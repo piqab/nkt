@@ -1,0 +1,22 @@
+# Runtime state
+data/
+
+# Node
+node_modules/
+
+# Build output
+/nkt
+/nkt.exe
+dist/*.map
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Local overrides
+.env
+
+# NOTE: internal/webui/dist is intentionally committed — it is embedded into the
+# binary, so `go build ./cmd/nkt` must work on a fresh clone without npm.

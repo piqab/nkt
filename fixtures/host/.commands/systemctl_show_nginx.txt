@@ -1,0 +1,8 @@
+Description=A high performance web server and a reverse proxy server
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+ActiveEnterTimestamp=Mon 2026-07-20 04:11:52 UTC
+MainPID=812
+MemoryCurrent=48234496
+NRestarts=0

@@ -1,0 +1,35 @@
+[
+  {
+    "Name": "bridge",
+    "Id": "a0default0bridge00000000000000000000000000000000000000000000000",
+    "Created": "2026-07-20T04:11:41.000000000Z",
+    "Scope": "local",
+    "Driver": "bridge",
+    "Internal": false,
+    "IPAM": { "Driver": "default", "Config": [{ "Subnet": "172.17.0.0/16", "Gateway": "172.17.0.1" }] },
+    "Options": { "com.docker.network.bridge.name": "docker0" },
+    "Labels": {}
+  },
+  {
+    "Name": "acme_backend",
+    "Id": "b1acme00backend0000000000000000000000000000000000000000000000000",
+    "Created": "2026-07-20T04:11:50.000000000Z",
+    "Scope": "local",
+    "Driver": "bridge",
+    "Internal": false,
+    "IPAM": { "Driver": "default", "Config": [{ "Subnet": "172.19.0.0/16", "Gateway": "172.19.0.1" }] },
+    "Options": { "com.docker.network.bridge.name": "br-acme-backend" },
+    "Labels": { "com.docker.compose.network": "backend", "com.docker.compose.project": "acme" }
+  },
+  {
+    "Name": "acme_monitoring",
+    "Id": "b2acme00monitoring000000000000000000000000000000000000000000000",
+    "Created": "2026-07-20T04:11:51.000000000Z",
+    "Scope": "local",
+    "Driver": "bridge",
+    "Internal": false,
+    "IPAM": { "Driver": "default", "Config": [{ "Subnet": "172.20.0.0/16", "Gateway": "172.20.0.1" }] },
+    "Options": { "com.docker.network.bridge.name": "br-acme-monitoring" },
+    "Labels": { "com.docker.compose.network": "monitoring", "com.docker.compose.project": "acme" }
+  }
+]

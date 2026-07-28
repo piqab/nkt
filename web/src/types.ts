@@ -1,0 +1,365 @@
+// Mirrors the JSON the Go API emits. Kept hand-written and small: only the
+// fields the UI actually reads.
+
+export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
+
+export interface Me {
+  username: string
+  role: 'admin' | 'viewer'
+  is_admin: boolean
+  mode: string
+  allow_mutations: boolean
+  simulated: boolean
+}
+
+export interface HostInfo {
+  mode: string
+  hostname: string
+  kernel: string
+  os: string
+  notes?: string[]
+}
+
+export interface SourceStatus {
+  name: string
+  available: boolean
+  version?: string
+  files?: string[]
+  warnings?: string[]
+  error?: string
+  duration_ms: number
+}
+
+export interface Finding {
+  id: string
+  rule: string
+  severity: Severity
+  title: string
+  detail: string
+  service: string
+  object?: string
+  file?: string
+  line?: number
+  suggestion?: string
+  refs?: string[]
+}
+
+export interface ServiceUnit {
+  name: string
+  unit: string
+  description?: string
+  active_state: string
+  sub_state?: string
+  enabled?: string
+  main_pid?: number
+  memory_bytes?: number
+  since?: string
+  restarts?: number
+  installed: boolean
+  config_files?: string[]
+  actions?: string[]
+}
+
+export interface PortMapping {
+  host_ip: string
+  host_port: number
+  container_port: number
+  protocol: string
+}
+
+export interface Container {
+  id: string
+  name: string
+  image: string
+  state: string
+  status: string
+  project?: string
+  service_name?: string
+  compose_file?: string
+  restart?: string
+  ports?: PortMapping[]
+  networks?: { name: string; ip_address?: string }[]
+  depends_on?: string[]
+  declared: boolean
+  running: boolean
+}
+
+export interface DockerNetwork {
+  id: string
+  name: string
+  driver: string
+  scope: string
+  internal: boolean
+  subnets?: string[]
+  gateway?: string
+  bridge?: string
+}
+
+export interface FirewallRule {
+  id: string
+  backend: string
+  table?: string
+  chain: string
+  order: number
+  action: string
+  protocol?: string
+  port_spec?: string
+  ports?: number[]
+  source?: string
+  destination?: string
+  in_iface?: string
+  out_iface?: string
+  dnat_to?: string
+  comment?: string
+  packets: number
+  bytes: number
+  raw: string
+  managed_by?: string
+}
+
+export interface FirewallPolicy {
+  backend: string
+  table: string
+  chain: string
+  policy: string
+  packets: number
+  bytes: number
+}
+
+export interface Listener {
+  protocol: string
+  address: string
+  port: number
+  process?: string
+  pid?: number
+}
+
+export interface ManagedFile {
+  path: string
+  service: string
+  size: number
+  mod_time: string
+  sha256: string
+  editable: boolean
+  readable: boolean
+  note?: string
+}
+
+export interface FileContent extends ManagedFile {
+  content: string
+}
+
+export interface ConfigVersion {
+  id: number
+  path: string
+  service: string
+  ts: string
+  author: string
+  action: string
+  note: string
+  size: number
+  sha256: string
+}
+
+export interface Overview {
+  host: HostInfo
+  mode: string
+  scanned: string
+  scan_ms: number
+  simulated: boolean
+  counts: Record<string, number>
+  findings: Partial<Record<Severity, number>>
+  top_findings: Finding[]
+  services: ServiceUnit[]
+  sources: SourceStatus[]
+  firewall: {
+    ufw_active: boolean
+    ufw_policy: string
+    backends: string[]
+    policies: FirewallPolicy[]
+  }
+  availability: {
+    targets: number
+    up: number
+    down: number
+    avg_uptime: number
+    outages: Outage[]
+    metrics_simulated: boolean
+  }
+}
+
+export interface TargetStatus {
+  id: number
+  key: string
+  label: string
+  kind: string
+  host: string
+  port: number
+  path: string
+  host_header?: string
+  source: string
+  service: string
+  node_id: string
+  enabled: boolean
+  first_seen: string
+  last_seen: string
+  last_check?: string
+  last_ok?: boolean
+  last_latency_ms: number
+  last_error?: string
+  checks_24h: number
+  failures_24h: number
+  uptime_24h: number
+  avg_latency_24h: number
+}
+
+export interface Bucket {
+  bucket: string
+  total: number
+  ok: number
+  uptime: number
+  avg_latency_ms: number
+  max_latency_ms: number
+}
+
+export interface HeatCell {
+  dow: number
+  hour: number
+  total: number
+  ok: number
+  uptime: number
+  value: number
+}
+
+export interface Outage {
+  target_id: number
+  label: string
+  start: string
+  end: string
+  checks: number
+  error: string
+}
+
+export interface MetricPoint {
+  bucket: string
+  subject: string
+  value: number
+}
+
+export interface SubjectTotal {
+  subject: string
+  total: number
+  samples: number
+}
+
+export interface AuditEntry {
+  id: number
+  ts: string
+  username: string
+  action: string
+  target: string
+  result: string
+  detail: string
+}
+
+export interface GraphNode {
+  id: string
+  kind: string
+  label: string
+  sublabel?: string
+  group?: string
+  status: 'ok' | 'warn' | 'error' | 'unknown'
+  findings: number
+  severity?: Severity
+  port?: number
+  public?: boolean
+  meta?: Record<string, string>
+}
+
+export interface GraphEdge {
+  id: string
+  from: string
+  to: string
+  kind: string
+  label?: string
+  status: string
+}
+
+export interface Graph {
+  nodes: GraphNode[]
+  edges: GraphEdge[]
+  stats: Record<string, number>
+}
+
+export interface JobStatus {
+  name: string
+  last_run?: string
+  last_error?: string
+  last_count: number
+  duration_ms: number
+  interval: string
+  runs: number
+}
+
+export interface Endpoint {
+  id: string
+  service: string
+  kind: string
+  address: string
+  port: number
+  protocol: string
+  tls: boolean
+  mode: string
+  names?: string[]
+  routes?: { match: string; target: string; target_kind: string; condition?: string }[]
+  upstreams?: string[]
+  file?: string
+  line?: number
+  label: string
+  access_logs?: string[]
+  extra?: Record<string, string>
+}
+
+export interface Upstream {
+  id: string
+  name: string
+  service: string
+  mode?: string
+  algorithm?: string
+  health?: string
+  servers: {
+    name?: string
+    host: string
+    port: number
+    weight?: number
+    backup: boolean
+    down: boolean
+    checked: boolean
+  }[]
+  file?: string
+  line?: number
+}
+
+export interface Snapshot {
+  ts: string
+  mode: string
+  host: HostInfo
+  sources: SourceStatus[]
+  services: ServiceUnit[]
+  files: ManagedFile[]
+  endpoints: Endpoint[]
+  upstreams: Upstream[]
+  containers: Container[]
+  networks: DockerNetwork[]
+  firewall: {
+    backends: string[]
+    ufw_active: boolean
+    ufw_policy?: string
+    policies: FirewallPolicy[]
+    rules: FirewallRule[]
+  }
+  listeners: Listener[]
+  findings: Finding[]
+  digest: string
+  scan_ms: number
+}

@@ -1,0 +1,8 @@
+Description=Uncomplicated firewall
+ActiveState=active
+SubState=exited
+UnitFileState=enabled
+ActiveEnterTimestamp=Mon 2026-07-20 04:11:38 UTC
+MainPID=0
+MemoryCurrent=0
+NRestarts=0

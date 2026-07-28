@@ -1,0 +1,157 @@
+[
+  {
+    "Id": "8f3a1c9e21b4d5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+    "Names": ["/acme-app"],
+    "Image": "ghcr.io/acme/app:1.24.3",
+    "ImageID": "sha256:1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+    "Command": "/app/server",
+    "Created": 1784520000,
+    "Ports": [{ "IP": "127.0.0.1", "PrivatePort": 8080, "PublicPort": 8080, "Type": "tcp" }],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "app",
+      "com.docker.compose.project.config_files": "/srv/docker/docker-compose.yml"
+    },
+    "State": "running",
+    "Status": "Up 8 days (healthy)",
+    "NetworkSettings": {
+      "Networks": {
+        "acme_backend": { "NetworkID": "b1acme00backend0000000000000000000000000000000000000000000000000", "IPAddress": "172.19.0.2", "Gateway": "172.19.0.1" }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "9e0d1c2b3a4958677889aabbccddeeff00112233445566778899aabbccddeeff",
+    "Names": ["/acme-api"],
+    "Image": "ghcr.io/acme/api:2.1.0",
+    "ImageID": "sha256:2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c",
+    "Command": "/app/api",
+    "Created": 1784520060,
+    "Ports": [{ "IP": "127.0.0.1", "PrivatePort": 8080, "PublicPort": 8081, "Type": "tcp" }],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "api",
+      "com.docker.compose.project.config_files": "/srv/docker/docker-compose.yml"
+    },
+    "State": "running",
+    "Status": "Up 8 days",
+    "NetworkSettings": {
+      "Networks": {
+        "acme_backend": { "NetworkID": "b1acme00backend0000000000000000000000000000000000000000000000000", "IPAddress": "172.19.0.3", "Gateway": "172.19.0.1" }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+    "Names": ["/acme-redis"],
+    "Image": "redis:7-alpine",
+    "ImageID": "sha256:3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d",
+    "Command": "redis-server",
+    "Created": 1784520120,
+    "Ports": [{ "IP": "0.0.0.0", "PrivatePort": 6379, "PublicPort": 6379, "Type": "tcp" }],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "redis",
+      "com.docker.compose.project.config_files": "/srv/docker/docker-compose.yml"
+    },
+    "State": "running",
+    "Status": "Up 8 days",
+    "NetworkSettings": {
+      "Networks": {
+        "acme_backend": { "NetworkID": "b1acme00backend0000000000000000000000000000000000000000000000000", "IPAddress": "172.19.0.4", "Gateway": "172.19.0.1" }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+    "Names": ["/acme-postgres"],
+    "Image": "postgres:16-alpine",
+    "ImageID": "sha256:4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e",
+    "Command": "postgres",
+    "Created": 1784520180,
+    "Ports": [],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "postgres",
+      "com.docker.compose.project.config_files": "/srv/docker/docker-compose.yml"
+    },
+    "State": "running",
+    "Status": "Up 8 days (healthy)",
+    "NetworkSettings": {
+      "Networks": {
+        "acme_backend": { "NetworkID": "b1acme00backend0000000000000000000000000000000000000000000000000", "IPAddress": "172.19.0.5", "Gateway": "172.19.0.1" }
+      }
+    },
+    "Mounts": [{ "Type": "volume", "Name": "acme_pgdata", "Destination": "/var/lib/postgresql/data" }]
+  },
+  {
+    "Id": "c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2",
+    "Names": ["/acme-grafana"],
+    "Image": "grafana/grafana:11.1.0",
+    "ImageID": "sha256:5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f",
+    "Command": "/run.sh",
+    "Created": 1784520240,
+    "Ports": [{ "IP": "127.0.0.1", "PrivatePort": 3000, "PublicPort": 3000, "Type": "tcp" }],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "grafana",
+      "com.docker.compose.project.config_files": "/srv/docker/docker-compose.yml"
+    },
+    "State": "running",
+    "Status": "Up 8 days",
+    "NetworkSettings": {
+      "Networks": {
+        "acme_backend": { "NetworkID": "b1acme00backend0000000000000000000000000000000000000000000000000", "IPAddress": "172.19.0.6", "Gateway": "172.19.0.1" },
+        "acme_monitoring": { "NetworkID": "b2acme00monitoring000000000000000000000000000000000000000000000", "IPAddress": "172.20.0.3", "Gateway": "172.20.0.1" }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3",
+    "Names": ["/acme-prometheus"],
+    "Image": "prom/prometheus:v2.53.0",
+    "ImageID": "sha256:6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a",
+    "Command": "/bin/prometheus",
+    "Created": 1784520300,
+    "Ports": [{ "IP": "127.0.0.1", "PrivatePort": 9090, "PublicPort": 9090, "Type": "tcp" }],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "prometheus",
+      "com.docker.compose.project.config_files": "/srv/docker/docker-compose.yml"
+    },
+    "State": "running",
+    "Status": "Up 8 days",
+    "NetworkSettings": {
+      "Networks": {
+        "acme_monitoring": { "NetworkID": "b2acme00monitoring000000000000000000000000000000000000000000000", "IPAddress": "172.20.0.2", "Gateway": "172.20.0.1" }
+      }
+    },
+    "Mounts": []
+  },
+  {
+    "Id": "e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4",
+    "Names": ["/acme-minio"],
+    "Image": "quay.io/minio/minio:RELEASE.2024-06-13T22-53-53Z",
+    "ImageID": "sha256:7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b",
+    "Command": "minio server /data --console-address :9002",
+    "Created": 1784520360,
+    "Ports": [{ "IP": "127.0.0.1", "PrivatePort": 9002, "PublicPort": 9002, "Type": "tcp" }],
+    "Labels": {
+      "com.docker.compose.project": "acme",
+      "com.docker.compose.service": "minio",
+      "com.docker.compose.project.config_files": "/srv/docker/docker-compose.yml"
+    },
+    "State": "restarting",
+    "Status": "Restarting (1) 14 seconds ago",
+    "NetworkSettings": {
+      "Networks": {
+        "acme_backend": { "NetworkID": "b1acme00backend0000000000000000000000000000000000000000000000000", "IPAddress": "172.19.0.8", "Gateway": "172.19.0.1" }
+      }
+    },
+    "Mounts": []
+  }
+]

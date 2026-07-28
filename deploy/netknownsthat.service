@@ -1,0 +1,54 @@
+[Unit]
+Description=NetKnownsThat — карта сетевых ресурсов и проверка конфигураций
+Documentation=https://github.com/althq/netknownsthat
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/nkt
+EnvironmentFile=/etc/netknownsthat/nkt.env
+Restart=on-failure
+RestartSec=5s
+
+# Приложение читает /etc/nginx и /etc/haproxy, вызывает systemctl, iptables-save
+# и ufw, поэтому работает от root. Ниже — ограничения, сужающие последствия
+# компрометации процесса.
+User=root
+Group=root
+
+StateDirectory=netknownsthat
+StateDirectoryMode=0750
+WorkingDirectory=/var/lib/netknownsthat
+
+# Файловая система только на чтение, кроме явно перечисленных каталогов.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/netknownsthat /etc/nginx /etc/haproxy
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+# Управление сервисами и firewall требует этих возможностей; всё остальное снято.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH
+
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Слушает только localhost по умолчанию (см. NKT_ADDR); наружу — через reverse
+# proxy с TLS.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target

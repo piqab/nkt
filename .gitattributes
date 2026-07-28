@@ -1,0 +1,13 @@
+# Проект собирается и разворачивается на Linux, а фикстуры изображают файлы
+# Linux-хоста. Держим LF везде, независимо от того, на какой ОС идёт разработка.
+* text=auto eol=lf
+
+# Бинарные и сгенерированные файлы git не трогает.
+*.png binary
+*.jpg binary
+*.woff binary
+*.woff2 binary
+
+# Собранный фронтенд вшивается в бинарник — в diff его показывать бессмысленно.
+internal/webui/dist/** linguist-generated=true -diff
+web/package-lock.json linguist-generated=true -diff
