@@ -6,6 +6,7 @@ package analyze
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/althq/netknownsthat/internal/model"
@@ -93,6 +94,11 @@ type index struct {
 	allowedFrom     map[int][]string // port -> list of sources allowed to reach it
 	dockerDNAT      map[int]bool
 	serviceActive   map[string]bool
+
+	// listenersComparable is false when the socket table was read somewhere the
+	// inspected services do not live; every rule contrasting the two must then
+	// stay quiet rather than report the whole host as dead.
+	listenersComparable bool
 }
 
 func buildIndex(s *model.Snapshot) *index {
@@ -150,6 +156,8 @@ func buildIndex(s *model.Snapshot) *index {
 			idx.allowedFrom[p] = append(idx.allowedFrom[p], src)
 		}
 	}
+
+	idx.listenersComparable = len(s.Listeners) > 0 && idx.listenersAreComparable(s)
 	return idx
 }
 
@@ -178,6 +186,24 @@ func (i *index) allowedFromAnywhere(port int) bool {
 }
 
 func (i *index) hasListener(port int) bool { return len(i.listenersByPort[port]) > 0 }
+
+// listenersAreComparable reports whether the observed sockets describe the same
+// machine view as the parsed configuration. When several endpoints are declared
+// and not a single one is corroborated by a listener, the two sides are not
+// comparable and every rule that contrasts them must stay quiet.
+func (i *index) listenersAreComparable(s *model.Snapshot) bool {
+	declared, corroborated := 0, 0
+	for _, e := range s.Endpoints {
+		if e.Protocol == "udp" {
+			continue
+		}
+		declared++
+		if i.hasListener(e.Port) {
+			corroborated++
+		}
+	}
+	return declared < 3 || corroborated > 0
+}
 
 // listenerFor finds a listener that would receive traffic for an address:port.
 func (i *index) listenerFor(addr string, port int) (model.Listener, bool) {
@@ -215,6 +241,9 @@ func rulePortConflicts(c *collector, s *model.Snapshot) {
 				if x.Service == model.ServiceNginx && y.Service == model.ServiceNginx {
 					continue
 				}
+				if sameSocketTwoLayers(x, y) {
+					continue
+				}
 				c.add(model.Finding{
 					Rule:     "port-conflict",
 					ID:       fmt.Sprintf("port-conflict:%d:%s:%s", port, x.ID, y.ID),
@@ -242,16 +271,50 @@ func addressesOverlap(a, b model.Endpoint) bool {
 	return a.Address == b.Address
 }
 
+// sameSocketTwoLayers reports whether a pair describes one socket observed at
+// two levels rather than two services fighting over a port.
+//
+// Two cases occur in practice: two published ports of the same container, and a
+// container publishing a port straight through to the service configured inside
+// it (8404 → 8404), which happens whenever a config directory is mounted into a
+// container and inspected from outside.
+func sameSocketTwoLayers(a, b model.Endpoint) bool {
+	if a.Service == model.ServiceDocker && b.Service == model.ServiceDocker {
+		return a.Extra["container"] != "" && a.Extra["container"] == b.Extra["container"]
+	}
+
+	docker, other := a, b
+	if b.Service == model.ServiceDocker {
+		docker, other = b, a
+	} else if a.Service != model.ServiceDocker {
+		return false
+	}
+	if other.Service == model.ServiceDocker {
+		return false
+	}
+	// The published port forwards to the very port the other service binds.
+	containerPort, err := strconv.Atoi(docker.Extra["container_port"])
+	return err == nil && containerPort == other.Port
+}
+
 func ruleDeclaredNotListening(c *collector, s *model.Snapshot, idx *index) {
-	if len(s.Listeners) == 0 {
-		return // ss unavailable: no ground truth to compare against
+	if !idx.listenersComparable {
+		return
 	}
 	for _, e := range s.Endpoints {
 		if e.Protocol == "udp" {
 			continue
 		}
+		// Published container ports are deliberately excluded. The Docker API
+		// already states whether a mapping exists, and the socket table is the
+		// wrong witness for it: with userland-proxy disabled docker forwards by
+		// DNAT alone and no process listens on the host at all. A container that
+		// is not actually up is reported by the container rules instead.
+		if e.Service == model.ServiceDocker {
+			continue
+		}
 		// Only complain when the owning service is supposed to be running.
-		if e.Service != model.ServiceDocker && !idx.serviceActive[e.Service] {
+		if !idx.serviceActive[e.Service] {
 			continue
 		}
 		if _, ok := idx.listenerFor(e.Address, e.Port); ok {
@@ -388,7 +451,7 @@ func ruleDockerBypassesFirewall(c *collector, s *model.Snapshot, idx *index) {
 }
 
 func ruleStaleFirewallRules(c *collector, s *model.Snapshot, idx *index) {
-	if len(s.Listeners) == 0 {
+	if !idx.listenersComparable {
 		return
 	}
 	for _, r := range s.Firewall.Rules {
@@ -592,7 +655,7 @@ func ruleUpstreams(c *collector, s *model.Snapshot, idx *index) {
 
 		// Local backend members that nothing is listening on.
 		for _, srv := range u.Servers {
-			if !isLocalHost(srv.Host) || len(s.Listeners) == 0 {
+			if !isLocalHost(srv.Host) || !idx.listenersComparable {
 				continue
 			}
 			if idx.hasListener(srv.Port) {

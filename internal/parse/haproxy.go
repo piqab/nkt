@@ -88,7 +88,11 @@ func HAProxy(ctx context.Context, c collect.Collector, mainConfig string) HAProx
 		}
 		sort.Strings(names)
 		for _, name := range names {
-			u, ok := haproxyUpstream(p, sectionType, name, mainConfig, defaultMode, sections)
+			// A backend section always defines a pool, even without server
+			// lines — it may answer by itself via http-request return. A listen
+			// section only counts as a pool when it actually has servers.
+			u, ok := haproxyUpstream(p, sectionType, name, mainConfig, defaultMode, sections,
+				sectionType == parser.Listen)
 			if !ok {
 				continue
 			}
@@ -217,14 +221,15 @@ func haproxyEndpoints(p parser.Parser, section parser.Section, name, file, defau
 }
 
 func haproxyUpstream(p parser.Parser, section parser.Section, name, file, defaultMode string,
-	sections []hapSection) (model.Upstream, bool) {
+	sections []hapSection, requireServers bool) (model.Upstream, bool) {
 
-	v, err := p.Get(section, name, "server")
-	if err != nil {
-		return model.Upstream{}, false
+	var list []types.Server
+	if v, err := p.Get(section, name, "server"); err == nil {
+		if servers, ok := v.([]types.Server); ok {
+			list = servers
+		}
 	}
-	list, ok := v.([]types.Server)
-	if !ok || len(list) == 0 {
+	if requireServers && len(list) == 0 {
 		return model.Upstream{}, false
 	}
 
