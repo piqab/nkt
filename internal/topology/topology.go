@@ -164,6 +164,12 @@ func Build(s *model.Snapshot) *Graph {
 		})
 	}
 
+	// Upstream pools are built before the endpoints that reference them.
+	// Otherwise a route would create a placeholder node first, and the real
+	// pool — with its balancing algorithm and health check — would never
+	// replace it, leaving every referenced pool labelled "не определён".
+	buildUpstreams(b, s, listeningPorts)
+
 	// Endpoints.
 	for _, e := range s.Endpoints {
 		id := "ep:" + e.ID
@@ -229,12 +235,34 @@ func Build(s *model.Snapshot) *Graph {
 		}
 	}
 
-	// Upstream pools and their members.
+	g := &Graph{Stats: map[string]int{}}
+	for _, id := range b.order {
+		g.Nodes = append(g.Nodes, *b.nodes[id])
+		g.Stats[b.nodes[id].Kind]++
+	}
+	g.Edges = b.edges
+	g.Stats["edges"] = len(b.edges)
+	sort.SliceStable(g.Nodes, func(i, j int) bool {
+		if g.Nodes[i].Kind != g.Nodes[j].Kind {
+			return kindRank(g.Nodes[i].Kind) < kindRank(g.Nodes[j].Kind)
+		}
+		return g.Nodes[i].Label < g.Nodes[j].Label
+	})
+	return g
+}
+
+// buildUpstreams adds every declared pool and its members.
+func buildUpstreams(b *builder, s *model.Snapshot, listeningPorts map[int]bool) {
 	for _, u := range s.Upstreams {
 		upID := "up:" + u.Service + ":" + u.Name
 		sub := u.Algorithm
 		if u.Health != "" {
 			sub += " · " + u.Health
+		}
+		if len(u.Servers) == 0 {
+			// A pool that answers by itself, such as an haproxy backend built
+			// from http-request return.
+			sub = strings.TrimSpace(sub + " · без backend-серверов")
 		}
 		status := StatusOK
 		if u.Health == "" && len(u.Servers) > 1 {
@@ -273,21 +301,6 @@ func Build(s *model.Snapshot) *Graph {
 			b.linkBackendToContainer(s, beID, srv.Socket())
 		}
 	}
-
-	g := &Graph{Stats: map[string]int{}}
-	for _, id := range b.order {
-		g.Nodes = append(g.Nodes, *b.nodes[id])
-		g.Stats[b.nodes[id].Kind]++
-	}
-	g.Edges = b.edges
-	g.Stats["edges"] = len(b.edges)
-	sort.SliceStable(g.Nodes, func(i, j int) bool {
-		if g.Nodes[i].Kind != g.Nodes[j].Kind {
-			return kindRank(g.Nodes[i].Kind) < kindRank(g.Nodes[j].Kind)
-		}
-		return g.Nodes[i].Label < g.Nodes[j].Label
-	})
-	return g
 }
 
 // linkBackendToContainer connects a backend address to the container that
