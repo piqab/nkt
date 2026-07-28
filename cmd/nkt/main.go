@@ -1,6 +1,6 @@
-// Command nkt is the NetKnownsThat server: it inspects nginx, haproxy, docker
-// and the host firewall, serves the dashboard, and runs the background
-// monitoring jobs.
+// Command nkt is NetKnownsThat: it inspects nginx, haproxy, docker and the host
+// firewall, and exposes the result three ways — a web dashboard, a terminal
+// interface, and a one-shot report for cron or CI.
 package main
 
 import (
@@ -25,23 +25,47 @@ import (
 	"github.com/althq/netknownsthat/internal/model"
 	"github.com/althq/netknownsthat/internal/monitor"
 	"github.com/althq/netknownsthat/internal/store"
+	"github.com/althq/netknownsthat/internal/tui"
 	"github.com/althq/netknownsthat/internal/webui"
 )
 
 // version is overridden at build time with -ldflags "-X main.version=...".
 var version = "dev"
 
-func main() {
-	var (
-		showVersion = flag.Bool("version", false, "показать версию и выйти")
-		scanOnce    = flag.Bool("scan", false, "выполнить один скан, напечатать отчёт и выйти")
-		verbose     = flag.Bool("v", false, "подробный лог")
-	)
-	flag.Parse()
+const usage = `NetKnownsThat %s — карта сетевых ресурсов и проверка конфигураций хоста.
 
-	if *showVersion {
-		fmt.Printf("netknownsthat %s\n", version)
-		return
+Использование:
+  nkt [serve]     запустить веб-дашборд и фоновый сбор данных (по умолчанию)
+  nkt tui         терминальный интерфейс: то же самое без браузера
+  nkt scan        разовая проверка, отчёт в stdout, код 2 при критичных находках
+  nkt version     показать версию
+
+Флаги:
+  -v              подробный лог
+
+Настройка — через переменные окружения NKT_*, см. deploy/nkt.env.example.
+`
+
+func main() {
+	command := "serve"
+	args := os.Args[1:]
+	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
+		command, args = args[0], args[1:]
+	}
+
+	fs := flag.NewFlagSet("nkt", flag.ExitOnError)
+	verbose := fs.Bool("v", false, "подробный лог")
+	// Kept so that the documented `nkt -scan` keeps working.
+	scanFlag := fs.Bool("scan", false, "разовая проверка и выход")
+	versionFlag := fs.Bool("version", false, "показать версию и выйти")
+	fs.Usage = func() { fmt.Fprintf(os.Stderr, usage, version) }
+	_ = fs.Parse(args)
+
+	switch {
+	case *versionFlag:
+		command = "version"
+	case *scanFlag:
+		command = "scan"
 	}
 
 	level := slog.LevelInfo
@@ -50,36 +74,108 @@ func main() {
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
-	if err := run(log, *scanOnce); err != nil {
-		log.Error("запуск не удался", "err", err)
+	if err := dispatch(command, log); err != nil {
+		log.Error("не удалось выполнить команду", "команда", command, "err", err)
 		os.Exit(1)
 	}
 }
 
-func run(log *slog.Logger, scanOnce bool) error {
+func dispatch(command string, log *slog.Logger) error {
+	switch command {
+	case "version":
+		fmt.Printf("netknownsthat %s\n", version)
+		return nil
+	case "serve", "tui", "scan":
+	case "help", "-h", "--help":
+		fmt.Fprintf(os.Stderr, usage, version)
+		return nil
+	default:
+		fmt.Fprintf(os.Stderr, usage, version)
+		return fmt.Errorf("неизвестная команда %q", command)
+	}
+
+	app, err := newRuntime()
+	if err != nil {
+		return err
+	}
+	defer app.close()
+
+	switch command {
+	case "scan":
+		return app.printScanReport(context.Background())
+	case "tui":
+		return app.runTUI()
+	default:
+		return app.runServer(log)
+	}
+}
+
+// runtime holds the subsystems every command shares.
+type runtime struct {
+	cfg       *config.Config
+	db        *store.DB
+	collector collect.Collector
+	scanner   *inventory.Scanner
+	services  *control.ServiceManager
+	configs   *control.ConfigManager
+	firewall  *control.FirewallManager
+}
+
+func newRuntime() (*runtime, error) {
 	cfg, err := config.Load()
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	collector, err := collect.New(string(cfg.Mode), cfg.FixturesRoot, cfg.DockerSocket, cfg.CommandTimeout)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	db, err := store.Open(cfg.DBPath())
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer func() { _ = db.Close() }()
-
 	scanner := inventory.New(cfg, collector, db)
+	services := control.NewServiceManager(cfg, collector, db)
 
-	if scanOnce {
-		return printScanReport(context.Background(), scanner)
+	return &runtime{
+		cfg:       cfg,
+		db:        db,
+		collector: collector,
+		scanner:   scanner,
+		services:  services,
+		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
+		firewall:  control.NewFirewallManager(cfg, collector, db),
+	}, nil
+}
+
+func (r *runtime) close() {
+	if r.db != nil {
+		_ = r.db.Close()
 	}
+}
 
-	authSvc := auth.NewService(db, cfg)
+// ------------------------------------------------------------------ terminal
+
+func (r *runtime) runTUI() error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	return tui.Run(ctx, tui.Deps{
+		Cfg:       r.cfg,
+		DB:        r.db,
+		Collector: r.collector,
+		Scanner:   r.scanner,
+		Services:  r.services,
+		Configs:   r.configs,
+		Firewall:  r.firewall,
+		Prober:    monitor.NewProber(r.db, r.cfg),
+	})
+}
+
+// --------------------------------------------------------------------- serve
+
+func (r *runtime) runServer(log *slog.Logger) error {
+	authSvc := auth.NewService(r.db, r.cfg)
 	generated, err := authSvc.Bootstrap(context.Background())
 	if err != nil {
 		return fmt.Errorf("создание учётной записи администратора: %w", err)
@@ -89,19 +185,15 @@ func run(log *slog.Logger, scanOnce bool) error {
 		fmt.Fprintf(os.Stderr,
 			"\n=== Создана учётная запись администратора ===\n  логин:  %s\n  пароль: %s\n"+
 				"  Сохраните пароль: он больше нигде не отображается.\n\n",
-			cfg.BootstrapAdminUser, generated)
+			r.cfg.BootstrapAdminUser, generated)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	scheduler := monitor.NewScheduler(cfg, db, scanner, log)
+	scheduler := monitor.NewScheduler(r.cfg, r.db, r.scanner, log)
 	var jobs sync.WaitGroup
 	scheduler.Start(ctx, &jobs)
-
-	services := control.NewServiceManager(cfg, collector, db)
-	configs := control.NewConfigManager(cfg, collector, db, scanner, services)
-	firewall := control.NewFirewallManager(cfg, collector, db)
 
 	ui := webui.FS()
 	if ui == nil {
@@ -109,12 +201,12 @@ func run(log *slog.Logger, scanOnce bool) error {
 	}
 
 	server := api.New(api.Deps{
-		Cfg: cfg, DB: db, Auth: authSvc, Scanner: scanner, Scheduler: scheduler,
-		Services: services, Configs: configs, Firewall: firewall, UI: ui, Log: log,
+		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
+		Services: r.services, Configs: r.configs, Firewall: r.firewall, UI: ui, Log: log,
 	})
 
 	httpServer := &http.Server{
-		Addr:              cfg.Addr,
+		Addr:              r.cfg.Addr,
 		Handler:           server.Handler(),
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       30 * time.Second,
@@ -125,7 +217,7 @@ func run(log *slog.Logger, scanOnce bool) error {
 	errCh := make(chan error, 1)
 	go func() {
 		log.Info("сервер запущен",
-			"addr", cfg.Addr, "mode", cfg.Mode, "mutations", cfg.AllowMutations, "version", version)
+			"addr", r.cfg.Addr, "mode", r.cfg.Mode, "mutations", r.cfg.AllowMutations, "version", version)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
@@ -148,10 +240,12 @@ func run(log *slog.Logger, scanOnce bool) error {
 	return nil
 }
 
+// ---------------------------------------------------------------------- scan
+
 // printScanReport runs one scan and writes a human-readable summary, which makes
-// the tool usable from cron or a CI check without the dashboard.
-func printScanReport(ctx context.Context, scanner *inventory.Scanner) error {
-	snap, err := scanner.Scan(ctx)
+// the tool usable from cron or a CI check without any interface at all.
+func (r *runtime) printScanReport(ctx context.Context) error {
+	snap, err := r.scanner.Scan(ctx)
 	if err != nil {
 		return err
 	}

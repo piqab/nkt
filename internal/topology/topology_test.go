@@ -1,0 +1,94 @@
+package topology
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/althq/netknownsthat/internal/model"
+)
+
+func nodeByID(g *Graph, id string) *Node {
+	for i := range g.Nodes {
+		if g.Nodes[i].ID == id {
+			return &g.Nodes[i]
+		}
+	}
+	return nil
+}
+
+// A pool referenced by a route must show its real algorithm and health check.
+// Building endpoints first used to leave a placeholder node behind, so every
+// referenced pool was drawn as undefined and red.
+func TestReferencedUpstreamKeepsItsRealLabel(t *testing.T) {
+	snap := &model.Snapshot{
+		Endpoints: []model.Endpoint{{
+			ID: "haproxy:fe", Service: model.ServiceHAProxy, Kind: "frontend",
+			Address: "0.0.0.0", Port: 8090, Protocol: "tcp", Mode: "http", Label: "fe_http",
+			Routes: []model.Route{{Match: "default", Target: "be_app", TargetKind: "upstream"}},
+		}},
+		Upstreams: []model.Upstream{{
+			ID: "haproxy:upstream:be_app", Name: "be_app", Service: model.ServiceHAProxy,
+			Algorithm: "leastconn", Health: "httpchk GET /healthz",
+			Servers: []model.UpstreamServer{
+				{Name: "app1", Host: "127.0.0.1", Port: 8080, Checked: true},
+				{Name: "app2", Host: "127.0.0.1", Port: 8081, Checked: true},
+			},
+		}},
+	}
+
+	g := Build(snap)
+	node := nodeByID(g, "up:haproxy:be_app")
+	if node == nil {
+		t.Fatal("узел пула be_app не построен")
+	}
+	if strings.Contains(node.Sublabel, "не определён") {
+		t.Errorf("определённый пул помечен как несуществующий: %q", node.Sublabel)
+	}
+	if !strings.Contains(node.Sublabel, "leastconn") || !strings.Contains(node.Sublabel, "httpchk") {
+		t.Errorf("подпись пула = %q, ожидались алгоритм и проверка здоровья", node.Sublabel)
+	}
+	if node.Status != StatusOK {
+		t.Errorf("статус пула = %q, ожидался %q", node.Status, StatusOK)
+	}
+}
+
+// A route pointing at a pool that genuinely does not exist must still be
+// visible as a gap in the map.
+func TestUndefinedUpstreamIsStillMarked(t *testing.T) {
+	snap := &model.Snapshot{
+		Endpoints: []model.Endpoint{{
+			ID: "nginx:80", Service: model.ServiceNginx, Kind: "server",
+			Address: "0.0.0.0", Port: 80, Protocol: "tcp", Mode: "http", Label: "site",
+			Routes: []model.Route{{Match: "/", Target: "ghost_pool", TargetKind: "upstream"}},
+		}},
+	}
+
+	node := nodeByID(Build(snap), "up:nginx:ghost_pool")
+	if node == nil {
+		t.Fatal("узел для несуществующего пула не построен")
+	}
+	if node.Status != StatusError || !strings.Contains(node.Sublabel, "не определён") {
+		t.Errorf("несуществующий пул должен быть помечен ошибкой, получено status=%q sublabel=%q",
+			node.Status, node.Sublabel)
+	}
+}
+
+// A backend that answers by itself carries no servers; that is not a fault.
+func TestServerlessBackendIsNotAnError(t *testing.T) {
+	snap := &model.Snapshot{
+		Upstreams: []model.Upstream{{
+			ID: "haproxy:upstream:be_health", Name: "be_health",
+			Service: model.ServiceHAProxy, Algorithm: "roundrobin",
+		}},
+	}
+	node := nodeByID(Build(snap), "up:haproxy:be_health")
+	if node == nil {
+		t.Fatal("узел пула be_health не построен")
+	}
+	if node.Status != StatusOK {
+		t.Errorf("статус = %q, ожидался %q", node.Status, StatusOK)
+	}
+	if !strings.Contains(node.Sublabel, "без backend-серверов") {
+		t.Errorf("подпись = %q, ожидалось пояснение об отсутствии серверов", node.Sublabel)
+	}
+}
