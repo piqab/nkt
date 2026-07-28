@@ -1,0 +1,122 @@
+package parse
+
+import (
+	"context"
+	"fmt"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/althq/netknownsthat/internal/collect"
+	"github.com/althq/netknownsthat/internal/model"
+)
+
+// ServiceSpec describes a service the dashboard knows how to manage.
+type ServiceSpec struct {
+	Name        string   // logical name used across the app: nginx, haproxy, docker...
+	Unit        string   // systemd unit
+	Binary      string   // binary used for the availability check
+	ConfigFiles []string // files the config editor may open
+	Actions     []string // control actions the API exposes
+}
+
+// DefaultServiceSpecs is the built-in catalogue. Config file lists are filled in
+// by the caller from the parsed inventory.
+func DefaultServiceSpecs() []ServiceSpec {
+	return []ServiceSpec{
+		{Name: model.ServiceNginx, Unit: "nginx", Binary: "nginx",
+			Actions: []string{"validate", "reload", "restart", "start", "stop"}},
+		{Name: model.ServiceHAProxy, Unit: "haproxy", Binary: "haproxy",
+			Actions: []string{"validate", "reload", "restart", "start", "stop"}},
+		{Name: model.ServiceDocker, Unit: "docker", Binary: "docker",
+			Actions: []string{"restart", "start", "stop"}},
+		{Name: model.ServiceUFW, Unit: "ufw", Binary: "ufw",
+			Actions: []string{"reload", "start", "stop"}},
+		{Name: "fail2ban", Unit: "fail2ban", Binary: "fail2ban-client",
+			Actions: []string{"restart", "start", "stop"}},
+	}
+}
+
+// systemctlProperties is the fixed property set the status reader asks for.
+var systemctlProperties = []string{
+	"Description", "ActiveState", "SubState", "UnitFileState",
+	"ActiveEnterTimestamp", "MainPID", "MemoryCurrent", "NRestarts",
+}
+
+// Services reads the state of every managed unit.
+func Services(ctx context.Context, c collect.Collector, specs []ServiceSpec) ([]model.ServiceUnit, model.SourceStatus) {
+	started := time.Now()
+	status := model.SourceStatus{Name: "services"}
+	defer func() { status.DurationMS = time.Since(started).Milliseconds() }()
+
+	out := make([]model.ServiceUnit, 0, len(specs))
+	for _, spec := range specs {
+		unit := model.ServiceUnit{
+			Name:        spec.Name,
+			Unit:        spec.Unit,
+			ActiveState: "unknown",
+			ConfigFiles: spec.ConfigFiles,
+			Actions:     spec.Actions,
+			Installed:   collect.Which(ctx, c, spec.Binary),
+		}
+
+		args := append([]string{"show", spec.Unit}, propertyFlags()...)
+		res, err := c.Run(ctx, "systemctl", args...)
+		if err != nil {
+			status.Warnings = append(status.Warnings, fmt.Sprintf("systemctl show %s: %v", spec.Unit, err))
+			out = append(out, unit)
+			continue
+		}
+		status.Available = true
+		applyUnitProperties(&unit, res.Stdout)
+		out = append(out, unit)
+	}
+
+	if !status.Available {
+		status.Error = "systemctl недоступен: состояние сервисов прочитать не удалось"
+	}
+	return out, status
+}
+
+func propertyFlags() []string {
+	flags := make([]string, 0, len(systemctlProperties)*2)
+	for _, p := range systemctlProperties {
+		flags = append(flags, "-p", p)
+	}
+	return flags
+}
+
+func applyUnitProperties(unit *model.ServiceUnit, stdout string) {
+	for _, line := range strings.Split(strings.ReplaceAll(stdout, "\r\n", "\n"), "\n") {
+		key, value, ok := strings.Cut(strings.TrimSpace(line), "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "Description":
+			unit.Description = value
+		case "ActiveState":
+			if value != "" {
+				unit.ActiveState = value
+			}
+		case "SubState":
+			unit.SubState = value
+		case "UnitFileState":
+			unit.Enabled = value
+		case "ActiveEnterTimestamp":
+			unit.SinceText = value
+		case "MainPID":
+			unit.MainPID, _ = strconv.Atoi(value)
+		case "MemoryCurrent":
+			// systemd reports "[not set]" for units without memory accounting.
+			if n, err := strconv.ParseInt(value, 10, 64); err == nil {
+				unit.MemoryBytes = n
+			}
+		case "NRestarts":
+			unit.Restarts, _ = strconv.Atoi(value)
+		}
+	}
+	if unit.Enabled == "not-found" {
+		unit.Installed = false
+	}
+}

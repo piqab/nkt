@@ -1,0 +1,118 @@
+package parse
+
+import (
+	"context"
+	"testing"
+
+	"github.com/althq/netknownsthat/internal/model"
+)
+
+func TestFirewallParsesFixture(t *testing.T) {
+	res := Firewall(context.Background(), fixtureCollector(t))
+	if res.Status.Error != "" {
+		t.Fatalf("парсер вернул ошибку: %s", res.Status.Error)
+	}
+
+	policy := func(backend, table, chain string) *model.FirewallPolicy {
+		for i := range res.State.Policies {
+			p := res.State.Policies[i]
+			if p.Backend == backend && p.Table == table && p.Chain == chain {
+				return &res.State.Policies[i]
+			}
+		}
+		return nil
+	}
+	in := policy("iptables", "filter", "INPUT")
+	if in == nil {
+		t.Fatal("политика filter/INPUT не найдена")
+	}
+	if in.Policy != "DROP" {
+		t.Errorf("INPUT policy = %q, ожидалось DROP", in.Policy)
+	}
+	if in.Packets != 1024 {
+		t.Errorf("INPUT счётчик пакетов = %d, ожидалось 1024", in.Packets)
+	}
+
+	var https, dnat, stale *model.FirewallRule
+	for i := range res.State.Rules {
+		r := &res.State.Rules[i]
+		switch {
+		case r.Backend == "iptables" && r.Chain == "INPUT" && len(r.Ports) == 1 && r.Ports[0] == 443:
+			https = r
+		case r.Backend == "iptables" && r.Action == "DNAT" && len(r.Ports) == 1 && r.Ports[0] == 6379:
+			dnat = r
+		case r.Backend == "iptables" && r.Chain == "INPUT" && len(r.Ports) == 1 && r.Ports[0] == 25:
+			stale = r
+		}
+	}
+	if https == nil {
+		t.Fatal("правило INPUT для 443 не найдено")
+	}
+	if https.Action != "ACCEPT" || https.Protocol != "tcp" {
+		t.Errorf("правило 443: action=%q proto=%q", https.Action, https.Protocol)
+	}
+	if https.Bytes == 0 {
+		t.Error("правило 443: счётчик байт должен быть прочитан из iptables-save -c")
+	}
+	if dnat == nil {
+		t.Fatal("DNAT-правило docker для 6379 не найдено")
+	}
+	if dnat.ManagedBy != "docker" {
+		t.Errorf("DNAT 6379: managed_by=%q, ожидалось docker", dnat.ManagedBy)
+	}
+	if dnat.DNATTo != "172.19.0.4:6379" {
+		t.Errorf("DNAT 6379: to=%q", dnat.DNATTo)
+	}
+	if stale == nil || stale.Packets != 0 {
+		t.Error("правило для 25/tcp с нулевым счётчиком должно быть распознано")
+	}
+
+	if !res.State.UFWActive {
+		t.Error("ufw должен быть активен")
+	}
+	if res.State.UFWPolicy == "" {
+		t.Error("политика ufw по умолчанию не прочитана")
+	}
+	ufwPorts := map[int]string{}
+	for _, r := range res.State.Rules {
+		if r.Backend != "ufw" {
+			continue
+		}
+		for _, p := range r.Ports {
+			ufwPorts[p] = r.Source
+		}
+	}
+	if ufwPorts[8443] != "10.10.0.0/24" {
+		t.Errorf("ufw 8443: source=%q, ожидалось 10.10.0.0/24 (все: %v)", ufwPorts[8443], ufwPorts)
+	}
+	if _, ok := ufwPorts[22]; !ok {
+		t.Error("ufw: правило для 22/tcp не найдено")
+	}
+}
+
+func TestListenersParseFixture(t *testing.T) {
+	listeners, status := Listeners(context.Background(), fixtureCollector(t))
+	if status.Error != "" {
+		t.Fatalf("ss вернул ошибку: %s", status.Error)
+	}
+	byPort := map[int]model.Listener{}
+	for _, l := range listeners {
+		byPort[l.Port] = l
+	}
+
+	if got := byPort[443]; got.Process != "nginx" || !got.Public() {
+		t.Errorf("443: process=%q addr=%q", got.Process, got.Address)
+	}
+	if got := byPort[6379]; got.Process != "docker-proxy" || !got.Public() {
+		t.Errorf("6379 должен быть опубликован docker-proxy на всех интерфейсах: %+v", got)
+	}
+	if got := byPort[8080]; got.Address != "127.0.0.1" {
+		t.Errorf("8080: адрес=%q, ожидалось 127.0.0.1", got.Address)
+	}
+	if got := byPort[5432]; got.Process != "haproxy" || got.Address != "10.10.0.2" {
+		t.Errorf("5432: %+v", got)
+	}
+	if _, ok := byPort[11211]; !ok {
+		t.Error("memcached на 11211 должен попасть в список слушателей")
+	}
+}

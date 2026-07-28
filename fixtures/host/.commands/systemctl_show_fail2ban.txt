@@ -1,0 +1,8 @@
+Description=Fail2Ban Service
+ActiveState=inactive
+SubState=dead
+UnitFileState=disabled
+ActiveEnterTimestamp=
+MainPID=0
+MemoryCurrent=0
+NRestarts=0

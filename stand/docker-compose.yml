@@ -1,0 +1,89 @@
+# Проверочный стенд: настоящие nginx и haproxy с настоящими бэкендами, рядом —
+# NetKnownsThat в режиме local. Он читает те же файлы конфигурации, что и сами
+# сервисы, и разговаривает с настоящим демоном docker через сокет.
+#
+#   docker compose -f stand/docker-compose.yml up --build
+#   открыть http://127.0.0.1:8077  (логин admin, пароль в логах контейнера nkt)
+#
+# Чего стенд НЕ покрывает: systemd и правила firewall хоста — внутри контейнера
+# их нет. Эти пути проверяются только на настоящей Linux-машине.
+
+name: nkt-stand
+
+services:
+  nkt:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: nkt
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8077:8077"
+    environment:
+      NKT_MODE: local
+      NKT_ADDR: 0.0.0.0:8077
+      NKT_NGINX_ROOT: /etc/nginx
+      NKT_NGINX_MAIN_CONFIG: /etc/nginx/nginx.conf
+      NKT_HAPROXY_ROOT: /etc/haproxy
+      NKT_HAPROXY_MAIN_CONFIG: /etc/haproxy/haproxy.cfg
+      NKT_COMPOSE_FILES: /stand/docker-compose.yml
+      NKT_NGINX_ACCESS_LOGS: /var/log/nginx/access.log
+      NKT_DOCKER_SOCKET: /var/run/docker.sock
+      NKT_PROBE_INTERVAL: 30
+      NKT_METRICS_INTERVAL: 30
+      NKT_LOG_SCAN_INTERVAL: 60
+      NKT_BOOTSTRAP_ADMIN_PASSWORD: "${NKT_ADMIN_PASSWORD:-}"
+    volumes:
+      - ./nginx:/etc/nginx:rw
+      - ./haproxy:/etc/haproxy:rw
+      - nginx-logs:/var/log/nginx:ro
+      - ./docker-compose.yml:/stand/docker-compose.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - nkt-data:/var/lib/netknownsthat
+    depends_on: [edge, balancer]
+
+  edge:
+    image: nginx:1.27-alpine
+    container_name: nkt-edge
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8081:80"
+    volumes:
+      - ./nginx:/etc/nginx:ro
+      - nginx-logs:/var/log/nginx
+    depends_on: [app-a, app-b]
+
+  balancer:
+    image: haproxy:2.9-alpine
+    container_name: nkt-balancer
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8082:8090"
+      - "127.0.0.1:8404:8404"
+    volumes:
+      - ./haproxy:/usr/local/etc/haproxy:ro
+    depends_on: [app-a, app-b]
+
+  app-a:
+    image: hashicorp/http-echo:1.0
+    container_name: nkt-app-a
+    restart: unless-stopped
+    command: ["-listen=:8080", "-text=app-a"]
+
+  app-b:
+    image: hashicorp/http-echo:1.0
+    container_name: nkt-app-b
+    restart: unless-stopped
+    command: ["-listen=:8080", "-text=app-b"]
+
+  # Опубликован на 0.0.0.0 намеренно: анализатор должен об этом сообщить.
+  cache:
+    image: redis:7-alpine
+    container_name: nkt-cache
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+
+volumes:
+  nginx-logs:
+  nkt-data:

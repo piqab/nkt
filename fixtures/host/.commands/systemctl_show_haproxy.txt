@@ -1,0 +1,8 @@
+Description=HAProxy Load Balancer
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+ActiveEnterTimestamp=Mon 2026-07-20 04:11:55 UTC
+MainPID=933
+MemoryCurrent=97517568
+NRestarts=2
