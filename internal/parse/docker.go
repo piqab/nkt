@@ -279,14 +279,28 @@ func dockerFromEngine(ctx context.Context, c collect.Collector) ([]model.Contain
 			ComposeFile: e.Labels["com.docker.compose.project.config_files"],
 			Running:     e.State == "running",
 		}
+		// A dual-stack publication is reported once per address family, but it is
+		// one forwarding rule; keeping both would double every port of every
+		// container and invent conflicts that do not exist.
+		seenPorts := map[string]int{}
 		for _, p := range e.Ports {
 			proto := p.Type
 			if proto == "" {
 				proto = "tcp"
 			}
-			ct.Ports = append(ct.Ports, model.PortMapping{
+			mapping := model.PortMapping{
 				HostIP: p.IP, HostPort: p.PublicPort, ContainerPort: p.PrivatePort, Protocol: proto,
-			})
+			}
+			key := portKey(mapping)
+			if idx, ok := seenPorts[key]; ok {
+				// Prefer the IPv4 spelling: it is what operators recognise.
+				if strings.Contains(ct.Ports[idx].HostIP, ":") && !strings.Contains(mapping.HostIP, ":") {
+					ct.Ports[idx] = mapping
+				}
+				continue
+			}
+			seenPorts[key] = len(ct.Ports)
+			ct.Ports = append(ct.Ports, mapping)
 		}
 		names := make([]string, 0, len(e.NetworkSettings.Networks))
 		for name := range e.NetworkSettings.Networks {

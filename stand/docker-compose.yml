@@ -36,7 +36,10 @@ services:
     volumes:
       - ./nginx:/etc/nginx:rw
       - ./haproxy:/etc/haproxy:rw
-      - nginx-logs:/var/log/nginx:ro
+      # Логи нужны на запись, а не только на чтение: `nginx -t` открывает
+      # access_log каждого server-блока, и на read-only томе проверка
+      # конфигурации падает независимо от того, корректен конфиг или нет.
+      - nginx-logs:/var/log/nginx:rw
       - ./docker-compose.yml:/stand/docker-compose.yml:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - nkt-data:/var/lib/netknownsthat
