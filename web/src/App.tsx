@@ -13,7 +13,8 @@ import Certificates from './pages/Certificates'
 import Availability from './pages/Availability'
 import Usage from './pages/Usage'
 import Audit from './pages/Audit'
-import { Banner } from './components/ui'
+import { Banner, Card } from './components/ui'
+import PasswordForm from './components/PasswordForm'
 
 type Theme = 'light' | 'dark' | 'auto'
 
@@ -88,6 +89,7 @@ export default function App() {
 
 function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const [theme, setTheme] = useTheme()
+  const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
   // The overview is polled anyway; reuse it to keep the sidebar badge current.
   const overview = useApi<Overview>('/overview', 60_000)
@@ -142,14 +144,38 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
           <div>
             {me.username} · {me.role}
           </div>
-          <button className="ghost" onClick={logout} style={{ paddingLeft: 0 }}>
-            Выйти
-          </button>
+          <div className="row" style={{ gap: '0.25rem' }}>
+            <button className="ghost" onClick={() => setShowPassword(true)} style={{ paddingLeft: 0 }}>
+              Сменить пароль
+            </button>
+            <button className="ghost" onClick={logout}>
+              Выйти
+            </button>
+          </div>
         </div>
       </aside>
 
       <main className="main">
         <div className="content">
+          {showPassword && (
+            <Card
+              title="Смена пароля"
+              actions={
+                <button className="ghost" onClick={() => setShowPassword(false)}>
+                  закрыть
+                </button>
+              }
+            >
+              <PasswordForm
+                onDone={() => {
+                  setShowPassword(false)
+                  onLogout()
+                  navigate('/login', { replace: true })
+                }}
+              />
+            </Card>
+          )}
+
           {me.simulated && (
             <Banner kind="warn">
               <strong>Режим снапшота (fixtures).</strong> Конфигурации читаются из каталога
