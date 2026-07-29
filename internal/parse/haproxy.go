@@ -184,7 +184,7 @@ func haproxyEndpoints(p parser.Parser, section parser.Section, name, file, defau
 		if !ok {
 			continue
 		}
-		line, tls := sec.bindInfo(b.Path)
+		line, tls, crt := sec.bindInfo(b.Path)
 		ep := model.Endpoint{
 			ID:       fmt.Sprintf("haproxy:%s:%s:%d", name, addr, port),
 			Service:  model.ServiceHAProxy,
@@ -205,6 +205,9 @@ func haproxyEndpoints(p parser.Parser, section parser.Section, name, file, defau
 			if r.TargetKind == "upstream" {
 				ep.Upstream = appendUnique(ep.Upstream, r.Target)
 			}
+		}
+		if crt != "" {
+			ep.Extra["ssl_certificate"] = crt
 		}
 		if len(acls) > 0 {
 			ep.Extra["acl"] = strings.Join(acls, "; ")
@@ -357,8 +360,9 @@ func (s hapSection) has(keyword string) bool {
 	return false
 }
 
-// bindInfo returns the line number of a bind directive and whether it enables TLS.
-func (s hapSection) bindInfo(path string) (line int, tls bool) {
+// bindInfo returns the line number of a bind directive, whether it enables TLS,
+// and the certificate path it serves.
+func (s hapSection) bindInfo(path string) (line int, tls bool, crt string) {
 	for i, l := range s.Lines {
 		trimmed := strings.TrimSpace(l)
 		if !strings.HasPrefix(trimmed, "bind ") {
@@ -368,14 +372,21 @@ func (s hapSection) bindInfo(path string) (line int, tls bool) {
 		if len(fields) < 2 || fields[1] != path {
 			continue
 		}
-		for _, f := range fields[2:] {
-			if f == "ssl" || strings.HasPrefix(f, "crt") {
+		for j, f := range fields[2:] {
+			switch {
+			case f == "ssl":
 				tls = true
+			case f == "crt" || f == "crt-list":
+				tls = true
+				// The value follows the keyword; index is offset by the slice start.
+				if idx := j + 3; idx < len(fields) {
+					crt = fields[idx]
+				}
 			}
 		}
-		return s.Line + i, tls
+		return s.Line + i, tls, crt
 	}
-	return s.Line, false
+	return s.Line, false, ""
 }
 
 var hapSectionRe = regexp.MustCompile(

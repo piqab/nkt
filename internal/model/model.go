@@ -272,6 +272,69 @@ type ServiceUnit struct {
 	Actions     []string `json:"actions,omitempty"`
 }
 
+// RenewalInfo describes how a certificate gets replaced before it expires.
+type RenewalInfo struct {
+	Tool      string `json:"tool,omitempty"`   // certbot | acme.sh | manual
+	Managed   bool   `json:"managed"`          // an automation owns this lineage
+	Automatic bool   `json:"automatic"`        // a timer or cron job actually runs
+	Detail    string `json:"detail,omitempty"` // what was found, in words
+}
+
+// Certificate is one TLS certificate a service presents, read from the file the
+// configuration points at.
+type Certificate struct {
+	ID        string   `json:"id"`
+	Path      string   `json:"path"`
+	Service   string   `json:"service"`
+	Endpoints []string `json:"endpoints,omitempty"` // sockets that serve it
+	Sites     []string `json:"sites,omitempty"`     // server_name / frontend names
+
+	Subject   string    `json:"subject,omitempty"`
+	Issuer    string    `json:"issuer,omitempty"`
+	Serial    string    `json:"serial,omitempty"`
+	Names     []string  `json:"names,omitempty"` // CN plus subject alternative names
+	NotBefore time.Time `json:"not_before"`
+	NotAfter  time.Time `json:"not_after"`
+	// DaysLeft is negative once the certificate has expired.
+	DaysLeft int `json:"days_left"`
+
+	KeyAlgorithm string `json:"key_algorithm,omitempty"`
+	KeyBits      int    `json:"key_bits,omitempty"`
+	SigAlgorithm string `json:"sig_algorithm,omitempty"`
+	SelfSigned   bool   `json:"self_signed"`
+	ChainLength  int    `json:"chain_length"`
+
+	Renewal RenewalInfo `json:"renewal"`
+	Error   string      `json:"error,omitempty"`
+}
+
+// Expired reports whether the certificate is already past its validity.
+func (c Certificate) Expired() bool { return c.DaysLeft < 0 }
+
+// Valid reports whether the certificate parsed and is currently usable.
+func (c Certificate) Valid() bool {
+	return c.Error == "" && !c.Expired() && !time.Now().Before(c.NotBefore)
+}
+
+// CoversName reports whether the certificate is valid for a host name,
+// including one level of wildcard.
+func (c Certificate) CoversName(name string) bool {
+	name = strings.ToLower(strings.TrimSuffix(name, "."))
+	for _, n := range c.Names {
+		n = strings.ToLower(n)
+		if n == name {
+			return true
+		}
+		if strings.HasPrefix(n, "*.") {
+			if suffix := n[1:]; strings.HasSuffix(name, suffix) &&
+				!strings.Contains(strings.TrimSuffix(name, suffix), ".") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Finding is one problem the analyzer found.
 type Finding struct {
 	ID         string   `json:"id"`
@@ -301,6 +364,7 @@ type Snapshot struct {
 	Networks  []DockerNetwork `json:"networks"`
 	Firewall  FirewallState   `json:"firewall"`
 	Listeners []Listener      `json:"listeners"`
+	Certs     []Certificate   `json:"certificates"`
 	Findings  []Finding       `json:"findings"`
 	Digest    string          `json:"digest"`
 	ScanMS    int64           `json:"scan_ms"`

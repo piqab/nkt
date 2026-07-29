@@ -8,6 +8,11 @@
     { "match": ["systemctl", "show", "fail2ban"], "stdout_file": "systemctl_show_fail2ban.txt" },
     { "match": ["systemctl", "show"], "stdout": "Description=\nActiveState=inactive\nSubState=dead\nUnitFileState=not-found\nActiveEnterTimestamp=\nMainPID=0\nMemoryCurrent=0\nNRestarts=0\n" },
 
+    { "_comment": "Таймер certbot намеренно выключен: сертификаты есть, а продлевать их некому.",
+      "match": ["systemctl", "is-active", "certbot.timer"], "stdout": "inactive\n", "exit_code": 3 },
+    { "match": ["systemctl", "is-active"], "stdout": "inactive\n", "exit_code": 3 },
+
+
     { "match": ["nginx", "-t"], "stderr": "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful\n", "exit_code": 0, "simulated": true },
     { "match": ["nginx", "-v"], "stderr": "nginx version: nginx/1.24.0 (Ubuntu)\n", "simulated": true },
     { "match": ["haproxy", "-c"], "stdout": "Configuration file is valid\n", "exit_code": 0, "simulated": true },
