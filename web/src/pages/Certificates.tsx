@@ -42,6 +42,13 @@ function renewalWord(cert: Certificate): string {
   return 'вручную'
 }
 
+/** A "Продлить" button only makes sense when certbot itself can act on this
+ * lineage — an orphan lineage or a manually managed path has nothing for
+ * `certbot renew --cert-name` to find. */
+function canRenew(cert: Certificate): boolean {
+  return cert.renewal.tool === 'certbot' && cert.renewal.managed && !!cert.renewal.lineage
+}
+
 function renewalTone(cert: Certificate): Tone | 'muted' {
   if (cert.renewal.automatic) return 'good'
   if (cert.renewal.managed) return 'warning'
@@ -80,9 +87,33 @@ function commonName(dn?: string): string {
 
 export default function Certificates({ me }: { me: Me }) {
   const { data, error, loading, reload } = useApi<CertificatesResponse>('/certificates', 300_000)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
 
   const certs = useMemo(() => data?.certificates ?? [], [data])
   const summary = data?.summary
+  const canControl = me.is_admin && me.allow_mutations
+
+  async function renew(cert: Certificate) {
+    const lineage = cert.renewal.lineage
+    if (!lineage) return
+    if (!window.confirm(`Запустить certbot renew --cert-name ${lineage}?`)) return
+    setBusy(cert.id)
+    setNotice(null)
+    try {
+      const res = await api<{ output: string; simulated: boolean }>('/certificates/renew', {
+        method: 'POST',
+        body: { lineage },
+      })
+      const suffix = res.simulated ? ' (симуляция, режим снапшота)' : ''
+      setNotice({ kind: 'info', text: `${lineage}: ${res.output || 'продлено'}${suffix}` })
+      reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(null)
+    }
+  }
 
   if (loading && !data) return <Loading what="сертификаты" />
   if (error && !data) return <ErrorNote error={error} />
@@ -100,6 +131,8 @@ export default function Certificates({ me }: { me: Me }) {
           </p>
         </div>
       </div>
+
+      {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
 
       <div className="grid grid-4">
         <StatTile label="Сертификатов" value={formatNumber(summary?.total ?? 0)} />
@@ -198,6 +231,7 @@ export default function Certificates({ me }: { me: Me }) {
                 <th>Издатель</th>
                 <th>Обновление</th>
                 <th>На сокете</th>
+                {canControl && <th>Действия</th>}
               </tr>
             </thead>
             <tbody>
@@ -252,6 +286,19 @@ export default function Certificates({ me }: { me: Me }) {
                         <div className="small muted mono">{cert.serving.endpoint}</div>
                       )}
                     </td>
+                    {canControl && (
+                      <td className="nowrap">
+                        {canRenew(cert) && (
+                          <button
+                            className="ghost"
+                            disabled={busy === cert.id}
+                            onClick={() => renew(cert)}
+                          >
+                            {busy === cert.id ? 'продлеваю…' : 'продлить'}
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 )
               })}

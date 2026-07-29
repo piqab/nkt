@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/control"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/store"
 )
@@ -25,29 +26,33 @@ type JobStatus struct {
 // Scheduler drives every periodic job: rescans, probes, usage sampling, log
 // ingestion and retention.
 type Scheduler struct {
-	cfg     *config.Config
-	db      *store.DB
-	scanner *inventory.Scanner
-	prober  *Prober
-	metrics *MetricsCollector
-	logs    *LogCollector
-	log     *slog.Logger
+	cfg         *config.Config
+	db          *store.DB
+	scanner     *inventory.Scanner
+	prober      *Prober
+	metrics     *MetricsCollector
+	logs        *LogCollector
+	certRenewer *CertRenewer
+	log         *slog.Logger
 
 	mu     sync.RWMutex
 	status map[string]*JobStatus
 }
 
-// NewScheduler wires the background jobs together.
-func NewScheduler(cfg *config.Config, db *store.DB, scanner *inventory.Scanner, log *slog.Logger) *Scheduler {
+// NewScheduler wires the background jobs together. certs is used only by the
+// optional cert-renew job (config.AutoRenewCerts).
+func NewScheduler(cfg *config.Config, db *store.DB, scanner *inventory.Scanner,
+	certs *control.CertManager, log *slog.Logger) *Scheduler {
 	return &Scheduler{
-		cfg:     cfg,
-		db:      db,
-		scanner: scanner,
-		prober:  NewProber(db, cfg),
-		metrics: NewMetricsCollector(db, scanner.Collector(), cfg),
-		logs:    NewLogCollector(db, scanner.Collector()),
-		log:     log,
-		status:  map[string]*JobStatus{},
+		cfg:         cfg,
+		db:          db,
+		scanner:     scanner,
+		prober:      NewProber(db, cfg),
+		metrics:     NewMetricsCollector(db, scanner.Collector(), cfg),
+		logs:        NewLogCollector(db, scanner.Collector()),
+		certRenewer: NewCertRenewer(cfg, scanner, certs),
+		log:         log,
+		status:      map[string]*JobStatus{},
 	}
 }
 
@@ -125,6 +130,14 @@ func (s *Scheduler) Start(ctx context.Context, wg *sync.WaitGroup) {
 		res, err := s.db.Purge(ctx, s.cfg.Retention)
 		return int(res.Probes + res.Metrics + res.Sessions + res.Snapshots), err
 	})
+
+	// AllowMutations is the same kill switch every admin-triggered action
+	// respects; an unattended job has no business bypassing it.
+	if s.cfg.AutoRenewCerts && s.cfg.AllowMutations {
+		s.every(ctx, wg, "cert-renew", s.cfg.AutoRenewCertsInterval, s.certRenewer.RunOnce)
+	} else if s.cfg.AutoRenewCerts {
+		s.log.Warn("NKT_AUTO_RENEW_CERTS включён, но NKT_ALLOW_MUTATIONS=false — задача не запущена")
+	}
 }
 
 // every runs job on a fixed interval until ctx is done, executing it once

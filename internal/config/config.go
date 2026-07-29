@@ -55,6 +55,19 @@ type Config struct {
 	AllowMutations bool
 	CommandTimeout time.Duration
 
+	// AutoRenewCerts periodically runs `certbot renew --cert-name <lineage>`
+	// for every certbot-managed certificate the analyzer already flags as
+	// expired or expiring — a fallback for hosts where certbot.timer or the
+	// cron job never got enabled. Off by default: an unattended process that
+	// reaches out to Let's Encrypt on its own is a deliberate opt-in, and it
+	// still respects AllowMutations.
+	AutoRenewCerts         bool
+	AutoRenewCertsInterval time.Duration
+	// AutoRenewCertsWithin is how close to expiry (or already expired) a
+	// certificate must be before the job touches it — the same margin
+	// Let's Encrypt itself uses to decide a renewal is actually due.
+	AutoRenewCertsWithin time.Duration
+
 	// Auth.
 	SessionTTL             time.Duration
 	BootstrapAdminUser     string
@@ -123,6 +136,10 @@ func Load() (*Config, error) {
 
 		AllowMutations: envBool("NKT_ALLOW_MUTATIONS", true),
 		CommandTimeout: envDur("NKT_COMMAND_TIMEOUT", 30*time.Second),
+
+		AutoRenewCerts:         envBool("NKT_AUTO_RENEW_CERTS", false),
+		AutoRenewCertsInterval: envDur("NKT_AUTO_RENEW_INTERVAL", 6*time.Hour),
+		AutoRenewCertsWithin:   envDur("NKT_AUTO_RENEW_WITHIN", 30*24*time.Hour),
 
 		SessionTTL:             envDur("NKT_SESSION_TTL", 12*time.Hour),
 		BootstrapAdminUser:     envStr("NKT_BOOTSTRAP_ADMIN_USER", "admin"),

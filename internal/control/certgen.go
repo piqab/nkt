@@ -213,3 +213,39 @@ func (m *CertManager) GenerateSelfSigned(ctx context.Context, user string, req S
 func safeDirName(name string) string {
 	return strings.NewReplacer("*", "_wildcard_", "/", "_").Replace(name)
 }
+
+// lineageRe accepts certbot's own lineage directory names: the first domain a
+// certificate was issued for, occasionally suffixed "-0001" and so on when
+// certbot had to disambiguate a repeat request.
+var lineageRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9])?$`)
+
+// RenewCertbot re-issues a certbot-managed lineage in place.
+//
+// Unlike GenerateSelfSigned, this never writes files itself — certbot already
+// knows to replace exactly the files under /etc/letsencrypt/live/<lineage>/
+// that nginx/haproxy configuration already points at, so nothing else needs
+// to change afterward. This only runs for lineages the app already found a
+// renewal.conf for (RenewalInfo.Managed) — an orphan lineage or a path
+// outside /etc/letsencrypt is not something certbot can renew at all.
+func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (collect.CommandResult, error) {
+	if !lineageRe.MatchString(lineage) {
+		return collect.CommandResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
+	}
+
+	res, err := m.c.Run(ctx, "certbot", "renew", "--cert-name", lineage, "--non-interactive")
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	m.db.Audit(ctx, user, "cert.renew", lineage, outcome, map[string]any{
+		"exit_code": res.ExitCode, "output": strings.TrimSpace(res.Output()), "simulated": res.Simulated,
+	})
+	if err != nil {
+		return res, err
+	}
+	if !res.OK() {
+		return res, fmt.Errorf("certbot renew --cert-name %s: код %d: %s", lineage, res.ExitCode,
+			strings.TrimSpace(res.Output()))
+	}
+	return res, nil
+}

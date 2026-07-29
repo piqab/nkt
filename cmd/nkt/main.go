@@ -232,7 +232,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	scheduler := monitor.NewScheduler(r.cfg, r.db, r.scanner, log)
+	scheduler := monitor.NewScheduler(r.cfg, r.db, r.scanner, r.certs, log)
 	var jobs sync.WaitGroup
 	scheduler.Start(ctx, &jobs)
 

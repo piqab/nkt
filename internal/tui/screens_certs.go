@@ -54,13 +54,16 @@ func (s *certsScreen) title() string          { return "Сертификаты" 
 func (s *certsScreen) view() tview.Primitive  { return s.root }
 func (s *certsScreen) focus() tview.Primitive { return s.table }
 func (s *certsScreen) hints() string {
-	return dim("Enter показать файл · g выпустить самоподписанный")
+	return dim("Enter показать файл · g выпустить самоподписанный · r продлить через certbot")
 }
 
 func (s *certsScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 	switch {
 	case event.Rune() == 'g' || event.Rune() == 'G':
 		s.showGenerateForm()
+		return nil
+	case event.Rune() == 'r' || event.Rune() == 'R':
+		s.renewSelected()
 		return nil
 	case event.Key() == tcell.KeyEnter:
 		row, _ := s.table.GetSelection()
@@ -133,6 +136,42 @@ func (s *certsScreen) showGenerateForm() {
 
 	s.app.editing = true
 	s.app.showModal("certgen", form, 74, 13)
+}
+
+// renewSelected re-issues the selected certificate's certbot lineage in
+// place. Only offered when the app already found a renewal.conf for it —
+// an orphan lineage or a manually managed path has nothing for
+// `certbot renew --cert-name` to act on.
+func (s *certsScreen) renewSelected() {
+	row, _ := s.table.GetSelection()
+	idx := row - 1
+	if idx < 0 || idx >= len(s.certs) {
+		return
+	}
+	cert := s.certs[idx]
+	if cert.Renewal.Tool != "certbot" || !cert.Renewal.Managed || cert.Renewal.Lineage == "" {
+		s.app.setStatus(hexWarning, "certbot не управляет этим сертификатом — продлить нечем")
+		return
+	}
+	if !s.app.canMutate() {
+		s.app.setStatus(hexWarning, "Изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
+		return
+	}
+
+	lineage := cert.Renewal.Lineage
+	s.app.confirm(fmt.Sprintf("Выполнить certbot renew --cert-name %s?", lineage), func() {
+		s.app.runAsync("Продлеваю "+lineage, true, func(ctx context.Context) (string, error) {
+			res, err := s.app.Certs.RenewCertbot(ctx, s.app.actor, lineage)
+			if err != nil {
+				return "", err
+			}
+			msg := lineage + ": продлено"
+			if res.Simulated {
+				msg += " (симуляция, режим снапшота)"
+			}
+			return msg, nil
+		})
+	})
 }
 
 // expiryTone maps days remaining onto the reserved status palette.
