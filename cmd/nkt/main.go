@@ -35,13 +35,22 @@ var version = "dev"
 const usage = `NetKnownsThat %s — карта сетевых ресурсов и проверка конфигураций хоста.
 
 Использование:
-  nkt [serve]     запустить веб-дашборд и фоновый сбор данных (по умолчанию)
-  nkt tui         терминальный интерфейс: то же самое без браузера
-  nkt scan        разовая проверка, отчёт в stdout, код 2 при критичных находках
-  nkt version     показать версию
+  nkt [serve]         запустить веб-дашборд и фоновый сбор данных (по умолчанию)
+  nkt tui             терминальный интерфейс: то же самое без браузера
+  nkt scan            разовая проверка, отчёт в stdout, код 2 при критичных находках
+  nkt users           показать учётные записи веб-интерфейса
+  nkt passwd [логин]  сменить пароль (по умолчанию admin), спросит его без эха
+  nkt version         показать версию
 
 Флаги:
-  -v              подробный лог
+  -v                  подробный лог
+  -random             в passwd: сгенерировать пароль и напечатать один раз
+  -role admin|viewer  в passwd: создать учётную запись с этой ролью, если её нет
+
+Примеры:
+  sudo nkt passwd                     сменить пароль администратора
+  sudo nkt passwd ops -role viewer    завести учётку только на чтение
+  sudo nkt passwd -random             выдать новый случайный пароль admin
 
 Настройка — через переменные окружения NKT_*, см. deploy/nkt.env.example.
 `
@@ -58,8 +67,19 @@ func main() {
 	// Kept so that the documented `nkt -scan` keeps working.
 	scanFlag := fs.Bool("scan", false, "разовая проверка и выход")
 	versionFlag := fs.Bool("version", false, "показать версию и выйти")
+	randomFlag := fs.Bool("random", false, "сгенерировать пароль вместо ввода")
+	roleFlag := fs.String("role", "", "роль создаваемой учётной записи: admin или viewer")
 	fs.Usage = func() { fmt.Fprintf(os.Stderr, usage, version) }
+
+	// The flag package stops at the first non-flag argument, so `passwd ops
+	// -role viewer` would silently ignore the role. Parse what precedes the
+	// positional argument, then continue with what follows it.
 	_ = fs.Parse(args)
+	positional := ""
+	if rest := fs.Args(); len(rest) > 0 {
+		positional = rest[0]
+		_ = fs.Parse(rest[1:])
+	}
 
 	switch {
 	case *versionFlag:
@@ -68,24 +88,37 @@ func main() {
 		command = "scan"
 	}
 
+	opts := commandOptions{
+		username: positional,
+		role:     *roleFlag,
+		random:   *randomFlag,
+	}
+
 	level := slog.LevelInfo
 	if *verbose {
 		level = slog.LevelDebug
 	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
-	if err := dispatch(command, log); err != nil {
+	if err := dispatch(command, opts, log); err != nil {
 		log.Error("не удалось выполнить команду", "команда", command, "err", err)
 		os.Exit(1)
 	}
 }
 
-func dispatch(command string, log *slog.Logger) error {
+// commandOptions carries the flags and positional argument the subcommands read.
+type commandOptions struct {
+	username string
+	role     string
+	random   bool
+}
+
+func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 	switch command {
 	case "version":
 		fmt.Printf("netknownsthat %s\n", version)
 		return nil
-	case "serve", "tui", "scan":
+	case "serve", "tui", "scan", "users", "passwd":
 	case "help", "-h", "--help":
 		fmt.Fprintf(os.Stderr, usage, version)
 		return nil
@@ -100,11 +133,16 @@ func dispatch(command string, log *slog.Logger) error {
 	}
 	defer app.close()
 
+	ctx := context.Background()
 	switch command {
 	case "scan":
-		return app.printScanReport(context.Background())
+		return app.printScanReport(ctx)
 	case "tui":
 		return app.runTUI()
+	case "users":
+		return app.listUsers(ctx)
+	case "passwd":
+		return app.setPassword(ctx, opts.username, opts.role, opts.random)
 	default:
 		return app.runServer(log)
 	}

@@ -4,12 +4,24 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/store"
 )
+
+// minPasswordRunes is the shortest password accepted anywhere in the API.
+const minPasswordRunes = 10
+
+const minPasswordMessage = "Пароль должен быть не короче 10 символов"
+
+// passwordLongEnough counts characters rather than bytes: five Cyrillic letters
+// occupy ten bytes in UTF-8 and would otherwise pass a byte-based check.
+func passwordLongEnough(password string) bool {
+	return utf8.RuneCountInString(password) >= minPasswordRunes
+}
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	snap := s.scanner.Latest()
@@ -92,8 +104,8 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if len(req.NewPassword) < 10 {
-		writeError(w, http.StatusBadRequest, "Новый пароль должен быть не короче 10 символов")
+	if !passwordLongEnough(req.NewPassword) {
+		writeError(w, http.StatusBadRequest, minPasswordMessage)
 		return
 	}
 	user, _ := auth.UserFromContext(r.Context())
@@ -131,8 +143,8 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
-	if req.Username == "" || len(req.Password) < 10 {
-		writeError(w, http.StatusBadRequest, "Нужен логин и пароль не короче 10 символов")
+	if req.Username == "" || !passwordLongEnough(req.Password) {
+		writeError(w, http.StatusBadRequest, "Нужен логин и "+strings.ToLower(minPasswordMessage))
 		return
 	}
 	if req.Role == "" {
@@ -189,8 +201,8 @@ func (s *Server) handleUserPatch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.Password != nil {
-		if len(*req.Password) < 10 {
-			writeError(w, http.StatusBadRequest, "Пароль должен быть не короче 10 символов")
+		if !passwordLongEnough(*req.Password) {
+			writeError(w, http.StatusBadRequest, minPasswordMessage)
 			return
 		}
 		hash, err := auth.HashPassword(*req.Password)
