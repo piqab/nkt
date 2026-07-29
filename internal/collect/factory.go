@@ -13,7 +13,12 @@ func New(mode, fixturesRoot, dockerSocket string, commandTimeout time.Duration) 
 	case "fixtures":
 		st, err := os.Stat(fixturesRoot)
 		if err != nil {
-			return nil, fmt.Errorf("снапшот %s недоступен: %w", fixturesRoot, err)
+			hint := "запускайте из корня репозитория или задайте NKT_FIXTURES_ROOT"
+			if runtime.GOOS == "linux" {
+				hint = "если это боевой хост, нужен режим NKT_MODE=local; " +
+					"для снапшота — запуск из корня репозитория или NKT_FIXTURES_ROOT"
+			}
+			return nil, fmt.Errorf("каталог снапшота %s не найден. %s", fixturesRoot, hint)
 		}
 		if !st.IsDir() {
 			return nil, fmt.Errorf("снапшот %s не является каталогом", fixturesRoot)
