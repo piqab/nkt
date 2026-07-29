@@ -171,8 +171,8 @@ func TestScanReadsCertificates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("скан завершился ошибкой: %v", err)
 	}
-	if len(snap.Certs) != 3 {
-		t.Fatalf("сертификатов: %d, ожидалось 3", len(snap.Certs))
+	if len(snap.Certs) != 5 {
+		t.Fatalf("сертификатов: %d, ожидалось 5", len(snap.Certs))
 	}
 
 	byPath := map[string]model.Certificate{}
