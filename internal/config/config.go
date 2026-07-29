@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -66,6 +67,27 @@ type Config struct {
 	DevProxyUI  bool
 }
 
+// defaultMode picks the mode for a bare invocation. Linux is the platform this
+// application manages, so there a plain `nkt` inspects the real host; anywhere
+// else local mode cannot work at all and the snapshot is the only useful choice.
+func defaultMode() Mode {
+	if runtime.GOOS == "linux" {
+		return ModeLocal
+	}
+	return ModeFixtures
+}
+
+// defaultDataDir keeps production state in the standard system location, which
+// is also where the systemd unit points. That matters beyond tidiness: the
+// terminal interface reads the same database the service writes, and a
+// directory next to the binary would leave it staring at an empty history.
+func defaultDataDir(mode Mode, wd string) string {
+	if mode == ModeLocal {
+		return "/var/lib/netknownsthat"
+	}
+	return filepath.Join(wd, "data")
+}
+
 // Load resolves configuration from NKT_* environment variables, falling back to
 // defaults that are sensible for a Debian/Ubuntu host.
 func Load() (*Config, error) {
@@ -74,10 +96,12 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("resolve working directory: %w", err)
 	}
 
+	mode := Mode(envStr("NKT_MODE", string(defaultMode())))
+
 	c := &Config{
-		Mode:         Mode(envStr("NKT_MODE", string(ModeFixtures))),
+		Mode:         mode,
 		FixturesRoot: envStr("NKT_FIXTURES_ROOT", filepath.Join(wd, "fixtures", "host")),
-		DataDir:      envStr("NKT_DATA_DIR", filepath.Join(wd, "data")),
+		DataDir:      envStr("NKT_DATA_DIR", defaultDataDir(mode, wd)),
 
 		NginxRoot:        envStr("NKT_NGINX_ROOT", "/etc/nginx"),
 		NginxMainConfig:  envStr("NKT_NGINX_MAIN_CONFIG", "/etc/nginx/nginx.conf"),
@@ -117,7 +141,9 @@ func Load() (*Config, error) {
 	}
 
 	if err := os.MkdirAll(c.DataDir, 0o750); err != nil {
-		return nil, fmt.Errorf("create data dir %s: %w", c.DataDir, err)
+		return nil, fmt.Errorf(
+			"не удалось создать каталог данных %s: %w. Запустите от root или задайте NKT_DATA_DIR",
+			c.DataDir, err)
 	}
 	return c, nil
 }
