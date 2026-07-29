@@ -28,6 +28,15 @@ type CertResult struct {
 // letsEncryptLive is where certbot keeps the symlinks a config normally points at.
 const letsEncryptLive = "/etc/letsencrypt/live/"
 
+// certUsage tracks which endpoints and site names a certificate path serves.
+// One file (or, for haproxy's directory form, one directory) often serves
+// several endpoints.
+type certUsage struct {
+	service   string
+	endpoints []string
+	sites     []string
+}
+
 // Certificates reads every certificate the parsed endpoints refer to.
 //
 // The file on disk is the source of truth here rather than the socket: a
@@ -38,13 +47,7 @@ func Certificates(ctx context.Context, c collect.Collector, endpoints []model.En
 	res := CertResult{Status: model.SourceStatus{Name: "certificates"}}
 	defer func() { res.Status.DurationMS = time.Since(started).Milliseconds() }()
 
-	// One file often serves several endpoints; collect the users of each path.
-	type usage struct {
-		service   string
-		endpoints []string
-		sites     []string
-	}
-	paths := map[string]*usage{}
+	paths := map[string]*certUsage{}
 	var order []string
 
 	for _, e := range endpoints {
@@ -54,7 +57,7 @@ func Certificates(ctx context.Context, c collect.Collector, endpoints []model.En
 		}
 		u, ok := paths[certPath]
 		if !ok {
-			u = &usage{service: e.Service}
+			u = &certUsage{service: e.Service}
 			paths[certPath] = u
 			order = append(order, certPath)
 		}
@@ -76,27 +79,29 @@ func Certificates(ctx context.Context, c collect.Collector, endpoints []model.En
 
 	for _, path := range order {
 		u := paths[path]
-		cert := model.Certificate{
-			ID:        "cert:" + path,
-			Path:      path,
-			Service:   u.service,
-			Endpoints: u.endpoints,
-			Sites:     u.sites,
-			Renewal:   renewals.forPath(path),
-		}
 
-		raw, err := c.ReadFile(path)
-		if err != nil {
-			cert.Error = fmt.Sprintf("файл недоступен: %v", err)
-			res.Status.Warnings = append(res.Status.Warnings, path+": "+cert.Error)
-			res.Certs = append(res.Certs, cert)
+		// haproxy's "bind ... crt" can name a directory instead of a single PEM
+		// file: it then picks a certificate per connection by SNI. Every bundle
+		// in the directory is a certificate in its own right and gets checked
+		// individually — there is no single file to read at the directory path.
+		if info, err := c.Stat(path); err == nil && info.IsDir {
+			files, err := certDirEntries(c, path)
+			if err != nil {
+				res.Certs = append(res.Certs, dirError(&res, path, u, renewals,
+					fmt.Sprintf("каталог сертификатов недоступен: %v", err)))
+				continue
+			}
+			if len(files) == 0 {
+				res.Certs = append(res.Certs, dirError(&res, path, u, renewals, "каталог сертификатов пуст"))
+				continue
+			}
+			for _, file := range files {
+				res.Certs = append(res.Certs, readCertFile(&res, c, file, u, renewals))
+			}
 			continue
 		}
-		if err := fillFromPEM(&cert, raw); err != nil {
-			cert.Error = err.Error()
-			res.Status.Warnings = append(res.Status.Warnings, path+": "+cert.Error)
-		}
-		res.Certs = append(res.Certs, cert)
+
+		res.Certs = append(res.Certs, readCertFile(&res, c, path, u, renewals))
 	}
 
 	sort.Slice(res.Certs, func(i, j int) bool {
@@ -107,6 +112,81 @@ func Certificates(ctx context.Context, c collect.Collector, endpoints []model.En
 	})
 	res.Status.Files = certPaths(res.Certs)
 	return res
+}
+
+// dirError builds a placeholder certificate describing why a "crt" directory
+// itself could not be resolved into any certificate bundle.
+func dirError(res *CertResult, path string, u *certUsage, renewals renewalIndex, reason string) model.Certificate {
+	cert := model.Certificate{
+		ID:        "cert:" + path,
+		Path:      path,
+		Service:   u.service,
+		Endpoints: u.endpoints,
+		Sites:     u.sites,
+		Renewal:   renewals.forPath(path),
+		Error:     reason,
+	}
+	res.Status.Warnings = append(res.Status.Warnings, path+": "+reason)
+	return cert
+}
+
+// readCertFile reads and parses a single certificate file, recording any
+// failure both on the returned certificate and in the source status.
+func readCertFile(res *CertResult, c collect.Collector, path string, u *certUsage, renewals renewalIndex) model.Certificate {
+	cert := model.Certificate{
+		ID:        "cert:" + path,
+		Path:      path,
+		Service:   u.service,
+		Endpoints: u.endpoints,
+		Sites:     u.sites,
+		Renewal:   renewals.forPath(path),
+	}
+
+	raw, err := c.ReadFile(path)
+	if err != nil {
+		cert.Error = fmt.Sprintf("файл недоступен: %v", err)
+		res.Status.Warnings = append(res.Status.Warnings, path+": "+cert.Error)
+		return cert
+	}
+	if err := fillFromPEM(&cert, raw); err != nil {
+		cert.Error = err.Error()
+		res.Status.Warnings = append(res.Status.Warnings, path+": "+cert.Error)
+	}
+	return cert
+}
+
+// certDirEntries lists the certificate bundles inside a haproxy "crt"
+// directory, skipping the private-key/OCSP/issuer companion files haproxy
+// expects alongside each bundle and any hidden files.
+func certDirEntries(c collect.Collector, dir string) ([]string, error) {
+	entries, err := c.ListDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	companionSuffixes := []string{".key", ".ocsp", ".issuer", ".sctl"}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir {
+			continue
+		}
+		base := gopath.Base(e.Path)
+		if strings.HasPrefix(base, ".") {
+			continue
+		}
+		skip := false
+		for _, suf := range companionSuffixes {
+			if strings.HasSuffix(base, suf) {
+				skip = true
+				break
+			}
+		}
+		if skip {
+			continue
+		}
+		out = append(out, e.Path)
+	}
+	sort.Strings(out)
+	return out, nil
 }
 
 func certPaths(certs []model.Certificate) []string {
