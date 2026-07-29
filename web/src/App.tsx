@@ -13,6 +13,7 @@ import Certificates from './pages/Certificates'
 import Availability from './pages/Availability'
 import Usage from './pages/Usage'
 import Audit from './pages/Audit'
+import Users from './pages/Users'
 import { Banner, Card } from './components/ui'
 import PasswordForm from './components/PasswordForm'
 
@@ -42,6 +43,9 @@ const NAV = [
   { to: '/firewall', label: 'Firewall' },
   { to: '/certificates', label: 'Сертификаты', badge: 'certs' as const },
   { to: '/audit', label: 'Журнал действий' },
+  // Managing who can sign in is itself an admin action — a viewer has no use
+  // for this screen and the API would refuse every request from it anyway.
+  { to: '/users', label: 'Пользователи', adminOnly: true },
 ]
 
 export default function App() {
@@ -117,7 +121,7 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
         </div>
 
         <nav className="nav">
-          {NAV.map((item) => (
+          {NAV.filter((item) => !item.adminOnly || me.is_admin).map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end}>
               <span>{item.label}</span>
               {item.badge === 'findings' && criticalCount > 0 && (
@@ -202,6 +206,7 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
             <Route path="/firewall" element={<Firewall me={me} />} />
             <Route path="/certificates" element={<Certificates me={me} />} />
             <Route path="/audit" element={<Audit />} />
+            {me.is_admin && <Route path="/users" element={<Users me={me} />} />}
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

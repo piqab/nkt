@@ -332,6 +332,15 @@ export interface SelfSignedResult {
   snippet: string
 }
 
+export interface Account {
+  id: number
+  username: string
+  role: 'admin' | 'viewer'
+  disabled: boolean
+  created_at: string
+  last_login_at?: string
+}
+
 export interface AuditEntry {
   id: number
   ts: string
