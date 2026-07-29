@@ -177,6 +177,54 @@ func TestUnreadableCertificate(t *testing.T) {
 	}
 }
 
+// This is the rule the live socket check exists for: a file that looks
+// perfectly healthy while the service actually hands out something else,
+// typically because nothing reloaded it after a renewal.
+func TestLiveCertificateMismatch(t *testing.T) {
+	got := certFindings(cert(func(x *model.Certificate) {
+		x.Serving = model.CertServing{
+			Checked: true, Endpoint: "127.0.0.1:443", Match: false,
+			ServedSerial:   "deadbeef",
+			ServedNotAfter: time.Now().Add(10 * 24 * time.Hour),
+		}
+	}))
+	list := got["tls-cert-not-reloaded"]
+	if len(list) != 1 {
+		t.Fatalf("ожидалась одна находка о несовпадении, получено %d", len(list))
+	}
+	if !strings.Contains(list[0].Detail, "127.0.0.1:443") || !strings.Contains(list[0].Detail, "deadbeef") {
+		t.Errorf("подробности должны называть точку подключения и серийный номер: %q", list[0].Detail)
+	}
+}
+
+// A matching live certificate must stay quiet, and so must one that was never
+// checked at all (fixtures mode, or no reachable endpoint).
+func TestLiveCertificateMatchOrUncheckedIsSilent(t *testing.T) {
+	matching := cert(func(x *model.Certificate) {
+		x.Serving = model.CertServing{Checked: true, Match: true}
+	})
+	if got := certFindings(matching)["tls-cert-not-reloaded"]; len(got) != 0 {
+		t.Errorf("совпадающий сертификат не должен давать находку: %+v", got)
+	}
+
+	unchecked := cert(nil) // Serving zero value: Checked=false
+	if got := certFindings(unchecked)["tls-cert-not-reloaded"]; len(got) != 0 {
+		t.Errorf("непроверенный сертификат не должен давать находку: %+v", got)
+	}
+}
+
+// A dial error is not evidence of a mismatch — it just means we could not
+// look. Firing here would turn "the firewall blocked this dial" into a false
+// claim about what the service is serving.
+func TestLiveCertificateDialErrorIsSilent(t *testing.T) {
+	got := certFindings(cert(func(x *model.Certificate) {
+		x.Serving = model.CertServing{Checked: true, Error: "connection refused"}
+	}))
+	if got := got["tls-cert-not-reloaded"]; len(got) != 0 {
+		t.Errorf("ошибка подключения не должна порождать находку о несовпадении: %+v", got)
+	}
+}
+
 func keysOf(m map[string][]model.Finding) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {

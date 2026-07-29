@@ -107,6 +107,12 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 	// Write to a sibling temp file and rename, so a crash mid-write can never
 	// leave nginx or haproxy with a truncated config.
 	dir := filepath.Dir(p)
+	// Mirrors Fixtures.WriteFile: most writers target an existing config
+	// directory, but a first-time write (a freshly generated certificate, for
+	// instance) may need its directory created.
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("создание каталога %s: %w", dir, err)
+	}
 	tmp, err := os.CreateTemp(dir, ".nkt-*")
 	if err != nil {
 		return fmt.Errorf("create temp file in %s: %w", dir, err)

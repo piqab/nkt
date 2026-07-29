@@ -200,7 +200,7 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
             <Route path="/configs" element={<Configs me={me} />} />
             <Route path="/services" element={<Services me={me} />} />
             <Route path="/firewall" element={<Firewall me={me} />} />
-            <Route path="/certificates" element={<Certificates />} />
+            <Route path="/certificates" element={<Certificates me={me} />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />

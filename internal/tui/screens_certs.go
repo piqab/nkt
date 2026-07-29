@@ -3,11 +3,13 @@ package tui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
+	"github.com/althq/netknownsthat/internal/control"
 	"github.com/althq/netknownsthat/internal/model"
 )
 
@@ -52,28 +54,85 @@ func (s *certsScreen) title() string          { return "Сертификаты" 
 func (s *certsScreen) view() tview.Primitive  { return s.root }
 func (s *certsScreen) focus() tview.Primitive { return s.table }
 func (s *certsScreen) hints() string {
-	return dim("Enter показать файл сертификата")
+	return dim("Enter показать файл · g выпустить самоподписанный")
 }
 
 func (s *certsScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
-	if event.Key() != tcell.KeyEnter {
-		return event
-	}
-	row, _ := s.table.GetSelection()
-	idx := row - 1
-	if idx < 0 || idx >= len(s.certs) {
+	switch {
+	case event.Rune() == 'g' || event.Rune() == 'G':
+		s.showGenerateForm()
+		return nil
+	case event.Key() == tcell.KeyEnter:
+		row, _ := s.table.GetSelection()
+		idx := row - 1
+		if idx < 0 || idx >= len(s.certs) {
+			return nil
+		}
+		cert := s.certs[idx]
+		file, err := s.app.Configs.Read(cert.Path)
+		if err != nil {
+			// Certificates live outside the editable allowlist, which is
+			// deliberate: they are not text to hand-edit. Show what is known.
+			s.app.showText("certfile", cert.Path, s.describe(cert))
+			return nil
+		}
+		s.app.showText("certfile", cert.Path, tview.Escape(file.Content))
 		return nil
 	}
-	cert := s.certs[idx]
-	file, err := s.app.Configs.Read(cert.Path)
-	if err != nil {
-		// Certificates live outside the editable allowlist, which is deliberate:
-		// they are not text to hand-edit. Show what is known instead.
-		s.app.showText("certfile", cert.Path, s.describe(cert))
-		return nil
+	return event
+}
+
+// showGenerateForm collects a self-signed certificate request. Generation
+// never touches nginx or haproxy configuration itself — the result panel shows
+// the exact directives to paste through the config editor (screen 6), which
+// validates the change and rolls back automatically if the service rejects it.
+func (s *certsScreen) showGenerateForm() {
+	if !s.app.canMutate() {
+		s.app.setStatus(hexWarning, "Изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
+		return
 	}
-	s.app.showText("certfile", cert.Path, tview.Escape(file.Content))
-	return nil
+
+	names, service, bits, days := "", "nginx", "2048", "397"
+	form := tview.NewForm().
+		AddInputField("Имена через запятую", "", 44, nil, func(t string) { names = t }).
+		AddDropDown("Сервис", []string{"nginx", "haproxy"}, 0, func(o string, _ int) { service = o }).
+		AddDropDown("Длина ключа", []string{"2048", "3072", "4096"}, 0, func(o string, _ int) { bits = o }).
+		AddInputField("Срок действия, дней", days, 8, tview.InputFieldInteger, func(t string) { days = t })
+
+	form.AddButton("Создать", func() {
+		var nameList []string
+		for _, n := range strings.Split(names, ",") {
+			if n = strings.TrimSpace(n); n != "" {
+				nameList = append(nameList, n)
+			}
+		}
+		b, _ := strconv.Atoi(bits)
+		d, _ := strconv.Atoi(days)
+		req := control.SelfSignedRequest{Names: nameList, Service: service, Bits: b, Days: d}
+
+		s.app.closeModal("certgen")
+		s.app.runAsync("Генерирую самоподписанный сертификат", true, func(ctx context.Context) (string, error) {
+			res, err := s.app.Certs.GenerateSelfSigned(ctx, s.app.actor, req)
+			if err != nil {
+				return "", err
+			}
+			s.app.queue(func() {
+				s.app.showText("certgen-result", "Сертификат создан", fmt.Sprintf(
+					" %s\n действителен до %s\n\n Файл в конфигурацию ещё не добавлен — вставьте через "+
+						"редактор (экран «Конфигурации»):\n\n%s\n",
+					bold(strings.Join(res.Names, ", ")), res.NotAfter.Local().Format("02.01.2006"),
+					tview.Escape(res.Snippet)))
+			})
+			return "сертификат создан, отпечаток " + res.Fingerprint[:16] + "…", nil
+		})
+	})
+	form.AddButton("Отмена", func() { s.app.closeModal("certgen") })
+
+	form.SetBorder(true).SetTitle(" Новый самоподписанный сертификат ").SetBorderColor(colorBorder)
+	form.SetCancelFunc(func() { s.app.closeModal("certgen") })
+
+	s.app.editing = true
+	s.app.showModal("certgen", form, 74, 13)
 }
 
 // expiryTone maps days remaining onto the reserved status palette.

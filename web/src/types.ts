@@ -268,6 +268,18 @@ export interface RenewalInfo {
   detail?: string
 }
 
+/** What a TLS endpoint actually presents on the wire, checked by dialing it
+ * directly — a renewed file nobody reloaded into the service is invisible
+ * from the filesystem alone. */
+export interface CertServing {
+  checked: boolean
+  endpoint?: string
+  match: boolean
+  served_serial?: string
+  served_not_after?: string
+  error?: string
+}
+
 export interface Certificate {
   id: string
   path: string
@@ -286,7 +298,9 @@ export interface Certificate {
   sig_algorithm?: string
   self_signed: boolean
   chain_length: number
+  fingerprint?: string
   renewal: RenewalInfo
+  serving: CertServing
   error?: string
 }
 
@@ -299,6 +313,23 @@ export interface CertificatesResponse {
     unreadable: number
     unmanaged: number
   }
+}
+
+export interface SelfSignedRequest {
+  names: string[]
+  service: 'nginx' | 'haproxy'
+  bits?: number
+  days?: number
+}
+
+export interface SelfSignedResult {
+  names: string[]
+  cert_path?: string
+  key_path?: string
+  combined_path?: string
+  fingerprint: string
+  not_after: string
+  snippet: string
 }
 
 export interface AuditEntry {
