@@ -90,6 +90,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/containers", s.handleContainers)
 			r.Get("/firewall", s.handleFirewall)
 			r.Get("/firewall/rules", s.handleFirewallNumbered)
+			r.Get("/certificates", s.handleCertificates)
 
 			r.Get("/configs", s.handleConfigList)
 			r.Get("/configs/file", s.handleConfigRead)

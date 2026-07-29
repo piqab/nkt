@@ -13,6 +13,43 @@ import (
 	"github.com/althq/netknownsthat/internal/topology"
 )
 
+// certSummary condenses the certificate state for the dashboard landing page:
+// how many are already broken, and how many will break without intervention.
+func certSummary(snap *model.Snapshot) map[string]any {
+	var expired, expiring, unreadable, unmanaged int
+	soonest := -1
+	soonestName := ""
+
+	for _, c := range snap.Certs {
+		switch {
+		case c.Error != "":
+			unreadable++
+			continue
+		case c.DaysLeft < 0:
+			expired++
+		case c.DaysLeft <= 30:
+			expiring++
+		}
+		if !c.Renewal.Automatic {
+			unmanaged++
+		}
+		if c.DaysLeft >= 0 && (soonest < 0 || c.DaysLeft < soonest) {
+			soonest = c.DaysLeft
+			soonestName = strings.Join(c.Names, ", ")
+		}
+	}
+
+	return map[string]any{
+		"total":        len(snap.Certs),
+		"expired":      expired,
+		"expiring":     expiring,
+		"unreadable":   unreadable,
+		"unmanaged":    unmanaged,
+		"soonest_days": soonest,
+		"soonest_name": soonestName,
+	}
+}
+
 // auditFilter reads the audit query parameters.
 func auditFilter(r *http.Request) store.AuditFilter {
 	return store.AuditFilter{
@@ -105,7 +142,9 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 			"firewall_rules":      len(snap.Firewall.Rules),
 			"listeners":           len(snap.Listeners),
 			"config_files":        len(snap.Files),
+			"certificates":        len(snap.Certs),
 		},
+		"certificates": certSummary(snap),
 		"findings":     snap.FindingCounts(),
 		"top_findings": top,
 		"services":     snap.Services,
@@ -250,6 +289,42 @@ func (s *Server) handleFirewallNumbered(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rules": rules})
+}
+
+// handleCertificates returns the TLS certificates with their renewal state,
+// ordered so that whatever needs attention soonest comes first.
+func (s *Server) handleCertificates(w http.ResponseWriter, r *http.Request) {
+	snap, err := s.scanner.LatestOrScan(r.Context())
+	if err != nil {
+		fail(w, err)
+		return
+	}
+
+	expired, expiring, unreadable, unmanaged := 0, 0, 0, 0
+	for _, c := range snap.Certs {
+		switch {
+		case c.Error != "":
+			unreadable++
+		case c.DaysLeft < 0:
+			expired++
+		case c.DaysLeft <= 30:
+			expiring++
+		}
+		if c.Error == "" && !c.Renewal.Automatic {
+			unmanaged++
+		}
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"certificates": snap.Certs,
+		"summary": map[string]int{
+			"total":      len(snap.Certs),
+			"expired":    expired,
+			"expiring":   expiring,
+			"unreadable": unreadable,
+			"unmanaged":  unmanaged,
+		},
+	})
 }
 
 func (s *Server) handleSnapshots(w http.ResponseWriter, r *http.Request) {

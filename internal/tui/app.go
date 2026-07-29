@@ -88,6 +88,7 @@ func Run(ctx context.Context, deps Deps) error {
 		newConfigsScreen(a),
 		newServicesScreen(a),
 		newFirewallScreen(a),
+		newCertsScreen(a),
 		newAuditScreen(a),
 	}
 	for i, s := range a.screens {
@@ -167,6 +168,10 @@ func (a *App) onKey(event *tcell.EventKey) *tcell.EventKey {
 	case '1', '2', '3', '4', '5', '6', '7', '8', '9':
 		a.switchTo(int(event.Rune() - '1'))
 		return nil
+	case '0':
+		// The tenth screen keeps the natural keyboard order.
+		a.switchTo(9)
+		return nil
 	case 'q', 'Q':
 		a.tv.Stop()
 		return nil
@@ -197,7 +202,12 @@ func (a *App) switchTo(index int) {
 func (a *App) renderNav() {
 	var parts []string
 	for i, s := range a.screens {
-		label := fmt.Sprintf("%d %s", i+1, s.title())
+		// The tenth screen answers to 0, so the digits stay single-key.
+		key := i + 1
+		if key == 10 {
+			key = 0
+		}
+		label := fmt.Sprintf("%d %s", key, s.title())
 		if i == a.current {
 			parts = append(parts, tag(hexSeries1, bold(label)))
 		} else {
@@ -340,7 +350,7 @@ func (a *App) showText(name, title, body string) {
 func (a *App) showHelp() {
 	body := strings.Join([]string{
 		bold("Навигация"),
-		"  1…9          перейти на экран",
+		"  1…9, 0       перейти на экран",
 		"  Tab / Shift+Tab   следующий и предыдущий экран",
 		"  ↑ ↓ PgUp PgDn     перемещение по таблице",
 		"  Enter        подробности выбранной строки",
@@ -355,6 +365,7 @@ func (a *App) showHelp() {
 		"  Конфигурации  e править, d различия с версией, v история, u откат",
 		"  Сервисы       s запустить, x остановить, t перезапустить, l перечитать, c проверить конфиг",
 		"  Firewall      a добавить правило, x удалить правило",
+		"  Сертификаты   Enter показать содержимое файла",
 		"  Доступность   p проверить сейчас, space пауза и возобновление",
 		"",
 		dim("Все изменения записываются в журнал под именем " + a.actor + "."),

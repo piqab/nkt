@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/althq/netknownsthat/internal/model"
 )
@@ -64,6 +65,7 @@ func Run(s *model.Snapshot) []model.Finding {
 	ruleStaleFirewallRules(c, s, idx)
 	ruleSensitivePortsPublic(c, s, idx)
 	ruleTLS(c, s)
+	ruleCertificates(c, s)
 	rulePlaintextProxy(c, s)
 	ruleUpstreams(c, s, idx)
 	ruleHealthChecks(c, s)
@@ -454,6 +456,16 @@ func ruleStaleFirewallRules(c *collector, s *model.Snapshot, idx *index) {
 	if !idx.listenersComparable {
 		return
 	}
+
+	// A ufw rule and the iptables rules it generates describe one thing. Report
+	// each unused port once, preferring the ufw view — that is where an operator
+	// would actually delete it.
+	type candidate struct {
+		rule model.FirewallRule
+		port int
+	}
+	best := map[int]candidate{}
+
 	for _, r := range s.Firewall.Rules {
 		if !isAcceptAction(r.Action) || !isInputChain(r.Chain) || r.Backend == "ufw6" {
 			continue
@@ -462,23 +474,37 @@ func ruleStaleFirewallRules(c *collector, s *model.Snapshot, idx *index) {
 			if idx.hasListener(port) || idx.dockerDNAT[port] {
 				continue
 			}
-			detail := fmt.Sprintf("Правило разрешает входящий трафик на порт %d, но на хосте нет "+
-				"процесса, который его слушает.", port)
-			if r.Packets == 0 {
-				detail += " Счётчик правила равен нулю — трафика по нему не было."
+			existing, seen := best[port]
+			if !seen || (r.Backend == "ufw" && existing.rule.Backend != "ufw") {
+				best[port] = candidate{rule: r, port: port}
 			}
-			c.add(model.Finding{
-				Rule:       "stale-firewall-rule",
-				ID:         fmt.Sprintf("stale-firewall-rule:%s:%d", r.Backend, port),
-				Severity:   model.SeverityLow,
-				Service:    model.ServiceIptables,
-				Object:     fmt.Sprintf("%s %d/tcp", r.Backend, port),
-				Title:      fmt.Sprintf("Правило firewall для порта %d не используется", port),
-				Detail:     detail,
-				Suggestion: fmt.Sprintf("Удалите правило, если сервис больше не нужен: ufw delete allow %d/tcp.", port),
-				Refs:       []string{r.Raw},
-			})
 		}
+	}
+
+	ports := make([]int, 0, len(best))
+	for port := range best {
+		ports = append(ports, port)
+	}
+	sort.Ints(ports)
+
+	for _, port := range ports {
+		r := best[port].rule
+		detail := fmt.Sprintf("Правило разрешает входящий трафик на порт %d, но на хосте нет "+
+			"процесса, который его слушает.", port)
+		if r.Packets == 0 {
+			detail += " Счётчик правила равен нулю — трафика по нему не было."
+		}
+		c.add(model.Finding{
+			Rule:       "stale-firewall-rule",
+			ID:         fmt.Sprintf("stale-firewall-rule:%d", port),
+			Severity:   model.SeverityLow,
+			Service:    model.ServiceIptables,
+			Object:     fmt.Sprintf("%s %d/tcp", r.Backend, port),
+			Title:      fmt.Sprintf("Правило firewall для порта %d не используется", port),
+			Detail:     detail,
+			Suggestion: fmt.Sprintf("Удалите правило, если сервис больше не нужен: ufw delete allow %d/tcp.", port),
+			Refs:       []string{r.Raw},
+		})
 	}
 }
 
@@ -576,6 +602,256 @@ func ruleTLS(c *collector, s *model.Snapshot) {
 			})
 		}
 	}
+}
+
+// Expiry thresholds. Let's Encrypt renews at 30 days left, so anything below
+// that means automation has already had its chance and did not take it.
+const (
+	certWarnDays     = 30
+	certCriticalDays = 7
+)
+
+// minRSABits is the smallest RSA key still considered adequate.
+const minRSABits = 2048
+
+func ruleCertificates(c *collector, s *model.Snapshot) {
+	for _, cert := range s.Certs {
+		where := strings.Join(cert.Endpoints, ", ")
+		if where == "" {
+			where = cert.Service
+		}
+
+		if cert.Error != "" {
+			c.add(model.Finding{
+				Rule:     "tls-cert-unreadable",
+				ID:       "tls-cert-unreadable:" + cert.Path,
+				Severity: model.SeverityHigh,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title:    "Сертификат не читается: " + certLabel(cert),
+				Detail: fmt.Sprintf("%s указан в конфигурации для %s, но прочитать его не удалось: %s. "+
+					"Если файла действительно нет, сервис не поднимет TLS-слушатель.",
+					cert.Path, where, cert.Error),
+				File:       cert.Path,
+				Suggestion: "Проверьте путь и права доступа, при необходимости выпустите сертификат заново.",
+			})
+			continue
+		}
+
+		switch {
+		case cert.DaysLeft < 0:
+			c.add(model.Finding{
+				Rule:     "tls-cert-expired",
+				ID:       "tls-cert-expired:" + cert.Path,
+				Severity: model.SeverityCritical,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title: fmt.Sprintf("Сертификат %s просрочен на %d дн.",
+					strings.Join(cert.Names, ", "), -cert.DaysLeft),
+				Detail: fmt.Sprintf("Срок действия истёк %s. Обслуживает %s. "+
+					"Браузеры показывают ошибку и не пускают пользователей дальше.",
+					cert.NotAfter.Local().Format("02.01.2006"), where),
+				File:       cert.Path,
+				Suggestion: renewalSuggestion(cert),
+			})
+		case cert.DaysLeft <= certCriticalDays:
+			c.add(model.Finding{
+				Rule:     "tls-cert-expiring",
+				ID:       "tls-cert-expiring:" + cert.Path,
+				Severity: model.SeverityHigh,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title: fmt.Sprintf("Сертификат %s истекает через %d дн.",
+					strings.Join(cert.Names, ", "), cert.DaysLeft),
+				Detail: fmt.Sprintf("Действителен до %s, обслуживает %s. %s",
+					cert.NotAfter.Local().Format("02.01.2006 15:04"), where, renewalState(cert)),
+				File:       cert.Path,
+				Suggestion: renewalSuggestion(cert),
+			})
+		case cert.DaysLeft <= certWarnDays:
+			c.add(model.Finding{
+				Rule:     "tls-cert-expiring",
+				ID:       "tls-cert-expiring:" + cert.Path,
+				Severity: model.SeverityMedium,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title: fmt.Sprintf("Сертификат %s истекает через %d дн.",
+					strings.Join(cert.Names, ", "), cert.DaysLeft),
+				Detail: fmt.Sprintf("Действителен до %s, обслуживает %s. %s",
+					cert.NotAfter.Local().Format("02.01.2006"), where, renewalState(cert)),
+				File:       cert.Path,
+				Suggestion: renewalSuggestion(cert),
+			})
+		}
+
+		if time.Now().Before(cert.NotBefore) {
+			c.add(model.Finding{
+				Rule:     "tls-cert-not-yet-valid",
+				ID:       "tls-cert-not-yet-valid:" + cert.Path,
+				Severity: model.SeverityHigh,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title:    "Сертификат ещё не вступил в силу: " + certLabel(cert),
+				Detail: fmt.Sprintf("Действителен только с %s. Обычно это значит, что часы на хосте "+
+					"отстают или сертификат выпущен «на будущее».",
+					cert.NotBefore.Local().Format("02.01.2006 15:04")),
+				File:       cert.Path,
+				Suggestion: "Проверьте системное время и дату выпуска сертификата.",
+			})
+		}
+
+		// Automation that nothing triggers is the failure mode that produces an
+		// expired certificate on a host where everyone believed it was handled.
+		if cert.Renewal.Managed && !cert.Renewal.Automatic {
+			c.add(model.Finding{
+				Rule:     "tls-cert-renewal-not-automatic",
+				ID:       "tls-cert-renewal-not-automatic:" + cert.Path,
+				Severity: model.SeverityMedium,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title:    "Автообновление сертификата не запускается: " + certLabel(cert),
+				Detail:   cert.Renewal.Detail,
+				File:     cert.Path,
+				Suggestion: "Включите таймер: systemctl enable --now certbot.timer — " +
+					"либо добавьте задание cron.",
+			})
+		}
+		if !cert.Renewal.Managed && cert.Renewal.Tool == "certbot" {
+			c.add(model.Finding{
+				Rule:     "tls-cert-orphan-lineage",
+				ID:       "tls-cert-orphan-lineage:" + cert.Path,
+				Severity: model.SeverityHigh,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title:    "Сертификат certbot остался без файла обновления",
+				Detail:   cert.Renewal.Detail,
+				File:     cert.Path,
+				Suggestion: "Выпустите сертификат заново через certbot certonly, " +
+					"чтобы восстановить запись обновления.",
+			})
+		}
+
+		if cert.SelfSigned {
+			c.add(model.Finding{
+				Rule:     "tls-cert-self-signed",
+				ID:       "tls-cert-self-signed:" + cert.Path,
+				Severity: model.SeverityLow,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title:    "Самоподписанный сертификат на " + where,
+				Detail: fmt.Sprintf("Издатель совпадает с субъектом (%s). Такому сертификату не доверяет "+
+					"ни один браузер; для внутренних сервисов это допустимо, для публичных — нет.",
+					cert.Subject),
+				File:       cert.Path,
+				Suggestion: "Для публичного сервиса выпустите сертификат в доверенном центре.",
+			})
+		}
+
+		if cert.KeyAlgorithm == "RSA" && cert.KeyBits > 0 && cert.KeyBits < minRSABits {
+			c.add(model.Finding{
+				Rule:     "tls-cert-weak-key",
+				ID:       "tls-cert-weak-key:" + cert.Path,
+				Severity: model.SeverityMedium,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title:    fmt.Sprintf("Слабый ключ RSA %d бит", cert.KeyBits),
+				Detail: fmt.Sprintf("Сертификат %s использует ключ короче %d бит. "+
+					"Современные клиенты такие соединения отклоняют.", cert.Path, minRSABits),
+				File:       cert.Path,
+				Suggestion: "Перевыпустите сертификат с ключом RSA 2048+ или ECDSA P-256.",
+			})
+		}
+
+		if isWeakSignature(cert.SigAlgorithm) {
+			c.add(model.Finding{
+				Rule:     "tls-cert-weak-signature",
+				ID:       "tls-cert-weak-signature:" + cert.Path,
+				Severity: model.SeverityMedium,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title:    "Устаревший алгоритм подписи: " + cert.SigAlgorithm,
+				Detail: "Подписи на основе SHA-1 и MD5 считаются небезопасными и не принимаются " +
+					"современными браузерами.",
+				File:       cert.Path,
+				Suggestion: "Перевыпустите сертификат с подписью SHA-256 или сильнее.",
+			})
+		}
+
+		// A certificate that does not cover the name it is served under produces
+		// exactly the browser warning it was bought to avoid.
+		for _, site := range cert.Sites {
+			if cert.CoversName(site) {
+				continue
+			}
+			c.add(model.Finding{
+				Rule:     "tls-cert-name-mismatch",
+				ID:       fmt.Sprintf("tls-cert-name-mismatch:%s:%s", cert.Path, site),
+				Severity: model.SeverityHigh,
+				Service:  cert.Service,
+				Object:   site,
+				Title:    fmt.Sprintf("Сертификат не покрывает имя %s", site),
+				Detail: fmt.Sprintf("Сервер отвечает на %s, но сертификат %s выписан на %s. "+
+					"Клиент увидит предупреждение о несоответствии имени.",
+					site, cert.Path, strings.Join(cert.Names, ", ")),
+				File:       cert.Path,
+				Suggestion: fmt.Sprintf("Добавьте %s в SAN сертификата или используйте отдельный сертификат.", site),
+			})
+		}
+	}
+}
+
+// renewalState describes, in one sentence, whether anything will renew this.
+func renewalState(cert model.Certificate) string {
+	switch {
+	case cert.Renewal.Automatic:
+		return "Автообновление настроено: " + cert.Renewal.Detail
+	case cert.Renewal.Detail != "":
+		return cert.Renewal.Detail
+	default:
+		return "Автообновление не обнаружено."
+	}
+}
+
+func renewalSuggestion(cert model.Certificate) string {
+	if cert.Renewal.Tool == "certbot" {
+		return "Продлите сейчас: certbot renew --cert-name " + lineageOf(cert.Path) +
+			", затем перезагрузите сервис."
+	}
+	return "Выпустите и установите новый сертификат, затем перезагрузите сервис."
+}
+
+// lineageOf extracts the certbot lineage name from a live path.
+func lineageOf(path string) string {
+	const live = "/etc/letsencrypt/live/"
+	if !strings.HasPrefix(path, live) {
+		return "<имя>"
+	}
+	rest := strings.TrimPrefix(path, live)
+	if i := strings.IndexByte(rest, '/'); i >= 0 {
+		return rest[:i]
+	}
+	return rest
+}
+
+func isWeakSignature(alg string) bool {
+	lower := strings.ToLower(alg)
+	return strings.Contains(lower, "sha1") || strings.Contains(lower, "md5") ||
+		strings.Contains(lower, "md2")
+}
+
+// certLabel names a certificate the way an operator thinks of it — by the site
+// it serves, falling back to the file name when the certificate is unreadable.
+func certLabel(cert model.Certificate) string {
+	if len(cert.Names) > 0 {
+		return strings.Join(cert.Names, ", ")
+	}
+	if len(cert.Sites) > 0 {
+		return strings.Join(cert.Sites, ", ")
+	}
+	if i := strings.LastIndexByte(cert.Path, '/'); i >= 0 && i+1 < len(cert.Path) {
+		return cert.Path[i+1:]
+	}
+	return cert.Path
 }
 
 func rulePlaintextProxy(c *collector, s *model.Snapshot) {

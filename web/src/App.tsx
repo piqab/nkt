@@ -9,6 +9,7 @@ import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
 import Services from './pages/Services'
 import Firewall from './pages/Firewall'
+import Certificates from './pages/Certificates'
 import Availability from './pages/Availability'
 import Usage from './pages/Usage'
 import Audit from './pages/Audit'
@@ -38,6 +39,7 @@ const NAV = [
   { to: '/configs', label: 'Конфигурации' },
   { to: '/services', label: 'Сервисы' },
   { to: '/firewall', label: 'Firewall' },
+  { to: '/certificates', label: 'Сертификаты', badge: 'certs' as const },
   { to: '/audit', label: 'Журнал действий' },
 ]
 
@@ -91,6 +93,10 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const overview = useApi<Overview>('/overview', 60_000)
   const criticalCount =
     (overview.data?.findings.critical ?? 0) + (overview.data?.findings.high ?? 0)
+  // Certificates get their own badge: an expiry is a deadline, not a defect,
+  // and it deserves to be visible without opening the findings list.
+  const certAlerts =
+    (overview.data?.certificates?.expired ?? 0) + (overview.data?.certificates?.expiring ?? 0)
 
   async function logout() {
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined)
@@ -114,6 +120,9 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
               <span>{item.label}</span>
               {item.badge === 'findings' && criticalCount > 0 && (
                 <span className="nav-count">{criticalCount}</span>
+              )}
+              {item.badge === 'certs' && certAlerts > 0 && (
+                <span className="nav-count">{certAlerts}</span>
               )}
             </NavLink>
           ))}
@@ -165,6 +174,7 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
             <Route path="/configs" element={<Configs me={me} />} />
             <Route path="/services" element={<Services me={me} />} />
             <Route path="/firewall" element={<Firewall me={me} />} />
+            <Route path="/certificates" element={<Certificates />} />
             <Route path="/audit" element={<Audit />} />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />

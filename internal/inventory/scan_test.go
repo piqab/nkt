@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -99,8 +100,17 @@ func TestScanFindsPlantedProblems(t *testing.T) {
 		{"admin-interface-open", model.SeverityHigh, "0.0.0.0:9001"},
 		{"weak-tls", model.SeverityMedium, ""},
 		{"public-plaintext-proxy", model.SeverityMedium, "0.0.0.0:80"},
-		{"stale-firewall-rule", model.SeverityLow, "iptables 25/tcp"},
+		// Reported through the ufw view: that is where an operator deletes it,
+		// and the underlying iptables rule describes the same thing.
+		{"stale-firewall-rule", model.SeverityLow, "ufw 25/tcp"},
 		{"port-conflict", model.SeverityHigh, ""},
+
+		// Certificates planted in the snapshot.
+		{"tls-cert-expired", model.SeverityCritical, "/etc/letsencrypt/live/api.example.com/fullchain.pem"},
+		{"tls-cert-orphan-lineage", model.SeverityHigh, "/etc/letsencrypt/live/api.example.com/fullchain.pem"},
+		{"tls-cert-renewal-not-automatic", model.SeverityMedium, "/etc/letsencrypt/live/app.example.com/fullchain.pem"},
+		{"tls-cert-self-signed", model.SeverityLow, "/etc/ssl/certs/internal.pem"},
+		{"tls-cert-weak-key", model.SeverityMedium, "/etc/ssl/certs/internal.pem"},
 	}
 	for _, w := range want {
 		list := byRule[w.rule]
@@ -134,11 +144,77 @@ func TestScanFindsPlantedProblems(t *testing.T) {
 		t.Errorf("конфликт порта 8443 (nginx vs acme-minio) не обнаружен: %s", objects(byRule["port-conflict"]))
 	}
 
+	// One unused port produces one finding, not one per firewall backend.
+	if got := len(byRule["stale-firewall-rule"]); got != 1 {
+		t.Errorf("неиспользуемое правило должно сообщаться один раз, получено %d: %s",
+			got, objects(byRule["stale-firewall-rule"]))
+	}
+
+	// The healthy certificate must not be reported as expiring or broken.
+	for _, f := range append(byRule["tls-cert-expired"], byRule["tls-cert-expiring"]...) {
+		if strings.Contains(f.Object, "app.example.com") {
+			t.Errorf("здоровый сертификат app.example.com помечен как проблемный: %s", f.Title)
+		}
+	}
+
 	// And nothing should be reported against the correctly configured pieces.
 	for _, f := range snap.Findings {
 		if f.Rule == "upstream-undefined" {
 			t.Errorf("ложное срабатывание upstream-undefined: %+v", f)
 		}
+	}
+}
+
+// The snapshot certificates must be parsed, not just counted.
+func TestScanReadsCertificates(t *testing.T) {
+	snap, err := fixtureScanner(t).Scan(context.Background())
+	if err != nil {
+		t.Fatalf("скан завершился ошибкой: %v", err)
+	}
+	if len(snap.Certs) != 3 {
+		t.Fatalf("сертификатов: %d, ожидалось 3", len(snap.Certs))
+	}
+
+	byPath := map[string]model.Certificate{}
+	for _, c := range snap.Certs {
+		byPath[c.Path] = c
+	}
+
+	app := byPath["/etc/letsencrypt/live/app.example.com/fullchain.pem"]
+	if app.Error != "" {
+		t.Fatalf("app.example.com: %s", app.Error)
+	}
+	if app.DaysLeft <= 0 {
+		t.Errorf("app.example.com должен быть действующим, осталось дней: %d", app.DaysLeft)
+	}
+	if app.ChainLength != 2 {
+		t.Errorf("app.example.com: цепочка из %d сертификатов, ожидалось 2", app.ChainLength)
+	}
+	if !app.CoversName("www.app.example.com") {
+		t.Errorf("app.example.com: SAN не разобраны, имена = %v", app.Names)
+	}
+	if app.SelfSigned {
+		t.Error("app.example.com выпущен тестовым CA и не должен считаться самоподписанным")
+	}
+	if !app.Renewal.Managed || app.Renewal.Automatic {
+		t.Errorf("app.example.com: ожидалось управление certbot без активного таймера, получено %+v",
+			app.Renewal)
+	}
+
+	api := byPath["/etc/letsencrypt/live/api.example.com/fullchain.pem"]
+	if api.DaysLeft >= 0 {
+		t.Errorf("api.example.com должен быть просрочен, осталось дней: %d", api.DaysLeft)
+	}
+	if api.Renewal.Managed {
+		t.Error("для api.example.com нет файла обновления — он не должен считаться управляемым")
+	}
+
+	internal := byPath["/etc/ssl/certs/internal.pem"]
+	if !internal.SelfSigned {
+		t.Error("internal.pem должен быть распознан как самоподписанный")
+	}
+	if internal.KeyBits != 1024 {
+		t.Errorf("internal.pem: ключ %d бит, ожидалось 1024", internal.KeyBits)
 	}
 }
 

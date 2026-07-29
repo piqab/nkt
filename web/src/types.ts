@@ -186,6 +186,15 @@ export interface Overview {
     outages: Outage[]
     metrics_simulated: boolean
   }
+  certificates: {
+    total: number
+    expired: number
+    expiring: number
+    unreadable: number
+    unmanaged: number
+    soonest_days: number
+    soonest_name: string
+  }
 }
 
 export interface TargetStatus {
@@ -250,6 +259,46 @@ export interface SubjectTotal {
   subject: string
   total: number
   samples: number
+}
+
+export interface RenewalInfo {
+  tool?: string
+  managed: boolean
+  automatic: boolean
+  detail?: string
+}
+
+export interface Certificate {
+  id: string
+  path: string
+  service: string
+  endpoints?: string[]
+  sites?: string[]
+  subject?: string
+  issuer?: string
+  serial?: string
+  names?: string[]
+  not_before: string
+  not_after: string
+  days_left: number
+  key_algorithm?: string
+  key_bits?: number
+  sig_algorithm?: string
+  self_signed: boolean
+  chain_length: number
+  renewal: RenewalInfo
+  error?: string
+}
+
+export interface CertificatesResponse {
+  certificates: Certificate[]
+  summary: {
+    total: number
+    expired: number
+    expiring: number
+    unreadable: number
+    unmanaged: number
+  }
 }
 
 export interface AuditEntry {

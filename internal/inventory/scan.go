@@ -105,6 +105,11 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	// Global nginx settings live outside any server block but still matter.
 	applyGlobalNginx(snap, nginxRes.Global)
 
+	// Certificates are read after the endpoints, since the paths come from them.
+	certs := parse.Certificates(ctx, s.c, snap.Endpoints)
+	snap.Certs = certs.Certs
+	snap.Sources = append(snap.Sources, certs.Status)
+
 	// Service catalogue, with the config files each service actually uses.
 	specs := parse.DefaultServiceSpecs()
 	for i := range specs {

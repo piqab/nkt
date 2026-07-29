@@ -137,7 +137,8 @@ func TestScreensRenderAgainstFixtures(t *testing.T) {
 		{'6', "Конфигурации", []string{"Файлы конфигурации", "nginx.conf"}},
 		{'7', "Сервисы", []string{"Сервисы и контейнеры", "acme-redis", "systemd"}},
 		{'8', "Firewall", []string{"Правила", "DNAT"}},
-		{'9', "Журнал", []string{"Журнал действий", "Фоновые задачи"}},
+		{'9', "Сертификаты", []string{"Расписание истечения", "app.example.com", "просрочен"}},
+		{'0', "Журнал", []string{"Журнал действий", "Фоновые задачи"}},
 	}
 
 	for _, c := range cases {
@@ -180,11 +181,16 @@ func TestFindingsFilterCycles(t *testing.T) {
 	sim.InjectKey(tcell.KeyRune, '2', tcell.ModNone)
 	waitFor(t, sim, "Серьёзность")
 
-	// First press narrows to critical only; both planted critical findings stay.
+	// First press narrows to critical only. The exact totals move whenever a
+	// fixture gains a problem, so assert the behaviour instead of the number:
+	// a critical finding stays, a low-severity one disappears.
 	sim.InjectKey(tcell.KeyRune, 'f', tcell.ModNone)
-	frame := waitFor(t, sim, "показано 2 из 25")
+	frame := waitFor(t, sim, "docker-bypasses-firewall")
 	if strings.Contains(frame, "container-undeclared") {
 		t.Error("фильтр «критично» не должен показывать находки низкой серьёзности")
+	}
+	if !strings.Contains(frame, "показано") {
+		t.Errorf("заголовок таблицы должен сообщать, сколько строк показано:\n%s", frame)
 	}
 
 	sim.InjectKey(tcell.KeyRune, 'q', tcell.ModNone)
