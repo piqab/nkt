@@ -299,7 +299,8 @@ func (r renewalIndex) forPath(path string) model.RenewalInfo {
 	}
 	if !r.lineages[lineage] {
 		return model.RenewalInfo{
-			Tool: "certbot",
+			Tool:    "certbot",
+			Lineage: lineage,
 			Detail: fmt.Sprintf(
 				"сертификат лежит в /etc/letsencrypt/live/%s, но файла обновления "+
 					"/etc/letsencrypt/renewal/%s.conf нет — certbot его не продлит",
@@ -311,6 +312,7 @@ func (r renewalIndex) forPath(path string) model.RenewalInfo {
 		Managed:   true,
 		Automatic: r.automatic,
 		Detail:    r.detail,
+		Lineage:   lineage,
 	}
 }
 

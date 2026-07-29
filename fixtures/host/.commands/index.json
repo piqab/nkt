@@ -12,6 +12,10 @@
       "match": ["systemctl", "is-active", "certbot.timer"], "stdout": "inactive\n", "exit_code": 3 },
     { "match": ["systemctl", "is-active"], "stdout": "inactive\n", "exit_code": 3 },
 
+    { "match": ["certbot", "renew", "--cert-name", "app.example.com"],
+      "stdout": "Cert not yet due for renewal, forced renewal...\nCongratulations, all renewals succeeded:\n  /etc/letsencrypt/live/app.example.com/fullchain.pem (success)\n",
+      "exit_code": 0, "simulated": true },
+
 
     { "match": ["nginx", "-t"], "stderr": "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful\n", "exit_code": 0, "simulated": true },
     { "match": ["nginx", "-v"], "stderr": "nginx version: nginx/1.24.0 (Ubuntu)\n", "simulated": true },

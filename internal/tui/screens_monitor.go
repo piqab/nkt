@@ -505,6 +505,11 @@ func (s *auditScreen) refresh(ctx context.Context) {
 			dim("интервалы:"), dim("пробы"), dim("метрики"), dim("инвентаризация")))
 		sb.WriteString(fmt.Sprintf(" %-14s %-10s %-16s %s\n", "",
 			s.app.Cfg.ProbeInterval, s.app.Cfg.MetricsInterval, s.app.Cfg.InventoryInterval))
+		if s.app.Cfg.AutoRenewCerts && s.app.Cfg.AllowMutations {
+			sb.WriteString(fmt.Sprintf(" %s каждые %s продлевает certbot-сертификаты не старше %d дн. до истечения\n",
+				dim("авто-renew:"), s.app.Cfg.AutoRenewCertsInterval,
+				int(s.app.Cfg.AutoRenewCertsWithin.Hours()/24)))
+		}
 		s.jobs.SetText(sb.String())
 	})
 }

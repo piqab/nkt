@@ -278,6 +278,11 @@ type RenewalInfo struct {
 	Managed   bool   `json:"managed"`          // an automation owns this lineage
 	Automatic bool   `json:"automatic"`        // a timer or cron job actually runs
 	Detail    string `json:"detail,omitempty"` // what was found, in words
+	// Lineage is the certbot lineage name (the directory under
+	// /etc/letsencrypt/live/), set whenever Tool is "certbot" — including an
+	// orphan lineage with Managed false, so the UI can explain which lineage
+	// is missing its renewal file. Empty for anything certbot does not own.
+	Lineage string `json:"lineage,omitempty"`
 }
 
 // Certificate is one TLS certificate a service presents, read from the file the

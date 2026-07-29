@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/control"
@@ -31,4 +32,38 @@ func (s *Server) handleGenerateSelfSigned(w http.ResponseWriter, r *http.Request
 	// snapshot current for anything else that changed underneath it.
 	s.rescanLater()
 	writeJSON(w, http.StatusOK, res)
+}
+
+type renewRequest struct {
+	Lineage string `json:"lineage"`
+}
+
+// handleRenewCertbot re-issues a certbot-managed certificate lineage in
+// place, calling certbot itself rather than writing any file directly.
+func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
+	var req renewRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Lineage == "" {
+		writeError(w, http.StatusBadRequest, "укажите lineage")
+		return
+	}
+
+	user := auth.Username(r.Context())
+	res, err := s.certs.RenewCertbot(r.Context(), user, req.Lineage)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// certbot rewrote the files the running config already points at, but the
+	// cached snapshot still has the old expiry until the next scan.
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":    "ok",
+		"output":    strings.TrimSpace(res.Output()),
+		"simulated": res.Simulated,
+	})
 }

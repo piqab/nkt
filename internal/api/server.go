@@ -130,6 +130,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/firewall/reload", s.handleFirewallReload)
 
 				r.Post("/certificates/self-signed", s.handleGenerateSelfSigned)
+				r.Post("/certificates/renew", s.handleRenewCertbot)
 
 				r.Post("/monitor/targets/{id}/check", s.handleTargetCheck)
 				r.Patch("/monitor/targets/{id}", s.handleTargetPatch)

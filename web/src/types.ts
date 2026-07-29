@@ -266,6 +266,7 @@ export interface RenewalInfo {
   managed: boolean
   automatic: boolean
   detail?: string
+  lineage?: string
 }
 
 /** What a TLS endpoint actually presents on the wire, checked by dialing it
