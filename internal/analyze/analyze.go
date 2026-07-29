@@ -589,16 +589,17 @@ func ruleTLS(c *collector, s *model.Snapshot) {
 		}
 		if e.Extra["tls_cert_missing"] == "yes" {
 			c.add(model.Finding{
-				Rule:       "tls-cert-missing",
-				ID:         "tls-cert-missing:" + e.ID,
-				Severity:   model.SeverityHigh,
-				Service:    e.Service,
-				Object:     e.Socket(),
-				Title:      fmt.Sprintf("listen ... ssl без ssl_certificate на %s", e.Label),
-				Detail:     "Слушатель объявлен как TLS, но сертификат в блоке не задан — nginx не запустится.",
-				File:       e.File,
-				Line:       e.Line,
-				Suggestion: "Добавьте ssl_certificate и ssl_certificate_key.",
+				Rule:     "tls-cert-missing",
+				ID:       "tls-cert-missing:" + e.ID,
+				Severity: model.SeverityHigh,
+				Service:  e.Service,
+				Object:   e.Socket(),
+				Title:    fmt.Sprintf("listen ... ssl без ssl_certificate на %s", e.Label),
+				Detail:   "Слушатель объявлен как TLS, но сертификат в блоке не задан — nginx не запустится.",
+				File:     e.File,
+				Line:     e.Line,
+				Suggestion: "Добавьте ssl_certificate и ssl_certificate_key — быстрый способ получить " +
+					"файлы: сгенерировать самоподписанный сертификат на странице «Сертификаты».",
 			})
 		}
 	}
@@ -728,6 +729,28 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				File:     cert.Path,
 				Suggestion: "Выпустите сертификат заново через certbot certonly, " +
 					"чтобы восстановить запись обновления.",
+			})
+		}
+
+		// The most useful check in this whole rule set: not "is the file on
+		// disk healthy" but "is what clients actually receive the same file".
+		// certbot renewing a certificate that nginx never reloaded produces a
+		// perfectly healthy-looking file next to an expiring live connection.
+		if cert.Serving.Checked && cert.Serving.Error == "" && !cert.Serving.Match {
+			c.add(model.Finding{
+				Rule:     "tls-cert-not-reloaded",
+				ID:       "tls-cert-not-reloaded:" + cert.Path,
+				Severity: model.SeverityHigh,
+				Service:  cert.Service,
+				Object:   cert.Path,
+				Title:    "На сокете отдаётся другой сертификат, чем указан в конфиге",
+				Detail: fmt.Sprintf("Файл %s не совпадает с тем, что реально отдаёт %s при TLS-подключении: "+
+					"на сокете сертификат с серийным номером %s, действителен до %s. Обычно это значит, "+
+					"что файл на диске обновили (например, certbot renew), а сервис не перечитал конфигурацию.",
+					cert.Path, cert.Serving.Endpoint, cert.Serving.ServedSerial,
+					cert.Serving.ServedNotAfter.Local().Format("02.01.2006")),
+				File:       cert.Path,
+				Suggestion: fmt.Sprintf("Перезагрузите %s, чтобы он подхватил актуальный сертификат.", cert.Service),
 			})
 		}
 
@@ -878,9 +901,11 @@ func rulePlaintextProxy(c *collector, s *model.Snapshot) {
 			Title:    fmt.Sprintf("%s проксирует трафик по HTTP без TLS", e.Label),
 			Detail: fmt.Sprintf("Слушатель %s принимает запросы на всех интерфейсах без шифрования "+
 				"и передаёт их дальше. Заголовки, cookie и токены идут открытым текстом.", e.Socket()),
-			File:       e.File,
-			Line:       e.Line,
-			Suggestion: "Переведите сервис на https или оставьте на 80 только редирект на https.",
+			File: e.File,
+			Line: e.Line,
+			Suggestion: "Переведите сервис на https (для быстрого теста можно сгенерировать " +
+				"самоподписанный сертификат на странице «Сертификаты») или оставьте на 80 только " +
+				"редирект на https.",
 		})
 	}
 }

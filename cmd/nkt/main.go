@@ -157,6 +157,7 @@ type runtime struct {
 	services  *control.ServiceManager
 	configs   *control.ConfigManager
 	firewall  *control.FirewallManager
+	certs     *control.CertManager
 }
 
 func newRuntime() (*runtime, error) {
@@ -183,6 +184,7 @@ func newRuntime() (*runtime, error) {
 		services:  services,
 		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
 		firewall:  control.NewFirewallManager(cfg, collector, db),
+		certs:     control.NewCertManager(cfg, collector, db),
 	}, nil
 }
 
@@ -206,6 +208,7 @@ func (r *runtime) runTUI() error {
 		Services:  r.services,
 		Configs:   r.configs,
 		Firewall:  r.firewall,
+		Certs:     r.certs,
 		Prober:    monitor.NewProber(r.db, r.cfg),
 	})
 }
@@ -240,7 +243,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 
 	server := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
-		Services: r.services, Configs: r.configs, Firewall: r.firewall, UI: ui, Log: log,
+		Services: r.services, Configs: r.configs, Firewall: r.firewall, Certs: r.certs, UI: ui, Log: log,
 	})
 
 	httpServer := &http.Server{

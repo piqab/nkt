@@ -42,6 +42,7 @@ type Deps struct {
 	Services  *control.ServiceManager
 	Configs   *control.ConfigManager
 	Firewall  *control.FirewallManager
+	Certs     *control.CertManager
 	Prober    *monitor.Prober
 
 	// Screen overrides the terminal. Tests drive the interface through a
@@ -365,7 +366,7 @@ func (a *App) showHelp() {
 		"  Конфигурации  e править, d различия с версией, v история, u откат",
 		"  Сервисы       s запустить, x остановить, t перезапустить, l перечитать, c проверить конфиг",
 		"  Firewall      a добавить правило, x удалить правило",
-		"  Сертификаты   Enter показать содержимое файла",
+		"  Сертификаты   Enter показать файл, g выпустить самоподписанный",
 		"  Доступность   p проверить сейчас, space пауза и возобновление",
 		"",
 		dim("Все изменения записываются в журнал под именем " + a.actor + "."),

@@ -33,6 +33,7 @@ type Server struct {
 	services  *control.ServiceManager
 	configs   *control.ConfigManager
 	firewall  *control.FirewallManager
+	certs     *control.CertManager
 	ui        fs.FS
 	log       *slog.Logger
 }
@@ -47,6 +48,7 @@ type Deps struct {
 	Services  *control.ServiceManager
 	Configs   *control.ConfigManager
 	Firewall  *control.FirewallManager
+	Certs     *control.CertManager
 	UI        fs.FS
 	Log       *slog.Logger
 }
@@ -55,7 +57,8 @@ type Deps struct {
 func New(d Deps) *Server {
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
-		services: d.Services, configs: d.Configs, firewall: d.Firewall, ui: d.UI, log: d.Log,
+		services: d.Services, configs: d.Configs, firewall: d.Firewall, certs: d.Certs,
+		ui: d.UI, log: d.Log,
 	}
 }
 
@@ -125,6 +128,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/firewall/rules", s.handleFirewallAdd)
 				r.Delete("/firewall/rules/{number}", s.handleFirewallDelete)
 				r.Post("/firewall/reload", s.handleFirewallReload)
+
+				r.Post("/certificates/self-signed", s.handleGenerateSelfSigned)
 
 				r.Post("/monitor/targets/{id}/check", s.handleTargetCheck)
 				r.Patch("/monitor/targets/{id}", s.handleTargetPatch)

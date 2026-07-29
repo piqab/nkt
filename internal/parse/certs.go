@@ -5,7 +5,9 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
+	"crypto/sha256"
 	"crypto/x509"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	gopath "path"
@@ -148,6 +150,8 @@ func fillFromPEM(cert *model.Certificate, raw []byte) error {
 	cert.DaysLeft = daysUntil(leaf.NotAfter)
 	cert.SigAlgorithm = leaf.SignatureAlgorithm.String()
 	cert.SelfSigned = leaf.Issuer.String() == leaf.Subject.String()
+	sum := sha256.Sum256(leaf.Raw)
+	cert.Fingerprint = hex.EncodeToString(sum[:])
 
 	names := []string{}
 	if leaf.Subject.CommonName != "" {

@@ -2,6 +2,8 @@ package tui
 
 import (
 	"context"
+	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,13 +21,63 @@ import (
 
 // fixtureDeps wires the whole application against the canned host snapshot and
 // a throwaway database, so the interface can be driven without a real host.
+// The snapshot is read-only here: nothing under test writes to it.
 func fixtureDeps(t *testing.T, screen tcell.Screen) Deps {
 	t.Helper()
-
 	root, err := filepath.Abs(filepath.Join("..", "..", "fixtures", "host"))
 	if err != nil {
 		t.Fatalf("путь к снапшоту: %v", err)
 	}
+	return depsAgainstRoot(t, screen, root)
+}
+
+// fixtureDepsWritable copies the snapshot into a scratch directory first, for
+// tests that exercise a write path (such as issuing a certificate). Writing
+// into the repository's actual fixtures/host would leave generated files
+// behind after every test run.
+func fixtureDepsWritable(t *testing.T, screen tcell.Screen) Deps {
+	t.Helper()
+	src, err := filepath.Abs(filepath.Join("..", "..", "fixtures", "host"))
+	if err != nil {
+		t.Fatalf("путь к снапшоту: %v", err)
+	}
+	dst := t.TempDir()
+	if err := copyTree(src, dst); err != nil {
+		t.Fatalf("копирование снапшота во временный каталог: %v", err)
+	}
+	return depsAgainstRoot(t, screen, dst)
+}
+
+func copyTree(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if info.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		in, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = in.Close() }()
+		out, err := os.Create(target)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = out.Close() }()
+		_, err = io.Copy(out, in)
+		return err
+	})
+}
+
+func depsAgainstRoot(t *testing.T, screen tcell.Screen, root string) Deps {
+	t.Helper()
 	cfg := &config.Config{
 		Mode:              config.ModeFixtures,
 		FixturesRoot:      root,
@@ -58,6 +110,7 @@ func fixtureDeps(t *testing.T, screen tcell.Screen) Deps {
 		Services:  services,
 		Configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
 		Firewall:  control.NewFirewallManager(cfg, collector, db),
+		Certs:     control.NewCertManager(cfg, collector, db),
 		Prober:    monitor.NewProber(db, cfg),
 		Screen:    screen,
 	}
@@ -193,6 +246,49 @@ func TestFindingsFilterCycles(t *testing.T) {
 		t.Errorf("заголовок таблицы должен сообщать, сколько строк показано:\n%s", frame)
 	}
 
+	sim.InjectKey(tcell.KeyRune, 'q', tcell.ModNone)
+	<-done
+}
+
+// TestGenerateSelfSignedFromCertsScreen drives the whole self-signed issuance
+// flow through the terminal: open the form, fill it in, submit, and read the
+// resulting snippet back off the result panel.
+func TestGenerateSelfSignedFromCertsScreen(t *testing.T) {
+	sim := newWideScreen(t)
+	deps := fixtureDepsWritable(t, sim)
+	done := make(chan error, 1)
+	go func() { done <- Run(context.Background(), deps) }()
+
+	waitFor(t, sim, "NetKnownsThat")
+	sim.SetSize(220, 60)
+	waitFor(t, sim, "edge-01")
+
+	sim.InjectKey(tcell.KeyRune, '9', tcell.ModNone)
+	waitFor(t, sim, "Сертификаты")
+	sim.InjectKey(tcell.KeyRune, 'g', tcell.ModNone)
+	waitFor(t, sim, "Новый самоподписанный сертификат")
+
+	for _, r := range "new.example.com" {
+		sim.InjectKey(tcell.KeyRune, r, tcell.ModNone)
+	}
+	// Tab to the "Создать" button and activate it: dropdowns and the days
+	// field keep their defaults (nginx, 2048, 397), which is exactly what
+	// TestGenerateSelfSignedDefaults already checks at the control-plane
+	// level — this test is about the screen wiring, not the defaults again.
+	for i := 0; i < 4; i++ {
+		sim.InjectKey(tcell.KeyTab, 0, tcell.ModNone)
+	}
+	sim.InjectKey(tcell.KeyEnter, 0, tcell.ModNone)
+
+	frame := waitFor(t, sim, "Сертификат создан")
+	if !strings.Contains(frame, "new.example.com") {
+		t.Errorf("результат должен называть выпущенное имя:\n%s", frame)
+	}
+	if !strings.Contains(frame, "ssl_certificate") {
+		t.Errorf("результат должен содержать директиву для вставки в конфиг:\n%s", frame)
+	}
+
+	sim.InjectKey(tcell.KeyEsc, 0, tcell.ModNone)
 	sim.InjectKey(tcell.KeyRune, 'q', tcell.ModNone)
 	<-done
 }

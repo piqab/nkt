@@ -200,6 +200,14 @@ func TestScanReadsCertificates(t *testing.T) {
 		t.Errorf("app.example.com: ожидалось управление certbot без активного таймера, получено %+v",
 			app.Renewal)
 	}
+	if len(app.Fingerprint) != 64 {
+		t.Errorf("app.example.com: отпечаток %q не похож на SHA-256 в hex", app.Fingerprint)
+	}
+	// Fixtures mode has no real sockets: the live check must be skipped
+	// entirely rather than fabricate a match.
+	if app.Serving.Checked {
+		t.Error("в режиме fixtures проверка живого сертификата не должна запускаться")
+	}
 
 	api := byPath["/etc/letsencrypt/live/api.example.com/fullchain.pem"]
 	if api.DaysLeft >= 0 {

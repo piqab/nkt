@@ -107,6 +107,11 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 
 	// Certificates are read after the endpoints, since the paths come from them.
 	certs := parse.Certificates(ctx, s.c, snap.Endpoints)
+	if !s.cfg.IsFixtures() {
+		// A snapshot has no real sockets to dial; on a real host this is what
+		// catches a renewed file nobody reloaded into the service.
+		checkLiveCertificates(ctx, certs.Certs, snap.Endpoints, s.cfg.ProbeTimeout)
+	}
 	snap.Certs = certs.Certs
 	snap.Sources = append(snap.Sources, certs.Status)
 

@@ -1,8 +1,8 @@
-import { useMemo } from 'react'
-import { useApi } from '../api'
-import type { Certificate, CertificatesResponse } from '../types'
+import { useMemo, useState, type FormEvent } from 'react'
+import { api, useApi } from '../api'
+import type { Certificate, CertificatesResponse, Me, SelfSignedRequest, SelfSignedResult } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
-import { Card, ErrorNote, Loading, formatDateTime } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, formatDateTime } from '../components/ui'
 
 /** Expiry bands, matching the thresholds the analyzer uses. */
 const WARN_DAYS = 30
@@ -49,6 +49,19 @@ function renewalTone(cert: Certificate): Tone | 'muted' {
   return 'muted'
 }
 
+/** What the socket actually hands back, checked by dialing it directly. This
+ * is the only signal in the app that does not trust the file on disk. */
+function servingWord(cert: Certificate): string {
+  if (!cert.serving.checked) return 'не проверялось'
+  if (cert.serving.error) return 'не отвечает'
+  return cert.serving.match ? 'совпадает' : 'отличается от файла'
+}
+
+function servingTone(cert: Certificate): Tone | 'muted' {
+  if (!cert.serving.checked || cert.serving.error) return 'muted'
+  return cert.serving.match ? 'good' : 'critical'
+}
+
 function certName(cert: Certificate): string {
   if (cert.names?.length) return cert.names.join(', ')
   if (cert.sites?.length) return cert.sites.join(', ')
@@ -65,8 +78,8 @@ function commonName(dn?: string): string {
   return dn
 }
 
-export default function Certificates() {
-  const { data, error, loading } = useApi<CertificatesResponse>('/certificates', 300_000)
+export default function Certificates({ me }: { me: Me }) {
+  const { data, error, loading, reload } = useApi<CertificatesResponse>('/certificates', 300_000)
 
   const certs = useMemo(() => data?.certificates ?? [], [data])
   const summary = data?.summary
@@ -82,7 +95,8 @@ export default function Certificates() {
           <p>
             Читаются файлы, на которые ссылаются директивы <code className="mono">ssl_certificate</code>{' '}
             в nginx и <code className="mono">crt</code> в haproxy. Проверяются сроки, покрытие имён,
-            стойкость ключа и то, запустится ли автообновление на самом деле.
+            стойкость ключа, то, запустится ли автообновление на самом деле, и — отдельным
+            TLS-подключением к сокету — совпадает ли файл на диске с тем, что реально видят клиенты.
           </p>
         </div>
       </div>
@@ -183,13 +197,14 @@ export default function Certificates() {
                 <th>Ключ</th>
                 <th>Издатель</th>
                 <th>Обновление</th>
-                <th>Обслуживает</th>
+                <th>На сокете</th>
               </tr>
             </thead>
             <tbody>
               {certs.map((cert) => {
                 const tone = expiryTone(cert)
                 const rTone = renewalTone(cert)
+                const sTone = servingTone(cert)
                 return (
                   <tr key={cert.id}>
                     <td>
@@ -223,7 +238,20 @@ export default function Certificates() {
                         <div className="small muted">{cert.renewal.detail}</div>
                       )}
                     </td>
-                    <td className="small mono">{(cert.endpoints ?? []).join(', ') || '—'}</td>
+                    <td className="small">
+                      <span style={{ color: sTone === 'muted' ? 'var(--text-muted)' : TONE_COLOR[sTone] }}>
+                        ● {servingWord(cert)}
+                      </span>
+                      {cert.serving.checked && !cert.serving.error && !cert.serving.match && (
+                        <div className="small muted">
+                          на сокете действителен до{' '}
+                          {cert.serving.served_not_after ? formatDateTime(cert.serving.served_not_after) : '—'}
+                        </div>
+                      )}
+                      {cert.serving.endpoint && (
+                        <div className="small muted mono">{cert.serving.endpoint}</div>
+                      )}
+                    </td>
                   </tr>
                 )
               })}
@@ -231,6 +259,118 @@ export default function Certificates() {
           </table>
         </div>
       </Card>
+
+      {me.is_admin && me.allow_mutations && (
+        <SelfSignedForm onIssued={reload} />
+      )}
     </>
+  )
+}
+
+const SERVICE_OPTIONS: { value: SelfSignedRequest['service']; label: string }[] = [
+  { value: 'nginx', label: 'nginx' },
+  { value: 'haproxy', label: 'haproxy' },
+]
+
+function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
+  const [names, setNames] = useState('')
+  const [service, setService] = useState<SelfSignedRequest['service']>('nginx')
+  const [bits, setBits] = useState(2048)
+  const [days, setDays] = useState(397)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<SelfSignedResult | null>(null)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    const nameList = names
+      .split(',')
+      .map((n) => n.trim())
+      .filter(Boolean)
+    if (nameList.length === 0) {
+      setError('Укажите хотя бы одно имя')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setResult(null)
+    try {
+      const res = await api<SelfSignedResult>('/certificates/self-signed', {
+        method: 'POST',
+        body: { names: nameList, service, bits, days } satisfies SelfSignedRequest,
+      })
+      setResult(res)
+      onIssued()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card
+      title="Выпустить самоподписанный сертификат"
+      subtitle="Для внутренних сервисов или как временная мера, пока не готов сертификат от доверенного центра — браузер всё равно покажет предупреждение"
+    >
+      <form className="col" onSubmit={submit}>
+        {error && <Banner kind="error">{error}</Banner>}
+        <div className="filters">
+          <label style={{ flex: 2, minWidth: '16rem' }}>
+            Имена через запятую
+            <input
+              value={names}
+              onChange={(e) => setNames(e.target.value)}
+              placeholder="internal.example.com, *.internal.example.com"
+              required
+            />
+          </label>
+          <label>
+            Сервис
+            <select value={service} onChange={(e) => setService(e.target.value as SelfSignedRequest['service'])}>
+              {SERVICE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Длина ключа
+            <select value={bits} onChange={(e) => setBits(Number(e.target.value))}>
+              <option value={2048}>2048</option>
+              <option value={3072}>3072</option>
+              <option value={4096}>4096</option>
+            </select>
+          </label>
+          <label>
+            Срок действия, дней
+            <input
+              type="number"
+              min={1}
+              max={825}
+              value={days}
+              onChange={(e) => setDays(Number(e.target.value))}
+            />
+          </label>
+        </div>
+        <div>
+          <button className="primary" type="submit" disabled={busy}>
+            {busy ? 'Генерирую…' : 'Создать'}
+          </button>
+        </div>
+      </form>
+
+      {result && (
+        <div className="col" style={{ marginTop: '0.85rem' }}>
+          <Banner kind="info">
+            Сертификат для {result.names.join(', ')} создан, действителен до{' '}
+            {formatDateTime(result.not_after)}. Он ещё не подключён ни к одному сервису — вставьте
+            директивы ниже в нужный файл через страницу «Конфигурации».
+          </Banner>
+          <pre className="diff">{result.snippet}</pre>
+        </div>
+      )}
+    </Card>
   )
 }

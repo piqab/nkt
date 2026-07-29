@@ -303,9 +303,32 @@ type Certificate struct {
 	SigAlgorithm string `json:"sig_algorithm,omitempty"`
 	SelfSigned   bool   `json:"self_signed"`
 	ChainLength  int    `json:"chain_length"`
+	// Fingerprint is the SHA-256 of the leaf certificate's raw DER bytes, hex
+	// encoded. It is what Serving.Match is checked against: the file on disk
+	// versus what the socket actually hands back.
+	Fingerprint string `json:"fingerprint,omitempty"`
 
 	Renewal RenewalInfo `json:"renewal"`
+	Serving CertServing `json:"serving"`
 	Error   string      `json:"error,omitempty"`
+}
+
+// CertServing describes what a TLS endpoint actually presents on the wire,
+// found by dialing it directly rather than trusting the file a configuration
+// points at. A certificate renewed on disk with nobody reloading the service
+// that serves it is invisible from the filesystem alone — this is the only
+// check in the application that looks at the socket instead.
+type CertServing struct {
+	// Checked is true once a dial was attempted. False means no reachable
+	// endpoint was known for this certificate, or the check was skipped
+	// entirely (fixtures mode has no real sockets to dial).
+	Checked  bool   `json:"checked"`
+	Endpoint string `json:"endpoint,omitempty"`
+	// Match is only meaningful when Checked is true and Error is empty.
+	Match          bool      `json:"match"`
+	ServedSerial   string    `json:"served_serial,omitempty"`
+	ServedNotAfter time.Time `json:"served_not_after,omitempty"`
+	Error          string    `json:"error,omitempty"`
 }
 
 // Expired reports whether the certificate is already past its validity.
