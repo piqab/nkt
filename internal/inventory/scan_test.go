@@ -171,8 +171,8 @@ func TestScanReadsCertificates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("скан завершился ошибкой: %v", err)
 	}
-	if len(snap.Certs) != 5 {
-		t.Fatalf("сертификатов: %d, ожидалось 5", len(snap.Certs))
+	if len(snap.Certs) != 6 {
+		t.Fatalf("сертификатов: %d, ожидалось 6", len(snap.Certs))
 	}
 
 	byPath := map[string]model.Certificate{}
@@ -223,6 +223,30 @@ func TestScanReadsCertificates(t *testing.T) {
 	}
 	if internal.KeyBits != 1024 {
 		t.Errorf("internal.pem: ключ %d бит, ожидалось 1024", internal.KeyBits)
+	}
+
+	// haproxy's combined PEM here is the same app.example.com leaf certificate
+	// a deploy-hook glued to its own key — the point of this fixture is that
+	// the app must recognise it as certbot-derived, not "manual" just because
+	// the path sits outside /etc/letsencrypt.
+	derived := byPath["/etc/haproxy/certs-le/app.example.com.pem"]
+	if derived.Error != "" {
+		t.Fatalf("производный сертификат haproxy: %s", derived.Error)
+	}
+	if derived.Fingerprint != app.Fingerprint {
+		t.Fatalf("производный сертификат: отпечаток %q не совпадает с оригиналом %q",
+			derived.Fingerprint, app.Fingerprint)
+	}
+	if !derived.Renewal.Derived {
+		t.Error("производный сертификат haproxy должен быть помечен Renewal.Derived")
+	}
+	if derived.Renewal.SourcePath != app.Path {
+		t.Errorf("производный сертификат: SourcePath = %q, ожидалось %q",
+			derived.Renewal.SourcePath, app.Path)
+	}
+	if derived.Renewal.Lineage != app.Renewal.Lineage || derived.Renewal.Managed != app.Renewal.Managed {
+		t.Errorf("производный сертификат должен унаследовать lineage/managed оригинала: %+v vs %+v",
+			derived.Renewal, app.Renewal)
 	}
 }
 

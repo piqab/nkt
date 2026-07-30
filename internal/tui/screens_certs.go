@@ -159,7 +159,12 @@ func (s *certsScreen) renewSelected() {
 	}
 
 	lineage := cert.Renewal.Lineage
-	s.app.confirm(fmt.Sprintf("Выполнить certbot renew --cert-name %s?", lineage), func() {
+	question := fmt.Sprintf("Выполнить certbot renew --cert-name %s?", lineage)
+	if cert.Renewal.Derived {
+		question += fmt.Sprintf("\n\nЭто копия сертификата из %s — продлится оригинал, а этот файл "+
+			"нужно пересобрать отдельно (deploy-hook certbot или вручную).", cert.Renewal.SourcePath)
+	}
+	s.app.confirm(question, func() {
 		s.app.runAsync("Продлеваю "+lineage, true, func(ctx context.Context) (string, error) {
 			res, err := s.app.Certs.RenewCertbot(ctx, s.app.actor, lineage)
 			if err != nil {
@@ -317,13 +322,17 @@ func (s *certsScreen) describe(cert model.Certificate) string {
 }
 
 func renewalWord(cert model.Certificate) string {
+	prefix := ""
+	if cert.Renewal.Derived {
+		prefix = "копия certbot, "
+	}
 	switch {
 	case cert.Renewal.Automatic:
-		return "автоматическое"
+		return prefix + "автоматическое"
 	case cert.Renewal.Managed:
-		return "настроено, но не запускается"
+		return prefix + "настроено, но не запускается"
 	case cert.Renewal.Tool == "certbot":
-		return "запись certbot потеряна"
+		return prefix + "запись certbot потеряна"
 	default:
 		return "вручную"
 	}

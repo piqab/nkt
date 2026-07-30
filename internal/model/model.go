@@ -283,6 +283,17 @@ type RenewalInfo struct {
 	// orphan lineage with Managed false, so the UI can explain which lineage
 	// is missing its renewal file. Empty for anything certbot does not own.
 	Lineage string `json:"lineage,omitempty"`
+	// Derived marks a certificate found outside /etc/letsencrypt whose leaf
+	// certificate bytes are identical to one already found under
+	// /etc/letsencrypt/live/<Lineage> — the common haproxy pattern of a
+	// deploy-hook concatenating fullchain.pem+privkey.pem into a single file
+	// haproxy's "crt" wants, since haproxy (unlike nginx) has no separate
+	// certificate/key directives. certbot renew still only rewrites
+	// SourcePath; this copy needs a separate step to pick up the new bytes.
+	Derived bool `json:"derived,omitempty"`
+	// SourcePath is the /etc/letsencrypt/live/... file this content matched,
+	// set only when Derived is true.
+	SourcePath string `json:"source_path,omitempty"`
 }
 
 // Certificate is one TLS certificate a service presents, read from the file the

@@ -267,6 +267,8 @@ export interface RenewalInfo {
   automatic: boolean
   detail?: string
   lineage?: string
+  derived?: boolean
+  source_path?: string
 }
 
 /** What a TLS endpoint actually presents on the wire, checked by dialing it
