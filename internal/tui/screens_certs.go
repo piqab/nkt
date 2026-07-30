@@ -54,7 +54,8 @@ func (s *certsScreen) title() string          { return "Сертификаты" 
 func (s *certsScreen) view() tview.Primitive  { return s.root }
 func (s *certsScreen) focus() tview.Primitive { return s.table }
 func (s *certsScreen) hints() string {
-	return dim("Enter показать файл · g выпустить самоподписанный · r продлить через certbot")
+	return dim("Enter показать файл · g выпустить самоподписанный · r продлить через certbot · " +
+		"c собрать PEM для haproxy")
 }
 
 func (s *certsScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
@@ -64,6 +65,9 @@ func (s *certsScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	case event.Rune() == 'r' || event.Rune() == 'R':
 		s.renewSelected()
+		return nil
+	case event.Rune() == 'c' || event.Rune() == 'C':
+		s.showCombineForm()
 		return nil
 	case event.Key() == tcell.KeyEnter:
 		row, _ := s.table.GetSelection()
@@ -136,6 +140,57 @@ func (s *certsScreen) showGenerateForm() {
 
 	s.app.editing = true
 	s.app.showModal("certgen", form, 74, 13)
+}
+
+// showCombineForm packages an already-issued certbot lineage into the single
+// PEM haproxy's "crt" needs — for wiring haproxy up to a certbot certificate
+// for the first time, when there is no existing file to compare bytes
+// against. Unlike showGenerateForm this never calls certbot: it only
+// repackages a certificate that already exists on disk.
+func (s *certsScreen) showCombineForm() {
+	if !s.app.canMutate() {
+		s.app.setStatus(hexWarning, "Изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
+		return
+	}
+
+	lineages, err := s.app.Certs.ListLetsEncryptLineages()
+	if err != nil {
+		s.app.setStatus(hexWarning, "Не удалось прочитать /etc/letsencrypt/live: "+err.Error())
+		return
+	}
+	if len(lineages) == 0 {
+		s.app.setStatus(hexWarning, "В /etc/letsencrypt/live не найдено ни одной lineage")
+		return
+	}
+
+	lineage := lineages[0]
+	form := tview.NewForm().
+		AddDropDown("Lineage", lineages, 0, func(o string, _ int) { lineage = o })
+
+	form.AddButton("Собрать", func() {
+		s.app.closeModal("certcombine")
+		s.app.runAsync("Собираю PEM для haproxy", true, func(ctx context.Context) (string, error) {
+			res, err := s.app.Certs.CombineForHAProxy(ctx, s.app.actor, lineage)
+			if err != nil {
+				return "", err
+			}
+			s.app.queue(func() {
+				s.app.showText("certcombine-result", "PEM собран", fmt.Sprintf(
+					" %s\n действителен до %s\n\n Файл в конфигурацию ещё не добавлен — вставьте через "+
+						"редактор (экран «Конфигурации»):\n\n%s\n",
+					bold(res.Lineage), res.NotAfter.Local().Format("02.01.2006"),
+					tview.Escape(res.Snippet)))
+			})
+			return "PEM собран, отпечаток " + res.Fingerprint[:16] + "…", nil
+		})
+	})
+	form.AddButton("Отмена", func() { s.app.closeModal("certcombine") })
+
+	form.SetBorder(true).SetTitle(" Собрать PEM для haproxy из certbot ").SetBorderColor(colorBorder)
+	form.SetCancelFunc(func() { s.app.closeModal("certcombine") })
+
+	s.app.editing = true
+	s.app.showModal("certcombine", form, 60, 8)
 }
 
 // renewSelected re-issues the selected certificate's certbot lineage in

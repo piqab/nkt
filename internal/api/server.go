@@ -131,6 +131,8 @@ func (s *Server) Handler() http.Handler {
 
 				r.Post("/certificates/self-signed", s.handleGenerateSelfSigned)
 				r.Post("/certificates/renew", s.handleRenewCertbot)
+				r.Get("/certificates/lineages", s.handleCertLineages)
+				r.Post("/certificates/combine", s.handleCombineForHAProxy)
 
 				r.Post("/monitor/targets/{id}/check", s.handleTargetCheck)
 				r.Patch("/monitor/targets/{id}", s.handleTargetPatch)

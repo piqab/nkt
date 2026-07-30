@@ -13,6 +13,7 @@ import (
 	"math/big"
 	gopath "path"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -350,6 +351,91 @@ func (m *CertManager) recombineDerivedCerts(ctx context.Context, user, lineage s
 		}
 	}
 	return services, nil
+}
+
+// ListLetsEncryptLineages lists the certbot lineage names found directly
+// under /etc/letsencrypt/live — the directory certbot itself maintains, so
+// listing it is more reliable than trusting whatever this app happened to
+// parse out of nginx/haproxy configuration.
+func (m *CertManager) ListLetsEncryptLineages() ([]string, error) {
+	entries, err := m.c.ListDir(strings.TrimSuffix(parse.LetsEncryptLive, "/"))
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir {
+			names = append(names, gopath.Base(e.Path))
+		}
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+// CombineResult is what got written when packaging a certbot lineage for
+// haproxy, and how to wire it in.
+type CombineResult struct {
+	Lineage      string    `json:"lineage"`
+	CombinedPath string    `json:"combined_path"`
+	Fingerprint  string    `json:"fingerprint"`
+	NotAfter     time.Time `json:"not_after"`
+	// Snippet is the configuration to paste through the config editor. This
+	// tool does not insert it itself.
+	Snippet string `json:"snippet"`
+}
+
+// CombineForHAProxy packages an already-issued certbot lineage's certificate
+// and key into the single PEM file haproxy's "crt" directive expects,
+// writing it under a dedicated directory — the same write boundary
+// GenerateSelfSigned uses — and returning the directive to paste in.
+//
+// Unlike RenewCertbot's automatic recombineDerivedCerts, this does not
+// require an existing haproxy file to already reference the lineage: it is
+// for wiring haproxy up to a certbot certificate for the first time, when
+// there is nothing yet for a fingerprint match to find.
+func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage string) (CombineResult, error) {
+	if !lineageRe.MatchString(lineage) {
+		return CombineResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
+	}
+
+	certPEM, err := m.c.ReadFile(parse.LetsEncryptLive + lineage + "/fullchain.pem")
+	if err != nil {
+		return CombineResult{}, fmt.Errorf("чтение сертификата lineage %s: %w", lineage, err)
+	}
+	keyPEM, err := m.c.ReadFile(parse.LetsEncryptLive + lineage + "/privkey.pem")
+	if err != nil {
+		return CombineResult{}, fmt.Errorf("чтение ключа lineage %s: %w", lineage, err)
+	}
+	block, _ := pem.Decode(certPEM)
+	if block == nil || block.Type != "CERTIFICATE" {
+		return CombineResult{}, fmt.Errorf("lineage %s: fullchain.pem не в формате PEM", lineage)
+	}
+	leaf, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return CombineResult{}, fmt.Errorf("lineage %s: разбор сертификата: %w", lineage, err)
+	}
+
+	combined := make([]byte, 0, len(certPEM)+len(keyPEM))
+	combined = append(combined, certPEM...)
+	combined = append(combined, keyPEM...)
+
+	sum := sha256.Sum256(leaf.Raw)
+	res := CombineResult{
+		Lineage:     lineage,
+		Fingerprint: hex.EncodeToString(sum[:]),
+		NotAfter:    leaf.NotAfter.UTC(),
+	}
+	dir := gopath.Join(m.cfg.HAProxyRoot, "ssl-letsencrypt", safeDirName(lineage))
+	res.CombinedPath = gopath.Join(dir, "combined.pem")
+	if err := m.c.WriteFile(res.CombinedPath, combined, 0o600); err != nil {
+		return CombineResult{}, fmt.Errorf("запись %s: %w", res.CombinedPath, err)
+	}
+	res.Snippet = fmt.Sprintf("bind *:443 ssl crt %s", res.CombinedPath)
+
+	m.db.Audit(ctx, user, "cert.combine_haproxy", lineage, "ok", map[string]any{
+		"combined_path": res.CombinedPath, "fingerprint": res.Fingerprint,
+	})
+	return res, nil
 }
 
 // usesStandaloneAuth reads the lineage's own renewal.conf and reports

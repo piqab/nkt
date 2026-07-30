@@ -67,3 +67,46 @@ func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
 		"simulated": res.Simulated,
 	})
 }
+
+// handleCertLineages lists the certbot lineages found on the host, to
+// populate the "собрать PEM для haproxy" form without the operator having to
+// know or type the exact directory name.
+func (s *Server) handleCertLineages(w http.ResponseWriter, r *http.Request) {
+	names, err := s.certs.ListLetsEncryptLineages()
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"lineages": names})
+}
+
+type combineRequest struct {
+	Lineage string `json:"lineage"`
+}
+
+// handleCombineForHAProxy packages an already-issued certbot lineage into
+// the single PEM haproxy's "crt" needs. Unlike renew, this never calls
+// certbot: it only repackages a certificate that already exists.
+func (s *Server) handleCombineForHAProxy(w http.ResponseWriter, r *http.Request) {
+	var req combineRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Lineage == "" {
+		writeError(w, http.StatusBadRequest, "укажите lineage")
+		return
+	}
+
+	user := auth.Username(r.Context())
+	res, err := s.certs.CombineForHAProxy(r.Context(), user, req.Lineage)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// The new file does not appear in the certificate inventory until some
+	// configuration references it, but a rescan costs nothing.
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, res)
+}
