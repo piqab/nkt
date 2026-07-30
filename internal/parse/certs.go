@@ -104,7 +104,7 @@ func Certificates(ctx context.Context, c collect.Collector, endpoints []model.En
 		res.Certs = append(res.Certs, readCertFile(&res, c, path, u, renewals))
 	}
 
-	markDerivedCertbotCerts(res.Certs)
+	markDerivedCertbotCerts(res.Certs, renewals)
 
 	sort.Slice(res.Certs, func(i, j int) bool {
 		if res.Certs[i].Error != res.Certs[j].Error {
@@ -284,6 +284,14 @@ type renewalIndex struct {
 	automatic bool
 	detail    string
 	tool      string
+	// fingerprints maps a leaf certificate's SHA-256 fingerprint (hex, the
+	// same value model.Certificate.Fingerprint carries) to its certbot
+	// lineage name. Built by reading every /etc/letsencrypt/live/<lineage>/
+	// fullchain.pem directly, independent of whether the parsed nginx/haproxy
+	// configuration references that path at all — a haproxy-only deploy-hook
+	// copy (see markDerivedCertbotCerts) has nothing else to compare against
+	// when nothing in the config ever points at the original file.
+	fingerprints map[string]string
 }
 
 // forPath decides how a specific certificate is renewed.
@@ -321,27 +329,17 @@ func (r renewalIndex) forPath(path string) model.RenewalInfo {
 // markDerivedCertbotCerts catches the common haproxy pattern: nginx gets its
 // certificate straight from /etc/letsencrypt/live/<lineage>, but haproxy's
 // "crt" wants certificate and key in one file, so a certbot deploy-hook
-// concatenates fullchain.pem+privkey.pem into a copy living somewhere else.
-// forPath sees only a path outside /etc/letsencrypt and calls that "manual",
-// which is wrong: the certificate is certbot-issued, it just isn't the file
-// certbot itself will touch on renewal. A copy has byte-identical leaf
-// certificate content to its source, so the fingerprint already computed by
-// fillFromPEM is enough to catch it — no assumption about hook script naming
-// or location is needed.
-func markDerivedCertbotCerts(certs []model.Certificate) {
-	sources := map[string]model.Certificate{}
-	for _, cert := range certs {
-		if cert.Error != "" || cert.Fingerprint == "" || cert.Renewal.Lineage == "" {
-			continue
-		}
-		if !strings.HasPrefix(cert.Path, letsEncryptLive) {
-			continue
-		}
-		if _, ok := sources[cert.Fingerprint]; !ok {
-			sources[cert.Fingerprint] = cert
-		}
-	}
-	if len(sources) == 0 {
+// concatenates fullchain.pem+privkey.pem into a copy living somewhere else —
+// sometimes with nothing in the parsed configuration ever referencing the
+// original /etc/letsencrypt/live path at all. forPath sees only a path
+// outside /etc/letsencrypt and calls that "manual", which is wrong: the
+// certificate is certbot-issued, it just isn't the file certbot itself will
+// touch on renewal. A copy has byte-identical leaf certificate content to its
+// source, so renewals.fingerprints (built by reading every lineage's own
+// certificate directly, not from whatever this scan happened to parse) is
+// enough to catch it.
+func markDerivedCertbotCerts(certs []model.Certificate, renewals renewalIndex) {
+	if len(renewals.fingerprints) == 0 {
 		return
 	}
 
@@ -351,30 +349,33 @@ func markDerivedCertbotCerts(certs []model.Certificate) {
 			continue
 		}
 		if strings.HasPrefix(cert.Path, letsEncryptLive) {
-			continue
+			continue // already accurate — this is the file certbot itself manages
 		}
-		src, ok := sources[cert.Fingerprint]
+		lineage, ok := renewals.fingerprints[cert.Fingerprint]
 		if !ok {
 			continue
 		}
 
+		sourcePath := letsEncryptLive + lineage + "/fullchain.pem"
+		src := renewals.forPath(sourcePath)
+
 		detail := fmt.Sprintf(
 			"тот же сертификат, что и %s — похоже, объединён с приватным ключом для другого "+
-				"сервиса (типично для haproxy, которому certbot не пишет напрямую).", src.Path)
-		if src.Renewal.Managed {
+				"сервиса (типично для haproxy, которому certbot не пишет напрямую).", sourcePath)
+		if src.Managed {
 			detail += fmt.Sprintf(" certbot renew --cert-name %s продлит оригинал, но этот файл "+
-				"нужно пересобрать отдельно — deploy-hook'ом certbot или вручную.", src.Renewal.Lineage)
+				"нужно пересобрать отдельно — deploy-hook'ом certbot или вручную.", lineage)
 		} else {
-			detail += " " + src.Renewal.Detail
+			detail += " " + src.Detail
 		}
 
 		cert.Renewal = model.RenewalInfo{
-			Tool:       src.Renewal.Tool,
-			Managed:    src.Renewal.Managed,
-			Automatic:  src.Renewal.Automatic,
-			Lineage:    src.Renewal.Lineage,
+			Tool:       src.Tool,
+			Managed:    src.Managed,
+			Automatic:  src.Automatic,
+			Lineage:    lineage,
 			Derived:    true,
-			SourcePath: src.Path,
+			SourcePath: sourcePath,
 			Detail:     detail,
 		}
 	}
@@ -383,13 +384,40 @@ func markDerivedCertbotCerts(certs []model.Certificate) {
 // discoverRenewals looks for certificate automation on the host: which lineages
 // certbot knows about, and whether anything actually triggers a renewal.
 func discoverRenewals(ctx context.Context, c collect.Collector) renewalIndex {
-	idx := renewalIndex{lineages: map[string]bool{}, tool: "certbot"}
+	idx := renewalIndex{lineages: map[string]bool{}, tool: "certbot", fingerprints: map[string]string{}}
 
 	if files, err := c.Glob("/etc/letsencrypt/renewal/*.conf"); err == nil {
 		for _, f := range files {
 			idx.lineages[strings.TrimSuffix(gopath.Base(f), ".conf")] = true
 		}
 	}
+
+	// Read every lineage's own certificate directly, regardless of whether
+	// the parsed nginx/haproxy configuration references this exact path — a
+	// deploy-hook copy elsewhere (markDerivedCertbotCerts) has nothing else
+	// to be compared against otherwise. An orphan lineage (no renewal.conf)
+	// is fingerprinted too, so a copy of it still gets a correct explanation
+	// instead of a false "manual".
+	if leaves, err := c.Glob(letsEncryptLive + "*/fullchain.pem"); err == nil {
+		for _, leafPath := range leaves {
+			raw, err := c.ReadFile(leafPath)
+			if err != nil {
+				continue
+			}
+			block, _ := pem.Decode(raw)
+			if block == nil || block.Type != "CERTIFICATE" {
+				continue
+			}
+			leaf, err := x509.ParseCertificate(block.Bytes)
+			if err != nil {
+				continue
+			}
+			lineage := strings.TrimSuffix(strings.TrimPrefix(leafPath, letsEncryptLive), "/fullchain.pem")
+			sum := sha256.Sum256(leaf.Raw)
+			idx.fingerprints[hex.EncodeToString(sum[:])] = lineage
+		}
+	}
+
 	if len(idx.lineages) == 0 {
 		return idx
 	}

@@ -2,6 +2,7 @@ package parse
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/althq/netknownsthat/internal/model"
@@ -107,5 +108,58 @@ func TestCertificatesDetectsCertbotDerivedHAProxyCert(t *testing.T) {
 	}
 	if derived.Renewal.Lineage != source.Renewal.Lineage {
 		t.Errorf("Lineage = %q, ожидалось %q", derived.Renewal.Lineage, source.Renewal.Lineage)
+	}
+}
+
+// TestCertificatesDetectsCertbotDerivedCertWithoutAnyDirectReference is the
+// scenario the fingerprint-vs-parsed-certs version of markDerivedCertbotCerts
+// missed: nothing in nginx or haproxy configuration ever references
+// /etc/letsencrypt/live/<lineage> directly — only the haproxy combined copy
+// is. In that case Certificates() never reads the original file as part of
+// its normal endpoint walk, so there is no in-memory "source" certificate to
+// compare against. Detection must come from reading the lineage's own
+// certificate off disk directly (renewalIndex.fingerprints), not from
+// whatever this particular scan happened to parse.
+func TestCertificatesDetectsCertbotDerivedCertWithoutAnyDirectReference(t *testing.T) {
+	c := fixtureCollector(t)
+	hap := HAProxy(context.Background(), c, "/etc/haproxy/haproxy.cfg")
+	if hap.Status.Error != "" {
+		t.Fatalf("парсер haproxy вернул ошибку: %s", hap.Status.Error)
+	}
+
+	// Only haproxy endpoints — deliberately excludes nginx, so nothing in
+	// this call ever points at /etc/letsencrypt/live/app.example.com.
+	res := Certificates(context.Background(), c, hap.Endpoints)
+
+	for _, cert := range res.Certs {
+		if strings.HasPrefix(cert.Path, letsEncryptLive) {
+			t.Fatalf("в списке не должно быть прямых ссылок на /etc/letsencrypt/live в этом сценарии, "+
+				"нашёлся: %s", cert.Path)
+		}
+	}
+
+	var derived *model.Certificate
+	for i := range res.Certs {
+		if res.Certs[i].Path == "/etc/haproxy/certs-le/app.example.com.pem" {
+			derived = &res.Certs[i]
+		}
+	}
+	if derived == nil {
+		t.Fatal("производный сертификат haproxy не найден")
+	}
+	if derived.Error != "" {
+		t.Fatalf("производный сертификат: неожиданная ошибка %q", derived.Error)
+	}
+	if !derived.Renewal.Derived {
+		t.Fatal("ожидался Renewal.Derived = true даже без прямой ссылки на /etc/letsencrypt/live")
+	}
+	if derived.Renewal.Lineage != "app.example.com" {
+		t.Errorf("Lineage = %q, ожидалось app.example.com", derived.Renewal.Lineage)
+	}
+	if derived.Renewal.SourcePath != letsEncryptLive+"app.example.com/fullchain.pem" {
+		t.Errorf("SourcePath = %q", derived.Renewal.SourcePath)
+	}
+	if !derived.Renewal.Managed {
+		t.Error("app.example.com — управляемая lineage (есть renewal.conf), ожидалось Managed = true")
 	}
 }
