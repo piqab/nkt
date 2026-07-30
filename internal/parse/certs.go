@@ -104,6 +104,8 @@ func Certificates(ctx context.Context, c collect.Collector, endpoints []model.En
 		res.Certs = append(res.Certs, readCertFile(&res, c, path, u, renewals))
 	}
 
+	markDerivedCertbotCerts(res.Certs)
+
 	sort.Slice(res.Certs, func(i, j int) bool {
 		if res.Certs[i].Error != res.Certs[j].Error {
 			return res.Certs[i].Error != "" // unreadable first, they need attention
@@ -313,6 +315,68 @@ func (r renewalIndex) forPath(path string) model.RenewalInfo {
 		Automatic: r.automatic,
 		Detail:    r.detail,
 		Lineage:   lineage,
+	}
+}
+
+// markDerivedCertbotCerts catches the common haproxy pattern: nginx gets its
+// certificate straight from /etc/letsencrypt/live/<lineage>, but haproxy's
+// "crt" wants certificate and key in one file, so a certbot deploy-hook
+// concatenates fullchain.pem+privkey.pem into a copy living somewhere else.
+// forPath sees only a path outside /etc/letsencrypt and calls that "manual",
+// which is wrong: the certificate is certbot-issued, it just isn't the file
+// certbot itself will touch on renewal. A copy has byte-identical leaf
+// certificate content to its source, so the fingerprint already computed by
+// fillFromPEM is enough to catch it — no assumption about hook script naming
+// or location is needed.
+func markDerivedCertbotCerts(certs []model.Certificate) {
+	sources := map[string]model.Certificate{}
+	for _, cert := range certs {
+		if cert.Error != "" || cert.Fingerprint == "" || cert.Renewal.Lineage == "" {
+			continue
+		}
+		if !strings.HasPrefix(cert.Path, letsEncryptLive) {
+			continue
+		}
+		if _, ok := sources[cert.Fingerprint]; !ok {
+			sources[cert.Fingerprint] = cert
+		}
+	}
+	if len(sources) == 0 {
+		return
+	}
+
+	for i := range certs {
+		cert := &certs[i]
+		if cert.Error != "" || cert.Fingerprint == "" {
+			continue
+		}
+		if strings.HasPrefix(cert.Path, letsEncryptLive) {
+			continue
+		}
+		src, ok := sources[cert.Fingerprint]
+		if !ok {
+			continue
+		}
+
+		detail := fmt.Sprintf(
+			"тот же сертификат, что и %s — похоже, объединён с приватным ключом для другого "+
+				"сервиса (типично для haproxy, которому certbot не пишет напрямую).", src.Path)
+		if src.Renewal.Managed {
+			detail += fmt.Sprintf(" certbot renew --cert-name %s продлит оригинал, но этот файл "+
+				"нужно пересобрать отдельно — deploy-hook'ом certbot или вручную.", src.Renewal.Lineage)
+		} else {
+			detail += " " + src.Renewal.Detail
+		}
+
+		cert.Renewal = model.RenewalInfo{
+			Tool:       src.Renewal.Tool,
+			Managed:    src.Renewal.Managed,
+			Automatic:  src.Renewal.Automatic,
+			Lineage:    src.Renewal.Lineage,
+			Derived:    true,
+			SourcePath: src.Path,
+			Detail:     detail,
+		}
 	}
 }
 

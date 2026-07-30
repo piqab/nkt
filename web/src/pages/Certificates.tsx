@@ -36,9 +36,10 @@ function expiryWord(cert: Certificate): string {
 }
 
 function renewalWord(cert: Certificate): string {
-  if (cert.renewal.automatic) return 'автоматическое'
-  if (cert.renewal.managed) return 'настроено, но не запускается'
-  if (cert.renewal.tool === 'certbot') return 'запись certbot потеряна'
+  const prefix = cert.renewal.derived ? 'копия certbot, ' : ''
+  if (cert.renewal.automatic) return prefix + 'автоматическое'
+  if (cert.renewal.managed) return prefix + 'настроено, но не запускается'
+  if (cert.renewal.tool === 'certbot') return prefix + 'запись certbot потеряна'
   return 'вручную'
 }
 
@@ -97,7 +98,11 @@ export default function Certificates({ me }: { me: Me }) {
   async function renew(cert: Certificate) {
     const lineage = cert.renewal.lineage
     if (!lineage) return
-    if (!window.confirm(`Запустить certbot renew --cert-name ${lineage}?`)) return
+    const caveat = cert.renewal.derived
+      ? `\n\nЭто копия сертификата из ${cert.renewal.source_path} — продлится оригинал, а этот файл ` +
+        'нужно пересобрать отдельно (deploy-hook certbot или вручную).'
+      : ''
+    if (!window.confirm(`Запустить certbot renew --cert-name ${lineage}?${caveat}`)) return
     setBusy(cert.id)
     setNotice(null)
     try {

@@ -3,6 +3,8 @@ package parse
 import (
 	"context"
 	"testing"
+
+	"github.com/althq/netknownsthat/internal/model"
 )
 
 // TestCertificatesExpandsHAProxyCrtDirectory covers haproxy's "bind ... crt
@@ -50,5 +52,60 @@ func TestCertificatesExpandsHAProxyCrtDirectory(t *testing.T) {
 	if len(fromDir) != 2 {
 		t.Fatalf("ожидалось 2 сертификата из каталога /etc/haproxy/certs (без .key), получено %d: %v",
 			len(fromDir), fromDir)
+	}
+}
+
+// TestCertificatesDetectsCertbotDerivedHAProxyCert covers the case that
+// prompted markDerivedCertbotCerts: haproxy's "crt" wants certificate and key
+// in one file, so a certbot deploy-hook typically concatenates
+// fullchain.pem+privkey.pem from an nginx-facing lineage into a copy living
+// outside /etc/letsencrypt. That copy must not be reported as "manual"
+// renewal just because of its path — its leaf certificate is byte-identical
+// to the /etc/letsencrypt/live source, and the app is expected to notice.
+func TestCertificatesDetectsCertbotDerivedHAProxyCert(t *testing.T) {
+	c := fixtureCollector(t)
+	nginx := Nginx(context.Background(), c, "/etc/nginx/nginx.conf")
+	if nginx.Status.Error != "" {
+		t.Fatalf("парсер nginx вернул ошибку: %s", nginx.Status.Error)
+	}
+	hap := HAProxy(context.Background(), c, "/etc/haproxy/haproxy.cfg")
+	if hap.Status.Error != "" {
+		t.Fatalf("парсер haproxy вернул ошибку: %s", hap.Status.Error)
+	}
+	endpoints := append(append([]model.Endpoint{}, nginx.Endpoints...), hap.Endpoints...)
+
+	res := Certificates(context.Background(), c, endpoints)
+	byPath := map[string]model.Certificate{}
+	for _, cert := range res.Certs {
+		byPath[cert.Path] = cert
+	}
+
+	source, ok := byPath["/etc/letsencrypt/live/app.example.com/fullchain.pem"]
+	if !ok {
+		t.Fatal("исходный сертификат app.example.com не найден — тест не может ничего проверить")
+	}
+
+	derived, ok := byPath["/etc/haproxy/certs-le/app.example.com.pem"]
+	if !ok {
+		t.Fatal("производный сертификат haproxy не найден")
+	}
+	if derived.Error != "" {
+		t.Fatalf("производный сертификат: неожиданная ошибка %q", derived.Error)
+	}
+	if derived.Fingerprint != source.Fingerprint {
+		t.Fatalf("отпечатки не совпадают: производный %q, исходный %q", derived.Fingerprint, source.Fingerprint)
+	}
+	if !derived.Renewal.Derived {
+		t.Error("ожидался Renewal.Derived = true")
+	}
+	if derived.Renewal.SourcePath != source.Path {
+		t.Errorf("Renewal.SourcePath = %q, ожидалось %q", derived.Renewal.SourcePath, source.Path)
+	}
+	if derived.Renewal.Tool != "certbot" || !derived.Renewal.Managed {
+		t.Errorf("производный сертификат должен унаследовать Tool=certbot/Managed=true от источника: %+v",
+			derived.Renewal)
+	}
+	if derived.Renewal.Lineage != source.Renewal.Lineage {
+		t.Errorf("Lineage = %q, ожидалось %q", derived.Renewal.Lineage, source.Renewal.Lineage)
 	}
 }
