@@ -132,7 +132,7 @@ func TestCertificatesDetectsCertbotDerivedCertWithoutAnyDirectReference(t *testi
 	res := Certificates(context.Background(), c, hap.Endpoints)
 
 	for _, cert := range res.Certs {
-		if strings.HasPrefix(cert.Path, letsEncryptLive) {
+		if strings.HasPrefix(cert.Path, LetsEncryptLive) {
 			t.Fatalf("в списке не должно быть прямых ссылок на /etc/letsencrypt/live в этом сценарии, "+
 				"нашёлся: %s", cert.Path)
 		}
@@ -156,7 +156,7 @@ func TestCertificatesDetectsCertbotDerivedCertWithoutAnyDirectReference(t *testi
 	if derived.Renewal.Lineage != "app.example.com" {
 		t.Errorf("Lineage = %q, ожидалось app.example.com", derived.Renewal.Lineage)
 	}
-	if derived.Renewal.SourcePath != letsEncryptLive+"app.example.com/fullchain.pem" {
+	if derived.Renewal.SourcePath != LetsEncryptLive+"app.example.com/fullchain.pem" {
 		t.Errorf("SourcePath = %q", derived.Renewal.SourcePath)
 	}
 	if !derived.Renewal.Managed {

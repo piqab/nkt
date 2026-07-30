@@ -2,6 +2,8 @@ package monitor
 
 import (
 	"context"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -13,12 +15,45 @@ import (
 	"github.com/althq/netknownsthat/internal/store"
 )
 
-func certRenewFixtures(t *testing.T, within time.Duration) *CertRenewer {
+// copyFixturesRoot copies the repo's fixtures/host tree into a throwaway
+// directory. RenewCertbot's recombine step writes through the Collector —
+// pointing a test straight at the repo's own fixtures/host would let it
+// mutate tracked files that the rest of the suite (and every other
+// contributor's working tree) relies on.
+func copyFixturesRoot(t *testing.T) string {
 	t.Helper()
-	root, err := filepath.Abs(filepath.Join("..", "..", "fixtures", "host"))
+	src, err := filepath.Abs(filepath.Join("..", "..", "fixtures", "host"))
 	if err != nil {
 		t.Fatalf("fixtures root: %v", err)
 	}
+	dst := t.TempDir()
+	err = filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
+	if err != nil {
+		t.Fatalf("копирование фикстур: %v", err)
+	}
+	return dst
+}
+
+func certRenewFixtures(t *testing.T, within time.Duration) *CertRenewer {
+	t.Helper()
+	root := copyFixturesRoot(t)
 	cfg := &config.Config{
 		Mode:                 config.ModeFixtures,
 		FixturesRoot:         root,
@@ -40,7 +75,8 @@ func certRenewFixtures(t *testing.T, within time.Duration) *CertRenewer {
 	if _, err := scanner.Scan(context.Background()); err != nil {
 		t.Fatalf("скан: %v", err)
 	}
-	return NewCertRenewer(cfg, scanner, control.NewCertManager(cfg, c, db))
+	services := control.NewServiceManager(cfg, c, db)
+	return NewCertRenewer(cfg, scanner, control.NewCertManager(cfg, c, db, services, scanner))
 }
 
 // app.example.com's fixture certificate is valid until 2035 — nowhere near

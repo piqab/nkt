@@ -18,25 +18,40 @@ import (
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/inventory"
+	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/parse"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
 // CertManager issues certificate material directly on the host.
 //
-// It never edits a live nginx or haproxy configuration. Locating the right
-// server block and rewriting it safely is a much larger feature than issuing a
-// certificate, and every config edit already goes through ConfigManager's
-// validated, auto-rolled-back path — GenerateSelfSigned writes the new files
-// and hands back the exact directives to paste there.
+// GenerateSelfSigned never edits a live nginx or haproxy configuration:
+// locating the right server block and rewriting it safely is a much larger
+// feature than issuing a certificate, and every config edit already goes
+// through ConfigManager's validated, auto-rolled-back path — it writes the
+// new files and hands back the exact directives to paste there. RenewCertbot
+// is different: it re-issues a lineage certbot already manages at the exact
+// path nginx/haproxy already reference, so there is nothing to paste.
 type CertManager struct {
-	cfg *config.Config
-	c   collect.Collector
-	db  *store.DB
+	cfg      *config.Config
+	c        collect.Collector
+	db       *store.DB
+	services *ServiceManager
+	// scanner is used only by RenewCertbot, to find any haproxy-style
+	// combined PEM the last scan identified as a copy of the lineage being
+	// renewed (model.RenewalInfo.Derived) — those need recombining with the
+	// fresh certificate, since certbot itself never touches them.
+	scanner *inventory.Scanner
 }
 
-// NewCertManager builds the certificate issuer.
-func NewCertManager(cfg *config.Config, c collect.Collector, db *store.DB) *CertManager {
-	return &CertManager{cfg: cfg, c: c, db: db}
+// NewCertManager builds the certificate issuer. services and scanner are
+// used only by RenewCertbot: services to stop and restart nginx/haproxy
+// around a --standalone renewal, scanner to find haproxy combined-PEM copies
+// that need recombining afterward.
+func NewCertManager(cfg *config.Config, c collect.Collector, db *store.DB,
+	services *ServiceManager, scanner *inventory.Scanner) *CertManager {
+	return &CertManager{cfg: cfg, c: c, db: db, services: services, scanner: scanner}
 }
 
 // Bounds for SelfSignedRequest.
@@ -219,19 +234,177 @@ func safeDirName(name string) string {
 // certbot had to disambiguate a repeat request.
 var lineageRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9])?$`)
 
+// standaloneServices is what certbot's --standalone authenticator needs off
+// port 80/443 for the duration of a renewal — a fixed list rather than
+// something derived from what happens to be running, since guessing wrong
+// about which service holds the port is worse than stopping one that was
+// never listening.
+var standaloneServices = []string{model.ServiceNginx, model.ServiceHAProxy}
+
 // RenewCertbot re-issues a certbot-managed lineage in place.
 //
-// Unlike GenerateSelfSigned, this never writes files itself — certbot already
-// knows to replace exactly the files under /etc/letsencrypt/live/<lineage>/
-// that nginx/haproxy configuration already points at, so nothing else needs
-// to change afterward. This only runs for lineages the app already found a
-// renewal.conf for (RenewalInfo.Managed) — an orphan lineage or a path
-// outside /etc/letsencrypt is not something certbot can renew at all.
+// certbot itself only ever rewrites the files under
+// /etc/letsencrypt/live/<lineage>/ that nginx (and, for a plain nginx-style
+// setup, haproxy too) already reference directly — nothing else to change
+// there. But haproxy needs certificate and key in one PEM, so a lineage that
+// also feeds haproxy often has a deploy-hook-built combined copy elsewhere
+// (model.RenewalInfo.Derived, see markDerivedCertbotCerts); that copy is
+// invisible to certbot and is recombined here from the freshly renewed
+// fullchain.pem+privkey.pem, then the owning service is reloaded to pick it
+// up. This only runs for lineages the app already found a renewal.conf for
+// (RenewalInfo.Managed) — an orphan lineage or a path outside
+// /etc/letsencrypt is not something certbot can renew at all.
+//
+// A lineage authenticated via --standalone needs :80/:443 free while certbot
+// itself talks to Let's Encrypt, so nginx and haproxy are stopped first and
+// always restarted afterward regardless of how the renewal went — leaving
+// the site down because a renewal failed is worse than the certificate
+// simply staying as it was. When that happens the restart alone already
+// picks up a recombined file, so no separate reload is needed on that path.
 func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (collect.CommandResult, error) {
 	if !lineageRe.MatchString(lineage) {
 		return collect.CommandResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
 	}
 
+	standalone := m.usesStandaloneAuth(lineage)
+	if standalone {
+		stopped, err := m.stopForStandalone(ctx, user)
+		defer m.restartAfterStandalone(user, stopped)
+		if err != nil {
+			return collect.CommandResult{}, fmt.Errorf(
+				"продление %s аутентифицируется через --standalone и требует остановки nginx/haproxy: %w",
+				lineage, err)
+		}
+	}
+
+	res, err := m.runCertbotRenew(ctx, user, lineage)
+	if err != nil {
+		return res, err
+	}
+
+	reloadTargets, err := m.recombineDerivedCerts(ctx, user, lineage)
+	if err != nil {
+		return res, fmt.Errorf(
+			"сертификат %s продлён, но не удалось пересобрать копию для haproxy: %w", lineage, err)
+	}
+	if !standalone {
+		// A --standalone renewal already restarts every stopped service with
+		// the recombined file already in place; otherwise a service serving a
+		// just-rewritten combined file needs reloading to pick it up — the
+		// same gap the tls-cert-not-reloaded finding watches for.
+		for _, svc := range reloadTargets {
+			if _, err := m.services.Action(ctx, user, svc, "reload"); err != nil {
+				return res, fmt.Errorf(
+					"сертификат %s продлён и пересобран, но не удалось перечитать конфигурацию %s: %w",
+					lineage, svc, err)
+			}
+		}
+	}
+
+	return res, nil
+}
+
+// recombineDerivedCerts rewrites every haproxy-style combined PEM the last
+// scan identified as a byte-identical copy of lineage's certificate
+// (model.RenewalInfo.Derived) with the freshly renewed certificate and key,
+// and returns the distinct services that own one — for the caller to reload.
+// certbot itself never touches these files: they live outside
+// /etc/letsencrypt entirely, so without this step they would keep serving
+// the certificate that was just renewed away from.
+func (m *CertManager) recombineDerivedCerts(ctx context.Context, user, lineage string) ([]string, error) {
+	snap := m.scanner.Latest()
+	if snap == nil {
+		return nil, nil
+	}
+
+	var certPEM, keyPEM []byte
+	var services []string
+	seen := map[string]bool{}
+	for _, cert := range snap.Certs {
+		if !cert.Renewal.Derived || cert.Renewal.Lineage != lineage {
+			continue
+		}
+		if certPEM == nil {
+			var err error
+			certPEM, err = m.c.ReadFile(parse.LetsEncryptLive + lineage + "/fullchain.pem")
+			if err != nil {
+				return nil, fmt.Errorf("чтение обновлённого сертификата: %w", err)
+			}
+			keyPEM, err = m.c.ReadFile(parse.LetsEncryptLive + lineage + "/privkey.pem")
+			if err != nil {
+				return nil, fmt.Errorf("чтение обновлённого ключа: %w", err)
+			}
+		}
+
+		combined := make([]byte, 0, len(certPEM)+len(keyPEM))
+		combined = append(combined, certPEM...)
+		combined = append(combined, keyPEM...)
+		if err := m.c.WriteFile(cert.Path, combined, 0o600); err != nil {
+			return services, fmt.Errorf("запись %s: %w", cert.Path, err)
+		}
+		m.db.Audit(ctx, user, "cert.recombine", cert.Path, "ok", map[string]any{"lineage": lineage})
+
+		if !seen[cert.Service] {
+			seen[cert.Service] = true
+			services = append(services, cert.Service)
+		}
+	}
+	return services, nil
+}
+
+// usesStandaloneAuth reads the lineage's own renewal.conf and reports
+// whether certbot will bind the ports itself rather than going through a
+// webroot, an installer plugin, or DNS. Any error or unrecognised layout is
+// treated as "no" — the safe default leaves nginx/haproxy exactly as they
+// were, since most lineages need no service interruption at all.
+func (m *CertManager) usesStandaloneAuth(lineage string) bool {
+	raw, err := m.c.ReadFile("/etc/letsencrypt/renewal/" + lineage + ".conf")
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(raw), "\n") {
+		key, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		if strings.TrimSpace(key) == "authenticator" {
+			return strings.TrimSpace(value) == "standalone"
+		}
+	}
+	return false
+}
+
+// stopForStandalone stops nginx and haproxy in order, returning exactly the
+// services it actually managed to stop even when it returns an error — the
+// caller must only restart what this function actually took down.
+func (m *CertManager) stopForStandalone(ctx context.Context, user string) ([]string, error) {
+	stopped := make([]string, 0, len(standaloneServices))
+	for _, svc := range standaloneServices {
+		if _, err := m.services.Action(ctx, user, svc, "stop"); err != nil {
+			return stopped, fmt.Errorf("остановка %s: %w", svc, err)
+		}
+		stopped = append(stopped, svc)
+	}
+	return stopped, nil
+}
+
+// restartAfterStandalone starts every service stopForStandalone stopped. It
+// runs on its own timeout independent of the request context: a client
+// disconnecting or an HTTP timeout must never be the reason nginx/haproxy
+// stay down.
+func (m *CertManager) restartAfterStandalone(user string, stopped []string) {
+	ctx, cancel := context.WithTimeout(context.Background(), m.cfg.CommandTimeout)
+	defer cancel()
+	for _, svc := range stopped {
+		if _, err := m.services.Action(ctx, user, svc, "start"); err != nil {
+			m.db.Audit(ctx, user, "cert.renew_restart_failed", svc, "error", err.Error())
+		}
+	}
+}
+
+// runCertbotRenew is the actual `certbot renew` invocation, shared by both
+// the standalone and non-standalone paths.
+func (m *CertManager) runCertbotRenew(ctx context.Context, user, lineage string) (collect.CommandResult, error) {
 	res, err := m.c.Run(ctx, "certbot", "renew", "--cert-name", lineage, "--non-interactive")
 	outcome := "ok"
 	if err != nil || !res.OK() {

@@ -99,8 +99,8 @@ export default function Certificates({ me }: { me: Me }) {
     const lineage = cert.renewal.lineage
     if (!lineage) return
     const caveat = cert.renewal.derived
-      ? `\n\nЭто копия сертификата из ${cert.renewal.source_path} — продлится оригинал, а этот файл ` +
-        'нужно пересобрать отдельно (deploy-hook certbot или вручную).'
+      ? `\n\nЭто копия сертификата из ${cert.renewal.source_path} — продлится оригинал, а эта копия ` +
+        'будет автоматически пересобрана из нового сертификата и ключа, после чего перечитается сервис.'
       : ''
     if (!window.confirm(`Запустить certbot renew --cert-name ${lineage}?${caveat}`)) return
     setBusy(cert.id)
