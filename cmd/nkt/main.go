@@ -184,7 +184,7 @@ func newRuntime() (*runtime, error) {
 		services:  services,
 		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
 		firewall:  control.NewFirewallManager(cfg, collector, db),
-		certs:     control.NewCertManager(cfg, collector, db),
+		certs:     control.NewCertManager(cfg, collector, db, services, scanner),
 	}, nil
 }
 

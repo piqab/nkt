@@ -12,6 +12,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -25,7 +26,8 @@ func certgenSetup(t *testing.T) (*CertManager, collect.Collector) {
 		t.Fatalf("открыть базу: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	return NewCertManager(cfg, c, db), c
+	scanner := inventory.New(cfg, c, db)
+	return NewCertManager(cfg, c, db, NewServiceManager(cfg, c, db), scanner), c
 }
 
 func TestGenerateSelfSignedNginx(t *testing.T) {

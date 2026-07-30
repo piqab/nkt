@@ -15,6 +15,10 @@
     { "match": ["certbot", "renew", "--cert-name", "app.example.com"],
       "stdout": "Cert not yet due for renewal, forced renewal...\nCongratulations, all renewals succeeded:\n  /etc/letsencrypt/live/app.example.com/fullchain.pem (success)\n",
       "exit_code": 0, "simulated": true },
+    { "_comment": "Эта lineage аутентифицируется через --standalone (см. renewal/standalone.example.com.conf) — на реальном хосте certbot сам слушает :80/:443, поэтому nginx/haproxy должны быть уже остановлены до этого вызова.",
+      "match": ["certbot", "renew", "--cert-name", "standalone.example.com"],
+      "stdout": "Congratulations, all renewals succeeded:\n  /etc/letsencrypt/live/standalone.example.com/fullchain.pem (success)\n",
+      "exit_code": 0, "simulated": true },
 
 
     { "match": ["nginx", "-t"], "stderr": "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful\n", "exit_code": 0, "simulated": true },

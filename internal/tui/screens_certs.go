@@ -161,8 +161,9 @@ func (s *certsScreen) renewSelected() {
 	lineage := cert.Renewal.Lineage
 	question := fmt.Sprintf("Выполнить certbot renew --cert-name %s?", lineage)
 	if cert.Renewal.Derived {
-		question += fmt.Sprintf("\n\nЭто копия сертификата из %s — продлится оригинал, а этот файл "+
-			"нужно пересобрать отдельно (deploy-hook certbot или вручную).", cert.Renewal.SourcePath)
+		question += fmt.Sprintf("\n\nЭто копия сертификата из %s — продлится оригинал, а эта копия "+
+			"будет автоматически пересобрана из нового сертификата и ключа, после чего перечитается сервис.",
+			cert.Renewal.SourcePath)
 	}
 	s.app.confirm(question, func() {
 		s.app.runAsync("Продлеваю "+lineage, true, func(ctx context.Context) (string, error) {

@@ -25,8 +25,8 @@ type CertResult struct {
 	Certs  []model.Certificate
 }
 
-// letsEncryptLive is where certbot keeps the symlinks a config normally points at.
-const letsEncryptLive = "/etc/letsencrypt/live/"
+// LetsEncryptLive is where certbot keeps the symlinks a config normally points at.
+const LetsEncryptLive = "/etc/letsencrypt/live/"
 
 // certUsage tracks which endpoints and site names a certificate path serves.
 // One file (or, for haproxy's directory form, one directory) often serves
@@ -296,14 +296,14 @@ type renewalIndex struct {
 
 // forPath decides how a specific certificate is renewed.
 func (r renewalIndex) forPath(path string) model.RenewalInfo {
-	if !strings.HasPrefix(path, letsEncryptLive) {
+	if !strings.HasPrefix(path, LetsEncryptLive) {
 		return model.RenewalInfo{
 			Tool:   "manual",
 			Detail: "путь вне /etc/letsencrypt — обновление, скорее всего, ручное",
 		}
 	}
 
-	lineage := strings.TrimPrefix(path, letsEncryptLive)
+	lineage := strings.TrimPrefix(path, LetsEncryptLive)
 	if i := strings.IndexByte(lineage, '/'); i >= 0 {
 		lineage = lineage[:i]
 	}
@@ -348,7 +348,7 @@ func markDerivedCertbotCerts(certs []model.Certificate, renewals renewalIndex) {
 		if cert.Error != "" || cert.Fingerprint == "" {
 			continue
 		}
-		if strings.HasPrefix(cert.Path, letsEncryptLive) {
+		if strings.HasPrefix(cert.Path, LetsEncryptLive) {
 			continue // already accurate — this is the file certbot itself manages
 		}
 		lineage, ok := renewals.fingerprints[cert.Fingerprint]
@@ -356,7 +356,7 @@ func markDerivedCertbotCerts(certs []model.Certificate, renewals renewalIndex) {
 			continue
 		}
 
-		sourcePath := letsEncryptLive + lineage + "/fullchain.pem"
+		sourcePath := LetsEncryptLive + lineage + "/fullchain.pem"
 		src := renewals.forPath(sourcePath)
 
 		detail := fmt.Sprintf(
@@ -398,7 +398,7 @@ func discoverRenewals(ctx context.Context, c collect.Collector) renewalIndex {
 	// to be compared against otherwise. An orphan lineage (no renewal.conf)
 	// is fingerprinted too, so a copy of it still gets a correct explanation
 	// instead of a false "manual".
-	if leaves, err := c.Glob(letsEncryptLive + "*/fullchain.pem"); err == nil {
+	if leaves, err := c.Glob(LetsEncryptLive + "*/fullchain.pem"); err == nil {
 		for _, leafPath := range leaves {
 			raw, err := c.ReadFile(leafPath)
 			if err != nil {
@@ -412,7 +412,7 @@ func discoverRenewals(ctx context.Context, c collect.Collector) renewalIndex {
 			if err != nil {
 				continue
 			}
-			lineage := strings.TrimSuffix(strings.TrimPrefix(leafPath, letsEncryptLive), "/fullchain.pem")
+			lineage := strings.TrimSuffix(strings.TrimPrefix(leafPath, LetsEncryptLive), "/fullchain.pem")
 			sum := sha256.Sum256(leaf.Raw)
 			idx.fingerprints[hex.EncodeToString(sum[:])] = lineage
 		}
