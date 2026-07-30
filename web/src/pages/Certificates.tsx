@@ -1,6 +1,13 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { api, useApi } from '../api'
-import type { Certificate, CertificatesResponse, Me, SelfSignedRequest, SelfSignedResult } from '../types'
+import type {
+  Certificate,
+  CertificatesResponse,
+  CombineResult,
+  Me,
+  SelfSignedRequest,
+  SelfSignedResult,
+} from '../types'
 import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, Loading, formatDateTime } from '../components/ui'
 
@@ -313,9 +320,91 @@ export default function Certificates({ me }: { me: Me }) {
       </Card>
 
       {me.is_admin && me.allow_mutations && (
-        <SelfSignedForm onIssued={reload} />
+        <>
+          <CombineForm onCombined={reload} />
+          <SelfSignedForm onIssued={reload} />
+        </>
       )}
     </>
+  )
+}
+
+function CombineForm({ onCombined }: { onCombined: () => void }) {
+  const lineages = useApi<{ lineages: string[] }>('/certificates/lineages', 0)
+  const [lineage, setLineage] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<CombineResult | null>(null)
+
+  const options = lineages.data?.lineages ?? []
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    if (!lineage) {
+      setError('Выберите lineage')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setResult(null)
+    try {
+      const res = await api<CombineResult>('/certificates/combine', {
+        method: 'POST',
+        body: { lineage },
+      })
+      setResult(res)
+      onCombined()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card
+      title="Собрать PEM для haproxy из certbot"
+      subtitle="Берёт уже выпущенный certbot-сертификат из /etc/letsencrypt/live и склеивает его с ключом в один файл — то, что требует haproxy `crt`. certbot renew не вызывается."
+    >
+      <form className="col" onSubmit={submit}>
+        {error && <Banner kind="error">{error}</Banner>}
+        <ErrorNote error={lineages.error} />
+        <div className="filters">
+          <label style={{ flex: 1, minWidth: '16rem' }}>
+            Lineage (/etc/letsencrypt/live/…)
+            <select value={lineage} onChange={(e) => setLineage(e.target.value)} required>
+              <option value="">— выберите —</option>
+              {options.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div>
+          <button className="primary" type="submit" disabled={busy || options.length === 0}>
+            {busy ? 'Собираю…' : 'Собрать'}
+          </button>
+        </div>
+        {!lineages.loading && options.length === 0 && !lineages.error && (
+          <p className="small muted" style={{ marginBottom: 0 }}>
+            В /etc/letsencrypt/live не найдено ни одной lineage.
+          </p>
+        )}
+      </form>
+
+      {result && (
+        <div className="col" style={{ marginTop: '0.85rem' }}>
+          <Banner kind="info">
+            {result.lineage}: PEM собран, действителен до {formatDateTime(result.not_after)}. Он ещё не
+            подключён ни к одному сервису — вставьте директиву ниже в нужный файл через страницу
+            «Конфигурации».
+          </Banner>
+          <pre className="diff">{result.snippet}</pre>
+        </div>
+      )}
+    </Card>
   )
 }
 

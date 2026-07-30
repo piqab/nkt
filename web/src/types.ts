@@ -335,6 +335,14 @@ export interface SelfSignedResult {
   snippet: string
 }
 
+export interface CombineResult {
+  lineage: string
+  combined_path: string
+  fingerprint: string
+  not_after: string
+  snippet: string
+}
+
 export interface Account {
   id: number
   username: string
