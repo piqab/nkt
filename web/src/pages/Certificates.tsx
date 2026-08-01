@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { api, useApi } from '../api'
 import type {
   Certificate,
@@ -6,11 +6,16 @@ import type {
   CombineResult,
   LineageInfo,
   Me,
+  RenewEvent,
+  RenewJobStatus,
   SelfSignedRequest,
   SelfSignedResult,
 } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
-import { Banner, Card, ErrorNote, Loading, Spinner, formatDateTime } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
+
+/** How often to poll a running renew job for new progress lines. */
+const RENEW_POLL_MS = 800
 
 /** Expiry bands, matching the thresholds the analyzer uses. */
 const WARN_DAYS = 30
@@ -98,10 +103,45 @@ export default function Certificates({ me }: { me: Me }) {
   const { data, error, loading, reload } = useApi<CertificatesResponse>('/certificates', 300_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [renewJob, setRenewJob] = useState<{ id: string; lineage: string } | null>(null)
+  const [jobStatus, setJobStatus] = useState<RenewJobStatus | null>(null)
 
   const certs = useMemo(() => data?.certificates ?? [], [data])
   const summary = data?.summary
   const canControl = me.is_admin && me.allow_mutations
+
+  // Polls the running renew job — stopping services, certbot's own output,
+  // recombining any haproxy copy, restarting services can together take
+  // minutes, so this shows it happening instead of one long spinner.
+  useEffect(() => {
+    if (!renewJob) return
+    const jobId = renewJob.id
+    let cancelled = false
+    let timer: number | undefined
+
+    async function poll() {
+      try {
+        const status = await api<RenewJobStatus>(`/certificates/renew/${jobId}`)
+        if (cancelled) return
+        setJobStatus(status)
+        if (status.done) {
+          window.clearInterval(timer)
+          reload()
+        }
+      } catch (err) {
+        if (cancelled) return
+        setJobStatus({ events: [], done: true, error: err instanceof Error ? err.message : String(err) })
+        window.clearInterval(timer)
+      }
+    }
+
+    void poll()
+    timer = window.setInterval(poll, RENEW_POLL_MS)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [renewJob, reload])
 
   async function renew(cert: Certificate) {
     const lineage = cert.renewal.lineage
@@ -114,18 +154,22 @@ export default function Certificates({ me }: { me: Me }) {
     setBusy(cert.id)
     setNotice(null)
     try {
-      const res = await api<{ output: string; simulated: boolean }>('/certificates/renew', {
+      const res = await api<{ job: string }>('/certificates/renew', {
         method: 'POST',
         body: { lineage },
       })
-      const suffix = res.simulated ? ' (симуляция, режим снапшота)' : ''
-      setNotice({ kind: 'info', text: `${lineage}: ${res.output || 'продлено'}${suffix}` })
-      reload()
+      setJobStatus(null)
+      setRenewJob({ id: res.job, lineage })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
       setBusy(null)
     }
+  }
+
+  function closeRenewModal() {
+    setRenewJob(null)
+    setJobStatus(null)
   }
 
   if (loading && !data) return <Loading what="сертификаты" />
@@ -327,7 +371,43 @@ export default function Certificates({ me }: { me: Me }) {
           <SelfSignedForm onIssued={reload} />
         </>
       )}
+
+      {renewJob && (
+        <Modal title={`Продление ${renewJob.lineage}`} onClose={closeRenewModal}>
+          <RenewLog events={jobStatus?.events ?? []} />
+          {jobStatus?.done ? (
+            <Banner kind={jobStatus.error ? 'error' : 'info'}>
+              {jobStatus.error ? `Ошибка: ${jobStatus.error}` : 'Готово.'}
+            </Banner>
+          ) : (
+            <p className="small muted row" style={{ alignItems: 'center', marginBottom: 0 }}>
+              <Spinner />
+              Выполняется — можно закрыть окно, процесс на хосте продолжится в фоне.
+            </p>
+          )}
+        </Modal>
+      )}
     </>
+  )
+}
+
+/** Auto-scrolling live log of a renew job's progress, one line per step. */
+function RenewLog({ events }: { events: RenewEvent[] }) {
+  const preRef = useRef<HTMLPreElement>(null)
+
+  useEffect(() => {
+    const el = preRef.current
+    if (el) el.scrollTop = el.scrollHeight
+  }, [events.length])
+
+  if (events.length === 0) {
+    return <p className="small muted">Начинаю…</p>
+  }
+
+  return (
+    <pre ref={preRef} className="diff" style={{ maxHeight: '22rem' }}>
+      {events.map((e) => `[${new Date(e.time).toLocaleTimeString('ru-RU')}] ${e.text}`).join('\n')}
+    </pre>
   )
 }
 

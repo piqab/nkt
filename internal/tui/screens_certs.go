@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -257,18 +259,85 @@ func (s *certsScreen) renewSelected() {
 			cert.Renewal.SourcePath)
 	}
 	s.app.confirm(question, func() {
-		s.app.runAsync("Продлеваю "+lineage, true, func(ctx context.Context) (string, error) {
-			res, err := s.app.Certs.RenewCertbot(ctx, s.app.actor, lineage)
-			if err != nil {
-				return "", err
-			}
-			msg := lineage + ": продлено"
-			if res.Simulated {
-				msg += " (симуляция, режим снапшота)"
-			}
-			return msg, nil
-		})
+		s.startRenewProgress(lineage)
 	})
+}
+
+// startRenewProgress opens a live-updating panel showing a renewal as it
+// actually happens — stopping services, certbot's own output, recombining
+// any haproxy copy, restarting services — instead of a single status-line
+// spinner for however long the whole thing takes.
+func (s *certsScreen) startRenewProgress(lineage string) {
+	id, err := s.app.Certs.StartRenewCertbot(s.app.actor, lineage)
+	if err != nil {
+		s.app.setStatus(hexCritical, "✖ "+err.Error())
+		return
+	}
+
+	const modalName = "renew-progress"
+	view := tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetScrollable(true)
+	view.SetText(" " + dim("Начинаю…"))
+	view.SetBorder(true).
+		SetTitle(fmt.Sprintf(" Продление %s — Esc скрыть (в фоне продолжится) ", lineage)).
+		SetBorderColor(colorBorder)
+
+	stop := make(chan struct{})
+	var closeOnce sync.Once
+	closePanel := func() {
+		closeOnce.Do(func() { close(stop) })
+		s.app.closeModal(modalName)
+	}
+	view.SetDoneFunc(func(tcell.Key) { closePanel() })
+	view.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEsc || event.Rune() == 'q' {
+			closePanel()
+			return nil
+		}
+		return event
+	})
+	s.app.showModal(modalName, view, 104, 30)
+
+	go func() {
+		ticker := time.NewTicker(400 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case <-ticker.C:
+				events, done, errMsg, ok := s.app.Certs.RenewJobStatus(id)
+				if !ok {
+					return
+				}
+				s.app.queue(func() {
+					view.SetText(renderRenewLog(events, done, errMsg))
+					view.ScrollToEnd()
+				})
+				if done {
+					s.refresh(context.Background())
+					return
+				}
+			}
+		}
+	}()
+}
+
+// renderRenewLog formats a renew job's progress for the live panel — one
+// timestamped line per step, ending with the outcome once done.
+func renderRenewLog(events []control.RenewEvent, done bool, errMsg string) string {
+	var sb strings.Builder
+	for _, e := range events {
+		sb.WriteString(fmt.Sprintf(" [%s] %s\n", e.Time.Local().Format("15:04:05"), tview.Escape(e.Text)))
+	}
+	if done {
+		sb.WriteString("\n")
+		if errMsg != "" {
+			sb.WriteString(" " + tag(hexCritical, "Ошибка: "+tview.Escape(errMsg)))
+		} else {
+			sb.WriteString(" " + tag(hexGood, "Готово."))
+		}
+	}
+	return sb.String()
 }
 
 // expiryTone maps days remaining onto the reserved status palette.

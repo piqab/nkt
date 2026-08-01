@@ -101,6 +101,46 @@ export function Spinner() {
   return <span className="spinner" aria-hidden="true" />
 }
 
+/**
+ * A dismissible window over the page, for showing something that outlives a
+ * single request — a background job's live progress, in particular. Closing
+ * it does not cancel whatever it was watching: the job (e.g. a certbot
+ * renewal already underway on the host) keeps running regardless.
+ */
+export function Modal({
+  title,
+  onClose,
+  closeLabel = 'Закрыть',
+  children,
+}: {
+  title: string
+  onClose?: () => void
+  closeLabel?: string
+  children: ReactNode
+}) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-head">
+          <h2>{title}</h2>
+          {onClose && (
+            <button className="ghost" onClick={onClose}>
+              {closeLabel}
+            </button>
+          )}
+        </div>
+        <div className="modal-body">{children}</div>
+      </div>
+    </div>
+  )
+}
+
 export function ErrorNote({ error }: { error: string | null }) {
   if (!error) return null
   return (

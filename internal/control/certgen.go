@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/althq/netknownsthat/internal/collect"
@@ -44,6 +46,12 @@ type CertManager struct {
 	// renewed (model.RenewalInfo.Derived) — those need recombining with the
 	// fresh certificate, since certbot itself never touches them.
 	scanner *inventory.Scanner
+
+	// jobs tracks in-flight and recently finished StartRenewCertbot runs, so
+	// a caller (the web/TUI "продлить" button) can poll RenewJobStatus and
+	// show progress instead of blocking on the whole multi-minute operation.
+	jobsMu sync.Mutex
+	jobs   map[string]*renewJob
 }
 
 // NewCertManager builds the certificate issuer. services and scanner are
@@ -52,7 +60,10 @@ type CertManager struct {
 // that need recombining afterward.
 func NewCertManager(cfg *config.Config, c collect.Collector, db *store.DB,
 	services *ServiceManager, scanner *inventory.Scanner) *CertManager {
-	return &CertManager{cfg: cfg, c: c, db: db, services: services, scanner: scanner}
+	return &CertManager{
+		cfg: cfg, c: c, db: db, services: services, scanner: scanner,
+		jobs: map[string]*renewJob{},
+	}
 }
 
 // Bounds for SelfSignedRequest.
@@ -242,7 +253,19 @@ var lineageRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9]
 // never listening.
 var standaloneServices = []string{model.ServiceNginx, model.ServiceHAProxy}
 
-// RenewCertbot re-issues a certbot-managed lineage in place.
+// RenewCertbot re-issues a certbot-managed lineage in place. It blocks until
+// the whole operation finishes — used by the unattended auto-renew job,
+// which has no one to show progress to. StartRenewCertbot is the
+// progress-reporting equivalent an interactive caller should use instead.
+//
+// See renewCertbot for what actually happens.
+func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (collect.CommandResult, error) {
+	return m.renewCertbot(ctx, user, lineage, nil)
+}
+
+// renewCertbot does the real work behind both RenewCertbot and
+// StartRenewCertbot. report receives one human-readable line at a time, in
+// the order things actually happen — nil is fine when no one is watching.
 //
 // certbot itself only ever rewrites the files under
 // /etc/letsencrypt/live/<lineage>/ that nginx (and, for a plain nginx-style
@@ -260,33 +283,69 @@ var standaloneServices = []string{model.ServiceNginx, model.ServiceHAProxy}
 // itself talks to Let's Encrypt, so nginx and haproxy are stopped first and
 // always restarted afterward regardless of how the renewal went — leaving
 // the site down because a renewal failed is worse than the certificate
-// simply staying as it was. When that happens the restart alone already
-// picks up a recombined file, so no separate reload is needed on that path.
-func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (collect.CommandResult, error) {
+// simply staying as it was. finish (below) makes that restart happen on
+// every exit path and reports the final outcome only afterward — "Готово"
+// must mean the site is actually back, not just that certbot finished.
+func (m *CertManager) renewCertbot(
+	ctx context.Context, user, lineage string, report func(string),
+) (collect.CommandResult, error) {
+	if report == nil {
+		report = func(string) {}
+	}
 	if !lineageRe.MatchString(lineage) {
 		return collect.CommandResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
 	}
 
 	standalone := m.usesStandaloneAuth(lineage)
-	if standalone {
-		stopped, err := m.stopForStandalone(ctx, user)
-		defer m.restartAfterStandalone(user, stopped)
-		if err != nil {
-			return collect.CommandResult{}, fmt.Errorf(
-				"продление %s аутентифицируется через --standalone и требует остановки nginx/haproxy: %w",
-				lineage, err)
-		}
-	}
+	var stopped []string
 
-	res, err := m.runCertbotRenew(ctx, user, lineage, standalone)
-	if err != nil {
+	finish := func(res collect.CommandResult, err error) (collect.CommandResult, error) {
+		if len(stopped) > 0 {
+			m.restartAfterStandalone(user, stopped)
+			for _, svc := range stopped {
+				report(svc + ": запущен")
+			}
+		}
+		if err != nil {
+			report("Ошибка: " + err.Error())
+		} else {
+			report("Готово")
+		}
 		return res, err
 	}
 
-	reloadTargets, err := m.recombineDerivedCerts(ctx, user, lineage)
+	if standalone {
+		report("Lineage аутентифицируется через --standalone: останавливаю nginx и haproxy…")
+		var err error
+		stopped, err = m.stopForStandalone(ctx, user)
+		for _, svc := range stopped {
+			report(svc + ": остановлен")
+		}
+		if err != nil {
+			return finish(collect.CommandResult{}, fmt.Errorf(
+				"продление %s аутентифицируется через --standalone и требует остановки nginx/haproxy: %w",
+				lineage, err))
+		}
+	}
+
+	cmdLine := fmt.Sprintf("certbot renew --cert-name %s --non-interactive", lineage)
+	if standalone {
+		cmdLine += " --standalone"
+	}
+	report("Запускаю: " + cmdLine)
+	res, err := m.runCertbotRenew(ctx, user, lineage, standalone)
+	if out := strings.TrimSpace(res.Output()); out != "" {
+		report("certbot:\n" + out)
+	}
 	if err != nil {
-		return res, fmt.Errorf(
-			"сертификат %s продлён, но не удалось пересобрать копию для haproxy: %w", lineage, err)
+		return finish(res, err)
+	}
+	report("certbot: сертификат продлён")
+
+	reloadTargets, err := m.recombineDerivedCerts(ctx, user, lineage, report)
+	if err != nil {
+		return finish(res, fmt.Errorf(
+			"сертификат %s продлён, но не удалось пересобрать копию для haproxy: %w", lineage, err))
 	}
 	if !standalone {
 		// A --standalone renewal already restarts every stopped service with
@@ -294,15 +353,139 @@ func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (c
 		// just-rewritten combined file needs reloading to pick it up — the
 		// same gap the tls-cert-not-reloaded finding watches for.
 		for _, svc := range reloadTargets {
+			report("Перечитываю конфигурацию " + svc + "…")
 			if _, err := m.services.Action(ctx, user, svc, "reload"); err != nil {
-				return res, fmt.Errorf(
+				return finish(res, fmt.Errorf(
 					"сертификат %s продлён и пересобран, но не удалось перечитать конфигурацию %s: %w",
-					lineage, svc, err)
+					lineage, svc, err))
 			}
+			report(svc + ": перечитан")
 		}
 	}
 
-	return res, nil
+	return finish(res, nil)
+}
+
+// RenewEvent is one line of progress from a StartRenewCertbot job.
+type RenewEvent struct {
+	Time time.Time `json:"time"`
+	Text string    `json:"text"`
+}
+
+// renewJob tracks one StartRenewCertbot run in memory.
+type renewJob struct {
+	created time.Time
+
+	mu     sync.Mutex
+	events []RenewEvent
+	done   bool
+	errMsg string
+}
+
+func (j *renewJob) append(text string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.events = append(j.events, RenewEvent{Time: time.Now(), Text: text})
+}
+
+func (j *renewJob) finish(err error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.done = true
+	if err != nil {
+		j.errMsg = err.Error()
+	}
+}
+
+func (j *renewJob) snapshot() (events []RenewEvent, done bool, errMsg string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return append([]RenewEvent{}, j.events...), j.done, j.errMsg
+}
+
+// StartRenewCertbot launches a certbot renewal in the background and returns
+// a job ID immediately, so a caller (the "продлить" button) can poll
+// RenewJobStatus and show progress — stopping services, certbot's own
+// output, recombining any haproxy copy, restarting services — as it
+// actually happens, instead of staring at a spinner for however long the
+// whole operation takes.
+func (m *CertManager) StartRenewCertbot(user, lineage string) (string, error) {
+	if !lineageRe.MatchString(lineage) {
+		return "", fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
+	}
+
+	job := &renewJob{created: time.Now()}
+	job.append("Начинаю продление " + lineage)
+
+	id, err := newJobID()
+	if err != nil {
+		return "", fmt.Errorf("генерация id задачи: %w", err)
+	}
+
+	m.jobsMu.Lock()
+	m.jobs[id] = job
+	m.evictOldJobsLocked()
+	m.jobsMu.Unlock()
+
+	go func() {
+		// Detached from the HTTP request's context on purpose: the request
+		// that started this job may well have returned (and its context
+		// been cancelled) long before certbot finishes. CertbotTimeout is
+		// still the ceiling for the certbot process itself; the extra
+		// headroom here covers the stop/start/recombine steps around it.
+		ctx, cancel := context.WithTimeout(context.Background(), m.cfg.CertbotTimeout+2*time.Minute)
+		defer cancel()
+		_, err := m.renewCertbot(ctx, user, lineage, job.append)
+		// The cached snapshot still has the pre-renewal expiry (and the
+		// pre-recombine haproxy file contents) until the next scan; run one
+		// now that there's actually something new to pick up, and do it
+		// *before* marking the job done — a caller reacting to "done" should
+		// already see fresh data, not have to guess whether the rescan
+		// finished yet.
+		_, _ = m.scanner.Scan(context.Background())
+		job.finish(err)
+	}()
+
+	return id, nil
+}
+
+// RenewJobStatus returns everything reported for a renew job so far. ok is
+// false when the job ID is unknown — never existed, or evicted a while
+// after finishing.
+func (m *CertManager) RenewJobStatus(id string) (events []RenewEvent, done bool, errMsg string, ok bool) {
+	m.jobsMu.Lock()
+	job := m.jobs[id]
+	m.jobsMu.Unlock()
+	if job == nil {
+		return nil, false, "", false
+	}
+	events, done, errMsg = job.snapshot()
+	return events, done, errMsg, true
+}
+
+// evictOldJobsLocked drops finished jobs older than an hour, so a
+// long-running server doesn't accumulate them forever. Called with jobsMu
+// already held.
+func (m *CertManager) evictOldJobsLocked() {
+	cutoff := time.Now().Add(-time.Hour)
+	for id, job := range m.jobs {
+		if job.created.Before(cutoff) {
+			if _, done, _ := job.snapshot(); done {
+				delete(m.jobs, id)
+			}
+		}
+	}
+}
+
+// newJobID generates a short, unguessable-enough handle for an in-memory
+// job — nothing sensitive is keyed by it, but a predictable sequence would
+// let one admin session poke at another's in-flight job.
+func newJobID() (string, error) {
+	buf := make([]byte, 9)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
 // recombineDerivedCerts rewrites every haproxy-style combined PEM the last
@@ -311,8 +494,13 @@ func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (c
 // and returns the distinct services that own one — for the caller to reload.
 // certbot itself never touches these files: they live outside
 // /etc/letsencrypt entirely, so without this step they would keep serving
-// the certificate that was just renewed away from.
-func (m *CertManager) recombineDerivedCerts(ctx context.Context, user, lineage string) ([]string, error) {
+// the certificate that was just renewed away from. report is called once per
+// file actually rewritten, naming the exact path — the point of showing this
+// step at all is confirming which haproxy file changed, not just that "some
+// copy" did.
+func (m *CertManager) recombineDerivedCerts(
+	ctx context.Context, user, lineage string, report func(string),
+) ([]string, error) {
 	snap := m.scanner.Latest()
 	if snap == nil {
 		return nil, nil
@@ -344,6 +532,7 @@ func (m *CertManager) recombineDerivedCerts(ctx context.Context, user, lineage s
 			return services, fmt.Errorf("запись %s: %w", cert.Path, err)
 		}
 		m.db.Audit(ctx, user, "cert.recombine", cert.Path, "ok", map[string]any{"lineage": lineage})
+		report("Пересобран файл для " + cert.Service + ": " + cert.Path)
 
 		if !seen[cert.Service] {
 			seen[cert.Service] = true

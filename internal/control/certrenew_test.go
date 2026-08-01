@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -307,4 +308,102 @@ func TestRenewCertbotUsesCertbotTimeout(t *testing.T) {
 		t.Errorf("RunTimeout вызван с таймаутами %v, ожидался один вызов с CertbotTimeout=%v",
 			rec.timeouts, cfg.CertbotTimeout)
 	}
+}
+
+// waitForJob polls RenewJobStatus until done, for tests — the background
+// goroutine finishes in milliseconds against fixtures, so a short deadline
+// is enough without making the test flaky under load.
+func waitForJob(t *testing.T, m *CertManager, id string) ([]RenewEvent, string) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		events, done, errMsg, ok := m.RenewJobStatus(id)
+		if !ok {
+			t.Fatalf("задача %s не найдена", id)
+		}
+		if done {
+			return events, errMsg
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("задача %s не завершилась за 5с, событий пока: %v", id, events)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func eventTexts(events []RenewEvent) []string {
+	out := make([]string, len(events))
+	for i, e := range events {
+		out[i] = e.Text
+	}
+	return out
+}
+
+// TestStartRenewCertbotReportsStandaloneStepsInOrder covers exactly what
+// prompted StartRenewCertbot: the "продлить" button used to block on the
+// whole operation with nothing but a spinner. This checks the progress feed
+// an open modal would poll shows stop → certbot → restart in the right
+// order, restart happening (and being reported) only after certbot is done.
+func TestStartRenewCertbotReportsStandaloneStepsInOrder(t *testing.T) {
+	m, _ := renewSetup(t)
+
+	id, err := m.StartRenewCertbot("test", "standalone.example.com")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	events, errMsg := waitForJob(t, m, id)
+	if errMsg != "" {
+		t.Fatalf("задача завершилась с ошибкой: %s (события: %v)", errMsg, eventTexts(events))
+	}
+
+	texts := eventTexts(events)
+	wantInOrder := []string{
+		"Начинаю продление standalone.example.com",
+		"останавливаю nginx и haproxy",
+		"nginx: остановлен",
+		"haproxy: остановлен",
+		"Запускаю: certbot renew --cert-name standalone.example.com --non-interactive --standalone",
+		"certbot: сертификат продлён",
+		"nginx: запущен",
+		"haproxy: запущен",
+		"Готово",
+	}
+	pos := -1
+	for _, want := range wantInOrder {
+		next := indexOfSubstring(texts, want, pos+1)
+		if next == -1 {
+			t.Fatalf("не нашёл %q после позиции %d в событиях: %v", want, pos, texts)
+		}
+		pos = next
+	}
+}
+
+// TestStartRenewCertbotReportsRecombinedHAProxyFile covers the user-facing
+// point of showing this step at all: naming the exact haproxy file that got
+// rewritten, not just "a copy was updated somewhere".
+func TestStartRenewCertbotReportsRecombinedHAProxyFile(t *testing.T) {
+	m, _ := renewSetup(t)
+
+	id, err := m.StartRenewCertbot("test", "app.example.com")
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	events, errMsg := waitForJob(t, m, id)
+	if errMsg != "" {
+		t.Fatalf("задача завершилась с ошибкой: %s (события: %v)", errMsg, eventTexts(events))
+	}
+
+	const want = "Пересобран файл для haproxy: /etc/haproxy/certs-le/app.example.com.pem"
+	if indexOfSubstring(eventTexts(events), want, 0) == -1 {
+		t.Errorf("не нашёл %q в событиях: %v", want, eventTexts(events))
+	}
+}
+
+func indexOfSubstring(haystack []string, substr string, from int) int {
+	for i := from; i < len(haystack); i++ {
+		if strings.Contains(haystack[i], substr) {
+			return i
+		}
+	}
+	return -1
 }
