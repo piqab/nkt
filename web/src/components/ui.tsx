@@ -94,6 +94,13 @@ export function Loading({ what = 'данные' }: { what?: string }) {
   return <div className="chart-empty">Загружаю {what}…</div>
 }
 
+/** Inline busy indicator for a button mid-action — a long operation (certbot,
+ * service restart, config validation) needs more than disabled+text, since
+ * that alone reads the same as "nothing is happening yet". */
+export function Spinner() {
+  return <span className="spinner" aria-hidden="true" />
+}
+
 export function ErrorNote({ error }: { error: string | null }) {
   if (!error) return null
   return (

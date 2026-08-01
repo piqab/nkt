@@ -100,6 +100,12 @@ func TestRenewCertbotSuccess(t *testing.T) {
 	if !res.OK() {
 		t.Fatalf("ожидался успешный exit code, получено %d: %s", res.ExitCode, res.Output())
 	}
+	// app.example.com is authenticated via webroot (fixtures/host renewal
+	// conf) — forcing --standalone here would be wrong, and nginx/haproxy
+	// must not be disturbed for it either.
+	if containsArg(res.Argv, "--standalone") {
+		t.Errorf("--standalone не должен передаваться для webroot-lineage: %v", res.Argv)
+	}
 
 	entries, err := db.ListAudit(context.Background(), store.AuditFilter{Action: "cert.renew", Limit: 10})
 	if err != nil {
@@ -111,6 +117,15 @@ func TestRenewCertbotSuccess(t *testing.T) {
 	if entries[0].Result != "ok" || entries[0].Target != "app.example.com" || entries[0].Username != "test" {
 		t.Errorf("неожиданная запись журнала: %+v", entries[0])
 	}
+}
+
+func containsArg(argv []string, want string) bool {
+	for _, a := range argv {
+		if a == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestRenewCertbotFailureIsAudited(t *testing.T) {
@@ -198,6 +213,12 @@ func TestRenewCertbotStopsAndRestartsForStandalone(t *testing.T) {
 	}
 	if !res.OK() {
 		t.Fatalf("ожидался успешный exit code, получено %d: %s", res.ExitCode, res.Output())
+	}
+	// Relying solely on renewal.conf's stored authenticator is not enough on
+	// every certbot version to actually invoke the standalone plugin during
+	// renew — the flag must be re-asserted on the command line explicitly.
+	if !containsArg(res.Argv, "--standalone") {
+		t.Errorf("--standalone не передан явно в команде certbot: %v", res.Argv)
 	}
 
 	entries, err := db.ListAudit(context.Background(), store.AuditFilter{Limit: 20})

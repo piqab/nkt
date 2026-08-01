@@ -9,6 +9,7 @@ import {
   ErrorNote,
   Loading,
   SeverityBadge,
+  Spinner,
   StateBadge,
   formatDateTime,
   formatRelative,
@@ -54,6 +55,7 @@ export default function OverviewPage({ me }: { me: Me }) {
         <div className="row">
           {me.is_admin && (
             <button onClick={rescan} disabled={busy}>
+              {busy && <Spinner />}
               {busy ? 'Сканирую…' : 'Пересканировать'}
             </button>
           )}

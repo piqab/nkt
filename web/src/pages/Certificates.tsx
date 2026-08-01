@@ -10,7 +10,7 @@ import type {
   SelfSignedResult,
 } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
-import { Banner, Card, ErrorNote, Loading, formatDateTime } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Spinner, formatDateTime } from '../components/ui'
 
 /** Expiry bands, matching the thresholds the analyzer uses. */
 const WARN_DAYS = 30
@@ -307,6 +307,7 @@ export default function Certificates({ me }: { me: Me }) {
                             disabled={busy === cert.id}
                             onClick={() => renew(cert)}
                           >
+                            {busy === cert.id && <Spinner />}
                             {busy === cert.id ? 'продлеваю…' : 'продлить'}
                           </button>
                         )}
@@ -410,6 +411,7 @@ function CombineForm({ onCombined }: { onCombined: () => void }) {
         </div>
         <div>
           <button className="primary" type="submit" disabled={busy || lineageOptions.length === 0}>
+            {busy && <Spinner />}
             {busy ? 'Собираю…' : 'Собрать'}
           </button>
         </div>
@@ -532,6 +534,7 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
         </div>
         <div>
           <button className="primary" type="submit" disabled={busy}>
+            {busy && <Spinner />}
             {busy ? 'Генерирую…' : 'Создать'}
           </button>
         </div>

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { api, useApi } from '../api'
 import type { FirewallPolicy, FirewallRule, Listener, Me } from '../types'
-import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Spinner, StateBadge } from '../components/ui'
 import { formatBytes, formatNumber } from '../components/charts'
 
 interface FirewallResponse {
@@ -132,6 +132,7 @@ export default function Firewall({ me }: { me: Me }) {
                   }
                 }}
               >
+                {busy && <Spinner />}
                 Перезагрузить ufw
               </button>
             )}
@@ -207,6 +208,7 @@ export default function Firewall({ me }: { me: Me }) {
                   <input value={form.comment} onChange={(e) => setForm({ ...form, comment: e.target.value })} />
                 </label>
                 <button className="primary" type="submit" disabled={busy}>
+                  {busy && <Spinner />}
                   Добавить правило
                 </button>
               </form>
@@ -236,6 +238,7 @@ export default function Firewall({ me }: { me: Me }) {
                     <td className="mono small">{r.text}</td>
                     <td>
                       <button className="danger ghost" disabled={busy} onClick={() => deleteRule(r)}>
+                        {busy && <Spinner />}
                         удалить
                       </button>
                     </td>

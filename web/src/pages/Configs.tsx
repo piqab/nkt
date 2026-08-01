@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me } from '../types'
-import { Banner, Card, ErrorNote, Loading, formatDateTime } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Spinner, formatDateTime } from '../components/ui'
 import { formatBytes } from '../components/charts'
 
 interface WriteResult {
@@ -163,6 +163,7 @@ export default function Configs({ me }: { me: Me }) {
                     </button>
                     {me.is_admin && me.allow_mutations && (
                       <button className="primary" onClick={save} disabled={busy || !dirty}>
+                        {busy && <Spinner />}
                         {busy ? 'Сохраняю…' : 'Проверить и сохранить'}
                       </button>
                     )}
@@ -247,6 +248,7 @@ export default function Configs({ me }: { me: Me }) {
                               </button>
                               {me.is_admin && me.allow_mutations && (
                                 <button className="ghost" onClick={() => rollback(v.id)} disabled={busy}>
+                                  {busy && <Spinner />}
                                   откатить
                                 </button>
                               )}

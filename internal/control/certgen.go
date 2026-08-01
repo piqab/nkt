@@ -278,7 +278,7 @@ func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (c
 		}
 	}
 
-	res, err := m.runCertbotRenew(ctx, user, lineage)
+	res, err := m.runCertbotRenew(ctx, user, lineage, standalone)
 	if err != nil {
 		return res, err
 	}
@@ -566,9 +566,16 @@ func (m *CertManager) restartAfterStandalone(user string, stopped []string) {
 }
 
 // runCertbotRenew is the actual `certbot renew` invocation, shared by both
-// the standalone and non-standalone paths.
-func (m *CertManager) runCertbotRenew(ctx context.Context, user, lineage string) (collect.CommandResult, error) {
-	res, err := m.c.Run(ctx, "certbot", "renew", "--cert-name", lineage, "--non-interactive")
+// the standalone and non-standalone paths. standalone re-asserts
+// --standalone on the command line explicitly — relying on renewal.conf's
+// stored authenticator alone is not enough on every certbot version/setup to
+// actually invoke the standalone plugin during renew.
+func (m *CertManager) runCertbotRenew(ctx context.Context, user, lineage string, standalone bool) (collect.CommandResult, error) {
+	args := []string{"renew", "--cert-name", lineage, "--non-interactive"}
+	if standalone {
+		args = append(args, "--standalone")
+	}
+	res, err := m.c.Run(ctx, "certbot", args...)
 	outcome := "ok"
 	if err != nil || !res.OK() {
 		outcome = "error"
