@@ -2,7 +2,8 @@ package api
 
 import (
 	"net/http"
-	"strings"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/control"
@@ -38,8 +39,11 @@ type renewRequest struct {
 	Lineage string `json:"lineage"`
 }
 
-// handleRenewCertbot re-issues a certbot-managed certificate lineage in
-// place, calling certbot itself rather than writing any file directly.
+// handleRenewCertbot starts a certbot-managed certificate lineage renewal in
+// the background and returns a job ID immediately — the operation (stop
+// services, run certbot, recombine any haproxy copy, restart services) can
+// legitimately take minutes, and the caller polls handleRenewJobStatus for
+// progress rather than waiting on one long request.
 func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
 	var req renewRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -52,19 +56,28 @@ func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := auth.Username(r.Context())
-	res, err := s.certs.RenewCertbot(r.Context(), user, req.Lineage)
+	id, err := s.certs.StartRenewCertbot(user, req.Lineage)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	writeJSON(w, http.StatusOK, map[string]any{"job": id})
+}
 
-	// certbot rewrote the files the running config already points at, but the
-	// cached snapshot still has the old expiry until the next scan.
-	s.rescanLater()
+// handleRenewJobStatus reports everything a renew job has logged so far, for
+// the progress window to poll. A 404 means the ID never existed or was
+// evicted a while after finishing — the caller should stop polling either way.
+func (s *Server) handleRenewJobStatus(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "job")
+	events, done, errMsg, ok := s.certs.RenewJobStatus(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "задача не найдена")
+		return
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"status":    "ok",
-		"output":    strings.TrimSpace(res.Output()),
-		"simulated": res.Simulated,
+		"events": events,
+		"done":   done,
+		"error":  errMsg,
 	})
 }
 

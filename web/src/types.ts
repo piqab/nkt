@@ -352,6 +352,17 @@ export interface LineageInfo {
   days_left: number
 }
 
+export interface RenewEvent {
+  time: string
+  text: string
+}
+
+export interface RenewJobStatus {
+  events: RenewEvent[]
+  done: boolean
+  error?: string
+}
+
 export interface Account {
   id: number
   username: string
