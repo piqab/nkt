@@ -297,6 +297,24 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 button.danger { border-color: var(--status-critical); color: var(--status-critical); }
 button.ghost { border-color: transparent; background: transparent; }
 
+.spinner {
+  display: inline-block;
+  width: 0.8em;
+  height: 0.8em;
+  margin-right: 0.4em;
+  vertical-align: -0.12em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation-duration: 1.5s; }
+}
+
 input, select, textarea {
   font: inherit;
   font-size: 0.85rem;

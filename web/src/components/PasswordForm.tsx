@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { api } from '../api'
-import { Banner } from './ui'
+import { Banner, Spinner } from './ui'
 
 /** Matches the minimum the API enforces, counted in characters. */
 const MIN_LENGTH = 10
@@ -89,6 +89,7 @@ export default function PasswordForm({ onDone }: { onDone: () => void }) {
 
       <div className="row">
         <button className="primary" type="submit" disabled={busy || tooShort || mismatch}>
+          {busy && <Spinner />}
           {busy ? 'Меняю…' : 'Сменить пароль'}
         </button>
       </div>

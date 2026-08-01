@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { api } from '../api'
-import { Banner } from '../components/ui'
+import { Banner, Spinner } from '../components/ui'
 
 export default function Login({ onSuccess }: { onSuccess: () => void }) {
   const [username, setUsername] = useState('')
@@ -56,6 +56,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
         </label>
 
         <button className="primary" type="submit" disabled={busy}>
+          {busy && <Spinner />}
           {busy ? 'Проверяю…' : 'Войти'}
         </button>
 

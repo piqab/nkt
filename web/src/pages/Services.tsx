@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { api, useApi } from '../api'
 import type { Container, DockerNetwork, Me, ServiceUnit } from '../types'
-import { Banner, Card, ErrorNote, Loading, StateBadge, formatBytesShort } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Spinner, StateBadge, formatBytesShort } from '../components/ui'
 
 const ACTION_LABEL: Record<string, string> = {
   start: 'запустить',
@@ -119,7 +119,8 @@ export default function Services({ me }: { me: Me }) {
                           disabled={!canControl || busy === `${s.name}:${a}`}
                           onClick={() => act(s.name, a)}
                         >
-                          {busy === `${s.name}:${a}` ? '…' : ACTION_LABEL[a] ?? a}
+                          {busy === `${s.name}:${a}` && <Spinner />}
+                          {ACTION_LABEL[a] ?? a}
                         </button>
                       ))}
                     </td>
@@ -201,7 +202,8 @@ export default function Services({ me }: { me: Me }) {
                           disabled={!canControl || busy === `${c.name}:${a}`}
                           onClick={() => containerAct(c.name, a)}
                         >
-                          {busy === `${c.name}:${a}` ? '…' : a}
+                          {busy === `${c.name}:${a}` && <Spinner />}
+                          {a}
                         </button>
                       ))}
                     </td>

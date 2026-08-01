@@ -1,7 +1,16 @@
 import { useState, type FormEvent } from 'react'
 import { api, useApi } from '../api'
 import type { Account, Me } from '../types'
-import { Banner, Card, ErrorNote, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
+import {
+  Banner,
+  Card,
+  ErrorNote,
+  Loading,
+  Spinner,
+  StateBadge,
+  formatDateTime,
+  formatRelative,
+} from '../components/ui'
 
 /** Matches the minimum the API enforces, counted in characters. */
 const MIN_LENGTH = 10
@@ -114,6 +123,7 @@ export default function Users({ me }: { me: Me }) {
                           title={self ? 'Нельзя изменить роль себе' : undefined}
                           onClick={() => toggleRole(u)}
                         >
+                          {busy === u.username && <Spinner />}
                           {u.role === 'admin' ? 'сделать viewer' : 'сделать admin'}
                         </button>
                         <button
@@ -122,6 +132,7 @@ export default function Users({ me }: { me: Me }) {
                           title={self && !u.disabled ? 'Нельзя отключить себя' : undefined}
                           onClick={() => toggleDisabled(u)}
                         >
+                          {busy === u.username && <Spinner />}
                           {u.disabled ? 'включить' : 'отключить'}
                         </button>
                         <button
@@ -130,6 +141,7 @@ export default function Users({ me }: { me: Me }) {
                           title={self ? 'Нельзя удалить себя' : undefined}
                           onClick={() => remove(u)}
                         >
+                          {busy === u.username && <Spinner />}
                           удалить
                         </button>
                       </td>
@@ -216,6 +228,7 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
         </div>
         <div>
           <button className="primary" type="submit" disabled={busy || tooShort}>
+            {busy && <Spinner />}
             {busy ? 'Создаю…' : 'Создать'}
           </button>
         </div>
