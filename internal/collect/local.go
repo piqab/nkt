@@ -139,7 +139,10 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 }
 
 func (l *Local) Run(ctx context.Context, name string, args ...string) (CommandResult, error) {
-	timeout := l.commandTimeout
+	return l.RunTimeout(ctx, l.commandTimeout, name, args...)
+}
+
+func (l *Local) RunTimeout(ctx context.Context, timeout time.Duration, name string, args ...string) (CommandResult, error) {
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}

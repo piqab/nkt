@@ -66,6 +66,7 @@ func renewSetup(t *testing.T) (*CertManager, *store.DB) {
 		HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
 		ComposeFiles:    []string{"/srv/docker/docker-compose.yml"},
 		CommandTimeout:  5 * time.Second,
+		CertbotTimeout:  20 * time.Second,
 	}
 	c := collect.NewFixtures(root)
 	dbPath := filepath.Join(t.TempDir(), "nkt.db")
@@ -254,5 +255,56 @@ func TestRenewCertbotStopsAndRestartsForStandalone(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("шаг %d: %+v, ожидалось %+v (вся последовательность: %v)", i, got[i], want[i], got)
 		}
+	}
+}
+
+// recordingCollector wraps a Collector and records every RunTimeout call's
+// requested timeout, so a test can catch a regression back to Run() — which
+// would silently reapply the collector's short, fast-command-tuned
+// CommandTimeout to certbot and kill it mid-renewal, exactly the "код -1"
+// bug this was built to fix.
+type recordingCollector struct {
+	collect.Collector
+	timeouts []time.Duration
+}
+
+func (r *recordingCollector) RunTimeout(
+	ctx context.Context, timeout time.Duration, name string, args ...string,
+) (collect.CommandResult, error) {
+	r.timeouts = append(r.timeouts, timeout)
+	return r.Collector.RunTimeout(ctx, timeout, name, args...)
+}
+
+func TestRenewCertbotUsesCertbotTimeout(t *testing.T) {
+	root := copyFixturesRoot(t)
+	cfg := &config.Config{
+		Mode:            config.ModeFixtures,
+		FixturesRoot:    root,
+		NginxMainConfig: "/etc/nginx/nginx.conf",
+		HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
+		ComposeFiles:    []string{"/srv/docker/docker-compose.yml"},
+		CommandTimeout:  5 * time.Second,
+		CertbotTimeout:  90 * time.Second,
+	}
+	rec := &recordingCollector{Collector: collect.NewFixtures(root)}
+	dbPath := filepath.Join(t.TempDir(), "nkt.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("открыть базу: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	scanner := inventory.New(cfg, rec, db)
+	if _, err := scanner.Scan(context.Background()); err != nil {
+		t.Fatalf("скан: %v", err)
+	}
+	services := NewServiceManager(cfg, rec, db)
+	m := NewCertManager(cfg, rec, db, services, scanner)
+
+	if _, err := m.RenewCertbot(context.Background(), "test", "app.example.com"); err != nil {
+		t.Fatalf("renew: %v", err)
+	}
+	if len(rec.timeouts) != 1 || rec.timeouts[0] != cfg.CertbotTimeout {
+		t.Errorf("RunTimeout вызван с таймаутами %v, ожидался один вызов с CertbotTimeout=%v",
+			rec.timeouts, cfg.CertbotTimeout)
 	}
 }

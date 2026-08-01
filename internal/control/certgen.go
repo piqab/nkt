@@ -569,13 +569,17 @@ func (m *CertManager) restartAfterStandalone(user string, stopped []string) {
 // the standalone and non-standalone paths. standalone re-asserts
 // --standalone on the command line explicitly — relying on renewal.conf's
 // stored authenticator alone is not enough on every certbot version/setup to
-// actually invoke the standalone plugin during renew.
+// actually invoke the standalone plugin during renew. It runs under
+// CertbotTimeout rather than the collector's normal (much shorter) command
+// timeout: an ACME challenge round-trip routinely takes longer than the fast
+// host commands that ceiling is tuned for, and killing certbot mid-renewal
+// looks exactly like an unexplained failure ("код -1", truncated output).
 func (m *CertManager) runCertbotRenew(ctx context.Context, user, lineage string, standalone bool) (collect.CommandResult, error) {
 	args := []string{"renew", "--cert-name", lineage, "--non-interactive"}
 	if standalone {
 		args = append(args, "--standalone")
 	}
-	res, err := m.c.Run(ctx, "certbot", args...)
+	res, err := m.c.RunTimeout(ctx, m.cfg.CertbotTimeout, "certbot", args...)
 	outcome := "ok"
 	if err != nil || !res.OK() {
 		outcome = "error"

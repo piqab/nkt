@@ -81,6 +81,13 @@ type Collector interface {
 	// command could not be started; a non-zero exit lives in the result.
 	Run(ctx context.Context, name string, args ...string) (CommandResult, error)
 
+	// RunTimeout behaves like Run but uses timeout instead of the collector's
+	// configured command timeout — for the rare operation (certbot's ACME
+	// challenge round-trip) that legitimately needs more time than the fast
+	// host commands Run() is tuned for. A timeout <= 0 falls back to the same
+	// default Run() uses.
+	RunTimeout(ctx context.Context, timeout time.Duration, name string, args ...string) (CommandResult, error)
+
 	// DockerAPI performs a request against the Docker Engine API. apiPath is
 	// everything after the version prefix, e.g. "/containers/json?all=1".
 	DockerAPI(ctx context.Context, method, apiPath string, body []byte) ([]byte, int, error)
