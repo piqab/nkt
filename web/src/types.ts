@@ -340,7 +340,16 @@ export interface CombineResult {
   combined_path: string
   fingerprint: string
   not_after: string
-  snippet: string
+  /** Non-empty only when combined_path is a brand-new file nothing references yet. */
+  snippet?: string
+}
+
+export interface LineageInfo {
+  name: string
+  /** False when fullchain.pem could not be read or parsed — days_left is meaningless then. */
+  known: boolean
+  not_after?: string
+  days_left: number
 }
 
 export interface Account {
