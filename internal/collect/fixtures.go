@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Fixtures serves a canned host snapshot from a directory tree, so the whole
@@ -220,6 +221,12 @@ func matchesPrefix(argv, prefix []string) bool {
 		}
 	}
 	return true
+}
+
+// RunTimeout ignores timeout: fixtures commands are simulated in memory,
+// nothing ever actually runs long enough to need a longer ceiling.
+func (f *Fixtures) RunTimeout(ctx context.Context, timeout time.Duration, name string, args ...string) (CommandResult, error) {
+	return f.Run(ctx, name, args...)
 }
 
 func (f *Fixtures) Run(ctx context.Context, name string, args ...string) (CommandResult, error) {

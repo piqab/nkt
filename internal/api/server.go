@@ -69,7 +69,11 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(s.requestLogger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	// Comfortably longer than CertbotTimeout: an ACME renewal that's still
+	// legitimately running must get its response back, not be cut off by a
+	// blanket request ceiling sized for the fast host commands everything
+	// else on this router uses.
+	r.Use(middleware.Timeout(s.cfg.CertbotTimeout + time.Minute))
 	r.Use(s.cors)
 	r.Use(securityHeaders)
 

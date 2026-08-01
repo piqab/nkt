@@ -54,6 +54,11 @@ type Config struct {
 	// Control plane.
 	AllowMutations bool
 	CommandTimeout time.Duration
+	// CertbotTimeout overrides CommandTimeout specifically for `certbot
+	// renew` — an ACME challenge round-trip to Let's Encrypt routinely takes
+	// longer than the couple of seconds every other host command needs, and
+	// forcing it into the same short ceiling kills the process mid-renewal.
+	CertbotTimeout time.Duration
 
 	// AutoRenewCerts periodically runs `certbot renew --cert-name <lineage>`
 	// for every certbot-managed certificate the analyzer already flags as
@@ -136,6 +141,7 @@ func Load() (*Config, error) {
 
 		AllowMutations: envBool("NKT_ALLOW_MUTATIONS", true),
 		CommandTimeout: envDur("NKT_COMMAND_TIMEOUT", 30*time.Second),
+		CertbotTimeout: envDur("NKT_CERTBOT_TIMEOUT", 3*time.Minute),
 
 		AutoRenewCerts:         envBool("NKT_AUTO_RENEW_CERTS", false),
 		AutoRenewCertsInterval: envDur("NKT_AUTO_RENEW_INTERVAL", 6*time.Hour),
