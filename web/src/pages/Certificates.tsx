@@ -4,6 +4,7 @@ import type {
   Certificate,
   CertificatesResponse,
   CombineResult,
+  LineageInfo,
   Me,
   SelfSignedRequest,
   SelfSignedResult,
@@ -329,14 +330,28 @@ export default function Certificates({ me }: { me: Me }) {
   )
 }
 
+/** Shows expiry inline so picking a lineage doesn't require checking the
+ * certificates table first. */
+function lineageLabel(info: LineageInfo): string {
+  if (!info.known) return `${info.name} — срок неизвестен`
+  if (info.days_left < 0) return `${info.name} — просрочен ${-info.days_left} дн. назад`
+  if (info.days_left === 0) return `${info.name} — истекает сегодня`
+  return `${info.name} — ${info.days_left} дн.`
+}
+
+const NEW_FILE = ''
+
 function CombineForm({ onCombined }: { onCombined: () => void }) {
-  const lineages = useApi<{ lineages: string[] }>('/certificates/lineages', 0)
+  const lineages = useApi<{ lineages: LineageInfo[] }>('/certificates/lineages', 0)
+  const haproxyPaths = useApi<{ paths: string[] }>('/certificates/haproxy-paths', 0)
   const [lineage, setLineage] = useState('')
+  const [targetPath, setTargetPath] = useState(NEW_FILE)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<CombineResult | null>(null)
 
-  const options = lineages.data?.lineages ?? []
+  const lineageOptions = lineages.data?.lineages ?? []
+  const pathOptions = haproxyPaths.data?.paths ?? []
 
   async function submit(event: FormEvent) {
     event.preventDefault()
@@ -350,7 +365,7 @@ function CombineForm({ onCombined }: { onCombined: () => void }) {
     try {
       const res = await api<CombineResult>('/certificates/combine', {
         method: 'POST',
-        body: { lineage },
+        body: { lineage, target_path: targetPath },
       })
       setResult(res)
       onCombined()
@@ -370,40 +385,60 @@ function CombineForm({ onCombined }: { onCombined: () => void }) {
         {error && <Banner kind="error">{error}</Banner>}
         <ErrorNote error={lineages.error} />
         <div className="filters">
-          <label style={{ flex: 1, minWidth: '16rem' }}>
+          <label style={{ flex: 1, minWidth: '18rem' }}>
             Lineage (/etc/letsencrypt/live/…)
             <select value={lineage} onChange={(e) => setLineage(e.target.value)} required>
               <option value="">— выберите —</option>
-              {options.map((name) => (
-                <option key={name} value={name}>
-                  {name}
+              {lineageOptions.map((info) => (
+                <option key={info.name} value={info.name}>
+                  {lineageLabel(info)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label style={{ flex: 1, minWidth: '18rem' }}>
+            Куда записать
+            <select value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>
+              <option value={NEW_FILE}>— новый файл (ещё не подключён) —</option>
+              {pathOptions.map((path) => (
+                <option key={path} value={path}>
+                  {path}
                 </option>
               ))}
             </select>
           </label>
         </div>
         <div>
-          <button className="primary" type="submit" disabled={busy || options.length === 0}>
+          <button className="primary" type="submit" disabled={busy || lineageOptions.length === 0}>
             {busy ? 'Собираю…' : 'Собрать'}
           </button>
         </div>
-        {!lineages.loading && options.length === 0 && !lineages.error && (
+        {!lineages.loading && lineageOptions.length === 0 && !lineages.error && (
           <p className="small muted" style={{ marginBottom: 0 }}>
             В /etc/letsencrypt/live не найдено ни одной lineage.
           </p>
         )}
       </form>
 
-      {result && (
-        <div className="col" style={{ marginTop: '0.85rem' }}>
-          <Banner kind="info">
-            {result.lineage}: PEM собран, действителен до {formatDateTime(result.not_after)}. Он ещё не
-            подключён ни к одному сервису — вставьте директиву ниже в нужный файл через страницу
-            «Конфигурации».
-          </Banner>
-          <pre className="diff">{result.snippet}</pre>
-        </div>
-      )}
+      {result &&
+        (result.snippet ? (
+          <div className="col" style={{ marginTop: '0.85rem' }}>
+            <Banner kind="info">
+              {result.lineage}: PEM собран, действителен до {formatDateTime(result.not_after)}. Он ещё не
+              подключён ни к одному сервису — вставьте директиву ниже в нужный файл через страницу
+              «Конфигурации».
+            </Banner>
+            <pre className="diff">{result.snippet}</pre>
+          </div>
+        ) : (
+          <div style={{ marginTop: '0.85rem' }}>
+            <Banner kind="info">
+              {result.lineage}: файл <code className="mono">{result.combined_path}</code> перезаписан,
+              действителен до {formatDateTime(result.not_after)}. haproxy перечитал конфигурацию — вставлять
+              ничего не нужно.
+            </Banner>
+          </div>
+        ))}
     </Card>
   )
 }

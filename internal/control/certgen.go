@@ -353,23 +353,47 @@ func (m *CertManager) recombineDerivedCerts(ctx context.Context, user, lineage s
 	return services, nil
 }
 
-// ListLetsEncryptLineages lists the certbot lineage names found directly
-// under /etc/letsencrypt/live — the directory certbot itself maintains, so
-// listing it is more reliable than trusting whatever this app happened to
-// parse out of nginx/haproxy configuration.
-func (m *CertManager) ListLetsEncryptLineages() ([]string, error) {
+// LineageInfo describes one certbot lineage found under /etc/letsencrypt/live.
+type LineageInfo struct {
+	Name string `json:"name"`
+	// Known is false when fullchain.pem could not be read or parsed — the
+	// lineage is still listed (it is still a valid combine target), just
+	// without an expiry to show. NotAfter/DaysLeft are meaningless when
+	// Known is false (DaysLeft == 0 is itself a valid "expires today").
+	Known    bool      `json:"known"`
+	NotAfter time.Time `json:"not_after,omitzero"`
+	DaysLeft int       `json:"days_left"`
+}
+
+// ListLetsEncryptLineages lists the certbot lineages found directly under
+// /etc/letsencrypt/live — the directory certbot itself maintains, so listing
+// it is more reliable than trusting whatever this app happened to parse out
+// of nginx/haproxy configuration — along with each one's expiry, so picking
+// one to combine doesn't require checking the certificates table first.
+func (m *CertManager) ListLetsEncryptLineages() ([]LineageInfo, error) {
 	entries, err := m.c.ListDir(strings.TrimSuffix(parse.LetsEncryptLive, "/"))
 	if err != nil {
 		return nil, err
 	}
-	names := make([]string, 0, len(entries))
+	out := make([]LineageInfo, 0, len(entries))
 	for _, e := range entries {
-		if e.IsDir {
-			names = append(names, gopath.Base(e.Path))
+		if !e.IsDir {
+			continue
 		}
+		info := LineageInfo{Name: gopath.Base(e.Path)}
+		if raw, err := m.c.ReadFile(parse.LetsEncryptLive + info.Name + "/fullchain.pem"); err == nil {
+			if block, _ := pem.Decode(raw); block != nil && block.Type == "CERTIFICATE" {
+				if leaf, err := x509.ParseCertificate(block.Bytes); err == nil {
+					info.Known = true
+					info.NotAfter = leaf.NotAfter.UTC()
+					info.DaysLeft = int(time.Until(leaf.NotAfter).Hours() / 24)
+				}
+			}
+		}
+		out = append(out, info)
 	}
-	sort.Strings(names)
-	return names, nil
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
 }
 
 // CombineResult is what got written when packaging a certbot lineage for
@@ -379,23 +403,60 @@ type CombineResult struct {
 	CombinedPath string    `json:"combined_path"`
 	Fingerprint  string    `json:"fingerprint"`
 	NotAfter     time.Time `json:"not_after"`
-	// Snippet is the configuration to paste through the config editor. This
-	// tool does not insert it itself.
-	Snippet string `json:"snippet"`
+	// Snippet is the configuration to paste through the config editor,
+	// non-empty only when CombinedPath is a brand-new file nothing
+	// references yet. When targetPath overwrote a file haproxy already uses,
+	// there is nothing to paste — the config already points at it.
+	Snippet string `json:"snippet,omitempty"`
+}
+
+// ListHAProxyCertPaths returns the haproxy certificate file paths the last
+// scan actually found and read successfully — the exact rows "Подробности"
+// already lists — so CombineForHAProxy can overwrite one of them by name
+// instead of guessing where haproxy's config expects the file.
+func (m *CertManager) ListHAProxyCertPaths() []string {
+	snap := m.scanner.Latest()
+	if snap == nil {
+		return nil
+	}
+	var paths []string
+	for _, cert := range snap.Certs {
+		if cert.Service == model.ServiceHAProxy && cert.Error == "" {
+			paths = append(paths, cert.Path)
+		}
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func (m *CertManager) isKnownHAProxyCertPath(path string) bool {
+	for _, p := range m.ListHAProxyCertPaths() {
+		if p == path {
+			return true
+		}
+	}
+	return false
 }
 
 // CombineForHAProxy packages an already-issued certbot lineage's certificate
-// and key into the single PEM file haproxy's "crt" directive expects,
-// writing it under a dedicated directory — the same write boundary
-// GenerateSelfSigned uses — and returning the directive to paste in.
+// and key into the single PEM file haproxy's "crt" directive expects.
 //
-// Unlike RenewCertbot's automatic recombineDerivedCerts, this does not
-// require an existing haproxy file to already reference the lineage: it is
-// for wiring haproxy up to a certbot certificate for the first time, when
-// there is nothing yet for a fingerprint match to find.
-func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage string) (CombineResult, error) {
+// With targetPath set to one of ListHAProxyCertPaths()'s entries, it
+// overwrites that exact file in place — the same path "Подробности" already
+// shows haproxy using — and reloads haproxy, so the operator has nothing
+// left to wire up by hand. With targetPath empty (no matching file exists
+// yet, e.g. haproxy has never used this lineage before), it instead writes a
+// brand-new file under a dedicated directory — the same write boundary
+// GenerateSelfSigned uses — and returns the directive to paste through the
+// validated config editor, since there is nothing yet to safely overwrite.
+func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage, targetPath string) (CombineResult, error) {
 	if !lineageRe.MatchString(lineage) {
 		return CombineResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
+	}
+	if targetPath != "" && !m.isKnownHAProxyCertPath(targetPath) {
+		return CombineResult{}, fmt.Errorf(
+			"путь %q не найден среди текущих сертификатов haproxy — обновите страницу и выберите заново",
+			targetPath)
 	}
 
 	certPEM, err := m.c.ReadFile(parse.LetsEncryptLive + lineage + "/fullchain.pem")
@@ -425,6 +486,22 @@ func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage strin
 		Fingerprint: hex.EncodeToString(sum[:]),
 		NotAfter:    leaf.NotAfter.UTC(),
 	}
+
+	if targetPath != "" {
+		if err := m.c.WriteFile(targetPath, combined, 0o600); err != nil {
+			return CombineResult{}, fmt.Errorf("запись %s: %w", targetPath, err)
+		}
+		res.CombinedPath = targetPath
+		m.db.Audit(ctx, user, "cert.combine_haproxy", targetPath, "ok", map[string]any{
+			"lineage": lineage, "fingerprint": res.Fingerprint,
+		})
+		if _, err := m.services.Action(ctx, user, model.ServiceHAProxy, "reload"); err != nil {
+			return res, fmt.Errorf("PEM собран и записан в %s, но не удалось перечитать конфигурацию haproxy: %w",
+				targetPath, err)
+		}
+		return res, nil
+	}
+
 	dir := gopath.Join(m.cfg.HAProxyRoot, "ssl-letsencrypt", safeDirName(lineage))
 	res.CombinedPath = gopath.Join(dir, "combined.pem")
 	if err := m.c.WriteFile(res.CombinedPath, combined, 0o600); err != nil {
@@ -432,8 +509,8 @@ func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage strin
 	}
 	res.Snippet = fmt.Sprintf("bind *:443 ssl crt %s", res.CombinedPath)
 
-	m.db.Audit(ctx, user, "cert.combine_haproxy", lineage, "ok", map[string]any{
-		"combined_path": res.CombinedPath, "fingerprint": res.Fingerprint,
+	m.db.Audit(ctx, user, "cert.combine_haproxy", res.CombinedPath, "ok", map[string]any{
+		"lineage": lineage, "fingerprint": res.Fingerprint,
 	})
 	return res, nil
 }

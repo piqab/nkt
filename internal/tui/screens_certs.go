@@ -142,11 +142,29 @@ func (s *certsScreen) showGenerateForm() {
 	s.app.showModal("certgen", form, 74, 13)
 }
 
+// lineageLabel describes one /etc/letsencrypt/live lineage with its expiry,
+// so picking one in the dropdown doesn't require checking the certificates
+// table first.
+func lineageLabel(info control.LineageInfo) string {
+	if !info.Known {
+		return info.Name + " — срок неизвестен"
+	}
+	switch {
+	case info.DaysLeft < 0:
+		return fmt.Sprintf("%s — просрочен %d дн. назад", info.Name, -info.DaysLeft)
+	case info.DaysLeft == 0:
+		return info.Name + " — истекает сегодня"
+	default:
+		return fmt.Sprintf("%s — %d дн.", info.Name, info.DaysLeft)
+	}
+}
+
 // showCombineForm packages an already-issued certbot lineage into the single
-// PEM haproxy's "crt" needs — for wiring haproxy up to a certbot certificate
-// for the first time, when there is no existing file to compare bytes
-// against. Unlike showGenerateForm this never calls certbot: it only
-// repackages a certificate that already exists on disk.
+// PEM haproxy's "crt" needs. Unlike showGenerateForm this never calls
+// certbot: it only repackages a certificate that already exists on disk. If
+// "Куда записать" names a path haproxy already uses, that exact file is
+// overwritten and haproxy reloaded; left on "новый файл", a fresh file is
+// written instead and the directive to paste in is shown.
 func (s *certsScreen) showCombineForm() {
 	if !s.app.canMutate() {
 		s.app.setStatus(hexWarning, "Изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
@@ -162,24 +180,42 @@ func (s *certsScreen) showCombineForm() {
 		s.app.setStatus(hexWarning, "В /etc/letsencrypt/live не найдено ни одной lineage")
 		return
 	}
+	lineageLabels := make([]string, len(lineages))
+	for i, info := range lineages {
+		lineageLabels[i] = lineageLabel(info)
+	}
+	pathOptions := append([]string{"— новый файл —"}, s.app.Certs.ListHAProxyCertPaths()...)
 
-	lineage := lineages[0]
+	lineage := lineages[0].Name
+	targetPath := ""
 	form := tview.NewForm().
-		AddDropDown("Lineage", lineages, 0, func(o string, _ int) { lineage = o })
+		AddDropDown("Lineage", lineageLabels, 0, func(_ string, i int) { lineage = lineages[i].Name }).
+		AddDropDown("Куда записать", pathOptions, 0, func(o string, i int) {
+			if i == 0 {
+				targetPath = ""
+			} else {
+				targetPath = o
+			}
+		})
 
 	form.AddButton("Собрать", func() {
 		s.app.closeModal("certcombine")
 		s.app.runAsync("Собираю PEM для haproxy", true, func(ctx context.Context) (string, error) {
-			res, err := s.app.Certs.CombineForHAProxy(ctx, s.app.actor, lineage)
+			res, err := s.app.Certs.CombineForHAProxy(ctx, s.app.actor, lineage, targetPath)
 			if err != nil {
 				return "", err
 			}
 			s.app.queue(func() {
-				s.app.showText("certcombine-result", "PEM собран", fmt.Sprintf(
-					" %s\n действителен до %s\n\n Файл в конфигурацию ещё не добавлен — вставьте через "+
-						"редактор (экран «Конфигурации»):\n\n%s\n",
-					bold(res.Lineage), res.NotAfter.Local().Format("02.01.2006"),
-					tview.Escape(res.Snippet)))
+				body := fmt.Sprintf(" %s\n действителен до %s\n\n",
+					bold(res.Lineage), res.NotAfter.Local().Format("02.01.2006"))
+				if res.Snippet != "" {
+					body += fmt.Sprintf("Файл в конфигурацию ещё не добавлен — вставьте через редактор "+
+						"(экран «Конфигурации»):\n\n%s\n", tview.Escape(res.Snippet))
+				} else {
+					body += fmt.Sprintf("Файл %s перезаписан, haproxy перечитал конфигурацию — вставлять "+
+						"ничего не нужно.\n", res.CombinedPath)
+				}
+				s.app.showText("certcombine-result", "PEM собран", body)
 			})
 			return "PEM собран, отпечаток " + res.Fingerprint[:16] + "…", nil
 		})
@@ -190,7 +226,7 @@ func (s *certsScreen) showCombineForm() {
 	form.SetCancelFunc(func() { s.app.closeModal("certcombine") })
 
 	s.app.editing = true
-	s.app.showModal("certcombine", form, 60, 8)
+	s.app.showModal("certcombine", form, 66, 10)
 }
 
 // renewSelected re-issues the selected certificate's certbot lineage in
