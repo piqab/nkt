@@ -163,6 +163,25 @@ func TestGenerateSelfSignedDefaults(t *testing.T) {
 	}
 }
 
+// A name typed in Cyrillic must convert to the punycode form TLS actually
+// carries, and the result must say what it converted it to.
+func TestGenerateSelfSignedUnicodeName(t *testing.T) {
+	m, _ := certgenSetup(t)
+	res, err := m.GenerateSelfSigned(context.Background(), "test", SelfSignedRequest{
+		Names: []string{"испытание.рф"}, Service: "nginx",
+	})
+	if err != nil {
+		t.Fatalf("генерация с unicode-именем: %v", err)
+	}
+	const wantASCII = "xn--80akhbyknj4f.xn--p1ai"
+	if len(res.Names) != 1 || res.Names[0] != wantASCII {
+		t.Fatalf("имена = %v, ожидался %q", res.Names, wantASCII)
+	}
+	if res.UnicodeNames[wantASCII] != "испытание.рф" {
+		t.Errorf("сноска = %v, ожидалось {%q: испытание.рф}", res.UnicodeNames, wantASCII)
+	}
+}
+
 // Wildcard names must survive validation and directory-name construction.
 func TestGenerateSelfSignedWildcard(t *testing.T) {
 	m, c := certgenSetup(t)

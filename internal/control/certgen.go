@@ -96,11 +96,25 @@ func (r SelfSignedRequest) normalise() (SelfSignedRequest, error) {
 	names := make([]string, len(out.Names))
 	for i, n := range out.Names {
 		n = strings.ToLower(strings.TrimSpace(n))
-		bare := strings.TrimPrefix(n, "*.")
-		if n == "" || !hostnameRe.MatchString(bare) {
+		prefix := ""
+		bare := n
+		if strings.HasPrefix(bare, "*.") {
+			prefix, bare = "*.", bare[2:]
+		}
+		if bare == "" {
 			return out, fmt.Errorf("недопустимое имя: %q", out.Names[i])
 		}
-		names[i] = n
+		if !hostnameRe.MatchString(bare) {
+			// DNS, TLS SNI and X.509 SANs only ever carry ASCII — a domain
+			// typed in Cyrillic or another script must travel as punycode.
+			// Convert it here instead of just rejecting it.
+			ascii, err := model.HostnameASCII(bare)
+			if err != nil || !hostnameRe.MatchString(ascii) {
+				return out, fmt.Errorf("недопустимое имя: %q", out.Names[i])
+			}
+			bare = ascii
+		}
+		names[i] = prefix + bare
 	}
 	out.Names = names
 
@@ -141,6 +155,10 @@ type SelfSignedResult struct {
 	// Snippet is the configuration to paste through the config editor. This
 	// tool does not insert it itself.
 	Snippet string `json:"snippet"`
+	// UnicodeNames maps an ASCII/punycode name in Names to its readable form,
+	// for names that needed converting — a footnote next to the ASCII the
+	// certificate and config actually have to use.
+	UnicodeNames map[string]string `json:"unicode_names,omitempty"`
 }
 
 // GenerateSelfSigned issues a self-signed certificate and writes it under a
@@ -190,11 +208,22 @@ func (m *CertManager) GenerateSelfSigned(ctx context.Context, user string, req S
 	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 
+	unicodeNames := map[string]string{}
+	for _, n := range req.Names {
+		if u := model.HostnameUnicode(n); u != "" {
+			unicodeNames[n] = u
+		}
+	}
+	if len(unicodeNames) == 0 {
+		unicodeNames = nil
+	}
+
 	sum := sha256.Sum256(der)
 	res := SelfSignedResult{
-		Names:       req.Names,
-		Fingerprint: hex.EncodeToString(sum[:]),
-		NotAfter:    tmpl.NotAfter.UTC(),
+		Names:        req.Names,
+		Fingerprint:  hex.EncodeToString(sum[:]),
+		NotAfter:     tmpl.NotAfter.UTC(),
+		UnicodeNames: unicodeNames,
 	}
 
 	root := m.cfg.NginxRoot
@@ -545,6 +574,10 @@ func (m *CertManager) recombineDerivedCerts(
 // LineageInfo describes one certbot lineage found under /etc/letsencrypt/live.
 type LineageInfo struct {
 	Name string `json:"name"`
+	// NameUnicode is the readable form of Name when certbot named the
+	// lineage in punycode for an IDN domain, e.g. "испытание.рф" for
+	// "xn--80akhbyknj4f.xn--p1ai" — empty when there is nothing to decode.
+	NameUnicode string `json:"name_unicode,omitempty"`
 	// Known is false when fullchain.pem could not be read or parsed — the
 	// lineage is still listed (it is still a valid combine target), just
 	// without an expiry to show. NotAfter/DaysLeft are meaningless when
@@ -570,6 +603,7 @@ func (m *CertManager) ListLetsEncryptLineages() ([]LineageInfo, error) {
 			continue
 		}
 		info := LineageInfo{Name: gopath.Base(e.Path)}
+		info.NameUnicode = model.HostnameUnicode(info.Name)
 		if raw, err := m.c.ReadFile(parse.LetsEncryptLive + info.Name + "/fullchain.pem"); err == nil {
 			if block, _ := pem.Decode(raw); block != nil && block.Type == "CERTIFICATE" {
 				if leaf, err := x509.ParseCertificate(block.Bytes); err == nil {

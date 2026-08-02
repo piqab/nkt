@@ -333,6 +333,8 @@ export interface SelfSignedResult {
   fingerprint: string
   not_after: string
   snippet: string
+  /** ASCII/punycode name -> readable form, for names that needed converting. */
+  unicode_names?: Record<string, string>
 }
 
 export interface CombineResult {
@@ -346,6 +348,8 @@ export interface CombineResult {
 
 export interface LineageInfo {
   name: string
+  /** Readable form of name when certbot punycode-encoded an IDN domain. */
+  name_unicode?: string
   /** False when fullchain.pem could not be read or parsed — days_left is meaningless then. */
   known: boolean
   not_after?: string
