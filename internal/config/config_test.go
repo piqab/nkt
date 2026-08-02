@@ -30,3 +30,20 @@ func TestDefaultDataDirDependsOnMode(t *testing.T) {
 		t.Errorf("каталог данных для fixtures = %q, ожидался %q", got, want)
 	}
 }
+
+// The session cookie must be safe by default: an operator who forgets to set
+// NKT_COOKIE_SECURE should get an HTTPS-only cookie, not a silently insecure
+// one. Opting into plain HTTP (an SSH tunnel, say) is an explicit override.
+func TestCookieSecureDefaultsToTrue(t *testing.T) {
+	t.Setenv("NKT_MODE", string(ModeFixtures))
+	t.Setenv("NKT_DATA_DIR", t.TempDir())
+	t.Setenv("NKT_COOKIE_SECURE", "")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.CookieSecure {
+		t.Error("CookieSecure по умолчанию должен быть true")
+	}
+}

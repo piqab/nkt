@@ -129,12 +129,16 @@ sudo systemctl daemon-reload && sudo systemctl enable --now netknownsthat
 ### Шаг 4. Открыть
 
 По умолчанию сервис слушает `127.0.0.1:8077`. Наружу отдавайте только через
-reverse proxy с TLS и выставьте `NKT_COOKIE_SECURE=true`. Быстрый доступ без
-проксирования — туннель:
+reverse proxy с TLS — `NKT_COOKIE_SECURE=true` включён по умолчанию, кука
+сессии без HTTPS браузер не примет. Быстрый доступ без проксирования —
+туннель:
 
 ```bash
 ssh -L 8077:127.0.0.1:8077 user@host
 ```
+
+Туннель отдаёт браузеру голый HTTP, поэтому для входа через него добавьте в
+`/etc/netknownsthat/nkt.env` `NKT_COOKIE_SECURE=false`.
 
 Либо вообще без браузера, прямо в SSH-сессии:
 
@@ -328,7 +332,7 @@ echo 'новый-пароль-подлиннее' | sudo nkt passwd ops
 | `NKT_DATA_DIR` | где хранить базу и историю конфигураций. По умолчанию `/var/lib/netknownsthat` в режиме `local` и `./data` в режиме `fixtures` |
 | `NKT_ADDR` | адрес прослушивания, по умолчанию `127.0.0.1:8077` |
 | `NKT_ALLOW_MUTATIONS` | `false` переводит всё приложение в режим только чтения |
-| `NKT_COOKIE_SECURE` | `true`, если приложение отдаётся по HTTPS |
+| `NKT_COOKIE_SECURE` | `true` по умолчанию (кука сессии только по HTTPS); `false` — только для голого HTTP, например SSH-туннеля |
 | `NKT_COMPOSE_FILES` | список compose-файлов через запятую |
 | `NKT_PROBE_INTERVAL` | как часто проверять доступность; голое число — секунды |
 | `NKT_AUTO_RENEW_CERTS` | `true` — раз в `NKT_AUTO_RENEW_INTERVAL` (по умолчанию 6h) сама запускает `certbot renew` для certbot-сертификатов не старше `NKT_AUTO_RENEW_WITHIN` (по умолчанию 30 дней) до истечения. По умолчанию `false` |

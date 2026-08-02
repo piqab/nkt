@@ -184,7 +184,7 @@ func Build(s *model.Snapshot) *Graph {
 			scheme = "http"
 		}
 		b.node(Node{
-			ID: id, Kind: KindEndpoint, Label: e.Socket(), Sublabel: e.Label,
+			ID: id, Kind: KindEndpoint, Label: e.Label, Sublabel: e.Socket(),
 			Group: e.Service, Status: status, Port: e.Port, Public: e.Public(),
 			Meta: map[string]string{
 				"service": e.Service, "scheme": scheme, "mode": e.Mode,

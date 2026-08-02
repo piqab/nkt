@@ -150,7 +150,7 @@ func Load() (*Config, error) {
 		SessionTTL:             envDur("NKT_SESSION_TTL", 12*time.Hour),
 		BootstrapAdminUser:     envStr("NKT_BOOTSTRAP_ADMIN_USER", "admin"),
 		BootstrapAdminPassword: envStr("NKT_BOOTSTRAP_ADMIN_PASSWORD", ""),
-		CookieSecure:           envBool("NKT_COOKIE_SECURE", false),
+		CookieSecure:           envBool("NKT_COOKIE_SECURE", true),
 
 		Addr:        envStr("NKT_ADDR", "127.0.0.1:8077"),
 		CORSOrigins: envList("NKT_CORS_ORIGINS", "http://localhost:5173"),
