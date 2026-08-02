@@ -1,16 +1,25 @@
 import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
-import { Banner, Card, ErrorNote, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
+import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import BlockTree from '../components/BlockTree'
 
 const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker'])
 
 export default function Configs({ me }: { me: Me }) {
-  const [view, setView] = useState<'text' | 'blocks'>('text')
+  // A link from "Сервисы и контейнеры" can open this page straight at a
+  // given file's block view, optionally focused on one service/section, or
+  // straight into "create a new block" — read once, on first render, so
+  // navigating away and back inside this page doesn't keep re-applying it.
+  const [searchParams] = useSearchParams()
+  const [view, setView] = useState<'text' | 'blocks'>(() => (searchParams.get('view') === 'blocks' ? 'blocks' : 'text'))
+  const [focusName] = useState(() => searchParams.get('focus'))
+  const [autoCreate] = useState(() => searchParams.get('create') === '1')
+  const [deepLinkedPath] = useState(() => searchParams.get('path'))
   const files = useApi<{ files: ManagedFile[] }>('/configs')
-  const [path, setPath] = useState<string | null>(null)
+  const [path, setPath] = useState<string | null>(deepLinkedPath)
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
   const [apply, setApply] = useState(false)
@@ -33,10 +42,6 @@ export default function Configs({ me }: { me: Me }) {
       setDiff(null)
     }
   }, [file.data])
-
-  useEffect(() => {
-    setView('text')
-  }, [path])
 
   const dirty = file.data !== null && draft !== file.data.content
 
@@ -135,6 +140,7 @@ export default function Configs({ me }: { me: Me }) {
                   onClick={() => {
                     setCreatingPath(null)
                     setPath(f.path)
+                    setView('text')
                   }}
                   style={{
                     textAlign: 'left',
@@ -160,9 +166,20 @@ export default function Configs({ me }: { me: Me }) {
           {creatingPath ? (
             <NewFileForm
               path={creatingPath}
-              onCreated={() => {
+              onCreated={async () => {
                 setCreatingPath(null)
                 setPath(creatingPath)
+                // The file list comes from the last scan, not a live directory
+                // read — Write()'s own rescan runs in the background and isn't
+                // done yet by the time this fires, so the new file would be
+                // missing until whatever triggers the next scan. Wait for a
+                // real one here instead of just reloading against stale data.
+                try {
+                  await api('/inventory/refresh', { method: 'POST' })
+                } catch {
+                  // A slow/failed rescan shouldn't block getting into the editor —
+                  // files.reload() below just shows whatever list is current.
+                }
                 files.reload()
               }}
               onCancel={() => setCreatingPath(null)}
@@ -215,6 +232,8 @@ export default function Configs({ me }: { me: Me }) {
                     service={file.data.service}
                     sha256={file.data.sha256}
                     me={me}
+                    focusName={path === deepLinkedPath ? focusName : null}
+                    autoCreate={path === deepLinkedPath && autoCreate}
                     onSaved={() => {
                       file.reload()
                       versions.reload()
@@ -239,11 +258,10 @@ export default function Configs({ me }: { me: Me }) {
                       </Banner>
                     )}
 
-                    <textarea
+                    <CodeEditor
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       rows={22}
-                      spellCheck={false}
                       readOnly={!me.is_admin || !me.allow_mutations}
                     />
 
@@ -422,7 +440,7 @@ function NewFileForm({ path, onCreated, onCancel }: { path: string; onCreated: (
           )}
         </Banner>
       )}
-      <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={22} spellCheck={false} autoFocus />
+      <CodeEditor value={content} onChange={(e) => setContent(e.target.value)} rows={22} autoFocus />
       <div className="filters" style={{ marginTop: '0.6rem' }}>
         <label style={{ flex: 1, minWidth: '14rem' }}>
           Комментарий

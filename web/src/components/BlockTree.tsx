@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api, qs, useApi } from '../api'
 import type { BlockKind, ConfigBlock, Me, WriteResult } from '../types'
-import { Banner, Modal, Spinner } from './ui'
+import { Banner, CodeEditor, Modal, Spinner } from './ui'
 
 const KIND_LABEL: Record<BlockKind, string> = {
   server: 'server',
@@ -42,12 +42,20 @@ export default function BlockTree({
   service,
   sha256,
   me,
+  focusName,
+  autoCreate,
   onSaved,
 }: {
   path: string
   service: string
   sha256: string
   me: Me
+  /** Select this block by name as soon as the tree loads — set by a deep
+   * link from "Сервисы и контейнеры", e.g. "редактировать конфиг". */
+  focusName?: string | null
+  /** Open the create form for this file's primary block kind as soon as the
+   * tree loads — set by a deep link like "+ новый контейнер". */
+  autoCreate?: boolean
   onSaved: () => void
 }) {
   const blocks = useApi<{ blocks: ConfigBlock[] }>(`/configs/blocks${qs({ path })}`)
@@ -58,10 +66,29 @@ export default function BlockTree({
   const [apply, setApply] = useState(false)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const appliedDeepLink = useRef(false)
 
   const canControl = me.is_admin && me.allow_mutations
   const list = blocks.data?.blocks ?? []
   const selectedBlock = findBlock(list, selected)
+
+  useEffect(() => {
+    if (appliedDeepLink.current || !blocks.data) return
+    appliedDeepLink.current = true
+    if (focusName) {
+      const match = findBlockByName(list, focusName)
+      if (match) setSelected(match.id)
+      return
+    }
+    if (autoCreate && canControl) {
+      const kinds = creatableKinds(service)
+      if (kinds.length > 0) openCreate(kinds[0])
+    }
+    // Deliberately keyed only on blocks.data: this must run exactly once, the
+    // first time the tree loads — not every time it reloads after a save,
+    // which is why the ref guard above (not a dependency list) does the
+    // actual once-only gating.
+  }, [blocks.data])
 
   function openCreate(kind: BlockKind, parentEndLine?: number) {
     setDraft('')
@@ -199,7 +226,7 @@ export default function BlockTree({
           onClose={() => setModal(null)}
         >
           <div className="col">
-            <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={12} spellCheck={false} />
+            <CodeEditor value={draft} onChange={(e) => setDraft(e.target.value)} rows={12} />
             <div className="filters" style={{ marginTop: '0.5rem' }}>
               <label style={{ flex: 1, minWidth: '14rem' }}>
                 Комментарий к правке
@@ -236,6 +263,15 @@ function findBlock(list: ConfigBlock[], id: string | null): ConfigBlock | null {
   for (const b of list) {
     if (b.id === id) return b
     const child = findBlock(b.children ?? [], id)
+    if (child) return child
+  }
+  return null
+}
+
+function findBlockByName(list: ConfigBlock[], name: string): ConfigBlock | null {
+  for (const b of list) {
+    if (b.name === name) return b
+    const child = findBlockByName(b.children ?? [], name)
     if (child) return child
   }
   return null

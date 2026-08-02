@@ -382,6 +382,36 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
 textarea { font-family: var(--mono); font-size: 0.8rem; line-height: 1.5; width: 100%; }
 label { font-size: 0.8rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.2rem; }
 
+.code-editor {
+  display: flex;
+  width: 100%;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.code-gutter {
+  flex: 0 0 auto;
+  padding: 0.32rem 0.5rem;
+  text-align: right;
+  color: var(--text-muted);
+  background: var(--wash);
+  border-right: 1px solid var(--border);
+  user-select: none;
+  overflow: hidden;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+.code-textarea {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  border-radius: 0;
+  white-space: pre;
+  overflow: auto;
+}
+.code-textarea:focus-visible { outline-offset: -2px; }
+
 .filters {
   display: flex;
   align-items: flex-end;

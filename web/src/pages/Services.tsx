@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { api, useApi } from '../api'
+import { Link } from 'react-router-dom'
+import { api, qs, useApi } from '../api'
 import type { Container, DockerNetwork, Me, ServiceUnit } from '../types'
 import { Banner, Card, ErrorNote, Loading, Spinner, StateBadge, formatBytesShort } from '../components/ui'
 
@@ -19,6 +20,10 @@ export default function Services({ me }: { me: Me }) {
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
+  // Any container already knows the compose file that declares it; used as
+  // the target for "+ новый контейнер" since there is no other way to infer
+  // which compose file a brand-new service belongs in.
+  const composeFile = docker.data?.containers.find((c) => c.compose_file)?.compose_file
 
   async function rescan() {
     setRescanning(true)
@@ -156,7 +161,18 @@ export default function Services({ me }: { me: Me }) {
         )}
       </Card>
 
-      <Card title="Контейнеры docker" subtitle="Сопоставление того, что описано в compose, с тем, что реально работает">
+      <Card
+        title="Контейнеры docker"
+        subtitle="Сопоставление того, что описано в compose, с тем, что реально работает"
+        actions={
+          canControl &&
+          composeFile && (
+            <Link to={`/configs${qs({ path: composeFile, view: 'blocks', create: '1' })}`}>
+              + новый контейнер
+            </Link>
+          )
+        }
+      >
         {docker.loading && !docker.data ? (
           <Loading what="контейнеры" />
         ) : (
@@ -230,6 +246,11 @@ export default function Services({ me }: { me: Me }) {
                           {a}
                         </button>
                       ))}
+                      {canControl && c.compose_file && c.service_name && (
+                        <Link to={`/configs${qs({ path: c.compose_file, view: 'blocks', focus: c.service_name })}`}>
+                          редактировать конфиг
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}
