@@ -3,6 +3,7 @@ package parse
 import (
 	"fmt"
 	"io"
+	"regexp"
 	"strings"
 
 	crossplane "github.com/nginxinc/nginx-go-crossplane"
@@ -321,11 +322,18 @@ func composeKeyAt(line string) (indent int, key string, ok bool) {
 	return i, key, true
 }
 
-// composeServicesLine finds the top-level "services:" key (0-based line
-// index into lines, -1 if the file has none).
+// composeServicesRe matches the top-level services: key either bare (with
+// block-style children below) or as an explicit empty flow mapping —
+// "services:" alone parses to null in YAML, which `docker compose` rejects
+// ("services must be a mapping"), so a freshly created, still-empty compose
+// file is written as "services: {}" instead; this needs to recognise both.
+var composeServicesRe = regexp.MustCompile(`^services:\s*(\{\s*\})?$`)
+
+// composeServicesLine finds the top-level services: key (0-based line index
+// into lines, -1 if the file has none).
 func composeServicesLine(lines []string) int {
 	for i, line := range lines {
-		if strings.TrimRight(line, " \t\r") == "services:" {
+		if composeServicesRe.MatchString(strings.TrimRight(line, " \t\r")) {
 			return i
 		}
 	}
@@ -449,6 +457,15 @@ func InsertBlockAtEnd(fileText string, kind BlockKind, newText string, parentEnd
 		return insertBefore(lines, parentEndLine, block), nil
 
 	case BlockService:
+		// A freshly created, still-empty compose file spells its services:
+		// key as "services: {}" (see composeServicesRe) — valid YAML, but a
+		// flow-empty value and an indented block child can't share the same
+		// key, so the first service inserted has to rewrite that line to
+		// bare "services:" first.
+		if idx := composeServicesLine(lines); idx >= 0 && strings.TrimRight(lines[idx], " \t\r") != "services:" {
+			lines = append([]string{}, lines...)
+			lines[idx] = "services:"
+		}
 		target, gap, err := composeInsertLine(lines)
 		if err != nil {
 			return "", err

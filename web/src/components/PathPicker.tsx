@@ -70,7 +70,11 @@ export default function PathPicker({
     try {
       await api('/configs/file', {
         method: 'PUT',
-        body: { path, content: 'services:\n', note: 'создан новый compose-стек', apply: false, expected_sha256: '' },
+        // "services:" alone parses to null in YAML — docker compose rejects
+        // that ("services must be a mapping"). An explicit empty mapping
+        // validates, and internal/parse/blocks.go knows to rewrite it back
+        // to block style when the first service gets added.
+        body: { path, content: 'services: {}\n', note: 'создан новый compose-стек', apply: false, expected_sha256: '' },
       })
       onPick(path)
     } catch (err) {
