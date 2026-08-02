@@ -3,11 +3,6 @@ import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
 import { Card, ErrorNote, Loading, SeverityBadge } from '../components/ui'
 
-// A long real-world host can produce far more findings than fit in a
-// glanceable list — cap it and say so, rather than letting the summary grow
-// into a second findings page.
-const FINDINGS_SUMMARY_LIMIT = 12
-
 /**
  * The resource map is laid out in fixed columns by node kind rather than by a
  * force simulation: traffic flows left to right (внешняя сеть → сервис →
@@ -127,53 +122,52 @@ export default function TopologyPage() {
 
   const viewW = width / zoom
   const viewH = height / zoom
+  // Scoped to whatever's under the cursor or clicked — a full list of every
+  // finding on the map ate half the screen and duplicated the "Проблемы"
+  // page; this is just enough to answer "what's wrong with this node".
+  const focusedFindings = focus ? data.findings.filter((f) => f.node_id === focus) : []
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Карта сетевых ресурсов</h1>
-          <p>
-            Построена из конфигураций: слушатель → маршрут → пул → backend → контейнер → сеть docker.
-            Красным отмечены узлы с критичными проблемами, жёлтым — предупреждения. Наведите курсор,
-            чтобы подсветить связи, щёлкните — чтобы увидеть подробности.
-          </p>
+          <p>Красным — критичные проблемы, жёлтым — предупреждения. Наведите или щёлкните узел, чтобы увидеть подробности.</p>
         </div>
       </div>
 
       {data.findings.length > 0 && (
-        <Card
-          title="Проблемы на карте"
-          subtitle={`${data.findings.length} шт. — щёлкните, чтобы найти узел`}
-        >
-          <div className="col" style={{ gap: '0.2rem' }}>
-            {data.findings.slice(0, FINDINGS_SUMMARY_LIMIT).map((f, i) => {
-              const node = data.nodes.find((n) => n.id === f.node_id)
-              return (
-                <button
-                  key={i}
-                  className="ghost"
-                  style={{ textAlign: 'left', padding: '0.25rem 0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
-                  onClick={() => setSelected(f.node_id)}
-                >
-                  <SeverityBadge severity={f.severity} />
-                  <span>{f.title}</span>
-                  {node && <span className="small muted">— {node.label}</span>}
-                </button>
-              )
-            })}
-            {data.findings.length > FINDINGS_SUMMARY_LIMIT && (
-              <div className="small muted" style={{ padding: '0.25rem 0.4rem' }}>
-                и ещё {data.findings.length - FINDINGS_SUMMARY_LIMIT} — полный список на странице «Проблемы»
-              </div>
-            )}
-          </div>
-        </Card>
+        <div className="topology-findings-bar">
+          {focusedFindings.length > 0 ? (
+            focusedFindings.map((f, i) => (
+              <span key={i} className="topology-finding-chip">
+                <SeverityBadge severity={f.severity} />
+                {f.title}
+              </span>
+            ))
+          ) : (
+            <span className="small muted">{data.findings.length} шт. на карте — наведите на красный или жёлтый узел</span>
+          )}
+        </div>
       )}
 
       <Card
         actions={
           <>
+            <div className="chart-legend">
+              <span className="legend-item">
+                <span className="legend-swatch" style={{ background: STATUS_COLOR.ok }} /> в порядке
+              </span>
+              <span className="legend-item">
+                <span className="legend-swatch" style={{ background: STATUS_COLOR.warn }} /> предупреждение
+              </span>
+              <span className="legend-item">
+                <span className="legend-swatch" style={{ background: STATUS_COLOR.error }} /> проблема
+              </span>
+              <span className="legend-item">
+                <span className="legend-swatch" style={{ background: STATUS_COLOR.unknown }} /> неизвестно
+              </span>
+            </div>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
               <input
                 type="checkbox"
@@ -181,10 +175,10 @@ export default function TopologyPage() {
                 onChange={(e) => setHideHealthy(e.target.checked)}
                 style={{ width: 'auto' }}
               />
-              только проблемные и соседние
+              только проблемы
             </label>
             <span className="small muted">
-              узлов {data.nodes.length}, связей {data.edges.length}
+              {data.nodes.length} узлов, {data.edges.length} связей
             </span>
           </>
         }
@@ -268,21 +262,6 @@ export default function TopologyPage() {
               />
             ))}
           </svg>
-        </div>
-
-        <div className="chart-legend" style={{ marginTop: '0.6rem' }}>
-          <span className="legend-item">
-            <span className="legend-swatch" style={{ background: STATUS_COLOR.ok }} /> в порядке
-          </span>
-          <span className="legend-item">
-            <span className="legend-swatch" style={{ background: STATUS_COLOR.warn }} /> предупреждение
-          </span>
-          <span className="legend-item">
-            <span className="legend-swatch" style={{ background: STATUS_COLOR.error }} /> проблема
-          </span>
-          <span className="legend-item">
-            <span className="legend-swatch" style={{ background: STATUS_COLOR.unknown }} /> состояние неизвестно
-          </span>
         </div>
       </Card>
 

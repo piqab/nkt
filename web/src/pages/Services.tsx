@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { api, qs, useApi } from '../api'
-import type { Container, DockerNetwork, Me, ServiceUnit } from '../types'
-import { Banner, Card, ErrorNote, Loading, Spinner, StateBadge, formatBytesShort } from '../components/ui'
+import type { Container, DockerNetwork, FileContent, Me, ServiceUnit } from '../types'
+import { Banner, Card, ErrorNote, Loading, Modal, Spinner, StateBadge, formatBytesShort } from '../components/ui'
+import BlockTree from '../components/BlockTree'
 
 const ACTION_LABEL: Record<string, string> = {
   start: 'запустить',
@@ -18,6 +18,7 @@ export default function Services({ me }: { me: Me }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [configModal, setConfigModal] = useState<{ path: string; focusName?: string; autoCreate?: boolean } | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
   // Any container already knows the compose file that declares it; used as
@@ -167,9 +168,9 @@ export default function Services({ me }: { me: Me }) {
         actions={
           canControl &&
           composeFile && (
-            <Link to={`/configs${qs({ path: composeFile, view: 'blocks', create: '1' })}`}>
+            <button className="ghost" onClick={() => setConfigModal({ path: composeFile, autoCreate: true })}>
               + новый контейнер
-            </Link>
+            </button>
           )
         }
       >
@@ -247,9 +248,12 @@ export default function Services({ me }: { me: Me }) {
                         </button>
                       ))}
                       {canControl && c.compose_file && c.service_name && (
-                        <Link to={`/configs${qs({ path: c.compose_file, view: 'blocks', focus: c.service_name })}`}>
+                        <button
+                          className="ghost"
+                          onClick={() => setConfigModal({ path: c.compose_file!, focusName: c.service_name })}
+                        >
                           редактировать конфиг
-                        </Link>
+                        </button>
                       )}
                     </td>
                   </tr>
@@ -289,6 +293,61 @@ export default function Services({ me }: { me: Me }) {
           </table>
         </div>
       </Card>
+
+      {configModal && (
+        <ContainerConfigModal
+          path={configModal.path}
+          focusName={configModal.focusName}
+          autoCreate={configModal.autoCreate}
+          me={me}
+          onClose={() => setConfigModal(null)}
+          onSaved={() => docker.reload()}
+        />
+      )}
     </>
+  )
+}
+
+/** Edits a container's compose service in place — no navigation to
+ * «Конфигурации», since jumping away and back just to change one image tag
+ * or port was the whole complaint that led here. */
+function ContainerConfigModal({
+  path,
+  focusName,
+  autoCreate,
+  me,
+  onClose,
+  onSaved,
+}: {
+  path: string
+  focusName?: string
+  autoCreate?: boolean
+  me: Me
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const file = useApi<FileContent>(`/configs/file${qs({ path })}`)
+
+  return (
+    <Modal title={path} onClose={onClose}>
+      {file.loading && !file.data ? (
+        <Loading what="файл" />
+      ) : file.error ? (
+        <ErrorNote error={file.error} />
+      ) : file.data ? (
+        <BlockTree
+          path={file.data.path}
+          service={file.data.service}
+          sha256={file.data.sha256}
+          me={me}
+          focusName={focusName}
+          autoCreate={autoCreate}
+          onSaved={() => {
+            file.reload()
+            onSaved()
+          }}
+        />
+      ) : null}
+    </Modal>
   )
 }
