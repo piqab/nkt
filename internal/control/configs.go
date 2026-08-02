@@ -156,10 +156,26 @@ func (m *ConfigManager) BrowseDir(path string) ([]collect.FileInfo, error) {
 	if path == "" {
 		path = "/home"
 	}
-	if !underRoot(path, "/home") || strings.Contains(path, "..") || gopath.Clean(path) != path {
-		return nil, ErrPathNotAllowed
+	if err := checkHomePath(path); err != nil {
+		return nil, err
 	}
 	return m.c.ListDir(path)
+}
+
+// Mkdir creates a new directory under /home — laying out a fresh compose
+// stack's folder before any file exists in it, same sandboxing as BrowseDir.
+func (m *ConfigManager) Mkdir(path string) error {
+	if err := checkHomePath(path); err != nil {
+		return err
+	}
+	return m.c.Mkdir(path)
+}
+
+func checkHomePath(path string) error {
+	if path == "" || !underRoot(path, "/home") || strings.Contains(path, "..") || gopath.Clean(path) != path {
+		return ErrPathNotAllowed
+	}
+	return nil
 }
 
 // List returns every config file the dashboard knows about.

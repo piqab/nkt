@@ -81,6 +81,9 @@ type Collector interface {
 	// that did not exist before this write, so the rollback is removal
 	// instead of ConfigManager.Write's usual "put the old bytes back".
 	DeleteFile(path string) error
+	// Mkdir creates a directory (and any missing parents), for laying out a
+	// new compose stack's folder before any file exists in it.
+	Mkdir(path string) error
 
 	// Run executes a command on the host. It returns an error only when the
 	// command could not be started; a non-zero exit lives in the result.

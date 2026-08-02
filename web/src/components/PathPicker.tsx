@@ -33,7 +33,9 @@ export default function PathPicker({
 }) {
   const [dir, setDir] = useState('/home')
   const [newName, setNewName] = useState('docker-compose.yml')
+  const [newFolderName, setNewFolderName] = useState('')
   const [busy, setBusy] = useState(false)
+  const [folderBusy, setFolderBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const listing = useApi<{ entries: DirEntry[] }>(`/configs/browse${qs({ path: dir })}`)
 
@@ -43,6 +45,23 @@ export default function PathPicker({
 
   const segments = dir.split('/').filter(Boolean) // ["home", "alice", ...]
   const owner = ownerFromPath(dir)
+
+  async function createFolder() {
+    const name = newFolderName.trim()
+    if (!name) return
+    const path = `${dir}/${name}`.replace(/\/+/g, '/')
+    setFolderBusy(true)
+    setError(null)
+    try {
+      await api('/configs/mkdir', { method: 'POST', body: { path } })
+      setNewFolderName('')
+      setDir(path) // navigate straight into it, ready for a compose file
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setFolderBusy(false)
+    }
+  }
 
   async function createHere() {
     const path = `${dir}/${newName.trim()}`.replace(/\/+/g, '/')
@@ -110,6 +129,21 @@ export default function PathPicker({
           ))}
         </div>
       )}
+
+      <div className="filters">
+        <label style={{ flex: 1, minWidth: '12rem' }}>
+          Новая папка в этом каталоге
+          <input
+            value={newFolderName}
+            onChange={(e) => setNewFolderName(e.target.value)}
+            placeholder="myproject"
+          />
+        </label>
+        <button onClick={createFolder} disabled={folderBusy || !newFolderName.trim()}>
+          {folderBusy && <Spinner />}
+          {folderBusy ? 'Создаю…' : '+ папка'}
+        </button>
+      </div>
 
       <div className="filters" style={{ marginTop: '0.6rem' }}>
         <label style={{ flex: 1, minWidth: '12rem' }}>

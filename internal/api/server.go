@@ -129,6 +129,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/containers/{name}/{action}", s.handleContainerAction)
 
 				r.Put("/configs/file", s.handleConfigWrite)
+				r.Post("/configs/mkdir", s.handleConfigMkdir)
 				r.Post("/configs/blocks", s.handleConfigBlockWrite)
 				r.Post("/configs/versions/{id}/rollback", s.handleConfigRollback)
 

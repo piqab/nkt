@@ -26,6 +26,26 @@ func (s *Server) handleConfigBrowse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
 }
 
+type mkdirRequest struct {
+	Path string `json:"path"`
+}
+
+func (s *Server) handleConfigMkdir(w http.ResponseWriter, r *http.Request) {
+	var req mkdirRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user := auth.Username(r.Context())
+	if err := s.configs.Mkdir(req.Path); err != nil {
+		s.db.Audit(r.Context(), user, "config.mkdir", req.Path, "error", err.Error())
+		fail(w, err)
+		return
+	}
+	s.db.Audit(r.Context(), user, "config.mkdir", req.Path, "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleConfigRead(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	file, err := s.configs.Read(path)

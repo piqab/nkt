@@ -142,6 +142,10 @@ func (l *Local) DeleteFile(p string) error {
 	return os.Remove(p)
 }
 
+func (l *Local) Mkdir(p string) error {
+	return os.MkdirAll(p, 0o755)
+}
+
 func (l *Local) Run(ctx context.Context, name string, args ...string) (CommandResult, error) {
 	return l.RunTimeout(ctx, l.commandTimeout, name, args...)
 }

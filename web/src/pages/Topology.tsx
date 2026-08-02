@@ -122,54 +122,60 @@ export default function TopologyPage() {
   // Scoped to whatever's under the cursor or clicked — a full list/panel for
   // every node ate half the screen; this answers "what is this, and what's
   // wrong with it" without leaving the header row.
-  const focusedNode = focus ? positions.get(focus) : null
-  const focusedFindings = focus ? data.findings.filter((f) => f.node_id === focus) : []
-  const focusedMeta = Object.entries(focusedNode?.meta ?? {}).filter(([, v]) => v)
+  // Deliberately keyed on selected, not focus (hover) — hover still drives
+  // the highlight on the map itself, but the info panel only reacts to a
+  // click, so it doesn't flicker as the cursor crosses the diagram.
+  const selectedNode = selected ? positions.get(selected) : null
+  const selectedFindings = selected ? data.findings.filter((f) => f.node_id === selected) : []
+  const selectedMeta = Object.entries(selectedNode?.meta ?? {}).filter(([, v]) => v)
 
   return (
     <>
-      <div className="page-head spread">
+      <div className="page-head">
         <div>
           <h1>Карта сетевых ресурсов</h1>
-          <p>Красным — критичные проблемы, жёлтым — предупреждения. Наведите или щёлкните узел, чтобы увидеть подробности.</p>
+          <p>Красным — критичные проблемы, жёлтым — предупреждения. Щёлкните узел, чтобы увидеть подробности.</p>
         </div>
+      </div>
 
-        {focusedNode ? (
-          <div className="topology-focus-panel">
+      {/* Fixed height and always rendered, whether or not something is
+          selected — so switching between nodes with very different amounts
+          of info never shifts the map below up or down. */}
+      <div className="topology-focus-panel">
+        {selectedNode ? (
+          <>
             <div className="topology-focus-head">
-              <strong>{focusedNode.label}</strong>
-              {selected === focus && (
-                <button className="ghost" onClick={() => setSelected(null)} title="закрыть" style={{ padding: '0 0.3rem' }}>
-                  ×
-                </button>
-              )}
+              <strong>{selectedNode.label}</strong>
+              <button className="ghost" onClick={() => setSelected(null)} title="закрыть" style={{ padding: '0 0.3rem' }}>
+                ×
+              </button>
             </div>
             <div className="small muted">
-              {focusedNode.kind}
-              {focusedNode.sublabel ? ` · ${focusedNode.sublabel}` : ''} · {focusedNode.status}
+              {selectedNode.kind}
+              {selectedNode.sublabel ? ` · ${selectedNode.sublabel}` : ''} · {selectedNode.status}
             </div>
-            {focusedFindings.map((f, i) => (
+            {selectedFindings.map((f, i) => (
               <span key={i} className="topology-finding-chip">
                 <SeverityBadge severity={f.severity} />
                 {f.title}
               </span>
             ))}
-            {focusedMeta.length > 0 && (
+            {selectedMeta.length > 0 && (
               <div className="topology-focus-meta">
-                {focusedMeta.map(([k, v]) => (
+                {selectedMeta.map(([k, v]) => (
                   <span key={k}>
                     <span className="muted">{k}:</span> {v}
                   </span>
                 ))}
               </div>
             )}
-          </div>
+          </>
         ) : (
-          data.findings.length > 0 && (
-            <div className="topology-focus-panel small muted">
-              {data.findings.length} шт. на карте — наведите на красный или жёлтый узел
-            </div>
-          )
+          <span className="small muted">
+            {data.findings.length > 0
+              ? `${data.findings.length} находок на карте — щёлкните узел, чтобы увидеть подробности`
+              : 'Щёлкните узел на карте, чтобы увидеть подробности.'}
+          </span>
         )}
       </div>
 
