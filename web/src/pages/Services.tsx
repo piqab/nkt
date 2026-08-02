@@ -15,9 +15,25 @@ export default function Services({ me }: { me: Me }) {
   const services = useApi<{ services: ServiceUnit[]; allow_mutations: boolean }>('/services', 30_000)
   const docker = useApi<{ containers: Container[]; networks: DockerNetwork[] }>('/containers', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
+  const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
+
+  async function rescan() {
+    setRescanning(true)
+    setNotice(null)
+    try {
+      await api('/inventory/refresh', { method: 'POST' })
+      services.reload()
+      docker.reload()
+      setNotice({ kind: 'info', text: 'Хост пересканирован.' })
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setRescanning(false)
+    }
+  }
 
   async function act(service: string, action: string) {
     if (action !== 'validate' && action !== 'reload') {
@@ -60,13 +76,21 @@ export default function Services({ me }: { me: Me }) {
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head spread">
         <div>
           <h1>Сервисы и контейнеры</h1>
           <p>
             Управление systemd-юнитами и контейнерами docker. Все действия записываются в журнал
             с указанием пользователя.
           </p>
+        </div>
+        <div className="row">
+          {me.is_admin && (
+            <button onClick={rescan} disabled={rescanning} title="Список ниже — снапшот, обновляется раз в несколько минут; эта кнопка пересканирует хост сейчас">
+              {rescanning && <Spinner />}
+              {rescanning ? 'Сканирую…' : 'Пересканировать'}
+            </button>
+          )}
         </div>
       </div>
 
