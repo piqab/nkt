@@ -16,6 +16,32 @@ func nodeByID(g *Graph, id string) *Node {
 	return nil
 }
 
+// server_name written in punycode for an IDN domain must carry a readable
+// footnote in Meta — the endpoint node's Label/Sublabel show what
+// nginx/haproxy actually use, which has to stay ASCII.
+func TestEndpointCarriesUnicodeHintForIDNName(t *testing.T) {
+	snap := &model.Snapshot{
+		Endpoints: []model.Endpoint{{
+			ID: "nginx:1", Service: model.ServiceNginx, Kind: "server",
+			Address: "0.0.0.0", Port: 443, Protocol: "tcp", Mode: "http", TLS: true,
+			Names: []string{"xn--80akhbyknj4f.xn--p1ai"},
+			Label: "xn--80akhbyknj4f.xn--p1ai",
+		}},
+	}
+
+	g := Build(snap)
+	node := nodeByID(g, "ep:nginx:1")
+	if node == nil {
+		t.Fatal("узел слушателя не построен")
+	}
+	if node.Label != "xn--80akhbyknj4f.xn--p1ai" {
+		t.Errorf("Label = %q, ожидалось имя ASCII/punycode (то, что реально в конфиге)", node.Label)
+	}
+	if want := "испытание.рф"; node.Meta["names_unicode"] != want {
+		t.Errorf("Meta[names_unicode] = %q, ожидалось %q", node.Meta["names_unicode"], want)
+	}
+}
+
 // A pool referenced by a route must show its real algorithm and health check.
 // Building endpoints first used to leave a placeholder node behind, so every
 // referenced pool was drawn as undefined and red.

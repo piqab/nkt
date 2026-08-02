@@ -183,14 +183,21 @@ func Build(s *model.Snapshot) *Graph {
 		} else if e.Mode == "http" {
 			scheme = "http"
 		}
+		meta := map[string]string{
+			"service": e.Service, "scheme": scheme, "mode": e.Mode,
+			"tls": strconv.FormatBool(e.TLS), "file": e.File,
+			"names": strings.Join(e.Names, ", "),
+		}
+		if hint := unicodeHint(e.Names); hint != "" {
+			// server_name/frontend names are ASCII (punycode) whenever the
+			// site is an IDN domain — this is the readable form, shown
+			// alongside rather than instead of what nginx/haproxy actually use.
+			meta["names_unicode"] = hint
+		}
 		b.node(Node{
 			ID: id, Kind: KindEndpoint, Label: e.Label, Sublabel: e.Socket(),
 			Group: e.Service, Status: status, Port: e.Port, Public: e.Public(),
-			Meta: map[string]string{
-				"service": e.Service, "scheme": scheme, "mode": e.Mode,
-				"tls": strconv.FormatBool(e.TLS), "file": e.File,
-				"names": strings.Join(e.Names, ", "),
-			},
+			Meta: meta,
 		})
 		b.attachFindings(id, e.Socket())
 
@@ -409,6 +416,19 @@ func backendStatus(socket string, listening map[int]bool) string {
 		return StatusOK
 	}
 	return StatusError
+}
+
+// unicodeHint decodes any punycode labels in names back to readable form,
+// e.g. "xn--80akhbyknj4f.xn--p1ai" -> "испытание.рф". Names with nothing to
+// decode are dropped, and an all-ASCII list yields "".
+func unicodeHint(names []string) string {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		if u := model.HostnameUnicode(n); u != "" {
+			out = append(out, u)
+		}
+	}
+	return strings.Join(out, ", ")
 }
 
 func isLoopback(host string) bool {

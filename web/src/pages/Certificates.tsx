@@ -414,10 +414,11 @@ function RenewLog({ events }: { events: RenewEvent[] }) {
 /** Shows expiry inline so picking a lineage doesn't require checking the
  * certificates table first. */
 function lineageLabel(info: LineageInfo): string {
-  if (!info.known) return `${info.name} — срок неизвестен`
-  if (info.days_left < 0) return `${info.name} — просрочен ${-info.days_left} дн. назад`
-  if (info.days_left === 0) return `${info.name} — истекает сегодня`
-  return `${info.name} — ${info.days_left} дн.`
+  const name = info.name_unicode ? `${info.name} (${info.name_unicode})` : info.name
+  if (!info.known) return `${name} — срок неизвестен`
+  if (info.days_left < 0) return `${name} — просрочен ${-info.days_left} дн. назад`
+  if (info.days_left === 0) return `${name} — истекает сегодня`
+  return `${name} — ${info.days_left} дн.`
 }
 
 const NEW_FILE = ''
@@ -627,6 +628,13 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
             {formatDateTime(result.not_after)}. Он ещё не подключён ни к одному сервису — вставьте
             директивы ниже в нужный файл через страницу «Конфигурации».
           </Banner>
+          {result.unicode_names && (
+            <p className="small muted">
+              {Object.entries(result.unicode_names)
+                .map(([ascii, unicode]) => `${unicode} → ${ascii}`)
+                .join('; ')}
+            </p>
+          )}
           <pre className="diff">{result.snippet}</pre>
         </div>
       )}
