@@ -819,3 +819,170 @@ func (m *CertManager) runCertbotRenew(ctx context.Context, user, lineage string,
 	}
 	return res, nil
 }
+
+// --------------------------------------------------------------- new issuance
+
+// normaliseCertbotDomains validates and lowercases a domain list for
+// certbot certonly. Unlike SelfSignedRequest.normalise, a leading "*." is
+// rejected outright: a wildcard needs a DNS-01 challenge (a DNS provider
+// plugin certbot would drive itself), which this app has no way to satisfy —
+// the --standalone HTTP-01 challenge this app runs only ever proves control
+// of one exact hostname.
+func normaliseCertbotDomains(names []string) ([]string, error) {
+	out := make([]string, 0, len(names))
+	for _, n := range names {
+		n = strings.ToLower(strings.TrimSpace(n))
+		if n == "" {
+			continue
+		}
+		if strings.HasPrefix(n, "*.") {
+			return nil, fmt.Errorf("wildcard-имя %q требует DNS-подтверждения, которое это приложение не поддерживает", n)
+		}
+		if !hostnameRe.MatchString(n) {
+			ascii, err := model.HostnameASCII(n)
+			if err != nil || !hostnameRe.MatchString(ascii) {
+				return nil, fmt.Errorf("недопустимое доменное имя: %q", n)
+			}
+			n = ascii
+		}
+		out = append(out, n)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("нужно указать хотя бы одно доменное имя")
+	}
+	return out, nil
+}
+
+// issueCertbot requests a brand-new certificate certbot does not manage
+// yet — unlike renewCertbot, there is no existing renewal.conf to read an
+// authenticator from, so this always uses --standalone: it is the only
+// authenticator this app can drive without either editing nginx/haproxy
+// configuration itself (the --nginx plugin) or requiring the operator to
+// pre-configure a webroot path per domain. That means nginx and haproxy
+// always stop for the duration, same as a --standalone renewal, and restart
+// on every exit path via the same finish-closure pattern renewCertbot uses —
+// "Готово" must mean the site is back up, not just that certbot returned.
+func (m *CertManager) issueCertbot(
+	ctx context.Context, user string, domains []string, report func(string),
+) (collect.CommandResult, error) {
+	if report == nil {
+		report = func(string) {}
+	}
+	domains, err := normaliseCertbotDomains(domains)
+	if err != nil {
+		return collect.CommandResult{}, err
+	}
+
+	report("Останавливаю nginx и haproxy для --standalone…")
+	stopped, stopErr := m.stopForStandalone(ctx, user)
+	for _, svc := range stopped {
+		report(svc + ": остановлен")
+	}
+
+	finish := func(res collect.CommandResult, err error) (collect.CommandResult, error) {
+		if len(stopped) > 0 {
+			m.restartAfterStandalone(user, stopped)
+			for _, svc := range stopped {
+				report(svc + ": запущен")
+			}
+		}
+		if err != nil {
+			report("Ошибка: " + err.Error())
+		} else {
+			report("Готово")
+		}
+		return res, err
+	}
+	if stopErr != nil {
+		return finish(collect.CommandResult{}, fmt.Errorf(
+			"выпуск нового сертификата требует остановки nginx/haproxy для --standalone: %w", stopErr))
+	}
+
+	emailFlag := "--register-unsafely-without-email"
+	if m.cfg.CertbotEmail != "" {
+		emailFlag = "--email " + m.cfg.CertbotEmail
+	}
+	cmdLine := "certbot certonly --standalone --non-interactive --agree-tos " + emailFlag + " -d " + strings.Join(domains, " -d ")
+	report("Запускаю: " + cmdLine)
+	res, err := m.runCertbotCertonly(ctx, user, domains)
+	if out := strings.TrimSpace(res.Output()); out != "" {
+		report("certbot:\n" + out)
+	}
+	if err != nil {
+		return finish(res, err)
+	}
+	report("certbot: сертификат выпущен для " + strings.Join(domains, ", "))
+	return finish(res, nil)
+}
+
+// runCertbotCertonly is the actual `certbot certonly` invocation. It runs
+// under CertbotTimeout for the same reason runCertbotRenew does — an ACME
+// challenge round-trip routinely outlasts the collector's normal short
+// command timeout.
+func (m *CertManager) runCertbotCertonly(ctx context.Context, user string, domains []string) (collect.CommandResult, error) {
+	args := []string{"certonly", "--standalone", "--non-interactive", "--agree-tos"}
+	if m.cfg.CertbotEmail != "" {
+		args = append(args, "--email", m.cfg.CertbotEmail)
+	} else {
+		args = append(args, "--register-unsafely-without-email")
+	}
+	for _, d := range domains {
+		args = append(args, "-d", d)
+	}
+	res, err := m.c.RunTimeout(ctx, m.cfg.CertbotTimeout, "certbot", args...)
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	m.db.Audit(ctx, user, "cert.issue", strings.Join(domains, ","), outcome, map[string]any{
+		"exit_code": res.ExitCode, "output": strings.TrimSpace(res.Output()), "simulated": res.Simulated,
+	})
+	if err != nil {
+		return res, err
+	}
+	if !res.OK() {
+		return res, fmt.Errorf("certbot certonly -d %s: код %d: %s", strings.Join(domains, ","), res.ExitCode,
+			strings.TrimSpace(res.Output()))
+	}
+	return res, nil
+}
+
+// StartIssueCertbot launches certbot certonly in the background for one or
+// more domains certbot does not manage yet, and returns a job ID
+// immediately — same progress-polling pattern as StartRenewCertbot, and the
+// two share one job registry, so a caller polls RenewJobStatus for either
+// kind of job with the same code.
+func (m *CertManager) StartIssueCertbot(user string, domains []string) (string, error) {
+	domains, err := normaliseCertbotDomains(domains)
+	if err != nil {
+		return "", err
+	}
+
+	job := &renewJob{created: time.Now()}
+	job.append("Начинаю выпуск сертификата для " + strings.Join(domains, ", "))
+
+	id, err := newJobID()
+	if err != nil {
+		return "", fmt.Errorf("генерация id задачи: %w", err)
+	}
+
+	m.jobsMu.Lock()
+	m.jobs[id] = job
+	m.evictOldJobsLocked()
+	m.jobsMu.Unlock()
+
+	go func() {
+		// Detached from the request context for the same reason
+		// StartRenewCertbot's goroutine is: the request may return long
+		// before certbot finishes.
+		ctx, cancel := context.WithTimeout(context.Background(), m.cfg.CertbotTimeout+2*time.Minute)
+		defer cancel()
+		_, err := m.issueCertbot(ctx, user, domains, job.append)
+		// Rescan before marking done, same reasoning as StartRenewCertbot —
+		// a caller reacting to "done" should already see the new lineage.
+		_, _ = m.scanner.Scan(context.Background())
+		job.finish(err)
+	}()
+
+	return id, nil
+}

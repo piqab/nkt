@@ -138,6 +138,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/firewall/reload", s.handleFirewallReload)
 
 				r.Post("/certificates/self-signed", s.handleGenerateSelfSigned)
+				r.Post("/certificates/issue", s.handleIssueCertbot)
 				r.Post("/certificates/renew", s.handleRenewCertbot)
 				r.Get("/certificates/renew/{job}", s.handleRenewJobStatus)
 				r.Get("/certificates/lineages", s.handleCertLineages)

@@ -59,6 +59,12 @@ type Config struct {
 	// longer than the couple of seconds every other host command needs, and
 	// forcing it into the same short ceiling kills the process mid-renewal.
 	CertbotTimeout time.Duration
+	// CertbotEmail is passed to `certbot certonly` as --email when issuing a
+	// brand-new certificate, so Let's Encrypt can warn about that specific
+	// certificate's own expiry — separate from and in addition to whatever
+	// this app's own renewal/expiry monitoring already does. Left empty,
+	// certonly runs with --register-unsafely-without-email instead.
+	CertbotEmail string
 
 	// AutoRenewCerts periodically runs `certbot renew --cert-name <lineage>`
 	// for every certbot-managed certificate the analyzer already flags as
@@ -142,6 +148,7 @@ func Load() (*Config, error) {
 		AllowMutations: envBool("NKT_ALLOW_MUTATIONS", true),
 		CommandTimeout: envDur("NKT_COMMAND_TIMEOUT", 30*time.Second),
 		CertbotTimeout: envDur("NKT_CERTBOT_TIMEOUT", 3*time.Minute),
+		CertbotEmail:   envStr("NKT_CERTBOT_EMAIL", ""),
 
 		AutoRenewCerts:         envBool("NKT_AUTO_RENEW_CERTS", false),
 		AutoRenewCertsInterval: envDur("NKT_AUTO_RENEW_INTERVAL", 6*time.Hour),
