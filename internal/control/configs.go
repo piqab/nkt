@@ -298,13 +298,28 @@ func (m *ConfigManager) Write(ctx context.Context, user, path, content, note str
 	res.Message = "Файл сохранён."
 
 	if apply {
-		out, err := m.svc.Action(ctx, user, service, "reload")
-		if err == nil {
+		var out collect.CommandResult
+		var applyErr error
+		if service == model.ServiceDocker {
+			// nginx/haproxy reread their config in place; docker has no such
+			// thing — "apply" means recreating whatever container the new
+			// compose definition actually changed. `up -d` is idempotent: it
+			// only touches services whose definition differs, so it is safe
+			// to run after any edit, not just the one service that changed.
+			out, applyErr = m.svc.ApplyCompose(ctx, user, path)
+		} else {
+			out, applyErr = m.svc.Action(ctx, user, service, "reload")
+		}
+		if applyErr == nil {
 			res.Applied = out.OK()
 			res.Apply = &out
 			if out.OK() {
 				res.Message = "Файл сохранён и конфигурация перезагружена."
 			}
+		} else {
+			// The write itself succeeded — only the follow-up apply step
+			// failed. That must stay visible instead of silently vanishing.
+			res.Message += " Применить не удалось: " + applyErr.Error()
 		}
 	}
 

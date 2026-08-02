@@ -74,6 +74,28 @@ func (s *ServiceManager) Action(ctx context.Context, user, service, action strin
 	return res, nil
 }
 
+// ApplyCompose recreates whatever a compose file's services actually need —
+// `docker compose up -d` only touches services whose definition changed, so
+// unlike systemd's reload there is no single "the config" to reread; the
+// file itself is the source of truth and this reconciles the stack to it.
+func (s *ServiceManager) ApplyCompose(ctx context.Context, user, path string) (collect.CommandResult, error) {
+	res, err := s.c.Run(ctx, "docker", "compose", "-f", path, "up", "-d")
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	s.db.Audit(ctx, user, "docker.compose.apply", path, outcome, map[string]any{
+		"exit_code": res.ExitCode, "output": strings.TrimSpace(res.Output()), "simulated": res.Simulated,
+	})
+	if err != nil {
+		return res, err
+	}
+	if !res.OK() {
+		return res, fmt.Errorf("docker compose up -d: код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+	}
+	return res, nil
+}
+
 // Validate asks a service to check its own configuration. The second return
 // value reports whether a validator was actually available: a missing binary is
 // not the same as an invalid config, and must never trigger a rollback.

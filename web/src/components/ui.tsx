@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useRef, type ChangeEvent, type ReactNode } from 'react'
 import type { Severity } from '../types'
 
 export const SEVERITY_LABEL: Record<Severity, string> = {
@@ -137,6 +137,56 @@ export function Modal({
         </div>
         <div className="modal-body">{children}</div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * A plain textarea with a synced line-number gutter — every editable config
+ * window (whole-file editor, new-file form, block create/edit) uses this
+ * instead of a bare `<textarea>` so a line a validator error or a block's
+ * start/end line refers to can actually be found by eye.
+ *
+ * Wrapping is turned off deliberately: with wrapping on, one array index
+ * from split("\n") can span several visual rows and the numbers stop lining
+ * up with the text. A long line scrolls horizontally instead.
+ */
+export function CodeEditor({
+  value,
+  onChange,
+  rows = 16,
+  readOnly,
+  autoFocus,
+}: {
+  value: string
+  onChange?: (e: ChangeEvent<HTMLTextAreaElement>) => void
+  rows?: number
+  readOnly?: boolean
+  autoFocus?: boolean
+}) {
+  const gutterRef = useRef<HTMLDivElement>(null)
+  const lineCount = value === '' ? 1 : value.split('\n').length
+
+  return (
+    <div className="code-editor">
+      <div className="code-gutter" ref={gutterRef} aria-hidden="true">
+        {Array.from({ length: lineCount }, (_, i) => (
+          <div key={i}>{i + 1}</div>
+        ))}
+      </div>
+      <textarea
+        className="code-textarea"
+        value={value}
+        onChange={onChange}
+        onScroll={(e) => {
+          if (gutterRef.current) gutterRef.current.scrollTop = e.currentTarget.scrollTop
+        }}
+        rows={rows}
+        spellCheck={false}
+        readOnly={readOnly}
+        autoFocus={autoFocus}
+        wrap="off"
+      />
     </div>
   )
 }
