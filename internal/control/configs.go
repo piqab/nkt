@@ -102,7 +102,26 @@ func (m *ConfigManager) serviceForPath(path string) string {
 			}
 		}
 	}
+	// A compose-named file under /home is trusted even before it exists on
+	// disk — a brand-new stack a user is about to create has, by definition,
+	// no prior scan or running container to vouch for it. The filename
+	// pattern is the only signal available, same as docker compose itself
+	// uses to recognise its own config with no -f flag given.
+	if underRoot(path, "/home") && isComposeFileName(path) {
+		return model.ServiceDocker
+	}
 	return ""
+}
+
+// composeFileNames are the filenames `docker compose` itself recognises
+// without an explicit -f flag.
+var composeFileNames = map[string]bool{
+	"docker-compose.yml": true, "docker-compose.yaml": true,
+	"compose.yml": true, "compose.yaml": true,
+}
+
+func isComposeFileName(path string) bool {
+	return composeFileNames[gopath.Base(path)]
 }
 
 func underRoot(path, root string) bool {
@@ -124,6 +143,23 @@ func (m *ConfigManager) checkPath(path string) (service string, err error) {
 		return "", ErrPathNotAllowed
 	}
 	return service, nil
+}
+
+// BrowseDir lists a directory under /home, for the "новый контейнер" path
+// picker — a directory being browsed is not itself a file this app manages
+// (checkPath would reject most of them), only the compose file the operator
+// eventually picks or creates inside it goes through the normal write path.
+// /home is a deliberately narrow root: shared hosts conventionally give each
+// operator their own home directory to keep their compose stacks in, and
+// nothing else on the host needs browsing this way.
+func (m *ConfigManager) BrowseDir(path string) ([]collect.FileInfo, error) {
+	if path == "" {
+		path = "/home"
+	}
+	if !underRoot(path, "/home") || strings.Contains(path, "..") || gopath.Clean(path) != path {
+		return nil, ErrPathNotAllowed
+	}
+	return m.c.ListDir(path)
 }
 
 // List returns every config file the dashboard knows about.

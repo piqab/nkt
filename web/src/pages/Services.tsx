@@ -3,6 +3,7 @@ import { api, qs, useApi } from '../api'
 import type { Container, DockerNetwork, FileContent, Me, ServiceUnit } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, Spinner, StateBadge, formatBytesShort } from '../components/ui'
 import BlockTree from '../components/BlockTree'
+import PathPicker, { ownerFromPath } from '../components/PathPicker'
 
 const ACTION_LABEL: Record<string, string> = {
   start: 'запустить',
@@ -19,12 +20,9 @@ export default function Services({ me }: { me: Me }) {
   const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [configModal, setConfigModal] = useState<{ path: string; focusName?: string; autoCreate?: boolean } | null>(null)
+  const [pickingPath, setPickingPath] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
-  // Any container already knows the compose file that declares it; used as
-  // the target for "+ новый контейнер" since there is no other way to infer
-  // which compose file a brand-new service belongs in.
-  const composeFile = docker.data?.containers.find((c) => c.compose_file)?.compose_file
 
   async function rescan() {
     setRescanning(true)
@@ -166,9 +164,8 @@ export default function Services({ me }: { me: Me }) {
         title="Контейнеры docker"
         subtitle="Сопоставление того, что описано в compose, с тем, что реально работает"
         actions={
-          canControl &&
-          composeFile && (
-            <button className="ghost" onClick={() => setConfigModal({ path: composeFile, autoCreate: true })}>
+          canControl && (
+            <button className="ghost" onClick={() => setPickingPath(true)}>
               + новый контейнер
             </button>
           )
@@ -182,6 +179,7 @@ export default function Services({ me }: { me: Me }) {
               <thead>
                 <tr>
                   <th>Контейнер</th>
+                  <th>Пользователь</th>
                   <th>Образ</th>
                   <th>Состояние</th>
                   <th>Порты</th>
@@ -199,6 +197,7 @@ export default function Services({ me }: { me: Me }) {
                         {c.restart ? ` · restart: ${c.restart}` : ''}
                       </div>
                     </td>
+                    <td className="small">{(c.compose_file && ownerFromPath(c.compose_file)) || '—'}</td>
                     <td className="small mono" style={{ wordBreak: 'break-all' }}>
                       {c.image}
                     </td>
@@ -293,6 +292,18 @@ export default function Services({ me }: { me: Me }) {
           </table>
         </div>
       </Card>
+
+      {pickingPath && (
+        <Modal title="Новый контейнер — выберите расположение" onClose={() => setPickingPath(false)}>
+          <PathPicker
+            onPick={(path) => {
+              setPickingPath(false)
+              setConfigModal({ path, autoCreate: true })
+            }}
+            onCancel={() => setPickingPath(false)}
+          />
+        </Modal>
+      )}
 
       {configModal && (
         <ContainerConfigModal

@@ -134,6 +134,17 @@ export interface Listener {
   pid?: number
 }
 
+/** One entry from GET /configs/browse — a directory listing under /home,
+ * used to pick or create a docker-compose file's location. */
+export interface DirEntry {
+  path: string
+  size: number
+  mode: string
+  mod_time: string
+  is_dir: boolean
+  readable: boolean
+}
+
 export interface ManagedFile {
   path: string
   service: string

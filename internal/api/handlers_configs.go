@@ -17,6 +17,15 @@ func (s *Server) handleConfigList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"files": files})
 }
 
+func (s *Server) handleConfigBrowse(w http.ResponseWriter, r *http.Request) {
+	entries, err := s.configs.BrowseDir(r.URL.Query().Get("path"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+}
+
 func (s *Server) handleConfigRead(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	file, err := s.configs.Read(path)

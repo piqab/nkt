@@ -1,0 +1,6 @@
+services:
+  blog:
+    image: ghcr.io/alice/blog:1.0.0
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8090:8080"

@@ -113,43 +113,65 @@ export default function TopologyPage() {
     return set
   }, [focus, edges])
 
-  const selectedNode = selected ? positions.get(selected) : null
-  const selectedEdges = selected ? edges.filter((e) => e.from === selected || e.to === selected) : []
-
   if (loading && !data) return <Loading what="карту ресурсов" />
   if (error && !data) return <ErrorNote error={error} />
   if (!data) return null
 
   const viewW = width / zoom
   const viewH = height / zoom
-  // Scoped to whatever's under the cursor or clicked — a full list of every
-  // finding on the map ate half the screen and duplicated the "Проблемы"
-  // page; this is just enough to answer "what's wrong with this node".
+  // Scoped to whatever's under the cursor or clicked — a full list/panel for
+  // every node ate half the screen; this answers "what is this, and what's
+  // wrong with it" without leaving the header row.
+  const focusedNode = focus ? positions.get(focus) : null
   const focusedFindings = focus ? data.findings.filter((f) => f.node_id === focus) : []
+  const focusedMeta = Object.entries(focusedNode?.meta ?? {}).filter(([, v]) => v)
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head spread">
         <div>
           <h1>Карта сетевых ресурсов</h1>
           <p>Красным — критичные проблемы, жёлтым — предупреждения. Наведите или щёлкните узел, чтобы увидеть подробности.</p>
         </div>
-      </div>
 
-      {data.findings.length > 0 && (
-        <div className="topology-findings-bar">
-          {focusedFindings.length > 0 ? (
-            focusedFindings.map((f, i) => (
+        {focusedNode ? (
+          <div className="topology-focus-panel">
+            <div className="topology-focus-head">
+              <strong>{focusedNode.label}</strong>
+              {selected === focus && (
+                <button className="ghost" onClick={() => setSelected(null)} title="закрыть" style={{ padding: '0 0.3rem' }}>
+                  ×
+                </button>
+              )}
+            </div>
+            <div className="small muted">
+              {focusedNode.kind}
+              {focusedNode.sublabel ? ` · ${focusedNode.sublabel}` : ''} · {focusedNode.status}
+            </div>
+            {focusedFindings.map((f, i) => (
               <span key={i} className="topology-finding-chip">
                 <SeverityBadge severity={f.severity} />
                 {f.title}
               </span>
-            ))
-          ) : (
-            <span className="small muted">{data.findings.length} шт. на карте — наведите на красный или жёлтый узел</span>
-          )}
-        </div>
-      )}
+            ))}
+            {focusedMeta.length > 0 && (
+              <div className="topology-focus-meta">
+                {focusedMeta.map(([k, v]) => (
+                  <span key={k}>
+                    <span className="muted">{k}:</span> {v}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        ) : (
+          data.findings.length > 0 && (
+            <div className="topology-focus-panel small muted">
+              {data.findings.length} шт. на карте — наведите на красный или жёлтый узел
+            </div>
+          )
+        )}
+      </div>
 
       <Card
         actions={
@@ -264,61 +286,6 @@ export default function TopologyPage() {
           </svg>
         </div>
       </Card>
-
-      {selectedNode && (
-        <Card title={selectedNode.label} subtitle={selectedNode.sublabel} actions={<button className="ghost" onClick={() => setSelected(null)}>закрыть</button>}>
-          <div className="grid grid-2">
-            <div>
-              <table>
-                <tbody>
-                  <tr>
-                    <td className="muted">тип</td>
-                    <td>{selectedNode.kind}</td>
-                  </tr>
-                  <tr>
-                    <td className="muted">состояние</td>
-                    <td>{selectedNode.status}</td>
-                  </tr>
-                  {selectedNode.findings > 0 && (
-                    <tr>
-                      <td className="muted">проблем</td>
-                      <td>
-                        {selectedNode.findings} (худшая: {selectedNode.severity})
-                      </td>
-                    </tr>
-                  )}
-                  {Object.entries(selectedNode.meta ?? {})
-                    .filter(([, v]) => v)
-                    .map(([k, v]) => (
-                      <tr key={k}>
-                        <td className="muted">{k}</td>
-                        <td className="mono small">{v}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            <div>
-              <h3 style={{ marginBottom: '0.4rem' }}>Связи</h3>
-              <table>
-                <tbody>
-                  {selectedEdges.map((e) => (
-                    <tr key={e.id}>
-                      <td className="small">
-                        {e.from === selected ? '→' : '←'} {positions.get(e.from === selected ? e.to : e.from)?.label}
-                      </td>
-                      <td className="small muted">
-                        {e.kind}
-                        {e.label ? ` · ${e.label}` : ''}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </Card>
-      )}
     </>
   )
 }
