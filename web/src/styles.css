@@ -526,6 +526,24 @@ pre.diff .hunk { color: var(--text-muted); }
 
 /* ------------------------------------------------------------------ topology */
 
+.topology-findings-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding: 0.4rem 0.6rem;
+  margin-bottom: 0.6rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  font-size: 0.8rem;
+}
+.topology-finding-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
 .map-wrap {
   position: relative;
   border: 1px solid var(--border);
