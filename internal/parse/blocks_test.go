@@ -296,6 +296,38 @@ func TestComposeInsertLineMissingServicesKey(t *testing.T) {
 	}
 }
 
+// "services:" alone parses to null in YAML, which docker compose rejects
+// ("services must be a mapping") — a freshly created file is written as the
+// explicit empty mapping "services: {}" instead (PathPicker.tsx). Building
+// the tree from it must not error, and adding the first service must
+// rewrite the line back to block style rather than producing invalid YAML
+// (a flow-empty value can't also have indented block children).
+func TestComposeServiceBlocksHandlesEmptyMapping(t *testing.T) {
+	blocks := composeServiceBlocks(splitLines("services: {}\n"))
+	if len(blocks) != 0 {
+		t.Errorf("blocks = %+v, ожидался пустой список", blocks)
+	}
+}
+
+func TestInsertBlockAtEndRewritesEmptyMappingServices(t *testing.T) {
+	text := "name: acme\n\nservices: {}\n"
+	got, err := InsertBlockAtEnd(text, BlockService, "  web:\n    image: nginx:alpine", 0)
+	if err != nil {
+		t.Fatalf("InsertBlockAtEnd: %v", err)
+	}
+	if strings.Contains(got, "services: {}") {
+		t.Errorf("services: {} должно быть переписано в блочный стиль, получено:\n%s", got)
+	}
+	if !strings.Contains(got, "services:\n  web:\n    image: nginx:alpine") {
+		t.Errorf("ожидался services: блочным стилем с web: сразу под ним, получено:\n%s", got)
+	}
+
+	blocks := composeServiceBlocks(splitLines(got))
+	if len(blocks) != 1 || blocks[0].Name != "web" {
+		t.Errorf("blocks = %+v, ожидался один сервис web", blocks)
+	}
+}
+
 // blocksFromComposeText re-parses edited compose text via a throwaway
 // fixtures root, exercising the real Collector.ReadFile path.
 func blocksFromComposeText(t *testing.T, text string) ([]Block, error) {
