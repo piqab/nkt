@@ -196,6 +196,121 @@ func TestBlocksRoundTrip(t *testing.T) {
 	}
 }
 
+func TestComposeKeyAt(t *testing.T) {
+	cases := []struct {
+		line       string
+		wantIndent int
+		wantKey    string
+		wantOK     bool
+	}{
+		{"  web:", 2, "web", true},
+		{"services:", 0, "services", true},
+		{"    image: nginx", 0, "", false},  // key: value on one line — not a block opener
+		{"      - \"80:80\"", 0, "", false}, // list item
+		{"", 0, "", false},                  // blank
+		{"  # a comment: with a colon", 0, "", false},
+	}
+	for _, c := range cases {
+		indent, key, ok := composeKeyAt(c.line)
+		if ok != c.wantOK || (ok && (indent != c.wantIndent || key != c.wantKey)) {
+			t.Errorf("composeKeyAt(%q) = (%d, %q, %v), ожидалось (%d, %q, %v)",
+				c.line, indent, key, ok, c.wantIndent, c.wantKey, c.wantOK)
+		}
+	}
+}
+
+// TestComposeBlocksRoundTrip mirrors TestBlocksRoundTrip for the compose
+// parser: real fixture, expected service names in order, then an insert
+// (after the last service, since appending at EOF would land past
+// volumes:/networks: and break the file) verified by reparsing.
+func TestComposeBlocksRoundTrip(t *testing.T) {
+	c := collect.NewFixtures("../../fixtures/host")
+	const composePath = "/srv/docker/docker-compose.yml"
+
+	blocks, err := Blocks(c, composePath, model.ServiceDocker)
+	if err != nil {
+		t.Fatalf("Blocks(docker): %v", err)
+	}
+	wantNames := []string{"app", "api", "redis", "postgres", "grafana", "prometheus", "minio"}
+	var gotNames []string
+	for _, b := range blocks {
+		if b.Kind != BlockService {
+			t.Errorf("kind = %s, ожидался service", b.Kind)
+		}
+		gotNames = append(gotNames, b.Name)
+	}
+	if strings.Join(gotNames, ",") != strings.Join(wantNames, ",") {
+		t.Fatalf("сервисы = %v, ожидалось %v", gotNames, wantNames)
+	}
+	for _, b := range blocks {
+		if !strings.Contains(b.Raw, "image:") {
+			t.Errorf("%s: сырой текст без image: %q", b.Name, b.Raw)
+		}
+	}
+
+	raw, err := c.ReadFile(composePath)
+	if err != nil {
+		t.Fatalf("чтение файла: %v", err)
+	}
+	edited, err := InsertBlockAtEnd(string(raw), BlockService,
+		"  worker:\n    image: ghcr.io/acme/worker:1.0.0\n    restart: unless-stopped", 0)
+	if err != nil {
+		t.Fatalf("InsertBlockAtEnd: %v", err)
+	}
+	// Must land before volumes:/networks:, not after them.
+	if idx := strings.Index(edited, "  worker:"); idx < 0 || idx > strings.Index(edited, "\nvolumes:") {
+		t.Fatalf("новый сервис вставлен не перед volumes:\n%s", edited)
+	}
+
+	reparsed, err := blocksFromComposeText(t, edited)
+	if err != nil {
+		t.Fatalf("повторный разбор после вставки: %v", err)
+	}
+	gotNames = nil
+	for _, b := range reparsed {
+		gotNames = append(gotNames, b.Name)
+	}
+	want := append(append([]string{}, wantNames...), "worker")
+	if strings.Join(gotNames, ",") != strings.Join(want, ",") {
+		t.Fatalf("сервисы после вставки = %v, ожидалось %v", gotNames, want)
+	}
+}
+
+func TestComposeInsertLineNoServicesYet(t *testing.T) {
+	lines := splitLines("services:\n\nvolumes:\n  data:\n")
+	line, gap, err := composeInsertLine(lines)
+	if err != nil {
+		t.Fatalf("composeInsertLine: %v", err)
+	}
+	if gap {
+		t.Error("перед первым сервисом не должно быть пустой строки-разделителя")
+	}
+	if line != 2 {
+		t.Errorf("line = %d, ожидалось 2 (сразу после services:)", line)
+	}
+}
+
+func TestComposeInsertLineMissingServicesKey(t *testing.T) {
+	if _, _, err := composeInsertLine(splitLines("volumes:\n  data:\n")); err == nil {
+		t.Error("ожидалась ошибка при отсутствии services:")
+	}
+}
+
+// blocksFromComposeText re-parses edited compose text via a throwaway
+// fixtures root, exercising the real Collector.ReadFile path.
+func blocksFromComposeText(t *testing.T, text string) ([]Block, error) {
+	t.Helper()
+	const relPath = "srv/docker/docker-compose.yml"
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(root, relPath)), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, relPath), []byte(text), 0o644); err != nil {
+		t.Fatalf("запись временного файла: %v", err)
+	}
+	return Blocks(collect.NewFixtures(root), "/"+relPath, model.ServiceDocker)
+}
+
 // blocksFromText re-parses edited text as if it were a fresh read — a single
 // file written into a throwaway fixtures root, so Blocks() exercises the
 // exact same Collector.ReadFile/Open path a real re-fetch after a save would.

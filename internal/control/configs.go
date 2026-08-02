@@ -267,10 +267,19 @@ func (m *ConfigManager) Write(ctx context.Context, user, path, content, note str
 	if validated {
 		res.Validation = &validation
 		if !validation.OK() {
-			// Put the file back exactly as it was before returning the error.
 			if hadPrevious {
+				// Put the file back exactly as it was before returning the error.
 				if rbErr := m.c.WriteFile(path, previous, 0o644); rbErr != nil {
 					return res, fmt.Errorf("конфиг не прошёл проверку, и откат не удался: %v (проверка: %s)",
+						rbErr, strings.TrimSpace(validation.Output()))
+				}
+				res.RolledBack = true
+			} else {
+				// There is no previous version to restore — the file did not
+				// exist before this call, so "roll back" means remove it,
+				// not leave a broken config the host never had on disk.
+				if rbErr := m.c.DeleteFile(path); rbErr != nil {
+					return res, fmt.Errorf("конфиг не прошёл проверку, и удалить новый файл не удалось: %v (проверка: %s)",
 						rbErr, strings.TrimSpace(validation.Output()))
 				}
 				res.RolledBack = true

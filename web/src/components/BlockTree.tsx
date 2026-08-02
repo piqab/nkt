@@ -12,6 +12,7 @@ const KIND_LABEL: Record<BlockKind, string> = {
   listen: 'listen',
   global: 'global',
   defaults: 'defaults',
+  service: 'service',
 }
 
 // What a "+" button can create at the top level of each service's file — a
@@ -21,6 +22,7 @@ const KIND_LABEL: Record<BlockKind, string> = {
 function creatableKinds(service: string): BlockKind[] {
   if (service === 'nginx') return ['server', 'upstream']
   if (service === 'haproxy') return ['frontend', 'backend', 'listen']
+  if (service === 'docker') return ['service']
   return []
 }
 

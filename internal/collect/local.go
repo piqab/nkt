@@ -138,6 +138,10 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 	return os.Rename(tmpName, p)
 }
 
+func (l *Local) DeleteFile(p string) error {
+	return os.Remove(p)
+}
+
 func (l *Local) Run(ctx context.Context, name string, args ...string) (CommandResult, error) {
 	return l.RunTimeout(ctx, l.commandTimeout, name, args...)
 }
