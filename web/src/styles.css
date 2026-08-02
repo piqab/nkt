@@ -527,9 +527,9 @@ pre.diff .hunk { color: var(--text-muted); }
 /* ------------------------------------------------------------------ topology */
 
 .topology-focus-panel {
-  width: 100%;
+  flex: 1 1 28rem;
+  min-width: 20rem;
   max-width: 54rem;
-  margin: 0 auto;
   height: 5.5rem;
   padding: 0.4rem 0.8rem;
   border: 1px solid var(--border-strong);
