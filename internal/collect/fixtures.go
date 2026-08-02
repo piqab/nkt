@@ -195,6 +195,14 @@ func (f *Fixtures) DeleteFile(p string) error {
 	return os.Remove(local)
 }
 
+func (f *Fixtures) Mkdir(p string) error {
+	local, err := f.resolve(p)
+	if err != nil {
+		return err
+	}
+	return os.MkdirAll(local, 0o755)
+}
+
 // --------------------------------------------------------------------- commands
 
 func (f *Fixtures) loadCommands() {

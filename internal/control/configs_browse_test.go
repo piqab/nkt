@@ -86,3 +86,41 @@ func TestServiceForPathRejectsNonComposeFileUnderHome(t *testing.T) {
 		t.Error("ожидалась ошибка для не-compose файла под /home")
 	}
 }
+
+func TestMkdirCreatesDirectoryUnderHome(t *testing.T) {
+	m := configsSetup(t)
+	if err := m.Mkdir("/home/dave/apps"); err != nil {
+		t.Fatalf("Mkdir: %v", err)
+	}
+	entries, err := m.BrowseDir("/home")
+	if err != nil {
+		t.Fatalf("BrowseDir: %v", err)
+	}
+	found := false
+	for _, e := range entries {
+		if e.Path == "/home/dave" && e.IsDir {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("entries = %+v, ожидался новый каталог /home/dave", entries)
+	}
+
+	// The nested directory must exist too, ready for a compose file straight away.
+	nested, err := m.BrowseDir("/home/dave")
+	if err != nil {
+		t.Fatalf("BrowseDir(/home/dave): %v", err)
+	}
+	if len(nested) != 1 || nested[0].Path != "/home/dave/apps" || !nested[0].IsDir {
+		t.Errorf("nested = %+v, ожидался только каталог /home/dave/apps", nested)
+	}
+}
+
+func TestMkdirRejectsOutsideHome(t *testing.T) {
+	m := configsSetup(t)
+	for _, path := range []string{"", "/etc/newdir", "/home/../etc/newdir", "/"} {
+		if err := m.Mkdir(path); err == nil {
+			t.Errorf("Mkdir(%q): ожидалась ошибка вне /home", path)
+		}
+	}
+}
