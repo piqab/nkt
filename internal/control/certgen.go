@@ -661,17 +661,56 @@ func (m *CertManager) isKnownHAProxyCertPath(path string) bool {
 	return false
 }
 
+// haproxyCertDir looks for a haproxy "bind ... crt <dir>" that names a
+// directory rather than a single file — haproxy loads every certificate
+// bundle in such a directory and picks one per connection by SNI, so a new
+// bundle dropped in under the domain's own name is live after a reload with
+// no config edit at all. Returns the first one found, sorted, for
+// determinism when a host has more than one.
+func (m *CertManager) haproxyCertDir() (string, bool) {
+	snap := m.scanner.Latest()
+	if snap == nil {
+		return "", false
+	}
+	seen := map[string]bool{}
+	var dirs []string
+	for _, ep := range snap.Endpoints {
+		if ep.Service != model.ServiceHAProxy {
+			continue
+		}
+		path := ep.Extra["ssl_certificate"]
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		if info, err := m.c.Stat(path); err == nil && info.IsDir {
+			dirs = append(dirs, path)
+		}
+	}
+	if len(dirs) == 0 {
+		return "", false
+	}
+	sort.Strings(dirs)
+	return dirs[0], true
+}
+
 // CombineForHAProxy packages an already-issued certbot lineage's certificate
 // and key into the single PEM file haproxy's "crt" directive expects.
 //
 // With targetPath set to one of ListHAProxyCertPaths()'s entries, it
 // overwrites that exact file in place — the same path "Подробности" already
 // shows haproxy using — and reloads haproxy, so the operator has nothing
-// left to wire up by hand. With targetPath empty (no matching file exists
-// yet, e.g. haproxy has never used this lineage before), it instead writes a
-// brand-new file under a dedicated directory — the same write boundary
-// GenerateSelfSigned uses — and returns the directive to paste through the
-// validated config editor, since there is nothing yet to safely overwrite.
+// left to wire up by hand.
+//
+// With targetPath empty, it first checks whether haproxy already has a
+// directory-style "bind ... crt <dir>" (see haproxyCertDir) — if so, the new
+// bundle is named after the lineage's own domain and dropped straight into
+// that directory, then haproxy is reloaded to pick it up; nothing needs
+// pasting anywhere, exactly like the known-target case. Only when haproxy has
+// no such directory does it fall back to writing a brand-new file under a
+// dedicated directory — the same write boundary GenerateSelfSigned uses —
+// and returning the directive to paste through the validated config editor,
+// since there is nothing yet to safely overwrite.
 func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage, targetPath string) (CombineResult, error) {
 	if !lineageRe.MatchString(lineage) {
 		return CombineResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
@@ -721,6 +760,21 @@ func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage, targ
 		if _, err := m.services.Action(ctx, user, model.ServiceHAProxy, "reload"); err != nil {
 			return res, fmt.Errorf("PEM собран и записан в %s, но не удалось перечитать конфигурацию haproxy: %w",
 				targetPath, err)
+		}
+		return res, nil
+	}
+
+	if dir, ok := m.haproxyCertDir(); ok {
+		res.CombinedPath = gopath.Join(dir, lineage+".pem")
+		if err := m.c.WriteFile(res.CombinedPath, combined, 0o600); err != nil {
+			return CombineResult{}, fmt.Errorf("запись %s: %w", res.CombinedPath, err)
+		}
+		m.db.Audit(ctx, user, "cert.combine_haproxy", res.CombinedPath, "ok", map[string]any{
+			"lineage": lineage, "fingerprint": res.Fingerprint,
+		})
+		if _, err := m.services.Action(ctx, user, model.ServiceHAProxy, "reload"); err != nil {
+			return res, fmt.Errorf("PEM собран и записан в %s, но не удалось перечитать конфигурацию haproxy: %w",
+				res.CombinedPath, err)
 		}
 		return res, nil
 	}
