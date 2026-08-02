@@ -1,7 +1,12 @@
 import { useMemo, useRef, useState } from 'react'
 import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
-import { Card, ErrorNote, Loading } from '../components/ui'
+import { Card, ErrorNote, Loading, SeverityBadge } from '../components/ui'
+
+// A long real-world host can produce far more findings than fit in a
+// glanceable list — cap it and say so, rather than letting the summary grow
+// into a second findings page.
+const FINDINGS_SUMMARY_LIMIT = 12
 
 /**
  * The resource map is laid out in fixed columns by node kind rather than by a
@@ -135,6 +140,36 @@ export default function TopologyPage() {
           </p>
         </div>
       </div>
+
+      {data.findings.length > 0 && (
+        <Card
+          title="Проблемы на карте"
+          subtitle={`${data.findings.length} шт. — щёлкните, чтобы найти узел`}
+        >
+          <div className="col" style={{ gap: '0.2rem' }}>
+            {data.findings.slice(0, FINDINGS_SUMMARY_LIMIT).map((f, i) => {
+              const node = data.nodes.find((n) => n.id === f.node_id)
+              return (
+                <button
+                  key={i}
+                  className="ghost"
+                  style={{ textAlign: 'left', padding: '0.25rem 0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                  onClick={() => setSelected(f.node_id)}
+                >
+                  <SeverityBadge severity={f.severity} />
+                  <span>{f.title}</span>
+                  {node && <span className="small muted">— {node.label}</span>}
+                </button>
+              )
+            })}
+            {data.findings.length > FINDINGS_SUMMARY_LIMIT && (
+              <div className="small muted" style={{ padding: '0.25rem 0.4rem' }}>
+                и ещё {data.findings.length - FINDINGS_SUMMARY_LIMIT} — полный список на странице «Проблемы»
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
 
       <Card
         actions={

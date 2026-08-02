@@ -42,6 +42,52 @@ func TestEndpointCarriesUnicodeHintForIDNName(t *testing.T) {
 	}
 }
 
+// The map's whole point for triage is a top-of-page list of what's actually
+// wrong — a coloured dot and a count on the node itself says something is
+// broken but not what, so Build must surface the real finding title too.
+func TestFindingsSummaryListsNodeAndSeverity(t *testing.T) {
+	snap := &model.Snapshot{
+		Endpoints: []model.Endpoint{{
+			ID: "nginx:1", Service: model.ServiceNginx, Kind: "server",
+			Address: "0.0.0.0", Port: 443, Protocol: "tcp", Mode: "http", TLS: true,
+			Label: "app.example.com",
+		}},
+		Findings: []model.Finding{
+			{Object: "0.0.0.0:443", Severity: model.SeverityHigh, Title: "Устаревший TLS"},
+		},
+	}
+
+	g := Build(snap)
+	if len(g.Findings) != 1 {
+		t.Fatalf("Findings = %d, ожидалась 1", len(g.Findings))
+	}
+	fr := g.Findings[0]
+	if fr.NodeID != "ep:nginx:1" || fr.Title != "Устаревший TLS" || fr.Severity != model.SeverityHigh {
+		t.Errorf("FindingRef = %+v, не совпадает с ожидаемым", fr)
+	}
+}
+
+// Sorted worst-first, so the most urgent problem is the one visible without
+// scrolling a long list.
+func TestFindingsSummarySortsWorstFirst(t *testing.T) {
+	snap := &model.Snapshot{
+		Endpoints: []model.Endpoint{{
+			ID: "nginx:1", Service: model.ServiceNginx, Kind: "server",
+			Address: "0.0.0.0", Port: 443, Protocol: "tcp", Mode: "http", TLS: true,
+			Label: "app.example.com",
+		}},
+		Findings: []model.Finding{
+			{Object: "0.0.0.0:443", Severity: model.SeverityMedium, Title: "Среднее"},
+			{Object: "0.0.0.0:443", Severity: model.SeverityCritical, Title: "Критичное"},
+		},
+	}
+
+	g := Build(snap)
+	if len(g.Findings) != 2 || g.Findings[0].Severity != model.SeverityCritical {
+		t.Fatalf("Findings = %+v, ожидался critical первым", g.Findings)
+	}
+}
+
 // A pool referenced by a route must show its real algorithm and health check.
 // Building endpoints first used to leave a placeholder node behind, so every
 // referenced pool was drawn as undefined and red.

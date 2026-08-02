@@ -69,6 +69,45 @@ func TestListBlocksRejectsPathOutsideAllowlist(t *testing.T) {
 	}
 }
 
+// A container's own compose label ("редактировать конфиг" in Services.tsx is
+// built directly from Container.ComposeFile) must be enough to unlock its
+// file, even when NKT_COMPOSE_FILES was never configured with that exact
+// path — the operator's static list is a convenience default, not the only
+// legitimate source; a real running container reported by the engine itself
+// is at least as trustworthy.
+func TestListBlocksAllowsPathOnlyKnownFromRunningContainer(t *testing.T) {
+	root := copyFixturesRoot(t)
+	cfg := &config.Config{
+		Mode:            config.ModeFixtures,
+		FixturesRoot:    root,
+		DataDir:         t.TempDir(),
+		NginxRoot:       "/etc/nginx",
+		NginxMainConfig: "/etc/nginx/nginx.conf",
+		HAProxyRoot:     "/etc/haproxy",
+		HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
+		// Deliberately NOT configured with composeFile — only the fixtures'
+		// canned engine response (.docker/containers_json.json) knows it,
+		// via com.docker.compose.project.config_files.
+		ComposeFiles:   nil,
+		CommandTimeout: 5 * time.Second,
+	}
+	c := collect.NewFixtures(root)
+	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
+	if err != nil {
+		t.Fatalf("открыть базу: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	scanner := inventory.New(cfg, c, db)
+	if _, err := scanner.Scan(context.Background()); err != nil {
+		t.Fatalf("скан: %v", err)
+	}
+	m := NewConfigManager(cfg, c, db, scanner, NewServiceManager(cfg, c, db))
+
+	if _, err := m.ListBlocks(composeFile); err != nil {
+		t.Fatalf("ListBlocks для файла, известного только по запущенному контейнеру: %v", err)
+	}
+}
+
 func TestWriteBlockUpdateAppliesAndValidates(t *testing.T) {
 	m := configsSetup(t)
 	blocks, err := m.ListBlocks(nginxSiteFile)

@@ -57,11 +57,22 @@ type Edge struct {
 	Status string `json:"status"`
 }
 
+// FindingRef is one problem or warning attached to a node, surfaced at the
+// top of the resource map — the node itself only carries a colour and a
+// count, which says something is wrong but not what, so the map is useless
+// for triage without opening every flagged node one at a time.
+type FindingRef struct {
+	NodeID   string `json:"node_id"`
+	Title    string `json:"title"`
+	Severity string `json:"severity"`
+}
+
 // Graph is the whole map.
 type Graph struct {
-	Nodes []Node         `json:"nodes"`
-	Edges []Edge         `json:"edges"`
-	Stats map[string]int `json:"stats"`
+	Nodes    []Node         `json:"nodes"`
+	Edges    []Edge         `json:"edges"`
+	Stats    map[string]int `json:"stats"`
+	Findings []FindingRef   `json:"findings"`
 }
 
 type builder struct {
@@ -70,6 +81,7 @@ type builder struct {
 	edges    []Edge
 	edgeSeen map[string]bool
 	bySubj   map[string][]model.Finding
+	findings []FindingRef
 }
 
 // Build assembles the resource map from a snapshot.
@@ -249,6 +261,10 @@ func Build(s *model.Snapshot) *Graph {
 	}
 	g.Edges = b.edges
 	g.Stats["edges"] = len(b.edges)
+	g.Findings = b.findings
+	sort.SliceStable(g.Findings, func(i, j int) bool {
+		return model.SeverityRank(g.Findings[i].Severity) < model.SeverityRank(g.Findings[j].Severity)
+	})
 	sort.SliceStable(g.Nodes, func(i, j int) bool {
 		if g.Nodes[i].Kind != g.Nodes[j].Kind {
 			return kindRank(g.Nodes[i].Kind) < kindRank(g.Nodes[j].Kind)
@@ -387,6 +403,7 @@ func (b *builder) attachFindings(nodeID, subject string) {
 		if model.SeverityRank(f.Severity) < model.SeverityRank(worst) {
 			worst = f.Severity
 		}
+		b.findings = append(b.findings, FindingRef{NodeID: nodeID, Title: f.Title, Severity: f.Severity})
 	}
 	n.Severity = worst
 	switch worst {
