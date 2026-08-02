@@ -131,52 +131,54 @@ export default function TopologyPage() {
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head spread">
         <div>
           <h1>Карта сетевых ресурсов</h1>
           <p>Красным — критичные проблемы, жёлтым — предупреждения. Щёлкните узел, чтобы увидеть подробности.</p>
         </div>
-      </div>
 
-      {/* Fixed height and always rendered, whether or not something is
-          selected — so switching between nodes with very different amounts
-          of info never shifts the map below up or down. */}
-      <div className="topology-focus-panel">
-        {selectedNode ? (
-          <>
-            <div className="topology-focus-head">
-              <strong>{selectedNode.label}</strong>
-              <button className="ghost" onClick={() => setSelected(null)} title="закрыть" style={{ padding: '0 0.3rem' }}>
-                ×
-              </button>
-            </div>
-            <div className="small muted">
-              {selectedNode.kind}
-              {selectedNode.sublabel ? ` · ${selectedNode.sublabel}` : ''} · {selectedNode.status}
-            </div>
-            {selectedFindings.map((f, i) => (
-              <span key={i} className="topology-finding-chip">
-                <SeverityBadge severity={f.severity} />
-                {f.title}
-              </span>
-            ))}
-            {selectedMeta.length > 0 && (
-              <div className="topology-focus-meta">
-                {selectedMeta.map(([k, v]) => (
-                  <span key={k}>
-                    <span className="muted">{k}:</span> {v}
-                  </span>
-                ))}
+        {/* Fixed height and always rendered, whether or not something is
+            selected, so switching between nodes with very different amounts
+            of info never shifts the map below up or down. Shares the row
+            with the title when there's room (page-head wraps), drops below
+            it otherwise. */}
+        <div className="topology-focus-panel">
+          {selectedNode ? (
+            <>
+              <div className="topology-focus-head">
+                <strong>{selectedNode.label}</strong>
+                <button className="ghost" onClick={() => setSelected(null)} title="закрыть" style={{ padding: '0 0.3rem' }}>
+                  ×
+                </button>
               </div>
-            )}
-          </>
-        ) : (
-          <span className="small muted">
-            {data.findings.length > 0
-              ? `${data.findings.length} находок на карте — щёлкните узел, чтобы увидеть подробности`
-              : 'Щёлкните узел на карте, чтобы увидеть подробности.'}
-          </span>
-        )}
+              <div className="small muted">
+                {selectedNode.kind}
+                {selectedNode.sublabel ? ` · ${selectedNode.sublabel}` : ''} · {selectedNode.status}
+              </div>
+              {selectedFindings.map((f, i) => (
+                <span key={i} className="topology-finding-chip">
+                  <SeverityBadge severity={f.severity} />
+                  {f.title}
+                </span>
+              ))}
+              {selectedMeta.length > 0 && (
+                <div className="topology-focus-meta">
+                  {selectedMeta.map(([k, v]) => (
+                    <span key={k}>
+                      <span className="muted">{k}:</span> {v}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            <span className="small muted">
+              {data.findings.length > 0
+                ? `${data.findings.length} находок на карте — щёлкните узел, чтобы увидеть подробности`
+                : 'Щёлкните узел на карте, чтобы увидеть подробности.'}
+            </span>
+          )}
+        </div>
       </div>
 
       <Card
