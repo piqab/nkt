@@ -526,17 +526,32 @@ pre.diff .hunk { color: var(--text-muted); }
 
 /* ------------------------------------------------------------------ topology */
 
-.topology-findings-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem 1rem;
+.topology-focus-panel {
+  flex: 0 1 26rem;
+  min-width: 16rem;
+  max-width: 28rem;
   padding: 0.4rem 0.6rem;
-  margin-bottom: 0.6rem;
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   font-size: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 8rem;
+  overflow-y: auto;
+}
+.topology-focus-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.topology-focus-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.1rem 0.7rem;
+  color: var(--text-secondary);
 }
 .topology-finding-chip {
   display: inline-flex;

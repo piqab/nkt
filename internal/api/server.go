@@ -101,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 
 			r.Get("/configs", s.handleConfigList)
 			r.Get("/configs/file", s.handleConfigRead)
+			r.Get("/configs/browse", s.handleConfigBrowse)
 			r.Get("/configs/blocks", s.handleConfigBlocks)
 			r.Get("/configs/versions", s.handleConfigVersions)
 			r.Get("/configs/versions/{id}", s.handleConfigVersion)
