@@ -247,15 +247,8 @@ export default function Configs({ me }: { me: Me }) {
                       </Banner>
                     )}
 
-                    <CodeEditor
-                      value={draft}
-                      onChange={(e) => setDraft(e.target.value)}
-                      rows={22}
-                      readOnly={!me.is_admin || !me.allow_mutations}
-                    />
-
                     {me.is_admin && me.allow_mutations && (
-                      <div className="filters" style={{ marginTop: '0.6rem' }}>
+                      <div className="filters" style={{ marginBottom: '0.6rem' }}>
                         <label style={{ flex: 1, minWidth: '14rem' }}>
                           Комментарий к правке
                           <input
@@ -275,6 +268,13 @@ export default function Configs({ me }: { me: Me }) {
                         </label>
                       </div>
                     )}
+
+                    <CodeEditor
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      rows={22}
+                      readOnly={!me.is_admin || !me.allow_mutations}
+                    />
                   </>
                 )}
               </Card>
@@ -429,8 +429,7 @@ function NewFileForm({ path, onCreated, onCancel }: { path: string; onCreated: (
           )}
         </Banner>
       )}
-      <CodeEditor value={content} onChange={(e) => setContent(e.target.value)} rows={22} autoFocus />
-      <div className="filters" style={{ marginTop: '0.6rem' }}>
+      <div className="filters" style={{ marginBottom: '0.6rem' }}>
         <label style={{ flex: 1, minWidth: '14rem' }}>
           Комментарий
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="зачем создаём" />
@@ -445,6 +444,7 @@ function NewFileForm({ path, onCreated, onCancel }: { path: string; onCreated: (
           перезагрузить сервис после сохранения
         </label>
       </div>
+      <CodeEditor value={content} onChange={(e) => setContent(e.target.value)} rows={22} autoFocus />
     </Card>
   )
 }
