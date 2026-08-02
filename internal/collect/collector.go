@@ -76,6 +76,11 @@ type Collector interface {
 	Glob(pattern string) ([]string, error)
 
 	WriteFile(path string, data []byte, mode fs.FileMode) error
+	// DeleteFile removes a file. Used only to undo a just-created file that
+	// failed validation — there is no previous version to restore for a file
+	// that did not exist before this write, so the rollback is removal
+	// instead of ConfigManager.Write's usual "put the old bytes back".
+	DeleteFile(path string) error
 
 	// Run executes a command on the host. It returns an error only when the
 	// command could not be started; a non-zero exit lives in the result.

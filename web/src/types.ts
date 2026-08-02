@@ -158,6 +158,7 @@ export type BlockKind =
   | 'listen'
   | 'global'
   | 'defaults'
+  | 'service'
 
 /** One structural block of a single config file — nginx server{}/location{}/
  * upstream{} or a haproxy frontend/backend/listen/global/defaults section —

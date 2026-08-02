@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
-import { Banner, Card, ErrorNote, Loading, Spinner, formatDateTime } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import BlockTree from '../components/BlockTree'
 
-const BLOCK_SERVICES = new Set(['nginx', 'haproxy'])
+const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker'])
 
 export default function Configs({ me }: { me: Me }) {
   const [view, setView] = useState<'text' | 'blocks'>('text')
@@ -18,6 +18,9 @@ export default function Configs({ me }: { me: Me }) {
   const [result, setResult] = useState<WriteResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [diff, setDiff] = useState<{ id: number; text: string } | null>(null)
+  const [creatingPath, setCreatingPath] = useState<string | null>(null)
+  const [newFileModal, setNewFileModal] = useState(false)
+  const [newFilePathInput, setNewFilePathInput] = useState('')
 
   const file = useApi<FileContent>(path ? `/configs/file${qs({ path })}` : null)
   const versions = useApi<{ versions: ConfigVersion[] }>(path ? `/configs/versions${qs({ path })}` : null)
@@ -109,7 +112,18 @@ export default function Configs({ me }: { me: Me }) {
       <ErrorNote error={files.error} />
 
       <div className="grid" style={{ gridTemplateColumns: 'minmax(240px, 320px) 1fr' }}>
-        <Card title="Файлы" subtitle={`${files.data?.files.length ?? 0} шт.`}>
+        <Card
+          title="Файлы"
+          subtitle={`${files.data?.files.length ?? 0} шт.`}
+          actions={
+            me.is_admin &&
+            me.allow_mutations && (
+              <button className="ghost" onClick={() => setNewFileModal(true)}>
+                + новый файл
+              </button>
+            )
+          }
+        >
           {files.loading && !files.data ? (
             <Loading what="список файлов" />
           ) : (
@@ -118,7 +132,10 @@ export default function Configs({ me }: { me: Me }) {
                 <button
                   key={f.path}
                   className="ghost"
-                  onClick={() => setPath(f.path)}
+                  onClick={() => {
+                    setCreatingPath(null)
+                    setPath(f.path)
+                  }}
                   style={{
                     textAlign: 'left',
                     background: f.path === path ? 'var(--wash)' : undefined,
@@ -140,7 +157,17 @@ export default function Configs({ me }: { me: Me }) {
         </Card>
 
         <div className="col">
-          {!path ? (
+          {creatingPath ? (
+            <NewFileForm
+              path={creatingPath}
+              onCreated={() => {
+                setCreatingPath(null)
+                setPath(creatingPath)
+                files.reload()
+              }}
+              onCancel={() => setCreatingPath(null)}
+            />
+          ) : !path ? (
             <Card>
               <div className="chart-empty">Выберите файл слева.</div>
             </Card>
@@ -297,7 +324,121 @@ export default function Configs({ me }: { me: Me }) {
           ) : null}
         </div>
       </div>
+
+      {newFileModal && (
+        <Modal title="Новый файл" onClose={() => setNewFileModal(false)}>
+          <div className="col">
+            <label>
+              Путь
+              <input
+                value={newFilePathInput}
+                onChange={(e) => setNewFilePathInput(e.target.value)}
+                placeholder="/etc/nginx/sites-enabled/newsite.conf"
+                autoFocus
+              />
+            </label>
+            <p className="small muted">
+              Каталог должен относиться к nginx, haproxy или быть путём из <code className="mono">NKT_COMPOSE_FILES</code>{' '}
+              — иначе запись отклонит сервер.
+            </p>
+            <div className="row" style={{ marginTop: '0.4rem' }}>
+              <button
+                className="primary"
+                disabled={!newFilePathInput.trim().startsWith('/')}
+                onClick={() => {
+                  const p = newFilePathInput.trim()
+                  setCreatingPath(p)
+                  setPath(null)
+                  setNewFileModal(false)
+                  setNewFilePathInput('')
+                }}
+              >
+                Создать
+              </button>
+              <button className="ghost" onClick={() => setNewFileModal(false)}>
+                Отмена
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </>
+  )
+}
+
+function NewFileForm({ path, onCreated, onCancel }: { path: string; onCreated: () => void; onCancel: () => void }) {
+  const [content, setContent] = useState('')
+  const [note, setNote] = useState('')
+  const [apply, setApply] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<WriteResult | null>(null)
+
+  async function create() {
+    setBusy(true)
+    setError(null)
+    setResult(null)
+    try {
+      const res = await api<WriteResult>('/configs/file', {
+        method: 'PUT',
+        body: { path, content, note, apply, expected_sha256: '' },
+      })
+      setResult(res)
+      if (!res.rolled_back) onCreated()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card
+      title={path}
+      subtitle="новый файл — пока не существует на диске"
+      actions={
+        <>
+          <button className="ghost" onClick={onCancel} disabled={busy}>
+            Отмена
+          </button>
+          <button className="primary" onClick={create} disabled={busy || !content.trim()}>
+            {busy && <Spinner />}
+            {busy ? 'Создаю…' : 'Проверить и создать'}
+          </button>
+        </>
+      }
+    >
+      {error && <Banner kind="error">{error}</Banner>}
+      {result && (
+        <Banner kind={result.rolled_back ? 'error' : 'info'}>
+          <div>{result.message}</div>
+          {result.validation && (
+            <div className="small mono" style={{ marginTop: '0.25rem' }}>
+              проверка: {result.validation.stdout || result.validation.stderr || 'без вывода'}
+            </div>
+          )}
+          {result.rolled_back && (
+            <div className="small muted">Файл не был создан — исправьте содержимое и попробуйте снова.</div>
+          )}
+        </Banner>
+      )}
+      <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={22} spellCheck={false} autoFocus />
+      <div className="filters" style={{ marginTop: '0.6rem' }}>
+        <label style={{ flex: 1, minWidth: '14rem' }}>
+          Комментарий
+          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="зачем создаём" />
+        </label>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
+          <input
+            type="checkbox"
+            checked={apply}
+            onChange={(e) => setApply(e.target.checked)}
+            style={{ width: 'auto' }}
+          />
+          перезагрузить сервис после сохранения
+        </label>
+      </div>
+    </Card>
   )
 }
 

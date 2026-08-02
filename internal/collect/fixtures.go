@@ -187,6 +187,14 @@ func (f *Fixtures) WriteFile(p string, data []byte, mode fs.FileMode) error {
 	return os.WriteFile(local, data, mode)
 }
 
+func (f *Fixtures) DeleteFile(p string) error {
+	local, err := f.resolve(p)
+	if err != nil {
+		return err
+	}
+	return os.Remove(local)
+}
+
 // --------------------------------------------------------------------- commands
 
 func (f *Fixtures) loadCommands() {

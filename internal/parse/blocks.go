@@ -17,6 +17,7 @@ type BlockKind string
 // The block kinds addressable for CRUD in v1. nginx server/location nest;
 // upstream does not. haproxy sections are always flat — global and defaults
 // are viewable and editable but not creatable/deletable (see Block.Editable).
+// docker-compose service is flat too — one entry per key under services:.
 const (
 	BlockServer   BlockKind = "server"
 	BlockLocation BlockKind = "location"
@@ -26,6 +27,7 @@ const (
 	BlockListen   BlockKind = "listen"
 	BlockGlobal   BlockKind = "global"
 	BlockDefaults BlockKind = "defaults"
+	BlockService  BlockKind = "service"
 )
 
 // Block is one structural unit of a single config file — a nginx server{}/
@@ -59,6 +61,8 @@ func Blocks(c collect.Collector, path, service string) ([]Block, error) {
 		return nginxBlocks(c, path)
 	case model.ServiceHAProxy:
 		return haproxyBlocks(c, path)
+	case model.ServiceDocker:
+		return dockerBlocks(c, path)
 	default:
 		return nil, fmt.Errorf("для сервиса %q дерево блоков не поддерживается", service)
 	}
@@ -278,6 +282,132 @@ func haproxyBlocks(c collect.Collector, path string) ([]Block, error) {
 	return out, nil
 }
 
+// --------------------------------------------------------------- compose
+
+// dockerBlocks reads one compose file's services: entries as flat blocks —
+// docker-compose.yml has no other structure worth addressing for v1.
+func dockerBlocks(c collect.Collector, path string) ([]Block, error) {
+	raw, err := c.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("чтение файла: %w", err)
+	}
+	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
+	return composeServiceBlocks(lines), nil
+}
+
+// composeKeyAt reports the indent and key name of a YAML "key:" mapping line
+// (nothing after the colon on the same line), which is the only line shape
+// that can open a compose service — "  web:" — or close one out by starting
+// a shallower-indent sibling like "networks:". Anything else (a "key: value"
+// line, a "- item" list entry, a comment, a blank line) is not a key line.
+func composeKeyAt(line string) (indent int, key string, ok bool) {
+	trimmedRight := strings.TrimRight(line, " \t\r")
+	if trimmedRight == "" {
+		return 0, "", false
+	}
+	i := 0
+	for i < len(line) && line[i] == ' ' {
+		i++
+	}
+	content := trimmedRight[i:]
+	if content == "" || strings.HasPrefix(content, "#") || strings.HasPrefix(content, "-") ||
+		!strings.HasSuffix(content, ":") {
+		return 0, "", false
+	}
+	key = strings.TrimSuffix(content, ":")
+	if key == "" {
+		return 0, "", false
+	}
+	return i, key, true
+}
+
+// composeServicesLine finds the top-level "services:" key (0-based line
+// index into lines, -1 if the file has none).
+func composeServicesLine(lines []string) int {
+	for i, line := range lines {
+		if strings.TrimRight(line, " \t\r") == "services:" {
+			return i
+		}
+	}
+	return -1
+}
+
+// composeServiceBlocks scans the raw lines under services: by indentation
+// depth — YAML has no braces, so a service's extent is "every line indented
+// deeper than its own key, until the next line at the same or shallower
+// indent" (the next service, or a sibling top-level key like volumes:).
+func composeServiceBlocks(lines []string) []Block {
+	servicesIdx := composeServicesLine(lines)
+	if servicesIdx < 0 {
+		return nil
+	}
+
+	childIndent := -1
+	for i := servicesIdx + 1; i < len(lines); i++ {
+		indent, _, ok := composeKeyAt(lines[i])
+		if !ok {
+			continue
+		}
+		if indent == 0 {
+			break // a sibling top-level key immediately follows — no services yet
+		}
+		childIndent = indent
+		break
+	}
+	if childIndent < 0 {
+		return nil // "services:" with nothing under it
+	}
+
+	var out []Block
+	start, name := -1, ""
+	closeBlock := func(endExclusive int) {
+		if start < 0 {
+			return
+		}
+		end := endExclusive
+		for end > start+1 && strings.TrimSpace(lines[end-1]) == "" {
+			end--
+		}
+		out = append(out, Block{
+			ID: fmt.Sprintf("%s:%d", BlockService, start+1), Kind: BlockService, Name: name,
+			StartLine: start + 1, EndLine: end, Raw: strings.Join(lines[start:end], "\n"), Editable: true,
+		})
+		start = -1
+	}
+
+	for i := servicesIdx + 1; i <= len(lines); i++ {
+		if i == len(lines) {
+			closeBlock(i)
+			break
+		}
+		indent, key, ok := composeKeyAt(lines[i])
+		switch {
+		case ok && indent == childIndent:
+			closeBlock(i)
+			start, name = i, key
+		case ok && indent < childIndent:
+			closeBlock(i)
+			return out // left services: entirely — a sibling top-level key
+		}
+	}
+	return out
+}
+
+// composeInsertLine finds where a new service belongs: right after the last
+// existing one (with a blank separator line, matching how compose files are
+// normally written), or right after "services:" itself when there are none
+// yet (no separator needed there). Returns a 1-based line to insert before.
+func composeInsertLine(lines []string) (line int, gapBefore bool, err error) {
+	servicesIdx := composeServicesLine(lines)
+	if servicesIdx < 0 {
+		return 0, false, fmt.Errorf("в файле нет ключа services:")
+	}
+	if existing := composeServiceBlocks(lines); len(existing) > 0 {
+		return existing[len(existing)-1].EndLine + 1, true, nil
+	}
+	return servicesIdx + 2, false, nil
+}
+
 // ----------------------------------------------------------------- splicing
 
 // SpliceBlock replaces the inclusive line range [startLine, endLine] of
@@ -301,22 +431,33 @@ func SpliceBlock(fileText string, startLine, endLine int, newText string) (strin
 
 // InsertBlockAtEnd appends newText as a new block. A nginx location{} is
 // inserted just before its parent server{}'s closing "}" (parentEndLine,
-// taken from a Block the caller already fetched); every other kind is
-// appended at the end of the file, since a top-level nginx server/upstream or
-// a haproxy section is always valid wherever it lands in the file.
+// taken from a Block the caller already fetched); a docker-compose service
+// is inserted right after the last existing one under services: (found
+// internally — YAML indentation means "the end of the file" is not a valid
+// position once volumes:/networks: follow); every other kind is appended at
+// the end of the file, since a top-level nginx server/upstream or a haproxy
+// section is always valid wherever it lands in the file.
 func InsertBlockAtEnd(fileText string, kind BlockKind, newText string, parentEndLine int) (string, error) {
 	lines := strings.Split(fileText, "\n")
 	block := strings.Split(strings.TrimRight(newText, "\n"), "\n")
 
-	if kind == BlockLocation {
+	switch kind {
+	case BlockLocation:
 		if parentEndLine < 1 || parentEndLine > len(lines) {
 			return "", fmt.Errorf("родительский блок вне диапазона файла")
 		}
-		out := make([]string, 0, len(lines)+len(block))
-		out = append(out, lines[:parentEndLine-1]...) // up to, not including, the closing "}"
-		out = append(out, block...)
-		out = append(out, lines[parentEndLine-1:]...) // the "}" line and everything after
-		return strings.Join(out, "\n"), nil
+		return insertBefore(lines, parentEndLine, block), nil
+
+	case BlockService:
+		target, gap, err := composeInsertLine(lines)
+		if err != nil {
+			return "", err
+		}
+		toInsert := block
+		if gap {
+			toInsert = append([]string{""}, block...)
+		}
+		return insertBefore(lines, target, toInsert), nil
 	}
 
 	out := append([]string{}, lines...)
@@ -325,4 +466,14 @@ func InsertBlockAtEnd(fileText string, kind BlockKind, newText string, parentEnd
 	}
 	out = append(out, block...)
 	return strings.Join(out, "\n"), nil
+}
+
+// insertBefore splices block just before the 1-based line "at" (pushing that
+// line and everything after it down), leaving everything before it untouched.
+func insertBefore(lines []string, at int, block []string) string {
+	out := make([]string, 0, len(lines)+len(block))
+	out = append(out, lines[:at-1]...)
+	out = append(out, block...)
+	out = append(out, lines[at-1:]...)
+	return strings.Join(out, "\n")
 }
