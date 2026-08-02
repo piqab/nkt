@@ -4,10 +4,63 @@ import (
 	"context"
 	"crypto/x509"
 	"encoding/pem"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/althq/netknownsthat/internal/collect"
+	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/store"
 )
+
+// noCertDirSetup mirrors renewSetup but rewrites the fixture's
+// directory-style "bind ... crt /etc/haproxy/certs" into a plain file bind,
+// so haproxyCertDir() finds nothing and CombineForHAProxy must fall back to
+// the scratch-directory-plus-snippet path.
+func noCertDirSetup(t *testing.T) (*CertManager, *store.DB) {
+	t.Helper()
+	root := copyFixturesRoot(t)
+	cfgPath := filepath.Join(root, "etc", "haproxy", "haproxy.cfg")
+	raw, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("чтение haproxy.cfg: %v", err)
+	}
+	rewritten := strings.Replace(string(raw),
+		"bind *:8443 ssl crt /etc/haproxy/certs\n",
+		"bind *:8443 ssl crt /etc/haproxy/certs/app.internal.pem\n", 1)
+	if rewritten == string(raw) {
+		t.Fatal("не удалось найти директорийный bind в фикстуре haproxy.cfg")
+	}
+	if err := os.WriteFile(cfgPath, []byte(rewritten), 0o644); err != nil {
+		t.Fatalf("запись haproxy.cfg: %v", err)
+	}
+
+	cfg := &config.Config{
+		Mode:            config.ModeFixtures,
+		FixturesRoot:    root,
+		NginxMainConfig: "/etc/nginx/nginx.conf",
+		HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
+		ComposeFiles:    []string{"/srv/docker/docker-compose.yml"},
+		CommandTimeout:  5 * time.Second,
+		CertbotTimeout:  20 * time.Second,
+	}
+	c := collect.NewFixtures(root)
+	dbPath := filepath.Join(t.TempDir(), "nkt.db")
+	db, err := store.Open(dbPath)
+	if err != nil {
+		t.Fatalf("открыть базу: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	scanner := inventory.New(cfg, c, db)
+	if _, err := scanner.Scan(context.Background()); err != nil {
+		t.Fatalf("скан: %v", err)
+	}
+	services := NewServiceManager(cfg, c, db)
+	return NewCertManager(cfg, c, db, services, scanner), db
+}
 
 func TestListLetsEncryptLineages(t *testing.T) {
 	m, _ := renewSetup(t)
@@ -36,7 +89,13 @@ func TestListLetsEncryptLineages(t *testing.T) {
 	}
 }
 
-func TestCombineForHAProxyNewFile(t *testing.T) {
+// TestCombineForHAProxyDropsIntoExistingCertDir covers the common case:
+// fixtures' haproxy.cfg already binds "crt /etc/haproxy/certs" as a
+// directory (see api.internal.pem/app.internal.pem living there), so a
+// brand-new lineage must land in that same directory, named after the site,
+// with nothing left to paste in by hand — haproxy already loads the whole
+// directory.
+func TestCombineForHAProxyDropsIntoExistingCertDir(t *testing.T) {
 	m, db := renewSetup(t)
 
 	certPEM, err := m.c.ReadFile("/etc/letsencrypt/live/app.example.com/fullchain.pem")
@@ -55,8 +114,12 @@ func TestCombineForHAProxyNewFile(t *testing.T) {
 	if res.Lineage != "app.example.com" {
 		t.Errorf("Lineage = %q", res.Lineage)
 	}
-	if res.CombinedPath == "" || res.Snippet == "" {
-		t.Fatalf("режим нового файла: ожидались непустые CombinedPath и Snippet, получено %+v", res)
+	const want = "/etc/haproxy/certs/app.example.com.pem"
+	if res.CombinedPath != want {
+		t.Errorf("CombinedPath = %q, ожидалось %q", res.CombinedPath, want)
+	}
+	if res.Snippet != "" {
+		t.Errorf("файл падает в уже известный haproxy crt-каталог: Snippet должен быть пустым, получено %q", res.Snippet)
 	}
 
 	block, _ := pem.Decode(certPEM)
@@ -66,6 +129,60 @@ func TestCombineForHAProxyNewFile(t *testing.T) {
 	}
 	if !res.NotAfter.Equal(leaf.NotAfter.UTC()) {
 		t.Errorf("NotAfter = %v, ожидалось %v", res.NotAfter, leaf.NotAfter.UTC())
+	}
+
+	got, err := m.c.ReadFile(res.CombinedPath)
+	if err != nil {
+		t.Fatalf("чтение собранного файла: %v", err)
+	}
+	want2 := append(append([]byte{}, certPEM...), keyPEM...)
+	if string(got) != string(want2) {
+		t.Error("собранный файл не совпадает с исходными cert+key")
+	}
+
+	entries, err := db.ListAudit(context.Background(), store.AuditFilter{Limit: 20})
+	if err != nil {
+		t.Fatalf("чтение журнала: %v", err)
+	}
+	var sawCombine, sawReload bool
+	for _, e := range entries {
+		if e.Action == "cert.combine_haproxy" && e.Target == res.CombinedPath && e.Result == "ok" {
+			sawCombine = true
+		}
+		if e.Action == "service.reload" && e.Target == "haproxy" && e.Result == "ok" {
+			sawReload = true
+		}
+	}
+	if !sawCombine {
+		t.Error("в журнале нет записи cert.combine_haproxy для " + res.CombinedPath)
+	}
+	if !sawReload {
+		t.Error("в журнале нет записи service.reload для haproxy — новый файл в crt-каталоге незаметен без перезагрузки")
+	}
+}
+
+// TestCombineForHAProxyFallsBackWithoutCertDir covers a host where haproxy
+// has no directory-style "crt" bind at all: there is nothing safe to drop a
+// new file into automatically, so this must keep writing to the dedicated
+// scratch directory and returning a snippet to paste by hand.
+func TestCombineForHAProxyFallsBackWithoutCertDir(t *testing.T) {
+	m, db := noCertDirSetup(t)
+
+	certPEM, err := m.c.ReadFile("/etc/letsencrypt/live/app.example.com/fullchain.pem")
+	if err != nil {
+		t.Fatalf("чтение сертификата: %v", err)
+	}
+	keyPEM, err := m.c.ReadFile("/etc/letsencrypt/live/app.example.com/privkey.pem")
+	if err != nil {
+		t.Fatalf("чтение ключа: %v", err)
+	}
+
+	res, err := m.CombineForHAProxy(context.Background(), "test", "app.example.com", "")
+	if err != nil {
+		t.Fatalf("combine: %v", err)
+	}
+	if res.CombinedPath == "" || res.Snippet == "" {
+		t.Fatalf("без crt-каталога: ожидались непустые CombinedPath и Snippet, получено %+v", res)
 	}
 
 	got, err := m.c.ReadFile(res.CombinedPath)

@@ -563,7 +563,7 @@ function CombineForm({ onCombined }: { onCombined: () => void }) {
           <label style={{ flex: 1, minWidth: '18rem' }}>
             Куда записать
             <select value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>
-              <option value={NEW_FILE}>— новый файл (ещё не подключён) —</option>
+              <option value={NEW_FILE}>— новый файл —</option>
               {pathOptions.map((path) => (
                 <option key={path} value={path}>
                   {path}
@@ -598,7 +598,7 @@ function CombineForm({ onCombined }: { onCombined: () => void }) {
         ) : (
           <div style={{ marginTop: '0.85rem' }}>
             <Banner kind="info">
-              {result.lineage}: файл <code className="mono">{result.combined_path}</code> перезаписан,
+              {result.lineage}: файл <code className="mono">{result.combined_path}</code> записан,
               действителен до {formatDateTime(result.not_after)}. haproxy перечитал конфигурацию — вставлять
               ничего не нужно.
             </Banner>
