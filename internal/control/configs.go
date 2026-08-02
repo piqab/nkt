@@ -11,6 +11,7 @@ import (
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/parse"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -19,6 +20,11 @@ var (
 	ErrPathNotAllowed = errors.New("файл вне разрешённых каталогов")
 	ErrNotFound       = errors.New("файл не найден")
 	ErrTooLarge       = errors.New("файл слишком большой для редактора")
+	// ErrStaleContent is returned when a BlockWriteRequest's expected_sha256
+	// no longer matches the file — the same optimistic-lock contract Write's
+	// callers already implement at the handler layer, enforced once here so
+	// every block-write caller gets it for free.
+	ErrStaleContent = errors.New("файл изменился с момента загрузки страницы, обновите список блоков и повторите")
 )
 
 // maxEditableBytes caps what the editor will load. Config files are small; a
@@ -151,6 +157,89 @@ func (m *ConfigManager) Read(path string) (FileContent, error) {
 		},
 		Content: string(raw),
 	}, nil
+}
+
+// ListBlocks builds the structural block tree of one config file — the
+// nginx server{}/location{}/upstream{} or haproxy frontend/backend/listen/
+// global/defaults sections it contains — for the per-file "blocks" view.
+func (m *ConfigManager) ListBlocks(path string) ([]parse.Block, error) {
+	service, err := m.checkPath(path)
+	if err != nil {
+		return nil, err
+	}
+	return parse.Blocks(m.c, path, service)
+}
+
+// BlockWriteRequest describes one create/update/delete of a single block
+// within a config file, applied as a line-range splice against the file's
+// current raw text rather than a reparse-and-rebuild of the whole file.
+type BlockWriteRequest struct {
+	Op    string          `json:"op"` // "create" | "update" | "delete"
+	Kind  parse.BlockKind `json:"kind"`
+	Start int             `json:"start_line"` // required for update/delete
+	End   int             `json:"end_line"`   // required for update/delete
+	// ParentEnd is the parent server{}'s EndLine, required only when creating
+	// a nginx location{} — every other create appends at the end of the file.
+	ParentEnd int    `json:"parent_end_line,omitempty"`
+	Content   string `json:"content"` // ignored for delete
+	Note      string `json:"note"`
+	Apply     bool   `json:"apply"`
+	// Expected is the file's expected_sha256, the same optimistic-lock
+	// contract Write already uses — a stale block edit (line numbers computed
+	// against content someone else has since changed) is refused rather than
+	// spliced into the wrong lines.
+	Expected string `json:"expected_sha256"`
+}
+
+// singletonHAProxySections cannot be created or deleted through block CRUD:
+// haproxy expects exactly one global and one defaults section, and removing
+// either breaks the config. Viewing and updating their raw text is still a
+// plain block update.
+var singletonHAProxySections = map[parse.BlockKind]bool{
+	parse.BlockGlobal:   true,
+	parse.BlockDefaults: true,
+}
+
+// WriteBlock applies one block-level edit and delegates the actual disk
+// write to Write unchanged — validation by the real nginx/haproxy binary,
+// automatic rollback on failure, versioning and audit logging all come from
+// there, so none of that safety logic is duplicated here.
+func (m *ConfigManager) WriteBlock(ctx context.Context, user, path string, req BlockWriteRequest) (WriteResult, error) {
+	if (req.Op == "create" || req.Op == "delete") && singletonHAProxySections[req.Kind] {
+		return WriteResult{}, fmt.Errorf("%s: создание и удаление недоступны для этого раздела, доступна только правка", req.Kind)
+	}
+	if (req.Op == "create" || req.Op == "update") && strings.TrimSpace(req.Content) == "" {
+		return WriteResult{}, fmt.Errorf("текст блока не может быть пустым")
+	}
+
+	current, err := m.Read(path)
+	if err != nil {
+		return WriteResult{}, err
+	}
+	if req.Expected != "" && req.Expected != current.SHA256 {
+		return WriteResult{}, ErrStaleContent
+	}
+
+	var newText string
+	switch req.Op {
+	case "create":
+		newText, err = parse.InsertBlockAtEnd(current.Content, req.Kind, req.Content, req.ParentEnd)
+	case "update":
+		newText, err = parse.SpliceBlock(current.Content, req.Start, req.End, req.Content)
+	case "delete":
+		newText, err = parse.SpliceBlock(current.Content, req.Start, req.End, "")
+	default:
+		return WriteResult{}, fmt.Errorf("неизвестная операция %q", req.Op)
+	}
+	if err != nil {
+		return WriteResult{}, err
+	}
+
+	note := req.Note
+	if note == "" {
+		note = fmt.Sprintf("блок %s: %s", req.Kind, req.Op)
+	}
+	return m.Write(ctx, user, path, newText, note, req.Apply)
 }
 
 // Write replaces a config file. The previous content is captured first, the new

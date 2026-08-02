@@ -1,0 +1,328 @@
+package parse
+
+import (
+	"fmt"
+	"io"
+	"strings"
+
+	crossplane "github.com/nginxinc/nginx-go-crossplane"
+
+	"github.com/althq/netknownsthat/internal/collect"
+	"github.com/althq/netknownsthat/internal/model"
+)
+
+// BlockKind identifies the kind of structural block a Block describes.
+type BlockKind string
+
+// The block kinds addressable for CRUD in v1. nginx server/location nest;
+// upstream does not. haproxy sections are always flat — global and defaults
+// are viewable and editable but not creatable/deletable (see Block.Editable).
+const (
+	BlockServer   BlockKind = "server"
+	BlockLocation BlockKind = "location"
+	BlockUpstream BlockKind = "upstream"
+	BlockFrontend BlockKind = "frontend"
+	BlockBackend  BlockKind = "backend"
+	BlockListen   BlockKind = "listen"
+	BlockGlobal   BlockKind = "global"
+	BlockDefaults BlockKind = "defaults"
+)
+
+// Block is one structural unit of a single config file — a nginx server{}/
+// location{}/upstream{} or a haproxy frontend/backend/listen/global/defaults
+// section — addressed by exact source line range so a caller can splice it
+// out of the raw file text without reparsing and rebuilding the whole file
+// (neither nginx-go-crossplane nor haproxytech/config-parser preserves
+// comments/formatting/section order on a full round trip).
+type Block struct {
+	ID        string    `json:"id"` // "kind:startLine", recomputed on every List call
+	Kind      BlockKind `json:"kind"`
+	Name      string    `json:"name"`       // server_name/upstream/frontend/backend/listen name; "" for a nameless server or location match
+	StartLine int       `json:"start_line"` // 1-based, inclusive
+	EndLine   int       `json:"end_line"`   // 1-based, inclusive
+	Raw       string    `json:"raw"`        // exact source text of [StartLine, EndLine]
+	Children  []Block   `json:"children,omitempty"`
+	// Editable is false for haproxy global/defaults: create and delete are
+	// refused for these singleton sections (there is normally exactly one of
+	// each, and removing either breaks the config), but viewing and updating
+	// their raw text is still a plain block update.
+	Editable bool `json:"editable"`
+}
+
+// Blocks builds the block tree for one config file. It reparses only that
+// file (SingleFile for nginx; scanHAProxySections is already per-file), so it
+// never follows nginx include directives — CRUD is deliberately scoped to one
+// file at a time.
+func Blocks(c collect.Collector, path, service string) ([]Block, error) {
+	switch service {
+	case model.ServiceNginx:
+		return nginxBlocks(c, path)
+	case model.ServiceHAProxy:
+		return haproxyBlocks(c, path)
+	default:
+		return nil, fmt.Errorf("для сервиса %q дерево блоков не поддерживается", service)
+	}
+}
+
+// --------------------------------------------------------------------- nginx
+
+func nginxBlocks(c collect.Collector, path string) ([]Block, error) {
+	raw, err := c.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("чтение файла: %w", err)
+	}
+	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
+
+	payload, err := crossplane.Parse(path, &crossplane.ParseOptions{
+		Open:                      func(name string) (io.ReadCloser, error) { return c.Open(name) },
+		SingleFile:                true,
+		SkipDirectiveArgsCheck:    true,
+		SkipDirectiveContextCheck: true,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("разбор %s: %w", path, err)
+	}
+
+	var out []Block
+	for _, cfg := range payload.Config {
+		blocks, err := walkNginxBlocks(cfg.Parsed, lines)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, blocks...)
+	}
+	return out, nil
+}
+
+// walkNginxBlocks collects server{} and upstream{} blocks anywhere in the
+// tree (including nested inside http{}/stream{}, which are walked through
+// transparently — they are not blocks in their own right for v1).
+func walkNginxBlocks(dirs crossplane.Directives, lines []string) ([]Block, error) {
+	var out []Block
+	for _, d := range dirs {
+		switch d.Directive {
+		case "upstream":
+			if len(d.Args) == 0 {
+				continue
+			}
+			b, err := newNginxBlock(BlockUpstream, d.Args[0], d.Line, lines)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, b)
+			continue
+
+		case "server":
+			// "server" inside upstream{} is a pool member, not a block — but
+			// upstream's case above never recurses into d.Block, so this case
+			// is never reached for pool-member "server" lines in the first place.
+			b, err := newNginxBlock(BlockServer, nginxServerName(d), d.Line, lines)
+			if err != nil {
+				return nil, err
+			}
+			children, err := walkNginxLocations(d.Block, lines)
+			if err != nil {
+				return nil, err
+			}
+			b.Children = children
+			out = append(out, b)
+			continue
+		}
+		if d.IsBlock() {
+			children, err := walkNginxBlocks(d.Block, lines)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, children...)
+		}
+	}
+	return out, nil
+}
+
+// walkNginxLocations collects only the direct location{} children of a
+// server{} — a location nested inside another location stays part of its
+// parent's raw text in v1, not separately addressable.
+func walkNginxLocations(dirs crossplane.Directives, lines []string) ([]Block, error) {
+	var out []Block
+	for _, d := range dirs {
+		if d.Directive != "location" {
+			continue
+		}
+		b, err := newNginxBlock(BlockLocation, strings.Join(d.Args, " "), d.Line, lines)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, b)
+	}
+	return out, nil
+}
+
+func nginxServerName(d *crossplane.Directive) string {
+	var names []string
+	for _, inner := range d.Block {
+		if inner.Directive == "server_name" {
+			names = append(names, inner.Args...)
+		}
+	}
+	return strings.Join(names, ", ")
+}
+
+func newNginxBlock(kind BlockKind, name string, startLine int, lines []string) (Block, error) {
+	end, err := nginxBlockEnd(lines, startLine)
+	if err != nil {
+		return Block{}, fmt.Errorf("%s %q (строка %d): %w", kind, name, startLine, err)
+	}
+	return Block{
+		ID:        fmt.Sprintf("%s:%d", kind, startLine),
+		Kind:      kind,
+		Name:      name,
+		StartLine: startLine,
+		EndLine:   end,
+		Raw:       strings.Join(lines[startLine-1:end], "\n"),
+		Editable:  true,
+	}, nil
+}
+
+// nginxBlockEnd finds the line of the "}" that closes the block opened on
+// startLine, by depth-counting braces across the raw file text. crossplane
+// gives no end-of-block position at all, so this has to scan text directly —
+// skipping "#" comments and quoted-string contents (nginx allows braces
+// inside a quoted directive argument, e.g. add_header's value) so those
+// don't throw the depth count off.
+func nginxBlockEnd(lines []string, startLine int) (int, error) {
+	if startLine < 1 || startLine > len(lines) {
+		return 0, fmt.Errorf("строка %d вне диапазона файла (%d строк)", startLine, len(lines))
+	}
+	depth := 0
+	var quote byte // 0 when not inside a quoted string
+	for i := startLine - 1; i < len(lines); i++ {
+		line := lines[i]
+		for j := 0; j < len(line); j++ {
+			ch := line[j]
+			if quote != 0 {
+				if ch == '\\' {
+					j++ // the escaped character is never special, skip it too
+					continue
+				}
+				if ch == quote {
+					quote = 0
+				}
+				continue
+			}
+			switch ch {
+			case '#':
+				j = len(line) // rest of the line is a comment
+			case '"', '\'':
+				quote = ch
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth == 0 {
+					return i + 1, nil
+				}
+			}
+		}
+	}
+	return 0, fmt.Errorf("не удалось определить конец блока, начатого в строке %d", startLine)
+}
+
+// ------------------------------------------------------------------- haproxy
+
+var haproxyBlockKinds = map[string]BlockKind{
+	"frontend": BlockFrontend,
+	"backend":  BlockBackend,
+	"listen":   BlockListen,
+	"global":   BlockGlobal,
+	"defaults": BlockDefaults,
+}
+
+// haproxyBlocks reuses scanHAProxySections (haproxy.go) almost as-is — it
+// already scans raw text into per-section {Kind, Name, Line, Lines}, which is
+// exactly the line-span information block CRUD needs.
+func haproxyBlocks(c collect.Collector, path string) ([]Block, error) {
+	raw, err := c.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("чтение файла: %w", err)
+	}
+	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
+	lines := strings.Split(text, "\n")
+
+	out := make([]Block, 0, 8)
+	for _, sec := range scanHAProxySections(text) {
+		kind, ok := haproxyBlockKinds[sec.Kind]
+		if !ok {
+			continue // resolvers/peers/cache/... are out of scope for v1
+		}
+		// sec.Lines holds every raw line after the header up to (not
+		// including) the next section header or EOF, so the section's last
+		// line is Line+len(Lines) — trim any trailing blank separator lines
+		// so a block's Raw text doesn't carry the gap before the next section.
+		end := sec.Line + len(sec.Lines)
+		if end > len(lines) {
+			end = len(lines)
+		}
+		for end > sec.Line && strings.TrimSpace(lines[end-1]) == "" {
+			end--
+		}
+		out = append(out, Block{
+			ID:        fmt.Sprintf("%s:%d", kind, sec.Line),
+			Kind:      kind,
+			Name:      sec.Name,
+			StartLine: sec.Line,
+			EndLine:   end,
+			Raw:       strings.Join(lines[sec.Line-1:end], "\n"),
+			Editable:  kind != BlockGlobal && kind != BlockDefaults,
+		})
+	}
+	return out, nil
+}
+
+// ----------------------------------------------------------------- splicing
+
+// SpliceBlock replaces the inclusive line range [startLine, endLine] of
+// fileText with newText, leaving every other line byte-for-byte untouched.
+// Line numbers are 1-based and are not re-normalised for \r\n — "\r" is never
+// a line separator, so an index computed against a \r\n-normalised copy of
+// the same text lands on the same line here.
+func SpliceBlock(fileText string, startLine, endLine int, newText string) (string, error) {
+	lines := strings.Split(fileText, "\n")
+	if startLine < 1 || endLine < startLine || endLine > len(lines) {
+		return "", fmt.Errorf("диапазон строк %d..%d вне файла (%d строк)", startLine, endLine, len(lines))
+	}
+	out := make([]string, 0, len(lines))
+	out = append(out, lines[:startLine-1]...)
+	if trimmed := strings.TrimRight(newText, "\n"); trimmed != "" {
+		out = append(out, strings.Split(trimmed, "\n")...)
+	}
+	out = append(out, lines[endLine:]...)
+	return strings.Join(out, "\n"), nil
+}
+
+// InsertBlockAtEnd appends newText as a new block. A nginx location{} is
+// inserted just before its parent server{}'s closing "}" (parentEndLine,
+// taken from a Block the caller already fetched); every other kind is
+// appended at the end of the file, since a top-level nginx server/upstream or
+// a haproxy section is always valid wherever it lands in the file.
+func InsertBlockAtEnd(fileText string, kind BlockKind, newText string, parentEndLine int) (string, error) {
+	lines := strings.Split(fileText, "\n")
+	block := strings.Split(strings.TrimRight(newText, "\n"), "\n")
+
+	if kind == BlockLocation {
+		if parentEndLine < 1 || parentEndLine > len(lines) {
+			return "", fmt.Errorf("родительский блок вне диапазона файла")
+		}
+		out := make([]string, 0, len(lines)+len(block))
+		out = append(out, lines[:parentEndLine-1]...) // up to, not including, the closing "}"
+		out = append(out, block...)
+		out = append(out, lines[parentEndLine-1:]...) // the "}" line and everything after
+		return strings.Join(out, "\n"), nil
+	}
+
+	out := append([]string{}, lines...)
+	if len(out) > 0 && out[len(out)-1] != "" {
+		out = append(out, "") // one blank line of separation from existing content
+	}
+	out = append(out, block...)
+	return strings.Join(out, "\n"), nil
+}

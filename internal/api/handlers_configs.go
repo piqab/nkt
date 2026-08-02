@@ -1,9 +1,11 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/althq/netknownsthat/internal/auth"
+	"github.com/althq/netknownsthat/internal/control"
 )
 
 func (s *Server) handleConfigList(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +66,44 @@ func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
 	}
 	s.db.Audit(r.Context(), user, "config.write", req.Path, "ok", map[string]any{
 		"version": res.VersionID, "applied": res.Applied, "note": req.Note,
+	})
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (s *Server) handleConfigBlocks(w http.ResponseWriter, r *http.Request) {
+	blocks, err := s.configs.ListBlocks(r.URL.Query().Get("path"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"blocks": blocks})
+}
+
+type blockWriteRequest struct {
+	Path string `json:"path"`
+	control.BlockWriteRequest
+}
+
+func (s *Server) handleConfigBlockWrite(w http.ResponseWriter, r *http.Request) {
+	var req blockWriteRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user := auth.Username(r.Context())
+
+	res, err := s.configs.WriteBlock(r.Context(), user, req.Path, req.BlockWriteRequest)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, control.ErrStaleContent) {
+			status = http.StatusConflict
+		}
+		s.db.Audit(r.Context(), user, "config.block."+req.Op, req.Path, "error", err.Error())
+		writeJSON(w, status, map[string]any{"error": err.Error(), "result": res})
+		return
+	}
+	s.db.Audit(r.Context(), user, "config.block."+req.Op, req.Path, "ok", map[string]any{
+		"kind": req.Kind, "version": res.VersionID, "applied": res.Applied,
 	})
 	writeJSON(w, http.StatusOK, res)
 }
