@@ -89,6 +89,18 @@ func (m *ConfigManager) serviceForPath(path string) string {
 				return f.Service
 			}
 		}
+		// A running container's own compose label is as trustworthy as the
+		// configured NKT_COMPOSE_FILES list — docker reported it, not the
+		// request — and it is often the ONLY way to reach a stack that
+		// wasn't in that list to begin with (a second project, a path that
+		// doesn't match the default guesses). Editing a container's config
+		// via "редактировать конфиг" depends on this: that link is built
+		// from exactly this same ComposeFile field.
+		for _, c := range snap.Container {
+			if c.ComposeFile == path {
+				return model.ServiceDocker
+			}
+		}
 	}
 	return ""
 }

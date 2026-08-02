@@ -448,10 +448,19 @@ export interface GraphEdge {
   status: string
 }
 
+/** One problem/warning attached to a graph node — the node itself only
+ * carries a colour and a count, this is what actually says what's wrong. */
+export interface GraphFinding {
+  node_id: string
+  title: string
+  severity: Severity
+}
+
 export interface Graph {
   nodes: GraphNode[]
   edges: GraphEdge[]
   stats: Record<string, number>
+  findings: GraphFinding[]
 }
 
 export interface JobStatus {
