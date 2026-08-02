@@ -352,6 +352,20 @@ button.ghost { border-color: transparent; background: transparent; }
   overflow-y: auto;
 }
 
+/* -------------------------------------------------------------- block tree */
+
+.block-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.4rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.block-row:hover { background: var(--wash); }
+.block-row.selected { background: var(--wash); font-weight: 600; }
+.block-row-action { margin-left: auto; }
+
 input, select, textarea {
   font: inherit;
   font-size: 0.85rem;

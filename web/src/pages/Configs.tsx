@@ -1,20 +1,14 @@
 import { useEffect, useState } from 'react'
 import { api, qs, useApi } from '../api'
-import type { ConfigVersion, FileContent, ManagedFile, Me } from '../types'
+import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
 import { Banner, Card, ErrorNote, Loading, Spinner, formatDateTime } from '../components/ui'
 import { formatBytes } from '../components/charts'
+import BlockTree from '../components/BlockTree'
 
-interface WriteResult {
-  path: string
-  version_id: number
-  validated: boolean
-  validation?: { exit_code: number; stdout: string; stderr: string; simulated: boolean }
-  rolled_back: boolean
-  message: string
-  applied: boolean
-}
+const BLOCK_SERVICES = new Set(['nginx', 'haproxy'])
 
 export default function Configs({ me }: { me: Me }) {
+  const [view, setView] = useState<'text' | 'blocks'>('text')
   const files = useApi<{ files: ManagedFile[] }>('/configs')
   const [path, setPath] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
@@ -36,6 +30,10 @@ export default function Configs({ me }: { me: Me }) {
       setDiff(null)
     }
   }, [file.data])
+
+  useEffect(() => {
+    setView('text')
+  }, [path])
 
   const dirty = file.data !== null && draft !== file.data.content
 
@@ -157,64 +155,93 @@ export default function Configs({ me }: { me: Me }) {
                 subtitle={`${file.data.service} · ${formatBytes(file.data.size)} · изменён ${formatDateTime(file.data.mod_time)}`}
                 actions={
                   <>
-                    {dirty && <span className="small" style={{ color: 'var(--status-warning)' }}>есть несохранённые правки</span>}
-                    <button onClick={() => setDraft(file.data!.content)} disabled={!dirty}>
-                      Сбросить
-                    </button>
-                    {me.is_admin && me.allow_mutations && (
-                      <button className="primary" onClick={save} disabled={busy || !dirty}>
-                        {busy && <Spinner />}
-                        {busy ? 'Сохраняю…' : 'Проверить и сохранить'}
-                      </button>
+                    {BLOCK_SERVICES.has(file.data.service) && (
+                      <div className="row" style={{ gap: '0.15rem' }}>
+                        <button className={view === 'text' ? 'primary' : 'ghost'} onClick={() => setView('text')}>
+                          текст
+                        </button>
+                        <button className={view === 'blocks' ? 'primary' : 'ghost'} onClick={() => setView('blocks')}>
+                          блоки
+                        </button>
+                      </div>
+                    )}
+                    {view === 'text' && (
+                      <>
+                        {dirty && <span className="small" style={{ color: 'var(--status-warning)' }}>есть несохранённые правки</span>}
+                        <button onClick={() => setDraft(file.data!.content)} disabled={!dirty}>
+                          Сбросить
+                        </button>
+                        {me.is_admin && me.allow_mutations && (
+                          <button className="primary" onClick={save} disabled={busy || !dirty}>
+                            {busy && <Spinner />}
+                            {busy ? 'Сохраняю…' : 'Проверить и сохранить'}
+                          </button>
+                        )}
+                      </>
                     )}
                   </>
                 }
               >
-                {error && <Banner kind="error">{error}</Banner>}
-                {result && (
-                  <Banner kind={result.rolled_back ? 'error' : 'info'}>
-                    <div>{result.message}</div>
-                    {result.validation && (
-                      <div className="small mono" style={{ marginTop: '0.25rem' }}>
-                        проверка: {result.validation.stdout || result.validation.stderr || 'без вывода'}
+                {view === 'blocks' ? (
+                  <BlockTree
+                    path={file.data.path}
+                    service={file.data.service}
+                    sha256={file.data.sha256}
+                    me={me}
+                    onSaved={() => {
+                      file.reload()
+                      versions.reload()
+                    }}
+                  />
+                ) : (
+                  <>
+                    {error && <Banner kind="error">{error}</Banner>}
+                    {result && (
+                      <Banner kind={result.rolled_back ? 'error' : 'info'}>
+                        <div>{result.message}</div>
+                        {result.validation && (
+                          <div className="small mono" style={{ marginTop: '0.25rem' }}>
+                            проверка: {result.validation.stdout || result.validation.stderr || 'без вывода'}
+                          </div>
+                        )}
+                        {!result.validated && (
+                          <div className="small muted">
+                            Проверка конфигурации недоступна для этого сервиса — файл записан без валидации.
+                          </div>
+                        )}
+                      </Banner>
+                    )}
+
+                    <textarea
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      rows={22}
+                      spellCheck={false}
+                      readOnly={!me.is_admin || !me.allow_mutations}
+                    />
+
+                    {me.is_admin && me.allow_mutations && (
+                      <div className="filters" style={{ marginTop: '0.6rem' }}>
+                        <label style={{ flex: 1, minWidth: '14rem' }}>
+                          Комментарий к правке
+                          <input
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                            placeholder="зачем меняем"
+                          />
+                        </label>
+                        <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
+                          <input
+                            type="checkbox"
+                            checked={apply}
+                            onChange={(e) => setApply(e.target.checked)}
+                            style={{ width: 'auto' }}
+                          />
+                          перезагрузить сервис после сохранения
+                        </label>
                       </div>
                     )}
-                    {!result.validated && (
-                      <div className="small muted">
-                        Проверка конфигурации недоступна для этого сервиса — файл записан без валидации.
-                      </div>
-                    )}
-                  </Banner>
-                )}
-
-                <textarea
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  rows={22}
-                  spellCheck={false}
-                  readOnly={!me.is_admin || !me.allow_mutations}
-                />
-
-                {me.is_admin && me.allow_mutations && (
-                  <div className="filters" style={{ marginTop: '0.6rem' }}>
-                    <label style={{ flex: 1, minWidth: '14rem' }}>
-                      Комментарий к правке
-                      <input
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        placeholder="зачем меняем"
-                      />
-                    </label>
-                    <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-                      <input
-                        type="checkbox"
-                        checked={apply}
-                        onChange={(e) => setApply(e.target.checked)}
-                        style={{ width: 'auto' }}
-                      />
-                      перезагрузить сервис после сохранения
-                    </label>
-                  </div>
+                  </>
                 )}
               </Card>
 

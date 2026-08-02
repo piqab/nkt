@@ -101,6 +101,7 @@ func (s *Server) Handler() http.Handler {
 
 			r.Get("/configs", s.handleConfigList)
 			r.Get("/configs/file", s.handleConfigRead)
+			r.Get("/configs/blocks", s.handleConfigBlocks)
 			r.Get("/configs/versions", s.handleConfigVersions)
 			r.Get("/configs/versions/{id}", s.handleConfigVersion)
 			r.Get("/configs/versions/{id}/diff", s.handleConfigDiff)
@@ -127,6 +128,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/containers/{name}/{action}", s.handleContainerAction)
 
 				r.Put("/configs/file", s.handleConfigWrite)
+				r.Post("/configs/blocks", s.handleConfigBlockWrite)
 				r.Post("/configs/versions/{id}/rollback", s.handleConfigRollback)
 
 				r.Post("/firewall/rules", s.handleFirewallAdd)

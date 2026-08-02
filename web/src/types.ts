@@ -149,6 +149,44 @@ export interface FileContent extends ManagedFile {
   content: string
 }
 
+export type BlockKind =
+  | 'server'
+  | 'location'
+  | 'upstream'
+  | 'frontend'
+  | 'backend'
+  | 'listen'
+  | 'global'
+  | 'defaults'
+
+/** One structural block of a single config file — nginx server{}/location{}/
+ * upstream{} or a haproxy frontend/backend/listen/global/defaults section —
+ * addressed by exact source line range rather than a persistent id. */
+export interface ConfigBlock {
+  id: string
+  kind: BlockKind
+  name: string
+  start_line: number
+  end_line: number
+  raw: string
+  children?: ConfigBlock[]
+  /** False for haproxy global/defaults: create/delete are refused, update is not. */
+  editable: boolean
+}
+
+/** What /configs/file (PUT), /configs/blocks (POST) and a version rollback
+ * all return — the real validator's verdict, and whether it had to roll the
+ * write back. */
+export interface WriteResult {
+  path: string
+  version_id: number
+  validated: boolean
+  validation?: { exit_code: number; stdout: string; stderr: string; simulated: boolean }
+  rolled_back: boolean
+  message: string
+  applied: boolean
+}
+
 export interface ConfigVersion {
   id: number
   path: string
