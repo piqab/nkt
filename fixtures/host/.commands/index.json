@@ -20,6 +20,11 @@
       "stdout": "Congratulations, all renewals succeeded:\n  /etc/letsencrypt/live/standalone.example.com/fullchain.pem (success)\n",
       "exit_code": 0, "simulated": true },
 
+    { "_comment": "Выпуск НОВОГО сертификата (StartIssueCertbot) для домена, которого certbot ещё не знает — не renew.",
+      "match": ["certbot", "certonly", "--standalone", "--non-interactive", "--agree-tos", "--register-unsafely-without-email", "-d", "newsite.example.com"],
+      "stdout": "Successfully received certificate.\nCertificate is saved at: /etc/letsencrypt/live/newsite.example.com/fullchain.pem\nKey is saved at:         /etc/letsencrypt/live/newsite.example.com/privkey.pem\n",
+      "exit_code": 0, "simulated": true },
+
 
     { "match": ["nginx", "-t"], "stderr": "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful\n", "exit_code": 0, "simulated": true },
     { "match": ["nginx", "-v"], "stderr": "nginx version: nginx/1.24.0 (Ubuntu)\n", "simulated": true },

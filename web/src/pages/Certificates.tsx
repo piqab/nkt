@@ -103,19 +103,23 @@ export default function Certificates({ me }: { me: Me }) {
   const { data, error, loading, reload } = useApi<CertificatesResponse>('/certificates', 300_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
-  const [renewJob, setRenewJob] = useState<{ id: string; lineage: string } | null>(null)
+  // Shared by both certbot flows — renewing an existing lineage and issuing
+  // a brand-new certificate both run in the background and report progress
+  // through the same job registry (RenewJobStatus), so one poller/Modal
+  // serves either kind; label is what tells them apart on screen.
+  const [job, setJob] = useState<{ id: string; label: string } | null>(null)
   const [jobStatus, setJobStatus] = useState<RenewJobStatus | null>(null)
 
   const certs = useMemo(() => data?.certificates ?? [], [data])
   const summary = data?.summary
   const canControl = me.is_admin && me.allow_mutations
 
-  // Polls the running renew job — stopping services, certbot's own output,
+  // Polls the running job — stopping services, certbot's own output,
   // recombining any haproxy copy, restarting services can together take
   // minutes, so this shows it happening instead of one long spinner.
   useEffect(() => {
-    if (!renewJob) return
-    const jobId = renewJob.id
+    if (!job) return
+    const jobId = job.id
     let cancelled = false
     let timer: number | undefined
 
@@ -141,7 +145,12 @@ export default function Certificates({ me }: { me: Me }) {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [renewJob, reload])
+  }, [job, reload])
+
+  function startJob(id: string, label: string) {
+    setJobStatus(null)
+    setJob({ id, label })
+  }
 
   async function renew(cert: Certificate) {
     const lineage = cert.renewal.lineage
@@ -158,8 +167,7 @@ export default function Certificates({ me }: { me: Me }) {
         method: 'POST',
         body: { lineage },
       })
-      setJobStatus(null)
-      setRenewJob({ id: res.job, lineage })
+      startJob(res.job, `Продление ${lineage}`)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -167,8 +175,8 @@ export default function Certificates({ me }: { me: Me }) {
     }
   }
 
-  function closeRenewModal() {
-    setRenewJob(null)
+  function closeJobModal() {
+    setJob(null)
     setJobStatus(null)
   }
 
@@ -367,13 +375,14 @@ export default function Certificates({ me }: { me: Me }) {
 
       {me.is_admin && me.allow_mutations && (
         <>
+          <IssueForm onStarted={startJob} />
           <CombineForm onCombined={reload} />
           <SelfSignedForm onIssued={reload} />
         </>
       )}
 
-      {renewJob && (
-        <Modal title={`Продление ${renewJob.lineage}`} onClose={closeRenewModal}>
+      {job && (
+        <Modal title={job.label} onClose={closeJobModal}>
           <RenewLog events={jobStatus?.events ?? []} />
           {jobStatus?.done ? (
             <Banner kind={jobStatus.error ? 'error' : 'info'}>
@@ -419,6 +428,79 @@ function lineageLabel(info: LineageInfo): string {
   if (info.days_left < 0) return `${name} — просрочен ${-info.days_left} дн. назад`
   if (info.days_left === 0) return `${name} — истекает сегодня`
   return `${name} — ${info.days_left} дн.`
+}
+
+/** Requests a brand-new Let's Encrypt certificate for domain(s) certbot
+ * doesn't manage yet — unlike "продлить" (an existing lineage) and unlike
+ * the self-signed form below (no real CA involved at all). Runs in the
+ * background through the same job/progress Modal "продлить" already uses. */
+function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) => void }) {
+  const [domains, setDomains] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    const domainList = domains
+      .split(',')
+      .map((d) => d.trim())
+      .filter(Boolean)
+    if (domainList.length === 0) {
+      setError('Укажите хотя бы одно доменное имя')
+      return
+    }
+    if (
+      !window.confirm(
+        `Выпустить сертификат для ${domainList.join(', ')}?\n\n` +
+          'certbot certonly --standalone требует свободный порт 80/443 — nginx и haproxy будут ' +
+          'ненадолго остановлены и автоматически запущены обратно после завершения.',
+      )
+    ) {
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ job: string }>('/certificates/issue', {
+        method: 'POST',
+        body: { domains: domainList },
+      })
+      setDomains('')
+      onStarted(res.job, `Выпуск сертификата: ${domainList.join(', ')}`)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Card
+      title="Выпустить новый сертификат Let's Encrypt"
+      subtitle="Для домена, у которого ещё нет сертификата — certbot certonly --standalone. Wildcard-имена не поддерживаются: standalone доказывает владение только одним точным именем за раз."
+    >
+      <form className="col" onSubmit={submit}>
+        {error && <Banner kind="error">{error}</Banner>}
+        <div className="filters">
+          <label style={{ flex: 1, minWidth: '18rem' }}>
+            Доменные имена через запятую
+            <input
+              value={domains}
+              onChange={(e) => setDomains(e.target.value)}
+              placeholder="new.example.com, www.new.example.com"
+              required
+            />
+          </label>
+        </div>
+        <div>
+          <button className="primary" type="submit" disabled={busy}>
+            {busy && <Spinner />}
+            {busy ? 'Запускаю…' : 'Выпустить'}
+          </button>
+        </div>
+      </form>
+    </Card>
+  )
 }
 
 const NEW_FILE = ''

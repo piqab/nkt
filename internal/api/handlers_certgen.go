@@ -64,6 +64,30 @@ func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"job": id})
 }
 
+type issueRequest struct {
+	Domains []string `json:"domains"`
+}
+
+// handleIssueCertbot starts issuing a brand-new Let's Encrypt certificate
+// for domain(s) certbot doesn't manage yet — unlike handleRenewCertbot,
+// which only re-issues an existing lineage. Same background-job pattern:
+// returns a job ID immediately, the caller polls handleRenewJobStatus.
+func (s *Server) handleIssueCertbot(w http.ResponseWriter, r *http.Request) {
+	var req issueRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	user := auth.Username(r.Context())
+	id, err := s.certs.StartIssueCertbot(user, req.Domains)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job": id})
+}
+
 // handleRenewJobStatus reports everything a renew job has logged so far, for
 // the progress window to poll. A 404 means the ID never existed or was
 // evicted a while after finishing — the caller should stop polling either way.
