@@ -4,11 +4,18 @@
 # Если есть Docker, компиляция идёт внутри контейнера golang — это работает с
 # любой рабочей машины и даёт один и тот же артефакт независимо от того,
 # откуда его собрали. Если Docker не найден, `build`/`web` сами переключаются
-# на bootstrap-build.sh: он собирает прямо на хосте, при нехватке Go/Node
-# спрашивает подтверждение и ставит их в $HOME/.local без sudo. Один и тот же
-# результат — dist/nkt — независимо от того, какой из двух путей сработал.
-# Нативная сборка (`build-dev`) предназначена только для разработки в режиме
-# fixtures.
+# на цель `native-build`: она собирает прямо на хосте и, если там нет
+# подходящего Go (1.25+) или Node (20+), спрашивает подтверждение и ставит их
+# в $HOME/.local — без sudo, ничего системного не трогая. Результат — dist/nkt
+# — один и тот же независимо от того, какой из путей сработал.
+# Нативная сборка (`build-dev`) — отдельная цель, только для разработки в
+# режиме fixtures, без всего вышеперечисленного.
+
+# native-build использует read -p, local и параметрическое расширение —
+# всё это bash, не гарантированный POSIX sh (на Debian/Ubuntu /bin/sh — это
+# dash, где `read -p` не поддерживается). Закрепляем shell для всего файла,
+# остальным целям это не мешает — они используют только простой POSIX-синтаксис.
+SHELL := bash
 
 GO_IMAGE   ?= golang:1.26-alpine
 NODE_IMAGE ?= node:22-alpine
@@ -23,6 +30,26 @@ DOCKER_RUN = docker run --rm \
 	-v nkt-gomod:/go/pkg/mod \
 	-v nkt-gocache:/root/.cache/go-build
 
+# --------------------------------------------------------- native-build (no Docker)
+
+UNAME_M := $(shell uname -m 2>/dev/null)
+ifeq ($(UNAME_M),x86_64)
+NATIVE_GO_ARCH   := amd64
+NATIVE_NODE_ARCH := x64
+else ifeq ($(UNAME_M),aarch64)
+NATIVE_GO_ARCH   := arm64
+NATIVE_NODE_ARCH := arm64
+else
+NATIVE_GO_ARCH   := $(UNAME_M)
+NATIVE_NODE_ARCH := $(UNAME_M)
+endif
+
+MIN_GO_MINOR    := 25
+MIN_NODE_MAJOR  := 20
+LOCAL_ROOT      := $(HOME)/.local
+LOCAL_GO_DIR    := $(LOCAL_ROOT)/go
+LOCAL_NODE_DIR  := $(LOCAL_ROOT)/node
+
 .DEFAULT_GOAL := help
 
 .PHONY: help
@@ -31,17 +58,17 @@ help: ## показать список целей
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: web
-web: ## собрать веб-интерфейс (вшивается в бинарник; без Docker — через bootstrap-build.sh)
+web: ## собрать веб-интерфейс (вшивается в бинарник; без Docker — через native-build)
 	@if command -v docker >/dev/null 2>&1; then \
 		docker run --rm -v "$(CURDIR)":/src -w /src/web -v nkt-npm:/root/.npm $(NODE_IMAGE) \
 			sh -c "npm ci && npm run build"; \
 	else \
-		echo "docker не найден — собираю через bootstrap-build.sh (заодно соберёт и dist/nkt)"; \
-		bash bootstrap-build.sh; \
+		echo "docker не найден — собираю через native-build (заодно соберёт и dist/nkt)"; \
+		$(MAKE) native-build; \
 	fi
 
 .PHONY: build
-build: ## собрать продакшен-бинарник для Linux (Docker, если есть; иначе bootstrap-build.sh на хосте)
+build: ## собрать продакшен-бинарник для Linux (Docker, если есть; иначе — native-build)
 	@if command -v docker >/dev/null 2>&1; then \
 		$(MAKE) web; \
 		mkdir -p dist; \
@@ -50,9 +77,97 @@ build: ## собрать продакшен-бинарник для Linux (Docke
 		echo "готово: $(OUT) ($(VERSION), linux/$(GOARCH))"; \
 		file $(OUT) 2>/dev/null || true; \
 	else \
-		echo "docker не найден — собираю напрямую на хосте через bootstrap-build.sh"; \
-		bash bootstrap-build.sh; \
+		echo "docker не найден — собираю напрямую на хосте (native-build)"; \
+		$(MAKE) native-build; \
 	fi
+
+# Весь рецепт — одна логическая строка Make (каждая физическая строка
+# заканчивается \), поэтому Make передаёт его целиком одному вызову shell —
+# переменные, функции (confirm/go_ok/node_ok) и export PATH переживают
+# переход между строками, как в обычном bash-скрипте. Тот же приём, что уже
+# используется в build/web.
+.PHONY: native-build
+native-build: ## собрать без Docker: сама проверит и, если нужно, поставит Go/Node
+	@set -euo pipefail; \
+	confirm() { \
+		read -r -p "$$1 [y/N] " reply; \
+		case "$$reply" in \
+			[yY]|[yY][eE][sS]|[дД]|[дД][аА]) return 0 ;; \
+			*) return 1 ;; \
+		esac; \
+	}; \
+	go_ok() { \
+		command -v go >/dev/null 2>&1 || return 1; \
+		local ver major minor; \
+		ver=$$(go version | grep -oE 'go[0-9]+\.[0-9]+' | head -1 | tr -d 'go'); \
+		major=$${ver%%.*}; minor=$${ver##*.}; \
+		[ "$$major" -gt 1 ] && return 0; \
+		[ "$$major" -eq 1 ] && [ "$$minor" -ge $(MIN_GO_MINOR) ]; \
+	}; \
+	if go_ok; then \
+		echo "Go: $$(go version) — подходит"; \
+	else \
+		if command -v go >/dev/null 2>&1; then \
+			echo "Найден $$(go version), но нужен 1.$(MIN_GO_MINOR)+"; \
+		else \
+			echo "Go не найден"; \
+		fi; \
+		echo "Будет установлен в $(LOCAL_GO_DIR) (последняя версия с go.dev, без sudo)."; \
+		if confirm "Установить Go?"; then \
+			GOVER=$$(curl -fsSL "https://go.dev/VERSION?m=text" | head -1); \
+			echo "Скачиваю $$GOVER для linux-$(NATIVE_GO_ARCH)…"; \
+			mkdir -p "$(LOCAL_ROOT)"; \
+			curl -fsSL "https://go.dev/dl/$${GOVER}.linux-$(NATIVE_GO_ARCH).tar.gz" -o /tmp/nkt-go.tar.gz; \
+			rm -rf "$(LOCAL_GO_DIR)"; \
+			tar -C "$(LOCAL_ROOT)" -xzf /tmp/nkt-go.tar.gz; \
+			rm -f /tmp/nkt-go.tar.gz; \
+			export PATH="$(LOCAL_GO_DIR)/bin:$$PATH"; \
+			echo "Установлено: $$(go version)"; \
+		else \
+			echo "Отказ — без Go сборка невозможна." >&2; \
+			exit 1; \
+		fi; \
+	fi; \
+	node_ok() { \
+		command -v npm >/dev/null 2>&1 || return 1; \
+		local major; \
+		major=$$(node -v | tr -d 'v' | cut -d. -f1); \
+		[ "$$major" -ge $(MIN_NODE_MAJOR) ]; \
+	}; \
+	if node_ok; then \
+		echo "Node: $$(node -v) — подходит"; \
+	else \
+		if command -v node >/dev/null 2>&1; then \
+			echo "Найден $$(node -v), но нужен $(MIN_NODE_MAJOR)+"; \
+		else \
+			echo "Node/npm не найдены"; \
+		fi; \
+		echo "Будет установлен в $(LOCAL_NODE_DIR) (последняя версия с nodejs.org, без sudo)."; \
+		if confirm "Установить Node?"; then \
+			NODEVER=$$(curl -fsSL "https://nodejs.org/dist/index.tab" | sed -n '2p' | cut -f1); \
+			echo "Скачиваю $$NODEVER для linux-$(NATIVE_NODE_ARCH)…"; \
+			mkdir -p "$(LOCAL_ROOT)"; \
+			curl -fsSL "https://nodejs.org/dist/$${NODEVER}/node-$${NODEVER}-linux-$(NATIVE_NODE_ARCH).tar.xz" -o /tmp/nkt-node.tar.xz; \
+			rm -rf "$(LOCAL_NODE_DIR)"; \
+			mkdir -p "$(LOCAL_NODE_DIR)"; \
+			tar -C "$(LOCAL_NODE_DIR)" --strip-components=1 -xJf /tmp/nkt-node.tar.xz; \
+			rm -f /tmp/nkt-node.tar.xz; \
+			export PATH="$(LOCAL_NODE_DIR)/bin:$$PATH"; \
+			echo "Установлено: $$(node -v)"; \
+		else \
+			echo "Отказ — без Node сборка невозможна." >&2; \
+			exit 1; \
+		fi; \
+	fi; \
+	echo "Собираю веб-интерфейс…"; \
+	( cd web && npm ci && npm run build ); \
+	echo "Собираю бинарник…"; \
+	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
+	echo; \
+	echo "готово: $$($(OUT) version)"; \
+	echo; \
+	echo "Если Go/Node ставились в $(LOCAL_ROOT), добавьте в ~/.bashrc (или ~/.profile):"; \
+	echo "  export PATH=\"$(LOCAL_GO_DIR)/bin:$(LOCAL_NODE_DIR)/bin:\$$PATH\""
 
 .PHONY: build-dev
 build-dev: ## собрать бинарник для текущей ОС — ТОЛЬКО для разработки в режиме fixtures
