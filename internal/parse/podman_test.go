@@ -3,7 +3,20 @@ package parse
 import (
 	"context"
 	"testing"
+
+	"github.com/althq/netknownsthat/internal/collect"
 )
+
+// TestPodmanNeverReturnsNilContainers guards against a real production
+// crash: a host without Podman must still get a real empty slice back, not
+// nil — the field has no `omitempty`, encoding/json marshals nil as `null`,
+// and the Podman page crashes calling .map on `null`.
+func TestPodmanNeverReturnsNilContainers(t *testing.T) {
+	res := Podman(context.Background(), collect.NewFixtures(t.TempDir()))
+	if res.Containers == nil {
+		t.Error("Containers = nil, ожидался непустой (даже если пустой) срез")
+	}
+}
 
 func TestPodmanListsContainersAndPods(t *testing.T) {
 	res := Podman(context.Background(), fixtureCollector(t))

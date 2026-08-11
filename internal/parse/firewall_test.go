@@ -4,8 +4,29 @@ import (
 	"context"
 	"testing"
 
+	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/model"
 )
+
+// TestFirewallNeverReturnsNilSlices guards against a real production crash:
+// a host where iptables-save/ip6tables-save fail and ufw is inactive (e.g.
+// no root, or neither installed) must still get real empty slices back, not
+// nil — encoding/json marshals a nil slice as `null` (none of these fields
+// have `omitempty`), and the frontend crashes calling .filter/.map on
+// `null`. An empty fixtures root (no .commands/index.json at all) makes
+// every command fail, exercising exactly that path.
+func TestFirewallNeverReturnsNilSlices(t *testing.T) {
+	res := Firewall(context.Background(), collect.NewFixtures(t.TempDir()))
+	if res.State.Backends == nil {
+		t.Error("Backends = nil, ожидался непустой (даже если пустой) срез")
+	}
+	if res.State.Policies == nil {
+		t.Error("Policies = nil, ожидался непустой (даже если пустой) срез")
+	}
+	if res.State.Rules == nil {
+		t.Error("Rules = nil, ожидался непустой (даже если пустой) срез")
+	}
+}
 
 func TestFirewallParsesFixture(t *testing.T) {
 	res := Firewall(context.Background(), fixtureCollector(t))

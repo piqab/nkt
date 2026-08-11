@@ -7,6 +7,24 @@ import (
 	"github.com/althq/netknownsthat/internal/model"
 )
 
+// TestBuildNeverReturnsNilEdgesOrFindings guards against a real production
+// crash: a minimal or brand-new host can genuinely have zero edges and zero
+// findings, and both fields must still be real empty slices, not nil —
+// neither has `omitempty`, encoding/json marshals nil as `null`, and the
+// resource map crashes calling .filter/.map on `null`.
+func TestBuildNeverReturnsNilEdgesOrFindings(t *testing.T) {
+	g := Build(&model.Snapshot{})
+	if g.Edges == nil {
+		t.Error("Edges = nil, ожидался непустой (даже если пустой) срез")
+	}
+	if g.Findings == nil {
+		t.Error("Findings = nil, ожидался непустой (даже если пустой) срез")
+	}
+	if g.Nodes == nil {
+		t.Error("Nodes = nil, ожидался непустой (даже если пустой) срез")
+	}
+}
+
 func nodeByID(g *Graph, id string) *Node {
 	for i := range g.Nodes {
 		if g.Nodes[i].ID == id {

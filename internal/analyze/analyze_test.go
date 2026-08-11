@@ -172,3 +172,18 @@ func TestDeclaredNotListeningFiresWhenComparable(t *testing.T) {
 		t.Errorf("ожидалась ровно одна находка по порту 9000, получено %+v", got)
 	}
 }
+
+// TestRunNeverReturnsNilOnCleanHost guards against a real production crash:
+// a clean host with zero findings must still get back a real empty slice,
+// not nil — encoding/json marshals a nil slice as `null` (Snapshot.Findings
+// has no `omitempty`), and every frontend page that calls .filter/.map on
+// the findings list crashes on `null`.
+func TestRunNeverReturnsNilOnCleanHost(t *testing.T) {
+	got := Run(&model.Snapshot{})
+	if got == nil {
+		t.Fatal("Run(пустой снапшот) вернул nil, ожидался непустой (даже если пустой) срез")
+	}
+	if len(got) != 0 {
+		t.Errorf("ожидалось 0 находок на пустом снапшоте, получено %d", len(got))
+	}
+}

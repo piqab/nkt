@@ -91,8 +91,10 @@ type builder struct {
 func Build(s *model.Snapshot) *Graph {
 	b := &builder{
 		nodes:    map[string]*Node{},
+		edges:    []Edge{},
 		edgeSeen: map[string]bool{},
 		bySubj:   map[string][]model.Finding{},
+		findings: []FindingRef{},
 	}
 	for _, f := range s.Findings {
 		b.bySubj[f.Object] = append(b.bySubj[f.Object], f)
@@ -323,7 +325,11 @@ func Build(s *model.Snapshot) *Graph {
 		}
 	}
 
-	g := &Graph{Stats: map[string]int{}}
+	// Nodes/Edges/Findings have no `omitempty` — a minimal or brand-new host
+	// can genuinely have zero edges or zero findings, and encoding/json
+	// marshals a nil slice as `null`, which crashes the map's .filter/.map
+	// calls over them.
+	g := &Graph{Stats: map[string]int{}, Nodes: []Node{}, Edges: []Edge{}, Findings: []FindingRef{}}
 	for _, id := range b.order {
 		g.Nodes = append(g.Nodes, *b.nodes[id])
 		g.Stats[b.nodes[id].Kind]++

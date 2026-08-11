@@ -46,6 +46,11 @@ func Certificates(ctx context.Context, c collect.Collector, endpoints []model.En
 	started := time.Now()
 	res := CertResult{Status: model.SourceStatus{Name: "certificates"}}
 	defer func() { res.Status.DurationMS = time.Since(started).Milliseconds() }()
+	// No `omitempty` on the JSON field this feeds — a host with zero TLS
+	// endpoints (nothing to reference a certificate) must still get a real
+	// empty slice back, not nil, or encoding/json marshals it as `null` and
+	// the Certificates page crashes calling .map on it.
+	res.Certs = []model.Certificate{}
 
 	paths := map[string]*certUsage{}
 	var order []string

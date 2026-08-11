@@ -84,7 +84,7 @@ export default function LXD({ me }: { me: Me }) {
                 </tr>
               </thead>
               <tbody>
-                {instances.data?.instances.map((i) => (
+                {(instances.data?.instances ?? []).map((i) => (
                   <tr key={i.name}>
                     <td>
                       <strong>{i.name}</strong>

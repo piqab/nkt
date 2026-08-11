@@ -3,7 +3,23 @@ package parse
 import (
 	"context"
 	"testing"
+
+	"github.com/althq/netknownsthat/internal/collect"
 )
+
+// TestLibvirtNeverReturnsNilSlices guards against a real production crash:
+// a host without libvirt must still get real empty slices back, not nil —
+// neither field has `omitempty`, encoding/json marshals nil as `null`, and
+// the VMs page crashes calling .map on `null`.
+func TestLibvirtNeverReturnsNilSlices(t *testing.T) {
+	res := Libvirt(context.Background(), collect.NewFixtures(t.TempDir()), "qemu:///system")
+	if res.VMs == nil {
+		t.Error("VMs = nil, ожидался непустой (даже если пустой) срез")
+	}
+	if res.Files == nil {
+		t.Error("Files = nil, ожидался непустой (даже если пустой) срез")
+	}
+}
 
 func TestLibvirtListsDomains(t *testing.T) {
 	res := Libvirt(context.Background(), fixtureCollector(t), "qemu:///system")

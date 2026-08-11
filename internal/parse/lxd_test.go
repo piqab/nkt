@@ -3,7 +3,20 @@ package parse
 import (
 	"context"
 	"testing"
+
+	"github.com/althq/netknownsthat/internal/collect"
 )
+
+// TestLXDNeverReturnsNilInstances guards against a real production crash: a
+// host without LXD must still get a real empty slice back, not nil — the
+// field has no `omitempty`, encoding/json marshals nil as `null`, and the
+// LXD page crashes calling .map on `null`.
+func TestLXDNeverReturnsNilInstances(t *testing.T) {
+	res := LXD(context.Background(), collect.NewFixtures(t.TempDir()))
+	if res.Instances == nil {
+		t.Error("Instances = nil, ожидался непустой (даже если пустой) срез")
+	}
+}
 
 func TestLXDListsInstances(t *testing.T) {
 	res := LXD(context.Background(), fixtureCollector(t))

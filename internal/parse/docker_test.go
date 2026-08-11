@@ -4,8 +4,30 @@ import (
 	"context"
 	"testing"
 
+	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/model"
 )
+
+// TestDockerNeverReturnsNilSlices guards against a real production crash: a
+// host with no docker socket and no compose files must still get real empty
+// slices back, not nil — encoding/json marshals a nil slice as `null` (none
+// of these fields have `omitempty`), and the frontend crashes calling
+// .filter/.map on `null`. An empty fixtures root exercises exactly that.
+func TestDockerNeverReturnsNilSlices(t *testing.T) {
+	res := Docker(context.Background(), collect.NewFixtures(t.TempDir()), nil)
+	if res.Containers == nil {
+		t.Error("Containers = nil, ожидался непустой (даже если пустой) срез")
+	}
+	if res.Networks == nil {
+		t.Error("Networks = nil, ожидался непустой (даже если пустой) срез")
+	}
+	if res.Endpoints == nil {
+		t.Error("Endpoints = nil, ожидался непустой (даже если пустой) срез")
+	}
+	if res.Files == nil {
+		t.Error("Files = nil, ожидался непустой (даже если пустой) срез")
+	}
+}
 
 func TestDockerMergesComposeAndEngine(t *testing.T) {
 	res := Docker(context.Background(), fixtureCollector(t), []string{"/srv/docker/docker-compose.yml"})

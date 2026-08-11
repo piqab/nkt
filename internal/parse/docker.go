@@ -30,6 +30,14 @@ func Docker(ctx context.Context, c collect.Collector, composePaths []string) Doc
 	started := time.Now()
 	res := DockerResult{Status: model.SourceStatus{Name: model.ServiceDocker}}
 	defer func() { res.Status.DurationMS = time.Since(started).Milliseconds() }()
+	// None of these fields have `omitempty` — a host with no containers/
+	// networks/compose files at all would otherwise leave them nil, which
+	// encoding/json marshals as `null` and crashes any frontend .map/.filter
+	// expecting an array.
+	res.Containers = []model.Container{}
+	res.Networks = []model.DockerNetwork{}
+	res.Endpoints = []model.Endpoint{}
+	res.Files = []model.ManagedFile{}
 
 	// --- what the engine is actually running -------------------------------------
 	running, version, err := dockerFromEngine(ctx, c)
