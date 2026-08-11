@@ -11,7 +11,7 @@ import (
 // because the directory was always already there.
 func TestLocalWriteFileCreatesParentDirectory(t *testing.T) {
 	root := t.TempDir()
-	l := NewLocal("/var/run/docker.sock", 0)
+	l := NewLocal("/var/run/docker.sock", "/run/podman/podman.sock", 0)
 
 	target := filepath.Join(root, "nested", "deeper", "file.pem")
 	if err := l.WriteFile(target, []byte("hello"), 0o644); err != nil {
@@ -30,7 +30,7 @@ func TestLocalWriteFileCreatesParentDirectory(t *testing.T) {
 // A write into an existing directory must keep working exactly as before.
 func TestLocalWriteFileExistingDirectory(t *testing.T) {
 	root := t.TempDir()
-	l := NewLocal("/var/run/docker.sock", 0)
+	l := NewLocal("/var/run/docker.sock", "/run/podman/podman.sock", 0)
 
 	target := filepath.Join(root, "file.txt")
 	if err := l.WriteFile(target, []byte("first"), 0o644); err != nil {

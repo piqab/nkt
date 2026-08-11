@@ -373,6 +373,33 @@ func (f *Fixtures) DockerAPI(_ context.Context, method, apiPath string, _ []byte
 	return []byte(`{"message":"no such fixture"}`), 404, nil
 }
 
+// -------------------------------------------------------------------- podman
+
+func (f *Fixtures) PodmanAPI(_ context.Context, method, apiPath string, _ []byte) ([]byte, int, error) {
+	clean := apiPath
+	if i := strings.IndexByte(clean, '?'); i >= 0 {
+		clean = clean[:i]
+	}
+	clean = strings.Trim(clean, "/")
+
+	// Container creation is the one mutation whose caller needs something
+	// back (the new container's ID, to start it next) — everything else
+	// (start/stop/restart/delete) succeeds silently like the real API.
+	if method == "POST" && clean == "libpod/containers/create" {
+		return []byte(`{"Id":"fixture0000created0000podman0000container00000000","Warnings":[]}`), 201, nil
+	}
+	if method != "GET" {
+		return nil, 204, nil
+	}
+
+	slug := strings.ReplaceAll(clean, "/", "_")
+	raw, err := os.ReadFile(filepath.Join(f.root, ".podman", slug+".json"))
+	if err == nil {
+		return raw, 200, nil
+	}
+	return []byte(`{"message":"no such fixture"}`), 404, nil
+}
+
 func (f *Fixtures) HostInfo(_ context.Context) HostInfo {
 	info := HostInfo{
 		Mode:     f.Mode(),

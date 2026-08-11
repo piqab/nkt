@@ -100,6 +100,12 @@ type Collector interface {
 	// everything after the version prefix, e.g. "/containers/json?all=1".
 	DockerAPI(ctx context.Context, method, apiPath string, body []byte) ([]byte, int, error)
 
+	// PodmanAPI performs a request against Podman's Docker-compatible REST
+	// API, the same shape as DockerAPI but over Podman's own socket — Podman
+	// is a separate engine from Docker and often runs alongside it on the
+	// same host.
+	PodmanAPI(ctx context.Context, method, apiPath string, body []byte) ([]byte, int, error)
+
 	HostInfo(ctx context.Context) HostInfo
 }
 

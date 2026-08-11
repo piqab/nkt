@@ -30,6 +30,8 @@ func DefaultServiceSpecs() []ServiceSpec {
 			Actions: []string{"validate", "reload", "restart", "start", "stop"}},
 		{Name: model.ServiceDocker, Unit: "docker", Binary: "docker",
 			Actions: []string{"restart", "start", "stop"}},
+		{Name: model.ServicePodman, Unit: "podman.socket", Binary: "podman",
+			Actions: []string{"restart", "start", "stop"}},
 		{Name: model.ServiceUFW, Unit: "ufw", Binary: "ufw",
 			Actions: []string{"reload", "start", "stop"}},
 		{Name: "fail2ban", Unit: "fail2ban", Binary: "fail2ban-client",

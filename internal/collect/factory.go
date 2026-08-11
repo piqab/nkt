@@ -8,7 +8,7 @@ import (
 )
 
 // New builds the collector for the requested mode.
-func New(mode, fixturesRoot, dockerSocket string, commandTimeout time.Duration) (Collector, error) {
+func New(mode, fixturesRoot, dockerSocket, podmanSocket string, commandTimeout time.Duration) (Collector, error) {
 	switch mode {
 	case "fixtures":
 		st, err := os.Stat(fixturesRoot)
@@ -34,7 +34,7 @@ func New(mode, fixturesRoot, dockerSocket string, commandTimeout time.Duration) 
 				"режим local работает только на Linux, а система — %s. "+
 					"Для разработки используйте NKT_MODE=fixtures", runtime.GOOS)
 		}
-		return NewLocal(dockerSocket, commandTimeout), nil
+		return NewLocal(dockerSocket, podmanSocket, commandTimeout), nil
 	default:
 		return nil, fmt.Errorf("неизвестный режим сбора данных: %q", mode)
 	}

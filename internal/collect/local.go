@@ -23,23 +23,34 @@ import (
 // Linux host being managed.
 type Local struct {
 	dockerSocket   string
+	podmanSocket   string
 	commandTimeout time.Duration
 	docker         *http.Client
+	podman         *http.Client
 }
 
 // NewLocal builds a collector bound to the running machine.
-func NewLocal(dockerSocket string, commandTimeout time.Duration) *Local {
-	l := &Local{dockerSocket: dockerSocket, commandTimeout: commandTimeout}
-	l.docker = &http.Client{
+func NewLocal(dockerSocket, podmanSocket string, commandTimeout time.Duration) *Local {
+	l := &Local{dockerSocket: dockerSocket, podmanSocket: podmanSocket, commandTimeout: commandTimeout}
+	l.docker = unixSocketClient(func() string { return l.dockerSocket })
+	l.podman = unixSocketClient(func() string { return l.podmanSocket })
+	return l
+}
+
+// unixSocketClient builds an http.Client that dials a unix socket instead of
+// TCP — both Docker's and Podman's engine APIs are exposed this way. socket
+// is a func rather than a plain string so the client can be built before the
+// Local struct's field is fully populated (see NewLocal).
+func unixSocketClient(socket func() string) *http.Client {
+	return &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 				var d net.Dialer
-				return d.DialContext(ctx, "unix", l.dockerSocket)
+				return d.DialContext(ctx, "unix", socket())
 			},
 		},
 	}
-	return l
 }
 
 // Mode implements Collector.
@@ -185,11 +196,26 @@ func (l *Local) DockerAPI(ctx context.Context, method, apiPath string, body []by
 	if runtime.GOOS == "windows" {
 		return nil, 0, fmt.Errorf("%w: Docker через unix-сокет", ErrNotSupported)
 	}
+	return engineAPI(ctx, l.docker, "docker", method, apiPath, body)
+}
+
+func (l *Local) PodmanAPI(ctx context.Context, method, apiPath string, body []byte) ([]byte, int, error) {
+	if runtime.GOOS == "windows" {
+		return nil, 0, fmt.Errorf("%w: Podman через unix-сокет", ErrNotSupported)
+	}
+	return engineAPI(ctx, l.podman, "podman", method, apiPath, body)
+}
+
+// engineAPI performs one request against a Docker-API-shaped unix-socket
+// engine — Docker and Podman both speak this protocol, just over different
+// sockets. host is only used to build a syntactically valid URL; the actual
+// destination is whatever the http.Client's DialContext dials.
+func engineAPI(ctx context.Context, client *http.Client, host, method, apiPath string, body []byte) ([]byte, int, error) {
 	var reader io.Reader
 	if len(body) > 0 {
 		reader = bytes.NewReader(body)
 	}
-	url := "http://docker" + apiPath
+	url := "http://" + host + apiPath
 	req, err := http.NewRequestWithContext(ctx, method, url, reader)
 	if err != nil {
 		return nil, 0, err
@@ -197,9 +223,9 @@ func (l *Local) DockerAPI(ctx context.Context, method, apiPath string, body []by
 	if len(body) > 0 {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	resp, err := l.docker.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return nil, 0, fmt.Errorf("docker api %s %s: %w", method, apiPath, err)
+		return nil, 0, fmt.Errorf("%s api %s %s: %w", host, method, apiPath, err)
 	}
 	defer resp.Body.Close()
 
