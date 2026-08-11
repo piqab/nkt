@@ -21,6 +21,9 @@ const (
 	ModeFixtures Mode = "fixtures"
 	// ModeLocal reads the real filesystem and runs real commands. Linux only.
 	ModeLocal Mode = "local"
+	// ModeHub runs as a control center for other nkt instances over SSH
+	// instead of inspecting any local host — see internal/hub.
+	ModeHub Mode = "hub"
 )
 
 // Config is the fully resolved application configuration.
@@ -91,6 +94,16 @@ type Config struct {
 	Addr        string
 	CORSOrigins []string
 	DevProxyUI  bool
+
+	// Hub only (ModeHub): base64-encoded AES-256 key used to encrypt SSH
+	// credentials and remote session tokens at rest. Left empty, the hub
+	// generates one on first start and persists it under DataDir instead —
+	// see secretbox.ResolveKey.
+	HubMasterKey string
+	// HubSourceRoot is where the hub cross-compiles nkt for a remote host's
+	// architecture (`go build` is run with this as its working directory) —
+	// the hub image bakes the module source in here at build time.
+	HubSourceRoot string
 }
 
 // defaultMode picks the mode for a bare invocation. Linux is the platform this
@@ -108,7 +121,7 @@ func defaultMode() Mode {
 // terminal interface reads the same database the service writes, and a
 // directory next to the binary would leave it staring at an empty history.
 func defaultDataDir(mode Mode, wd string) string {
-	if mode == ModeLocal {
+	if mode == ModeLocal || mode == ModeHub {
 		return "/var/lib/netknownsthat"
 	}
 	return filepath.Join(wd, "data")
@@ -166,12 +179,15 @@ func Load() (*Config, error) {
 		Addr:        envStr("NKT_ADDR", "127.0.0.1:8077"),
 		CORSOrigins: envList("NKT_CORS_ORIGINS", "http://localhost:5173"),
 		DevProxyUI:  envBool("NKT_DEV_PROXY_UI", false),
+
+		HubMasterKey:  envStr("NKT_HUB_MASTER_KEY", ""),
+		HubSourceRoot: envStr("NKT_HUB_SOURCE_ROOT", wd),
 	}
 
 	switch c.Mode {
-	case ModeFixtures, ModeLocal:
+	case ModeFixtures, ModeLocal, ModeHub:
 	default:
-		return nil, fmt.Errorf("NKT_MODE must be %q or %q, got %q", ModeFixtures, ModeLocal, c.Mode)
+		return nil, fmt.Errorf("NKT_MODE must be %q, %q or %q, got %q", ModeFixtures, ModeLocal, ModeHub, c.Mode)
 	}
 
 	if err := os.MkdirAll(c.DataDir, 0o750); err != nil {
@@ -187,6 +203,15 @@ func (c *Config) DBPath() string { return filepath.Join(c.DataDir, "netknownstha
 
 // HistoryDir stores every observed and edited version of every managed config.
 func (c *Config) HistoryDir() string { return filepath.Join(c.DataDir, "config-history") }
+
+// HubKeyFile is where the hub's secretbox master key is persisted when
+// NKT_HUB_MASTER_KEY is not set.
+func (c *Config) HubKeyFile() string { return filepath.Join(c.DataDir, "hub.key") }
+
+// HubBinCacheDir caches nkt binaries the hub has already cross-compiled for
+// a given remote architecture, so installing a second host of the same
+// arch/version skips the build step.
+func (c *Config) HubBinCacheDir() string { return filepath.Join(c.DataDir, "bin-cache") }
 
 // IsFixtures reports whether the app runs against a canned snapshot.
 func (c *Config) IsFixtures() bool { return c.Mode == ModeFixtures }

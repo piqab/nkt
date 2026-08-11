@@ -20,8 +20,21 @@ type Options = {
 /** Fires when a request comes back 401, so the shell can send the user to /login. */
 export const onUnauthorized: { handler: (() => void) | null } = { handler: null }
 
+/**
+ * Set by the hub shell when a host is selected, so every existing page's
+ * `api()`/`useApi()` calls transparently reach that host's own API through
+ * the hub's proxy instead of the hub's own — the pages themselves never
+ * need to know they are running under a hub. null (the default, and always
+ * the case for a plain single-host nkt) targets the hub/local API directly.
+ */
+export const hostScope: { id: number | null } = { id: null }
+
 export async function api<T>(path: string, opts: Options = {}): Promise<T> {
-  const res = await fetch(`/api${path}`, {
+  // Authentication always targets the hub itself — the operator only ever
+  // logs in once, never per host (see internal/hub's design notes).
+  const scoped = hostScope.id !== null && !path.startsWith('/auth/')
+  const prefix = scoped ? `/hosts/${hostScope.id}` : ''
+  const res = await fetch(`/api${prefix}${path}`, {
     method: opts.method ?? 'GET',
     credentials: 'same-origin',
     headers: opts.body === undefined ? undefined : { 'Content-Type': 'application/json' },

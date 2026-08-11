@@ -123,6 +123,28 @@ CREATE TABLE IF NOT EXISTS kv (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+
+-- Remote hosts a hub instance manages over SSH. Only present/used in
+-- NKT_MODE=hub; a plain single-host nkt never touches this table.
+CREATE TABLE IF NOT EXISTS hosts (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    name               TEXT NOT NULL,
+    addr               TEXT NOT NULL,
+    ssh_port           INTEGER NOT NULL DEFAULT 22,
+    ssh_user           TEXT NOT NULL,
+    ssh_auth_kind      TEXT NOT NULL CHECK (ssh_auth_kind IN ('password','key')),
+    secret_enc         BLOB NOT NULL,          -- SSH password or private key, secretbox-encrypted
+    arch               TEXT NOT NULL DEFAULT '',
+    status             TEXT NOT NULL DEFAULT 'new' CHECK (status IN ('new','installing','online','error')),
+    nkt_version        TEXT NOT NULL DEFAULT '',
+    admin_user         TEXT NOT NULL DEFAULT '',
+    admin_password_enc BLOB,                   -- remote bootstrap admin password, secretbox-encrypted;
+                                                -- used to re-login when a proxied session expires
+    error_msg          TEXT NOT NULL DEFAULT '',
+    created_at         TEXT NOT NULL,
+    last_seen_at       TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_hosts_name ON hosts(name);
 `
 
 // DB wraps the SQLite handle.

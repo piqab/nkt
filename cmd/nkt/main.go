@@ -21,9 +21,11 @@ import (
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/control"
+	"github.com/althq/netknownsthat/internal/hub"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/model"
 	"github.com/althq/netknownsthat/internal/monitor"
+	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
 	"github.com/althq/netknownsthat/internal/tui"
 	"github.com/althq/netknownsthat/internal/webui"
@@ -38,6 +40,7 @@ const usage = `NetKnownsThat %s — карта сетевых ресурсов �
   nkt [serve]         запустить веб-дашборд и фоновый сбор данных (по умолчанию)
   nkt tui             терминальный интерфейс: то же самое без браузера
   nkt scan            разовая проверка, отчёт в stdout, код 2 при критичных находках
+  nkt hub             управляющий центр: установка и проксирование nkt на других хостах по SSH
   nkt users           показать учётные записи веб-интерфейса
   nkt passwd [логин]  сменить пароль (по умолчанию admin), спросит его без эха
   nkt version         показать версию
@@ -118,10 +121,19 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 	case "version":
 		fmt.Printf("netknownsthat %s\n", version)
 		return nil
-	case "serve", "tui", "scan", "users", "passwd":
 	case "help", "-h", "--help":
 		fmt.Fprintf(os.Stderr, usage, version)
 		return nil
+	case "hub":
+		// A hub never inspects a local host, so it gets its own much smaller
+		// runtime instead of newRuntime() — see hubRuntime.
+		app, err := newHubRuntime()
+		if err != nil {
+			return err
+		}
+		defer app.close()
+		return app.runHub(log)
+	case "serve", "tui", "scan", "users", "passwd":
 	default:
 		fmt.Fprintf(os.Stderr, usage, version)
 		return fmt.Errorf("неизвестная команда %q", command)
@@ -332,5 +344,100 @@ func (r *runtime) printScanReport(ctx context.Context) error {
 	if counts[model.SeverityCritical] > 0 {
 		os.Exit(2)
 	}
+	return nil
+}
+
+// ----------------------------------------------------------------------- hub
+
+// hubRuntime holds what the hub command needs — deliberately much smaller
+// than runtime: a hub never inspects the local host's nginx/haproxy/docker,
+// so none of collect/scanner/control belongs here. It only persists a host
+// registry and, from stage 2 onward, drives SSH sessions to remote hosts.
+type hubRuntime struct {
+	cfg *config.Config
+	db  *store.DB
+}
+
+func newHubRuntime() (*hubRuntime, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Mode != config.ModeHub {
+		return nil, fmt.Errorf("nkt hub требует NKT_MODE=hub, сейчас %q", cfg.Mode)
+	}
+	db, err := store.Open(cfg.DBPath())
+	if err != nil {
+		return nil, err
+	}
+	return &hubRuntime{cfg: cfg, db: db}, nil
+}
+
+func (r *hubRuntime) close() {
+	if r.db != nil {
+		_ = r.db.Close()
+	}
+}
+
+func (r *hubRuntime) runHub(log *slog.Logger) error {
+	key, err := secretbox.ResolveKey(r.cfg.HubMasterKey, r.cfg.HubKeyFile())
+	if err != nil {
+		return fmt.Errorf("ключ шифрования секретов хаба: %w", err)
+	}
+
+	authSvc := auth.NewService(r.db, r.cfg)
+	generated, err := authSvc.Bootstrap(context.Background())
+	if err != nil {
+		return fmt.Errorf("создание учётной записи администратора хаба: %w", err)
+	}
+	if generated != "" {
+		fmt.Fprintf(os.Stderr,
+			"\n=== Создана учётная запись администратора хаба ===\n  логин:  %s\n  пароль: %s\n"+
+				"  Сохраните пароль: он больше нигде не отображается.\n\n",
+			r.cfg.BootstrapAdminUser, generated)
+	}
+
+	manager := hub.NewManager(r.cfg, r.db, key, version)
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	go manager.Run(ctx)
+
+	ui := webui.FS()
+	if ui == nil {
+		log.Warn("фронтенд не собран, отдаётся только API (соберите web/ через npm run build)")
+	}
+
+	server := hub.New(hub.Deps{Cfg: r.cfg, DB: r.db, Auth: authSvc, Hub: manager, UI: ui, Log: log})
+	httpServer := &http.Server{
+		Addr:              r.cfg.Addr,
+		Handler:           server.Handler(),
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      120 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		log.Info("хаб запущен", "addr", r.cfg.Addr, "version", version)
+		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		log.Info("получен сигнал завершения, останавливаемся")
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		log.Error("остановка HTTP-сервера", "err", err)
+	}
+	log.Info("завершено")
 	return nil
 }

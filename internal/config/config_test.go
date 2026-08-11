@@ -25,6 +25,9 @@ func TestDefaultDataDirDependsOnMode(t *testing.T) {
 	if got := defaultDataDir(ModeLocal, "/home/user/nkt/dist"); got != "/var/lib/netknownsthat" {
 		t.Errorf("каталог данных для local = %q, ожидался /var/lib/netknownsthat", got)
 	}
+	if got := defaultDataDir(ModeHub, "/home/user/nkt/dist"); got != "/var/lib/netknownsthat" {
+		t.Errorf("каталог данных для hub = %q, ожидался /var/lib/netknownsthat", got)
+	}
 	want := filepath.Join("/repo", "data")
 	if got := defaultDataDir(ModeFixtures, "/repo"); got != want {
 		t.Errorf("каталог данных для fixtures = %q, ожидался %q", got, want)
