@@ -47,6 +47,10 @@ func Podman(ctx context.Context, c collect.Collector) PodmanResult {
 	started := time.Now()
 	res := PodmanResult{Status: model.SourceStatus{Name: model.ServicePodman}}
 	defer func() { res.Status.DurationMS = time.Since(started).Milliseconds() }()
+	// A host with Podman installed but zero containers running would
+	// otherwise leave this nil, which encoding/json marshals as `null` and
+	// crashes the Podman page's .map over it.
+	res.Containers = []model.PodmanContainer{}
 
 	if raw, code, err := c.PodmanAPI(ctx, "GET", "/libpod/version", nil); err == nil && code == 200 {
 		var v struct {

@@ -84,7 +84,7 @@ export default function Podman({ me }: { me: Me }) {
                 </tr>
               </thead>
               <tbody>
-                {containers.data?.containers.map((c) => (
+                {(containers.data?.containers ?? []).map((c) => (
                   <tr key={c.id}>
                     <td>
                       <strong>{c.name}</strong>

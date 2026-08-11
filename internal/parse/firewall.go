@@ -24,6 +24,13 @@ func Firewall(ctx context.Context, c collect.Collector) FirewallResult {
 	started := time.Now()
 	res := FirewallResult{Status: model.SourceStatus{Name: "firewall"}}
 	defer func() { res.Status.DurationMS = time.Since(started).Milliseconds() }()
+	// Backends/Policies/Rules have no `omitempty` — a host with iptables
+	// unreadable and ufw inactive would otherwise leave them nil, which
+	// encoding/json marshals as `null` and crashes any frontend .filter/.map
+	// expecting an array.
+	res.State.Backends = []string{}
+	res.State.Policies = []model.FirewallPolicy{}
+	res.State.Rules = []model.FirewallRule{}
 
 	for _, backend := range []struct{ cmd, name string }{
 		{"iptables-save", "iptables"},
@@ -320,18 +327,23 @@ func Listeners(ctx context.Context, c collect.Collector) ([]model.Listener, mode
 	status := model.SourceStatus{Name: "listeners"}
 	defer func() { status.DurationMS = time.Since(started).Milliseconds() }()
 
+	// No `omitempty` on the JSON field this feeds — every return path below
+	// must hand back a real (even if empty) slice, never nil, or
+	// encoding/json marshals it as `null` and the frontend crashes calling
+	// .filter/.map on it.
+	listeners := []model.Listener{}
+
 	out, err := c.Run(ctx, "ss", "-tulpnH")
 	if err != nil {
 		status.Error = fmt.Sprintf("ss: %v", err)
-		return nil, status
+		return listeners, status
 	}
 	if !out.OK() {
 		status.Error = fmt.Sprintf("ss завершился с кодом %d: %s", out.ExitCode, strings.TrimSpace(out.Stderr))
-		return nil, status
+		return listeners, status
 	}
 	status.Available = true
 
-	var listeners []model.Listener
 	for _, line := range strings.Split(strings.ReplaceAll(out.Stdout, "\r\n", "\n"), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 5 {

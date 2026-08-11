@@ -121,7 +121,11 @@ func (f *FirewallManager) NumberedRules(ctx context.Context) ([]NumberedRule, er
 	if !res.OK() {
 		return nil, fmt.Errorf("ufw status numbered: код %d", res.ExitCode)
 	}
-	var out []NumberedRule
+	// Zero custom ufw rules is a common, entirely valid state (ufw inactive,
+	// or active with only its own default policy) — out must stay a real
+	// empty slice, not nil, since the frontend renders {"rules": rules}
+	// with a bare .map, and encoding/json marshals a nil slice as `null`.
+	out := []NumberedRule{}
 	for _, line := range strings.Split(strings.ReplaceAll(res.Stdout, "\r\n", "\n"), "\n") {
 		m := numberedRe.FindStringSubmatch(strings.TrimSpace(line))
 		if m == nil {

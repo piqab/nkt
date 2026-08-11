@@ -131,7 +131,7 @@ export default function Virtualization({ me }: { me: Me }) {
                 </tr>
               </thead>
               <tbody>
-                {vms.data?.vms.map((vm) => (
+                {(vms.data?.vms ?? []).map((vm) => (
                   <tr key={vm.name}>
                     <td>
                       <strong>{vm.name}</strong>

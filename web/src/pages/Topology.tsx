@@ -58,7 +58,7 @@ export default function TopologyPage() {
         if (n.status === 'error' || n.status === 'warn') keep.add(n.id)
       }
       // Keep one hop of context around every problem node.
-      for (const e of data.edges) {
+      for (const e of data.edges ?? []) {
         if (keep.has(e.from)) keep.add(e.to)
         if (keep.has(e.to)) keep.add(e.from)
       }
@@ -92,7 +92,7 @@ export default function TopologyPage() {
     })
 
     const positions = new Map(out.map((n) => [n.id, n]))
-    const visibleEdges = data.edges.filter((e) => positions.has(e.from) && positions.has(e.to))
+    const visibleEdges = (data.edges ?? []).filter((e) => positions.has(e.from) && positions.has(e.to))
 
     return {
       placed: out,
@@ -129,7 +129,7 @@ export default function TopologyPage() {
   // the highlight on the map itself, but the info panel only reacts to a
   // click, so it doesn't flicker as the cursor crosses the diagram.
   const selectedNode = selected ? positions.get(selected) : null
-  const selectedFindings = selected ? data.findings.filter((f) => f.node_id === selected) : []
+  const selectedFindings = selected ? (data.findings ?? []).filter((f) => f.node_id === selected) : []
   const selectedMeta = Object.entries(selectedNode?.meta ?? {}).filter(([, v]) => v)
 
   return (

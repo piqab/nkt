@@ -403,7 +403,10 @@ func (d *DB) RecentOutages(ctx context.Context, since string, limit int) ([]Outa
 	}
 	defer rows.Close()
 
-	var out []Outage
+	// Zero outages in the window is the goal, not an edge case (a healthy
+	// site with no downtime) — out must stay a real empty slice, not nil,
+	// since the frontend renders {"outages": outages} with a bare .map.
+	out := []Outage{}
 	var cur *Outage
 	var curTarget int64 = -1
 

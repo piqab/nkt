@@ -75,6 +75,11 @@ func Libvirt(ctx context.Context, c collect.Collector, uri string) LibvirtResult
 	started := time.Now()
 	res := LibvirtResult{Status: model.SourceStatus{Name: model.ServiceLibvirt}}
 	defer func() { res.Status.DurationMS = time.Since(started).Milliseconds() }()
+	// A host without libvirt (or with it installed but zero domains defined)
+	// would otherwise leave these nil, which encoding/json marshals as
+	// `null` and crashes the VMs page's .map over them.
+	res.VMs = []model.VirtualMachine{}
+	res.Files = []model.ManagedFile{}
 
 	out, err := c.Run(ctx, "virsh", "-c", uri, "list", "--all", "--name")
 	if err != nil {

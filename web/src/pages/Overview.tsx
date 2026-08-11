@@ -167,7 +167,7 @@ export default function OverviewPage({ me }: { me: Me }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.firewall.policies
+                  {(data.firewall.policies ?? [])
                     .filter((p) => p.table === 'filter')
                     .map((p) => (
                       <tr key={`${p.backend}/${p.chain}`}>

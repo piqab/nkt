@@ -53,7 +53,11 @@ func (c *collector) add(f model.Finding) {
 // Run executes every rule against the snapshot and returns findings ordered by
 // severity, then by service and object.
 func Run(s *model.Snapshot) []model.Finding {
-	c := &collector{}
+	// A clean host with zero findings is the goal, not an edge case — the
+	// zero value of collector.findings is nil, and encoding/json marshals a
+	// nil slice as `null` rather than `[]` (Findings has no `omitempty`),
+	// which would crash every frontend page that calls .filter/.map on it.
+	c := &collector{findings: []model.Finding{}}
 	idx := buildIndex(s)
 
 	rulePortConflicts(c, s)

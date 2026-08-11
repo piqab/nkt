@@ -124,7 +124,7 @@ export default function Services({ me }: { me: Me }) {
                 </tr>
               </thead>
               <tbody>
-                {services.data?.services.map((s) => (
+                {(services.data?.services ?? []).map((s) => (
                   <tr key={s.name}>
                     <td>
                       <strong>{s.name}</strong>
@@ -188,7 +188,7 @@ export default function Services({ me }: { me: Me }) {
                 </tr>
               </thead>
               <tbody>
-                {docker.data?.containers.map((c) => (
+                {(docker.data?.containers ?? []).map((c) => (
                   <tr key={c.name}>
                     <td>
                       <strong>{c.name}</strong>
@@ -276,7 +276,7 @@ export default function Services({ me }: { me: Me }) {
               </tr>
             </thead>
             <tbody>
-              {docker.data?.networks.map((n) => (
+              {(docker.data?.networks ?? []).map((n) => (
                 <tr key={n.id}>
                   <td>
                     <strong>{n.name}</strong>

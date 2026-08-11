@@ -46,6 +46,10 @@ func LXD(ctx context.Context, c collect.Collector) LXDResult {
 	started := time.Now()
 	res := LXDResult{Status: model.SourceStatus{Name: model.ServiceLXD}}
 	defer func() { res.Status.DurationMS = time.Since(started).Milliseconds() }()
+	// A host without LXD (or with it installed but zero instances) would
+	// otherwise leave this nil, which encoding/json marshals as `null` and
+	// crashes the LXD page's .map over it.
+	res.Instances = []model.LXDInstance{}
 
 	out, err := c.Run(ctx, "lxc", "list", "--format", "json")
 	if err != nil {
