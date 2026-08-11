@@ -109,7 +109,7 @@ VERSION=$(git describe --tags --always 2>/dev/null || echo dev)
 CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=$VERSION" -o dist/nkt ./cmd/nkt
 
 echo
-echo "Готово: dist/nkt"
+echo "Готово: $(dist/nkt version)"
 cat <<EOF
 
 Если Go/Node ставились в $LOCAL_ROOT, добавьте в ~/.bashrc (или ~/.profile),

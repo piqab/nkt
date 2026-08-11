@@ -1,10 +1,14 @@
 # Сборка и проверка NetKnownsThat.
 #
-# Продакшен-бинарник собирается ТОЛЬКО в Linux-окружении — целью `build`,
-# которая запускает компиляцию внутри контейнера golang. Это работает с любой
-# рабочей машины и даёт один и тот же артефакт независимо от того, откуда его
-# собрали. Нативная сборка (`build-dev`) предназначена только для разработки
-# в режиме fixtures.
+# Продакшен-бинарник собирается ТОЛЬКО в Linux-окружении — целью `build`.
+# Если есть Docker, компиляция идёт внутри контейнера golang — это работает с
+# любой рабочей машины и даёт один и тот же артефакт независимо от того,
+# откуда его собрали. Если Docker не найден, `build`/`web` сами переключаются
+# на bootstrap-build.sh: он собирает прямо на хосте, при нехватке Go/Node
+# спрашивает подтверждение и ставит их в $HOME/.local без sudo. Один и тот же
+# результат — dist/nkt — независимо от того, какой из двух путей сработал.
+# Нативная сборка (`build-dev`) предназначена только для разработки в режиме
+# fixtures.
 
 GO_IMAGE   ?= golang:1.26-alpine
 NODE_IMAGE ?= node:22-alpine
@@ -27,17 +31,28 @@ help: ## показать список целей
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
 .PHONY: web
-web: ## собрать веб-интерфейс (вшивается в бинарник)
-	docker run --rm -v "$(CURDIR)":/src -w /src/web -v nkt-npm:/root/.npm $(NODE_IMAGE) \
-		sh -c "npm ci && npm run build"
+web: ## собрать веб-интерфейс (вшивается в бинарник; без Docker — через bootstrap-build.sh)
+	@if command -v docker >/dev/null 2>&1; then \
+		docker run --rm -v "$(CURDIR)":/src -w /src/web -v nkt-npm:/root/.npm $(NODE_IMAGE) \
+			sh -c "npm ci && npm run build"; \
+	else \
+		echo "docker не найден — собираю через bootstrap-build.sh (заодно соберёт и dist/nkt)"; \
+		bash bootstrap-build.sh; \
+	fi
 
 .PHONY: build
-build: web ## собрать продакшен-бинарник для Linux (внутри контейнера)
-	@mkdir -p dist
-	$(DOCKER_RUN) -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=$(GOARCH) $(GO_IMAGE) \
-		go build -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt
-	@echo "готово: $(OUT) ($(VERSION), linux/$(GOARCH))"
-	@file $(OUT) 2>/dev/null || true
+build: ## собрать продакшен-бинарник для Linux (Docker, если есть; иначе bootstrap-build.sh на хосте)
+	@if command -v docker >/dev/null 2>&1; then \
+		$(MAKE) web; \
+		mkdir -p dist; \
+		$(DOCKER_RUN) -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=$(GOARCH) $(GO_IMAGE) \
+			go build -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
+		echo "готово: $(OUT) ($(VERSION), linux/$(GOARCH))"; \
+		file $(OUT) 2>/dev/null || true; \
+	else \
+		echo "docker не найден — собираю напрямую на хосте через bootstrap-build.sh"; \
+		bash bootstrap-build.sh; \
+	fi
 
 .PHONY: build-dev
 build-dev: ## собрать бинарник для текущей ОС — ТОЛЬКО для разработки в режиме fixtures
