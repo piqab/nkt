@@ -35,6 +35,44 @@ func NewLibvirtManager(cfg *config.Config, c collect.Collector, db *store.DB, sc
 // interpreted as a shell or virsh option.
 var libvirtDomainRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9._-]{0,63})?$`)
 
+// libvirtImagesRoot is qemu/KVM's conventional disk image directory — the
+// same default the domain-XML skeleton (web/src/pages/Virtualization.tsx)
+// already points new disks at. CreateDisk is sandboxed to it for the same
+// reason config edits are sandboxed to specific roots: an operator-supplied
+// path must not be able to write a qcow2 header over an arbitrary file.
+const libvirtImagesRoot = "/var/lib/libvirt/images"
+
+// CreateDisk provisions a new qcow2 disk image via qemu-img — the piece a
+// hand-written or wizard-generated domain XML never does on its own: the
+// XML only ever references a disk path, it never creates the file, so a VM
+// booted against a path with nothing there fails immediately. Only paths
+// under libvirtImagesRoot are accepted.
+func (m *LibvirtManager) CreateDisk(ctx context.Context, user, path string, sizeGB int) error {
+	if !strings.HasPrefix(path, libvirtImagesRoot+"/") || strings.Contains(path, "..") {
+		return fmt.Errorf("путь диска должен быть внутри %s", libvirtImagesRoot)
+	}
+	if sizeGB <= 0 || sizeGB > 65536 {
+		return fmt.Errorf("недопустимый размер диска: %d ГБ", sizeGB)
+	}
+
+	res, err := m.c.Run(ctx, "qemu-img", "create", "-f", "qcow2", path, fmt.Sprintf("%dG", sizeGB))
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	m.db.Audit(ctx, user, "vm.create_disk", path, outcome, map[string]any{
+		"size_gb": sizeGB, "exit_code": res.ExitCode,
+		"output": strings.TrimSpace(res.Output()), "simulated": res.Simulated,
+	})
+	if err != nil {
+		return fmt.Errorf("qemu-img create %s: %w", path, err)
+	}
+	if !res.OK() {
+		return fmt.Errorf("qemu-img create %s: код %d: %s", path, res.ExitCode, strings.TrimSpace(res.Output()))
+	}
+	return nil
+}
+
 // VMAction runs a lifecycle action against a domain. "stop" is deliberately
 // not one of the accepted values: shutdown (graceful, ACPI) and destroy
 // (immediate power-off) have different blast radii and this application

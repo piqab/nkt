@@ -143,6 +143,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/lxd/instances", s.handleLXDInstanceCreate)
 				r.Post("/lxd/instances/{name}/{action}", s.handleLXDInstanceAction)
 				r.Delete("/lxd/instances/{name}", s.handleLXDInstanceDelete)
+				r.Post("/vms/disks", s.handleVMCreateDisk)
 				r.Post("/vms/{name}/{action}", s.handleVMAction)
 				r.Delete("/vms/{name}", s.handleVMDelete)
 
