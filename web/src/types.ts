@@ -84,6 +84,18 @@ export interface Container {
   running: boolean
 }
 
+export interface PodmanContainer {
+  id: string
+  name: string
+  image: string
+  state: string
+  status: string
+  created?: number
+  pod?: string
+  ports?: PortMapping[]
+  networks?: { name: string; ip_address?: string }[]
+}
+
 export interface DockerNetwork {
   id: string
   name: string

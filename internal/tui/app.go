@@ -43,6 +43,7 @@ type Deps struct {
 	Configs   *control.ConfigManager
 	Firewall  *control.FirewallManager
 	Certs     *control.CertManager
+	Podman    *control.PodmanManager
 	Prober    *monitor.Prober
 
 	// Screen overrides the terminal. Tests drive the interface through a

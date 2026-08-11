@@ -77,20 +77,22 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 		nginxRes  parse.NginxResult
 		hapRes    parse.HAProxyResult
 		dockerRes parse.DockerResult
+		podmanRes parse.PodmanResult
 		fwRes     parse.FirewallResult
 		listeners []model.Listener
 		lisStatus model.SourceStatus
 	)
-	wg.Add(5)
+	wg.Add(6)
 	go func() { defer wg.Done(); nginxRes = parse.Nginx(ctx, s.c, s.cfg.NginxMainConfig) }()
 	go func() { defer wg.Done(); hapRes = parse.HAProxy(ctx, s.c, s.cfg.HAProxyMainConf) }()
 	go func() { defer wg.Done(); dockerRes = parse.Docker(ctx, s.c, s.cfg.ComposeFiles) }()
+	go func() { defer wg.Done(); podmanRes = parse.Podman(ctx, s.c) }()
 	go func() { defer wg.Done(); fwRes = parse.Firewall(ctx, s.c) }()
 	go func() { defer wg.Done(); listeners, lisStatus = parse.Listeners(ctx, s.c) }()
 	wg.Wait()
 
 	snap.Sources = []model.SourceStatus{
-		nginxRes.Status, hapRes.Status, dockerRes.Status, fwRes.Status, lisStatus,
+		nginxRes.Status, hapRes.Status, dockerRes.Status, podmanRes.Status, fwRes.Status, lisStatus,
 	}
 	snap.Endpoints = append(append(append([]model.Endpoint{},
 		nginxRes.Endpoints...), hapRes.Endpoints...), dockerRes.Endpoints...)
@@ -99,6 +101,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Files = append(snap.Files, dockerRes.Files...)
 	snap.Container = dockerRes.Containers
 	snap.Networks = dockerRes.Networks
+	snap.Podman = podmanRes.Containers
 	snap.Firewall = fwRes.State
 	snap.Listeners = listeners
 

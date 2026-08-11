@@ -14,6 +14,7 @@ const (
 	ServiceNginx    = "nginx"
 	ServiceHAProxy  = "haproxy"
 	ServiceDocker   = "docker"
+	ServicePodman   = "podman"
 	ServiceIptables = "iptables"
 	ServiceUFW      = "ufw"
 	ServiceHost     = "host"
@@ -196,6 +197,25 @@ type DockerNetwork struct {
 	Gateway  string   `json:"gateway,omitempty"`
 	Bridge   string   `json:"bridge,omitempty"`
 	Project  string   `json:"project,omitempty"`
+}
+
+// PodmanContainer is a Podman workload. Podman is a separate engine from
+// Docker (not a client for it) and adds one concept Docker lacks: pods —
+// groups of containers sharing a network namespace, similar to a Kubernetes
+// pod. There is no declared/running duality here the way there is for
+// Container: Podman has no first-class compose-file concept in this
+// application (Quadlet systemd units are out of scope for v1), so every
+// entry is simply what the engine reports right now.
+type PodmanContainer struct {
+	ID       string             `json:"id"`
+	Name     string             `json:"name"`
+	Image    string             `json:"image"`
+	State    string             `json:"state"` // running | exited | paused | created
+	Status   string             `json:"status"`
+	Created  int64              `json:"created,omitempty"`
+	Pod      string             `json:"pod,omitempty"`
+	Ports    []PortMapping      `json:"ports,omitempty"`
+	Networks []ContainerNetwork `json:"networks,omitempty"`
 }
 
 // FirewallPolicy is a chain's default policy plus its counters.
@@ -391,22 +411,23 @@ type Finding struct {
 
 // Snapshot is the complete picture of the host at one moment.
 type Snapshot struct {
-	TS        string          `json:"ts"`
-	Mode      string          `json:"mode"`
-	Host      HostInfo        `json:"host"`
-	Sources   []SourceStatus  `json:"sources"`
-	Services  []ServiceUnit   `json:"services"`
-	Files     []ManagedFile   `json:"files"`
-	Endpoints []Endpoint      `json:"endpoints"`
-	Upstreams []Upstream      `json:"upstreams"`
-	Container []Container     `json:"containers"`
-	Networks  []DockerNetwork `json:"networks"`
-	Firewall  FirewallState   `json:"firewall"`
-	Listeners []Listener      `json:"listeners"`
-	Certs     []Certificate   `json:"certificates"`
-	Findings  []Finding       `json:"findings"`
-	Digest    string          `json:"digest"`
-	ScanMS    int64           `json:"scan_ms"`
+	TS        string            `json:"ts"`
+	Mode      string            `json:"mode"`
+	Host      HostInfo          `json:"host"`
+	Sources   []SourceStatus    `json:"sources"`
+	Services  []ServiceUnit     `json:"services"`
+	Files     []ManagedFile     `json:"files"`
+	Endpoints []Endpoint        `json:"endpoints"`
+	Upstreams []Upstream        `json:"upstreams"`
+	Container []Container       `json:"containers"`
+	Networks  []DockerNetwork   `json:"networks"`
+	Podman    []PodmanContainer `json:"podman_containers,omitempty"`
+	Firewall  FirewallState     `json:"firewall"`
+	Listeners []Listener        `json:"listeners"`
+	Certs     []Certificate     `json:"certificates"`
+	Findings  []Finding         `json:"findings"`
+	Digest    string            `json:"digest"`
+	ScanMS    int64             `json:"scan_ms"`
 }
 
 // HostInfo mirrors collect.HostInfo without importing that package.

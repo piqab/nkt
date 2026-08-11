@@ -1,0 +1,6 @@
+{
+  "Version": "5.1.2",
+  "APIVersion": "5.1.2",
+  "GoVersion": "go1.22.4",
+  "OsArch": "linux/amd64"
+}

@@ -158,6 +158,7 @@ type runtime struct {
 	configs   *control.ConfigManager
 	firewall  *control.FirewallManager
 	certs     *control.CertManager
+	podman    *control.PodmanManager
 }
 
 func newRuntime() (*runtime, error) {
@@ -165,7 +166,7 @@ func newRuntime() (*runtime, error) {
 	if err != nil {
 		return nil, err
 	}
-	collector, err := collect.New(string(cfg.Mode), cfg.FixturesRoot, cfg.DockerSocket, cfg.CommandTimeout)
+	collector, err := collect.New(string(cfg.Mode), cfg.FixturesRoot, cfg.DockerSocket, cfg.PodmanSocket, cfg.CommandTimeout)
 	if err != nil {
 		return nil, err
 	}
@@ -185,6 +186,7 @@ func newRuntime() (*runtime, error) {
 		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
 		firewall:  control.NewFirewallManager(cfg, collector, db),
 		certs:     control.NewCertManager(cfg, collector, db, services, scanner),
+		podman:    control.NewPodmanManager(collector, db),
 	}, nil
 }
 
@@ -209,6 +211,7 @@ func (r *runtime) runTUI() error {
 		Configs:   r.configs,
 		Firewall:  r.firewall,
 		Certs:     r.certs,
+		Podman:    r.podman,
 		Prober:    monitor.NewProber(r.db, r.cfg),
 	})
 }
@@ -243,7 +246,8 @@ func (r *runtime) runServer(log *slog.Logger) error {
 
 	server := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
-		Services: r.services, Configs: r.configs, Firewall: r.firewall, Certs: r.certs, UI: ui, Log: log,
+		Services: r.services, Configs: r.configs, Firewall: r.firewall, Certs: r.certs,
+		Podman: r.podman, UI: ui, Log: log,
 	})
 
 	httpServer := &http.Server{

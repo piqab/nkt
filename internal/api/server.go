@@ -34,6 +34,7 @@ type Server struct {
 	configs   *control.ConfigManager
 	firewall  *control.FirewallManager
 	certs     *control.CertManager
+	podman    *control.PodmanManager
 	ui        fs.FS
 	log       *slog.Logger
 }
@@ -49,6 +50,7 @@ type Deps struct {
 	Configs   *control.ConfigManager
 	Firewall  *control.FirewallManager
 	Certs     *control.CertManager
+	Podman    *control.PodmanManager
 	UI        fs.FS
 	Log       *slog.Logger
 }
@@ -58,7 +60,8 @@ func New(d Deps) *Server {
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, firewall: d.Firewall, certs: d.Certs,
-		ui: d.UI, log: d.Log,
+		podman: d.Podman,
+		ui:     d.UI, log: d.Log,
 	}
 }
 
@@ -95,6 +98,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/topology", s.handleTopology)
 			r.Get("/services", s.handleServices)
 			r.Get("/containers", s.handleContainers)
+			r.Get("/podman/containers", s.handlePodmanContainers)
 			r.Get("/firewall", s.handleFirewall)
 			r.Get("/firewall/rules", s.handleFirewallNumbered)
 			r.Get("/certificates", s.handleCertificates)
@@ -127,6 +131,9 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/services/{name}/validate", s.handleServiceValidate)
 				r.Post("/services/{name}/{action}", s.handleServiceAction)
 				r.Post("/containers/{name}/{action}", s.handleContainerAction)
+				r.Post("/podman/containers", s.handlePodmanContainerCreate)
+				r.Post("/podman/containers/{name}/{action}", s.handlePodmanContainerAction)
+				r.Delete("/podman/containers/{name}", s.handlePodmanContainerDelete)
 
 				r.Put("/configs/file", s.handleConfigWrite)
 				r.Post("/configs/mkdir", s.handleConfigMkdir)

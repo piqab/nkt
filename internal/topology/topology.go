@@ -21,6 +21,7 @@ const (
 	KindUpstream  = "upstream"
 	KindBackend   = "backend"
 	KindContainer = "container"
+	KindPodman    = "podman_container"
 	KindNetwork   = "network"
 )
 
@@ -161,6 +162,28 @@ func Build(s *model.Snapshot) *Graph {
 			b.edge("svc:docker", id, "manages", "", StatusOK)
 		}
 	}
+	// Podman containers — a separate engine from docker, so its own kind and
+	// its own "svc:podman" link rather than folding into KindContainer.
+	for _, ct := range s.Podman {
+		id := "pod:" + ct.Name
+		status := StatusOK
+		switch ct.State {
+		case "exited", "dead", "stopped":
+			status = StatusWarn
+		case "restarting":
+			status = StatusError
+		}
+		b.node(Node{
+			ID: id, Kind: KindPodman, Label: ct.Name, Sublabel: ct.Image,
+			Group: model.ServicePodman, Status: status,
+			Meta: map[string]string{"state": ct.State, "status": ct.Status, "pod": ct.Pod},
+		})
+		b.attachFindings(id, ct.Name)
+		if b.nodes["svc:podman"] != nil {
+			b.edge("svc:podman", id, "manages", "", StatusOK)
+		}
+	}
+
 	for _, n := range s.Networks {
 		netID := "net:" + n.Name
 		sub := strings.Join(n.Subnets, ", ")
@@ -488,9 +511,11 @@ func kindRank(kind string) int {
 		return 5
 	case KindContainer:
 		return 6
-	case KindNetwork:
+	case KindPodman:
 		return 7
-	default:
+	case KindNetwork:
 		return 8
+	default:
+		return 9
 	}
 }

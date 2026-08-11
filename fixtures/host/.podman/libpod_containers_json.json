@@ -1,0 +1,38 @@
+[
+  {
+    "Id": "p1a2b3c4d5e6f7081920a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2",
+    "Names": ["monitoring-grafana"],
+    "Image": "docker.io/grafana/grafana:11.1.0",
+    "State": "running",
+    "Status": "Up 3 hours",
+    "Created": 1784600000,
+    "Pod": "e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4",
+    "PodName": "monitoring",
+    "Ports": [{ "host_ip": "0.0.0.0", "container_port": 3000, "host_port": 3000, "protocol": "tcp" }],
+    "Networks": ["podman"]
+  },
+  {
+    "Id": "q9e8d7c6b5a493827160f9e8d7c6b5a493827160f9e8d7c6b5a493827160f9e8",
+    "Names": ["monitoring-prometheus"],
+    "Image": "docker.io/prom/prometheus:v2.53.0",
+    "State": "running",
+    "Status": "Up 3 hours",
+    "Created": 1784599950,
+    "Pod": "e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4",
+    "PodName": "monitoring",
+    "Ports": [{ "host_ip": "127.0.0.1", "container_port": 9090, "host_port": 9090, "protocol": "tcp" }],
+    "Networks": ["podman"]
+  },
+  {
+    "Id": "r5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6",
+    "Names": ["adhoc-backup"],
+    "Image": "docker.io/library/restic:0.16.4",
+    "State": "exited",
+    "Status": "Exited (0) 2 hours ago",
+    "Created": 1784580000,
+    "Pod": "",
+    "PodName": "",
+    "Ports": [],
+    "Networks": []
+  }
+]

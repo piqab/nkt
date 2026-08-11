@@ -38,6 +38,7 @@ type Config struct {
 	NginxAccessLogs  []string
 	HAProxyAccessLog []string
 	DockerSocket     string
+	PodmanSocket     string
 
 	// Monitoring cadence.
 	ProbeInterval     time.Duration
@@ -135,6 +136,7 @@ func Load() (*Config, error) {
 		NginxAccessLogs:  envList("NKT_NGINX_ACCESS_LOGS", "/var/log/nginx/access.log"),
 		HAProxyAccessLog: envList("NKT_HAPROXY_ACCESS_LOGS", "/var/log/haproxy.log"),
 		DockerSocket:     envStr("NKT_DOCKER_SOCKET", "/var/run/docker.sock"),
+		PodmanSocket:     envStr("NKT_PODMAN_SOCKET", "/run/podman/podman.sock"),
 
 		ProbeInterval:     envDur("NKT_PROBE_INTERVAL", time.Minute),
 		ProbeTimeout:      envDur("NKT_PROBE_TIMEOUT", 5*time.Second),

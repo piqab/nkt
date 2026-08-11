@@ -15,10 +15,11 @@ import (
 
 // ------------------------------------------------------------------- services
 
-// serviceRow is what one line of the services table refers to. Units and
-// containers share the table so there is a single selection to reason about.
+// serviceRow is what one line of the services table refers to. Units,
+// docker containers and Podman containers share the table so there is a
+// single selection to reason about.
 type serviceRow struct {
-	kind    string // unit | container
+	kind    string // unit | container | podman
 	name    string
 	actions []string
 }
@@ -109,15 +110,22 @@ func (s *servicesScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 
 	s.app.confirm(fmt.Sprintf("Выполнить «%s» для %s «%s»?", action,
-		map[string]string{"unit": "сервиса", "container": "контейнера"}[target.kind], target.name),
+		map[string]string{"unit": "сервиса", "container": "контейнера", "podman": "контейнера Podman"}[target.kind],
+		target.name),
 		func() {
 			s.app.runAsync(fmt.Sprintf("%s %s", action, target.name), true,
 				func(ctx context.Context) (string, error) {
-					if target.kind == "container" {
+					switch target.kind {
+					case "container":
 						if err := s.app.Services.ContainerAction(ctx, s.app.actor, target.name, action); err != nil {
 							return "", err
 						}
 						return fmt.Sprintf("контейнер %s: %s выполнено", target.name, action), nil
+					case "podman":
+						if err := s.app.Podman.ContainerAction(ctx, s.app.actor, target.name, action); err != nil {
+							return "", err
+						}
+						return fmt.Sprintf("podman-контейнер %s: %s выполнено", target.name, action), nil
 					}
 					res, err := s.app.Services.Action(ctx, s.app.actor, target.name, action)
 					if err != nil {
@@ -177,6 +185,18 @@ func (s *servicesScreen) refresh(ctx context.Context) {
 			s.table.SetCell(row, 4, cellDim(truncate(portSummary(ct), 40)))
 			row++
 		}
+
+		for _, ct := range snap.Podman {
+			s.rows = append(s.rows, serviceRow{
+				kind: "podman", name: ct.Name, actions: []string{"start", "stop", "restart"},
+			})
+			s.table.SetCell(row, 0, cellDim("podman"))
+			s.table.SetCell(row, 1, cell(ct.Name))
+			s.table.SetCell(row, 2, cellColor("●"+ct.State, stateColor(ct.State)))
+			s.table.SetCell(row, 3, cellDim(truncate(ct.Image, 46)))
+			s.table.SetCell(row, 4, cellDim(truncate(podmanPortSummary(ct), 40)))
+			row++
+		}
 		s.table.SetTitle(fmt.Sprintf(" Сервисы и контейнеры — %d ", len(s.rows)))
 		if len(s.rows) > 0 {
 			s.showDetail(0)
@@ -205,6 +225,27 @@ func portSummary(ct model.Container) string {
 	return strings.Join(parts, " ")
 }
 
+func podmanPortSummary(ct model.PodmanContainer) string {
+	if len(ct.Ports) == 0 {
+		return "портов не публикует"
+	}
+	var parts []string
+	for _, p := range ct.Ports {
+		if p.HostPort == 0 {
+			continue
+		}
+		ip := p.HostIP
+		if ip == "" {
+			ip = "0.0.0.0"
+		}
+		parts = append(parts, fmt.Sprintf("%s:%d→%d", ip, p.HostPort, p.ContainerPort))
+	}
+	if len(parts) == 0 {
+		return "портов не публикует"
+	}
+	return strings.Join(parts, " ")
+}
+
 func (s *servicesScreen) showDetail(index int) {
 	snap := s.app.Scanner.Latest()
 	if snap == nil || index < 0 || index >= len(s.rows) {
@@ -213,7 +254,8 @@ func (s *servicesScreen) showDetail(index int) {
 	target := s.rows[index]
 	var sb strings.Builder
 
-	if target.kind == "unit" {
+	switch target.kind {
+	case "unit":
 		for _, svc := range snap.Services {
 			if svc.Name != target.name {
 				continue
@@ -232,7 +274,20 @@ func (s *servicesScreen) showDetail(index int) {
 			}
 			sb.WriteString(dim(" доступные действия: " + strings.Join(svc.Actions, ", ")))
 		}
-	} else {
+	case "podman":
+		for _, ct := range snap.Podman {
+			if ct.Name != target.name {
+				continue
+			}
+			sb.WriteString(" " + bold(ct.Name) + dim(" · "+ct.Image) + "\n")
+			sb.WriteString(fmt.Sprintf(" состояние: %s   %s\n",
+				tag(stateColor(ct.State), ct.State), dim(ct.Status)))
+			if ct.Pod != "" {
+				sb.WriteString(dim(" под: " + ct.Pod + "\n"))
+			}
+			sb.WriteString(" порты: " + podmanPortSummary(ct))
+		}
+	default:
 		for _, ct := range snap.Container {
 			if ct.Name != target.name {
 				continue
