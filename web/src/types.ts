@@ -104,6 +104,30 @@ export interface LXDInstance {
   ipv4?: string[]
 }
 
+export interface VMDisk {
+  device: string
+  source?: string
+  bus?: string
+}
+
+export interface VMNetIface {
+  source?: string
+  mac?: string
+  model?: string
+}
+
+export interface VirtualMachine {
+  name: string
+  uuid?: string
+  state: string
+  persistent: boolean
+  autostart: boolean
+  vcpus?: number
+  memory_kb?: number
+  disks?: VMDisk[]
+  networks?: VMNetIface[]
+}
+
 export interface DockerNetwork {
   id: string
   name: string

@@ -111,7 +111,8 @@ func (s *servicesScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 
 	s.app.confirm(fmt.Sprintf("Выполнить «%s» для %s «%s»?", action,
 		map[string]string{
-			"unit": "сервиса", "container": "контейнера", "podman": "контейнера Podman", "lxd": "инстанса LXD",
+			"unit": "сервиса", "container": "контейнера", "podman": "контейнера Podman",
+			"lxd": "инстанса LXD", "vm": "виртуальной машины",
 		}[target.kind],
 		target.name),
 		func() {
@@ -133,6 +134,15 @@ func (s *servicesScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 							return "", err
 						}
 						return fmt.Sprintf("lxd-инстанс %s: %s выполнено", target.name, action), nil
+					case "vm":
+						vmAction := action
+						if vmAction == "stop" {
+							vmAction = "shutdown"
+						}
+						if err := s.app.Libvirt.VMAction(ctx, s.app.actor, target.name, vmAction); err != nil {
+							return "", err
+						}
+						return fmt.Sprintf("VM %s: %s выполнено", target.name, vmAction), nil
 					}
 					res, err := s.app.Services.Action(ctx, s.app.actor, target.name, action)
 					if err != nil {
@@ -214,6 +224,25 @@ func (s *servicesScreen) refresh(ctx context.Context) {
 			s.table.SetCell(row, 2, cellColor("●"+inst.Status, stateColor(inst.Status)))
 			s.table.SetCell(row, 3, cellDim(inst.Type))
 			s.table.SetCell(row, 4, cellDim(strings.Join(inst.IPv4, ", ")))
+			row++
+		}
+
+		for _, vm := range snap.VMs {
+			// Only the two safest lifecycle actions map onto this screen's
+			// single-key shortcuts (s/x); destroy/reboot/suspend/resume and
+			// undefine stay web-only, where each gets its own labelled
+			// button and its own confirmation instead of sharing a key.
+			// "stop" here is translated to VMAction's "shutdown" (graceful)
+			// at dispatch time — see onKey — to share this screen's fixed
+			// key vocabulary with every other row kind.
+			s.rows = append(s.rows, serviceRow{
+				kind: "vm", name: vm.Name, actions: []string{"start", "stop"},
+			})
+			s.table.SetCell(row, 0, cellDim("libvirt"))
+			s.table.SetCell(row, 1, cell(vm.Name))
+			s.table.SetCell(row, 2, cellColor("●"+vm.State, stateColor(vm.State)))
+			s.table.SetCell(row, 3, cellDim(fmt.Sprintf("%d vCPU, %s", vm.VCPUs, formatBytes(float64(vm.MemoryKB*1024)))))
+			s.table.SetCell(row, 4, cellDim(orDash(vm.UUID)))
 			row++
 		}
 		s.table.SetTitle(fmt.Sprintf(" Сервисы и контейнеры — %d ", len(s.rows)))
@@ -319,6 +348,27 @@ func (s *servicesScreen) showDetail(index int) {
 			} else {
 				sb.WriteString(dim(" IPv4: нет данных"))
 			}
+		}
+	case "vm":
+		for _, vm := range snap.VMs {
+			if vm.Name != target.name {
+				continue
+			}
+			sb.WriteString(" " + bold(vm.Name) + dim(" · "+orDash(vm.UUID)) + "\n")
+			sb.WriteString(fmt.Sprintf(" состояние: %s   vCPU: %d   память: %s\n",
+				tag(stateColor(vm.State), vm.State), vm.VCPUs, formatBytes(float64(vm.MemoryKB*1024))))
+			sb.WriteString(fmt.Sprintf(" постоянный домен: %s   автозапуск: %s\n",
+				boolState(vm.Persistent), boolState(vm.Autostart)))
+			var disks []string
+			for _, d := range vm.Disks {
+				disks = append(disks, fmt.Sprintf("%s(%s)", d.Source, d.Bus))
+			}
+			sb.WriteString(dim(" диски: ") + strings.Join(disks, ", ") + "\n")
+			var nets []string
+			for _, n := range vm.Networks {
+				nets = append(nets, n.Source)
+			}
+			sb.WriteString(dim(" сети: ") + strings.Join(nets, ", "))
 		}
 	default:
 		for _, ct := range snap.Container {

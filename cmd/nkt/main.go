@@ -160,6 +160,7 @@ type runtime struct {
 	certs     *control.CertManager
 	podman    *control.PodmanManager
 	lxd       *control.LXDManager
+	libvirt   *control.LibvirtManager
 }
 
 func newRuntime() (*runtime, error) {
@@ -189,6 +190,7 @@ func newRuntime() (*runtime, error) {
 		certs:     control.NewCertManager(cfg, collector, db, services, scanner),
 		podman:    control.NewPodmanManager(collector, db),
 		lxd:       control.NewLXDManager(collector, db),
+		libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
 	}, nil
 }
 
@@ -215,6 +217,7 @@ func (r *runtime) runTUI() error {
 		Certs:     r.certs,
 		Podman:    r.podman,
 		LXD:       r.lxd,
+		Libvirt:   r.libvirt,
 		Prober:    monitor.NewProber(r.db, r.cfg),
 	})
 }
@@ -250,7 +253,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	server := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
 		Services: r.services, Configs: r.configs, Firewall: r.firewall, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, UI: ui, Log: log,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, UI: ui, Log: log,
 	})
 
 	httpServer := &http.Server{

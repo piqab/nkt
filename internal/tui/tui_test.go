@@ -85,6 +85,7 @@ func depsAgainstRoot(t *testing.T, screen tcell.Screen, root string) Deps {
 		NginxMainConfig:   "/etc/nginx/nginx.conf",
 		HAProxyMainConf:   "/etc/haproxy/haproxy.cfg",
 		ComposeFiles:      []string{"/srv/docker/docker-compose.yml"},
+		LibvirtURI:        "qemu:///system",
 		CommandTimeout:    5 * time.Second,
 		ProbeTimeout:      time.Second,
 		ProbeInterval:     time.Minute,
@@ -113,6 +114,7 @@ func depsAgainstRoot(t *testing.T, screen tcell.Screen, root string) Deps {
 		Certs:     control.NewCertManager(cfg, collector, db, services, scanner),
 		Podman:    control.NewPodmanManager(collector, db),
 		LXD:       control.NewLXDManager(collector, db),
+		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
 		Prober:    monitor.NewProber(db, cfg),
 		Screen:    screen,
 	}

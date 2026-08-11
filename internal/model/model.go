@@ -16,6 +16,7 @@ const (
 	ServiceDocker   = "docker"
 	ServicePodman   = "podman"
 	ServiceLXD      = "lxd"
+	ServiceLibvirt  = "libvirt"
 	ServiceIptables = "iptables"
 	ServiceUFW      = "ufw"
 	ServiceHost     = "host"
@@ -231,6 +232,38 @@ type LXDInstance struct {
 	IPv4         []string `json:"ipv4,omitempty"`
 }
 
+// VMDisk is one storage device attached to a libvirt/QEMU domain.
+type VMDisk struct {
+	Device string `json:"device"` // disk | cdrom
+	Source string `json:"source,omitempty"`
+	Bus    string `json:"bus,omitempty"` // virtio | sata | scsi | ide
+}
+
+// VMNetIface is one network interface attached to a libvirt/QEMU domain.
+type VMNetIface struct {
+	Source string `json:"source,omitempty"` // bridge/network name
+	MAC    string `json:"mac,omitempty"`
+	Model  string `json:"model,omitempty"`
+}
+
+// VirtualMachine is a libvirt/QEMU domain, whether running or only defined.
+// Unlike Container's declared/running split (compose file vs docker daemon),
+// libvirt itself is the single source of truth for both a domain's
+// definition and its runtime state — "defined but not running" is just
+// State == "shut off" on a Persistent domain, not a separate concept to
+// reconcile.
+type VirtualMachine struct {
+	Name       string       `json:"name"`
+	UUID       string       `json:"uuid,omitempty"`
+	State      string       `json:"state"` // running | shut off | paused | crashed | ...
+	Persistent bool         `json:"persistent"`
+	Autostart  bool         `json:"autostart"`
+	VCPUs      int          `json:"vcpus,omitempty"`
+	MemoryKB   int64        `json:"memory_kb,omitempty"`
+	Disks      []VMDisk     `json:"disks,omitempty"`
+	Networks   []VMNetIface `json:"networks,omitempty"`
+}
+
 // FirewallPolicy is a chain's default policy plus its counters.
 type FirewallPolicy struct {
 	Backend string `json:"backend"`
@@ -436,6 +469,7 @@ type Snapshot struct {
 	Networks  []DockerNetwork   `json:"networks"`
 	Podman    []PodmanContainer `json:"podman_containers,omitempty"`
 	LXD       []LXDInstance     `json:"lxd_instances,omitempty"`
+	VMs       []VirtualMachine  `json:"vms,omitempty"`
 	Firewall  FirewallState     `json:"firewall"`
 	Listeners []Listener        `json:"listeners"`
 	Certs     []Certificate     `json:"certificates"`

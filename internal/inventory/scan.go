@@ -73,28 +73,31 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 
 	// The parsers touch disjoint parts of the host, so run them concurrently.
 	var (
-		wg        sync.WaitGroup
-		nginxRes  parse.NginxResult
-		hapRes    parse.HAProxyResult
-		dockerRes parse.DockerResult
-		podmanRes parse.PodmanResult
-		lxdRes    parse.LXDResult
-		fwRes     parse.FirewallResult
-		listeners []model.Listener
-		lisStatus model.SourceStatus
+		wg         sync.WaitGroup
+		nginxRes   parse.NginxResult
+		hapRes     parse.HAProxyResult
+		dockerRes  parse.DockerResult
+		podmanRes  parse.PodmanResult
+		lxdRes     parse.LXDResult
+		libvirtRes parse.LibvirtResult
+		fwRes      parse.FirewallResult
+		listeners  []model.Listener
+		lisStatus  model.SourceStatus
 	)
-	wg.Add(7)
+	wg.Add(8)
 	go func() { defer wg.Done(); nginxRes = parse.Nginx(ctx, s.c, s.cfg.NginxMainConfig) }()
 	go func() { defer wg.Done(); hapRes = parse.HAProxy(ctx, s.c, s.cfg.HAProxyMainConf) }()
 	go func() { defer wg.Done(); dockerRes = parse.Docker(ctx, s.c, s.cfg.ComposeFiles) }()
 	go func() { defer wg.Done(); podmanRes = parse.Podman(ctx, s.c) }()
 	go func() { defer wg.Done(); lxdRes = parse.LXD(ctx, s.c) }()
+	go func() { defer wg.Done(); libvirtRes = parse.Libvirt(ctx, s.c, s.cfg.LibvirtURI) }()
 	go func() { defer wg.Done(); fwRes = parse.Firewall(ctx, s.c) }()
 	go func() { defer wg.Done(); listeners, lisStatus = parse.Listeners(ctx, s.c) }()
 	wg.Wait()
 
 	snap.Sources = []model.SourceStatus{
-		nginxRes.Status, hapRes.Status, dockerRes.Status, podmanRes.Status, lxdRes.Status, fwRes.Status, lisStatus,
+		nginxRes.Status, hapRes.Status, dockerRes.Status, podmanRes.Status, lxdRes.Status, libvirtRes.Status,
+		fwRes.Status, lisStatus,
 	}
 	snap.Endpoints = append(append(append([]model.Endpoint{},
 		nginxRes.Endpoints...), hapRes.Endpoints...), dockerRes.Endpoints...)
@@ -104,6 +107,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Container = dockerRes.Containers
 	snap.Networks = dockerRes.Networks
 	snap.LXD = lxdRes.Instances
+	snap.VMs = libvirtRes.VMs
 	snap.Podman = podmanRes.Containers
 	snap.Firewall = fwRes.State
 	snap.Listeners = listeners

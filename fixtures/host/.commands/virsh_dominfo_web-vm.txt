@@ -1,0 +1,14 @@
+Id:             4
+Name:           web-vm
+UUID:           4b3f9b1e-1234-4a2b-9c3d-abcdef123456
+OS Type:        hvm
+State:          running
+CPU(s):         2
+CPU time:       842.3s
+Max memory:     2097152 KiB
+Used memory:    2097152 KiB
+Persistent:     yes
+Autostart:      enable
+Managed save:   no
+Security model: none
+Security DOI:   0

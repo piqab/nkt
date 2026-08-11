@@ -39,6 +39,7 @@ type Config struct {
 	HAProxyAccessLog []string
 	DockerSocket     string
 	PodmanSocket     string
+	LibvirtURI       string
 
 	// Monitoring cadence.
 	ProbeInterval     time.Duration
@@ -137,6 +138,7 @@ func Load() (*Config, error) {
 		HAProxyAccessLog: envList("NKT_HAPROXY_ACCESS_LOGS", "/var/log/haproxy.log"),
 		DockerSocket:     envStr("NKT_DOCKER_SOCKET", "/var/run/docker.sock"),
 		PodmanSocket:     envStr("NKT_PODMAN_SOCKET", "/run/podman/podman.sock"),
+		LibvirtURI:       envStr("NKT_LIBVIRT_URI", "qemu:///system"),
 
 		ProbeInterval:     envDur("NKT_PROBE_INTERVAL", time.Minute),
 		ProbeTimeout:      envDur("NKT_PROBE_TIMEOUT", 5*time.Second),

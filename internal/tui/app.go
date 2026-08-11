@@ -45,6 +45,7 @@ type Deps struct {
 	Certs     *control.CertManager
 	Podman    *control.PodmanManager
 	LXD       *control.LXDManager
+	Libvirt   *control.LibvirtManager
 	Prober    *monitor.Prober
 
 	// Screen overrides the terminal. Tests drive the interface through a

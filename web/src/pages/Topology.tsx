@@ -18,6 +18,7 @@ const COLUMNS: { kind: string; title: string }[] = [
   { kind: 'container', title: 'Контейнеры' },
   { kind: 'podman_container', title: 'Podman' },
   { kind: 'lxd_instance', title: 'LXD' },
+  { kind: 'vm', title: 'Виртуальные машины' },
   { kind: 'network', title: 'Сети docker' },
 ]
 

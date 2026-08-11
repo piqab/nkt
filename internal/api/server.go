@@ -36,6 +36,7 @@ type Server struct {
 	certs     *control.CertManager
 	podman    *control.PodmanManager
 	lxd       *control.LXDManager
+	libvirt   *control.LibvirtManager
 	ui        fs.FS
 	log       *slog.Logger
 }
@@ -53,6 +54,7 @@ type Deps struct {
 	Certs     *control.CertManager
 	Podman    *control.PodmanManager
 	LXD       *control.LXDManager
+	Libvirt   *control.LibvirtManager
 	UI        fs.FS
 	Log       *slog.Logger
 }
@@ -62,7 +64,7 @@ func New(d Deps) *Server {
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, firewall: d.Firewall, certs: d.Certs,
-		podman: d.Podman, lxd: d.LXD,
+		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt,
 		ui: d.UI, log: d.Log,
 	}
 }
@@ -102,6 +104,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/containers", s.handleContainers)
 			r.Get("/podman/containers", s.handlePodmanContainers)
 			r.Get("/lxd/instances", s.handleLXDInstances)
+			r.Get("/vms", s.handleVMs)
 			r.Get("/firewall", s.handleFirewall)
 			r.Get("/firewall/rules", s.handleFirewallNumbered)
 			r.Get("/certificates", s.handleCertificates)
@@ -140,6 +143,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/lxd/instances", s.handleLXDInstanceCreate)
 				r.Post("/lxd/instances/{name}/{action}", s.handleLXDInstanceAction)
 				r.Delete("/lxd/instances/{name}", s.handleLXDInstanceDelete)
+				r.Post("/vms/{name}/{action}", s.handleVMAction)
+				r.Delete("/vms/{name}", s.handleVMDelete)
 
 				r.Put("/configs/file", s.handleConfigWrite)
 				r.Post("/configs/mkdir", s.handleConfigMkdir)
