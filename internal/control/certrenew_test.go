@@ -102,11 +102,10 @@ func TestRenewCertbotSuccess(t *testing.T) {
 	if !res.OK() {
 		t.Fatalf("ожидался успешный exit code, получено %d: %s", res.ExitCode, res.Output())
 	}
-	// app.example.com is authenticated via webroot (fixtures/host renewal
-	// conf) — forcing --standalone here would be wrong, and nginx/haproxy
-	// must not be disturbed for it either.
-	if containsArg(res.Argv, "--standalone") {
-		t.Errorf("--standalone не должен передаваться для webroot-lineage: %v", res.Argv)
+	// Every renewal always goes through --standalone now, regardless of what
+	// authenticator app.example.com's own renewal.conf records.
+	if !containsArg(res.Argv, "--standalone") {
+		t.Errorf("--standalone должен передаваться для каждого продления: %v", res.Argv)
 	}
 
 	entries, err := db.ListAudit(context.Background(), store.AuditFilter{Action: "cert.renew", Limit: 10})
@@ -151,9 +150,10 @@ func TestRenewCertbotFailureIsAudited(t *testing.T) {
 // recombineDerivedCerts: the fixture's /etc/haproxy/certs-le/app.example.com.pem
 // was hand-built with a different throwaway key than the one now sitting in
 // /etc/letsencrypt/live/app.example.com/privkey.pem, so a successful renewal
-// must overwrite it with the certificate+key pair actually on disk today,
-// then reload haproxy (the fixture's "webroot" authenticator never stops
-// it) to pick the new file up.
+// must overwrite it with the certificate+key pair actually on disk today.
+// Every renewal now stops and restarts haproxy unconditionally (see
+// renewCertbot), so the restart itself — not a separate reload — is what
+// picks the recombined file up.
 func TestRenewCertbotRecombinesDerivedHAProxyCert(t *testing.T) {
 	m, db := renewSetup(t)
 
@@ -184,20 +184,20 @@ func TestRenewCertbotRecombinesDerivedHAProxyCert(t *testing.T) {
 	if err != nil {
 		t.Fatalf("чтение журнала: %v", err)
 	}
-	var sawRecombine, sawReload bool
+	var sawRecombine, sawRestart bool
 	for _, e := range entries {
 		if e.Action == "cert.recombine" && e.Target == derivedPath && e.Result == "ok" {
 			sawRecombine = true
 		}
-		if e.Action == "service.reload" && e.Target == "haproxy" && e.Result == "ok" {
-			sawReload = true
+		if e.Action == "service.start" && e.Target == "haproxy" && e.Result == "ok" {
+			sawRestart = true
 		}
 	}
 	if !sawRecombine {
 		t.Error("в журнале нет записи cert.recombine для " + derivedPath)
 	}
-	if !sawReload {
-		t.Error("в журнале нет записи service.reload для haproxy")
+	if !sawRestart {
+		t.Error("в журнале нет записи service.start для haproxy")
 	}
 }
 
@@ -359,7 +359,7 @@ func TestStartRenewCertbotReportsStandaloneStepsInOrder(t *testing.T) {
 	texts := eventTexts(events)
 	wantInOrder := []string{
 		"Начинаю продление standalone.example.com",
-		"останавливаю nginx и haproxy",
+		"Останавливаю nginx и haproxy для --standalone",
 		"nginx: остановлен",
 		"haproxy: остановлен",
 		"Запускаю: certbot renew --cert-name standalone.example.com --non-interactive --standalone",

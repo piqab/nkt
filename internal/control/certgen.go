@@ -303,18 +303,23 @@ func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (c
 // also feeds haproxy often has a deploy-hook-built combined copy elsewhere
 // (model.RenewalInfo.Derived, see markDerivedCertbotCerts); that copy is
 // invisible to certbot and is recombined here from the freshly renewed
-// fullchain.pem+privkey.pem, then the owning service is reloaded to pick it
-// up. This only runs for lineages the app already found a renewal.conf for
-// (RenewalInfo.Managed) — an orphan lineage or a path outside
-// /etc/letsencrypt is not something certbot can renew at all.
+// fullchain.pem+privkey.pem. The restart below (unconditional, every
+// renewal) is what picks the recombined file up — no separate reload step
+// needed.
 //
-// A lineage authenticated via --standalone needs :80/:443 free while certbot
-// itself talks to Let's Encrypt, so nginx and haproxy are stopped first and
-// always restarted afterward regardless of how the renewal went — leaving
-// the site down because a renewal failed is worse than the certificate
-// simply staying as it was. finish (below) makes that restart happen on
-// every exit path and reports the final outcome only afterward — "Готово"
-// must mean the site is actually back, not just that certbot finished.
+// Every renewal always goes through --standalone, regardless of what
+// authenticator the lineage's own renewal.conf records. Relying on that
+// stored authenticator (webroot, an installer plugin...) turned out to be
+// fragile across setups — a broken webroot path or a plugin certbot can no
+// longer find fails with a bare "код 1" and a truncated "Processing
+// /etc/letsencrypt/renewal/..." that gives no clue why. --standalone is at
+// least uniform and its failure mode (a bind error) is diagnosable, so nginx
+// and haproxy are stopped unconditionally before every renewal and always
+// restarted afterward regardless of how it went — leaving the site down
+// because a renewal failed is worse than the certificate simply staying as
+// it was. finish (below) makes that restart happen on every exit path and
+// reports the final outcome only afterward — "Готово" must mean the site is
+// actually back, not just that certbot finished.
 func (m *CertManager) renewCertbot(
 	ctx context.Context, user, lineage string, report func(string),
 ) (collect.CommandResult, error) {
@@ -325,8 +330,11 @@ func (m *CertManager) renewCertbot(
 		return collect.CommandResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
 	}
 
-	standalone := m.usesStandaloneAuth(lineage)
-	var stopped []string
+	report("Останавливаю nginx и haproxy для --standalone…")
+	stopped, stopErr := m.stopForStandalone(ctx, user)
+	for _, svc := range stopped {
+		report(svc + ": остановлен")
+	}
 
 	finish := func(res collect.CommandResult, err error) (collect.CommandResult, error) {
 		if len(stopped) > 0 {
@@ -342,27 +350,18 @@ func (m *CertManager) renewCertbot(
 		}
 		return res, err
 	}
-
-	if standalone {
-		report("Lineage аутентифицируется через --standalone: останавливаю nginx и haproxy…")
-		var err error
-		stopped, err = m.stopForStandalone(ctx, user)
-		for _, svc := range stopped {
-			report(svc + ": остановлен")
-		}
-		if err != nil {
-			return finish(collect.CommandResult{}, fmt.Errorf(
-				"продление %s аутентифицируется через --standalone и требует остановки nginx/haproxy: %w",
-				lineage, err))
-		}
+	if stopErr != nil {
+		return finish(collect.CommandResult{}, fmt.Errorf(
+			"продление %s требует остановки nginx/haproxy для --standalone: %w", lineage, stopErr))
 	}
 
-	cmdLine := fmt.Sprintf("certbot renew --cert-name %s --non-interactive", lineage)
-	if standalone {
-		cmdLine += " --standalone"
+	if err := m.checkPortFreeForStandalone(ctx, report); err != nil {
+		return finish(collect.CommandResult{}, err)
 	}
+
+	cmdLine := fmt.Sprintf("certbot renew --cert-name %s --non-interactive --standalone", lineage)
 	report("Запускаю: " + cmdLine)
-	res, err := m.runCertbotRenew(ctx, user, lineage, standalone)
+	res, err := m.runCertbotRenew(ctx, user, lineage)
 	if out := strings.TrimSpace(res.Output()); out != "" {
 		report("certbot:\n" + out)
 	}
@@ -371,25 +370,9 @@ func (m *CertManager) renewCertbot(
 	}
 	report("certbot: сертификат продлён")
 
-	reloadTargets, err := m.recombineDerivedCerts(ctx, user, lineage, report)
-	if err != nil {
+	if _, err := m.recombineDerivedCerts(ctx, user, lineage, report); err != nil {
 		return finish(res, fmt.Errorf(
 			"сертификат %s продлён, но не удалось пересобрать копию для haproxy: %w", lineage, err))
-	}
-	if !standalone {
-		// A --standalone renewal already restarts every stopped service with
-		// the recombined file already in place; otherwise a service serving a
-		// just-rewritten combined file needs reloading to pick it up — the
-		// same gap the tls-cert-not-reloaded finding watches for.
-		for _, svc := range reloadTargets {
-			report("Перечитываю конфигурацию " + svc + "…")
-			if _, err := m.services.Action(ctx, user, svc, "reload"); err != nil {
-				return finish(res, fmt.Errorf(
-					"сертификат %s продлён и пересобран, но не удалось перечитать конфигурацию %s: %w",
-					lineage, svc, err))
-			}
-			report(svc + ": перечитан")
-		}
 	}
 
 	return finish(res, nil)
@@ -792,26 +775,60 @@ func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage, targ
 	return res, nil
 }
 
-// usesStandaloneAuth reads the lineage's own renewal.conf and reports
-// whether certbot will bind the ports itself rather than going through a
-// webroot, an installer plugin, or DNS. Any error or unrecognised layout is
-// treated as "no" — the safe default leaves nginx/haproxy exactly as they
-// were, since most lineages need no service interruption at all.
-func (m *CertManager) usesStandaloneAuth(lineage string) bool {
-	raw, err := m.c.ReadFile("/etc/letsencrypt/renewal/" + lineage + ".conf")
-	if err != nil {
-		return false
+// standalonePort is the port certbot's --standalone authenticator binds for
+// an HTTP-01 challenge — the only challenge type this app ever requests, so
+// only this port needs to be free; TLS-ALPN-01's :443 is never used.
+const standalonePort = 80
+
+// checkPortFreeForStandalone reports whether anything is still listening on
+// standalonePort after nginx/haproxy have already been stopped. If it is,
+// certbot cannot possibly succeed — failing fast here, with the name of
+// whatever is actually blocking the port (see checkPortFree), is far more
+// useful than letting certbot fail with its own generic "Problem binding to
+// port 80" and leaving the operator to guess why.
+//
+// This only runs against a real host: a canned fixtures snapshot always
+// reports the same listeners regardless of what stopForStandalone just
+// "stopped" (fixtures commands don't simulate state changes between calls),
+// so checking it there would reject every renewal in fixtures mode.
+func (m *CertManager) checkPortFreeForStandalone(ctx context.Context, report func(string)) error {
+	if m.cfg.IsFixtures() {
+		return nil
 	}
-	for _, line := range strings.Split(string(raw), "\n") {
-		key, value, ok := strings.Cut(line, "=")
-		if !ok {
+	report(fmt.Sprintf("Проверяю порт %d…", standalonePort))
+	holder, free := m.checkPortFree(ctx, standalonePort)
+	if free {
+		return nil
+	}
+	return fmt.Errorf(
+		"порт %d занят (%s) — certbot не сможет подтвердить домен через --standalone; "+
+			"остановите этот процесс и повторите", standalonePort, holder)
+}
+
+// checkPortFree reports what, if anything, is listening on port right now,
+// via the same `ss` parser the network map uses. An unavailable `ss` (or any
+// other read failure) is treated as "free" — this is a best-effort early
+// warning, not the thing that actually determines whether certbot succeeds,
+// and a missing diagnostic tool must never be the reason a renewal is
+// refused.
+func (m *CertManager) checkPortFree(ctx context.Context, port int) (holder string, free bool) {
+	listeners, status := parse.Listeners(ctx, m.c)
+	if !status.Available {
+		return "", true
+	}
+	for _, l := range listeners {
+		if l.Port != port {
 			continue
 		}
-		if strings.TrimSpace(key) == "authenticator" {
-			return strings.TrimSpace(value) == "standalone"
+		if l.Process == "" {
+			return "неизвестный процесс", false
 		}
+		if l.PID > 0 {
+			return fmt.Sprintf("%s, pid %d", l.Process, l.PID), false
+		}
+		return l.Process, false
 	}
-	return false
+	return "", true
 }
 
 // stopForStandalone stops nginx and haproxy in order, returning exactly the
@@ -842,20 +859,18 @@ func (m *CertManager) restartAfterStandalone(user string, stopped []string) {
 	}
 }
 
-// runCertbotRenew is the actual `certbot renew` invocation, shared by both
-// the standalone and non-standalone paths. standalone re-asserts
-// --standalone on the command line explicitly — relying on renewal.conf's
+// runCertbotRenew is the actual `certbot renew` invocation. --standalone is
+// always asserted explicitly on the command line — relying on renewal.conf's
 // stored authenticator alone is not enough on every certbot version/setup to
-// actually invoke the standalone plugin during renew. It runs under
-// CertbotTimeout rather than the collector's normal (much shorter) command
-// timeout: an ACME challenge round-trip routinely takes longer than the fast
-// host commands that ceiling is tuned for, and killing certbot mid-renewal
-// looks exactly like an unexplained failure ("код -1", truncated output).
-func (m *CertManager) runCertbotRenew(ctx context.Context, user, lineage string, standalone bool) (collect.CommandResult, error) {
-	args := []string{"renew", "--cert-name", lineage, "--non-interactive"}
-	if standalone {
-		args = append(args, "--standalone")
-	}
+// actually invoke the standalone plugin during renew, and this app always
+// wants standalone regardless of what the lineage was originally issued
+// with (see renewCertbot). It runs under CertbotTimeout rather than the
+// collector's normal (much shorter) command timeout: an ACME challenge
+// round-trip routinely takes longer than the fast host commands that
+// ceiling is tuned for, and killing certbot mid-renewal looks exactly like
+// an unexplained failure ("код -1", truncated output).
+func (m *CertManager) runCertbotRenew(ctx context.Context, user, lineage string) (collect.CommandResult, error) {
+	args := []string{"renew", "--cert-name", lineage, "--non-interactive", "--standalone"}
 	res, err := m.c.RunTimeout(ctx, m.cfg.CertbotTimeout, "certbot", args...)
 	outcome := "ok"
 	if err != nil || !res.OK() {
@@ -950,6 +965,10 @@ func (m *CertManager) issueCertbot(
 	if stopErr != nil {
 		return finish(collect.CommandResult{}, fmt.Errorf(
 			"выпуск нового сертификата требует остановки nginx/haproxy для --standalone: %w", stopErr))
+	}
+
+	if err := m.checkPortFreeForStandalone(ctx, report); err != nil {
+		return finish(collect.CommandResult{}, err)
 	}
 
 	emailFlag := "--register-unsafely-without-email"
