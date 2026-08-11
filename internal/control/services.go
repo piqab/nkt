@@ -96,6 +96,29 @@ func (s *ServiceManager) ApplyCompose(ctx context.Context, user, path string) (c
 	return res, nil
 }
 
+// DefineLibvirtDomain registers a domain's on-disk XML with libvirtd —
+// writing the file to LibvirtQEMUDir alone does not do this, libvirtd does
+// not watch that directory, so this is libvirt's equivalent of ApplyCompose:
+// the actual "make the definition take effect" step Write runs after a
+// successful validate.
+func (s *ServiceManager) DefineLibvirtDomain(ctx context.Context, user, path string) (collect.CommandResult, error) {
+	res, err := s.c.Run(ctx, "virsh", "-c", s.cfg.LibvirtURI, "define", path)
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	s.db.Audit(ctx, user, "libvirt.define", path, outcome, map[string]any{
+		"exit_code": res.ExitCode, "output": strings.TrimSpace(res.Output()), "simulated": res.Simulated,
+	})
+	if err != nil {
+		return res, err
+	}
+	if !res.OK() {
+		return res, fmt.Errorf("virsh define %s: код %d: %s", path, res.ExitCode, strings.TrimSpace(res.Output()))
+	}
+	return res, nil
+}
+
 // Validate asks a service to check its own configuration. The second return
 // value reports whether a validator was actually available: a missing binary is
 // not the same as an invalid config, and must never trigger a rollback.
@@ -118,6 +141,19 @@ func (s *ServiceManager) Validate(ctx context.Context, service string, paths ...
 			return collect.CommandResult{}, false
 		}
 		res, err = s.c.Run(ctx, "docker", "compose", "-f", path, "config", "-q")
+	case model.ServiceLibvirt:
+		// virt-xml-validate checks the XML against libvirt's schema without
+		// touching libvirtd — a true dry run, unlike `virsh define` which
+		// both validates AND registers the domain (that happens in the
+		// apply step, Write's equivalent of ApplyCompose for docker).
+		path := ""
+		if len(paths) > 0 {
+			path = paths[0]
+		}
+		if path == "" {
+			return collect.CommandResult{}, false
+		}
+		res, err = s.c.Run(ctx, "virt-xml-validate", path, "domain")
 	default:
 		return collect.CommandResult{}, false
 	}

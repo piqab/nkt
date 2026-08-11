@@ -37,6 +37,8 @@ func DefaultServiceSpecs() []ServiceSpec {
 		// distro-packaged LXD ("lxd.service") would need its own spec.
 		{Name: model.ServiceLXD, Unit: "snap.lxd.daemon", Binary: "lxc",
 			Actions: []string{"restart", "start", "stop"}},
+		{Name: model.ServiceLibvirt, Unit: "libvirtd", Binary: "virsh",
+			Actions: []string{"restart", "start", "stop"}},
 		{Name: model.ServiceUFW, Unit: "ufw", Binary: "ufw",
 			Actions: []string{"reload", "start", "stop"}},
 		{Name: "fail2ban", Unit: "fail2ban", Binary: "fail2ban-client",

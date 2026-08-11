@@ -1,0 +1,12 @@
+Name:           db-vm
+UUID:           7c1a2b3d-4567-4e8f-9a0b-fedcba987654
+OS Type:        hvm
+State:          shut off
+CPU(s):         4
+Max memory:     4194304 KiB
+Used memory:    0 KiB
+Persistent:     yes
+Autostart:      disable
+Managed save:   no
+Security model: none
+Security DOI:   0

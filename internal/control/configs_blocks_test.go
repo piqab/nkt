@@ -38,6 +38,7 @@ func configsSetupWithCollector(t *testing.T, root string, c collect.Collector) *
 		HAProxyRoot:     "/etc/haproxy",
 		HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
 		ComposeFiles:    []string{"/srv/docker/docker-compose.yml"},
+		LibvirtURI:      "qemu:///system",
 		CommandTimeout:  5 * time.Second,
 	}
 	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))

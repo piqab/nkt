@@ -24,6 +24,7 @@ func fixtureScanner(t *testing.T) *Scanner {
 		NginxMainConfig: "/etc/nginx/nginx.conf",
 		HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
 		ComposeFiles:    []string{"/srv/docker/docker-compose.yml"},
+		LibvirtURI:      "qemu:///system",
 		CommandTimeout:  5 * time.Second,
 	}
 	// A nil store keeps the scan read-only, which is what the assertions need.

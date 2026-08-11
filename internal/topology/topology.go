@@ -23,6 +23,7 @@ const (
 	KindContainer = "container"
 	KindPodman    = "podman_container"
 	KindLXD       = "lxd_instance"
+	KindVM        = "vm"
 	KindNetwork   = "network"
 )
 
@@ -201,6 +202,31 @@ func Build(s *model.Snapshot) *Graph {
 		b.attachFindings(id, inst.Name)
 		if b.nodes["svc:lxd"] != nil {
 			b.edge("svc:lxd", id, "manages", "", StatusOK)
+		}
+	}
+
+	// libvirt/QEMU virtual machines.
+	for _, vm := range s.VMs {
+		id := "vm:" + vm.Name
+		status := StatusOK
+		switch vm.State {
+		case "crashed":
+			status = StatusError
+		case "shut off", "paused":
+			status = StatusWarn
+		}
+		sub := fmt.Sprintf("%d vCPU", vm.VCPUs)
+		b.node(Node{
+			ID: id, Kind: KindVM, Label: vm.Name, Sublabel: sub,
+			Group: model.ServiceLibvirt, Status: status,
+			Meta: map[string]string{
+				"state": vm.State, "persistent": strconv.FormatBool(vm.Persistent),
+				"autostart": strconv.FormatBool(vm.Autostart), "uuid": vm.UUID,
+			},
+		})
+		b.attachFindings(id, vm.Name)
+		if b.nodes["svc:libvirt"] != nil {
+			b.edge("svc:libvirt", id, "manages", "", StatusOK)
 		}
 	}
 
@@ -535,9 +561,11 @@ func kindRank(kind string) int {
 		return 7
 	case KindLXD:
 		return 8
-	case KindNetwork:
+	case KindVM:
 		return 9
-	default:
+	case KindNetwork:
 		return 10
+	default:
+		return 11
 	}
 }

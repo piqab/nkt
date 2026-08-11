@@ -1,0 +1,8 @@
+Description=Virtualization daemon
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+ActiveEnterTimestamp=Mon 2026-07-20 04:11:40 UTC
+MainPID=1190
+MemoryCurrent=41943040
+NRestarts=0

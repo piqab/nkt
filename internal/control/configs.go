@@ -77,6 +77,13 @@ func (m *ConfigManager) serviceForPath(path string) string {
 		return model.ServiceNginx
 	case underRoot(path, m.cfg.HAProxyRoot):
 		return model.ServiceHAProxy
+	case underRoot(path, parse.LibvirtQEMUDir):
+		// libvirt itself stores a defined domain's persistent XML here — this
+		// is not a config file some other service merely reads, it IS
+		// libvirt's own storage for the definition, which is exactly why
+		// writing here can double as "create/edit a VM" (see Write's apply
+		// step) without a bespoke VM-creation code path.
+		return model.ServiceLibvirt
 	}
 	for _, p := range m.cfg.ComposeFiles {
 		if p == path {
@@ -364,14 +371,22 @@ func (m *ConfigManager) Write(ctx context.Context, user, path, content, note str
 	if apply {
 		var out collect.CommandResult
 		var applyErr error
-		if service == model.ServiceDocker {
+		switch service {
+		case model.ServiceDocker:
 			// nginx/haproxy reread their config in place; docker has no such
 			// thing — "apply" means recreating whatever container the new
 			// compose definition actually changed. `up -d` is idempotent: it
 			// only touches services whose definition differs, so it is safe
 			// to run after any edit, not just the one service that changed.
 			out, applyErr = m.svc.ApplyCompose(ctx, user, path)
-		} else {
+		case model.ServiceLibvirt:
+			// Same idea as compose's `up -d`: writing the XML file alone
+			// does not register it with libvirtd, `virsh define` does —
+			// this is what turns a saved skeleton into an actual domain
+			// (or updates an already-defined one), covering both create
+			// and edit through the one write path.
+			out, applyErr = m.svc.DefineLibvirtDomain(ctx, user, path)
+		default:
 			out, applyErr = m.svc.Action(ctx, user, service, "reload")
 		}
 		if applyErr == nil {
