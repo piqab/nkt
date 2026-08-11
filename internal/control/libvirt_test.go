@@ -132,3 +132,43 @@ func TestLibvirtUndefineRejectsBadName(t *testing.T) {
 		t.Error("ожидалась ошибка валидации имени")
 	}
 }
+
+func TestLibvirtCreateDiskSuccess(t *testing.T) {
+	m, db := libvirtSetup(t)
+	if err := m.CreateDisk(context.Background(), "test", "/var/lib/libvirt/images/new-vm.qcow2", 20); err != nil {
+		t.Fatalf("create disk: %v", err)
+	}
+	entries, err := db.ListAudit(context.Background(), store.AuditFilter{Action: "vm.create_disk", Limit: 10})
+	if err != nil {
+		t.Fatalf("чтение журнала: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Result != "ok" || entries[0].Target != "/var/lib/libvirt/images/new-vm.qcow2" {
+		t.Errorf("неожиданная запись журнала: %+v", entries)
+	}
+}
+
+// TestLibvirtCreateDiskRejectsPathOutsideImagesRoot covers the sandbox: an
+// operator-supplied path must not be able to write a qcow2 header over an
+// arbitrary file on the host.
+func TestLibvirtCreateDiskRejectsPathOutsideImagesRoot(t *testing.T) {
+	m, _ := libvirtSetup(t)
+	for _, path := range []string{
+		"/etc/passwd",
+		"/var/lib/libvirt/images/../../../etc/passwd",
+		"/var/lib/libvirt/imagesEVIL/x.qcow2",
+		"",
+	} {
+		if err := m.CreateDisk(context.Background(), "test", path, 10); err == nil {
+			t.Errorf("путь %q: ожидалась ошибка — вне /var/lib/libvirt/images", path)
+		}
+	}
+}
+
+func TestLibvirtCreateDiskRejectsBadSize(t *testing.T) {
+	m, _ := libvirtSetup(t)
+	for _, size := range []int{0, -1, 70000} {
+		if err := m.CreateDisk(context.Background(), "test", "/var/lib/libvirt/images/x.qcow2", size); err == nil {
+			t.Errorf("размер %d: ожидалась ошибка валидации", size)
+		}
+	}
+}

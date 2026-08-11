@@ -6,10 +6,21 @@ import { Banner, Card, CodeEditor, ErrorNote, Loading, Spinner, StateBadge, form
 const LIFECYCLE_ACTIONS = ['start', 'shutdown', 'reboot', 'suspend', 'resume']
 
 function domainXMLSkeleton(name: string): string {
+  return domainXMLFromWizard(name, { memoryMB: 2048, vcpus: 2, diskPath: defaultDiskPath(name), bridge: 'br0' })
+}
+
+function defaultDiskPath(name: string): string {
+  return `/var/lib/libvirt/images/${name}.qcow2`
+}
+
+function domainXMLFromWizard(
+  name: string,
+  p: { memoryMB: number; vcpus: number; diskPath: string; bridge: string },
+): string {
   return `<domain type='kvm'>
   <name>${name}</name>
-  <memory unit='KiB'>2097152</memory>
-  <vcpu placement='static'>2</vcpu>
+  <memory unit='KiB'>${Math.max(1, p.memoryMB) * 1024}</memory>
+  <vcpu placement='static'>${Math.max(1, p.vcpus)}</vcpu>
   <os>
     <type arch='x86_64' machine='pc-q35-8.0'>hvm</type>
     <boot dev='hd'/>
@@ -17,11 +28,11 @@ function domainXMLSkeleton(name: string): string {
   <devices>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source file='/var/lib/libvirt/images/${name}.qcow2'/>
+      <source file='${p.diskPath}'/>
       <target dev='vda' bus='virtio'/>
     </disk>
     <interface type='bridge'>
-      <source bridge='br0'/>
+      <source bridge='${p.bridge}'/>
       <model type='virtio'/>
     </interface>
     <graphics type='vnc' port='-1' autoport='yes'/>
@@ -34,8 +45,8 @@ export default function Virtualization({ me }: { me: Me }) {
   const vms = useApi<{ vms: VirtualMachine[] }>('/vms', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
-  const [creatingName, setCreatingName] = useState<string | null>(null)
-  const [namePrompt, setNamePrompt] = useState(false)
+  const [creating, setCreating] = useState<{ name: string; initialContent?: string } | null>(null)
+  const [chooserOpen, setChooserOpen] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
 
@@ -105,7 +116,7 @@ export default function Virtualization({ me }: { me: Me }) {
         title="Домены libvirt"
         actions={
           canControl && (
-            <button className="ghost" onClick={() => setNamePrompt(true)}>
+            <button className="ghost" onClick={() => setChooserOpen(true)}>
               + новая VM
             </button>
           )
@@ -139,7 +150,6 @@ export default function Virtualization({ me }: { me: Me }) {
                     </td>
                     <td>
                       <StateBadge state={vm.state} />
-                      {!vm.persistent && <div className="small muted">временный домен</div>}
                     </td>
                     <td className="num small">{vm.vcpus || '—'}</td>
                     <td className="num small">{vm.memory_kb ? formatBytesShort(vm.memory_kb * 1024) : '—'}</td>
@@ -152,14 +162,23 @@ export default function Virtualization({ me }: { me: Me }) {
                       {(vm.networks ?? []).map((n, i) => <div key={i}>{n.source || '—'}</div>)}
                     </td>
                     <td>
-                      <button
-                        className="ghost"
-                        disabled={!canControl || !vm.persistent || busy === `${vm.name}:autostart`}
-                        onClick={() => toggleAutostart(vm.name, !vm.autostart)}
-                      >
-                        {busy === `${vm.name}:autostart` && <Spinner />}
-                        {vm.autostart ? 'включён' : 'выключен'}
-                      </button>
+                      {vm.persistent ? (
+                        <button
+                          className="ghost"
+                          disabled={!canControl || busy === `${vm.name}:autostart`}
+                          onClick={() => toggleAutostart(vm.name, !vm.autostart)}
+                        >
+                          {busy === `${vm.name}:autostart` && <Spinner />}
+                          {vm.autostart ? 'включён' : 'выключен'}
+                        </button>
+                      ) : (
+                        <span
+                          className="small muted"
+                          title="Домен временный: не зарегистрирован через virsh define, поэтому у него нет ни сохранённого определения, ни автозапуска. Пропадёт из списка при остановке."
+                        >
+                          недоступен (временный домен)
+                        </span>
+                      )}
                     </td>
                     <td className="nowrap">
                       {LIFECYCLE_ACTIONS.map((a) => (
@@ -211,22 +230,23 @@ export default function Virtualization({ me }: { me: Me }) {
         )}
       </Card>
 
-      {namePrompt && (
-        <VMNamePrompt
-          onClose={() => setNamePrompt(false)}
-          onNamed={(name) => {
-            setNamePrompt(false)
-            setCreatingName(name)
+      {chooserOpen && (
+        <VMCreateChooser
+          onClose={() => setChooserOpen(false)}
+          onReady={(name, initialContent) => {
+            setChooserOpen(false)
+            setCreating({ name, initialContent })
           }}
         />
       )}
 
-      {creatingName && (
+      {creating && (
         <VMEditor
-          name={creatingName}
-          onClose={() => setCreatingName(null)}
+          name={creating.name}
+          initialContent={creating.initialContent}
+          onClose={() => setCreating(null)}
           onSaved={() => {
-            setCreatingName(null)
+            setCreating(null)
             vms.reload()
           }}
         />
@@ -237,23 +257,58 @@ export default function Virtualization({ me }: { me: Me }) {
 
 const domainNameRe = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/
 
-function VMNamePrompt({ onClose, onNamed }: { onClose: () => void; onNamed: (name: string) => void }) {
+/** Name + a choice of how to get to the XML review step: a short guided form
+ * (memory/vCPU/disk/network, with an optional real qcow2 file created to
+ * match) or straight to a blank skeleton for hand-editing. Either path lands
+ * on the same VMEditor — the wizard only changes what's pre-filled there,
+ * never skips the review-before-save step. */
+function VMCreateChooser({
+  onClose,
+  onReady,
+}: {
+  onClose: () => void
+  onReady: (name: string, initialContent?: string) => void
+}) {
+  const [mode, setMode] = useState<'wizard' | 'raw'>('wizard')
   const [name, setName] = useState('')
+  const [memoryMB, setMemoryMB] = useState(2048)
+  const [vcpus, setVcpus] = useState(2)
+  const [diskGB, setDiskGB] = useState(20)
+  const [bridge, setBridge] = useState('br0')
+  const [createDiskFile, setCreateDiskFile] = useState(true)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  function submit(event: FormEvent) {
+  const diskPath = defaultDiskPath(name || 'new-vm')
+
+  async function submit(event: FormEvent) {
     event.preventDefault()
     if (!domainNameRe.test(name)) {
       setError('Имя может содержать только латинские буквы, цифры, точку, дефис и подчёркивание')
       return
     }
-    onNamed(name)
+    if (mode === 'raw') {
+      onReady(name)
+      return
+    }
+    setError(null)
+    setBusy(true)
+    try {
+      if (createDiskFile) {
+        await api('/vms/disks', { method: 'POST', body: { path: diskPath, size_gb: diskGB } })
+      }
+      onReady(name, domainXMLFromWizard(name, { memoryMB, vcpus, diskPath, bridge }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
     <Card
-      title="Новая VM — имя домена"
-      subtitle="Имя станет и именем libvirt-домена, и именем XML-файла определения."
+      title="Новая VM"
+      subtitle="Оба способа заканчиваются одним и тем же — проверкой и правкой XML перед сохранением."
       actions={
         <button className="ghost" onClick={onClose}>
           закрыть
@@ -262,13 +317,63 @@ function VMNamePrompt({ onClose, onNamed }: { onClose: () => void; onNamed: (nam
     >
       <form className="col" onSubmit={submit}>
         {error && <Banner kind="error">{error}</Banner>}
+        <div className="row" style={{ gap: '0.5rem' }}>
+          <button
+            type="button"
+            className={mode === 'wizard' ? 'primary' : 'ghost'}
+            onClick={() => setMode('wizard')}
+          >
+            Мастер
+          </button>
+          <button type="button" className={mode === 'raw' ? 'primary' : 'ghost'} onClick={() => setMode('raw')}>
+            Сырой XML
+          </button>
+        </div>
         <label style={{ maxWidth: '20rem' }}>
           Имя VM
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="new-vm" required autoFocus />
         </label>
+
+        {mode === 'wizard' && (
+          <>
+            <div className="filters">
+              <label style={{ minWidth: '10rem' }}>
+                Память, МБ
+                <input
+                  type="number"
+                  min={256}
+                  step={256}
+                  value={memoryMB}
+                  onChange={(e) => setMemoryMB(Number(e.target.value))}
+                />
+              </label>
+              <label style={{ minWidth: '8rem' }}>
+                vCPU
+                <input type="number" min={1} max={64} value={vcpus} onChange={(e) => setVcpus(Number(e.target.value))} />
+              </label>
+              <label style={{ minWidth: '8rem' }}>
+                Диск, ГБ
+                <input type="number" min={1} max={65536} value={diskGB} onChange={(e) => setDiskGB(Number(e.target.value))} />
+              </label>
+              <label style={{ minWidth: '10rem' }}>
+                Сетевой мост
+                <input value={bridge} onChange={(e) => setBridge(e.target.value)} placeholder="br0" />
+              </label>
+            </div>
+            <p className="small muted" style={{ margin: 0 }}>
+              Файл диска: <code className="mono">{diskPath}</code>
+            </p>
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+              <input type="checkbox" checked={createDiskFile} onChange={(e) => setCreateDiskFile(e.target.checked)} />
+              Создать файл диска (qemu-img create) — без этого XML будет ссылаться на несуществующий файл
+            </label>
+          </>
+        )}
+
         <div>
-          <button className="primary" type="submit">
-            Далее — редактировать XML
+          <button className="primary" type="submit" disabled={busy}>
+            {busy && <Spinner />}
+            {busy ? 'Готовлю…' : 'Далее — проверить XML'}
           </button>
         </div>
       </form>
@@ -283,10 +388,14 @@ function VMNamePrompt({ onClose, onNamed }: { onClose: () => void; onNamed: (nam
  * none is needed. */
 function VMEditor({
   name,
+  initialContent,
   onClose,
   onSaved,
 }: {
   name: string
+  /** Pre-filled by the wizard; falls back to the plain skeleton when the
+   * operator went the raw-XML route instead. */
+  initialContent?: string
   onClose: () => void
   onSaved: () => void
 }) {
@@ -300,7 +409,7 @@ function VMEditor({
   const [result, setResult] = useState<WriteResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const content = draft ?? existing.data?.content ?? (isNew ? domainXMLSkeleton(name) : '')
+  const content = draft ?? existing.data?.content ?? (isNew ? initialContent ?? domainXMLSkeleton(name) : '')
 
   async function save() {
     setBusy(true)

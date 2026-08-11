@@ -8,6 +8,7 @@ import Findings from './pages/Findings'
 import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
 import Services from './pages/Services'
+import Docker from './pages/Docker'
 import Podman from './pages/Podman'
 import LXD from './pages/LXD'
 import Virtualization from './pages/Virtualization'
@@ -43,6 +44,7 @@ const NAV = [
   { to: '/usage', label: 'Нагрузка' },
   { to: '/configs', label: 'Конфигурации' },
   { to: '/services', label: 'Сервисы' },
+  { to: '/containers', label: 'Docker' },
   { to: '/podman', label: 'Podman' },
   { to: '/lxd', label: 'LXD' },
   { to: '/vms', label: 'Виртуальные машины' },
@@ -209,6 +211,7 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
             <Route path="/usage" element={<Usage />} />
             <Route path="/configs" element={<Configs me={me} />} />
             <Route path="/services" element={<Services me={me} />} />
+            <Route path="/containers" element={<Docker me={me} />} />
             <Route path="/podman" element={<Podman me={me} />} />
             <Route path="/lxd" element={<LXD me={me} />} />
             <Route path="/vms" element={<Virtualization me={me} />} />

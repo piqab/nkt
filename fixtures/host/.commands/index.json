@@ -67,6 +67,7 @@
     { "match": ["virsh", "-c", "qemu:///system", "undefine"], "stdout": "Domain undefined\n", "exit_code": 0, "simulated": true },
     { "match": ["virsh", "-c", "qemu:///system", "define"], "stdout": "Domain defined\n", "exit_code": 0, "simulated": true },
     { "match": ["virt-xml-validate"], "stdout": "Validates\n", "exit_code": 0, "simulated": true },
+    { "match": ["qemu-img", "create"], "stdout": "Formatting, fmt=qcow2\n", "exit_code": 0, "simulated": true },
 
     { "match": ["ss", "-tulpnH"], "stdout_file": "ss.txt" },
     { "match": ["ss"], "stdout_file": "ss.txt" },

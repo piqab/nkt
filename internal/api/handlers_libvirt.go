@@ -54,3 +54,25 @@ func (s *Server) handleVMDelete(w http.ResponseWriter, r *http.Request) {
 	s.rescanLater()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+type createDiskRequest struct {
+	Path   string `json:"path"`
+	SizeGB int    `json:"size_gb"`
+}
+
+// handleVMCreateDisk provisions a new qcow2 disk image for the VM-creation
+// wizard — a hand-written or generated domain XML only ever references a
+// disk path, it never creates the file itself.
+func (s *Server) handleVMCreateDisk(w http.ResponseWriter, r *http.Request) {
+	var req createDiskRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user := auth.Username(r.Context())
+	if err := s.libvirt.CreateDisk(r.Context(), user, req.Path, req.SizeGB); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
