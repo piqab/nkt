@@ -89,6 +89,7 @@ build: ## собрать продакшен-бинарник для Linux (Docke
 .PHONY: native-build
 native-build: ## собрать без Docker: сама проверит и, если нужно, поставит Go/Node
 	@set -euo pipefail; \
+	export PATH="$(LOCAL_GO_DIR)/bin:$(LOCAL_NODE_DIR)/bin:$$PATH"; \
 	confirm() { \
 		read -r -p "$$1 [y/N] " reply; \
 		case "$$reply" in \
@@ -121,7 +122,6 @@ native-build: ## собрать без Docker: сама проверит и, е�
 			rm -rf "$(LOCAL_GO_DIR)"; \
 			tar -C "$(LOCAL_ROOT)" -xzf /tmp/nkt-go.tar.gz; \
 			rm -f /tmp/nkt-go.tar.gz; \
-			export PATH="$(LOCAL_GO_DIR)/bin:$$PATH"; \
 			echo "Установлено: $$(go version)"; \
 		else \
 			echo "Отказ — без Go сборка невозможна." >&2; \
@@ -152,7 +152,6 @@ native-build: ## собрать без Docker: сама проверит и, е�
 			mkdir -p "$(LOCAL_NODE_DIR)"; \
 			tar -C "$(LOCAL_NODE_DIR)" --strip-components=1 -xJf /tmp/nkt-node.tar.xz; \
 			rm -f /tmp/nkt-node.tar.xz; \
-			export PATH="$(LOCAL_NODE_DIR)/bin:$$PATH"; \
 			echo "Установлено: $$(node -v)"; \
 		else \
 			echo "Отказ — без Node сборка невозможна." >&2; \
@@ -165,9 +164,12 @@ native-build: ## собрать без Docker: сама проверит и, е�
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
 	echo; \
 	echo "готово: $$($(OUT) version)"; \
-	echo; \
-	echo "Если Go/Node ставились в $(LOCAL_ROOT), добавьте в ~/.bashrc (или ~/.profile):"; \
-	echo "  export PATH=\"$(LOCAL_GO_DIR)/bin:$(LOCAL_NODE_DIR)/bin:\$$PATH\""
+	if [ -d "$(LOCAL_GO_DIR)" ] || [ -d "$(LOCAL_NODE_DIR)" ]; then \
+		echo; \
+		echo "Go/Node из $(LOCAL_ROOT) следующий make build подхватит сам — но чтобы"; \
+		echo "вызывать go/npm напрямую вне make, добавьте в ~/.bashrc (или ~/.profile):"; \
+		echo "  export PATH=\"$(LOCAL_GO_DIR)/bin:$(LOCAL_NODE_DIR)/bin:\$$PATH\""; \
+	fi
 
 .PHONY: build-dev
 build-dev: ## собрать бинарник для текущей ОС — ТОЛЬКО для разработки в режиме fixtures
