@@ -110,7 +110,9 @@ func (s *servicesScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 	}
 
 	s.app.confirm(fmt.Sprintf("Выполнить «%s» для %s «%s»?", action,
-		map[string]string{"unit": "сервиса", "container": "контейнера", "podman": "контейнера Podman"}[target.kind],
+		map[string]string{
+			"unit": "сервиса", "container": "контейнера", "podman": "контейнера Podman", "lxd": "инстанса LXD",
+		}[target.kind],
 		target.name),
 		func() {
 			s.app.runAsync(fmt.Sprintf("%s %s", action, target.name), true,
@@ -126,6 +128,11 @@ func (s *servicesScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 							return "", err
 						}
 						return fmt.Sprintf("podman-контейнер %s: %s выполнено", target.name, action), nil
+					case "lxd":
+						if err := s.app.LXD.InstanceAction(ctx, s.app.actor, target.name, action); err != nil {
+							return "", err
+						}
+						return fmt.Sprintf("lxd-инстанс %s: %s выполнено", target.name, action), nil
 					}
 					res, err := s.app.Services.Action(ctx, s.app.actor, target.name, action)
 					if err != nil {
@@ -195,6 +202,18 @@ func (s *servicesScreen) refresh(ctx context.Context) {
 			s.table.SetCell(row, 2, cellColor("●"+ct.State, stateColor(ct.State)))
 			s.table.SetCell(row, 3, cellDim(truncate(ct.Image, 46)))
 			s.table.SetCell(row, 4, cellDim(truncate(podmanPortSummary(ct), 40)))
+			row++
+		}
+
+		for _, inst := range snap.LXD {
+			s.rows = append(s.rows, serviceRow{
+				kind: "lxd", name: inst.Name, actions: []string{"start", "stop", "restart", "pause"},
+			})
+			s.table.SetCell(row, 0, cellDim("lxd"))
+			s.table.SetCell(row, 1, cell(inst.Name))
+			s.table.SetCell(row, 2, cellColor("●"+inst.Status, stateColor(inst.Status)))
+			s.table.SetCell(row, 3, cellDim(inst.Type))
+			s.table.SetCell(row, 4, cellDim(strings.Join(inst.IPv4, ", ")))
 			row++
 		}
 		s.table.SetTitle(fmt.Sprintf(" Сервисы и контейнеры — %d ", len(s.rows)))
@@ -286,6 +305,20 @@ func (s *servicesScreen) showDetail(index int) {
 				sb.WriteString(dim(" под: " + ct.Pod + "\n"))
 			}
 			sb.WriteString(" порты: " + podmanPortSummary(ct))
+		}
+	case "lxd":
+		for _, inst := range snap.LXD {
+			if inst.Name != target.name {
+				continue
+			}
+			sb.WriteString(" " + bold(inst.Name) + dim(" · "+inst.Type) + "\n")
+			sb.WriteString(fmt.Sprintf(" состояние: %s   архитектура: %s\n",
+				tag(stateColor(inst.Status), inst.Status), orDash(inst.Architecture)))
+			if len(inst.IPv4) > 0 {
+				sb.WriteString(dim(" IPv4: ") + strings.Join(inst.IPv4, ", "))
+			} else {
+				sb.WriteString(dim(" IPv4: нет данных"))
+			}
 		}
 	default:
 		for _, ct := range snap.Container {

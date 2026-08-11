@@ -44,6 +44,7 @@ type Deps struct {
 	Firewall  *control.FirewallManager
 	Certs     *control.CertManager
 	Podman    *control.PodmanManager
+	LXD       *control.LXDManager
 	Prober    *monitor.Prober
 
 	// Screen overrides the terminal. Tests drive the interface through a

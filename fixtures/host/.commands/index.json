@@ -5,6 +5,7 @@
     { "match": ["systemctl", "show", "haproxy"], "stdout_file": "systemctl_show_haproxy.txt" },
     { "match": ["systemctl", "show", "docker"], "stdout_file": "systemctl_show_docker.txt" },
     { "match": ["systemctl", "show", "podman.socket"], "stdout_file": "systemctl_show_podman.txt" },
+    { "match": ["systemctl", "show", "snap.lxd.daemon"], "stdout_file": "systemctl_show_lxd.txt" },
     { "match": ["systemctl", "show", "ufw"], "stdout_file": "systemctl_show_ufw.txt" },
     { "match": ["systemctl", "show", "fail2ban"], "stdout_file": "systemctl_show_fail2ban.txt" },
     { "match": ["systemctl", "show"], "stdout": "Description=\nActiveState=inactive\nSubState=dead\nUnitFileState=not-found\nActiveEnterTimestamp=\nMainPID=0\nMemoryCurrent=0\nNRestarts=0\n" },
@@ -42,6 +43,14 @@
     { "match": ["ufw", "reload"], "stdout": "Firewall reloaded\n", "simulated": true },
     { "match": ["iptables"], "stdout": "", "simulated": true },
 
+    { "match": ["lxc", "list", "--format", "json"], "stdout_file": "lxc_list.json" },
+    { "match": ["lxc", "start"], "stdout": "", "exit_code": 0, "simulated": true },
+    { "match": ["lxc", "stop"], "stdout": "", "exit_code": 0, "simulated": true },
+    { "match": ["lxc", "restart"], "stdout": "", "exit_code": 0, "simulated": true },
+    { "match": ["lxc", "pause"], "stdout": "", "exit_code": 0, "simulated": true },
+    { "match": ["lxc", "launch"], "stdout": "Creating instance\nStarting instance\n", "exit_code": 0, "simulated": true },
+    { "match": ["lxc", "delete"], "stdout": "", "exit_code": 0, "simulated": true },
+
     { "match": ["ss", "-tulpnH"], "stdout_file": "ss.txt" },
     { "match": ["ss"], "stdout_file": "ss.txt" },
 
@@ -56,6 +65,7 @@
     { "match": ["sh", "-c", "command -v ip6tables-save"], "stdout": "/usr/sbin/ip6tables-save\n" },
     { "match": ["sh", "-c", "command -v docker"], "stdout": "/usr/bin/docker\n" },
     { "match": ["sh", "-c", "command -v podman"], "stdout": "/usr/bin/podman\n" },
+    { "match": ["sh", "-c", "command -v lxc"], "stdout": "/snap/bin/lxc\n" },
     { "match": ["sh", "-c", "command -v ss"], "stdout": "/usr/bin/ss\n" },
     { "match": ["sh", "-c", "command -v systemctl"], "stdout": "/usr/bin/systemctl\n" },
     { "match": ["sh", "-c", "command -v nft"], "exit_code": 1 },
