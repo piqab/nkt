@@ -195,6 +195,15 @@ stand: ## поднять проверочный стенд с настоящим
 stand-down: ## остановить стенд и удалить его тома
 	docker compose -f stand/docker-compose.yml down -v
 
+.PHONY: hub
+hub: ## поднять управляющий центр (nkt hub) в Docker
+	docker compose -f deploy/docker-compose.hub.yml up -d --build
+	@echo "хаб: http://127.0.0.1:8443   пароль: docker compose -f deploy/docker-compose.hub.yml logs hub"
+
+.PHONY: hub-down
+hub-down: ## остановить хаб и удалить его тома
+	docker compose -f deploy/docker-compose.hub.yml down -v
+
 .PHONY: install
 install: ## установить на этот Linux-хост (запускать на самом хосте от root)
 	@test "$$(uname -s)" = "Linux" || (echo "install выполняется только на Linux-хосте" && false)

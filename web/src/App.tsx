@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
-import { api, onUnauthorized, useApi } from './api'
+import { api, hostScope, onUnauthorized, useApi } from './api'
 import type { Me, Overview } from './types'
 import Login from './pages/Login'
+import Hosts from './pages/Hosts'
 import OverviewPage from './pages/Overview'
 import Findings from './pages/Findings'
 import TopologyPage from './pages/Topology'
@@ -99,12 +100,48 @@ export default function App() {
   return <Shell me={me} onLogout={() => setMe(null)} />
 }
 
+/** A host selected in the hub shell — everything below scopes its API calls
+ * to it (see api.ts's hostScope) once it is set. */
+type SelectedHost = { id: number; name: string }
+
 function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const [theme, setTheme] = useTheme()
   const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
+  const isHub = me.mode === 'hub'
+
+  const [selectedHost, setSelectedHost] = useState<SelectedHost | null>(() => {
+    if (!isHub) return null
+    try {
+      const raw = localStorage.getItem('nkt-hub-host')
+      return raw ? (JSON.parse(raw) as SelectedHost) : null
+    } catch {
+      return null
+    }
+  })
+
+  // Every page below reads through api()/useApi() unmodified; this is the
+  // one place that redirects their calls to the selected host's own API
+  // through the hub's proxy (see api.ts's hostScope) instead of the hub's.
+  useEffect(() => {
+    hostScope.id = isHub ? (selectedHost?.id ?? null) : null
+    return () => {
+      hostScope.id = null
+    }
+  }, [isHub, selectedHost])
+
+  function selectHost(host: SelectedHost | null) {
+    setSelectedHost(host)
+    if (host) localStorage.setItem('nkt-hub-host', JSON.stringify(host))
+    else localStorage.removeItem('nkt-hub-host')
+  }
+
+  // A hub with no host selected has nothing of its own to show an
+  // overview/findings/etc. for — the host registry is the whole page.
+  const showingHostPicker = isHub && !selectedHost
+
   // The overview is polled anyway; reuse it to keep the sidebar badge current.
-  const overview = useApi<Overview>('/overview', 60_000)
+  const overview = useApi<Overview>(showingHostPicker ? null : '/overview', 60_000)
   const criticalCount =
     (overview.data?.findings.critical ?? 0) + (overview.data?.findings.high ?? 0)
   // Certificates get their own badge: an expiry is a deadline, not a defect,
@@ -118,15 +155,51 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
     navigate('/login', { replace: true })
   }
 
+  if (showingHostPicker) {
+    return (
+      <div className="shell">
+        <aside className="sidebar">
+          <div className="brand">
+            <div className="brand-name">NetKnownsThat</div>
+            <div className="brand-sub">управляющий центр</div>
+          </div>
+          <div className="sidebar-foot">
+            <div>
+              {me.username} · {me.role}
+            </div>
+            <div className="row" style={{ gap: '0.25rem' }}>
+              <button className="ghost" onClick={logout}>
+                Выйти
+              </button>
+            </div>
+          </div>
+        </aside>
+        <main className="main">
+          <div className="content">
+            <Hosts onSelect={selectHost} />
+          </div>
+        </main>
+      </div>
+    )
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-name">NetKnownsThat</div>
           <div className="brand-sub">
-            {overview.data?.host.hostname ?? '…'} · режим {me.mode}
+            {isHub
+              ? selectedHost!.name
+              : `${overview.data?.host.hostname ?? '…'} · режим ${me.mode}`}
           </div>
         </div>
+
+        {isHub && (
+          <button className="ghost" onClick={() => selectHost(null)} style={{ margin: '0 0.75rem 0.5rem' }}>
+            ← к списку хостов
+          </button>
+        )}
 
         <nav className="nav">
           {NAV.filter((item) => !item.adminOnly || me.is_admin).map((item) => (
@@ -168,7 +241,10 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
       </aside>
 
       <main className="main">
-        <div className="content">
+        {/* key remounts every page below on host switch, so their useApi()
+            calls re-fetch scoped to the newly selected host instead of
+            showing stale data from the previous one. */}
+        <div className="content" key={isHub ? selectedHost!.id : 'local'}>
           {showPassword && (
             <Card
               title="Смена пароля"

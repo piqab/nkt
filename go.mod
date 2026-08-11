@@ -7,6 +7,7 @@ require (
 	github.com/go-chi/chi/v5 v5.3.1
 	github.com/haproxytech/config-parser/v5 v5.1.6
 	github.com/nginxinc/nginx-go-crossplane v0.4.89
+	github.com/pkg/sftp v1.13.11
 	github.com/rivo/tview v0.42.0
 	golang.org/x/crypto v0.54.0
 	golang.org/x/net v0.57.0
@@ -23,6 +24,7 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/haproxytech/go-logger v1.1.0 // indirect
 	github.com/jstemmer/go-junit-report v1.0.0 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

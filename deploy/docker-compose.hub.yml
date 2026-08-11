@@ -1,0 +1,37 @@
+# Control-center deployment: one hub container manages other VPS hosts over
+# SSH (see internal/hub). The build context is the repository root, so run
+# this from there, not from inside deploy/:
+#
+#   docker compose -f deploy/docker-compose.hub.yml up -d --build
+#
+# The hub only ever reaches out to SSH into the hosts you register — nothing
+# here calls home on its own. On first start it prints a generated admin
+# password to its logs (`docker compose -f deploy/docker-compose.hub.yml
+# logs hub`); log in with that, then add a host from the "Хосты" page.
+#
+# Unlike a plain nkt (which defaults to 127.0.0.1 and expects a reverse proxy
+# in front for TLS), the hub binds 0.0.0.0 inside the container so Docker's
+# own port mapping below can reach it — put this behind your own TLS
+# termination for anything beyond local testing.
+services:
+  hub:
+    build:
+      context: ..
+      dockerfile: Dockerfile.hub
+    ports:
+      - "8443:8077"
+    environment:
+      NKT_MODE: hub
+      NKT_ADDR: 0.0.0.0:8077
+      # Leave unset to have the hub generate and persist its own key inside
+      # the data volume on first start (internal/secretbox.ResolveKey). Set
+      # this yourself (32 random bytes, base64: `openssl rand -base64 32`)
+      # if you'd rather manage the secret outside the volume — e.g. to move
+      # the registry to a fresh volume without losing access to it.
+      NKT_HUB_MASTER_KEY: ""
+    volumes:
+      - nkt-hub-data:/var/lib/netknownsthat
+    restart: unless-stopped
+
+volumes:
+  nkt-hub-data:

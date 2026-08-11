@@ -12,6 +12,23 @@ export interface Me {
   simulated: boolean
 }
 
+/** A remote VPS registered with the hub (internal/store.Host). */
+export interface HubHost {
+  id: number
+  name: string
+  addr: string
+  ssh_port: number
+  ssh_user: string
+  ssh_auth_kind: 'password' | 'key'
+  arch: string
+  status: 'new' | 'installing' | 'online' | 'error'
+  nkt_version: string
+  admin_user?: string
+  error_msg?: string
+  created_at: string
+  last_seen_at?: string
+}
+
 export interface HostInfo {
   mode: string
   hostname: string

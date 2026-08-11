@@ -1,0 +1,47 @@
+# syntax=docker/dockerfile:1
+#
+# Builds the hub — the multi-host control center (internal/hub), not the
+# regular single-host nkt built by the top-level Dockerfile. Run from the
+# repository root:
+#
+#   docker compose -f deploy/docker-compose.hub.yml up -d --build
+#
+# Unlike the plain nkt image, the runtime stage keeps a full Go toolchain and
+# the module source: StartInstall cross-compiles nkt for whatever
+# architecture a newly added host reports (internal/hub/provision.go), so the
+# build step has to stay usable long after this image itself was built, not
+# just once here. That is also why there is no separate slim runtime stage.
+
+# ---- frontend -----------------------------------------------------------------
+FROM node:22-alpine AS web
+WORKDIR /src
+COPY web/package.json web/package-lock.json ./web/
+RUN cd web && npm ci
+COPY web ./web
+# Vite writes straight into the Go embed directory.
+RUN cd web && npm run build
+
+# ---- runtime --------------------------------------------------------------
+FROM golang:1.26-alpine
+RUN apk add --no-cache ca-certificates tzdata
+
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+COPY --from=web /src/internal/webui/dist ./internal/webui/dist
+
+ARG VERSION=docker
+# CGO off keeps every binary the hub produces — its own, and every one it
+# later cross-compiles for a managed host — static: modernc.org/sqlite is
+# pure Go, so nothing ever needs to link against a C library.
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /usr/local/bin/nkt ./cmd/nkt
+
+ENV NKT_MODE=hub \
+    NKT_ADDR=0.0.0.0:8077 \
+    NKT_DATA_DIR=/var/lib/netknownsthat \
+    NKT_HUB_SOURCE_ROOT=/src
+
+VOLUME ["/var/lib/netknownsthat"]
+EXPOSE 8077
+ENTRYPOINT ["/usr/local/bin/nkt", "hub"]
