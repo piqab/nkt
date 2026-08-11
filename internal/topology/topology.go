@@ -22,6 +22,7 @@ const (
 	KindBackend   = "backend"
 	KindContainer = "container"
 	KindPodman    = "podman_container"
+	KindLXD       = "lxd_instance"
 	KindNetwork   = "network"
 )
 
@@ -181,6 +182,25 @@ func Build(s *model.Snapshot) *Graph {
 		b.attachFindings(id, ct.Name)
 		if b.nodes["svc:podman"] != nil {
 			b.edge("svc:podman", id, "manages", "", StatusOK)
+		}
+	}
+
+	// LXD instances — containers or VMs, so status only distinguishes
+	// running from everything else rather than assuming container semantics.
+	for _, inst := range s.LXD {
+		id := "lxd:" + inst.Name
+		status := StatusOK
+		if inst.Status != "running" {
+			status = StatusWarn
+		}
+		b.node(Node{
+			ID: id, Kind: KindLXD, Label: inst.Name, Sublabel: inst.Type,
+			Group: model.ServiceLXD, Status: status,
+			Meta: map[string]string{"status": inst.Status, "type": inst.Type, "architecture": inst.Architecture},
+		})
+		b.attachFindings(id, inst.Name)
+		if b.nodes["svc:lxd"] != nil {
+			b.edge("svc:lxd", id, "manages", "", StatusOK)
 		}
 	}
 
@@ -513,9 +533,11 @@ func kindRank(kind string) int {
 		return 6
 	case KindPodman:
 		return 7
-	case KindNetwork:
+	case KindLXD:
 		return 8
-	default:
+	case KindNetwork:
 		return 9
+	default:
+		return 10
 	}
 }

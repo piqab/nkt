@@ -96,6 +96,14 @@ export interface PodmanContainer {
   networks?: { name: string; ip_address?: string }[]
 }
 
+export interface LXDInstance {
+  name: string
+  type: string
+  status: string
+  architecture?: string
+  ipv4?: string[]
+}
+
 export interface DockerNetwork {
   id: string
   name: string

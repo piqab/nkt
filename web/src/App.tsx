@@ -9,6 +9,7 @@ import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
 import Services from './pages/Services'
 import Podman from './pages/Podman'
+import LXD from './pages/LXD'
 import Firewall from './pages/Firewall'
 import Certificates from './pages/Certificates'
 import Availability from './pages/Availability'
@@ -42,6 +43,7 @@ const NAV = [
   { to: '/configs', label: 'Конфигурации' },
   { to: '/services', label: 'Сервисы' },
   { to: '/podman', label: 'Podman' },
+  { to: '/lxd', label: 'LXD' },
   { to: '/firewall', label: 'Firewall' },
   { to: '/certificates', label: 'Сертификаты', badge: 'certs' as const },
   { to: '/audit', label: 'Журнал действий' },
@@ -206,6 +208,7 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
             <Route path="/configs" element={<Configs me={me} />} />
             <Route path="/services" element={<Services me={me} />} />
             <Route path="/podman" element={<Podman me={me} />} />
+            <Route path="/lxd" element={<LXD me={me} />} />
             <Route path="/firewall" element={<Firewall me={me} />} />
             <Route path="/certificates" element={<Certificates me={me} />} />
             <Route path="/audit" element={<Audit />} />

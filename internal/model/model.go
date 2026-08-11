@@ -15,6 +15,7 @@ const (
 	ServiceHAProxy  = "haproxy"
 	ServiceDocker   = "docker"
 	ServicePodman   = "podman"
+	ServiceLXD      = "lxd"
 	ServiceIptables = "iptables"
 	ServiceUFW      = "ufw"
 	ServiceHost     = "host"
@@ -216,6 +217,18 @@ type PodmanContainer struct {
 	Pod      string             `json:"pod,omitempty"`
 	Ports    []PortMapping      `json:"ports,omitempty"`
 	Networks []ContainerNetwork `json:"networks,omitempty"`
+}
+
+// LXDInstance is a container or virtual machine managed by LXD — unlike
+// libvirt/QEMU (a separate, dedicated VM technology this application also
+// supports) or Podman, LXD ≥4.0 can run either kind of workload under one
+// tool, which is why Type is a field here rather than implied by the model.
+type LXDInstance struct {
+	Name         string   `json:"name"`
+	Type         string   `json:"type"` // container | virtual-machine
+	Status       string   `json:"status"`
+	Architecture string   `json:"architecture,omitempty"`
+	IPv4         []string `json:"ipv4,omitempty"`
 }
 
 // FirewallPolicy is a chain's default policy plus its counters.
@@ -422,6 +435,7 @@ type Snapshot struct {
 	Container []Container       `json:"containers"`
 	Networks  []DockerNetwork   `json:"networks"`
 	Podman    []PodmanContainer `json:"podman_containers,omitempty"`
+	LXD       []LXDInstance     `json:"lxd_instances,omitempty"`
 	Firewall  FirewallState     `json:"firewall"`
 	Listeners []Listener        `json:"listeners"`
 	Certs     []Certificate     `json:"certificates"`

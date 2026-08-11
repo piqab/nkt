@@ -1,0 +1,8 @@
+Description=Service for snap application lxd.daemon
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+ActiveEnterTimestamp=Mon 2026-07-20 04:11:40 UTC
+MainPID=1180
+MemoryCurrent=52428800
+NRestarts=0

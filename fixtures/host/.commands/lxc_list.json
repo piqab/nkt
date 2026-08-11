@@ -1,0 +1,38 @@
+[
+  {
+    "name": "build-runner",
+    "status": "Running",
+    "type": "container",
+    "architecture": "x86_64",
+    "state": {
+      "network": {
+        "eth0": {
+          "addresses": [
+            { "family": "inet", "address": "10.90.10.11" },
+            { "family": "inet6", "address": "fd42:1a2b:3c4d::11" }
+          ]
+        }
+      }
+    }
+  },
+  {
+    "name": "win-testbed",
+    "status": "Stopped",
+    "type": "virtual-machine",
+    "architecture": "x86_64",
+    "state": null
+  },
+  {
+    "name": "dns-cache",
+    "status": "Running",
+    "type": "container",
+    "architecture": "x86_64",
+    "state": {
+      "network": {
+        "eth0": {
+          "addresses": [{ "family": "inet", "address": "10.90.10.15" }]
+        }
+      }
+    }
+  }
+]

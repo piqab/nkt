@@ -17,6 +17,7 @@ const COLUMNS: { kind: string; title: string }[] = [
   { kind: 'backend', title: 'Backend-адреса' },
   { kind: 'container', title: 'Контейнеры' },
   { kind: 'podman_container', title: 'Podman' },
+  { kind: 'lxd_instance', title: 'LXD' },
   { kind: 'network', title: 'Сети docker' },
 ]
 

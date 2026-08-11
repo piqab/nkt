@@ -159,6 +159,7 @@ type runtime struct {
 	firewall  *control.FirewallManager
 	certs     *control.CertManager
 	podman    *control.PodmanManager
+	lxd       *control.LXDManager
 }
 
 func newRuntime() (*runtime, error) {
@@ -187,6 +188,7 @@ func newRuntime() (*runtime, error) {
 		firewall:  control.NewFirewallManager(cfg, collector, db),
 		certs:     control.NewCertManager(cfg, collector, db, services, scanner),
 		podman:    control.NewPodmanManager(collector, db),
+		lxd:       control.NewLXDManager(collector, db),
 	}, nil
 }
 
@@ -212,6 +214,7 @@ func (r *runtime) runTUI() error {
 		Firewall:  r.firewall,
 		Certs:     r.certs,
 		Podman:    r.podman,
+		LXD:       r.lxd,
 		Prober:    monitor.NewProber(r.db, r.cfg),
 	})
 }
@@ -247,7 +250,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	server := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
 		Services: r.services, Configs: r.configs, Firewall: r.firewall, Certs: r.certs,
-		Podman: r.podman, UI: ui, Log: log,
+		Podman: r.podman, LXD: r.lxd, UI: ui, Log: log,
 	})
 
 	httpServer := &http.Server{
