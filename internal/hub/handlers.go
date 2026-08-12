@@ -278,6 +278,22 @@ func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"job": job})
 }
 
+// handleCancelInstall stops a host's in-flight install (or, if the hub
+// restarted mid-install and lost track of it, just clears the stuck status)
+// so its controls have something to act on again either way.
+func (s *Server) handleCancelInstall(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.hub.CancelInstall(r.Context(), id); err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleInstallJobStatus(w http.ResponseWriter, r *http.Request) {
 	events, done, errMsg, ok := s.hub.InstallJobStatus(chi.URLParam(r, "job"))
 	if !ok {

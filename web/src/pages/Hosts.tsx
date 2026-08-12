@@ -85,6 +85,16 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
     }
   }
 
+  async function cancelInstall(host: HubHost) {
+    setNotice(null)
+    try {
+      await api(`/hub/hosts/${host.id}/install/cancel`, { method: 'POST' })
+      reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
   async function showPubKey(host: HubHost) {
     setNotice(null)
     try {
@@ -184,6 +194,11 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
                         {h.status === 'installing' && <Spinner />}
                         {h.status === 'new' ? 'установить' : 'переустановить'}
                       </button>
+                      {h.status === 'installing' && (
+                        <button className="danger ghost" onClick={() => cancelInstall(h)}>
+                          отменить
+                        </button>
+                      )}
                       <button
                         className="ghost"
                         disabled={h.status === 'installing'}
