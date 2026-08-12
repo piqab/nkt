@@ -10,6 +10,9 @@ export interface Me {
   mode: string
   allow_mutations: boolean
   simulated: boolean
+  /** Hub only: the hub's own build version, for comparing against each
+   * host's nkt_version to tell "переустановить" and "обновить" apart. */
+  hub_version?: string
 }
 
 /** A remote VPS registered with the hub (internal/store.Host). */

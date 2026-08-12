@@ -124,6 +124,13 @@ type Manager struct {
 	resolvedGoBin string
 }
 
+// Version returns the hub's own build version — every binary it
+// cross-compiles for a managed host is stamped with the same one (see
+// ensureBinary), so comparing it against a host's stored nkt_version is
+// how the UI knows an "переустановить" would actually deploy something
+// newer rather than just repeat the same build.
+func (m *Manager) Version() string { return m.version }
+
 // NewManager builds a host manager. key is the resolved secretbox master
 // key (see secretbox.ResolveKey); version is stamped into every binary this
 // hub cross-compiles, so an installed host reports the hub's own build.

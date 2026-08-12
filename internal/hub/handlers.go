@@ -129,6 +129,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"mode":            "hub",
 		"allow_mutations": s.cfg.AllowMutations,
 		"simulated":       false,
+		"hub_version":     s.hub.Version(),
 	})
 }
 
