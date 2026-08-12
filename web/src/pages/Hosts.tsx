@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
 import { api, useApi } from '../api'
 import type { HubHost, RenewEvent, RenewJobStatus } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, Spinner, formatRelative } from '../components/ui'
@@ -254,7 +254,6 @@ export default function Hosts({
                   <th>Sudo</th>
                   <th>Версия nkt</th>
                   <th>Виден в сети</th>
-                  <th>Действия</th>
                 </tr>
               </thead>
               <tbody>
@@ -265,7 +264,8 @@ export default function Hosts({
                     !!h.nkt_version &&
                     isOlderVersion(h.nkt_version, hubVersion)
                   return (
-                  <tr key={h.id}>
+                  <Fragment key={h.id}>
+                  <tr className="host-row">
                     <td>
                       <strong>{h.name}</strong>
                     </td>
@@ -299,65 +299,63 @@ export default function Hosts({
                     <td className="small nowrap">
                       {h.last_seen_at ? formatRelative(h.last_seen_at) : 'ни разу'}
                     </td>
-                    {/* Two rows rather than one long flex-wrap line: the top
-                        row is the one action someone actually comes to this
-                        table for (открыть/установить/отменить), the bottom
-                        row is maintenance (журнал, изменить, ключ, sudo,
-                        удалить) — splitting them keeps the primary action in
-                        a stable position instead of shifting left/right as
-                        other buttons appear or disappear on the same line. */}
-                    <td style={{ minWidth: '18rem' }}>
-                      <div className="col" style={{ gap: '0.35rem' }}>
-                        <div className="row">
-                          {h.status === 'online' && (
-                            <button className="ghost" onClick={() => onSelect({ id: h.id, name: h.name })}>
-                              открыть
-                            </button>
-                          )}
-                          <button
-                            className={outdated ? 'primary' : 'ghost'}
-                            disabled={h.status === 'installing'}
-                            onClick={() => startInstall(h)}
-                          >
-                            {h.status === 'installing' && <Spinner />}
-                            {h.status === 'new' ? 'установить' : outdated ? 'обновить' : 'переустановить'}
-                          </button>
-                          {h.status === 'installing' && (
-                            <button className="danger ghost" onClick={() => cancelInstall(h)}>
-                              отменить
-                            </button>
-                          )}
-                        </div>
-                        <div className="row">
-                          {h.status !== 'new' && (
-                            <button className="ghost" onClick={() => openInstallLog(h)}>
-                              журнал установки
-                            </button>
-                          )}
-                          <button
-                            className="ghost"
-                            disabled={h.status === 'installing'}
-                            onClick={() => setEditingHost(h)}
-                          >
-                            изменить
-                          </button>
-                          {h.ssh_auth_kind === 'key' && (
-                            <button className="ghost" onClick={() => showPubKey(h)}>
-                              публичный ключ
-                            </button>
-                          )}
-                          {h.sudo_status === 'nopasswd' && (
-                            <button className="danger ghost" onClick={() => removeSudoAccess(h)}>
-                              снять NOPASSWD
-                            </button>
-                          )}
-                          <button className="danger ghost" onClick={() => remove(h)}>
-                            удалить
-                          </button>
-                        </div>
+                  </tr>
+                  {/* Own full-width row instead of a dedicated "Действия"
+                      column: with up to eight buttons, sharing a column with
+                      the other data columns squeezed them and pushed the
+                      table into horizontal scroll. A row of its own gives
+                      the buttons the entire table width to wrap into,
+                      starting under "Имя". */}
+                  <tr className="host-actions-row">
+                    <td colSpan={7}>
+                      <div className="row">
+                      {h.status === 'online' && (
+                        <button className="ghost" onClick={() => onSelect({ id: h.id, name: h.name })}>
+                          открыть
+                        </button>
+                      )}
+                      <button
+                        className={outdated ? 'primary' : 'ghost'}
+                        disabled={h.status === 'installing'}
+                        onClick={() => startInstall(h)}
+                      >
+                        {h.status === 'installing' && <Spinner />}
+                        {h.status === 'new' ? 'установить' : outdated ? 'обновить' : 'переустановить'}
+                      </button>
+                      {h.status === 'installing' && (
+                        <button className="danger ghost" onClick={() => cancelInstall(h)}>
+                          отменить
+                        </button>
+                      )}
+                      {h.status !== 'new' && (
+                        <button className="ghost" onClick={() => openInstallLog(h)}>
+                          журнал установки
+                        </button>
+                      )}
+                      <button
+                        className="ghost"
+                        disabled={h.status === 'installing'}
+                        onClick={() => setEditingHost(h)}
+                      >
+                        изменить
+                      </button>
+                      {h.ssh_auth_kind === 'key' && (
+                        <button className="ghost" onClick={() => showPubKey(h)}>
+                          публичный ключ
+                        </button>
+                      )}
+                      {h.sudo_status === 'nopasswd' && (
+                        <button className="danger ghost" onClick={() => removeSudoAccess(h)}>
+                          снять NOPASSWD
+                        </button>
+                      )}
+                      <button className="danger ghost" onClick={() => remove(h)}>
+                        удалить
+                      </button>
                       </div>
                     </td>
                   </tr>
+                  </Fragment>
                   )
                 })}
               </tbody>
