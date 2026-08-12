@@ -420,11 +420,17 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 
 	envContent := renderEnv(adminUser, adminPassword)
 	if err := stageFiles(client, host.SSHUser, binPath, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report); err != nil {
+		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
 		return fail(err)
 	}
 	if err := activateService(client, host.SSHUser, report); err != nil {
+		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
 		return fail(err)
 	}
+	// Both steps above needed sudo for a non-root SSHUser and neither
+	// failed on it — nopasswd sudo (or root, needing none at all) is
+	// confirmed working, right here, for free, with no separate probe.
+	m.recordSudoOutcome(ctx, hostID, host.SSHUser, nil)
 
 	report("Жду, пока сервис ответит на /health…")
 	healthCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
@@ -499,6 +505,64 @@ func (m *Manager) resolveAdminCredential(ctx context.Context, hostID int64, host
 		return "", "", err
 	}
 	return user, password, nil
+}
+
+// recordSudoOutcome updates a host's sudo_status from what stageFiles/
+// activateService just observed: root never needs sudo at all; a non-root
+// user either got past both steps (nopasswd confirmed, err == nil) or
+// didn't. A failure unrelated to sudo itself (network hiccup, disk full —
+// anything sudoRequiresPassword doesn't recognise) says nothing about sudo
+// either way and is left alone rather than recorded as a guess.
+func (m *Manager) recordSudoOutcome(ctx context.Context, hostID int64, sshUser string, err error) {
+	status := store.SudoStatusNopasswd
+	switch {
+	case sshUser == "root":
+		status = store.SudoStatusRoot
+	case err != nil && !sudoRequiresPassword(err):
+		return
+	case err != nil:
+		status = store.SudoStatusPasswordRequired
+	}
+	_ = m.db.SetHostSudoStatus(ctx, hostID, status)
+}
+
+// RemoveSudoAccess deletes the sudoers drop-in file HUB.md tells an
+// operator to create by hand (sudoersDropIn) — a deliberate cleanup step
+// for someone who wants to revoke the standing NOPASSWD grant once they no
+// longer expect the hub to install/update this host again. Doing this
+// obviously means every later install/update needs sudo access restored
+// (or the host's SSH user switched to root) before it can do anything that
+// needs root on the host again.
+func (m *Manager) RemoveSudoAccess(ctx context.Context, hostID int64) error {
+	host, err := m.db.HostByID(ctx, hostID)
+	if err != nil {
+		return err
+	}
+	if host.SSHUser == "root" {
+		return fmt.Errorf("хост подключён под root — sudo не используется, нечего убирать")
+	}
+	if host.SudoStatus != store.SudoStatusNopasswd {
+		return fmt.Errorf("для хоста не подтверждён доступ sudo без пароля — нечего убирать")
+	}
+
+	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
+	if err != nil {
+		return fmt.Errorf("расшифровка SSH-секрета: %w", err)
+	}
+	client, err := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	out, err := runRemote(client, "sudo -n rm -f "+sudoersDropIn)
+	if err != nil {
+		return diagnoseInstallError(host.SSHUser, sudoersDropIn, err, out)
+	}
+	// Not password_required: some *other* NOPASSWD rule this file didn't
+	// create might still grant access. Unknown is the honest answer until
+	// the next install/update actually re-observes it either way.
+	return m.db.SetHostSudoStatus(ctx, hostID, store.SudoStatusUnknown)
 }
 
 // loadUnitTemplate reads deploy/netknownsthat.service as-is from the hub's

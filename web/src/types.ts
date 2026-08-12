@@ -27,6 +27,10 @@ export interface HubHost {
   status: 'new' | 'installing' | 'online' | 'error'
   nkt_version: string
   admin_user?: string
+  /** What the last install/update actually observed about sudo for a
+   * non-root ssh_user — '' means never observed (or invalidated by an
+   * "изменить" that changed the connection). See store.SudoStatus*. */
+  sudo_status?: '' | 'root' | 'nopasswd' | 'password_required'
   error_msg?: string
   created_at: string
   last_seen_at?: string

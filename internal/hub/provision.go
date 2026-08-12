@@ -26,6 +26,13 @@ const (
 	remoteDataDir     = "/var/lib/netknownsthat"
 )
 
+// sudoersDropIn is the sudoers file HUB.md tells an operator to create by
+// hand for a non-root SSH user's NOPASSWD access — the one file
+// RemoveSudoAccess is willing to delete. A NOPASSWD rule set up any other
+// way (a different file, a direct /etc/sudoers edit) is left alone: this
+// only ever removes what it can name exactly.
+const sudoersDropIn = "/etc/sudoers.d/nkt-hub"
+
 // ensureBinary returns the path to a static nkt binary built for goos/goarch
 // at version, cross-compiling it into the hub's cache the first time a given
 // combination is needed. Because modernc.org/sqlite is pure Go
@@ -199,6 +206,21 @@ func diagnoseInstallError(sshUser, dst string, err error, out string) error {
 	default:
 		return fmt.Errorf("установка %s: %w: %s", dst, err, out)
 	}
+}
+
+// sudoRequiresPassword reports whether err — as stageFiles/activateService
+// return it, already run through diagnoseInstallError — means sudo itself
+// is the problem (needs a password, or the account isn't in sudoers at
+// all), as opposed to some unrelated failure (network, disk, a genuine bug)
+// that happens to have hit the same sudo -n command. Checked against the
+// wrapped message's own wording rather than re-deriving it, so it only ever
+// agrees with what diagnoseInstallError already decided to tell the operator.
+func sudoRequiresPassword(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "нужен sudo без пароля") || strings.Contains(msg, "не может использовать sudo")
 }
 
 // activateService enables and (re)starts the freshly installed unit —
