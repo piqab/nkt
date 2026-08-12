@@ -1,11 +1,45 @@
 import { useEffect, useState } from 'react'
+import { Button, Checkbox, Input, Segmented, Table, type TableColumnsType } from 'antd'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
-import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
+import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, formatDateTime } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import BlockTree from '../components/BlockTree'
 
 const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker'])
+
+function versionColumns(
+  diff: { id: number; text: string } | null,
+  showDiff: (id: number) => void,
+  rollback: (id: number) => void,
+  busy: boolean,
+  me: Me,
+): TableColumnsType<ConfigVersion> {
+  return [
+    { title: '#', dataIndex: 'id', key: 'id', align: 'right' },
+    { title: 'Когда', key: 'ts', render: (_, v) => <span className="small nowrap">{formatDateTime(v.ts)}</span> },
+    { title: 'Кто', dataIndex: 'author', key: 'author', className: 'small' },
+    { title: 'Событие', dataIndex: 'action', key: 'action', className: 'small' },
+    { title: 'Комментарий', dataIndex: 'note', key: 'note', className: 'small secondary' },
+    { title: 'Размер', key: 'size', align: 'right', render: (_, v) => <span className="num small">{formatBytes(v.size)}</span> },
+    {
+      title: '',
+      key: 'actions',
+      render: (_, v) => (
+        <div className="row">
+          <Button type="link" size="small" onClick={() => showDiff(v.id)}>
+            {diff?.id === v.id ? 'скрыть' : 'diff'}
+          </Button>
+          {me.is_admin && me.allow_mutations && (
+            <Button type="link" size="small" loading={busy} onClick={() => rollback(v.id)}>
+              откатить
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ]
+}
 
 export default function Configs({ me }: { me: Me }) {
   const [view, setView] = useState<'text' | 'blocks'>('text')
@@ -114,9 +148,9 @@ export default function Configs({ me }: { me: Me }) {
           actions={
             me.is_admin &&
             me.allow_mutations && (
-              <button className="ghost" onClick={() => setNewFileModal(true)}>
+              <Button type="link" onClick={() => setNewFileModal(true)}>
                 + новый файл
-              </button>
+              </Button>
             )
           }
         >
@@ -125,9 +159,9 @@ export default function Configs({ me }: { me: Me }) {
           ) : (
             <div className="col" style={{ gap: '0.15rem' }}>
               {files.data?.files.map((f) => (
-                <button
+                <Button
                   key={f.path}
-                  className="ghost"
+                  type="text"
                   onClick={() => {
                     setCreatingPath(null)
                     setPath(f.path)
@@ -135,6 +169,7 @@ export default function Configs({ me }: { me: Me }) {
                   }}
                   style={{
                     textAlign: 'left',
+                    height: 'auto',
                     background: f.path === path ? 'var(--wash)' : undefined,
                     fontWeight: f.path === path ? 600 : 400,
                     padding: '0.3rem 0.4rem',
@@ -147,7 +182,7 @@ export default function Configs({ me }: { me: Me }) {
                     {f.service} · {formatBytes(f.size)}
                     {!f.editable && ' · только чтение'}
                   </div>
-                </button>
+                </Button>
               ))}
             </div>
           )}
@@ -191,26 +226,25 @@ export default function Configs({ me }: { me: Me }) {
                 actions={
                   <>
                     {BLOCK_SERVICES.has(file.data.service) && (
-                      <div className="row" style={{ gap: '0.15rem' }}>
-                        <button className={view === 'text' ? 'primary' : 'ghost'} onClick={() => setView('text')}>
-                          текст
-                        </button>
-                        <button className={view === 'blocks' ? 'primary' : 'ghost'} onClick={() => setView('blocks')}>
-                          блоки
-                        </button>
-                      </div>
+                      <Segmented
+                        value={view}
+                        onChange={(v) => setView(v as 'text' | 'blocks')}
+                        options={[
+                          { value: 'text', label: 'текст' },
+                          { value: 'blocks', label: 'блоки' },
+                        ]}
+                      />
                     )}
                     {view === 'text' && (
                       <>
                         {dirty && <span className="small" style={{ color: 'var(--status-warning)' }}>есть несохранённые правки</span>}
-                        <button onClick={() => setDraft(file.data!.content)} disabled={!dirty}>
+                        <Button onClick={() => setDraft(file.data!.content)} disabled={!dirty}>
                           Сбросить
-                        </button>
+                        </Button>
                         {me.is_admin && me.allow_mutations && (
-                          <button className="primary" onClick={save} disabled={busy || !dirty}>
-                            {busy && <Spinner />}
+                          <Button type="primary" onClick={save} loading={busy} disabled={!dirty}>
                             {busy ? 'Сохраняю…' : 'Проверить и сохранить'}
-                          </button>
+                          </Button>
                         )}
                       </>
                     )}
@@ -251,19 +285,10 @@ export default function Configs({ me }: { me: Me }) {
                       <div className="filters" style={{ marginBottom: '0.6rem' }}>
                         <label style={{ flex: 1, minWidth: '14rem' }}>
                           Комментарий к правке
-                          <input
-                            value={note}
-                            onChange={(e) => setNote(e.target.value)}
-                            placeholder="зачем меняем"
-                          />
+                          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="зачем меняем" />
                         </label>
                         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-                          <input
-                            type="checkbox"
-                            checked={apply}
-                            onChange={(e) => setApply(e.target.checked)}
-                            style={{ width: 'auto' }}
-                          />
+                          <Checkbox checked={apply} onChange={(e) => setApply(e.target.checked)} />
                           перезагрузить сервис после сохранения
                         </label>
                       </div>
@@ -282,42 +307,13 @@ export default function Configs({ me }: { me: Me }) {
               <Card title="История версий" subtitle="Первая запись создаётся автоматически перед первой правкой">
                 {versions.data?.versions.length ? (
                   <div className="table-wrap">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th className="num">#</th>
-                          <th>Когда</th>
-                          <th>Кто</th>
-                          <th>Событие</th>
-                          <th>Комментарий</th>
-                          <th className="num">Размер</th>
-                          <th />
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {versions.data.versions.map((v) => (
-                          <tr key={v.id}>
-                            <td className="num">{v.id}</td>
-                            <td className="small nowrap">{formatDateTime(v.ts)}</td>
-                            <td className="small">{v.author}</td>
-                            <td className="small">{v.action}</td>
-                            <td className="small secondary">{v.note}</td>
-                            <td className="num small">{formatBytes(v.size)}</td>
-                            <td className="nowrap">
-                              <button className="ghost" onClick={() => showDiff(v.id)}>
-                                {diff?.id === v.id ? 'скрыть' : 'diff'}
-                              </button>
-                              {me.is_admin && me.allow_mutations && (
-                                <button className="ghost" onClick={() => rollback(v.id)} disabled={busy}>
-                                  {busy && <Spinner />}
-                                  откатить
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <Table<ConfigVersion>
+                      dataSource={versions.data.versions}
+                      rowKey="id"
+                      pagination={false}
+                      size="small"
+                      columns={versionColumns(diff, showDiff, rollback, busy, me)}
+                    />
                   </div>
                 ) : (
                   <div className="chart-empty">
@@ -337,7 +333,7 @@ export default function Configs({ me }: { me: Me }) {
           <div className="col">
             <label>
               Путь
-              <input
+              <Input
                 value={newFilePathInput}
                 onChange={(e) => setNewFilePathInput(e.target.value)}
                 placeholder="/etc/nginx/sites-enabled/newsite.conf"
@@ -349,8 +345,8 @@ export default function Configs({ me }: { me: Me }) {
               — иначе запись отклонит сервер.
             </p>
             <div className="row" style={{ marginTop: '0.4rem' }}>
-              <button
-                className="primary"
+              <Button
+                type="primary"
                 disabled={!newFilePathInput.trim().startsWith('/')}
                 onClick={() => {
                   const p = newFilePathInput.trim()
@@ -361,10 +357,10 @@ export default function Configs({ me }: { me: Me }) {
                 }}
               >
                 Создать
-              </button>
-              <button className="ghost" onClick={() => setNewFileModal(false)}>
+              </Button>
+              <Button type="link" onClick={() => setNewFileModal(false)}>
                 Отмена
-              </button>
+              </Button>
             </div>
           </div>
         </Modal>
@@ -405,13 +401,12 @@ function NewFileForm({ path, onCreated, onCancel }: { path: string; onCreated: (
       subtitle="новый файл — пока не существует на диске"
       actions={
         <>
-          <button className="ghost" onClick={onCancel} disabled={busy}>
+          <Button type="link" onClick={onCancel} disabled={busy}>
             Отмена
-          </button>
-          <button className="primary" onClick={create} disabled={busy || !content.trim()}>
-            {busy && <Spinner />}
+          </Button>
+          <Button type="primary" onClick={create} loading={busy} disabled={!content.trim()}>
             {busy ? 'Создаю…' : 'Проверить и создать'}
-          </button>
+          </Button>
         </>
       }
     >
@@ -432,15 +427,10 @@ function NewFileForm({ path, onCreated, onCancel }: { path: string; onCreated: (
       <div className="filters" style={{ marginBottom: '0.6rem' }}>
         <label style={{ flex: 1, minWidth: '14rem' }}>
           Комментарий
-          <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="зачем создаём" />
+          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="зачем создаём" />
         </label>
         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-          <input
-            type="checkbox"
-            checked={apply}
-            onChange={(e) => setApply(e.target.checked)}
-            style={{ width: 'auto' }}
-          />
+          <Checkbox checked={apply} onChange={(e) => setApply(e.target.checked)} />
           перезагрузить сервис после сохранения
         </label>
       </div>
