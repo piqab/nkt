@@ -223,13 +223,6 @@ hub-install: ## установить хаб на этот Linux-хост как 
 	install -m 0644 deploy/netknownsthat-hub.service /etc/systemd/system/
 	systemctl daemon-reload
 	@echo "готово. Дальше: systemctl enable --now netknownsthat-hub"
-	@if ! command -v go >/dev/null 2>&1 && [ -x "$(LOCAL_GO_DIR)/bin/go" ]; then \
-		echo ""; \
-		echo "ПРЕДУПРЕЖДЕНИЕ: go не на системном PATH, а сервис (systemd) его тоже не видит."; \
-		echo "Установка хостов не сможет собирать под них бинарники, пока не добавите в"; \
-		echo "/etc/netknownsthat/hub.env строку:"; \
-		echo "  NKT_HUB_GO_BIN=$(LOCAL_GO_DIR)/bin/go"; \
-	fi
 
 .PHONY: clean
 clean: ## удалить артефакты сборки

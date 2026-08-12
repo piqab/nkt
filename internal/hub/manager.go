@@ -73,6 +73,12 @@ type Manager struct {
 
 	sessionMu sync.Mutex
 	sessions  map[int64]sessionCache
+
+	// goBinMu/resolvedGoBin cache resolveGoBin's result for the Manager's
+	// lifetime — the self-install it may trigger is expensive enough
+	// (network fetch) that it must run at most once per process.
+	goBinMu       sync.Mutex
+	resolvedGoBin string
 }
 
 // NewManager builds a host manager. key is the resolved secretbox master

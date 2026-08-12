@@ -51,8 +51,9 @@ SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 
-# Исходящий SSH к управляемым хостам и (при первой сборке под новую
-# архитектуру) загрузка Go-модулей — обычные TCP-соединения наружу.
+# Исходящий SSH к управляемым хостам и, при необходимости, загрузка
+# Go-модулей или самого Go с go.dev (если настроенный NKT_HUB_GO_BIN не
+# запускается) — обычные TCP-соединения наружу.
 RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
 
 LimitNOFILE=8192
