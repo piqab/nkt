@@ -18,6 +18,11 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile.hub
+      # `make hub` passes the VERSION file's contents through this shell
+      # variable; a bare `docker compose up --build` without it falls back
+      # to the same default Dockerfile.hub's own ARG VERSION uses.
+      args:
+        VERSION: ${VERSION:-docker}
     ports:
       - "8443:8077"
     environment:
