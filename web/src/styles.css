@@ -262,6 +262,10 @@ h3 { font-size: 1rem; }
 .stat-note { font-size: 0.75rem; color: var(--text-muted); }
 
 /* ------------------------------------------------------------------ badges */
+/* Only .sev-info survives here — every other severity/state badge now goes
+   through ui.tsx SeverityBadge/StateBadge (antd Badge, colours sourced
+   from the same status and seq tokens directly). This one raw usage is
+   BlockTree.tsx own new-block marker. */
 
 .badge {
   display: inline-flex;
@@ -276,38 +280,13 @@ h3 { font-size: 1rem; }
   white-space: nowrap;
 }
 .badge-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 8px; }
-
-.sev-critical .badge-dot { background: var(--status-critical); }
-.sev-high .badge-dot { background: var(--status-serious); }
-.sev-medium .badge-dot { background: var(--status-warning); }
-.sev-low .badge-dot { background: var(--seq-300); }
 .sev-info .badge-dot { background: var(--text-muted); }
-.sev-ok .badge-dot { background: var(--status-good); }
-
-.tag {
-  display: inline-block;
-  padding: 0.02rem 0.4rem;
-  border-radius: var(--radius-sm);
-  background: var(--wash);
-  color: var(--text-secondary);
-  font-size: 0.72rem;
-  font-family: var(--mono);
-}
 
 /* ------------------------------------------------------------------ tables */
+/* Every page's own <table> is gone (all on antd Table now) — only the
+   scroll wrapper survives, still placed around each antd Table the same
+   way it wrapped the raw ones. */
 
-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-th {
-  text-align: left;
-  font-weight: 600;
-  color: var(--text-secondary);
-  padding: 0.4rem 0.6rem;
-  border-bottom: 1px solid var(--baseline);
-  white-space: nowrap;
-}
-td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--gridline); vertical-align: top; }
-tbody tr:hover { background: var(--wash); }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .table-wrap { overflow-x: auto; }
 
 /* ---------------------------------------------------------------- controls */
@@ -330,62 +309,7 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 button.danger { border-color: var(--status-critical); color: var(--status-critical); }
 button.ghost { border-color: transparent; background: transparent; }
 
-.spinner {
-  display: inline-block;
-  width: 0.8em;
-  height: 0.8em;
-  margin-right: 0.4em;
-  vertical-align: -0.12em;
-  border: 2px solid currentColor;
-  border-right-color: transparent;
-  border-radius: 50%;
-  animation: spin 0.6s linear infinite;
-}
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .spinner { animation-duration: 1.5s; }
-}
-
-/* ------------------------------------------------------------------- modal */
-
-.modal-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 1rem;
-  z-index: 100;
-}
-.modal {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: 42rem;
-  max-height: 85vh;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
-}
-.modal-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.7rem 1rem;
-  border-bottom: 1px solid var(--border);
-}
-.modal-head h2 { margin: 0; font-size: 0.95rem; }
-.modal-body {
-  padding: 1rem;
-  overflow-y: auto;
-}
-
-/* -------------------------------------------------------------- block tree */
+/* ------------------------------------------------------------------ block tree */
 
 .block-row {
   display: flex;
@@ -487,27 +411,6 @@ label { font-size: 0.8rem; color: var(--text-secondary); display: flex; flex-dir
 .tooltip-title { font-weight: 600; margin-bottom: 0.15rem; }
 .tooltip-row { display: flex; gap: 0.5rem; justify-content: space-between; }
 .tooltip-row span:last-child { font-variant-numeric: tabular-nums; }
-
-/* ------------------------------------------------------------------ banners */
-
-.banner {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  padding: 0.6rem 0.85rem;
-  border-radius: var(--radius);
-  border: 1px solid var(--border-strong);
-  background: var(--surface-1);
-  font-size: 0.83rem;
-  /* Command output (certbot, nginx -t, ...) arrives with real newlines —
-     without this, HTML collapses them and multi-line errors read as one
-     run-on line. */
-  white-space: pre-wrap;
-}
-.banner-icon { font-size: 1rem; line-height: 1.3; }
-.banner.warn { border-color: var(--status-warning); }
-.banner.error { border-color: var(--status-critical); }
-.banner.info { border-color: var(--seq-300); }
 
 /* ------------------------------------------------------------------- misc */
 

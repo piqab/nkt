@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button, Table, type TableColumnsType } from 'antd'
+import { Button, Table, Tag, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
@@ -161,7 +161,7 @@ export default function OverviewPage({ me }: { me: Me }) {
                     <strong>{f.title}</strong>
                   </div>
                   <div className="small secondary">{f.detail}</div>
-                  {f.object && <span className="tag">{f.object}</span>}
+                  {f.object && <Tag>{f.object}</Tag>}
                 </div>
               ))}
             </div>
