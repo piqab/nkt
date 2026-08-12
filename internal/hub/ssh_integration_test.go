@@ -16,12 +16,16 @@ import (
 )
 
 // TestSSHProvisioningRoundTrip exercises the actually-new code in this
-// package — dialSSH, detectTarget and the SFTP upload half of stageFiles —
-// against a throwaway local sshd, instead of only unit-testing the pure
-// helpers around them. It stages files under a scratch directory rather
-// than /usr/local/bin and never calls activateService, so it needs neither
-// root nor systemd; the plan's own manual step (installing onto a real test
-// VM) is still the way to verify the systemctl half end to end.
+// package — dialSSH, detectTarget and the SFTP-then-install half of
+// stageFiles — against a throwaway local sshd, instead of only unit-testing
+// the pure helpers around them. It stages files under a scratch directory
+// rather than /usr/local/bin and never calls activateService, so it needs
+// neither root nor systemd; passing "root" as the sshUser skips
+// installRemoteFile's sudo prefix (the connecting test user already owns
+// the scratch directory, no escalation needed to write there) — sudo's own
+// behavior is covered separately by TestInstallRemoteFileNeedsSudoForNonRoot.
+// The plan's own manual step (installing onto a real test VM) is still the
+// way to verify the systemctl half end to end.
 func TestSSHProvisioningRoundTrip(t *testing.T) {
 	addr, port, clientKeyPEM := startTestSSHD(t)
 
@@ -64,7 +68,7 @@ func TestSSHProvisioningRoundTrip(t *testing.T) {
 	var events []string
 	report := func(s string) { events = append(events, s) }
 
-	if err := stageFiles(client, localBin, "unit-content", "env-content", binPath, servicePath, envPath, report); err != nil {
+	if err := stageFiles(client, "root", localBin, "unit-content", "env-content", binPath, servicePath, envPath, report); err != nil {
 		t.Fatalf("stageFiles: %v", err)
 	}
 	if len(events) == 0 {
@@ -146,6 +150,47 @@ func TestGeneratedKeyWorksAgainstRealSSHD(t *testing.T) {
 	}
 	if strings.TrimSpace(out) != "ok" {
 		t.Errorf("runRemote output = %q, want %q", out, "ok")
+	}
+}
+
+// TestInstallRemoteFileNeedsSudoForNonRoot exercises the actual `sudo -n`
+// escalation path against a real sshd: passing any sshUser other than
+// "root" makes installRemoteFile prefix the remote command with `sudo -n`,
+// which — on a machine with no NOPASSWD rule for the connecting account —
+// fails fast (no hang, no password prompt to nowhere) with output
+// diagnoseInstallError must recognise and explain, not just relay as a bare
+// "permission denied". Skipped if the environment happens to grant
+// passwordless sudo, since then there is nothing to observe failing.
+func TestInstallRemoteFileNeedsSudoForNonRoot(t *testing.T) {
+	if exec.Command("sudo", "-n", "true").Run() == nil {
+		t.Skip("this environment has passwordless sudo for the test user — nothing to observe failing")
+	}
+
+	addr, port, clientKeyPEM := startTestSSHD(t)
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := dialSSH(ctx, addr, port, me.Username, store.HostAuthKey, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("dialSSH: %v", err)
+	}
+	defer client.Close()
+
+	src := filepath.Join(t.TempDir(), "nkt")
+	if err := os.WriteFile(src, []byte("fake"), 0o644); err != nil {
+		t.Fatalf("write fake binary: %v", err)
+	}
+
+	err = installRemoteFile(client, "not-root", src, "/usr/local/bin/nkt-nkt-test-should-never-exist", 0o755)
+	if err == nil {
+		t.Fatal("expected installRemoteFile to fail without passwordless sudo")
+	}
+	if !strings.Contains(err.Error(), "sudo") {
+		t.Errorf("error does not explain the sudo/NOPASSWD problem: %v", err)
 	}
 }
 

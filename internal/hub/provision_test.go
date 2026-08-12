@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -62,6 +63,40 @@ func TestResolveGoBinUsesWorkingGoWithoutInstalling(t *testing.T) {
 	}
 	if path2 != path {
 		t.Errorf("resolveGoBin did not cache its result: %q then %q", path, path2)
+	}
+}
+
+func TestDiagnoseInstallError(t *testing.T) {
+	baseErr := errors.New("exit status 1")
+	cases := []struct {
+		name string
+		out  string
+		want string
+	}{
+		{"needs password", "sudo: a password is required", "NOPASSWD"},
+		{"sorry a password", "sudo: sorry, a password is required to run sudo", "NOPASSWD"},
+		{"not in sudoers", "user is not in the sudoers file. This incident will be reported.", "sudoers"},
+		{"plain permission denied", "install: cannot create regular file '/usr/local/bin/nkt': Permission denied", "sudo"},
+		{"unrecognised output", "some other failure entirely", "unrecognised output"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := diagnoseInstallError("deploy", "/usr/local/bin/nkt", baseErr, c.out)
+			if err == nil {
+				t.Fatal("diagnoseInstallError returned nil")
+			}
+			if c.name == "unrecognised output" {
+				// Falls through to the default case — must still carry the
+				// original error and raw output, just without a canned hint.
+				if !strings.Contains(err.Error(), c.out) {
+					t.Errorf("error %q does not include the raw command output", err.Error())
+				}
+				return
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("error %q does not mention %q", err.Error(), c.want)
+			}
+		})
 	}
 }
 
