@@ -1,19 +1,67 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Button, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
-import type { Me, Overview } from '../types'
+import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
-import {
-  Banner,
-  Card,
-  ErrorNote,
-  Loading,
-  SeverityBadge,
-  Spinner,
-  StateBadge,
-  formatDateTime,
-  formatRelative,
-} from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative } from '../components/ui'
+
+const serviceColumns: TableColumnsType<ServiceUnit> = [
+  {
+    title: 'Сервис',
+    key: 'name',
+    render: (_, s) => (
+      <>
+        <strong>{s.name}</strong>
+        <div className="small muted">{s.description}</div>
+      </>
+    ),
+  },
+  { title: 'Состояние', key: 'state', render: (_, s) => <StateBadge state={s.active_state} /> },
+  { title: 'Автозапуск', key: 'enabled', render: (_, s) => <span className="small">{s.enabled || '—'}</span> },
+  { title: 'PID', key: 'main_pid', align: 'right', render: (_, s) => <span className="num small">{s.main_pid || '—'}</span> },
+]
+
+const firewallPolicyColumns: TableColumnsType<FirewallPolicy> = [
+  { title: 'Цепочка', key: 'chain', render: (_, p) => <span className="mono">{p.backend}/{p.chain}</span> },
+  {
+    title: 'Политика',
+    key: 'policy',
+    render: (_, p) => (
+      <>
+        <StateBadge state={p.policy === 'DROP' || p.policy === 'REJECT' ? 'active' : 'inactive'} />
+        <span className="mono small" style={{ marginLeft: 6 }}>
+          {p.policy}
+        </span>
+      </>
+    ),
+  },
+  { title: 'Пакетов', key: 'packets', align: 'right', render: (_, p) => <span className="num">{formatNumber(p.packets)}</span> },
+]
+
+const outageColumns: TableColumnsType<Outage> = [
+  { title: 'Ресурс', dataIndex: 'label', key: 'label' },
+  { title: 'Начало', key: 'start', render: (_, o) => <span className="small nowrap">{formatDateTime(o.start)}</span> },
+  { title: 'Проверок', dataIndex: 'checks', key: 'checks', align: 'right' },
+  { title: 'Ошибка', key: 'error', render: (_, o) => <span className="small mono">{o.error}</span> },
+]
+
+const sourceColumns: TableColumnsType<SourceStatus> = [
+  { title: 'Источник', dataIndex: 'name', key: 'name' },
+  {
+    title: 'Статус',
+    key: 'status',
+    render: (_, s) => (
+      <>
+        <StateBadge state={s.error ? 'failed' : s.available ? 'active' : 'inactive'} />
+        {s.error && <div className="small muted">{s.error}</div>}
+        {s.warnings?.length ? <div className="small muted">предупреждений: {s.warnings.length}</div> : null}
+      </>
+    ),
+  },
+  { title: 'Версия', key: 'version', render: (_, s) => <span className="small mono">{s.version || '—'}</span> },
+  { title: 'мс', dataIndex: 'duration_ms', key: 'duration_ms', align: 'right' },
+]
 
 export default function OverviewPage({ me }: { me: Me }) {
   const { data, error, loading, reload } = useApi<Overview>('/overview', 60_000)
@@ -54,10 +102,9 @@ export default function OverviewPage({ me }: { me: Me }) {
         </div>
         <div className="row">
           {me.is_admin && (
-            <button onClick={rescan} disabled={busy}>
-              {busy && <Spinner />}
+            <Button onClick={rescan} loading={busy}>
               {busy ? 'Сканирую…' : 'Пересканировать'}
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -124,31 +171,7 @@ export default function OverviewPage({ me }: { me: Me }) {
         <div className="col">
           <Card title="Сервисы" actions={<Link to="/services">управление →</Link>}>
             <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Сервис</th>
-                    <th>Состояние</th>
-                    <th>Автозапуск</th>
-                    <th className="num">PID</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.services.map((s) => (
-                    <tr key={s.name}>
-                      <td>
-                        <strong>{s.name}</strong>
-                        <div className="small muted">{s.description}</div>
-                      </td>
-                      <td>
-                        <StateBadge state={s.active_state} />
-                      </td>
-                      <td className="small">{s.enabled || '—'}</td>
-                      <td className="num small">{s.main_pid || '—'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <Table<ServiceUnit> dataSource={data.services} columns={serviceColumns} rowKey="name" pagination={false} size="small" />
             </div>
           </Card>
 
@@ -158,33 +181,13 @@ export default function OverviewPage({ me }: { me: Me }) {
               <span className="small secondary">ufw · {data.firewall.ufw_policy || 'политика не прочитана'}</span>
             </div>
             <div className="table-wrap" style={{ marginTop: '0.6rem' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Цепочка</th>
-                    <th>Политика</th>
-                    <th className="num">Пакетов</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(data.firewall.policies ?? [])
-                    .filter((p) => p.table === 'filter')
-                    .map((p) => (
-                      <tr key={`${p.backend}/${p.chain}`}>
-                        <td className="mono">
-                          {p.backend}/{p.chain}
-                        </td>
-                        <td>
-                          <StateBadge state={p.policy === 'DROP' || p.policy === 'REJECT' ? 'active' : 'inactive'} />
-                          <span className="mono small" style={{ marginLeft: 6 }}>
-                            {p.policy}
-                          </span>
-                        </td>
-                        <td className="num">{formatNumber(p.packets)}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+              <Table<FirewallPolicy>
+                dataSource={(data.firewall.policies ?? []).filter((p) => p.table === 'filter')}
+                columns={firewallPolicyColumns}
+                rowKey={(p) => `${p.backend}/${p.chain}`}
+                pagination={false}
+                size="small"
+              />
             </div>
           </Card>
         </div>
@@ -196,58 +199,14 @@ export default function OverviewPage({ me }: { me: Me }) {
             <div className="chart-empty">За сутки простоев не зафиксировано.</div>
           ) : (
             <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Ресурс</th>
-                    <th>Начало</th>
-                    <th className="num">Проверок</th>
-                    <th>Ошибка</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {av.outages.map((o, i) => (
-                    <tr key={i}>
-                      <td>{o.label}</td>
-                      <td className="small nowrap">{formatDateTime(o.start)}</td>
-                      <td className="num">{o.checks}</td>
-                      <td className="small mono">{o.error}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <Table<Outage> dataSource={av.outages} columns={outageColumns} rowKey={(_, i) => i ?? 0} pagination={false} size="small" />
             </div>
           )}
         </Card>
 
         <Card title="Источники данных" subtitle="Что удалось прочитать при последнем скане">
           <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Источник</th>
-                  <th>Статус</th>
-                  <th>Версия</th>
-                  <th className="num">мс</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.sources.map((s) => (
-                  <tr key={s.name}>
-                    <td>{s.name}</td>
-                    <td>
-                      <StateBadge state={s.error ? 'failed' : s.available ? 'active' : 'inactive'} />
-                      {s.error && <div className="small muted">{s.error}</div>}
-                      {s.warnings?.length ? (
-                        <div className="small muted">предупреждений: {s.warnings.length}</div>
-                      ) : null}
-                    </td>
-                    <td className="small mono">{s.version || '—'}</td>
-                    <td className="num">{s.duration_ms}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table<SourceStatus> dataSource={data.sources} columns={sourceColumns} rowKey="name" pagination={false} size="small" />
           </div>
         </Card>
       </div>

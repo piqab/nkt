@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Select } from 'antd'
 import { qs, tzOffsetMinutes, useApi } from '../api'
 import type { HeatCell, MetricPoint, SubjectTotal } from '../types'
 import { BarChart, Heatmap, LineChart, formatBytes, formatNumber } from '../components/charts'
@@ -151,23 +152,16 @@ export default function Usage() {
         <div className="row">
           <label>
             Показатель
-            <select value={seriesId} onChange={(e) => setSeriesId(e.target.value)}>
-              {SERIES.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={seriesId}
+              onChange={setSeriesId}
+              style={{ minWidth: '16rem' }}
+              options={SERIES.map((s) => ({ value: s.id, label: s.label }))}
+            />
           </label>
           <label>
             Период
-            <select value={range} onChange={(e) => setRange(e.target.value)}>
-              {RANGES.map((r) => (
-                <option key={r.value} value={r.value}>
-                  {r.label}
-                </option>
-              ))}
-            </select>
+            <Select value={range} onChange={setRange} style={{ minWidth: '8rem' }} options={RANGES} />
           </label>
         </div>
       </div>
