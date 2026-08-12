@@ -53,7 +53,14 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   }
 
   if (!res.ok) {
-    if (res.status === 401) onUnauthorized.handler?.()
+    // A 401 from a proxied host's own API (see hostScope above) means that
+    // HOST's session needs attention — internal/hub's Proxy re-logs in on
+    // its own the next time regardless — not that the browser's hub
+    // session is invalid. Bouncing to /login here would log the operator
+    // out of the hub itself over something a single managed host did,
+    // replacing the whole shell (sidebar, "к списку хостов") with a bare
+    // login form and leaving no way back short of reloading.
+    if (res.status === 401 && !scoped) onUnauthorized.handler?.()
     const message =
       (payload && typeof payload === 'object' && 'error' in payload
         ? String((payload as { error: unknown }).error)

@@ -173,6 +173,39 @@ h3 { font-size: 1rem; }
 
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 
+/* -------------------------------------------------------------- hub frame */
+/* Wraps a plain host dashboard (.shell, unmodified) under a hub-level bar
+   naming which host is open and how to get back — see App.tsx's Shell. */
+
+.hub-frame {
+  --hub-topbar-height: 3.25rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+.hub-frame .shell { flex: 1; min-height: 0; }
+/* The sidebar's own sticky/100vh sizing assumes it is the topmost element;
+   nested under hub-topbar it must give up exactly that bar's height instead. */
+.hub-frame .sidebar { height: calc(100vh - var(--hub-topbar-height)); top: var(--hub-topbar-height); }
+
+.hub-topbar {
+  height: var(--hub-topbar-height);
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 1.25rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-1);
+  position: sticky;
+  top: 0;
+  z-index: 6;
+}
+.hub-topbar-brand { font-weight: 650; }
+.hub-topbar-sep { color: var(--text-muted); }
+.hub-topbar-host { font-weight: 600; }
+.hub-topbar-spacer { flex: 1; }
+
 .topbar {
   display: flex;
   align-items: center;

@@ -303,6 +303,23 @@ func (s *Server) handleInstallJobStatus(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]any{"events": events, "done": done, "error": errMsg})
 }
 
+// handleLatestInstallJob lets the UI reopen a host's most recent install
+// log — after closing the modal, or after a page reload — without having
+// kept the job id around itself.
+func (s *Server) handleLatestInstallJob(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	jobID, ok := s.hub.LatestJobID(id)
+	if !ok {
+		writeError(w, http.StatusNotFound, "для этого хоста ещё не было установок")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"job": jobID})
+}
+
 func hostIDParam(r *http.Request) (int64, error) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
