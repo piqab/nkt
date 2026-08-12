@@ -426,7 +426,15 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 
 	report("Проверяю учётную запись администратора…")
 	if _, err := bootstrapLogin(ctx, client, adminUser, adminPassword); err != nil {
-		return fail(err)
+		report("Вход не удался — на хосте уже есть учётная запись администратора с другим паролем " +
+			"(например, от прошлой попытки установки); сбрасываю пароль на хосте…")
+		if resetErr := resetRemoteAdminPassword(client, host.SSHUser, adminUser, adminPassword, remoteDataDir, remoteBinPath); resetErr != nil {
+			return fail(fmt.Errorf("вход администратора не удался (%v), и сбросить пароль на хосте тоже не получилось: %w", err, resetErr))
+		}
+		if _, err := bootstrapLogin(ctx, client, adminUser, adminPassword); err != nil {
+			return fail(fmt.Errorf("вход администратора всё ещё не удаётся после сброса пароля на хосте: %w", err))
+		}
+		report("Пароль администратора на хосте синхронизирован")
 	}
 	if err := m.db.SetHostVersion(ctx, hostID, m.version); err != nil {
 		return fail(err)

@@ -120,6 +120,80 @@ func TestManagerProxyRoundTrip(t *testing.T) {
 	}
 }
 
+// TestResetRemoteAdminPasswordSyncsRealNkt reproduces the exact scenario
+// that motivated resetRemoteAdminPassword: a real nkt instance already
+// bootstrapped with one admin password (simulating an earlier, independent
+// install attempt), and a login attempt with a *different* password the
+// hub currently has on file — auth.Service.Bootstrap only ever runs once,
+// so nothing about a fresh env file or a service restart would otherwise
+// reconcile the two. Confirms the old password stops working and the new
+// one the hub asked for starts working, via a real nkt `passwd` invocation
+// over SSH exec, not just a call into internal/auth directly.
+func TestResetRemoteAdminPasswordSyncsRealNkt(t *testing.T) {
+	sshAddr, sshPort, clientKeyPEM := startTestSSHD(t)
+
+	repoRoot := findRepoRoot(t)
+	nktBin := filepath.Join(t.TempDir(), "nkt")
+	buildCmd := exec.Command("go", "build", "-o", nktBin, "./cmd/nkt")
+	buildCmd.Dir = repoRoot
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("build nkt for the test: %v\n%s", err, out)
+	}
+
+	const oldPassword = "old-password-from-a-past-install-1"
+	const newPassword = "new-password-the-hub-has-on-file-2"
+	remoteDataDir := t.TempDir()
+	remoteCmd := exec.Command(nktBin)
+	remoteCmd.Dir = repoRoot
+	remoteCmd.Env = append(os.Environ(),
+		"NKT_MODE=fixtures",
+		"NKT_ADDR="+remoteAPIAddr, // must match what bootstrapLogin/dialSSH's tunnel dials
+		"NKT_DATA_DIR="+remoteDataDir,
+		"NKT_BOOTSTRAP_ADMIN_USER=admin",
+		"NKT_BOOTSTRAP_ADMIN_PASSWORD="+oldPassword,
+		"NKT_COOKIE_SECURE=false",
+		"NKT_SCHEDULER_ENABLED=false",
+	)
+	if err := remoteCmd.Start(); err != nil {
+		t.Fatalf("start remote nkt: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = remoteCmd.Process.Kill()
+		_, _ = remoteCmd.Process.Wait()
+	})
+	waitForLocalHTTP(t, "http://"+remoteAPIAddr+"/api/health")
+
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	client, err := dialSSH(ctx, sshAddr, sshPort, me.Username, store.HostAuthKey, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("dialSSH: %v", err)
+	}
+	defer client.Close()
+
+	if _, err := bootstrapLogin(ctx, client, "admin", oldPassword); err != nil {
+		t.Fatalf("login with the password the remote was actually bootstrapped with should succeed: %v", err)
+	}
+	if _, err := bootstrapLogin(ctx, client, "admin", newPassword); err == nil {
+		t.Fatal("login with a password the remote was never given should fail")
+	}
+
+	if err := resetRemoteAdminPassword(client, "root", "admin", newPassword, remoteDataDir, nktBin); err != nil {
+		t.Fatalf("resetRemoteAdminPassword: %v", err)
+	}
+
+	if _, err := bootstrapLogin(ctx, client, "admin", newPassword); err != nil {
+		t.Fatalf("login with the new password should succeed after resetRemoteAdminPassword: %v", err)
+	}
+	if _, err := bootstrapLogin(ctx, client, "admin", oldPassword); err == nil {
+		t.Fatal("the old password should no longer work after the reset")
+	}
+}
+
 func findRepoRoot(t *testing.T) string {
 	t.Helper()
 	wd, err := os.Getwd()

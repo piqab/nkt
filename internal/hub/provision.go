@@ -23,6 +23,7 @@ const (
 	remoteBinPath     = "/usr/local/bin/nkt"
 	remoteEnvPath     = "/etc/netknownsthat/nkt.env"
 	remoteServicePath = "/etc/systemd/system/netknownsthat.service"
+	remoteDataDir     = "/var/lib/netknownsthat"
 )
 
 // ensureBinary returns the path to a static nkt binary built for goos/goarch
@@ -78,7 +79,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 func renderEnv(adminUser, adminPassword string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "NKT_MODE=local\n")
-	fmt.Fprintf(&b, "NKT_DATA_DIR=/var/lib/netknownsthat\n")
+	fmt.Fprintf(&b, "NKT_DATA_DIR=%s\n", remoteDataDir)
 	fmt.Fprintf(&b, "NKT_ADDR=127.0.0.1:8077\n")
 	fmt.Fprintf(&b, "NKT_BOOTSTRAP_ADMIN_USER=%s\n", adminUser)
 	fmt.Fprintf(&b, "NKT_BOOTSTRAP_ADMIN_PASSWORD=%s\n", adminPassword)
@@ -212,6 +213,40 @@ func activateService(client *ssh.Client, sshUser string, report func(string)) er
 	out, err := runRemote(client, cmd)
 	if err != nil {
 		return diagnoseInstallError(sshUser, "netknownsthat.service", err, out)
+	}
+	return nil
+}
+
+// resetRemoteAdminPassword makes the remote's own admin account match
+// adminPassword by running `nkt passwd` directly on the host over SSH — the
+// fallback for when bootstrapLogin fails not because anything is actually
+// broken, but because the remote's accounts table was already populated by
+// an earlier install attempt (auth.Service.Bootstrap only ever runs once)
+// with a password this run's env file no longer carries, or never matched
+// in the first place (a reinstall after the hub's own record of the host
+// was lost — a delete-and-re-add, say). The hub already has root/sudo SSH
+// access to the host at this point — that's how the binary got there in
+// the first place — so it can simply fix the mismatch itself instead of
+// leaving the operator to track down and wipe the host's stale database
+// by hand.
+//
+// The password travels base64-encoded specifically so the whole pipeline
+// can be embedded in a `sudo -n sh -c '...'` wrapper with no nested quoting
+// to get wrong — generatePassword's own alphabet (base64 URL, no shell
+// metacharacters) would already be safe unquoted, but a password decrypted
+// from a much older host record is worth not assuming anything about.
+func resetRemoteAdminPassword(client *ssh.Client, sshUser, adminUser, adminPassword, dataDir, binPath string) error {
+	encoded := base64.StdEncoding.EncodeToString([]byte(adminPassword))
+	inner := fmt.Sprintf("echo %s | base64 -d | env NKT_MODE=local NKT_DATA_DIR=%s %s passwd %s",
+		encoded, dataDir, binPath, adminUser)
+
+	cmd := inner
+	if sshUser != "root" {
+		cmd = "sudo -n sh -c '" + inner + "'"
+	}
+	out, err := runRemote(client, cmd)
+	if err != nil {
+		return diagnoseInstallError(sshUser, "пароль администратора на хосте", err, out)
 	}
 	return nil
 }
