@@ -214,6 +214,16 @@ install: ## установить на этот Linux-хост (запускат�
 	systemctl daemon-reload
 	@echo "готово. Дальше: systemctl enable --now netknownsthat"
 
+.PHONY: hub-install
+hub-install: ## установить хаб на этот Linux-хост как systemd-сервис, без Docker (запускать от root)
+	@test "$$(uname -s)" = "Linux" || (echo "hub-install выполняется только на Linux-хосте" && false)
+	install -m 0755 $(OUT) /usr/local/bin/nkt
+	install -d -m 0750 /etc/netknownsthat
+	@test -f /etc/netknownsthat/hub.env || install -m 0640 deploy/hub.env.example /etc/netknownsthat/hub.env
+	install -m 0644 deploy/netknownsthat-hub.service /etc/systemd/system/
+	systemctl daemon-reload
+	@echo "готово. Дальше: systemctl enable --now netknownsthat-hub"
+
 .PHONY: clean
 clean: ## удалить артефакты сборки
 	rm -rf dist nkt nkt.exe

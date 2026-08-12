@@ -6,12 +6,24 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/store"
 )
+
+// minPasswordRunes mirrors api's own rule (see api.passwordLongEnough), so a
+// hub admin's password is never held to a looser standard just because the
+// account lives on the hub instead of a plain nkt.
+const minPasswordRunes = 10
+
+const minPasswordMessage = "Пароль должен быть не короче 10 символов"
+
+func passwordLongEnough(password string) bool {
+	return utf8.RuneCountInString(password) >= minPasswordRunes
+}
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -70,6 +82,33 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	_ = s.auth.Logout(r.Context(), auth.TokenFromRequest(r))
 	s.auth.ClearSessionCookie(w)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+type passwordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
+// handleChangePassword backs the same "Сменить пароль" form every nkt page
+// shares (web/src/components/PasswordForm.tsx) — it always targets the hub
+// itself (see api.ts's hostScope bypass for /auth/*), never a managed host.
+func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
+	var req passwordRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !passwordLongEnough(req.NewPassword) {
+		writeError(w, http.StatusBadRequest, minPasswordMessage)
+		return
+	}
+	user, _ := auth.UserFromContext(r.Context())
+	if err := s.auth.ChangePassword(r.Context(), user.Username, req.OldPassword, req.NewPassword); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.auth.ClearSessionCookie(w)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Пароль изменён, войдите заново."})
 }
 
 // handleMe matches the shape of a plain nkt's own /api/auth/me (see

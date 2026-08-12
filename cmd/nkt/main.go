@@ -133,7 +133,21 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 		}
 		defer app.close()
 		return app.runHub(log)
-	case "serve", "tui", "scan", "users", "passwd":
+	case "users", "passwd":
+		// Neither command ever touches the collector — they only read and
+		// write the accounts table — so they work the same way under every
+		// NKT_MODE, including hub, unlike newRuntime() below which would
+		// fail trying to build a local-host collector for NKT_MODE=hub.
+		app, err := newAccountsRuntime()
+		if err != nil {
+			return err
+		}
+		defer app.close()
+		if command == "users" {
+			return app.listUsers(context.Background())
+		}
+		return app.setPassword(context.Background(), opts.username, opts.role, opts.random)
+	case "serve", "tui", "scan":
 	default:
 		fmt.Fprintf(os.Stderr, usage, version)
 		return fmt.Errorf("неизвестная команда %q", command)
@@ -151,10 +165,6 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 		return app.printScanReport(ctx)
 	case "tui":
 		return app.runTUI()
-	case "users":
-		return app.listUsers(ctx)
-	case "passwd":
-		return app.setPassword(ctx, opts.username, opts.role, opts.random)
 	default:
 		return app.runServer(log)
 	}
@@ -345,6 +355,35 @@ func (r *runtime) printScanReport(ctx context.Context) error {
 		os.Exit(2)
 	}
 	return nil
+}
+
+// ------------------------------------------------------------------ accounts
+
+// accountsRuntime holds what `nkt users`/`nkt passwd` need — just config and
+// the database, the same minimal shape under every NKT_MODE (including hub),
+// since neither command ever reads or writes anything a collector would
+// produce.
+type accountsRuntime struct {
+	cfg *config.Config
+	db  *store.DB
+}
+
+func newAccountsRuntime() (*accountsRuntime, error) {
+	cfg, err := config.Load()
+	if err != nil {
+		return nil, err
+	}
+	db, err := store.Open(cfg.DBPath())
+	if err != nil {
+		return nil, err
+	}
+	return &accountsRuntime{cfg: cfg, db: db}, nil
+}
+
+func (r *accountsRuntime) close() {
+	if r.db != nil {
+		_ = r.db.Close()
+	}
 }
 
 // ----------------------------------------------------------------------- hub

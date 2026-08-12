@@ -72,6 +72,7 @@ func (s *Server) Handler() http.Handler {
 
 			r.Get("/auth/me", s.handleMe)
 			r.Post("/auth/logout", s.handleLogout)
+			r.Post("/auth/password", s.handleChangePassword)
 
 			r.Get("/hub/hosts", s.handleListHosts)
 			r.Get("/hub/hosts/{id}/install/{job}", s.handleInstallJobStatus)
