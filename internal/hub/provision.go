@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -43,7 +44,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 		return "", fmt.Errorf("каталог кэша бинарников: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, "go", "build",
+	cmd := exec.CommandContext(ctx, m.cfg.HubGoBin, "build",
 		"-trimpath", "-ldflags", "-s -w -X main.version="+m.version,
 		"-o", path, "./cmd/nkt")
 	cmd.Dir = m.cfg.HubSourceRoot
@@ -52,7 +53,15 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		_ = os.Remove(path)
-		return "", fmt.Errorf("сборка бинарника для %s/%s: %w: %s", goos, goarch, err, strings.TrimSpace(string(out)))
+		hint := ""
+		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) ||
+			strings.Contains(err.Error(), "executable file not found") {
+			hint = fmt.Sprintf(
+				" — go по пути %q не найден; если это systemd-сервис хаба, его PATH не видит "+
+					"$HOME/.local/go/bin от native-build — задайте NKT_HUB_GO_BIN абсолютным путём к go",
+				m.cfg.HubGoBin)
+		}
+		return "", fmt.Errorf("сборка бинарника для %s/%s: %w: %s%s", goos, goarch, err, strings.TrimSpace(string(out)), hint)
 	}
 	return path, nil
 }

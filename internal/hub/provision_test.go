@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
@@ -21,6 +22,24 @@ func TestRenderEnvContainsExpectedLines(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("renderEnv output missing %q, got:\n%s", want, out)
 		}
+	}
+}
+
+// TestEnsureBinaryMissingGoHintsOverride reproduces the exact failure a
+// systemd-run hub hits when Go was only installed via `make native-build`
+// into an interactive user's $HOME/.local/go/bin: the service's PATH never
+// finds it. ensureBinary must name NKT_HUB_GO_BIN in the error rather than
+// leaving the operator with a bare "executable file not found".
+func TestEnsureBinaryMissingGoHintsOverride(t *testing.T) {
+	m, _ := newTestManager(t)
+	m.cfg.HubGoBin = "/nonexistent/nkt-test-go-binary"
+
+	_, err := m.ensureBinary(context.Background(), "linux", "amd64", func(string) {})
+	if err == nil {
+		t.Fatal("expected ensureBinary to fail with a bogus HubGoBin")
+	}
+	if !strings.Contains(err.Error(), "NKT_HUB_GO_BIN") {
+		t.Errorf("error does not mention NKT_HUB_GO_BIN: %v", err)
 	}
 }
 

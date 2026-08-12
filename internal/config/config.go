@@ -104,6 +104,14 @@ type Config struct {
 	// architecture (`go build` is run with this as its working directory) —
 	// the hub image bakes the module source in here at build time.
 	HubSourceRoot string
+	// HubGoBin is the `go` binary the hub invokes to cross-compile nkt for
+	// each new host's architecture. Defaults to "go", resolved via PATH —
+	// which works inside the Docker image (golang:1.26-alpine) but not
+	// necessarily under systemd: a `go` installed by `make native-build`
+	// into $HOME/.local/go/bin is invisible to a service, whose PATH is
+	// never the interactive shell's. Set this to an absolute path in that
+	// case instead of relying on PATH.
+	HubGoBin string
 }
 
 // defaultMode picks the mode for a bare invocation. Linux is the platform this
@@ -182,6 +190,7 @@ func Load() (*Config, error) {
 
 		HubMasterKey:  envStr("NKT_HUB_MASTER_KEY", ""),
 		HubSourceRoot: envStr("NKT_HUB_SOURCE_ROOT", wd),
+		HubGoBin:      envStr("NKT_HUB_GO_BIN", "go"),
 	}
 
 	switch c.Mode {
