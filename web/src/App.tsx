@@ -123,12 +123,15 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
   // Every page below reads through api()/useApi() unmodified; this is the
   // one place that redirects their calls to the selected host's own API
   // through the hub's proxy (see api.ts's hostScope) instead of the hub's.
-  useEffect(() => {
-    hostScope.id = isHub ? (selectedHost?.id ?? null) : null
-    return () => {
-      hostScope.id = null
-    }
-  }, [isHub, selectedHost])
+  //
+  // Set inline during render, deliberately not in a useEffect: React fires
+  // effects child-first within a commit, so a child page's own effect
+  // (useApi's fetch trigger, on the very page instance this same render is
+  // about to mount) could otherwise run *before* an effect here updates
+  // hostScope — sending that first request unscoped, straight at the hub's
+  // own API instead of the host's ("Неизвестный метод API: /api/overview").
+  // Render itself is always parent-before-children, so this is not.
+  hostScope.id = isHub ? (selectedHost?.id ?? null) : null
 
   function selectHost(host: SelectedHost | null) {
     setSelectedHost(host)
@@ -176,7 +179,7 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
         </aside>
         <main className="main">
           <div className="content">
-            <Hosts onSelect={selectHost} />
+            <Hosts onSelect={selectHost} hubVersion={me.hub_version} />
           </div>
         </main>
       </div>

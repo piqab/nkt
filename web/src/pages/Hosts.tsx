@@ -35,7 +35,13 @@ function HostStatusBadge({ status }: { status: HubHost['status'] }) {
  * online host hands its id up to the shell (App.tsx), which scopes every
  * other page's API calls to it — those pages are otherwise unmodified.
  */
-export default function Hosts({ onSelect }: { onSelect: (host: { id: number; name: string }) => void }) {
+export default function Hosts({
+  onSelect,
+  hubVersion,
+}: {
+  onSelect: (host: { id: number; name: string }) => void
+  hubVersion?: string
+}) {
   const { data: hosts, error, loading, reload } = useApi<HubHost[]>('/hub/hosts', 30_000)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [installHostId, setInstallHostId] = useState<number | null>(null)
@@ -179,7 +185,10 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
                 </tr>
               </thead>
               <tbody>
-                {hosts.map((h) => (
+                {hosts.map((h) => {
+                  const outdated =
+                    h.status !== 'new' && !!hubVersion && !!h.nkt_version && h.nkt_version !== hubVersion
+                  return (
                   <tr key={h.id}>
                     <td>
                       <strong>{h.name}</strong>
@@ -196,7 +205,14 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
                         </div>
                       )}
                     </td>
-                    <td className="small mono">{h.nkt_version || '—'}</td>
+                    <td className="small mono">
+                      {h.nkt_version || '—'}
+                      {outdated && (
+                        <div className="small" style={{ color: 'var(--status-warning)' }}>
+                          на хабе: {hubVersion}
+                        </div>
+                      )}
+                    </td>
                     <td className="small nowrap">
                       {h.last_seen_at ? formatRelative(h.last_seen_at) : 'ни разу'}
                     </td>
@@ -207,12 +223,12 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
                         </button>
                       )}
                       <button
-                        className="ghost"
+                        className={outdated ? 'primary' : 'ghost'}
                         disabled={h.status === 'installing'}
                         onClick={() => startInstall(h)}
                       >
                         {h.status === 'installing' && <Spinner />}
-                        {h.status === 'new' ? 'установить' : 'переустановить'}
+                        {h.status === 'new' ? 'установить' : outdated ? 'обновить' : 'переустановить'}
                       </button>
                       {h.status === 'installing' && (
                         <button className="danger ghost" onClick={() => cancelInstall(h)}>
@@ -241,7 +257,8 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
                       </button>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
