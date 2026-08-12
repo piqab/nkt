@@ -7,6 +7,33 @@ import { Banner, Card, ErrorNote, Loading, Modal, Spinner, formatRelative } from
  * cadence Certificates.tsx uses for certbot jobs. */
 const INSTALL_POLL_MS = 800
 
+/** Parses a leading MAJOR.MINOR.PATCH off a version string, ignoring any
+ * suffix (so "1.2.3-dirty" still parses as [1, 2, 3]). Returns null for
+ * anything that doesn't start with that shape — a "dev" build, or a bare
+ * git hash from before the VERSION file existed. */
+function parseSemver(v: string): [number, number, number] | null {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(v)
+  if (!m) return null
+  return [Number(m[1]), Number(m[2]), Number(m[3])]
+}
+
+/** True when `current` is an older release than `latest`. Falls back to a
+ * plain "not equal" when either side doesn't parse as semver — the best
+ * that can be said about an opaque string like "dev" — rather than
+ * guessing which of two incomparable strings is "newer". Never reports a
+ * host as outdated when it is actually newer than the hub (e.g. the hub
+ * itself hasn't been rebuilt yet) — "переустановить" would only downgrade
+ * it in that case, not update it. */
+function isOlderVersion(current: string, latest: string): boolean {
+  const a = parseSemver(current)
+  const b = parseSemver(latest)
+  if (!a || !b) return current !== latest
+  for (let i = 0; i < 3; i++) {
+    if (a[i] !== b[i]) return a[i] < b[i]
+  }
+  return false
+}
+
 const STATUS_LABEL: Record<HubHost['status'], string> = {
   new: 'новый',
   installing: 'установка…',
@@ -187,7 +214,10 @@ export default function Hosts({
               <tbody>
                 {hosts.map((h) => {
                   const outdated =
-                    h.status !== 'new' && !!hubVersion && !!h.nkt_version && h.nkt_version !== hubVersion
+                    h.status !== 'new' &&
+                    !!hubVersion &&
+                    !!h.nkt_version &&
+                    isOlderVersion(h.nkt_version, hubVersion)
                   return (
                   <tr key={h.id}>
                     <td>

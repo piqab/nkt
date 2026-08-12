@@ -20,7 +20,11 @@ SHELL := bash
 GO_IMAGE   ?= golang:1.26-alpine
 NODE_IMAGE ?= node:22-alpine
 GOARCH     ?= amd64
-VERSION    ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+# Semver, bumped by hand in the VERSION file — not derived from git tags:
+# this project doesn't tag releases, and the hub's own "обновить" button
+# (internal/hub, web/src/pages/Hosts.tsx) needs a number it can actually
+# compare release-to-release, which a git-describe hash cannot give it.
+VERSION    ?= $(shell tr -d '[:space:]' < VERSION 2>/dev/null || echo dev)
 LDFLAGS    := -s -w -X main.version=$(VERSION)
 OUT        := dist/nkt
 
@@ -68,18 +72,43 @@ web: ## собрать веб-интерфейс (вшивается в бина
 	fi
 
 .PHONY: build
-build: ## собрать продакшен-бинарник для Linux (Docker, если есть; иначе — native-build)
+build: ## собрать продакшен-бинарник для Linux (Docker, если есть; иначе — native-build); увеличивает минорную версию в VERSION
 	@if command -v docker >/dev/null 2>&1; then \
-		$(MAKE) web; \
-		mkdir -p dist; \
-		$(DOCKER_RUN) -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=$(GOARCH) $(GO_IMAGE) \
-			go build -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
-		echo "готово: $(OUT) ($(VERSION), linux/$(GOARCH))"; \
-		file $(OUT) 2>/dev/null || true; \
+		$(MAKE) build-docker; \
 	else \
 		echo "docker не найден — собираю напрямую на хосте (native-build)"; \
 		$(MAKE) native-build; \
 	fi
+
+# Разделено на отдельную цель (а не просто ветку build) исключительно из-за
+# bump-version: он должен быть настоящим prerequisite (см. его комментарий),
+# а из двух путей — через Docker и через native-build — за один запуск
+# make build выполняется только один, так что версия увеличивается ровно
+# один раз независимо от того, какой путь сработал.
+.PHONY: build-docker
+build-docker: bump-version web
+	@mkdir -p dist; \
+	$(DOCKER_RUN) -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=$(GOARCH) $(GO_IMAGE) \
+		go build -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
+	echo "готово: $(OUT) ($(VERSION), linux/$(GOARCH))"; \
+	file $(OUT) 2>/dev/null || true
+
+# Prerequisite, а не $(MAKE) bump-version внутри рецепта build-docker/
+# native-build: у обеих целей рецепт — один составной shell-скрипт (из-за \
+# продолжений строк), и Make подставляет $(VERSION)/$(LDFLAGS) в него ДО
+# того, как этот скрипт вообще начинает выполняться — вызов bump-version
+# где-то в середине того же рецепта не успел бы повлиять на уже
+# подставленные более ранние или поздние ссылки на $(VERSION) в нём же.
+# Настоящий prerequisite гарантированно отрабатывает раньше, чем Make
+# вообще начинает подставлять переменные в рецепт зависимой цели.
+.PHONY: bump-version
+bump-version: ## увеличить минорную версию в файле VERSION (запускается автоматически при build/native-build)
+	@current=$$(tr -d '[:space:]' < VERSION 2>/dev/null || echo 0.0.0); \
+	major=$$(echo "$$current" | cut -d. -f1); \
+	minor=$$(echo "$$current" | cut -d. -f2); \
+	next="$$major.$$((minor + 1)).0"; \
+	echo "$$next" > VERSION; \
+	echo "версия: $$current -> $$next"
 
 # Весь рецепт — одна логическая строка Make (каждая физическая строка
 # заканчивается \), поэтому Make передаёт его целиком одному вызову shell —
@@ -87,7 +116,7 @@ build: ## собрать продакшен-бинарник для Linux (Docke
 # переход между строками, как в обычном bash-скрипте. Тот же приём, что уже
 # используется в build/web.
 .PHONY: native-build
-native-build: ## собрать без Docker: сама проверит и, если нужно, поставит Go/Node
+native-build: bump-version ## собрать без Docker: сама проверит и, если нужно, поставит Go/Node; увеличивает минорную версию в VERSION
 	@set -euo pipefail; \
 	export PATH="$(LOCAL_GO_DIR)/bin:$(LOCAL_NODE_DIR)/bin:$$PATH"; \
 	confirm() { \
@@ -197,7 +226,7 @@ stand-down: ## остановить стенд и удалить его тома
 
 .PHONY: hub
 hub: ## поднять управляющий центр (nkt hub) в Docker
-	docker compose -f deploy/docker-compose.hub.yml up -d --build
+	VERSION=$(VERSION) docker compose -f deploy/docker-compose.hub.yml up -d --build
 	@echo "хаб: http://127.0.0.1:8443   пароль: docker compose -f deploy/docker-compose.hub.yml logs hub"
 
 .PHONY: hub-down
