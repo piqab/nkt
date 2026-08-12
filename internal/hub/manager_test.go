@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/althq/netknownsthat/internal/config"
@@ -85,6 +86,85 @@ func TestUpdateHostReplacesSecret(t *testing.T) {
 	}
 	if string(after.SecretEnc) == string(before.SecretEnc) {
 		t.Error("UpdateHost with a new secret must replace the stored credential")
+	}
+}
+
+func TestAddHostGeneratedProducesAWorkingKeyPair(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	id, authorizedKey, err := m.AddHostGenerated(ctx, "h1", "10.0.0.1", 22, "root")
+	if err != nil {
+		t.Fatalf("AddHostGenerated: %v", err)
+	}
+	if authorizedKey == "" {
+		t.Fatal("AddHostGenerated returned an empty authorized_keys line")
+	}
+	if !strings.HasPrefix(authorizedKey, "ssh-ed25519 ") {
+		t.Errorf("authorized_keys line has an unexpected format: %q", authorizedKey)
+	}
+
+	host, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if host.SSHAuthKind != store.HostAuthKey {
+		t.Errorf("stored auth kind = %q, want %q", host.SSHAuthKind, store.HostAuthKey)
+	}
+
+	// PublicKeyLine must derive exactly the same line from the stored
+	// (encrypted) private key — it is the mechanism a caller uses to
+	// re-fetch the key later, so it has to agree with what AddHostGenerated
+	// already handed back once.
+	got, err := m.PublicKeyLine(ctx, id)
+	if err != nil {
+		t.Fatalf("PublicKeyLine: %v", err)
+	}
+	if got != authorizedKey {
+		t.Errorf("PublicKeyLine() = %q, want %q", got, authorizedKey)
+	}
+}
+
+func TestPublicKeyLineRejectsPasswordHost(t *testing.T) {
+	m, _ := newTestManager(t)
+	ctx := context.Background()
+
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+	if err != nil {
+		t.Fatalf("AddHost: %v", err)
+	}
+	if _, err := m.PublicKeyLine(ctx, id); err == nil {
+		t.Fatal("expected PublicKeyLine to reject a password-auth host")
+	}
+}
+
+func TestUpdateHostGeneratedRotatesKey(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	id, firstKey, err := m.AddHostGenerated(ctx, "h1", "10.0.0.1", 22, "root")
+	if err != nil {
+		t.Fatalf("AddHostGenerated: %v", err)
+	}
+	before, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+
+	secondKey, err := m.UpdateHostGenerated(ctx, id, "h1", "10.0.0.1", 22, "root")
+	if err != nil {
+		t.Fatalf("UpdateHostGenerated: %v", err)
+	}
+	if secondKey == firstKey {
+		t.Error("UpdateHostGenerated must produce a fresh key, not repeat the old one")
+	}
+
+	after, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID after update: %v", err)
+	}
+	if string(after.SecretEnc) == string(before.SecretEnc) {
+		t.Error("UpdateHostGenerated must replace the stored credential")
 	}
 }
 

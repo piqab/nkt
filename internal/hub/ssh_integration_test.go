@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	osuser "os/user"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -105,6 +106,49 @@ func TestSSHProvisioningRoundTrip(t *testing.T) {
 	}
 }
 
+// TestGeneratedKeyWorksAgainstRealSSHD proves generateHostKeyPair's output
+// is actually usable, not just internally self-consistent: the authorized
+// key line it produces is trusted by a real sshd, and the private PEM it
+// produces successfully authenticates against it via dialSSH — the exact
+// two halves AddHostGenerated/UpdateHostGenerated split between the caller
+// (public) and the hub's own encrypted storage (private).
+func TestGeneratedKeyWorksAgainstRealSSHD(t *testing.T) {
+	sshdPath := findBinary(t, []string{"/usr/sbin/sshd", "/usr/bin/sshd"})
+	sftpServer := findBinary(t, []string{
+		"/usr/lib/openssh/sftp-server",
+		"/usr/libexec/openssh/sftp-server",
+		"/usr/lib/ssh/sftp-server",
+	})
+
+	privatePEM, authorizedKey, err := generateHostKeyPair()
+	if err != nil {
+		t.Fatalf("generateHostKeyPair: %v", err)
+	}
+
+	addr, port := launchTestSSHD(t, sshdPath, sftpServer, t.TempDir(), authorizedKey+"\n")
+
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := dialSSH(ctx, addr, port, me.Username, store.HostAuthKey, []byte(privatePEM))
+	if err != nil {
+		t.Fatalf("dialSSH with the generated key: %v", err)
+	}
+	defer client.Close()
+
+	out, err := runRemote(client, "echo ok")
+	if err != nil {
+		t.Fatalf("runRemote: %v", err)
+	}
+	if strings.TrimSpace(out) != "ok" {
+		t.Errorf("runRemote output = %q, want %q", out, "ok")
+	}
+}
+
 // startTestSSHD launches a throwaway sshd on 127.0.0.1 for integration
 // tests, authenticating the current OS user via a freshly generated ed25519
 // keypair. It skips the test (rather than failing) when OpenSSH isn't
@@ -120,21 +164,38 @@ func startTestSSHD(t *testing.T) (addr string, port int, clientKeyPEM []byte) {
 	})
 
 	dir := t.TempDir()
-	hostKey := filepath.Join(dir, "host_key")
 	clientKey := filepath.Join(dir, "client_key")
-	runOK(t, "ssh-keygen", "-t", "ed25519", "-f", hostKey, "-N", "", "-q")
 	runOK(t, "ssh-keygen", "-t", "ed25519", "-f", clientKey, "-N", "", "-q")
-
 	pub, err := os.ReadFile(clientKey + ".pub")
 	if err != nil {
 		t.Fatalf("read generated client pubkey: %v", err)
 	}
-	authorizedKeys := filepath.Join(dir, "authorized_keys")
-	if err := os.WriteFile(authorizedKeys, pub, 0o600); err != nil {
-		t.Fatalf("write authorized_keys: %v", err)
+
+	addr, port = launchTestSSHD(t, sshdPath, sftpServer, dir, string(pub))
+
+	keyPEM, err := os.ReadFile(clientKey)
+	if err != nil {
+		t.Fatalf("read generated client private key: %v", err)
 	}
+	return addr, port, keyPEM
+}
+
+// launchTestSSHD is the shared plumbing behind startTestSSHD and
+// TestGeneratedKeyWorksAgainstRealSSHD: writes authorizedKeysContent to an
+// authorized_keys file, starts sshd trusting only that, and waits for it to
+// accept connections.
+func launchTestSSHD(t *testing.T, sshdPath, sftpServer, dir, authorizedKeysContent string) (addr string, port int) {
+	t.Helper()
+
+	hostKey := filepath.Join(dir, "host_key")
+	runOK(t, "ssh-keygen", "-t", "ed25519", "-f", hostKey, "-N", "", "-q")
 	if err := os.Chmod(hostKey, 0o600); err != nil {
 		t.Fatalf("chmod host key: %v", err)
+	}
+
+	authorizedKeys := filepath.Join(dir, "authorized_keys")
+	if err := os.WriteFile(authorizedKeys, []byte(authorizedKeysContent), 0o600); err != nil {
+		t.Fatalf("write authorized_keys: %v", err)
 	}
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
@@ -182,11 +243,7 @@ Subsystem sftp %s
 		time.Sleep(50 * time.Millisecond)
 	}
 
-	keyPEM, err := os.ReadFile(clientKey)
-	if err != nil {
-		t.Fatalf("read generated client private key: %v", err)
-	}
-	return "127.0.0.1", port, keyPEM
+	return "127.0.0.1", port
 }
 
 func findBinary(t *testing.T, candidates []string) string {

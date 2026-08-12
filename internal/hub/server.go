@@ -75,6 +75,7 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/auth/password", s.handleChangePassword)
 
 			r.Get("/hub/hosts", s.handleListHosts)
+			r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
 			r.Get("/hub/hosts/{id}/install/{job}", s.handleInstallJobStatus)
 
 			r.Group(func(r chi.Router) {

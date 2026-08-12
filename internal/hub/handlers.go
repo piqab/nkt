@@ -134,13 +134,20 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 
 // ------------------------------------------------------------------- hosts
 
+// authKindGenerated is a request-only auth_kind value (never stored — see
+// store.HostAuthPassword/HostAuthKey): it asks the hub to generate its own
+// keypair for the host instead of accepting a credential from the caller.
+// Once generated, the host is indistinguishable from one added with a
+// hand-supplied key — it is stored with store.HostAuthKey like any other.
+const authKindGenerated = "generated"
+
 type addHostRequest struct {
 	Name     string `json:"name"`
 	Addr     string `json:"addr"`
 	SSHPort  int    `json:"ssh_port"`
 	SSHUser  string `json:"ssh_user"`
-	AuthKind string `json:"auth_kind"` // "password" | "key"
-	Secret   string `json:"secret"`    // password, or a PEM private key
+	AuthKind string `json:"auth_kind"` // "generated" | "password" | "key"
+	Secret   string `json:"secret"`    // password, or a PEM private key — unused when auth_kind is "generated"
 }
 
 func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
@@ -158,8 +165,21 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	id, err := s.hub.AddHost(r.Context(), strings.TrimSpace(req.Name), strings.TrimSpace(req.Addr),
-		req.SSHPort, strings.TrimSpace(req.SSHUser), req.AuthKind, req.Secret)
+	name := strings.TrimSpace(req.Name)
+	addr := strings.TrimSpace(req.Addr)
+	sshUser := strings.TrimSpace(req.SSHUser)
+
+	if req.AuthKind == authKindGenerated {
+		id, authorizedKey, err := s.hub.AddHostGenerated(r.Context(), name, addr, req.SSHPort, sshUser)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "authorized_key": authorizedKey})
+		return
+	}
+
+	id, err := s.hub.AddHost(r.Context(), name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -169,7 +189,8 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 
 // updateHostRequest mirrors addHostRequest; Secret is optional here — an
 // empty string leaves the stored SSH credential untouched (see
-// Manager.UpdateHost).
+// Manager.UpdateHost). auth_kind "generated" replaces it with a freshly
+// hub-generated keypair regardless of Secret.
 type updateHostRequest struct {
 	Name     string `json:"name"`
 	Addr     string `json:"addr"`
@@ -190,13 +211,39 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	err = s.hub.UpdateHost(r.Context(), id, strings.TrimSpace(req.Name), strings.TrimSpace(req.Addr),
-		req.SSHPort, strings.TrimSpace(req.SSHUser), req.AuthKind, req.Secret)
-	if err != nil {
+	name := strings.TrimSpace(req.Name)
+	addr := strings.TrimSpace(req.Addr)
+	sshUser := strings.TrimSpace(req.SSHUser)
+
+	if req.AuthKind == authKindGenerated {
+		authorizedKey, err := s.hub.UpdateHostGenerated(r.Context(), id, name, addr, req.SSHPort, sshUser)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "authorized_key": authorizedKey})
+		return
+	}
+
+	if err := s.hub.UpdateHost(r.Context(), id, name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret); err != nil {
 		fail(w, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleHostPubKey(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	line, err := s.hub.PublicKeyLine(r.Context(), id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"authorized_key": line})
 }
 
 func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {

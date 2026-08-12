@@ -42,6 +42,7 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
   const [job, setJob] = useState<string | null>(null)
   const [jobStatus, setJobStatus] = useState<RenewJobStatus | null>(null)
   const [editingHost, setEditingHost] = useState<HubHost | null>(null)
+  const [pubKeyInfo, setPubKeyInfo] = useState<{ hostName: string; key: string } | null>(null)
 
   useEffect(() => {
     if (!job) return
@@ -79,6 +80,16 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
       setInstallHostId(host.id)
       setJobStatus(null)
       setJob(res.job)
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  async function showPubKey(host: HubHost) {
+    setNotice(null)
+    try {
+      const res = await api<{ authorized_key: string }>(`/hub/hosts/${host.id}/pubkey`)
+      setPubKeyInfo({ hostName: host.name, key: res.authorized_key })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
@@ -180,6 +191,11 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
                       >
                         изменить
                       </button>
+                      {h.ssh_auth_kind === 'key' && (
+                        <button className="ghost" onClick={() => showPubKey(h)}>
+                          публичный ключ
+                        </button>
+                      )}
                       <button className="danger ghost" onClick={() => remove(h)}>
                         удалить
                       </button>
@@ -192,18 +208,32 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
         )}
       </Card>
 
-      <HostForm onDone={reload} />
+      <HostForm
+        onDone={(name, authorizedKey) => {
+          reload()
+          if (authorizedKey) setPubKeyInfo({ hostName: name, key: authorizedKey })
+        }}
+      />
 
       {editingHost && (
         <Modal title={`Изменить хост «${editingHost.name}»`} onClose={() => setEditingHost(null)}>
           <HostForm
             initial={editingHost}
-            onDone={() => {
+            onDone={(name, authorizedKey) => {
               setEditingHost(null)
               reload()
+              if (authorizedKey) setPubKeyInfo({ hostName: name, key: authorizedKey })
             }}
           />
         </Modal>
+      )}
+
+      {pubKeyInfo && (
+        <PublicKeyModal
+          hostName={pubKeyInfo.hostName}
+          authorizedKey={pubKeyInfo.key}
+          onClose={() => setPubKeyInfo(null)}
+        />
       )}
 
       {job && (
@@ -222,6 +252,52 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
         </Modal>
       )}
     </>
+  )
+}
+
+/**
+ * Shows a hub-generated (or re-fetched) public key for the operator to
+ * copy onto the target host's own ~/.ssh/authorized_keys — the private
+ * half that matches it never leaves the hub.
+ */
+function PublicKeyModal({
+  hostName,
+  authorizedKey,
+  onClose,
+}: {
+  hostName: string
+  authorizedKey: string
+  onClose: () => void
+}) {
+  const [copied, setCopied] = useState(false)
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(authorizedKey)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // Clipboard API can be unavailable (e.g. no HTTPS) — the text below
+      // is still selectable and copyable by hand either way.
+    }
+  }
+
+  return (
+    <Modal title={`Публичный ключ для «${hostName}»`} onClose={onClose}>
+      <p className="small muted">
+        Добавьте эту строку в <code className="mono">~/.ssh/authorized_keys</code> на самом
+        хосте (пользователю, указанному при добавлении), затем нажмите «установить». Приватная
+        половина ключа хранится только на хабе и никуда больше не передаётся.
+      </p>
+      <pre className="diff mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        {authorizedKey}
+      </pre>
+      <div>
+        <button className="ghost" onClick={copy}>
+          {copied ? 'скопировано' : 'скопировать'}
+        </button>
+      </div>
+    </Modal>
   )
 }
 
@@ -246,18 +322,32 @@ function InstallLog({ events }: { events: RenewEvent[] }) {
   )
 }
 
+type AuthKind = 'generated' | 'password' | 'key'
+
 /**
  * Add-host form, or (with `initial` set) an edit form for an existing one.
  * Editing never requires re-entering the SSH secret — an empty secret field
  * leaves whatever is already stored untouched (see Manager.UpdateHost).
+ * onDone receives the host's name and, when auth_kind is "generated", the
+ * freshly generated public key to display.
  */
-function HostForm({ initial, onDone }: { initial?: HubHost; onDone: () => void }) {
+function HostForm({
+  initial,
+  onDone,
+}: {
+  initial?: HubHost
+  onDone: (name: string, generatedAuthorizedKey?: string) => void
+}) {
   const editing = initial !== undefined
   const [name, setName] = useState(initial?.name ?? '')
   const [addr, setAddr] = useState(initial?.addr ?? '')
   const [sshPort, setSshPort] = useState(initial?.ssh_port ?? 22)
   const [sshUser, setSshUser] = useState(initial?.ssh_user ?? 'root')
-  const [authKind, setAuthKind] = useState<'password' | 'key'>(initial?.ssh_auth_kind ?? 'key')
+  // New hosts default to a hub-generated key — the operator's own private
+  // key never has to be pasted anywhere for the common case. Editing
+  // defaults to whatever the host already uses, since switching it is an
+  // explicit choice, not the default action of opening the form.
+  const [authKind, setAuthKind] = useState<AuthKind>(initial?.ssh_auth_kind ?? 'generated')
   const [secret, setSecret] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -268,15 +358,24 @@ function HostForm({ initial, onDone }: { initial?: HubHost; onDone: () => void }
     setError(null)
     try {
       const body = { name, addr, ssh_port: sshPort, ssh_user: sshUser, auth_kind: authKind, secret }
+      let authorizedKey: string | undefined
       if (editing) {
-        await api(`/hub/hosts/${initial.id}`, { method: 'PATCH', body })
+        const res = await api<{ authorized_key?: string }>(`/hub/hosts/${initial.id}`, {
+          method: 'PATCH',
+          body,
+        })
+        authorizedKey = res.authorized_key
       } else {
-        await api('/hub/hosts', { method: 'POST', body })
+        const res = await api<{ id: number; authorized_key?: string }>('/hub/hosts', {
+          method: 'POST',
+          body,
+        })
+        authorizedKey = res.authorized_key
         setName('')
         setAddr('')
       }
       setSecret('')
-      onDone()
+      onDone(name, authorizedKey)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -284,13 +383,14 @@ function HostForm({ initial, onDone }: { initial?: HubHost; onDone: () => void }
     }
   }
 
-  const secretLabel = editing
-    ? authKind === 'key'
-      ? 'Новый приватный ключ (PEM) — оставьте пустым, чтобы не менять'
-      : 'Новый пароль — оставьте пустым, чтобы не менять'
-    : authKind === 'key'
-      ? 'Приватный ключ (PEM)'
-      : 'Пароль'
+  const secretLabel =
+    authKind === 'key'
+      ? editing
+        ? 'Новый приватный ключ (PEM) — оставьте пустым, чтобы не менять'
+        : 'Приватный ключ (PEM)'
+      : editing
+        ? 'Новый пароль — оставьте пустым, чтобы не менять'
+        : 'Пароль'
 
   const form = (
     <form className="col" onSubmit={submit}>
@@ -319,39 +419,49 @@ function HostForm({ initial, onDone }: { initial?: HubHost; onDone: () => void }
           SSH-пользователь
           <input value={sshUser} onChange={(e) => setSshUser(e.target.value)} required />
         </label>
-        <label style={{ minWidth: '10rem' }}>
+        <label style={{ minWidth: '14rem' }}>
           Способ входа
-          <select value={authKind} onChange={(e) => setAuthKind(e.target.value as 'password' | 'key')}>
-            <option value="key">приватный ключ</option>
+          <select value={authKind} onChange={(e) => setAuthKind(e.target.value as AuthKind)}>
+            <option value="generated">хаб сгенерирует ключ (рекомендуется)</option>
+            <option value="key">свой приватный ключ</option>
             <option value="password">пароль</option>
           </select>
         </label>
       </div>
-      <label>
-        {secretLabel}
-        {authKind === 'key' ? (
-          <textarea
-            className="mono"
-            rows={6}
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-            spellCheck={false}
-            autoCapitalize="off"
-            autoCorrect="off"
-            autoComplete="off"
-            required={!editing}
-          />
-        ) : (
-          <input
-            type="password"
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-            autoComplete="new-password"
-            required={!editing}
-          />
-        )}
-      </label>
+      {authKind === 'generated' ? (
+        <p className="small muted">
+          Приватный ключ никуда вставлять не нужно — хаб сгенерирует пару сам и после
+          сохранения покажет публичную часть, которую нужно добавить в{' '}
+          <code className="mono">~/.ssh/authorized_keys</code> на хосте.
+          {editing && ' Старый способ входа этого хоста будет заменён на новый ключ.'}
+        </p>
+      ) : (
+        <label>
+          {secretLabel}
+          {authKind === 'key' ? (
+            <textarea
+              className="mono"
+              rows={6}
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+              spellCheck={false}
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoComplete="off"
+              required={!editing}
+            />
+          ) : (
+            <input
+              type="password"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              autoComplete="new-password"
+              required={!editing}
+            />
+          )}
+        </label>
+      )}
       <div>
         <button className="primary" type="submit" disabled={busy}>
           {busy && <Spinner />}

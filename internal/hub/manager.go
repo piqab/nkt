@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/crypto/ssh"
+
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
@@ -117,6 +119,59 @@ func (m *Manager) AddHost(ctx context.Context, name, addr string, sshPort int, s
 	return m.db.CreateHost(ctx, name, addr, sshPort, sshUser, authKind, secretEnc)
 }
 
+// AddHostGenerated registers a host and has the hub generate its own SSH
+// keypair for it, instead of accepting one from the operator — the
+// recommended way to add a host: the private half is generated here and
+// never leaves the hub; authorizedKeyLine is the public half the caller
+// must then place in the host's own ~/.ssh/authorized_keys before
+// StartInstall can connect.
+func (m *Manager) AddHostGenerated(ctx context.Context, name, addr string, sshPort int, sshUser string) (hostID int64, authorizedKeyLine string, err error) {
+	if name == "" || addr == "" || sshUser == "" {
+		return 0, "", fmt.Errorf("укажите имя, адрес и пользователя SSH")
+	}
+	if sshPort == 0 {
+		sshPort = 22
+	}
+
+	privatePEM, authorizedKeyLine, err := generateHostKeyPair()
+	if err != nil {
+		return 0, "", err
+	}
+	secretEnc, err := secretbox.Encrypt(m.key, []byte(privatePEM))
+	if err != nil {
+		return 0, "", fmt.Errorf("шифрование сгенерированного ключа: %w", err)
+	}
+	id, err := m.db.CreateHost(ctx, name, addr, sshPort, sshUser, store.HostAuthKey, secretEnc)
+	if err != nil {
+		return 0, "", err
+	}
+	return id, authorizedKeyLine, nil
+}
+
+// PublicKeyLine returns the authorized_keys line for a key-auth host's
+// stored private key, so it can be re-copied onto the host at any time
+// (e.g. after rebuilding it) without ever exposing the private half —
+// works the same whether the hub generated the key or the operator
+// supplied their own.
+func (m *Manager) PublicKeyLine(ctx context.Context, hostID int64) (string, error) {
+	host, err := m.db.HostByID(ctx, hostID)
+	if err != nil {
+		return "", err
+	}
+	if host.SSHAuthKind != store.HostAuthKey {
+		return "", fmt.Errorf("у хоста способ входа %q, приватного ключа нет", host.SSHAuthKind)
+	}
+	privatePEM, err := secretbox.Decrypt(m.key, host.SecretEnc)
+	if err != nil {
+		return "", fmt.Errorf("расшифровка ключа: %w", err)
+	}
+	signer, err := ssh.ParsePrivateKey(privatePEM)
+	if err != nil {
+		return "", diagnoseKeyError(string(privatePEM), err)
+	}
+	return formatAuthorizedKey(signer.PublicKey()), nil
+}
+
 // UpdateHost changes a host's connection details. secret is optional — an
 // empty string keeps whatever SSH credential is already stored, so renaming
 // a host or fixing a typo'd address does not force re-entering it.
@@ -156,6 +211,38 @@ func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr strin
 	// new ones instead of replaying stale ones.
 	m.CloseHost(hostID)
 	return nil
+}
+
+// UpdateHostGenerated updates a host's connection details and replaces its
+// stored credential with a freshly hub-generated keypair, the same way
+// AddHostGenerated does for a new host — useful to switch an existing
+// password-authenticated host over to a key, or to rotate a compromised one.
+func (m *Manager) UpdateHostGenerated(ctx context.Context, hostID int64, name, addr string, sshPort int, sshUser string) (authorizedKeyLine string, err error) {
+	if name == "" || addr == "" || sshUser == "" {
+		return "", fmt.Errorf("укажите имя, адрес и пользователя SSH")
+	}
+	if sshPort == 0 {
+		sshPort = 22
+	}
+
+	if err := m.db.UpdateHost(ctx, hostID, name, addr, sshPort, sshUser, store.HostAuthKey); err != nil {
+		return "", err
+	}
+
+	privatePEM, authorizedKeyLine, err := generateHostKeyPair()
+	if err != nil {
+		return "", err
+	}
+	secretEnc, err := secretbox.Encrypt(m.key, []byte(privatePEM))
+	if err != nil {
+		return "", fmt.Errorf("шифрование сгенерированного ключа: %w", err)
+	}
+	if err := m.db.SetHostSecret(ctx, hostID, store.HostAuthKey, secretEnc); err != nil {
+		return "", err
+	}
+
+	m.CloseHost(hostID)
+	return authorizedKeyLine, nil
 }
 
 // StartInstall installs nkt on host id in the background and returns a job
