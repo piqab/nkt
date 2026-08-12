@@ -34,6 +34,18 @@ export interface HubHost {
   error_msg?: string
   created_at: string
   last_seen_at?: string
+  /** Findings severity counts from the hub's own background poll of this
+   * host's /api/overview (see internal/hub's pollOverviews) — omitted
+   * entirely (not zero) for a host that's never been polled, distinct from
+   * a real "полностью здоров" reading. Only keys with a nonzero count are
+   * present, same as Overview['findings']. */
+  findings?: Partial<Record<Severity, number>>
+  /** Whether the last poll attempt reached this host — undefined means
+   * "never polled" (not `false`), which is why this is a tri-state on the
+   * wire (see internal/hub/handlers.go's hostWithOverview). Stale findings
+   * from an earlier successful poll are kept even while this is false. */
+  reachable?: boolean
+  last_polled_at?: string
 }
 
 export interface HostInfo {

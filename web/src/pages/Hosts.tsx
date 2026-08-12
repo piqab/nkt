@@ -1,7 +1,17 @@
-import { Fragment, useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Badge, Button, Form, Input, InputNumber, Select, Switch, Table, Tooltip, type TableColumnsType } from 'antd'
+import {
+  CheckCircleFilled,
+  CloseCircleFilled,
+  ExclamationCircleFilled,
+  InfoCircleFilled,
+  QuestionCircleOutlined,
+  WarningFilled,
+} from '@ant-design/icons'
 import { api, useApi } from '../api'
-import type { HubHost, RenewEvent, RenewJobStatus } from '../types'
-import { Banner, Card, ErrorNote, Loading, Modal, Spinner, formatRelative } from '../components/ui'
+import type { HubHost, RenewEvent, RenewJobStatus, Severity } from '../types'
+import { Banner, Card, ErrorNote, Loading, Modal, SEVERITIES, SEVERITY_LABEL, formatRelative } from '../components/ui'
+import { checkForNewProblems, notificationsEnabled, requestNotificationPermission, setNotificationsEnabled, type NotifyState } from '../notifications'
 
 /** How often to poll a running install job for new progress lines — same
  * cadence Certificates.tsx uses for certbot jobs. */
@@ -34,6 +44,10 @@ function isOlderVersion(current: string, latest: string): boolean {
   return false
 }
 
+function isOutdated(h: HubHost, hubVersion?: string): boolean {
+  return h.status !== 'new' && !!hubVersion && !!h.nkt_version && isOlderVersion(h.nkt_version, hubVersion)
+}
+
 const STATUS_LABEL: Record<HubHost['status'], string> = {
   new: 'новый',
   installing: 'установка…',
@@ -41,11 +55,11 @@ const STATUS_LABEL: Record<HubHost['status'], string> = {
   error: 'ошибка',
 }
 
-const STATUS_TONE: Record<HubHost['status'], string> = {
-  new: 'info',
-  installing: 'info',
-  online: 'ok',
-  error: 'critical',
+const STATUS_COLOR: Record<HubHost['status'], string> = {
+  new: 'var(--text-muted)',
+  installing: 'var(--text-muted)',
+  online: 'var(--status-good)',
+  error: 'var(--status-critical)',
 }
 
 const SUDO_LABEL: Record<NonNullable<HubHost['sudo_status']>, string> = {
@@ -55,11 +69,11 @@ const SUDO_LABEL: Record<NonNullable<HubHost['sudo_status']>, string> = {
   password_required: 'нужен пароль',
 }
 
-const SUDO_TONE: Record<NonNullable<HubHost['sudo_status']>, string> = {
-  '': 'info',
-  root: 'info',
-  nopasswd: 'ok',
-  password_required: 'critical',
+const SUDO_COLOR: Record<NonNullable<HubHost['sudo_status']>, string> = {
+  '': 'var(--text-muted)',
+  root: 'var(--text-muted)',
+  nopasswd: 'var(--status-good)',
+  password_required: 'var(--status-critical)',
 }
 
 /** What the last install/update on this host actually observed about sudo
@@ -67,20 +81,61 @@ const SUDO_TONE: Record<NonNullable<HubHost['sudo_status']>, string> = {
  * own, so this can be stale until the next install/update touches the host. */
 function SudoBadge({ status }: { status: HubHost['sudo_status'] }) {
   const s = status ?? ''
-  return (
-    <span className={`badge sev-${SUDO_TONE[s]}`}>
-      <span className="badge-dot" />
-      {SUDO_LABEL[s]}
-    </span>
-  )
+  return <Badge color={SUDO_COLOR[s]} text={SUDO_LABEL[s]} />
 }
 
 function HostStatusBadge({ status }: { status: HubHost['status'] }) {
+  return <Badge color={STATUS_COLOR[status]} text={STATUS_LABEL[status]} />
+}
+
+const SEVERITY_ICON: Record<Severity, ReactNode> = {
+  critical: <CloseCircleFilled style={{ color: 'var(--status-critical)' }} />,
+  high: <ExclamationCircleFilled style={{ color: 'var(--status-serious)' }} />,
+  medium: <WarningFilled style={{ color: 'var(--status-warning)' }} />,
+  low: <InfoCircleFilled style={{ color: 'var(--seq-300)' }} />,
+  info: <InfoCircleFilled style={{ color: 'var(--text-muted)' }} />,
+}
+
+/**
+ * The "Проблемы" column: icons + counts sourced from the hub's own
+ * background poll (see internal/hub's pollOverviews), not fetched on open —
+ * `host.reachable === undefined` is the tri-state "never polled" signal
+ * (see types.ts's own doc comment on HubHost), distinct from a real
+ * zero-findings reading.
+ */
+function ProblemsCell({ host }: { host: HubHost }) {
+  if (host.reachable === undefined) {
+    return (
+      <span className="small muted row" style={{ gap: '0.3rem', flexWrap: 'nowrap' }}>
+        <QuestionCircleOutlined /> неизвестно
+      </span>
+    )
+  }
+  const findings = host.findings ?? {}
+  const present = SEVERITIES.filter((s) => (findings[s] ?? 0) > 0)
   return (
-    <span className={`badge sev-${STATUS_TONE[status]}`}>
-      <span className="badge-dot" />
-      {STATUS_LABEL[status]}
-    </span>
+    <div className="col" style={{ gap: '0.25rem' }}>
+      <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap' }}>
+        {present.length === 0 ? (
+          <span className="row small" style={{ gap: '0.3rem', color: 'var(--status-good)', flexWrap: 'nowrap' }}>
+            <CheckCircleFilled /> нет проблем
+          </span>
+        ) : (
+          present.map((s) => (
+            <Tooltip key={s} title={SEVERITY_LABEL[s]}>
+              <span className="row small" style={{ gap: '0.25rem', flexWrap: 'nowrap' }}>
+                {SEVERITY_ICON[s]} {findings[s]}
+              </span>
+            </Tooltip>
+          ))
+        )}
+      </div>
+      {host.reachable === false && (
+        <span className="small" style={{ color: 'var(--status-critical)' }}>
+          недоступен{host.last_polled_at ? ` (данные от ${formatRelative(host.last_polled_at)})` : ''}
+        </span>
+      )}
+    </div>
   )
 }
 
@@ -103,6 +158,27 @@ export default function Hosts({
   const [jobStatus, setJobStatus] = useState<RenewJobStatus | null>(null)
   const [editingHost, setEditingHost] = useState<HubHost | null>(null)
   const [pubKeyInfo, setPubKeyInfo] = useState<{ hostName: string; key: string } | null>(null)
+  const [notifyOn, setNotifyOn] = useState(() => notificationsEnabled())
+
+  // The previous poll tick's per-host snapshot — comparing against it is
+  // the dedup mechanism itself (see notifications.ts): a ref, not state,
+  // since updating it must never itself trigger a render.
+  const notifyStateRef = useRef<NotifyState>(new Map())
+  useEffect(() => {
+    if (hosts) checkForNewProblems(hosts, notifyStateRef.current)
+  }, [hosts])
+
+  async function toggleNotify(checked: boolean) {
+    if (checked) {
+      const granted = await requestNotificationPermission()
+      if (!granted) {
+        setNotice({ kind: 'error', text: 'Браузер не дал разрешение на уведомления.' })
+        return
+      }
+    }
+    setNotificationsEnabled(checked)
+    setNotifyOn(checked)
+  }
 
   useEffect(() => {
     if (!job) return
@@ -221,6 +297,109 @@ export default function Hosts({
 
   const installingHost = hosts?.find((h) => h.id === installHostId)
 
+  function renderActions(h: HubHost) {
+    const outdated = isOutdated(h, hubVersion)
+    return (
+      <div className="row">
+        {h.status === 'online' && (
+          <Button type="link" onClick={() => onSelect({ id: h.id, name: h.name })}>
+            открыть
+          </Button>
+        )}
+        <Button
+          type={outdated ? 'primary' : 'default'}
+          loading={h.status === 'installing'}
+          onClick={() => startInstall(h)}
+        >
+          {h.status === 'new' ? 'установить' : outdated ? 'обновить' : 'переустановить'}
+        </Button>
+        {h.status === 'installing' && (
+          <Button danger type="link" onClick={() => cancelInstall(h)}>
+            отменить
+          </Button>
+        )}
+        {h.status !== 'new' && (
+          <Button type="link" onClick={() => openInstallLog(h)}>
+            журнал установки
+          </Button>
+        )}
+        <Button type="link" disabled={h.status === 'installing'} onClick={() => setEditingHost(h)}>
+          изменить
+        </Button>
+        {h.ssh_auth_kind === 'key' && (
+          <Button type="link" onClick={() => showPubKey(h)}>
+            публичный ключ
+          </Button>
+        )}
+        {h.sudo_status === 'nopasswd' && (
+          <Button danger type="link" onClick={() => removeSudoAccess(h)}>
+            снять NOPASSWD
+          </Button>
+        )}
+        <Button danger type="link" onClick={() => remove(h)}>
+          удалить
+        </Button>
+      </div>
+    )
+  }
+
+  const columns: TableColumnsType<HubHost> = [
+    { title: 'Имя', dataIndex: 'name', key: 'name', render: (name: string) => <strong>{name}</strong> },
+    {
+      title: 'Адрес',
+      key: 'addr',
+      render: (_, h) => (
+        <span className="mono small">
+          {h.ssh_user}@{h.addr}:{h.ssh_port}
+        </span>
+      ),
+    },
+    { title: 'Проблемы', key: 'problems', render: (_, h) => <ProblemsCell host={h} /> },
+    { title: 'Архитектура', key: 'arch', render: (_, h) => <span className="small">{h.arch || '—'}</span> },
+    {
+      title: 'Состояние',
+      key: 'status',
+      render: (_, h) => (
+        <>
+          <HostStatusBadge status={h.status} />
+          {h.status === 'error' && h.error_msg && (
+            <div className="small" style={{ color: 'var(--status-critical)' }}>
+              {h.error_msg}
+            </div>
+          )}
+        </>
+      ),
+    },
+    {
+      title: 'Sudo',
+      key: 'sudo',
+      render: (_, h) =>
+        h.ssh_user === 'root' ? <span className="small muted">—</span> : <SudoBadge status={h.sudo_status} />,
+    },
+    {
+      title: 'Версия nkt',
+      key: 'version',
+      render: (_, h) => {
+        const outdated = isOutdated(h, hubVersion)
+        return (
+          <span className="small mono">
+            {h.nkt_version || '—'}
+            {outdated && (
+              <div className="small" style={{ color: 'var(--status-warning)' }}>
+                на хабе: {hubVersion}
+              </div>
+            )}
+          </span>
+        )
+      },
+    },
+    {
+      title: 'Виден в сети',
+      key: 'last_seen',
+      render: (_, h) => <span className="small nowrap">{h.last_seen_at ? formatRelative(h.last_seen_at) : 'ни разу'}</span>,
+    },
+  ]
+
   return (
     <>
       <div className="page-head">
@@ -232,6 +411,12 @@ export default function Hosts({
             управление ничем не отличаются от обычного nkt на одном хосте.
           </p>
         </div>
+        <Tooltip title="Уведомит браузером о новой critical/high-проблеме или о потере связи с хостом — пока эта вкладка открыта">
+          <span className="row" style={{ gap: '0.4rem' }}>
+            <Switch checked={notifyOn} onChange={toggleNotify} />
+            Уведомлять о проблемах
+          </span>
+        </Tooltip>
       </div>
 
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
@@ -244,122 +429,19 @@ export default function Hosts({
           <p className="small muted">Хостов ещё нет — добавьте первый ниже.</p>
         ) : (
           <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Имя</th>
-                  <th>Адрес</th>
-                  <th>Архитектура</th>
-                  <th>Состояние</th>
-                  <th>Sudo</th>
-                  <th>Версия nkt</th>
-                  <th>Виден в сети</th>
-                </tr>
-              </thead>
-              <tbody>
-                {hosts.map((h) => {
-                  const outdated =
-                    h.status !== 'new' &&
-                    !!hubVersion &&
-                    !!h.nkt_version &&
-                    isOlderVersion(h.nkt_version, hubVersion)
-                  return (
-                  <Fragment key={h.id}>
-                  <tr className="host-row">
-                    <td>
-                      <strong>{h.name}</strong>
-                    </td>
-                    <td className="mono small">
-                      {h.ssh_user}@{h.addr}:{h.ssh_port}
-                    </td>
-                    <td className="small">{h.arch || '—'}</td>
-                    <td>
-                      <HostStatusBadge status={h.status} />
-                      {h.status === 'error' && h.error_msg && (
-                        <div className="small" style={{ color: 'var(--status-critical)' }}>
-                          {h.error_msg}
-                        </div>
-                      )}
-                    </td>
-                    <td>
-                      {h.ssh_user === 'root' ? (
-                        <span className="small muted">—</span>
-                      ) : (
-                        <SudoBadge status={h.sudo_status} />
-                      )}
-                    </td>
-                    <td className="small mono">
-                      {h.nkt_version || '—'}
-                      {outdated && (
-                        <div className="small" style={{ color: 'var(--status-warning)' }}>
-                          на хабе: {hubVersion}
-                        </div>
-                      )}
-                    </td>
-                    <td className="small nowrap">
-                      {h.last_seen_at ? formatRelative(h.last_seen_at) : 'ни разу'}
-                    </td>
-                  </tr>
-                  {/* Own full-width row instead of a dedicated "Действия"
-                      column: with up to eight buttons, sharing a column with
-                      the other data columns squeezed them and pushed the
-                      table into horizontal scroll. A row of its own gives
-                      the buttons the entire table width to wrap into,
-                      starting under "Имя". */}
-                  <tr className="host-actions-row">
-                    <td colSpan={7}>
-                      <div className="row">
-                      {h.status === 'online' && (
-                        <button className="ghost" onClick={() => onSelect({ id: h.id, name: h.name })}>
-                          открыть
-                        </button>
-                      )}
-                      <button
-                        className={outdated ? 'primary' : 'ghost'}
-                        disabled={h.status === 'installing'}
-                        onClick={() => startInstall(h)}
-                      >
-                        {h.status === 'installing' && <Spinner />}
-                        {h.status === 'new' ? 'установить' : outdated ? 'обновить' : 'переустановить'}
-                      </button>
-                      {h.status === 'installing' && (
-                        <button className="danger ghost" onClick={() => cancelInstall(h)}>
-                          отменить
-                        </button>
-                      )}
-                      {h.status !== 'new' && (
-                        <button className="ghost" onClick={() => openInstallLog(h)}>
-                          журнал установки
-                        </button>
-                      )}
-                      <button
-                        className="ghost"
-                        disabled={h.status === 'installing'}
-                        onClick={() => setEditingHost(h)}
-                      >
-                        изменить
-                      </button>
-                      {h.ssh_auth_kind === 'key' && (
-                        <button className="ghost" onClick={() => showPubKey(h)}>
-                          публичный ключ
-                        </button>
-                      )}
-                      {h.sudo_status === 'nopasswd' && (
-                        <button className="danger ghost" onClick={() => removeSudoAccess(h)}>
-                          снять NOPASSWD
-                        </button>
-                      )}
-                      <button className="danger ghost" onClick={() => remove(h)}>
-                        удалить
-                      </button>
-                      </div>
-                    </td>
-                  </tr>
-                  </Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
+            <Table<HubHost>
+              dataSource={hosts}
+              columns={columns}
+              rowKey="id"
+              pagination={false}
+              size="small"
+              expandable={{
+                expandedRowKeys: hosts.map((h) => h.id),
+                expandIcon: () => null,
+                rowExpandable: () => true,
+                expandedRowRender: renderActions,
+              }}
+            />
           </div>
         )}
       </Card>
@@ -401,8 +483,7 @@ export default function Hosts({
             </Banner>
           ) : (
             <p className="small muted row" style={{ alignItems: 'center', marginBottom: 0 }}>
-              <Spinner />
-              Выполняется — можно закрыть окно, установка продолжится в фоне.
+              выполняется — можно закрыть окно, установка продолжится в фоне.
             </p>
           )}
         </Modal>
@@ -449,9 +530,7 @@ function PublicKeyModal({
         {authorizedKey}
       </pre>
       <div>
-        <button className="ghost" onClick={copy}>
-          {copied ? 'скопировано' : 'скопировать'}
-        </button>
+        <Button onClick={copy}>{copied ? 'скопировано' : 'скопировать'}</Button>
       </div>
     </Modal>
   )
@@ -480,6 +559,20 @@ function InstallLog({ events }: { events: RenewEvent[] }) {
 
 type AuthKind = 'generated' | 'password' | 'key'
 
+const AUTH_KIND_OPTIONS: { value: AuthKind; label: string }[] = [
+  { value: 'generated', label: 'хаб сгенерирует ключ (рекомендуется)' },
+  { value: 'key', label: 'свой приватный ключ' },
+  { value: 'password', label: 'пароль' },
+]
+
+type HostFormValues = {
+  name: string
+  addr: string
+  ssh_port: number
+  ssh_user: string
+  secret?: string
+}
+
 /**
  * Add-host form, or (with `initial` set) an edit form for an existing one.
  * Editing never requires re-entering the SSH secret — an empty secret field
@@ -495,25 +588,27 @@ function HostForm({
   onDone: (name: string, generatedAuthorizedKey?: string) => void
 }) {
   const editing = initial !== undefined
-  const [name, setName] = useState(initial?.name ?? '')
-  const [addr, setAddr] = useState(initial?.addr ?? '')
-  const [sshPort, setSshPort] = useState(initial?.ssh_port ?? 22)
-  const [sshUser, setSshUser] = useState(initial?.ssh_user ?? 'root')
+  const [form] = Form.useForm<HostFormValues>()
   // New hosts default to a hub-generated key — the operator's own private
   // key never has to be pasted anywhere for the common case. Editing
   // defaults to whatever the host already uses, since switching it is an
   // explicit choice, not the default action of opening the form.
   const [authKind, setAuthKind] = useState<AuthKind>(initial?.ssh_auth_kind ?? 'generated')
-  const [secret, setSecret] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  async function submit(values: HostFormValues) {
     setBusy(true)
     setError(null)
     try {
-      const body = { name, addr, ssh_port: sshPort, ssh_user: sshUser, auth_kind: authKind, secret }
+      const body = {
+        name: values.name,
+        addr: values.addr,
+        ssh_port: values.ssh_port,
+        ssh_user: values.ssh_user,
+        auth_kind: authKind,
+        secret: values.secret ?? '',
+      }
       let authorizedKey: string | undefined
       if (editing) {
         const res = await api<{ authorized_key?: string }>(`/hub/hosts/${initial.id}`, {
@@ -527,11 +622,10 @@ function HostForm({
           body,
         })
         authorizedKey = res.authorized_key
-        setName('')
-        setAddr('')
+        form.setFieldsValue({ name: '', addr: '' })
       }
-      setSecret('')
-      onDone(name, authorizedKey)
+      form.setFieldsValue({ secret: '' })
+      onDone(values.name, authorizedKey)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -548,41 +642,40 @@ function HostForm({
         ? 'Новый пароль — оставьте пустым, чтобы не менять'
         : 'Пароль'
 
-  const form = (
-    <form className="col" onSubmit={submit}>
+  const formEl = (
+    <Form<HostFormValues>
+      form={form}
+      layout="vertical"
+      onFinish={submit}
+      initialValues={{
+        name: initial?.name ?? '',
+        addr: initial?.addr ?? '',
+        ssh_port: initial?.ssh_port ?? 22,
+        ssh_user: initial?.ssh_user ?? 'root',
+      }}
+    >
       {error && <Banner kind="error">{error}</Banner>}
       <div className="filters">
-        <label style={{ flex: 1, minWidth: '10rem' }}>
-          Имя
-          <input value={name} onChange={(e) => setName(e.target.value)} required />
-        </label>
-        <label style={{ flex: 1, minWidth: '10rem' }}>
-          IP-адрес или имя хоста
-          <input value={addr} onChange={(e) => setAddr(e.target.value)} required />
-        </label>
-        <label style={{ minWidth: '6rem' }}>
-          SSH-порт
-          <input
-            type="number"
-            min={1}
-            max={65535}
-            value={sshPort}
-            onChange={(e) => setSshPort(Number(e.target.value))}
-            required
-          />
-        </label>
-        <label style={{ minWidth: '8rem' }}>
-          SSH-пользователь
-          <input value={sshUser} onChange={(e) => setSshUser(e.target.value)} required />
-        </label>
-        <label style={{ minWidth: '14rem' }}>
-          Способ входа
-          <select value={authKind} onChange={(e) => setAuthKind(e.target.value as AuthKind)}>
-            <option value="generated">хаб сгенерирует ключ (рекомендуется)</option>
-            <option value="key">свой приватный ключ</option>
-            <option value="password">пароль</option>
-          </select>
-        </label>
+        <Form.Item name="name" label="Имя" rules={[{ required: true }]} style={{ flex: 1, minWidth: '10rem' }}>
+          <Input />
+        </Form.Item>
+        <Form.Item
+          name="addr"
+          label="IP-адрес или имя хоста"
+          rules={[{ required: true }]}
+          style={{ flex: 1, minWidth: '10rem' }}
+        >
+          <Input />
+        </Form.Item>
+        <Form.Item name="ssh_port" label="SSH-порт" rules={[{ required: true }]} style={{ minWidth: '6rem' }}>
+          <InputNumber min={1} max={65535} style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item name="ssh_user" label="SSH-пользователь" rules={[{ required: true }]} style={{ minWidth: '8rem' }}>
+          <Input />
+        </Form.Item>
+        <Form.Item label="Способ входа" style={{ minWidth: '14rem' }}>
+          <Select<AuthKind> value={authKind} onChange={setAuthKind} options={AUTH_KIND_OPTIONS} />
+        </Form.Item>
       </div>
       {authKind === 'generated' ? (
         <p className="small muted">
@@ -592,49 +685,38 @@ function HostForm({
           {editing && ' Старый способ входа этого хоста будет заменён на новый ключ.'}
         </p>
       ) : (
-        <label>
-          {secretLabel}
+        <Form.Item name="secret" label={secretLabel} rules={[{ required: !editing }]}>
           {authKind === 'key' ? (
-            <textarea
+            <Input.TextArea
               className="mono"
               rows={6}
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
               placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
               spellCheck={false}
               autoCapitalize="off"
               autoCorrect="off"
               autoComplete="off"
-              required={!editing}
             />
           ) : (
-            <input
-              type="password"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              autoComplete="new-password"
-              required={!editing}
-            />
+            <Input.Password autoComplete="new-password" />
           )}
-        </label>
+        </Form.Item>
       )}
-      <div>
-        <button className="primary" type="submit" disabled={busy}>
-          {busy && <Spinner />}
-          {busy ? 'Сохраняю…' : editing ? 'Сохранить' : 'Добавить хост'}
-        </button>
-      </div>
-    </form>
+      <Form.Item style={{ marginBottom: 0 }}>
+        <Button type="primary" htmlType="submit" loading={busy}>
+          {editing ? 'Сохранить' : 'Добавить хост'}
+        </Button>
+      </Form.Item>
+    </Form>
   )
 
-  if (editing) return form
+  if (editing) return formEl
 
   return (
     <Card
       title="Добавить хост"
       subtitle="Хаб подключится по SSH, определит архитектуру, соберёт или возьмёт из кэша бинарник nkt и установит его как systemd-сервис"
     >
-      {form}
+      {formEl}
     </Card>
   )
 }

@@ -310,17 +310,6 @@ tbody tr:hover { background: var(--wash); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .table-wrap { overflow-x: auto; }
 
-/* A data row immediately followed by its own full-width actions row (e.g.
-   Hosts.tsx) reads as one entry, not two unrelated rows: no border/hover
-   split between them, padding trimmed so the action buttons sit right
-   under the data instead of visually drifting to the next host. */
-.host-row td { border-bottom: none; padding-bottom: 0.15rem; }
-.host-actions-row td { padding-top: 0; }
-.host-row:hover,
-.host-row:hover + .host-actions-row,
-.host-actions-row:hover,
-.host-row:has(+ .host-actions-row:hover) { background: var(--wash); }
-
 /* ---------------------------------------------------------------- controls */
 
 button, .btn {
