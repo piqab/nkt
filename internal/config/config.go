@@ -222,6 +222,11 @@ func (c *Config) HubKeyFile() string { return filepath.Join(c.DataDir, "hub.key"
 // arch/version skips the build step.
 func (c *Config) HubBinCacheDir() string { return filepath.Join(c.DataDir, "bin-cache") }
 
+// HubGoToolchainDir is where the hub installs its own Go toolchain when
+// NKT_HUB_GO_BIN doesn't resolve to a working compiler — see
+// internal/hub's resolveGoBin.
+func (c *Config) HubGoToolchainDir() string { return filepath.Join(c.DataDir, "go-toolchain") }
+
 // IsFixtures reports whether the app runs against a canned snapshot.
 func (c *Config) IsFixtures() bool { return c.Mode == ModeFixtures }
 

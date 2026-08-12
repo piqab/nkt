@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -30,7 +29,9 @@ const (
 // combination is needed. Because modernc.org/sqlite is pure Go
 // (CGO_ENABLED=0 throughout, see Makefile), this cross-compile never needs a
 // C toolchain for the target — the same reason `make build GOARCH=...`
-// already works from any machine with Go installed.
+// already works from any machine with Go installed. The compiler itself is
+// resolved by resolveGoBin, which self-installs one if NKT_HUB_GO_BIN
+// doesn't already point at something that runs.
 func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report func(string)) (string, error) {
 	name := fmt.Sprintf("nkt-%s-%s-%s", goos, goarch, m.version)
 	path := filepath.Join(m.cfg.HubBinCacheDir(), name)
@@ -39,12 +40,17 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 		return path, nil
 	}
 
+	goBin, err := m.resolveGoBin(ctx, report)
+	if err != nil {
+		return "", err
+	}
+
 	report(fmt.Sprintf("Собираю бинарник для %s/%s…", goos, goarch))
 	if err := os.MkdirAll(m.cfg.HubBinCacheDir(), 0o750); err != nil {
 		return "", fmt.Errorf("каталог кэша бинарников: %w", err)
 	}
 
-	cmd := exec.CommandContext(ctx, m.cfg.HubGoBin, "build",
+	cmd := exec.CommandContext(ctx, goBin, "build",
 		"-trimpath", "-ldflags", "-s -w -X main.version="+m.version,
 		"-o", path, "./cmd/nkt")
 	cmd.Dir = m.cfg.HubSourceRoot
@@ -53,15 +59,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		_ = os.Remove(path)
-		hint := ""
-		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) ||
-			strings.Contains(err.Error(), "executable file not found") {
-			hint = fmt.Sprintf(
-				" — go по пути %q не найден; если это systemd-сервис хаба, его PATH не видит "+
-					"$HOME/.local/go/bin от native-build — задайте NKT_HUB_GO_BIN абсолютным путём к go",
-				m.cfg.HubGoBin)
-		}
-		return "", fmt.Errorf("сборка бинарника для %s/%s: %w: %s%s", goos, goarch, err, strings.TrimSpace(string(out)), hint)
+		return "", fmt.Errorf("сборка бинарника для %s/%s: %w: %s", goos, goarch, err, strings.TrimSpace(string(out)))
 	}
 	return path, nil
 }
