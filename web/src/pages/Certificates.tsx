@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button, Form, Input, InputNumber, Select, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type {
   Certificate,
@@ -97,6 +98,113 @@ function commonName(dn?: string): string {
     if (trimmed.startsWith('CN=')) return trimmed.slice(3)
   }
   return dn
+}
+
+function certColumns(
+  canControl: boolean,
+  busy: string | null,
+  renew: (cert: Certificate) => void,
+): TableColumnsType<Certificate> {
+  const columns: TableColumnsType<Certificate> = [
+    {
+      title: 'Сайты',
+      key: 'name',
+      render: (_, cert) => (
+        <>
+          <strong>{certName(cert)}</strong>
+          {cert.self_signed && <div className="small muted">самоподписанный</div>}
+          {cert.error && (
+            <div className="small" style={{ color: TONE_COLOR.critical }}>
+              {cert.error}
+            </div>
+          )}
+        </>
+      ),
+    },
+    {
+      title: 'Файл',
+      key: 'path',
+      render: (_, cert) => (
+        <span className="small mono" style={{ wordBreak: 'break-all' }}>
+          {cert.path}
+        </span>
+      ),
+    },
+    {
+      title: 'Действителен до',
+      key: 'not_after',
+      render: (_, cert) => <span className="small nowrap">{cert.error ? '—' : formatDateTime(cert.not_after)}</span>,
+    },
+    {
+      title: 'Осталось',
+      key: 'days_left',
+      render: (_, cert) => (
+        <span className="small nowrap" style={{ color: TONE_COLOR[expiryTone(cert)] }}>
+          ● {expiryWord(cert)}
+        </span>
+      ),
+    },
+    {
+      title: 'Ключ',
+      key: 'key',
+      render: (_, cert) => (
+        <span className="small nowrap">
+          {cert.key_algorithm ? `${cert.key_algorithm} ${cert.key_bits}` : '—'}
+          {cert.sig_algorithm && <div className="small muted">{cert.sig_algorithm}</div>}
+        </span>
+      ),
+    },
+    { title: 'Издатель', key: 'issuer', render: (_, cert) => <span className="small">{commonName(cert.issuer)}</span> },
+    {
+      title: 'Обновление',
+      key: 'renewal',
+      render: (_, cert) => {
+        const rTone = renewalTone(cert)
+        return (
+          <>
+            <span style={{ color: rTone === 'muted' ? 'var(--text-muted)' : TONE_COLOR[rTone] }}>
+              ● {renewalWord(cert)}
+            </span>
+            {cert.renewal.detail && <div className="small muted">{cert.renewal.detail}</div>}
+          </>
+        )
+      },
+    },
+    {
+      title: 'На сокете',
+      key: 'serving',
+      render: (_, cert) => {
+        const sTone = servingTone(cert)
+        return (
+          <>
+            <span style={{ color: sTone === 'muted' ? 'var(--text-muted)' : TONE_COLOR[sTone] }}>
+              ● {servingWord(cert)}
+            </span>
+            {cert.serving.checked && !cert.serving.error && !cert.serving.match && (
+              <div className="small muted">
+                на сокете действителен до{' '}
+                {cert.serving.served_not_after ? formatDateTime(cert.serving.served_not_after) : '—'}
+              </div>
+            )}
+            {cert.serving.endpoint && <div className="small muted mono">{cert.serving.endpoint}</div>}
+          </>
+        )
+      },
+    },
+  ]
+  if (canControl) {
+    columns.push({
+      title: 'Действия',
+      key: 'actions',
+      render: (_, cert) =>
+        canRenew(cert) && (
+          <Button type="link" size="small" loading={busy === cert.id} onClick={() => renew(cert)}>
+            {busy === cert.id ? 'продлеваю…' : 'продлить'}
+          </Button>
+        ),
+    })
+  }
+  return columns
 }
 
 export default function Certificates({ me }: { me: Me }) {
@@ -285,91 +393,13 @@ export default function Certificates({ me }: { me: Me }) {
 
       <Card title="Подробности">
         <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Сайты</th>
-                <th>Файл</th>
-                <th>Действителен до</th>
-                <th>Осталось</th>
-                <th>Ключ</th>
-                <th>Издатель</th>
-                <th>Обновление</th>
-                <th>На сокете</th>
-                {canControl && <th>Действия</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {certs.map((cert) => {
-                const tone = expiryTone(cert)
-                const rTone = renewalTone(cert)
-                const sTone = servingTone(cert)
-                return (
-                  <tr key={cert.id}>
-                    <td>
-                      <strong>{certName(cert)}</strong>
-                      {cert.self_signed && <div className="small muted">самоподписанный</div>}
-                      {cert.error && (
-                        <div className="small" style={{ color: TONE_COLOR.critical }}>
-                          {cert.error}
-                        </div>
-                      )}
-                    </td>
-                    <td className="small mono" style={{ wordBreak: 'break-all' }}>
-                      {cert.path}
-                    </td>
-                    <td className="small nowrap">
-                      {cert.error ? '—' : formatDateTime(cert.not_after)}
-                    </td>
-                    <td className="small nowrap" style={{ color: TONE_COLOR[tone] }}>
-                      ● {expiryWord(cert)}
-                    </td>
-                    <td className="small nowrap">
-                      {cert.key_algorithm ? `${cert.key_algorithm} ${cert.key_bits}` : '—'}
-                      {cert.sig_algorithm && <div className="small muted">{cert.sig_algorithm}</div>}
-                    </td>
-                    <td className="small">{commonName(cert.issuer)}</td>
-                    <td className="small">
-                      <span style={{ color: rTone === 'muted' ? 'var(--text-muted)' : TONE_COLOR[rTone] }}>
-                        ● {renewalWord(cert)}
-                      </span>
-                      {cert.renewal.detail && (
-                        <div className="small muted">{cert.renewal.detail}</div>
-                      )}
-                    </td>
-                    <td className="small">
-                      <span style={{ color: sTone === 'muted' ? 'var(--text-muted)' : TONE_COLOR[sTone] }}>
-                        ● {servingWord(cert)}
-                      </span>
-                      {cert.serving.checked && !cert.serving.error && !cert.serving.match && (
-                        <div className="small muted">
-                          на сокете действителен до{' '}
-                          {cert.serving.served_not_after ? formatDateTime(cert.serving.served_not_after) : '—'}
-                        </div>
-                      )}
-                      {cert.serving.endpoint && (
-                        <div className="small muted mono">{cert.serving.endpoint}</div>
-                      )}
-                    </td>
-                    {canControl && (
-                      <td className="nowrap">
-                        {canRenew(cert) && (
-                          <button
-                            className="ghost"
-                            disabled={busy === cert.id}
-                            onClick={() => renew(cert)}
-                          >
-                            {busy === cert.id && <Spinner />}
-                            {busy === cert.id ? 'продлеваю…' : 'продлить'}
-                          </button>
-                        )}
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+          <Table<Certificate>
+            dataSource={certs}
+            rowKey="id"
+            pagination={false}
+            size="small"
+            columns={certColumns(canControl, busy, renew)}
+          />
         </div>
       </Card>
 
@@ -435,13 +465,12 @@ function lineageLabel(info: LineageInfo): string {
  * the self-signed form below (no real CA involved at all). Runs in the
  * background through the same job/progress Modal "продлить" already uses. */
 function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) => void }) {
-  const [domains, setDomains] = useState('')
+  const [form] = Form.useForm<{ domains: string }>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    const domainList = domains
+  async function submit(values: { domains: string }) {
+    const domainList = values.domains
       .split(',')
       .map((d) => d.trim())
       .filter(Boolean)
@@ -465,7 +494,7 @@ function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) =>
         method: 'POST',
         body: { domains: domainList },
       })
-      setDomains('')
+      form.resetFields()
       onStarted(res.job, `Выпуск сертификата: ${domainList.join(', ')}`)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -479,26 +508,19 @@ function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) =>
       title="Выпустить новый сертификат Let's Encrypt"
       subtitle="Для домена, у которого ещё нет сертификата — certbot certonly --standalone. Wildcard-имена не поддерживаются: standalone доказывает владение только одним точным именем за раз."
     >
-      <form className="col" onSubmit={submit}>
+      <Form form={form} layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <label style={{ flex: 1, minWidth: '18rem' }}>
-            Доменные имена через запятую
-            <input
-              value={domains}
-              onChange={(e) => setDomains(e.target.value)}
-              placeholder="new.example.com, www.new.example.com"
-              required
-            />
-          </label>
+          <Form.Item name="domains" label="Доменные имена через запятую" rules={[{ required: true }]} style={{ flex: 1, minWidth: '18rem' }}>
+            <Input placeholder="new.example.com, www.new.example.com" />
+          </Form.Item>
         </div>
-        <div>
-          <button className="primary" type="submit" disabled={busy}>
-            {busy && <Spinner />}
+        <Form.Item style={{ marginBottom: 0 }}>
+          <Button type="primary" htmlType="submit" loading={busy}>
             {busy ? 'Запускаю…' : 'Выпустить'}
-          </button>
-        </div>
-      </form>
+          </Button>
+        </Form.Item>
+      </Form>
     </Card>
   )
 }
@@ -517,8 +539,7 @@ function CombineForm({ onCombined }: { onCombined: () => void }) {
   const lineageOptions = lineages.data?.lineages ?? []
   const pathOptions = haproxyPaths.data?.paths ?? []
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  async function submit() {
     if (!lineage) {
       setError('Выберите lineage')
       return
@@ -545,45 +566,37 @@ function CombineForm({ onCombined }: { onCombined: () => void }) {
       title="Собрать PEM для haproxy из certbot"
       subtitle="Берёт уже выпущенный certbot-сертификат из /etc/letsencrypt/live и склеивает его с ключом в один файл — то, что требует haproxy `crt`. certbot renew не вызывается."
     >
-      <form className="col" onSubmit={submit}>
+      <Form layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
         <ErrorNote error={lineages.error} />
         <div className="filters">
-          <label style={{ flex: 1, minWidth: '18rem' }}>
-            Lineage (/etc/letsencrypt/live/…)
-            <select value={lineage} onChange={(e) => setLineage(e.target.value)} required>
-              <option value="">— выберите —</option>
-              {lineageOptions.map((info) => (
-                <option key={info.name} value={info.name}>
-                  {lineageLabel(info)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label style={{ flex: 1, minWidth: '18rem' }}>
-            Куда записать
-            <select value={targetPath} onChange={(e) => setTargetPath(e.target.value)}>
-              <option value={NEW_FILE}>— новый файл —</option>
-              {pathOptions.map((path) => (
-                <option key={path} value={path}>
-                  {path}
-                </option>
-              ))}
-            </select>
-          </label>
+          <Form.Item label="Lineage (/etc/letsencrypt/live/…)" style={{ flex: 1, minWidth: '18rem' }}>
+            <Select
+              value={lineage || undefined}
+              onChange={setLineage}
+              placeholder="— выберите —"
+              options={lineageOptions.map((info) => ({ value: info.name, label: lineageLabel(info) }))}
+            />
+          </Form.Item>
+          <Form.Item label="Куда записать" style={{ flex: 1, minWidth: '18rem' }}>
+            <Select
+              value={targetPath}
+              onChange={setTargetPath}
+              options={[{ value: NEW_FILE, label: '— новый файл —' }, ...pathOptions.map((path) => ({ value: path, label: path }))]}
+            />
+          </Form.Item>
         </div>
-        <div>
-          <button className="primary" type="submit" disabled={busy || lineageOptions.length === 0}>
-            {busy && <Spinner />}
+        <Form.Item style={{ marginBottom: 0 }}>
+          <Button type="primary" htmlType="submit" loading={busy} disabled={lineageOptions.length === 0}>
             {busy ? 'Собираю…' : 'Собрать'}
-          </button>
-        </div>
+          </Button>
+        </Form.Item>
         {!lineages.loading && lineageOptions.length === 0 && !lineages.error && (
           <p className="small muted" style={{ marginBottom: 0 }}>
             В /etc/letsencrypt/live не найдено ни одной lineage.
           </p>
         )}
-      </form>
+      </Form>
 
       {result &&
         (result.snippet ? (
@@ -613,18 +626,16 @@ const SERVICE_OPTIONS: { value: SelfSignedRequest['service']; label: string }[] 
   { value: 'haproxy', label: 'haproxy' },
 ]
 
+type SelfSignedFormValues = { names: string; service: SelfSignedRequest['service']; bits: number; days: number }
+
 function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
-  const [names, setNames] = useState('')
-  const [service, setService] = useState<SelfSignedRequest['service']>('nginx')
-  const [bits, setBits] = useState(2048)
-  const [days, setDays] = useState(397)
+  const [form] = Form.useForm<SelfSignedFormValues>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<SelfSignedResult | null>(null)
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
-    const nameList = names
+  async function submit(values: SelfSignedFormValues) {
+    const nameList = values.names
       .split(',')
       .map((n) => n.trim())
       .filter(Boolean)
@@ -638,7 +649,7 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
     try {
       const res = await api<SelfSignedResult>('/certificates/self-signed', {
         method: 'POST',
-        body: { names: nameList, service, bits, days } satisfies SelfSignedRequest,
+        body: { names: nameList, service: values.service, bits: values.bits, days: values.days } satisfies SelfSignedRequest,
       })
       setResult(res)
       onIssued()
@@ -654,54 +665,33 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
       title="Выпустить самоподписанный сертификат"
       subtitle="Для внутренних сервисов или как временная мера, пока не готов сертификат от доверенного центра — браузер всё равно покажет предупреждение"
     >
-      <form className="col" onSubmit={submit}>
+      <Form<SelfSignedFormValues>
+        form={form}
+        layout="vertical"
+        onFinish={submit}
+        initialValues={{ service: 'nginx', bits: 2048, days: 397 }}
+      >
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <label style={{ flex: 2, minWidth: '16rem' }}>
-            Имена через запятую
-            <input
-              value={names}
-              onChange={(e) => setNames(e.target.value)}
-              placeholder="internal.example.com, *.internal.example.com"
-              required
-            />
-          </label>
-          <label>
-            Сервис
-            <select value={service} onChange={(e) => setService(e.target.value as SelfSignedRequest['service'])}>
-              {SERVICE_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Длина ключа
-            <select value={bits} onChange={(e) => setBits(Number(e.target.value))}>
-              <option value={2048}>2048</option>
-              <option value={3072}>3072</option>
-              <option value={4096}>4096</option>
-            </select>
-          </label>
-          <label>
-            Срок действия, дней
-            <input
-              type="number"
-              min={1}
-              max={825}
-              value={days}
-              onChange={(e) => setDays(Number(e.target.value))}
-            />
-          </label>
+          <Form.Item name="names" label="Имена через запятую" rules={[{ required: true }]} style={{ flex: 2, minWidth: '16rem' }}>
+            <Input placeholder="internal.example.com, *.internal.example.com" />
+          </Form.Item>
+          <Form.Item name="service" label="Сервис">
+            <Select options={SERVICE_OPTIONS} />
+          </Form.Item>
+          <Form.Item name="bits" label="Длина ключа">
+            <Select options={[2048, 3072, 4096].map((n) => ({ value: n, label: String(n) }))} />
+          </Form.Item>
+          <Form.Item name="days" label="Срок действия, дней">
+            <InputNumber min={1} max={825} />
+          </Form.Item>
         </div>
-        <div>
-          <button className="primary" type="submit" disabled={busy}>
-            {busy && <Spinner />}
+        <Form.Item style={{ marginBottom: 0 }}>
+          <Button type="primary" htmlType="submit" loading={busy}>
             {busy ? 'Генерирую…' : 'Создать'}
-          </button>
-        </div>
-      </form>
+          </Button>
+        </Form.Item>
+      </Form>
 
       {result && (
         <div className="col" style={{ marginTop: '0.85rem' }}>

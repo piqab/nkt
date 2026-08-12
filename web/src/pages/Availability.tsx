@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Button, Select, Table, type TableColumnsType } from 'antd'
 import { api, qs, tzOffsetMinutes, useApi } from '../api'
 import type { Bucket, HeatCell, Outage, TargetStatus } from '../types'
 import { Heatmap, LineChart, StatTile, formatMs, formatNumber } from '../components/charts'
@@ -15,6 +16,80 @@ const RANGES = [
   { value: '7d', label: '7 дней' },
   { value: '14d', label: '14 дней' },
   { value: '30d', label: '30 дней' },
+]
+
+function targetColumns(
+  checking: number | null,
+  checkNow: (id: number) => void,
+  toggle: (id: number, enabled: boolean) => void,
+): TableColumnsType<TargetStatus> {
+  return [
+    {
+      title: 'Ресурс',
+      key: 'label',
+      render: (_, t) => (
+        <>
+          <strong>{t.label}</strong>
+          <div className="small muted">{t.source}</div>
+        </>
+      ),
+    },
+    {
+      title: 'Адрес',
+      key: 'addr',
+      render: (_, t) => (
+        <span className="mono small nowrap">
+          {t.kind}://{t.host}:{t.port}
+          {t.host_header ? ` (Host: ${t.host_header})` : ''}
+        </span>
+      ),
+    },
+    {
+      title: 'Сейчас',
+      key: 'last_ok',
+      render: (_, t) => (
+        <>
+          <StateBadge state={t.last_ok === undefined ? 'нет данных' : t.last_ok ? 'active' : 'failed'} />
+          {t.last_error && <div className="small muted mono">{t.last_error}</div>}
+        </>
+      ),
+    },
+    {
+      title: 'Доступность 24 ч',
+      key: 'uptime_24h',
+      align: 'right',
+      render: (_, t) => <span className="num">{t.checks_24h ? `${t.uptime_24h.toFixed(1)}%` : '—'}</span>,
+    },
+    {
+      title: 'Задержка',
+      key: 'last_latency_ms',
+      align: 'right',
+      render: (_, t) => <span className="num">{t.last_latency_ms ? formatMs(t.last_latency_ms) : '—'}</span>,
+    },
+    { title: 'Проверок', dataIndex: 'checks_24h', key: 'checks_24h', align: 'right' },
+    {
+      title: '',
+      key: 'actions',
+      render: (_, t) => (
+        <div className="row" onClick={(e) => e.stopPropagation()}>
+          <Button type="link" size="small" disabled={checking === t.id} onClick={() => checkNow(t.id)}>
+            {checking === t.id ? '…' : 'проверить'}
+          </Button>
+          <Button type="link" size="small" onClick={() => toggle(t.id, !t.enabled)}>
+            {t.enabled ? 'пауза' : 'включить'}
+          </Button>
+        </div>
+      ),
+    },
+  ]
+}
+
+const outageColumns: TableColumnsType<Outage> = [
+  { title: 'Ресурс', dataIndex: 'label', key: 'label' },
+  { title: 'Начало', key: 'start', render: (_, o) => <span className="small nowrap">{formatDateTime(o.start)}</span> },
+  { title: 'Окончание', key: 'end', render: (_, o) => <span className="small nowrap">{formatDateTime(o.end)}</span> },
+  { title: 'Проверок', dataIndex: 'checks', key: 'checks', align: 'right' },
+  { title: 'Ошибка', key: 'error', render: (_, o) => <span className="small mono">{o.error}</span> },
 ]
 
 export default function Availability() {
@@ -104,13 +179,7 @@ export default function Availability() {
         </div>
         <label>
           Период
-          <select value={range} onChange={(e) => setRange(e.target.value)}>
-            {RANGES.map((r) => (
-              <option key={r.value} value={r.value}>
-                {r.label}
-              </option>
-            ))}
-          </select>
+          <Select value={range} onChange={setRange} options={RANGES} style={{ minWidth: '8rem' }} />
         </label>
       </div>
 
@@ -142,9 +211,9 @@ export default function Availability() {
         subtitle="Каждая клетка — час недели. Чем темнее, тем больше проверок в этот час завершились ошибкой."
         actions={
           selected ? (
-            <button className="ghost" onClick={() => setSelected(null)}>
+            <Button type="link" onClick={() => setSelected(null)}>
               показать все ресурсы
-            </button>
+            </Button>
           ) : null
         }
       >
@@ -214,82 +283,30 @@ export default function Availability() {
         subtitle="Щёлкните по строке, чтобы посмотреть историю конкретного ресурса."
       >
         <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Ресурс</th>
-                <th>Адрес</th>
-                <th>Сейчас</th>
-                <th className="num">Доступность 24 ч</th>
-                <th className="num">Задержка</th>
-                <th className="num">Проверок</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {sorted.map((t) => (
-                <tr
-                  key={t.id}
-                  onClick={() => setSelected(t.id === selected ? null : t.id)}
-                  style={{ cursor: 'pointer', opacity: t.enabled ? 1 : 0.5 }}
-                >
-                  <td>
-                    <strong>{t.label}</strong>
-                    <div className="small muted">{t.source}</div>
-                  </td>
-                  <td className="mono small nowrap">
-                    {t.kind}://{t.host}:{t.port}
-                    {t.host_header ? ` (Host: ${t.host_header})` : ''}
-                  </td>
-                  <td>
-                    <StateBadge
-                      state={t.last_ok === undefined ? 'нет данных' : t.last_ok ? 'active' : 'failed'}
-                    />
-                    {t.last_error && <div className="small muted mono">{t.last_error}</div>}
-                  </td>
-                  <td className="num">{t.checks_24h ? `${t.uptime_24h.toFixed(1)}%` : '—'}</td>
-                  <td className="num">{t.last_latency_ms ? formatMs(t.last_latency_ms) : '—'}</td>
-                  <td className="num">{t.checks_24h}</td>
-                  <td className="nowrap" onClick={(e) => e.stopPropagation()}>
-                    <button className="ghost" disabled={checking === t.id} onClick={() => checkNow(t.id)}>
-                      {checking === t.id ? '…' : 'проверить'}
-                    </button>
-                    <button className="ghost" onClick={() => toggle(t.id, !t.enabled)}>
-                      {t.enabled ? 'пауза' : 'включить'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <Table<TargetStatus>
+            dataSource={sorted}
+            rowKey="id"
+            pagination={false}
+            size="small"
+            onRow={(t) => ({
+              onClick: () => setSelected(t.id === selected ? null : t.id),
+              style: { cursor: 'pointer', opacity: t.enabled ? 1 : 0.5 },
+            })}
+            columns={targetColumns(checking, checkNow, toggle)}
+          />
         </div>
       </Card>
 
       <Card title="Простои" subtitle={`Непрерывные серии неудачных проверок за выбранный период`}>
         {outages.data?.outages.length ? (
           <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Ресурс</th>
-                  <th>Начало</th>
-                  <th>Окончание</th>
-                  <th className="num">Проверок</th>
-                  <th>Ошибка</th>
-                </tr>
-              </thead>
-              <tbody>
-                {outages.data.outages.map((o, i) => (
-                  <tr key={i}>
-                    <td>{o.label}</td>
-                    <td className="small nowrap">{formatDateTime(o.start)}</td>
-                    <td className="small nowrap">{formatDateTime(o.end)}</td>
-                    <td className="num">{o.checks}</td>
-                    <td className="small mono">{o.error}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table<Outage>
+              dataSource={outages.data.outages}
+              rowKey={(_, i) => i ?? 0}
+              pagination={false}
+              size="small"
+              columns={outageColumns}
+            />
           </div>
         ) : (
           <div className="chart-empty">Простоев за период не зафиксировано.</div>

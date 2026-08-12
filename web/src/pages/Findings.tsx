@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Input, Select, Tag } from 'antd'
 import { qs, useApi } from '../api'
 import type { Finding, Severity } from '../types'
 import { Card, ErrorNote, Loading, SeverityBadge, SEVERITIES, SEVERITY_LABEL } from '../components/ui'
@@ -53,33 +54,28 @@ export default function Findings() {
         <div className="filters">
           <label>
             Серьёзность
-            <select value={severity} onChange={(e) => setSeverity(e.target.value)}>
-              <option value="">все</option>
-              {SEVERITIES.map((s) => (
-                <option key={s} value={s}>
-                  {SEVERITY_LABEL[s]} ({data?.counts[s] ?? 0})
-                </option>
-              ))}
-            </select>
+            <Select
+              value={severity}
+              onChange={setSeverity}
+              style={{ minWidth: '11rem' }}
+              options={[
+                { value: '', label: 'все' },
+                ...SEVERITIES.map((s) => ({ value: s, label: `${SEVERITY_LABEL[s]} (${data?.counts[s] ?? 0})` })),
+              ]}
+            />
           </label>
           <label>
             Сервис
-            <select value={service} onChange={(e) => setService(e.target.value)}>
-              <option value="">все</option>
-              {services.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={service}
+              onChange={setService}
+              style={{ minWidth: '9rem' }}
+              options={[{ value: '', label: 'все' }, ...services.map((s) => ({ value: s, label: s }))]}
+            />
           </label>
           <label style={{ flex: 1, minWidth: '14rem' }}>
             Поиск
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="порт, файл, имя правила…"
-            />
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="порт, файл, имя правила…" />
           </label>
           <span className="small muted" style={{ paddingBottom: '0.4rem' }}>
             показано {formatNumber(visible.length)} из {formatNumber(data?.total ?? 0)}
@@ -101,9 +97,9 @@ export default function Findings() {
                 <div style={{ minWidth: 0 }}>
                   <div className="row" style={{ marginBottom: '0.25rem' }}>
                     <SeverityBadge severity={f.severity} />
-                    <span className="tag">{f.rule}</span>
-                    <span className="tag">{f.service}</span>
-                    {f.object && <span className="tag">{f.object}</span>}
+                    <Tag>{f.rule}</Tag>
+                    <Tag>{f.service}</Tag>
+                    {f.object && <Tag>{f.object}</Tag>}
                   </div>
                   <h3>{f.title}</h3>
                   <p className="secondary" style={{ margin: '0.3rem 0 0' }}>
