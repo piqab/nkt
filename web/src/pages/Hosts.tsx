@@ -119,6 +119,26 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
     setJob(null)
     setInstallHostId(null)
     setJobStatus(null)
+    // The table's status/version/last-seen columns only otherwise refresh
+    // on done (see the poll effect above) or the next 30s tick — closing
+    // right after a job finishes, or while it's still running, must not
+    // leave the buttons showing stale state until then.
+    reload()
+  }
+
+  /** Reopens the progress/log for a host's current or most recent install —
+   * the only way back in once the modal has been closed, since the job id
+   * itself is otherwise only ever known transiently (see startInstall). */
+  async function openInstallLog(host: HubHost) {
+    setNotice(null)
+    try {
+      const res = await api<{ job: string }>(`/hub/hosts/${host.id}/install/latest`)
+      setInstallHostId(host.id)
+      setJobStatus(null)
+      setJob(res.job)
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
   }
 
   const installingHost = hosts?.find((h) => h.id === installHostId)
@@ -197,6 +217,11 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
                       {h.status === 'installing' && (
                         <button className="danger ghost" onClick={() => cancelInstall(h)}>
                           отменить
+                        </button>
+                      )}
+                      {h.status !== 'new' && (
+                        <button className="ghost" onClick={() => openInstallLog(h)}>
+                          журнал установки
                         </button>
                       )}
                       <button

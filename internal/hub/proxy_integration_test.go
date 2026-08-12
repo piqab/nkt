@@ -118,6 +118,24 @@ func TestManagerProxyRoundTrip(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), `"admin"`) {
 		t.Errorf("GET /api/auth/me through proxy: expected the admin username in body, got %s", rec.Body.String())
 	}
+
+	// The browser always sends its own hub session cookie on every request
+	// (same origin, same cookie name as the per-host one — see
+	// auth.SessionCookie) — proxyHost clones that request as-is, so it is
+	// still attached here too. A real request never arrives without it;
+	// the two prior checks above didn't exercise that at all. If Proxy
+	// forwarded it alongside the per-host cookie it injects, net/http
+	// would resolve the *first* one when the remote calls Request.Cookie —
+	// this one, meaningless to it — and every proxied request would 401
+	// regardless of how correctly the hub-side login worked.
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/auth/me", nil)
+	req.AddCookie(&http.Cookie{Name: "nkt_session", Value: "unrelated-hub-session-token"})
+	manager.Proxy(hostID).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/auth/me through proxy with the hub's own cookie already present: status %d, body %s",
+			rec.Code, rec.Body.String())
+	}
 }
 
 // TestResetRemoteAdminPasswordSyncsRealNkt reproduces the exact scenario

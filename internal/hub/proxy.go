@@ -178,6 +178,16 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 				req.URL.Scheme = "http"
 				req.URL.Host = remoteAPIAddr
 				req.Host = remoteAPIAddr
+				// The incoming request still carries the browser's own hub
+				// session cookie (proxyHost clones it as-is) — same name
+				// (auth.SessionCookie) as the one injected below, but
+				// meaningless to this host. Left in place, the two would
+				// travel together and the host would resolve whichever one
+				// net/http's Cookie() returns first — the hub's, in
+				// practice — instead of the one actually meant for it,
+				// failing auth on every single request. It must be gone
+				// before AddCookie puts the right one in its place.
+				req.Header.Del("Cookie")
 				req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
 			},
 			Transport: &http.Transport{

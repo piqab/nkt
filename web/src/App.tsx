@@ -183,23 +183,17 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
     )
   }
 
-  return (
+  const shell = (
     <div className="shell">
       <aside className="sidebar">
         <div className="brand">
           <div className="brand-name">NetKnownsThat</div>
-          <div className="brand-sub">
-            {isHub
-              ? selectedHost!.name
-              : `${overview.data?.host.hostname ?? '…'} · режим ${me.mode}`}
-          </div>
+          {!isHub && (
+            <div className="brand-sub">
+              {overview.data?.host.hostname ?? '…'} · режим {me.mode}
+            </div>
+          )}
         </div>
-
-        {isHub && (
-          <button className="ghost" onClick={() => selectHost(null)} style={{ margin: '0 0.75rem 0.5rem' }}>
-            ← к списку хостов
-          </button>
-        )}
 
         <nav className="nav">
           {NAV.filter((item) => !item.adminOnly || me.is_admin).map((item) => (
@@ -226,17 +220,21 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
               </select>
             </label>
           </div>
-          <div>
-            {me.username} · {me.role}
-          </div>
-          <div className="row" style={{ gap: '0.25rem' }}>
-            <button className="ghost" onClick={() => setShowPassword(true)} style={{ paddingLeft: 0 }}>
-              Сменить пароль
-            </button>
-            <button className="ghost" onClick={logout}>
-              Выйти
-            </button>
-          </div>
+          {!isHub && (
+            <>
+              <div>
+                {me.username} · {me.role}
+              </div>
+              <div className="row" style={{ gap: '0.25rem' }}>
+                <button className="ghost" onClick={() => setShowPassword(true)} style={{ paddingLeft: 0 }}>
+                  Сменить пароль
+                </button>
+                <button className="ghost" onClick={logout}>
+                  Выйти
+                </button>
+              </div>
+            </>
+          )}
         </div>
       </aside>
 
@@ -300,6 +298,33 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
           </Routes>
         </div>
       </main>
+    </div>
+  )
+
+  if (!isHub) return shell
+
+  // Under a hub, the host's own dashboard (identical markup to a plain
+  // nkt's) sits below a hub-level bar — which host this is, and how to get
+  // back to the registry — instead of blending hub navigation into the
+  // host's own sidebar alongside its Findings/Docker/etc. links.
+  return (
+    <div className="hub-frame">
+      <div className="hub-topbar">
+        <button className="ghost" onClick={() => selectHost(null)}>
+          ← к списку хостов
+        </button>
+        <span className="hub-topbar-brand">NetKnownsThat — хаб</span>
+        <span className="hub-topbar-sep">→</span>
+        <span className="hub-topbar-host">{selectedHost!.name}</span>
+        <span className="hub-topbar-spacer" />
+        <span className="small muted">
+          {me.username} · {me.role}
+        </span>
+        <button className="ghost" onClick={logout}>
+          Выйти
+        </button>
+      </div>
+      {shell}
     </div>
   )
 }

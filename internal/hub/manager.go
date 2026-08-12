@@ -29,6 +29,7 @@ type Event struct {
 // installJob tracks one StartInstall run in memory, mirroring
 // control.CertManager's renewJob.
 type installJob struct {
+	id      string
 	created time.Time
 	hostID  int64
 	// cancel stops every ctx-aware step still to come (exec.CommandContext
@@ -306,6 +307,7 @@ func (m *Manager) StartInstall(hostID int64) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("генерация id задачи: %w", err)
 	}
+	job.id = id
 
 	// Detached from the HTTP request's context on purpose: the request that
 	// started this job returns long before the install finishes. cancel is
@@ -516,6 +518,20 @@ func (m *Manager) InstallJobStatus(id string) (events []Event, done bool, errMsg
 	}
 	events, done, errMsg = job.snapshot()
 	return events, done, errMsg, true
+}
+
+// LatestJobID returns the id of the most recent install job for a host, so
+// the UI can reopen its progress/log — after closing the modal, or after a
+// page reload loses all local state — instead of that log becoming
+// unreachable the moment nothing is actively watching it.
+func (m *Manager) LatestJobID(hostID int64) (string, bool) {
+	m.jobsMu.Lock()
+	defer m.jobsMu.Unlock()
+	job, ok := m.jobByHost[hostID]
+	if !ok {
+		return "", false
+	}
+	return job.id, true
 }
 
 // evictOldJobsLocked drops finished jobs older than an hour. Called with
