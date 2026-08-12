@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
+import { ConfigProvider, type ThemeConfig } from 'antd'
 import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import { api, hostScope, onUnauthorized, useApi } from './api'
+import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
 import type { Me, Overview } from './types'
 import Login from './pages/Login'
 import Hosts from './pages/Hosts'
@@ -22,19 +24,49 @@ import Users from './pages/Users'
 import { Banner, Card } from './components/ui'
 import PasswordForm from './components/PasswordForm'
 
-type Theme = 'light' | 'dark' | 'auto'
-
-function useTheme(): [Theme, (t: Theme) => void] {
+/**
+ * Owns both the `data-theme` attribute (what styles.css itself reacts to)
+ * and the antd ThemeConfig derived from it (see theme.ts's buildAntdTheme)
+ * — one hook, so the two can never independently drift out of sync.
+ *
+ * The antd theme is recomputed inside the same effect that writes the
+ * attribute, immediately after, rather than via a separate
+ * `useMemo(..., [isDark])`: a DOM attribute write is synchronous and
+ * getComputedStyle forces a synchronous style recalc, so reading it right
+ * here already reflects the mutation above — waiting for isDark to change
+ * as a memo dependency would miss the case where an explicit ('light'/
+ * 'dark') choice is re-applied on mount before the OS-driven CSS media
+ * query and the JS-side value could otherwise briefly disagree.
+ */
+function useTheme(): [Theme, (t: Theme) => void, ThemeConfig] {
   const [theme, setTheme] = useState<Theme>(
     () => (localStorage.getItem('nkt-theme') as Theme | null) ?? 'auto',
   )
+  const [antdTheme, setAntdTheme] = useState<ThemeConfig>(() =>
+    buildAntdTheme(resolveIsDark(theme)),
+  )
+
   useEffect(() => {
     const root = document.documentElement
     if (theme === 'auto') root.removeAttribute('data-theme')
     else root.setAttribute('data-theme', theme)
     localStorage.setItem('nkt-theme', theme)
+    setAntdTheme(buildAntdTheme(resolveIsDark(theme)))
   }, [theme])
-  return [theme, setTheme]
+
+  // styles.css's own @media (prefers-color-scheme) block already reacts to
+  // a live OS theme flip on its own; nothing JS-observable did before this,
+  // which would otherwise leave antd's algorithm/tokens silently stuck at
+  // whatever 'auto' resolved to at mount.
+  useEffect(() => {
+    if (theme !== 'auto') return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const onChange = () => setAntdTheme(buildAntdTheme(mq.matches))
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [theme])
+
+  return [theme, setTheme, antdTheme]
 }
 
 const NAV = [
@@ -61,6 +93,10 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null)
   const [checked, setChecked] = useState(false)
   const navigate = useNavigate()
+  // Owned here, not inside Shell, so the antd theme (and the login screen
+  // under it) is consistent before a session even exists — not just once
+  // someone is signed in.
+  const [theme, setTheme, antdTheme] = useTheme()
 
   const loadMe = useCallback(async () => {
     try {
@@ -86,26 +122,37 @@ export default function App() {
     }
   }, [navigate])
 
-  if (!checked) return <div className="login-wrap">Загрузка…</div>
-
-  if (!me) {
-    return (
-      <Routes>
-        <Route path="/login" element={<Login onSuccess={loadMe} />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
-    )
-  }
-
-  return <Shell me={me} onLogout={() => setMe(null)} />
+  return (
+    <ConfigProvider theme={antdTheme}>
+      {!checked ? (
+        <div className="login-wrap">Загрузка…</div>
+      ) : !me ? (
+        <Routes>
+          <Route path="/login" element={<Login onSuccess={loadMe} />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      ) : (
+        <Shell me={me} theme={theme} setTheme={setTheme} onLogout={() => setMe(null)} />
+      )}
+    </ConfigProvider>
+  )
 }
 
 /** A host selected in the hub shell — everything below scopes its API calls
  * to it (see api.ts's hostScope) once it is set. */
 type SelectedHost = { id: number; name: string }
 
-function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
-  const [theme, setTheme] = useTheme()
+function Shell({
+  me,
+  theme,
+  setTheme,
+  onLogout,
+}: {
+  me: Me
+  theme: Theme
+  setTheme: (t: Theme) => void
+  onLogout: () => void
+}) {
   const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
   const isHub = me.mode === 'hub'
