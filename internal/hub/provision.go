@@ -183,6 +183,19 @@ func installRemoteFile(client *ssh.Client, sshUser, src, dst string, mode os.Fil
 	return nil
 }
 
+// sudoersHint is the exact pair of commands an operator needs to run on the
+// target host (as root, or as any account that already has sudo there) to
+// grant sshUser passwordless sudo through the one drop-in file
+// RemoveSudoAccess later knows how to clean up again. Spelled out in full
+// here rather than left as prose in diagnoseInstallError's callers, since
+// "add a rule to sudoers" without the actual command is not something
+// someone can act on without going to look it up.
+func sudoersHint(sshUser string) string {
+	return fmt.Sprintf(
+		"  echo '%s ALL=(ALL) NOPASSWD:ALL' | sudo tee %s\n  sudo chmod 0440 %s",
+		sshUser, sudoersDropIn, sudoersDropIn)
+}
+
 // diagnoseInstallError turns a failed install/sudo command into something
 // actionable: the two things that actually go wrong here are "no write
 // access" (sshUser isn't root and there's no sudo at all) and "sudo needs a
@@ -193,16 +206,19 @@ func diagnoseInstallError(sshUser, dst string, err error, out string) error {
 	switch {
 	case strings.Contains(out, "a password is required"), strings.Contains(out, "sudo: sorry, a password"):
 		return fmt.Errorf(
-			"установка %s: пользователю %q нужен sudo без пароля (NOPASSWD) — добавьте правило в sudoers "+
-				"на хосте, либо укажите root как SSH-пользователя: %w: %s", dst, sshUser, err, out)
+			"установка %s: пользователю %q нужен sudo без пароля (NOPASSWD) — на хосте выполните:\n%s\n"+
+				"либо укажите root как SSH-пользователя: %w: %s",
+			dst, sshUser, sudoersHint(sshUser), err, out)
 	case strings.Contains(out, "not in the sudoers file"):
 		return fmt.Errorf(
-			"установка %s: пользователь %q не может использовать sudo на этом хосте — добавьте его в sudoers "+
-				"с NOPASSWD, либо укажите root как SSH-пользователя: %w: %s", dst, sshUser, err, out)
+			"установка %s: пользователь %q не может использовать sudo на этом хосте — на хосте выполните:\n%s\n"+
+				"либо укажите root как SSH-пользователя: %w: %s",
+			dst, sshUser, sudoersHint(sshUser), err, out)
 	case strings.Contains(out, "Permission denied"), strings.Contains(out, "permission denied"):
 		return fmt.Errorf(
 			"установка %s: пользователю %q не хватает прав, а sudo недоступен — укажите root как "+
-				"SSH-пользователя, либо дайте %s sudo с NOPASSWD: %w: %s", dst, sshUser, sshUser, err, out)
+				"SSH-пользователя, либо на хосте выполните:\n%s\n: %w: %s",
+			dst, sshUser, sudoersHint(sshUser), err, out)
 	default:
 		return fmt.Errorf("установка %s: %w: %s", dst, err, out)
 	}
