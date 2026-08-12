@@ -331,8 +331,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, report func(string)
 		return fail(err)
 	}
 
-	const adminUser = "admin"
-	adminPassword, err := generatePassword()
+	adminUser, adminPassword, err := m.resolveAdminCredential(ctx, hostID, host)
 	if err != nil {
 		return fail(err)
 	}
@@ -356,13 +355,6 @@ func (m *Manager) install(ctx context.Context, hostID int64, report func(string)
 	if _, err := bootstrapLogin(ctx, client, adminUser, adminPassword); err != nil {
 		return fail(err)
 	}
-	adminPasswordEnc, err := secretbox.Encrypt(m.key, []byte(adminPassword))
-	if err != nil {
-		return fail(fmt.Errorf("шифрование пароля администратора: %w", err))
-	}
-	if err := m.db.SetHostAdmin(ctx, hostID, adminUser, adminPasswordEnc); err != nil {
-		return fail(err)
-	}
 	if err := m.db.SetHostVersion(ctx, hostID, m.version); err != nil {
 		return fail(err)
 	}
@@ -373,6 +365,50 @@ func (m *Manager) install(ctx context.Context, hostID int64, report func(string)
 
 	report("Готово")
 	return nil
+}
+
+// resolveAdminCredential returns the bootstrap admin username/password to
+// write into the remote's env file, reusing whatever is already stored for
+// this host instead of generating a fresh one every time install runs.
+//
+// This matters on a reinstall (or a retry after an earlier attempt failed
+// partway through): the systemd unit may have already started once with a
+// previously generated password and bootstrapped that exact account into
+// the remote's own database — auth.Service.Bootstrap only ever creates the
+// admin account when the accounts table is still empty, so a *different*
+// password written on a later attempt is simply never picked up, and
+// bootstrapLogin fails with "неверный логин или пароль" against an account
+// that still holds the first password. Persisting the generated password
+// immediately (before ever attempting to use it remotely), rather than only
+// after a successful login, closes the gap where an interrupted attempt —
+// one that got far enough to start the service but not far enough to log
+// in — would otherwise leave the hub about to try a different password
+// next time than whatever the remote ended up bootstrapped with.
+func (m *Manager) resolveAdminCredential(ctx context.Context, hostID int64, host store.Host) (user, password string, err error) {
+	user = host.AdminUser
+	if user == "" {
+		user = "admin"
+	}
+	if len(host.AdminPasswordEnc) > 0 {
+		decrypted, err := secretbox.Decrypt(m.key, host.AdminPasswordEnc)
+		if err != nil {
+			return "", "", fmt.Errorf("расшифровка сохранённого пароля администратора: %w", err)
+		}
+		return user, string(decrypted), nil
+	}
+
+	password, err = generatePassword()
+	if err != nil {
+		return "", "", err
+	}
+	passwordEnc, err := secretbox.Encrypt(m.key, []byte(password))
+	if err != nil {
+		return "", "", fmt.Errorf("шифрование пароля администратора: %w", err)
+	}
+	if err := m.db.SetHostAdmin(ctx, hostID, user, passwordEnc); err != nil {
+		return "", "", err
+	}
+	return user, password, nil
 }
 
 // loadUnitTemplate reads deploy/netknownsthat.service as-is from the hub's
