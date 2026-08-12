@@ -436,6 +436,16 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 			r.cfg.BootstrapAdminUser, generated)
 	}
 
+	// Any host still 'installing' belongs to a run this process never
+	// finished (a crash, or this very restart) — nothing left alive can
+	// ever complete it, so it must not stay stuck forever with its
+	// "переустановить"/cancel controls unable to act on anything real.
+	if n, err := r.db.ResetStuckInstalls(context.Background(), "установка прервана перезапуском хаба"); err != nil {
+		log.Warn("не удалось сбросить зависшие установки", "err", err)
+	} else if n > 0 {
+		log.Info("сброшены зависшие установки хостов", "число", n)
+	}
+
 	manager := hub.NewManager(r.cfg, r.db, key, version)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -15,6 +15,39 @@ import (
 	"github.com/althq/netknownsthat/internal/store"
 )
 
+// TestInstallJobCancelNowClosesSSHClient proves cancelNow actually renders
+// a live SSH connection unusable, not just cancels a context nothing inside
+// golang.org/x/crypto/ssh listens to — the reason CancelInstall closes the
+// job's client explicitly instead of relying on ctx cancellation alone (see
+// installJob's doc comment).
+func TestInstallJobCancelNowClosesSSHClient(t *testing.T) {
+	addr, port, clientKeyPEM := startTestSSHD(t)
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := dialSSH(ctx, addr, port, me.Username, store.HostAuthKey, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("dialSSH: %v", err)
+	}
+
+	jobCtx, jobCancel := context.WithCancel(context.Background())
+	job := &installJob{created: time.Now(), cancel: jobCancel}
+	job.setClient(client)
+
+	job.cancelNow()
+
+	if jobCtx.Err() == nil {
+		t.Error("cancelNow did not cancel the job's context")
+	}
+	if _, err := client.NewSession(); err == nil {
+		t.Error("cancelNow did not close the SSH client — NewSession still succeeds on it")
+	}
+}
+
 // TestSSHProvisioningRoundTrip exercises the actually-new code in this
 // package — dialSSH, detectTarget and the SFTP-then-install half of
 // stageFiles — against a throwaway local sshd, instead of only unit-testing

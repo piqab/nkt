@@ -85,6 +85,7 @@ func (s *Server) Handler() http.Handler {
 				r.Patch("/hub/hosts/{id}", s.handleUpdateHost)
 				r.Delete("/hub/hosts/{id}", s.handleDeleteHost)
 				r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
+				r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)
 			})
 
 			// Every other host-scoped call — reads and mutations alike —

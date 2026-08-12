@@ -154,6 +154,22 @@ func (d *DB) SetHostSecret(ctx context.Context, id int64, authKind string, secre
 	return nil
 }
 
+// ResetStuckInstalls marks every host still showing 'installing' as
+// 'error' — called once when a hub starts up, since a status like that can
+// only mean the process that was running the install died (crashed,
+// restarted for an upgrade) with no goroutine left to ever finish it. Left
+// alone, the host would stay 'installing' forever and its
+// "переустановить"/cancel controls would have nothing real to act on.
+func (d *DB) ResetStuckInstalls(ctx context.Context, message string) (int64, error) {
+	res, err := d.ExecContext(ctx,
+		`UPDATE hosts SET status = ?, error_msg = ? WHERE status = ?`,
+		HostStatusError, message, HostStatusInstalling)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // SetHostStatus updates a host's install/health status and, for the 'error'
 // status, the reason. errMsg is cleared for every other status.
 func (d *DB) SetHostStatus(ctx context.Context, id int64, status, errMsg string) error {

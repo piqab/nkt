@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,11 +30,21 @@ type Event struct {
 // control.CertManager's renewJob.
 type installJob struct {
 	created time.Time
+	hostID  int64
+	// cancel stops every ctx-aware step still to come (exec.CommandContext
+	// cross-compiles, HTTP calls through the tunnel). It cannot by itself
+	// interrupt a step already blocked inside an SSH session — the
+	// golang.org/x/crypto/ssh API has no context support — which is what
+	// client is for: closing the live connection forces any in-flight SFTP
+	// upload or remote command to error out immediately instead of running
+	// to completion regardless of cancellation.
+	cancel context.CancelFunc
 
 	mu     sync.Mutex
 	events []Event
 	done   bool
 	errMsg string
+	client *ssh.Client
 }
 
 func (j *installJob) append(text string) {
@@ -57,6 +68,36 @@ func (j *installJob) snapshot() (events []Event, done bool, errMsg string) {
 	return append([]Event{}, j.events...), j.done, j.errMsg
 }
 
+// setClient records the SSH connection the job is currently using, so a
+// later cancelNow can force it closed.
+func (j *installJob) setClient(c *ssh.Client) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.client = c
+}
+
+func (j *installJob) isDone() bool {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	return j.done
+}
+
+// cancelNow stops the job as promptly as the underlying APIs allow: the
+// context cancellation covers everything ctx-aware, and force-closing the
+// SSH connection covers whatever it might currently be blocked inside that
+// isn't.
+func (j *installJob) cancelNow() {
+	j.mu.Lock()
+	cancel, client := j.cancel, j.client
+	j.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if client != nil {
+		_ = client.Close()
+	}
+}
+
 // Manager registers remote hosts, installs nkt on them over SSH, and proxies
 // their own web API through the connections it keeps open (see proxy.go).
 type Manager struct {
@@ -65,8 +106,9 @@ type Manager struct {
 	key     []byte
 	version string
 
-	jobsMu sync.Mutex
-	jobs   map[string]*installJob
+	jobsMu    sync.Mutex
+	jobs      map[string]*installJob
+	jobByHost map[int64]*installJob
 
 	connsMu sync.Mutex
 	conns   map[int64]*hostConn
@@ -87,9 +129,10 @@ type Manager struct {
 func NewManager(cfg *config.Config, db *store.DB, key []byte, version string) *Manager {
 	return &Manager{
 		cfg: cfg, db: db, key: key, version: version,
-		jobs:     map[string]*installJob{},
-		conns:    map[int64]*hostConn{},
-		sessions: map[int64]sessionCache{},
+		jobs:      map[string]*installJob{},
+		jobByHost: map[int64]*installJob{},
+		conns:     map[int64]*hostConn{},
+		sessions:  map[int64]sessionCache{},
 	}
 }
 
@@ -256,7 +299,7 @@ func (m *Manager) UpdateHostGenerated(ctx context.Context, hostID int64, name, a
 // InstallJobStatus instead of blocking on the whole multi-step operation —
 // same pattern as control.CertManager.StartRenewCertbot.
 func (m *Manager) StartInstall(hostID int64) (string, error) {
-	job := &installJob{created: time.Now()}
+	job := &installJob{created: time.Now(), hostID: hostID}
 	job.append("Начинаю установку")
 
 	id, err := newJobID()
@@ -264,28 +307,57 @@ func (m *Manager) StartInstall(hostID int64) (string, error) {
 		return "", fmt.Errorf("генерация id задачи: %w", err)
 	}
 
+	// Detached from the HTTP request's context on purpose: the request that
+	// started this job returns long before the install finishes. cancel is
+	// kept on the job itself so CancelInstall can stop it later.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	job.cancel = cancel
+
 	m.jobsMu.Lock()
 	m.jobs[id] = job
+	m.jobByHost[hostID] = job
 	m.evictOldJobsLocked()
 	m.jobsMu.Unlock()
 
 	go func() {
-		// Detached from the HTTP request's context on purpose: the request
-		// that started this job returns long before the install finishes.
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		job.finish(m.install(ctx, hostID, job.append))
+		job.finish(m.install(ctx, hostID, job))
 	}()
 
 	return id, nil
+}
+
+// CancelInstall stops host's in-flight install, if the hub still has a live
+// goroutine running it, and marks the host as errored either way. When
+// there is no job to cancel — most often because the hub itself restarted
+// mid-install and lost it, the same situation ResetStuckInstalls handles at
+// startup — this just clears the stuck status so the host's controls have
+// something sane to act on again.
+func (m *Manager) CancelInstall(ctx context.Context, hostID int64) error {
+	m.jobsMu.Lock()
+	job := m.jobByHost[hostID]
+	m.jobsMu.Unlock()
+
+	const message = "установка отменена пользователем"
+	if job == nil || job.isDone() {
+		return m.db.SetHostStatus(ctx, hostID, store.HostStatusError, message)
+	}
+
+	job.cancelNow()
+	job.append(message)
+	job.finish(errors.New(message))
+	return m.db.SetHostStatus(ctx, hostID, store.HostStatusError, message)
 }
 
 // install does the real work behind StartInstall: connect, detect the
 // target architecture, cross-compile or reuse a cached binary, ship it over
 // SFTP with its systemd unit and env file, start the service, then log in
 // through the SSH tunnel so the hub can proxy requests as the remote's own
-// bootstrap admin from then on (see tunnel.go, server.go).
-func (m *Manager) install(ctx context.Context, hostID int64, report func(string)) error {
+// bootstrap admin from then on (see tunnel.go, server.go). job carries both
+// the progress log (job.append) and, once connected, the live SSH
+// connection CancelInstall needs to be able to interrupt this from outside.
+func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) error {
+	report := job.append
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
 		return fmt.Errorf("хост не найден: %w", err)
@@ -311,6 +383,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, report func(string)
 		return fail(err)
 	}
 	defer client.Close()
+	job.setClient(client)
 
 	goos, goarch, err := detectTarget(client)
 	if err != nil {

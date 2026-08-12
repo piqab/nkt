@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/secretbox"
@@ -68,6 +69,74 @@ func TestResolveAdminCredentialIsStableAcrossReinstalls(t *testing.T) {
 	if user2 != user1 || pw2 != pw1 {
 		t.Errorf("resolveAdminCredential is not stable across calls: got (%q,%q) then (%q,%q)",
 			user1, pw1, user2, pw2)
+	}
+}
+
+// TestCancelInstallWithNoLiveJobResetsStatus covers the "hub restarted
+// mid-install" case: nothing left in jobByHost to actually cancel, but the
+// host must not stay stuck on 'installing' forever with no working control
+// — this is the same situation ResetStuckInstalls handles at hub startup,
+// exercised here through the on-demand "отменить" button's own code path.
+func TestCancelInstallWithNoLiveJobResetsStatus(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+	if err != nil {
+		t.Fatalf("AddHost: %v", err)
+	}
+	if err := db.SetHostStatus(ctx, id, store.HostStatusInstalling, ""); err != nil {
+		t.Fatalf("SetHostStatus: %v", err)
+	}
+
+	if err := m.CancelInstall(ctx, id); err != nil {
+		t.Fatalf("CancelInstall: %v", err)
+	}
+
+	host, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if host.Status != store.HostStatusError {
+		t.Errorf("status after CancelInstall = %q, want %q", host.Status, store.HostStatusError)
+	}
+}
+
+// TestCancelInstallStopsLiveJob covers the normal case: a job the hub is
+// still actively tracking. CancelInstall must invoke the job's own cancel
+// func (interrupting any ctx-aware step still to come), mark it done, and
+// leave the host in 'error' — not just silently forget about it.
+func TestCancelInstallStopsLiveJob(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+	if err != nil {
+		t.Fatalf("AddHost: %v", err)
+	}
+
+	jobCtx, jobCancel := context.WithCancel(context.Background())
+	job := &installJob{created: time.Now(), hostID: id, cancel: jobCancel}
+	m.jobsMu.Lock()
+	m.jobByHost[id] = job
+	m.jobsMu.Unlock()
+
+	if err := m.CancelInstall(ctx, id); err != nil {
+		t.Fatalf("CancelInstall: %v", err)
+	}
+
+	if jobCtx.Err() == nil {
+		t.Error("CancelInstall did not cancel the job's context")
+	}
+	if !job.isDone() {
+		t.Error("CancelInstall did not mark the job done")
+	}
+	host, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if host.Status != store.HostStatusError {
+		t.Errorf("status after CancelInstall = %q, want %q", host.Status, store.HostStatusError)
 	}
 }
 
