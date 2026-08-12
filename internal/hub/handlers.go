@@ -151,13 +151,38 @@ type addHostRequest struct {
 	Secret   string `json:"secret"`    // password, or a PEM private key — unused when auth_kind is "generated"
 }
 
+// hostWithOverview is store.Host plus what pollOverviews last learned about
+// it (see Manager.Overview) — merged in here rather than persisted on Host
+// itself, since it's cache data with no reason to survive a hub restart.
+// Findings is omitted (not just empty) for a host pollOverviews has never
+// reported on — that's the frontend's signal to show "неизвестно" rather
+// than "zero problems" for a host that isn't online yet, or hasn't had its
+// first poll tick.
+type hostWithOverview struct {
+	store.Host
+	Findings     map[string]int `json:"findings,omitempty"`
+	Reachable    bool           `json:"reachable,omitempty"`
+	LastPolledAt string         `json:"last_polled_at,omitempty"`
+}
+
 func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 	hosts, err := s.db.ListHosts(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, hosts)
+	out := make([]hostWithOverview, len(hosts))
+	for i, h := range hosts {
+		out[i] = hostWithOverview{Host: h}
+		if findings, reachable, lastPolledAt, ok := s.hub.Overview(h.ID); ok {
+			out[i].Findings = findings
+			out[i].Reachable = reachable
+			if !lastPolledAt.IsZero() {
+				out[i].LastPolledAt = store.FormatTime(lastPolledAt)
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
