@@ -148,6 +148,73 @@ CREATE TABLE IF NOT EXISTS hosts (
 CREATE INDEX IF NOT EXISTS idx_hosts_name ON hosts(name);
 `
 
+// columnMigrations lists every column the hosts table has picked up since
+// it was first introduced, beyond what CreateHost's original CREATE TABLE
+// shipped with. `CREATE TABLE IF NOT EXISTS` in schema above is a no-op
+// against a database that already has the table — it does not retroactively
+// add columns a newer version of this file added to the same table, so a
+// database that already existed before one of these was introduced needs
+// this to actually reach it. Append here, never edit or remove a past
+// entry: the table's row order doubles as its own history.
+var columnMigrations = []struct{ table, column, ddl string }{
+	{"hosts", "admin_user", `ALTER TABLE hosts ADD COLUMN admin_user TEXT NOT NULL DEFAULT ''`},
+	{"hosts", "admin_password_enc", `ALTER TABLE hosts ADD COLUMN admin_password_enc BLOB`},
+	{"hosts", "sudo_status", `ALTER TABLE hosts ADD COLUMN sudo_status TEXT NOT NULL DEFAULT ''
+		CHECK (sudo_status IN ('','root','nopasswd','password_required'))`},
+}
+
+// addMissingColumns applies whatever entries in columnMigrations a table
+// doesn't already have. Safe to run on every startup: existing columns are
+// skipped, not re-added.
+func addMissingColumns(ctx context.Context, db *sql.DB) error {
+	tables := map[string]bool{}
+	for _, m := range columnMigrations {
+		tables[m.table] = true
+	}
+	existing := map[string]map[string]bool{}
+	for table := range tables {
+		cols, err := tableColumns(ctx, db, table)
+		if err != nil {
+			return fmt.Errorf("чтение схемы %s: %w", table, err)
+		}
+		existing[table] = cols
+	}
+
+	for _, m := range columnMigrations {
+		if existing[m.table][m.column] {
+			continue
+		}
+		if _, err := db.ExecContext(ctx, m.ddl); err != nil {
+			return fmt.Errorf("добавление колонки %s.%s: %w", m.table, m.column, err)
+		}
+	}
+	return nil
+}
+
+// tableColumns returns the set of column names a table currently has.
+// PRAGMA table_info on a table that doesn't exist yet returns zero rows
+// rather than an error, but addMissingColumns always runs after `schema`
+// has already created every table it lists, so that case never applies here.
+func tableColumns(ctx context.Context, db *sql.DB, table string) (map[string]bool, error) {
+	rows, err := db.QueryContext(ctx, `PRAGMA table_info(`+table+`)`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cols := map[string]bool{}
+	for rows.Next() {
+		var cid, notNull, pk int
+		var name, colType string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
+			return nil, err
+		}
+		cols[name] = true
+	}
+	return cols, rows.Err()
+}
+
 // DB wraps the SQLite handle.
 type DB struct {
 	*sql.DB
@@ -172,6 +239,9 @@ func Open(path string) (*DB, error) {
 		return nil, fmt.Errorf("ping sqlite %s: %w", path, err)
 	}
 	if _, err := sqlDB.ExecContext(ctx, schema); err != nil {
+		return nil, fmt.Errorf("apply schema: %w", err)
+	}
+	if err := addMissingColumns(ctx, sqlDB); err != nil {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 	return &DB{DB: sqlDB, path: path}, nil
