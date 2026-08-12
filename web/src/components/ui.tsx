@@ -1,4 +1,5 @@
 import { useRef, type ChangeEvent, type ReactNode } from 'react'
+import { Alert, Badge, Button, Card as AntCard, Modal as AntModal, Spin } from 'antd'
 import type { Severity } from '../types'
 
 export const SEVERITY_LABEL: Record<Severity, string> = {
@@ -12,16 +13,25 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
 const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
 export const SEVERITIES = SEVERITY_ORDER
 
+/** Tone → the same CSS custom property styles.css's own `.sev-*` classes
+ * read, so SeverityBadge/StateBadge stay on the one palette every other
+ * still-custom bit of the UI (charts, BlockTree, ...) shares — see
+ * theme.ts's own doc comment. Badge's `color` prop accepts any CSS color,
+ * and `var(--x)` is one. */
+const TONE_COLOR_VAR: Record<'critical' | 'high' | 'medium' | 'low' | 'info' | 'ok', string> = {
+  critical: 'var(--status-critical)',
+  high: 'var(--status-serious)',
+  medium: 'var(--status-warning)',
+  low: 'var(--seq-300)',
+  info: 'var(--text-muted)',
+  ok: 'var(--status-good)',
+}
+
 /**
  * Status is never carried by colour alone: every badge pairs its dot with a word.
  */
 export function SeverityBadge({ severity }: { severity: Severity }) {
-  return (
-    <span className={`badge sev-${severity}`}>
-      <span className="badge-dot" />
-      {SEVERITY_LABEL[severity]}
-    </span>
-  )
+  return <Badge color={TONE_COLOR_VAR[severity]} text={SEVERITY_LABEL[severity]} />
 }
 
 export function StateBadge({ state }: { state: string }) {
@@ -33,12 +43,7 @@ export function StateBadge({ state }: { state: string }) {
         : state === 'inactive' || state === 'exited' || state === 'declared'
           ? 'medium'
           : 'info'
-  return (
-    <span className={`badge sev-${tone}`}>
-      <span className="badge-dot" />
-      {state}
-    </span>
-  )
+  return <Badge color={TONE_COLOR_VAR[tone]} text={state} />
 }
 
 export function Card({
@@ -55,18 +60,24 @@ export function Card({
   className?: string
 }) {
   return (
-    <section className={`card${className ? ` ${className}` : ''}`}>
-      {(title || actions) && (
-        <div className="card-head">
+    <AntCard
+      className={className}
+      title={
+        title || subtitle ? (
           <div>
-            {title && <h2>{title}</h2>}
-            {subtitle && <p>{subtitle}</p>}
+            {title && <span>{title}</span>}
+            {subtitle && (
+              <div className="card-subtitle" style={{ fontWeight: 400 }}>
+                {subtitle}
+              </div>
+            )}
           </div>
-          {actions && <div className="row">{actions}</div>}
-        </div>
-      )}
+        ) : undefined
+      }
+      extra={actions && <div className="row">{actions}</div>}
+    >
       {children}
-    </section>
+    </AntCard>
   )
 }
 
@@ -79,26 +90,29 @@ export function Banner({
   icon?: string
   children: ReactNode
 }) {
-  const defaultIcon = kind === 'error' ? '✖' : kind === 'warn' ? '▲' : 'ℹ'
   return (
-    <div className={`banner ${kind}`} role={kind === 'error' ? 'alert' : undefined}>
-      <span className="banner-icon" aria-hidden="true">
-        {icon ?? defaultIcon}
-      </span>
-      <div>{children}</div>
-    </div>
+    <Alert
+      type={kind === 'warn' ? 'warning' : kind}
+      showIcon
+      icon={icon ? <span aria-hidden="true">{icon}</span> : undefined}
+      message={children}
+    />
   )
 }
 
 export function Loading({ what = 'данные' }: { what?: string }) {
-  return <div className="chart-empty">Загружаю {what}…</div>
+  return (
+    <div className="chart-empty">
+      <Spin size="small" /> Загружаю {what}…
+    </div>
+  )
 }
 
 /** Inline busy indicator for a button mid-action — a long operation (certbot,
  * service restart, config validation) needs more than disabled+text, since
  * that alone reads the same as "nothing is happening yet". */
 export function Spinner() {
-  return <span className="spinner" aria-hidden="true" />
+  return <Spin size="small" />
 }
 
 /**
@@ -119,25 +133,17 @@ export function Modal({
   children: ReactNode
 }) {
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-head">
-          <h2>{title}</h2>
-          {onClose && (
-            <button className="ghost" onClick={onClose}>
-              {closeLabel}
-            </button>
-          )}
-        </div>
-        <div className="modal-body">{children}</div>
-      </div>
-    </div>
+    <AntModal
+      title={title}
+      open
+      closable={false}
+      maskClosable={!!onClose}
+      onCancel={onClose}
+      footer={onClose ? <Button onClick={onClose}>{closeLabel}</Button> : null}
+      destroyOnHidden
+    >
+      {children}
+    </AntModal>
   )
 }
 
