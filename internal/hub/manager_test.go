@@ -26,6 +26,51 @@ func newTestManager(t *testing.T) (*Manager, *store.DB) {
 	return NewManager(&config.Config{}, db, key, "test"), db
 }
 
+// TestResolveAdminCredentialIsStableAcrossReinstalls reproduces the bug a
+// reinstall used to hit: bootstrapLogin failing with "неверный логин или
+// пароль" because a retry generated a fresh password that never matched
+// whatever the remote's own accounts table was actually bootstrapped with
+// on an earlier, partially-successful attempt. resolveAdminCredential must
+// persist a generated password immediately and reuse it on every later
+// call for the same host, never handing back two different passwords.
+func TestResolveAdminCredentialIsStableAcrossReinstalls(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "ssh-pw")
+	if err != nil {
+		t.Fatalf("AddHost: %v", err)
+	}
+	host, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+
+	user1, pw1, err := m.resolveAdminCredential(ctx, id, host)
+	if err != nil {
+		t.Fatalf("resolveAdminCredential (first call): %v", err)
+	}
+	if user1 == "" || pw1 == "" {
+		t.Fatalf("resolveAdminCredential returned empty user/password: %q/%q", user1, pw1)
+	}
+
+	// Simulate a reinstall: re-read the host row (now carrying whatever
+	// resolveAdminCredential just persisted) exactly as install() does on
+	// every call, and resolve again.
+	host, err = db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID (reload): %v", err)
+	}
+	user2, pw2, err := m.resolveAdminCredential(ctx, id, host)
+	if err != nil {
+		t.Fatalf("resolveAdminCredential (second call): %v", err)
+	}
+	if user2 != user1 || pw2 != pw1 {
+		t.Errorf("resolveAdminCredential is not stable across calls: got (%q,%q) then (%q,%q)",
+			user1, pw1, user2, pw2)
+	}
+}
+
 func TestAddHostRejectsBadKey(t *testing.T) {
 	m, _ := newTestManager(t)
 	_, err := m.AddHost(context.Background(), "h1", "10.0.0.1", 22, "root", store.HostAuthKey, "not a key")
