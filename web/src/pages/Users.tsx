@@ -1,16 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useState } from 'react'
+import { Button, Form, Input, Select, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Account, Me } from '../types'
-import {
-  Banner,
-  Card,
-  ErrorNote,
-  Loading,
-  Spinner,
-  StateBadge,
-  formatDateTime,
-  formatRelative,
-} from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
 
 /** Matches the minimum the API enforces, counted in characters. */
 const MIN_LENGTH = 10
@@ -67,6 +59,69 @@ export default function Users({ me }: { me: Me }) {
     }
   }
 
+  const columns: TableColumnsType<Account> = [
+    {
+      title: 'Логин',
+      key: 'username',
+      render: (_, u) => (
+        <>
+          <strong>{u.username}</strong>
+          {u.username === me.username && <span className="small muted"> (это вы)</span>}
+        </>
+      ),
+    },
+    { title: 'Роль', dataIndex: 'role', key: 'role' },
+    { title: 'Состояние', key: 'state', render: (_, u) => <StateBadge state={u.disabled ? 'inactive' : 'active'} /> },
+    { title: 'Создана', key: 'created_at', render: (_, u) => <span className="small nowrap">{formatDateTime(u.created_at)}</span> },
+    {
+      title: 'Последний вход',
+      key: 'last_login_at',
+      render: (_, u) => <span className="small nowrap">{u.last_login_at ? formatRelative(u.last_login_at) : 'ни разу'}</span>,
+    },
+    {
+      title: 'Действия',
+      key: 'actions',
+      render: (_, u) => {
+        const self = u.username === me.username
+        return (
+          <div className="row">
+            <Button
+              type="link"
+              size="small"
+              loading={busy === u.username}
+              disabled={self}
+              title={self ? 'Нельзя изменить роль себе' : undefined}
+              onClick={() => toggleRole(u)}
+            >
+              {u.role === 'admin' ? 'сделать viewer' : 'сделать admin'}
+            </Button>
+            <Button
+              type="link"
+              size="small"
+              loading={busy === u.username}
+              disabled={self && !u.disabled}
+              title={self && !u.disabled ? 'Нельзя отключить себя' : undefined}
+              onClick={() => toggleDisabled(u)}
+            >
+              {u.disabled ? 'включить' : 'отключить'}
+            </Button>
+            <Button
+              danger
+              type="link"
+              size="small"
+              loading={busy === u.username}
+              disabled={self}
+              title={self ? 'Нельзя удалить себя' : undefined}
+              onClick={() => remove(u)}
+            >
+              удалить
+            </Button>
+          </div>
+        )
+      },
+    },
+  ]
+
   return (
     <>
       <div className="page-head">
@@ -88,68 +143,7 @@ export default function Users({ me }: { me: Me }) {
           <Loading what="учётные записи" />
         ) : (
           <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Логин</th>
-                  <th>Роль</th>
-                  <th>Состояние</th>
-                  <th>Создана</th>
-                  <th>Последний вход</th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data?.users.map((u) => {
-                  const self = u.username === me.username
-                  return (
-                    <tr key={u.id}>
-                      <td>
-                        <strong>{u.username}</strong>
-                        {self && <span className="small muted"> (это вы)</span>}
-                      </td>
-                      <td>{u.role}</td>
-                      <td>
-                        <StateBadge state={u.disabled ? 'inactive' : 'active'} />
-                      </td>
-                      <td className="small nowrap">{formatDateTime(u.created_at)}</td>
-                      <td className="small nowrap">
-                        {u.last_login_at ? formatRelative(u.last_login_at) : 'ни разу'}
-                      </td>
-                      <td className="nowrap">
-                        <button
-                          className="ghost"
-                          disabled={busy === u.username || self}
-                          title={self ? 'Нельзя изменить роль себе' : undefined}
-                          onClick={() => toggleRole(u)}
-                        >
-                          {busy === u.username && <Spinner />}
-                          {u.role === 'admin' ? 'сделать viewer' : 'сделать admin'}
-                        </button>
-                        <button
-                          className="ghost"
-                          disabled={busy === u.username || (self && !u.disabled)}
-                          title={self && !u.disabled ? 'Нельзя отключить себя' : undefined}
-                          onClick={() => toggleDisabled(u)}
-                        >
-                          {busy === u.username && <Spinner />}
-                          {u.disabled ? 'включить' : 'отключить'}
-                        </button>
-                        <button
-                          className="danger ghost"
-                          disabled={busy === u.username || self}
-                          title={self ? 'Нельзя удалить себя' : undefined}
-                          onClick={() => remove(u)}
-                        >
-                          {busy === u.username && <Spinner />}
-                          удалить
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <Table<Account> dataSource={data?.users ?? []} columns={columns} rowKey="id" pagination={false} size="small" />
           </div>
         )}
       </Card>
@@ -159,25 +153,24 @@ export default function Users({ me }: { me: Me }) {
   )
 }
 
+type CreateUserValues = { username: string; password: string; role: 'admin' | 'viewer' }
+
 function CreateUserForm({ onCreated }: { onCreated: () => void }) {
-  const [username, setUsername] = useState('')
+  const [form] = Form.useForm<CreateUserValues>()
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState<'admin' | 'viewer'>('viewer')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
   const tooShort = password.length > 0 && [...password].length < MIN_LENGTH
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  async function submit(values: CreateUserValues) {
     if (tooShort) return
     setBusy(true)
     setError(null)
     try {
-      await api('/users', { method: 'POST', body: { username, password, role } })
-      setUsername('')
+      await api('/users', { method: 'POST', body: values })
+      form.resetFields()
       setPassword('')
-      setRole('viewer')
       onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -187,52 +180,36 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
   }
 
   return (
-    <Card
-      title="Новая учётная запись"
-      subtitle="Роль viewer — только просмотр, admin — полное управление хостом"
-    >
-      <form className="col" onSubmit={submit}>
+    <Card title="Новая учётная запись" subtitle="Роль viewer — только просмотр, admin — полное управление хостом">
+      <Form<CreateUserValues> form={form} layout="vertical" onFinish={submit} initialValues={{ role: 'viewer' }}>
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <label style={{ flex: 1, minWidth: '12rem' }}>
-            Логин
-            <input
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="off"
-              required
+          <Form.Item name="username" label="Логин" rules={[{ required: true }]} style={{ flex: 1, minWidth: '12rem' }}>
+            <Input autoComplete="off" />
+          </Form.Item>
+          <Form.Item name="password" label="Пароль" rules={[{ required: true }]} style={{ flex: 1, minWidth: '14rem' }}>
+            <Input.Password autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
+          </Form.Item>
+          <Form.Item name="role" label="Роль">
+            <Select
+              options={[
+                { value: 'viewer', label: 'viewer' },
+                { value: 'admin', label: 'admin' },
+              ]}
             />
-          </label>
-          <label style={{ flex: 1, minWidth: '14rem' }}>
-            Пароль
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-            {tooShort && (
-              <span className="small" style={{ color: 'var(--status-warning)' }}>
-                не короче {MIN_LENGTH} символов
-              </span>
-            )}
-          </label>
-          <label>
-            Роль
-            <select value={role} onChange={(e) => setRole(e.target.value as 'admin' | 'viewer')}>
-              <option value="viewer">viewer</option>
-              <option value="admin">admin</option>
-            </select>
-          </label>
+          </Form.Item>
         </div>
-        <div>
-          <button className="primary" type="submit" disabled={busy || tooShort}>
-            {busy && <Spinner />}
-            {busy ? 'Создаю…' : 'Создать'}
-          </button>
-        </div>
-      </form>
+        {tooShort && (
+          <p className="small" style={{ color: 'var(--status-warning)', marginTop: '-0.5rem' }}>
+            Пароль не короче {MIN_LENGTH} символов
+          </p>
+        )}
+        <Form.Item style={{ marginBottom: 0 }}>
+          <Button type="primary" htmlType="submit" loading={busy} disabled={tooShort}>
+            Создать
+          </Button>
+        </Form.Item>
+      </Form>
     </Card>
   )
 }
