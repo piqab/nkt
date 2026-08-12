@@ -205,9 +205,10 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 	})
 }
 
-// CloseHost drops any pooled connection/session for a host — called when a
-// host is removed from the registry.
+// CloseHost drops any pooled connection/session/cached overview for a host
+// — called when a host is removed from the registry.
 func (m *Manager) CloseHost(hostID int64) {
 	m.dropClient(hostID)
 	m.dropSession(hostID)
+	m.dropOverview(hostID)
 }

@@ -117,6 +117,11 @@ type Manager struct {
 	sessionMu sync.Mutex
 	sessions  map[int64]sessionCache
 
+	// overviewMu/overview cache what pollOverviews last learned about each
+	// online host's findings/reachability — see overview_poll.go.
+	overviewMu sync.Mutex
+	overview   map[int64]hostOverview
+
 	// goBinMu/resolvedGoBin cache resolveGoBin's result for the Manager's
 	// lifetime — the self-install it may trigger is expensive enough
 	// (network fetch) that it must run at most once per process.
@@ -141,12 +146,15 @@ func NewManager(cfg *config.Config, db *store.DB, key []byte, version string) *M
 		jobByHost: map[int64]*installJob{},
 		conns:     map[int64]*hostConn{},
 		sessions:  map[int64]sessionCache{},
+		overview:  map[int64]hostOverview{},
 	}
 }
 
-// Run starts the manager's background maintenance (idle SSH connection
-// eviction) and blocks until ctx is done.
+// Run starts the manager's background maintenance — idle SSH connection
+// eviction and the periodic host findings/reachability poll — and blocks
+// until ctx is done.
 func (m *Manager) Run(ctx context.Context) {
+	go m.pollOverviews(ctx)
 	m.evictIdleConns(ctx)
 }
 
