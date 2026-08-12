@@ -104,12 +104,58 @@ func (m *Manager) AddHost(ctx context.Context, name, addr string, sshPort int, s
 	if sshPort == 0 {
 		sshPort = 22
 	}
+	if authKind == store.HostAuthKey {
+		if err := validatePrivateKey(secret); err != nil {
+			return 0, err
+		}
+	}
 
 	secretEnc, err := secretbox.Encrypt(m.key, []byte(secret))
 	if err != nil {
 		return 0, fmt.Errorf("шифрование секрета: %w", err)
 	}
 	return m.db.CreateHost(ctx, name, addr, sshPort, sshUser, authKind, secretEnc)
+}
+
+// UpdateHost changes a host's connection details. secret is optional — an
+// empty string keeps whatever SSH credential is already stored, so renaming
+// a host or fixing a typo'd address does not force re-entering it.
+func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr string, sshPort int, sshUser, authKind, secret string) error {
+	if name == "" || addr == "" || sshUser == "" {
+		return fmt.Errorf("укажите имя, адрес и пользователя SSH")
+	}
+	if authKind != store.HostAuthPassword && authKind != store.HostAuthKey {
+		return fmt.Errorf("способ входа должен быть %q или %q, получено %q",
+			store.HostAuthPassword, store.HostAuthKey, authKind)
+	}
+	if sshPort == 0 {
+		sshPort = 22
+	}
+
+	if err := m.db.UpdateHost(ctx, hostID, name, addr, sshPort, sshUser, authKind); err != nil {
+		return err
+	}
+
+	if secret != "" {
+		if authKind == store.HostAuthKey {
+			if err := validatePrivateKey(secret); err != nil {
+				return err
+			}
+		}
+		secretEnc, err := secretbox.Encrypt(m.key, []byte(secret))
+		if err != nil {
+			return fmt.Errorf("шифрование секрета: %w", err)
+		}
+		if err := m.db.SetHostSecret(ctx, hostID, authKind, secretEnc); err != nil {
+			return err
+		}
+	}
+
+	// Connection details (possibly the credential itself) changed — drop any
+	// pooled SSH connection/session so the next request reconnects with the
+	// new ones instead of replaying stale ones.
+	m.CloseHost(hostID)
+	return nil
 }
 
 // StartInstall installs nkt on host id in the background and returns a job

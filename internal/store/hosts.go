@@ -117,6 +117,43 @@ func (d *DB) DeleteHost(ctx context.Context, id int64) error {
 	return nil
 }
 
+// UpdateHost changes a host's connection details — everything but its SSH
+// secret, which SetHostSecret handles separately so editing a host's name or
+// address never requires re-entering a credential that did not change.
+func (d *DB) UpdateHost(ctx context.Context, id int64, name, addr string, sshPort int, sshUser, authKind string) error {
+	if authKind != HostAuthPassword && authKind != HostAuthKey {
+		return errors.New("unknown ssh auth kind: " + authKind)
+	}
+	res, err := d.ExecContext(ctx,
+		`UPDATE hosts SET name = ?, addr = ?, ssh_port = ?, ssh_user = ?, ssh_auth_kind = ? WHERE id = ?`,
+		name, addr, sshPort, sshUser, authKind, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetHostSecret replaces a host's encrypted SSH credential — used when
+// editing a host with a new password or key, distinct from the auth_kind/
+// secret_enc pair CreateHost sets at registration.
+func (d *DB) SetHostSecret(ctx context.Context, id int64, authKind string, secretEnc []byte) error {
+	if authKind != HostAuthPassword && authKind != HostAuthKey {
+		return errors.New("unknown ssh auth kind: " + authKind)
+	}
+	res, err := d.ExecContext(ctx,
+		`UPDATE hosts SET ssh_auth_kind = ?, secret_enc = ? WHERE id = ?`, authKind, secretEnc, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // SetHostStatus updates a host's install/health status and, for the 'error'
 // status, the reason. errMsg is cleared for every other status.
 func (d *DB) SetHostStatus(ctx context.Context, id int64, status, errMsg string) error {

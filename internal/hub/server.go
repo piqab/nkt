@@ -81,6 +81,7 @@ func (s *Server) Handler() http.Handler {
 				r.Use(s.auth.RequireAdmin)
 
 				r.Post("/hub/hosts", s.handleAddHost)
+				r.Patch("/hub/hosts/{id}", s.handleUpdateHost)
 				r.Delete("/hub/hosts/{id}", s.handleDeleteHost)
 				r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 			})
