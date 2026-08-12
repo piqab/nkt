@@ -33,7 +33,7 @@ func dialSSH(ctx context.Context, addr string, port int, user, authKind string, 
 	case store.HostAuthKey:
 		signer, err := ssh.ParsePrivateKey(secret)
 		if err != nil {
-			return nil, fmt.Errorf("разбор приватного SSH-ключа: %w", err)
+			return nil, diagnoseKeyError(string(secret), err)
 		}
 		auth = ssh.PublicKeys(signer)
 	default:
@@ -116,5 +116,42 @@ func mapUnameArch(s string) (string, error) {
 		return "arm64", nil
 	default:
 		return "", fmt.Errorf("неподдерживаемая архитектура удалённого хоста: %q", s)
+	}
+}
+
+// validatePrivateKey checks a pasted secret parses as an SSH private key
+// before it is ever stored, so a malformed key is caught right in the
+// "добавить хост"/"изменить" form instead of only surfacing much later, as
+// StartInstall's bare "ssh: no key found" — a message that gives no hint
+// about which of several unrelated causes actually produced it.
+func validatePrivateKey(secret string) error {
+	if _, err := ssh.ParsePrivateKey([]byte(secret)); err != nil {
+		return diagnoseKeyError(secret, err)
+	}
+	return nil
+}
+
+// diagnoseKeyError turns ssh.ParsePrivateKey's error into something a person
+// can act on, covering the mistakes that are actually common here: a PuTTY
+// .ppk file pasted where OpenSSH PEM was expected, a passphrase-protected
+// key (auth.PublicKeys alone can never supply one), or a public key/garbled
+// paste where a private key belongs.
+func diagnoseKeyError(secret string, err error) error {
+	trimmed := strings.TrimSpace(secret)
+	switch {
+	case strings.Contains(trimmed, "PuTTY-User-Key-File"):
+		return fmt.Errorf(
+			"это ключ в формате PuTTY (.ppk), а не OpenSSH PEM — экспортируйте его через " +
+				"puttygen: Conversions → Export OpenSSH key, и вставьте результат")
+	case strings.Contains(err.Error(), "passphrase protected"):
+		return fmt.Errorf(
+			"ключ защищён паролем — сейчас это не поддерживается; снимите пароль " +
+				`(ssh-keygen -p -N "" -f <файл>) и вставьте ключ снова`)
+	case !strings.Contains(trimmed, "-----BEGIN"):
+		return fmt.Errorf(
+			`не похоже на приватный ключ в формате PEM (нет строки "-----BEGIN ... PRIVATE KEY-----") ` +
+				"— проверьте, не вставлен ли публичный ключ (.pub) или обрезанный текст")
+	default:
+		return fmt.Errorf("не удалось разобрать приватный ключ: %w", err)
 	}
 }

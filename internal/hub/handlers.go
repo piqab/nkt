@@ -167,6 +167,38 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
+// updateHostRequest mirrors addHostRequest; Secret is optional here — an
+// empty string leaves the stored SSH credential untouched (see
+// Manager.UpdateHost).
+type updateHostRequest struct {
+	Name     string `json:"name"`
+	Addr     string `json:"addr"`
+	SSHPort  int    `json:"ssh_port"`
+	SSHUser  string `json:"ssh_user"`
+	AuthKind string `json:"auth_kind"`
+	Secret   string `json:"secret"`
+}
+
+func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var req updateHostRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	err = s.hub.UpdateHost(r.Context(), id, strings.TrimSpace(req.Name), strings.TrimSpace(req.Addr),
+		req.SSHPort, strings.TrimSpace(req.SSHUser), req.AuthKind, req.Secret)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {

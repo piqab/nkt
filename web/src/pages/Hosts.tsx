@@ -41,6 +41,7 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
   const [installHostId, setInstallHostId] = useState<number | null>(null)
   const [job, setJob] = useState<string | null>(null)
   const [jobStatus, setJobStatus] = useState<RenewJobStatus | null>(null)
+  const [editingHost, setEditingHost] = useState<HubHost | null>(null)
 
   useEffect(() => {
     if (!job) return
@@ -172,6 +173,13 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
                         {h.status === 'installing' && <Spinner />}
                         {h.status === 'new' ? 'установить' : 'переустановить'}
                       </button>
+                      <button
+                        className="ghost"
+                        disabled={h.status === 'installing'}
+                        onClick={() => setEditingHost(h)}
+                      >
+                        изменить
+                      </button>
                       <button className="danger ghost" onClick={() => remove(h)}>
                         удалить
                       </button>
@@ -184,7 +192,19 @@ export default function Hosts({ onSelect }: { onSelect: (host: { id: number; nam
         )}
       </Card>
 
-      <AddHostForm onAdded={reload} />
+      <HostForm onDone={reload} />
+
+      {editingHost && (
+        <Modal title={`Изменить хост «${editingHost.name}»`} onClose={() => setEditingHost(null)}>
+          <HostForm
+            initial={editingHost}
+            onDone={() => {
+              setEditingHost(null)
+              reload()
+            }}
+          />
+        </Modal>
+      )}
 
       {job && (
         <Modal title={`Установка на ${installingHost?.name ?? 'хост'}`} onClose={closeJobModal}>
@@ -226,12 +246,18 @@ function InstallLog({ events }: { events: RenewEvent[] }) {
   )
 }
 
-function AddHostForm({ onAdded }: { onAdded: () => void }) {
-  const [name, setName] = useState('')
-  const [addr, setAddr] = useState('')
-  const [sshPort, setSshPort] = useState(22)
-  const [sshUser, setSshUser] = useState('root')
-  const [authKind, setAuthKind] = useState<'password' | 'key'>('key')
+/**
+ * Add-host form, or (with `initial` set) an edit form for an existing one.
+ * Editing never requires re-entering the SSH secret — an empty secret field
+ * leaves whatever is already stored untouched (see Manager.UpdateHost).
+ */
+function HostForm({ initial, onDone }: { initial?: HubHost; onDone: () => void }) {
+  const editing = initial !== undefined
+  const [name, setName] = useState(initial?.name ?? '')
+  const [addr, setAddr] = useState(initial?.addr ?? '')
+  const [sshPort, setSshPort] = useState(initial?.ssh_port ?? 22)
+  const [sshUser, setSshUser] = useState(initial?.ssh_user ?? 'root')
+  const [authKind, setAuthKind] = useState<'password' | 'key'>(initial?.ssh_auth_kind ?? 'key')
   const [secret, setSecret] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -241,14 +267,16 @@ function AddHostForm({ onAdded }: { onAdded: () => void }) {
     setBusy(true)
     setError(null)
     try {
-      await api('/hub/hosts', {
-        method: 'POST',
-        body: { name, addr, ssh_port: sshPort, ssh_user: sshUser, auth_kind: authKind, secret },
-      })
-      setName('')
-      setAddr('')
+      const body = { name, addr, ssh_port: sshPort, ssh_user: sshUser, auth_kind: authKind, secret }
+      if (editing) {
+        await api(`/hub/hosts/${initial.id}`, { method: 'PATCH', body })
+      } else {
+        await api('/hub/hosts', { method: 'POST', body })
+        setName('')
+        setAddr('')
+      }
       setSecret('')
-      onAdded()
+      onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -256,73 +284,91 @@ function AddHostForm({ onAdded }: { onAdded: () => void }) {
     }
   }
 
+  const secretLabel = editing
+    ? authKind === 'key'
+      ? 'Новый приватный ключ (PEM) — оставьте пустым, чтобы не менять'
+      : 'Новый пароль — оставьте пустым, чтобы не менять'
+    : authKind === 'key'
+      ? 'Приватный ключ (PEM)'
+      : 'Пароль'
+
+  const form = (
+    <form className="col" onSubmit={submit}>
+      {error && <Banner kind="error">{error}</Banner>}
+      <div className="filters">
+        <label style={{ flex: 1, minWidth: '10rem' }}>
+          Имя
+          <input value={name} onChange={(e) => setName(e.target.value)} required />
+        </label>
+        <label style={{ flex: 1, minWidth: '10rem' }}>
+          IP-адрес или имя хоста
+          <input value={addr} onChange={(e) => setAddr(e.target.value)} required />
+        </label>
+        <label style={{ minWidth: '6rem' }}>
+          SSH-порт
+          <input
+            type="number"
+            min={1}
+            max={65535}
+            value={sshPort}
+            onChange={(e) => setSshPort(Number(e.target.value))}
+            required
+          />
+        </label>
+        <label style={{ minWidth: '8rem' }}>
+          SSH-пользователь
+          <input value={sshUser} onChange={(e) => setSshUser(e.target.value)} required />
+        </label>
+        <label style={{ minWidth: '10rem' }}>
+          Способ входа
+          <select value={authKind} onChange={(e) => setAuthKind(e.target.value as 'password' | 'key')}>
+            <option value="key">приватный ключ</option>
+            <option value="password">пароль</option>
+          </select>
+        </label>
+      </div>
+      <label>
+        {secretLabel}
+        {authKind === 'key' ? (
+          <textarea
+            className="mono"
+            rows={6}
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
+            spellCheck={false}
+            autoCapitalize="off"
+            autoCorrect="off"
+            autoComplete="off"
+            required={!editing}
+          />
+        ) : (
+          <input
+            type="password"
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            autoComplete="new-password"
+            required={!editing}
+          />
+        )}
+      </label>
+      <div>
+        <button className="primary" type="submit" disabled={busy}>
+          {busy && <Spinner />}
+          {busy ? 'Сохраняю…' : editing ? 'Сохранить' : 'Добавить хост'}
+        </button>
+      </div>
+    </form>
+  )
+
+  if (editing) return form
+
   return (
     <Card
       title="Добавить хост"
       subtitle="Хаб подключится по SSH, определит архитектуру, соберёт или возьмёт из кэша бинарник nkt и установит его как systemd-сервис"
     >
-      <form className="col" onSubmit={submit}>
-        {error && <Banner kind="error">{error}</Banner>}
-        <div className="filters">
-          <label style={{ flex: 1, minWidth: '10rem' }}>
-            Имя
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
-          </label>
-          <label style={{ flex: 1, minWidth: '10rem' }}>
-            IP-адрес или имя хоста
-            <input value={addr} onChange={(e) => setAddr(e.target.value)} required />
-          </label>
-          <label style={{ minWidth: '6rem' }}>
-            SSH-порт
-            <input
-              type="number"
-              min={1}
-              max={65535}
-              value={sshPort}
-              onChange={(e) => setSshPort(Number(e.target.value))}
-              required
-            />
-          </label>
-          <label style={{ minWidth: '8rem' }}>
-            SSH-пользователь
-            <input value={sshUser} onChange={(e) => setSshUser(e.target.value)} required />
-          </label>
-          <label style={{ minWidth: '10rem' }}>
-            Способ входа
-            <select value={authKind} onChange={(e) => setAuthKind(e.target.value as 'password' | 'key')}>
-              <option value="key">приватный ключ</option>
-              <option value="password">пароль</option>
-            </select>
-          </label>
-        </div>
-        <label>
-          {authKind === 'key' ? 'Приватный ключ (PEM)' : 'Пароль'}
-          {authKind === 'key' ? (
-            <textarea
-              className="mono"
-              rows={6}
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
-              required
-            />
-          ) : (
-            <input
-              type="password"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              autoComplete="new-password"
-              required
-            />
-          )}
-        </label>
-        <div>
-          <button className="primary" type="submit" disabled={busy}>
-            {busy && <Spinner />}
-            {busy ? 'Добавляю…' : 'Добавить хост'}
-          </button>
-        </div>
-      </form>
+      {form}
     </Card>
   )
 }
