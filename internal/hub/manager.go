@@ -338,10 +338,10 @@ func (m *Manager) install(ctx context.Context, hostID int64, report func(string)
 	}
 
 	envContent := renderEnv(adminUser, adminPassword)
-	if err := stageFiles(client, binPath, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report); err != nil {
+	if err := stageFiles(client, host.SSHUser, binPath, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report); err != nil {
 		return fail(err)
 	}
-	if err := activateService(client, report); err != nil {
+	if err := activateService(client, host.SSHUser, report); err != nil {
 		return fail(err)
 	}
 
