@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { Button, Checkbox } from 'antd'
 import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
 import { Card, ErrorNote, Loading, SeverityBadge } from '../components/ui'
@@ -150,9 +151,9 @@ export default function TopologyPage() {
             <>
               <div className="topology-focus-head">
                 <strong>{selectedNode.label}</strong>
-                <button className="ghost" onClick={() => setSelected(null)} title="закрыть" style={{ padding: '0 0.3rem' }}>
+                <Button type="text" size="small" onClick={() => setSelected(null)} title="закрыть" style={{ padding: '0 0.3rem' }}>
                   ×
-                </button>
+                </Button>
               </div>
               <div className="small muted">
                 {selectedNode.kind}
@@ -202,12 +203,7 @@ export default function TopologyPage() {
               </span>
             </div>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-              <input
-                type="checkbox"
-                checked={hideHealthy}
-                onChange={(e) => setHideHealthy(e.target.checked)}
-                style={{ width: 'auto' }}
-              />
+              <Checkbox checked={hideHealthy} onChange={(e) => setHideHealthy(e.target.checked)} />
               только проблемы
             </label>
             <span className="small muted">
@@ -218,14 +214,14 @@ export default function TopologyPage() {
       >
         <div className="map-wrap">
           <div className="map-controls">
-            <button className="ghost" onClick={() => setZoom((z) => Math.min(z * 1.25, 3))} title="Приблизить">
+            <Button size="small" onClick={() => setZoom((z) => Math.min(z * 1.25, 3))} title="Приблизить">
               +
-            </button>
-            <button className="ghost" onClick={() => setZoom((z) => Math.max(z / 1.25, 0.5))} title="Отдалить">
+            </Button>
+            <Button size="small" onClick={() => setZoom((z) => Math.max(z / 1.25, 0.5))} title="Отдалить">
               −
-            </button>
-            <button
-              className="ghost"
+            </Button>
+            <Button
+              size="small"
               onClick={() => {
                 setZoom(1)
                 setPan({ x: 0, y: 0 })
@@ -233,7 +229,7 @@ export default function TopologyPage() {
               title="Сбросить вид"
             >
               ⤢
-            </button>
+            </Button>
           </div>
 
           <svg
