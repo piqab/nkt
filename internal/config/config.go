@@ -112,6 +112,13 @@ type Config struct {
 	// never the interactive shell's. Set this to an absolute path in that
 	// case instead of relying on PATH.
 	HubGoBin string
+	// HubFindingsPollInterval is how often the hub polls every online
+	// managed host's own /api/overview in the background to cache its
+	// findings counts and reachability (see Manager.pollOverviews) — this
+	// runs for the hub's whole lifetime regardless of whether any browser
+	// tab is open, so it deliberately defaults slower than the frontend's
+	// own 30s Hosts.tsx poll.
+	HubFindingsPollInterval time.Duration
 }
 
 // defaultMode picks the mode for a bare invocation. Linux is the platform this
@@ -188,9 +195,10 @@ func Load() (*Config, error) {
 		CORSOrigins: envList("NKT_CORS_ORIGINS", "http://localhost:5173"),
 		DevProxyUI:  envBool("NKT_DEV_PROXY_UI", false),
 
-		HubMasterKey:  envStr("NKT_HUB_MASTER_KEY", ""),
-		HubSourceRoot: envStr("NKT_HUB_SOURCE_ROOT", wd),
-		HubGoBin:      envStr("NKT_HUB_GO_BIN", "go"),
+		HubMasterKey:            envStr("NKT_HUB_MASTER_KEY", ""),
+		HubSourceRoot:           envStr("NKT_HUB_SOURCE_ROOT", wd),
+		HubGoBin:                envStr("NKT_HUB_GO_BIN", "go"),
+		HubFindingsPollInterval: envDur("NKT_HUB_FINDINGS_POLL_INTERVAL", 60*time.Second),
 	}
 
 	switch c.Mode {
