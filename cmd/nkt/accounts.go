@@ -19,7 +19,7 @@ import (
 const minPasswordLength = 10
 
 // listUsers prints the accounts that can sign in to the web dashboard.
-func (r *runtime) listUsers(ctx context.Context) error {
+func (r *accountsRuntime) listUsers(ctx context.Context) error {
 	users, err := r.db.ListUsers(ctx)
 	if err != nil {
 		return err
@@ -48,7 +48,7 @@ func (r *runtime) listUsers(ctx context.Context) error {
 // when the printed password was lost. Creating the account is offered only when
 // a role is given explicitly, so a typo in the login does not silently make a
 // second administrator.
-func (r *runtime) setPassword(ctx context.Context, username, role string, generate bool) error {
+func (r *accountsRuntime) setPassword(ctx context.Context, username, role string, generate bool) error {
 	if username == "" {
 		username = r.cfg.BootstrapAdminUser
 	}

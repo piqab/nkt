@@ -1,0 +1,61 @@
+[Unit]
+Description=NetKnownsThat hub — управляющий центр для нескольких VPS по SSH
+Documentation=https://github.com/althq/netknownsthat
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/nkt hub
+EnvironmentFile=/etc/netknownsthat/hub.env
+Restart=on-failure
+RestartSec=5s
+
+# В отличие от обычного nkt, хаб не трогает состояние ЭТОЙ машины — не читает
+# /etc/nginx, не вызывает systemctl/iptables, не открывает docker.sock. Он
+# только хранит свои данные и по SSH управляет ДРУГИМИ хостами, поэтому ему
+# не нужен root: systemd сам заводит непривилегированного пользователя на
+# время работы юнита (DynamicUser) — вместо ручного useradd.
+DynamicUser=yes
+StateDirectory=netknownsthat-hub
+StateDirectoryMode=0750
+WorkingDirectory=/var/lib/netknownsthat-hub
+
+# StartInstall кросс-компилирует nkt для архитектуры каждого нового хоста
+# (internal/hub/provision.go) — это `go build` от имени того же
+# непривилегированного пользователя. Кэш и модули Go держим внутри
+# StateDirectory, а не в домашнем каталоге динамического пользователя,
+# которого фактически нет.
+Environment=HOME=/var/lib/netknownsthat-hub
+Environment=GOCACHE=/var/lib/netknownsthat-hub/go-cache
+Environment=GOMODCACHE=/var/lib/netknownsthat-hub/go-mod
+
+# Исходники для кросс-компиляции (NKT_HUB_SOURCE_ROOT в hub.env) читаются,
+# но не пишутся — держите чекаут репозитория вне StateDirectory, например
+# в /opt/netknownsthat, и обновляйте его отдельно от систем sd самого хаба.
+ProtectSystem=strict
+ReadWritePaths=/var/lib/netknownsthat-hub
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Исходящий SSH к управляемым хостам и (при первой сборке под новую
+# архитектуру) загрузка Go-модулей — обычные TCP-соединения наружу.
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+LimitNOFILE=8192
+
+[Install]
+WantedBy=multi-user.target
