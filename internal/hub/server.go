@@ -88,14 +88,22 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 				r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)
 				r.Post("/hub/hosts/{id}/sudo/remove", s.handleRemoveSudoAccess)
-			})
 
-			// Every other host-scoped call — reads and mutations alike —
-			// crosses the SSH tunnel to that host's own nkt API, which
-			// enforces its own RequireAuth/RequireAdmin exactly as it would
-			// for a direct request; the hub does not re-implement that
-			// check here.
-			r.HandleFunc("/hosts/{id}/*", s.proxyHost)
+				// Every other host-scoped call — reads and mutations alike —
+				// crosses the SSH tunnel to that host's own nkt API,
+				// authenticated there as *that host's* saved bootstrap-admin
+				// account (see Manager.cookieFor), never as whoever is
+				// actually sitting in the browser. A host's own
+				// RequireAuth/RequireAdmin therefore always sees "admin",
+				// regardless of the hub account's real role — so gating this
+				// on RequireAdmin here, rather than trusting the host to
+				// re-derive it, is the only place a hub "viewer" account's
+				// restriction can actually be enforced. Without this, a
+				// viewer — who cannot add/install/remove a host — could
+				// still open any already-connected one and get full admin
+				// control over it.
+				r.HandleFunc("/hosts/{id}/*", s.proxyHost)
+			})
 		})
 
 		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
