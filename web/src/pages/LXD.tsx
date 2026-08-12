@@ -1,7 +1,8 @@
-import { FormEvent, useState } from 'react'
+import { useState } from 'react'
+import { Button, Form, Input, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { LXDInstance, Me } from '../types'
-import { Banner, Card, ErrorNote, Loading, Spinner, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
 
 export default function LXD({ me }: { me: Me }) {
   const instances = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
@@ -41,6 +42,39 @@ export default function LXD({ me }: { me: Me }) {
     }
   }
 
+  const columns: TableColumnsType<LXDInstance> = [
+    { title: 'Имя', key: 'name', render: (_, i) => <strong>{i.name}</strong> },
+    { title: 'Тип', key: 'type', render: (_, i) => <span className="small">{i.type === 'virtual-machine' ? 'VM' : 'контейнер'}</span> },
+    { title: 'Состояние', key: 'status', render: (_, i) => <StateBadge state={i.status} /> },
+    { title: 'Архитектура', key: 'architecture', render: (_, i) => <span className="small mono">{i.architecture || '—'}</span> },
+    { title: 'IPv4', key: 'ipv4', render: (_, i) => <span className="small mono">{(i.ipv4 ?? []).join(', ') || '—'}</span> },
+    {
+      title: 'Действия',
+      key: 'actions',
+      render: (_, i) => (
+        <div className="row">
+          {['start', 'restart', 'stop', 'pause'].map((a) => (
+            <Button
+              key={a}
+              type="link"
+              size="small"
+              disabled={!canControl}
+              loading={busy === `${i.name}:${a}`}
+              onClick={() => act(i.name, a)}
+            >
+              {a}
+            </Button>
+          ))}
+          {canControl && (
+            <Button danger type="link" size="small" loading={busy === `${i.name}:delete`} onClick={() => del(i.name)}>
+              удалить
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ]
+
   return (
     <>
       <div className="page-head">
@@ -60,9 +94,9 @@ export default function LXD({ me }: { me: Me }) {
         title="Инстансы LXD"
         actions={
           canControl && (
-            <button className="ghost" onClick={() => setCreating(true)}>
+            <Button type="link" onClick={() => setCreating(true)}>
               + новый инстанс
-            </button>
+            </Button>
           )
         }
       >
@@ -72,56 +106,13 @@ export default function LXD({ me }: { me: Me }) {
           <p className="small muted">LXD не обнаружен или инстансов нет.</p>
         ) : (
           <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Имя</th>
-                  <th>Тип</th>
-                  <th>Состояние</th>
-                  <th>Архитектура</th>
-                  <th>IPv4</th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(instances.data?.instances ?? []).map((i) => (
-                  <tr key={i.name}>
-                    <td>
-                      <strong>{i.name}</strong>
-                    </td>
-                    <td className="small">{i.type === 'virtual-machine' ? 'VM' : 'контейнер'}</td>
-                    <td>
-                      <StateBadge state={i.status} />
-                    </td>
-                    <td className="small mono">{i.architecture || '—'}</td>
-                    <td className="small mono">{(i.ipv4 ?? []).join(', ') || '—'}</td>
-                    <td className="nowrap">
-                      {['start', 'restart', 'stop', 'pause'].map((a) => (
-                        <button
-                          key={a}
-                          className="ghost"
-                          disabled={!canControl || busy === `${i.name}:${a}`}
-                          onClick={() => act(i.name, a)}
-                        >
-                          {busy === `${i.name}:${a}` && <Spinner />}
-                          {a}
-                        </button>
-                      ))}
-                      {canControl && (
-                        <button
-                          className="ghost"
-                          disabled={busy === `${i.name}:delete`}
-                          onClick={() => del(i.name)}
-                        >
-                          {busy === `${i.name}:delete` && <Spinner />}
-                          удалить
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table<LXDInstance>
+              dataSource={instances.data?.instances ?? []}
+              columns={columns}
+              rowKey="name"
+              pagination={false}
+              size="small"
+            />
           </div>
         )}
       </Card>
@@ -139,18 +130,17 @@ export default function LXD({ me }: { me: Me }) {
   )
 }
 
+type CreateInstanceValues = { image: string; name: string }
+
 function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [image, setImage] = useState('')
-  const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  async function submit(values: CreateInstanceValues) {
     setBusy(true)
     setError(null)
     try {
-      await api('/lxd/instances', { method: 'POST', body: { image, name } })
+      await api('/lxd/instances', { method: 'POST', body: values })
       onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -164,30 +154,27 @@ function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCre
       title="Новый инстанс LXD"
       subtitle="lxc launch — образ скачивается автоматически, инстанс сразу запускается."
       actions={
-        <button className="ghost" onClick={onClose}>
+        <Button type="link" onClick={onClose}>
           закрыть
-        </button>
+        </Button>
       }
     >
-      <form className="col" onSubmit={submit}>
+      <Form<CreateInstanceValues> layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <label style={{ flex: 1, minWidth: '16rem' }}>
-            Образ
-            <input value={image} onChange={(e) => setImage(e.target.value)} placeholder="ubuntu:24.04" required />
-          </label>
-          <label style={{ flex: 1, minWidth: '12rem' }}>
-            Имя инстанса
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-instance" required />
-          </label>
+          <Form.Item name="image" label="Образ" rules={[{ required: true }]} style={{ flex: 1, minWidth: '16rem' }}>
+            <Input placeholder="ubuntu:24.04" />
+          </Form.Item>
+          <Form.Item name="name" label="Имя инстанса" rules={[{ required: true }]} style={{ flex: 1, minWidth: '12rem' }}>
+            <Input placeholder="my-instance" />
+          </Form.Item>
         </div>
-        <div>
-          <button className="primary" type="submit" disabled={busy}>
-            {busy && <Spinner />}
+        <Form.Item style={{ marginBottom: 0 }}>
+          <Button type="primary" htmlType="submit" loading={busy}>
             {busy ? 'Запускаю…' : 'Создать и запустить'}
-          </button>
-        </div>
-      </form>
+          </Button>
+        </Form.Item>
+      </Form>
     </Card>
   )
 }

@@ -1,7 +1,8 @@
-import { FormEvent, useState } from 'react'
+import { useState } from 'react'
+import { Button, Form, Input, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Me, PodmanContainer } from '../types'
-import { Banner, Card, ErrorNote, Loading, Spinner, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
 
 export default function Podman({ me }: { me: Me }) {
   const containers = useApi<{ containers: PodmanContainer[] }>('/podman/containers', 30_000)
@@ -41,6 +42,72 @@ export default function Podman({ me }: { me: Me }) {
     }
   }
 
+  const columns: TableColumnsType<PodmanContainer> = [
+    { title: 'Контейнер', key: 'name', render: (_, c) => <strong>{c.name}</strong> },
+    { title: 'Под', key: 'pod', render: (_, c) => <span className="small">{c.pod || '—'}</span> },
+    {
+      title: 'Образ',
+      key: 'image',
+      render: (_, c) => (
+        <span className="small mono" style={{ wordBreak: 'break-all' }}>
+          {c.image}
+        </span>
+      ),
+    },
+    {
+      title: 'Состояние',
+      key: 'state',
+      render: (_, c) => (
+        <>
+          <StateBadge state={c.state} />
+          <div className="small muted">{c.status}</div>
+        </>
+      ),
+    },
+    {
+      title: 'Порты',
+      key: 'ports',
+      render: (_, c) => (
+        <span className="small mono">
+          {(c.ports ?? []).length === 0
+            ? '—'
+            : (c.ports ?? []).map((p, i) => (
+                <div key={i}>
+                  {p.host_port
+                    ? `${p.host_ip || '0.0.0.0'}:${p.host_port} → ${p.container_port}/${p.protocol}`
+                    : `${p.container_port}/${p.protocol} (не опубликован)`}
+                </div>
+              ))}
+        </span>
+      ),
+    },
+    {
+      title: 'Действия',
+      key: 'actions',
+      render: (_, c) => (
+        <div className="row">
+          {['start', 'restart', 'stop'].map((a) => (
+            <Button
+              key={a}
+              type="link"
+              size="small"
+              disabled={!canControl}
+              loading={busy === `${c.name}:${a}`}
+              onClick={() => act(c.name, a)}
+            >
+              {a}
+            </Button>
+          ))}
+          {canControl && (
+            <Button danger type="link" size="small" loading={busy === `${c.name}:delete`} onClick={() => del(c.name)}>
+              удалить
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ]
+
   return (
     <>
       <div className="page-head">
@@ -60,9 +127,9 @@ export default function Podman({ me }: { me: Me }) {
         title="Контейнеры Podman"
         actions={
           canControl && (
-            <button className="ghost" onClick={() => setCreating(true)}>
+            <Button type="link" onClick={() => setCreating(true)}>
               + новый контейнер
-            </button>
+            </Button>
           )
         }
       >
@@ -72,69 +139,13 @@ export default function Podman({ me }: { me: Me }) {
           <p className="small muted">Podman не обнаружен или контейнеров нет.</p>
         ) : (
           <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Контейнер</th>
-                  <th>Под</th>
-                  <th>Образ</th>
-                  <th>Состояние</th>
-                  <th>Порты</th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(containers.data?.containers ?? []).map((c) => (
-                  <tr key={c.id}>
-                    <td>
-                      <strong>{c.name}</strong>
-                    </td>
-                    <td className="small">{c.pod || '—'}</td>
-                    <td className="small mono" style={{ wordBreak: 'break-all' }}>
-                      {c.image}
-                    </td>
-                    <td>
-                      <StateBadge state={c.state} />
-                      <div className="small muted">{c.status}</div>
-                    </td>
-                    <td className="small mono">
-                      {(c.ports ?? []).length === 0
-                        ? '—'
-                        : (c.ports ?? []).map((p, i) => (
-                            <div key={i}>
-                              {p.host_port
-                                ? `${p.host_ip || '0.0.0.0'}:${p.host_port} → ${p.container_port}/${p.protocol}`
-                                : `${p.container_port}/${p.protocol} (не опубликован)`}
-                            </div>
-                          ))}
-                    </td>
-                    <td className="nowrap">
-                      {['start', 'restart', 'stop'].map((a) => (
-                        <button
-                          key={a}
-                          className="ghost"
-                          disabled={!canControl || busy === `${c.name}:${a}`}
-                          onClick={() => act(c.name, a)}
-                        >
-                          {busy === `${c.name}:${a}` && <Spinner />}
-                          {a}
-                        </button>
-                      ))}
-                      {canControl && (
-                        <button
-                          className="ghost"
-                          disabled={busy === `${c.name}:delete`}
-                          onClick={() => del(c.name)}
-                        >
-                          {busy === `${c.name}:delete` && <Spinner />}
-                          удалить
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table<PodmanContainer>
+              dataSource={containers.data?.containers ?? []}
+              columns={columns}
+              rowKey="id"
+              pagination={false}
+              size="small"
+            />
           </div>
         )}
       </Card>
@@ -152,18 +163,17 @@ export default function Podman({ me }: { me: Me }) {
   )
 }
 
+type CreateContainerValues = { image: string; name: string }
+
 function CreateContainerForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [image, setImage] = useState('')
-  const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  async function submit(values: CreateContainerValues) {
     setBusy(true)
     setError(null)
     try {
-      await api('/podman/containers', { method: 'POST', body: { image, name } })
+      await api('/podman/containers', { method: 'POST', body: values })
       onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -177,30 +187,27 @@ function CreateContainerForm({ onClose, onCreated }: { onClose: () => void; onCr
       title="Новый контейнер Podman"
       subtitle="Образ будет скачан (если нужно), контейнер создан и сразу запущен."
       actions={
-        <button className="ghost" onClick={onClose}>
+        <Button type="link" onClick={onClose}>
           закрыть
-        </button>
+        </Button>
       }
     >
-      <form className="col" onSubmit={submit}>
+      <Form<CreateContainerValues> layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <label style={{ flex: 1, minWidth: '16rem' }}>
-            Образ
-            <input value={image} onChange={(e) => setImage(e.target.value)} placeholder="docker.io/library/nginx:1.27" required />
-          </label>
-          <label style={{ flex: 1, minWidth: '12rem' }}>
-            Имя контейнера
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="my-container" required />
-          </label>
+          <Form.Item name="image" label="Образ" rules={[{ required: true }]} style={{ flex: 1, minWidth: '16rem' }}>
+            <Input placeholder="docker.io/library/nginx:1.27" />
+          </Form.Item>
+          <Form.Item name="name" label="Имя контейнера" rules={[{ required: true }]} style={{ flex: 1, minWidth: '12rem' }}>
+            <Input placeholder="my-container" />
+          </Form.Item>
         </div>
-        <div>
-          <button className="primary" type="submit" disabled={busy}>
-            {busy && <Spinner />}
+        <Form.Item style={{ marginBottom: 0 }}>
+          <Button type="primary" htmlType="submit" loading={busy}>
             {busy ? 'Создаю…' : 'Создать и запустить'}
-          </button>
-        </div>
-      </form>
+          </Button>
+        </Form.Item>
+      </Form>
     </Card>
   )
 }

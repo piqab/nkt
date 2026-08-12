@@ -1,7 +1,8 @@
-import { FormEvent, useState } from 'react'
+import { useState } from 'react'
+import { Button, Checkbox, Form, Input, InputNumber, Segmented, Table, type TableColumnsType } from 'antd'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
-import { Banner, Card, CodeEditor, ErrorNote, Loading, Spinner, StateBadge, formatBytesShort } from '../components/ui'
+import { Banner, Card, CodeEditor, ErrorNote, Loading, StateBadge, formatBytesShort } from '../components/ui'
 
 const LIFECYCLE_ACTIONS = ['start', 'shutdown', 'reboot', 'suspend', 'resume']
 
@@ -39,6 +40,125 @@ function domainXMLFromWizard(
   </devices>
 </domain>
 `
+}
+
+function vmColumns(
+  canControl: boolean,
+  busy: string | null,
+  act: (name: string, action: string) => void,
+  toggleAutostart: (name: string, on: boolean) => void,
+  del: (name: string, removeStorage: boolean) => void,
+): TableColumnsType<VirtualMachine> {
+  return [
+    {
+      title: 'Имя',
+      key: 'name',
+      render: (_, vm) => (
+        <>
+          <strong>{vm.name}</strong>
+          <div className="small muted">{vm.uuid || '—'}</div>
+        </>
+      ),
+    },
+    { title: 'Состояние', key: 'state', render: (_, vm) => <StateBadge state={vm.state} /> },
+    { title: 'vCPU', key: 'vcpus', align: 'right', render: (_, vm) => <span className="num small">{vm.vcpus || '—'}</span> },
+    {
+      title: 'Память',
+      key: 'memory_kb',
+      align: 'right',
+      render: (_, vm) => <span className="num small">{vm.memory_kb ? formatBytesShort(vm.memory_kb * 1024) : '—'}</span>,
+    },
+    {
+      title: 'Диски',
+      key: 'disks',
+      render: (_, vm) => (
+        <span className="small mono">
+          {(vm.disks ?? []).map((d, i) => (
+            <div key={i}>
+              {d.source || '—'}
+              {d.bus ? ` (${d.bus})` : ''}
+            </div>
+          ))}
+        </span>
+      ),
+    },
+    {
+      title: 'Сети',
+      key: 'networks',
+      render: (_, vm) => (
+        <span className="small">
+          {(vm.networks ?? []).map((n, i) => (
+            <div key={i}>{n.source || '—'}</div>
+          ))}
+        </span>
+      ),
+    },
+    {
+      title: 'Автозапуск',
+      key: 'autostart',
+      render: (_, vm) =>
+        vm.persistent ? (
+          <Button
+            type="link"
+            size="small"
+            disabled={!canControl}
+            loading={busy === `${vm.name}:autostart`}
+            onClick={() => toggleAutostart(vm.name, !vm.autostart)}
+          >
+            {vm.autostart ? 'включён' : 'выключен'}
+          </Button>
+        ) : (
+          <span
+            className="small muted"
+            title="Домен временный: не зарегистрирован через virsh define, поэтому у него нет ни сохранённого определения, ни автозапуска. Пропадёт из списка при остановке."
+          >
+            недоступен (временный домен)
+          </span>
+        ),
+    },
+    {
+      title: 'Действия',
+      key: 'actions',
+      render: (_, vm) => (
+        <div className="row">
+          {LIFECYCLE_ACTIONS.map((a) => (
+            <Button
+              key={a}
+              type="link"
+              size="small"
+              disabled={!canControl}
+              loading={busy === `${vm.name}:${a}`}
+              onClick={() => act(vm.name, a)}
+            >
+              {a}
+            </Button>
+          ))}
+          {canControl && (
+            <Button
+              danger
+              type="link"
+              size="small"
+              loading={busy === `${vm.name}:destroy`}
+              onClick={() => act(vm.name, 'destroy')}
+              title="Немедленное принудительное отключение — как выдернуть шнур питания"
+            >
+              завершить принудительно
+            </Button>
+          )}
+          {canControl && vm.persistent && (
+            <>
+              <Button danger type="link" size="small" loading={busy === `${vm.name}:delete`} onClick={() => del(vm.name, false)}>
+                удалить
+              </Button>
+              <Button danger type="link" size="small" loading={busy === `${vm.name}:delete`} onClick={() => del(vm.name, true)}>
+                удалить с дисками
+              </Button>
+            </>
+          )}
+        </div>
+      ),
+    },
+  ]
 }
 
 export default function Virtualization({ me }: { me: Me }) {
@@ -116,9 +236,9 @@ export default function Virtualization({ me }: { me: Me }) {
         title="Домены libvirt"
         actions={
           canControl && (
-            <button className="ghost" onClick={() => setChooserOpen(true)}>
+            <Button type="link" onClick={() => setChooserOpen(true)}>
               + новая VM
-            </button>
+            </Button>
           )
         }
       >
@@ -128,104 +248,13 @@ export default function Virtualization({ me }: { me: Me }) {
           <p className="small muted">libvirt не обнаружен или доменов нет.</p>
         ) : (
           <div className="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Имя</th>
-                  <th>Состояние</th>
-                  <th className="num">vCPU</th>
-                  <th className="num">Память</th>
-                  <th>Диски</th>
-                  <th>Сети</th>
-                  <th>Автозапуск</th>
-                  <th>Действия</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(vms.data?.vms ?? []).map((vm) => (
-                  <tr key={vm.name}>
-                    <td>
-                      <strong>{vm.name}</strong>
-                      <div className="small muted">{vm.uuid || '—'}</div>
-                    </td>
-                    <td>
-                      <StateBadge state={vm.state} />
-                    </td>
-                    <td className="num small">{vm.vcpus || '—'}</td>
-                    <td className="num small">{vm.memory_kb ? formatBytesShort(vm.memory_kb * 1024) : '—'}</td>
-                    <td className="small mono">
-                      {(vm.disks ?? []).map((d, i) => (
-                        <div key={i}>{d.source || '—'}{d.bus ? ` (${d.bus})` : ''}</div>
-                      ))}
-                    </td>
-                    <td className="small">
-                      {(vm.networks ?? []).map((n, i) => <div key={i}>{n.source || '—'}</div>)}
-                    </td>
-                    <td>
-                      {vm.persistent ? (
-                        <button
-                          className="ghost"
-                          disabled={!canControl || busy === `${vm.name}:autostart`}
-                          onClick={() => toggleAutostart(vm.name, !vm.autostart)}
-                        >
-                          {busy === `${vm.name}:autostart` && <Spinner />}
-                          {vm.autostart ? 'включён' : 'выключен'}
-                        </button>
-                      ) : (
-                        <span
-                          className="small muted"
-                          title="Домен временный: не зарегистрирован через virsh define, поэтому у него нет ни сохранённого определения, ни автозапуска. Пропадёт из списка при остановке."
-                        >
-                          недоступен (временный домен)
-                        </span>
-                      )}
-                    </td>
-                    <td className="nowrap">
-                      {LIFECYCLE_ACTIONS.map((a) => (
-                        <button
-                          key={a}
-                          className="ghost"
-                          disabled={!canControl || busy === `${vm.name}:${a}`}
-                          onClick={() => act(vm.name, a)}
-                        >
-                          {busy === `${vm.name}:${a}` && <Spinner />}
-                          {a}
-                        </button>
-                      ))}
-                      {canControl && (
-                        <button
-                          className="ghost"
-                          disabled={busy === `${vm.name}:destroy`}
-                          onClick={() => act(vm.name, 'destroy')}
-                          title="Немедленное принудительное отключение — как выдернуть шнур питания"
-                        >
-                          {busy === `${vm.name}:destroy` && <Spinner />}
-                          завершить принудительно
-                        </button>
-                      )}
-                      {canControl && vm.persistent && (
-                        <>
-                          <button
-                            className="ghost"
-                            disabled={busy === `${vm.name}:delete`}
-                            onClick={() => del(vm.name, false)}
-                          >
-                            удалить
-                          </button>
-                          <button
-                            className="ghost"
-                            disabled={busy === `${vm.name}:delete`}
-                            onClick={() => del(vm.name, true)}
-                          >
-                            удалить с дисками
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <Table<VirtualMachine>
+              dataSource={vms.data?.vms ?? []}
+              rowKey="name"
+              pagination={false}
+              size="small"
+              columns={vmColumns(canControl, busy, act, toggleAutostart, del)}
+            />
           </div>
         )}
       </Card>
@@ -281,8 +310,7 @@ function VMCreateChooser({
 
   const diskPath = defaultDiskPath(name || 'new-vm')
 
-  async function submit(event: FormEvent) {
-    event.preventDefault()
+  async function submit() {
     if (!domainNameRe.test(name)) {
       setError('Имя может содержать только латинские буквы, цифры, точку, дефис и подчёркивание')
       return
@@ -310,73 +338,58 @@ function VMCreateChooser({
       title="Новая VM"
       subtitle="Оба способа заканчиваются одним и тем же — проверкой и правкой XML перед сохранением."
       actions={
-        <button className="ghost" onClick={onClose}>
+        <Button type="link" onClick={onClose}>
           закрыть
-        </button>
+        </Button>
       }
     >
-      <form className="col" onSubmit={submit}>
+      <Form layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
-        <div className="row" style={{ gap: '0.5rem' }}>
-          <button
-            type="button"
-            className={mode === 'wizard' ? 'primary' : 'ghost'}
-            onClick={() => setMode('wizard')}
-          >
-            Мастер
-          </button>
-          <button type="button" className={mode === 'raw' ? 'primary' : 'ghost'} onClick={() => setMode('raw')}>
-            Сырой XML
-          </button>
-        </div>
-        <label style={{ maxWidth: '20rem' }}>
-          Имя VM
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="new-vm" required autoFocus />
-        </label>
+        <Segmented
+          value={mode}
+          onChange={(v) => setMode(v as 'wizard' | 'raw')}
+          options={[
+            { value: 'wizard', label: 'Мастер' },
+            { value: 'raw', label: 'Сырой XML' },
+          ]}
+          style={{ marginBottom: '0.75rem' }}
+        />
+        <Form.Item label="Имя VM" style={{ maxWidth: '20rem' }}>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="new-vm" autoFocus />
+        </Form.Item>
 
         {mode === 'wizard' && (
           <>
             <div className="filters">
-              <label style={{ minWidth: '10rem' }}>
-                Память, МБ
-                <input
-                  type="number"
-                  min={256}
-                  step={256}
-                  value={memoryMB}
-                  onChange={(e) => setMemoryMB(Number(e.target.value))}
-                />
-              </label>
-              <label style={{ minWidth: '8rem' }}>
-                vCPU
-                <input type="number" min={1} max={64} value={vcpus} onChange={(e) => setVcpus(Number(e.target.value))} />
-              </label>
-              <label style={{ minWidth: '8rem' }}>
-                Диск, ГБ
-                <input type="number" min={1} max={65536} value={diskGB} onChange={(e) => setDiskGB(Number(e.target.value))} />
-              </label>
-              <label style={{ minWidth: '10rem' }}>
-                Сетевой мост
-                <input value={bridge} onChange={(e) => setBridge(e.target.value)} placeholder="br0" />
-              </label>
+              <Form.Item label="Память, МБ" style={{ minWidth: '10rem' }}>
+                <InputNumber min={256} step={256} value={memoryMB} onChange={(v) => setMemoryMB(v ?? 256)} style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item label="vCPU" style={{ minWidth: '8rem' }}>
+                <InputNumber min={1} max={64} value={vcpus} onChange={(v) => setVcpus(v ?? 1)} style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item label="Диск, ГБ" style={{ minWidth: '8rem' }}>
+                <InputNumber min={1} max={65536} value={diskGB} onChange={(v) => setDiskGB(v ?? 1)} style={{ width: '100%' }} />
+              </Form.Item>
+              <Form.Item label="Сетевой мост" style={{ minWidth: '10rem' }}>
+                <Input value={bridge} onChange={(e) => setBridge(e.target.value)} placeholder="br0" />
+              </Form.Item>
             </div>
             <p className="small muted" style={{ margin: 0 }}>
               Файл диска: <code className="mono">{diskPath}</code>
             </p>
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
-              <input type="checkbox" checked={createDiskFile} onChange={(e) => setCreateDiskFile(e.target.checked)} />
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem' }}>
+              <Checkbox checked={createDiskFile} onChange={(e) => setCreateDiskFile(e.target.checked)} />
               Создать файл диска (qemu-img create) — без этого XML будет ссылаться на несуществующий файл
             </label>
           </>
         )}
 
-        <div>
-          <button className="primary" type="submit" disabled={busy}>
-            {busy && <Spinner />}
+        <Form.Item style={{ marginTop: '0.75rem', marginBottom: 0 }}>
+          <Button type="primary" htmlType="submit" loading={busy}>
             {busy ? 'Готовлю…' : 'Далее — проверить XML'}
-          </button>
-        </div>
-      </form>
+          </Button>
+        </Form.Item>
+      </Form>
     </Card>
   )
 }
@@ -440,9 +453,9 @@ function VMEditor({
       title={isNew ? `Новая VM: ${name}` : `Редактирование VM: ${name}`}
       subtitle={path}
       actions={
-        <button className="ghost" onClick={onClose}>
+        <Button type="link" onClick={onClose}>
           закрыть
-        </button>
+        </Button>
       }
     >
       {existing.loading && !isNew ? (
@@ -456,17 +469,16 @@ function VMEditor({
           <CodeEditor value={content} onChange={(e) => setDraft(e.target.value)} rows={20} />
           <label>
             Заметка
-            <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="необязательно" />
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="необязательно" />
           </label>
           <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
-            <input type="checkbox" checked={apply} onChange={(e) => setApply(e.target.checked)} />
+            <Checkbox checked={apply} onChange={(e) => setApply(e.target.checked)} />
             Применить (virsh define) — без этого XML сохраняется, но домен не регистрируется
           </label>
           <div>
-            <button className="primary" onClick={save} disabled={busy}>
-              {busy && <Spinner />}
+            <Button type="primary" onClick={save} loading={busy}>
               {busy ? 'Сохраняю…' : 'Сохранить'}
-            </button>
+            </Button>
           </div>
         </div>
       )}
