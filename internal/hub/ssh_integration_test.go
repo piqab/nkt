@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -221,6 +222,51 @@ func TestInstallRemoteFileNeedsSudoForNonRoot(t *testing.T) {
 	err = installRemoteFile(client, "not-root", src, "/usr/local/bin/nkt-nkt-test-should-never-exist", 0o755)
 	if err == nil {
 		t.Fatal("expected installRemoteFile to fail without passwordless sudo")
+	}
+	if !strings.Contains(err.Error(), "sudo") {
+		t.Errorf("error does not explain the sudo/NOPASSWD problem: %v", err)
+	}
+}
+
+// TestRemoveSudoAccessFailsWithoutNopasswd exercises RemoveSudoAccess's real
+// SSH/sudo path — dialSSH, the `sudo -n rm -f` exec, diagnoseInstallError —
+// against the test sshd. It cannot verify a successful removal (that would
+// need a real, pre-existing sudoers rule, which requires root to set up in
+// the first place — not available in a sandboxed test environment), only
+// that a confirmed-but-since-broken NOPASSWD grant fails the same
+// diagnosable way installRemoteFile's own sudo path does, rather than
+// hanging or panicking.
+func TestRemoveSudoAccessFailsWithoutNopasswd(t *testing.T) {
+	if exec.Command("sudo", "-n", "true").Run() == nil {
+		t.Skip("this environment has passwordless sudo for the test user — nothing to observe failing")
+	}
+
+	addr, port, clientKeyPEM := startTestSSHD(t)
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	secretEnc, err := secretbox.Encrypt(m.key, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("encrypt ssh key: %v", err)
+	}
+	id, err := db.CreateHost(ctx, "h1", addr, port, me.Username, store.HostAuthKey, secretEnc)
+	if err != nil {
+		t.Fatalf("CreateHost: %v", err)
+	}
+	// Simulate a host the hub previously confirmed had NOPASSWD sudo — the
+	// only state RemoveSudoAccess is willing to act on at all.
+	if err := db.SetHostSudoStatus(ctx, id, store.SudoStatusNopasswd); err != nil {
+		t.Fatalf("SetHostSudoStatus: %v", err)
+	}
+
+	err = m.RemoveSudoAccess(ctx, id)
+	if err == nil {
+		t.Fatal("expected RemoveSudoAccess to fail without passwordless sudo")
 	}
 	if !strings.Contains(err.Error(), "sudo") {
 		t.Errorf("error does not explain the sudo/NOPASSWD problem: %v", err)

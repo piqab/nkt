@@ -140,6 +140,7 @@ CREATE TABLE IF NOT EXISTS hosts (
     admin_user         TEXT NOT NULL DEFAULT '',
     admin_password_enc BLOB,                   -- remote bootstrap admin password, secretbox-encrypted;
                                                 -- used to re-login when a proxied session expires
+    sudo_status        TEXT NOT NULL DEFAULT '' CHECK (sudo_status IN ('','root','nopasswd','password_required')),
     error_msg          TEXT NOT NULL DEFAULT '',
     created_at         TEXT NOT NULL,
     last_seen_at       TEXT

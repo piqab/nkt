@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,6 +26,88 @@ func newTestManager(t *testing.T) (*Manager, *store.DB) {
 		t.Fatalf("GenerateKey: %v", err)
 	}
 	return NewManager(&config.Config{}, db, key, "test"), db
+}
+
+func TestRecordSudoOutcome(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("root never needs sudo", func(t *testing.T) {
+		m, db := newTestManager(t)
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+		if err != nil {
+			t.Fatalf("AddHost: %v", err)
+		}
+		m.recordSudoOutcome(ctx, id, "root", errors.New("irrelevant"))
+		host, _ := db.HostByID(ctx, id)
+		if host.SudoStatus != store.SudoStatusRoot {
+			t.Errorf("SudoStatus = %q, want %q", host.SudoStatus, store.SudoStatusRoot)
+		}
+	})
+
+	t.Run("non-root success confirms nopasswd", func(t *testing.T) {
+		m, db := newTestManager(t)
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw")
+		if err != nil {
+			t.Fatalf("AddHost: %v", err)
+		}
+		m.recordSudoOutcome(ctx, id, "deploy", nil)
+		host, _ := db.HostByID(ctx, id)
+		if host.SudoStatus != store.SudoStatusNopasswd {
+			t.Errorf("SudoStatus = %q, want %q", host.SudoStatus, store.SudoStatusNopasswd)
+		}
+	})
+
+	t.Run("sudo error records password_required", func(t *testing.T) {
+		m, db := newTestManager(t)
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw")
+		if err != nil {
+			t.Fatalf("AddHost: %v", err)
+		}
+		m.recordSudoOutcome(ctx, id, "deploy", errors.New("установка x: deploy нужен sudo без пароля (NOPASSWD): boom"))
+		host, _ := db.HostByID(ctx, id)
+		if host.SudoStatus != store.SudoStatusPasswordRequired {
+			t.Errorf("SudoStatus = %q, want %q", host.SudoStatus, store.SudoStatusPasswordRequired)
+		}
+	})
+
+	t.Run("unrelated error leaves status unset", func(t *testing.T) {
+		m, db := newTestManager(t)
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw")
+		if err != nil {
+			t.Fatalf("AddHost: %v", err)
+		}
+		m.recordSudoOutcome(ctx, id, "deploy", errors.New("connection reset by peer"))
+		host, _ := db.HostByID(ctx, id)
+		if host.SudoStatus != store.SudoStatusUnknown {
+			t.Errorf("SudoStatus = %q, want unset (%q)", host.SudoStatus, store.SudoStatusUnknown)
+		}
+	})
+}
+
+func TestRemoveSudoAccessGuardsAgainstMisuse(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("refuses for root", func(t *testing.T) {
+		m, _ := newTestManager(t)
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+		if err != nil {
+			t.Fatalf("AddHost: %v", err)
+		}
+		if err := m.RemoveSudoAccess(ctx, id); err == nil {
+			t.Fatal("expected RemoveSudoAccess to refuse for a root-auth host")
+		}
+	})
+
+	t.Run("refuses when nopasswd was never confirmed", func(t *testing.T) {
+		m, _ := newTestManager(t)
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw")
+		if err != nil {
+			t.Fatalf("AddHost: %v", err)
+		}
+		if err := m.RemoveSudoAccess(ctx, id); err == nil {
+			t.Fatal("expected RemoveSudoAccess to refuse when sudo_status isn't 'nopasswd'")
+		}
+	})
 }
 
 // TestResolveAdminCredentialIsStableAcrossReinstalls reproduces the bug a

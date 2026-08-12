@@ -247,6 +247,23 @@ func (s *Server) handleHostPubKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"authorized_key": line})
 }
 
+// handleRemoveSudoAccess deletes the sudoers drop-in HUB.md tells an
+// operator to create for a non-root SSH user — a deliberate, admin-only
+// cleanup action, not something a viewer should ever be able to trigger on
+// someone else's managed host.
+func (s *Server) handleRemoveSudoAccess(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.hub.RemoveSudoAccess(r.Context(), id); err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {

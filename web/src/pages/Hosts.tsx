@@ -48,6 +48,33 @@ const STATUS_TONE: Record<HubHost['status'], string> = {
   error: 'critical',
 }
 
+const SUDO_LABEL: Record<NonNullable<HubHost['sudo_status']>, string> = {
+  '': 'неизвестно',
+  root: 'root',
+  nopasswd: 'без пароля',
+  password_required: 'нужен пароль',
+}
+
+const SUDO_TONE: Record<NonNullable<HubHost['sudo_status']>, string> = {
+  '': 'info',
+  root: 'info',
+  nopasswd: 'ok',
+  password_required: 'critical',
+}
+
+/** What the last install/update on this host actually observed about sudo
+ * — set as a side effect (Manager.recordSudoOutcome), never probed on its
+ * own, so this can be stale until the next install/update touches the host. */
+function SudoBadge({ status }: { status: HubHost['sudo_status'] }) {
+  const s = status ?? ''
+  return (
+    <span className={`badge sev-${SUDO_TONE[s]}`}>
+      <span className="badge-dot" />
+      {SUDO_LABEL[s]}
+    </span>
+  )
+}
+
 function HostStatusBadge({ status }: { status: HubHost['status'] }) {
   return (
     <span className={`badge sev-${STATUS_TONE[status]}`}>
@@ -138,6 +165,24 @@ export default function Hosts({
     }
   }
 
+  async function removeSudoAccess(host: HubHost) {
+    if (
+      !window.confirm(
+        `Убрать passwordless sudo у «${host.ssh_user}» на «${host.name}»?\n\n` +
+          'Хаб не сможет заливать обновления или менять что-либо на хосте, требующее ' +
+          'root, пока доступ не будет выдан заново (или SSH-пользователь не станет root).',
+      )
+    )
+      return
+    setNotice(null)
+    try {
+      await api(`/hub/hosts/${host.id}/sudo/remove`, { method: 'POST' })
+      reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
   async function remove(host: HubHost) {
     if (!window.confirm(`Удалить хост «${host.name}» из хаба? Сам nkt на нём не удаляется.`)) return
     try {
@@ -206,6 +251,7 @@ export default function Hosts({
                   <th>Адрес</th>
                   <th>Архитектура</th>
                   <th>Состояние</th>
+                  <th>Sudo</th>
                   <th>Версия nkt</th>
                   <th>Виден в сети</th>
                   <th>Действия</th>
@@ -235,6 +281,13 @@ export default function Hosts({
                         </div>
                       )}
                     </td>
+                    <td>
+                      {h.ssh_user === 'root' ? (
+                        <span className="small muted">—</span>
+                      ) : (
+                        <SudoBadge status={h.sudo_status} />
+                      )}
+                    </td>
                     <td className="small mono">
                       {h.nkt_version || '—'}
                       {outdated && (
@@ -246,7 +299,14 @@ export default function Hosts({
                     <td className="small nowrap">
                       {h.last_seen_at ? formatRelative(h.last_seen_at) : 'ни разу'}
                     </td>
-                    <td className="nowrap">
+                    {/* .row (flex-wrap) instead of .nowrap: this cell can hold up
+                        to eight buttons — forcing them onto one unbroken line
+                        pushed "удалить" etc. off-screen on a narrow window,
+                        with only the table's own horizontal scrollbar (easy to
+                        miss) to reach them. Wrapping keeps every button
+                        reachable without relying on that. */}
+                    <td style={{ minWidth: '18rem' }}>
+                      <div className="row">
                       {h.status === 'online' && (
                         <button className="ghost" onClick={() => onSelect({ id: h.id, name: h.name })}>
                           открыть
@@ -282,9 +342,15 @@ export default function Hosts({
                           публичный ключ
                         </button>
                       )}
+                      {h.sudo_status === 'nopasswd' && (
+                        <button className="danger ghost" onClick={() => removeSudoAccess(h)}>
+                          снять NOPASSWD
+                        </button>
+                      )}
                       <button className="danger ghost" onClick={() => remove(h)}>
                         удалить
                       </button>
+                      </div>
                     </td>
                   </tr>
                   )

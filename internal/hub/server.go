@@ -87,6 +87,7 @@ func (s *Server) Handler() http.Handler {
 				r.Delete("/hub/hosts/{id}", s.handleDeleteHost)
 				r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 				r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)
+				r.Post("/hub/hosts/{id}/sudo/remove", s.handleRemoveSudoAccess)
 			})
 
 			// Every other host-scoped call — reads and mutations alike —

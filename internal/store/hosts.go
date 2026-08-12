@@ -20,6 +20,19 @@ const (
 	HostAuthKey      = "key"
 )
 
+// Sudo status values — set as a side effect of whatever the last install/
+// update actually observed (see internal/hub), not probed independently:
+// stageFiles/activateService already need sudo when SSHUser isn't root, so
+// their own success or failure already answers the question.
+const (
+	// SudoStatusUnknown means no install has run since this field was
+	// added, or since the host's connection details last changed.
+	SudoStatusUnknown          = ""
+	SudoStatusRoot             = "root"
+	SudoStatusNopasswd         = "nopasswd"
+	SudoStatusPasswordRequired = "password_required"
+)
+
 // Host is one VPS a hub instance manages over SSH.
 type Host struct {
 	ID          int64  `json:"id"`
@@ -32,6 +45,7 @@ type Host struct {
 	Status      string `json:"status"`
 	NktVersion  string `json:"nkt_version"`
 	AdminUser   string `json:"admin_user,omitempty"`
+	SudoStatus  string `json:"sudo_status,omitempty"`
 	ErrorMsg    string `json:"error_msg,omitempty"`
 	CreatedAt   string `json:"created_at"`
 	LastSeenAt  string `json:"last_seen_at,omitempty"`
@@ -59,14 +73,14 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 }
 
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
-	arch, status, nkt_version, admin_user, admin_password_enc, error_msg, created_at, last_seen_at`
+	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, error_msg, created_at, last_seen_at`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
 	var lastSeen sql.NullString
 	var adminPasswordEnc []byte
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
-		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.ErrorMsg, &h.CreatedAt, &lastSeen)
+		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.ErrorMsg, &h.CreatedAt, &lastSeen)
 	if err != nil {
 		return Host{}, err
 	}
@@ -124,9 +138,13 @@ func (d *DB) UpdateHost(ctx context.Context, id int64, name, addr string, sshPor
 	if authKind != HostAuthPassword && authKind != HostAuthKey {
 		return errors.New("unknown ssh auth kind: " + authKind)
 	}
+	// A changed ssh_user in particular can invalidate a previously observed
+	// sudo_status (root <-> non-root, or a different account entirely) —
+	// clearing it here means the UI shows "неизвестно" instead of a status
+	// that may no longer be true until the next install/update reobserves it.
 	res, err := d.ExecContext(ctx,
-		`UPDATE hosts SET name = ?, addr = ?, ssh_port = ?, ssh_user = ?, ssh_auth_kind = ? WHERE id = ?`,
-		name, addr, sshPort, sshUser, authKind, id)
+		`UPDATE hosts SET name = ?, addr = ?, ssh_port = ?, ssh_user = ?, ssh_auth_kind = ?, sudo_status = ? WHERE id = ?`,
+		name, addr, sshPort, sshUser, authKind, SudoStatusUnknown, id)
 	if err != nil {
 		return err
 	}
@@ -145,6 +163,25 @@ func (d *DB) SetHostSecret(ctx context.Context, id int64, authKind string, secre
 	}
 	res, err := d.ExecContext(ctx,
 		`UPDATE hosts SET ssh_auth_kind = ?, secret_enc = ? WHERE id = ?`, authKind, secretEnc, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetHostSudoStatus records what the last install/update actually observed
+// about sudo access for a non-root SSH user (or that none was needed,
+// SudoStatusRoot) — see the SudoStatus* constants.
+func (d *DB) SetHostSudoStatus(ctx context.Context, id int64, status string) error {
+	switch status {
+	case SudoStatusUnknown, SudoStatusRoot, SudoStatusNopasswd, SudoStatusPasswordRequired:
+	default:
+		return errors.New("unknown sudo status: " + status)
+	}
+	res, err := d.ExecContext(ctx, `UPDATE hosts SET sudo_status = ? WHERE id = ?`, status, id)
 	if err != nil {
 		return err
 	}
