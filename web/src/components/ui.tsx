@@ -67,7 +67,7 @@ export function Card({
           <div>
             {title && <span>{title}</span>}
             {subtitle && (
-              <div className="card-subtitle" style={{ fontWeight: 400 }}>
+              <div style={{ fontWeight: 400, fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
                 {subtitle}
               </div>
             )}
