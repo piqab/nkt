@@ -88,37 +88,7 @@ export function usePty(wsUrl: string) {
     stop()
     setStatus('connecting')
 
-    // setStatus above does not repaint the DOM synchronously — React
-    // flushes and the browser paints only after this function returns.
-    // Callers that hide the container until a session starts (a CSS
-    // display:none toggle keyed on status, or an antd Modal whose entrance
-    // animation hasn't begun yet) therefore still have it hidden/unlaid-out
-    // at this exact point. xterm.js measures character-cell metrics as
-    // part of Terminal.open() itself — opening on a hidden container
-    // permanently bakes in a broken (zero) measurement that a later resize
-    // does not fix, because the container's *size* changing is not what
-    // was wrong; the *measurement taken while unmeasurable* is. One rAF
-    // defers this far enough for that repaint to have actually happened,
-    // which the ResizeObserver below (a real fix for a genuinely
-    // late-settling container size, not for this) cannot do on its own.
-    requestAnimationFrame(() => {
-      try {
-        runStart()
-      } catch (err) {
-        // An uncaught throw partway through (xterm.js opening on a
-        // container that still isn't measurable for some other reason,
-        // say) must not leave status stuck on "connecting" forever with
-        // nothing on screen to explain why — that reads as a hung
-        // connection, not the local failure it actually was.
-        // eslint-disable-next-line no-console
-        console.error('usePty: failed to start session', err)
-        setStatus('error')
-      }
-    })
-
-    function runStart() {
-      if (!containerRef.current) return // unmounted before this frame ran
-
+    try {
       const term = new XTerm({
         cursorBlink: true,
         fontSize,
@@ -126,6 +96,7 @@ export function usePty(wsUrl: string) {
         theme: THEME,
         scrollback: 5000,
       })
+      termRef.current = term
 
       const fit = new FitAddon()
       term.loadAddon(fit)
@@ -148,44 +119,68 @@ export function usePty(wsUrl: string) {
         // slower under very high-volume output.
       }
 
-      term.open(containerRef.current)
-      termRef.current = term
+      // xterm.js measures character-cell metrics as part of Terminal.open()
+      // itself — calling it on a container that isn't measurable yet (still
+      // display:none, or an antd Modal whose enter animation hasn't laid
+      // out its content) permanently bakes in a broken (zero) measurement
+      // that no later resize corrects, because what was wrong was the
+      // *measurement taken while unmeasurable*, not the container's size
+      // changing afterwards. A single deferred frame doesn't reliably cover
+      // this — a CSS-driven modal animation can take far longer than one
+      // frame — so instead of guessing a delay, open() is held until the
+      // ResizeObserver itself reports a real, non-zero box. That observer
+      // then keeps calling fit() on every later resize as before, so this
+      // is a strict superset of the old one-shot behaviour, not a
+      // replacement path only used once.
+      let opened = false
 
-      // A plain one-shot fit() right after open() is not enough when the
-      // container is inside something that finishes laying out
-      // asynchronously — an antd Modal, in particular, mounts its content
-      // before its own open animation settles, so the container can still
-      // report a zero (or stale) size at this exact point: the terminal
-      // then opens at 0 cols/rows and never recovers, rendering as an
-      // empty box even though data is arriving. ResizeObserver fires once
-      // immediately on observe() with whatever the real size is right
-      // then, and again on every later change, which a single fit() call
-      // cannot give us.
-      const resizeObserver = new ResizeObserver(() => fit.fit())
+      function openAndConnect(container: HTMLDivElement) {
+        if (opened) return
+        opened = true
+        term.open(container)
+        fit.fit()
+
+        const ws = new WebSocket(wsUrl)
+        ws.binaryType = 'arraybuffer'
+        wsRef.current = ws
+        const encoder = new TextEncoder()
+
+        ws.onopen = () => {
+          setStatus('connected')
+          term.focus()
+        }
+        ws.onmessage = (ev) => {
+          if (ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data))
+        }
+        ws.onerror = () => setStatus('error')
+        ws.onclose = () => setStatus((s) => (s === 'error' ? s : 'closed'))
+
+        term.onData((data) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(encoder.encode(data))
+        })
+        term.onResize(({ cols, rows }) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows }))
+        })
+      }
+
+      const resizeObserver = new ResizeObserver(() => {
+        const container = containerRef.current
+        if (!container) return
+        if (!opened) {
+          if (container.clientWidth > 0 && container.clientHeight > 0) openAndConnect(container)
+          return
+        }
+        fit.fit()
+      })
       resizeObserver.observe(containerRef.current)
       resizeObserverRef.current = resizeObserver
-
-      const ws = new WebSocket(wsUrl)
-      ws.binaryType = 'arraybuffer'
-      wsRef.current = ws
-      const encoder = new TextEncoder()
-
-      ws.onopen = () => {
-        setStatus('connected')
-        term.focus()
-      }
-      ws.onmessage = (ev) => {
-        if (ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data))
-      }
-      ws.onerror = () => setStatus('error')
-      ws.onclose = () => setStatus((s) => (s === 'error' ? s : 'closed'))
-
-      term.onData((data) => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(encoder.encode(data))
-      })
-      term.onResize(({ cols, rows }) => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows }))
-      })
+    } catch (err) {
+      // An uncaught throw partway through must not leave status stuck on
+      // "connecting" forever with nothing on screen to explain why — that
+      // reads as a hung connection, not the local failure it actually was.
+      // eslint-disable-next-line no-console
+      console.error('usePty: failed to start session', err)
+      setStatus('error')
     }
     // wsUrl is the only real dependency — start() always (re)builds a fresh
     // terminal/socket pair from scratch via stop() above regardless of when
