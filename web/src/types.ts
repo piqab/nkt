@@ -325,6 +325,23 @@ export interface Overview {
     soonest_days: number
     soonest_name: string
   }
+  package_updates: PackageUpdates
+}
+
+export interface PackageUpdate {
+  name: string
+  old_version: string
+  new_version: string
+}
+
+/** Pending OS package updates — apt/Debian-Ubuntu hosts only for now (see
+ * internal/parse.Packages). `packages` is undefined/empty both when the
+ * host has none pending AND when apt isn't available at all; that
+ * distinction lives in the corresponding `sources` entry ("packages"),
+ * not here. */
+export interface PackageUpdates {
+  packages?: PackageUpdate[]
+  reboot_required: boolean
 }
 
 export interface TargetStatus {

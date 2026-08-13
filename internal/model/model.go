@@ -473,9 +473,31 @@ type Snapshot struct {
 	Firewall  FirewallState     `json:"firewall"`
 	Listeners []Listener        `json:"listeners"`
 	Certs     []Certificate     `json:"certificates"`
+	Packages  PackageUpdates    `json:"package_updates"`
 	Findings  []Finding         `json:"findings"`
 	Digest    string            `json:"digest"`
 	ScanMS    int64             `json:"scan_ms"`
+}
+
+// PackageUpdate is one package `apt list --upgradable` reports as having a
+// newer version available.
+type PackageUpdate struct {
+	Name       string `json:"name"`
+	OldVersion string `json:"old_version"`
+	NewVersion string `json:"new_version"`
+}
+
+// PackageUpdates summarises pending OS package updates — Debian/Ubuntu (apt)
+// hosts only for now, matching where this project actually runs. Checked
+// once per scan (see internal/parse.Packages), not on every request: `apt
+// list --upgradable` can take a couple of seconds.
+type PackageUpdates struct {
+	Packages []PackageUpdate `json:"packages,omitempty"`
+	// RebootRequired mirrors /var/run/reboot-required — can be true from an
+	// update nkt had nothing to do with (unattended-upgrades, an operator
+	// running apt by hand), so it is checked independently of Packages
+	// rather than only right after nkt's own upgrade flow finishes.
+	RebootRequired bool `json:"reboot_required"`
 }
 
 // HostInfo mirrors collect.HostInfo without importing that package.
