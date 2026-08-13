@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"os/exec"
 	"time"
 
@@ -12,6 +13,79 @@ import (
 
 	"github.com/althq/netknownsthat/internal/auth"
 )
+
+// unrestrictedCommand builds argv the way a caller who wants to run it
+// under nkt's own restrictions normally would (exec.Command(argv[0],
+// argv[1:]...), env applied to cmd.Env) — except when nkt is itself
+// running as netknownsthat.service, whose deliberately narrow
+// ProtectSystem=strict / CapabilityBoundingSet= would otherwise apply to
+// every child process this spawns, including a login shell someone opened
+// specifically to administer the box, or apt-get's own internal privilege
+// drop to _apt (which needs CAP_SETUID/CAP_SETGID nkt's unit does not
+// grant, and a writable /var/lib/apt the unit does not expose). Neither is
+// something the daemon's own hardening should have ever constrained — that
+// hardening exists to limit what a compromised *nkt process* could do on
+// its own, not to limit an operator who has already authenticated as
+// admin and explicitly asked for a root shell or a package upgrade.
+//
+// systemd-run --pty asks PID 1 — which is not itself sandboxed — to start
+// a brand-new, separately-sandboxed transient unit for just this one
+// command. Sandboxing directives are a property of a unit's own cgroup and
+// exec context, not something inherited through that D-Bus request, so
+// the new unit starts with systemd's normal (unrestricted) defaults; the
+// -p overrides below just make that explicit rather than relying on
+// nkt's own unit never changing its defaults in a way that would
+// otherwise leak through. This is the same trick "systemd-run --pty bash"
+// is commonly used for: escaping a hardened unit's sandbox for one
+// interactive command, from inside that very unit.
+func unrestrictedCommand(env map[string]string, argv ...string) *exec.Cmd {
+	if usingSystemdSandbox() {
+		return exec.Command("systemd-run", systemdRunArgs(env, argv...)...)
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Env = os.Environ()
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	return cmd
+}
+
+// systemdRunArgs builds the argv systemd-run needs to run argv in a fresh,
+// unrestricted transient unit — split out from unrestrictedCommand as a
+// pure function so the flags themselves are unit-testable without an
+// actual systemd system to run them against.
+func systemdRunArgs(env map[string]string, argv ...string) []string {
+	args := []string{"--pty", "--collect", "--quiet",
+		"-p", "ProtectSystem=no",
+		"-p", "ProtectHome=no",
+		"-p", "PrivateTmp=no",
+		"-p", "NoNewPrivileges=no",
+		"-p", "RestrictSUIDSGID=no",
+		"-p", "RestrictNamespaces=no",
+		"-p", "CapabilityBoundingSet=~",
+	}
+	for k, v := range env {
+		args = append(args, "--setenv="+k+"="+v)
+	}
+	args = append(args, "--")
+	return append(args, argv...)
+}
+
+// usingSystemdSandbox reports whether this nkt process is itself running
+// as a systemd unit — INVOCATION_ID is set by systemd for every unit it
+// starts and never by a plain shell/test invocation, which is exactly the
+// distinction that matters here: running outside of any systemd unit (a
+// dev machine, the test suite, a host where nkt was started by hand) has
+// no sandbox to escape from in the first place, and forcing every
+// terminal/update session through systemd-run there would just break
+// something that currently works for no benefit.
+func usingSystemdSandbox() bool {
+	if os.Getenv("INVOCATION_ID") == "" {
+		return false
+	}
+	_, err := exec.LookPath("systemd-run")
+	return err == nil
+}
 
 // ptyControl is the shape of a WebSocket TEXT frame — raw keystrokes and
 // process output travel as BINARY frames instead, so a text/binary split

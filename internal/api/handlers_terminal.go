@@ -27,8 +27,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shell := loginShell()
-	cmd := exec.Command(shell, "-l")
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	cmd := unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, shell, "-l")
 	s.runPTYSession(w, r, cmd, "terminal", shell, s.cfg.TerminalIdleTimeout)
 }
 
