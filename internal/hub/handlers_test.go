@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -112,5 +113,64 @@ func TestHandleListHostsMergesOverview(t *testing.T) {
 	}
 	if unpolled.Reachable != nil {
 		t.Errorf("unpolled host: Reachable = %v, want nil (never polled, not just false)", unpolled.Reachable)
+	}
+}
+
+// TestExportImportHostsHandlersRoundTrip exercises the HTTP layer end to
+// end: export one host from a real server, POST that exact response body
+// to a second server's import handler, and confirm it landed — this is
+// what actually proves handleExportHosts and handleImportHosts agree on
+// the wire format, not just that store.ExportHosts/ImportHosts do
+// (already covered directly in internal/store).
+func TestExportImportHostsHandlersRoundTrip(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := t.Context()
+
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", true)
+	if err != nil {
+		t.Fatalf("AddHost: %v", err)
+	}
+	if err := db.SetHostStatus(ctx, id, store.HostStatusOnline, ""); err != nil {
+		t.Fatalf("SetHostStatus: %v", err)
+	}
+
+	srv := New(Deps{DB: db, Hub: m})
+
+	exportRec := httptest.NewRecorder()
+	srv.handleExportHosts(exportRec, httptest.NewRequest(http.MethodGet, "/api/hub/export", nil))
+	if exportRec.Code != http.StatusOK {
+		t.Fatalf("handleExportHosts: status %d, body %s", exportRec.Code, exportRec.Body.String())
+	}
+	if cd := exportRec.Header().Get("Content-Disposition"); !strings.Contains(cd, "attachment") {
+		t.Errorf("Content-Disposition = %q, want an attachment", cd)
+	}
+
+	m2, db2 := newTestManager(t)
+	srv2 := New(Deps{DB: db2, Hub: m2})
+
+	importRec := httptest.NewRecorder()
+	importReq := httptest.NewRequest(http.MethodPost, "/api/hub/import", exportRec.Body)
+	srv2.handleImportHosts(importRec, importReq)
+	if importRec.Code != http.StatusOK {
+		t.Fatalf("handleImportHosts: status %d, body %s", importRec.Code, importRec.Body.String())
+	}
+
+	var result struct {
+		Imported int      `json:"imported"`
+		Errors   []string `json:"errors"`
+	}
+	if err := json.Unmarshal(importRec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode import response: %v", err)
+	}
+	if result.Imported != 1 || len(result.Errors) != 0 {
+		t.Fatalf("import result = %+v, want 1 imported and no errors", result)
+	}
+
+	hosts, err := db2.ListHosts(ctx)
+	if err != nil {
+		t.Fatalf("ListHosts on the importing hub: %v", err)
+	}
+	if len(hosts) != 1 || hosts[0].Name != "h1" || !hosts[0].TerminalEnabled {
+		t.Errorf("imported host = %+v, want h1 with TerminalEnabled=true", hosts)
 	}
 }

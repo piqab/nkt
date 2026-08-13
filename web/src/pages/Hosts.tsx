@@ -161,6 +161,8 @@ export default function Hosts({
   const [notifyOn, setNotifyOn] = useState(() => notificationsEnabled())
   const [busyServiceIds, setBusyServiceIds] = useState<Set<number>>(new Set())
   const [bulkBusy, setBulkBusy] = useState<'stop' | 'start' | null>(null)
+  const [importing, setImporting] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   // The previous poll tick's per-host snapshot — comparing against it is
   // the dedup mechanism itself (see notifications.ts): a ref, not state,
@@ -323,6 +325,68 @@ export default function Hosts({
       reload()
     } finally {
       setBulkBusy(null)
+    }
+  }
+
+  /** GET /hub/export returns a file, not JSON-for-the-UI — bypasses the
+   * api() helper (which always parses the body as JSON) and drives a
+   * regular browser download instead, using the filename the server
+   * suggested via Content-Disposition. */
+  async function exportHosts() {
+    setNotice(null)
+    try {
+      const res = await fetch('/api/hub/export', { credentials: 'same-origin' })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null)
+        throw new Error(payload?.error ?? `Ошибка ${res.status}`)
+      }
+      const blob = await res.blob()
+      const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'nkt-hub-export.json'
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  async function importHosts(file: File) {
+    if (
+      !window.confirm(
+        'Импортировать хосты из файла? Хосты добавятся к уже существующим (файл не заменяет и не ' +
+          'сверяет дубликаты по имени/адресу). Секреты в файле расшифруются только если он экспортирован ' +
+          'с тем же NKT_HUB_MASTER_KEY, что и у этого хаба.',
+      )
+    ) {
+      return
+    }
+    setNotice(null)
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const res = await fetch('/api/hub/import', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+        body: text,
+      })
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload?.error ?? `Ошибка ${res.status}`)
+      const { imported, errors } = payload as { imported: number; errors?: string[] }
+      setNotice({
+        kind: errors?.length ? 'error' : 'info',
+        text: `Импортировано хостов: ${imported}.${errors?.length ? ` Ошибки: ${errors.join('; ')}` : ''}`,
+      })
+      reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -500,6 +564,21 @@ export default function Hosts({
           >
             остановить все
           </Button>
+          <Button onClick={exportHosts}>экспорт</Button>
+          <Button loading={importing} onClick={() => importInputRef.current?.click()}>
+            импорт
+          </Button>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept="application/json"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              e.target.value = ''
+              if (file) void importHosts(file)
+            }}
+          />
           <Tooltip title="Уведомит браузером о новой critical/high-проблеме или о потере связи с хостом — пока эта вкладка открыта">
             <span className="row" style={{ gap: '0.4rem' }}>
               <Switch checked={notifyOn} onChange={toggleNotify} />

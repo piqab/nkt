@@ -3,6 +3,8 @@ package hub
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -329,6 +331,43 @@ func (s *Server) handleStartHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleExportHosts hands back the whole host registry — including the
+// encrypted SSH/admin secrets, as-is — as a downloadable JSON file, for
+// backup or migrating to a new hub. The ciphertext only decrypts under
+// whatever NKT_HUB_MASTER_KEY produced it; importing into a hub with a
+// different key leaves the hosts registered but unreachable until their
+// secrets are re-entered, the same "расшифровка секрета" failure any other
+// master-key mismatch already produces elsewhere.
+func (s *Server) handleExportHosts(w http.ResponseWriter, r *http.Request) {
+	export, err := s.db.ExportHosts(r.Context())
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	filename := fmt.Sprintf("nkt-hub-export-%s.json", strings.ReplaceAll(export.ExportedAt[:10], "-", ""))
+	w.Header().Set("Content-Disposition", `attachment; filename="`+filename+`"`)
+	writeJSON(w, http.StatusOK, export)
+}
+
+// handleImportHosts adds every host in an uploaded export as a brand-new
+// row — additive, never replacing or merging into what's already
+// registered (see store.ImportHosts) — and reports per-host failures
+// instead of aborting the whole file over one bad entry.
+func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 16<<20)) // 16 MiB — generous for a host list, not unbounded
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	export, err := store.DecodeHubExport(body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	imported, errs := s.db.ImportHosts(r.Context(), export)
+	writeJSON(w, http.StatusOK, map[string]any{"imported": imported, "errors": errs})
 }
 
 func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
