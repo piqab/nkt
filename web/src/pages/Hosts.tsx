@@ -641,10 +641,22 @@ export default function Hosts({
         <Modal title={`Изменить хост «${editingHost.name}»`} onClose={() => setEditingHost(null)}>
           <HostForm
             initial={editingHost}
-            onDone={(name, authorizedKey) => {
+            onDone={(name, authorizedKey, terminalEnabledChanged) => {
+              const host = editingHost
               setEditingHost(null)
               reload()
               if (authorizedKey) setPubKeyInfo({ hostName: name, key: authorizedKey })
+              // Saving the checkbox alone only updates the hub's own
+              // record — nothing changes on the host itself until
+              // nkt.env is rewritten and the service restarted, which is
+              // exactly what a reinstall does. Only for a host already
+              // past its first install: a brand new one goes through
+              // that install for the first time via its own separate
+              // flow, and one already installing must not get a second,
+              // concurrent job racing the first.
+              if (terminalEnabledChanged && host.status !== 'new' && host.status !== 'installing') {
+                void startInstall(host)
+              }
             }}
           />
         </Modal>
@@ -762,15 +774,19 @@ type HostFormValues = {
  * Add-host form, or (with `initial` set) an edit form for an existing one.
  * Editing never requires re-entering the SSH secret — an empty secret field
  * leaves whatever is already stored untouched (see Manager.UpdateHost).
- * onDone receives the host's name and, when auth_kind is "generated", the
- * freshly generated public key to display.
+ * onDone receives the host's name, the freshly generated public key when
+ * auth_kind is "generated", and whether terminal_enabled actually changed
+ * — the caller uses that last one to auto-trigger a reinstall, since
+ * saving the checkbox alone only updates the hub's own record and does
+ * nothing on the host itself until nkt.env is rewritten and the service
+ * restarted (see Manager.UpdateHost / install).
  */
 function HostForm({
   initial,
   onDone,
 }: {
   initial?: HubHost
-  onDone: (name: string, generatedAuthorizedKey?: string) => void
+  onDone: (name: string, generatedAuthorizedKey?: string, terminalEnabledChanged?: boolean) => void
 }) {
   const editing = initial !== undefined
   const [form] = Form.useForm<HostFormValues>()
@@ -786,6 +802,7 @@ function HostForm({
     setBusy(true)
     setError(null)
     try {
+      const terminalEnabled = values.terminal_enabled ?? false
       const body = {
         name: values.name,
         addr: values.addr,
@@ -793,7 +810,7 @@ function HostForm({
         ssh_user: values.ssh_user,
         auth_kind: authKind,
         secret: values.secret ?? '',
-        terminal_enabled: values.terminal_enabled ?? false,
+        terminal_enabled: terminalEnabled,
       }
       let authorizedKey: string | undefined
       if (editing) {
@@ -811,7 +828,8 @@ function HostForm({
         form.setFieldsValue({ name: '', addr: '' })
       }
       form.setFieldsValue({ secret: '' })
-      onDone(values.name, authorizedKey)
+      const terminalEnabledChanged = editing && terminalEnabled !== (initial.terminal_enabled ?? false)
+      onDone(values.name, authorizedKey, terminalEnabledChanged)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -893,7 +911,10 @@ function HostForm({
           включить веб-терминал на хосте
           <div className="small muted" style={{ fontWeight: 400 }}>
             Полноценный root-shell прямо в браузере (раздел «Терминал» на самом хосте) —
-            выключено по умолчанию. Применится при следующей установке/обновлении этого хоста.
+            выключено по умолчанию.{' '}
+            {editing
+              ? 'Изменение этой настройки сразу переустановит nkt на хосте (если он уже установлен), чтобы применить её.'
+              : 'Применится при первой установке этого хоста.'}
           </div>
         </Checkbox>
       </Form.Item>
