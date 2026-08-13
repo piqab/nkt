@@ -22,8 +22,15 @@ StateDirectoryMode=0750
 WorkingDirectory=/var/lib/netknownsthat
 
 # Файловая система только на чтение, кроме явно перечисленных каталогов.
+# nginx и haproxy — каждый из них может отсутствовать на конкретном хосте
+# (например, установлен только один из двух, или ни одного); "-" делает
+# путь необязательным для systemd, иначе отсутствие каталога валит весь
+# сервис на шаге NAMESPACE ("No such file or directory") ещё до запуска
+# самого nkt, который сам по себе прекрасно работает без одного из них.
 ProtectSystem=strict
-ReadWritePaths=/var/lib/netknownsthat /etc/nginx /etc/haproxy
+ReadWritePaths=/var/lib/netknownsthat
+ReadWritePaths=-/etc/nginx
+ReadWritePaths=-/etc/haproxy
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
