@@ -31,15 +31,18 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	s.runPTYSession(w, r, cmd, "terminal", shell, s.cfg.TerminalIdleTimeout)
 }
 
-// loginShell picks the shell handleTerminalWS runs: $SHELL if the
-// environment sets one (the norm under systemd's own default environment
-// and most login setups), else bash if it exists, else the POSIX baseline.
+// loginShell picks the shell handleTerminalWS runs: bash if it exists —
+// the predictable, consistent choice regardless of what $SHELL happens to
+// be set to in nkt's own process environment (often unset entirely under
+// systemd, but not guaranteed, and not necessarily what the operator
+// opening this terminal would expect anyway) — else $SHELL if the
+// environment sets one, else the POSIX baseline.
 func loginShell() string {
-	if sh := os.Getenv("SHELL"); sh != "" {
-		return sh
-	}
 	if path, err := exec.LookPath("bash"); err == nil {
 		return path
+	}
+	if sh := os.Getenv("SHELL"); sh != "" {
+		return sh
 	}
 	return "/bin/sh"
 }
