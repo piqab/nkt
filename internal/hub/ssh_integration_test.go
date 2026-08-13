@@ -391,3 +391,46 @@ func runOK(t *testing.T, name string, args ...string) {
 		t.Fatalf("%s %v: %v\n%s", name, args, err, out)
 	}
 }
+
+// TestSetServiceRunningReachesHostOverSSH is a real round trip (real sshd,
+// real SSH session — no mocking of the transport) confirming
+// SetServiceRunning actually dials the host and runs systemctl there,
+// escalating with sudo -n exactly the way installRemoteFile/activateService
+// already do for a non-root SSH user. There is no real netknownsthat unit
+// on the test machine, so systemctl itself is expected to fail — what this
+// proves is that the command reaches the host and a real failure comes
+// back through diagnoseInstallError, not that the unit starts.
+func TestSetServiceRunningReachesHostOverSSH(t *testing.T) {
+	addr, port, clientKeyPEM := startTestSSHD(t)
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	secretEnc, err := secretbox.Encrypt(m.key, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("encrypt ssh key: %v", err)
+	}
+	id, err := db.CreateHost(ctx, "h1", addr, port, me.Username, store.HostAuthKey, secretEnc)
+	if err != nil {
+		t.Fatalf("CreateHost: %v", err)
+	}
+	if err := db.SetHostStatus(ctx, id, store.HostStatusOnline, ""); err != nil {
+		t.Fatalf("SetHostStatus: %v", err)
+	}
+
+	err = m.SetServiceRunning(ctx, id, false)
+	if err == nil {
+		t.Fatal("expected an error: no real netknownsthat unit exists on the test machine")
+	}
+	// Whatever the exact wording, it must be the real remote failure
+	// (systemctl/sudo output), proving the SSH round trip actually
+	// happened — not a local/connection-level error that never reached
+	// the host at all.
+	if strings.Contains(err.Error(), "подключение") || strings.Contains(err.Error(), "рукопожатие") {
+		t.Errorf("looks like the SSH connection itself failed, not a remote command failure: %v", err)
+	}
+}

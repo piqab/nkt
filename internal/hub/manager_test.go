@@ -378,3 +378,25 @@ func TestUpdateHostRejectsBadKey(t *testing.T) {
 		t.Fatal("expected UpdateHost to reject an unparsable private key")
 	}
 }
+
+// TestSetServiceRunningRejectsUninstalledHost covers the guard that needs
+// no SSH connection at all: a freshly added host is still
+// store.HostStatusNew (nothing has ever been installed on it), so
+// start/stop has nothing real to act on and must say so plainly rather
+// than dialing SSH only to fail on a command that could never have
+// succeeded.
+func TestSetServiceRunningRejectsUninstalledHost(t *testing.T) {
+	m, _ := newTestManager(t)
+	ctx := context.Background()
+
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	if err != nil {
+		t.Fatalf("AddHost: %v", err)
+	}
+
+	if err := m.SetServiceRunning(ctx, id, true); err == nil {
+		t.Fatal("expected SetServiceRunning to refuse a host that was never installed")
+	} else if !strings.Contains(err.Error(), "не установлен") {
+		t.Errorf("error does not explain the host is not installed: %v", err)
+	}
+}

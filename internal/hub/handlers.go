@@ -299,6 +299,38 @@ func (s *Server) handleRemoveSudoAccess(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// handleStopHost/handleStartHost stop or start the netknownsthat systemd
+// unit already installed on a host — an operational toggle, not a
+// reinstall (see Manager.SetServiceRunning). A stopped host simply stops
+// answering pollOverviews' periodic /api/overview poll and shows as
+// unreachable, the same way any other outage would — no separate "stopped"
+// status is tracked for it.
+func (s *Server) handleStopHost(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.hub.SetServiceRunning(r.Context(), id, false); err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleStartHost(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.hub.SetServiceRunning(r.Context(), id, true); err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
