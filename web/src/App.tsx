@@ -182,6 +182,13 @@ function Shell({
     setSelectedHost(host)
     if (host) localStorage.setItem('nkt-hub-host', JSON.stringify(host))
     else localStorage.removeItem('nkt-hub-host')
+    // The URL otherwise stays wherever it was — the host picker renders
+    // outside <Routes> entirely (see showingHostPicker below), so it never
+    // changes the address bar on its own. Without this, opening a host
+    // after last viewing e.g. "/firewall" on a *different* host (or the
+    // same one, earlier) lands back on Firewall instead of the overview,
+    // since <Routes> just matches whatever path was already there.
+    if (host) navigate('/')
   }
 
   // A hub with no host selected has nothing of its own to show an

@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Modal as AntModal, Button } from 'antd'
 import type { PackageUpdate } from '../types'
 import { Banner } from './ui'
+import { PtyToolbar } from './PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
 
 /**
@@ -14,7 +15,9 @@ import { usePty, wsURL } from '../hooks/usePty'
  * in front of it.
  */
 export default function UpdateModal({ packages, onClose }: { packages: PackageUpdate[]; onClose: () => void }) {
-  const { containerRef, status, start, stop } = usePty(wsURL('/updates/ws'))
+  const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(
+    wsURL('/updates/ws'),
+  )
 
   useEffect(() => {
     start()
@@ -43,6 +46,9 @@ export default function UpdateModal({ packages, onClose }: { packages: PackageUp
       </p>
       {status === 'error' && (
         <Banner kind="error">Не удалось подключиться к сессии обновления.</Banner>
+      )}
+      {status === 'connected' && (
+        <PtyToolbar onCopy={copySelection} onClear={clear} onFontSize={changeFontSize} onSearch={search} />
       )}
       <div
         ref={containerRef}
