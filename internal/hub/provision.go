@@ -33,6 +33,50 @@ const (
 // only ever removes what it can name exactly.
 const sudoersDropIn = "/etc/sudoers.d/nkt-hub"
 
+// resolveSourceRoot returns a directory that actually contains the nkt
+// sources (detected by go.mod), or an actionable error. The configured
+// HubSourceRoot defaults to the hub process's own working directory, which
+// silently stops being the checkout the moment someone launches `nkt hub`
+// from elsewhere (their home directory, a systemd unit with the wrong
+// WorkingDirectory) — and the resulting `go: go.mod file not found` says
+// nothing about how to fix it. So: trust the configured root when it has a
+// go.mod, then fall back to where the hub's own executable lives and its
+// parents (running ./nkt from inside a checkout, or bin/nkt one level
+// down), and only then give up — naming the paths tried and the variable
+// that fixes it.
+func (m *Manager) resolveSourceRoot(report func(string)) (string, error) {
+	hasGoMod := func(dir string) bool {
+		_, err := os.Stat(filepath.Join(dir, "go.mod"))
+		return err == nil
+	}
+
+	if hasGoMod(m.cfg.HubSourceRoot) {
+		return m.cfg.HubSourceRoot, nil
+	}
+
+	tried := []string{m.cfg.HubSourceRoot}
+	if exe, err := os.Executable(); err == nil {
+		if exe, err = filepath.EvalSymlinks(exe); err == nil {
+			for dir := filepath.Dir(exe); ; dir = filepath.Dir(dir) {
+				if hasGoMod(dir) {
+					report(fmt.Sprintf("Исходники не найдены в %s — использую %s (каталог бинарника хаба)", m.cfg.HubSourceRoot, dir))
+					return dir, nil
+				}
+				tried = append(tried, dir)
+				if dir == filepath.Dir(dir) {
+					break
+				}
+			}
+		}
+	}
+
+	return "", fmt.Errorf(
+		"исходники nkt не найдены (нет go.mod ни в одном из: %s) — хабу нужен каталог с исходниками для "+
+			"кросс-компиляции бинарников. Задайте NKT_HUB_SOURCE_ROOT абсолютным путём к клону репозитория "+
+			"(без Docker — в /etc/netknownsthat/hub.env, затем systemctl restart netknownsthat-hub)",
+		strings.Join(tried, ", "))
+}
+
 // ensureBinary returns the path to a static nkt binary built for goos/goarch
 // at version, cross-compiling it into the hub's cache the first time a given
 // combination is needed. Because modernc.org/sqlite is pure Go
@@ -49,6 +93,11 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 		return path, nil
 	}
 
+	sourceRoot, err := m.resolveSourceRoot(report)
+	if err != nil {
+		return "", err
+	}
+
 	goBin, err := m.resolveGoBin(ctx, report)
 	if err != nil {
 		return "", err
@@ -62,7 +111,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 	cmd := exec.CommandContext(ctx, goBin, "build",
 		"-trimpath", "-ldflags", "-s -w -X main.version="+m.version,
 		"-o", path, "./cmd/nkt")
-	cmd.Dir = m.cfg.HubSourceRoot
+	cmd.Dir = sourceRoot
 	cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch, "CGO_ENABLED=0")
 
 	out, err := cmd.CombinedOutput()
@@ -242,14 +291,29 @@ func sudoRequiresPassword(err error) bool {
 // activateService enables and (re)starts the freshly installed unit —
 // escalated the same way installRemoteFile is, since managing a systemd
 // unit needs root just as much as writing under /etc/systemd/system does.
+//
+// When the unit fails to start, systemctl's own output is just "Job
+// failed... see journalctl" — and the journal it points to lives on the
+// remote host, which the operator may have no separate shell open to. The
+// hub still holds the SSH connection that just failed, so it fetches the
+// journal tail itself and puts the actual failure reason in the install
+// log, instead of forwarding systemd's go-look-elsewhere message alone.
 func activateService(client *ssh.Client, sshUser string, report func(string)) error {
 	report("Запускаю systemd-сервис…")
 	cmd := "systemctl daemon-reload && systemctl enable --now netknownsthat"
+	sudo := ""
 	if sshUser != "root" {
-		cmd = "sudo -n systemctl daemon-reload && sudo -n systemctl enable --now netknownsthat"
+		sudo = "sudo -n "
+		cmd = sudo + "systemctl daemon-reload && " + sudo + "systemctl enable --now netknownsthat"
 	}
 	out, err := runRemote(client, cmd)
 	if err != nil {
+		if journal, jerr := runRemote(client,
+			sudo+"journalctl -u netknownsthat -n 25 --no-pager -o cat"); jerr == nil {
+			if journal = strings.TrimSpace(journal); journal != "" {
+				out = strings.TrimSpace(out) + "\n--- журнал сервиса на хосте (journalctl -u netknownsthat) ---\n" + journal
+			}
+		}
 		return diagnoseInstallError(sshUser, "netknownsthat.service", err, out)
 	}
 	return nil
