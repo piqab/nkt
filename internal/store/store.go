@@ -141,6 +141,7 @@ CREATE TABLE IF NOT EXISTS hosts (
     admin_password_enc BLOB,                   -- remote bootstrap admin password, secretbox-encrypted;
                                                 -- used to re-login when a proxied session expires
     sudo_status        TEXT NOT NULL DEFAULT '' CHECK (sudo_status IN ('','root','nopasswd','password_required')),
+    terminal_enabled   INTEGER NOT NULL DEFAULT 0, -- passed through as NKT_TERMINAL_ENABLED on install/update
     error_msg          TEXT NOT NULL DEFAULT '',
     created_at         TEXT NOT NULL,
     last_seen_at       TEXT
@@ -161,6 +162,7 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"hosts", "admin_password_enc", `ALTER TABLE hosts ADD COLUMN admin_password_enc BLOB`},
 	{"hosts", "sudo_status", `ALTER TABLE hosts ADD COLUMN sudo_status TEXT NOT NULL DEFAULT ''
 		CHECK (sudo_status IN ('','root','nopasswd','password_required'))`},
+	{"hosts", "terminal_enabled", `ALTER TABLE hosts ADD COLUMN terminal_enabled INTEGER NOT NULL DEFAULT 0`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table
