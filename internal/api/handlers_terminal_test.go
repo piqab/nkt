@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"os/exec"
 	"testing"
 
 	"github.com/althq/netknownsthat/internal/config"
@@ -46,5 +47,48 @@ func TestHandleTerminalWSGates(t *testing.T) {
 				t.Errorf("status = %d, want %d (body: %s)", rec.Code, c.wantCode, rec.Body.String())
 			}
 		})
+	}
+}
+
+// TestLoginShellPrefersBash locks in that the terminal always opens bash
+// when it's available, regardless of what $SHELL happens to be set to in
+// nkt's own process environment — often unset entirely under systemd, but
+// not guaranteed, and picking up something unexpected there (a service
+// account's /usr/sbin/nologin, a stray Environment= in the unit, etc.)
+// must not silently change what shell the operator gets.
+func TestLoginShellPrefersBash(t *testing.T) {
+	bashPath, err := exec.LookPath("bash")
+	if err != nil {
+		t.Skip("bash not on PATH in this environment")
+	}
+
+	t.Setenv("SHELL", "/definitely/not/a/real/shell")
+
+	got := loginShell()
+	if got != bashPath {
+		t.Errorf("loginShell() = %q, want %q (bash, ignoring $SHELL)", got, bashPath)
+	}
+}
+
+// TestLoginShellFallsBackToShellEnv confirms $SHELL is still honoured when
+// bash genuinely isn't installed — a minimal, non-Debian image is exactly
+// the case loginShell's fallback chain exists for.
+func TestLoginShellFallsBackToShellEnv(t *testing.T) {
+	t.Setenv("PATH", t.TempDir()) // empty dir: no bash to find
+	t.Setenv("SHELL", "/bin/zsh")
+
+	if got := loginShell(); got != "/bin/zsh" {
+		t.Errorf("loginShell() = %q, want %q", got, "/bin/zsh")
+	}
+}
+
+// TestLoginShellFallsBackToPOSIXBaseline is the last resort: neither bash
+// nor $SHELL available at all.
+func TestLoginShellFallsBackToPOSIXBaseline(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("SHELL", "")
+
+	if got := loginShell(); got != "/bin/sh" {
+		t.Errorf("loginShell() = %q, want %q", got, "/bin/sh")
 	}
 }
