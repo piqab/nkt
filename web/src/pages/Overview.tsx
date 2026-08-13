@@ -69,6 +69,13 @@ export default function OverviewPage({ me }: { me: Me }) {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
+  // Polled independently of whether the update dialog is open — otherwise
+  // there's no way to tell, from the button alone, whether "обновить"
+  // would reattach to an apt-get already running (started earlier, or by
+  // someone else) or start a brand new one; both look identical at first
+  // glance (a black terminal with a spinner) once the dialog opens.
+  const { data: updateStatus } = useApi<{ active: boolean }>('/updates/status', 5_000)
+  const updateActive = updateStatus?.active ?? false
 
   async function rescan() {
     setBusy(true)
@@ -95,6 +102,7 @@ export default function OverviewPage({ me }: { me: Me }) {
   const pkgAvailable = pkgSource?.available ?? false
   const pkgUpdates = data.package_updates?.packages ?? []
   const canUpdate = me.is_admin && me.allow_mutations && pkgAvailable
+  const canReopenUpdate = me.is_admin && me.allow_mutations
 
   return (
     <>
@@ -107,23 +115,30 @@ export default function OverviewPage({ me }: { me: Me }) {
           </p>
         </div>
         <div className="row">
-          {canUpdate && pkgUpdates.length > 0 && (
-            <Button
-              type="primary"
-              onClick={() => {
-                if (
-                  window.confirm(
-                    `Запустить apt-get upgrade на этом хосте (${pkgUpdates.length} пакетов)? ` +
-                      'Подтверждение apt (Y/n) нужно будет дать в открывшемся окне.',
-                  )
-                ) {
-                  setUpdating(true)
-                }
-              }}
-            >
-              обновить ({pkgUpdates.length})
-            </Button>
-          )}
+          {updateActive
+            ? canReopenUpdate && (
+                <Button type="primary" onClick={() => setUpdating(true)}>
+                  обновление выполняется — открыть
+                </Button>
+              )
+            : canUpdate &&
+              pkgUpdates.length > 0 && (
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Запустить apt-get upgrade на этом хосте (${pkgUpdates.length} пакетов)? ` +
+                          'Подтверждение apt (Y/n) нужно будет дать в открывшемся окне.',
+                      )
+                    ) {
+                      setUpdating(true)
+                    }
+                  }}
+                >
+                  обновить ({pkgUpdates.length})
+                </Button>
+              )}
           {me.is_admin && (
             <Button onClick={rescan} loading={busy}>
               {busy ? 'Сканирую…' : 'Пересканировать'}

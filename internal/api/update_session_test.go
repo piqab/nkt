@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
@@ -88,6 +89,57 @@ func TestUpdateSessionSurvivesDisconnect(t *testing.T) {
 
 	if runs != 1 {
 		t.Errorf("runs = %d, want 1 — a second WebSocket connection must reattach, not start a second process", runs)
+	}
+}
+
+// TestHandleUpdatesStatus locks in the three states the Overview page's
+// button relies on to tell the operator whether "обновить" would reattach
+// to a real, already-running apt-get or start a brand new one: no session
+// yet, a session actively running, and a session that has finished.
+func TestHandleUpdatesStatus(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	s := &Server{db: db}
+
+	active := func(t *testing.T) bool {
+		t.Helper()
+		req := httptest.NewRequest(http.MethodGet, "/api/updates/status", nil)
+		rec := httptest.NewRecorder()
+		s.handleUpdatesStatus(rec, req)
+		var body map[string]bool
+		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+			t.Fatalf("decode response: %v (body: %s)", err, rec.Body.String())
+		}
+		return body["active"]
+	}
+
+	if active(t) {
+		t.Error("active = true before any session was ever started")
+	}
+
+	sess, err := newUpdateSession(exec.Command("bash", "-c", "sleep 0.3"))
+	if err != nil {
+		t.Fatalf("newUpdateSession: %v", err)
+	}
+	s.updateSession = sess
+
+	if !active(t) {
+		t.Error("active = false while the session is still running")
+	}
+
+	for i := 0; i < 50 && !sess.isDone(); i++ {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if !sess.isDone() {
+		t.Fatal("session never finished")
+	}
+
+	if active(t) {
+		t.Error("active = true after the session finished")
 	}
 }
 
