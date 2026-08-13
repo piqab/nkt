@@ -72,7 +72,7 @@ web: ## собрать веб-интерфейс (вшивается в бина
 	fi
 
 .PHONY: build
-build: ## собрать продакшен-бинарник для Linux (Docker, если есть; иначе — native-build); увеличивает минорную версию в VERSION
+build: ## собрать продакшен-бинарник для Linux (Docker, если есть; иначе — native-build)
 	@if command -v docker >/dev/null 2>&1; then \
 		$(MAKE) build-docker; \
 	else \
@@ -80,33 +80,36 @@ build: ## собрать продакшен-бинарник для Linux (Docke
 		$(MAKE) native-build; \
 	fi
 
-# Разделено на отдельную цель (а не просто ветку build) исключительно из-за
-# bump-version: он должен быть настоящим prerequisite (см. его комментарий),
-# а из двух путей — через Docker и через native-build — за один запуск
-# make build выполняется только один, так что версия увеличивается ровно
-# один раз независимо от того, какой путь сработал.
+# Разделено на отдельную цель (а не просто ветку build), не из-за версии
+# (она больше не бампается тут — см. bump-version) — а потому что `build`
+# нужно выбирать РОВНО один из двух путей (Docker или native), и делать это
+# веткой в самом build проще, чем дублировать логику выбора в обеих целях.
 .PHONY: build-docker
-build-docker: bump-version web
+build-docker: web
 	@mkdir -p dist; \
 	$(DOCKER_RUN) -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=$(GOARCH) $(GO_IMAGE) \
 		go build -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
 	echo "готово: $(OUT) ($(VERSION), linux/$(GOARCH))"; \
 	file $(OUT) 2>/dev/null || true
 
-# Prerequisite, а не $(MAKE) bump-version внутри рецепта build-docker/
-# native-build: у обеих целей рецепт — один составной shell-скрипт (из-за \
-# продолжений строк), и Make подставляет $(VERSION)/$(LDFLAGS) в него ДО
-# того, как этот скрипт вообще начинает выполняться — вызов bump-version
-# где-то в середине того же рецепта не успел бы повлиять на уже
-# подставленные более ранние или поздние ссылки на $(VERSION) в нём же.
-# Настоящий prerequisite гарантированно отрабатывает раньше, чем Make
-# вообще начинает подставлять переменные в рецепт зависимой цели.
+# НЕ вызывается автоматически из build/build-docker/native-build. Раньше
+# была prerequisite'ом build-docker/native-build и бампала VERSION при
+# каждом локальном билде — это мутировало отслеживаемый git-файл без
+# коммита, так что любой хост, где хоть раз вручную запустили `make build`
+# (например, тестируя установку), расходился с origin и следующий `git
+# pull` там отказывал ("ваши локальные изменения будут перезаписаны").
+# Теперь версия — это то, что реально закоммичено: bump-version запускается
+# вручную (или мной, при подготовке коммита — патч-версия при каждом
+# коммите, пока явно не попросят увеличить минорную/мажорную), и попадает
+# в репозиторий тем же коммитом, что и остальные изменения. `build` только
+# читает VERSION в LDFLAGS, никогда не пишет в файл.
 .PHONY: bump-version
-bump-version: ## увеличить минорную версию в файле VERSION (запускается автоматически при build/native-build)
+bump-version: ## увеличить патч-версию в файле VERSION (вручную, перед коммитом)
 	@current=$$(tr -d '[:space:]' < VERSION 2>/dev/null || echo 0.0.0); \
 	major=$$(echo "$$current" | cut -d. -f1); \
 	minor=$$(echo "$$current" | cut -d. -f2); \
-	next="$$major.$$((minor + 1)).0"; \
+	patch=$$(echo "$$current" | cut -d. -f3); \
+	next="$$major.$$minor.$$((patch + 1))"; \
 	echo "$$next" > VERSION; \
 	echo "версия: $$current -> $$next"
 
@@ -116,7 +119,7 @@ bump-version: ## увеличить минорную версию в файле 
 # переход между строками, как в обычном bash-скрипте. Тот же приём, что уже
 # используется в build/web.
 .PHONY: native-build
-native-build: bump-version ## собрать без Docker: сама проверит и, если нужно, поставит Go/Node; увеличивает минорную версию в VERSION
+native-build: ## собрать без Docker: сама проверит и, если нужно, поставит Go/Node
 	@set -euo pipefail; \
 	export PATH="$(LOCAL_GO_DIR)/bin:$(LOCAL_NODE_DIR)/bin:$$PATH"; \
 	confirm() { \
