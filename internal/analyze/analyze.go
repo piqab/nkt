@@ -343,7 +343,13 @@ func ruleDeclaredNotListening(c *collector, s *model.Snapshot, idx *index) {
 	}
 }
 
-func ruleListeningNotDeclared(c *collector, s *model.Snapshot, idx *index) {
+// undeclaredListeners returns every s.Listeners entry idx has no matching
+// endpoint for — the "разное"/misc set, shared between ruleListeningNotDeclared
+// (turns each into a Finding) and UndeclaredListeners (a plain list for
+// callers, namely the /api/misc handler, that just want the services
+// themselves rather than a problem report about them).
+func undeclaredListeners(s *model.Snapshot, idx *index) []model.Listener {
+	var out []model.Listener
 	for _, l := range s.Listeners {
 		if len(idx.endpointsByPort[l.Port]) > 0 {
 			continue
@@ -351,6 +357,21 @@ func ruleListeningNotDeclared(c *collector, s *model.Snapshot, idx *index) {
 		if l.Process == "docker-proxy" {
 			continue // covered by the container rules
 		}
+		out = append(out, l)
+	}
+	return out
+}
+
+// UndeclaredListeners is undeclaredListeners for callers outside this
+// package that only have a Snapshot, not an already-built index — building
+// one here is cheap (a handful of map inserts over the snapshot's own
+// listeners/endpoints), so there is no need to expose the index type itself.
+func UndeclaredListeners(s *model.Snapshot) []model.Listener {
+	return undeclaredListeners(s, buildIndex(s))
+}
+
+func ruleListeningNotDeclared(c *collector, s *model.Snapshot, idx *index) {
+	for _, l := range undeclaredListeners(s, idx) {
 		severity := model.SeverityInfo
 		detail := fmt.Sprintf("Процесс %s слушает %s:%d, но этот порт не описан ни в одном из разобранных конфигов.",
 			l.Process, l.Address, l.Port)
