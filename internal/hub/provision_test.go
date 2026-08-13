@@ -252,3 +252,45 @@ func TestGeneratePasswordIsRandomAndLong(t *testing.T) {
 		t.Fatalf("generatePassword produced a suspiciously short value: %q", a)
 	}
 }
+
+// TestResolveSourceRoot covers the failure the configured-source-root
+// default actually produces in the field: `nkt hub` launched from a
+// directory that is not the checkout (its wd then has no go.mod), which
+// used to surface as go's own bare "go.mod file not found" with no hint
+// that NKT_HUB_SOURCE_ROOT exists.
+func TestResolveSourceRoot(t *testing.T) {
+	discard := func(string) {}
+
+	t.Run("configured root with go.mod wins", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		m, _ := newTestManager(t)
+		m.cfg.HubSourceRoot = dir
+		got, err := m.resolveSourceRoot(discard)
+		if err != nil {
+			t.Fatalf("resolveSourceRoot: %v", err)
+		}
+		if got != dir {
+			t.Errorf("resolveSourceRoot = %q, want configured %q", got, dir)
+		}
+	})
+
+	t.Run("no go.mod anywhere gives actionable error", func(t *testing.T) {
+		// The test executable lives in a temp build dir with no go.mod
+		// anywhere above it, and the configured root has none either —
+		// this must fail with the actionable message, not go's own.
+		m, _ := newTestManager(t)
+		m.cfg.HubSourceRoot = t.TempDir()
+		_, err := m.resolveSourceRoot(discard)
+		if err == nil {
+			t.Fatal("expected an error for a source root without go.mod")
+		}
+		for _, want := range []string{"go.mod", "NKT_HUB_SOURCE_ROOT", m.cfg.HubSourceRoot} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not mention %q", err, want)
+			}
+		}
+	})
+}
