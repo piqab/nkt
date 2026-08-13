@@ -88,6 +88,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 				r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)
 				r.Post("/hub/hosts/{id}/sudo/remove", s.handleRemoveSudoAccess)
+				r.Post("/hub/hosts/{id}/stop", s.handleStopHost)
+				r.Post("/hub/hosts/{id}/start", s.handleStartHost)
 
 				// Every other host-scoped call — reads and mutations alike —
 				// crosses the SSH tunnel to that host's own nkt API,

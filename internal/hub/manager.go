@@ -550,6 +550,45 @@ func (m *Manager) recordSudoOutcome(ctx context.Context, hostID int64, sshUser s
 	_ = m.db.SetHostSudoStatus(ctx, hostID, status)
 }
 
+// SetServiceRunning starts or stops the netknownsthat systemd unit on a
+// host — not a reinstall, just start/stop against whatever is already on
+// disk there; use StartInstall for anything that needs to touch the
+// binary/unit/env themselves. Escalated with sudo -n the same way
+// activateService is when SSHUser isn't root.
+func (m *Manager) SetServiceRunning(ctx context.Context, hostID int64, running bool) error {
+	host, err := m.db.HostByID(ctx, hostID)
+	if err != nil {
+		return err
+	}
+	if host.Status == store.HostStatusNew {
+		return fmt.Errorf("хост ещё не установлен — нечего останавливать/запускать")
+	}
+
+	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
+	if err != nil {
+		return fmt.Errorf("расшифровка SSH-секрета: %w", err)
+	}
+	client, err := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
+	if err != nil {
+		return err
+	}
+	defer client.Close()
+
+	action := "stop"
+	if running {
+		action = "start"
+	}
+	cmd := "systemctl " + action + " netknownsthat"
+	if host.SSHUser != "root" {
+		cmd = "sudo -n " + cmd
+	}
+	out, err := runRemote(client, cmd)
+	if err != nil {
+		return diagnoseInstallError(host.SSHUser, "netknownsthat.service", err, out)
+	}
+	return nil
+}
+
 // RemoveSudoAccess deletes the sudoers drop-in file HUB.md tells an
 // operator to create by hand (sudoersDropIn) — a deliberate cleanup step
 // for someone who wants to revoke the standing NOPASSWD grant once they no

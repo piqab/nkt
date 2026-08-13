@@ -159,6 +159,8 @@ export default function Hosts({
   const [editingHost, setEditingHost] = useState<HubHost | null>(null)
   const [pubKeyInfo, setPubKeyInfo] = useState<{ hostName: string; key: string } | null>(null)
   const [notifyOn, setNotifyOn] = useState(() => notificationsEnabled())
+  const [busyServiceIds, setBusyServiceIds] = useState<Set<number>>(new Set())
+  const [bulkBusy, setBulkBusy] = useState<'stop' | 'start' | null>(null)
 
   // The previous poll tick's per-host snapshot — comparing against it is
   // the dedup mechanism itself (see notifications.ts): a ref, not state,
@@ -259,6 +261,71 @@ export default function Hosts({
     }
   }
 
+  /** Shared by the per-host buttons and "остановить все"/"запустить все" —
+   * confirm is skipped for the bulk path (one confirm covers the whole
+   * batch, see stopAll/startAll below), and errors are collected by the
+   * caller instead of shown immediately, so one failing host doesn't hide
+   * what happened to the rest. */
+  async function setServiceRunning(host: HubHost, running: boolean): Promise<string | null> {
+    setBusyServiceIds((s) => new Set(s).add(host.id))
+    try {
+      await api(`/hub/hosts/${host.id}/${running ? 'start' : 'stop'}`, { method: 'POST' })
+      return null
+    } catch (err) {
+      return err instanceof Error ? err.message : String(err)
+    } finally {
+      setBusyServiceIds((s) => {
+        const next = new Set(s)
+        next.delete(host.id)
+        return next
+      })
+    }
+  }
+
+  async function stopHost(host: HubHost) {
+    if (!window.confirm(`Остановить nkt на «${host.name}»? Хост станет недоступен через хаб, пока вы не запустите его снова.`)) return
+    setNotice(null)
+    const err = await setServiceRunning(host, false)
+    if (err) setNotice({ kind: 'error', text: err })
+    else reload()
+  }
+
+  async function startHost(host: HubHost) {
+    setNotice(null)
+    const err = await setServiceRunning(host, true)
+    if (err) setNotice({ kind: 'error', text: err })
+    else reload()
+  }
+
+  /** Runs setServiceRunning across every installed host in parallel and
+   * reports one combined summary — a host mid-install ('new'/'installing')
+   * has nothing to stop/start yet and is silently skipped rather than
+   * counted as a failure. */
+  async function bulkSetServiceRunning(running: boolean) {
+    const targets = (hosts ?? []).filter((h) => h.status !== 'new' && h.status !== 'installing')
+    if (targets.length === 0) return
+    if (
+      !window.confirm(
+        `${running ? 'Запустить' : 'Остановить'} nkt сразу на всех хостах (${targets.length} шт.)?` +
+          (running ? '' : ' Все они станут недоступны через хаб, пока вы не запустите их снова.'),
+      )
+    ) {
+      return
+    }
+    setNotice(null)
+    setBulkBusy(running ? 'start' : 'stop')
+    try {
+      const results = await Promise.all(targets.map((h) => setServiceRunning(h, running)))
+      const failed = results.filter((e): e is string => e !== null).length
+      if (failed > 0) {
+        setNotice({ kind: 'error', text: `Не удалось на ${failed} из ${targets.length} хостов.` })
+      }
+      reload()
+    } finally {
+      setBulkBusy(null)
+    }
+  }
+
   async function remove(host: HubHost) {
     if (!window.confirm(`Удалить хост «${host.name}» из хаба? Сам nkt на нём не удаляется.`)) return
     try {
@@ -322,6 +389,16 @@ export default function Hosts({
           <Button type="link" onClick={() => openInstallLog(h)}>
             журнал установки
           </Button>
+        )}
+        {h.status !== 'new' && h.status !== 'installing' && (
+          <>
+            <Button type="link" loading={busyServiceIds.has(h.id)} onClick={() => startHost(h)}>
+              запустить
+            </Button>
+            <Button danger type="link" loading={busyServiceIds.has(h.id)} onClick={() => stopHost(h)}>
+              остановить
+            </Button>
+          </>
         )}
         <Button type="link" disabled={h.status === 'installing'} onClick={() => setEditingHost(h)}>
           изменить
@@ -411,12 +488,25 @@ export default function Hosts({
             управление ничем не отличаются от обычного nkt на одном хосте.
           </p>
         </div>
-        <Tooltip title="Уведомит браузером о новой critical/high-проблеме или о потере связи с хостом — пока эта вкладка открыта">
-          <span className="row" style={{ gap: '0.4rem' }}>
-            <Switch checked={notifyOn} onChange={toggleNotify} />
-            Уведомлять о проблемах
-          </span>
-        </Tooltip>
+        <div className="row" style={{ gap: '1rem' }}>
+          <Button loading={bulkBusy === 'start'} disabled={bulkBusy === 'stop'} onClick={() => bulkSetServiceRunning(true)}>
+            запустить все
+          </Button>
+          <Button
+            danger
+            loading={bulkBusy === 'stop'}
+            disabled={bulkBusy === 'start'}
+            onClick={() => bulkSetServiceRunning(false)}
+          >
+            остановить все
+          </Button>
+          <Tooltip title="Уведомит браузером о новой critical/high-проблеме или о потере связи с хостом — пока эта вкладка открыта">
+            <span className="row" style={{ gap: '0.4rem' }}>
+              <Switch checked={notifyOn} onChange={toggleNotify} />
+              Уведомлять о проблемах
+            </span>
+          </Tooltip>
+        </div>
       </div>
 
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}

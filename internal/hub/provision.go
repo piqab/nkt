@@ -305,11 +305,20 @@ func sudoRequiresPassword(err error) bool {
 // log, instead of forwarding systemd's go-look-elsewhere message alone.
 func activateService(client *ssh.Client, sshUser string, report func(string)) error {
 	report("Запускаю systemd-сервис…")
-	cmd := "systemctl daemon-reload && systemctl enable --now netknownsthat"
+	// `enable --now` is a no-op on a unit that's already active — on a host
+	// this install/update already had once (i.e. every "обновить"/
+	// "переустановить", not just the first install), the freshly rewritten
+	// nkt.env/binary would sit on disk unused: the running process keeps
+	// whatever environment it started with until something actually
+	// restarts it. `enable` (idempotent either way) + `restart` fixes
+	// that — `restart` on a unit that was never started behaves exactly
+	// like `start`, so this is correct for a first install too.
+	cmd := "systemctl daemon-reload && systemctl enable netknownsthat && systemctl restart netknownsthat"
 	sudo := ""
 	if sshUser != "root" {
 		sudo = "sudo -n "
-		cmd = sudo + "systemctl daemon-reload && " + sudo + "systemctl enable --now netknownsthat"
+		cmd = sudo + "systemctl daemon-reload && " + sudo + "systemctl enable netknownsthat && " +
+			sudo + "systemctl restart netknownsthat"
 	}
 	out, err := runRemote(client, cmd)
 	if err != nil {
