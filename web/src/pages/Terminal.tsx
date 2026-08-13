@@ -1,21 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
-import { Terminal as XTerm } from '@xterm/xterm'
-import { FitAddon } from '@xterm/addon-fit'
-import '@xterm/xterm/css/xterm.css'
 import { Button } from 'antd'
-import { hostScope } from '../api'
 import type { Me } from '../types'
 import { Banner, Card } from '../components/ui'
-
-type Status = 'idle' | 'connecting' | 'connected' | 'closed' | 'error'
-
-/** Mirrors api.ts's own hostScope-aware prefixing — WebSocket needs its own
- * URL, it cannot go through the fetch-based api() helper. */
-function terminalURL(): string {
-  const prefix = hostScope.id !== null ? `/hosts/${hostScope.id}` : ''
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${location.host}/api${prefix}/terminal/ws`
-}
+import { usePty, wsURL } from '../hooks/usePty'
 
 /**
  * A real login shell on the host, streamed over WebSocket into xterm.js.
@@ -27,27 +13,9 @@ function terminalURL(): string {
  */
 export default function TerminalPage({ me }: { me: Me }) {
   const canUse = me.is_admin && me.allow_mutations
-  const [status, setStatus] = useState<Status>('idle')
-  const containerRef = useRef<HTMLDivElement>(null)
-  const termRef = useRef<XTerm | null>(null)
-  const fitRef = useRef<FitAddon | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  const { containerRef, status, start, stop } = usePty(wsURL('/terminal/ws'))
 
-  function teardown() {
-    wsRef.current?.close()
-    wsRef.current = null
-    termRef.current?.dispose()
-    termRef.current = null
-    fitRef.current = null
-  }
-
-  // Belt-and-braces cleanup if the operator navigates away mid-session —
-  // the shell process on the host is killed by the server the moment the
-  // socket closes (see handleTerminalWS's deferred cleanup), not left
-  // running.
-  useEffect(() => teardown, [])
-
-  function start() {
+  function handleStart() {
     if (
       !window.confirm(
         'Открыть терминал на этом хосте? Это полноценный доступ к shell от имени пользователя, ' +
@@ -56,57 +24,8 @@ export default function TerminalPage({ me }: { me: Me }) {
     ) {
       return
     }
-    if (!containerRef.current) return
-    teardown()
-    setStatus('connecting')
-
-    const term = new XTerm({
-      cursorBlink: true,
-      fontSize: 13,
-      fontFamily: 'var(--mono)',
-      theme: { background: '#141414' },
-    })
-    const fit = new FitAddon()
-    term.loadAddon(fit)
-    term.open(containerRef.current)
-    fit.fit()
-    termRef.current = term
-    fitRef.current = fit
-
-    const ws = new WebSocket(terminalURL())
-    ws.binaryType = 'arraybuffer'
-    wsRef.current = ws
-    const encoder = new TextEncoder()
-
-    ws.onopen = () => {
-      setStatus('connected')
-      term.focus()
-    }
-    ws.onmessage = (ev) => {
-      if (ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data))
-    }
-    ws.onerror = () => setStatus('error')
-    ws.onclose = () => setStatus((s) => (s === 'error' ? s : 'closed'))
-
-    term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(encoder.encode(data))
-    })
-    term.onResize(({ cols, rows }) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows }))
-    })
+    start()
   }
-
-  function stop() {
-    teardown()
-    setStatus('closed')
-  }
-
-  useEffect(() => {
-    if (status !== 'connected') return
-    const onResize = () => fitRef.current?.fit()
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [status])
 
   return (
     <>
@@ -125,7 +44,7 @@ export default function TerminalPage({ me }: { me: Me }) {
               закрыть терминал
             </Button>
           ) : (
-            <Button type="primary" loading={status === 'connecting'} disabled={!canUse} onClick={start}>
+            <Button type="primary" loading={status === 'connecting'} disabled={!canUse} onClick={handleStart}>
               {status === 'connecting' ? 'Подключаюсь…' : 'Открыть терминал'}
             </Button>
           )}

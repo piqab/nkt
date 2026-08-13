@@ -95,6 +95,7 @@ func (s *Server) Handler() http.Handler {
 			r.Use(s.auth.RequireAuth)
 			r.Use(s.auth.RequireAdmin)
 			r.Get("/terminal/ws", s.handleTerminalWS)
+			r.Get("/updates/ws", s.handleUpdatesWS)
 		})
 
 		r.Group(func(r chi.Router) {

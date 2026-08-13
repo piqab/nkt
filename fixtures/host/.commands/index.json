@@ -87,6 +87,9 @@
     { "match": ["sh", "-c", "command -v ss"], "stdout": "/usr/bin/ss\n" },
     { "match": ["sh", "-c", "command -v systemctl"], "stdout": "/usr/bin/systemctl\n" },
     { "match": ["sh", "-c", "command -v nft"], "exit_code": 1 },
-    { "match": ["sh", "-c", "command -v fail2ban-client"], "exit_code": 1 }
+    { "match": ["sh", "-c", "command -v fail2ban-client"], "exit_code": 1 },
+    { "match": ["sh", "-c", "command -v apt-get"], "stdout": "/usr/bin/apt-get\n" },
+    { "match": ["apt", "list", "--upgradable"],
+      "stdout": "Listing...\nopenssl/jammy-updates 3.0.2-0ubuntu1.15 amd64 [upgradable from: 3.0.2-0ubuntu1.14]\ncurl/jammy-updates 7.81.0-1ubuntu1.16 amd64 [upgradable from: 7.81.0-1ubuntu1.15]\n" }
   ]
 }

@@ -5,6 +5,7 @@ import { api, useApi } from '../api'
 import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative } from '../components/ui'
+import UpdateModal from '../components/UpdateModal'
 
 const serviceColumns: TableColumnsType<ServiceUnit> = [
   {
@@ -67,6 +68,7 @@ export default function OverviewPage({ me }: { me: Me }) {
   const { data, error, loading, reload } = useApi<Overview>('/overview', 60_000)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [updating, setUpdating] = useState(false)
 
   async function rescan() {
     setBusy(true)
@@ -89,6 +91,10 @@ export default function OverviewPage({ me }: { me: Me }) {
   const findings = data.findings
   const worst = (findings.critical ?? 0) + (findings.high ?? 0)
   const av = data.availability
+  const pkgSource = data.sources.find((s) => s.name === 'packages')
+  const pkgAvailable = pkgSource?.available ?? false
+  const pkgUpdates = data.package_updates?.packages ?? []
+  const canUpdate = me.is_admin && me.allow_mutations && pkgAvailable
 
   return (
     <>
@@ -101,6 +107,23 @@ export default function OverviewPage({ me }: { me: Me }) {
           </p>
         </div>
         <div className="row">
+          {canUpdate && pkgUpdates.length > 0 && (
+            <Button
+              type="primary"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Запустить apt-get upgrade на этом хосте (${pkgUpdates.length} пакетов)? ` +
+                      'Подтверждение apt (Y/n) нужно будет дать в открывшемся окне.',
+                  )
+                ) {
+                  setUpdating(true)
+                }
+              }}
+            >
+              обновить ({pkgUpdates.length})
+            </Button>
+          )}
           {me.is_admin && (
             <Button onClick={rescan} loading={busy}>
               {busy ? 'Сканирую…' : 'Пересканировать'}
@@ -115,6 +138,12 @@ export default function OverviewPage({ me }: { me: Me }) {
           {note}
         </Banner>
       ))}
+      {data.package_updates?.reboot_required && (
+        <Banner kind="warn">
+          Требуется перезагрузка хоста — обновление (не обязательно запущенное отсюда) уже
+          применено и ждёт рестарта, например после обновления ядра.
+        </Banner>
+      )}
 
       <div className="grid grid-4">
         <StatTile
@@ -142,6 +171,14 @@ export default function OverviewPage({ me }: { me: Me }) {
           note={`целей ${av.targets}: сейчас доступно ${av.up}, недоступно ${av.down}`}
           tone={av.down > 0 ? 'warning' : 'good'}
         />
+        {pkgAvailable && (
+          <StatTile
+            label="Обновления пакетов"
+            value={formatNumber(pkgUpdates.length)}
+            note={data.package_updates?.reboot_required ? 'нужна перезагрузка' : undefined}
+            tone={pkgUpdates.length > 0 ? 'warning' : 'good'}
+          />
+        )}
       </div>
 
       <div className="grid grid-2">
@@ -210,6 +247,16 @@ export default function OverviewPage({ me }: { me: Me }) {
           </div>
         </Card>
       </div>
+
+      {updating && (
+        <UpdateModal
+          packages={pkgUpdates}
+          onClose={() => {
+            setUpdating(false)
+            reload()
+          }}
+        />
+      )}
     </>
   )
 }
