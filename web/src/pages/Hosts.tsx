@@ -332,10 +332,22 @@ export default function Hosts({
    * api() helper (which always parses the body as JSON) and drives a
    * regular browser download instead, using the filename the server
    * suggested via Content-Disposition. */
-  async function exportHosts() {
+  async function exportHosts(includeKey: boolean) {
+    if (
+      includeKey &&
+      !window.confirm(
+        'Включить ключ шифрования в файл экспорта?\n\n' +
+          'Так секреты на новом хабе расшифруются сами при импорте (перешифруются его собственным ' +
+          'ключом) — не нужно вручную переносить NKT_HUB_MASTER_KEY. Но пока ключ в файле, этого файла ' +
+          'одного достаточно, чтобы расшифровать все секреты всех хостов — храните и передавайте его ' +
+          'так же осторожно, как сами пароли, и удалите после того, как импортируете.',
+      )
+    ) {
+      return
+    }
     setNotice(null)
     try {
-      const res = await fetch('/api/hub/export', { credentials: 'same-origin' })
+      const res = await fetch(`/api/hub/export${includeKey ? '?include_key=1' : ''}`, { credentials: 'same-origin' })
       if (!res.ok) {
         const payload = await res.json().catch(() => null)
         throw new Error(payload?.error ?? `Ошибка ${res.status}`)
@@ -564,7 +576,10 @@ export default function Hosts({
           >
             остановить все
           </Button>
-          <Button onClick={exportHosts}>экспорт</Button>
+          <Button onClick={() => exportHosts(false)}>экспорт</Button>
+          <Tooltip title="Для переноса на новый хаб без ручного копирования NKT_HUB_MASTER_KEY — файл станет самодостаточным для расшифровки, храните его так же осторожно, как пароли">
+            <Button onClick={() => exportHosts(true)}>экспорт с ключом</Button>
+          </Tooltip>
           <Button loading={importing} onClick={() => importInputRef.current?.click()}>
             импорт
           </Button>

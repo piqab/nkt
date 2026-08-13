@@ -47,6 +47,12 @@ type HubExport struct {
 	Version    int          `json:"version"`
 	ExportedAt string       `json:"exported_at"`
 	Hosts      []HostExport `json:"hosts"`
+	// MasterKey is the exporting hub's own secretbox key (base64), present
+	// only when the operator opted into a one-step migration — see
+	// Manager.ExportHosts/ImportHosts in internal/hub, which is what
+	// actually knows how to use it (this package only carries it through
+	// JSON; the store layer itself never decrypts anything).
+	MasterKey string `json:"master_key,omitempty"`
 }
 
 func hostToExport(h Host) HostExport {
