@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/althq/netknownsthat/internal/analyze"
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/model"
 	"github.com/althq/netknownsthat/internal/store"
@@ -252,6 +253,23 @@ func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"containers": snap.Container,
 		"networks":   snap.Networks,
+	})
+}
+
+// handleMisc lists sockets something on the host is actually listening on
+// that don't match any endpoint the config parsers found — the same set
+// analyze.ruleListeningNotDeclared turns into findings, here as a plain
+// service list instead ("Разное" tab: services the configs don't know
+// about, not a problem report about them).
+func (s *Server) handleMisc(w http.ResponseWriter, r *http.Request) {
+	snap, err := s.scanner.LatestOrScan(r.Context())
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	listeners := analyze.UndeclaredListeners(snap)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"listeners": listeners,
 	})
 }
 

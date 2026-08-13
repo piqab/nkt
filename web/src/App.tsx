@@ -11,10 +11,7 @@ import Findings from './pages/Findings'
 import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
 import Services from './pages/Services'
-import Docker from './pages/Docker'
-import Podman from './pages/Podman'
-import LXD from './pages/LXD'
-import Virtualization from './pages/Virtualization'
+import Containers from './pages/Containers'
 import Firewall from './pages/Firewall'
 import Certificates from './pages/Certificates'
 import Availability from './pages/Availability'
@@ -77,10 +74,7 @@ const NAV = [
   { to: '/usage', label: 'Нагрузка' },
   { to: '/configs', label: 'Конфигурации' },
   { to: '/services', label: 'Сервисы' },
-  { to: '/containers', label: 'Docker' },
-  { to: '/podman', label: 'Podman' },
-  { to: '/lxd', label: 'LXD' },
-  { to: '/vms', label: 'Виртуальные машины' },
+  { to: '/containers', label: 'Контейнеры и ВМ' },
   { to: '/firewall', label: 'Firewall' },
   { to: '/certificates', label: 'Сертификаты', badge: 'certs' as const },
   { to: '/audit', label: 'Журнал действий' },
@@ -335,10 +329,13 @@ function Shell({
             <Route path="/usage" element={<Usage />} />
             <Route path="/configs" element={<Configs me={me} />} />
             <Route path="/services" element={<Services me={me} />} />
-            <Route path="/containers" element={<Docker me={me} />} />
-            <Route path="/podman" element={<Podman me={me} />} />
-            <Route path="/lxd" element={<LXD me={me} />} />
-            <Route path="/vms" element={<Virtualization me={me} />} />
+            <Route path="/containers" element={<Containers me={me} />} />
+            {/* Docker/Podman/LXD/ВМ were separate nav entries before —
+                redirect their old URLs to the merged page's default tab
+                rather than a bare 404 for anyone with these bookmarked. */}
+            <Route path="/podman" element={<Navigate to="/containers" replace />} />
+            <Route path="/lxd" element={<Navigate to="/containers" replace />} />
+            <Route path="/vms" element={<Navigate to="/containers" replace />} />
             <Route path="/firewall" element={<Firewall me={me} />} />
             <Route path="/certificates" element={<Certificates me={me} />} />
             <Route path="/audit" element={<Audit />} />

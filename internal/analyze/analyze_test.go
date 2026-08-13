@@ -187,3 +187,38 @@ func TestRunNeverReturnsNilOnCleanHost(t *testing.T) {
 		t.Errorf("ожидалось 0 находок на пустом снапшоте, получено %d", len(got))
 	}
 }
+
+// TestUndeclaredListeners covers the plain-list entry point /api/misc uses
+// (analyze.UndeclaredListeners): it must agree exactly with what
+// ruleListeningNotDeclared turns into findings — same set, same exclusions
+// (a port with a matching endpoint, and docker-proxy, both stay out) — just
+// without the Finding wrapper.
+func TestUndeclaredListeners(t *testing.T) {
+	snap := &model.Snapshot{
+		Endpoints: []model.Endpoint{
+			{
+				ID: "nginx:80", Service: model.ServiceNginx, Kind: "server",
+				Address: "0.0.0.0", Port: 80, Protocol: "tcp", Mode: "http", Label: "site",
+			},
+		},
+		Listeners: []model.Listener{
+			{Protocol: "tcp", Address: "0.0.0.0", Port: 80, Process: "nginx"},
+			{Protocol: "tcp", Address: "0.0.0.0", Port: 9000, Process: "some-daemon"},
+			{Protocol: "tcp", Address: "0.0.0.0", Port: 5432, Process: "docker-proxy"},
+		},
+	}
+
+	got := UndeclaredListeners(snap)
+	if len(got) != 1 || got[0].Port != 9000 || got[0].Process != "some-daemon" {
+		t.Fatalf("UndeclaredListeners = %+v, want exactly the port-9000 listener", got)
+	}
+
+	// Must match ruleListeningNotDeclared's own set exactly (same source of
+	// truth) — this is the guarantee that makes /api/misc and the
+	// "listening-not-declared" findings never disagree.
+	findings := rules(Run(snap))["listening-not-declared"]
+	if len(findings) != len(got) {
+		t.Errorf("ruleListeningNotDeclared produced %d findings, UndeclaredListeners %d entries — should match",
+			len(findings), len(got))
+	}
+}
