@@ -45,3 +45,18 @@ func (s *Server) handleUpdatesWS(w http.ResponseWriter, r *http.Request) {
 	}
 	s.runUpdateSession(w, r, buildCmd, "packages.upgrade", "apt-get upgrade", s.cfg.TerminalIdleTimeout)
 }
+
+// handleUpdatesStatus reports whether a package-update session is
+// currently running, independent of whether anyone is actually watching
+// it — the frontend polls this so the "обновить" button can say "an
+// upgrade is already running" instead of leaving the operator to guess by
+// reopening a dialog that always looks the same at first glance (a black
+// terminal with a spinner) whether it's attaching to a live process or
+// about to start a brand new one.
+func (s *Server) handleUpdatesStatus(w http.ResponseWriter, r *http.Request) {
+	s.updateSessionMu.Lock()
+	sess := s.updateSession
+	s.updateSessionMu.Unlock()
+
+	writeJSON(w, http.StatusOK, map[string]bool{"active": sess != nil && !sess.isDone()})
+}

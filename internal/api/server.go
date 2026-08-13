@@ -116,6 +116,7 @@ func (s *Server) Handler() http.Handler {
 
 			// --- read-only surface, available to viewers -------------------------
 			r.Get("/overview", s.handleOverview)
+			r.Get("/updates/status", s.handleUpdatesStatus)
 			r.Get("/inventory", s.handleInventory)
 			r.Get("/findings", s.handleFindings)
 			r.Get("/topology", s.handleTopology)
