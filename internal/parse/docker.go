@@ -284,7 +284,7 @@ func dockerFromEngine(ctx context.Context, c collect.Collector) ([]model.Contain
 			Created:     e.Create,
 			Project:     e.Labels["com.docker.compose.project"],
 			ServiceName: e.Labels["com.docker.compose.service"],
-			ComposeFile: e.Labels["com.docker.compose.project.config_files"],
+			ComposeFile: primaryComposeFile(e.Labels["com.docker.compose.project.config_files"]),
 			Running:     e.State == "running",
 		}
 		// A dual-stack publication is reported once per address family, but it is
@@ -537,6 +537,21 @@ func defaultProjectName(path string) string {
 		return "default"
 	}
 	return parts[len(parts)-2]
+}
+
+// primaryComposeFile returns the first path out of the
+// com.docker.compose.project.config_files label — a single path when the
+// stack was brought up with one -f, but a comma-joined list of ABSOLUTE
+// paths when it was brought up with several (-f a.yml -f b.yml). Storing
+// the raw label verbatim made "редактировать конфиг" try to open the whole
+// joined string as one filename, which is never a real path — os.Stat on
+// it always fails with "файл не найден" the moment a stack uses more than
+// one compose file. The base/first file is the one that actually declares
+// the service (later -f files only override fields in it), so it is the
+// one worth editing here.
+func primaryComposeFile(label string) string {
+	first, _, _ := strings.Cut(label, ",")
+	return first
 }
 
 func firstOr(list []string, def string) string {

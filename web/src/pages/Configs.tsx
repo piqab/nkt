@@ -168,8 +168,11 @@ export default function Configs({ me }: { me: Me }) {
                     setView('text')
                   }}
                   style={{
+                    display: 'block',
+                    width: '100%',
                     textAlign: 'left',
                     height: 'auto',
+                    whiteSpace: 'normal',
                     background: f.path === path ? 'var(--wash)' : undefined,
                     fontWeight: f.path === path ? 600 : 400,
                     padding: '0.3rem 0.4rem',
