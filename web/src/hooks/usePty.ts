@@ -88,72 +88,105 @@ export function usePty(wsUrl: string) {
     stop()
     setStatus('connecting')
 
-    const term = new XTerm({
-      cursorBlink: true,
-      fontSize,
-      fontFamily: 'var(--mono)',
-      theme: THEME,
-      scrollback: 5000,
+    // setStatus above does not repaint the DOM synchronously — React
+    // flushes and the browser paints only after this function returns.
+    // Callers that hide the container until a session starts (a CSS
+    // display:none toggle keyed on status, or an antd Modal whose entrance
+    // animation hasn't begun yet) therefore still have it hidden/unlaid-out
+    // at this exact point. xterm.js measures character-cell metrics as
+    // part of Terminal.open() itself — opening on a hidden container
+    // permanently bakes in a broken (zero) measurement that a later resize
+    // does not fix, because the container's *size* changing is not what
+    // was wrong; the *measurement taken while unmeasurable* is. One rAF
+    // defers this far enough for that repaint to have actually happened,
+    // which the ResizeObserver below (a real fix for a genuinely
+    // late-settling container size, not for this) cannot do on its own.
+    requestAnimationFrame(() => {
+      try {
+        runStart()
+      } catch (err) {
+        // An uncaught throw partway through (xterm.js opening on a
+        // container that still isn't measurable for some other reason,
+        // say) must not leave status stuck on "connecting" forever with
+        // nothing on screen to explain why — that reads as a hung
+        // connection, not the local failure it actually was.
+        // eslint-disable-next-line no-console
+        console.error('usePty: failed to start session', err)
+        setStatus('error')
+      }
     })
 
-    const fit = new FitAddon()
-    term.loadAddon(fit)
-    fitAddonRef.current = fit
-    term.loadAddon(new WebLinksAddon())
-    const search = new SearchAddon()
-    term.loadAddon(search)
-    searchAddonRef.current = search
-    term.loadAddon(new Unicode11Addon())
-    term.unicode.activeVersion = '11'
-    // The canvas renderer measurably smooths scrolling under heavy output
-    // (apt-get upgrade logs, `ls` of a large tree) versus the default DOM
-    // renderer — optional by design: if the browser refuses a 2D canvas
-    // context for any reason, the terminal must keep working on the
-    // fallback renderer rather than fail to open at all.
-    try {
-      term.loadAddon(new CanvasAddon())
-    } catch {
-      // DOM renderer stays in effect — still fully functional, just slower
-      // under very high-volume output.
+    function runStart() {
+      if (!containerRef.current) return // unmounted before this frame ran
+
+      const term = new XTerm({
+        cursorBlink: true,
+        fontSize,
+        fontFamily: 'var(--mono)',
+        theme: THEME,
+        scrollback: 5000,
+      })
+
+      const fit = new FitAddon()
+      term.loadAddon(fit)
+      fitAddonRef.current = fit
+      term.loadAddon(new WebLinksAddon())
+      const search = new SearchAddon()
+      term.loadAddon(search)
+      searchAddonRef.current = search
+      term.loadAddon(new Unicode11Addon())
+      term.unicode.activeVersion = '11'
+      // The canvas renderer measurably smooths scrolling under heavy
+      // output (apt-get upgrade logs, `ls` of a large tree) versus the
+      // default DOM renderer — optional by design: if the browser refuses
+      // a 2D canvas context for any reason, the terminal must keep
+      // working on the fallback renderer rather than fail to open at all.
+      try {
+        term.loadAddon(new CanvasAddon())
+      } catch {
+        // DOM renderer stays in effect — still fully functional, just
+        // slower under very high-volume output.
+      }
+
+      term.open(containerRef.current)
+      termRef.current = term
+
+      // A plain one-shot fit() right after open() is not enough when the
+      // container is inside something that finishes laying out
+      // asynchronously — an antd Modal, in particular, mounts its content
+      // before its own open animation settles, so the container can still
+      // report a zero (or stale) size at this exact point: the terminal
+      // then opens at 0 cols/rows and never recovers, rendering as an
+      // empty box even though data is arriving. ResizeObserver fires once
+      // immediately on observe() with whatever the real size is right
+      // then, and again on every later change, which a single fit() call
+      // cannot give us.
+      const resizeObserver = new ResizeObserver(() => fit.fit())
+      resizeObserver.observe(containerRef.current)
+      resizeObserverRef.current = resizeObserver
+
+      const ws = new WebSocket(wsUrl)
+      ws.binaryType = 'arraybuffer'
+      wsRef.current = ws
+      const encoder = new TextEncoder()
+
+      ws.onopen = () => {
+        setStatus('connected')
+        term.focus()
+      }
+      ws.onmessage = (ev) => {
+        if (ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data))
+      }
+      ws.onerror = () => setStatus('error')
+      ws.onclose = () => setStatus((s) => (s === 'error' ? s : 'closed'))
+
+      term.onData((data) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(encoder.encode(data))
+      })
+      term.onResize(({ cols, rows }) => {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows }))
+      })
     }
-
-    term.open(containerRef.current)
-    termRef.current = term
-
-    // A plain one-shot fit() right after open() is not enough when the
-    // container is inside something that finishes laying out asynchronously
-    // — an antd Modal, in particular, mounts its content before its own
-    // open animation settles, so the container can still report a zero (or
-    // stale) size at this exact point: the terminal then opens at 0 cols/
-    // rows and never recovers, rendering as an empty box even though data
-    // is arriving. ResizeObserver fires once immediately on observe() with
-    // whatever the real size is right then, and again on every later
-    // change, which a single fit() call cannot give us.
-    const resizeObserver = new ResizeObserver(() => fit.fit())
-    resizeObserver.observe(containerRef.current)
-    resizeObserverRef.current = resizeObserver
-
-    const ws = new WebSocket(wsUrl)
-    ws.binaryType = 'arraybuffer'
-    wsRef.current = ws
-    const encoder = new TextEncoder()
-
-    ws.onopen = () => {
-      setStatus('connected')
-      term.focus()
-    }
-    ws.onmessage = (ev) => {
-      if (ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data))
-    }
-    ws.onerror = () => setStatus('error')
-    ws.onclose = () => setStatus((s) => (s === 'error' ? s : 'closed'))
-
-    term.onData((data) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(encoder.encode(data))
-    })
-    term.onResize(({ cols, rows }) => {
-      if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows }))
-    })
     // wsUrl is the only real dependency — start() always (re)builds a fresh
     // terminal/socket pair from scratch via stop() above regardless of when
     // it's called, so re-creating the callback on every render buys nothing.

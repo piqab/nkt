@@ -69,17 +69,41 @@ export default function TerminalPage({ me }: { me: Me }) {
         {status === 'connected' && (
           <PtyToolbar onCopy={copySelection} onClear={clear} onFontSize={changeFontSize} onSearch={search} />
         )}
-        <div
-          ref={containerRef}
-          style={{
-            height: '65vh',
-            background: '#141414',
-            borderRadius: 'var(--radius-sm)',
-            padding: '0.5rem',
-            display: status === 'idle' ? 'none' : 'block',
-          }}
-        />
-        {status === 'idle' && <div className="chart-empty">Терминал ещё не открыт.</div>}
+        {/* The xterm container stays mounted and laid out (never
+            display:none) from the very first render — xterm.js measures
+            character-cell metrics as part of opening, and doing that on a
+            hidden element bakes in a broken measurement no later resize
+            fixes (see usePty's own comment on this). The "not started yet"
+            state is an overlay on top of it instead of a replacement for
+            it, so the terminal is always sitting on a real, visible,
+            correctly-sized element by the time start() actually opens it. */}
+        <div style={{ position: 'relative' }}>
+          <div
+            ref={containerRef}
+            style={{
+              height: '65vh',
+              background: '#141414',
+              borderRadius: 'var(--radius-sm)',
+              padding: '0.5rem',
+            }}
+          />
+          {status === 'idle' && (
+            <div
+              className="chart-empty"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#141414',
+                borderRadius: 'var(--radius-sm)',
+              }}
+            >
+              Терминал ещё не открыт.
+            </div>
+          )}
+        </div>
       </Card>
     </>
   )
