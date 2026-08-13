@@ -71,7 +71,12 @@ export function buildAntdTheme(isDark: boolean): ThemeConfig {
   if (mono) token.fontFamilyCode = mono
 
   return {
-    algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+    // compactAlgorithm stacks on top of dark/default — it shrinks control
+    // heights, padding and font sizes across every antd component
+    // (buttons, inputs, tables, cards, forms, ...) uniformly, rather than
+    // hand-tuning spacing per component. Applies globally since virtually
+    // the whole UI is antd-rendered now (Phases 3-6).
+    algorithm: [isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm, antdTheme.compactAlgorithm],
     token,
   }
 }
