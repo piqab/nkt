@@ -65,8 +65,10 @@ export function usePty(wsUrl: string) {
   const searchAddonRef = useRef<SearchAddon | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  const stopWaitRef = useRef<() => void>(() => {})
 
   const stop = useCallback(() => {
+    stopWaitRef.current()
     wsRef.current?.close()
     wsRef.current = null
     resizeObserverRef.current?.disconnect()
@@ -84,110 +86,144 @@ export function usePty(wsUrl: string) {
   useEffect(() => stop, [stop])
 
   const start = useCallback(() => {
-    if (!containerRef.current) return
     stop()
     setStatus('connecting')
 
-    try {
-      const term = new XTerm({
-        cursorBlink: true,
-        fontSize,
-        fontFamily: 'var(--mono)',
-        theme: THEME,
-        scrollback: 5000,
-        // Unicode11Addon (below) and setting term.unicode.activeVersion both
-        // touch xterm.js's "proposed" (unstable) API surface, which throws
-        // synchronously unless this is explicitly opted into — uncaught,
-        // that exception aborted start() before the WebSocket was ever
-        // created, which is why the terminal was blank with no network
-        // request at all, not a connection failure.
-        allowProposedApi: true,
-      })
-      termRef.current = term
+    // containerRef.current can still be null right here even though the
+    // caller just mounted (UpdateModal starts from a useEffect that fires
+    // the instant its own component mounts): antd's Modal renders its
+    // children into a portal target it may only attach a render or two
+    // after this component's own effects run, so the ref this component
+    // holds isn't guaranteed to be live yet on the very first tick. Rather
+    // than assume either timing (silently doing nothing forever, or
+    // crashing on a null container), poll a few animation frames for the
+    // ref to actually resolve — the same "wait for the real signal instead
+    // of guessing a delay" approach used for the container's size below.
+    let cancelled = false
+    let attempts = 0
+    const MAX_ATTEMPTS = 120 // ~2s at 60fps
 
-      const fit = new FitAddon()
-      term.loadAddon(fit)
-      fitAddonRef.current = fit
-      term.loadAddon(new WebLinksAddon())
-      const search = new SearchAddon()
-      term.loadAddon(search)
-      searchAddonRef.current = search
-      term.loadAddon(new Unicode11Addon())
-      term.unicode.activeVersion = '11'
-      // The canvas renderer measurably smooths scrolling under heavy
-      // output (apt-get upgrade logs, `ls` of a large tree) versus the
-      // default DOM renderer — optional by design: if the browser refuses
-      // a 2D canvas context for any reason, the terminal must keep
-      // working on the fallback renderer rather than fail to open at all.
+    const waitForContainer = () => {
+      if (cancelled) return
+      const container = containerRef.current
+      if (container) {
+        runStart(container)
+        return
+      }
+      attempts += 1
+      if (attempts >= MAX_ATTEMPTS) {
+        // eslint-disable-next-line no-console
+        console.error('usePty: container never mounted')
+        setStatus('error')
+        return
+      }
+      requestAnimationFrame(waitForContainer)
+    }
+    requestAnimationFrame(waitForContainer)
+    stopWaitRef.current = () => {
+      cancelled = true
+    }
+
+    function runStart(container: HTMLDivElement) {
       try {
-        term.loadAddon(new CanvasAddon())
-      } catch {
-        // DOM renderer stays in effect — still fully functional, just
-        // slower under very high-volume output.
-      }
-
-      // xterm.js measures character-cell metrics as part of Terminal.open()
-      // itself — calling it on a container that isn't measurable yet (still
-      // display:none, or an antd Modal whose enter animation hasn't laid
-      // out its content) permanently bakes in a broken (zero) measurement
-      // that no later resize corrects, because what was wrong was the
-      // *measurement taken while unmeasurable*, not the container's size
-      // changing afterwards. A single deferred frame doesn't reliably cover
-      // this — a CSS-driven modal animation can take far longer than one
-      // frame — so instead of guessing a delay, open() is held until the
-      // ResizeObserver itself reports a real, non-zero box. That observer
-      // then keeps calling fit() on every later resize as before, so this
-      // is a strict superset of the old one-shot behaviour, not a
-      // replacement path only used once.
-      let opened = false
-
-      function openAndConnect(container: HTMLDivElement) {
-        if (opened) return
-        opened = true
-        term.open(container)
-        fit.fit()
-
-        const ws = new WebSocket(wsUrl)
-        ws.binaryType = 'arraybuffer'
-        wsRef.current = ws
-        const encoder = new TextEncoder()
-
-        ws.onopen = () => {
-          setStatus('connected')
-          term.focus()
-        }
-        ws.onmessage = (ev) => {
-          if (ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data))
-        }
-        ws.onerror = () => setStatus('error')
-        ws.onclose = () => setStatus((s) => (s === 'error' ? s : 'closed'))
-
-        term.onData((data) => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(encoder.encode(data))
+        const term = new XTerm({
+          cursorBlink: true,
+          fontSize,
+          fontFamily: 'var(--mono)',
+          theme: THEME,
+          scrollback: 5000,
+          // Unicode11Addon (below) and setting term.unicode.activeVersion
+          // both touch xterm.js's "proposed" (unstable) API surface, which
+          // throws synchronously unless this is explicitly opted into —
+          // uncaught, that exception aborted start() before the WebSocket
+          // was ever created, which is why the terminal was blank with no
+          // network request at all, not a connection failure.
+          allowProposedApi: true,
         })
-        term.onResize(({ cols, rows }) => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows }))
-        })
-      }
+        termRef.current = term
 
-      const resizeObserver = new ResizeObserver(() => {
-        const container = containerRef.current
-        if (!container) return
-        if (!opened) {
-          if (container.clientWidth > 0 && container.clientHeight > 0) openAndConnect(container)
-          return
+        const fit = new FitAddon()
+        term.loadAddon(fit)
+        fitAddonRef.current = fit
+        term.loadAddon(new WebLinksAddon())
+        const search = new SearchAddon()
+        term.loadAddon(search)
+        searchAddonRef.current = search
+        term.loadAddon(new Unicode11Addon())
+        term.unicode.activeVersion = '11'
+        // The canvas renderer measurably smooths scrolling under heavy
+        // output (apt-get upgrade logs, `ls` of a large tree) versus the
+        // default DOM renderer — optional by design: if the browser refuses
+        // a 2D canvas context for any reason, the terminal must keep
+        // working on the fallback renderer rather than fail to open at all.
+        try {
+          term.loadAddon(new CanvasAddon())
+        } catch {
+          // DOM renderer stays in effect — still fully functional, just
+          // slower under very high-volume output.
         }
-        fit.fit()
-      })
-      resizeObserver.observe(containerRef.current)
-      resizeObserverRef.current = resizeObserver
-    } catch (err) {
-      // An uncaught throw partway through must not leave status stuck on
-      // "connecting" forever with nothing on screen to explain why — that
-      // reads as a hung connection, not the local failure it actually was.
-      // eslint-disable-next-line no-console
-      console.error('usePty: failed to start session', err)
-      setStatus('error')
+
+        // xterm.js measures character-cell metrics as part of Terminal.open()
+        // itself — calling it on a container that isn't measurable yet
+        // (still display:none, or an antd Modal whose enter animation
+        // hasn't laid out its content) permanently bakes in a broken (zero)
+        // measurement that no later resize corrects, because what was
+        // wrong was the *measurement taken while unmeasurable*, not the
+        // container's size changing afterwards. A single deferred frame
+        // doesn't reliably cover this — a CSS-driven modal animation can
+        // take far longer than one frame — so instead of guessing a delay,
+        // open() is held until the ResizeObserver itself reports a real,
+        // non-zero box. That observer then keeps calling fit() on every
+        // later resize as before, so this is a strict superset of the old
+        // one-shot behaviour, not a replacement path only used once.
+        let opened = false
+
+        function openAndConnect() {
+          if (opened) return
+          opened = true
+          term.open(container)
+          fit.fit()
+
+          const ws = new WebSocket(wsUrl)
+          ws.binaryType = 'arraybuffer'
+          wsRef.current = ws
+          const encoder = new TextEncoder()
+
+          ws.onopen = () => {
+            setStatus('connected')
+            term.focus()
+          }
+          ws.onmessage = (ev) => {
+            if (ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data))
+          }
+          ws.onerror = () => setStatus('error')
+          ws.onclose = () => setStatus((s) => (s === 'error' ? s : 'closed'))
+
+          term.onData((data) => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(encoder.encode(data))
+          })
+          term.onResize(({ cols, rows }) => {
+            if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows }))
+          })
+        }
+
+        const resizeObserver = new ResizeObserver(() => {
+          if (!opened) {
+            if (container.clientWidth > 0 && container.clientHeight > 0) openAndConnect()
+            return
+          }
+          fit.fit()
+        })
+        resizeObserver.observe(container)
+        resizeObserverRef.current = resizeObserver
+      } catch (err) {
+        // An uncaught throw partway through must not leave status stuck on
+        // "connecting" forever with nothing on screen to explain why — that
+        // reads as a hung connection, not the local failure it actually was.
+        // eslint-disable-next-line no-console
+        console.error('usePty: failed to start session', err)
+        setStatus('error')
+      }
     }
     // wsUrl is the only real dependency — start() always (re)builds a fresh
     // terminal/socket pair from scratch via stop() above regardless of when
