@@ -12,6 +12,7 @@ import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
+import TerminalPage from './pages/Terminal'
 import Firewall from './pages/Firewall'
 import Certificates from './pages/Certificates'
 import Availability from './pages/Availability'
@@ -75,6 +76,9 @@ const NAV = [
   { to: '/configs', label: 'Конфигурации' },
   { to: '/services', label: 'Сервисы' },
   { to: '/containers', label: 'Контейнеры и ВМ' },
+  // A viewer has nothing to look at here without connecting (unlike the
+  // read-only pages above) — hidden rather than shown-but-disabled.
+  { to: '/terminal', label: 'Терминал', adminOnly: true },
   { to: '/firewall', label: 'Firewall' },
   { to: '/certificates', label: 'Сертификаты', badge: 'certs' as const },
   { to: '/audit', label: 'Журнал действий' },
@@ -336,6 +340,7 @@ function Shell({
             <Route path="/podman" element={<Navigate to="/containers" replace />} />
             <Route path="/lxd" element={<Navigate to="/containers" replace />} />
             <Route path="/vms" element={<Navigate to="/containers" replace />} />
+            {me.is_admin && <Route path="/terminal" element={<TerminalPage me={me} />} />}
             <Route path="/firewall" element={<Firewall me={me} />} />
             <Route path="/certificates" element={<Certificates me={me} />} />
             <Route path="/audit" element={<Audit />} />

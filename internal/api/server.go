@@ -76,11 +76,6 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(s.requestLogger)
 	r.Use(middleware.Recoverer)
-	// Comfortably longer than CertbotTimeout: an ACME renewal that's still
-	// legitimately running must get its response back, not be cut off by a
-	// blanket request ceiling sized for the fast host commands everything
-	// else on this router uses.
-	r.Use(middleware.Timeout(s.cfg.CertbotTimeout + time.Minute))
 	r.Use(s.cors)
 	r.Use(securityHeaders)
 
@@ -88,7 +83,26 @@ func (s *Server) Handler() http.Handler {
 		r.Get("/health", s.handleHealth)
 		r.Post("/auth/login", s.handleLogin)
 
+		// The terminal WebSocket is long-lived by design and registered on
+		// its own group specifically so it never inherits the blanket
+		// request Timeout below: chi's timeout wrapper doesn't implement
+		// http.Hijacker (breaking the WS upgrade outright), and even if it
+		// did, a bounded ceiling would kill any interactive session that
+		// outlives it. RequireAdmin depends on RequireAuth having already
+		// put the user in context, so both are needed here, not just the
+		// admin check.
 		r.Group(func(r chi.Router) {
+			r.Use(s.auth.RequireAuth)
+			r.Use(s.auth.RequireAdmin)
+			r.Get("/terminal/ws", s.handleTerminalWS)
+		})
+
+		r.Group(func(r chi.Router) {
+			// Comfortably longer than CertbotTimeout: an ACME renewal
+			// that's still legitimately running must get its response
+			// back, not be cut off by a blanket request ceiling sized for
+			// the fast host commands everything else on this router uses.
+			r.Use(middleware.Timeout(s.cfg.CertbotTimeout + time.Minute))
 			r.Use(s.auth.RequireAuth)
 
 			r.Get("/auth/me", s.handleMe)
