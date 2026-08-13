@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -39,6 +40,9 @@ type Server struct {
 	libvirt   *control.LibvirtManager
 	ui        fs.FS
 	log       *slog.Logger
+
+	updateSessionMu sync.Mutex
+	updateSession   *updateSession
 }
 
 // Deps bundles the constructed subsystems.
