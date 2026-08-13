@@ -95,6 +95,22 @@ type Config struct {
 	CORSOrigins []string
 	DevProxyUI  bool
 
+	// TerminalEnabled turns on the web terminal (/api/terminal/ws — a real
+	// login shell over WebSocket, wired through the same RequireAdmin +
+	// AllowMutations gate as every other mutating endpoint). Off by default:
+	// unlike the rest of the API, this is direct interactive shell access,
+	// not a bounded action — an operator must consciously opt in, in
+	// addition to already being admin with mutations on. Also refused
+	// outright in ModeFixtures regardless of this flag (see
+	// handleTerminalWS) — a demo/fixtures instance must never be able to
+	// spawn a real shell on whatever machine happens to be running it.
+	TerminalEnabled bool
+	// TerminalIdleTimeout closes a terminal session that has sent or
+	// received nothing for this long — the safety net for a tab left open
+	// and forgotten, since the underlying shell process otherwise runs
+	// until someone closes it by hand.
+	TerminalIdleTimeout time.Duration
+
 	// Hub only (ModeHub): base64-encoded AES-256 key used to encrypt SSH
 	// credentials and remote session tokens at rest. Left empty, the hub
 	// generates one on first start and persists it under DataDir instead —
@@ -181,6 +197,9 @@ func Load() (*Config, error) {
 		CommandTimeout: envDur("NKT_COMMAND_TIMEOUT", 30*time.Second),
 		CertbotTimeout: envDur("NKT_CERTBOT_TIMEOUT", 3*time.Minute),
 		CertbotEmail:   envStr("NKT_CERTBOT_EMAIL", ""),
+
+		TerminalEnabled:     envBool("NKT_TERMINAL_ENABLED", false),
+		TerminalIdleTimeout: envDur("NKT_TERMINAL_IDLE_TIMEOUT", 30*time.Minute),
 
 		AutoRenewCerts:         envBool("NKT_AUTO_RENEW_CERTS", false),
 		AutoRenewCertsInterval: envDur("NKT_AUTO_RENEW_INTERVAL", 6*time.Hour),
