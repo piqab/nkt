@@ -2,8 +2,6 @@ package api
 
 import (
 	"net/http"
-	"os"
-	"os/exec"
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
@@ -30,9 +28,8 @@ func (s *Server) handleUpdatesWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cmd := exec.Command("bash", "-c", "apt-get update && apt-get upgrade")
 	// DEBIAN_FRONTEND intentionally left at its default (not "noninteractive"):
 	// the whole point is a real prompt the operator answers themselves.
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	cmd := unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, "bash", "-c", "apt-get update && apt-get upgrade")
 	s.runPTYSession(w, r, cmd, "packages.upgrade", "apt-get upgrade", s.cfg.TerminalIdleTimeout)
 }

@@ -13,6 +13,14 @@ export type PtyStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error'
 const MIN_FONT_SIZE = 9
 const MAX_FONT_SIZE = 22
 
+// Mirrors styles.css's --mono token as a literal font stack — xterm.js
+// passes this straight into a Canvas 2D context's `font` property (via
+// CanvasAddon) to measure and draw glyphs, and unlike a DOM element's
+// style, ctx.font does not resolve CSS custom properties: a bare
+// `var(--mono)` silently falls back to the canvas default (usually a
+// proportional font), which is why glyph spacing looked wrong.
+const MONO_FONT_STACK = "ui-monospace, SFMono-Regular, 'Cascadia Mono', Consolas, monospace"
+
 /** Dark terminal palette built from the app's own categorical chart colours
  * (styles.css's --series-N tokens) rather than a generic scheme, so ANSI
  * colour output (ls --color, git status, apt, prompts) reads as part of the
@@ -129,7 +137,7 @@ export function usePty(wsUrl: string) {
         const term = new XTerm({
           cursorBlink: true,
           fontSize,
-          fontFamily: 'var(--mono)',
+          fontFamily: MONO_FONT_STACK,
           theme: THEME,
           scrollback: 5000,
           // Unicode11Addon (below) and setting term.unicode.activeVersion
