@@ -136,3 +136,24 @@ func keys(m map[string]model.Container) []string {
 	}
 	return out
 }
+
+// TestPrimaryComposeFile covers the fix for a real "файл не найден" report:
+// a stack brought up with several -f files gets a comma-joined label
+// (com.docker.compose.project.config_files), and the whole joined string is
+// never a real path on disk — "редактировать конфиг" must open the first
+// (base) file, not the raw label.
+func TestPrimaryComposeFile(t *testing.T) {
+	cases := []struct {
+		label string
+		want  string
+	}{
+		{"/srv/docker/docker-compose.yml", "/srv/docker/docker-compose.yml"},
+		{"/srv/docker/docker-compose.yml,/srv/docker/docker-compose.override.yml", "/srv/docker/docker-compose.yml"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := primaryComposeFile(c.label); got != c.want {
+			t.Errorf("primaryComposeFile(%q) = %q, want %q", c.label, got, c.want)
+		}
+	}
+}
