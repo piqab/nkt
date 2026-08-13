@@ -95,6 +95,13 @@ export function usePty(wsUrl: string) {
         fontFamily: 'var(--mono)',
         theme: THEME,
         scrollback: 5000,
+        // Unicode11Addon (below) and setting term.unicode.activeVersion both
+        // touch xterm.js's "proposed" (unstable) API surface, which throws
+        // synchronously unless this is explicitly opted into — uncaught,
+        // that exception aborted start() before the WebSocket was ever
+        // created, which is why the terminal was blank with no network
+        // request at all, not a connection failure.
+        allowProposedApi: true,
       })
       termRef.current = term
 
