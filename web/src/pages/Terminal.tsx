@@ -1,6 +1,7 @@
 import { Button } from 'antd'
 import type { Me } from '../types'
 import { Banner, Card } from '../components/ui'
+import { PtyToolbar } from '../components/PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
 
 /**
@@ -13,7 +14,9 @@ import { usePty, wsURL } from '../hooks/usePty'
  */
 export default function TerminalPage({ me }: { me: Me }) {
   const canUse = me.is_admin && me.allow_mutations
-  const { containerRef, status, start, stop } = usePty(wsURL('/terminal/ws'))
+  const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(
+    wsURL('/terminal/ws'),
+  )
 
   function handleStart() {
     if (
@@ -63,6 +66,9 @@ export default function TerminalPage({ me }: { me: Me }) {
       {status === 'closed' && <Banner kind="info">Сессия завершена.</Banner>}
 
       <Card>
+        {status === 'connected' && (
+          <PtyToolbar onCopy={copySelection} onClear={clear} onFontSize={changeFontSize} onSearch={search} />
+        )}
         <div
           ref={containerRef}
           style={{

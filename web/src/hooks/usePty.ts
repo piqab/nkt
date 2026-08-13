@@ -1,10 +1,45 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Terminal as XTerm } from '@xterm/xterm'
+import { Terminal as XTerm, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { WebLinksAddon } from '@xterm/addon-web-links'
+import { SearchAddon } from '@xterm/addon-search'
+import { CanvasAddon } from '@xterm/addon-canvas'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 import '@xterm/xterm/css/xterm.css'
 import { hostScope } from '../api'
 
 export type PtyStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error'
+
+const MIN_FONT_SIZE = 9
+const MAX_FONT_SIZE = 22
+
+/** Dark terminal palette built from the app's own categorical chart colours
+ * (styles.css's --series-N tokens) rather than a generic scheme, so ANSI
+ * colour output (ls --color, git status, apt, prompts) reads as part of the
+ * same product instead of an unrelated embedded widget. */
+const THEME: ITheme = {
+  background: '#161616',
+  foreground: '#e8e6e1',
+  cursor: '#e8e6e1',
+  cursorAccent: '#161616',
+  selectionBackground: 'rgba(255, 255, 255, 0.28)',
+  black: '#161616',
+  red: '#e34948', // --series-8
+  green: '#1baf7a', // --series-3
+  yellow: '#eda100', // --series-4
+  blue: '#2a78d6', // --series-1
+  magenta: '#e87ba4', // --series-5
+  cyan: '#3a9aa0',
+  white: '#e8e6e1',
+  brightBlack: '#6b6b68',
+  brightRed: '#ff7472',
+  brightGreen: '#3fd6a0',
+  brightYellow: '#ffc247',
+  brightBlue: '#5b9bf0',
+  brightMagenta: '#f5a3c5',
+  brightCyan: '#63c2c8',
+  brightWhite: '#ffffff',
+}
 
 /**
  * Wires an xterm.js terminal to a PTY-over-WebSocket endpoint (see
@@ -12,11 +47,22 @@ export type PtyStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error'
  * as a JSON text frame). Shared by the general terminal page and the
  * package-update dialog — both stream a live interactive PTY session the
  * same way and differ only in the WebSocket URL and the UI around it.
+ *
+ * Pinned to @xterm/xterm 5.5.0, not the newer 6.x line: v6 rewrote its
+ * rendering internals wholesale (adopted VS Code's own render platform,
+ * dropped the canvas renderer entirely) mere months before this was
+ * written, and none of the addons below have caught up to it yet (their
+ * package.json peer deps still say ^5.0.0) — too fresh to trust for
+ * something this central, versus 5.5.0's long, widely deployed track
+ * record (VS Code's own integrated terminal included).
  */
 export function usePty(wsUrl: string) {
   const [status, setStatus] = useState<PtyStatus>('idle')
+  const [fontSize, setFontSize] = useState(13)
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
+  const fitAddonRef = useRef<FitAddon | null>(null)
+  const searchAddonRef = useRef<SearchAddon | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
 
@@ -27,6 +73,8 @@ export function usePty(wsUrl: string) {
     resizeObserverRef.current = null
     termRef.current?.dispose()
     termRef.current = null
+    fitAddonRef.current = null
+    searchAddonRef.current = null
     setStatus((s) => (s === 'idle' ? s : 'closed'))
   }, [])
 
@@ -42,12 +90,33 @@ export function usePty(wsUrl: string) {
 
     const term = new XTerm({
       cursorBlink: true,
-      fontSize: 13,
+      fontSize,
       fontFamily: 'var(--mono)',
-      theme: { background: '#141414', foreground: '#e6e6e6', cursor: '#e6e6e6' },
+      theme: THEME,
+      scrollback: 5000,
     })
+
     const fit = new FitAddon()
     term.loadAddon(fit)
+    fitAddonRef.current = fit
+    term.loadAddon(new WebLinksAddon())
+    const search = new SearchAddon()
+    term.loadAddon(search)
+    searchAddonRef.current = search
+    term.loadAddon(new Unicode11Addon())
+    term.unicode.activeVersion = '11'
+    // The canvas renderer measurably smooths scrolling under heavy output
+    // (apt-get upgrade logs, `ls` of a large tree) versus the default DOM
+    // renderer — optional by design: if the browser refuses a 2D canvas
+    // context for any reason, the terminal must keep working on the
+    // fallback renderer rather than fail to open at all.
+    try {
+      term.loadAddon(new CanvasAddon())
+    } catch {
+      // DOM renderer stays in effect — still fully functional, just slower
+      // under very high-volume output.
+    }
+
     term.open(containerRef.current)
     termRef.current = term
 
@@ -91,7 +160,35 @@ export function usePty(wsUrl: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsUrl])
 
-  return { containerRef, status, start, stop }
+  const copySelection = useCallback(() => {
+    const text = termRef.current?.getSelection()
+    if (text) void navigator.clipboard.writeText(text)
+  }, [])
+
+  const clear = useCallback(() => termRef.current?.clear(), [])
+
+  const changeFontSize = useCallback((delta: number) => {
+    setFontSize((size) => {
+      const next = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, size + delta))
+      if (termRef.current) termRef.current.options.fontSize = next
+      // fontSize is not a layout-affecting CSS property the ResizeObserver
+      // above would ever see change on its own — cols/rows have to be
+      // recomputed for the new glyph metrics explicitly, once the browser
+      // has actually re-laid-out the resized character cells.
+      requestAnimationFrame(() => fitAddonRef.current?.fit())
+      return next
+    })
+  }, [])
+
+  const search = useCallback((query: string, backwards = false) => {
+    if (!query) return
+    const addon = searchAddonRef.current
+    if (!addon) return
+    if (backwards) addon.findPrevious(query)
+    else addon.findNext(query)
+  }, [])
+
+  return { containerRef, status, start, stop, copySelection, clear, changeFontSize, search }
 }
 
 /** Mirrors api.ts's own hostScope-aware prefixing — WebSocket needs its own
