@@ -149,6 +149,10 @@ type addHostRequest struct {
 	SSHUser  string `json:"ssh_user"`
 	AuthKind string `json:"auth_kind"` // "generated" | "password" | "key"
 	Secret   string `json:"secret"`    // password, or a PEM private key — unused when auth_kind is "generated"
+	// TerminalEnabled becomes NKT_TERMINAL_ENABLED on this host's next
+	// install/update (see store.Host.TerminalEnabled) — off by default,
+	// same as the env var itself.
+	TerminalEnabled bool `json:"terminal_enabled"`
 }
 
 // hostWithOverview is store.Host plus what pollOverviews last learned about
@@ -201,7 +205,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 	sshUser := strings.TrimSpace(req.SSHUser)
 
 	if req.AuthKind == authKindGenerated {
-		id, authorizedKey, err := s.hub.AddHostGenerated(r.Context(), name, addr, req.SSHPort, sshUser)
+		id, authorizedKey, err := s.hub.AddHostGenerated(r.Context(), name, addr, req.SSHPort, sshUser, req.TerminalEnabled)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -210,7 +214,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := s.hub.AddHost(r.Context(), name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret)
+	id, err := s.hub.AddHost(r.Context(), name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret, req.TerminalEnabled)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -223,12 +227,13 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 // Manager.UpdateHost). auth_kind "generated" replaces it with a freshly
 // hub-generated keypair regardless of Secret.
 type updateHostRequest struct {
-	Name     string `json:"name"`
-	Addr     string `json:"addr"`
-	SSHPort  int    `json:"ssh_port"`
-	SSHUser  string `json:"ssh_user"`
-	AuthKind string `json:"auth_kind"`
-	Secret   string `json:"secret"`
+	Name            string `json:"name"`
+	Addr            string `json:"addr"`
+	SSHPort         int    `json:"ssh_port"`
+	SSHUser         string `json:"ssh_user"`
+	AuthKind        string `json:"auth_kind"`
+	Secret          string `json:"secret"`
+	TerminalEnabled bool   `json:"terminal_enabled"`
 }
 
 func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +252,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 	sshUser := strings.TrimSpace(req.SSHUser)
 
 	if req.AuthKind == authKindGenerated {
-		authorizedKey, err := s.hub.UpdateHostGenerated(r.Context(), id, name, addr, req.SSHPort, sshUser)
+		authorizedKey, err := s.hub.UpdateHostGenerated(r.Context(), id, name, addr, req.SSHPort, sshUser, req.TerminalEnabled)
 		if err != nil {
 			fail(w, err)
 			return
@@ -256,7 +261,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.hub.UpdateHost(r.Context(), id, name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret); err != nil {
+	if err := s.hub.UpdateHost(r.Context(), id, name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret, req.TerminalEnabled); err != nil {
 		fail(w, err)
 		return
 	}

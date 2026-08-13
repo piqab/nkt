@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Badge, Button, Form, Input, InputNumber, Select, Switch, Table, Tooltip, type TableColumnsType } from 'antd'
+import { Badge, Button, Checkbox, Form, Input, InputNumber, Select, Switch, Table, Tooltip, type TableColumnsType } from 'antd'
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -571,6 +571,7 @@ type HostFormValues = {
   ssh_port: number
   ssh_user: string
   secret?: string
+  terminal_enabled: boolean
 }
 
 /**
@@ -608,6 +609,7 @@ function HostForm({
         ssh_user: values.ssh_user,
         auth_kind: authKind,
         secret: values.secret ?? '',
+        terminal_enabled: values.terminal_enabled ?? false,
       }
       let authorizedKey: string | undefined
       if (editing) {
@@ -652,6 +654,7 @@ function HostForm({
         addr: initial?.addr ?? '',
         ssh_port: initial?.ssh_port ?? 22,
         ssh_user: initial?.ssh_user ?? 'root',
+        terminal_enabled: initial?.terminal_enabled ?? false,
       }}
     >
       {error && <Banner kind="error">{error}</Banner>}
@@ -701,6 +704,15 @@ function HostForm({
           )}
         </Form.Item>
       )}
+      <Form.Item name="terminal_enabled" valuePropName="checked" style={{ marginBottom: '0.4rem' }}>
+        <Checkbox>
+          включить веб-терминал на хосте
+          <div className="small muted" style={{ fontWeight: 400 }}>
+            Полноценный root-shell прямо в браузере (раздел «Терминал» на самом хосте) —
+            выключено по умолчанию. Применится при следующей установке/обновлении этого хоста.
+          </div>
+        </Checkbox>
+      </Form.Item>
       <Form.Item style={{ marginBottom: 0 }}>
         <Button type="primary" htmlType="submit" loading={busy}>
           {editing ? 'Сохранить' : 'Добавить хост'}

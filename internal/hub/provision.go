@@ -123,16 +123,20 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 }
 
 // renderEnv builds /etc/netknownsthat/nkt.env for the remote host. Values
-// beyond mode/addr/admin are left at defaults deploy/nkt.env.example itself
-// falls back to — an operator who needs to inspect a non-default nginx/
-// haproxy layout on that host can still edit the file by hand afterward.
+// beyond mode/addr/admin/terminal are left at defaults deploy/nkt.env.example
+// itself falls back to. This file is regenerated from scratch and reuploaded
+// by stageFiles on every install AND every "переустановить"/"обновить" — not
+// only the first install — so an operator editing it by hand directly on the
+// host does not stick; anything that needs to survive across updates belongs
+// in the hosts table (like TerminalEnabled below) and gets rendered here
+// instead.
 //
 // NKT_COOKIE_SECURE=false is deliberate, not an oversight: the hub only ever
 // reaches this instance through the SSH tunnel dialed in tunnel.go, over
 // plain HTTP on loopback — never through a browser directly. Requiring HTTPS
 // there (the default) would make the remote nkt refuse to set the very
 // session cookie the hub needs to capture in bootstrapLogin.
-func renderEnv(adminUser, adminPassword string) string {
+func renderEnv(adminUser, adminPassword string, terminalEnabled bool) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "NKT_MODE=local\n")
 	fmt.Fprintf(&b, "NKT_DATA_DIR=%s\n", remoteDataDir)
@@ -140,6 +144,7 @@ func renderEnv(adminUser, adminPassword string) string {
 	fmt.Fprintf(&b, "NKT_BOOTSTRAP_ADMIN_USER=%s\n", adminUser)
 	fmt.Fprintf(&b, "NKT_BOOTSTRAP_ADMIN_PASSWORD=%s\n", adminPassword)
 	fmt.Fprintf(&b, "NKT_COOKIE_SECURE=false\n")
+	fmt.Fprintf(&b, "NKT_TERMINAL_ENABLED=%t\n", terminalEnabled)
 	return b.String()
 }
 

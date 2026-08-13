@@ -15,7 +15,7 @@ import (
 )
 
 func TestRenderEnvContainsExpectedLines(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw")
+	out := renderEnv("admin", "s3cr3t-pw", false)
 
 	for _, want := range []string{
 		"NKT_MODE=local",
@@ -26,10 +26,26 @@ func TestRenderEnvContainsExpectedLines(t *testing.T) {
 		// tunnel — requiring HTTPS here would stop the remote from setting
 		// the session cookie bootstrapLogin needs to capture.
 		"NKT_COOKIE_SECURE=false",
+		"NKT_TERMINAL_ENABLED=false",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("renderEnv output missing %q, got:\n%s", want, out)
 		}
+	}
+}
+
+// TestRenderEnvPassesThroughTerminalEnabled covers the fix for a real
+// limitation: a hub-managed host's nkt.env is regenerated from scratch by
+// stageFiles on every install AND every "переустановить"/"обновить" — an
+// operator editing NKT_TERMINAL_ENABLED by hand directly on the host would
+// have it silently overwritten the next time the hub touches that host.
+// The per-host store.Host.TerminalEnabled flag (see Manager.install) is
+// what actually has to survive that regeneration, so this asserts renderEnv
+// itself faithfully reflects whatever it is told, not a hardcoded default.
+func TestRenderEnvPassesThroughTerminalEnabled(t *testing.T) {
+	out := renderEnv("admin", "s3cr3t-pw", true)
+	if !strings.Contains(out, "NKT_TERMINAL_ENABLED=true") {
+		t.Errorf("renderEnv(..., true) output missing NKT_TERMINAL_ENABLED=true, got:\n%s", out)
 	}
 }
 

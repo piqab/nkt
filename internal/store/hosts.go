@@ -46,9 +46,15 @@ type Host struct {
 	NktVersion  string `json:"nkt_version"`
 	AdminUser   string `json:"admin_user,omitempty"`
 	SudoStatus  string `json:"sudo_status,omitempty"`
-	ErrorMsg    string `json:"error_msg,omitempty"`
-	CreatedAt   string `json:"created_at"`
-	LastSeenAt  string `json:"last_seen_at,omitempty"`
+	// TerminalEnabled is passed through as NKT_TERMINAL_ENABLED when the hub
+	// (re)installs this host — see internal/hub/provision.go's renderEnv.
+	// Off by default like the env var itself: opening a root shell on a
+	// managed host is not something the hub should hand out just because a
+	// host was added, so this needs its own explicit per-host opt-in.
+	TerminalEnabled bool   `json:"terminal_enabled"`
+	ErrorMsg        string `json:"error_msg,omitempty"`
+	CreatedAt       string `json:"created_at"`
+	LastSeenAt      string `json:"last_seen_at,omitempty"`
 
 	// SecretEnc and AdminPasswordEnc are secretbox-encrypted and never
 	// serialised to JSON — only the hub package that holds the master key
@@ -73,14 +79,14 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 }
 
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
-	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, error_msg, created_at, last_seen_at`
+	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled, error_msg, created_at, last_seen_at`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
 	var lastSeen sql.NullString
 	var adminPasswordEnc []byte
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
-		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.ErrorMsg, &h.CreatedAt, &lastSeen)
+		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled, &h.ErrorMsg, &h.CreatedAt, &lastSeen)
 	if err != nil {
 		return Host{}, err
 	}
@@ -182,6 +188,20 @@ func (d *DB) SetHostSudoStatus(ctx context.Context, id int64, status string) err
 		return errors.New("unknown sudo status: " + status)
 	}
 	res, err := d.ExecContext(ctx, `UPDATE hosts SET sudo_status = ? WHERE id = ?`, status, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetHostTerminalEnabled records whether the hub should pass
+// NKT_TERMINAL_ENABLED=true to this host on its next install/update — see
+// Host.TerminalEnabled.
+func (d *DB) SetHostTerminalEnabled(ctx context.Context, id int64, enabled bool) error {
+	res, err := d.ExecContext(ctx, `UPDATE hosts SET terminal_enabled = ? WHERE id = ?`, enabled, id)
 	if err != nil {
 		return err
 	}

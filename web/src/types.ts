@@ -31,6 +31,11 @@ export interface HubHost {
    * non-root ssh_user — '' means never observed (or invalidated by an
    * "изменить" that changed the connection). See store.SudoStatus*. */
   sudo_status?: '' | 'root' | 'nopasswd' | 'password_required'
+  /** Whether the hub passes NKT_TERMINAL_ENABLED=true when it (re)installs
+   * this host — off by default. The host's own nkt.env is regenerated from
+   * scratch on every install/update, so this has to live here (not edited
+   * by hand on the host) to survive one. */
+  terminal_enabled: boolean
   error_msg?: string
   created_at: string
   last_seen_at?: string

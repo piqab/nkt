@@ -33,7 +33,7 @@ func TestRecordSudoOutcome(t *testing.T) {
 
 	t.Run("root never needs sudo", func(t *testing.T) {
 		m, db := newTestManager(t)
-		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
 		if err != nil {
 			t.Fatalf("AddHost: %v", err)
 		}
@@ -46,7 +46,7 @@ func TestRecordSudoOutcome(t *testing.T) {
 
 	t.Run("non-root success confirms nopasswd", func(t *testing.T) {
 		m, db := newTestManager(t)
-		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw")
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw", false)
 		if err != nil {
 			t.Fatalf("AddHost: %v", err)
 		}
@@ -59,7 +59,7 @@ func TestRecordSudoOutcome(t *testing.T) {
 
 	t.Run("sudo error records password_required", func(t *testing.T) {
 		m, db := newTestManager(t)
-		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw")
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw", false)
 		if err != nil {
 			t.Fatalf("AddHost: %v", err)
 		}
@@ -72,7 +72,7 @@ func TestRecordSudoOutcome(t *testing.T) {
 
 	t.Run("unrelated error leaves status unset", func(t *testing.T) {
 		m, db := newTestManager(t)
-		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw")
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw", false)
 		if err != nil {
 			t.Fatalf("AddHost: %v", err)
 		}
@@ -89,7 +89,7 @@ func TestRemoveSudoAccessGuardsAgainstMisuse(t *testing.T) {
 
 	t.Run("refuses for root", func(t *testing.T) {
 		m, _ := newTestManager(t)
-		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
 		if err != nil {
 			t.Fatalf("AddHost: %v", err)
 		}
@@ -100,7 +100,7 @@ func TestRemoveSudoAccessGuardsAgainstMisuse(t *testing.T) {
 
 	t.Run("refuses when nopasswd was never confirmed", func(t *testing.T) {
 		m, _ := newTestManager(t)
-		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw")
+		id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw", false)
 		if err != nil {
 			t.Fatalf("AddHost: %v", err)
 		}
@@ -121,7 +121,7 @@ func TestResolveAdminCredentialIsStableAcrossReinstalls(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := context.Background()
 
-	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "ssh-pw")
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "ssh-pw", false)
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
@@ -164,7 +164,7 @@ func TestCancelInstallWithNoLiveJobResetsStatus(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := context.Background()
 
-	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestCancelInstallStopsLiveJob(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := context.Background()
 
-	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestCancelInstallStopsLiveJob(t *testing.T) {
 
 func TestAddHostRejectsBadKey(t *testing.T) {
 	m, _ := newTestManager(t)
-	_, err := m.AddHost(context.Background(), "h1", "10.0.0.1", 22, "root", store.HostAuthKey, "not a key")
+	_, err := m.AddHost(context.Background(), "h1", "10.0.0.1", 22, "root", store.HostAuthKey, "not a key", false)
 	if err == nil {
 		t.Fatal("expected AddHost to reject an unparsable private key")
 	}
@@ -235,7 +235,7 @@ func TestUpdateHostRenameKeepsSecret(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := context.Background()
 
-	id, err := m.AddHost(ctx, "old-name", "10.0.0.1", 22, "root", store.HostAuthPassword, "s3cret")
+	id, err := m.AddHost(ctx, "old-name", "10.0.0.1", 22, "root", store.HostAuthPassword, "s3cret", false)
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestUpdateHostRenameKeepsSecret(t *testing.T) {
 		t.Fatalf("HostByID: %v", err)
 	}
 
-	if err := m.UpdateHost(ctx, id, "new-name", "10.0.0.2", 2222, "admin", store.HostAuthPassword, ""); err != nil {
+	if err := m.UpdateHost(ctx, id, "new-name", "10.0.0.2", 2222, "admin", store.HostAuthPassword, "", false); err != nil {
 		t.Fatalf("UpdateHost: %v", err)
 	}
 
@@ -264,7 +264,7 @@ func TestUpdateHostReplacesSecret(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := context.Background()
 
-	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "old-password")
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "old-password", false)
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
@@ -273,7 +273,7 @@ func TestUpdateHostReplacesSecret(t *testing.T) {
 		t.Fatalf("HostByID: %v", err)
 	}
 
-	if err := m.UpdateHost(ctx, id, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "new-password"); err != nil {
+	if err := m.UpdateHost(ctx, id, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "new-password", false); err != nil {
 		t.Fatalf("UpdateHost: %v", err)
 	}
 
@@ -290,7 +290,7 @@ func TestAddHostGeneratedProducesAWorkingKeyPair(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := context.Background()
 
-	id, authorizedKey, err := m.AddHostGenerated(ctx, "h1", "10.0.0.1", 22, "root")
+	id, authorizedKey, err := m.AddHostGenerated(ctx, "h1", "10.0.0.1", 22, "root", false)
 	if err != nil {
 		t.Fatalf("AddHostGenerated: %v", err)
 	}
@@ -326,7 +326,7 @@ func TestPublicKeyLineRejectsPasswordHost(t *testing.T) {
 	m, _ := newTestManager(t)
 	ctx := context.Background()
 
-	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
@@ -339,7 +339,7 @@ func TestUpdateHostGeneratedRotatesKey(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := context.Background()
 
-	id, firstKey, err := m.AddHostGenerated(ctx, "h1", "10.0.0.1", 22, "root")
+	id, firstKey, err := m.AddHostGenerated(ctx, "h1", "10.0.0.1", 22, "root", false)
 	if err != nil {
 		t.Fatalf("AddHostGenerated: %v", err)
 	}
@@ -348,7 +348,7 @@ func TestUpdateHostGeneratedRotatesKey(t *testing.T) {
 		t.Fatalf("HostByID: %v", err)
 	}
 
-	secondKey, err := m.UpdateHostGenerated(ctx, id, "h1", "10.0.0.1", 22, "root")
+	secondKey, err := m.UpdateHostGenerated(ctx, id, "h1", "10.0.0.1", 22, "root", false)
 	if err != nil {
 		t.Fatalf("UpdateHostGenerated: %v", err)
 	}
@@ -369,11 +369,11 @@ func TestUpdateHostRejectsBadKey(t *testing.T) {
 	m, _ := newTestManager(t)
 	ctx := context.Background()
 
-	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw")
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
-	err = m.UpdateHost(ctx, id, "h1", "10.0.0.1", 22, "root", store.HostAuthKey, "not a key")
+	err = m.UpdateHost(ctx, id, "h1", "10.0.0.1", 22, "root", store.HostAuthKey, "not a key", false)
 	if err == nil {
 		t.Fatal("expected UpdateHost to reject an unparsable private key")
 	}
