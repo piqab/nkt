@@ -335,13 +335,15 @@ func (s *Server) handleStartHost(w http.ResponseWriter, r *http.Request) {
 
 // handleExportHosts hands back the whole host registry — including the
 // encrypted SSH/admin secrets, as-is — as a downloadable JSON file, for
-// backup or migrating to a new hub. The ciphertext only decrypts under
-// whatever NKT_HUB_MASTER_KEY produced it; importing into a hub with a
-// different key leaves the hosts registered but unreachable until their
-// secrets are re-entered, the same "расшифровка секрета" failure any other
-// master-key mismatch already produces elsewhere.
+// backup or migrating to a new hub. ?include_key=1 additionally embeds
+// this hub's own master key, so ImportHosts on the receiving hub can
+// re-encrypt every secret with its own key on the spot instead of
+// requiring the two hubs' NKT_HUB_MASTER_KEY to already match (see
+// Manager.ExportHosts/ImportHosts) — off by default, since while present
+// the file alone is enough to decrypt every secret in it.
 func (s *Server) handleExportHosts(w http.ResponseWriter, r *http.Request) {
-	export, err := s.db.ExportHosts(r.Context())
+	includeKey := r.URL.Query().Get("include_key") == "1"
+	export, err := s.hub.ExportHosts(r.Context(), includeKey)
 	if err != nil {
 		fail(w, err)
 		return
@@ -354,7 +356,9 @@ func (s *Server) handleExportHosts(w http.ResponseWriter, r *http.Request) {
 // handleImportHosts adds every host in an uploaded export as a brand-new
 // row — additive, never replacing or merging into what's already
 // registered (see store.ImportHosts) — and reports per-host failures
-// instead of aborting the whole file over one bad entry.
+// instead of aborting the whole file over one bad entry. An embedded
+// master key (see handleExportHosts) is consumed and re-encrypted away by
+// Manager.ImportHosts before anything reaches the database.
 func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 16<<20)) // 16 MiB — generous for a host list, not unbounded
 	if err != nil {
@@ -366,7 +370,7 @@ func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	imported, errs := s.db.ImportHosts(r.Context(), export)
+	imported, errs := s.hub.ImportHosts(r.Context(), export)
 	writeJSON(w, http.StatusOK, map[string]any{"imported": imported, "errors": errs})
 }
 
