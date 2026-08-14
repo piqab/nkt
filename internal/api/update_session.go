@@ -37,7 +37,11 @@ type updateSession struct {
 	mu   sync.Mutex
 	buf  []byte
 	done bool
-	subs map[chan []byte]struct{}
+	// exitCode is meaningful only once done — -1 stands for "the process
+	// state could not be determined", which must not be mistaken for
+	// success by anything deciding what to do after the run.
+	exitCode int
+	subs     map[chan []byte]struct{}
 }
 
 func newUpdateSession(cmd *exec.Cmd) (*updateSession, error) {
@@ -45,7 +49,7 @@ func newUpdateSession(cmd *exec.Cmd) (*updateSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := &updateSession{ptmx: ptmx, cmd: cmd, subs: map[chan []byte]struct{}{}}
+	s := &updateSession{ptmx: ptmx, cmd: cmd, exitCode: -1, subs: map[chan []byte]struct{}{}}
 	go s.pump()
 	return s, nil
 }
@@ -65,12 +69,16 @@ func (s *updateSession) pump() {
 		}
 	}
 	_ = s.ptmx.Close()
+	exitCode := -1
 	if s.cmd.Process != nil {
-		_, _ = s.cmd.Process.Wait()
+		if state, err := s.cmd.Process.Wait(); err == nil && state != nil {
+			exitCode = state.ExitCode()
+		}
 	}
 
 	s.mu.Lock()
 	s.done = true
+	s.exitCode = exitCode
 	for ch := range s.subs {
 		close(ch)
 	}
@@ -129,6 +137,15 @@ func (s *updateSession) isDone() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.done
+}
+
+// outcome reports how the run ended: done is false while it is still
+// going, and exitCode is only meaningful once it is true (-1 meaning the
+// process state could not be read at all).
+func (s *updateSession) outcome() (done bool, exitCode int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.done, s.exitCode
 }
 
 // runUpdateSession bridges a WebSocket to a process-level session that

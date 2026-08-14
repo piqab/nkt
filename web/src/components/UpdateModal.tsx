@@ -14,7 +14,23 @@ import { usePty, wsURL } from '../hooks/usePty'
  * Overview), this dialog IS the thing that was confirmed, not another gate
  * in front of it.
  */
-export default function UpdateModal({ packages, onClose }: { packages: PackageUpdate[]; onClose: () => void }) {
+export default function UpdateModal({
+  packages,
+  onClose,
+  onFinished,
+  outcome,
+  rescanning,
+}: {
+  packages: PackageUpdate[]
+  onClose: () => void
+  onFinished?: () => void
+  /** How the run ended, once the caller has resolved it — null while it
+   * is still going or not yet known. */
+  outcome?: { ok: boolean; exitCode?: number } | null
+  /** The caller is rescanning the host after a successful run, so the
+   * package list it shows is about to change. */
+  rescanning?: boolean
+}) {
   const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(
     wsURL('/updates/ws'),
   )
@@ -25,6 +41,14 @@ export default function UpdateModal({ packages, onClose }: { packages: PackageUp
     // stable for the lifetime of this dialog.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // The server closes the socket the moment the run ends (see
+  // runUpdateSession), so this fires as soon as apt is actually done —
+  // no waiting on the next /updates/status poll to notice.
+  useEffect(() => {
+    if (status === 'closed') onFinished?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status])
 
   function handleClose() {
     stop()
@@ -59,7 +83,21 @@ export default function UpdateModal({ packages, onClose }: { packages: PackageUp
           padding: '0.5rem',
         }}
       />
-      {status === 'closed' && <Banner kind="info">Сессия завершена.</Banner>}
+      {status === 'closed' &&
+        (outcome === null || outcome === undefined ? (
+          <Banner kind="info">Сессия завершена.</Banner>
+        ) : outcome.ok ? (
+          <Banner kind="info">
+            Обновление завершено успешно.{' '}
+            {rescanning ? 'Пересканирую хост…' : 'Хост пересканирован — список пакетов уже обновлён.'}
+          </Banner>
+        ) : (
+          <Banner kind="error">
+            Обновление завершилось с ошибкой
+            {outcome.exitCode !== undefined && outcome.exitCode >= 0 ? ` (код ${outcome.exitCode})` : ''}. Что
+            именно пошло не так — в выводе выше.
+          </Banner>
+        ))}
     </AntModal>
   )
 }

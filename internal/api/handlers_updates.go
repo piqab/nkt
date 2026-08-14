@@ -53,10 +53,27 @@ func (s *Server) handleUpdatesWS(w http.ResponseWriter, r *http.Request) {
 // reopening a dialog that always looks the same at first glance (a black
 // terminal with a spinner) whether it's attaching to a live process or
 // about to start a brand new one.
+//
+// Once a run has finished it also reports how it ended. That matters for
+// more than a nicer banner: the package list on Overview comes from the
+// last inventory scan, so after a successful upgrade it still shows the
+// versions apt just replaced until something rescans the host — which
+// reads exactly like "the update never finished". The frontend uses
+// succeeded to trigger that rescan itself.
 func (s *Server) handleUpdatesStatus(w http.ResponseWriter, r *http.Request) {
 	s.updateSessionMu.Lock()
 	sess := s.updateSession
 	s.updateSessionMu.Unlock()
 
-	writeJSON(w, http.StatusOK, map[string]bool{"active": sess != nil && !sess.isDone()})
+	if sess == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"active": false, "finished": false})
+		return
+	}
+	done, exitCode := sess.outcome()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"active":    !done,
+		"finished":  done,
+		"exit_code": exitCode,
+		"succeeded": done && exitCode == 0,
+	})
 }
