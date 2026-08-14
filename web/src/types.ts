@@ -254,6 +254,12 @@ export interface NetworkInterface {
   rx_dropped?: number
   tx_errors?: number
   tx_dropped?: number
+  /** Which docker network this bridge serves, and how many containers are
+   * actually attached to it — resolved server-side by matching this
+   * interface's name against docker's own network data, real not guessed.
+   * Absent for anything that isn't a docker bridge. */
+  docker_network?: string
+  attached_containers?: number
 }
 
 /** One entry from GET /configs/browse — a directory listing under /home,
