@@ -111,6 +111,49 @@ export default function TopologyPage() {
 
   const positions = useMemo(() => new Map(placed.map((n) => [n.id, n])), [placed])
 
+  // A node with several incoming (or outgoing) edges used to have every
+  // one of them meet at the exact same point — the box's dead centre.
+  // Two edges converging on identical coordinates read as one continuous
+  // line: a public endpoint reachable both directly from "внешняя сеть"
+  // (ingress) and via the service that owns it (listens) looked like a
+  // single path running straight through the service's box, when they're
+  // two independent facts that just happen to end at the same place.
+  // Spreading each node's edges evenly along its box height — sorted by
+  // where the other end sits, so the fan-out doesn't cross itself — is
+  // the standard fix: it makes plain that separate lines stay separate
+  // all the way to their own distinct point on the box.
+  const edgeAnchors = useMemo(() => {
+    const spread = (idx: number, count: number) => {
+      if (count <= 1) return NODE_H / 2
+      const usable = NODE_H - 16 // keep clear of the rounded corners
+      return 8 + (usable * idx) / (count - 1)
+    }
+
+    const outgoing = new Map<string, GraphEdge[]>()
+    const incoming = new Map<string, GraphEdge[]>()
+    for (const e of edges) {
+      ;(outgoing.get(e.from) ?? outgoing.set(e.from, []).get(e.from)!).push(e)
+      ;(incoming.get(e.to) ?? incoming.set(e.to, []).get(e.to)!).push(e)
+    }
+
+    const y1ByEdge = new Map<string, number>()
+    for (const list of outgoing.values()) {
+      const sorted = [...list].sort((a, b) => (positions.get(a.to)?.y ?? 0) - (positions.get(b.to)?.y ?? 0))
+      sorted.forEach((e, i) => y1ByEdge.set(e.id, spread(i, sorted.length)))
+    }
+    const y2ByEdge = new Map<string, number>()
+    for (const list of incoming.values()) {
+      const sorted = [...list].sort((a, b) => (positions.get(a.from)?.y ?? 0) - (positions.get(b.from)?.y ?? 0))
+      sorted.forEach((e, i) => y2ByEdge.set(e.id, spread(i, sorted.length)))
+    }
+
+    const result = new Map<string, { y1: number; y2: number }>()
+    for (const e of edges) {
+      result.set(e.id, { y1: y1ByEdge.get(e.id) ?? NODE_H / 2, y2: y2ByEdge.get(e.id) ?? NODE_H / 2 })
+    }
+    return result
+  }, [edges, positions])
+
   // React 18 attaches its own JSX onWheel listener as passive at the root
   // for scroll performance, so e.preventDefault() inside a plain onWheel
   // prop is silently ignored (and warns in dev) — the page would scroll
@@ -364,6 +407,7 @@ export default function TopologyPage() {
                 edge={e}
                 from={positions.get(e.from)!}
                 to={positions.get(e.to)!}
+                anchor={edgeAnchors.get(e.id)!}
                 dimmed={connected !== null && !(connected.has(e.from) && connected.has(e.to))}
                 highlighted={connected !== null && connected.has(e.from) && connected.has(e.to)}
               />
@@ -390,19 +434,21 @@ function EdgePath({
   edge,
   from,
   to,
+  anchor,
   dimmed,
   highlighted,
 }: {
   edge: GraphEdge
   from: Placed
   to: Placed
+  anchor: { y1: number; y2: number }
   dimmed: boolean
   highlighted: boolean
 }) {
   const x1 = from.x + NODE_W
-  const y1 = from.y + NODE_H / 2
+  const y1 = from.y + anchor.y1
   const x2 = to.x
-  const y2 = to.y + NODE_H / 2
+  const y2 = to.y + anchor.y2
   const mid = (x1 + x2) / 2
   const d = `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`
 
