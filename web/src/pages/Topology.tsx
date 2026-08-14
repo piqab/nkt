@@ -39,6 +39,22 @@ const STATUS_COLOR: Record<string, string> = {
   unknown: 'var(--text-muted)',
 }
 
+// The same categorical palette the charts use elsewhere, reused here to
+// tell apart several lines fanning out of one node (e.g. docker → many
+// containers) — with only 8 colors, a node with more outgoing edges than
+// that cycles back through them, which is fine: colors only need to be
+// locally distinct among one node's own siblings, not globally unique.
+const FAN_PALETTE = [
+  'var(--series-1)',
+  'var(--series-2)',
+  'var(--series-3)',
+  'var(--series-4)',
+  'var(--series-5)',
+  'var(--series-6)',
+  'var(--series-7)',
+  'var(--series-8)',
+]
+
 interface Placed extends GraphNode {
   x: number
   y: number
@@ -137,9 +153,17 @@ export default function TopologyPage() {
     }
 
     const y1ByEdge = new Map<string, number>()
+    // A single color per edge only matters once a node actually fans out
+    // into more than one line — an edge that's its source's only outgoing
+    // link stays the neutral baseline color, so coloring only lights up
+    // where it disambiguates something.
+    const colorByEdge = new Map<string, string>()
     for (const list of outgoing.values()) {
       const sorted = [...list].sort((a, b) => (positions.get(a.to)?.y ?? 0) - (positions.get(b.to)?.y ?? 0))
-      sorted.forEach((e, i) => y1ByEdge.set(e.id, spread(i, sorted.length)))
+      sorted.forEach((e, i) => {
+        y1ByEdge.set(e.id, spread(i, sorted.length))
+        if (sorted.length > 1) colorByEdge.set(e.id, FAN_PALETTE[i % FAN_PALETTE.length])
+      })
     }
     const y2ByEdge = new Map<string, number>()
     for (const list of incoming.values()) {
@@ -147,9 +171,13 @@ export default function TopologyPage() {
       sorted.forEach((e, i) => y2ByEdge.set(e.id, spread(i, sorted.length)))
     }
 
-    const result = new Map<string, { y1: number; y2: number }>()
+    const result = new Map<string, { y1: number; y2: number; color: string | null }>()
     for (const e of edges) {
-      result.set(e.id, { y1: y1ByEdge.get(e.id) ?? NODE_H / 2, y2: y2ByEdge.get(e.id) ?? NODE_H / 2 })
+      result.set(e.id, {
+        y1: y1ByEdge.get(e.id) ?? NODE_H / 2,
+        y2: y2ByEdge.get(e.id) ?? NODE_H / 2,
+        color: colorByEdge.get(e.id) ?? null,
+      })
     }
     return result
   }, [edges, positions])
@@ -441,7 +469,7 @@ function EdgePath({
   edge: GraphEdge
   from: Placed
   to: Placed
-  anchor: { y1: number; y2: number }
+  anchor: { y1: number; y2: number; color: string | null }
   dimmed: boolean
   highlighted: boolean
 }) {
@@ -466,7 +494,12 @@ function EdgePath({
       <path
         d={d}
         fill="none"
-        stroke={highlighted ? 'var(--series-1)' : 'var(--baseline)'}
+        // The fan color only applies with nothing focused (dimmed and
+        // highlighted are both false in that state, for every edge) — once
+        // something IS focused, every edge falls back to the plain
+        // highlight/dim treatment so the one lit-up route stays the single
+        // unambiguous signal, instead of competing with per-node colors.
+        stroke={highlighted ? 'var(--series-1)' : !dimmed && anchor.color ? anchor.color : 'var(--baseline)'}
         strokeWidth={highlighted ? 2 : 1.25}
       />
       {highlighted && label && (
