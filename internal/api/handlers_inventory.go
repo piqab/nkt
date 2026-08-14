@@ -322,13 +322,24 @@ func (s *Server) handleFirewall(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleFirewallNumbered lists ufw's rules two ways: numbered (what
+// DeleteRule's index refers to — empty while ufw is inactive, since
+// `ufw status numbered` prints nothing but "Status: inactive" then) and
+// added (what ufw actually has stored regardless of active state — the
+// only way to know a rule exists at all on a host where ufw isn't
+// currently turned on).
 func (s *Server) handleFirewallNumbered(w http.ResponseWriter, r *http.Request) {
 	rules, err := s.firewall.NumberedRules(r.Context())
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"rules": rules})
+	added, err := s.firewall.AddedRules(r.Context())
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"rules": rules, "added": added})
 }
 
 // handleCertificates returns the TLS certificates with their renewal state,

@@ -19,6 +19,25 @@ interface NumberedRule {
   text: string
 }
 
+/** One line of `ufw show added` — what ufw has stored regardless of
+ * whether it's currently active. Unlike NumberedRule (`ufw status
+ * numbered`, which prints nothing but "Status: inactive" while ufw is
+ * off), this is the only way to tell "no rule" apart from "a rule exists
+ * but ufw can't currently report it" on a host where ufw isn't running. */
+interface AddedRule {
+  spec: string
+  action?: string
+  port?: number
+  protocol?: string
+}
+
+/** What ufwRuleForListener found, and where — numbered (ufw active, has a
+ * real index to delete by) or added-only (ufw inactive, only removable by
+ * re-specifying the rule). */
+type ListenerRuleMatch =
+  | { source: 'numbered'; rule: NumberedRule; action?: string }
+  | { source: 'added'; added: AddedRule; action?: string }
+
 /** ufw's own text format for one `ufw status numbered` line — e.g.
  * "80/tcp                     ALLOW IN    Anywhere" or
  * "22/tcp (OpenSSH)           ALLOW IN    Anywhere (v6)" — the leading
@@ -44,6 +63,28 @@ const UFW_ACTION_COLOR: Record<string, string> = {
   LIMIT: 'warning',
 }
 
+// Ports where getting this wrong can lock every future connection out —
+// not just this one. An already-open SSH session usually survives a bad
+// rule change (ufw's default chain accepts ESTABLISHED,RELATED traffic
+// ahead of user rules), but the moment that session drops — a network
+// blip, a laptop going to sleep — the NEXT connection attempt is exactly
+// what the new rule blocks, and recovering from that needs a hosting
+// provider's console or physical access: precisely the channel that just
+// got cut. 22 is the one port worth hardcoding a warning for; nkt's own
+// web port has no fixed number to check against the same way.
+const CRITICAL_PORTS = new Set([22])
+
+function confirmCriticalPort(port: number, action: string): boolean {
+  if (!CRITICAL_PORTS.has(port)) return true
+  return window.confirm(
+    `ВНИМАНИЕ: порт ${port} — стандартный порт SSH.\n\n` +
+      `${action} может отрезать доступ по SSH к этому хосту. Уже открытая сессия обычно не ` +
+      `оборвётся сразу, но следующее подключение — не пройдёт. Восстановить доступ тогда можно ` +
+      `будет только через консоль хостинг-провайдера или физически.\n\n` +
+      `Точно продолжить?`,
+  )
+}
+
 type AddRuleValues = {
   action: string
   port: string
@@ -54,7 +95,7 @@ type AddRuleValues = {
 
 export default function Firewall({ me }: { me: Me }) {
   const fw = useApi<FirewallResponse>('/firewall', 60_000)
-  const numbered = useApi<{ rules: NumberedRule[] }>('/firewall/rules', 60_000)
+  const numbered = useApi<{ rules: NumberedRule[]; added: AddedRule[] }>('/firewall/rules', 60_000)
   const [backend, setBackend] = useState('')
   const [chain, setChain] = useState('')
   const [busy, setBusy] = useState(false)
@@ -77,6 +118,8 @@ export default function Firewall({ me }: { me: Me }) {
   }, [fw.data, backend, chain])
 
   async function addRule(values: AddRuleValues) {
+    const port = Number(values.port)
+    if (values.action !== 'allow' && !confirmCriticalPort(port, `«${values.action}» для порта ${port}`)) return
     setBusy(true)
     setNotice(null)
     try {
@@ -90,9 +133,10 @@ export default function Firewall({ me }: { me: Me }) {
           comment: values.comment,
         },
       })
+      const ufwOffNote = fw.data && !fw.data.ufw_active ? ' ufw сейчас выключен — правило сохранено, но не действует, пока вы его не включите.' : ''
       setNotice({
         kind: 'info',
-        text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}`,
+        text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}.${ufwOffNote}`,
       })
       addForm.setFieldsValue({ port: '', comment: '' })
       fw.reload()
@@ -105,12 +149,40 @@ export default function Firewall({ me }: { me: Me }) {
   }
 
   async function deleteRule(rule: NumberedRule) {
+    const parsed = parseNumberedRule(rule.text)
+    if (parsed && !confirmCriticalPort(parsed.port, 'Удаление этого правила')) return
     if (!window.confirm(`Удалить правило ufw №${rule.number}?\n\n${rule.text}`)) return
     setBusy(true)
     setNotice(null)
     try {
       await api(`/firewall/rules/${rule.number}`, { method: 'DELETE', body: { expected: rule.text } })
       setNotice({ kind: 'info', text: `Правило №${rule.number} удалено.` })
+      fw.reload()
+      numbered.reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Removes a rule by the specification that created it, not by ufw's
+   * positional index — the only way to remove a rule while ufw is
+   * inactive, since NumberedRule (what deleteRule's number refers to) is
+   * empty then. Action defaults to "allow": every quick-add from a socket
+   * row creates a plain allow, so that's what a quick-remove from the same
+   * row is undoing. */
+  async function deleteAddedRule(added: AddedRule) {
+    if (added.port && !confirmCriticalPort(added.port, 'Удаление этого правила')) return
+    if (!window.confirm(`Удалить правило ufw: ${added.spec}?`)) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      await api('/firewall/rules', {
+        method: 'DELETE',
+        body: { action: added.action || 'allow', port: added.port, protocol: added.protocol || 'tcp', from: '', comment: '' },
+      })
+      setNotice({ kind: 'info', text: `Правило удалено: ${added.spec}` })
       fw.reload()
       numbered.reload()
     } catch (err) {
@@ -132,9 +204,10 @@ export default function Firewall({ me }: { me: Me }) {
         method: 'POST',
         body: { action: 'allow', port: l.port, protocol: l.protocol, from: '', comment: '' },
       })
+      const ufwOffNote = fw.data && !fw.data.ufw_active ? ' ufw сейчас выключен — правило сохранено, но не действует, пока вы его не включите.' : ''
       setNotice({
         kind: 'info',
-        text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}`,
+        text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}.${ufwOffNote}`,
       })
       fw.reload()
       numbered.reload()
@@ -156,11 +229,20 @@ export default function Firewall({ me }: { me: Me }) {
    * status text is the only place this pairing exists; the structured
    * FirewallRule view (from iptables-save) knows a rule came from ufw
    * (ManagedBy) but not which ufw index deleting it needs. */
-  function ufwRuleForListener(l: Listener): { rule: NumberedRule; parsed: NonNullable<ReturnType<typeof parseNumberedRule>> } | null {
+  function ufwRuleForListener(l: Listener): ListenerRuleMatch | null {
     for (const rule of numbered.data?.rules ?? []) {
       const parsed = parseNumberedRule(rule.text)
       if (parsed && parsed.port === l.port && (!parsed.protocol || parsed.protocol === l.protocol)) {
-        return { rule, parsed }
+        return { source: 'numbered', rule, action: parsed.action }
+      }
+    }
+    // ufw status numbered — what the loop above reads — prints nothing at
+    // all while ufw is inactive, so a rule that's genuinely stored just
+    // never shows up there until ufw is turned on. "ufw show added" is
+    // the only place that still reports it either way.
+    for (const added of numbered.data?.added ?? []) {
+      if (added.port === l.port && (!added.protocol || added.protocol === l.protocol)) {
+        return { source: 'added', added, action: added.action?.toUpperCase() }
       }
     }
     return null
@@ -258,7 +340,7 @@ export default function Firewall({ me }: { me: Me }) {
       render: (_, l) => {
         const found = ufwRuleForListener(l)
         if (!found) return <Tag>нет правила</Tag>
-        const { action } = found.parsed
+        const { action } = found
         return (
           <>
             <Tag color={(action && UFW_ACTION_COLOR[action]) || 'default'}>
@@ -276,13 +358,17 @@ export default function Firewall({ me }: { me: Me }) {
             key: 'ufw_actions',
             render: (_: unknown, l: Listener) => {
               const found = ufwRuleForListener(l)
-              return found ? (
-                <Button danger type="link" size="small" loading={busy} onClick={() => deleteRule(found.rule)}>
+              if (!found) {
+                return (
+                  <Button type="link" size="small" loading={busy} onClick={() => quickAllowListener(l)}>
+                    разрешить
+                  </Button>
+                )
+              }
+              const onDelete = found.source === 'numbered' ? () => deleteRule(found.rule) : () => deleteAddedRule(found.added)
+              return (
+                <Button danger type="link" size="small" loading={busy} onClick={onDelete}>
                   удалить
-                </Button>
-              ) : (
-                <Button type="link" size="small" loading={busy} onClick={() => quickAllowListener(l)}>
-                  разрешить
                 </Button>
               )
             },

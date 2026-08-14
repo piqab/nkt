@@ -137,6 +137,61 @@ func (f *FirewallManager) NumberedRules(ctx context.Context) ([]NumberedRule, er
 	return out, nil
 }
 
+// AddedRule is one entry of `ufw show added` — the rule set ufw applies
+// once active, in the exact command form that created it.
+type AddedRule struct {
+	Spec     string `json:"spec"`             // everything after "ufw ", e.g. "allow 80/tcp"
+	Action   string `json:"action,omitempty"` // allow | deny | reject | limit
+	Port     int    `json:"port,omitempty"`
+	Protocol string `json:"protocol,omitempty"`
+}
+
+// addedRulePortRe matches either form `ufw show added` prints: the short
+// "allow 80/tcp" a plain port/protocol rule takes, or the long "allow from
+// X to any port Y proto Z" a rule with a source restriction takes.
+var addedRulePortRe = regexp.MustCompile(`^(allow|deny|reject|limit)\s+(?:from\s+\S+\s+to\s+any\s+port\s+(\d+)(?:\s+proto\s+(\w+))?|(\d+)(?:/(\w+))?)`)
+
+// AddedRules lists every rule ufw has stored, independent of whether ufw
+// is currently active. `ufw status numbered` — NumberedRules above, and
+// the only thing DeleteRule can act on — prints nothing but "Status:
+// inactive" while ufw is off, even though `ufw allow/deny/...` still
+// writes rules to disk regardless of active state. Without this, a rule
+// added while ufw is inactive is invisible: the numbered view has nothing
+// to show it in, and there is no way to tell "no rule" apart from "a rule
+// exists but ufw can't currently report it".
+func (f *FirewallManager) AddedRules(ctx context.Context) ([]AddedRule, error) {
+	res, err := f.c.Run(ctx, "ufw", "show", "added")
+	if err != nil {
+		return nil, err
+	}
+	if !res.OK() {
+		return nil, fmt.Errorf("ufw show added: код %d", res.ExitCode)
+	}
+	// Same nil-vs-empty concern as NumberedRules above.
+	out := []AddedRule{}
+	for _, line := range strings.Split(strings.ReplaceAll(res.Stdout, "\r\n", "\n"), "\n") {
+		line = strings.TrimSpace(line)
+		spec, ok := strings.CutPrefix(line, "ufw ")
+		if !ok {
+			continue // the "Added user rules (see 'ufw status' ...)" header, blank lines
+		}
+		ar := AddedRule{Spec: spec}
+		if m := addedRulePortRe.FindStringSubmatch(spec); m != nil {
+			ar.Action = m[1]
+			switch {
+			case m[2] != "":
+				ar.Port, _ = strconv.Atoi(m[2])
+				ar.Protocol = m[3]
+			case m[4] != "":
+				ar.Port, _ = strconv.Atoi(m[4])
+				ar.Protocol = m[5]
+			}
+		}
+		out = append(out, ar)
+	}
+	return out, nil
+}
+
 // DeleteRule removes a rule by its ufw index. The caller must pass the text it
 // saw next to that index, and it is compared against the live list first: rule
 // numbers shift after every change, and deleting the wrong one can cut off SSH.
@@ -172,6 +227,36 @@ func (f *FirewallManager) DeleteRule(ctx context.Context, user string, number in
 	}
 	f.db.Audit(ctx, user, "firewall.delete", strconv.Itoa(number), outcome,
 		map[string]any{"rule": found.Text, "output": strings.TrimSpace(res.Output())})
+
+	if err != nil {
+		return res, err
+	}
+	if !res.OK() {
+		return res, fmt.Errorf("ufw вернул код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+	}
+	return res, nil
+}
+
+// DeleteRuleBySpec removes a rule by the exact specification that would
+// have added it (`ufw delete allow 80/tcp`), rather than by ufw's
+// positional index — the only way to remove a rule while ufw itself is
+// inactive, since NumberedRules (what DeleteRule's index refers to) shows
+// nothing at all until ufw is turned on. Reuses RuleSpec's own validation
+// and argv building, so a spec accepted here is guaranteed to be exactly
+// one AddRule was willing to create in the first place.
+func (f *FirewallManager) DeleteRuleBySpec(ctx context.Context, user string, spec RuleSpec) (collect.CommandResult, error) {
+	if err := spec.Validate(); err != nil {
+		return collect.CommandResult{}, err
+	}
+	args := append([]string{"--force", "delete"}, spec.argv()...)
+	res, err := f.c.Run(ctx, "ufw", args...)
+
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	f.db.Audit(ctx, user, "firewall.delete", fmt.Sprintf("%d/%s", spec.Port, spec.Protocol), outcome,
+		map[string]any{"argv": append([]string{"ufw"}, args...), "output": strings.TrimSpace(res.Output())})
 
 	if err != nil {
 		return res, err

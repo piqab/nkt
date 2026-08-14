@@ -181,6 +181,7 @@ func (s *Server) Handler() http.Handler {
 
 				r.Post("/firewall/rules", s.handleFirewallAdd)
 				r.Delete("/firewall/rules/{number}", s.handleFirewallDelete)
+				r.Delete("/firewall/rules", s.handleFirewallDeleteBySpec)
 				r.Post("/firewall/reload", s.handleFirewallReload)
 
 				r.Post("/certificates/self-signed", s.handleGenerateSelfSigned)

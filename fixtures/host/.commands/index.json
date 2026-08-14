@@ -209,6 +209,7 @@
     {
       "match": [
         "ufw",
+        "--force",
         "delete"
       ],
       "stdout": "Deleting:\nRule deleted\n",
@@ -619,6 +620,14 @@
         "show"
       ],
       "stdout_file": "ip_addr.json"
+    },
+    {
+      "match": [
+        "ufw",
+        "show",
+        "added"
+      ],
+      "stdout_file": "ufw_show_added.txt"
     }
   ]
 }
