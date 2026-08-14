@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { Table, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useApi } from '../api'
 import type { NetworkInterface } from '../types'
@@ -85,6 +86,21 @@ function guessInterfaceKind(name: string): string | null {
   return null
 }
 
+/** Real physical/loopback interfaces read top, virtual ones read below in
+ * roughly the order traffic passes through them on its way to a
+ * container: a VPN/tunnel terminates on the host itself, a bridge is the
+ * virtual switch, veth is a single container's leg plugged into it. Plain
+ * alphabetical order scattered these across the table (br-acme-backend
+ * next to br-acme-monitoring, but eth0 stuck between them) with nothing
+ * to indicate which rows are "the real network" versus internal plumbing. */
+function interfaceRank(i: NetworkInterface): number {
+  if (i.loopback) return 1
+  if (/^veth/.test(i.name)) return 4
+  if (/^wg/.test(i.name) || /^(tun|tap)/.test(i.name)) return 2
+  if (i.docker_network || /^(br-|docker0|virbr)/.test(i.name)) return 3
+  return 0 // physical / unclassified — the actual uplinks
+}
+
 const columns: TableColumnsType<NetworkInterface> = [
   {
     title: 'Интерфейс',
@@ -156,7 +172,10 @@ const columns: TableColumnsType<NetworkInterface> = [
  */
 export default function Interfaces() {
   const { data, error, loading } = useApi<{ interfaces: NetworkInterface[] }>('/interfaces', 60_000)
-  const interfaces = data?.interfaces ?? []
+  const interfaces = useMemo(() => {
+    const list = data?.interfaces ?? []
+    return [...list].sort((a, b) => interfaceRank(a) - interfaceRank(b) || a.name.localeCompare(b.name))
+  }, [data])
 
   return (
     <>
