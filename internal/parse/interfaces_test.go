@@ -21,8 +21,8 @@ func TestInterfacesAgainstFixtures(t *testing.T) {
 	if !status.Available {
 		t.Fatalf("Available = false: %s", status.Error)
 	}
-	if len(ifaces) != 4 {
-		t.Fatalf("got %d interfaces, want 4: %+v", len(ifaces), ifaces)
+	if len(ifaces) != 6 {
+		t.Fatalf("got %d interfaces, want 6: %+v", len(ifaces), ifaces)
 	}
 
 	byName := map[string]int{}

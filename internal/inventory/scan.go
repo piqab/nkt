@@ -120,6 +120,11 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Firewall = fwRes.State
 	snap.Listeners = listeners
 
+	// A bridge interface's own data (ip addr) has no idea what's plugged
+	// into it — that only exists in the separately-parsed docker network
+	// and container data, gathered above.
+	attachInterfaceOwnership(snap)
+
 	// `ss` names the executable and nothing more. Resolving each PID to
 	// its full command line, owner and cgroup is what turns "python3 is
 	// listening on 8000" into "python3 /opt/debug.py, started by hand in
@@ -182,6 +187,54 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 		}
 	}
 	return snap, nil
+}
+
+// attachInterfaceOwnership fills in which docker network (if any) each
+// bridge interface serves, and how many containers are actually attached
+// to it. Docker only writes a network's real bridge name into the
+// interface's own inspect data when it was explicitly configured
+// (Options["com.docker.network.bridge.name"]) — for everything else,
+// Docker names the interface deterministically itself: "docker0" for the
+// implicit default "bridge" network, "br-<first 12 hex of the network
+// ID>" for every other one (compose projects, `docker network create`).
+// Matching against that fallback is what makes this actually cover the
+// common case, not just the rare explicitly-named one.
+func attachInterfaceOwnership(snap *model.Snapshot) {
+	if len(snap.Networks) == 0 || len(snap.Interfaces) == 0 {
+		return
+	}
+
+	byBridgeName := make(map[string]model.DockerNetwork, len(snap.Networks))
+	for _, n := range snap.Networks {
+		name := n.Bridge
+		switch {
+		case name != "":
+		case n.Name == "bridge":
+			name = "docker0"
+		case len(n.ID) >= 12:
+			name = "br-" + n.ID[:12]
+		default:
+			continue
+		}
+		byBridgeName[name] = n
+	}
+
+	containersByNetwork := make(map[string]int, len(snap.Networks))
+	for _, ct := range snap.Container {
+		for _, cn := range ct.Networks {
+			containersByNetwork[cn.Name]++
+		}
+	}
+
+	for i := range snap.Interfaces {
+		iface := &snap.Interfaces[i]
+		n, ok := byBridgeName[iface.Name]
+		if !ok {
+			continue
+		}
+		iface.DockerNetwork = n.Name
+		iface.AttachedContainers = containersByNetwork[n.Name]
+	}
 }
 
 // applyGlobalNginx propagates http-level directives onto the endpoints that

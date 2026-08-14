@@ -48,6 +48,43 @@ function ErrorsCell({ i }: { i: NetworkInterface }) {
   )
 }
 
+/** Points-to-point links (a VPN tunnel) genuinely have a from/to; a bridge
+ * doesn't — it's a virtual switch with several things plugged into it, so
+ * the meaningful question is "what's attached", not "where does it go".
+ * docker_network/attached_containers is real, server-resolved data (the
+ * interface matched against docker's own network inspect output — see
+ * attachInterfaceOwnership); everything else here is a client-side guess
+ * from the interface's name alone, shown visibly less certain (outlined,
+ * not filled) so the two are never confused for the same kind of claim. */
+function OwnerCell({ i }: { i: NetworkInterface }) {
+  if (i.docker_network) {
+    return (
+      <>
+        <Tag color="blue">docker: {i.docker_network}</Tag>
+        <div className="small muted">
+          {i.attached_containers ? `контейнеров: ${i.attached_containers}` : 'ни одного контейнера не подключено'}
+        </div>
+      </>
+    )
+  }
+  const guess = guessInterfaceKind(i.name)
+  if (!guess) return <span className="small muted">—</span>
+  return (
+    <Tooltip title="По имени интерфейса — не проверено, в отличие от docker-меток выше">
+      <Tag>{guess}</Tag>
+    </Tooltip>
+  )
+}
+
+function guessInterfaceKind(name: string): string | null {
+  if (/^veth/.test(name)) return 'veth — контейнер/namespace'
+  if (/^wg/.test(name)) return 'WireGuard (VPN)'
+  if (/^(tun|tap)/.test(name)) return 'туннель (VPN)'
+  if (/^virbr/.test(name)) return 'libvirt/QEMU'
+  if (/^br-/.test(name)) return 'мост (bridge)'
+  return null
+}
+
 const columns: TableColumnsType<NetworkInterface> = [
   {
     title: 'Интерфейс',
@@ -58,6 +95,11 @@ const columns: TableColumnsType<NetworkInterface> = [
         {i.mac && <div className="small mono muted">{i.mac}</div>}
       </>
     ),
+  },
+  {
+    title: 'Кому принадлежит',
+    key: 'owner',
+    render: (_, i) => <OwnerCell i={i} />,
   },
   {
     title: 'Состояние',

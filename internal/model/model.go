@@ -381,6 +381,17 @@ type NetworkInterface struct {
 	RXDropped int64 `json:"rx_dropped,omitempty"`
 	TXErrors  int64 `json:"tx_errors,omitempty"`
 	TXDropped int64 `json:"tx_dropped,omitempty"`
+	// DockerNetwork/AttachedContainers answer the one thing `ip addr`
+	// fundamentally cannot: what a bridge interface actually connects.
+	// Unlike a point-to-point link (a VPN tunnel genuinely goes "from this
+	// host to that peer"), a bridge is a virtual switch with no single
+	// from/to of its own — the meaningful question for one is "what's
+	// plugged into it", which only exists in the separately-parsed docker
+	// network/container data, resolved after scanning by matching this
+	// interface's name against each network's real (or Docker's
+	// deterministically auto-generated "br-<12 hex>") bridge name.
+	DockerNetwork      string `json:"docker_network,omitempty"`
+	AttachedContainers int    `json:"attached_containers,omitempty"`
 }
 
 // ServiceUnit is a managed systemd service (or the docker engine).
