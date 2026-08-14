@@ -9,22 +9,24 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/althq/netknownsthat/internal/analyze"
 	"github.com/althq/netknownsthat/internal/model"
 )
 
 // Node kinds.
 const (
-	KindInternet  = "internet"
-	KindHost      = "host"
-	KindService   = "service"
-	KindEndpoint  = "endpoint"
-	KindUpstream  = "upstream"
-	KindBackend   = "backend"
-	KindContainer = "container"
-	KindPodman    = "podman_container"
-	KindLXD       = "lxd_instance"
-	KindVM        = "vm"
-	KindNetwork   = "network"
+	KindInternet   = "internet"
+	KindHost       = "host"
+	KindService    = "service"
+	KindEndpoint   = "endpoint"
+	KindUndeclared = "undeclared"
+	KindUpstream   = "upstream"
+	KindBackend    = "backend"
+	KindContainer  = "container"
+	KindPodman     = "podman_container"
+	KindLXD        = "lxd_instance"
+	KindVM         = "vm"
+	KindNetwork    = "network"
 )
 
 // Node statuses, used by the UI to colour the map.
@@ -325,6 +327,8 @@ func Build(s *model.Snapshot) *Graph {
 		}
 	}
 
+	buildUndeclaredListeners(b, s, hostID)
+
 	// Nodes/Edges/Findings have no `omitempty` — a minimal or brand-new host
 	// can genuinely have zero edges or zero findings, and encoding/json
 	// marshals a nil slice as `null`, which crashes the map's .filter/.map
@@ -347,6 +351,89 @@ func Build(s *model.Snapshot) *Graph {
 		return g.Nodes[i].Label < g.Nodes[j].Label
 	})
 	return g
+}
+
+// buildUndeclaredListeners folds analyze.UndeclaredListeners — the same set
+// the "Разное" page lists as a plain inventory, and ruleListeningNotDeclared
+// turns into findings — into the resource map itself, instead of leaving it
+// a separate page the map says nothing about. A socket nobody declared is
+// still a socket on this host; omitting it from "everything listening here"
+// left the map an incomplete picture of exactly the kind of gap it exists
+// to surface. docker-proxy listeners are excluded upstream (already covered
+// by the container publish edges), so nothing here duplicates those.
+func buildUndeclaredListeners(b *builder, s *model.Snapshot, hostID string) {
+	for _, l := range analyze.UndeclaredListeners(s) {
+		id := fmt.Sprintf("misc:%s:%s:%d", l.Protocol, l.Address, l.Port)
+		label := l.Process
+		if label == "" {
+			label = "неизвестно"
+		}
+		// Mirrors ruleListeningNotDeclared's own severity split (Medium
+		// only when public, Info otherwise) — attachFindings below refines
+		// this further once the matching finding is looked up, but starts
+		// from the same signal rather than a separate guess at it.
+		status := StatusUnknown
+		if l.Public() {
+			status = StatusWarn
+		}
+
+		meta := map[string]string{}
+		if l.Command != "" {
+			meta["command"] = l.Command
+		}
+		if l.User != "" {
+			meta["user"] = l.User
+		}
+		if up := formatUptime(l.UptimeS); up != "" {
+			meta["started"] = up
+		}
+		switch l.Origin {
+		case model.OriginService:
+			meta["origin"] = "сервис"
+			if l.Unit != "" {
+				meta["unit"] = l.Unit
+			}
+		case model.OriginManual:
+			meta["origin"] = "запущен вручную (интерактивная сессия)"
+		case model.OriginContainer:
+			meta["origin"] = "контейнер"
+			if l.ContainerID != "" {
+				meta["container_id"] = l.ContainerID
+			}
+		}
+
+		b.node(Node{
+			ID: id, Kind: KindUndeclared, Label: label,
+			Sublabel: fmt.Sprintf("%s %s:%d", l.Protocol, l.Address, l.Port),
+			Group:    "misc", Status: status, Port: l.Port, Public: l.Public(),
+			Meta: meta,
+		})
+		b.attachFindings(id, fmt.Sprintf("%s:%d", l.Address, l.Port))
+		b.edge(hostID, id, "listens", "", StatusOK)
+		if l.Public() {
+			b.edge("internet", id, "ingress", l.Protocol, statusOfNode(status))
+		}
+	}
+}
+
+// formatUptime mirrors Misc.tsx's own formatUptime — rough but readable is
+// the point, "minutes vs months" rather than a precise duration.
+func formatUptime(seconds int) string {
+	switch {
+	case seconds <= 0:
+		return ""
+	case seconds < 60:
+		return fmt.Sprintf("%d с", seconds)
+	}
+	m := seconds / 60
+	if m < 60 {
+		return fmt.Sprintf("%d мин", m)
+	}
+	h := m / 60
+	if h < 24 {
+		return fmt.Sprintf("%d ч", h)
+	}
+	return fmt.Sprintf("%d дн", h/24)
 }
 
 // buildUpstreams adds every declared pool and its members.
@@ -557,21 +644,23 @@ func kindRank(kind string) int {
 		return 2
 	case KindEndpoint:
 		return 3
-	case KindUpstream:
+	case KindUndeclared:
 		return 4
-	case KindBackend:
+	case KindUpstream:
 		return 5
-	case KindContainer:
+	case KindBackend:
 		return 6
-	case KindPodman:
+	case KindContainer:
 		return 7
-	case KindLXD:
+	case KindPodman:
 		return 8
-	case KindVM:
+	case KindLXD:
 		return 9
-	case KindNetwork:
+	case KindVM:
 		return 10
-	default:
+	case KindNetwork:
 		return 11
+	default:
+		return 12
 	}
 }

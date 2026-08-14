@@ -432,7 +432,7 @@ func (s *mapScreen) refresh(ctx context.Context) {
 	for i := range graph.Nodes {
 		n := graph.Nodes[i]
 		switch n.Kind {
-		case topology.KindEndpoint:
+		case topology.KindEndpoint, topology.KindUndeclared:
 			if fromInternet[n.ID] {
 				public = append(public, n.ID)
 			} else {
