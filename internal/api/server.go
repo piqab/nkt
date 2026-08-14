@@ -40,6 +40,7 @@ type Server struct {
 	libvirt   *control.LibvirtManager
 	ui        fs.FS
 	log       *slog.Logger
+	version   string
 
 	updateSessionMu sync.Mutex
 	updateSession   *updateSession
@@ -61,6 +62,10 @@ type Deps struct {
 	Libvirt   *control.LibvirtManager
 	UI        fs.FS
 	Log       *slog.Logger
+	// Version is this binary's own version, reported by /api/health so
+	// the hub can show what is actually running on a host rather than
+	// what it recorded having installed there.
+	Version string
 }
 
 // New builds the HTTP server.
@@ -69,7 +74,7 @@ func New(d Deps) *Server {
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, firewall: d.Firewall, certs: d.Certs,
 		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt,
-		ui: d.UI, log: d.Log,
+		ui: d.UI, log: d.Log, version: d.Version,
 	}
 }
 

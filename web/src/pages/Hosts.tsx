@@ -534,10 +534,20 @@ export default function Hosts({
       key: 'version',
       render: (_, h) => {
         const outdated = isOutdated(h, hubVersion)
+        // running_version comes from the host's own binary (hub poll);
+        // nkt_version is what the hub recorded installing. A mismatch is
+        // the only visible sign that an update silently did not take
+        // effect — the host keeps working, just as the older version.
+        const stale = !!h.running_version && h.running_version !== h.nkt_version
         return (
           <span className="small mono">
-            {h.nkt_version || '—'}
-            {outdated && (
+            {h.running_version || h.nkt_version || '—'}
+            {stale && (
+              <div className="small" style={{ color: 'var(--status-warning)' }}>
+                установлено {h.nkt_version} — обновление не применилось
+              </div>
+            )}
+            {!stale && outdated && (
               <div className="small" style={{ color: 'var(--status-warning)' }}>
                 на хабе: {hubVersion}
               </div>

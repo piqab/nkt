@@ -171,9 +171,16 @@ type addHostRequest struct {
 // from "never polled" on the wire.
 type hostWithOverview struct {
 	store.Host
-	Findings     map[string]int `json:"findings,omitempty"`
-	Reachable    *bool          `json:"reachable,omitempty"`
-	LastPolledAt string         `json:"last_polled_at,omitempty"`
+	Findings  map[string]int `json:"findings,omitempty"`
+	Reachable *bool          `json:"reachable,omitempty"`
+	// RunningVersion is what the host's binary reports actually serving
+	// requests, as opposed to Host.NktVersion, which is what the hub
+	// recorded having installed there. They differ exactly when an
+	// update did not take effect — a failure that is otherwise invisible,
+	// since every page keeps working, just without whatever the new
+	// version added.
+	RunningVersion string `json:"running_version,omitempty"`
+	LastPolledAt   string `json:"last_polled_at,omitempty"`
 }
 
 func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
@@ -185,11 +192,13 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 	out := make([]hostWithOverview, len(hosts))
 	for i, h := range hosts {
 		out[i] = hostWithOverview{Host: h}
-		if findings, reachable, lastPolledAt, ok := s.hub.Overview(h.ID); ok {
-			out[i].Findings = findings
+		if ov, ok := s.hub.Overview(h.ID); ok {
+			out[i].Findings = ov.Findings
+			reachable := ov.Reachable
 			out[i].Reachable = &reachable
-			if !lastPolledAt.IsZero() {
-				out[i].LastPolledAt = store.FormatTime(lastPolledAt)
+			out[i].RunningVersion = ov.Version
+			if !ov.LastPolledAt.IsZero() {
+				out[i].LastPolledAt = store.FormatTime(ov.LastPolledAt)
 			}
 		}
 	}

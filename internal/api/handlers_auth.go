@@ -26,8 +26,13 @@ func passwordLongEnough(password string) bool {
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	snap := s.scanner.Latest()
 	payload := map[string]any{
-		"status":          "ok",
-		"mode":            s.cfg.Mode,
+		"status": "ok",
+		"mode":   s.cfg.Mode,
+		// The version of the binary actually serving this request — which
+		// is not necessarily the one the hub recorded having installed
+		// here. Distinguishing the two is the only way to notice that an
+		// update never actually took effect on a host.
+		"version":         s.version,
 		"allow_mutations": s.cfg.AllowMutations,
 		"scanned":         snap != nil,
 	}

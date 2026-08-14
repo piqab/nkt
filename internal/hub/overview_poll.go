@@ -36,6 +36,11 @@ type hostOverview struct {
 	// lastCheckedAt is the last attempt, success or failure.
 	lastCheckedAt time.Time
 	errMsg        string
+	// version is what the host's own binary reports serving the request,
+	// which is not the same thing as the version the hub recorded having
+	// installed there (store.Host.NktVersion): an update that silently
+	// failed to take effect shows up as exactly that difference.
+	version string
 }
 
 // pollOverviews periodically refreshes every online host's findings/
@@ -146,6 +151,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 
 	var body struct {
 		Findings map[string]int `json:"findings"`
+		Version  string         `json:"version"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		m.recordUnreachable(hostID, err)
@@ -157,6 +163,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	m.overview[hostID] = hostOverview{
 		reachable:     true,
 		findings:      body.Findings,
+		version:       body.Version,
 		lastPolledAt:  now,
 		lastCheckedAt: now,
 	}
@@ -201,16 +208,34 @@ func (m *Manager) dropOverview(hostID int64) {
 // pollOverviews has ever reported anything for it at all (false for a host
 // not yet polled, or never online). The returned map is a defensive copy —
 // callers must not be handed the cache's own backing map under lock.
-func (m *Manager) Overview(hostID int64) (findings map[string]int, reachable bool, lastPolledAt time.Time, ok bool) {
+func (m *Manager) Overview(hostID int64) (HostOverview, bool) {
 	m.overviewMu.Lock()
 	defer m.overviewMu.Unlock()
 	cur, ok := m.overview[hostID]
 	if !ok {
-		return nil, false, time.Time{}, false
+		return HostOverview{}, false
 	}
 	cp := make(map[string]int, len(cur.findings))
 	for k, v := range cur.findings {
 		cp[k] = v
 	}
-	return cp, cur.reachable, cur.lastPolledAt, true
+	return HostOverview{
+		Findings:     cp,
+		Reachable:    cur.reachable,
+		Version:      cur.version,
+		LastPolledAt: cur.lastPolledAt,
+	}, true
+}
+
+// HostOverview is what the hub last learned about one host, as handed to
+// callers outside this package — a struct rather than a growing list of
+// return values, since every field here is optional context about the
+// same single observation.
+type HostOverview struct {
+	Findings  map[string]int
+	Reachable bool
+	// Version is what the host's own binary reports actually running,
+	// which is what makes a silently-failed update visible.
+	Version      string
+	LastPolledAt time.Time
 }

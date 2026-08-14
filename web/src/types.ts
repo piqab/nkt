@@ -25,7 +25,14 @@ export interface HubHost {
   ssh_auth_kind: 'password' | 'key'
   arch: string
   status: 'new' | 'installing' | 'online' | 'error'
+  /** What the hub recorded having installed on this host. */
   nkt_version: string
+  /** What the host's own binary reports actually serving requests, read by
+   * the hub's background poll. Differs from nkt_version exactly when an
+   * update did not take effect — otherwise invisible, since the host keeps
+   * working, just without whatever the newer version added. Absent until
+   * the first successful poll. */
+  running_version?: string
   admin_user?: string
   /** What the last install/update actually observed about sudo for a
    * non-root ssh_user — '' means never observed (or invalidated by an

@@ -276,6 +276,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
 		Services: r.services, Configs: r.configs, Firewall: r.firewall, Certs: r.certs,
 		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, UI: ui, Log: log,
+		Version: version,
 	})
 
 	httpServer := &http.Server{
