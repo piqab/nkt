@@ -235,6 +235,17 @@ export interface Listener {
   origin?: 'service' | 'manual' | 'container'
 }
 
+export interface NetworkInterface {
+  name: string
+  mac?: string
+  mtu?: number
+  up: boolean
+  loopback?: boolean
+  addresses?: string[]
+  rx_bytes: number
+  tx_bytes: number
+}
+
 /** One entry from GET /configs/browse — a directory listing under /home,
  * used to pick or create a docker-compose file's location. */
 export interface DirEntry {

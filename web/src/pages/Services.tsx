@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Button, Table, type TableColumnsType } from 'antd'
+import { Button, Table, Tabs, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
-import type { Me, ServiceUnit } from '../types'
+import type { Listener, Me, ServiceUnit } from '../types'
 import { Banner, Card, ErrorNote, Loading, StateBadge, formatBytesShort } from '../components/ui'
+import Misc from './Misc'
 
 const ACTION_LABEL: Record<string, string> = {
   start: 'запустить',
@@ -12,7 +13,32 @@ const ACTION_LABEL: Record<string, string> = {
   validate: 'проверить конфиг',
 }
 
+/**
+ * "Сервисы" now has two tabs: systemd-юниты (below) and "Разное" — moved
+ * here from "Контейнеры и ВМ". After ps/cgroup enrichment, most of what
+ * shows up in "Разное" turns out to be a systemd unit nobody described in
+ * any parsed config, not a container — so it belongs next to the rest of
+ * the service inventory, not next to Docker/Podman/LXD/VMs.
+ */
 export default function Services({ me }: { me: Me }) {
+  const misc = useApi<{ listeners: Listener[] }>('/misc', 60_000)
+
+  return (
+    <Tabs
+      defaultActiveKey="systemd"
+      items={[
+        { key: 'systemd', label: 'systemd', children: <SystemdTab me={me} /> },
+        {
+          key: 'misc',
+          label: misc.data ? `Разное (${misc.data.listeners.length})` : 'Разное',
+          children: <Misc />,
+        },
+      ]}
+    />
+  )
+}
+
+function SystemdTab({ me }: { me: Me }) {
   const services = useApi<{ services: ServiceUnit[]; allow_mutations: boolean }>('/services', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [rescanning, setRescanning] = useState(false)

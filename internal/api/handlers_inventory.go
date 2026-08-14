@@ -278,6 +278,23 @@ func (s *Server) handleMisc(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleInterfaces lists every network interface on the host — physical
+// NICs, bridges, VLANs, tunnels, loopback — as a plain inventory. Deliberately
+// no "public" verdict here: Listener.Public() already answers that per
+// socket, and guessing which interface counts as "the" public one at the
+// interface level would just be a second, coarser answer to a question
+// already answered precisely elsewhere.
+func (s *Server) handleInterfaces(w http.ResponseWriter, r *http.Request) {
+	snap, err := s.scanner.LatestOrScan(r.Context())
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"interfaces": snap.Interfaces,
+	})
+}
+
 func (s *Server) handleFirewall(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {

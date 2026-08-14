@@ -351,6 +351,26 @@ func (l Listener) Public() bool {
 	return l.Address == "0.0.0.0" || l.Address == "*" || l.Address == "::" || l.Address == "[::]"
 }
 
+// NetworkInterface is one network interface on the host — physical NIC,
+// bridge, VLAN, tunnel, or loopback — as `ip addr` reports it. A plain
+// inventory: it does not attempt to say which interface is "the public
+// one" (0.0.0.0 already covers that per-listener via Public() above) —
+// just what actually exists.
+type NetworkInterface struct {
+	Name      string   `json:"name"`
+	MAC       string   `json:"mac,omitempty"`
+	MTU       int      `json:"mtu,omitempty"`
+	Up        bool     `json:"up"`
+	Loopback  bool     `json:"loopback,omitempty"`
+	Addresses []string `json:"addresses,omitempty"` // CIDR form, e.g. "192.168.1.5/24"
+	// Traffic counters since boot, from /proc/net/dev — 0 is a legitimate
+	// reading (an idle interface), not a missing one; RXBytes/TXBytes are
+	// only actually absent (both zero) when /proc/net/dev couldn't be read
+	// at all, which the source's own SourceStatus.Error already reports.
+	RXBytes int64 `json:"rx_bytes"`
+	TXBytes int64 `json:"tx_bytes"`
+}
+
 // ServiceUnit is a managed systemd service (or the docker engine).
 type ServiceUnit struct {
 	Name        string   `json:"name"`
@@ -487,26 +507,27 @@ type Finding struct {
 
 // Snapshot is the complete picture of the host at one moment.
 type Snapshot struct {
-	TS        string            `json:"ts"`
-	Mode      string            `json:"mode"`
-	Host      HostInfo          `json:"host"`
-	Sources   []SourceStatus    `json:"sources"`
-	Services  []ServiceUnit     `json:"services"`
-	Files     []ManagedFile     `json:"files"`
-	Endpoints []Endpoint        `json:"endpoints"`
-	Upstreams []Upstream        `json:"upstreams"`
-	Container []Container       `json:"containers"`
-	Networks  []DockerNetwork   `json:"networks"`
-	Podman    []PodmanContainer `json:"podman_containers,omitempty"`
-	LXD       []LXDInstance     `json:"lxd_instances,omitempty"`
-	VMs       []VirtualMachine  `json:"vms,omitempty"`
-	Firewall  FirewallState     `json:"firewall"`
-	Listeners []Listener        `json:"listeners"`
-	Certs     []Certificate     `json:"certificates"`
-	Packages  PackageUpdates    `json:"package_updates"`
-	Findings  []Finding         `json:"findings"`
-	Digest    string            `json:"digest"`
-	ScanMS    int64             `json:"scan_ms"`
+	TS         string             `json:"ts"`
+	Mode       string             `json:"mode"`
+	Host       HostInfo           `json:"host"`
+	Sources    []SourceStatus     `json:"sources"`
+	Services   []ServiceUnit      `json:"services"`
+	Files      []ManagedFile      `json:"files"`
+	Endpoints  []Endpoint         `json:"endpoints"`
+	Upstreams  []Upstream         `json:"upstreams"`
+	Container  []Container        `json:"containers"`
+	Networks   []DockerNetwork    `json:"networks"`
+	Podman     []PodmanContainer  `json:"podman_containers,omitempty"`
+	LXD        []LXDInstance      `json:"lxd_instances,omitempty"`
+	VMs        []VirtualMachine   `json:"vms,omitempty"`
+	Firewall   FirewallState      `json:"firewall"`
+	Listeners  []Listener         `json:"listeners"`
+	Interfaces []NetworkInterface `json:"interfaces"`
+	Certs      []Certificate      `json:"certificates"`
+	Packages   PackageUpdates     `json:"package_updates"`
+	Findings   []Finding          `json:"findings"`
+	Digest     string             `json:"digest"`
+	ScanMS     int64              `json:"scan_ms"`
 }
 
 // PackageUpdate is one package `apt list --upgradable` reports as having a
