@@ -131,6 +131,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/lxd/instances", s.handleLXDInstances)
 			r.Get("/vms", s.handleVMs)
 			r.Get("/misc", s.handleMisc)
+			r.Get("/interfaces", s.handleInterfaces)
 			r.Get("/firewall", s.handleFirewall)
 			r.Get("/firewall/rules", s.handleFirewallNumbered)
 			r.Get("/certificates", s.handleCertificates)

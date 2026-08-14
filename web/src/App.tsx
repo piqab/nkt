@@ -14,6 +14,7 @@ import Services from './pages/Services'
 import Containers from './pages/Containers'
 import TerminalPage from './pages/Terminal'
 import Firewall from './pages/Firewall'
+import Interfaces from './pages/Interfaces'
 import Certificates from './pages/Certificates'
 import Availability from './pages/Availability'
 import Usage from './pages/Usage'
@@ -80,6 +81,7 @@ const NAV = [
   // read-only pages above) — hidden rather than shown-but-disabled.
   { to: '/terminal', label: 'Терминал', adminOnly: true },
   { to: '/firewall', label: 'Firewall' },
+  { to: '/interfaces', label: 'Сетевые интерфейсы' },
   { to: '/certificates', label: 'Сертификаты', badge: 'certs' as const },
   { to: '/audit', label: 'Журнал действий' },
   // Managing who can sign in is itself an admin action — a viewer has no use
@@ -349,6 +351,7 @@ function Shell({
             <Route path="/vms" element={<Navigate to="/containers" replace />} />
             {me.is_admin && <Route path="/terminal" element={<TerminalPage me={me} />} />}
             <Route path="/firewall" element={<Firewall me={me} />} />
+            <Route path="/interfaces" element={<Interfaces />} />
             <Route path="/certificates" element={<Certificates me={me} />} />
             <Route path="/audit" element={<Audit />} />
             {me.is_admin && <Route path="/users" element={<Users me={me} />} />}

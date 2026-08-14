@@ -73,20 +73,22 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 
 	// The parsers touch disjoint parts of the host, so run them concurrently.
 	var (
-		wg         sync.WaitGroup
-		nginxRes   parse.NginxResult
-		hapRes     parse.HAProxyResult
-		dockerRes  parse.DockerResult
-		podmanRes  parse.PodmanResult
-		lxdRes     parse.LXDResult
-		libvirtRes parse.LibvirtResult
-		fwRes      parse.FirewallResult
-		listeners  []model.Listener
-		lisStatus  model.SourceStatus
-		pkgRes     model.PackageUpdates
-		pkgStatus  model.SourceStatus
+		wg          sync.WaitGroup
+		nginxRes    parse.NginxResult
+		hapRes      parse.HAProxyResult
+		dockerRes   parse.DockerResult
+		podmanRes   parse.PodmanResult
+		lxdRes      parse.LXDResult
+		libvirtRes  parse.LibvirtResult
+		fwRes       parse.FirewallResult
+		listeners   []model.Listener
+		lisStatus   model.SourceStatus
+		pkgRes      model.PackageUpdates
+		pkgStatus   model.SourceStatus
+		ifaces      []model.NetworkInterface
+		ifaceStatus model.SourceStatus
 	)
-	wg.Add(9)
+	wg.Add(10)
 	go func() { defer wg.Done(); nginxRes = parse.Nginx(ctx, s.c, s.cfg.NginxMainConfig) }()
 	go func() { defer wg.Done(); hapRes = parse.HAProxy(ctx, s.c, s.cfg.HAProxyMainConf) }()
 	go func() { defer wg.Done(); dockerRes = parse.Docker(ctx, s.c, s.cfg.ComposeFiles) }()
@@ -96,12 +98,14 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	go func() { defer wg.Done(); fwRes = parse.Firewall(ctx, s.c) }()
 	go func() { defer wg.Done(); listeners, lisStatus = parse.Listeners(ctx, s.c) }()
 	go func() { defer wg.Done(); pkgRes, pkgStatus = parse.Packages(ctx, s.c) }()
+	go func() { defer wg.Done(); ifaces, ifaceStatus = parse.Interfaces(ctx, s.c) }()
 	wg.Wait()
 
 	snap.Packages = pkgRes
+	snap.Interfaces = ifaces
 	snap.Sources = []model.SourceStatus{
 		nginxRes.Status, hapRes.Status, dockerRes.Status, podmanRes.Status, lxdRes.Status, libvirtRes.Status,
-		fwRes.Status, lisStatus, pkgStatus,
+		fwRes.Status, lisStatus, pkgStatus, ifaceStatus,
 	}
 	snap.Endpoints = append(append(append([]model.Endpoint{},
 		nginxRes.Endpoints...), hapRes.Endpoints...), dockerRes.Endpoints...)

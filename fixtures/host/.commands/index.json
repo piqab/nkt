@@ -610,6 +610,15 @@
         "ps"
       ],
       "stdout_file": "ps.txt"
+    },
+    {
+      "match": [
+        "ip",
+        "-j",
+        "addr",
+        "show"
+      ],
+      "stdout_file": "ip_addr.json"
     }
   ]
 }
