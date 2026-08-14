@@ -314,7 +314,37 @@ type Listener struct {
 	Process  string `json:"process,omitempty"`
 	PID      int    `json:"pid,omitempty"`
 	Raw      string `json:"raw,omitempty"`
+
+	// Everything below is resolved from the owning PID after the socket
+	// table is read (see parse.ProcessDetails). `ss` alone only ever gives
+	// the short executable name — "python3", "node", "beam.smp" — which is
+	// least informative exactly when it matters most: identifying a
+	// listener nobody remembers configuring. All optional: a process can
+	// exit between reading the socket table and looking it up, and a
+	// snapshot has no live /proc to consult at all.
+	Command     string `json:"command,omitempty"`      // full argv
+	User        string `json:"user,omitempty"`         // who runs it
+	UptimeS     int    `json:"uptime_s,omitempty"`     // seconds since start
+	Unit        string `json:"unit,omitempty"`         // owning systemd unit
+	ContainerID string `json:"container_id,omitempty"` // when it runs in a container
+	Origin      string `json:"origin,omitempty"`       // Origin* below
 }
+
+// How a listening process came to be running — derived from its cgroup,
+// which is what actually distinguishes a managed service from something
+// a person started by hand in a shell. That difference is the whole point
+// of the "Разное" inventory, and no amount of `ps` output reveals it.
+const (
+	// OriginService — started by systemd, Listener.Unit names it.
+	OriginService = "service"
+	// OriginManual — running inside an interactive login session's scope,
+	// i.e. someone ran it by hand over SSH and it will not survive a
+	// reboot or come back on its own.
+	OriginManual = "manual"
+	// OriginContainer — inside a container runtime's cgroup;
+	// Listener.ContainerID identifies which.
+	OriginContainer = "container"
+)
 
 // Public reports whether the observed socket is bound to all interfaces.
 func (l Listener) Public() bool {

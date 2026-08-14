@@ -116,6 +116,13 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Firewall = fwRes.State
 	snap.Listeners = listeners
 
+	// `ss` names the executable and nothing more. Resolving each PID to
+	// its full command line, owner and cgroup is what turns "python3 is
+	// listening on 8000" into "python3 /opt/debug.py, started by hand in
+	// an SSH session 4 minutes ago" — done here, once, so findings, the
+	// "Разное" inventory, firewall and the TUI all see the same thing.
+	parse.EnrichListeners(ctx, s.c, snap.Listeners)
+
 	// Global nginx settings live outside any server block but still matter.
 	applyGlobalNginx(snap, nginxRes.Global)
 
