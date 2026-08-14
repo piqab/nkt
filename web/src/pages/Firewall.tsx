@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Badge, Button, Form, Input, Select, Table, type TableColumnsType } from 'antd'
+import { Badge, Button, Form, Input, Select, Table, Tag, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { FirewallPolicy, FirewallRule, Listener, Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
@@ -17,6 +17,31 @@ interface FirewallResponse {
 interface NumberedRule {
   number: number
   text: string
+}
+
+/** ufw's own text format for one `ufw status numbered` line — e.g.
+ * "80/tcp                     ALLOW IN    Anywhere" or
+ * "22/tcp (OpenSSH)           ALLOW IN    Anywhere (v6)" — the leading
+ * token is the port (optionally "/tcp" or "/udp"), and ALLOW/DENY/REJECT/
+ * LIMIT tells what it actually does once matched. */
+function parseNumberedRule(text: string): { port: number; protocol?: string; action?: string } | null {
+  const portMatch = text.match(/^(\d+)(?:\/(tcp|udp))?/)
+  if (!portMatch) return null
+  const actionMatch = text.match(/\b(ALLOW|DENY|REJECT|LIMIT)\b/)
+  return { port: Number(portMatch[1]), protocol: portMatch[2], action: actionMatch?.[1] }
+}
+
+const UFW_ACTION_LABEL: Record<string, string> = {
+  ALLOW: 'разрешено',
+  DENY: 'запрещено',
+  REJECT: 'отклонено',
+  LIMIT: 'ограничено (limit)',
+}
+const UFW_ACTION_COLOR: Record<string, string> = {
+  ALLOW: 'success',
+  DENY: 'error',
+  REJECT: 'error',
+  LIMIT: 'warning',
 }
 
 type AddRuleValues = {
@@ -95,11 +120,51 @@ export default function Firewall({ me }: { me: Me }) {
     }
   }
 
+  /** "Открытые сокеты хоста" → allow — the same one-off, no-source-restriction
+   * shape as the form above, just triggered straight from the socket's own
+   * row instead of typing the port in by hand. */
+  async function quickAllowListener(l: Listener) {
+    if (!window.confirm(`Разрешить в ufw ${l.port}/${l.protocol} от любого источника?`)) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      const res = await api<{ output?: string; simulated?: boolean }>('/firewall/rules', {
+        method: 'POST',
+        body: { action: 'allow', port: l.port, protocol: l.protocol, from: '', comment: '' },
+      })
+      setNotice({
+        kind: 'info',
+        text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}`,
+      })
+      fw.reload()
+      numbered.reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const listeningPorts = useMemo(() => {
     const set = new Set<number>()
     fw.data?.listeners.forEach((l) => set.add(l.port))
     return set
   }, [fw.data])
+
+  /** Which numbered ufw rule (if any) actually governs a given socket —
+   * matched on port and, when the rule names one, protocol. ufw's own
+   * status text is the only place this pairing exists; the structured
+   * FirewallRule view (from iptables-save) knows a rule came from ufw
+   * (ManagedBy) but not which ufw index deleting it needs. */
+  function ufwRuleForListener(l: Listener): { rule: NumberedRule; parsed: NonNullable<ReturnType<typeof parseNumberedRule>> } | null {
+    for (const rule of numbered.data?.rules ?? []) {
+      const parsed = parseNumberedRule(rule.text)
+      if (parsed && parsed.port === l.port && (!parsed.protocol || parsed.protocol === l.protocol)) {
+        return { rule, parsed }
+      }
+    }
+    return null
+  }
 
   const policyColumns: TableColumnsType<FirewallPolicy> = [
     { title: 'Цепочка', key: 'chain', render: (_, p) => <span className="mono small">{p.backend}/{p.table}/{p.chain}</span> },
@@ -187,6 +252,43 @@ export default function Firewall({ me }: { me: Me }) {
           <Badge color="var(--status-good)" text="локально" />
         ),
     },
+    {
+      title: 'Правило ufw',
+      key: 'ufw_rule',
+      render: (_, l) => {
+        const found = ufwRuleForListener(l)
+        if (!found) return <Tag>нет правила</Tag>
+        const { action } = found.parsed
+        return (
+          <>
+            <Tag color={(action && UFW_ACTION_COLOR[action]) || 'default'}>
+              {(action && UFW_ACTION_LABEL[action]) || action || 'правило есть'}
+            </Tag>
+            {!fw.data?.ufw_active && <div className="small muted">ufw выключен — не действует</div>}
+          </>
+        )
+      },
+    },
+    ...(canControl
+      ? [
+          {
+            title: '',
+            key: 'ufw_actions',
+            render: (_: unknown, l: Listener) => {
+              const found = ufwRuleForListener(l)
+              return found ? (
+                <Button danger type="link" size="small" loading={busy} onClick={() => deleteRule(found.rule)}>
+                  удалить
+                </Button>
+              ) : (
+                <Button type="link" size="small" loading={busy} onClick={() => quickAllowListener(l)}>
+                  разрешить
+                </Button>
+              )
+            },
+          } satisfies TableColumnsType<Listener>[number],
+        ]
+      : []),
   ]
 
   return (
