@@ -35,9 +35,18 @@ ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
 
-# Управление сервисами и firewall требует этих возможностей; всё остальное снято.
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH
+# Управление сервисами и firewall требует этих возможностей; всё остальное
+# снято. CAP_SYS_PTRACE — отдельная история: без неё ядро отклоняет чтение
+# /proc/<pid>/fd, /proc/<pid>/cmdline и /proc/<pid>/cgroup ЧУЖОГО процесса
+# (ptrace_may_access()) даже для root под CapabilityBoundingSet — сам факт
+# UID=0 тут не помогает, ограничение накладывается поверх него. Без этой
+# capability `ss -p` видит атрибуцию процесса только для собственных
+# сокетов nkt, а обогащение "Разного" (internal/parse/process.go: ps и
+# чтение cgroup по чужим PID) не находит вообще ничего — оба симптома
+# выглядят как «не работает», хотя код исправен, просто ядро молча
+# отказывает в доступе.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_SYS_PTRACE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
 
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
