@@ -494,12 +494,15 @@ function EdgePath({
       <path
         d={d}
         fill="none"
-        // The fan color only applies with nothing focused (dimmed and
-        // highlighted are both false in that state, for every edge) — once
-        // something IS focused, every edge falls back to the plain
-        // highlight/dim treatment so the one lit-up route stays the single
-        // unambiguous signal, instead of competing with per-node colors.
-        stroke={highlighted ? 'var(--series-1)' : !dimmed && anchor.color ? anchor.color : 'var(--baseline)'}
+        // Fan colors only ever apply to the highlighted route itself — e.g.
+        // hovering a service that fans out into several listeners lights up
+        // every one of those edges as "highlighted", and without per-branch
+        // color they're indistinguishable beyond the single accent color.
+        // Everything not on the highlighted route (including the default
+        // nothing-selected state) stays the plain neutral baseline, same as
+        // before this existed — coloring the whole map by default competed
+        // with the highlight instead of supporting it.
+        stroke={highlighted ? (anchor.color ?? 'var(--series-1)') : 'var(--baseline)'}
         strokeWidth={highlighted ? 2 : 1.25}
       />
       {highlighted && label && (
