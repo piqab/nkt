@@ -2,10 +2,12 @@ package parse
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/model"
@@ -51,7 +53,11 @@ var (
 // between reading the socket table and this call, a snapshot with no
 // /proc — all yield an absent entry rather than an error, because none of
 // them mean the listener itself is any less real.
-func ProcessDetails(ctx context.Context, c collect.Collector, pids []int) map[int]ProcessDetail {
+func ProcessDetails(ctx context.Context, c collect.Collector, pids []int) (map[int]ProcessDetail, model.SourceStatus) {
+	started := time.Now()
+	status := model.SourceStatus{Name: "processes"}
+	defer func() { status.DurationMS = time.Since(started).Milliseconds() }()
+
 	unique := make([]int, 0, len(pids))
 	seen := make(map[int]struct{}, len(pids))
 	for _, pid := range pids {
@@ -65,7 +71,11 @@ func ProcessDetails(ctx context.Context, c collect.Collector, pids []int) map[in
 		unique = append(unique, pid)
 	}
 	if len(unique) == 0 {
-		return nil
+		// Nothing to look up is not a failure — a host where `ss` reported
+		// no PIDs at all (it was run without root, say) simply gives this
+		// step nothing to do.
+		status.Available = true
+		return nil, status
 	}
 	sort.Ints(unique)
 
@@ -81,7 +91,18 @@ func ProcessDetails(ctx context.Context, c collect.Collector, pids []int) map[in
 	for i, pid := range unique {
 		list[i] = strconv.Itoa(pid)
 	}
-	if out, err := c.Run(ctx, "ps", "-ww", "-o", "pid=,user=,etimes=,args=", "-p", strings.Join(list, ",")); err == nil && out.OK() {
+	out, err := c.Run(ctx, "ps", "-ww", "-o", "pid=,user=,etimes=,args=", "-p", strings.Join(list, ","))
+	switch {
+	case err != nil:
+		// Silence here is what made this hard to diagnose the first time
+		// round: with no status, a host where ps is missing or refused
+		// looks exactly like one where every listener genuinely has no
+		// extra detail to show.
+		status.Error = fmt.Sprintf("ps: %v", err)
+	case !out.OK():
+		status.Error = fmt.Sprintf("ps завершился с кодом %d: %s", out.ExitCode, strings.TrimSpace(out.Stderr))
+	default:
+		status.Available = true
 		for _, line := range strings.Split(strings.ReplaceAll(out.Stdout, "\r\n", "\n"), "\n") {
 			pid, detail, ok := parsePSLine(line)
 			if !ok {
@@ -89,13 +110,19 @@ func ProcessDetails(ctx context.Context, c collect.Collector, pids []int) map[in
 			}
 			details[pid] = detail
 		}
+		if len(details) == 0 {
+			status.Warnings = append(status.Warnings,
+				"ps отработал, но ни одной строки разобрать не удалось — возможно, у него другой формат вывода (busybox?)")
+		}
 	}
 
+	cgroupsRead := 0
 	for _, pid := range unique {
 		raw, err := c.ReadFile("/proc/" + strconv.Itoa(pid) + "/cgroup")
 		if err != nil {
 			continue
 		}
+		cgroupsRead++
 		unit, containerID, origin := classifyCgroup(string(raw))
 		if unit == "" && containerID == "" && origin == "" {
 			continue
@@ -104,8 +131,12 @@ func ProcessDetails(ctx context.Context, c collect.Collector, pids []int) map[in
 		d.Unit, d.ContainerID, d.Origin = unit, containerID, origin
 		details[pid] = d
 	}
+	if cgroupsRead == 0 {
+		status.Warnings = append(status.Warnings,
+			"ни один /proc/<pid>/cgroup не прочитан — происхождение процессов (сервис/контейнер/вручную) определить нельзя")
+	}
 
-	return details
+	return details, status
 }
 
 // parsePSLine splits one `ps -o pid=,user=,etimes=,args=` row. The first
@@ -172,14 +203,14 @@ func classifyCgroup(content string) (unit, containerID, origin string) {
 // EnrichListeners fills in what each listening process actually is, in
 // place. Listeners sharing a PID (nginx's master bound to both 80 and
 // 443, say) all get the same details from a single lookup.
-func EnrichListeners(ctx context.Context, c collect.Collector, listeners []model.Listener) {
+func EnrichListeners(ctx context.Context, c collect.Collector, listeners []model.Listener) model.SourceStatus {
 	pids := make([]int, 0, len(listeners))
 	for _, l := range listeners {
 		pids = append(pids, l.PID)
 	}
-	details := ProcessDetails(ctx, c, pids)
+	details, status := ProcessDetails(ctx, c, pids)
 	if len(details) == 0 {
-		return
+		return status
 	}
 	for i := range listeners {
 		d, ok := details[listeners[i].PID]
@@ -193,4 +224,5 @@ func EnrichListeners(ctx context.Context, c collect.Collector, listeners []model
 		listeners[i].ContainerID = d.ContainerID
 		listeners[i].Origin = d.Origin
 	}
+	return status
 }
