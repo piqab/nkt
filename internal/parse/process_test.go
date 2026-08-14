@@ -1,8 +1,10 @@
 package parse
 
 import (
+	"path/filepath"
 	"testing"
 
+	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/model"
 )
 
@@ -96,6 +98,54 @@ func TestClassifyCgroup(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestProcessDetailsReportsStatus covers the diagnostic itself. Without
+// it, a host where `ps` is absent or refuses looks exactly like one where
+// every listener genuinely had nothing extra to show — which is precisely
+// how this went undiagnosed the first time: the page simply stayed the
+// way it had always looked, with nothing anywhere saying why.
+func TestProcessDetailsReportsStatus(t *testing.T) {
+	ctx := t.Context()
+
+	t.Run("no pids is a success, not a failure", func(t *testing.T) {
+		// A host whose `ss` reported no PIDs at all (run without root, say)
+		// gives this step nothing to do — that must not be reported as ps
+		// being broken.
+		_, status := ProcessDetails(ctx, collect.NewFixtures(t.TempDir()), nil)
+		if !status.Available || status.Error != "" {
+			t.Errorf("available/error = %v/%q, want true/empty", status.Available, status.Error)
+		}
+	})
+
+	t.Run("missing ps is reported", func(t *testing.T) {
+		// An empty fixtures tree has no ps stub, so the call fails the same
+		// way a host without procps would.
+		_, status := ProcessDetails(ctx, collect.NewFixtures(t.TempDir()), []int{1})
+		if status.Available {
+			t.Error("available = true even though ps could not run")
+		}
+		if status.Error == "" {
+			t.Error("error is empty — the failure would be invisible in the Источники table")
+		}
+	})
+
+	t.Run("working host reports available and resolves details", func(t *testing.T) {
+		root, err := filepath.Abs(filepath.Join("..", "..", "fixtures", "host"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		details, status := ProcessDetails(ctx, collect.NewFixtures(root), []int{812, 1400})
+		if !status.Available {
+			t.Fatalf("available = false: %s", status.Error)
+		}
+		if got := details[1400]; got.User != "deploy" || got.Origin != model.OriginManual {
+			t.Errorf("pid 1400 = user %q origin %q, want deploy/%s", got.User, got.Origin, model.OriginManual)
+		}
+		if got := details[812]; got.Unit != "nginx.service" || got.Origin != model.OriginService {
+			t.Errorf("pid 812 = unit %q origin %q, want nginx.service/%s", got.Unit, got.Origin, model.OriginService)
+		}
+	})
 }
 
 // TestParsePSLine is mostly about the command line surviving intact:

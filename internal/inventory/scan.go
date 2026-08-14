@@ -121,7 +121,10 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	// listening on 8000" into "python3 /opt/debug.py, started by hand in
 	// an SSH session 4 minutes ago" — done here, once, so findings, the
 	// "Разное" inventory, firewall and the TUI all see the same thing.
-	parse.EnrichListeners(ctx, s.c, snap.Listeners)
+	// Reported as its own source so a host where `ps` is missing or
+	// refused says so in the "Источники" table, instead of silently
+	// looking identical to one where there was simply nothing to add.
+	snap.Sources = append(snap.Sources, parse.EnrichListeners(ctx, s.c, snap.Listeners))
 
 	// Global nginx settings live outside any server block but still matter.
 	applyGlobalNginx(snap, nginxRes.Global)
