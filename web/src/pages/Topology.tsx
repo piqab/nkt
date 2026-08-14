@@ -256,8 +256,8 @@ export default function TopologyPage() {
               {selectedMeta.length > 0 && (
                 <div className="topology-focus-meta">
                   {selectedMeta.map(([k, v]) => (
-                    <span key={k}>
-                      <span className="muted">{k}:</span> {v}
+                    <span key={k} title={v.length > 140 ? v : undefined}>
+                      <span className="muted">{k}:</span> {v.length > 140 ? `${v.slice(0, 139)}…` : v}
                     </span>
                   ))}
                 </div>
@@ -406,6 +406,15 @@ function EdgePath({
   const mid = (x1 + x2) / 2
   const d = `M${x1},${y1} C${mid},${y1} ${mid},${y2} ${x2},${y2}`
 
+  // Unlike node labels (truncated in NodeBox below), edge labels come
+  // straight from config as-is — a haproxy `use_backend ... if <acl
+  // condition>` carries the raw ACL expression verbatim, which can run
+  // to a full line of its own. Drawn without a limit, one long condition
+  // stretched clear across the diagram, reading like stray file content
+  // pasted onto the map rather than a label. <title> keeps the whole
+  // thing one hover away instead of losing it outright.
+  const label = edge.label && edge.label.length > 34 ? `${edge.label.slice(0, 33)}…` : edge.label
+
   return (
     <g opacity={dimmed ? 0.12 : 1}>
       <path
@@ -414,9 +423,10 @@ function EdgePath({
         stroke={highlighted ? 'var(--series-1)' : 'var(--baseline)'}
         strokeWidth={highlighted ? 2 : 1.25}
       />
-      {highlighted && edge.label && (
+      {highlighted && label && (
         <text className="edge-label" x={mid} y={(y1 + y2) / 2 - 4} textAnchor="middle">
-          {edge.label}
+          {edge.label !== label && <title>{edge.label}</title>}
+          {label}
         </text>
       )}
     </g>

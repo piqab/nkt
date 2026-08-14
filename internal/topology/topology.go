@@ -327,7 +327,7 @@ func Build(s *model.Snapshot) *Graph {
 			case "address":
 				beID := "be:" + r.Target
 				b.node(Node{
-					ID: beID, Kind: KindBackend, Label: r.Target, Group: e.Service,
+					ID: beID, Kind: KindBackend, Label: displaySocket(r.Target), Group: e.Service,
 					Status: backendStatus(r.Target, listeningPorts), Sublabel: "прямой адрес",
 				})
 				b.edge(id, beID, "routes", r.Match, StatusOK)
@@ -473,14 +473,14 @@ func buildUpstreams(b *builder, s *model.Snapshot, listeningPorts map[int]bool) 
 			beID := "be:" + srv.Socket()
 			label := srv.Name
 			if label == "" {
-				label = srv.Socket()
+				label = displaySocket(srv.Socket())
 			}
 			st := backendStatus(srv.Socket(), listeningPorts)
 			if srv.Down {
 				st = StatusError
 			}
 			b.node(Node{
-				ID: beID, Kind: KindBackend, Label: srv.Socket(), Sublabel: label,
+				ID: beID, Kind: KindBackend, Label: displaySocket(srv.Socket()), Sublabel: label,
 				Group: u.Service, Status: st, Port: srv.Port,
 				Meta: map[string]string{
 					"backup": strconv.FormatBool(srv.Backup),
@@ -621,6 +621,31 @@ func unicodeHint(names []string) string {
 
 func isLoopback(host string) bool {
 	return host == "127.0.0.1" || host == "localhost" || host == "::1" || strings.HasPrefix(host, "127.")
+}
+
+// displayHost renders an address the way an operator reads a map, not the
+// way the kernel resolves a socket: 127.0.0.1 (or ::1, or anything in
+// 127.0.0.0/8) means "this machine, nothing else" no matter which exact
+// number is written, but showing that number reads as just another
+// routable IP on a quick glance — the one ambiguity a map audited for
+// what's actually exposed can least afford. "localhost" needs no lookup
+// (/etc/hosts, reverse DNS) to be correct: unlike some hostname a specific
+// box happens to answer to, it's true by definition for the whole range.
+func displayHost(host string) string {
+	if isLoopback(host) {
+		return "localhost"
+	}
+	return host
+}
+
+// displaySocket applies displayHost to just the host part of a "host:port"
+// pair, leaving the port untouched.
+func displaySocket(socket string) string {
+	host, port, ok := strings.Cut(socket, ":")
+	if !ok {
+		return socket
+	}
+	return displayHost(host) + ":" + port
 }
 
 func statusOfNode(s string) string {
