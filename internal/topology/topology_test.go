@@ -200,6 +200,46 @@ func TestServiceHasNoDirectRunsEdgeFromHost(t *testing.T) {
 	}
 }
 
+// A backend on the loopback range must read as "localhost", not as a bare
+// IP that looks like just another routable address on a quick glance — the
+// one ambiguity a map audited for what's actually exposed can least
+// afford. Covers both the ways a backend node gets built: an upstream
+// member (buildUpstreams) and a route to a direct address.
+func TestLoopbackBackendsDisplayAsLocalhost(t *testing.T) {
+	snap := &model.Snapshot{
+		Endpoints: []model.Endpoint{{
+			ID: "nginx:1", Service: model.ServiceNginx, Kind: "server",
+			Address: "0.0.0.0", Port: 80, Protocol: "tcp", Mode: "http", Label: "site",
+			Routes: []model.Route{{Match: "/api", Target: "127.0.0.1:9000", TargetKind: "address"}},
+		}},
+		Upstreams: []model.Upstream{{
+			ID: "haproxy:upstream:be_app", Name: "be_app", Service: model.ServiceHAProxy,
+			Servers: []model.UpstreamServer{{Host: "127.0.0.1", Port: 8080, Checked: true}},
+		}},
+	}
+
+	g := Build(snap)
+
+	direct := nodeByID(g, "be:127.0.0.1:9000")
+	if direct == nil {
+		t.Fatal("узел прямого адреса не построен")
+	}
+	if direct.Label != "localhost:9000" {
+		t.Errorf("Label прямого адреса = %q, ожидалось %q", direct.Label, "localhost:9000")
+	}
+
+	member := nodeByID(g, "be:127.0.0.1:8080")
+	if member == nil {
+		t.Fatal("узел участника пула не построен")
+	}
+	if member.Label != "localhost:8080" {
+		t.Errorf("Label участника пула = %q, ожидалось %q", member.Label, "localhost:8080")
+	}
+	if member.Sublabel != "localhost:8080" {
+		t.Errorf("Sublabel участника пула = %q, ожидалось %q (нет собственного имени)", member.Sublabel, "localhost:8080")
+	}
+}
+
 // An undeclared listener — nothing in any parsed config accounts for it —
 // must show up on the map itself, not only on the separate "Разное" page:
 // omitting it left the map claiming to show "everything listening here"
