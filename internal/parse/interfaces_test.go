@@ -31,8 +31,8 @@ func TestInterfacesAgainstFixtures(t *testing.T) {
 	}
 
 	lo := ifaces[byName["lo"]]
-	if !lo.Loopback || !lo.Up {
-		t.Errorf("lo = %+v, want loopback and up", lo)
+	if !lo.Loopback || !lo.Up || !lo.LowerUp {
+		t.Errorf("lo = %+v, want loopback, up and lower_up", lo)
 	}
 	if len(lo.Addresses) != 2 {
 		t.Errorf("lo addresses = %v, want 2 (v4 + v6)", lo.Addresses)
@@ -42,6 +42,9 @@ func TestInterfacesAgainstFixtures(t *testing.T) {
 	if eth0.Loopback {
 		t.Error("eth0 marked loopback, should not be")
 	}
+	if !eth0.Up || !eth0.LowerUp {
+		t.Errorf("eth0 = %+v, want up and lower_up (real carrier)", eth0)
+	}
 	if eth0.MAC != "52:54:00:1a:2b:3c" {
 		t.Errorf("eth0 MAC = %q, want %q", eth0.MAC, "52:54:00:1a:2b:3c")
 	}
@@ -50,6 +53,10 @@ func TestInterfacesAgainstFixtures(t *testing.T) {
 	}
 	if eth0.RXBytes == 0 || eth0.TXBytes == 0 {
 		t.Errorf("eth0 traffic counters not attached: rx=%d tx=%d", eth0.RXBytes, eth0.TXBytes)
+	}
+	if eth0.RXErrors != 3 || eth0.RXDropped != 145 || eth0.TXDropped != 12 {
+		t.Errorf("eth0 rx_errors/rx_dropped/tx_dropped = %d/%d/%d, want 3/145/12",
+			eth0.RXErrors, eth0.RXDropped, eth0.TXDropped)
 	}
 }
 
@@ -82,7 +89,10 @@ func TestReadTrafficCounters(t *testing.T) {
 	if !ok {
 		t.Fatal("no counters found for eth0")
 	}
-	if eth0.rx != 4293102934 || eth0.tx != 812934021 {
-		t.Errorf("eth0 counters = %+v, want rx=4293102934 tx=812934021", eth0)
+	if eth0.rxBytes != 4293102934 || eth0.txBytes != 812934021 {
+		t.Errorf("eth0 byte counters = %+v, want rxBytes=4293102934 txBytes=812934021", eth0)
+	}
+	if eth0.rxErrors != 3 || eth0.rxDropped != 145 || eth0.txDropped != 12 {
+		t.Errorf("eth0 error/drop counters = %+v, want rxErrors=3 rxDropped=145 txDropped=12", eth0)
 	}
 }

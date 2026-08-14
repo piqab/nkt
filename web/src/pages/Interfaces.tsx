@@ -1,7 +1,52 @@
-import { Table, Tag, type TableColumnsType } from 'antd'
+import { Table, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useApi } from '../api'
 import type { NetworkInterface } from '../types'
 import { Card, ErrorNote, Loading, formatBytesShort } from '../components/ui'
+
+/**
+ * up alone can't tell a genuinely working interface apart from one that's
+ * administratively enabled with nothing actually connected — lower_up
+ * (kernel's own carrier/operational state) is what catches "cable fell
+ * out" or "switch port disabled on the other end".
+ */
+function StateTag({ i }: { i: NetworkInterface }) {
+  if (!i.up) return <Tag>down</Tag>
+  if (!i.lower_up) {
+    return (
+      <Tooltip title="Интерфейс включён администратором, но нет отклика от линк-партнёра — вынут кабель, отключён порт коммутатора, либо peer не поднят">
+        <Tag color="warning">нет линка</Tag>
+      </Tooltip>
+    )
+  }
+  return <Tag color="success">up</Tag>
+}
+
+/** A raw byte counter never shows this: an interface can carry plenty of
+ * traffic and still be quietly losing packets to a bad cable, a
+ * misconfigured MTU further down the path, or a saturated queue. Shown
+ * only when something is actually non-zero — a column of "0 / 0" on every
+ * healthy row would just be noise. */
+function ErrorsCell({ i }: { i: NetworkInterface }) {
+  const rxErr = i.rx_errors ?? 0
+  const rxDrop = i.rx_dropped ?? 0
+  const txErr = i.tx_errors ?? 0
+  const txDrop = i.tx_dropped ?? 0
+  if (rxErr + rxDrop + txErr + txDrop === 0) return <span className="small muted">—</span>
+  return (
+    <div className="small">
+      {(rxErr > 0 || rxDrop > 0) && (
+        <div style={{ color: 'var(--status-warning)' }}>
+          RX: {rxErr} ошибок, {rxDrop} потеряно
+        </div>
+      )}
+      {(txErr > 0 || txDrop > 0) && (
+        <div style={{ color: 'var(--status-warning)' }}>
+          TX: {txErr} ошибок, {txDrop} потеряно
+        </div>
+      )}
+    </div>
+  )
+}
 
 const columns: TableColumnsType<NetworkInterface> = [
   {
@@ -19,7 +64,7 @@ const columns: TableColumnsType<NetworkInterface> = [
     key: 'up',
     render: (_, i) => (
       <>
-        <Tag color={i.up ? 'success' : 'default'}>{i.up ? 'up' : 'down'}</Tag>
+        <StateTag i={i} />
         {i.loopback && <Tag>loopback</Tag>}
       </>
     ),
@@ -50,6 +95,11 @@ const columns: TableColumnsType<NetworkInterface> = [
     key: 'tx',
     align: 'right',
     render: (_, i) => <span className="small">{formatBytesShort(i.tx_bytes)}</span>,
+  },
+  {
+    title: 'Ошибки/потери',
+    key: 'errors',
+    render: (_, i) => <ErrorsCell i={i} />,
   },
 ]
 

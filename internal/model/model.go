@@ -357,18 +357,30 @@ func (l Listener) Public() bool {
 // one" (0.0.0.0 already covers that per-listener via Public() above) —
 // just what actually exists.
 type NetworkInterface struct {
-	Name      string   `json:"name"`
-	MAC       string   `json:"mac,omitempty"`
-	MTU       int      `json:"mtu,omitempty"`
-	Up        bool     `json:"up"`
+	Name string `json:"name"`
+	MAC  string `json:"mac,omitempty"`
+	MTU  int    `json:"mtu,omitempty"`
+	// Up is the administrative state (ip link set <iface> up/down) — a NIC
+	// can be Up with no actual carrier (cable unplugged, peer down), which
+	// LowerUp below is what actually catches.
+	Up bool `json:"up"`
+	// LowerUp is the operational/carrier state: is there actually a link
+	// partner responding right now. Up=true, LowerUp=false is exactly the
+	// "administratively enabled but the cable fell out" case a plain "up"
+	// flag can't distinguish from a genuinely working interface.
+	LowerUp   bool     `json:"lower_up"`
 	Loopback  bool     `json:"loopback,omitempty"`
 	Addresses []string `json:"addresses,omitempty"` // CIDR form, e.g. "192.168.1.5/24"
 	// Traffic counters since boot, from /proc/net/dev — 0 is a legitimate
-	// reading (an idle interface), not a missing one; RXBytes/TXBytes are
-	// only actually absent (both zero) when /proc/net/dev couldn't be read
-	// at all, which the source's own SourceStatus.Error already reports.
-	RXBytes int64 `json:"rx_bytes"`
-	TXBytes int64 `json:"tx_bytes"`
+	// reading (an idle interface), not a missing one; these are only
+	// actually absent (all zero) when /proc/net/dev couldn't be read at
+	// all, which the source's own SourceStatus.Error already reports.
+	RXBytes   int64 `json:"rx_bytes"`
+	TXBytes   int64 `json:"tx_bytes"`
+	RXErrors  int64 `json:"rx_errors,omitempty"`
+	RXDropped int64 `json:"rx_dropped,omitempty"`
+	TXErrors  int64 `json:"tx_errors,omitempty"`
+	TXDropped int64 `json:"tx_dropped,omitempty"`
 }
 
 // ServiceUnit is a managed systemd service (or the docker engine).

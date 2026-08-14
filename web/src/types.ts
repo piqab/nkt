@@ -239,11 +239,21 @@ export interface NetworkInterface {
   name: string
   mac?: string
   mtu?: number
+  /** Administrative state (ip link set up/down). Can be true with no
+   * actual carrier — see lower_up. */
   up: boolean
+  /** Operational/carrier state — a link partner is actually responding
+   * right now. up=true, lower_up=false is "enabled but the cable fell
+   * out", which up alone can't tell apart from a working interface. */
+  lower_up: boolean
   loopback?: boolean
   addresses?: string[]
   rx_bytes: number
   tx_bytes: number
+  rx_errors?: number
+  rx_dropped?: number
+  tx_errors?: number
+  tx_dropped?: number
 }
 
 /** One entry from GET /configs/browse — a directory listing under /home,
