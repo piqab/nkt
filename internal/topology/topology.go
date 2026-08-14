@@ -115,7 +115,17 @@ func Build(s *model.Snapshot) *Graph {
 		listeningPorts[l.Port] = true
 	}
 
-	// Services own endpoints.
+	// Services own endpoints. Deliberately no host->service "runs" edge:
+	// every service sitting in the same "Сервисы" column as the host
+	// already implies it runs there — an explicit edge for that added a
+	// second, parallel route to the internet alongside the real one
+	// (host -> service -> listener, next to internet's own direct ingress
+	// edge into that same listener), which read as a redundant branch
+	// rather than the different fact it actually was (who owns the
+	// listener, not whether it's exposed). host -> listener still gets
+	// drawn a few lines down, but only for listeners nothing else claims
+	// — there, the edge is the only way to know it is not owned by
+	// anything, so it earns its place instead of restating the obvious.
 	for _, svc := range s.Services {
 		if !svc.Installed && svc.ActiveState == "unknown" {
 			continue
@@ -133,7 +143,6 @@ func Build(s *model.Snapshot) *Graph {
 			Group: svc.Name, Status: status,
 			Meta: map[string]string{"unit": svc.Unit, "enabled": svc.Enabled, "sub_state": svc.SubState},
 		})
-		b.edge(hostID, id, "runs", "", StatusOK)
 	}
 
 	// Containers and docker networks.
