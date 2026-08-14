@@ -243,6 +243,28 @@ func (s *Server) handleFirewallDelete(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleFirewallDeleteBySpec removes a rule by the exact specification
+// that would have added it, rather than by ufw's positional index —
+// DeleteRule's index comes from `ufw status numbered`, which shows
+// nothing at all while ufw is inactive, so a rule added while it was off
+// has no numbered index to delete by until ufw is turned on.
+func (s *Server) handleFirewallDeleteBySpec(w http.ResponseWriter, r *http.Request) {
+	var spec control.RuleSpec
+	if err := decodeJSON(r, &spec); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	res, err := s.firewall.DeleteRuleBySpec(r.Context(), auth.Username(r.Context()), spec)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status": "ok", "output": strings.TrimSpace(res.Output()), "simulated": res.Simulated,
+	})
+}
+
 func (s *Server) handleFirewallReload(w http.ResponseWriter, r *http.Request) {
 	res, err := s.firewall.Reload(r.Context(), auth.Username(r.Context()))
 	if err != nil {
