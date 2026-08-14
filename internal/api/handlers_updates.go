@@ -43,7 +43,7 @@ func (s *Server) handleUpdatesWS(w http.ResponseWriter, r *http.Request) {
 		// answers themselves.
 		return unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, "bash", "-c", "apt-get update && apt-get upgrade")
 	}
-	s.runUpdateSession(w, r, buildCmd, "packages.upgrade", "apt-get upgrade", s.cfg.TerminalIdleTimeout)
+	s.runUpdateSession(w, r, "packages", buildCmd, "packages.upgrade", "apt-get upgrade", s.cfg.TerminalIdleTimeout)
 }
 
 // handleUpdatesStatus reports whether a package-update session is
@@ -61,9 +61,9 @@ func (s *Server) handleUpdatesWS(w http.ResponseWriter, r *http.Request) {
 // reads exactly like "the update never finished". The frontend uses
 // succeeded to trigger that rescan itself.
 func (s *Server) handleUpdatesStatus(w http.ResponseWriter, r *http.Request) {
-	s.updateSessionMu.Lock()
-	sess := s.updateSession
-	s.updateSessionMu.Unlock()
+	s.sessionsMu.Lock()
+	sess := s.sessions["packages"]
+	s.sessionsMu.Unlock()
 
 	if sess == nil {
 		writeJSON(w, http.StatusOK, map[string]any{"active": false, "finished": false})

@@ -42,8 +42,13 @@ type Server struct {
 	log       *slog.Logger
 	version   string
 
-	updateSessionMu sync.Mutex
-	updateSession   *updateSession
+	// Keyed sessions ("packages", "ufw-install", ...) each outlive any one
+	// WebSocket connection to them — see runUpdateSession. A single shared
+	// field (as this used to be) would make an ufw install race an
+	// in-progress apt upgrade for the same slot; a map keyed by task name
+	// keeps unrelated long-running commands independent of each other.
+	sessionsMu sync.Mutex
+	sessions   map[string]*updateSession
 }
 
 // Deps bundles the constructed subsystems.
@@ -75,6 +80,7 @@ func New(d Deps) *Server {
 		services: d.Services, configs: d.Configs, firewall: d.Firewall, certs: d.Certs,
 		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt,
 		ui: d.UI, log: d.Log, version: d.Version,
+		sessions: map[string]*updateSession{},
 	}
 }
 
@@ -105,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 			r.Use(s.auth.RequireAdmin)
 			r.Get("/terminal/ws", s.handleTerminalWS)
 			r.Get("/updates/ws", s.handleUpdatesWS)
+			r.Get("/firewall/ufw-install/ws", s.handleUFWInstallWS)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -134,6 +141,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/interfaces", s.handleInterfaces)
 			r.Get("/firewall", s.handleFirewall)
 			r.Get("/firewall/rules", s.handleFirewallNumbered)
+			r.Get("/firewall/ufw-install/status", s.handleUFWInstallStatus)
 			r.Get("/certificates", s.handleCertificates)
 
 			r.Get("/configs", s.handleConfigList)

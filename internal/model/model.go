@@ -299,11 +299,12 @@ type FirewallRule struct {
 
 // FirewallState is the whole packet-filter picture.
 type FirewallState struct {
-	Backends  []string         `json:"backends"`
-	UFWActive bool             `json:"ufw_active"`
-	UFWPolicy string           `json:"ufw_policy,omitempty"`
-	Policies  []FirewallPolicy `json:"policies"`
-	Rules     []FirewallRule   `json:"rules"`
+	Backends     []string         `json:"backends"`
+	UFWInstalled bool             `json:"ufw_installed"`
+	UFWActive    bool             `json:"ufw_active"`
+	UFWPolicy    string           `json:"ufw_policy,omitempty"`
+	Policies     []FirewallPolicy `json:"policies"`
+	Rules        []FirewallRule   `json:"rules"`
 }
 
 // Listener is a socket actually observed in LISTEN state on the host.

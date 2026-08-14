@@ -4,8 +4,10 @@ import { api, useApi } from '../api'
 import type { FirewallPolicy, FirewallRule, Listener, Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
 import { formatBytes, formatNumber } from '../components/charts'
+import UfwInstallModal from '../components/UfwInstallModal'
 
 interface FirewallResponse {
+  ufw_installed: boolean
   ufw_active: boolean
   ufw_policy: string
   backends: string[]
@@ -101,8 +103,46 @@ export default function Firewall({ me }: { me: Me }) {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [addForm] = Form.useForm<AddRuleValues>()
+  const [installing, setInstalling] = useState(false)
+  const [installOutcome, setInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
+  const [rescanningAfterInstall, setRescanningAfterInstall] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
+
+  // Polled independently of whether the install dialog is open, same reason
+  // as Overview's /updates/status: without it there's no way to tell, from
+  // the button alone, whether opening the dialog would reattach to an
+  // install already running (started earlier, or by someone else) or start
+  // a fresh one.
+  const { data: installStatus, reload: reloadInstallStatus } = useApi<{
+    active: boolean
+    finished: boolean
+    succeeded: boolean
+  }>('/firewall/ufw-install/status', 5_000)
+  const installActive = installStatus?.active ?? false
+
+  /** Fires the moment the install session's socket closes (apt actually
+   * exited) — a plain fw.reload() alone would still show ufw_installed:
+   * false until this runs, since /firewall serves the last scan. */
+  async function handleInstallFinished() {
+    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>('/firewall/ufw-install/status').catch(
+      () => null,
+    )
+    reloadInstallStatus()
+    if (fresh?.succeeded) {
+      setInstallOutcome({ ok: true })
+      setRescanningAfterInstall(true)
+      try {
+        await api('/inventory/refresh', { method: 'POST' })
+        fw.reload()
+        numbered.reload()
+      } finally {
+        setRescanningAfterInstall(false)
+      }
+    } else {
+      setInstallOutcome({ ok: false, exitCode: fresh?.exit_code })
+    }
+  }
 
   const chains = useMemo(() => {
     const set = new Set<string>()
@@ -395,29 +435,63 @@ export default function Firewall({ me }: { me: Me }) {
       {fw.data && (
         <div className="grid grid-3">
           <Card title="ufw">
-            <div className="row">
-              <StateBadge state={fw.data.ufw_active ? 'active' : 'inactive'} />
-              <span className="small secondary">{fw.data.ufw_policy || 'политика не прочитана'}</span>
-            </div>
-            {canControl && (
-              <Button
-                style={{ marginTop: '0.6rem' }}
-                loading={busy}
-                onClick={async () => {
-                  setBusy(true)
-                  try {
-                    await api('/firewall/reload', { method: 'POST' })
-                    setNotice({ kind: 'info', text: 'ufw перезагружен.' })
-                    fw.reload()
-                  } catch (err) {
-                    setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-                  } finally {
-                    setBusy(false)
-                  }
-                }}
-              >
-                Перезагрузить ufw
-              </Button>
+            {fw.data.ufw_installed ? (
+              <>
+                <div className="row">
+                  <StateBadge state={fw.data.ufw_active ? 'active' : 'inactive'} />
+                  <span className="small secondary">{fw.data.ufw_policy || 'политика не прочитана'}</span>
+                </div>
+                {canControl && (
+                  <Button
+                    style={{ marginTop: '0.6rem' }}
+                    loading={busy}
+                    onClick={async () => {
+                      setBusy(true)
+                      try {
+                        await api('/firewall/reload', { method: 'POST' })
+                        setNotice({ kind: 'info', text: 'ufw перезагружен.' })
+                        fw.reload()
+                      } catch (err) {
+                        setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+                      } finally {
+                        setBusy(false)
+                      }
+                    }}
+                  >
+                    Перезагрузить ufw
+                  </Button>
+                )}
+              </>
+            ) : (
+              <>
+                <Banner kind="warn">ufw не установлен на этом хосте.</Banner>
+                {canControl &&
+                  (installActive ? (
+                    <Button
+                      style={{ marginTop: '0.6rem' }}
+                      type="primary"
+                      onClick={() => {
+                        setInstallOutcome(null)
+                        setInstalling(true)
+                      }}
+                    >
+                      установка выполняется — открыть
+                    </Button>
+                  ) : (
+                    <Button
+                      style={{ marginTop: '0.6rem' }}
+                      type="primary"
+                      onClick={() => {
+                        if (window.confirm('Установить ufw (apt-get install -y ufw) на этом хосте?')) {
+                          setInstallOutcome(null)
+                          setInstalling(true)
+                        }
+                      }}
+                    >
+                      Установить ufw
+                    </Button>
+                  ))}
+              </>
             )}
           </Card>
 
@@ -534,6 +608,15 @@ export default function Firewall({ me }: { me: Me }) {
           />
         </div>
       </Card>
+
+      {installing && (
+        <UfwInstallModal
+          onClose={() => setInstalling(false)}
+          onFinished={handleInstallFinished}
+          outcome={installOutcome}
+          rescanning={rescanningAfterInstall}
+        />
+      )}
     </>
   )
 }
