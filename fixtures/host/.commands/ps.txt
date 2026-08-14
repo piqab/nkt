@@ -1,0 +1,15 @@
+  590 root         864233 /sbin/dhclient -1 -4 -v -pf /run/dhclient.eth0.pid -lf /var/lib/dhcp/dhclient.eth0.leases -I -df /var/lib/dhcp/dhclient6.eth0.leases eth0
+  602 systemd-resolve 864240 /lib/systemd/systemd-resolved
+  655 memcache      864102 /usr/bin/memcached -m 64 -p 11211 -u memcache -l 127.0.0.1 -P /var/run/memcached/memcached.pid
+  701 root         864198 sshd: /usr/sbin/sshd -D [listener] 0 of 10-100 startups
+  811 www-data      86391 nginx: worker process
+  812 root          86392 nginx: master process /usr/sbin/nginx -g daemon on; master_process on;
+  933 haproxy       81044 /usr/sbin/haproxy -Ws -f /etc/haproxy/haproxy.cfg -p /run/haproxy.pid -S /run/haproxy-master.sock
+ 1201 root          79210 /usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 8080 -container-ip 172.18.0.4 -container-port 8080
+ 1233 root          79208 /usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 8081 -container-ip 172.18.0.5 -container-port 80
+ 1255 root          79205 /usr/bin/docker-proxy -proto tcp -host-ip 0.0.0.0 -host-port 6379 -container-ip 172.18.0.6 -container-port 6379
+ 1288 root          79201 /usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 3000 -container-ip 172.18.0.7 -container-port 3000
+ 1301 root          79198 /usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 9090 -container-ip 172.18.0.8 -container-port 9090
+ 1322 root          79194 /usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 9002 -container-ip 172.18.0.9 -container-port 9002
+ 1400 deploy          932 python3 -m http.server 8082 --directory /srv/tmp-share
+ 1455 root          79188 /usr/bin/docker-proxy -proto tcp -host-ip 127.0.0.1 -host-port 5433 -container-ip 172.18.0.10 -container-port 5432

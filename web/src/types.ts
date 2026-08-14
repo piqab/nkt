@@ -217,6 +217,15 @@ export interface Listener {
   port: number
   process?: string
   pid?: number
+  /** Resolved from the owning PID at scan time (see parse.ProcessDetails).
+   * All optional — a process can exit between reading the socket table and
+   * looking it up, and a fixtures snapshot has no live /proc. */
+  command?: string
+  user?: string
+  uptime_s?: number
+  unit?: string
+  container_id?: string
+  origin?: 'service' | 'manual' | 'container'
 }
 
 /** One entry from GET /configs/browse — a directory listing under /home,
