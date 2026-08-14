@@ -155,14 +155,51 @@ export default function TopologyPage() {
   }, [zoom, pan, width, height])
 
   const focus = hovered ?? selected
+  // The full route through the focused node — every ancestor back to
+  // "внешняя сеть"/the host, and every descendant down to whatever backend
+  // or container actually serves it — not just its immediate neighbours.
+  // One hop used to mean clicking a backend address highlighted only its
+  // pool, with no way to see the endpoint (let alone the internet) that
+  // route actually starts from; the map showed a graph but couldn't answer
+  // "how does traffic get here" for anything more than one link away.
+  //
+  // Ancestors and descendants are walked as two SEPARATE directed BFS
+  // passes (backward-only, then forward-only) rather than one traversal
+  // that follows edges in either direction — that distinction is what
+  // keeps the highlight to the actual route instead of exploding through
+  // any hub node it passes. "внешняя сеть"/"host" fan out to every public
+  // endpoint and every service on the host; an undirected walk reaching
+  // "внешняя сеть" would then walk straight back down into all of them,
+  // lighting up unrelated services that merely share that same hub node —
+  // exactly the "путь уходит на другие сервисы" confusion this replaces.
+  // A directed walk only ever climbs from a node to what feeds it (or
+  // descends to what it feeds), so it stops there instead of fanning back
+  // out.
   const connected = useMemo(() => {
     if (!focus) return null
-    const set = new Set<string>([focus])
+    const forward = new Map<string, string[]>()
+    const backward = new Map<string, string[]>()
     for (const e of edges) {
-      if (e.from === focus) set.add(e.to)
-      if (e.to === focus) set.add(e.from)
+      ;(forward.get(e.from) ?? forward.set(e.from, []).get(e.from)!).push(e.to)
+      ;(backward.get(e.to) ?? backward.set(e.to, []).get(e.to)!).push(e.from)
     }
-    return set
+    const walk = (adjacency: Map<string, string[]>) => {
+      const seen = new Set<string>([focus])
+      const queue = [focus]
+      while (queue.length) {
+        const cur = queue.shift()!
+        for (const next of adjacency.get(cur) ?? []) {
+          if (!seen.has(next)) {
+            seen.add(next)
+            queue.push(next)
+          }
+        }
+      }
+      return seen
+    }
+    const ancestors = walk(backward)
+    const descendants = walk(forward)
+    return new Set([...ancestors, ...descendants])
   }, [focus, edges])
 
   if (loading && !data) return <Loading what="карту ресурсов" />
@@ -186,7 +223,10 @@ export default function TopologyPage() {
       <div className="page-head spread">
         <div>
           <h1>Карта сетевых ресурсов</h1>
-          <p>Красным — критичные проблемы, жёлтым — предупреждения. Щёлкните узел, чтобы увидеть подробности.</p>
+          <p>
+            Красным — критичные проблемы, жёлтым — предупреждения. Наведите на узел или щёлкните
+            его, чтобы увидеть весь путь — от внешней сети до backend'а и обратно, — и подробности.
+          </p>
         </div>
 
         {/* Fixed height and always rendered, whether or not something is
@@ -325,7 +365,7 @@ export default function TopologyPage() {
                 from={positions.get(e.from)!}
                 to={positions.get(e.to)!}
                 dimmed={connected !== null && !(connected.has(e.from) && connected.has(e.to))}
-                highlighted={focus !== null && (e.from === focus || e.to === focus)}
+                highlighted={connected !== null && connected.has(e.from) && connected.has(e.to)}
               />
             ))}
 
