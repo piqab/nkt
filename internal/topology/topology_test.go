@@ -163,6 +163,43 @@ func TestUndefinedUpstreamIsStillMarked(t *testing.T) {
 	}
 }
 
+// A host->service "runs" edge used to sit alongside a service's own
+// listener, drawing two parallel routes back to "внешняя сеть" for the
+// exact same node (the direct internet->listener ingress edge, and
+// host->service->listener) — every service already sits in the same
+// column as the host, so the extra edge restated something already
+// implied instead of adding information, and read as a redundant branch.
+// The service node itself must still exist and stay reachable through its
+// own listener; only the direct host edge is gone.
+func TestServiceHasNoDirectRunsEdgeFromHost(t *testing.T) {
+	snap := &model.Snapshot{
+		Services: []model.ServiceUnit{{Name: "haproxy", Unit: "haproxy.service", Installed: true, ActiveState: "active"}},
+		Endpoints: []model.Endpoint{{
+			ID: "haproxy:fe", Service: model.ServiceHAProxy, Kind: "frontend",
+			Address: "0.0.0.0", Port: 8443, Protocol: "tcp", Mode: "http", TLS: true, Label: "fe_ssl",
+		}},
+	}
+
+	g := Build(snap)
+	if nodeByID(g, "svc:haproxy") == nil {
+		t.Fatal("узел сервиса haproxy не построен")
+	}
+	for _, e := range g.Edges {
+		if e.Kind == "runs" {
+			t.Errorf("неожиданное ребро \"runs\": %+v", e)
+		}
+	}
+	found := false
+	for _, e := range g.Edges {
+		if e.From == "svc:haproxy" && e.To == "ep:haproxy:fe" && e.Kind == "listens" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("сервис должен по-прежнему владеть своим слушателем через \"listens\"")
+	}
+}
+
 // An undeclared listener — nothing in any parsed config accounts for it —
 // must show up on the map itself, not only on the separate "Разное" page:
 // omitting it left the map claiming to show "everything listening here"
