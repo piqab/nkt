@@ -33,7 +33,7 @@ func TestUpdateSessionSurvivesDisconnect(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	s := &Server{db: db}
+	s := &Server{db: db, sessions: map[string]*updateSession{}}
 
 	var runs int
 	buildCmd := func() *exec.Cmd {
@@ -46,7 +46,7 @@ func TestUpdateSessionSurvivesDisconnect(t *testing.T) {
 	}
 
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		s.runUpdateSession(w, r, buildCmd, "test.session", "test", 0)
+		s.runUpdateSession(w, r, "test", buildCmd, "test.session", "test", 0)
 	}))
 	defer ts.Close()
 
@@ -105,7 +105,7 @@ func TestHandleUpdatesStatus(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 
-	s := &Server{db: db}
+	s := &Server{db: db, sessions: map[string]*updateSession{}}
 
 	status := func(t *testing.T) map[string]any {
 		t.Helper()
@@ -138,7 +138,7 @@ func TestHandleUpdatesStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("newUpdateSession: %v", err)
 		}
-		s.updateSession = sess
+		s.sessions["packages"] = sess
 
 		if got := status(t); got["active"] != true {
 			t.Error("active = false while the session is still running")
@@ -160,7 +160,7 @@ func TestHandleUpdatesStatus(t *testing.T) {
 		if err != nil {
 			t.Fatalf("newUpdateSession: %v", err)
 		}
-		s.updateSession = sess
+		s.sessions["packages"] = sess
 		waitDone(t, sess)
 
 		got := status(t)

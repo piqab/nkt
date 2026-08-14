@@ -28,6 +28,21 @@ func TestFirewallNeverReturnsNilSlices(t *testing.T) {
 	}
 }
 
+// TestFirewallUFWNotInstalled locks in that a host without the ufw binary
+// gets an explicit UFWInstalled=false rather than looking identical to one
+// where ufw is merely inactive (UFWActive=false with installed=true would
+// suggest "just turn it on"; installed=false is the "install it first"
+// case the Firewall page needs to tell apart).
+func TestFirewallUFWNotInstalled(t *testing.T) {
+	res := Firewall(context.Background(), collect.NewFixtures(t.TempDir()))
+	if res.State.UFWInstalled {
+		t.Error("UFWInstalled = true на пустом хосте без ufw")
+	}
+	if res.State.UFWActive {
+		t.Error("UFWActive = true без установленного ufw — так быть не может")
+	}
+}
+
 func TestFirewallParsesFixture(t *testing.T) {
 	res := Firewall(context.Background(), fixtureCollector(t))
 	if res.Status.Error != "" {
@@ -88,6 +103,9 @@ func TestFirewallParsesFixture(t *testing.T) {
 		t.Error("правило для 25/tcp с нулевым счётчиком должно быть распознано")
 	}
 
+	if !res.State.UFWInstalled {
+		t.Error("ufw должен быть определён как установленный (в фикстурах есть command -v ufw)")
+	}
 	if !res.State.UFWActive {
 		t.Error("ufw должен быть активен")
 	}

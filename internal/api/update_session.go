@@ -150,30 +150,32 @@ func (s *updateSession) outcome() (done bool, exitCode int) {
 
 // runUpdateSession bridges a WebSocket to a process-level session that
 // survives the connection itself: buildCmd is only actually called (and a
-// new process started) when there is no session yet, or the previous one
-// has already finished — otherwise this attaches to whatever is already
-// running and replays its output so far, so a client that reconnects
-// mid-upgrade sees the same session, not a fresh one racing it.
-func (s *Server) runUpdateSession(w http.ResponseWriter, r *http.Request, buildCmd func() *exec.Cmd, auditAction, auditTarget string, idleTimeout time.Duration) {
+// new process started) when there is no session yet under this key, or the
+// previous one has already finished — otherwise this attaches to whatever
+// is already running and replays its output so far, so a client that
+// reconnects mid-run sees the same session, not a fresh one racing it.
+// key namespaces this from every other long-running command using the same
+// mechanism (e.g. "packages" vs "ufw-install") so they never collide.
+func (s *Server) runUpdateSession(w http.ResponseWriter, r *http.Request, key string, buildCmd func() *exec.Cmd, auditAction, auditTarget string, idleTimeout time.Duration) {
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return // Accept already wrote the response.
 	}
 	defer conn.CloseNow()
 
-	s.updateSessionMu.Lock()
-	sess := s.updateSession
+	s.sessionsMu.Lock()
+	sess := s.sessions[key]
 	if sess == nil || sess.isDone() {
 		newSess, err := newUpdateSession(buildCmd())
 		if err != nil {
-			s.updateSessionMu.Unlock()
+			s.sessionsMu.Unlock()
 			conn.Close(websocket.StatusInternalError, "не удалось запустить команду: "+err.Error())
 			return
 		}
-		s.updateSession = newSess
+		s.sessions[key] = newSess
 		sess = newSess
 	}
-	s.updateSessionMu.Unlock()
+	s.sessionsMu.Unlock()
 
 	buf, ch, live := sess.attach()
 

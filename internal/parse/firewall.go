@@ -54,17 +54,28 @@ func Firewall(ctx context.Context, c collect.Collector) FirewallResult {
 		res.State.Rules = append(res.State.Rules, rules...)
 	}
 
-	if out, err := c.Run(ctx, "ufw", "status", "verbose"); err == nil && out.OK() {
-		res.Status.Available = true
-		active, policy, rules := parseUFWStatus(out.Stdout)
-		res.State.UFWActive = active
-		res.State.UFWPolicy = policy
-		if active {
-			res.State.Backends = append(res.State.Backends, "ufw")
-			res.State.Rules = append(res.State.Rules, rules...)
+	// A missing `ufw` binary and a real failure to run it need to read
+	// differently to the operator: one is "install it", the other is
+	// "something's actually broken". collect.Which checks with `command -v`
+	// first (the same idiom parse.Packages and parse.Services use for
+	// apt-get/docker/podman/etc.) rather than trying to infer "not
+	// installed" from Run's error — Run itself can't distinguish that from
+	// other exec-start failures reliably, and its behavior even differs
+	// between the real and fixtures collectors for this exact case.
+	res.State.UFWInstalled = collect.Which(ctx, c, "ufw")
+	if res.State.UFWInstalled {
+		if out, err := c.Run(ctx, "ufw", "status", "verbose"); err == nil && out.OK() {
+			res.Status.Available = true
+			active, policy, rules := parseUFWStatus(out.Stdout)
+			res.State.UFWActive = active
+			res.State.UFWPolicy = policy
+			if active {
+				res.State.Backends = append(res.State.Backends, "ufw")
+				res.State.Rules = append(res.State.Rules, rules...)
+			}
+		} else if err != nil {
+			res.Status.Warnings = append(res.Status.Warnings, fmt.Sprintf("ufw: %v", err))
 		}
-	} else if err != nil {
-		res.Status.Warnings = append(res.Status.Warnings, fmt.Sprintf("ufw: %v", err))
 	}
 
 	if !res.Status.Available {
