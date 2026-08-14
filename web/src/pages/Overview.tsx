@@ -69,25 +69,50 @@ export default function OverviewPage({ me }: { me: Me }) {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [updating, setUpdating] = useState(false)
+  const [updateOutcome, setUpdateOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
   // Polled independently of whether the update dialog is open — otherwise
   // there's no way to tell, from the button alone, whether "обновить"
   // would reattach to an apt-get already running (started earlier, or by
   // someone else) or start a brand new one; both look identical at first
   // glance (a black terminal with a spinner) once the dialog opens.
-  const { data: updateStatus } = useApi<{ active: boolean }>('/updates/status', 5_000)
+  const { data: updateStatus, reload: reloadUpdateStatus } = useApi<{
+    active: boolean
+    finished: boolean
+    succeeded: boolean
+  }>('/updates/status', 5_000)
   const updateActive = updateStatus?.active ?? false
 
-  async function rescan() {
+  async function rescan(successNotice = 'Хост пересканирован.') {
     setBusy(true)
     setNotice(null)
     try {
       await api('/inventory/refresh', { method: 'POST' })
       reload()
-      setNotice('Хост пересканирован.')
+      setNotice(successNotice)
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
+    }
+  }
+
+  /**
+   * Called the moment the update session's socket closes, i.e. as soon as
+   * apt actually exits. A plain reload() would not be enough: /overview
+   * serves the last inventory scan, so the package list would still show
+   * the versions apt just replaced — which reads as "the upgrade never
+   * finished" rather than "nothing rescanned the host yet". Only a
+   * successful run is worth rescanning for; a failed one leaves the
+   * previous state in place and its error on screen instead.
+   */
+  async function handleUpdateFinished() {
+    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>('/updates/status').catch(() => null)
+    reloadUpdateStatus()
+    if (fresh?.succeeded) {
+      setUpdateOutcome({ ok: true })
+      await rescan('Пакеты обновлены, хост пересканирован.')
+    } else {
+      setUpdateOutcome({ ok: false, exitCode: fresh?.exit_code })
     }
   }
 
@@ -117,7 +142,13 @@ export default function OverviewPage({ me }: { me: Me }) {
         <div className="row">
           {updateActive
             ? canReopenUpdate && (
-                <Button type="primary" onClick={() => setUpdating(true)}>
+                <Button
+                  type="primary"
+                  onClick={() => {
+                    setUpdateOutcome(null)
+                    setUpdating(true)
+                  }}
+                >
                   обновление выполняется — открыть
                 </Button>
               )
@@ -132,6 +163,7 @@ export default function OverviewPage({ me }: { me: Me }) {
                           'Подтверждение apt (Y/n) нужно будет дать в открывшемся окне.',
                       )
                     ) {
+                      setUpdateOutcome(null)
                       setUpdating(true)
                     }
                   }}
@@ -140,7 +172,7 @@ export default function OverviewPage({ me }: { me: Me }) {
                 </Button>
               )}
           {me.is_admin && (
-            <Button onClick={rescan} loading={busy}>
+            <Button onClick={() => rescan()} loading={busy}>
               {busy ? 'Сканирую…' : 'Пересканировать'}
             </Button>
           )}
@@ -266,6 +298,9 @@ export default function OverviewPage({ me }: { me: Me }) {
       {updating && (
         <UpdateModal
           packages={pkgUpdates}
+          outcome={updateOutcome}
+          rescanning={busy}
+          onFinished={handleUpdateFinished}
           onClose={() => {
             setUpdating(false)
             reload()

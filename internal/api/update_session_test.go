@@ -92,10 +92,12 @@ func TestUpdateSessionSurvivesDisconnect(t *testing.T) {
 	}
 }
 
-// TestHandleUpdatesStatus locks in the three states the Overview page's
-// button relies on to tell the operator whether "обновить" would reattach
-// to a real, already-running apt-get or start a brand new one: no session
-// yet, a session actively running, and a session that has finished.
+// TestHandleUpdatesStatus locks in the states the Overview page's button
+// relies on: no session yet, a session actively running, and a finished
+// one — plus how it finished. That last part is not cosmetic: Overview
+// uses "succeeded" to decide whether to rescan the host, and the package
+// list stays stale (reading exactly like "the upgrade never finished")
+// if that signal is wrong.
 func TestHandleUpdatesStatus(t *testing.T) {
 	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
 	if err != nil {
@@ -105,42 +107,70 @@ func TestHandleUpdatesStatus(t *testing.T) {
 
 	s := &Server{db: db}
 
-	active := func(t *testing.T) bool {
+	status := func(t *testing.T) map[string]any {
 		t.Helper()
 		req := httptest.NewRequest(http.MethodGet, "/api/updates/status", nil)
 		rec := httptest.NewRecorder()
 		s.handleUpdatesStatus(rec, req)
-		var body map[string]bool
+		var body map[string]any
 		if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
 			t.Fatalf("decode response: %v (body: %s)", err, rec.Body.String())
 		}
-		return body["active"]
+		return body
 	}
 
-	if active(t) {
-		t.Error("active = true before any session was ever started")
+	waitDone := func(t *testing.T, sess *updateSession) {
+		t.Helper()
+		for i := 0; i < 100 && !sess.isDone(); i++ {
+			time.Sleep(20 * time.Millisecond)
+		}
+		if !sess.isDone() {
+			t.Fatal("session never finished")
+		}
 	}
 
-	sess, err := newUpdateSession(exec.Command("bash", "-c", "sleep 0.3"))
-	if err != nil {
-		t.Fatalf("newUpdateSession: %v", err)
-	}
-	s.updateSession = sess
-
-	if !active(t) {
-		t.Error("active = false while the session is still running")
+	if got := status(t); got["active"] != false || got["finished"] != false {
+		t.Errorf("before any session: active/finished = %v/%v, want false/false", got["active"], got["finished"])
 	}
 
-	for i := 0; i < 50 && !sess.isDone(); i++ {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if !sess.isDone() {
-		t.Fatal("session never finished")
-	}
+	t.Run("successful run reports succeeded", func(t *testing.T) {
+		sess, err := newUpdateSession(exec.Command("bash", "-c", "sleep 0.2; exit 0"))
+		if err != nil {
+			t.Fatalf("newUpdateSession: %v", err)
+		}
+		s.updateSession = sess
 
-	if active(t) {
-		t.Error("active = true after the session finished")
-	}
+		if got := status(t); got["active"] != true {
+			t.Error("active = false while the session is still running")
+		}
+
+		waitDone(t, sess)
+
+		got := status(t)
+		if got["active"] != false || got["finished"] != true {
+			t.Errorf("after finish: active/finished = %v/%v, want false/true", got["active"], got["finished"])
+		}
+		if got["succeeded"] != true {
+			t.Errorf("succeeded = %v, want true (exit_code = %v)", got["succeeded"], got["exit_code"])
+		}
+	})
+
+	t.Run("failed run does not report succeeded", func(t *testing.T) {
+		sess, err := newUpdateSession(exec.Command("bash", "-c", "exit 7"))
+		if err != nil {
+			t.Fatalf("newUpdateSession: %v", err)
+		}
+		s.updateSession = sess
+		waitDone(t, sess)
+
+		got := status(t)
+		if got["succeeded"] != false {
+			t.Errorf("succeeded = %v, want false after a non-zero exit", got["succeeded"])
+		}
+		if code, ok := got["exit_code"].(float64); !ok || int(code) != 7 {
+			t.Errorf("exit_code = %v, want 7", got["exit_code"])
+		}
+	})
 }
 
 func readUntilMarker(t *testing.T, ctx context.Context, conn *websocket.Conn, marker string) string {
