@@ -98,13 +98,14 @@ func TestPollOverviewPopulatesFindings(t *testing.T) {
 
 	manager := NewManager(&config.Config{}, db, key, "test")
 
-	if _, _, _, ok := manager.Overview(hostID); ok {
+	if _, ok := manager.Overview(hostID); ok {
 		t.Fatalf("Overview before any poll tick should report ok=false")
 	}
 
 	manager.pollOnce(ctx)
 
-	findings, reachable, lastPolledAt, ok := manager.Overview(hostID)
+	ov, ok := manager.Overview(hostID)
+	findings, reachable, lastPolledAt := ov.Findings, ov.Reachable, ov.LastPolledAt
 	if !ok {
 		t.Fatalf("Overview after pollOnce: ok=false, want true")
 	}
@@ -124,7 +125,8 @@ func TestPollOverviewPopulatesFindings(t *testing.T) {
 	killRemote()
 	manager.pollOnce(ctx)
 
-	findingsAfter, reachableAfter, _, ok := manager.Overview(hostID)
+	ovAfter, ok := manager.Overview(hostID)
+	findingsAfter, reachableAfter := ovAfter.Findings, ovAfter.Reachable
 	if !ok {
 		t.Fatalf("Overview after the remote died: ok=false, want true (a stale cache entry, not none)")
 	}
@@ -153,7 +155,7 @@ func TestPollOverviewSkipsNonOnlineHosts(t *testing.T) {
 
 	m.pollOnce(ctx)
 
-	if _, _, _, ok := m.Overview(id); ok {
+	if _, ok := m.Overview(id); ok {
 		t.Errorf("Overview for a non-online host after pollOnce: ok=true, want false")
 	}
 }

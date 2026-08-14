@@ -147,10 +147,14 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		},
 		"certificates":    certSummary(snap),
 		"package_updates": snap.Packages,
-		"findings":        snap.FindingCounts(),
-		"top_findings":    top,
-		"services":        snap.Services,
-		"sources":         snap.Sources,
+		// The version actually serving this — the hub's poller reads it
+		// from here to show what is really running on a host, as opposed
+		// to what it recorded having installed there.
+		"version":      s.version,
+		"findings":     snap.FindingCounts(),
+		"top_findings": top,
+		"services":     snap.Services,
+		"sources":      snap.Sources,
 		"firewall": map[string]any{
 			"ufw_active": snap.Firewall.UFWActive,
 			"ufw_policy": snap.Firewall.UFWPolicy,
