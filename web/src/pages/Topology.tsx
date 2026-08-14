@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Checkbox } from 'antd'
 import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
@@ -14,6 +14,7 @@ const COLUMNS: { kind: string; title: string }[] = [
   { kind: 'internet', title: 'Внешняя сеть' },
   { kind: 'service', title: 'Сервисы' },
   { kind: 'endpoint', title: 'Слушатели' },
+  { kind: 'undeclared', title: 'Разное' },
   { kind: 'upstream', title: 'Пулы' },
   { kind: 'backend', title: 'Backend-адреса' },
   { kind: 'container', title: 'Контейнеры' },
@@ -27,6 +28,9 @@ const NODE_W = 168
 const NODE_H = 40
 const COL_GAP = 78
 const ROW_GAP = 14
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 3
+const ZOOM_STEP = 1.25
 
 const STATUS_COLOR: Record<string, string> = {
   ok: 'var(--status-good)',
@@ -48,6 +52,7 @@ export default function TopologyPage() {
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
+  const svgRef = useRef<SVGSVGElement>(null)
 
   const { placed, edges, width, height, columns } = useMemo(() => {
     if (!data) return { placed: [], edges: [], width: 100, height: 100, columns: [] as typeof COLUMNS }
@@ -105,6 +110,49 @@ export default function TopologyPage() {
   }, [data, hideHealthy])
 
   const positions = useMemo(() => new Map(placed.map((n) => [n.id, n])), [placed])
+
+  // React 18 attaches its own JSX onWheel listener as passive at the root
+  // for scroll performance, so e.preventDefault() inside a plain onWheel
+  // prop is silently ignored (and warns in dev) — the page would scroll
+  // out from under the map on every zoom attempt. A manually attached,
+  // non-passive listener is the only way to actually claim the wheel
+  // event for zooming instead. Re-attached whenever zoom/pan/size change
+  // so the handler always closes over fresh values rather than stale ones
+  // captured at mount — wheel events are infrequent enough that the
+  // remove/add churn this causes is not worth avoiding.
+  useEffect(() => {
+    const el = svgRef.current
+    if (!el) return
+
+    function onWheel(e: WheelEvent) {
+      e.preventDefault()
+      const rect = el!.getBoundingClientRect()
+      const curViewW = width / zoom
+      const curViewH = height / zoom
+      // The map point under the cursor, in the SVG's own coordinate space
+      // — kept fixed on screen across the zoom change below, the way
+      // every other zoom-under-cursor implementation (maps, image
+      // viewers) behaves. Without this, zooming in while looking at a
+      // node on the right edge shoves it off-screen instead of growing
+      // it in place.
+      const fx = (e.clientX - rect.left) / rect.width
+      const fy = (e.clientY - rect.top) / rect.height
+      const anchorX = pan.x + fx * curViewW
+      const anchorY = pan.y + fy * curViewH
+
+      const factor = e.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP
+      const nextZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor))
+      if (nextZoom === zoom) return
+
+      const nextViewW = width / nextZoom
+      const nextViewH = height / nextZoom
+      setZoom(nextZoom)
+      setPan({ x: anchorX - fx * nextViewW, y: anchorY - fy * nextViewH })
+    }
+
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [zoom, pan, width, height])
 
   const focus = hovered ?? selected
   const connected = useMemo(() => {
@@ -214,10 +262,10 @@ export default function TopologyPage() {
       >
         <div className="map-wrap">
           <div className="map-controls">
-            <Button size="small" onClick={() => setZoom((z) => Math.min(z * 1.25, 3))} title="Приблизить">
+            <Button size="small" onClick={() => setZoom((z) => Math.min(z * ZOOM_STEP, MAX_ZOOM))} title="Приблизить">
               +
             </Button>
-            <Button size="small" onClick={() => setZoom((z) => Math.max(z / 1.25, 0.5))} title="Отдалить">
+            <Button size="small" onClick={() => setZoom((z) => Math.max(z / ZOOM_STEP, MIN_ZOOM))} title="Отдалить">
               −
             </Button>
             <Button
@@ -233,6 +281,7 @@ export default function TopologyPage() {
           </div>
 
           <svg
+            ref={svgRef}
             viewBox={`${pan.x} ${pan.y} ${viewW} ${viewH}`}
             style={{ height: Math.min(height, 720) }}
             onMouseDown={(e) => {

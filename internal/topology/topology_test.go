@@ -163,6 +163,120 @@ func TestUndefinedUpstreamIsStillMarked(t *testing.T) {
 	}
 }
 
+// An undeclared listener — nothing in any parsed config accounts for it —
+// must show up on the map itself, not only on the separate "Разное" page:
+// omitting it left the map claiming to show "everything listening here"
+// while quietly leaving out exactly the sockets nobody remembers
+// configuring, which is the one case worth seeing on the map most.
+func TestUndeclaredListenerAppearsOnTheMap(t *testing.T) {
+	snap := &model.Snapshot{
+		Listeners: []model.Listener{{
+			Protocol: "tcp", Address: "127.0.0.1", Port: 11211,
+			Process: "memcached", PID: 655,
+			Command: "/usr/bin/memcached -m 64 -p 11211", User: "memcache",
+			UptimeS: 3700, Origin: model.OriginService, Unit: "memcached.service",
+		}},
+	}
+
+	g := Build(snap)
+	node := nodeByID(g, "misc:tcp:127.0.0.1:11211")
+	if node == nil {
+		t.Fatal("узел для необъявленного слушателя не построен")
+	}
+	if node.Kind != KindUndeclared {
+		t.Errorf("Kind = %q, ожидался %q", node.Kind, KindUndeclared)
+	}
+	if node.Label != "memcached" {
+		t.Errorf("Label = %q, ожидалось имя процесса", node.Label)
+	}
+	if node.Meta["command"] == "" || node.Meta["user"] != "memcache" || node.Meta["unit"] != "memcached.service" {
+		t.Errorf("Meta = %+v, ожидались command/user/unit", node.Meta)
+	}
+	if node.Meta["started"] != "1 ч" {
+		t.Errorf("Meta[started] = %q, ожидалось %q", node.Meta["started"], "1 ч")
+	}
+	// Loopback-only and not public — no reason to draw an internet edge or
+	// alarm colour for something nothing outside the host can reach.
+	if node.Status != StatusUnknown {
+		t.Errorf("статус = %q, ожидался %q (не публичный)", node.Status, StatusUnknown)
+	}
+	for _, e := range g.Edges {
+		if e.From == "internet" && e.To == node.ID {
+			t.Errorf("неожиданное ingress-ребро для непубличного слушателя: %+v", e)
+		}
+	}
+}
+
+// A listener bound to all interfaces is the one case worth an actual alarm
+// colour and a direct edge from "внешняя сеть" — it is reachable from
+// outside and nobody declared it, which is exactly what
+// ruleListeningNotDeclared escalates to Medium once Public() is true.
+func TestPublicUndeclaredListenerGetsIngressEdgeAndWarning(t *testing.T) {
+	snap := &model.Snapshot{
+		Listeners: []model.Listener{{
+			Protocol: "tcp", Address: "0.0.0.0", Port: 5380,
+			Process: "dotnet", PID: 419, User: "root", Origin: model.OriginManual,
+		}},
+	}
+
+	g := Build(snap)
+	node := nodeByID(g, "misc:tcp:0.0.0.0:5380")
+	if node == nil {
+		t.Fatal("узел не построен")
+	}
+	if node.Status != StatusWarn {
+		t.Errorf("статус = %q, ожидался %q (публичный)", node.Status, StatusWarn)
+	}
+	if !node.Public {
+		t.Error("Public = false, ожидался true для 0.0.0.0")
+	}
+	found := false
+	for _, e := range g.Edges {
+		if e.From == "internet" && e.To == node.ID && e.Kind == "ingress" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("нет ребра internet -> узел для публичного необъявленного слушателя")
+	}
+}
+
+// A port a config file actually declares must not also show up as
+// "undeclared" — the two views would otherwise contradict each other for
+// the exact same socket.
+func TestDeclaredPortIsNotAlsoShownAsUndeclared(t *testing.T) {
+	snap := &model.Snapshot{
+		Endpoints: []model.Endpoint{{
+			ID: "nginx:1", Service: model.ServiceNginx, Kind: "server",
+			Address: "0.0.0.0", Port: 80, Protocol: "tcp", Mode: "http", Label: "site",
+		}},
+		Listeners: []model.Listener{{Protocol: "tcp", Address: "0.0.0.0", Port: 80, Process: "nginx", PID: 1}},
+	}
+
+	g := Build(snap)
+	for _, n := range g.Nodes {
+		if n.Kind == KindUndeclared {
+			t.Errorf("порт, описанный в конфиге, не должен также попадать в необъявленные: %+v", n)
+		}
+	}
+}
+
+// docker-proxy is already covered by the container publish edges built from
+// the endpoint's own routes — showing it a second time as "undeclared"
+// would be a redundant, unexplained duplicate of the same port.
+func TestDockerProxyIsExcludedFromUndeclared(t *testing.T) {
+	snap := &model.Snapshot{
+		Listeners: []model.Listener{{Protocol: "tcp", Address: "127.0.0.1", Port: 8080, Process: "docker-proxy", PID: 1201}},
+	}
+
+	g := Build(snap)
+	for _, n := range g.Nodes {
+		if n.Kind == KindUndeclared {
+			t.Errorf("docker-proxy не должен становиться узлом Разного: %+v", n)
+		}
+	}
+}
+
 // A backend that answers by itself carries no servers; that is not a fault.
 func TestServerlessBackendIsNotAnError(t *testing.T) {
 	snap := &model.Snapshot{
