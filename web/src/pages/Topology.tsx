@@ -138,6 +138,19 @@ export default function TopologyPage() {
   // where the other end sits, so the fan-out doesn't cross itself — is
   // the standard fix: it makes plain that separate lines stay separate
   // all the way to their own distinct point on the box.
+  // Shared by the anchor spread below and by the route walk further down —
+  // both need "every edge leaving this node" / "every edge arriving at
+  // this node" grouped the same way.
+  const adjacency = useMemo(() => {
+    const outByNode = new Map<string, GraphEdge[]>()
+    const inByNode = new Map<string, GraphEdge[]>()
+    for (const e of edges) {
+      ;(outByNode.get(e.from) ?? outByNode.set(e.from, []).get(e.from)!).push(e)
+      ;(inByNode.get(e.to) ?? inByNode.set(e.to, []).get(e.to)!).push(e)
+    }
+    return { outByNode, inByNode }
+  }, [edges])
+
   const edgeAnchors = useMemo(() => {
     const spread = (idx: number, count: number) => {
       if (count <= 1) return NODE_H / 2
@@ -145,42 +158,23 @@ export default function TopologyPage() {
       return 8 + (usable * idx) / (count - 1)
     }
 
-    const outgoing = new Map<string, GraphEdge[]>()
-    const incoming = new Map<string, GraphEdge[]>()
-    for (const e of edges) {
-      ;(outgoing.get(e.from) ?? outgoing.set(e.from, []).get(e.from)!).push(e)
-      ;(incoming.get(e.to) ?? incoming.set(e.to, []).get(e.to)!).push(e)
-    }
-
     const y1ByEdge = new Map<string, number>()
-    // A single color per edge only matters once a node actually fans out
-    // into more than one line — an edge that's its source's only outgoing
-    // link stays the neutral baseline color, so coloring only lights up
-    // where it disambiguates something.
-    const colorByEdge = new Map<string, string>()
-    for (const list of outgoing.values()) {
+    for (const list of adjacency.outByNode.values()) {
       const sorted = [...list].sort((a, b) => (positions.get(a.to)?.y ?? 0) - (positions.get(b.to)?.y ?? 0))
-      sorted.forEach((e, i) => {
-        y1ByEdge.set(e.id, spread(i, sorted.length))
-        if (sorted.length > 1) colorByEdge.set(e.id, FAN_PALETTE[i % FAN_PALETTE.length])
-      })
+      sorted.forEach((e, i) => y1ByEdge.set(e.id, spread(i, sorted.length)))
     }
     const y2ByEdge = new Map<string, number>()
-    for (const list of incoming.values()) {
+    for (const list of adjacency.inByNode.values()) {
       const sorted = [...list].sort((a, b) => (positions.get(a.from)?.y ?? 0) - (positions.get(b.from)?.y ?? 0))
       sorted.forEach((e, i) => y2ByEdge.set(e.id, spread(i, sorted.length)))
     }
 
-    const result = new Map<string, { y1: number; y2: number; color: string | null }>()
+    const result = new Map<string, { y1: number; y2: number }>()
     for (const e of edges) {
-      result.set(e.id, {
-        y1: y1ByEdge.get(e.id) ?? NODE_H / 2,
-        y2: y2ByEdge.get(e.id) ?? NODE_H / 2,
-        color: colorByEdge.get(e.id) ?? null,
-      })
+      result.set(e.id, { y1: y1ByEdge.get(e.id) ?? NODE_H / 2, y2: y2ByEdge.get(e.id) ?? NODE_H / 2 })
     }
     return result
-  }, [edges, positions])
+  }, [edges, positions, adjacency])
 
   // React 18 attaches its own JSX onWheel listener as passive at the root
   // for scroll performance, so e.preventDefault() inside a plain onWheel
@@ -246,32 +240,67 @@ export default function TopologyPage() {
   // A directed walk only ever climbs from a node to what feeds it (or
   // descends to what it feeds), so it stops there instead of fanning back
   // out.
-  const connected = useMemo(() => {
+  // Color is assigned once, at the very first branch out of the focused
+  // node, and then simply inherited edge-by-edge for the rest of that
+  // branch's length — no matter how many more times it splits further on.
+  // Recoloring at every intermediate node (the previous approach) made a
+  // single continuous route change color mid-way for no reason other than
+  // passing through a node that happened to fan out again; a route should
+  // read as one color from where it leaves the focus to wherever it ends.
+  // If two differently-colored branches reconverge on the same node (e.g.
+  // a container attached to two networks), whichever branch's BFS gets
+  // there first "owns" that node and everything downstream of it — the
+  // other branch's own edge into that node still keeps its own color, it
+  // just doesn't get to repaint what's already claimed.
+  const route = useMemo(() => {
     if (!focus) return null
-    const forward = new Map<string, string[]>()
-    const backward = new Map<string, string[]>()
-    for (const e of edges) {
-      ;(forward.get(e.from) ?? forward.set(e.from, []).get(e.from)!).push(e.to)
-      ;(backward.get(e.to) ?? backward.set(e.to, []).get(e.to)!).push(e.from)
-    }
-    const walk = (adjacency: Map<string, string[]>) => {
-      const seen = new Set<string>([focus])
-      const queue = [focus]
+
+    const walk = (byNode: Map<string, GraphEdge[]>, other: (e: GraphEdge) => string) => {
+      const nodes = new Set<string>([focus])
+      const edgeColors = new Map<string, string>()
+      const nodeColor = new Map<string, string>()
+
+      const first = [...(byNode.get(focus) ?? [])].sort(
+        (a, b) => (positions.get(other(a))?.y ?? 0) - (positions.get(other(b))?.y ?? 0),
+      )
+      const queue: string[] = []
+      first.forEach((e, i) => {
+        const color = FAN_PALETTE[i % FAN_PALETTE.length]
+        edgeColors.set(e.id, color)
+        const next = other(e)
+        if (!nodes.has(next)) {
+          nodes.add(next)
+          nodeColor.set(next, color)
+          queue.push(next)
+        }
+      })
+
       while (queue.length) {
         const cur = queue.shift()!
-        for (const next of adjacency.get(cur) ?? []) {
-          if (!seen.has(next)) {
-            seen.add(next)
+        const color = nodeColor.get(cur)!
+        for (const e of byNode.get(cur) ?? []) {
+          edgeColors.set(e.id, color)
+          const next = other(e)
+          if (!nodes.has(next)) {
+            nodes.add(next)
+            nodeColor.set(next, color)
             queue.push(next)
           }
         }
       }
-      return seen
+      return { nodes, edgeColors }
     }
-    const ancestors = walk(backward)
-    const descendants = walk(forward)
-    return new Set([...ancestors, ...descendants])
-  }, [focus, edges])
+
+    const descendants = walk(adjacency.outByNode, (e) => e.to)
+    const ancestors = walk(adjacency.inByNode, (e) => e.from)
+    return {
+      nodes: new Set([...descendants.nodes, ...ancestors.nodes]),
+      edgeColors: new Map([...descendants.edgeColors, ...ancestors.edgeColors]),
+    }
+  }, [focus, adjacency, positions])
+
+  const connected = route?.nodes ?? null
+  const edgeColors = route?.edgeColors ?? null
 
   if (loading && !data) return <Loading what="карту ресурсов" />
   if (error && !data) return <ErrorNote error={error} />
@@ -436,6 +465,7 @@ export default function TopologyPage() {
                 from={positions.get(e.from)!}
                 to={positions.get(e.to)!}
                 anchor={edgeAnchors.get(e.id)!}
+                color={edgeColors?.get(e.id) ?? null}
                 dimmed={connected !== null && !(connected.has(e.from) && connected.has(e.to))}
                 highlighted={connected !== null && connected.has(e.from) && connected.has(e.to)}
               />
@@ -463,13 +493,15 @@ function EdgePath({
   from,
   to,
   anchor,
+  color,
   dimmed,
   highlighted,
 }: {
   edge: GraphEdge
   from: Placed
   to: Placed
-  anchor: { y1: number; y2: number; color: string | null }
+  anchor: { y1: number; y2: number }
+  color: string | null
   dimmed: boolean
   highlighted: boolean
 }) {
@@ -494,15 +526,13 @@ function EdgePath({
       <path
         d={d}
         fill="none"
-        // Fan colors only ever apply to the highlighted route itself — e.g.
-        // hovering a service that fans out into several listeners lights up
-        // every one of those edges as "highlighted", and without per-branch
-        // color they're indistinguishable beyond the single accent color.
-        // Everything not on the highlighted route (including the default
-        // nothing-selected state) stays the plain neutral baseline, same as
-        // before this existed — coloring the whole map by default competed
-        // with the highlight instead of supporting it.
-        stroke={highlighted ? (anchor.color ?? 'var(--series-1)') : 'var(--baseline)'}
+        // color is only ever set for edges on the highlighted route (see
+        // the `route` walk above) — a fresh palette color per branch right
+        // where it splits off the focused node, inherited unchanged for
+        // the rest of that branch's length. Everything not on the route
+        // (including the default nothing-selected state) stays the plain
+        // neutral baseline, same as before per-branch color existed.
+        stroke={highlighted ? (color ?? 'var(--series-1)') : 'var(--baseline)'}
         strokeWidth={highlighted ? 2 : 1.25}
       />
       {highlighted && label && (
