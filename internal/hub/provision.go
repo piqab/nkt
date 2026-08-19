@@ -109,6 +109,16 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 	}
 
 	cmd := exec.CommandContext(ctx, goBin, "build",
+		// -buildvcs=false: go build otherwise shells out to `git status` to
+		// stamp VCS info into the binary, which this process doesn't even
+		// use (the version is already embedded explicitly via -X below) —
+		// and that shell-out fails outright under the hub's own systemd
+		// unit, which runs as root while the source checkout is normally
+		// owned by whatever user cloned it: git's dubious-ownership check
+		// refuses to touch a repo it doesn't own, and go build surfaces
+		// that as an opaque "error obtaining VCS status: exit status 1"
+		// with no indication it was ever about git ownership at all.
+		"-buildvcs=false",
 		"-trimpath", "-ldflags", "-s -w -X main.version="+m.version,
 		"-o", path, "./cmd/nkt")
 	cmd.Dir = sourceRoot

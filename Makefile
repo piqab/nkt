@@ -27,6 +27,15 @@ GOARCH     ?= amd64
 VERSION    ?= $(shell tr -d '[:space:]' < VERSION 2>/dev/null || echo dev)
 LDFLAGS    := -s -w -X main.version=$(VERSION)
 OUT        := dist/nkt
+# Every `go build` below passes -buildvcs=false: left on, go build shells out
+# to `git status` to stamp VCS info nothing here reads (version is already
+# embedded explicitly via LDFLAGS above) — and that shell-out fails outright
+# whenever it can't run cleanly: git missing entirely (a minimal golang:
+# ...-alpine image, as build-docker uses), or present but refusing a repo it
+# doesn't own ("dubious ownership", e.g. a checkout built as root — see
+# internal/hub/provision.go's own cross-compile for a real case of this).
+# The failure go build then surfaces ("error obtaining VCS status: exit
+# status 1") gives no hint it was ever about git at all.
 
 # Кэш модулей и npm переживает пересборки, иначе каждая тянет зависимости заново.
 DOCKER_RUN = docker run --rm \
@@ -105,7 +114,7 @@ build: ## собрать продакшен-бинарник для Linux (Docke
 build-docker: web
 	@mkdir -p dist; \
 	$(DOCKER_RUN) -e CGO_ENABLED=0 -e GOOS=linux -e GOARCH=$(GOARCH) $(GO_IMAGE) \
-		go build -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
+		go build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
 	echo "готово: $(OUT) ($(VERSION), linux/$(GOARCH))"; \
 	file $(OUT) 2>/dev/null || true
 
@@ -224,7 +233,7 @@ native-build: ## собрать без Docker: сама проверит и, е�
 	echo "Собираю веб-интерфейс…"; \
 	( cd web && npm ci && $(NODE_BUILD_ENV) npm run build ); \
 	echo "Собираю бинарник…"; \
-	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
+	CGO_ENABLED=0 go build -buildvcs=false -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
 	echo; \
 	echo "готово: $$($(OUT) version)"; \
 	if [ -d "$(LOCAL_GO_DIR)" ] || [ -d "$(LOCAL_NODE_DIR)" ]; then \
@@ -236,7 +245,7 @@ native-build: ## собрать без Docker: сама проверит и, е�
 
 .PHONY: build-dev
 build-dev: ## собрать бинарник для текущей ОС — ТОЛЬКО для разработки в режиме fixtures
-	go build -ldflags "-X main.version=$(VERSION)-dev" -o nkt ./cmd/nkt
+	go build -buildvcs=false -ldflags "-X main.version=$(VERSION)-dev" -o nkt ./cmd/nkt
 
 .PHONY: test
 test: ## прогнать тесты Go и проверку типов фронтенда
