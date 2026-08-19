@@ -12,9 +12,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/althq/netknownsthat/internal/api"
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/control"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
@@ -253,4 +255,112 @@ func TestHostsLocalRouteAuthAndForwarding(t *testing.T) {
 			t.Errorf("Local handler saw path %q, want %q", gotPath, "/api/overview")
 		}
 	})
+}
+
+// TestHostsLocalRouteWithRealEmbeddedAPIServer is the end-to-end version of
+// the test above: instead of a hand-written stub http.HandlerFunc standing
+// in for Local, this wires up the actual api.New(...) the same way runHub
+// does (cmd/nkt/main.go) — same fixtures-backed scanner/collector, the same
+// set of control managers, no Scheduler and no UI, exactly what a real hub
+// process builds for its embedded "localhost" server — and drives several
+// of the pages a browser actually opens (overview, findings, services)
+// through the full router, not just a single synthetic path. Catches
+// anything the stub-based test above structurally cannot: a real routing or
+// wiring mismatch between the hub's own /hosts/local/* prefix and what
+// api.Server actually registers under /api/*.
+func TestHostsLocalRouteWithRealEmbeddedAPIServer(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "fixtures", "host"))
+	if err != nil {
+		t.Fatalf("fixtures root: %v", err)
+	}
+	db, err := store.Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	cfg := &config.Config{
+		Mode:            config.ModeFixtures,
+		FixturesRoot:    root,
+		NginxMainConfig: "/etc/nginx/nginx.conf",
+		HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
+		ComposeFiles:    []string{"/srv/docker/docker-compose.yml"},
+		LibvirtURI:      "qemu:///system",
+		CommandTimeout:  5 * time.Second,
+		AllowMutations:  true,
+		SessionTTL:      time.Hour,
+		CookieSecure:    false,
+	}
+	authSvc := auth.NewService(db, cfg)
+	hash, err := auth.HashPassword("admin-password-1234")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	if _, err := db.CreateUser(context.Background(), "admin", hash, store.RoleAdmin); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+
+	// Mirrors newHubRuntime/runHub in cmd/nkt/main.go field for field.
+	collector := collect.NewFixtures(root)
+	scanner := inventory.New(cfg, collector, db)
+	services := control.NewServiceManager(cfg, collector, db)
+	localAPI := api.New(api.Deps{
+		Cfg: cfg, DB: db, Auth: authSvc, Scanner: scanner,
+		Services:  services,
+		Configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
+		Firewall:  control.NewFirewallManager(cfg, collector, db),
+		Firewalld: control.NewFirewalldManager(cfg, collector, db),
+		Certs:     control.NewCertManager(cfg, collector, db, services, scanner),
+		Podman:    control.NewPodmanManager(collector, db),
+		LXD:       control.NewLXDManager(collector, db),
+		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
+		Log:       slog.Default(), Version: "test",
+	})
+
+	key, err := secretbox.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	manager := NewManager(cfg, db, key, "test")
+
+	srv := New(Deps{
+		Cfg: cfg, DB: db, Auth: authSvc, Hub: manager,
+		Local: localAPI.Handler(), LocalScanner: scanner, Log: slog.Default(),
+	})
+	handler := srv.Handler()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login",
+		strings.NewReader(`{"username":"admin","password":"admin-password-1234"}`))
+	req.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login: status %d: %s", rec.Code, rec.Body.String())
+	}
+	var cookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == auth.SessionCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil {
+		t.Fatal("login: no session cookie set")
+	}
+
+	for _, path := range []string{
+		"/api/hosts/local/overview",
+		"/api/hosts/local/findings",
+		"/api/hosts/local/services",
+		"/api/hosts/local/inventory",
+	} {
+		t.Run(path, func(t *testing.T) {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, path, nil)
+			req.AddCookie(cookie)
+			handler.ServeHTTP(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Errorf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+			}
+		})
+	}
 }
