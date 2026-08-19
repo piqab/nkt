@@ -163,6 +163,11 @@ export default function Hosts({
   const [bulkBusy, setBulkBusy] = useState<'stop' | 'start' | null>(null)
   const [importing, setImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
+  // Set by openHost when "открыть" is clicked on a host whose nkt_version
+  // trails the hub's own — the update this same click kicked off has to
+  // actually finish before there's anything current to look at. Cleared
+  // once the matching job settles, whether or not that navigation happens.
+  const [autoOpenHost, setAutoOpenHost] = useState<{ id: number; name: string } | null>(null)
 
   // The previous poll tick's per-host snapshot — comparing against it is
   // the dedup mechanism itself (see notifications.ts): a ref, not state,
@@ -197,12 +202,31 @@ export default function Hosts({
         if (status.done) {
           window.clearInterval(timer)
           reload()
+          finishAutoOpen(status.error)
         }
       } catch (err) {
         if (cancelled) return
         setJobStatus({ events: [], done: true, error: err instanceof Error ? err.message : String(err) })
         window.clearInterval(timer)
+        finishAutoOpen('не удалось получить статус установки')
       }
+    }
+
+    // Navigates into the host that "открыть" auto-triggered this very job
+    // for (see openHost) once it settles — but only on success: opening an
+    // outdated host anyway, silently, right after its update just failed,
+    // would hide the failure behind a dashboard that still isn't current.
+    function finishAutoOpen(jobError: string | undefined) {
+      setAutoOpenHost((pending) => {
+        if (pending && pending.id === installHostId) {
+          if (!jobError) {
+            closeJobModal()
+            onSelect(pending)
+          }
+          return null
+        }
+        return pending
+      })
     }
 
     void poll()
@@ -216,8 +240,10 @@ export default function Hosts({
   /** force is set on retry, after the operator confirms the 409 prompt
    * below — a first call is always unforced, so an existing "foreign"
    * install (one this hub has no record of putting there itself) always
-   * gets a chance to be seen before anything on the host is touched. */
-  async function startInstall(host: HubHost, force = false) {
+   * gets a chance to be seen before anything on the host is touched.
+   * Returns whether a job actually started — openHost needs that to know
+   * whether autoOpenHost has anything left to wait for. */
+  async function startInstall(host: HubHost, force = false): Promise<boolean> {
     setNotice(null)
     try {
       const res = await api<{ job: string }>(
@@ -227,6 +253,7 @@ export default function Hosts({
       setInstallHostId(host.id)
       setJobStatus(null)
       setJob(res.job)
+      return true
     } catch (err) {
       if (
         err instanceof ApiError &&
@@ -244,11 +271,28 @@ export default function Hosts({
               'если это чужая установка, доступ к ней текущим паролем будет потерян.',
           )
         ) {
-          await startInstall(host, true)
+          return startInstall(host, true)
         }
-        return
+        return false
       }
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      return false
+    }
+  }
+
+  /** "открыть" on a host whose nkt_version trails the hub's own: the
+   * dashboard it would open into is for a build that's already known to be
+   * behind, so update it first and open once that actually lands (see the
+   * install-poll effect's finishAutoOpen) instead of showing a stale
+   * version and making the operator notice and fix it by hand. */
+  async function openHost(host: HubHost) {
+    if (!isOutdated(host, hubVersion)) {
+      onSelect({ id: host.id, name: host.name })
+      return
+    }
+    setAutoOpenHost({ id: host.id, name: host.name })
+    if (!(await startInstall(host))) {
+      setAutoOpenHost(null)
     }
   }
 
@@ -484,8 +528,8 @@ export default function Hosts({
     return (
       <div className="row">
         {h.status === 'online' && (
-          <Button type="link" onClick={() => onSelect({ id: h.id, name: h.name })}>
-            открыть
+          <Button type="link" loading={autoOpenHost?.id === h.id} onClick={() => openHost(h)}>
+            {autoOpenHost?.id === h.id ? 'обновляю перед открытием…' : 'открыть'}
           </Button>
         )}
         <Button
