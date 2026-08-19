@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"encoding/json"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -257,6 +258,108 @@ func TestRenewCertbotStopsAndRestartsForStandalone(t *testing.T) {
 			t.Errorf("шаг %d: %+v, ожидалось %+v (вся последовательность: %v)", i, got[i], want[i], got)
 		}
 	}
+}
+
+// TestStopForStandaloneSkipsUninstalledServices is the regression test for
+// a bug shipped in a709f33: adding caddy to standaloneServices made
+// stopForStandalone unconditionally try to stop it, on every host —
+// including ones that never installed caddy at all, where "systemctl stop
+// caddy" fails outright ("Unit caddy.service not loaded") and used to abort
+// the entire certificate renewal before certbot ever ran. A host running
+// nginx or haproxy alone (the overwhelmingly common case) must still be
+// able to renew a standalone certificate.
+func TestStopForStandaloneSkipsUninstalledServices(t *testing.T) {
+	root := copyFixturesRoot(t)
+	removeFixtureCommand(t, root, []string{"sh", "-c", "command -v caddy"})
+
+	cfg := &config.Config{
+		Mode:            config.ModeFixtures,
+		FixturesRoot:    root,
+		NginxMainConfig: "/etc/nginx/nginx.conf",
+		HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
+		ComposeFiles:    []string{"/srv/docker/docker-compose.yml"},
+		CommandTimeout:  5 * time.Second,
+		CertbotTimeout:  20 * time.Second,
+	}
+	c := collect.NewFixtures(root)
+	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
+	if err != nil {
+		t.Fatalf("открыть базу: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	scanner := inventory.New(cfg, c, db)
+	if _, err := scanner.Scan(context.Background()); err != nil {
+		t.Fatalf("скан: %v", err)
+	}
+	if snap := scanner.Latest(); snap != nil {
+		for _, svc := range snap.Services {
+			if svc.Name == "caddy" && svc.Installed {
+				t.Fatal("тестовая подготовка не удалась: caddy всё ещё выглядит установленным")
+			}
+		}
+	}
+
+	m := NewCertManager(cfg, c, db, NewServiceManager(cfg, c, db), scanner)
+	stopped, err := m.stopForStandalone(context.Background(), "test")
+	if err != nil {
+		t.Fatalf("stopForStandalone: %v", err)
+	}
+	for _, svc := range stopped {
+		if svc == "caddy" {
+			t.Errorf("stopped = %v, не должен включать caddy — он не установлен", stopped)
+		}
+	}
+	if len(stopped) != 2 {
+		t.Errorf("stopped = %v, want ровно nginx и haproxy", stopped)
+	}
+}
+
+// removeFixtureCommand deletes one entry from a copied fixtures tree's
+// .commands/index.json, matched by its exact "match" argv — used to make a
+// binary look uninstalled (collect.Which falls through to fixtures' own
+// "no canned output" 127 exit) without hand-rolling a second fixtures tree.
+func removeFixtureCommand(t *testing.T, root string, match []string) {
+	t.Helper()
+	path := filepath.Join(root, ".commands", "index.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("чтение index.json: %v", err)
+	}
+	var idx struct {
+		Commands []map[string]any `json:"commands"`
+	}
+	if err := json.Unmarshal(raw, &idx); err != nil {
+		t.Fatalf("разбор index.json: %v", err)
+	}
+	out := idx.Commands[:0]
+	for _, cmd := range idx.Commands {
+		argv, _ := cmd["match"].([]any)
+		if argvEquals(argv, match) {
+			continue
+		}
+		out = append(out, cmd)
+	}
+	idx.Commands = out
+	newRaw, err := json.Marshal(idx)
+	if err != nil {
+		t.Fatalf("сериализация index.json: %v", err)
+	}
+	if err := os.WriteFile(path, newRaw, 0o644); err != nil {
+		t.Fatalf("запись index.json: %v", err)
+	}
+}
+
+func argvEquals(argv []any, match []string) bool {
+	if len(argv) != len(match) {
+		return false
+	}
+	for i, v := range argv {
+		s, ok := v.(string)
+		if !ok || s != match[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // recordingCollector wraps a Collector and records every RunTimeout call's
