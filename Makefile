@@ -182,10 +182,24 @@ native-build: ## собрать без Docker: сама проверит и, е�
 		else \
 			echo "Node/npm не найдены"; \
 		fi; \
-		echo "Будет установлен в $(LOCAL_NODE_DIR) (последняя версия с nodejs.org, без sudo)."; \
+		echo "Будет установлен в $(LOCAL_NODE_DIR) (последняя версия с nodejs.org, поддерживающая linux-$(NATIVE_NODE_ARCH), без sudo)."; \
 		if confirm "Установить Node?"; then \
-			NODEVER=$$(curl -fsSL "https://nodejs.org/dist/index.tab" | sed -n '2p' | cut -f1); \
-			echo "Скачиваю $$NODEVER для linux-$(NATIVE_NODE_ARCH)…"; \
+			curl -fsSL "https://nodejs.org/dist/index.tab" -o /tmp/nkt-node-index.tab; \
+			NODEARCH="linux-$(NATIVE_NODE_ARCH)"; \
+			NODEVER=$$(awk -F'\t' -v want=",$$NODEARCH," 'NR==2 { s = "," $$3 ","; if (index(s, want)) print $$1 }' /tmp/nkt-node-index.tab); \
+			if [ -z "$$NODEVER" ]; then \
+				echo "Последний Node.js не публикует сборку для $$NODEARCH — ищу свежий LTS, который ещё публикует."; \
+				NODEVER=$$(awk -F'\t' -v want=",$$NODEARCH," 'NR>1 { s = "," $$3 ","; if (index(s, want) && $$10 != "-") { print $$1; exit } }' /tmp/nkt-node-index.tab); \
+			fi; \
+			if [ -z "$$NODEVER" ]; then \
+				NODEVER=$$(awk -F'\t' -v want=",$$NODEARCH," 'NR>1 { s = "," $$3 ","; if (index(s, want)) { print $$1; exit } }' /tmp/nkt-node-index.tab); \
+			fi; \
+			rm -f /tmp/nkt-node-index.tab; \
+			if [ -z "$$NODEVER" ]; then \
+				echo "Node.js больше не публикует сборки для $$NODEARCH ни в одной версии." >&2; \
+				exit 1; \
+			fi; \
+			echo "Скачиваю $$NODEVER для $$NODEARCH…"; \
 			mkdir -p "$(LOCAL_ROOT)"; \
 			curl -fsSL "https://nodejs.org/dist/$${NODEVER}/node-$${NODEVER}-linux-$(NATIVE_NODE_ARCH).tar.xz" -o /tmp/nkt-node.tar.xz; \
 			rm -rf "$(LOCAL_NODE_DIR)"; \
