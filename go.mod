@@ -44,3 +44,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace github.com/nginxinc/nginx-go-crossplane => github.com/tas50/nginx-go-crossplane v0.0.0-20260310170226-c5adf2bb7e39
