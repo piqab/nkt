@@ -113,6 +113,15 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 		"-o", path, "./cmd/nkt")
 	cmd.Dir = sourceRoot
 	cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch, "CGO_ENABLED=0")
+	if goarch == "arm" {
+		// GOARCH=arm alone is ambiguous about the float ABI — GOARM picks
+		// it, and the compiler needs telling explicitly. 6 is the same
+		// safe baseline the Makefile's native-build already settled on
+		// for the same architecture family: it runs on armv7 hardware too
+		// (armv6 is a strict instruction subset), while building for 7
+		// would refuse to start on a true armv6 board.
+		cmd.Env = append(cmd.Env, "GOARM=6")
+	}
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {

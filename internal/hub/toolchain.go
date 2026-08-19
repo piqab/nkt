@@ -108,12 +108,17 @@ func installGoToolchain(ctx context.Context, dir string, report func(string)) (s
 }
 
 // goArchForRuntime maps the hub's own architecture to a go.dev download
-// suffix — deliberately only the two architectures real VPS/hub deployments
-// actually use, same as mapUnameArch for managed hosts.
+// suffix, same set mapUnameArch recognizes for managed hosts. 32-bit ARM is
+// a single case regardless of runtime.GOARM (Go has no public runtime
+// constant for it anyway) — go.dev itself only ever publishes one 32-bit
+// ARM build, named "armv6l", the same one native-build's Makefile target
+// downloads for a hub running directly on a Raspberry Pi-class board.
 func goArchForRuntime() string {
 	switch runtime.GOARCH {
 	case "amd64", "arm64":
 		return runtime.GOARCH
+	case "arm":
+		return "armv6l"
 	default:
 		return ""
 	}

@@ -107,13 +107,19 @@ func mapUnameOS(s string) (string, error) {
 }
 
 // mapUnameArch translates `uname -m` output to a Go GOARCH value, covering
-// the architectures real VPS offerings actually use.
+// the architectures real VPS offerings actually use, plus 32-bit ARM SBCs
+// (Raspberry Pi and similar) — uname reports armv6l/armv7l/armv7 depending
+// on hardware and distro, but Go collapses all of them into one GOARCH,
+// "arm" (the float-ABI distinction between v6/v7 is GOARM, a separate build
+// setting — see ensureBinary).
 func mapUnameArch(s string) (string, error) {
 	switch s {
 	case "x86_64", "amd64":
 		return "amd64", nil
 	case "aarch64", "arm64":
 		return "arm64", nil
+	case "armv6l", "armv7l", "armv7", "arm":
+		return "arm", nil
 	default:
 		return "", fmt.Errorf("неподдерживаемая архитектура удалённого хоста: %q", s)
 	}
