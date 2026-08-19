@@ -313,12 +313,13 @@ func (s *Server) handleFirewall(w http.ResponseWriter, r *http.Request) {
 		rules = filtered
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ufw_active": snap.Firewall.UFWActive,
-		"ufw_policy": snap.Firewall.UFWPolicy,
-		"backends":   snap.Firewall.Backends,
-		"policies":   snap.Firewall.Policies,
-		"rules":      rules,
-		"listeners":  snap.Listeners,
+		"ufw_installed": snap.Firewall.UFWInstalled,
+		"ufw_active":    snap.Firewall.UFWActive,
+		"ufw_policy":    snap.Firewall.UFWPolicy,
+		"backends":      snap.Firewall.Backends,
+		"policies":      snap.Firewall.Policies,
+		"rules":         rules,
+		"listeners":     snap.Listeners,
 	})
 }
 
