@@ -77,6 +77,8 @@ func (m *ConfigManager) serviceForPath(path string) string {
 		return model.ServiceNginx
 	case underRoot(path, m.cfg.HAProxyRoot):
 		return model.ServiceHAProxy
+	case underRoot(path, m.cfg.CaddyRoot):
+		return model.ServiceCaddy
 	case underRoot(path, parse.LibvirtQEMUDir):
 		// libvirt itself stores a defined domain's persistent XML here — this
 		// is not a config file some other service merely reads, it IS
@@ -131,7 +133,16 @@ func isComposeFileName(path string) bool {
 	return composeFileNames[gopath.Base(path)]
 }
 
+// underRoot reports whether path is root itself or somewhere beneath it. An
+// empty root never matches anything — without this guard, root="" would
+// trim to "" and root+"/" would be "/", which every absolute path starts
+// with, silently claiming the entire filesystem for whichever service's
+// root config field happened to be left unset (e.g. a test config that
+// predates a newer service and never got the new field added).
 func underRoot(path, root string) bool {
+	if root == "" {
+		return false
+	}
 	root = strings.TrimSuffix(root, "/")
 	return path == root || strings.HasPrefix(path, root+"/")
 }

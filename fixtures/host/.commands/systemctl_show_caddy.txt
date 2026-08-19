@@ -1,0 +1,8 @@
+Description=Caddy
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+ActiveEnterTimestamp=Mon 2026-07-20 04:11:38 UTC
+MainPID=934
+MemoryCurrent=15728640
+NRestarts=0

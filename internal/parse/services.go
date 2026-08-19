@@ -28,6 +28,8 @@ func DefaultServiceSpecs() []ServiceSpec {
 			Actions: []string{"validate", "reload", "restart", "start", "stop"}},
 		{Name: model.ServiceHAProxy, Unit: "haproxy", Binary: "haproxy",
 			Actions: []string{"validate", "reload", "restart", "start", "stop"}},
+		{Name: model.ServiceCaddy, Unit: "caddy", Binary: "caddy",
+			Actions: []string{"validate", "reload", "restart", "start", "stop"}},
 		{Name: model.ServiceDocker, Unit: "docker", Binary: "docker",
 			Actions: []string{"restart", "start", "stop"}},
 		{Name: model.ServicePodman, Unit: "podman.socket", Binary: "podman",

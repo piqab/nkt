@@ -204,8 +204,8 @@ func TestRenewCertbotRecombinesDerivedHAProxyCert(t *testing.T) {
 // TestRenewCertbotStopsAndRestartsForStandalone covers the lineage in
 // fixtures/host/etc/letsencrypt/renewal/standalone.example.com.conf, which
 // declares authenticator = standalone: certbot needs :80/:443 free for
-// itself, so nginx and haproxy must be stopped before the renewal and
-// restarted afterward regardless of outcome.
+// itself, so nginx, haproxy and caddy must all be stopped before the
+// renewal and restarted afterward regardless of outcome.
 func TestRenewCertbotStopsAndRestartsForStandalone(t *testing.T) {
 	m, db := renewSetup(t)
 
@@ -245,9 +245,9 @@ func TestRenewCertbotStopsAndRestartsForStandalone(t *testing.T) {
 		}
 	}
 	want := []step{
-		{"service.stop", "nginx"}, {"service.stop", "haproxy"},
+		{"service.stop", "nginx"}, {"service.stop", "haproxy"}, {"service.stop", "caddy"},
 		{"cert.renew", "standalone.example.com"},
-		{"service.start", "nginx"}, {"service.start", "haproxy"},
+		{"service.start", "nginx"}, {"service.start", "haproxy"}, {"service.start", "caddy"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("последовательность действий: %v, ожидалось %v", got, want)

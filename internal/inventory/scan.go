@@ -76,6 +76,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 		wg          sync.WaitGroup
 		nginxRes    parse.NginxResult
 		hapRes      parse.HAProxyResult
+		caddyRes    parse.CaddyResult
 		dockerRes   parse.DockerResult
 		podmanRes   parse.PodmanResult
 		lxdRes      parse.LXDResult
@@ -88,9 +89,10 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 		ifaces      []model.NetworkInterface
 		ifaceStatus model.SourceStatus
 	)
-	wg.Add(10)
+	wg.Add(11)
 	go func() { defer wg.Done(); nginxRes = parse.Nginx(ctx, s.c, s.cfg.NginxMainConfig) }()
 	go func() { defer wg.Done(); hapRes = parse.HAProxy(ctx, s.c, s.cfg.HAProxyMainConf) }()
+	go func() { defer wg.Done(); caddyRes = parse.Caddy(ctx, s.c, s.cfg.CaddyMainConfig) }()
 	go func() { defer wg.Done(); dockerRes = parse.Docker(ctx, s.c, s.cfg.ComposeFiles) }()
 	go func() { defer wg.Done(); podmanRes = parse.Podman(ctx, s.c) }()
 	go func() { defer wg.Done(); lxdRes = parse.LXD(ctx, s.c) }()
@@ -104,13 +106,13 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Packages = pkgRes
 	snap.Interfaces = ifaces
 	snap.Sources = []model.SourceStatus{
-		nginxRes.Status, hapRes.Status, dockerRes.Status, podmanRes.Status, lxdRes.Status, libvirtRes.Status,
-		fwRes.Status, lisStatus, pkgStatus, ifaceStatus,
+		nginxRes.Status, hapRes.Status, caddyRes.Status, dockerRes.Status, podmanRes.Status, lxdRes.Status,
+		libvirtRes.Status, fwRes.Status, lisStatus, pkgStatus, ifaceStatus,
 	}
-	snap.Endpoints = append(append(append([]model.Endpoint{},
-		nginxRes.Endpoints...), hapRes.Endpoints...), dockerRes.Endpoints...)
-	snap.Upstreams = append(append([]model.Upstream{}, nginxRes.Upstreams...), hapRes.Upstreams...)
-	snap.Files = append(append([]model.ManagedFile{}, nginxRes.Files...), hapRes.Files...)
+	snap.Endpoints = append(append(append(append([]model.Endpoint{},
+		nginxRes.Endpoints...), hapRes.Endpoints...), caddyRes.Endpoints...), dockerRes.Endpoints...)
+	snap.Upstreams = append(append(append([]model.Upstream{}, nginxRes.Upstreams...), hapRes.Upstreams...), caddyRes.Upstreams...)
+	snap.Files = append(append(append([]model.ManagedFile{}, nginxRes.Files...), hapRes.Files...), caddyRes.Files...)
 	snap.Files = append(snap.Files, dockerRes.Files...)
 	snap.Container = dockerRes.Containers
 	snap.Networks = dockerRes.Networks
@@ -156,6 +158,8 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 			specs[i].ConfigFiles = fileList(nginxRes.Files)
 		case model.ServiceHAProxy:
 			specs[i].ConfigFiles = fileList(hapRes.Files)
+		case model.ServiceCaddy:
+			specs[i].ConfigFiles = fileList(caddyRes.Files)
 		case model.ServiceDocker:
 			specs[i].ConfigFiles = fileList(dockerRes.Files)
 		}
