@@ -8,7 +8,7 @@ import {
   QuestionCircleOutlined,
   WarningFilled,
 } from '@ant-design/icons'
-import { api, ApiError, useApi } from '../api'
+import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
 import type { HubHost, RenewEvent, RenewJobStatus, Severity } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, SEVERITIES, SEVERITY_LABEL, formatRelative } from '../components/ui'
 import { checkForNewProblems, notificationsEnabled, requestNotificationPermission, setNotificationsEnabled, type NotifyState } from '../notifications'
@@ -468,6 +468,18 @@ export default function Hosts({
   const installingHost = hosts?.find((h) => h.id === installHostId)
 
   function renderActions(h: HubHost) {
+    // "localhost" (the hub's own machine, see internal/hub/handlers.go's
+    // localHostEntry) has no SSH install to manage — it's just a link into
+    // its own dashboard, same as any other online host's "открыть".
+    if (h.id === LOCAL_HOST_ID) {
+      return (
+        <div className="row">
+          <Button type="link" onClick={() => onSelect({ id: h.id, name: h.name })}>
+            открыть
+          </Button>
+        </div>
+      )
+    }
     const outdated = isOutdated(h, hubVersion)
     return (
       <div className="row">
@@ -528,14 +540,21 @@ export default function Hosts({
     {
       title: 'Адрес',
       key: 'addr',
-      render: (_, h) => (
-        <span className="mono small">
-          {h.ssh_user}@{h.addr}:{h.ssh_port}
-        </span>
-      ),
+      render: (_, h) =>
+        h.id === LOCAL_HOST_ID ? (
+          <span className="small muted">эта машина — хаб сканирует сам себя, без SSH</span>
+        ) : (
+          <span className="mono small">
+            {h.ssh_user}@{h.addr}:{h.ssh_port}
+          </span>
+        ),
     },
     { title: 'Проблемы', key: 'problems', render: (_, h) => <ProblemsCell host={h} /> },
-    { title: 'Архитектура', key: 'arch', render: (_, h) => <span className="small">{h.arch || '—'}</span> },
+    {
+      title: 'Архитектура',
+      key: 'arch',
+      render: (_, h) => <span className="small">{h.id === LOCAL_HOST_ID ? '—' : h.arch || '—'}</span>,
+    },
     {
       title: 'Состояние',
       key: 'status',
@@ -554,7 +573,11 @@ export default function Hosts({
       title: 'Sudo',
       key: 'sudo',
       render: (_, h) =>
-        h.ssh_user === 'root' ? <span className="small muted">—</span> : <SudoBadge status={h.sudo_status} />,
+        h.ssh_user === 'root' || h.id === LOCAL_HOST_ID ? (
+          <span className="small muted">—</span>
+        ) : (
+          <SudoBadge status={h.sudo_status} />
+        ),
     },
     {
       title: 'Версия nkt',
@@ -565,7 +588,11 @@ export default function Hosts({
         // nkt_version is what the hub recorded installing. A mismatch is
         // the only visible sign that an update silently did not take
         // effect — the host keeps working, just as the older version.
-        const stale = !!h.running_version && h.running_version !== h.nkt_version
+        // localhost has no separate "installed" version to compare against
+        // — it always runs whatever build the hub itself was built from
+        // (see internal/hub/handlers.go's localHostEntry), so a mismatch
+        // here can never mean "an update didn't take effect".
+        const stale = h.id !== LOCAL_HOST_ID && !!h.running_version && h.running_version !== h.nkt_version
         return (
           <span className="small mono">
             {h.running_version || h.nkt_version || '—'}
@@ -586,7 +613,11 @@ export default function Hosts({
     {
       title: 'Виден в сети',
       key: 'last_seen',
-      render: (_, h) => <span className="small nowrap">{h.last_seen_at ? formatRelative(h.last_seen_at) : 'ни разу'}</span>,
+      render: (_, h) => (
+        <span className="small nowrap">
+          {h.id === LOCAL_HOST_ID ? '—' : h.last_seen_at ? formatRelative(h.last_seen_at) : 'ни разу'}
+        </span>
+      ),
     },
   ]
 

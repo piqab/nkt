@@ -183,26 +183,61 @@ type hostWithOverview struct {
 	LastPolledAt   string `json:"last_polled_at,omitempty"`
 }
 
+// localHostID is the sentinel Host.ID for the synthetic "localhost" row —
+// real hosts autoincrement from 1, so this never collides with one.
+const localHostID = -1
+
 func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 	hosts, err := s.db.ListHosts(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	out := make([]hostWithOverview, len(hosts))
-	for i, h := range hosts {
-		out[i] = hostWithOverview{Host: h}
+	out := make([]hostWithOverview, 0, len(hosts)+1)
+	if local := s.localHostEntry(); local != nil {
+		out = append(out, *local)
+	}
+	for _, h := range hosts {
+		row := hostWithOverview{Host: h}
 		if ov, ok := s.hub.Overview(h.ID); ok {
-			out[i].Findings = ov.Findings
+			row.Findings = ov.Findings
 			reachable := ov.Reachable
-			out[i].Reachable = &reachable
-			out[i].RunningVersion = ov.Version
+			row.Reachable = &reachable
+			row.RunningVersion = ov.Version
 			if !ov.LastPolledAt.IsZero() {
-				out[i].LastPolledAt = store.FormatTime(ov.LastPolledAt)
+				row.LastPolledAt = store.FormatTime(ov.LastPolledAt)
 			}
 		}
+		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, out)
+}
+
+// localHostEntry builds the pinned "localhost" row — the machine the hub
+// itself runs on, reachable with no SSH/install (see proxyLocal). Returns
+// nil when the hub wasn't built with an embedded scanner at all (Local ==
+// nil): a hub that genuinely has nothing local to show shouldn't pin an
+// empty, permanently-broken row at the top of every operator's host list.
+func (s *Server) localHostEntry() *hostWithOverview {
+	if s.local == nil {
+		return nil
+	}
+	row := &hostWithOverview{Host: store.Host{
+		ID:     localHostID,
+		Name:   "localhost",
+		Addr:   "127.0.0.1",
+		Status: store.HostStatusOnline,
+	}}
+	reachable := true
+	row.Reachable = &reachable
+	row.RunningVersion = s.hub.Version()
+	if s.localScanner != nil {
+		if snap := s.localScanner.Latest(); snap != nil {
+			row.Findings = snap.FindingCounts()
+			row.LastPolledAt = snap.TS
+		}
+	}
+	return row
 }
 
 func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
@@ -487,6 +522,22 @@ func fail(w http.ResponseWriter, err error) {
 }
 
 // ------------------------------------------------------------------- proxy
+
+// proxyLocal forwards a request under /api/hosts/local/* to the embedded
+// local api.Server (the machine the hub itself runs on) — the in-process
+// equivalent of proxyHost, minus the SSH tunnel: no dialing, no per-host
+// cookie swap, since there is nothing remote to reach.
+func (s *Server) proxyLocal(w http.ResponseWriter, r *http.Request) {
+	if s.local == nil {
+		writeError(w, http.StatusServiceUnavailable, "локальный сканер хаба не запущен")
+		return
+	}
+	rest := chi.URLParam(r, "*")
+	r2 := r.Clone(r.Context())
+	r2.URL.Path = "/api/" + rest
+	r2.URL.RawPath = ""
+	s.local.ServeHTTP(w, r2)
+}
 
 // proxyHost forwards a request under /api/hosts/{id}/* to the same path
 // under /api/* on that host's own nkt — see Manager.Proxy.

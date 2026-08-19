@@ -38,11 +38,12 @@ LogsDirectory=letsencrypt
 WorkingDirectory=/var/lib/netknownsthat
 
 # Файловая система только на чтение, кроме явно перечисленных каталогов.
-# nginx и haproxy — каждый из них может отсутствовать на конкретном хосте
-# (например, установлен только один из двух, или ни одного); "-" делает
-# путь необязательным для systemd, иначе отсутствие каталога валит весь
-# сервис на шаге NAMESPACE ("No such file or directory") ещё до запуска
-# самого nkt, который сам по себе прекрасно работает без одного из них.
+# nginx, haproxy и caddy — любой из них может отсутствовать на конкретном
+# хосте (например, установлен только один из трёх, или ни одного); "-"
+# делает путь необязательным для systemd, иначе отсутствие каталога валит
+# весь сервис на шаге NAMESPACE ("No such file or directory") ещё до
+# запуска самого nkt, который сам по себе прекрасно работает без части
+# из них.
 # /etc/letsencrypt отдельно перечислен в ReadWritePaths, хотя и создаётся
 # через ConfigurationDirectory выше: этой директиве systemd монтирует его
 # read-only по умолчанию (в отличие от StateDirectory/LogsDirectory) —
@@ -53,6 +54,7 @@ ProtectSystem=strict
 ReadWritePaths=/var/lib/netknownsthat
 ReadWritePaths=-/etc/nginx
 ReadWritePaths=-/etc/haproxy
+ReadWritePaths=-/etc/caddy
 ReadWritePaths=-/etc/letsencrypt
 ProtectHome=yes
 PrivateTmp=yes

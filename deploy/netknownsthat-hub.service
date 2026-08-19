@@ -1,7 +1,7 @@
 [Unit]
 Description=NetKnownsThat hub — управляющий центр для нескольких VPS по SSH
 Documentation=https://github.com/althq/netknownsthat
-After=network-online.target
+After=network-online.target docker.service
 Wants=network-online.target
 
 [Service]
@@ -11,33 +11,55 @@ EnvironmentFile=/etc/netknownsthat/hub.env
 Restart=on-failure
 RestartSec=5s
 
-# В отличие от обычного nkt, хаб не трогает состояние ЭТОЙ машины — не читает
-# /etc/nginx, не вызывает systemctl/iptables, не открывает docker.sock. Он
-# только хранит свои данные и по SSH управляет ДРУГИМИ хостами, поэтому ему
-# не нужен root: systemd сам заводит непривилегированного пользователя на
-# время работы юнита (DynamicUser) — вместо ручного useradd.
-DynamicUser=yes
-StateDirectory=netknownsthat-hub
+# Хаб по SSH управляет ДРУГИМИ хостами, но, начиная отсюда, ещё и сам
+# сканирует машину, на которой запущен ("localhost" в списке хостов —
+# без установки отдельного nkt и без конфликта портов, см. коммит,
+# добавивший эту возможность) — тем же кодом, что использует обычный
+# nkt: читает /etc/nginx, /etc/haproxy, /etc/caddy, вызывает systemctl,
+# iptables-save, ufw/firewall-cmd. Поэтому нужен тот же профиль прав,
+# что у deploy/netknownsthat.service, а не DynamicUser — ниже он
+# практически совпадает построчно с той разницей, что StateDirectory и
+# WorkingDirectory свои, отдельные от обычного управляемого хоста.
+User=root
+Group=root
+
+StateDirectory=netknownsthat-hub letsencrypt
 StateDirectoryMode=0750
+# certbot сам пишет в /etc/letsencrypt, /var/lib/letsencrypt и
+# /var/log/letsencrypt (см. те же директивы и то же обоснование в
+# netknownsthat.service) — актуально, только если через эту же машину
+# (как "localhost"-хост) когда-нибудь выпускают/продлевают сертификат.
+ConfigurationDirectory=letsencrypt
+LogsDirectory=letsencrypt
 WorkingDirectory=/var/lib/netknownsthat-hub
 
 # StartInstall кросс-компилирует nkt для архитектуры каждого нового хоста
-# (internal/hub/provision.go) — это `go build` от имени того же
-# непривилегированного пользователя. Кэш и модули Go держим внутри
-# StateDirectory, а не в домашнем каталоге динамического пользователя,
-# которого фактически нет.
+# (internal/hub/provision.go) — `go build` от имени root, как и весь
+# остальной процесс. Кэш и модули Go держим внутри StateDirectory.
 Environment=HOME=/var/lib/netknownsthat-hub
 Environment=GOCACHE=/var/lib/netknownsthat-hub/go-cache
 Environment=GOMODCACHE=/var/lib/netknownsthat-hub/go-mod
 
+# Файловая система только на чтение, кроме явно перечисленных каталогов —
+# то же самое, что и у обычного nkt, плюс собственный StateDirectory хаба.
 # Исходники для кросс-компиляции (NKT_HUB_SOURCE_ROOT в hub.env) читаются,
 # но не пишутся — держите чекаут репозитория вне StateDirectory, например
-# в /opt/netknownsthat, и обновляйте его отдельно от систем sd самого хаба.
+# в /opt/netknownsthat, и обновляйте его отдельно от systemd самого хаба.
 ProtectSystem=strict
 ReadWritePaths=/var/lib/netknownsthat-hub
+ReadWritePaths=-/etc/nginx
+ReadWritePaths=-/etc/haproxy
+ReadWritePaths=-/etc/caddy
+ReadWritePaths=-/etc/letsencrypt
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
+
+# Тот же набор, что и у netknownsthat.service, по тем же причинам — см.
+# комментарий там про CAP_SYS_PTRACE (чтение /proc/<pid>/* чужого
+# процесса) и CAP_NET_BIND_SERVICE (certbot --standalone на портах <1024).
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_SYS_PTRACE
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
 
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
@@ -51,10 +73,11 @@ SystemCallArchitectures=native
 SystemCallFilter=@system-service
 SystemCallErrorNumber=EPERM
 
-# Исходящий SSH к управляемым хостам и, при необходимости, загрузка
-# Go-модулей или самого Go с go.dev (если настроенный NKT_HUB_GO_BIN не
-# запускается) — обычные TCP-соединения наружу.
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Исходящий SSH к управляемым хостам, загрузка Go-модулей/самого Go, плюс
+# AF_NETLINK — то же, что и обычному nkt, нужно самому сбору сетевых
+# интерфейсов/фаервола на "localhost" (internal/parse/interfaces.go и
+# firewall-cmd/ufw обращаются к ядру через netlink).
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
 
 LimitNOFILE=8192
 

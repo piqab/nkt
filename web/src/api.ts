@@ -29,11 +29,19 @@ export const onUnauthorized: { handler: (() => void) | null } = { handler: null 
  */
 export const hostScope: { id: number | null } = { id: null }
 
+/** Sentinel hostScope.id for the pinned "localhost" row — the machine the
+ * hub itself runs on (internal/hub/handlers.go's localHostID). Real hosts
+ * autoincrement from 1 in the hub's own db, so -1 never collides; routed
+ * to /hosts/local/* (proxyLocal, no SSH) instead of /hosts/{numeric id}
+ * (proxyHost, over the SSH tunnel) — the only place that distinction
+ * matters, everything else treats it as just another selected host. */
+export const LOCAL_HOST_ID = -1
+
 export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   // Authentication always targets the hub itself — the operator only ever
   // logs in once, never per host (see internal/hub's design notes).
   const scoped = hostScope.id !== null && !path.startsWith('/auth/')
-  const prefix = scoped ? `/hosts/${hostScope.id}` : ''
+  const prefix = scoped ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
   const res = await fetch(`/api${prefix}${path}`, {
     method: opts.method ?? 'GET',
     credentials: 'same-origin',
