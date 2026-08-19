@@ -97,6 +97,27 @@ type Config struct {
 	CORSOrigins []string
 	DevProxyUI  bool
 
+	// TLS. Off by default — nkt keeps listening plain HTTP and expects an
+	// external reverse proxy for HTTPS in front of it (see README's
+	// "Открыть"), same as always. Turning this on makes nkt terminate TLS
+	// itself instead — useful for reaching it directly with no separate
+	// nginx/Caddy in front (a LAN dashboard, a quick test, an SSH-tunnel-
+	// free setup). TLSCert/TLSKey point at an existing certificate; left
+	// empty, nkt generates and persists its own self-signed one under
+	// DataDir/tls (see ensureTLS in cmd/nkt/main.go and internal/tlscert).
+	// A self-signed certificate still shows a one-time browser warning —
+	// it is not a replacement for a certificate from a trusted issuer.
+	TLSEnabled bool
+	TLSCert    string
+	TLSKey     string
+	// TLSHosts lists the DNS names/IP addresses the generated self-signed
+	// certificate should cover (ignored once TLSCert/TLSKey are set — those
+	// already have their own). Defaults to this machine's own hostname plus
+	// 127.0.0.1/::1, which is enough for an SSH tunnel or local access; add
+	// a LAN hostname or a public IP here to also reach it directly, without
+	// that address tripping a certificate name-mismatch warning of its own.
+	TLSHosts []string
+
 	// TerminalEnabled turns on the web terminal (/api/terminal/ws — a real
 	// login shell over WebSocket, wired through the same RequireAdmin +
 	// AllowMutations gate as every other mutating endpoint). Off by default:
@@ -147,6 +168,20 @@ func defaultMode() Mode {
 		return ModeLocal
 	}
 	return ModeFixtures
+}
+
+// defaultTLSHosts covers exactly what's reachable with zero extra setup —
+// loopback (an SSH tunnel or something running right on the box) plus
+// whatever hostname the machine already reports. A public IP or LAN name
+// the operator actually wants to hit directly has to be added explicitly
+// via NKT_TLS_HOSTS: guessing at one here risks baking a stale address into
+// a certificate that then silently stops matching if the machine moves.
+func defaultTLSHosts() string {
+	hosts := "127.0.0.1,::1"
+	if name, err := os.Hostname(); err == nil && name != "" {
+		hosts += "," + name
+	}
+	return hosts
 }
 
 // defaultDataDir keeps production state in the standard system location, which
@@ -218,6 +253,11 @@ func Load() (*Config, error) {
 		CORSOrigins: envList("NKT_CORS_ORIGINS", "http://localhost:5173"),
 		DevProxyUI:  envBool("NKT_DEV_PROXY_UI", false),
 
+		TLSEnabled: envBool("NKT_TLS_ENABLED", false),
+		TLSCert:    envStr("NKT_TLS_CERT", ""),
+		TLSKey:     envStr("NKT_TLS_KEY", ""),
+		TLSHosts:   envList("NKT_TLS_HOSTS", defaultTLSHosts()),
+
 		HubMasterKey:            envStr("NKT_HUB_MASTER_KEY", ""),
 		HubSourceRoot:           envStr("NKT_HUB_SOURCE_ROOT", wd),
 		HubGoBin:                envStr("NKT_HUB_GO_BIN", "go"),
@@ -257,6 +297,15 @@ func (c *Config) HubBinCacheDir() string { return filepath.Join(c.DataDir, "bin-
 // NKT_HUB_GO_BIN doesn't resolve to a working compiler — see
 // internal/hub's resolveGoBin.
 func (c *Config) HubGoToolchainDir() string { return filepath.Join(c.DataDir, "go-toolchain") }
+
+// TLSSelfSignedCertFile and TLSSelfSignedKeyFile are where nkt persists the
+// certificate it generates for itself when TLSEnabled is on and TLSCert/
+// TLSKey were left empty — reused across restarts (see internal/tlscert)
+// instead of minted fresh every time, so a browser that already accepted
+// this certificate's warning doesn't have to do it again after every
+// restart.
+func (c *Config) TLSSelfSignedCertFile() string { return filepath.Join(c.DataDir, "tls", "cert.pem") }
+func (c *Config) TLSSelfSignedKeyFile() string  { return filepath.Join(c.DataDir, "tls", "key.pem") }
 
 // IsFixtures reports whether the app runs against a canned snapshot.
 func (c *Config) IsFixtures() bool { return c.Mode == ModeFixtures }

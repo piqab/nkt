@@ -27,6 +27,7 @@ import (
 	"github.com/althq/netknownsthat/internal/monitor"
 	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
+	"github.com/althq/netknownsthat/internal/tlscert"
 	"github.com/althq/netknownsthat/internal/tui"
 	"github.com/althq/netknownsthat/internal/webui"
 )
@@ -248,6 +249,32 @@ func (r *runtime) runTUI() error {
 
 // --------------------------------------------------------------------- serve
 
+// ensureTLS resolves which certificate/key files the HTTP server should
+// listen with — used by both runServer and runHub, since either one can
+// terminate TLS itself instead of relying on an external reverse proxy (see
+// config.Config.TLSEnabled's own doc comment for why that's off by
+// default). Empty return values mean "plain HTTP", the default: cfg.
+// TLSEnabled is off. With it on, an explicit cfg.TLSCert/TLSKey pair is
+// used as-is; left empty, a self-signed certificate is generated (or
+// reused, if one already on disk still matches — see internal/tlscert)
+// under cfg's own DataDir, covering cfg.TLSHosts.
+func ensureTLS(cfg *config.Config, log *slog.Logger) (certFile, keyFile string, err error) {
+	if !cfg.TLSEnabled {
+		return "", "", nil
+	}
+	if cfg.TLSCert != "" && cfg.TLSKey != "" {
+		log.Info("TLS включён", "cert", cfg.TLSCert, "самоподписанный", false)
+		return cfg.TLSCert, cfg.TLSKey, nil
+	}
+	certFile = cfg.TLSSelfSignedCertFile()
+	keyFile = cfg.TLSSelfSignedKeyFile()
+	if err := tlscert.EnsureSelfSigned(certFile, keyFile, cfg.TLSHosts); err != nil {
+		return "", "", fmt.Errorf("подготовка самоподписанного TLS-сертификата: %w", err)
+	}
+	log.Info("TLS включён: самоподписанный сертификат", "hosts", cfg.TLSHosts, "cert", certFile)
+	return certFile, keyFile, nil
+}
+
 func (r *runtime) runServer(log *slog.Logger) error {
 	authSvc := auth.NewService(r.db, r.cfg)
 	generated, err := authSvc.Bootstrap(context.Background())
@@ -281,6 +308,11 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		Version: version,
 	})
 
+	tlsCert, tlsKey, err := ensureTLS(r.cfg, log)
+	if err != nil {
+		return err
+	}
+
 	httpServer := &http.Server{
 		Addr:              r.cfg.Addr,
 		Handler:           server.Handler(),
@@ -293,9 +325,15 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	errCh := make(chan error, 1)
 	go func() {
 		log.Info("сервер запущен",
-			"addr", r.cfg.Addr, "mode", r.cfg.Mode, "mutations", r.cfg.AllowMutations, "version", version)
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
+			"addr", r.cfg.Addr, "mode", r.cfg.Mode, "mutations", r.cfg.AllowMutations, "version", version, "tls", tlsCert != "")
+		var serveErr error
+		if tlsCert != "" {
+			serveErr = httpServer.ListenAndServeTLS(tlsCert, tlsKey)
+		} else {
+			serveErr = httpServer.ListenAndServe()
+		}
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			errCh <- serveErr
 		}
 	}()
 
@@ -529,6 +567,12 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Hub: manager,
 		Local: localAPI.Handler(), LocalScanner: r.scanner, UI: ui, Log: log,
 	})
+
+	tlsCert, tlsKey, err := ensureTLS(r.cfg, log)
+	if err != nil {
+		return err
+	}
+
 	httpServer := &http.Server{
 		Addr:              r.cfg.Addr,
 		Handler:           server.Handler(),
@@ -540,9 +584,15 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("хаб запущен", "addr", r.cfg.Addr, "version", version)
-		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- err
+		log.Info("хаб запущен", "addr", r.cfg.Addr, "version", version, "tls", tlsCert != "")
+		var serveErr error
+		if tlsCert != "" {
+			serveErr = httpServer.ListenAndServeTLS(tlsCert, tlsKey)
+		} else {
+			serveErr = httpServer.ListenAndServe()
+		}
+		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
+			errCh <- serveErr
 		}
 	}()
 
