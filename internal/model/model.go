@@ -11,15 +11,17 @@ import (
 
 // Service identifiers used throughout the application.
 const (
-	ServiceNginx    = "nginx"
-	ServiceHAProxy  = "haproxy"
-	ServiceDocker   = "docker"
-	ServicePodman   = "podman"
-	ServiceLXD      = "lxd"
-	ServiceLibvirt  = "libvirt"
-	ServiceIptables = "iptables"
-	ServiceUFW      = "ufw"
-	ServiceHost     = "host"
+	ServiceNginx     = "nginx"
+	ServiceHAProxy   = "haproxy"
+	ServiceCaddy     = "caddy"
+	ServiceDocker    = "docker"
+	ServicePodman    = "podman"
+	ServiceLXD       = "lxd"
+	ServiceLibvirt   = "libvirt"
+	ServiceIptables  = "iptables"
+	ServiceUFW       = "ufw"
+	ServiceFirewalld = "firewalld"
+	ServiceHost      = "host"
 )
 
 // Severity levels for findings, ordered from worst to least important.
@@ -277,7 +279,7 @@ type FirewallPolicy struct {
 // FirewallRule is one normalised packet-filter rule.
 type FirewallRule struct {
 	ID          string `json:"id"`
-	Backend     string `json:"backend"` // iptables | ip6tables | ufw
+	Backend     string `json:"backend"` // iptables | ip6tables | ufw | firewalld
 	Table       string `json:"table,omitempty"`
 	Chain       string `json:"chain"`
 	Order       int    `json:"order"`
@@ -291,20 +293,66 @@ type FirewallRule struct {
 	OutIface    string `json:"out_iface,omitempty"`
 	DNATTo      string `json:"dnat_to,omitempty"`
 	Comment     string `json:"comment,omitempty"`
-	Packets     int64  `json:"packets"`
-	Bytes       int64  `json:"bytes"`
-	Raw         string `json:"raw"`
-	ManagedBy   string `json:"managed_by,omitempty"` // docker | ufw | manual
+	// Zone is firewalld-only — the zone (public, trusted, dmz, ...) a rule
+	// belongs to. Empty for every other backend, which have no such concept.
+	Zone      string `json:"zone,omitempty"`
+	Permanent bool   `json:"permanent,omitempty"`
+	Runtime   bool   `json:"runtime,omitempty"`
+	Packets   int64  `json:"packets"`
+	Bytes     int64  `json:"bytes"`
+	Raw       string `json:"raw"`
+	ManagedBy string `json:"managed_by,omitempty"` // docker | ufw | firewalld | manual
+}
+
+// FirewallManagerState is one high-level firewall manager's own summary —
+// ufw and firewalld (and anything added later) each report through one of
+// these, so the Firewall page and TUI overview iterate a list instead of
+// hardcoding which managers exist. A third manager is a new entry in the
+// slice, not new sibling fields on FirewallState.
+type FirewallManagerState struct {
+	Name      string `json:"name"` // ufw | firewalld
+	Installed bool   `json:"installed"`
+	Active    bool   `json:"active"`
+	// Policy is a short human-readable summary of the default posture:
+	// ufw's own "Default: deny (incoming), allow (outgoing)" line, or
+	// firewalld's default zone name.
+	Policy string `json:"policy,omitempty"`
 }
 
 // FirewallState is the whole packet-filter picture.
 type FirewallState struct {
-	Backends     []string         `json:"backends"`
-	UFWInstalled bool             `json:"ufw_installed"`
-	UFWActive    bool             `json:"ufw_active"`
-	UFWPolicy    string           `json:"ufw_policy,omitempty"`
-	Policies     []FirewallPolicy `json:"policies"`
-	Rules        []FirewallRule   `json:"rules"`
+	Backends []string               `json:"backends"`
+	Managers []FirewallManagerState `json:"managers"`
+	Policies []FirewallPolicy       `json:"policies"`
+	Rules    []FirewallRule         `json:"rules"`
+}
+
+// Manager returns the named manager's state, or a zero value (Installed
+// and Active both false) if this snapshot never saw one by that name —
+// callers don't need a separate "found" bool, since a manager that was
+// never even checked is indistinguishable from one confirmed absent for
+// every purpose this is used for.
+func (f FirewallState) Manager(name string) FirewallManagerState {
+	for _, m := range f.Managers {
+		if m.Name == name {
+			return m
+		}
+	}
+	return FirewallManagerState{Name: name}
+}
+
+// AnyManagerActive reports whether some default-deny-capable firewall
+// manager (ufw, firewalld, ...) is actively enforcing right now — used by
+// the analyzer to decide whether an ACCEPT-everything iptables INPUT chain
+// is actually a problem, or just the substrate under a manager that's
+// doing the real enforcement of its own accord.
+func (f FirewallState) AnyManagerActive() bool {
+	for _, m := range f.Managers {
+		if m.Active {
+			return true
+		}
+	}
+	return false
 }
 
 // Listener is a socket actually observed in LISTEN state on the host.

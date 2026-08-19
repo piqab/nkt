@@ -181,9 +181,15 @@ func (s *overviewScreen) refresh(ctx context.Context) {
 
 		fw := snap.Firewall
 		var fb strings.Builder
-		fb.WriteString(" ufw: " + tag(stateColor(boolState(fw.UFWActive)), boolState(fw.UFWActive)) + "\n")
-		if fw.UFWPolicy != "" {
-			fb.WriteString(" " + dim(fw.UFWPolicy) + "\n")
+		for _, m := range fw.Managers {
+			if !m.Installed {
+				continue
+			}
+			fb.WriteString(" " + m.Name + ": " + tag(stateColor(boolState(m.Active)), boolState(m.Active)))
+			if m.Policy != "" {
+				fb.WriteString(" " + dim(m.Policy))
+			}
+			fb.WriteString("\n")
 		}
 		fb.WriteString("\n")
 		for _, p := range fw.Policies {

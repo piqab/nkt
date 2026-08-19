@@ -44,19 +44,62 @@ func (s *Server) handleUFWInstallWS(w http.ResponseWriter, r *http.Request) {
 // disconnect) can show "установка выполняется — открыть" instead of racing
 // a second apt-get install against one already running.
 func (s *Server) handleUFWInstallStatus(w http.ResponseWriter, r *http.Request) {
-	s.sessionsMu.Lock()
-	sess := s.sessions["ufw-install"]
-	s.sessionsMu.Unlock()
+	active, finished, exitCode := s.sessionStatus("ufw-install")
+	writeSessionStatus(w, active, finished, exitCode)
+}
 
-	if sess == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"active": false, "finished": false})
+// handleFirewalldInstallWS is handleUFWInstallWS's twin for firewalld —
+// same apt-only assumption (firewalld ships in Debian/Ubuntu's own repos
+// too, just less often pre-installed there than on RHEL-family distros,
+// where it's the default and this button would rarely be needed at all).
+func (s *Server) handleFirewalldInstallWS(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Mode == config.ModeFixtures {
+		writeError(w, http.StatusForbidden, "установка пакетов недоступна в режиме fixtures")
 		return
 	}
-	done, exitCode := sess.outcome()
+	c := s.scanner.Collector()
+	if !collect.Which(r.Context(), c, "apt-get") {
+		writeError(w, http.StatusForbidden, "apt-get не найден — установка пакетов поддерживается только на Debian/Ubuntu")
+		return
+	}
+	if collect.Which(r.Context(), c, "firewall-cmd") {
+		writeError(w, http.StatusConflict, "firewalld уже установлен")
+		return
+	}
+
+	buildCmd := func() *exec.Cmd {
+		env := map[string]string{"TERM": "xterm-256color", "DEBIAN_FRONTEND": "noninteractive"}
+		return unrestrictedCommand(env, "apt-get", "install", "-y", "firewalld")
+	}
+	s.runUpdateSession(w, r, "firewalld-install", buildCmd, "firewall.install_firewalld", "apt-get install firewalld",
+		s.cfg.TerminalIdleTimeout)
+}
+
+func (s *Server) handleFirewalldInstallStatus(w http.ResponseWriter, r *http.Request) {
+	active, finished, exitCode := s.sessionStatus("firewalld-install")
+	writeSessionStatus(w, active, finished, exitCode)
+}
+
+// sessionStatus reads a keyed session's own outcome — shared by every
+// "install X" status endpoint (ufw, firewalld, ...) instead of each
+// reimplementing the same lock/lookup/outcome dance handleUpdatesStatus
+// established first.
+func (s *Server) sessionStatus(key string) (active, finished bool, exitCode int) {
+	s.sessionsMu.Lock()
+	sess := s.sessions[key]
+	s.sessionsMu.Unlock()
+	if sess == nil {
+		return false, false, -1
+	}
+	done, code := sess.outcome()
+	return !done, done, code
+}
+
+func writeSessionStatus(w http.ResponseWriter, active, finished bool, exitCode int) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"active":    !done,
-		"finished":  done,
+		"active":    active,
+		"finished":  finished,
 		"exit_code": exitCode,
-		"succeeded": done && exitCode == 0,
+		"succeeded": finished && exitCode == 0,
 	})
 }

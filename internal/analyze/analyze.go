@@ -151,7 +151,7 @@ func buildIndex(s *model.Snapshot) *index {
 		if !isAcceptAction(r.Action) {
 			continue
 		}
-		if !isInputChain(r.Chain) {
+		if !isInputChain(r) {
 			continue
 		}
 		src := r.Source
@@ -175,8 +175,16 @@ func isAcceptAction(a string) bool {
 	return false
 }
 
-func isInputChain(chain string) bool {
-	c := strings.ToLower(chain)
+// isInputChain reports whether a rule governs incoming traffic. For
+// iptables/ufw that's a property of the chain name; firewalld has no
+// equivalent chain concept at all — every port/service/rich-rule entry in a
+// zone listing IS an inbound-allow rule by construction, so its Backend
+// alone is enough, regardless of what its Chain (the zone name) says.
+func isInputChain(r model.FirewallRule) bool {
+	if r.Backend == "firewalld" {
+		return true
+	}
+	c := strings.ToLower(r.Chain)
 	return c == "input" || strings.Contains(c, "user-input") || strings.Contains(c, "ufw")
 }
 
@@ -396,24 +404,24 @@ func ruleFirewallDefaultPolicy(c *collector, s *model.Snapshot, idx *index) {
 	if len(s.Firewall.Rules) == 0 && len(s.Firewall.Policies) == 0 {
 		return
 	}
-	if idx.inputPolicy == "ACCEPT" && !s.Firewall.UFWActive {
+	if idx.inputPolicy == "ACCEPT" && !s.Firewall.AnyManagerActive() {
 		c.add(model.Finding{
 			Rule:     "no-default-deny",
 			ID:       "no-default-deny:INPUT",
 			Severity: model.SeverityHigh,
 			Service:  model.ServiceIptables,
 			Object:   "filter/INPUT",
-			Title:    "Политика INPUT по умолчанию — ACCEPT, ufw выключен",
+			Title:    "Политика INPUT по умолчанию — ACCEPT, менеджер firewall не активен",
 			Detail: "Входящий трафик разрешён по умолчанию: любой открытый порт доступен извне " +
 				"вне зависимости от того, планировали вы это или нет.",
-			Suggestion: "Включите ufw (ufw default deny incoming) либо задайте iptables -P INPUT DROP " +
-				"и явно разрешите нужные порты.",
+			Suggestion: "Включите ufw (ufw default deny incoming) или firewalld, либо задайте " +
+				"iptables -P INPUT DROP и явно разрешите нужные порты.",
 		})
 	}
 }
 
 func rulePublicPortWithoutRule(c *collector, s *model.Snapshot, idx *index) {
-	if idx.inputPolicy != "DROP" && idx.inputPolicy != "REJECT" && !s.Firewall.UFWActive {
+	if idx.inputPolicy != "DROP" && idx.inputPolicy != "REJECT" && !s.Firewall.AnyManagerActive() {
 		return // no default-deny: nothing to be blocked by
 	}
 	for _, e := range s.Endpoints {
@@ -444,7 +452,7 @@ func rulePublicPortWithoutRule(c *collector, s *model.Snapshot, idx *index) {
 }
 
 func ruleDockerBypassesFirewall(c *collector, s *model.Snapshot, idx *index) {
-	if !s.Firewall.UFWActive && idx.inputPolicy != "DROP" && idx.inputPolicy != "REJECT" {
+	if !s.Firewall.AnyManagerActive() && idx.inputPolicy != "DROP" && idx.inputPolicy != "REJECT" {
 		return
 	}
 	for _, ct := range s.Container {
@@ -492,7 +500,7 @@ func ruleStaleFirewallRules(c *collector, s *model.Snapshot, idx *index) {
 	best := map[int]candidate{}
 
 	for _, r := range s.Firewall.Rules {
-		if !isAcceptAction(r.Action) || !isInputChain(r.Chain) || r.Backend == "ufw6" {
+		if !isAcceptAction(r.Action) || !isInputChain(r) || r.Backend == "ufw6" {
 			continue
 		}
 		for _, port := range r.Ports {
@@ -543,7 +551,7 @@ func ruleSensitivePortsPublic(c *collector, s *model.Snapshot, idx *index) {
 			continue
 		}
 		reachable := idx.allowedFromAnywhere(l.Port) || idx.dockerDNAT[l.Port] ||
-			(idx.inputPolicy == "ACCEPT" && !s.Firewall.UFWActive)
+			(idx.inputPolicy == "ACCEPT" && !s.Firewall.AnyManagerActive())
 		severity := model.SeverityHigh
 		suffix := ""
 		if reachable {

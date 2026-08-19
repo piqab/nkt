@@ -156,10 +156,9 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		"services":     snap.Services,
 		"sources":      snap.Sources,
 		"firewall": map[string]any{
-			"ufw_active": snap.Firewall.UFWActive,
-			"ufw_policy": snap.Firewall.UFWPolicy,
-			"backends":   snap.Firewall.Backends,
-			"policies":   snap.Firewall.Policies,
+			"managers": snap.Firewall.Managers,
+			"backends": snap.Firewall.Backends,
+			"policies": snap.Firewall.Policies,
 		},
 		"availability": map[string]any{
 			"targets":           len(statuses),
@@ -313,13 +312,11 @@ func (s *Server) handleFirewall(w http.ResponseWriter, r *http.Request) {
 		rules = filtered
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"ufw_installed": snap.Firewall.UFWInstalled,
-		"ufw_active":    snap.Firewall.UFWActive,
-		"ufw_policy":    snap.Firewall.UFWPolicy,
-		"backends":      snap.Firewall.Backends,
-		"policies":      snap.Firewall.Policies,
-		"rules":         rules,
-		"listeners":     snap.Listeners,
+		"managers":  snap.Firewall.Managers,
+		"backends":  snap.Firewall.Backends,
+		"policies":  snap.Firewall.Policies,
+		"rules":     rules,
+		"listeners": snap.Listeners,
 	})
 }
 

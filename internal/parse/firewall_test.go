@@ -29,17 +29,18 @@ func TestFirewallNeverReturnsNilSlices(t *testing.T) {
 }
 
 // TestFirewallUFWNotInstalled locks in that a host without the ufw binary
-// gets an explicit UFWInstalled=false rather than looking identical to one
-// where ufw is merely inactive (UFWActive=false with installed=true would
-// suggest "just turn it on"; installed=false is the "install it first"
-// case the Firewall page needs to tell apart).
+// gets an explicit Manager("ufw").Installed=false rather than looking
+// identical to one where ufw is merely inactive (Active=false with
+// Installed=true would suggest "just turn it on"; Installed=false is the
+// "install it first" case the Firewall page needs to tell apart).
 func TestFirewallUFWNotInstalled(t *testing.T) {
 	res := Firewall(context.Background(), collect.NewFixtures(t.TempDir()))
-	if res.State.UFWInstalled {
-		t.Error("UFWInstalled = true на пустом хосте без ufw")
+	ufw := res.State.Manager("ufw")
+	if ufw.Installed {
+		t.Error("ufw.Installed = true на пустом хосте без ufw")
 	}
-	if res.State.UFWActive {
-		t.Error("UFWActive = true без установленного ufw — так быть не может")
+	if ufw.Active {
+		t.Error("ufw.Active = true без установленного ufw — так быть не может")
 	}
 }
 
@@ -103,13 +104,14 @@ func TestFirewallParsesFixture(t *testing.T) {
 		t.Error("правило для 25/tcp с нулевым счётчиком должно быть распознано")
 	}
 
-	if !res.State.UFWInstalled {
+	ufw := res.State.Manager("ufw")
+	if !ufw.Installed {
 		t.Error("ufw должен быть определён как установленный (в фикстурах есть command -v ufw)")
 	}
-	if !res.State.UFWActive {
+	if !ufw.Active {
 		t.Error("ufw должен быть активен")
 	}
-	if res.State.UFWPolicy == "" {
+	if ufw.Policy == "" {
 		t.Error("политика ufw по умолчанию не прочитана")
 	}
 	ufwPorts := map[int]string{}

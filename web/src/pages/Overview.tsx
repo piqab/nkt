@@ -260,9 +260,21 @@ export default function OverviewPage({ me }: { me: Me }) {
           </Card>
 
           <Card title="Firewall" actions={<Link to="/firewall">правила →</Link>}>
-            <div className="row">
-              <StateBadge state={data.firewall.ufw_active ? 'active' : 'inactive'} />
-              <span className="small secondary">ufw · {data.firewall.ufw_policy || 'политика не прочитана'}</span>
+            <div className="row" style={{ flexWrap: 'wrap', rowGap: '0.4rem' }}>
+              {data.firewall.managers.filter((m) => m.installed).length === 0 ? (
+                <span className="small muted">ufw/firewalld не установлены</span>
+              ) : (
+                data.firewall.managers
+                  .filter((m) => m.installed)
+                  .map((m) => (
+                    <span key={m.name} className="row" style={{ alignItems: 'center', gap: '0.35rem' }}>
+                      <StateBadge state={m.active ? 'active' : 'inactive'} />
+                      <span className="small secondary">
+                        {m.name} · {m.policy || 'политика не прочитана'}
+                      </span>
+                    </span>
+                  ))
+              )}
             </div>
             <div className="table-wrap" style={{ marginTop: '0.6rem' }}>
               <Table<FirewallPolicy>

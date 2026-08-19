@@ -203,6 +203,16 @@ export interface FirewallRule {
   out_iface?: string
   dnat_to?: string
   comment?: string
+  /** firewalld-only — the zone (public, trusted, dmz, ...) this rule
+   * belongs to. Absent for every other backend, which has no such concept. */
+  zone?: string
+  /** firewalld-only — which of its two independent stores this rule was
+   * read from. A port can be permanent, runtime, or (the common case, once
+   * applied) both — as two separate rows, not one row with two flags,
+   * since they come from two separate `firewall-cmd` listings that can
+   * genuinely disagree (a change staged but not yet reloaded). */
+  permanent?: boolean
+  runtime?: boolean
   packets: number
   bytes: number
   raw: string
@@ -216,6 +226,17 @@ export interface FirewallPolicy {
   policy: string
   packets: number
   bytes: number
+}
+
+/** One firewall manager's own installed/active/policy summary — ufw and
+ * firewalld each report through one of these (see
+ * model.FirewallManagerState) so the page iterates a list instead of
+ * hardcoding which managers exist. */
+export interface FirewallManagerState {
+  name: string // ufw | firewalld
+  installed: boolean
+  active: boolean
+  policy?: string
 }
 
 export interface Listener {
@@ -351,8 +372,7 @@ export interface Overview {
   services: ServiceUnit[]
   sources: SourceStatus[]
   firewall: {
-    ufw_active: boolean
-    ufw_policy: string
+    managers: FirewallManagerState[]
     backends: string[]
     policies: FirewallPolicy[]
   }
@@ -681,8 +701,7 @@ export interface Snapshot {
   networks: DockerNetwork[]
   firewall: {
     backends: string[]
-    ufw_active: boolean
-    ufw_policy?: string
+    managers: FirewallManagerState[]
     policies: FirewallPolicy[]
     rules: FirewallRule[]
   }

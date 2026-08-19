@@ -587,10 +587,16 @@ func (s *firewallScreen) refresh(ctx context.Context) {
 			len(numbered), len(s.rows)-len(numbered)))
 
 		var sb strings.Builder
-		sb.WriteString(" ufw: " + tag(stateColor(boolState(snap.Firewall.UFWActive)),
-			boolState(snap.Firewall.UFWActive)))
-		if snap.Firewall.UFWPolicy != "" {
-			sb.WriteString(dim("   " + snap.Firewall.UFWPolicy))
+		ufw := snap.Firewall.Manager("ufw")
+		sb.WriteString(" ufw: " + tag(stateColor(boolState(ufw.Active)), boolState(ufw.Active)))
+		if ufw.Policy != "" {
+			sb.WriteString(dim("   " + ufw.Policy))
+		}
+		if fd := snap.Firewall.Manager("firewalld"); fd.Installed {
+			sb.WriteString("\n firewalld: " + tag(stateColor(boolState(fd.Active)), boolState(fd.Active)))
+			if fd.Policy != "" {
+				sb.WriteString(dim("   зона по умолчанию: " + fd.Policy))
+			}
 		}
 		if numErr != nil {
 			sb.WriteString("\n " + tag(hexWarning, "список правил ufw недоступен: "+numErr.Error()))
