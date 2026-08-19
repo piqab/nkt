@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -533,7 +534,19 @@ func (s *Server) proxyLocal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	rest := chi.URLParam(r, "*")
-	r2 := r.Clone(r.Context())
+	// r.Context() already carries THIS router's own *chi.Context (set by
+	// chi.Mux.ServeHTTP when it first dispatched this very request) — left
+	// in place, s.local's chi.Mux.ServeHTTP would see a non-nil route
+	// context, assume it's a nested sub-router of the SAME tree, and skip
+	// allocating its own: it would then match against rctx.RoutePath, the
+	// route THIS router already consumed (e.g. "/api/hosts/local/overview"),
+	// not the rewritten r2.URL.Path below, and 404 — the embedded server
+	// registers "/api/overview", never that. Shadowing the key with a nil
+	// *chi.Context makes the type assertion in chi's ServeHTTP come back
+	// nil, so it allocates a fresh route context for the embedded server's
+	// own tree instead of reusing this one's.
+	ctx := context.WithValue(r.Context(), chi.RouteCtxKey, (*chi.Context)(nil))
+	r2 := r.Clone(ctx)
 	r2.URL.Path = "/api/" + rest
 	r2.URL.RawPath = ""
 	s.local.ServeHTTP(w, r2)
