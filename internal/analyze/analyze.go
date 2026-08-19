@@ -252,7 +252,10 @@ func rulePortConflicts(c *collector, s *model.Snapshot) {
 				}
 				// nginx routinely declares several server{} blocks on the same
 				// socket and picks one by server_name — that is not a conflict.
-				if x.Service == model.ServiceNginx && y.Service == model.ServiceNginx {
+				// Caddy does exactly the same thing with several site blocks
+				// on one address (SNI-based routing, same idea as nginx's
+				// server_name), so it gets the same exception.
+				if x.Service == y.Service && (x.Service == model.ServiceNginx || x.Service == model.ServiceCaddy) {
 					continue
 				}
 				if sameSocketTwoLayers(x, y) {
@@ -1075,6 +1078,7 @@ func ruleHealthChecks(c *collector, s *model.Snapshot) {
 			Suggestion: map[string]string{
 				model.ServiceHAProxy: "Добавьте параметр check к каждой строке server и option httpchk в backend.",
 				model.ServiceNginx:   "Задайте max_fails и fail_timeout для пассивной проверки.",
+				model.ServiceCaddy:   "Добавьте health_uri/health_interval в reverse_proxy для активной проверки.",
 			}[u.Service],
 		})
 	}

@@ -29,6 +29,11 @@ const (
 	BlockGlobal   BlockKind = "global"
 	BlockDefaults BlockKind = "defaults"
 	BlockService  BlockKind = "service"
+	// BlockSite is one Caddyfile site block ("example.com { ... }") — always
+	// flat in v1, same as haproxy's sections: a handle{}/route{} nested
+	// inside stays part of its site's raw text rather than its own
+	// addressable block.
+	BlockSite BlockKind = "site"
 )
 
 // Block is one structural unit of a single config file — a nginx server{}/
@@ -64,6 +69,8 @@ func Blocks(c collect.Collector, path, service string) ([]Block, error) {
 		return haproxyBlocks(c, path)
 	case model.ServiceDocker:
 		return dockerBlocks(c, path)
+	case model.ServiceCaddy:
+		return caddyBlocks(c, path)
 	default:
 		return nil, fmt.Errorf("для сервиса %q дерево блоков не поддерживается", service)
 	}
@@ -230,6 +237,85 @@ func nginxBlockEnd(lines []string, startLine int) (int, error) {
 		}
 	}
 	return 0, fmt.Errorf("не удалось определить конец блока, начатого в строке %d", startLine)
+}
+
+// --------------------------------------------------------------------- caddy
+
+// caddySection is one top-level Caddyfile site block ("example.com { ... }"),
+// found by brace-depth scanning — reusing nginxBlockEnd as-is, since it is
+// already syntax-agnostic (brace counting that skips "#" comments and
+// quoted-string contents) and Caddyfile blocks are delimited the same way
+// nginx's are. Lines holds everything strictly between the header and the
+// closing "}", nested blocks (handle{}, route{}, ...) included but
+// flattened — Caddy has no other structure worth addressing in v1.
+type caddySection struct {
+	Addr  string // raw site address list, e.g. "example.com, www.example.com"
+	Line  int    // 1-based line of the opening "addr {" line
+	End   int    // 1-based line of the matching closing "}"
+	Lines []string
+}
+
+// caddySiteHeaderRe matches a top-level "<addresses> {" line. The bare
+// global options block ("{" alone, no address before it) does not match —
+// \S.* requires at least one non-whitespace character ahead of the brace —
+// which is exactly right: it has no site address to build an Endpoint from.
+var caddySiteHeaderRe = regexp.MustCompile(`^(\S.*)\{\s*$`)
+
+func scanCaddySites(lines []string) ([]caddySection, error) {
+	var out []caddySection
+	for i, line := range lines {
+		if strings.HasPrefix(line, " ") || strings.HasPrefix(line, "\t") {
+			continue // indented — nested inside another block, not top-level
+		}
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		m := caddySiteHeaderRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		addr := strings.TrimSpace(m[1])
+		if addr == "" {
+			continue
+		}
+		startLine := i + 1
+		end, err := nginxBlockEnd(lines, startLine)
+		if err != nil {
+			return nil, fmt.Errorf("сайт %q (строка %d): %w", addr, startLine, err)
+		}
+		var body []string
+		if end > startLine+1 {
+			body = lines[startLine : end-1]
+		}
+		out = append(out, caddySection{Addr: addr, Line: startLine, End: end, Lines: body})
+	}
+	return out, nil
+}
+
+func caddyBlocks(c collect.Collector, path string) ([]Block, error) {
+	raw, err := c.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("чтение файла: %w", err)
+	}
+	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
+	sections, err := scanCaddySites(lines)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Block, 0, len(sections))
+	for _, sec := range sections {
+		out = append(out, Block{
+			ID:        fmt.Sprintf("%s:%d", BlockSite, sec.Line),
+			Kind:      BlockSite,
+			Name:      sec.Addr,
+			StartLine: sec.Line,
+			EndLine:   sec.End,
+			Raw:       strings.Join(lines[sec.Line-1:sec.End], "\n"),
+			Editable:  true,
+		})
+	}
+	return out, nil
 }
 
 // ------------------------------------------------------------------- haproxy

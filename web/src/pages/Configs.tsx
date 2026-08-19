@@ -6,7 +6,7 @@ import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, formatDateTime } f
 import { formatBytes } from '../components/charts'
 import BlockTree from '../components/BlockTree'
 
-const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker'])
+const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker', 'caddy'])
 
 function versionColumns(
   diff: { id: number; text: string } | null,
@@ -133,7 +133,8 @@ export default function Configs({ me }: { me: Me }) {
           <p>
             Файлы, найденные при разборе конфигурации. Перед записью содержимое проверяется самим
             сервисом (<code className="mono">nginx -t</code>, <code className="mono">haproxy -c</code>,{' '}
-            <code className="mono">docker compose config</code>); если проверка не прошла, файл
+            <code className="mono">caddy validate</code>, <code className="mono">docker compose config</code>);
+            если проверка не прошла, файл
             автоматически возвращается в прежнее состояние. Каждая правка сохраняется в истории.
           </p>
         </div>
@@ -344,8 +345,8 @@ export default function Configs({ me }: { me: Me }) {
               />
             </label>
             <p className="small muted">
-              Каталог должен относиться к nginx, haproxy или быть путём из <code className="mono">NKT_COMPOSE_FILES</code>{' '}
-              — иначе запись отклонит сервер.
+              Каталог должен относиться к nginx, haproxy, caddy или быть путём из{' '}
+              <code className="mono">NKT_COMPOSE_FILES</code> — иначе запись отклонит сервер.
             </p>
             <div className="row" style={{ marginTop: '0.4rem' }}>
               <Button

@@ -132,6 +132,13 @@ func (s *ServiceManager) Validate(ctx context.Context, service string, paths ...
 		res, err = s.c.Run(ctx, "nginx", "-t")
 	case model.ServiceHAProxy:
 		res, err = s.c.Run(ctx, "haproxy", "-c", "-f", s.cfg.HAProxyMainConf)
+	case model.ServiceCaddy:
+		// --adapter caddyfile is explicit rather than relying on caddy's own
+		// filename sniffing — nkt only ever writes/validates the Caddyfile
+		// format (see parse.Caddy's own doc comment on why JSON is out of
+		// scope), and being explicit means a file that doesn't literally end
+		// in "Caddyfile" still validates correctly.
+		res, err = s.c.Run(ctx, "caddy", "validate", "--config", s.cfg.CaddyMainConfig, "--adapter", "caddyfile")
 	case model.ServiceDocker:
 		path := ""
 		if len(paths) > 0 {

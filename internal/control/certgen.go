@@ -280,7 +280,7 @@ var lineageRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9]
 // something derived from what happens to be running, since guessing wrong
 // about which service holds the port is worse than stopping one that was
 // never listening.
-var standaloneServices = []string{model.ServiceNginx, model.ServiceHAProxy}
+var standaloneServices = []string{model.ServiceNginx, model.ServiceHAProxy, model.ServiceCaddy}
 
 // RenewCertbot re-issues a certbot-managed lineage in place. It blocks until
 // the whole operation finishes — used by the unattended auto-renew job,

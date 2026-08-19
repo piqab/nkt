@@ -76,6 +76,14 @@
     {
       "match": [
         "systemctl",
+        "show",
+        "caddy"
+      ],
+      "stdout_file": "systemctl_show_caddy.txt"
+    },
+    {
+      "match": [
+        "systemctl",
         "show"
       ],
       "stdout": "Description=\nActiveState=inactive\nSubState=dead\nUnitFileState=not-found\nActiveEnterTimestamp=\nMainPID=0\nMemoryCurrent=0\nNRestarts=0\n"
@@ -169,6 +177,23 @@
         "-v"
       ],
       "stdout": "HAProxy version 2.8.5-1ubuntu3 2026/01/24 - https://haproxy.org/\n",
+      "simulated": true
+    },
+    {
+      "match": [
+        "caddy",
+        "validate"
+      ],
+      "stdout": "Valid configuration\n",
+      "exit_code": 0,
+      "simulated": true
+    },
+    {
+      "match": [
+        "caddy",
+        "version"
+      ],
+      "stdout": "v2.7.6 h1:w0NymbG2m9PcvKWsrXO6EEkY9Ru4FJK8uQbYcev1p3A=\n",
       "simulated": true
     },
     {
@@ -545,6 +570,14 @@
         "command -v haproxy"
       ],
       "stdout": "/usr/sbin/haproxy\n"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "command -v caddy"
+      ],
+      "stdout": "/usr/bin/caddy\n"
     },
     {
       "match": [

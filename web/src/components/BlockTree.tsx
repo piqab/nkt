@@ -13,16 +13,20 @@ const KIND_LABEL: Record<BlockKind, string> = {
   global: 'global',
   defaults: 'defaults',
   service: 'service',
+  site: 'site',
 }
 
 // What a "+" button can create at the top level of each service's file — a
 // deliberately safe subset (v1 never creates haproxy global/defaults, and
 // never creates a nested nginx block from here; location is only ever
-// created from its parent server's own "+ location" button).
+// created from its parent server's own "+ location" button). Caddy sites
+// are always flat too, same as haproxy's sections — no nested "+" button
+// for a handle{}/route{} inside one.
 function creatableKinds(service: string): BlockKind[] {
   if (service === 'nginx') return ['server', 'upstream']
   if (service === 'haproxy') return ['frontend', 'backend', 'listen']
   if (service === 'docker') return ['service']
+  if (service === 'caddy') return ['site']
   return []
 }
 

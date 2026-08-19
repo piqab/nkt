@@ -1,0 +1,28 @@
+{
+	admin off
+}
+
+acme.example.com {
+	reverse_proxy 127.0.0.1:9001
+}
+
+lb.example.com {
+	reverse_proxy 10.10.0.21:9100 10.10.0.22:9100
+}
+
+old.example.com {
+	redir https://new.example.com{uri} permanent
+}
+
+static.example.com {
+	root * /var/www/static
+	file_server
+}
+
+:8081 {
+	reverse_proxy 127.0.0.1:9200
+}
+
+http://plain.example.com {
+	reverse_proxy 127.0.0.1:9300
+}
