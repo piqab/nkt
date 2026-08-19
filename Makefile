@@ -51,6 +51,15 @@ else ifneq ($(filter armv6l armv7l armv7 arm,$(UNAME_M)),)
 # uname's own value through unchanged.
 NATIVE_GO_ARCH   := armv6l
 NATIVE_NODE_ARCH := $(UNAME_M)
+# 32-bit V8 defaults its heap ceiling to well under 1 GB regardless of how
+# much RAM the board actually has — vite/rollup bundling this frontend
+# routinely needs more than that and dies mid-build with "JavaScript heap
+# out of memory" (typically the low-RAM ARM SBCs this branch targets in the
+# first place — Raspberry Pi 2/3 and similar). Raising the ceiling explicitly
+# fixes it on any board with enough RAM+swap to back the allocation; a board
+# that still can't manage it needs actual swap space added, which no build
+# flag can substitute for.
+NODE_BUILD_ENV   := NODE_OPTIONS=--max-old-space-size=1536
 else
 NATIVE_GO_ARCH   := $(UNAME_M)
 NATIVE_NODE_ARCH := $(UNAME_M)
@@ -213,7 +222,7 @@ native-build: ## собрать без Docker: сама проверит и, е�
 		fi; \
 	fi; \
 	echo "Собираю веб-интерфейс…"; \
-	( cd web && npm ci && npm run build ); \
+	( cd web && npm ci && $(NODE_BUILD_ENV) npm run build ); \
 	echo "Собираю бинарник…"; \
 	CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(OUT) ./cmd/nkt; \
 	echo; \
