@@ -94,7 +94,10 @@ func TestMapUnameArch(t *testing.T) {
 		{"amd64", "amd64", false},
 		{"aarch64", "arm64", false},
 		{"arm64", "arm64", false},
-		{"armv7l", "", true},
+		{"armv6l", "arm", false},
+		{"armv7l", "arm", false},
+		{"armv7", "arm", false},
+		{"arm", "arm", false},
 		{"i386", "", true},
 	}
 	for _, c := range cases {
