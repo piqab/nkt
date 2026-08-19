@@ -42,6 +42,7 @@ const usage = `NetKnownsThat %s — карта сетевых ресурсов �
   nkt tui             терминальный интерфейс: то же самое без браузера
   nkt scan            разовая проверка, отчёт в stdout, код 2 при критичных находках
   nkt hub             управляющий центр: установка и проксирование nkt на других хостах по SSH
+  nkt hub delete      безвозвратно стереть данные и ключи хаба (сервис и бинарник остаются)
   nkt users           показать учётные записи веб-интерфейса
   nkt passwd [логин]  сменить пароль (по умолчанию admin), спросит его без эха
   nkt version         показать версию
@@ -50,11 +51,16 @@ const usage = `NetKnownsThat %s — карта сетевых ресурсов �
   -v                  подробный лог
   -random             в passwd: сгенерировать пароль и напечатать один раз
   -role admin|viewer  в passwd: создать учётную запись с этой ролью, если её нет
+  -yes                в hub delete: не спрашивать подтверждения
+  -export <файл>      в hub delete: сохранить сюда экспорт хостов с ключом перед удалением
+  -no-export          в hub delete: не предлагать и не делать экспорт перед удалением
 
 Примеры:
   sudo nkt passwd                     сменить пароль администратора
   sudo nkt passwd ops -role viewer    завести учётку только на чтение
   sudo nkt passwd -random             выдать новый случайный пароль admin
+  sudo nkt hub delete                 удалить хаб: спросит про экспорт и подтверждение
+  sudo nkt hub delete -export a.json  удалить хаб, предварительно сохранив экспорт в a.json
 
 Настройка — через переменные окружения NKT_*, см. deploy/nkt.env.example.
 `
@@ -73,6 +79,9 @@ func main() {
 	versionFlag := fs.Bool("version", false, "показать версию и выйти")
 	randomFlag := fs.Bool("random", false, "сгенерировать пароль вместо ввода")
 	roleFlag := fs.String("role", "", "роль создаваемой учётной записи: admin или viewer")
+	yesFlag := fs.Bool("yes", false, "в hub delete: не спрашивать подтверждения")
+	exportFlag := fs.String("export", "", "в hub delete: сохранить сюда экспорт хостов с ключом перед удалением")
+	noExportFlag := fs.Bool("no-export", false, "в hub delete: не предлагать и не делать экспорт перед удалением")
 	fs.Usage = func() { fmt.Fprintf(os.Stderr, usage, version) }
 
 	// The flag package stops at the first non-flag argument, so `passwd ops
@@ -96,6 +105,9 @@ func main() {
 		username: positional,
 		role:     *roleFlag,
 		random:   *randomFlag,
+		yes:      *yesFlag,
+		export:   *exportFlag,
+		noExport: *noExportFlag,
 	}
 
 	level := slog.LevelInfo
@@ -110,11 +122,17 @@ func main() {
 	}
 }
 
-// commandOptions carries the flags and positional argument the subcommands read.
+// commandOptions carries the flags and positional argument the subcommands
+// read. username doubles as the `hub` subcommand name (e.g. "delete") when
+// command == "hub" — both are just "whatever followed the command word",
+// the same slot passwd's <username> and hub's <subcommand> both fill.
 type commandOptions struct {
 	username string
 	role     string
 	random   bool
+	yes      bool
+	export   string
+	noExport bool
 }
 
 func dispatch(command string, opts commandOptions, log *slog.Logger) error {
@@ -126,6 +144,9 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 		fmt.Fprintf(os.Stderr, usage, version)
 		return nil
 	case "hub":
+		if opts.username == "delete" {
+			return runHubDelete(opts, log)
+		}
 		// A hub never inspects a local host, so it gets its own much smaller
 		// runtime instead of newRuntime() — see hubRuntime.
 		app, err := newHubRuntime()
