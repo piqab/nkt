@@ -17,8 +17,24 @@ RestartSec=5s
 User=root
 Group=root
 
-StateDirectory=netknownsthat
+StateDirectory=netknownsthat letsencrypt
 StateDirectoryMode=0750
+# certbot itself writes to /etc/letsencrypt, /var/lib/letsencrypt and
+# /var/log/letsencrypt (its own hardcoded defaults — nkt passes it no
+# --config-dir/--work-dir/--logs-dir) — but it runs as a plain child
+# process of nkt, so it inherits this unit's own mount namespace. On a
+# host where nothing has ever run certbot before, none of those three
+# directories exist yet: plain ReadWritePaths can only make an EXISTING
+# path writable, so listing a not-yet-existing one there is a no-op, and
+# certbot's very first write (its own lock file) fails with "Read-only
+# file system" — the ExecStart process can't mkdir its way out of that
+# either, since /etc and /var/log are themselves read-only under
+# ProtectSystem=strict. StateDirectory=/LogsDirectory=/
+# ConfigurationDirectory= are the systemd-native fix: unlike raw
+# ReadWritePaths, they CREATE the named directory (root:root) before the
+# sandboxed process ever starts, so there is no first-run gap.
+ConfigurationDirectory=letsencrypt
+LogsDirectory=letsencrypt
 WorkingDirectory=/var/lib/netknownsthat
 
 # Файловая система только на чтение, кроме явно перечисленных каталогов.
@@ -27,10 +43,17 @@ WorkingDirectory=/var/lib/netknownsthat
 # путь необязательным для systemd, иначе отсутствие каталога валит весь
 # сервис на шаге NAMESPACE ("No such file or directory") ещё до запуска
 # самого nkt, который сам по себе прекрасно работает без одного из них.
+# /etc/letsencrypt отдельно перечислен в ReadWritePaths, хотя и создаётся
+# через ConfigurationDirectory выше: этой директиве systemd монтирует его
+# read-only по умолчанию (в отличие от StateDirectory/LogsDirectory) —
+# сделано так специально, чтобы обычный сервис не мог сам менять свой
+# конфиг, но certbot должен писать именно туда (это его хранилище
+# сертификатов, не конфиг nkt), поэтому явно переопределяется на запись.
 ProtectSystem=strict
 ReadWritePaths=/var/lib/netknownsthat
 ReadWritePaths=-/etc/nginx
 ReadWritePaths=-/etc/haproxy
+ReadWritePaths=-/etc/letsencrypt
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
