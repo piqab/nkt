@@ -1,9 +1,8 @@
 import { useState } from 'react'
-import { Button, Table, Tabs, type TableColumnsType } from 'antd'
+import { Button, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
 import { Banner, Card, ErrorNote, Loading, StateBadge, formatBytesShort } from '../components/ui'
-import Misc from './Misc'
 
 const ACTION_LABEL: Record<string, string> = {
   start: 'запустить',
@@ -13,38 +12,113 @@ const ACTION_LABEL: Record<string, string> = {
   validate: 'проверить конфиг',
 }
 
-/**
- * "Сервисы" now has two tabs: systemd-юниты (below) and "Разное" — moved
- * here from "Контейнеры и ВМ". After ps/cgroup enrichment, most of what
- * shows up in "Разное" turns out to be a systemd unit nobody described in
- * any parsed config, not a container — so it belongs next to the rest of
- * the service inventory, not next to Docker/Podman/LXD/VMs.
- */
-export default function Services({ me }: { me: Me }) {
-  const misc = useApi<{ listeners: Listener[] }>('/misc', 60_000)
-
-  return (
-    <Tabs
-      defaultActiveKey="systemd"
-      items={[
-        { key: 'systemd', label: 'systemd', children: <SystemdTab me={me} /> },
-        {
-          key: 'misc',
-          label: misc.data ? `Разное (${misc.data.listeners.length})` : 'Разное',
-          children: <Misc />,
-        },
-      ]}
-    />
-  )
+/** Mirrors model.Listener.Public() in Go — a socket bound to all
+ * interfaces rather than just loopback/a specific address. */
+function isPublic(l: Listener): boolean {
+  return l.address === '0.0.0.0' || l.address === '*' || l.address === '::' || l.address === '[::]'
 }
 
-function SystemdTab({ me }: { me: Me }) {
+/** Rough but readable — the point is "minutes vs months", not precision. */
+function formatUptime(seconds?: number): string | null {
+  if (!seconds || seconds < 0) return null
+  if (seconds < 60) return `${seconds} с`
+  const m = Math.floor(seconds / 60)
+  if (m < 60) return `${m} мин`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h} ч`
+  return `${Math.floor(h / 24)} дн`
+}
+
+/**
+ * How the process came to be running, from its cgroup. "Запущен вручную"
+ * is the one worth reacting to here: it means an interactive login session
+ * started it, so nothing will bring it back after a reboot — and nothing
+ * declared it in the first place.
+ */
+function OriginTag({ l }: { l: Listener }) {
+  if (l.origin === 'manual') {
+    return (
+      <Tooltip title="Процесс запущен из интерактивной сессии (SSH), а не сервисом — после перезагрузки не вернётся">
+        <Tag color="warning">запущен вручную</Tag>
+      </Tooltip>
+    )
+  }
+  if (l.origin === 'service') {
+    return (
+      <Tooltip title={`systemd-юнит: ${l.unit}`}>
+        <Tag color="processing">{l.unit || 'systemd'}</Tag>
+      </Tooltip>
+    )
+  }
+  if (l.origin === 'container') {
+    return (
+      <Tooltip title={l.container_id ? `Контейнер ${l.container_id}` : 'Процесс внутри контейнера'}>
+        <Tag color="default">контейнер{l.container_id ? ` ${l.container_id.slice(0, 12)}` : ''}</Tag>
+      </Tooltip>
+    )
+  }
+  return <span className="small muted">—</span>
+}
+
+const miscColumns: TableColumnsType<Listener> = [
+  {
+    title: 'Процесс',
+    key: 'process',
+    render: (_, l) => {
+      const uptime = formatUptime(l.uptime_s)
+      return (
+        <>
+          <strong>{l.process || '—'}</strong>
+          {l.command && (
+            <div className="small mono muted" style={{ wordBreak: 'break-all' }}>
+              {l.command}
+            </div>
+          )}
+          <div className="small muted">
+            {l.user ? `от ${l.user}` : ''}
+            {l.user && (uptime || l.pid) ? ' · ' : ''}
+            {uptime ? `работает ${uptime}` : ''}
+            {uptime && l.pid ? ' · ' : ''}
+            {l.pid ? `pid ${l.pid}` : ''}
+          </div>
+        </>
+      )
+    },
+  },
+  { title: 'Происхождение', key: 'origin', render: (_, l) => <OriginTag l={l} /> },
+  {
+    title: 'Сокет',
+    key: 'socket',
+    render: (_, l) => (
+      <span className="small mono">
+        {l.protocol} {l.address}:{l.port}
+      </span>
+    ),
+  },
+  {
+    title: 'Доступность',
+    key: 'exposure',
+    render: (_, l) => (isPublic(l) ? <Tag color="warning">все интерфейсы</Tag> : <Tag>локально</Tag>),
+  },
+]
+
+/**
+ * "Сервисы" — systemd-юниты, и ниже, в том же разделе, «Неучтённые
+ * сервисы» (бывшая отдельная вкладка/страница «Разное», перенесённая
+ * сюда же — после ps/cgroup enrichment большинство из них на деле
+ * оказывается systemd-юнитом, а не контейнером, так что это соседствует
+ * с остальным перечнем сервисов, а не с Docker/Podman/LXD/VMs).
+ */
+export default function Services({ me }: { me: Me }) {
   const services = useApi<{ services: ServiceUnit[]; allow_mutations: boolean }>('/services', 30_000)
+  const misc = useApi<{ listeners: Listener[] }>('/misc', 60_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
+  const miscListeners = misc.data?.listeners ?? []
+  const manual = miscListeners.filter((l) => l.origin === 'manual').length
 
   async function rescan() {
     setRescanning(true)
@@ -52,6 +126,7 @@ function SystemdTab({ me }: { me: Me }) {
     try {
       await api('/inventory/refresh', { method: 'POST' })
       services.reload()
+      misc.reload()
       setNotice({ kind: 'info', text: 'Хост пересканирован.' })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -177,6 +252,30 @@ function SystemdTab({ me }: { me: Me }) {
               dataSource={services.data?.services ?? []}
               columns={columns}
               rowKey="name"
+              pagination={false}
+              size="small"
+            />
+          </div>
+        )}
+      </Card>
+
+      <ErrorNote error={misc.error} />
+      <Card
+        title="Неучтённые сервисы"
+        subtitle={`сокеты, не описанные ни в одном разобранном конфиге — найдено: ${miscListeners.length}${manual ? ` · из них запущено вручную: ${manual}` : ''}`}
+      >
+        {misc.loading && !misc.data ? (
+          <Loading what="неучтённые сервисы" />
+        ) : miscListeners.length === 0 ? (
+          <div className="chart-empty">
+            Всё, что слушает сеть на этом хосте, описано в разобранных конфигах.
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <Table<Listener>
+              dataSource={miscListeners}
+              columns={miscColumns}
+              rowKey={(l) => `${l.address}:${l.port}`}
               pagination={false}
               size="small"
             />
