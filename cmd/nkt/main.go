@@ -391,13 +391,31 @@ func (r *accountsRuntime) close() {
 
 // ----------------------------------------------------------------------- hub
 
-// hubRuntime holds what the hub command needs — deliberately much smaller
-// than runtime: a hub never inspects the local host's nginx/haproxy/docker,
-// so none of collect/scanner/control belongs here. It only persists a host
-// registry and, from stage 2 onward, drives SSH sessions to remote hosts.
+// hubRuntime holds what the hub command needs: the host registry and SSH
+// session machinery for managing OTHER hosts, plus — reusing exactly the
+// same collect/inventory/control machinery `runtime` above builds for a
+// plain local install — a scanner for the machine the hub itself runs on.
+// That second half is what lets "localhost" appear pinned in the host list
+// with no SSH install of its own (installing a second nkt onto the hub's
+// own machine would collide on the same 127.0.0.1:8077 the hub itself
+// listens on — see ensureBinary/renderEnv's hardcoded NKT_ADDR). It needs
+// the hub's own systemd unit to run with the same privileges a managed
+// host's does (see deploy/netknownsthat-hub.service) — a hub deployed
+// without them still starts, it just can't read anything on its own host.
 type hubRuntime struct {
 	cfg *config.Config
 	db  *store.DB
+
+	collector collect.Collector
+	scanner   *inventory.Scanner
+	services  *control.ServiceManager
+	configs   *control.ConfigManager
+	firewall  *control.FirewallManager
+	firewalld *control.FirewalldManager
+	certs     *control.CertManager
+	podman    *control.PodmanManager
+	lxd       *control.LXDManager
+	libvirt   *control.LibvirtManager
 }
 
 func newHubRuntime() (*hubRuntime, error) {
@@ -412,7 +430,33 @@ func newHubRuntime() (*hubRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &hubRuntime{cfg: cfg, db: db}, nil
+
+	// The embedded scanner always calls itself "local" regardless of this
+	// process's own cfg.Mode ("hub") — collect.New only recognizes
+	// "local"/"fixtures" (internal/collect/factory.go), and this is
+	// exactly the same host-inspection collector a plain nkt install
+	// builds for itself; nothing about scanning the local host is
+	// hub-specific.
+	collector, err := collect.New("local", cfg.FixturesRoot, cfg.DockerSocket, cfg.PodmanSocket, cfg.CommandTimeout)
+	if err != nil {
+		return nil, err
+	}
+	scanner := inventory.New(cfg, collector, db)
+	services := control.NewServiceManager(cfg, collector, db)
+
+	return &hubRuntime{
+		cfg: cfg, db: db,
+		collector: collector,
+		scanner:   scanner,
+		services:  services,
+		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
+		firewall:  control.NewFirewallManager(cfg, collector, db),
+		firewalld: control.NewFirewalldManager(cfg, collector, db),
+		certs:     control.NewCertManager(cfg, collector, db, services, scanner),
+		podman:    control.NewPodmanManager(collector, db),
+		lxd:       control.NewLXDManager(collector, db),
+		libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
+	}, nil
 }
 
 func (r *hubRuntime) close() {
@@ -455,12 +499,36 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	defer stop()
 	go manager.Run(ctx)
 
+	// The embedded local API server — same api.New/Handler() a plain nkt
+	// install uses, sharing the hub's own db and auth.Service so the
+	// operator's existing hub session cookie authenticates against it with
+	// no separate login. UI is deliberately nil: the hub's own router
+	// serves the SPA at "/", this instance is only ever reached at
+	// /api/hosts/local/* (internal/hub/server.go), which only needs its
+	// API routes.
+	localAPI := api.New(api.Deps{
+		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner,
+		Services: r.services, Configs: r.configs, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Log: log, Version: version,
+	})
+
+	// Keeps the "localhost" entry's snapshot/findings/history/availability
+	// data fresh, exactly the way runServer's scheduler does for a plain
+	// local install — without this, nothing would ever call Scan() and
+	// the localhost dashboard would stay permanently empty.
+	scheduler := monitor.NewScheduler(r.cfg, r.db, r.scanner, r.certs, log)
+	var jobs sync.WaitGroup
+	scheduler.Start(ctx, &jobs)
+
 	ui := webui.FS()
 	if ui == nil {
 		log.Warn("фронтенд не собран, отдаётся только API (соберите web/ через npm run build)")
 	}
 
-	server := hub.New(hub.Deps{Cfg: r.cfg, DB: r.db, Auth: authSvc, Hub: manager, UI: ui, Log: log})
+	server := hub.New(hub.Deps{
+		Cfg: r.cfg, DB: r.db, Auth: authSvc, Hub: manager,
+		Local: localAPI.Handler(), LocalScanner: r.scanner, UI: ui, Log: log,
+	})
 	httpServer := &http.Server{
 		Addr:              r.cfg.Addr,
 		Handler:           server.Handler(),
@@ -490,6 +558,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Error("остановка HTTP-сервера", "err", err)
 	}
+	jobs.Wait()
 	log.Info("завершено")
 	return nil
 }

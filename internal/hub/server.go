@@ -17,6 +17,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -24,12 +25,14 @@ import (
 // internal/auth, unchanged) plus the host registry and per-host proxy
 // routes backed by Manager.
 type Server struct {
-	cfg  *config.Config
-	db   *store.DB
-	auth *auth.Service
-	hub  *Manager
-	ui   fs.FS
-	log  *slog.Logger
+	cfg          *config.Config
+	db           *store.DB
+	auth         *auth.Service
+	hub          *Manager
+	local        http.Handler
+	localScanner *inventory.Scanner
+	ui           fs.FS
+	log          *slog.Logger
 }
 
 // Deps bundles the constructed subsystems, mirroring api.Deps.
@@ -38,13 +41,29 @@ type Deps struct {
 	DB   *store.DB
 	Auth *auth.Service
 	Hub  *Manager
-	UI   fs.FS
-	Log  *slog.Logger
+	// Local is the embedded api.Server.Handler() for the machine the hub
+	// itself runs on — mounted at /api/hosts/local/* (proxyLocal) so
+	// "localhost" appears in the host list with no SSH install of its
+	// own. nil is valid (e.g. tests that don't need it): proxyLocal
+	// reports 503 rather than panicking.
+	Local http.Handler
+	// LocalScanner is that same embedded instance's own inventory.Scanner
+	// — handleListHosts reads its latest snapshot directly (no SSH poll
+	// needed, it's in-process) to give the synthetic "localhost" row the
+	// same findings-count badge every real managed host's row gets from
+	// Manager.Overview. nil is valid, same as Local — the row just shows
+	// no findings yet (matches "no scan has completed" for any host).
+	LocalScanner *inventory.Scanner
+	UI           fs.FS
+	Log          *slog.Logger
 }
 
 // New builds the hub server.
 func New(d Deps) *Server {
-	return &Server{cfg: d.Cfg, db: d.DB, auth: d.Auth, hub: d.Hub, ui: d.UI, log: d.Log}
+	return &Server{
+		cfg: d.Cfg, db: d.DB, auth: d.Auth, hub: d.Hub,
+		local: d.Local, localScanner: d.LocalScanner, ui: d.UI, log: d.Log,
+	}
 }
 
 // Handler builds the HTTP router: the hub's own login, the host registry and
@@ -78,6 +97,20 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
 			r.Get("/hub/hosts/{id}/install/latest", s.handleLatestInstallJob)
 			r.Get("/hub/hosts/{id}/install/{job}", s.handleInstallJobStatus)
+
+			// "localhost" (internal/hub/handlers.go's synthetic entry
+			// prepended in handleListHosts) needs no RequireAdmin wrapper
+			// the way /hosts/{id}/* below does: that wrapper exists
+			// because a real managed host is always reached as *that
+			// host's own* bootstrap-admin cookie regardless of the hub
+			// user's actual role (Manager.cookieFor), so hub-level RBAC
+			// is the only place a hub "viewer" can be stopped from
+			// getting de-facto admin on a connected host. The embedded
+			// local api.Server has no such blind spot — it shares this
+			// same auth.Service/session, so its own RequireAuth/
+			// RequireAdmin middleware already sees the real user and
+			// role directly, the same as a plain single-host nkt install.
+			r.HandleFunc("/hosts/local/*", s.proxyLocal)
 
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.RequireAdmin)
