@@ -74,6 +74,30 @@ func runRemote(client *ssh.Client, cmd string) (string, error) {
 	return string(out), err
 }
 
+// probeExistingInstall checks, over an already-open SSH connection, whether
+// the target already has an nkt on it — binary present and runnable and/or
+// its systemd unit active — without installing or changing anything. Both
+// results are best-effort: `; true` at the end keeps the whole command's
+// exit code 0 regardless of `systemctl is-active`'s own (nonzero for
+// "inactive" is entirely normal, not a probe failure), so a non-nil err
+// here only ever means the SSH session itself failed, never "found
+// nothing" — the caller tells those apart by the empty-string results.
+func probeExistingInstall(client *ssh.Client, binPath, unitName string) (versionLine, activeState string, err error) {
+	const sep = "___NKT_HUB_PROBE_SEP___"
+	out, err := runRemote(client,
+		"test -x "+binPath+" && "+binPath+" version 2>/dev/null; echo "+sep+"; "+
+			"systemctl is-active "+unitName+" 2>/dev/null; true")
+	if err != nil {
+		return "", "", err
+	}
+	parts := strings.SplitN(out, sep, 2)
+	versionLine = strings.TrimSpace(parts[0])
+	if len(parts) > 1 {
+		activeState = strings.TrimSpace(parts[1])
+	}
+	return versionLine, activeState, nil
+}
+
 // detectTarget reports the remote host's OS and CPU architecture in Go's
 // own GOOS/GOARCH vocabulary, so the caller knows what to cross-compile.
 func detectTarget(client *ssh.Client) (goos, goarch string, err error) {

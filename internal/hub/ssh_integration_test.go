@@ -434,3 +434,147 @@ func TestSetServiceRunningReachesHostOverSSH(t *testing.T) {
 		t.Errorf("looks like the SSH connection itself failed, not a remote command failure: %v", err)
 	}
 }
+
+// TestProbeExistingInstallDetectsFakeBinary proves probeExistingInstall's
+// parsing against a real SSH round trip: a fake "nkt" script that prints a
+// version line the way `nkt version` really does, at a scratch path (not
+// the real /usr/local/bin/nkt — this only needs to prove the probe command
+// and its output-splitting work, not that a real install exists here).
+func TestProbeExistingInstallDetectsFakeBinary(t *testing.T) {
+	addr, port, clientKeyPEM := startTestSSHD(t)
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := dialSSH(ctx, addr, port, me.Username, store.HostAuthKey, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("dialSSH: %v", err)
+	}
+	defer client.Close()
+
+	fakeBin := filepath.Join(t.TempDir(), "fake-nkt")
+	if err := os.WriteFile(fakeBin, []byte("#!/bin/sh\necho netknownsthat 9.9.9-test\n"), 0o755); err != nil {
+		t.Fatalf("write fake binary: %v", err)
+	}
+
+	version, active, err := probeExistingInstall(client, fakeBin, "nkt-hub-test-unit-should-not-exist")
+	if err != nil {
+		t.Fatalf("probeExistingInstall: %v", err)
+	}
+	if version != "netknownsthat 9.9.9-test" {
+		t.Errorf("version = %q, want %q", version, "netknownsthat 9.9.9-test")
+	}
+	if active == "active" {
+		t.Error(`active = "active" for a unit name that cannot exist on the test machine`)
+	}
+}
+
+// TestProbeExistingInstallEmptyOnFreshMachine confirms the "found nothing"
+// shape (empty strings, nil error) checkForeignInstall relies on to decide
+// there's nothing to warn about.
+func TestProbeExistingInstallEmptyOnFreshMachine(t *testing.T) {
+	addr, port, clientKeyPEM := startTestSSHD(t)
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := dialSSH(ctx, addr, port, me.Username, store.HostAuthKey, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("dialSSH: %v", err)
+	}
+	defer client.Close()
+
+	missing := filepath.Join(t.TempDir(), "does-not-exist", "nkt")
+	version, active, err := probeExistingInstall(client, missing, "nkt-hub-test-unit-should-not-exist")
+	if err != nil {
+		t.Fatalf("probeExistingInstall: %v", err)
+	}
+	if version != "" {
+		t.Errorf("version = %q, want empty", version)
+	}
+	if active == "active" {
+		t.Error(`active = "active" for a unit name that cannot exist on the test machine`)
+	}
+}
+
+// TestCheckForeignInstallSkipsWhenAlreadyKnown confirms the fast,
+// no-network path: once host.NktVersion is non-empty (this hub completed
+// an install here before — see SetHostVersion), checkForeignInstall never
+// even tries to connect, so a bogus/unreachable address doesn't matter —
+// proving it, rather than just asserting it, by pointing at one.
+func TestCheckForeignInstallSkipsWhenAlreadyKnown(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	secretEnc, err := secretbox.Encrypt(m.key, []byte("never dialled — see comment above"))
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	id, err := db.CreateHost(ctx, "h1", "203.0.113.1", 22, "root", store.HostAuthKey, secretEnc)
+	if err != nil {
+		t.Fatalf("CreateHost: %v", err)
+	}
+	if err := db.SetHostVersion(ctx, id, "1.2.3"); err != nil {
+		t.Fatalf("SetHostVersion: %v", err)
+	}
+	host, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+
+	foreign, err := m.checkForeignInstall(ctx, host)
+	if err != nil {
+		t.Fatalf("checkForeignInstall: %v", err)
+	}
+	if foreign != nil {
+		t.Errorf("foreign = %+v, want nil — host.NktVersion is already set, must skip the check entirely", foreign)
+	}
+}
+
+// TestCheckForeignInstallFindsNothingOnFreshHost is the counterpart against
+// a real, reachable target: host.NktVersion is empty (never installed by
+// this hub) and the test sshd's own machine has no active "netknownsthat"
+// unit — so checkForeignInstall must report no foreign install, not a
+// false positive. Skipped if the machine running this test genuinely has
+// nkt installed at the real path checkForeignInstall checks — an
+// environment detail this test can observe but not control, same as the
+// passwordless-sudo skip used elsewhere in this file.
+func TestCheckForeignInstallFindsNothingOnFreshHost(t *testing.T) {
+	if _, err := os.Stat(remoteBinPath); err == nil {
+		t.Skipf("this machine actually has something at %s — skipping to avoid a false positive", remoteBinPath)
+	}
+
+	addr, port, clientKeyPEM := startTestSSHD(t)
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	secretEnc, err := secretbox.Encrypt(m.key, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	id, err := db.CreateHost(ctx, "h1", addr, port, me.Username, store.HostAuthKey, secretEnc)
+	if err != nil {
+		t.Fatalf("CreateHost: %v", err)
+	}
+	host, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+
+	foreign, err := m.checkForeignInstall(ctx, host)
+	if err != nil {
+		t.Fatalf("checkForeignInstall: %v", err)
+	}
+	if foreign != nil {
+		t.Errorf("foreign = %+v, want nil on a genuinely fresh machine", foreign)
+	}
+}

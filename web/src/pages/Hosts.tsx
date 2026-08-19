@@ -8,7 +8,7 @@ import {
   QuestionCircleOutlined,
   WarningFilled,
 } from '@ant-design/icons'
-import { api, useApi } from '../api'
+import { api, ApiError, useApi } from '../api'
 import type { HubHost, RenewEvent, RenewJobStatus, Severity } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, SEVERITIES, SEVERITY_LABEL, formatRelative } from '../components/ui'
 import { checkForNewProblems, notificationsEnabled, requestNotificationPermission, setNotificationsEnabled, type NotifyState } from '../notifications'
@@ -213,14 +213,41 @@ export default function Hosts({
     }
   }, [job, installHostId, reload])
 
-  async function startInstall(host: HubHost) {
+  /** force is set on retry, after the operator confirms the 409 prompt
+   * below — a first call is always unforced, so an existing "foreign"
+   * install (one this hub has no record of putting there itself) always
+   * gets a chance to be seen before anything on the host is touched. */
+  async function startInstall(host: HubHost, force = false) {
     setNotice(null)
     try {
-      const res = await api<{ job: string }>(`/hub/hosts/${host.id}/install`, { method: 'POST' })
+      const res = await api<{ job: string }>(
+        `/hub/hosts/${host.id}/install${force ? '?force=true' : ''}`,
+        { method: 'POST' },
+      )
       setInstallHostId(host.id)
       setJobStatus(null)
       setJob(res.job)
     } catch (err) {
+      if (
+        err instanceof ApiError &&
+        err.status === 409 &&
+        err.payload &&
+        typeof err.payload === 'object' &&
+        (err.payload as { foreign_install?: boolean }).foreign_install
+      ) {
+        const detail = (err.payload as { detail?: string }).detail ?? ''
+        if (
+          window.confirm(
+            `На хосте уже есть nkt, установленный не этим хабом: ${detail}.\n\n` +
+              'Продолжить всё равно? Бинарник, systemd-юнит и env будут перезаписаны, ' +
+              'а пароль администратора синхронизирован с тем, что хранит хаб — ' +
+              'если это чужая установка, доступ к ней текущим паролем будет потерян.',
+          )
+        ) {
+          await startInstall(host, true)
+        }
+        return
+      }
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
   }

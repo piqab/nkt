@@ -330,7 +330,88 @@ func (m *Manager) UpdateHostGenerated(ctx context.Context, hostID int64, name, a
 // id immediately, so a caller (the "добавить хост" wizard) can poll
 // InstallJobStatus instead of blocking on the whole multi-step operation —
 // same pattern as control.CertManager.StartRenewCertbot.
-func (m *Manager) StartInstall(hostID int64) (string, error) {
+// ForeignInstallError is returned by StartInstall when the target already
+// runs an nkt this hub has no record of installing itself, and force was
+// not set — the caller (the HTTP handler) turns this into a 409 the
+// frontend recognizes and re-prompts the operator with, rather than
+// silently overwriting a binary/unit/admin-credential that isn't the
+// hub's own to begin with.
+type ForeignInstallError struct {
+	// Detail is a human-readable description of what was found (version
+	// string and/or systemd active state), for the confirmation prompt.
+	Detail string
+}
+
+func (e *ForeignInstallError) Error() string {
+	return "на хосте уже есть nkt, установленный не через этот хаб: " + e.Detail
+}
+
+// checkForeignInstall connects briefly and reports whether the target
+// already has an nkt on it that this hub never itself installed — judged
+// by host.NktVersion being empty, which SetHostVersion only ever sets
+// after install() completes successfully (so "empty" reliably means
+// either a genuinely fresh host, or a previous attempt by this hub that
+// never got that far). A positive here is not proof of anything malicious
+// — it's just as likely a manual install, or a host being migrated from
+// another hub — but proceeding without asking would silently overwrite
+// that binary/unit and reset whatever admin password it already has (see
+// install's bootstrap-login fallback), so it always needs an explicit
+// override once surfaced.
+//
+// A probe that fails to even connect returns (false, nil) rather than an
+// error — the real install attempt right after this will hit the exact
+// same connection problem and report it properly; duplicating that here
+// would just be a worse-quality copy of the same error message.
+func (m *Manager) checkForeignInstall(ctx context.Context, host store.Host) (*ForeignInstallError, error) {
+	if host.NktVersion != "" {
+		return nil, nil
+	}
+	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
+	if err != nil {
+		return nil, nil
+	}
+	dialCtx, cancel := context.WithTimeout(ctx, sshDialTimeout)
+	defer cancel()
+	client, err := dialSSH(dialCtx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
+	if err != nil {
+		return nil, nil
+	}
+	defer client.Close()
+
+	version, active, err := probeExistingInstall(client, remoteBinPath, "netknownsthat")
+	if err != nil || (version == "" && active != "active") {
+		return nil, nil
+	}
+	detail := "статус сервиса: " + orUnknown(active)
+	if version != "" {
+		detail = version + ", " + detail
+	}
+	return &ForeignInstallError{Detail: detail}, nil
+}
+
+func orUnknown(s string) string {
+	if s == "" {
+		return "неизвестен"
+	}
+	return s
+}
+
+// StartInstall launches install as a background job and returns its id
+// immediately. force must be true to proceed when checkForeignInstall
+// finds an nkt on the target this hub didn't put there itself — set by the
+// operator explicitly confirming the overwrite after seeing
+// ForeignInstallError's detail.
+func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool) (string, error) {
+	host, err := m.db.HostByID(ctx, hostID)
+	if err != nil {
+		return "", fmt.Errorf("хост не найден: %w", err)
+	}
+	if !force {
+		if foreign, err := m.checkForeignInstall(ctx, host); err == nil && foreign != nil {
+			return "", foreign
+		}
+	}
+
 	job := &installJob{created: time.Now(), hostID: hostID}
 	job.append("Начинаю установку")
 
