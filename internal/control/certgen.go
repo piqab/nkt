@@ -831,12 +831,31 @@ func (m *CertManager) checkPortFree(ctx context.Context, port int) (holder strin
 	return "", true
 }
 
-// stopForStandalone stops nginx and haproxy in order, returning exactly the
-// services it actually managed to stop even when it returns an error — the
-// caller must only restart what this function actually took down.
+// stopForStandalone stops every installed service in standaloneServices, in
+// order, returning exactly the ones it actually managed to stop even when
+// it returns an error — the caller must only restart what this function
+// actually took down. A host very rarely runs all three reverse proxies at
+// once; skipping whichever ones aren't installed (systemctl's own "Unit
+// not loaded") rather than treating that as a failure is what lets this
+// list keep growing (ufw/firewalld's own equivalent list would have the
+// same shape) without every host that lacks the newest addition suddenly
+// failing every certificate renewal.
 func (m *CertManager) stopForStandalone(ctx context.Context, user string) ([]string, error) {
+	// No snapshot yet, or a service missing from the catalogue entirely
+	// (neither should happen in practice) — attempt the stop rather than
+	// silently skipping, so a genuine failure still surfaces.
+	installed := map[string]bool{}
+	if snap := m.scanner.Latest(); snap != nil {
+		for _, svc := range snap.Services {
+			installed[svc.Name] = svc.Installed
+		}
+	}
+
 	stopped := make([]string, 0, len(standaloneServices))
 	for _, svc := range standaloneServices {
+		if known, ok := installed[svc]; ok && !known {
+			continue
+		}
 		if _, err := m.services.Action(ctx, user, svc, "stop"); err != nil {
 			return stopped, fmt.Errorf("остановка %s: %w", svc, err)
 		}
