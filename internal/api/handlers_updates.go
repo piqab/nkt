@@ -61,19 +61,6 @@ func (s *Server) handleUpdatesWS(w http.ResponseWriter, r *http.Request) {
 // reads exactly like "the update never finished". The frontend uses
 // succeeded to trigger that rescan itself.
 func (s *Server) handleUpdatesStatus(w http.ResponseWriter, r *http.Request) {
-	s.sessionsMu.Lock()
-	sess := s.sessions["packages"]
-	s.sessionsMu.Unlock()
-
-	if sess == nil {
-		writeJSON(w, http.StatusOK, map[string]any{"active": false, "finished": false})
-		return
-	}
-	done, exitCode := sess.outcome()
-	writeJSON(w, http.StatusOK, map[string]any{
-		"active":    !done,
-		"finished":  done,
-		"exit_code": exitCode,
-		"succeeded": done && exitCode == 0,
-	})
+	active, finished, exitCode := s.sessionStatus("packages")
+	writeSessionStatus(w, active, finished, exitCode)
 }

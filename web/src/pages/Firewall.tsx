@@ -1,19 +1,34 @@
 import { useMemo, useState } from 'react'
-import { Badge, Button, Form, Input, Select, Table, Tag, type TableColumnsType } from 'antd'
+import { Badge, Button, Checkbox, Form, Input, Radio, Select, Table, Tag, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
-import type { FirewallPolicy, FirewallRule, Listener, Me } from '../types'
+import type { FirewallManagerState, FirewallPolicy, FirewallRule, Listener, Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
 import { formatBytes, formatNumber } from '../components/charts'
-import UfwInstallModal from '../components/UfwInstallModal'
+import PackageInstallModal from '../components/PackageInstallModal'
 
 interface FirewallResponse {
-  ufw_installed: boolean
-  ufw_active: boolean
-  ufw_policy: string
+  managers: FirewallManagerState[]
   backends: string[]
   policies: FirewallPolicy[]
   rules: FirewallRule[]
   listeners: Listener[]
+}
+
+/** Everything that differs between the two managers' install/reload
+ * endpoints — the rest of the page logic is shared. */
+const MANAGER_META: Record<string, { label: string; reloadPath: string; installWsPath: string; installStatusPath: string }> = {
+  ufw: {
+    label: 'ufw',
+    reloadPath: '/firewall/reload',
+    installWsPath: '/firewall/ufw-install/ws',
+    installStatusPath: '/firewall/ufw-install/status',
+  },
+  firewalld: {
+    label: 'firewalld',
+    reloadPath: '/firewall/firewalld/reload',
+    installWsPath: '/firewall/firewalld-install/ws',
+    installStatusPath: '/firewall/firewalld-install/status',
+  },
 }
 
 interface NumberedRule {
@@ -95,6 +110,22 @@ type AddRuleValues = {
   comment: string
 }
 
+// firewalld zones aren't discoverable from a fixed list the way ufw's four
+// actions are — these are just the common defaults every install ships
+// with, merged with whatever zones this host's own rules already mention,
+// so a host with custom zones still offers them without hardcoding more.
+const COMMON_FIREWALLD_ZONES = ['public', 'trusted', 'home', 'work', 'internal', 'external', 'dmz', 'block', 'drop']
+
+type AddFirewalldValues = {
+  zone: string
+  targetType: 'port' | 'service'
+  port: string
+  protocol: string
+  service: string
+  runtime: boolean
+  permanent: boolean
+}
+
 export default function Firewall({ me }: { me: Me }) {
   const fw = useApi<FirewallResponse>('/firewall', 60_000)
   const numbered = useApi<{ rules: NumberedRule[]; added: AddedRule[] }>('/firewall/rules', 60_000)
@@ -103,7 +134,8 @@ export default function Firewall({ me }: { me: Me }) {
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [addForm] = Form.useForm<AddRuleValues>()
-  const [installing, setInstalling] = useState(false)
+  const [addFirewalldForm] = Form.useForm<AddFirewalldValues>()
+  const [installTarget, setInstallTarget] = useState<'ufw' | 'firewalld' | null>(null)
   const [installOutcome, setInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
   const [rescanningAfterInstall, setRescanningAfterInstall] = useState(false)
 
@@ -113,22 +145,32 @@ export default function Firewall({ me }: { me: Me }) {
   // as Overview's /updates/status: without it there's no way to tell, from
   // the button alone, whether opening the dialog would reattach to an
   // install already running (started earlier, or by someone else) or start
-  // a fresh one.
-  const { data: installStatus, reload: reloadInstallStatus } = useApi<{
+  // a fresh one. Two backends, two independent sessions — a hook can't be
+  // called conditionally/in a loop, so this is unrolled rather than looped.
+  const { data: ufwInstallStatus, reload: reloadUfwInstallStatus } = useApi<{
     active: boolean
     finished: boolean
     succeeded: boolean
-  }>('/firewall/ufw-install/status', 5_000)
-  const installActive = installStatus?.active ?? false
+  }>(MANAGER_META.ufw.installStatusPath, 5_000)
+  const { data: firewalldInstallStatus, reload: reloadFirewalldInstallStatus } = useApi<{
+    active: boolean
+    finished: boolean
+    succeeded: boolean
+  }>(MANAGER_META.firewalld.installStatusPath, 5_000)
+
+  function installActiveFor(name: string): boolean {
+    return name === 'ufw' ? (ufwInstallStatus?.active ?? false) : (firewalldInstallStatus?.active ?? false)
+  }
 
   /** Fires the moment the install session's socket closes (apt actually
-   * exited) — a plain fw.reload() alone would still show ufw_installed:
-   * false until this runs, since /firewall serves the last scan. */
+   * exited) — a plain fw.reload() alone would still show installed: false
+   * until this runs, since /firewall serves the last scan. */
   async function handleInstallFinished() {
-    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>('/firewall/ufw-install/status').catch(
-      () => null,
-    )
-    reloadInstallStatus()
+    if (!installTarget) return
+    const meta = MANAGER_META[installTarget]
+    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>(meta.installStatusPath).catch(() => null)
+    if (installTarget === 'ufw') reloadUfwInstallStatus()
+    else reloadFirewalldInstallStatus()
     if (fresh?.succeeded) {
       setInstallOutcome({ ok: true })
       setRescanningAfterInstall(true)
@@ -144,6 +186,20 @@ export default function Firewall({ me }: { me: Me }) {
     }
   }
 
+  async function reloadManager(name: string) {
+    setBusy(true)
+    setNotice(null)
+    try {
+      await api(MANAGER_META[name].reloadPath, { method: 'POST' })
+      setNotice({ kind: 'info', text: `${MANAGER_META[name].label} перезагружен.` })
+      fw.reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
   const chains = useMemo(() => {
     const set = new Set<string>()
     fw.data?.rules.forEach((r) => set.add(r.chain))
@@ -156,6 +212,17 @@ export default function Firewall({ me }: { me: Me }) {
     if (chain) list = list.filter((r) => r.chain === chain)
     return list
   }, [fw.data, backend, chain])
+
+  const ufwManager = fw.data?.managers.find((m) => m.name === 'ufw')
+  const firewalldManager = fw.data?.managers.find((m) => m.name === 'firewalld')
+
+  const knownZones = useMemo(() => {
+    const set = new Set(COMMON_FIREWALLD_ZONES)
+    fw.data?.rules.forEach((r) => {
+      if (r.zone) set.add(r.zone)
+    })
+    return [...set].sort()
+  }, [fw.data])
 
   async function addRule(values: AddRuleValues) {
     const port = Number(values.port)
@@ -173,7 +240,7 @@ export default function Firewall({ me }: { me: Me }) {
           comment: values.comment,
         },
       })
-      const ufwOffNote = fw.data && !fw.data.ufw_active ? ' ufw сейчас выключен — правило сохранено, но не действует, пока вы его не включите.' : ''
+      const ufwOffNote = ufwManager && !ufwManager.active ? ' ufw сейчас выключен — правило сохранено, но не действует, пока вы его не включите.' : ''
       setNotice({
         kind: 'info',
         text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}.${ufwOffNote}`,
@@ -181,6 +248,70 @@ export default function Firewall({ me }: { me: Me }) {
       addForm.setFieldsValue({ port: '', comment: '' })
       fw.reload()
       numbered.reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function addFirewalldRule(values: AddFirewalldValues) {
+    if (!values.runtime && !values.permanent) {
+      setNotice({ kind: 'error', text: 'Выберите хотя бы один вариант: применить сейчас или сохранить постоянно.' })
+      return
+    }
+    const isService = values.targetType === 'service'
+    if (!isService && !confirmCriticalPort(Number(values.port), 'Добавление правила firewalld')) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      const body: Record<string, unknown> = { zone: values.zone, runtime: values.runtime, permanent: values.permanent }
+      if (isService) body.service = values.service
+      else {
+        body.port = Number(values.port)
+        body.protocol = values.protocol
+      }
+      const res = await api<{ output?: string; simulated?: boolean }>('/firewall/firewalld/rules', {
+        method: 'POST',
+        body,
+      })
+      setNotice({
+        kind: 'info',
+        text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}.`,
+      })
+      addFirewalldForm.setFieldsValue({ port: '', service: '' })
+      fw.reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Deletes a firewalld port/service rule straight from its own row in the
+   * "Все правила пакетного фильтра" table — rich rules have no delete
+   * action here (see the actions column below): firewall-cmd removes them
+   * by re-specifying the exact rule text via --remove-rich-rule, which is
+   * fragile enough (whitespace/quoting) to leave for a follow-up rather
+   * than risk deleting the wrong thing from a reconstructed string. */
+  async function deleteFirewalldRule(r: FirewallRule) {
+    const isPort = (r.ports?.length ?? 0) > 0
+    if (isPort && r.ports && !confirmCriticalPort(r.ports[0], 'Удаление этого правила firewalld')) return
+    const label = isPort ? `${r.port_spec}/${r.protocol}` : r.port_spec
+    if (!window.confirm(`Удалить правило firewalld: зона ${r.zone}, ${label}?`)) return
+    setBusy(true)
+    setNotice(null)
+    try {
+      const body: Record<string, unknown> = { zone: r.zone, runtime: r.runtime, permanent: r.permanent }
+      if (isPort) {
+        body.port = r.ports![0]
+        body.protocol = r.protocol
+      } else {
+        body.service = r.port_spec
+      }
+      await api('/firewall/firewalld/rules', { method: 'DELETE', body })
+      setNotice({ kind: 'info', text: `Правило firewalld удалено: зона ${r.zone}, ${label}.` })
+      fw.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -244,7 +375,7 @@ export default function Firewall({ me }: { me: Me }) {
         method: 'POST',
         body: { action: 'allow', port: l.port, protocol: l.protocol, from: '', comment: '' },
       })
-      const ufwOffNote = fw.data && !fw.data.ufw_active ? ' ufw сейчас выключен — правило сохранено, но не действует, пока вы его не включите.' : ''
+      const ufwOffNote = ufwManager && !ufwManager.active ? ' ufw сейчас выключен — правило сохранено, но не действует, пока вы его не включите.' : ''
       setNotice({
         kind: 'info',
         text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}.${ufwOffNote}`,
@@ -344,10 +475,46 @@ export default function Firewall({ me }: { me: Me }) {
         </span>
       ),
     },
+    {
+      title: 'Зона',
+      key: 'zone',
+      render: (_, r) => (r.zone ? <span className="small mono">{r.zone}</span> : <span className="small muted">—</span>),
+    },
+    {
+      title: 'Хранилище',
+      key: 'store',
+      render: (_, r) => {
+        if (r.backend !== 'firewalld') return <span className="small muted">—</span>
+        return (
+          <>
+            {r.runtime && <Tag color="success">сейчас</Tag>}
+            {r.permanent && <Tag>постоянно</Tag>}
+          </>
+        )
+      },
+    },
     { title: 'Источник', key: 'source', render: (_, r) => <span className="mono small">{r.source || 'any'}</span> },
     { title: 'Кем создано', key: 'managed_by', render: (_, r) => <span className="small">{r.managed_by || '—'}</span> },
     { title: 'Пакетов', key: 'packets', align: 'right', render: (_, r) => <span className="num small">{formatNumber(r.packets)}</span> },
     { title: 'Байт', key: 'bytes', align: 'right', render: (_, r) => <span className="num small">{formatBytes(r.bytes)}</span> },
+    ...(canControl
+      ? [
+          {
+            title: '',
+            key: 'firewalld_actions',
+            render: (_: unknown, r: FirewallRule) => {
+              // Rich rules (r.raw set, no port_spec) have no delete action
+              // here yet — see deleteFirewalldRule's own doc comment.
+              if (r.backend !== 'firewalld' || r.raw) return null
+              return (
+                <Button danger type="link" size="small" loading={busy} onClick={() => deleteFirewalldRule(r)}>
+                  удалить
+                </Button>
+              )
+            },
+          } satisfies TableColumnsType<FirewallRule>[number],
+        ]
+      : []),
   ]
 
   const listenerColumns: TableColumnsType<Listener> = [
@@ -386,7 +553,7 @@ export default function Firewall({ me }: { me: Me }) {
             <Tag color={(action && UFW_ACTION_COLOR[action]) || 'default'}>
               {(action && UFW_ACTION_LABEL[action]) || action || 'правило есть'}
             </Tag>
-            {!fw.data?.ufw_active && <div className="small muted">ufw выключен — не действует</div>}
+            {!ufwManager?.active && <div className="small muted">ufw выключен — не действует</div>}
           </>
         )
       },
@@ -423,8 +590,9 @@ export default function Firewall({ me }: { me: Me }) {
         <div>
           <h1>Firewall</h1>
           <p>
-            Полный набор правил iptables и ufw со счётчиками. Правила меняются только через ufw:
-            прямая правка iptables из веб-интерфейса — верный способ потерять доступ к серверу.
+            Полный набор правил iptables, ufw и firewalld со счётчиками. Правила меняются только
+            через ufw/firewalld: прямая правка iptables из веб-интерфейса — верный способ потерять
+            доступ к серверу.
           </p>
         </div>
       </div>
@@ -434,65 +602,58 @@ export default function Firewall({ me }: { me: Me }) {
 
       {fw.data && (
         <div className="grid grid-3">
-          <Card title="ufw">
-            {fw.data.ufw_installed ? (
-              <>
-                <div className="row">
-                  <StateBadge state={fw.data.ufw_active ? 'active' : 'inactive'} />
-                  <span className="small secondary">{fw.data.ufw_policy || 'политика не прочитана'}</span>
+          <Card title="Менеджеры firewall">
+            {fw.data.managers.map((m, i) => (
+              <div key={m.name} style={i > 0 ? { marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid var(--border)' } : undefined}>
+                <div className="small muted" style={{ marginBottom: '0.2rem' }}>
+                  {MANAGER_META[m.name]?.label ?? m.name}
                 </div>
-                {canControl && (
-                  <Button
-                    style={{ marginTop: '0.6rem' }}
-                    loading={busy}
-                    onClick={async () => {
-                      setBusy(true)
-                      try {
-                        await api('/firewall/reload', { method: 'POST' })
-                        setNotice({ kind: 'info', text: 'ufw перезагружен.' })
-                        fw.reload()
-                      } catch (err) {
-                        setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-                      } finally {
-                        setBusy(false)
-                      }
-                    }}
-                  >
-                    Перезагрузить ufw
-                  </Button>
+                {m.installed ? (
+                  <>
+                    <div className="row">
+                      <StateBadge state={m.active ? 'active' : 'inactive'} />
+                      <span className="small secondary">{m.policy || 'политика не прочитана'}</span>
+                    </div>
+                    {canControl && (
+                      <Button style={{ marginTop: '0.6rem' }} loading={busy} onClick={() => reloadManager(m.name)}>
+                        Перезагрузить {MANAGER_META[m.name]?.label ?? m.name}
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <Banner kind="warn">{MANAGER_META[m.name]?.label ?? m.name} не установлен на этом хосте.</Banner>
+                    {canControl &&
+                      (installActiveFor(m.name) ? (
+                        <Button
+                          style={{ marginTop: '0.6rem' }}
+                          type="primary"
+                          onClick={() => {
+                            setInstallOutcome(null)
+                            setInstallTarget(m.name as 'ufw' | 'firewalld')
+                          }}
+                        >
+                          установка выполняется — открыть
+                        </Button>
+                      ) : (
+                        <Button
+                          style={{ marginTop: '0.6rem' }}
+                          type="primary"
+                          onClick={() => {
+                            const label = MANAGER_META[m.name]?.label ?? m.name
+                            if (window.confirm(`Установить ${label} (apt-get install -y ${label}) на этом хосте?`)) {
+                              setInstallOutcome(null)
+                              setInstallTarget(m.name as 'ufw' | 'firewalld')
+                            }
+                          }}
+                        >
+                          Установить {MANAGER_META[m.name]?.label ?? m.name}
+                        </Button>
+                      ))}
+                  </>
                 )}
-              </>
-            ) : (
-              <>
-                <Banner kind="warn">ufw не установлен на этом хосте.</Banner>
-                {canControl &&
-                  (installActive ? (
-                    <Button
-                      style={{ marginTop: '0.6rem' }}
-                      type="primary"
-                      onClick={() => {
-                        setInstallOutcome(null)
-                        setInstalling(true)
-                      }}
-                    >
-                      установка выполняется — открыть
-                    </Button>
-                  ) : (
-                    <Button
-                      style={{ marginTop: '0.6rem' }}
-                      type="primary"
-                      onClick={() => {
-                        if (window.confirm('Установить ufw (apt-get install -y ufw) на этом хосте?')) {
-                          setInstallOutcome(null)
-                          setInstalling(true)
-                        }
-                      }}
-                    >
-                      Установить ufw
-                    </Button>
-                  ))}
-              </>
-            )}
+              </div>
+            ))}
           </Card>
 
           <Card title="Политики цепочек">
@@ -507,8 +668,8 @@ export default function Firewall({ me }: { me: Me }) {
             </div>
           </Card>
 
-          {canControl && (
-            <Card title="Добавить правило" subtitle="Через ufw, с записью в журнал">
+          {canControl && ufwManager?.installed && (
+            <Card title="Добавить правило (ufw)" subtitle="Через ufw, с записью в журнал">
               <Form<AddRuleValues>
                 form={addForm}
                 layout="vertical"
@@ -534,6 +695,71 @@ export default function Firewall({ me }: { me: Me }) {
                 <Form.Item name="comment" label="Комментарий">
                   <Input />
                 </Form.Item>
+                <Form.Item style={{ marginBottom: 0 }}>
+                  <Button type="primary" htmlType="submit" loading={busy}>
+                    Добавить правило
+                  </Button>
+                </Form.Item>
+              </Form>
+            </Card>
+          )}
+
+          {canControl && firewalldManager?.installed && (
+            <Card title="Добавить правило (firewalld)" subtitle="Порт или сервис в зоне, с записью в журнал">
+              <Form<AddFirewalldValues>
+                form={addFirewalldForm}
+                layout="vertical"
+                onFinish={addFirewalldRule}
+                initialValues={{
+                  zone: firewalldManager.policy || 'public',
+                  targetType: 'port',
+                  port: '',
+                  protocol: 'tcp',
+                  service: '',
+                  runtime: true,
+                  permanent: true,
+                }}
+              >
+                <div className="row">
+                  <Form.Item name="zone" label="Зона" rules={[{ required: true }]} style={{ flex: 1 }}>
+                    <Select options={knownZones.map((z) => ({ value: z, label: z }))} />
+                  </Form.Item>
+                  <Form.Item name="targetType" label="Что разрешить" style={{ flex: 1 }}>
+                    <Radio.Group
+                      options={[
+                        { value: 'port', label: 'порт' },
+                        { value: 'service', label: 'сервис' },
+                      ]}
+                      optionType="button"
+                    />
+                  </Form.Item>
+                </div>
+                <Form.Item shouldUpdate={(prev, next) => prev.targetType !== next.targetType} noStyle>
+                  {({ getFieldValue }) =>
+                    getFieldValue('targetType') === 'service' ? (
+                      <Form.Item name="service" label="Сервис" rules={[{ required: true }]}>
+                        <Input placeholder="ssh" />
+                      </Form.Item>
+                    ) : (
+                      <div className="row">
+                        <Form.Item name="port" label="Порт" rules={[{ required: true }]} style={{ flex: 1 }}>
+                          <Input inputMode="numeric" />
+                        </Form.Item>
+                        <Form.Item name="protocol" label="Протокол" style={{ flex: 1 }}>
+                          <Select options={['tcp', 'udp'].map((v) => ({ value: v, label: v }))} />
+                        </Form.Item>
+                      </div>
+                    )
+                  }
+                </Form.Item>
+                <div className="row">
+                  <Form.Item name="runtime" valuePropName="checked">
+                    <Checkbox>применить сейчас</Checkbox>
+                  </Form.Item>
+                  <Form.Item name="permanent" valuePropName="checked">
+                    <Checkbox>сохранить постоянно</Checkbox>
+                  </Form.Item>
+                </div>
                 <Form.Item style={{ marginBottom: 0 }}>
                   <Button type="primary" htmlType="submit" loading={busy}>
                     Добавить правило
@@ -609,9 +835,11 @@ export default function Firewall({ me }: { me: Me }) {
         </div>
       </Card>
 
-      {installing && (
-        <UfwInstallModal
-          onClose={() => setInstalling(false)}
+      {installTarget && (
+        <PackageInstallModal
+          packageName={MANAGER_META[installTarget].label}
+          wsPath={MANAGER_META[installTarget].installWsPath}
+          onClose={() => setInstallTarget(null)}
           onFinished={handleInstallFinished}
           outcome={installOutcome}
           rescanning={rescanningAfterInstall}

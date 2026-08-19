@@ -34,6 +34,7 @@ type Server struct {
 	services  *control.ServiceManager
 	configs   *control.ConfigManager
 	firewall  *control.FirewallManager
+	firewalld *control.FirewalldManager
 	certs     *control.CertManager
 	podman    *control.PodmanManager
 	lxd       *control.LXDManager
@@ -61,6 +62,7 @@ type Deps struct {
 	Services  *control.ServiceManager
 	Configs   *control.ConfigManager
 	Firewall  *control.FirewallManager
+	Firewalld *control.FirewalldManager
 	Certs     *control.CertManager
 	Podman    *control.PodmanManager
 	LXD       *control.LXDManager
@@ -77,7 +79,7 @@ type Deps struct {
 func New(d Deps) *Server {
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
-		services: d.Services, configs: d.Configs, firewall: d.Firewall, certs: d.Certs,
+		services: d.Services, configs: d.Configs, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
 		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt,
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
@@ -112,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/terminal/ws", s.handleTerminalWS)
 			r.Get("/updates/ws", s.handleUpdatesWS)
 			r.Get("/firewall/ufw-install/ws", s.handleUFWInstallWS)
+			r.Get("/firewall/firewalld-install/ws", s.handleFirewalldInstallWS)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -142,6 +145,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/firewall", s.handleFirewall)
 			r.Get("/firewall/rules", s.handleFirewallNumbered)
 			r.Get("/firewall/ufw-install/status", s.handleUFWInstallStatus)
+			r.Get("/firewall/firewalld-install/status", s.handleFirewalldInstallStatus)
 			r.Get("/certificates", s.handleCertificates)
 
 			r.Get("/configs", s.handleConfigList)
@@ -191,6 +195,10 @@ func (s *Server) Handler() http.Handler {
 				r.Delete("/firewall/rules/{number}", s.handleFirewallDelete)
 				r.Delete("/firewall/rules", s.handleFirewallDeleteBySpec)
 				r.Post("/firewall/reload", s.handleFirewallReload)
+
+				r.Post("/firewall/firewalld/rules", s.handleFirewalldAdd)
+				r.Delete("/firewall/firewalld/rules", s.handleFirewalldDelete)
+				r.Post("/firewall/firewalld/reload", s.handleFirewalldReload)
 
 				r.Post("/certificates/self-signed", s.handleGenerateSelfSigned)
 				r.Post("/certificates/issue", s.handleIssueCertbot)

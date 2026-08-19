@@ -61,6 +61,14 @@
       "match": [
         "systemctl",
         "show",
+        "firewalld"
+      ],
+      "stdout_file": "systemctl_show_firewalld.txt"
+    },
+    {
+      "match": [
+        "systemctl",
+        "show",
         "fail2ban"
       ],
       "stdout_file": "systemctl_show_fail2ban.txt"
@@ -228,6 +236,42 @@
         "iptables"
       ],
       "stdout": "",
+      "simulated": true
+    },
+    {
+      "match": [
+        "firewall-cmd",
+        "--state"
+      ],
+      "stdout": "running\n"
+    },
+    {
+      "match": [
+        "firewall-cmd",
+        "--get-default-zone"
+      ],
+      "stdout": "public\n"
+    },
+    {
+      "match": [
+        "firewall-cmd",
+        "--permanent",
+        "--list-all-zones"
+      ],
+      "stdout_file": "firewalld_list_all_zones_permanent.txt"
+    },
+    {
+      "match": [
+        "firewall-cmd",
+        "--list-all-zones"
+      ],
+      "stdout_file": "firewalld_list_all_zones.txt"
+    },
+    {
+      "match": [
+        "firewall-cmd"
+      ],
+      "stdout": "success\n",
       "simulated": true
     },
     {
@@ -509,6 +553,14 @@
         "command -v ufw"
       ],
       "stdout": "/usr/sbin/ufw\n"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "command -v firewall-cmd"
+      ],
+      "stdout": "/usr/bin/firewall-cmd\n"
     },
     {
       "match": [

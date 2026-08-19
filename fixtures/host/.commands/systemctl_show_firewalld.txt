@@ -1,0 +1,8 @@
+Description=firewalld - dynamic firewall daemon
+ActiveState=active
+SubState=running
+UnitFileState=enabled
+ActiveEnterTimestamp=Mon 2026-07-20 04:11:38 UTC
+MainPID=812
+MemoryCurrent=9748480
+NRestarts=0
