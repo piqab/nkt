@@ -407,8 +407,21 @@ func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
-	job, err := s.hub.StartInstall(id)
+	force := r.URL.Query().Get("force") == "true"
+	job, err := s.hub.StartInstall(r.Context(), id, force)
 	if err != nil {
+		var foreign *ForeignInstallError
+		if errors.As(err, &foreign) {
+			// 409: not a server error, a decision the operator needs to
+			// make — the frontend recognizes this shape and re-prompts
+			// with foreign.Detail, retrying with ?force=true if confirmed.
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"error":           err.Error(),
+				"foreign_install": true,
+				"detail":          foreign.Detail,
+			})
+			return
+		}
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
