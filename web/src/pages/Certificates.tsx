@@ -222,6 +222,24 @@ export default function Certificates({ me }: { me: Me }) {
   const summary = data?.summary
   const canControl = me.is_admin && me.allow_mutations
 
+  // Shared with both the "неподключённые сертификаты" card and CombineForm's
+  // own dropdown, rather than each fetching it separately — a lineage on
+  // disk doesn't change when something gets wired to it or reloaded, only
+  // its "attached" status (derived below from `certs`) does.
+  const lineages = useApi<{ lineages: LineageInfo[] }>('/certificates/lineages', 60_000)
+  // A lineage counts as attached once some parsed endpoint's certificate
+  // resolves back to it — Certificate.renewal.lineage is already how the
+  // "продлить" button finds the right `certbot renew --cert-name`, so the
+  // same field is the correct join key here too.
+  const attachedLineages = useMemo(
+    () => new Set(certs.map((c) => c.renewal.lineage).filter((l): l is string => !!l)),
+    [certs],
+  )
+  const unattachedLineages = useMemo(
+    () => (lineages.data?.lineages ?? []).filter((l) => !attachedLineages.has(l.name)),
+    [lineages.data, attachedLineages],
+  )
+
   // Polls the running job — stopping services, certbot's own output,
   // recombining any haproxy copy, restarting services can together take
   // minutes, so this shows it happening instead of one long spinner.
@@ -276,6 +294,28 @@ export default function Certificates({ me }: { me: Me }) {
         body: { lineage },
       })
       startJob(res.job, `Продление ${lineage}`)
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  /** Same endpoint "продлить" uses, just keyed by a bare lineage name
+   * instead of a Certificate — an unattached lineage has no Certificate
+   * object (nothing parsed points at it), but certbot itself doesn't care
+   * either way: `certbot renew --cert-name X` works on any lineage it
+   * manages, attached or not. */
+  async function renewLineage(lineageName: string) {
+    if (!window.confirm(`Запустить certbot renew --cert-name ${lineageName}?`)) return
+    setBusy(`lineage:${lineageName}`)
+    setNotice(null)
+    try {
+      const res = await api<{ job: string }>('/certificates/renew', {
+        method: 'POST',
+        body: { lineage: lineageName },
+      })
+      startJob(res.job, `Продление ${lineageName}`)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -403,10 +443,19 @@ export default function Certificates({ me }: { me: Me }) {
         </div>
       </Card>
 
+      {unattachedLineages.length > 0 && (
+        <UnattachedCard lineages={unattachedLineages} canControl={canControl} busy={busy} onRenew={renewLineage} />
+      )}
+
       {me.is_admin && me.allow_mutations && (
         <>
           <IssueForm onStarted={startJob} />
-          <CombineForm onCombined={reload} />
+          <CombineForm
+            onCombined={reload}
+            lineages={lineages.data?.lineages ?? []}
+            lineagesLoading={lineages.loading}
+            lineagesError={lineages.error}
+          />
           <SelfSignedForm onIssued={reload} />
         </>
       )}
@@ -427,6 +476,97 @@ export default function Certificates({ me }: { me: Me }) {
         </Modal>
       )}
     </>
+  )
+}
+
+/** Lineages certbot manages on disk (/etc/letsencrypt/live) that no parsed
+ * endpoint references at all — `certbot certonly` (whether run by hand or
+ * through "Выпустить новый сертификат" above) only writes the certificate
+ * files, it never wires them into nginx/haproxy/Caddy itself, so a
+ * freshly issued certificate is invisible in "Подробности" above until
+ * something actually points at it. This is that "something exists but
+ * nothing uses it yet" list — read-only detail plus the one action that
+ * still makes sense without an endpoint (certbot renew doesn't care
+ * whether anything serves the cert it's renewing). */
+function UnattachedCard({
+  lineages,
+  canControl,
+  busy,
+  onRenew,
+}: {
+  lineages: LineageInfo[]
+  canControl: boolean
+  busy: string | null
+  onRenew: (name: string) => void
+}) {
+  const columns: TableColumnsType<LineageInfo> = [
+    {
+      title: 'Домен',
+      key: 'name',
+      render: (_, info) => (
+        <>
+          <strong>{info.name}</strong>
+          {info.name_unicode && <div className="small muted">{info.name_unicode}</div>}
+        </>
+      ),
+    },
+    {
+      title: 'Осталось',
+      key: 'days_left',
+      render: (_, info) => {
+        if (!info.known) return <span className="small muted">срок неизвестен</span>
+        const tone: Tone =
+          info.days_left < 0
+            ? 'critical'
+            : info.days_left <= CRITICAL_DAYS
+              ? 'serious'
+              : info.days_left <= WARN_DAYS
+                ? 'warning'
+                : 'good'
+        const word =
+          info.days_left < 0
+            ? `просрочен на ${-info.days_left} дн.`
+            : info.days_left === 0
+              ? 'истекает сегодня'
+              : `${info.days_left} дн.`
+        return (
+          <span className="small nowrap" style={{ color: TONE_COLOR[tone] }}>
+            ● {word}
+          </span>
+        )
+      },
+    },
+  ]
+  if (canControl) {
+    columns.push({
+      title: '',
+      key: 'actions',
+      render: (_, info) => (
+        <Button
+          type="link"
+          size="small"
+          loading={busy === `lineage:${info.name}`}
+          onClick={() => onRenew(info.name)}
+        >
+          продлить
+        </Button>
+      ),
+    })
+  }
+
+  return (
+    <Card
+      title="Неподключённые сертификаты"
+      subtitle="Есть в /etc/letsencrypt/live, но ни один разобранный конфиг на них не ссылается — сюда попадает всё, что certbot certonly выпустил (вручную или через форму выше), но никто ещё не подключил к сервису"
+    >
+      <div className="table-wrap">
+        <Table<LineageInfo> dataSource={lineages} rowKey="name" pagination={false} size="small" columns={columns} />
+      </div>
+      <p className="small muted" style={{ marginBottom: 0, marginTop: '0.6rem' }}>
+        Чтобы сертификат появился в «Подробности» выше — подключите его в конфиг сервиса (страница
+        «Конфигурации») или соберите PEM для haproxy формой ниже.
+      </p>
+    </Card>
   )
 }
 
@@ -527,8 +667,17 @@ function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) =>
 
 const NEW_FILE = ''
 
-function CombineForm({ onCombined }: { onCombined: () => void }) {
-  const lineages = useApi<{ lineages: LineageInfo[] }>('/certificates/lineages', 0)
+function CombineForm({
+  onCombined,
+  lineages: lineageOptions,
+  lineagesLoading,
+  lineagesError,
+}: {
+  onCombined: () => void
+  lineages: LineageInfo[]
+  lineagesLoading: boolean
+  lineagesError: string | null
+}) {
   const haproxyPaths = useApi<{ paths: string[] }>('/certificates/haproxy-paths', 0)
   const [lineage, setLineage] = useState('')
   const [targetPath, setTargetPath] = useState(NEW_FILE)
@@ -536,7 +685,6 @@ function CombineForm({ onCombined }: { onCombined: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<CombineResult | null>(null)
 
-  const lineageOptions = lineages.data?.lineages ?? []
   const pathOptions = haproxyPaths.data?.paths ?? []
 
   async function submit() {
@@ -568,7 +716,7 @@ function CombineForm({ onCombined }: { onCombined: () => void }) {
     >
       <Form layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
-        <ErrorNote error={lineages.error} />
+        <ErrorNote error={lineagesError} />
         <div className="filters">
           <Form.Item label="Lineage (/etc/letsencrypt/live/…)" style={{ flex: 1, minWidth: '18rem' }}>
             <Select
@@ -591,7 +739,7 @@ function CombineForm({ onCombined }: { onCombined: () => void }) {
             {busy ? 'Собираю…' : 'Собрать'}
           </Button>
         </Form.Item>
-        {!lineages.loading && lineageOptions.length === 0 && !lineages.error && (
+        {!lineagesLoading && lineageOptions.length === 0 && !lineagesError && (
           <p className="small muted" style={{ marginBottom: 0 }}>
             В /etc/letsencrypt/live не найдено ни одной lineage.
           </p>
