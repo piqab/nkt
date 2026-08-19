@@ -43,6 +43,14 @@ NATIVE_NODE_ARCH := x64
 else ifeq ($(UNAME_M),aarch64)
 NATIVE_GO_ARCH   := arm64
 NATIVE_NODE_ARCH := arm64
+else ifneq ($(filter armv6l armv7l armv7 arm,$(UNAME_M)),)
+# go.dev publishes exactly one 32-bit ARM build, named "armv6l" — it runs
+# fine on armv7 hosts too (armv6 is a strict instruction subset of armv7),
+# so every 32-bit ARM uname value maps to that one name. Node.js, unlike
+# Go, does publish a separate armv7l tarball, so its arch can just pass
+# uname's own value through unchanged.
+NATIVE_GO_ARCH   := armv6l
+NATIVE_NODE_ARCH := $(UNAME_M)
 else
 NATIVE_GO_ARCH   := $(UNAME_M)
 NATIVE_NODE_ARCH := $(UNAME_M)
