@@ -157,6 +157,18 @@ func TestHubTerminalWebSocketThroughFullRouter(t *testing.T) {
 	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/api/hosts/" + strconv.FormatInt(hostID, 10) + "/terminal/ws"
 	header := http.Header{}
 	header.Set("Cookie", cookieHeader)
+	// A real browser always sends Origin on a WebSocket handshake — set here
+	// deliberately (real hub address, not the remote's own remoteAPIAddr)
+	// so this test actually exercises coder/websocket's default same-origin
+	// check on the remote's Accept() call, the same way a real browser
+	// would. Manager.Proxy's Director must NOT rewrite req.Host to the
+	// remote's address, or this and every other proxied Origin would
+	// permanently disagree with it and every real-browser WS upgrade would
+	// be rejected — a bug that went unnoticed for a while precisely because
+	// websocket.Dial here, like most Go WS clients, doesn't set Origin
+	// unless told to, and coder/websocket's origin check is a no-op when
+	// Origin is absent.
+	header.Set("Origin", ts.URL)
 	conn, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{HTTPHeader: header})
 	if err != nil {
 		t.Fatalf("websocket.Dial through the hub's real router: %v", err)
