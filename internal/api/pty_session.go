@@ -79,12 +79,43 @@ func systemdRunArgs(env map[string]string, argv ...string) []string {
 // no sandbox to escape from in the first place, and forcing every
 // terminal/update session through systemd-run there would just break
 // something that currently works for no benefit.
+//
+// Also requires systemdControlSocket: a real, observed failure mode is a
+// host that runs systemd as PID 1 (so INVOCATION_ID is set) but never
+// installed or started dbus — some minimal cloud VPS images do this.
+// systemd-run itself still gets exec'd there, but immediately fails with
+// "Failed to connect to bus: No such file or directory" printed as the
+// *terminal's own output*, not a clean API error — from inside the PTY it
+// just started, nothing here catches or explains it. Checking first lets
+// unrestrictedCommand fall back to the plain (still unit-sandboxed) shell
+// instead, which at least works.
 func usingSystemdSandbox() bool {
 	if os.Getenv("INVOCATION_ID") == "" {
 		return false
 	}
-	_, err := exec.LookPath("systemd-run")
-	return err == nil
+	if _, err := exec.LookPath("systemd-run"); err != nil {
+		return false
+	}
+	return systemdControlSocket()
+}
+
+// systemdControlSocketPaths are the sockets that make systemd-run able to
+// reach the manager — a var, not a const, so tests can point it at a temp
+// directory instead of needing root access to the real /run paths.
+// /run/systemd/private lets systemd-run talk to PID 1 directly, no
+// dbus-daemon involved at all — systemd's own designed fallback for
+// exactly this reason (early boot, minimal containers); /run/dbus/
+// system_bus_socket is the classic D-Bus route, relevant only on setups
+// where the direct socket isn't exposed.
+var systemdControlSocketPaths = []string{"/run/systemd/private", "/run/dbus/system_bus_socket"}
+
+func systemdControlSocket() bool {
+	for _, p := range systemdControlSocketPaths {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // unrestrictedBackgroundCommand is unrestrictedCommand's non-interactive
