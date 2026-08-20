@@ -95,6 +95,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      # Нужен именно чекаут, а не голый gh: --generate-notes и определение
+      # предыдущего тега для диапазона коммитов gh release create делает,
+      # шеллясь в git — без .git в рабочей директории он падает с "not a
+      # git repository", даже с валидным GH_TOKEN.
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           pattern: nkt-linux-*
