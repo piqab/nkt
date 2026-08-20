@@ -42,15 +42,25 @@ func (m *Manager) tunnelReinstallFallback(host store.Host) bool {
 // prepareTunnelEnv applies before ever trusting a browser request's own Host
 // header as an automatic stand-in for an unset NKT_HUB_PUBLIC_ADDR. Without
 // it, an operator reaching the hub through an SSH tunnel or some other
-// loopback/private hop would silently bake that unreachable-from-anywhere-
-// else address into every host's tunnel config instead of just leaving the
+// loopback hop would silently bake that unreachable-from-anywhere-else
+// address into every host's tunnel config instead of just leaving the
 // feature off the way an empty NKT_HUB_PUBLIC_ADDR always has.
 //
-// A hostname that isn't a literal IP is trusted as-is — there is no way to
-// tell a real public DNS name from an internal-only one just by its shape,
-// and rejecting it would bring back the "always needs manual setup"
-// problem this auto-detection exists to avoid for the common case
-// (an operator opening the hub directly at its real address).
+// Deliberately narrow: only loopback (127.0.0.0/8, ::1), "unspecified"
+// (0.0.0.0, ::) and link-local (169.254.0.0/16, fe80::/10 — a self-assigned
+// fallback address that isn't usable without an explicit interface/zone
+// anyway) are rejected — the cases that can *never* mean anything to a
+// different machine, no matter the topology. A private RFC1918/ULA
+// address (10.x, 172.16-31.x, 192.168.x, fc00::/7) is NOT rejected: hub and
+// managed host sitting on the same LAN/VPC — a common real deployment, not
+// an edge case — makes that address exactly what the host needs to dial.
+// Rejecting it would silently disable the whole feature for that entirely
+// legitimate setup, with nothing in the UI to explain why. A hostname that
+// isn't a literal IP is trusted as-is too — there is no way to tell a real
+// public DNS name from an internal-only one just by its shape, and
+// rejecting it would bring back the "always needs manual setup" problem
+// this auto-detection exists to avoid for the common case (an operator
+// opening the hub directly at its real address).
 func looksRoutableFromHost(hostport string) bool {
 	if hostport == "" {
 		return false
@@ -66,7 +76,35 @@ func looksRoutableFromHost(hostport string) bool {
 	if ip == nil {
 		return true
 	}
-	return !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() && !ip.IsUnspecified()
+	return !ip.IsLoopback() && !ip.IsUnspecified() && !ip.IsLinkLocalUnicast()
+}
+
+// hubAddrLooksUnreachableFrom is prepareTunnelEnv's best-effort sanity
+// check for one specific, easy-to-fall-into topology: the hub is only
+// reachable at a private/loopback address (its own LAN/VPC — or, if
+// looksRoutableFromHost let it through, a genuinely local NKT_HUB_PUBLIC_ADDR
+// someone set by hand) while the managed host sits on what looks like a
+// public IP out on the internet. In that shape, hubAddr — however it was
+// obtained — can never actually work: the host has no network path to a
+// private address that isn't its own. Best-effort only, both directions: a
+// false negative (hub and host both private but on genuinely different,
+// VPN-bridged networks) is possible, and so is a false positive (some
+// carrier-grade-NAT or unusual routing setups blur "public-looking"). Used
+// only to warn, never to block — a wrong guess here must never be more
+// disruptive than the silent failure it exists to replace.
+func hubAddrLooksUnreachableFrom(hubHostport, hostAddr string) bool {
+	hubHost := hubHostport
+	if h, _, err := net.SplitHostPort(hubHostport); err == nil {
+		hubHost = h
+	}
+	hubIP := net.ParseIP(hubHost)
+	hostIP := net.ParseIP(hostAddr)
+	if hubIP == nil || hostIP == nil {
+		return false
+	}
+	hubIsLocal := hubIP.IsLoopback() || hubIP.IsPrivate() || hubIP.IsLinkLocalUnicast()
+	hostIsLocal := hostIP.IsLoopback() || hostIP.IsPrivate() || hostIP.IsLinkLocalUnicast()
+	return hubIsLocal && !hostIsLocal
 }
 
 // dynamicRelayDial returns a dialFunc that re-resolves hostID's current
@@ -200,9 +238,12 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 	if err != nil {
 		return fail(err)
 	}
-	tun, err := m.prepareTunnelEnv(ctx, hostID, host, requestHubAddr)
+	tun, tunWarn, err := m.prepareTunnelEnv(ctx, hostID, host, requestHubAddr)
 	if err != nil {
 		return fail(err)
+	}
+	if tunWarn != "" {
+		report(tunWarn)
 	}
 	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, tun)
 
