@@ -186,8 +186,38 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 	}
 
 	report("Проверяю учётную запись администратора…")
-	if _, err := bootstrapLogin(ctx, dial, adminUser, adminPassword); err != nil {
-		return fail(fmt.Errorf("вход администратора через резервный канал не удался: %w", err))
+	// waitForHealth just above only proves the freshly restarted host's
+	// /health responds — it says nothing about whether the very next
+	// request over the very same (or a moments-later-replaced) relay
+	// session lands cleanly too. In practice it sometimes doesn't: right
+	// after systemctl restart, the tunnel session itself can flap once
+	// more (the old process's session closing a beat after health already
+	// answered, or the new one still settling), and a login attempt that
+	// lands in that gap fails with a bare connection error (EOF) that has
+	// nothing to do with the credentials themselves. A single flaky
+	// attempt here must not fail the whole job when the update itself
+	// (the part that actually matters) already succeeded — a few quick
+	// retries ride out exactly that window, the same way waitForHealth's
+	// own loop already does for the health check right before this.
+	const loginAttempts = 4
+	var loginErr error
+	for i := 0; i < loginAttempts; i++ {
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return fail(fmt.Errorf("вход администратора через резервный канал не удался: %w", loginErr))
+			case <-time.After(time.Second):
+			}
+		}
+		if _, err := bootstrapLogin(ctx, dial, adminUser, adminPassword); err != nil {
+			loginErr = err
+			continue
+		}
+		loginErr = nil
+		break
+	}
+	if loginErr != nil {
+		return fail(fmt.Errorf("вход администратора через резервный канал не удался: %w", loginErr))
 	}
 
 	if err := m.db.SetHostVersion(ctx, hostID, m.version); err != nil {
