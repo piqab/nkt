@@ -155,7 +155,22 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 // plain HTTP on loopback — never through a browser directly. Requiring HTTPS
 // there (the default) would make the remote nkt refuse to set the very
 // session cookie the hub needs to capture in bootstrapLogin.
-func renderEnv(adminUser, adminPassword string, terminalEnabled bool) string {
+// tunnelEnvParams carries the reverse-tunnel fallback fields renderEnv
+// writes into a host's env when the feature is actually configured for it
+// — see Manager.prepareTunnelEnv, which builds this. The zero value
+// (Enabled: false) means "write nothing", same as if the feature didn't
+// exist for this host.
+type tunnelEnvParams struct {
+	Enabled bool
+	HubAddr string
+	HostID  int64
+	Token   string
+	// PinnedCertSHA256 is empty when the hub isn't using a self-signed
+	// certificate — see Manager.hubCertFingerprint.
+	PinnedCertSHA256 string
+}
+
+func renderEnv(adminUser, adminPassword string, terminalEnabled bool, tun tunnelEnvParams) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "NKT_MODE=local\n")
 	fmt.Fprintf(&b, "NKT_DATA_DIR=%s\n", remoteDataDir)
@@ -164,6 +179,14 @@ func renderEnv(adminUser, adminPassword string, terminalEnabled bool) string {
 	fmt.Fprintf(&b, "NKT_BOOTSTRAP_ADMIN_PASSWORD=%s\n", adminPassword)
 	fmt.Fprintf(&b, "NKT_COOKIE_SECURE=false\n")
 	fmt.Fprintf(&b, "NKT_TERMINAL_ENABLED=%t\n", terminalEnabled)
+	if tun.Enabled {
+		fmt.Fprintf(&b, "NKT_HUB_TUNNEL_ADDR=%s\n", tun.HubAddr)
+		fmt.Fprintf(&b, "NKT_HUB_TUNNEL_HOST_ID=%d\n", tun.HostID)
+		fmt.Fprintf(&b, "NKT_HUB_TUNNEL_TOKEN=%s\n", tun.Token)
+		if tun.PinnedCertSHA256 != "" {
+			fmt.Fprintf(&b, "NKT_HUB_TUNNEL_CERT_SHA256=%s\n", tun.PinnedCertSHA256)
+		}
+	}
 	return b.String()
 }
 

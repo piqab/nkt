@@ -102,28 +102,29 @@ func (m *Manager) pollOnce(ctx context.Context) {
 	m.pruneOverview(live)
 }
 
-// pollHost refreshes one host's cached overview. A connection-level failure
-// (dialing, logging in, or the HTTP round-trip itself) evicts the pooled
-// client/session — mirroring Proxy's ErrorHandler — so the next tick
-// reconnects from scratch instead of retrying a connection already known
-// bad. A non-2xx response or undecodable body leaves the connection alone:
-// nothing about the tunnel or session was actually broken, there is just
-// nothing to report this cycle. Either way, previously cached findings are
-// never cleared on failure — a stale-but-labeled count is more useful in the
-// UI than one that silently drops to zero on a single blip.
+// pollHost refreshes one host's cached overview — over SSH, or the
+// reverse-tunnel fallback when SSH is unreachable (see dialerFor), same as
+// Proxy. A connection-level failure (dialing, logging in, or the HTTP
+// round-trip itself) evicts whichever pooled client/session dialerFor used
+// — mirroring Proxy's ErrorHandler — so the next tick reconnects from
+// scratch instead of retrying a connection already known bad. A non-2xx
+// response or undecodable body leaves the connection alone: nothing about
+// the tunnel or session was actually broken, there is just nothing to
+// report this cycle. Either way, previously cached findings are never
+// cleared on failure — a stale-but-labeled count is more useful in the UI
+// than one that silently drops to zero on a single blip.
 func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	ctx, cancel := context.WithTimeout(ctx, pollHostTimeout)
 	defer cancel()
 
-	client, err := m.clientFor(ctx, hostID)
+	dial, onFail, err := m.dialerFor(ctx, hostID)
 	if err != nil {
 		m.recordUnreachable(hostID, err)
 		return
 	}
-	cookie, err := m.cookieFor(ctx, hostID, client)
+	cookie, err := m.cookieFor(ctx, hostID, dial)
 	if err != nil {
-		m.dropClient(hostID)
-		m.dropSession(hostID)
+		onFail()
 		m.recordUnreachable(hostID, err)
 		return
 	}
@@ -135,10 +136,9 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
 
-	resp, err := tunnelHTTPClient(client).Do(req)
+	resp, err := tunnelHTTPClient(dial).Do(req)
 	if err != nil {
-		m.dropClient(hostID)
-		m.dropSession(hostID)
+		onFail()
 		m.recordUnreachable(hostID, err)
 		return
 	}

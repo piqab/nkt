@@ -25,6 +25,7 @@ require (
 	github.com/google/renameio v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/haproxytech/go-logger v1.1.0 // indirect
+	github.com/hashicorp/yamux v0.1.2 // indirect
 	github.com/jstemmer/go-junit-report v1.0.0 // indirect
 	github.com/kr/fs v0.1.0 // indirect
 	github.com/kr/text v0.2.0 // indirect

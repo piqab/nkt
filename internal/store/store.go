@@ -142,6 +142,8 @@ CREATE TABLE IF NOT EXISTS hosts (
                                                 -- used to re-login when a proxied session expires
     sudo_status        TEXT NOT NULL DEFAULT '' CHECK (sudo_status IN ('','root','nopasswd','password_required')),
     terminal_enabled   INTEGER NOT NULL DEFAULT 0, -- passed through as NKT_TERMINAL_ENABLED on install/update
+    tunnel_enabled     INTEGER NOT NULL DEFAULT 0, -- reverse-tunnel fallback for when SSH is unreachable, see internal/tunnel
+    tunnel_token_hash  BLOB,                       -- SHA-256 of the per-host tunnel token; the raw token is never stored here
     error_msg          TEXT NOT NULL DEFAULT '',
     created_at         TEXT NOT NULL,
     last_seen_at       TEXT
@@ -163,6 +165,8 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"hosts", "sudo_status", `ALTER TABLE hosts ADD COLUMN sudo_status TEXT NOT NULL DEFAULT ''
 		CHECK (sudo_status IN ('','root','nopasswd','password_required'))`},
 	{"hosts", "terminal_enabled", `ALTER TABLE hosts ADD COLUMN terminal_enabled INTEGER NOT NULL DEFAULT 0`},
+	{"hosts", "tunnel_enabled", `ALTER TABLE hosts ADD COLUMN tunnel_enabled INTEGER NOT NULL DEFAULT 0`},
+	{"hosts", "tunnel_token_hash", `ALTER TABLE hosts ADD COLUMN tunnel_token_hash BLOB`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

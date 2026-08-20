@@ -109,8 +109,9 @@ func (m *Manager) evictIdleConns(ctx context.Context) {
 
 // cookieFor returns a session cookie for hostID's own nkt, logging in as its
 // bootstrap admin (with the credentials StartInstall saved) whenever no
-// cached one is fresh enough.
-func (m *Manager) cookieFor(ctx context.Context, hostID int64, client *ssh.Client) (string, error) {
+// cached one is fresh enough. dial reaches the host over whichever channel
+// dialerFor picked — SSH or the reverse-tunnel fallback.
+func (m *Manager) cookieFor(ctx context.Context, hostID int64, dial dialFunc) (string, error) {
 	m.sessionMu.Lock()
 	if sc, ok := m.sessions[hostID]; ok && time.Now().Before(sc.expires) {
 		m.sessionMu.Unlock()
@@ -130,7 +131,7 @@ func (m *Manager) cookieFor(ctx context.Context, hostID int64, client *ssh.Clien
 		return "", fmt.Errorf("расшифровка пароля администратора: %w", err)
 	}
 
-	cookie, err := bootstrapLogin(ctx, client, host.AdminUser, string(adminPassword))
+	cookie, err := bootstrapLogin(ctx, dial, host.AdminUser, string(adminPassword))
 	if err != nil {
 		return "", fmt.Errorf("вход на хост %q: %w", host.Name, err)
 	}
@@ -150,25 +151,46 @@ func (m *Manager) dropSession(hostID int64) {
 	m.sessionMu.Unlock()
 }
 
+// dialerFor returns a way to reach hostID's own nkt API: SSH first — the
+// primary, fully-capable path, unchanged — falling back to the
+// reverse-tunnel channel (internal/tunnel, see relay.go) only when the SSH
+// dial itself fails and a live tunnel session happens to be registered for
+// this host. Install/update/SFTP/sudo commands never go through this —
+// they need real SSH regardless and call clientFor/dialSSH directly.
+//
+// The returned onFail must be called if something reached via dial later
+// fails too (a stale pooled SSH conn dying mid-use, say) — always safe to
+// call even when there's nothing to drop.
+func (m *Manager) dialerFor(ctx context.Context, hostID int64) (dial dialFunc, onFail func(), err error) {
+	client, sshErr := m.clientFor(ctx, hostID)
+	if sshErr == nil {
+		return client.Dial, func() { m.dropClient(hostID); m.dropSession(hostID) }, nil
+	}
+	if relay, ok := m.relayDial(hostID); ok {
+		return relay, func() {}, nil
+	}
+	return nil, nil, sshErr
+}
+
 // Proxy returns a handler that forwards every request it receives to
-// hostID's own nkt API through the SSH tunnel, injecting that host's own
-// session cookie — the browser only ever authenticates to the hub itself,
-// never to each managed host individually. The caller is expected to have
-// already rewritten the request path to what the remote's own API expects
-// (see server.go's proxyHost).
+// hostID's own nkt API — over SSH, or the reverse-tunnel fallback when SSH
+// is unreachable (see dialerFor) — injecting that host's own session
+// cookie either way: the browser only ever authenticates to the hub
+// itself, never to each managed host individually. The caller is expected
+// to have already rewritten the request path to what the remote's own API
+// expects (see server.go's proxyHost).
 func (m *Manager) Proxy(hostID int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		client, err := m.clientFor(ctx, hostID)
+		dial, onFail, err := m.dialerFor(ctx, hostID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
-		cookie, err := m.cookieFor(ctx, hostID, client)
+		cookie, err := m.cookieFor(ctx, hostID, dial)
 		if err != nil {
-			m.dropClient(hostID)
-			m.dropSession(hostID)
+			onFail()
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
@@ -192,12 +214,11 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 			},
 			Transport: &http.Transport{
 				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-					return client.Dial("tcp", remoteAPIAddr)
+					return dial("tcp", remoteAPIAddr)
 				},
 			},
 			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
-				m.dropClient(hostID)
-				m.dropSession(hostID)
+				onFail()
 				http.Error(w, "хост недоступен: "+err.Error(), http.StatusBadGateway)
 			},
 		}
@@ -205,10 +226,11 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 	})
 }
 
-// CloseHost drops any pooled connection/session/cached overview for a host
-// — called when a host is removed from the registry.
+// CloseHost drops any pooled connection/session/cached overview/tunnel
+// session for a host — called when a host is removed from the registry.
 func (m *Manager) CloseHost(hostID int64) {
 	m.dropClient(hostID)
 	m.dropSession(hostID)
 	m.dropOverview(hostID)
+	m.dropRelayAll(hostID)
 }

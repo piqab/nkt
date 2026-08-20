@@ -193,10 +193,10 @@ func TestResetRemoteAdminPasswordSyncsRealNkt(t *testing.T) {
 	}
 	defer client.Close()
 
-	if _, err := bootstrapLogin(ctx, client, "admin", oldPassword); err != nil {
+	if _, err := bootstrapLogin(ctx, client.Dial, "admin", oldPassword); err != nil {
 		t.Fatalf("login with the password the remote was actually bootstrapped with should succeed: %v", err)
 	}
-	if _, err := bootstrapLogin(ctx, client, "admin", newPassword); err == nil {
+	if _, err := bootstrapLogin(ctx, client.Dial, "admin", newPassword); err == nil {
 		t.Fatal("login with a password the remote was never given should fail")
 	}
 
@@ -204,10 +204,10 @@ func TestResetRemoteAdminPasswordSyncsRealNkt(t *testing.T) {
 		t.Fatalf("resetRemoteAdminPassword: %v", err)
 	}
 
-	if _, err := bootstrapLogin(ctx, client, "admin", newPassword); err != nil {
+	if _, err := bootstrapLogin(ctx, client.Dial, "admin", newPassword); err != nil {
 		t.Fatalf("login with the new password should succeed after resetRemoteAdminPassword: %v", err)
 	}
-	if _, err := bootstrapLogin(ctx, client, "admin", oldPassword); err == nil {
+	if _, err := bootstrapLogin(ctx, client.Dial, "admin", oldPassword); err == nil {
 		t.Fatal("the old password should no longer work after the reset")
 	}
 }

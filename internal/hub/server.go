@@ -19,6 +19,7 @@ import (
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/store"
+	"github.com/althq/netknownsthat/internal/tunnel"
 )
 
 // Server is the hub's HTTP entry point: its own auth/session handling (via
@@ -77,74 +78,87 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(s.requestLogger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(2 * time.Minute))
 	r.Use(securityHeaders)
 
 	r.Route("/api", func(r chi.Router) {
-		r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
-			writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "mode": string(s.cfg.Mode)})
-		})
-		r.Post("/auth/login", s.handleLogin)
+		// The reverse-tunnel fallback channel (internal/tunnel) is a
+		// standing connection a managed host holds open indefinitely —
+		// registered here, outside the 2-minute request Timeout every
+		// route below gets, for the same reason internal/api/server.go
+		// carves its own terminal/updates WebSocket routes out of an
+		// equivalent timeout. Outside RequireAuth too: the connecting
+		// host authenticates itself with a per-host token (see
+		// handleTunnel), never a browser session cookie.
+		r.HandleFunc(strings.TrimPrefix(tunnel.Path, "/api"), s.handleTunnel)
 
 		r.Group(func(r chi.Router) {
-			r.Use(s.auth.RequireAuth)
+			r.Use(middleware.Timeout(2 * time.Minute))
 
-			r.Get("/auth/me", s.handleMe)
-			r.Post("/auth/logout", s.handleLogout)
-			r.Post("/auth/password", s.handleChangePassword)
-
-			r.Get("/hub/hosts", s.handleListHosts)
-			r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
-			r.Get("/hub/hosts/{id}/install/latest", s.handleLatestInstallJob)
-			r.Get("/hub/hosts/{id}/install/{job}", s.handleInstallJobStatus)
-
-			// "localhost" (internal/hub/handlers.go's synthetic entry
-			// prepended in handleListHosts) needs no RequireAdmin wrapper
-			// the way /hosts/{id}/* below does: that wrapper exists
-			// because a real managed host is always reached as *that
-			// host's own* bootstrap-admin cookie regardless of the hub
-			// user's actual role (Manager.cookieFor), so hub-level RBAC
-			// is the only place a hub "viewer" can be stopped from
-			// getting de-facto admin on a connected host. The embedded
-			// local api.Server has no such blind spot — it shares this
-			// same auth.Service/session, so its own RequireAuth/
-			// RequireAdmin middleware already sees the real user and
-			// role directly, the same as a plain single-host nkt install.
-			r.HandleFunc("/hosts/local/*", s.proxyLocal)
+			r.Get("/health", func(w http.ResponseWriter, _ *http.Request) {
+				writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "mode": string(s.cfg.Mode)})
+			})
+			r.Post("/auth/login", s.handleLogin)
 
 			r.Group(func(r chi.Router) {
-				r.Use(s.auth.RequireAdmin)
+				r.Use(s.auth.RequireAuth)
 
-				r.Post("/hub/hosts", s.handleAddHost)
-				r.Patch("/hub/hosts/{id}", s.handleUpdateHost)
-				r.Delete("/hub/hosts/{id}", s.handleDeleteHost)
-				r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
-				r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)
-				r.Post("/hub/hosts/{id}/sudo/remove", s.handleRemoveSudoAccess)
-				r.Post("/hub/hosts/{id}/stop", s.handleStopHost)
-				r.Post("/hub/hosts/{id}/start", s.handleStartHost)
-				r.Get("/hub/export", s.handleExportHosts)
-				r.Post("/hub/import", s.handleImportHosts)
+				r.Get("/auth/me", s.handleMe)
+				r.Post("/auth/logout", s.handleLogout)
+				r.Post("/auth/password", s.handleChangePassword)
 
-				// Every other host-scoped call — reads and mutations alike —
-				// crosses the SSH tunnel to that host's own nkt API,
-				// authenticated there as *that host's* saved bootstrap-admin
-				// account (see Manager.cookieFor), never as whoever is
-				// actually sitting in the browser. A host's own
-				// RequireAuth/RequireAdmin therefore always sees "admin",
-				// regardless of the hub account's real role — so gating this
-				// on RequireAdmin here, rather than trusting the host to
-				// re-derive it, is the only place a hub "viewer" account's
-				// restriction can actually be enforced. Without this, a
-				// viewer — who cannot add/install/remove a host — could
-				// still open any already-connected one and get full admin
-				// control over it.
-				r.HandleFunc("/hosts/{id}/*", s.proxyHost)
+				r.Get("/hub/hosts", s.handleListHosts)
+				r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
+				r.Get("/hub/hosts/{id}/install/latest", s.handleLatestInstallJob)
+				r.Get("/hub/hosts/{id}/install/{job}", s.handleInstallJobStatus)
+
+				// "localhost" (internal/hub/handlers.go's synthetic entry
+				// prepended in handleListHosts) needs no RequireAdmin wrapper
+				// the way /hosts/{id}/* below does: that wrapper exists
+				// because a real managed host is always reached as *that
+				// host's own* bootstrap-admin cookie regardless of the hub
+				// user's actual role (Manager.cookieFor), so hub-level RBAC
+				// is the only place a hub "viewer" can be stopped from
+				// getting de-facto admin on a connected host. The embedded
+				// local api.Server has no such blind spot — it shares this
+				// same auth.Service/session, so its own RequireAuth/
+				// RequireAdmin middleware already sees the real user and
+				// role directly, the same as a plain single-host nkt install.
+				r.HandleFunc("/hosts/local/*", s.proxyLocal)
+
+				r.Group(func(r chi.Router) {
+					r.Use(s.auth.RequireAdmin)
+
+					r.Post("/hub/hosts", s.handleAddHost)
+					r.Patch("/hub/hosts/{id}", s.handleUpdateHost)
+					r.Delete("/hub/hosts/{id}", s.handleDeleteHost)
+					r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
+					r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)
+					r.Post("/hub/hosts/{id}/sudo/remove", s.handleRemoveSudoAccess)
+					r.Post("/hub/hosts/{id}/stop", s.handleStopHost)
+					r.Post("/hub/hosts/{id}/start", s.handleStartHost)
+					r.Get("/hub/export", s.handleExportHosts)
+					r.Post("/hub/import", s.handleImportHosts)
+
+					// Every other host-scoped call — reads and mutations alike —
+					// crosses the SSH tunnel to that host's own nkt API,
+					// authenticated there as *that host's* saved bootstrap-admin
+					// account (see Manager.cookieFor), never as whoever is
+					// actually sitting in the browser. A host's own
+					// RequireAuth/RequireAdmin therefore always sees "admin",
+					// regardless of the hub account's real role — so gating this
+					// on RequireAdmin here, rather than trusting the host to
+					// re-derive it, is the only place a hub "viewer" account's
+					// restriction can actually be enforced. Without this, a
+					// viewer — who cannot add/install/remove a host — could
+					// still open any already-connected one and get full admin
+					// control over it.
+					r.HandleFunc("/hosts/{id}/*", s.proxyHost)
+				})
 			})
-		})
 
-		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-			writeError(w, http.StatusNotFound, "Неизвестный метод API: "+r.URL.Path)
+			r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+				writeError(w, http.StatusNotFound, "Неизвестный метод API: "+r.URL.Path)
+			})
 		})
 	})
 
