@@ -1,6 +1,7 @@
 package api
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -25,6 +26,92 @@ func TestUsingSystemdSandbox(t *testing.T) {
 		t.Setenv("PATH", t.TempDir()) // empty dir: LookPath("systemd-run") must fail
 		if usingSystemdSandbox() {
 			t.Error("usingSystemdSandbox() = true with systemd-run absent from PATH")
+		}
+	})
+
+	// A real observed failure mode: systemd as PID 1 (INVOCATION_ID set)
+	// and systemd-run on PATH, but no dbus ever installed/started — the
+	// exact combination that used to make it into systemd-run's own
+	// "Failed to connect to bus" error inside the terminal instead of a
+	// clean fallback.
+	t.Run("false with INVOCATION_ID and systemd-run on PATH but no control socket", func(t *testing.T) {
+		t.Setenv("INVOCATION_ID", "deadbeef")
+		withFakeSystemdRunOnPath(t)
+		withSystemdControlSocketPaths(t, t.TempDir()+"/private", t.TempDir()+"/system_bus_socket")
+		if usingSystemdSandbox() {
+			t.Error("usingSystemdSandbox() = true with neither control socket present")
+		}
+	})
+
+	t.Run("true with INVOCATION_ID, systemd-run on PATH, and a control socket present", func(t *testing.T) {
+		t.Setenv("INVOCATION_ID", "deadbeef")
+		withFakeSystemdRunOnPath(t)
+		dir := t.TempDir()
+		socket := dir + "/private"
+		if err := os.WriteFile(socket, nil, 0o600); err != nil {
+			t.Fatalf("create fake socket file: %v", err)
+		}
+		withSystemdControlSocketPaths(t, socket, dir+"/system_bus_socket")
+		if !usingSystemdSandbox() {
+			t.Error("usingSystemdSandbox() = false with a control socket present")
+		}
+	})
+}
+
+// withFakeSystemdRunOnPath points PATH at a directory containing an
+// executable named systemd-run, so exec.LookPath("systemd-run") succeeds
+// without needing the real thing installed.
+func withFakeSystemdRunOnPath(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	path := dir + "/systemd-run"
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("create fake systemd-run: %v", err)
+	}
+	t.Setenv("PATH", dir)
+}
+
+// withSystemdControlSocketPaths swaps systemdControlSocketPaths for the
+// duration of the test and restores it afterward.
+func withSystemdControlSocketPaths(t *testing.T, paths ...string) {
+	t.Helper()
+	orig := systemdControlSocketPaths
+	systemdControlSocketPaths = paths
+	t.Cleanup(func() { systemdControlSocketPaths = orig })
+}
+
+// TestSystemdControlSocket is a narrower, direct check of the fallback
+// systemdControlSocket applies: present at either candidate path is enough.
+func TestSystemdControlSocket(t *testing.T) {
+	t.Run("neither path exists", func(t *testing.T) {
+		dir := t.TempDir()
+		withSystemdControlSocketPaths(t, dir+"/private", dir+"/system_bus_socket")
+		if systemdControlSocket() {
+			t.Error("systemdControlSocket() = true with neither path present")
+		}
+	})
+
+	t.Run("only the direct systemd socket exists", func(t *testing.T) {
+		dir := t.TempDir()
+		direct := dir + "/private"
+		if err := os.WriteFile(direct, nil, 0o600); err != nil {
+			t.Fatalf("create fake socket file: %v", err)
+		}
+		withSystemdControlSocketPaths(t, direct, dir+"/system_bus_socket")
+		if !systemdControlSocket() {
+			t.Error("systemdControlSocket() = false with the direct socket present")
+		}
+	})
+
+	t.Run("only the classic dbus socket exists", func(t *testing.T) {
+		dir := t.TempDir()
+		classic := dir + "/system_bus_socket"
+		if err := os.WriteFile(classic, nil, 0o600); err != nil {
+			t.Fatalf("create fake socket file: %v", err)
+		}
+		withSystemdControlSocketPaths(t, dir+"/private", classic)
+		if !systemdControlSocket() {
+			t.Error("systemdControlSocket() = false with the classic dbus socket present")
 		}
 	})
 }
