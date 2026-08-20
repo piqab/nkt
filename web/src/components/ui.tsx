@@ -86,7 +86,7 @@ export function Banner({
   icon,
   children,
 }: {
-  kind?: 'info' | 'warn' | 'error'
+  kind?: 'info' | 'warn' | 'error' | 'success'
   icon?: string
   children: ReactNode
 }) {

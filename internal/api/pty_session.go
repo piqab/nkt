@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -112,11 +113,30 @@ func usingSystemdSandbox() bool {
 // where the direct socket isn't exposed.
 var systemdControlSocketPaths = []string{"/run/systemd/private", "/run/dbus/system_bus_socket"}
 
+// systemdControlSocketDialTimeout bounds each connect attempt below — local
+// Unix socket connects either succeed near-instantly (something is actually
+// listening) or fail immediately (ECONNREFUSED/ENOENT), so this is just a
+// backstop against an unexpected hang, not a real network-latency budget.
+const systemdControlSocketDialTimeout = 200 * time.Millisecond
+
+// systemdControlSocket reports whether at least one of
+// systemdControlSocketPaths has something actually listening on it — an
+// explicit connect, not just os.Stat'ing the path. A path can exist without
+// anyone home behind it: systemctl stop dbus, for instance, can leave a
+// stale socket file if dbus.socket's own activation unit was masked or
+// never enabled, and a plain Stat would have kept reporting D-Bus
+// "available" from that leftover file alone. Connecting (then immediately
+// closing — this never speaks the D-Bus or systemd wire protocol, the TCP/
+// Unix-level accept alone is the signal) catches that stale-file case that
+// pure existence checks cannot.
 func systemdControlSocket() bool {
 	for _, p := range systemdControlSocketPaths {
-		if _, err := os.Stat(p); err == nil {
-			return true
+		conn, err := net.DialTimeout("unix", p, systemdControlSocketDialTimeout)
+		if err != nil {
+			continue
 		}
+		_ = conn.Close()
+		return true
 	}
 	return false
 }

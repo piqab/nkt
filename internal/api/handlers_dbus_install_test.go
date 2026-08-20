@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -18,10 +17,6 @@ func decodeJSONBody(t *testing.T, rec *httptest.ResponseRecorder, v any) {
 	if err := json.NewDecoder(rec.Body).Decode(v); err != nil {
 		t.Fatalf("decode response body: %v (body: %s)", err, rec.Body.String())
 	}
-}
-
-func touchFile(path string) error {
-	return os.WriteFile(path, nil, 0o600)
 }
 
 // TestHandleDbusStatus covers the three states the "install dbus" button
@@ -89,9 +84,7 @@ func TestHandleDbusStatus(t *testing.T) {
 		t.Setenv("INVOCATION_ID", "deadbeef")
 		dir := t.TempDir()
 		socket := dir + "/private"
-		if err := touchFile(socket); err != nil {
-			t.Fatalf("create fake socket file: %v", err)
-		}
+		listenUnixSocket(t, socket)
 		withSystemdControlSocketPaths(t, socket, dir+"/system_bus_socket")
 		s := &Server{cfg: &config.Config{}}
 
@@ -148,9 +141,7 @@ func TestHandleDbusInstallWSGates(t *testing.T) {
 
 		dir := t.TempDir()
 		socket := dir + "/private"
-		if err := touchFile(socket); err != nil {
-			t.Fatalf("create fake socket file: %v", err)
-		}
+		listenUnixSocket(t, socket)
 		withSystemdControlSocketPaths(t, socket, dir+"/system_bus_socket")
 
 		rec := httptest.NewRecorder()
