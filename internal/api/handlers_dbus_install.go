@@ -24,7 +24,13 @@ import (
 // it knows would just fail.
 func (s *Server) handleDbusStatus(w http.ResponseWriter, r *http.Request) {
 	sandboxed := os.Getenv("INVOCATION_ID") != ""
-	needed := sandboxed && !systemdControlSocket()
+	// systemdRunReachable actually invokes systemd-run rather than
+	// inferring reachability from which control-socket paths merely
+	// accept a raw connect — see its own doc comment (pty_session.go) for
+	// why that distinction matters: a stale-but-connectable socket used to
+	// read as "available" here right up until the terminal itself failed
+	// with "Failed to connect to bus".
+	needed := sandboxed && !systemdRunReachable()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"needed":      needed,
 		"can_install": needed && needsNsenterFallback(),
@@ -47,7 +53,7 @@ func (s *Server) handleDbusInstallWS(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "apt-get не найден — установка пакетов поддерживается только на Debian/Ubuntu")
 		return
 	}
-	if systemdControlSocket() {
+	if systemdRunReachable() {
 		writeError(w, http.StatusConflict, "D-Bus уже доступен")
 		return
 	}

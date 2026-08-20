@@ -84,15 +84,17 @@ func systemdRunArgs(env map[string]string, argv ...string) []string {
 // terminal/update session through systemd-run there would just break
 // something that currently works for no benefit.
 //
-// Also requires systemdControlSocket: a real, observed failure mode is a
-// host that runs systemd as PID 1 (so INVOCATION_ID is set) but never
-// installed or started dbus — some minimal cloud VPS images do this.
-// systemd-run itself still gets exec'd there, but immediately fails with
-// "Failed to connect to bus: No such file or directory" printed as the
-// *terminal's own output*, not a clean API error — from inside the PTY it
-// just started, nothing here catches or explains it. Checking first lets
-// unrestrictedCommand fall back to the plain (still unit-sandboxed) shell
-// instead, which at least works.
+// Also requires systemdRunReachable: a real, observed failure mode is a
+// host that runs systemd as PID 1 (so INVOCATION_ID is set) but D-Bus isn't
+// usable — either never installed (some minimal cloud VPS images do this)
+// or installed and then stopped (systemctl stop dbus, which can leave
+// /run/dbus/system_bus_socket's file behind without a live daemon behind
+// it). systemd-run itself still gets exec'd there, but immediately fails
+// with "Failed to connect to bus: ..." printed as the *terminal's own
+// output*, not a clean API error — from inside the PTY it just started,
+// nothing here catches or explains it. Checking first lets
+// unrestrictedCommand fall back to the plain (still unit-sandboxed) shell,
+// or nsenter, instead — either of which at least works.
 func usingSystemdSandbox() bool {
 	if os.Getenv("INVOCATION_ID") == "" {
 		return false
@@ -100,7 +102,7 @@ func usingSystemdSandbox() bool {
 	if _, err := exec.LookPath("systemd-run"); err != nil {
 		return false
 	}
-	return systemdControlSocket()
+	return systemdRunReachable()
 }
 
 // systemdControlSocketPaths are the sockets that make systemd-run able to
@@ -127,8 +129,10 @@ const systemdControlSocketDialTimeout = 200 * time.Millisecond
 // never enabled, and a plain Stat would have kept reporting D-Bus
 // "available" from that leftover file alone. Connecting (then immediately
 // closing — this never speaks the D-Bus or systemd wire protocol, the TCP/
-// Unix-level accept alone is the signal) catches that stale-file case that
-// pure existence checks cannot.
+// Unix-level accept alone is the signal) catches that stale-file case, but
+// only that one: used here purely as a cheap pre-filter (see
+// systemdRunReachable) to skip actually spawning systemd-run when neither
+// candidate path even accepts a raw connect.
 func systemdControlSocket() bool {
 	for _, p := range systemdControlSocketPaths {
 		conn, err := net.DialTimeout("unix", p, systemdControlSocketDialTimeout)
@@ -139,6 +143,42 @@ func systemdControlSocket() bool {
 		return true
 	}
 	return false
+}
+
+// systemdRunProbeTimeout bounds the real systemd-run invocation below —
+// generous relative to how fast "run true and wait for it to exit"
+// normally completes (well under a second), but this is the one check in
+// this file that can genuinely hang (a wedged, half-alive dbus-daemon that
+// accepts connections but never answers), so it needs its own real ceiling.
+const systemdRunProbeTimeout = 3 * time.Second
+
+// systemdRunReachable reports whether systemd-run can actually reach
+// systemd's manager well enough to run something — ground truth for
+// whether unrestrictedCommand's systemd-run escape hatch will really work,
+// rather than inferring it from which control-socket paths merely accept a
+// raw connect (see systemdControlSocket's own doc comment on why that
+// alone isn't reliable: /run/systemd/private can still dial successfully —
+// it's systemd's own PID 1 control socket, independent of dbus.service —
+// while systemd-run itself still fails to reach the bus, observed after
+// `systemctl stop dbus`). systemdControlSocket is still checked first as a
+// cheap pre-filter: if literally nothing accepts a connection on either
+// candidate path, systemd-run cannot possibly work and there is no reason
+// to actually spawn it just to confirm that.
+func systemdRunReachable() bool {
+	if !systemdControlSocket() {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), systemdRunProbeTimeout)
+	defer cancel()
+	// --wait blocks until the transient unit exits (near-instant for
+	// `true`); --collect drops the unit's own record immediately after,
+	// so this leaves nothing behind to clean up. No --pty: the failure
+	// mode this checks for (can't reach the bus at all) happens during
+	// connection setup, before PTY attachment would ever come into play,
+	// and --pty specifically needs a real controlling terminal this
+	// process — an HTTP handler goroutine — does not have.
+	cmd := exec.CommandContext(ctx, "systemd-run", "--quiet", "--wait", "--collect", "--", "true")
+	return cmd.Run() == nil
 }
 
 // needsNsenterFallback reports whether unrestrictedCommand should reach for

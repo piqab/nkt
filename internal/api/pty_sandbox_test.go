@@ -93,6 +93,20 @@ func withSystemdControlSocketPaths(t *testing.T, paths ...string) {
 	t.Cleanup(func() { systemdControlSocketPaths = orig })
 }
 
+// withFailingSystemdRunOnPath points PATH at a directory containing an
+// executable named systemd-run that always exits non-zero — stands in for
+// the real thing failing to reach the bus (e.g. "Failed to connect to bus:
+// Connection refused"), without needing an actually-broken D-Bus to test
+// against.
+func withFailingSystemdRunOnPath(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/systemd-run", []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("create failing fake systemd-run: %v", err)
+	}
+	t.Setenv("PATH", dir)
+}
+
 // TestSystemdControlSocket is a narrower, direct check of the fallback
 // systemdControlSocket applies: present at either candidate path is enough.
 func TestSystemdControlSocket(t *testing.T) {
@@ -133,6 +147,45 @@ func TestSystemdControlSocket(t *testing.T) {
 		withSystemdControlSocketPaths(t, stale, dir+"/system_bus_socket")
 		if systemdControlSocket() {
 			t.Error("systemdControlSocket() = true for a stale file with nothing listening behind it")
+		}
+	})
+}
+
+// TestSystemdRunReachable locks in the exact bug this function exists to
+// fix: a real, observed case where systemctl stop dbus left something
+// still accepting raw connections on a control-socket path (so
+// systemdControlSocket alone read "available"), while systemd-run itself
+// still failed with "Failed to connect to bus: Connection refused" —
+// visible as the terminal's own broken output, with the status badge
+// claiming everything was fine. systemdRunReachable must actually invoke
+// systemd-run and trust its real exit code over the socket check alone.
+func TestSystemdRunReachable(t *testing.T) {
+	t.Run("false when neither control socket accepts a connection", func(t *testing.T) {
+		withSystemdControlSocketPaths(t, t.TempDir()+"/private", t.TempDir()+"/system_bus_socket")
+		if systemdRunReachable() {
+			t.Error("systemdRunReachable() = true with neither control socket present")
+		}
+	})
+
+	t.Run("false when a socket accepts a connection but systemd-run itself fails", func(t *testing.T) {
+		dir := t.TempDir()
+		socket := dir + "/private"
+		listenUnixSocket(t, socket)
+		withSystemdControlSocketPaths(t, socket, dir+"/system_bus_socket")
+		withFailingSystemdRunOnPath(t)
+		if systemdRunReachable() {
+			t.Error("systemdRunReachable() = true even though the real systemd-run invocation failed — exactly the stale-socket case this exists to catch")
+		}
+	})
+
+	t.Run("true when a socket accepts a connection and systemd-run succeeds", func(t *testing.T) {
+		dir := t.TempDir()
+		socket := dir + "/private"
+		listenUnixSocket(t, socket)
+		withSystemdControlSocketPaths(t, socket, dir+"/system_bus_socket")
+		withFakeSystemdRunOnPath(t)
+		if !systemdRunReachable() {
+			t.Error("systemdRunReachable() = false with a live socket and a succeeding systemd-run")
 		}
 	})
 }
