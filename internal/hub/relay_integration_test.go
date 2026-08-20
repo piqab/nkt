@@ -226,3 +226,61 @@ func TestHandleTunnelRejectsBadAuth(t *testing.T) {
 		}
 	})
 }
+
+// TestHandleTunnelRateLimitsRepeatedWrongTokens confirms 5 wrong-token
+// attempts against a real, tunnel-configured host lock it out (429) —
+// the actual point of routing failed token checks through
+// Manager.tunnelAttempts (see handleTunnel) rather than leaving the
+// endpoint open to unlimited guessing. Also confirms attempts against an
+// UNKNOWN host id never count toward this at all (they're rejected before
+// the limiter is even consulted — see handleTunnel's own comment on why),
+// so an attacker can't use garbage ids to grow the limiter's map for free.
+func TestHandleTunnelRateLimitsRepeatedWrongTokens(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	hostID, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	if err != nil {
+		t.Fatalf("AddHost: %v", err)
+	}
+	if err := db.SetHostTunnelToken(ctx, hostID, tunnel.TokenHash("the-real-token")); err != nil {
+		t.Fatalf("SetHostTunnelToken: %v", err)
+	}
+
+	cfg := &config.Config{SessionTTL: time.Hour}
+	authSvc := auth.NewService(db, cfg)
+	srv := New(Deps{Cfg: cfg, DB: db, Auth: authSvc, Hub: m, Log: slog.New(slog.DiscardHandler)})
+
+	attempt := func(token string) int {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, tunnel.Path, nil)
+		req.Header.Set(tunnel.HeaderHostID, strconv.FormatInt(hostID, 10))
+		req.Header.Set(tunnel.HeaderToken, token)
+		srv.handleTunnel(rec, req)
+		return rec.Code
+	}
+
+	// Unknown host ids never touch the limiter, no matter how many times.
+	for i := 0; i < 10; i++ {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, tunnel.Path, nil)
+		req.Header.Set(tunnel.HeaderHostID, "999999")
+		req.Header.Set(tunnel.HeaderToken, "whatever")
+		srv.handleTunnel(rec, req)
+		if rec.Code != http.StatusUnauthorized {
+			t.Fatalf("unknown-host attempt %d: status = %d, want %d", i, rec.Code, http.StatusUnauthorized)
+		}
+	}
+
+	for i := 0; i < 5; i++ {
+		if code := attempt("wrong-token"); code != http.StatusUnauthorized {
+			t.Fatalf("wrong-token attempt %d: status = %d, want %d", i, code, http.StatusUnauthorized)
+		}
+	}
+
+	// The 6th attempt — even with the CORRECT token this time — must be
+	// locked out: the endpoint refuses before it ever compares the token.
+	if code := attempt("the-real-token"); code != http.StatusTooManyRequests {
+		t.Errorf("attempt after 5 failures (correct token this time): status = %d, want %d", code, http.StatusTooManyRequests)
+	}
+}

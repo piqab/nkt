@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/althq/netknownsthat/internal/config"
@@ -30,18 +29,12 @@ type Service struct {
 	db  *store.DB
 	cfg *config.Config
 
-	mu       sync.Mutex
-	attempts map[string]*attemptState
-}
-
-type attemptState struct {
-	count   int
-	blocked time.Time
+	attempts *AttemptLimiter
 }
 
 // NewService builds the auth service.
 func NewService(db *store.DB, cfg *config.Config) *Service {
-	return &Service{db: db, cfg: cfg, attempts: map[string]*attemptState{}}
+	return &Service{db: db, cfg: cfg, attempts: NewAttemptLimiter()}
 }
 
 // Bootstrap creates the initial admin account on an empty database and returns
@@ -74,7 +67,7 @@ func (s *Service) Bootstrap(ctx context.Context) (string, error) {
 
 // Login validates credentials and opens a session.
 func (s *Service) Login(ctx context.Context, username, password, userAgent string) (string, time.Time, store.User, error) {
-	if !s.allowAttempt(username) {
+	if !s.attempts.Allow(username) {
 		return "", time.Time{}, store.User{}, ErrTooManyAttempts
 	}
 
@@ -82,23 +75,23 @@ func (s *Service) Login(ctx context.Context, username, password, userAgent strin
 	if errors.Is(err, store.ErrNotFound) {
 		// Spend comparable time so a missing account is not distinguishable by timing.
 		_, _ = HashPassword(password)
-		s.failAttempt(username)
+		s.attempts.Fail(username)
 		return "", time.Time{}, store.User{}, ErrInvalidCredentials
 	}
 	if err != nil {
 		return "", time.Time{}, store.User{}, err
 	}
 	if user.Disabled {
-		s.failAttempt(username)
+		s.attempts.Fail(username)
 		return "", time.Time{}, store.User{}, ErrInvalidCredentials
 	}
 
 	ok, err := VerifyPassword(password, user.PasswordHash)
 	if err != nil || !ok {
-		s.failAttempt(username)
+		s.attempts.Fail(username)
 		return "", time.Time{}, store.User{}, ErrInvalidCredentials
 	}
-	s.clearAttempts(username)
+	s.attempts.Clear(username)
 
 	token, err := NewToken()
 	if err != nil {
@@ -135,40 +128,6 @@ func (s *Service) ChangePassword(ctx context.Context, username, oldPassword, new
 		return err
 	}
 	return s.db.SetPasswordHash(ctx, username, hash)
-}
-
-// --------------------------------------------------------------- login throttling
-
-func (s *Service) allowAttempt(username string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	st := s.attempts[username]
-	return st == nil || time.Now().After(st.blocked)
-}
-
-func (s *Service) failAttempt(username string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	st := s.attempts[username]
-	if st == nil {
-		st = &attemptState{}
-		s.attempts[username] = st
-	}
-	st.count++
-	if st.count >= 5 {
-		// Exponential-ish backoff capped at five minutes.
-		delay := time.Duration(1<<min(st.count-5, 5)) * 2 * time.Second
-		if delay > 5*time.Minute {
-			delay = 5 * time.Minute
-		}
-		st.blocked = time.Now().Add(delay)
-	}
-}
-
-func (s *Service) clearAttempts(username string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.attempts, username)
 }
 
 // --------------------------------------------------------------------- cookies
