@@ -1,11 +1,13 @@
 package hub
 
 import (
+	"context"
 	"net"
 	"testing"
 
 	"github.com/hashicorp/yamux"
 
+	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -143,4 +145,110 @@ func TestDynamicRelayDialSurvivesSessionSwap(t *testing.T) {
 	if _, err := dial("tcp", "127.0.0.1:0"); err != nil {
 		t.Errorf("dial() after the session was swapped out from under it: %v", err)
 	}
+}
+
+// TestLooksRoutableFromHost locks in the filter that keeps an obviously
+// wrong guess (the operator's own loopback/private hop into the hub — an
+// SSH tunnel, a VPN, docker's own bridge network) from ever being baked
+// into a host's tunnel config as a stand-in for NKT_HUB_PUBLIC_ADDR.
+func TestLooksRoutableFromHost(t *testing.T) {
+	cases := []struct {
+		hostport string
+		want     bool
+	}{
+		{"", false},
+		{"localhost:8443", false},
+		{"localhost", false},
+		{"127.0.0.1:8443", false},
+		{"127.0.0.1", false},
+		{"::1", false},
+		{"[::1]:8443", false},
+		{"10.0.0.5:8443", false},
+		{"192.168.1.20:8443", false},
+		{"169.254.1.2:8443", false},
+		{"0.0.0.0:8443", false},
+		{"203.0.113.5:8443", true},
+		{"hub.example.com:8443", true},
+		{"hub.example.com", true},
+	}
+	for _, c := range cases {
+		if got := looksRoutableFromHost(c.hostport); got != c.want {
+			t.Errorf("looksRoutableFromHost(%q) = %v, want %v", c.hostport, got, c.want)
+		}
+	}
+}
+
+// TestPrepareTunnelEnvAddrResolution covers the three-way priority
+// prepareTunnelEnv applies to pick a hub address: an explicitly configured
+// NKT_HUB_PUBLIC_ADDR always wins; without one, a routable request Host is
+// used automatically; a non-routable one (or none at all) leaves the
+// feature off exactly like an unset NKT_HUB_PUBLIC_ADDR always has.
+func TestPrepareTunnelEnvAddrResolution(t *testing.T) {
+	ctx := context.Background()
+
+	newHost := func(t *testing.T, db *store.DB) store.Host {
+		t.Helper()
+		id, err := db.CreateHost(ctx, "h", "203.0.113.9", 22, "root", store.HostAuthKey, []byte("enc"))
+		if err != nil {
+			t.Fatalf("CreateHost: %v", err)
+		}
+		host, err := db.HostByID(ctx, id)
+		if err != nil {
+			t.Fatalf("HostByID: %v", err)
+		}
+		host.TunnelEnabled = true
+		return host
+	}
+
+	t.Run("tunnel disabled: never resolves an address", func(t *testing.T) {
+		m, _ := newTestManager(t)
+		host := store.Host{ID: 1, TunnelEnabled: false}
+		tun, err := m.prepareTunnelEnv(ctx, host.ID, host, "public.example.com:8443")
+		if err != nil {
+			t.Fatalf("prepareTunnelEnv: %v", err)
+		}
+		if tun.Enabled {
+			t.Errorf("prepareTunnelEnv() = %+v, want Enabled=false with TunnelEnabled off", tun)
+		}
+	})
+
+	t.Run("explicit config always wins over the request Host", func(t *testing.T) {
+		m, db := newTestManager(t)
+		m.cfg = &config.Config{HubPublicAddr: "configured.example.com:8443"}
+		host := newHost(t, db)
+
+		tun, err := m.prepareTunnelEnv(ctx, host.ID, host, "public.example.com:8443")
+		if err != nil {
+			t.Fatalf("prepareTunnelEnv: %v", err)
+		}
+		if !tun.Enabled || tun.HubAddr != "configured.example.com:8443" {
+			t.Errorf("prepareTunnelEnv() = %+v, want HubAddr from cfg.HubPublicAddr", tun)
+		}
+	})
+
+	t.Run("no config: falls back to a routable request Host", func(t *testing.T) {
+		m, db := newTestManager(t)
+		host := newHost(t, db)
+
+		tun, err := m.prepareTunnelEnv(ctx, host.ID, host, "public.example.com:8443")
+		if err != nil {
+			t.Fatalf("prepareTunnelEnv: %v", err)
+		}
+		if !tun.Enabled || tun.HubAddr != "public.example.com:8443" {
+			t.Errorf("prepareTunnelEnv() = %+v, want HubAddr from the request Host", tun)
+		}
+	})
+
+	t.Run("no config, non-routable request Host: stays off", func(t *testing.T) {
+		m, db := newTestManager(t)
+		host := newHost(t, db)
+
+		tun, err := m.prepareTunnelEnv(ctx, host.ID, host, "127.0.0.1:8443")
+		if err != nil {
+			t.Fatalf("prepareTunnelEnv: %v", err)
+		}
+		if tun.Enabled {
+			t.Errorf("prepareTunnelEnv() = %+v, want Enabled=false with only a loopback request Host to go on", tun)
+		}
+	})
 }

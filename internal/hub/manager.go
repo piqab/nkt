@@ -309,10 +309,12 @@ func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr strin
 		}
 	}
 
-	// Connection details (possibly the credential itself) changed — drop any
+	// Connection details (possibly the credential itself) changed — drop the
 	// pooled SSH connection/session so the next request reconnects with the
-	// new ones instead of replaying stale ones.
-	m.CloseHost(hostID)
+	// new ones instead of replaying stale ones. Not CloseHost: the
+	// reverse-tunnel session (if any) is unaffected by any of this and must
+	// survive a save here — see dropSSHPool's doc comment.
+	m.dropSSHPool(hostID)
 	return nil
 }
 
@@ -347,7 +349,8 @@ func (m *Manager) UpdateHostGenerated(ctx context.Context, hostID int64, name, a
 		return "", err
 	}
 
-	m.CloseHost(hostID)
+	// Not CloseHost — see dropSSHPool's doc comment.
+	m.dropSSHPool(hostID)
 	return authorizedKeyLine, nil
 }
 
@@ -437,7 +440,15 @@ func orUnknown(s string) string {
 // finds an nkt on the target this hub didn't put there itself — set by the
 // operator explicitly confirming the overwrite after seeing
 // ForeignInstallError's detail.
-func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool) (string, error) {
+// requestHubAddr is whatever host:port the browser that clicked
+// "установить"/"обновить" is itself using to reach this hub (an HTTP
+// handler's r.Host) — used as an automatic stand-in for NKT_HUB_PUBLIC_ADDR
+// when that is not set, so the reverse-tunnel fallback works out of the box
+// in the common case (operator opens the hub directly by its real address)
+// instead of requiring manual configuration up front. See prepareTunnelEnv
+// and looksRoutableFromHost for why a manual NKT_HUB_PUBLIC_ADDR still
+// takes priority and an obviously-local guess is rejected rather than used.
+func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, requestHubAddr string) (string, error) {
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
 		return "", fmt.Errorf("хост не найден: %w", err)
@@ -471,7 +482,7 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool) (s
 
 	go func() {
 		defer cancel()
-		job.finish(m.install(ctx, hostID, job))
+		job.finish(m.install(ctx, hostID, job, requestHubAddr))
 	}()
 
 	return id, nil
@@ -506,7 +517,7 @@ func (m *Manager) CancelInstall(ctx context.Context, hostID int64) error {
 // bootstrap admin from then on (see tunnel.go, server.go). job carries both
 // the progress log (job.append) and, once connected, the live SSH
 // connection CancelInstall needs to be able to interrupt this from outside.
-func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) error {
+func (m *Manager) install(ctx context.Context, hostID int64, job *installJob, requestHubAddr string) error {
 	report := job.append
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
@@ -531,7 +542,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	client, sshErr := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
 	if sshErr != nil {
 		if m.tunnelReinstallFallback(host) {
-			return m.installOverTunnel(ctx, hostID, host, job)
+			return m.installOverTunnel(ctx, hostID, host, job, requestHubAddr)
 		}
 		return fail(sshErr)
 	}
@@ -562,7 +573,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		return fail(err)
 	}
 
-	tun, err := m.prepareTunnelEnv(ctx, hostID, host)
+	tun, err := m.prepareTunnelEnv(ctx, hostID, host, requestHubAddr)
 	if err != nil {
 		return fail(err)
 	}
@@ -613,12 +624,15 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 }
 
 // prepareTunnelEnv generates this install's reverse-tunnel fallback
-// credentials (see internal/tunnel) when the host has TunnelEnabled and the
-// hub itself has a public address configured (config.Config.HubPublicAddr
-// — without it there is nowhere for the host to dial back to, so the
-// feature is simply off). The zero value (Enabled: false) tells renderEnv
-// to write none of the NKT_HUB_TUNNEL_* variables, the same as if this
-// feature didn't exist.
+// credentials (see internal/tunnel) when the host has TunnelEnabled and a
+// usable hub address is available — config.Config.HubPublicAddr if set
+// explicitly (always wins, since it was set on purpose), otherwise
+// requestHubAddr (the browser's own r.Host — see StartInstall's doc
+// comment) when that looks like it could plausibly be reached from a
+// *different* machine at all (see looksRoutableFromHost). With neither,
+// there is nowhere for the host to dial back to, so the feature is simply
+// off. The zero value (Enabled: false) tells renderEnv to write none of
+// the NKT_HUB_TUNNEL_* variables, the same as if this feature didn't exist.
 //
 // A fresh random token is generated on every install/update that has
 // TunnelEnabled on — not reused from a previous install — mirroring how
@@ -626,8 +640,15 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 // (see UpdateHostGenerated): whatever a *previous* install wrote into this
 // host's env file no longer matters once a new one is about to overwrite
 // it, and there is no benefit to keeping an old token alive.
-func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store.Host) (tunnelEnvParams, error) {
-	if !host.TunnelEnabled || m.cfg.HubPublicAddr == "" {
+func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store.Host, requestHubAddr string) (tunnelEnvParams, error) {
+	if !host.TunnelEnabled {
+		return tunnelEnvParams{}, nil
+	}
+	hubAddr := m.cfg.HubPublicAddr
+	if hubAddr == "" && looksRoutableFromHost(requestHubAddr) {
+		hubAddr = requestHubAddr
+	}
+	if hubAddr == "" {
 		return tunnelEnvParams{}, nil
 	}
 	token, err := generatePassword() // 24 random bytes, base64 — plenty of entropy for a machine token too
@@ -639,7 +660,7 @@ func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store
 	}
 	return tunnelEnvParams{
 		Enabled:          true,
-		HubAddr:          m.cfg.HubPublicAddr,
+		HubAddr:          hubAddr,
 		HostID:           hostID,
 		Token:            token,
 		PinnedCertSHA256: m.hubCertFingerprint(),

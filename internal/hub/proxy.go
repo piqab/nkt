@@ -239,10 +239,27 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 }
 
 // CloseHost drops any pooled connection/session/cached overview/tunnel
-// session for a host — called when a host is removed from the registry.
+// session for a host — called when a host is removed from the registry
+// entirely. Deliberately not used by UpdateHost/UpdateHostGenerated (see
+// dropSSHPool): editing a host's SSH details has nothing to do with
+// whether its reverse-tunnel session is still good, and dropping it there
+// too would force every "изменить" to wait out the host's own reconnect
+// backoff (up to 30s) before install()'s SSH-down fallback could find a
+// live session again — exactly the gap that let a save-then-reinstall
+// (e.g. flipping the terminal checkbox) fail over to raw SSH errors
+// instead of the tunnel that was working a moment before.
 func (m *Manager) CloseHost(hostID int64) {
-	m.dropClient(hostID)
-	m.dropSession(hostID)
+	m.dropSSHPool(hostID)
 	m.dropOverview(hostID)
 	m.dropRelayAll(hostID)
+}
+
+// dropSSHPool forgets hostID's pooled SSH connection and cached session
+// cookie — everything UpdateHost/UpdateHostGenerated need to drop after
+// changing connection details (address, port, user, credential) so the
+// next request reconnects with the new ones, without touching the
+// unrelated reverse-tunnel session or overview cache CloseHost also clears.
+func (m *Manager) dropSSHPool(hostID int64) {
+	m.dropClient(hostID)
+	m.dropSession(hostID)
 }
