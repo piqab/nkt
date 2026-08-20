@@ -12,6 +12,7 @@ import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
 import type { HubHost, RenewEvent, RenewJobStatus, Severity } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, SEVERITIES, SEVERITY_LABEL, formatRelative } from '../components/ui'
 import { checkForNewProblems, notificationsEnabled, requestNotificationPermission, setNotificationsEnabled, type NotifyState } from '../notifications'
+import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 
 /** How often to poll a running install job for new progress lines — same
  * cadence Certificates.tsx uses for certbot jobs. */
@@ -163,6 +164,15 @@ export default function Hosts({
   const [bulkBusy, setBulkBusy] = useState<'stop' | 'start' | null>(null)
   const [importing, setImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
+  // Set when "экспорт с ключом" is clicked — opens ExportPasswordModal
+  // instead of downloading immediately, since the file about to be
+  // generated carries the hub's own master key plus every host's secret.
+  const [exportPrompt, setExportPrompt] = useState(false)
+  const [exportBusy, setExportBusy] = useState(false)
+  // A file the operator just picked for "импорт" that turned out to be
+  // password-encrypted (see exportCrypto.ts) — decryptImportFile below
+  // needs the password before store.DecodeHubExport has anything to parse.
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
   // Set by openHost when "открыть" is clicked on a host whose nkt_version
   // trails the hub's own — the update this same click kicked off has to
   // actually finish before there's anything current to look at. Cleared
@@ -399,32 +409,40 @@ export default function Hosts({
     }
   }
 
-  /** GET /hub/export returns a file, not JSON-for-the-UI — bypasses the
-   * api() helper (which always parses the body as JSON) and drives a
-   * regular browser download instead, using the filename the server
-   * suggested via Content-Disposition. */
-  async function exportHosts(includeKey: boolean) {
-    if (
-      includeKey &&
-      !window.confirm(
-        'Включить ключ шифрования в файл экспорта?\n\n' +
-          'Так секреты на новом хабе расшифруются сами при импорте (перешифруются его собственным ' +
-          'ключом) — не нужно вручную переносить NKT_HUB_MASTER_KEY. Но пока ключ в файле, этого файла ' +
-          'одного достаточно, чтобы расшифровать все секреты всех хостов — храните и передавайте его ' +
-          'так же осторожно, как сами пароли, и удалите после того, как импортируете.',
-      )
-    ) {
+  /** "экспорт" (no key) downloads straight away — nothing in that file
+   * decrypts without the hub's own master key anyway. "экспорт с ключом"
+   * opens ExportPasswordModal instead: that file IS enough on its own to
+   * decrypt every host's secrets, so it always gets a chance to be
+   * password-protected before it touches disk. */
+  function exportHosts(includeKey: boolean) {
+    if (!includeKey) {
+      void downloadExport(false)
       return
     }
+    setExportPrompt(true)
+  }
+
+  /** GET /hub/export returns a file, not JSON-for-the-UI — bypasses the
+   * api() helper (which always parses the body as JSON). password, when
+   * given, encrypts the downloaded bytes in-browser (see exportCrypto.ts)
+   * before the save-as dialog ever sees them — the plaintext export never
+   * touches disk itself. */
+  async function downloadExport(includeKey: boolean, password?: string) {
     setNotice(null)
+    setExportBusy(true)
     try {
       const res = await fetch(`/api/hub/export${includeKey ? '?include_key=1' : ''}`, { credentials: 'same-origin' })
       if (!res.ok) {
         const payload = await res.json().catch(() => null)
         throw new Error(payload?.error ?? `Ошибка ${res.status}`)
       }
-      const blob = await res.blob()
+      let blob = await res.blob()
       const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'nkt-hub-export.json'
+      if (password) {
+        const plaintext = new Uint8Array(await blob.arrayBuffer())
+        const encrypted = await encryptWithPassword(password, plaintext)
+        blob = new Blob([encrypted.buffer as ArrayBuffer], { type: 'application/octet-stream' })
+      }
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
@@ -433,12 +451,49 @@ export default function Hosts({
       a.click()
       a.remove()
       URL.revokeObjectURL(url)
+      setExportPrompt(false)
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  /** Reads the picked file far enough to tell whether exportCrypto.ts's
+   * password envelope wraps it (see isPasswordEncrypted) — an encrypted
+   * file needs ImportPasswordModal before there's any JSON to send
+   * anywhere; a plain one goes straight to doImport, same as before this
+   * feature existed. */
+  async function importHosts(file: File) {
+    setNotice(null)
+    let buf: Uint8Array
+    try {
+      buf = new Uint8Array(await file.arrayBuffer())
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      return
+    }
+    if (isPasswordEncrypted(buf)) {
+      setPendingImportFile(file)
+      return
+    }
+    await doImport(new TextDecoder().decode(buf))
+  }
+
+  async function decryptImportFile(password: string) {
+    if (!pendingImportFile) return
+    setNotice(null)
+    try {
+      const buf = new Uint8Array(await pendingImportFile.arrayBuffer())
+      const plaintext = await decryptWithPassword(password, buf)
+      setPendingImportFile(null)
+      await doImport(new TextDecoder().decode(plaintext))
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
   }
 
-  async function importHosts(file: File) {
+  async function doImport(jsonText: string) {
     if (
       !window.confirm(
         'Импортировать хосты из файла? Хосты добавятся к уже существующим (файл не заменяет и не ' +
@@ -448,15 +503,13 @@ export default function Hosts({
     ) {
       return
     }
-    setNotice(null)
     setImporting(true)
     try {
-      const text = await file.text()
       const res = await fetch('/api/hub/import', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'Content-Type': 'application/json' },
-        body: text,
+        body: jsonText,
       })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload?.error ?? `Ошибка ${res.status}`)
@@ -796,6 +849,22 @@ export default function Hosts({
           )}
         </Modal>
       )}
+
+      {exportPrompt && (
+        <ExportPasswordModal
+          busy={exportBusy}
+          onDownload={(password) => downloadExport(true, password)}
+          onClose={() => setExportPrompt(false)}
+        />
+      )}
+
+      {pendingImportFile && (
+        <ImportPasswordModal
+          fileName={pendingImportFile.name}
+          onDecrypt={decryptImportFile}
+          onClose={() => setPendingImportFile(null)}
+        />
+      )}
     </>
   )
 }
@@ -840,6 +909,126 @@ function PublicKeyModal({
       <div>
         <Button onClick={copy}>{copied ? 'скопировано' : 'скопировать'}</Button>
       </div>
+    </Modal>
+  )
+}
+
+/**
+ * Opened by "экспорт с ключом" instead of downloading straight away — that
+ * file carries the hub's own master key plus every host's secret, so it
+ * always gets a chance to be password-protected (AES-256-GCM via
+ * exportCrypto.ts, decryptable by `nkt hub import` or this same modal's
+ * counterpart on another hub) before it ever touches disk. Leaving the
+ * password field empty and downloading anyway is still possible — this is
+ * a reminder, not a hard requirement — but needs an explicit second
+ * confirmation, the same way the CLI's own `nkt hub delete` treats it.
+ */
+function ExportPasswordModal({
+  busy,
+  onDownload,
+  onClose,
+}: {
+  busy: boolean
+  onDownload: (password?: string) => void
+  onClose: () => void
+}) {
+  const [password, setPassword] = useState('')
+
+  function download() {
+    if (!password) {
+      if (
+        !window.confirm(
+          'Скачать БЕЗ шифрования?\n\n' +
+            'Файл экспорта — открытый JSON с ключом шифрования хаба и SSH-/admin-секретами всех ' +
+            'хостов внутри: у кого файл — у того и они. Без пароля любой, кто его получит, читает ' +
+            'всё напрямую.',
+        )
+      ) {
+        return
+      }
+      onDownload(undefined)
+      return
+    }
+    onDownload(password)
+  }
+
+  return (
+    <Modal title="Экспорт с ключом" onClose={onClose}>
+      <p className="small muted">
+        Этот файл несёт ключ шифрования хаба и SSH-/admin-секреты всех хостов открытым текстом —
+        того, кто им завладеет, достаточно, чтобы расшифровать всё. <strong>Настоятельно
+        рекомендуется</strong> зашифровать файл паролем прямо сейчас, а не хранить его как есть.
+        Пароль нигде не сохраняется — потеряете его, файл станет бесполезен.
+      </p>
+      <Form layout="vertical" onFinish={download}>
+        <Form.Item label="Пароль для шифрования файла (необязательно, но рекомендуется)">
+          <Input.Password
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoFocus
+            autoComplete="new-password"
+          />
+        </Form.Item>
+        <Form.Item style={{ marginBottom: 0 }}>
+          <Button type="primary" htmlType="submit" loading={busy}>
+            {password ? 'Скачать зашифрованным' : 'Скачать'}
+          </Button>
+        </Form.Item>
+      </Form>
+    </Modal>
+  )
+}
+
+/** Opened by "импорт" when the picked file turns out to be password-
+ * encrypted (see exportCrypto.ts's isPasswordEncrypted) — decryption
+ * happens entirely in the browser before anything is sent to the hub;
+ * the plaintext export never touches disk. */
+function ImportPasswordModal({
+  fileName,
+  onDecrypt,
+  onClose,
+}: {
+  fileName: string
+  onDecrypt: (password: string) => Promise<void>
+  onClose: () => void
+}) {
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function submit() {
+    setBusy(true)
+    setError(null)
+    try {
+      await onDecrypt(password)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title="Файл зашифрован паролем" onClose={onClose}>
+      <p className="small muted">
+        «{fileName}» зашифрован паролем — введите его, чтобы расшифровать и импортировать хосты.
+      </p>
+      {error && <Banner kind="error">{error}</Banner>}
+      <Form layout="vertical" onFinish={submit}>
+        <Form.Item label="Пароль">
+          <Input.Password
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoFocus
+            autoComplete="current-password"
+          />
+        </Form.Item>
+        <Form.Item style={{ marginBottom: 0 }}>
+          <Button type="primary" htmlType="submit" loading={busy} disabled={!password}>
+            Расшифровать и импортировать
+          </Button>
+        </Form.Item>
+      </Form>
     </Modal>
   )
 }
