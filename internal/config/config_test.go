@@ -56,3 +56,48 @@ func TestCookieSecureDefaultsToTrue(t *testing.T) {
 		t.Error("CookieSecure по умолчанию должен быть true")
 	}
 }
+
+// TestTerminalEnabledDefaultDependsOnMode: the "localhost" row a hub shows
+// is the machine already running the hub process itself, so gating its
+// terminal behind the same opt-in a *remote* managed host needs grants
+// nothing there — on by default only for ModeHub, unchanged (off) for a
+// plain single-host nkt. An explicit NKT_TERMINAL_ENABLED, either way,
+// still always wins over the mode-based default.
+func TestTerminalEnabledDefaultDependsOnMode(t *testing.T) {
+	for _, tc := range []struct {
+		mode Mode
+		want bool
+	}{
+		{ModeFixtures, false},
+		{ModeLocal, false},
+		{ModeHub, true},
+	} {
+		t.Run(string(tc.mode), func(t *testing.T) {
+			t.Setenv("NKT_MODE", string(tc.mode))
+			t.Setenv("NKT_DATA_DIR", t.TempDir())
+			t.Setenv("NKT_TERMINAL_ENABLED", "")
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if cfg.TerminalEnabled != tc.want {
+				t.Errorf("TerminalEnabled для %s = %v, ожидался %v", tc.mode, cfg.TerminalEnabled, tc.want)
+			}
+		})
+	}
+
+	t.Run("explicit false overrides the ModeHub default", func(t *testing.T) {
+		t.Setenv("NKT_MODE", string(ModeHub))
+		t.Setenv("NKT_DATA_DIR", t.TempDir())
+		t.Setenv("NKT_TERMINAL_ENABLED", "false")
+
+		cfg, err := Load()
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.TerminalEnabled {
+			t.Error("явный NKT_TERMINAL_ENABLED=false должен побеждать дефолт для ModeHub")
+		}
+	})
+}
