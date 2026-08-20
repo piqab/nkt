@@ -1,0 +1,119 @@
+# Развёртывание хаба (internal/hub) в Kubernetes — образ из GitHub Container
+# Registry, собирается и публикуется автоматически при каждом релизе
+# (.github/workflows/release.yml). Только хаб: обычный nkt (local-режим)
+# рассчитан на установку прямо на управляемый хост (см. README, раздел
+# «Развернуть на хосте») — ему нужен systemd, iptables и docker-сокет
+# самого хоста, что в обычном поде без привилегированного DaemonSet и
+# host-mount'ов недоступно.
+#
+# Только один реплика: хаб хранит реестр хостов и секреты в SQLite на
+# ReadWriteOnce-томе и при первом старте генерирует свой ключ шифрования
+# (NKT_HUB_MASTER_KEY) — второй под с тем же томом либо не поднимется
+# (RWO уже занят), либо, если том RWX, столкнётся с той же базой без
+# координации между репликами. Не увеличивайте replicas.
+#
+# Применить:
+#   kubectl apply -f deploy/k8s/hub.yaml
+#   kubectl create secret docker-registry ghcr-pull \
+#     --docker-server=ghcr.io --docker-username=<логин GitHub> \
+#     --docker-password=<PAT с read:packages> -n netknownsthat
+#     # пакет приватный — без этого секрета образ не скачается
+#   kubectl logs -n netknownsthat deploy/nkt-hub    # пароль администратора
+#   kubectl port-forward -n netknownsthat svc/nkt-hub 8443:8077
+#
+# Доступ снаружи кластера — через свой Ingress с TLS перед Service ниже
+# (сюда намеренно не включён: разный набор ingress-контроллеров в разных
+# кластерах, добавьте свой на его основе).
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netknownsthat
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nkt-hub-data
+  namespace: netknownsthat
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nkt-hub
+  namespace: netknownsthat
+spec:
+  replicas: 1
+  strategy:
+    # Recreate, не RollingUpdate: новый под с тем же RWO-томом не
+    # запустится, пока старый его не отпустит.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nkt-hub
+  template:
+    metadata:
+      labels:
+        app: nkt-hub
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull
+      containers:
+        - name: hub
+          image: ghcr.io/piqab/nkt-hub:latest
+          ports:
+            - containerPort: 8077
+          env:
+            - name: NKT_MODE
+              value: hub
+            - name: NKT_ADDR
+              value: 0.0.0.0:8077
+            # Оставлено пустым — хаб сгенерирует и сохранит свой ключ в
+            # /var/lib/netknownsthat (том ниже) при первом старте. Чтобы
+            # задать свой (openssl rand -base64 32), заведите Secret и
+            # подключите его сюда через valueFrom.secretKeyRef, а не пишите
+            # в открытом виде.
+            - name: NKT_HUB_MASTER_KEY
+              value: ""
+            # Внешний адрес:порт, на который хостам с резервным каналом
+            # звонить обратно при отказе SSH (см. HUB.md, раздел 5) — сюда
+            # обычно указатель на Ingress/LoadBalancer этого Service.
+            # Пустая переменная выключает резервный канал целиком.
+            - name: NKT_HUB_PUBLIC_ADDR
+              value: ""
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/netknownsthat
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8077
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8077
+            initialDelaySeconds: 15
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: nkt-hub-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nkt-hub
+  namespace: netknownsthat
+spec:
+  selector:
+    app: nkt-hub
+  ports:
+    - port: 8077
+      targetPort: 8077
