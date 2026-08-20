@@ -21,12 +21,18 @@ func TestDefaultModeFollowsPlatform(t *testing.T) {
 
 // Production state belongs in the system location the systemd unit uses, so a
 // manually started `nkt tui` reads the same database the service writes.
+//
+// ModeLocal and ModeHub must resolve to DIFFERENT directories — a shared
+// default would mean a hub started without NKT_DATA_DIR explicitly set
+// (any invocation that skips hub.env) silently reuses a plain local nkt's
+// own data directory on any machine running both, up to and including
+// `nkt hub delete` shredding the wrong install's data.
 func TestDefaultDataDirDependsOnMode(t *testing.T) {
 	if got := defaultDataDir(ModeLocal, "/home/user/nkt/dist"); got != "/var/lib/netknownsthat" {
 		t.Errorf("каталог данных для local = %q, ожидался /var/lib/netknownsthat", got)
 	}
-	if got := defaultDataDir(ModeHub, "/home/user/nkt/dist"); got != "/var/lib/netknownsthat" {
-		t.Errorf("каталог данных для hub = %q, ожидался /var/lib/netknownsthat", got)
+	if got := defaultDataDir(ModeHub, "/home/user/nkt/dist"); got != "/var/lib/netknownsthat-hub" {
+		t.Errorf("каталог данных для hub = %q, ожидался /var/lib/netknownsthat-hub", got)
 	}
 	want := filepath.Join("/repo", "data")
 	if got := defaultDataDir(ModeFixtures, "/repo"); got != want {

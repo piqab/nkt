@@ -188,8 +188,21 @@ func defaultTLSHosts() string {
 // is also where the systemd unit points. That matters beyond tidiness: the
 // terminal interface reads the same database the service writes, and a
 // directory next to the binary would leave it staring at an empty history.
+//
+// ModeHub gets its OWN path, separate from ModeLocal's — deploy/hub.env.
+// example and deploy/netknownsthat-hub.service's WorkingDirectory both
+// already assume /var/lib/netknownsthat-hub, so this is that default made
+// to actually match, not a new choice. Before this, a hub started without
+// NKT_DATA_DIR explicitly set (any invocation that doesn't load hub.env —
+// running the binary by hand, a systemd unit that predates the env file)
+// silently fell back to the SAME directory a plain local nkt uses, on any
+// machine running both: at best a confusing shared database, at worst
+// `nkt hub delete` shredding the wrong install's data entirely.
 func defaultDataDir(mode Mode, wd string) string {
-	if mode == ModeLocal || mode == ModeHub {
+	if mode == ModeHub {
+		return "/var/lib/netknownsthat-hub"
+	}
+	if mode == ModeLocal {
 		return "/var/lib/netknownsthat"
 	}
 	return filepath.Join(wd, "data")
