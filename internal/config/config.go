@@ -120,13 +120,22 @@ type Config struct {
 
 	// TerminalEnabled turns on the web terminal (/api/terminal/ws — a real
 	// login shell over WebSocket, wired through the same RequireAdmin +
-	// AllowMutations gate as every other mutating endpoint). Off by default:
+	// AllowMutations gate as every other mutating endpoint). Off by default
+	// for ModeLocal (a plain single-host nkt, or a hub-managed remote host):
 	// unlike the rest of the API, this is direct interactive shell access,
 	// not a bounded action — an operator must consciously opt in, in
-	// addition to already being admin with mutations on. Also refused
-	// outright in ModeFixtures regardless of this flag (see
-	// handleTerminalWS) — a demo/fixtures instance must never be able to
-	// spawn a real shell on whatever machine happens to be running it.
+	// addition to already being admin with mutations on.
+	//
+	// On for ModeHub by default: this same flag also governs the "localhost"
+	// row's terminal (see internal/hub's localHostEntry/proxyLocal), and
+	// that row is the machine already running the hub process itself —
+	// gating it behind an opt-in that exists to bound access to a
+	// *different* machine grants nothing there; an operator who can run
+	// `nkt hub` already has a shell on this box by definition. Still
+	// overridable to false explicitly, and still refused outright in
+	// ModeFixtures regardless of this flag (see handleTerminalWS) — a
+	// demo/fixtures instance must never be able to spawn a real shell on
+	// whatever machine happens to be running it.
 	TerminalEnabled bool
 	// TerminalIdleTimeout closes a terminal session that has sent or
 	// received nothing for this long — the safety net for a tab left open
@@ -271,7 +280,7 @@ func Load() (*Config, error) {
 		CertbotTimeout: envDur("NKT_CERTBOT_TIMEOUT", 3*time.Minute),
 		CertbotEmail:   envStr("NKT_CERTBOT_EMAIL", ""),
 
-		TerminalEnabled:     envBool("NKT_TERMINAL_ENABLED", false),
+		TerminalEnabled:     envBool("NKT_TERMINAL_ENABLED", mode == ModeHub),
 		TerminalIdleTimeout: envDur("NKT_TERMINAL_IDLE_TIMEOUT", 30*time.Minute),
 
 		TunnelListenAddr: envStr("NKT_HUB_TUNNEL_LISTEN_ADDR", ""),
