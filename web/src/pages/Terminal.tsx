@@ -63,6 +63,12 @@ export default function TerminalPage({ me }: { me: Me }) {
     ) {
       return
     }
+    // dbusStatus polls every 30s in the background — too stale to trust
+    // right at the moment it matters most (right before the shell actually
+    // opens and either does or doesn't hit the sandbox). Refresh it here so
+    // the badge below reflects the state the terminal is about to run
+    // under, not whatever it was up to half a minute ago.
+    reloadDbusStatus()
     start()
   }
 
@@ -101,7 +107,9 @@ export default function TerminalPage({ me }: { me: Me }) {
       )}
       {status === 'closed' && <Banner kind="info">Сессия завершена.</Banner>}
 
-      {dbusStatus?.needed && (
+      {dbusStatus === null ? (
+        <Banner kind="info">Проверяю доступность D-Bus на хосте…</Banner>
+      ) : dbusStatus.needed ? (
         <Banner kind="warn">
           На хосте не работает D-Bus — терминал (если он вообще открылся), обновление пакетов и
           самообновление хоста через резервный канал ограничены песочницей systemd-юнита: не могут
@@ -137,6 +145,8 @@ export default function TerminalPage({ me }: { me: Me }) {
             'Автоматическая установка недоступна на этом хосте — поставьте вручную: apt-get install -y dbus && systemctl enable --now dbus.'
           )}
         </Banner>
+      ) : (
+        <Banner kind="success">D-Bus на хосте доступен — песочница не ограничивает терминал и обновления.</Banner>
       )}
 
       <Card>

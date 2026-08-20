@@ -1,10 +1,25 @@
 package api
 
 import (
+	"net"
 	"os"
 	"strings"
 	"testing"
 )
+
+// listenUnixSocket starts a real Unix-domain listener at path and closes it
+// on test cleanup — systemdControlSocket dials each candidate path rather
+// than just os.Stat'ing it (a stale regular file must not read as "D-Bus
+// available"), so tests standing in for a live control socket need an
+// actual listener behind the path, not merely a file with that name.
+func listenUnixSocket(t *testing.T, path string) {
+	t.Helper()
+	ln, err := net.Listen("unix", path)
+	if err != nil {
+		t.Fatalf("listen unix %s: %v", path, err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+}
 
 // TestUsingSystemdSandbox locks in the two conditions that must both hold
 // before terminal/update sessions get routed through systemd-run: running
@@ -48,9 +63,7 @@ func TestUsingSystemdSandbox(t *testing.T) {
 		withFakeSystemdRunOnPath(t)
 		dir := t.TempDir()
 		socket := dir + "/private"
-		if err := os.WriteFile(socket, nil, 0o600); err != nil {
-			t.Fatalf("create fake socket file: %v", err)
-		}
+		listenUnixSocket(t, socket)
 		withSystemdControlSocketPaths(t, socket, dir+"/system_bus_socket")
 		if !usingSystemdSandbox() {
 			t.Error("usingSystemdSandbox() = false with a control socket present")
@@ -94,9 +107,7 @@ func TestSystemdControlSocket(t *testing.T) {
 	t.Run("only the direct systemd socket exists", func(t *testing.T) {
 		dir := t.TempDir()
 		direct := dir + "/private"
-		if err := os.WriteFile(direct, nil, 0o600); err != nil {
-			t.Fatalf("create fake socket file: %v", err)
-		}
+		listenUnixSocket(t, direct)
 		withSystemdControlSocketPaths(t, direct, dir+"/system_bus_socket")
 		if !systemdControlSocket() {
 			t.Error("systemdControlSocket() = false with the direct socket present")
@@ -106,12 +117,22 @@ func TestSystemdControlSocket(t *testing.T) {
 	t.Run("only the classic dbus socket exists", func(t *testing.T) {
 		dir := t.TempDir()
 		classic := dir + "/system_bus_socket"
-		if err := os.WriteFile(classic, nil, 0o600); err != nil {
-			t.Fatalf("create fake socket file: %v", err)
-		}
+		listenUnixSocket(t, classic)
 		withSystemdControlSocketPaths(t, dir+"/private", classic)
 		if !systemdControlSocket() {
 			t.Error("systemdControlSocket() = false with the classic dbus socket present")
+		}
+	})
+
+	t.Run("path exists but nothing is listening (stale file)", func(t *testing.T) {
+		dir := t.TempDir()
+		stale := dir + "/private"
+		if err := os.WriteFile(stale, nil, 0o600); err != nil {
+			t.Fatalf("create stale file: %v", err)
+		}
+		withSystemdControlSocketPaths(t, stale, dir+"/system_bus_socket")
+		if systemdControlSocket() {
+			t.Error("systemdControlSocket() = true for a stale file with nothing listening behind it")
 		}
 	})
 }
