@@ -42,10 +42,25 @@ func (s *Server) handleTunnel(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "резервный канал не настроен для этого хоста", http.StatusUnauthorized)
 		return
 	}
+
+	// Rate-limited by host id, not by the raw (still-unvalidated-until-
+	// here) header value: only a token guess against a real, tunnel-
+	// configured host is what this is meant to slow down, and host id
+	// already passed a DB lookup above — an attacker can't cheaply grow
+	// s.hub.tunnelAttempts' map by spraying arbitrary garbage ids that
+	// never reach this point at all (see AttemptLimiter's own doc comment
+	// on why that distinction matters).
+	attemptKey := strconv.FormatInt(hostID, 10)
+	if !s.hub.tunnelAttempts.Allow(attemptKey) {
+		http.Error(w, "слишком много неудачных попыток подключения, попробуйте позже", http.StatusTooManyRequests)
+		return
+	}
 	if subtle.ConstantTimeCompare(tunnel.TokenHash(token), host.TunnelTokenHash) != 1 {
+		s.hub.tunnelAttempts.Fail(attemptKey)
 		http.Error(w, "неверный токен резервного канала", http.StatusUnauthorized)
 		return
 	}
+	s.hub.tunnelAttempts.Clear(attemptKey)
 
 	wsConn, err := websocket.Accept(w, r, nil)
 	if err != nil {

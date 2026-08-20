@@ -17,6 +17,7 @@ import (
 	"github.com/hashicorp/yamux"
 	"golang.org/x/crypto/ssh"
 
+	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
@@ -136,6 +137,14 @@ type Manager struct {
 	relayMu       sync.Mutex
 	relaySessions map[int64]*yamux.Session
 
+	// tunnelAttempts rate-limits failed reverse-tunnel token checks (see
+	// relay.go's handleTunnel), keyed by host id — the same
+	// auth.AttemptLimiter the hub's own login already uses (there, keyed
+	// by username), reused here rather than duplicated: a bearer token has
+	// far more entropy than a password, but a client hammering the
+	// endpoint with wrong ones still deserves the same backoff.
+	tunnelAttempts *auth.AttemptLimiter
+
 	// goBinMu/resolvedGoBin cache resolveGoBin's result for the Manager's
 	// lifetime — the self-install it may trigger is expensive enough
 	// (network fetch) that it must run at most once per process.
@@ -156,12 +165,13 @@ func (m *Manager) Version() string { return m.version }
 func NewManager(cfg *config.Config, db *store.DB, key []byte, version string) *Manager {
 	return &Manager{
 		cfg: cfg, db: db, key: key, version: version,
-		jobs:          map[string]*installJob{},
-		jobByHost:     map[int64]*installJob{},
-		conns:         map[int64]*hostConn{},
-		sessions:      map[int64]sessionCache{},
-		overview:      map[int64]hostOverview{},
-		relaySessions: map[int64]*yamux.Session{},
+		jobs:           map[string]*installJob{},
+		jobByHost:      map[int64]*installJob{},
+		conns:          map[int64]*hostConn{},
+		sessions:       map[int64]sessionCache{},
+		overview:       map[int64]hostOverview{},
+		relaySessions:  map[int64]*yamux.Session{},
+		tunnelAttempts: auth.NewAttemptLimiter(),
 	}
 }
 
