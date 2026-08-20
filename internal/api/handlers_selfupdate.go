@@ -8,9 +8,22 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/althq/netknownsthat/internal/config"
 )
+
+// selfUpdateReadTimeout overrides the server-wide 30s http.Server.
+// ReadTimeout (cmd/nkt/main.go) for this one request — reading the
+// multipart body (a full ~16 MiB binary, plus the unit/env text) can
+// legitimately take longer than that over the reverse-tunnel channel this
+// endpoint exists for in the first place: by definition, it's only ever
+// called when SSH itself is unreachable, so this is never the fast path to
+// begin with, and a relayed yamux stream through the hub adds its own
+// latency on top of whatever the network already has. The blanket 30s stays
+// as-is for every other route — this is scoped to just this request via
+// http.ResponseController, not a server-wide change.
+const selfUpdateReadTimeout = 5 * time.Minute
 
 // selfUpdateMaxRequestSize bounds the whole multipart request — nkt itself
 // is a ~16 MiB static binary, this just guards against a runaway or
@@ -60,6 +73,13 @@ func (s *Server) handleSelfUpdate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "самообновление доступно только в режиме local")
 		return
 	}
+
+	// Ignoring the error deliberately: it only fails when the underlying
+	// ResponseWriter doesn't support deadlines at all (not net/http's own
+	// server — e.g. a test's httptest.ResponseRecorder) — the server-wide
+	// 30s still applies in that case, which is exactly today's existing
+	// behavior, nothing to report.
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(selfUpdateReadTimeout))
 
 	r.Body = http.MaxBytesReader(w, r.Body, selfUpdateMaxRequestSize)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
