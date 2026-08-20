@@ -636,6 +636,17 @@ func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store
 	if err := m.db.SetHostTunnelToken(ctx, hostID, tokenEnc); err != nil {
 		return tunnelEnvParams{}, fmt.Errorf("сохранение токена резервного канала: %w", err)
 	}
+	// A fresh token means a fresh trust bootstrap: clear whatever
+	// certificate fingerprint was pinned from a previous install (see
+	// internal/hub/tunnelpin.go) so the next dial re-pins from scratch
+	// instead of permanently refusing a host that was legitimately
+	// reinstalled (new DataDir, regenerated tunnel-tls cert). Best-effort —
+	// a failure here just means the old pin lingers and the very next
+	// dial's cert-mismatch warning explains why, not a reason to fail the
+	// install itself.
+	if err := m.db.SetHostTunnelCertSHA256(ctx, hostID, nil); err != nil {
+		m.log.Warn("резервный канал: не удалось сбросить привязку сертификата хоста перед переустановкой", "host_id", hostID, "err", err)
+	}
 	return tunnelEnvParams{
 		Enabled:    true,
 		ListenAddr: fmt.Sprintf("0.0.0.0:%d", m.cfg.HubTunnelPort),

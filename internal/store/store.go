@@ -147,6 +147,8 @@ CREATE TABLE IF NOT EXISTS hosts (
                                                     -- kept only per this file's own "never remove a past column" policy
     tunnel_token_enc   BLOB,                       -- the per-host tunnel token, secretbox-encrypted: the hub is now the
                                                     -- side presenting it on every reconnect, so the raw value must be recoverable
+    tunnel_cert_sha256 BLOB,                       -- SHA-256 of the tunnel TLS cert this host presented on first connect
+                                                    -- (trust-on-first-use pin, see internal/hub/tunnelpin.go); NULL until then
     error_msg          TEXT NOT NULL DEFAULT '',
     created_at         TEXT NOT NULL,
     last_seen_at       TEXT
@@ -171,6 +173,7 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"hosts", "tunnel_enabled", `ALTER TABLE hosts ADD COLUMN tunnel_enabled INTEGER NOT NULL DEFAULT 0`},
 	{"hosts", "tunnel_token_hash", `ALTER TABLE hosts ADD COLUMN tunnel_token_hash BLOB`},
 	{"hosts", "tunnel_token_enc", `ALTER TABLE hosts ADD COLUMN tunnel_token_enc BLOB`},
+	{"hosts", "tunnel_cert_sha256", `ALTER TABLE hosts ADD COLUMN tunnel_cert_sha256 BLOB`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

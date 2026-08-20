@@ -3,6 +3,8 @@ package hub
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"net"
 	"strconv"
 	"time"
@@ -118,20 +120,52 @@ func (m *Manager) tunnelDialOnce(ctx context.Context, hostID int64) (connected b
 	}
 
 	addr := net.JoinHostPort(host.Addr, strconv.Itoa(m.cfg.HubTunnelPort))
+	var fingerprint []byte
 	dialer := tls.Dialer{
 		NetDialer: &net.Dialer{Timeout: tunnelDialTimeout},
 		Config: &tls.Config{
-			// Not blind trust: the token written right after this handshake
-			// completes is what actually authenticates this connection to
-			// the host (see internal/tunnel's package doc comment) — the
-			// same trade-off dialSSH already makes for SSH host keys in
-			// this codebase.
+			// The usual chain/hostname verification a non-self-signed cert
+			// would get is skipped (there's no CA to chain to), but this is
+			// not blind trust: VerifyPeerCertificate below pins the cert's
+			// own fingerprint on first sight and enforces it on every
+			// dial after — see verifyPinnedTunnelCert. The token written
+			// right after this handshake completes is still what actually
+			// authenticates the connection to the host; the pin closes the
+			// gap that left, an on-path attacker swapping in their own
+			// cert to read that token off the wire before this existed.
 			InsecureSkipVerify: true, //nolint:gosec
+			VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
+				fp, verr := verifyPinnedTunnelCert(rawCerts, host.TunnelCertSHA256)
+				fingerprint = fp
+				return verr
+			},
 		},
 	}
 	conn, err := dialer.DialContext(ctx, "tcp", addr)
 	if err != nil {
+		// A pin mismatch is not an ordinary connection failure (host down,
+		// wrong port, transient network blip) — it means the certificate
+		// this dial just saw doesn't match what was pinned on a previous
+		// successful connection, so it's logged at Warn instead of
+		// runTunnelDialer's usual silent-retry Debug line. Deliberately not
+		// escalated into the host's own Status/ErrorMsg: that field means
+		// "the primary connection to this host is broken" and drives
+		// pollOnce's decision to keep polling it — a stale pin on the
+		// fallback channel alone must not stop overview polling over what
+		// is very likely still a perfectly healthy SSH connection.
+		var mismatch *tunnelCertMismatchError
+		if errors.As(err, &mismatch) {
+			m.log.Warn("резервный канал: сертификат хоста не совпал с привязанным — возможна подмена соединения, либо хост был переустановлен без сброса привязки",
+				"host_id", hostID, "host", host.Name, "err", mismatch)
+		}
 		return false, err
+	}
+	if len(host.TunnelCertSHA256) == 0 && len(fingerprint) > 0 {
+		if err := m.db.SetHostTunnelCertSHA256(ctx, hostID, fingerprint); err != nil {
+			m.log.Warn("резервный канал: не удалось сохранить привязку сертификата хоста", "host_id", hostID, "err", err)
+		} else {
+			m.log.Info("резервный канал: привязал сертификат хоста при первом подключении", "host_id", hostID, "host", host.Name)
+		}
 	}
 	if err := tunnel.WriteToken(conn, string(token)); err != nil {
 		_ = conn.Close()
