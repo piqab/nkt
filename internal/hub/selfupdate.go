@@ -174,8 +174,31 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 	}
 	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, tun)
 
-	if err := m.selfUpdateOverTunnel(ctx, hostID, dial, binPath, unitContent, envContent, report); err != nil {
-		return fail(err)
+	// A single attempt sometimes hits a transient stall on the relay itself
+	// (read i/o timeout while parsing the multipart body) — plausible on
+	// the very link degraded enough that SSH fell back to this channel in
+	// the first place, and confirmed by users seeing it succeed instantly
+	// on a manual second click. Safe to retry outright: a failed parse
+	// never reaches install -D/systemctl restart (those run only after
+	// ParseMultipartForm and the sha256 check both succeed), so there is no
+	// partial state a retry could double-apply.
+	const selfUpdateAttempts = 3
+	var updateErr error
+	for i := 0; i < selfUpdateAttempts; i++ {
+		if i > 0 {
+			select {
+			case <-ctx.Done():
+				return fail(fmt.Errorf("обновление через резервный канал не удалось: %w", updateErr))
+			case <-time.After(2 * time.Second):
+			}
+			report("Повторяю отправку обновления через резервный канал…")
+		}
+		if updateErr = m.selfUpdateOverTunnel(ctx, hostID, dial, binPath, unitContent, envContent, report); updateErr == nil {
+			break
+		}
+	}
+	if updateErr != nil {
+		return fail(updateErr)
 	}
 
 	report("Жду, пока сервис ответит на /health…")
