@@ -1,0 +1,43 @@
+# Развёртывание хаба готовым образом из GitHub Container Registry — без
+# клонирования репозитория и локальной сборки. Собирается и публикуется
+# автоматически при каждом релизе (.github/workflows/release.yml).
+# Для сборки из исходников на этой же машине см. docker-compose.hub.yml.
+#
+#   curl -fsSLO https://raw.githubusercontent.com/piqab/nkt/main/deploy/docker-compose.hub.release.yml
+#   docker compose -f docker-compose.hub.release.yml up -d
+#
+# Пакет — приватный (репозиторий приватный): нужен `docker login ghcr.io`
+# токеном с правом read:packages, прежде чем `up` сможет его скачать.
+#
+# На первом старте пароль администратора печатается в лог:
+#   docker compose -f docker-compose.hub.release.yml logs hub
+#
+# Хаб внутри контейнера бинды на 0.0.0.0 (в отличие от обычного nkt,
+# который по умолчанию слушает только 127.0.0.1) — иначе публикация порта
+# ниже не сработает. Ставьте перед ним свой reverse proxy с TLS для
+# доступа не только с localhost.
+services:
+  hub:
+    image: ghcr.io/piqab/nkt-hub:latest
+    ports:
+      - "8443:8077"
+    environment:
+      NKT_MODE: hub
+      NKT_ADDR: 0.0.0.0:8077
+      # Оставьте пустым — хаб сгенерирует и сохранит свой ключ в томе данных
+      # при первом старте (internal/secretbox.ResolveKey). Задайте сами
+      # (`openssl rand -base64 32`), если хотите управлять секретом отдельно
+      # от тома — например, чтобы перенести реестр на новый том без потери
+      # доступа к зашифрованным в нём данным.
+      NKT_HUB_MASTER_KEY: ""
+      # Внешний адрес:порт, на который хостам с включённым резервным каналом
+      # звонить обратно, если у них откажет SSH — обычно тот же адрес, по
+      # которому вы сами открываете хаб. Пустая переменная выключает
+      # резервный канал целиком. См. HUB.md, раздел 5.
+      NKT_HUB_PUBLIC_ADDR: ""
+    volumes:
+      - nkt-hub-data:/var/lib/netknownsthat
+    restart: unless-stopped
+
+volumes:
+  nkt-hub-data:

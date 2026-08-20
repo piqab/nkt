@@ -3,8 +3,10 @@ name: release
 # Запускается пушем тега вида v1.6.38 — собирает бинарники nkt под все
 # Linux-архитектуры, где приложение реально работает в Local-режиме
 # (amd64, arm64, 32-бит ARM с GOARM=6 — те же три цели, что и Makefile/
-# internal/hub умеют собирать локально), и публикует их как GitHub Release
-# с этим тегом.
+# internal/hub умеют собирать локально), публикует их как GitHub Release
+# с этим тегом, и отдельно — образ хаба (Dockerfile.hub) в GitHub Container
+# Registry для docker compose/Kubernetes (deploy/docker-compose.hub.release.yml,
+# deploy/k8s/hub.yaml).
 #
 # Тег должен совпадать с файлом VERSION в репозитории (без ведущего "v") —
 # это то же число, что hub's own "обновить" сравнивает у управляемых
@@ -21,6 +23,7 @@ on:
 
 permissions:
   contents: write
+  packages: write
 
 jobs:
   check-version:
@@ -90,6 +93,37 @@ jobs:
           name: nkt-linux-${{ matrix.goarch }}
           path: dist/nkt-linux-${{ matrix.goarch }}
           retention-days: 1
+
+  # Собирает и публикует образ ХАБА (Dockerfile.hub) в GitHub Container
+  # Registry — на него ссылаются deploy/docker-compose.hub.release.yml и
+  # deploy/k8s/hub.yaml, чтобы их можно было развернуть без клонирования
+  # репозитория. Обычный nkt (Dockerfile) образом не публикуется: local-режим
+  # рассчитан на установку прямо на хост (see README), а не на контейнер без
+  # доступа к systemd/iptables/docker-сокету хоста.
+  docker-hub-image:
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Прочитать версию
+        id: version
+        run: echo "value=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.hub
+          push: true
+          build-args: |
+            VERSION=${{ steps.version.outputs.value }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/nkt-hub:${{ steps.version.outputs.value }}
+            ghcr.io/${{ github.repository_owner }}/nkt-hub:latest
 
   release:
     needs: build

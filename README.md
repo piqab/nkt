@@ -30,8 +30,8 @@ nkt hub      управляющий центр для нескольких хо�
 
 ## С чего начать
 
-Четыре разных сценария, и они действительно разные — выбирайте по тому,
-что у вас сейчас на руках:
+Разные сценарии, и они действительно разные — выбирайте по тому, что у вас
+сейчас на руках:
 
 | Что вам нужно | Куда идти | Сколько это займёт |
 |---|---|---|
@@ -39,6 +39,7 @@ nkt hub      управляющий центр для нескольких хо�
 | Поставить на один настоящий Linux-хост | [Развернуть на хосте](#развернуть-на-хосте) | 10 минут |
 | Работать по SSH, без проброса портов и браузера | [Терминальный интерфейс](#терминальный-интерфейс) | сразу после установки |
 | Управлять несколькими VPS из одного места | [Хаб](#хаб-много-хостов-из-одного-места) | 15 минут на первый хост |
+| Хаб в Docker Compose или Kubernetes, без сборки | [Хаб в контейнере](#хаб-в-контейнере-docker-compose-и-kubernetes) | 5 минут |
 
 ---
 
@@ -86,26 +87,25 @@ Linux и нигде больше не запускается: попытка в�
 Windows или macOS завершится понятной ошибкой, а не наполовину работающим
 дашбордом.
 
-### 1. Собрать бинарник
+### 1. Получить бинарник
+
+Самый быстрый путь — готовый бинарник со страницы
+[Releases](https://github.com/piqab/nkt/releases): под каждый тег `vX.Y.Z`
+`.github/workflows/release.yml` сам собирает и публикует статический ELF
+для `linux/amd64`, `linux/arm64` и `linux/arm` (armv6+), вместе с
+`SHA256SUMS`.
 
 ```bash
-make build                # → dist/nkt, linux/amd64, статический
-make build GOARCH=arm64   # для ARM-хоста
+# подставьте свою архитектуру и нужную версию
+curl -fsSLO https://github.com/piqab/nkt/releases/download/v1.7.0/nkt-linux-amd64
+curl -fsSLO https://github.com/piqab/nkt/releases/download/v1.7.0/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+chmod +x nkt-linux-amd64
+sudo mv nkt-linux-amd64 /usr/local/bin/nkt
 ```
 
-Одна команда работает в обоих случаях — сама решает, как собирать:
-
-* **Есть Docker** — сборка идёт внутри контейнеров (`node:22-alpine` для
-  интерфейса, затем `golang:1.26-alpine`), артефакт получается одинаковым
-  независимо от машины, с которой его запустили.
-* **Docker не найден** — `make build` переключается на `native-build`:
-  собирает прямо на хосте, а если там нет подходящего Go (1.25+) или Node
-  (20+) — спрашивает подтверждение и ставит их в `$HOME/.local`, без
-  sudo, ничего системного не трогая.
-
-Из инструментов на машине сборки нужен только `make`. Порядок важен и
-соблюдается автоматически: `go:embed` вшивает веб-интерфейс **на этапе
-компиляции**, поэтому `npm run build` всегда выполняется до `go build`.
+Сборка из исходников (нужен только `make`; сама решает — через Docker или
+`native-build` на голом хосте) — в [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ### 2. Проверить, что хост читается
 
@@ -113,7 +113,7 @@ make build GOARCH=arm64   # для ARM-хоста
 конфигурации:
 
 ```bash
-sudo ./dist/nkt scan
+sudo nkt scan
 ```
 
 Команда напечатает найденные слушатели, контейнеры, правила firewall и
@@ -127,22 +127,24 @@ sudo ./dist/nkt scan
 
 ### 3. Установить
 
+Бинарник уже на месте (шаг 1) — остаются конфиг и systemd-юнит. Репозиторий
+клонировать не обязательно, оба файла можно взять прямо с GitHub:
+
 ```bash
-sudo make install                          # бинарник, конфиг и unit на место
+sudo install -d -m 0750 /etc/netknownsthat
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/nkt.env.example \
+  | sudo install -m 0640 /dev/stdin /etc/netknownsthat/nkt.env
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/netknownsthat.service \
+  | sudo install -m 0644 /dev/stdin /etc/systemd/system/netknownsthat.service
 sudo $EDITOR /etc/netknownsthat/nkt.env
+sudo systemctl daemon-reload
 sudo systemctl enable --now netknownsthat
 sudo journalctl -u netknownsthat -n 30     # здесь будет пароль администратора
 ```
 
-Ровно то же самое вручную:
-
-```bash
-sudo install -m 0755 dist/nkt /usr/local/bin/nkt
-sudo install -d -m 0750 /etc/netknownsthat
-sudo install -m 0640 deploy/nkt.env.example /etc/netknownsthat/nkt.env
-sudo install -m 0644 deploy/netknownsthat.service /etc/systemd/system/
-sudo systemctl daemon-reload && sudo systemctl enable --now netknownsthat
-```
+Если вместо этого собирали из исходников (см. [DEVELOPMENT.md](DEVELOPMENT.md)) —
+`sudo make install` делает всё то же самое, включая копирование бинарника,
+одной командой; существующий `nkt.env` не перезаписывает.
 
 Пароль администратора печатается в журнал **один раз** при первом запуске
 и больше нигде в открытом виде не хранится. Чтобы задать его заранее —
@@ -312,6 +314,55 @@ sudo make hub-install   # либо как обычный systemd-сервис, �
 
 **Пошаговый запуск, добавление первого хоста и диагностика —
 [HUB.md](HUB.md).**
+
+---
+
+## Хаб в контейнере: Docker Compose и Kubernetes
+
+Здесь — только хаб. Обычный `nkt` (режим `local`) шеллится в `systemctl`,
+`iptables-save` и docker-сокет **самого хоста**, поэтому его место —
+установка прямо на хост (раздел выше), а не контейнер без доступа к этому
+хосту. Хаб же со своими хостами общается наружу по SSH, поэтому для него
+контейнерное развёртывание — обычный случай.
+
+Готовый образ (`Dockerfile.hub`) публикует `.github/workflows/release.yml`
+под каждый тег `vX.Y.Z` в `ghcr.io/piqab/nkt-hub` — можно развернуть без
+клонирования репозитория. Пакет приватный (репозиторий приватный) — нужен
+токен с правом `read:packages`.
+
+### Docker Compose
+
+```bash
+curl -fsSLO https://raw.githubusercontent.com/piqab/nkt/main/deploy/docker-compose.hub.release.yml
+docker login ghcr.io -u <логин GitHub>          # токен с read:packages вместо пароля
+docker compose -f docker-compose.hub.release.yml up -d
+docker compose -f docker-compose.hub.release.yml logs hub    # пароль администратора
+```
+
+Сборка из исходников тем же `docker compose`, но локально (`make hub`) —
+файл `deploy/docker-compose.hub.yml`, описан в начале этого раздела.
+
+### Kubernetes
+
+Манифест — [deploy/k8s/hub.yaml](deploy/k8s/hub.yaml): `Namespace`,
+`PersistentVolumeClaim` для базы хаба, `Deployment` (**строго один
+реплика** — хаб хранит реестр хостов в SQLite на ReadWriteOnce-томе и сам
+генерирует ключ шифрования при первом старте, второй под с тем же томом
+координации не имеет) и `Service` на порту 8077.
+
+```bash
+kubectl apply -f deploy/k8s/hub.yaml
+kubectl create secret docker-registry ghcr-pull \
+  --docker-server=ghcr.io --docker-username=<логин GitHub> \
+  --docker-password=<токен с read:packages> -n netknownsthat
+kubectl logs -n netknownsthat deploy/nkt-hub       # пароль администратора
+kubectl port-forward -n netknownsthat svc/nkt-hub 8443:8077
+```
+
+Доступ снаружи кластера — через свой Ingress с TLS перед этим `Service`
+(в манифест намеренно не включён — у каждого кластера свой контроллер).
+Комментарии внутри файла объясняют `NKT_HUB_MASTER_KEY` и
+`NKT_HUB_PUBLIC_ADDR` (резервный канал хаб↔хост, см. HUB.md, раздел 5).
 
 ---
 
@@ -590,150 +641,8 @@ echo 'новый-пароль' | sudo nkt passwd ops    # без интерак�
 
 ## Разработка
 
-### Команды сборки
-
-`make` без аргументов печатает список целей.
-
-| Команда | Что делает |
-|---|---|
-| `make build` | **Основная цель.** Продакшен-бинарник `dist/nkt` (статический ELF ~16 МБ, версия из `git describe`). С Docker — в контейнерах, без — через `native-build`. Другая архитектура: `make build GOARCH=arm64` |
-| `make web` | Только веб-интерфейс в `internal/webui/dist`, откуда его вшивает `go:embed`. Отдельно нужен редко — `make build` вызывает сам |
-| `make native-build` | Сборка без Docker: при нехватке Go (1.25+) или Node (20+) спрашивает и ставит их в `$HOME/.local`, без sudo |
-| `make build-dev` | Нативный бинарник для текущей ОС. **Только для режима fixtures**, в продакшен такой артефакт не отправляют |
-| `make test` | `go test ./...` и проверка типов фронтенда |
-| `make check` | То же плюс `go vet` и `gofmt`. Это то, что стоит гонять перед коммитом |
-| `make stand` / `make stand-down` | Проверочный стенд (ниже) |
-| `make install` | Ставит на **этот** Linux-хост. Существующий `nkt.env` не перезаписывает |
-| `make clean` | Удаляет `dist/` и локальные бинарники |
-
-Кэш Go и npm живёт в именованных docker-томах, поэтому повторная сборка не
-тянет зависимости заново. Сбросить, если испортился:
-`docker volume rm nkt-gomod nkt-gocache nkt-npm`.
-
-Под Windows `make` обычно отсутствует, а `native-build` рассчитана на
-Linux-хост — там нужен именно Docker:
-
-```powershell
-docker run --rm -v "${PWD}:/src" -w /src/web node:22-alpine sh -c "npm ci && npm run build"
-docker run --rm -v "${PWD}:/src" -w /src -e CGO_ENABLED=0 -e GOOS=linux golang:1.26-alpine `
-  go build -trimpath -ldflags "-s -w" -o dist/nkt ./cmd/nkt
-```
-
-Что нужно установить: Docker 29.6 (сборка релиза и стенд), Go 1.26
-(минимум 1.25 — требует `modernc.org/sqlite`), Node 24 / npm 11 (достаточно
-Node 20). На целевом хосте — ничего, кроме самого бинарника.
-
-### Проверочный стенд
-
-Настоящие nginx и haproxy с настоящими бэкендами, рядом — NetKnownsThat в
-режиме `local`, читающий те же файлы и работающий с настоящим демоном
-docker.
-
-```bash
-make stand              # docker compose -f stand/docker-compose.yml up -d --build
-docker logs nkt         # пароль администратора
-make stand-down         # остановить и удалить тома
-```
-
-| Адрес | Что это |
-|---|---|
-| <http://127.0.0.1:8077> | NetKnownsThat |
-| <http://127.0.0.1:8081> | nginx, проксирует на два бэкенда |
-| <http://127.0.0.1:8082> | haproxy, балансирует те же бэкенды |
-| <http://127.0.0.1:8404> | панель статистики haproxy (намеренно без пароля) |
-| `127.0.0.1:6380` | redis, намеренно опубликован на всех интерфейсах |
-
-Стенд проверяет по-настоящему: разбор живых конфигов, Docker Engine API,
-управление контейнерами и цикл правки конфигурации с настоящим `nginx -t`,
-включая ветку отказа с автооткатом.
-
-Не покрывает: systemd и firewall хоста (внутри контейнера их нет), а также
-сравнение «объявлено против слушается» для nginx и haproxy — они в своих
-сетевых пространствах имён, и `ss` их сокетов не видит. Приложение это
-распознаёт и молчит, вместо того чтобы объявить весь хост мёртвым.
-
-`make stand-down` удаляет тома обязательно: учётная запись живёт в томе, и
-без его удаления пересозданный стенд не напечатает новый пароль.
-
-### Фронтенд с горячей перезагрузкой
-
-Два процесса:
-
-```bash
-./nkt                        # API на :8077
-cd web && npm run dev        # интерфейс на :5173, проксирует /api
-```
-
-### Тесты
-
-Тесты работают против `fixtures/host` — снапшота с намеренно заложенными
-проблемами; `TestScanFindsPlantedProblems` проверяет, что анализатор
-находит каждую с ожидаемой серьёзностью.
-
-Терминальный интерфейс тестируется headless: `tcell` отдаёт симулированный
-экран, тест поднимает приложение целиком, нажимает клавиши и проверяет
-отрисованные кадры.
-
-Хаб тестируется против **настоящего** `sshd` и настоящего субпроцесса
-`nkt` — включая установку по SSH, проксирование API и WebSocket-сессии
-терминала через SSH-туннель. Моков в этом слое намеренно нет: слишком
-многое здесь ломается именно на стыке с реальностью.
-
-Добавление нового парсера: новый файл в `internal/parse`, возвращающий
-`model.Endpoint` / `model.Upstream` / `model.SourceStatus`, и вызов в
-`internal/inventory/scan.go`. Всё остальное — карта, анализ, мониторинг,
-оба интерфейса — подхватит его автоматически.
-
----
-
-## Архитектура
-
-```
-cmd/nkt                 подкоманды: serve, tui, scan, hub
-internal/config         все настройки из NKT_* переменных
-internal/collect        ЕДИНСТВЕННОЕ место, где расходятся fixtures и реальный хост
-  ├── local.go          настоящая ФС, exec, unix-сокеты docker/podman (только Linux)
-  └── fixtures.go       снапшот на диске, заготовленные ответы команд
-internal/parse          nginx (crossplane), haproxy (config-parser), docker,
-                        podman, lxd, libvirt, iptables, ufw, ss, systemd
-internal/model          вендор-нейтральное описание найденного
-internal/analyze        правила поиска проблем
-internal/topology       построение графа ресурсов
-internal/inventory      оркестрация скана, снапшоты, цели мониторинга
-internal/monitor        пробы, метрики, access-логи, планировщик
-internal/tlscheck       живой TLS-дозвон: что сокет отдаёт на самом деле
-internal/control        сервисы, правка конфигов с версиями, firewall,
-                        сертификаты, podman/lxd/libvirt
-internal/store          SQLite (modernc, чистый Go — статическая сборка)
-internal/secretbox      шифрование секретов at-rest (AES-256-GCM) для хаба
-internal/hub            управляющий центр: установка nkt по SSH и проксирование
-internal/api            HTTP API на chi
-internal/webui          вшитый веб-интерфейс
-internal/tui            терминальный интерфейс на tview
-web/                    React + TypeScript + antd, графики на голом SVG
-```
-
-Ключевое решение — интерфейс `collect.Collector`. Всё остальное приложение
-работает с POSIX-путями хоста и не знает, читает оно настоящий сервер или
-снапшот, поэтому парсеры и правила ведут себя одинаково везде.
-
-Веб-интерфейс и терминальный — два равноправных потребителя одних и тех же
-пакетов: оба вызывают `inventory`, `analyze`, `topology` и `control`
-напрямую, ни один не ходит через другой. Исправление в правилах или в
-построителе карты одинаково видно и там, и там.
-
-Каждый обнаруживаемый рантайм (docker, podman, lxd, libvirt) — отдельный
-модуль по образцу первого: своя модель, свой парсер, своя страница. Общей
-абстракции «workload» между ними намеренно нет — осознанный выбор в пользу
-простоты и меньшего риска регрессий, а не упущение.
-
-Внешние зависимости: `nginx-go-crossplane` (официальный парсер nginx),
-`haproxytech/config-parser` (из HAProxy Dataplane API), `modernc.org/sqlite`,
-`go-chi/chi`, `rivo/tview`, `golang.org/x/crypto` (argon2id и SSH для хаба),
-`github.com/pkg/sftp`, `coder/websocket` и `creack/pty` (веб-терминал),
-`gopkg.in/yaml.v3`. Docker и Podman опрашиваются собственным минимальным
-клиентом Engine API — вместо трёхсот пакетов официального SDK; LXD и
-libvirt — через их собственные CLI (`lxc`, `virsh`).
+Сборка из исходников, проверочный стенд, тесты и внутреннее устройство
+пакетов — в [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ---
 
