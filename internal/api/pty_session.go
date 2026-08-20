@@ -87,6 +87,38 @@ func usingSystemdSandbox() bool {
 	return err == nil
 }
 
+// unrestrictedBackgroundCommand is unrestrictedCommand's non-interactive
+// counterpart: no --pty, no controlling terminal expected. For a
+// fire-and-forget command (see handleSelfUpdate) that is meant to outlive
+// the request handling it — including, deliberately, outliving *this very
+// process* when the command itself restarts the unit this process belongs
+// to — rather than an interactive session tied to a WebSocket someone is
+// watching live.
+func unrestrictedBackgroundCommand(argv ...string) *exec.Cmd {
+	if usingSystemdSandbox() {
+		return exec.Command("systemd-run", systemdRunBackgroundArgs(argv...)...)
+	}
+	return exec.Command(argv[0], argv[1:]...)
+}
+
+// systemdRunBackgroundArgs mirrors systemdRunArgs' sandbox-escape overrides
+// without --pty — split out the same way, for the same reason: a pure
+// function the flags themselves can be unit-tested against without an
+// actual systemd system to run them on.
+func systemdRunBackgroundArgs(argv ...string) []string {
+	args := []string{"--collect", "--quiet",
+		"-p", "ProtectSystem=no",
+		"-p", "ProtectHome=no",
+		"-p", "PrivateTmp=no",
+		"-p", "NoNewPrivileges=no",
+		"-p", "RestrictSUIDSGID=no",
+		"-p", "RestrictNamespaces=no",
+		"-p", "CapabilityBoundingSet=~",
+		"--",
+	}
+	return append(args, argv...)
+}
+
 // ptyControl is the shape of a WebSocket TEXT frame — raw keystrokes and
 // process output travel as BINARY frames instead, so a text/binary split
 // (rather than an envelope around every byte) is enough to tell the one

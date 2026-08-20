@@ -215,6 +215,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/users", s.handleUserCreate)
 				r.Patch("/users/{name}", s.handleUserPatch)
 				r.Delete("/users/{name}", s.handleUserDelete)
+
+				r.Post("/self-update", s.handleSelfUpdate)
 			})
 		})
 

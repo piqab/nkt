@@ -44,14 +44,23 @@ export interface HubHost {
    * by hand on the host) to survive one. */
   terminal_enabled: boolean
   /** Whether the hub passes the reverse-tunnel fallback credentials
-   * (NKT_HUB_TUNNEL_*) when it (re)installs this host — off by default.
-   * With it on, the host keeps a standing outbound connection to the hub
-   * so the dashboard/terminal keep working even if SSH to it stops
-   * responding (a blocked or misconfigured inbound port 22 is the common
-   * real case, not necessarily sshd itself being down) — see
+   * (NKT_HUB_TUNNEL_*) when it (re)installs this host — on by default for
+   * newly added hosts (see HostForm's initialValues). With it on, the host
+   * keeps a standing outbound connection to the hub so the dashboard/
+   * terminal — and reinstall/update itself — keep working even if SSH to
+   * it stops responding (a blocked or misconfigured inbound port 22 is the
+   * common real case, not necessarily sshd itself being down) — see
    * internal/tunnel. Same "regenerated on every install/update" shape as
    * terminal_enabled. */
   tunnel_enabled: boolean
+  /** "ssh" or "tunnel" — which path the hub most recently reached this
+   * host through (see internal/hub's Manager.recordChannel). Absent before
+   * the first dial attempt. */
+  channel?: 'ssh' | 'tunnel'
+  /** Whether this host currently has a live reverse-tunnel session
+   * registered, independent of channel — a healthy standby channel is
+   * common long before SSH ever actually needs it. */
+  tunnel_connected?: boolean
   error_msg?: string
   created_at: string
   last_seen_at?: string

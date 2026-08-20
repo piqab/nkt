@@ -151,25 +151,36 @@ func (m *Manager) dropSession(hostID int64) {
 	m.sessionMu.Unlock()
 }
 
+// channelSSH and channelTunnel identify which path dialerFor picked, for
+// callers that surface it to the operator (see recordChannel) — a plain
+// string rather than a typed enum since its only consumers are a log field
+// and a JSON API response.
+const (
+	channelSSH    = "ssh"
+	channelTunnel = "tunnel"
+)
+
 // dialerFor returns a way to reach hostID's own nkt API: SSH first — the
 // primary, fully-capable path, unchanged — falling back to the
 // reverse-tunnel channel (internal/tunnel, see relay.go) only when the SSH
 // dial itself fails and a live tunnel session happens to be registered for
 // this host. Install/update/SFTP/sudo commands never go through this —
-// they need real SSH regardless and call clientFor/dialSSH directly.
+// they need real SSH regardless and call clientFor/dialSSH directly (except
+// installOverTunnel's own deliberate fallback, which never calls this
+// either — it already knows which channel it's using).
 //
 // The returned onFail must be called if something reached via dial later
 // fails too (a stale pooled SSH conn dying mid-use, say) — always safe to
 // call even when there's nothing to drop.
-func (m *Manager) dialerFor(ctx context.Context, hostID int64) (dial dialFunc, onFail func(), err error) {
+func (m *Manager) dialerFor(ctx context.Context, hostID int64) (dial dialFunc, channel string, onFail func(), err error) {
 	client, sshErr := m.clientFor(ctx, hostID)
 	if sshErr == nil {
-		return client.Dial, func() { m.dropClient(hostID); m.dropSession(hostID) }, nil
+		return client.Dial, channelSSH, func() { m.dropClient(hostID); m.dropSession(hostID) }, nil
 	}
 	if relay, ok := m.relayDial(hostID); ok {
-		return relay, func() {}, nil
+		return relay, channelTunnel, func() {}, nil
 	}
-	return nil, nil, sshErr
+	return nil, "", nil, sshErr
 }
 
 // Proxy returns a handler that forwards every request it receives to
@@ -183,11 +194,12 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 
-		dial, onFail, err := m.dialerFor(ctx, hostID)
+		dial, channel, onFail, err := m.dialerFor(ctx, hostID)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadGateway)
 			return
 		}
+		m.recordChannel(hostID, channel)
 		cookie, err := m.cookieFor(ctx, hostID, dial)
 		if err != nil {
 			onFail()
