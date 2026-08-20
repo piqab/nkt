@@ -79,13 +79,30 @@ NoNewPrivileges=yes
 # "Requesting a certificate for ...", хотя тот же certbot с теми же
 # аргументами прекрасно отрабатывает вручную через sudo (там root не
 # ограничен CapabilityBoundingSet вообще).
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_SYS_PTRACE
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_SYS_PTRACE
+#
+# CAP_SYS_ADMIN — запасной способ выйти из ProtectSystem=strict, когда
+# основной (systemd-run --pty, см. internal/api/pty_session.go) не
+# работает: на хосте без D-Bus (некоторые минимальные облачные образы,
+# например Debian 11, не ставят его по умолчанию) systemd-run не может
+# достучаться до PID 1 вообще. С этой capability nkt вместо него сам
+# заходит в РЕАЛЬНОЕ (не песочное) mount-пространство имён PID 1 через
+# `nsenter --target 1 --mount` — тем самым можно поставить сам dbus (см.
+# кнопку рядом с терминалом) и вообще починить основной путь. Не даёт
+# ничего практически нового по сравнению с уже имеющимся набором прав:
+# процесс и так root с CAP_SYS_PTRACE и уже умеет полностью выходить из
+# песочницы через systemd-run, когда D-Bus жив — это лишь альтернативный
+# способ того же самого выхода на случай, когда основной недоступен.
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_SYS_PTRACE CAP_SYS_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_SYS_PTRACE CAP_SYS_ADMIN
 
 ProtectKernelTunables=yes
 ProtectKernelModules=yes
 ProtectControlGroups=yes
-RestrictNamespaces=yes
+# Было RestrictNamespaces=yes (запрещает вход/создание НИКАКИХ пространств
+# имён). Сужено до "mnt" — разрешает ровно то, что нужно nsenter'у выше
+# (--mount, только это одно пространство имён), явно оставляя net/pid/
+# uts/ipc/user запрещёнными: nsenter в этот процесс их и не трогает.
+RestrictNamespaces=mnt
 RestrictRealtime=yes
 RestrictSUIDSGID=yes
 LockPersonality=yes

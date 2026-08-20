@@ -182,3 +182,92 @@ func TestUnrestrictedCommandFallsBackOutsideSystemd(t *testing.T) {
 		t.Errorf("cmd.Env missing TERM=xterm-256color: %v", cmd.Env)
 	}
 }
+
+// TestNeedsNsenterFallback locks in the two conditions gating the nsenter
+// escape hatch (see needsNsenterFallback's own doc comment): a real
+// systemd unit context (INVOCATION_ID) and nsenter actually on PATH.
+func TestNeedsNsenterFallback(t *testing.T) {
+	t.Run("false without INVOCATION_ID", func(t *testing.T) {
+		t.Setenv("INVOCATION_ID", "")
+		t.Setenv("PATH", withFakeBinaryOnPath(t, "nsenter"))
+		if needsNsenterFallback() {
+			t.Error("needsNsenterFallback() = true without INVOCATION_ID set")
+		}
+	})
+
+	t.Run("false when nsenter is not on PATH, even with INVOCATION_ID", func(t *testing.T) {
+		t.Setenv("INVOCATION_ID", "deadbeef")
+		t.Setenv("PATH", t.TempDir())
+		if needsNsenterFallback() {
+			t.Error("needsNsenterFallback() = true with nsenter absent from PATH")
+		}
+	})
+
+	t.Run("true with INVOCATION_ID and nsenter on PATH", func(t *testing.T) {
+		t.Setenv("INVOCATION_ID", "deadbeef")
+		t.Setenv("PATH", withFakeBinaryOnPath(t, "nsenter"))
+		if !needsNsenterFallback() {
+			t.Error("needsNsenterFallback() = false with nsenter present and INVOCATION_ID set")
+		}
+	})
+}
+
+// withFakeBinaryOnPath creates an executable file named name in a fresh
+// temp dir and returns that dir, for pointing PATH at so
+// exec.LookPath(name) succeeds without needing the real binary installed.
+func withFakeBinaryOnPath(t *testing.T, name string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/"+name, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("create fake %s: %v", name, err)
+	}
+	return dir
+}
+
+// TestNsenterArgs is a pure check of the flags — missing --mount or the
+// wrong --target would either fail outright or (worse) silently enter the
+// wrong namespace; the env-passing trick is exercised separately since
+// nsenter itself has no --setenv equivalent, unlike systemd-run.
+func TestNsenterArgs(t *testing.T) {
+	t.Run("no env", func(t *testing.T) {
+		args := nsenterArgs(nil, "bash", "-l")
+		want := []string{"--target", "1", "--mount", "--", "bash", "-l"}
+		if strings.Join(args, "|") != strings.Join(want, "|") {
+			t.Errorf("nsenterArgs(nil, ...) = %v, want %v", args, want)
+		}
+	})
+
+	t.Run("with env: wrapped in coreutils env", func(t *testing.T) {
+		args := nsenterArgs(map[string]string{"TERM": "xterm-256color"}, "bash", "-l")
+		joined := " " + strings.Join(args, " ") + " "
+		for _, want := range []string{" --target 1 ", " --mount ", " -- env ", " TERM=xterm-256color "} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("nsenterArgs() missing %q in %v", strings.TrimSpace(want), args)
+			}
+		}
+		// The target command must still come last.
+		if len(args) < 2 || args[len(args)-2] != "bash" || args[len(args)-1] != "-l" {
+			t.Errorf("nsenterArgs() target command not at the end: %v", args)
+		}
+	})
+}
+
+// TestUnrestrictedCommandFallsBackToNsenter confirms the three-tier
+// priority: systemd-run first when usable, nsenter next when the unit
+// context is real but systemd-run isn't (no control socket — exactly the
+// no-dbus case), plain exec only when there's no unit context at all.
+func TestUnrestrictedCommandFallsBackToNsenter(t *testing.T) {
+	t.Setenv("INVOCATION_ID", "deadbeef")
+	t.Setenv("PATH", withFakeBinaryOnPath(t, "nsenter")) // no systemd-run on this PATH
+	withSystemdControlSocketPaths(t, t.TempDir()+"/private", t.TempDir()+"/system_bus_socket")
+
+	cmd := unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, "bash", "-l")
+
+	if cmd.Path == "" || !strings.HasSuffix(cmd.Path, "nsenter") {
+		t.Fatalf("unrestrictedCommand() cmd.Path = %q, want it to resolve to the fake nsenter", cmd.Path)
+	}
+	joined := strings.Join(cmd.Args, " ")
+	if !strings.Contains(joined, "--mount") || !strings.Contains(joined, "bash -l") {
+		t.Errorf("unrestrictedCommand() args = %v, want nsenter args wrapping bash -l", cmd.Args)
+	}
+}

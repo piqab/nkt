@@ -42,6 +42,9 @@ func unrestrictedCommand(env map[string]string, argv ...string) *exec.Cmd {
 	if usingSystemdSandbox() {
 		return exec.Command("systemd-run", systemdRunArgs(env, argv...)...)
 	}
+	if needsNsenterFallback() {
+		return exec.Command("nsenter", nsenterArgs(env, argv...)...)
+	}
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Env = os.Environ()
 	for k, v := range env {
@@ -118,6 +121,45 @@ func systemdControlSocket() bool {
 	return false
 }
 
+// needsNsenterFallback reports whether unrestrictedCommand should reach for
+// nsenter instead of systemd-run: running as a real systemd unit (so
+// ProtectSystem=strict's mount namespace genuinely applies — nothing to
+// escape otherwise) but systemd-run itself can't be used right now (see
+// usingSystemdSandbox). "Needs" only in the sense of "this is the next
+// thing to try" — it does not itself confirm CAP_SYS_ADMIN is actually
+// granted; nsenter simply fails with its own permission error if not, the
+// same as any other missing-privilege failure already surfaces in the
+// session output.
+func needsNsenterFallback() bool {
+	if os.Getenv("INVOCATION_ID") == "" {
+		return false
+	}
+	_, err := exec.LookPath("nsenter")
+	return err == nil
+}
+
+// nsenterArgs builds the argv for entering PID 1's own mount namespace —
+// the fallback for when systemd-run can't reach the manager at all (no
+// D-Bus). Deliberately narrow: only --mount, matching RestrictNamespaces=mnt
+// on the unit itself (see deploy/netknownsthat.service) — ProtectSystem=
+// strict is implemented as a private mount namespace, the one and only
+// thing that actually needs escaping here; net/pid/uts/ipc/user stay
+// exactly as they already are. Unlike systemd-run, nsenter has no built-in
+// way to set environment variables for the command it runs, so env (when
+// non-empty) is applied via a leading `env KEY=value ...` — the same
+// coreutils trick used to pass environment through any exec that doesn't
+// support it natively.
+func nsenterArgs(env map[string]string, argv ...string) []string {
+	args := []string{"--target", "1", "--mount", "--"}
+	if len(env) > 0 {
+		args = append(args, "env")
+		for k, v := range env {
+			args = append(args, k+"="+v)
+		}
+	}
+	return append(args, argv...)
+}
+
 // unrestrictedBackgroundCommand is unrestrictedCommand's non-interactive
 // counterpart: no --pty, no controlling terminal expected. For a
 // fire-and-forget command (see handleSelfUpdate) that is meant to outlive
@@ -128,6 +170,9 @@ func systemdControlSocket() bool {
 func unrestrictedBackgroundCommand(argv ...string) *exec.Cmd {
 	if usingSystemdSandbox() {
 		return exec.Command("systemd-run", systemdRunBackgroundArgs(argv...)...)
+	}
+	if needsNsenterFallback() {
+		return exec.Command("nsenter", nsenterArgs(nil, argv...)...)
 	}
 	return exec.Command(argv[0], argv[1:]...)
 }
