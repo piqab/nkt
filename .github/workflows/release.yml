@@ -1,0 +1,114 @@
+name: release
+
+# Запускается пушем тега вида v1.6.38 — собирает бинарники nkt под все
+# Linux-архитектуры, где приложение реально работает в Local-режиме
+# (amd64, arm64, 32-бит ARM с GOARM=6 — те же три цели, что и Makefile/
+# internal/hub умеют собирать локально), и публикует их как GitHub Release
+# с этим тегом.
+#
+# Тег должен совпадать с файлом VERSION в репозитории (без ведущего "v") —
+# это то же число, что hub's own "обновить" сравнивает у управляемых
+# хостов, так что релиз и VERSION не должны расходиться.
+#
+# Как выпустить релиз:
+#   1. Обновить VERSION (или make bump-version), закоммитить.
+#   2. git tag v$(cat VERSION) && git push origin v$(cat VERSION)
+#   3. Дальше всё делает этот workflow — вручную собирать/заливать не нужно.
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Тег должен совпадать с файлом VERSION
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          file="$(tr -d '[:space:]' < VERSION)"
+          if [ "$tag" != "$file" ]; then
+            echo "::error::тег v$tag не совпадает с VERSION ($file) — обновите VERSION и перетегируйте"
+            exit 1
+          fi
+
+  frontend:
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: cd web && npm ci && npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: webui-dist
+          path: internal/webui/dist
+          retention-days: 1
+
+  build:
+    needs: frontend
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        goarch: [amd64, arm64, arm]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/download-artifact@v4
+        with:
+          name: webui-dist
+          path: internal/webui/dist
+      - name: Собрать бинарник (linux/${{ matrix.goarch }})
+        env:
+          CGO_ENABLED: "0"
+          GOOS: linux
+          GOARCH: ${{ matrix.goarch }}
+          # GOARM=6 — тот же безопасный минимум, что и в Makefile's native-
+          # build/internal/hub: работает и на armv6, и на armv7 (armv6 —
+          # строгое подмножество набора инструкций armv7). Для amd64/arm64
+          # это пустая переменная — go build её просто игнорирует.
+          GOARM: ${{ matrix.goarch == 'arm' && '6' || '' }}
+        run: |
+          mkdir -p dist
+          version="$(tr -d '[:space:]' < VERSION)"
+          out="dist/nkt-linux-${{ matrix.goarch }}"
+          go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=$version" -o "$out" ./cmd/nkt
+          chmod +x "$out"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nkt-linux-${{ matrix.goarch }}
+          path: dist/nkt-linux-${{ matrix.goarch }}
+          retention-days: 1
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: nkt-linux-*
+          path: dist
+          merge-multiple: true
+      - name: Контрольные суммы
+        working-directory: dist
+        run: |
+          chmod +x nkt-linux-*
+          sha256sum nkt-linux-* > SHA256SUMS
+      - name: Создать GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes
