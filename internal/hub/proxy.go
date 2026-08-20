@@ -211,7 +211,21 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 			Director: func(req *http.Request) {
 				req.URL.Scheme = "http"
 				req.URL.Host = remoteAPIAddr
-				req.Host = remoteAPIAddr
+				// req.Host deliberately left as whatever the browser sent
+				// (the hub's own address) — NOT rewritten to remoteAPIAddr.
+				// dial() below already hardcodes the real network target
+				// regardless of what's in req.URL.Host, and internal/api
+				// never itself reads r.Host — but coder/websocket's
+				// Accept() (handleTerminalWS/handleUpdatesWS on the remote)
+				// does, as part of its default same-origin check: it
+				// compares the browser's Origin header (always the hub's
+				// own address, since the browser only ever talks to the
+				// hub) against r.Host. Rewriting r.Host to remoteAPIAddr
+				// here made those two permanently disagree, so every
+				// proxied terminal/package-update WebSocket upgrade was
+				// rejected with 403 regardless of NKT_TERMINAL_ENABLED —
+				// on literally every managed host, unconditionally.
+				//
 				// The incoming request still carries the browser's own hub
 				// session cookie (proxyHost clones it as-is) — same name
 				// (auth.SessionCookie) as the one injected below, but
