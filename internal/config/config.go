@@ -134,20 +134,20 @@ type Config struct {
 	// until someone closes it by hand.
 	TerminalIdleTimeout time.Duration
 
-	// TunnelHubAddr/TunnelHostID/TunnelToken/TunnelCertSHA256 configure the
-	// reverse-tunnel fallback channel's HOST side (see internal/tunnel) —
-	// set by the hub itself at install time (internal/hub/provision.go's
-	// renderEnv) when this host has TunnelEnabled on, not meant to be set
-	// by hand. Together they're what runServer needs to start
-	// internal/tunnel.Run, maintaining a standing outbound connection back
-	// to the hub so its dashboard/terminal keeps working even if SSH to
-	// this host stops responding. TunnelHubAddr empty means the fallback
-	// channel is off — the common case for a plain single-host nkt install
-	// that was never added to any hub.
-	TunnelHubAddr    string
-	TunnelHostID     string
+	// TunnelListenAddr/TunnelToken configure the reverse-tunnel fallback
+	// channel's HOST side (see internal/tunnel) — set by the hub itself at
+	// install time (internal/hub/provision.go's renderEnv) when this host
+	// has TunnelEnabled on, not meant to be set by hand. Together they're
+	// what runServer needs to start internal/tunnel.Run: the hub is the
+	// side that dials out (see internal/hub/tunneldial.go — the same
+	// direction SSH itself already uses, so a hub with no public address of
+	// its own, e.g. one run on a home/office LAN, is not a blocker), so all
+	// this host needs is somewhere to accept that connection and a token to
+	// check it against. TunnelListenAddr empty means the fallback channel
+	// is off — the common case for a plain single-host nkt install that was
+	// never added to any hub.
+	TunnelListenAddr string
 	TunnelToken      string
-	TunnelCertSHA256 string
 
 	// Hub only (ModeHub): base64-encoded AES-256 key used to encrypt SSH
 	// credentials and remote session tokens at rest. Left empty, the hub
@@ -173,26 +173,12 @@ type Config struct {
 	// tab is open, so it deliberately defaults slower than the frontend's
 	// own 30s Hosts.tsx poll.
 	HubFindingsPollInterval time.Duration
-	// HubPublicAddr is the hub's own externally-reachable address:port —
-	// where a managed host with TunnelEnabled on should dial back for the
-	// reverse-tunnel fallback channel (see internal/tunnel), used when SSH
-	// to that host stops working.
-	//
-	// Optional: left empty, install()/StartInstall (see internal/hub's
-	// prepareTunnelEnv) falls back to whatever address the browser that
-	// clicked "установить"/"обновить" is itself using to reach the hub —
-	// good enough for the common case (an operator opening the hub
-	// directly at its real address, private LAN/VPC address included —
-	// only an obvious non-starter like loopback, via e.g. an SSH tunnel
-	// into the hub, is filtered out by looksRoutableFromHost), in which
-	// case the fallback channel stays off exactly like an unset
-	// HubPublicAddr always has. Set this
-	// explicitly only when that guess would be wrong for a *host* even
-	// though it works for a browser — NAT, a reverse proxy that rewrites
-	// Host, or a different public hostname than whatever NKT_ADDR binds
-	// to — e.g. "hub.example.com:8077" or an IP:port with no DNS name yet;
-	// an explicit value here always takes priority over the guess.
-	HubPublicAddr string
+	// HubTunnelPort is the port the hub dials on every TunnelEnabled host
+	// for the reverse-tunnel fallback channel (see internal/hub/tunneldial.go)
+	// — the same port is pushed to each such host at install time as
+	// NKT_HUB_TUNNEL_LISTEN_ADDR (internal/hub/provision.go's renderEnv), so
+	// both sides always agree on it without needing a value per host.
+	HubTunnelPort int
 }
 
 // defaultMode picks the mode for a bare invocation. Linux is the platform this
@@ -288,10 +274,8 @@ func Load() (*Config, error) {
 		TerminalEnabled:     envBool("NKT_TERMINAL_ENABLED", false),
 		TerminalIdleTimeout: envDur("NKT_TERMINAL_IDLE_TIMEOUT", 30*time.Minute),
 
-		TunnelHubAddr:    envStr("NKT_HUB_TUNNEL_ADDR", ""),
-		TunnelHostID:     envStr("NKT_HUB_TUNNEL_HOST_ID", ""),
+		TunnelListenAddr: envStr("NKT_HUB_TUNNEL_LISTEN_ADDR", ""),
 		TunnelToken:      envStr("NKT_HUB_TUNNEL_TOKEN", ""),
-		TunnelCertSHA256: envStr("NKT_HUB_TUNNEL_CERT_SHA256", ""),
 
 		AutoRenewCerts:         envBool("NKT_AUTO_RENEW_CERTS", false),
 		AutoRenewCertsInterval: envDur("NKT_AUTO_RENEW_INTERVAL", 6*time.Hour),
@@ -315,7 +299,7 @@ func Load() (*Config, error) {
 		HubSourceRoot:           envStr("NKT_HUB_SOURCE_ROOT", wd),
 		HubGoBin:                envStr("NKT_HUB_GO_BIN", "go"),
 		HubFindingsPollInterval: envDur("NKT_HUB_FINDINGS_POLL_INTERVAL", 60*time.Second),
-		HubPublicAddr:           envStr("NKT_HUB_PUBLIC_ADDR", ""),
+		HubTunnelPort:           envInt("NKT_HUB_TUNNEL_PORT", 8078),
 	}
 
 	switch c.Mode {
@@ -409,4 +393,16 @@ func envDur(key string, def time.Duration) time.Duration {
 		return def
 	}
 	return d
+}
+
+func envInt(key string, def int) int {
+	v, ok := os.LookupEnv(key)
+	if !ok || v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return def
+	}
+	return n
 }

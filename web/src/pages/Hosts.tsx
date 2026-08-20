@@ -97,8 +97,9 @@ function HostStatusBadge({ status }: { status: HubHost['status'] }) {
  * since it is standing in for a broken primary path, not just a healthy
  * standby. `tunnel_connected` alone (channel still "ssh", or not dialed
  * yet) means the standby connection is up and ready but not needed. Neither
- * set, with the feature enabled, means the host hasn't connected its
- * tunnel client yet (freshly installed, or itself offline).
+ * set, with the feature enabled, means the hub hasn't connected to the
+ * host's tunnel listener yet (freshly installed, or the host itself
+ * offline/unreachable on that port).
  */
 function TunnelChannelBadge({ host }: { host: HubHost }) {
   if (!host.tunnel_enabled) return <span className="small muted">—</span>
@@ -117,7 +118,7 @@ function TunnelChannelBadge({ host }: { host: HubHost }) {
     )
   }
   return (
-    <Tooltip title="Резервный канал включён в настройках, но хост ещё не установил соединение с хабом">
+    <Tooltip title="Резервный канал включён в настройках, но хаб ещё не подключился к хосту">
       <Badge color="var(--text-muted)" text="резервный канал: не подключён" />
     </Tooltip>
   )
@@ -1281,12 +1282,12 @@ function HostForm({
         <Checkbox>
           резервный канал связи на случай недоступности SSH
           <div className="small muted" style={{ fontWeight: 400 }}>
-            Хост держит отдельное защищённое соединение к хабу, чтобы дашборд, терминал и
-            «переустановить»/«обновить» продолжали работать, даже если SSH к нему перестанет
-            отвечать (заблокированный порт 22 — обычно самая частая причина). Включено по
-            умолчанию для новых хостов. Требует, чтобы на хабе был настроен
-            NKT_HUB_PUBLIC_ADDR — свой внешний адрес, на который хостам звонить обратно;
-            без него настройка сохранится, но канал не заработает.{' '}
+            Хаб держит отдельное защищённое соединение к хосту (порт 8078 по умолчанию —
+            NKT_HUB_TUNNEL_PORT на хабе), чтобы дашборд, терминал и «переустановить»/«обновить»
+            продолжали работать, даже если SSH к нему перестанет отвечать. Настраивать адрес
+            самого хаба не нужно — хаб дозванивается так же, как и по SSH, тем же адресом хоста.
+            Включено по умолчанию для новых хостов; не подменяет SSH для самой первой установки
+            (тогда ещё нечему было раньше подключиться).{' '}
             {editing
               ? 'Изменение этой настройки сразу переустановит nkt на хосте (если он уже установлен), чтобы применить её.'
               : 'Применится при первой установке этого хоста.'}

@@ -119,7 +119,7 @@ func TestHubTerminalWebSocketThroughFullRouter(t *testing.T) {
 		t.Fatalf("SetHostStatus: %v", err)
 	}
 
-	manager := NewManager(hubCfg, db, key, "test")
+	manager := NewManager(hubCfg, db, key, "test", slog.New(slog.DiscardHandler))
 
 	srv := New(Deps{Cfg: hubCfg, DB: db, Auth: authSvc, Hub: manager, Log: slog.Default()})
 	ts := httptest.NewServer(srv.Handler())

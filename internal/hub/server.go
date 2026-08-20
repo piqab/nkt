@@ -19,7 +19,6 @@ import (
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/store"
-	"github.com/althq/netknownsthat/internal/tunnel"
 )
 
 // Server is the hub's HTTP entry point: its own auth/session handling (via
@@ -81,16 +80,6 @@ func (s *Server) Handler() http.Handler {
 	r.Use(securityHeaders)
 
 	r.Route("/api", func(r chi.Router) {
-		// The reverse-tunnel fallback channel (internal/tunnel) is a
-		// standing connection a managed host holds open indefinitely —
-		// registered here, outside the 2-minute request Timeout every
-		// route below gets, for the same reason internal/api/server.go
-		// carves its own terminal/updates WebSocket routes out of an
-		// equivalent timeout. Outside RequireAuth too: the connecting
-		// host authenticates itself with a per-host token (see
-		// handleTunnel), never a browser session cookie.
-		r.HandleFunc(strings.TrimPrefix(tunnel.Path, "/api"), s.handleTunnel)
-
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(2 * time.Minute))
 

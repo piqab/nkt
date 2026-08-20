@@ -2,9 +2,9 @@ package hub
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
+	"crypto/tls"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
+	"github.com/althq/netknownsthat/internal/tlscert"
 	"github.com/althq/netknownsthat/internal/tunnel"
 )
 
@@ -26,10 +26,10 @@ import (
 // counterpart to TestManagerProxyRoundTrip: a real nkt binary (fixtures
 // mode) reached through Manager.Proxy — except this host's SSH address
 // deliberately refuses connections (nothing listens on it), the way a
-// blocked or misconfigured inbound port 22 looks in practice, and the
-// ONLY way to it is a real internal/tunnel.Client dialing a real hub TLS
-// server. Success here proves the whole path end to end: dialerFor's
-// SSH-then-relay fallback, the WebSocket+yamux transport, token auth, and
+// blocked or misconfigured inbound port 22 looks in practice, and the ONLY
+// way to it is the hub's own tunnelDialOnce dialing a real internal/tunnel
+// listener. Success here proves the whole path end to end: dialerFor's
+// SSH-then-relay fallback, the TLS+token+yamux transport, and
 // Manager.Proxy/cookieFor working unmodified over it.
 func TestProxyFallsBackToRelayWhenSSHUnreachable(t *testing.T) {
 	repoRoot := findRepoRoot(t)
@@ -61,6 +61,20 @@ func TestProxyFallsBackToRelayWhenSSHUnreachable(t *testing.T) {
 		_, _ = remoteCmd.Process.Wait()
 	})
 	waitForLocalHTTP(t, "http://127.0.0.1:8077/api/health")
+
+	// The host-side tunnel listener — a real internal/tunnel.Run, exactly
+	// what cmd/nkt/main.go's runServer starts on a managed host with
+	// TunnelEnabled on, piping accepted streams to the fixtures nkt above.
+	const token = "relay-integration-test-token"
+	tunnelAddr := startTestTunnelListener(t, token, "127.0.0.1:8077")
+	_, tunnelPortStr, err := net.SplitHostPort(tunnelAddr)
+	if err != nil {
+		t.Fatalf("split tunnel listener addr: %v", err)
+	}
+	tunnelPort, err := strconv.Atoi(tunnelPortStr)
+	if err != nil {
+		t.Fatalf("parse tunnel listener port: %v", err)
+	}
 
 	db, err := store.Open(filepath.Join(t.TempDir(), "hub.db"))
 	if err != nil {
@@ -98,30 +112,23 @@ func TestProxyFallsBackToRelayWhenSSHUnreachable(t *testing.T) {
 	if err := db.SetHostStatus(ctx, hostID, store.HostStatusOnline, ""); err != nil {
 		t.Fatalf("SetHostStatus: %v", err)
 	}
-	const token = "relay-integration-test-token"
-	if err := db.SetHostTunnelToken(ctx, hostID, tunnel.TokenHash(token)); err != nil {
+	if err := db.SetHostTunnelEnabled(ctx, hostID, true); err != nil {
+		t.Fatalf("SetHostTunnelEnabled: %v", err)
+	}
+	tokenEnc, err := secretbox.Encrypt(key, []byte(token))
+	if err != nil {
+		t.Fatalf("encrypt tunnel token: %v", err)
+	}
+	if err := db.SetHostTunnelToken(ctx, hostID, tokenEnc); err != nil {
 		t.Fatalf("SetHostTunnelToken: %v", err)
 	}
 
-	cfg := &config.Config{SessionTTL: time.Hour}
-	manager := NewManager(cfg, db, key, "test")
-	authSvc := auth.NewService(db, cfg)
-	srv := New(Deps{Cfg: cfg, DB: db, Auth: authSvc, Hub: manager, Log: slog.New(slog.DiscardHandler)})
+	cfg := &config.Config{SessionTTL: time.Hour, HubTunnelPort: tunnelPort}
+	manager := NewManager(cfg, db, key, "test", slog.New(slog.DiscardHandler))
 
-	hubSrv := httptest.NewTLSServer(srv.Handler())
-	t.Cleanup(hubSrv.Close)
-	certSum := sha256.Sum256(hubSrv.Certificate().Raw)
-
-	tunnelCtx, stopTunnel := context.WithCancel(context.Background())
-	t.Cleanup(stopTunnel)
-	go tunnel.Run(tunnelCtx, tunnel.ClientConfig{
-		HubAddr:          hubSrv.Listener.Addr().String(),
-		HostID:           strconv.FormatInt(hostID, 10),
-		Token:            token,
-		PinnedCertSHA256: hex.EncodeToString(certSum[:]),
-		LocalAddr:        "127.0.0.1:8077", // the real fixtures nkt above
-		Log:              slog.New(slog.DiscardHandler),
-	})
+	dialerCtx, stopDialer := context.WithCancel(context.Background())
+	t.Cleanup(stopDialer)
+	go manager.runTunnelDialer(dialerCtx, hostID)
 
 	deadline := time.Now().Add(5 * time.Second)
 	for {
@@ -129,7 +136,7 @@ func TestProxyFallsBackToRelayWhenSSHUnreachable(t *testing.T) {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("tunnel client never registered its relay session with the hub")
+			t.Fatal("tunnel dialer never registered a relay session with the hub")
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -141,7 +148,7 @@ func TestProxyFallsBackToRelayWhenSSHUnreachable(t *testing.T) {
 	}
 
 	// /api/health needs no session — proves the relay transport itself
-	// works (WebSocket + yamux + token auth, byte-for-byte).
+	// works (TLS + token auth + yamux, byte-for-byte).
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
 	manager.Proxy(hostID).ServeHTTP(rec, req)
@@ -163,124 +170,50 @@ func TestProxyFallsBackToRelayWhenSSHUnreachable(t *testing.T) {
 	}
 }
 
-// TestHandleTunnelRejectsBadAuth confirms the WebSocket upgrade endpoint
-// itself refuses an unknown host id, a host with no tunnel token
-// configured, and a wrong token — each without ever reaching
-// websocket.Accept (a 401/400 plain HTTP response, not an upgraded
-// connection that then gets closed).
-func TestHandleTunnelRejectsBadAuth(t *testing.T) {
-	m, db := newTestManager(t)
-	ctx := context.Background()
+// startTestTunnelListener starts a real internal/tunnel.Run listener on an
+// ephemeral port and returns its address once it's actually accepting
+// connections.
+func startTestTunnelListener(t *testing.T, token, localAddr string) string {
+	t.Helper()
 
-	hostID, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	dir := t.TempDir()
+	certFile, keyFile := filepath.Join(dir, "cert.pem"), filepath.Join(dir, "key.pem")
+	if err := tlscert.EnsureSelfSigned(certFile, keyFile, []string{"nkt-tunnel-test"}); err != nil {
+		t.Fatalf("EnsureSelfSigned: %v", err)
+	}
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		t.Fatalf("AddHost: %v", err)
+		t.Fatalf("LoadX509KeyPair: %v", err)
 	}
 
-	cfg := &config.Config{SessionTTL: time.Hour}
-	authSvc := auth.NewService(db, cfg)
-	srv := New(Deps{Cfg: cfg, DB: db, Auth: authSvc, Hub: m, Log: slog.New(slog.DiscardHandler)})
-
-	t.Run("unknown host id", func(t *testing.T) {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, tunnel.Path, nil)
-		req.Header.Set(tunnel.HeaderHostID, "999999")
-		req.Header.Set(tunnel.HeaderToken, "whatever")
-		srv.handleTunnel(rec, req)
-		if rec.Code != http.StatusUnauthorized {
-			t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-		}
-	})
-
-	t.Run("tunnel never configured for this host", func(t *testing.T) {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, tunnel.Path, nil)
-		req.Header.Set(tunnel.HeaderHostID, strconv.FormatInt(hostID, 10))
-		req.Header.Set(tunnel.HeaderToken, "whatever")
-		srv.handleTunnel(rec, req)
-		if rec.Code != http.StatusUnauthorized {
-			t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-		}
-	})
-
-	t.Run("wrong token", func(t *testing.T) {
-		if err := db.SetHostTunnelToken(ctx, hostID, tunnel.TokenHash("the-real-token")); err != nil {
-			t.Fatalf("SetHostTunnelToken: %v", err)
-		}
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, tunnel.Path, nil)
-		req.Header.Set(tunnel.HeaderHostID, strconv.FormatInt(hostID, 10))
-		req.Header.Set(tunnel.HeaderToken, "not-the-real-token")
-		srv.handleTunnel(rec, req)
-		if rec.Code != http.StatusUnauthorized {
-			t.Errorf("status = %d, want %d", rec.Code, http.StatusUnauthorized)
-		}
-	})
-
-	t.Run("missing headers", func(t *testing.T) {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, tunnel.Path, nil)
-		srv.handleTunnel(rec, req)
-		if rec.Code != http.StatusBadRequest {
-			t.Errorf("status = %d, want %d", rec.Code, http.StatusBadRequest)
-		}
-	})
-}
-
-// TestHandleTunnelRateLimitsRepeatedWrongTokens confirms 5 wrong-token
-// attempts against a real, tunnel-configured host lock it out (429) —
-// the actual point of routing failed token checks through
-// Manager.tunnelAttempts (see handleTunnel) rather than leaving the
-// endpoint open to unlimited guessing. Also confirms attempts against an
-// UNKNOWN host id never count toward this at all (they're rejected before
-// the limiter is even consulted — see handleTunnel's own comment on why),
-// so an attacker can't use garbage ids to grow the limiter's map for free.
-func TestHandleTunnelRateLimitsRepeatedWrongTokens(t *testing.T) {
-	m, db := newTestManager(t)
-	ctx := context.Background()
-
-	hostID, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("AddHost: %v", err)
+		t.Fatalf("pick a free port: %v", err)
 	}
-	if err := db.SetHostTunnelToken(ctx, hostID, tunnel.TokenHash("the-real-token")); err != nil {
-		t.Fatalf("SetHostTunnelToken: %v", err)
-	}
+	addr := ln.Addr().String()
+	_ = ln.Close()
 
-	cfg := &config.Config{SessionTTL: time.Hour}
-	authSvc := auth.NewService(db, cfg)
-	srv := New(Deps{Cfg: cfg, DB: db, Auth: authSvc, Hub: m, Log: slog.New(slog.DiscardHandler)})
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() {
+		_ = tunnel.Run(ctx, tunnel.ListenerConfig{
+			ListenAddr: addr,
+			Token:      token,
+			TLSCert:    cert,
+			LocalAddr:  localAddr,
+			Log:        slog.New(slog.DiscardHandler),
+		})
+	}()
 
-	attempt := func(token string) int {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, tunnel.Path, nil)
-		req.Header.Set(tunnel.HeaderHostID, strconv.FormatInt(hostID, 10))
-		req.Header.Set(tunnel.HeaderToken, token)
-		srv.handleTunnel(rec, req)
-		return rec.Code
-	}
-
-	// Unknown host ids never touch the limiter, no matter how many times.
-	for i := 0; i < 10; i++ {
-		rec := httptest.NewRecorder()
-		req := httptest.NewRequest(http.MethodGet, tunnel.Path, nil)
-		req.Header.Set(tunnel.HeaderHostID, "999999")
-		req.Header.Set(tunnel.HeaderToken, "whatever")
-		srv.handleTunnel(rec, req)
-		if rec.Code != http.StatusUnauthorized {
-			t.Fatalf("unknown-host attempt %d: status = %d, want %d", i, rec.Code, http.StatusUnauthorized)
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return addr
 		}
+		time.Sleep(10 * time.Millisecond)
 	}
-
-	for i := 0; i < 5; i++ {
-		if code := attempt("wrong-token"); code != http.StatusUnauthorized {
-			t.Fatalf("wrong-token attempt %d: status = %d, want %d", i, code, http.StatusUnauthorized)
-		}
-	}
-
-	// The 6th attempt — even with the CORRECT token this time — must be
-	// locked out: the endpoint refuses before it ever compares the token.
-	if code := attempt("the-real-token"); code != http.StatusTooManyRequests {
-		t.Errorf("attempt after 5 failures (correct token this time): status = %d, want %d", code, http.StatusTooManyRequests)
-	}
+	t.Fatalf("tunnel listener at %s never came up", addr)
+	return ""
 }

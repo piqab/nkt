@@ -55,7 +55,7 @@ func TestProxyHostRequiresAdmin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	manager := NewManager(cfg, db, key, "test")
+	manager := NewManager(cfg, db, key, "test", slog.New(slog.DiscardHandler))
 
 	srv := New(Deps{Cfg: cfg, DB: db, Auth: authSvc, Hub: manager, Log: slog.Default()})
 	handler := srv.Handler()

@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,7 +26,7 @@ func newTestManager(t *testing.T) (*Manager, *store.DB) {
 	if err != nil {
 		t.Fatalf("GenerateKey: %v", err)
 	}
-	return NewManager(&config.Config{}, db, key, "test"), db
+	return NewManager(&config.Config{}, db, key, "test", slog.New(slog.DiscardHandler)), db
 }
 
 func TestRecordSudoOutcome(t *testing.T) {

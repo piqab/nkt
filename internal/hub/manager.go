@@ -3,12 +3,10 @@ package hub
 import (
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
-	"encoding/pem"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sync"
@@ -17,11 +15,9 @@ import (
 	"github.com/hashicorp/yamux"
 	"golang.org/x/crypto/ssh"
 
-	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
-	"github.com/althq/netknownsthat/internal/tunnel"
 )
 
 // Event is one line of progress from a StartInstall job — the same shape
@@ -112,6 +108,7 @@ type Manager struct {
 	db      *store.DB
 	key     []byte
 	version string
+	log     *slog.Logger
 
 	jobsMu    sync.Mutex
 	jobs      map[string]*installJob
@@ -129,21 +126,11 @@ type Manager struct {
 	overview   map[int64]hostOverview
 
 	// relayMu/relaySessions hold each host's live reverse-tunnel session
-	// (see relay.go) — populated by handleTunnel when a host with
-	// TunnelEnabled dials in, consumed by dialerFor only after an SSH dial
-	// has already failed. Unlike conns/sessions, the hub never dials this
-	// side itself: an entry exists exactly when that host currently has
-	// the fallback channel open, nothing here ever gets "redialed".
+	// (see relay.go) — populated by tunneldial.go's runTunnelDialer, which
+	// keeps one such connection alive per TunnelEnabled host, consumed by
+	// dialerFor only after an SSH dial has already failed.
 	relayMu       sync.Mutex
 	relaySessions map[int64]*yamux.Session
-
-	// tunnelAttempts rate-limits failed reverse-tunnel token checks (see
-	// relay.go's handleTunnel), keyed by host id — the same
-	// auth.AttemptLimiter the hub's own login already uses (there, keyed
-	// by username), reused here rather than duplicated: a bearer token has
-	// far more entropy than a password, but a client hammering the
-	// endpoint with wrong ones still deserves the same backoff.
-	tunnelAttempts *auth.AttemptLimiter
 
 	// goBinMu/resolvedGoBin cache resolveGoBin's result for the Manager's
 	// lifetime — the self-install it may trigger is expensive enough
@@ -162,24 +149,24 @@ func (m *Manager) Version() string { return m.version }
 // NewManager builds a host manager. key is the resolved secretbox master
 // key (see secretbox.ResolveKey); version is stamped into every binary this
 // hub cross-compiles, so an installed host reports the hub's own build.
-func NewManager(cfg *config.Config, db *store.DB, key []byte, version string) *Manager {
+func NewManager(cfg *config.Config, db *store.DB, key []byte, version string, log *slog.Logger) *Manager {
 	return &Manager{
-		cfg: cfg, db: db, key: key, version: version,
-		jobs:           map[string]*installJob{},
-		jobByHost:      map[int64]*installJob{},
-		conns:          map[int64]*hostConn{},
-		sessions:       map[int64]sessionCache{},
-		overview:       map[int64]hostOverview{},
-		relaySessions:  map[int64]*yamux.Session{},
-		tunnelAttempts: auth.NewAttemptLimiter(),
+		cfg: cfg, db: db, key: key, version: version, log: log,
+		jobs:          map[string]*installJob{},
+		jobByHost:     map[int64]*installJob{},
+		conns:         map[int64]*hostConn{},
+		sessions:      map[int64]sessionCache{},
+		overview:      map[int64]hostOverview{},
+		relaySessions: map[int64]*yamux.Session{},
 	}
 }
 
 // Run starts the manager's background maintenance — idle SSH connection
-// eviction and the periodic host findings/reachability poll — and blocks
-// until ctx is done.
+// eviction, the periodic host findings/reachability poll, and the
+// reverse-tunnel dialers — and blocks until ctx is done.
 func (m *Manager) Run(ctx context.Context) {
 	go m.pollOverviews(ctx)
+	go m.maintainTunnelDialers(ctx)
 	m.evictIdleConns(ctx)
 }
 
@@ -440,15 +427,7 @@ func orUnknown(s string) string {
 // finds an nkt on the target this hub didn't put there itself — set by the
 // operator explicitly confirming the overwrite after seeing
 // ForeignInstallError's detail.
-// requestHubAddr is whatever host:port the browser that clicked
-// "установить"/"обновить" is itself using to reach this hub (an HTTP
-// handler's r.Host) — used as an automatic stand-in for NKT_HUB_PUBLIC_ADDR
-// when that is not set, so the reverse-tunnel fallback works out of the box
-// in the common case (operator opens the hub directly by its real address)
-// instead of requiring manual configuration up front. See prepareTunnelEnv
-// and looksRoutableFromHost for why a manual NKT_HUB_PUBLIC_ADDR still
-// takes priority and an obviously-local guess is rejected rather than used.
-func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, requestHubAddr string) (string, error) {
+func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool) (string, error) {
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
 		return "", fmt.Errorf("хост не найден: %w", err)
@@ -482,7 +461,7 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, re
 
 	go func() {
 		defer cancel()
-		job.finish(m.install(ctx, hostID, job, requestHubAddr))
+		job.finish(m.install(ctx, hostID, job))
 	}()
 
 	return id, nil
@@ -517,7 +496,7 @@ func (m *Manager) CancelInstall(ctx context.Context, hostID int64) error {
 // bootstrap admin from then on (see tunnel.go, server.go). job carries both
 // the progress log (job.append) and, once connected, the live SSH
 // connection CancelInstall needs to be able to interrupt this from outside.
-func (m *Manager) install(ctx context.Context, hostID int64, job *installJob, requestHubAddr string) error {
+func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) error {
 	report := job.append
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
@@ -542,7 +521,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob, re
 	client, sshErr := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
 	if sshErr != nil {
 		if m.tunnelReinstallFallback(host) {
-			return m.installOverTunnel(ctx, hostID, host, job, requestHubAddr)
+			return m.installOverTunnel(ctx, hostID, host, job)
 		}
 		return fail(sshErr)
 	}
@@ -573,12 +552,9 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob, re
 		return fail(err)
 	}
 
-	tun, tunWarn, err := m.prepareTunnelEnv(ctx, hostID, host, requestHubAddr)
+	tun, err := m.prepareTunnelEnv(ctx, hostID, host)
 	if err != nil {
 		return fail(err)
-	}
-	if tunWarn != "" {
-		report(tunWarn)
 	}
 
 	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, tun)
@@ -627,90 +603,44 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob, re
 }
 
 // prepareTunnelEnv generates this install's reverse-tunnel fallback
-// credentials (see internal/tunnel) when the host has TunnelEnabled and a
-// usable hub address is available — config.Config.HubPublicAddr if set
-// explicitly (always wins, since it was set on purpose), otherwise
-// requestHubAddr (the browser's own r.Host — see StartInstall's doc
-// comment) when that looks like it could plausibly be reached from a
-// *different* machine at all (see looksRoutableFromHost). With neither,
-// there is nowhere for the host to dial back to, so the feature is simply
-// off. The zero value (Enabled: false) tells renderEnv to write none of
-// the NKT_HUB_TUNNEL_* variables, the same as if this feature didn't exist.
-//
-// The returned warn string is non-empty exactly when hubAddrLooksUnreachableFrom
-// flags a topology no code here can actually fix — a private/loopback hub
-// address next to a public-looking host address, i.e. the hub is reachable
-// only from its own LAN while the host sits out on the public internet.
-// The channel is still configured in that case (the guess might be right —
-// this is best-effort, not a hard block), but silently is exactly how the
-// first two rounds of this exact feature went wrong before, so the caller
-// surfaces this in the install log instead of leaving it to be discovered
-// only once SSH itself later breaks too.
+// credentials (see internal/tunnel) when the host has TunnelEnabled — the
+// zero value (Enabled: false) tells renderEnv to write none of the
+// NKT_HUB_TUNNEL_* variables, the same as if this feature didn't exist.
+// Unlike the first iteration of this feature, no hub address needs
+// resolving here at all: the hub is the side that dials out (see
+// tunneldial.go), using host.Addr — already known, the same address SSH
+// itself already reaches this host at — so there is nothing for the host
+// to be told about how to find the hub.
 //
 // A fresh random token is generated on every install/update that has
 // TunnelEnabled on — not reused from a previous install — mirroring how
 // the SSH keypair itself gets regenerated on "изменить" → "переустановить"
 // (see UpdateHostGenerated): whatever a *previous* install wrote into this
 // host's env file no longer matters once a new one is about to overwrite
-// it, and there is no benefit to keeping an old token alive.
-func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store.Host, requestHubAddr string) (tunnelEnvParams, string, error) {
+// it, and there is no benefit to keeping an old token alive. Encrypted at
+// rest (unlike the first iteration's plain hash) because the hub now needs
+// the raw value back to present it on every future reconnect, not just to
+// verify one — the host is the verifier this time (see internal/tunnel).
+func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store.Host) (tunnelEnvParams, error) {
 	if !host.TunnelEnabled {
-		return tunnelEnvParams{}, "", nil
-	}
-	hubAddr := m.cfg.HubPublicAddr
-	if hubAddr == "" && looksRoutableFromHost(requestHubAddr) {
-		hubAddr = requestHubAddr
-	}
-	if hubAddr == "" {
-		return tunnelEnvParams{}, "", nil
-	}
-	warn := ""
-	if hubAddrLooksUnreachableFrom(hubAddr, host.Addr) {
-		warn = fmt.Sprintf(
-			"резервный канал: адрес хаба %q похож на локальный/приватный, а адрес хоста %q — на внешний; "+
-				"если хаб и хост не в одной сети, хост не сможет дозвониться — задайте настоящий внешний "+
-				"адрес хаба через NKT_HUB_PUBLIC_ADDR",
-			hubAddr, host.Addr)
+		return tunnelEnvParams{}, nil
 	}
 	token, err := generatePassword() // 24 random bytes, base64 — plenty of entropy for a machine token too
 	if err != nil {
-		return tunnelEnvParams{}, "", fmt.Errorf("генерация токена резервного канала: %w", err)
+		return tunnelEnvParams{}, fmt.Errorf("генерация токена резервного канала: %w", err)
 	}
-	if err := m.db.SetHostTunnelToken(ctx, hostID, tunnel.TokenHash(token)); err != nil {
-		return tunnelEnvParams{}, "", fmt.Errorf("сохранение токена резервного канала: %w", err)
+	tokenEnc, err := secretbox.Encrypt(m.key, []byte(token))
+	if err != nil {
+		return tunnelEnvParams{}, fmt.Errorf("шифрование токена резервного канала: %w", err)
+	}
+	if err := m.db.SetHostTunnelToken(ctx, hostID, tokenEnc); err != nil {
+		return tunnelEnvParams{}, fmt.Errorf("сохранение токена резервного канала: %w", err)
 	}
 	return tunnelEnvParams{
-		Enabled:          true,
-		HubAddr:          hubAddr,
-		HostID:           hostID,
-		Token:            token,
-		PinnedCertSHA256: m.hubCertFingerprint(),
-	}, warn, nil
-}
-
-// hubCertFingerprint returns the SHA-256 fingerprint (hex) of this hub's
-// own current self-signed TLS certificate (see internal/tlscert), for a
-// newly installed host's tunnel client to pin against instead of blind
-// trust-on-first-use — see internal/tunnel.ClientConfig.PinnedCertSHA256.
-// Empty when TLS isn't self-signed here: a manually supplied NKT_TLS_CERT/
-// NKT_TLS_KEY, or NKT_TLS_ENABLED off entirely (a reverse proxy in front
-// with its own real certificate), both rely on normal CA verification
-// instead, which needs no pin — and an empty pin is exactly what tells the
-// tunnel client to do that.
-func (m *Manager) hubCertFingerprint() string {
-	if !m.cfg.TLSEnabled || m.cfg.TLSCert != "" {
-		return ""
-	}
-	raw, err := os.ReadFile(m.cfg.TLSSelfSignedCertFile())
-	if err != nil {
-		return ""
-	}
-	block, _ := pem.Decode(raw)
-	if block == nil {
-		return ""
-	}
-	sum := sha256.Sum256(block.Bytes)
-	return hex.EncodeToString(sum[:])
+		Enabled:    true,
+		ListenAddr: fmt.Sprintf("0.0.0.0:%d", m.cfg.HubTunnelPort),
+		Token:      token,
+	}, nil
 }
 
 // resolveAdminCredential returns the bootstrap admin username/password to

@@ -61,7 +61,7 @@ func runHubDelete(opts commandOptions, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("ключ шифрования секретов хаба: %w", err)
 	}
-	manager := hub.NewManager(cfg, db, key, version)
+	manager := hub.NewManager(cfg, db, key, version, log)
 
 	ctx := context.Background()
 	stdin := bufio.NewReader(os.Stdin)

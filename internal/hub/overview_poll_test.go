@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"os/exec"
 	osuser "os/user"
@@ -96,7 +97,7 @@ func TestPollOverviewPopulatesFindings(t *testing.T) {
 		t.Fatalf("SetHostStatus: %v", err)
 	}
 
-	manager := NewManager(&config.Config{}, db, key, "test")
+	manager := NewManager(&config.Config{}, db, key, "test", slog.New(slog.DiscardHandler))
 
 	if _, ok := manager.Overview(hostID); ok {
 		t.Fatalf("Overview before any poll tick should report ok=false")
