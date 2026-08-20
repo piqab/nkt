@@ -159,15 +159,15 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 // writes into a host's env when the feature is actually configured for it
 // — see Manager.prepareTunnelEnv, which builds this. The zero value
 // (Enabled: false) means "write nothing", same as if the feature didn't
-// exist for this host.
+// exist for this host. Only ListenAddr and Token: since the hub is the
+// side that dials out (see internal/hub/tunneldial.go), the host doesn't
+// need to be told a hub address or its own id — it never identifies
+// itself to anyone, it just accepts on ListenAddr and checks whatever
+// token an incoming connection presents against Token.
 type tunnelEnvParams struct {
-	Enabled bool
-	HubAddr string
-	HostID  int64
-	Token   string
-	// PinnedCertSHA256 is empty when the hub isn't using a self-signed
-	// certificate — see Manager.hubCertFingerprint.
-	PinnedCertSHA256 string
+	Enabled    bool
+	ListenAddr string
+	Token      string
 }
 
 func renderEnv(adminUser, adminPassword string, terminalEnabled bool, tun tunnelEnvParams) string {
@@ -180,12 +180,8 @@ func renderEnv(adminUser, adminPassword string, terminalEnabled bool, tun tunnel
 	fmt.Fprintf(&b, "NKT_COOKIE_SECURE=false\n")
 	fmt.Fprintf(&b, "NKT_TERMINAL_ENABLED=%t\n", terminalEnabled)
 	if tun.Enabled {
-		fmt.Fprintf(&b, "NKT_HUB_TUNNEL_ADDR=%s\n", tun.HubAddr)
-		fmt.Fprintf(&b, "NKT_HUB_TUNNEL_HOST_ID=%d\n", tun.HostID)
+		fmt.Fprintf(&b, "NKT_HUB_TUNNEL_LISTEN_ADDR=%s\n", tun.ListenAddr)
 		fmt.Fprintf(&b, "NKT_HUB_TUNNEL_TOKEN=%s\n", tun.Token)
-		if tun.PinnedCertSHA256 != "" {
-			fmt.Fprintf(&b, "NKT_HUB_TUNNEL_CERT_SHA256=%s\n", tun.PinnedCertSHA256)
-		}
 	}
 	return b.String()
 }

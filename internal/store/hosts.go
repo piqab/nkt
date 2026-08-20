@@ -53,25 +53,26 @@ type Host struct {
 	// host was added, so this needs its own explicit per-host opt-in.
 	TerminalEnabled bool `json:"terminal_enabled"`
 	// TunnelEnabled turns on the reverse-tunnel fallback channel (see
-	// internal/tunnel and internal/hub/tunnel.go) — the host dials the hub
-	// itself over WebSocket and keeps that connection ready so the hub can
-	// still reach its dashboard/terminal if SSH becomes unreachable. Off by
-	// default, same reasoning as TerminalEnabled: a new opt-in surface,
-	// not something every host should get just by being added.
+	// internal/tunnel and internal/hub/tunneldial.go) — the hub dials out
+	// to this host and keeps that connection ready so it can still reach
+	// the dashboard/terminal if SSH becomes unreachable. Off by default,
+	// same reasoning as TerminalEnabled: a new opt-in surface, not
+	// something every host should get just by being added.
 	TunnelEnabled bool   `json:"tunnel_enabled"`
 	ErrorMsg      string `json:"error_msg,omitempty"`
 	CreatedAt     string `json:"created_at"`
 	LastSeenAt    string `json:"last_seen_at,omitempty"`
 
-	// SecretEnc and AdminPasswordEnc are secretbox-encrypted and never
-	// serialised to JSON — only the hub package that holds the master key
-	// reads them. TunnelTokenHash is not a secret to recover (nothing ever
-	// needs the raw token back, only to verify a presented one against it),
-	// so it is a plain SHA-256 digest, not secretbox-encrypted — see
-	// SetHostTunnelToken.
+	// SecretEnc, AdminPasswordEnc and TunnelTokenEnc are secretbox-encrypted
+	// and never serialised to JSON — only the hub package that holds the
+	// master key reads them. TunnelTokenEnc is encrypted, not just hashed
+	// like the first iteration of this feature: the hub is now the side
+	// that *presents* the token on every reconnect (see
+	// internal/hub/tunneldial.go), not just the side that verifies one, so
+	// it needs the raw value back — see SetHostTunnelToken.
 	SecretEnc        []byte `json:"-"`
 	AdminPasswordEnc []byte `json:"-"`
-	TunnelTokenHash  []byte `json:"-"`
+	TunnelTokenEnc   []byte `json:"-"`
 }
 
 // CreateHost inserts a host with an already-encrypted SSH secret.
@@ -91,20 +92,20 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
-	tunnel_enabled, tunnel_token_hash, error_msg, created_at, last_seen_at`
+	tunnel_enabled, tunnel_token_enc, error_msg, created_at, last_seen_at`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
 	var lastSeen sql.NullString
-	var adminPasswordEnc, tunnelTokenHash []byte
+	var adminPasswordEnc, tunnelTokenEnc []byte
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
-		&h.TunnelEnabled, &tunnelTokenHash, &h.ErrorMsg, &h.CreatedAt, &lastSeen)
+		&h.TunnelEnabled, &tunnelTokenEnc, &h.ErrorMsg, &h.CreatedAt, &lastSeen)
 	if err != nil {
 		return Host{}, err
 	}
 	h.AdminPasswordEnc = adminPasswordEnc
-	h.TunnelTokenHash = tunnelTokenHash
+	h.TunnelTokenEnc = tunnelTokenEnc
 	h.LastSeenAt = lastSeen.String
 	return h, nil
 }
@@ -242,16 +243,15 @@ func (d *DB) SetHostTunnelEnabled(ctx context.Context, id int64, enabled bool) e
 	return nil
 }
 
-// SetHostTunnelToken stores the SHA-256 digest of a freshly generated
-// reverse-tunnel token — called once per install/update that has
-// TunnelEnabled on, right after a new random token is generated and written
-// into the host's own env file. Only the digest is kept: nothing on the hub
-// side ever needs the raw token back, only to verify a value a connecting
-// host presents against it (see internal/hub/tunnel.go), so there is
-// nothing to decrypt and therefore no secretbox round trip needed here,
-// unlike SecretEnc/AdminPasswordEnc.
-func (d *DB) SetHostTunnelToken(ctx context.Context, id int64, tokenHash []byte) error {
-	res, err := d.ExecContext(ctx, `UPDATE hosts SET tunnel_token_hash = ? WHERE id = ?`, tokenHash, id)
+// SetHostTunnelToken stores a freshly generated reverse-tunnel token,
+// secretbox-encrypted by the caller — called once per install/update that
+// has TunnelEnabled on, right after a new random token is generated and
+// written into the host's own env file. Unlike the first iteration of this
+// feature (which only ever stored a SHA-256 digest), the raw value has to
+// be recoverable: the hub is now the side presenting the token on every
+// reconnect (see internal/hub/tunneldial.go), not the side verifying one.
+func (d *DB) SetHostTunnelToken(ctx context.Context, id int64, tokenEnc []byte) error {
+	res, err := d.ExecContext(ctx, `UPDATE hosts SET tunnel_token_enc = ? WHERE id = ?`, tokenEnc, id)
 	if err != nil {
 		return err
 	}

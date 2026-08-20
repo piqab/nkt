@@ -44,7 +44,7 @@ func runHubImport(opts commandOptions, log *slog.Logger) error {
 	if err != nil {
 		return fmt.Errorf("ключ шифрования секретов хаба: %w", err)
 	}
-	manager := hub.NewManager(cfg, db, key, version)
+	manager := hub.NewManager(cfg, db, key, version, log)
 
 	data, err := os.ReadFile(opts.file)
 	if err != nil {

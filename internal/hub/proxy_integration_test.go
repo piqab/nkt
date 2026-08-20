@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -97,7 +98,7 @@ func TestManagerProxyRoundTrip(t *testing.T) {
 		t.Fatalf("SetHostStatus: %v", err)
 	}
 
-	manager := NewManager(&config.Config{}, db, key, "test")
+	manager := NewManager(&config.Config{}, db, key, "test", slog.New(slog.DiscardHandler))
 
 	// /api/health needs no session — proves the tunnel itself works.
 	rec := httptest.NewRecorder()

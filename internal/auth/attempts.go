@@ -7,12 +7,13 @@ import (
 
 // AttemptLimiter tracks failed attempts per key and applies an
 // exponential-ish backoff lockout once a key accumulates enough failures —
-// used here for login (keyed by username) and, in internal/hub, the
-// reverse-tunnel token check (keyed by host id). A guessable secret (a
-// password) needs this to slow brute-forcing down; a high-entropy one (the
-// tunnel's 192-bit token) mainly needs it to stop an attacker or
-// misbehaving client hammering the endpoint at all rather than to make
-// guessing infeasible — the same mechanism serves both.
+// used here for login (keyed by username) and, in internal/tunnel, the
+// reverse-tunnel listener's token check (keyed by the connecting remote
+// address). A guessable secret (a password) needs this to slow
+// brute-forcing down; a high-entropy one (the tunnel's 192-bit token)
+// mainly needs it to stop an attacker or misbehaving client hammering the
+// endpoint at all rather than to make guessing infeasible — the same
+// mechanism serves both.
 //
 // In-memory only, with no expiry sweep: a process restart clears it, and a
 // key that stops failing simply stops growing its own entry further — the

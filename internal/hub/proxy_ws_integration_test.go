@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"log/slog"
 	"net/http/httptest"
 	"os"
 	"os/exec"
@@ -104,7 +105,7 @@ func TestManagerProxyWebSocketRoundTrip(t *testing.T) {
 		t.Fatalf("SetHostStatus: %v", err)
 	}
 
-	manager := NewManager(&config.Config{}, db, key, "test")
+	manager := NewManager(&config.Config{}, db, key, "test", slog.New(slog.DiscardHandler))
 
 	// A real network listener, not httptest.NewRecorder(): the WS upgrade
 	// needs a real http.Hijacker-backed connection on the client side of

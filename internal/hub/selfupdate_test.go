@@ -8,6 +8,7 @@ import (
 	"github.com/hashicorp/yamux"
 
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -147,54 +148,47 @@ func TestDynamicRelayDialSurvivesSessionSwap(t *testing.T) {
 	}
 }
 
-// TestLooksRoutableFromHost locks in the filter that keeps an obviously
-// wrong guess (the operator's own loopback hop into the hub — an SSH
-// tunnel, say) from ever being baked into a host's tunnel config as a
-// stand-in for NKT_HUB_PUBLIC_ADDR — while deliberately NOT rejecting a
-// private/LAN address, since hub and managed host sharing a private
-// network is a normal, common deployment, not an edge case (this used to
-// reject IsPrivate() too, which silently broke exactly that setup — see
-// the git history for the incident this test now guards against).
-func TestLooksRoutableFromHost(t *testing.T) {
-	cases := []struct {
-		hostport string
-		want     bool
-	}{
-		{"", false},
-		{"localhost:8443", false},
-		{"localhost", false},
-		{"127.0.0.1:8443", false},
-		{"127.0.0.1", false},
-		{"::1", false},
-		{"[::1]:8443", false},
-		{"169.254.1.2:8443", false},
-		{"0.0.0.0:8443", false},
-		// Private/LAN addresses ARE accepted — hub and host on the same
-		// network is legitimate, not something to silently disable.
-		{"10.0.0.5:8443", true},
-		{"192.168.1.20:8443", true},
-		{"172.20.0.5:8443", true},
-		{"203.0.113.5:8443", true},
-		{"hub.example.com:8443", true},
-		{"hub.example.com", true},
-	}
-	for _, c := range cases {
-		if got := looksRoutableFromHost(c.hostport); got != c.want {
-			t.Errorf("looksRoutableFromHost(%q) = %v, want %v", c.hostport, got, c.want)
-		}
-	}
-}
-
-// TestPrepareTunnelEnvAddrResolution covers the three-way priority
-// prepareTunnelEnv applies to pick a hub address: an explicitly configured
-// NKT_HUB_PUBLIC_ADDR always wins; without one, a routable request Host is
-// used automatically; a non-routable one (or none at all) leaves the
-// feature off exactly like an unset NKT_HUB_PUBLIC_ADDR always has.
-func TestPrepareTunnelEnvAddrResolution(t *testing.T) {
+// TestPrepareTunnelEnv covers Manager.prepareTunnelEnv now that it no
+// longer has any hub-address guessing to do — the hub is the side that
+// dials out (see tunneldial.go), using the host's own already-known Addr,
+// so this only has TunnelEnabled to branch on. Disabled means no token is
+// generated or stored at all; enabled means a token is generated, stored
+// secretbox-encrypted (recoverable — the hub has to present it again on
+// every future reconnect, unlike the first iteration's plain hash), and
+// ListenAddr reflects cfg.HubTunnelPort.
+func TestPrepareTunnelEnv(t *testing.T) {
 	ctx := context.Background()
 
-	newHost := func(t *testing.T, db *store.DB) store.Host {
-		t.Helper()
+	t.Run("disabled: no token generated or stored", func(t *testing.T) {
+		m, db := newTestManager(t)
+		id, err := db.CreateHost(ctx, "h", "203.0.113.9", 22, "root", store.HostAuthKey, []byte("enc"))
+		if err != nil {
+			t.Fatalf("CreateHost: %v", err)
+		}
+		host, err := db.HostByID(ctx, id)
+		if err != nil {
+			t.Fatalf("HostByID: %v", err)
+		}
+
+		tun, err := m.prepareTunnelEnv(ctx, host.ID, host)
+		if err != nil {
+			t.Fatalf("prepareTunnelEnv: %v", err)
+		}
+		if tun.Enabled {
+			t.Errorf("prepareTunnelEnv() = %+v, want Enabled=false with TunnelEnabled off", tun)
+		}
+		got, err := db.HostByID(ctx, id)
+		if err != nil {
+			t.Fatalf("HostByID: %v", err)
+		}
+		if got.TunnelTokenEnc != nil {
+			t.Errorf("TunnelTokenEnc = %x, want nil — nothing should be stored when the feature is off", got.TunnelTokenEnc)
+		}
+	})
+
+	t.Run("enabled: generates, stores encrypted, and derives ListenAddr from HubTunnelPort", func(t *testing.T) {
+		m, db := newTestManager(t)
+		m.cfg = &config.Config{HubTunnelPort: 9999}
 		id, err := db.CreateHost(ctx, "h", "203.0.113.9", 22, "root", store.HostAuthKey, []byte("enc"))
 		if err != nil {
 			t.Fatalf("CreateHost: %v", err)
@@ -204,100 +198,31 @@ func TestPrepareTunnelEnvAddrResolution(t *testing.T) {
 			t.Fatalf("HostByID: %v", err)
 		}
 		host.TunnelEnabled = true
-		return host
-	}
 
-	t.Run("tunnel disabled: never resolves an address", func(t *testing.T) {
-		m, _ := newTestManager(t)
-		host := store.Host{ID: 1, TunnelEnabled: false}
-		tun, _, err := m.prepareTunnelEnv(ctx, host.ID, host, "public.example.com:8443")
+		tun, err := m.prepareTunnelEnv(ctx, host.ID, host)
 		if err != nil {
 			t.Fatalf("prepareTunnelEnv: %v", err)
 		}
-		if tun.Enabled {
-			t.Errorf("prepareTunnelEnv() = %+v, want Enabled=false with TunnelEnabled off", tun)
+		if !tun.Enabled || tun.Token == "" {
+			t.Fatalf("prepareTunnelEnv() = %+v, want Enabled=true with a generated token", tun)
 		}
-	})
+		if tun.ListenAddr != "0.0.0.0:9999" {
+			t.Errorf("ListenAddr = %q, want %q (from cfg.HubTunnelPort)", tun.ListenAddr, "0.0.0.0:9999")
+		}
 
-	t.Run("explicit config always wins over the request Host", func(t *testing.T) {
-		m, db := newTestManager(t)
-		m.cfg = &config.Config{HubPublicAddr: "configured.example.com:8443"}
-		host := newHost(t, db)
-
-		tun, _, err := m.prepareTunnelEnv(ctx, host.ID, host, "public.example.com:8443")
-		if err != nil {
-			t.Fatalf("prepareTunnelEnv: %v", err)
-		}
-		if !tun.Enabled || tun.HubAddr != "configured.example.com:8443" {
-			t.Errorf("prepareTunnelEnv() = %+v, want HubAddr from cfg.HubPublicAddr", tun)
-		}
-	})
-
-	t.Run("no config: falls back to a routable request Host", func(t *testing.T) {
-		m, db := newTestManager(t)
-		host := newHost(t, db)
-
-		tun, _, err := m.prepareTunnelEnv(ctx, host.ID, host, "public.example.com:8443")
-		if err != nil {
-			t.Fatalf("prepareTunnelEnv: %v", err)
-		}
-		if !tun.Enabled || tun.HubAddr != "public.example.com:8443" {
-			t.Errorf("prepareTunnelEnv() = %+v, want HubAddr from the request Host", tun)
-		}
-	})
-
-	t.Run("no config, non-routable request Host: stays off", func(t *testing.T) {
-		m, db := newTestManager(t)
-		host := newHost(t, db)
-
-		tun, _, err := m.prepareTunnelEnv(ctx, host.ID, host, "127.0.0.1:8443")
-		if err != nil {
-			t.Fatalf("prepareTunnelEnv: %v", err)
-		}
-		if tun.Enabled {
-			t.Errorf("prepareTunnelEnv() = %+v, want Enabled=false with only a loopback request Host to go on", tun)
-		}
-	})
-
-	t.Run("private hub address, public host address: enabled but warns", func(t *testing.T) {
-		m, db := newTestManager(t)
-		m.cfg = &config.Config{HubPublicAddr: "192.168.1.50:8443"}
-		host := newHost(t, db) // Addr: "203.0.113.9" — a public-looking IP
-
-		tun, warn, err := m.prepareTunnelEnv(ctx, host.ID, host, "")
-		if err != nil {
-			t.Fatalf("prepareTunnelEnv: %v", err)
-		}
-		if !tun.Enabled || tun.HubAddr != "192.168.1.50:8443" {
-			t.Errorf("prepareTunnelEnv() = %+v, want it still configured with the private address", tun)
-		}
-		if warn == "" {
-			t.Error("prepareTunnelEnv() warn = \"\", want a warning about the private hub / public host mismatch")
-		}
-	})
-
-	t.Run("private hub address, private host address: no warning", func(t *testing.T) {
-		m, db := newTestManager(t)
-		m.cfg = &config.Config{HubPublicAddr: "192.168.1.50:8443"}
-		id, err := db.CreateHost(ctx, "h", "192.168.1.77", 22, "root", store.HostAuthKey, []byte("enc"))
-		if err != nil {
-			t.Fatalf("CreateHost: %v", err)
-		}
-		host, err := db.HostByID(ctx, id)
+		got, err := db.HostByID(ctx, id)
 		if err != nil {
 			t.Fatalf("HostByID: %v", err)
 		}
-		host.TunnelEnabled = true
-
-		tun, warn, err := m.prepareTunnelEnv(ctx, host.ID, host, "")
+		if len(got.TunnelTokenEnc) == 0 {
+			t.Fatal("TunnelTokenEnc not stored")
+		}
+		decrypted, err := secretbox.Decrypt(m.key, got.TunnelTokenEnc)
 		if err != nil {
-			t.Fatalf("prepareTunnelEnv: %v", err)
+			t.Fatalf("decrypt stored token: %v", err)
 		}
-		if !tun.Enabled {
-			t.Errorf("prepareTunnelEnv() = %+v, want Enabled=true", tun)
-		}
-		if warn != "" {
-			t.Errorf("prepareTunnelEnv() warn = %q, want none — hub and host are both on the same private network", warn)
+		if string(decrypted) != tun.Token {
+			t.Errorf("stored token decrypts to %q, want the same token renderEnv got: %q", decrypted, tun.Token)
 		}
 	})
 }

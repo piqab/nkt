@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
@@ -329,21 +331,38 @@ func (r *runtime) runServer(log *slog.Logger) error {
 
 	// The reverse-tunnel fallback channel (internal/tunnel) — only present
 	// when this host was installed by a hub with TunnelEnabled on (see
-	// internal/hub/provision.go's renderEnv); TunnelHubAddr empty is the
+	// internal/hub/provision.go's renderEnv); TunnelListenAddr empty is the
 	// common case (a plain standalone install, or one added to a hub
-	// without this feature turned on) and starts nothing here at all.
-	if r.cfg.TunnelHubAddr != "" {
+	// without this feature turned on) and starts nothing here at all. The
+	// hub is the side that dials in (see internal/hub/tunneldial.go) — this
+	// host only needs to accept on TunnelListenAddr and check whatever
+	// token the connection presents, so unlike the dashboard's own optional
+	// TLS (ensureTLS above), there is no NKT_TLS_ENABLED gate here: the
+	// listener always needs a certificate to speak TLS at all, generated
+	// once and reused the same way, under its own subdirectory so toggling
+	// the dashboard's TLS setting never touches it.
+	if r.cfg.TunnelListenAddr != "" {
+		certFile := filepath.Join(r.cfg.DataDir, "tunnel-tls", "cert.pem")
+		keyFile := filepath.Join(r.cfg.DataDir, "tunnel-tls", "key.pem")
+		if err := tlscert.EnsureSelfSigned(certFile, keyFile, []string{"nkt-tunnel"}); err != nil {
+			return fmt.Errorf("подготовка сертификата резервного канала: %w", err)
+		}
+		tlsCert, err := tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return fmt.Errorf("загрузка сертификата резервного канала: %w", err)
+		}
 		jobs.Add(1)
 		go func() {
 			defer jobs.Done()
-			tunnel.Run(ctx, tunnel.ClientConfig{
-				HubAddr:          r.cfg.TunnelHubAddr,
-				HostID:           r.cfg.TunnelHostID,
-				Token:            r.cfg.TunnelToken,
-				PinnedCertSHA256: r.cfg.TunnelCertSHA256,
-				LocalAddr:        r.cfg.Addr,
-				Log:              log,
-			})
+			if err := tunnel.Run(ctx, tunnel.ListenerConfig{
+				ListenAddr: r.cfg.TunnelListenAddr,
+				Token:      r.cfg.TunnelToken,
+				TLSCert:    tlsCert,
+				LocalAddr:  r.cfg.Addr,
+				Log:        log,
+			}); err != nil && ctx.Err() == nil {
+				log.Error("резервный канал: не удалось запустить приём соединений", "err", err)
+			}
 		}()
 	}
 
@@ -582,7 +601,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 		log.Info("сброшены зависшие установки хостов", "число", n)
 	}
 
-	manager := hub.NewManager(r.cfg, r.db, key, version)
+	manager := hub.NewManager(r.cfg, r.db, key, version, log)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

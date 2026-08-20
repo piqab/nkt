@@ -32,7 +32,7 @@ func TestRenderEnvContainsExpectedLines(t *testing.T) {
 			t.Errorf("renderEnv output missing %q, got:\n%s", want, out)
 		}
 	}
-	for _, absent := range []string{"NKT_HUB_TUNNEL_ADDR", "NKT_HUB_TUNNEL_HOST_ID", "NKT_HUB_TUNNEL_TOKEN", "NKT_HUB_TUNNEL_CERT_SHA256"} {
+	for _, absent := range []string{"NKT_HUB_TUNNEL_LISTEN_ADDR", "NKT_HUB_TUNNEL_TOKEN"} {
 		if strings.Contains(out, absent) {
 			t.Errorf("renderEnv output with a zero-value tunnelEnvParams contains %q, want none of the NKT_HUB_TUNNEL_* vars", absent)
 		}
@@ -56,34 +56,20 @@ func TestRenderEnvPassesThroughTerminalEnabled(t *testing.T) {
 
 // TestRenderEnvWritesTunnelVarsWhenEnabled covers the reverse-tunnel
 // fallback's own env vars — written only when tunnelEnvParams.Enabled is
-// set (see Manager.prepareTunnelEnv), and the optional cert pin omitted
-// entirely when the hub isn't using a self-signed certificate.
+// set (see Manager.prepareTunnelEnv).
 func TestRenderEnvWritesTunnelVarsWhenEnabled(t *testing.T) {
 	out := renderEnv("admin", "s3cr3t-pw", false, tunnelEnvParams{
-		Enabled: true,
-		HubAddr: "hub.example.com:8077",
-		HostID:  42,
-		Token:   "the-token",
+		Enabled:    true,
+		ListenAddr: "0.0.0.0:8078",
+		Token:      "the-token",
 	})
 	for _, want := range []string{
-		"NKT_HUB_TUNNEL_ADDR=hub.example.com:8077",
-		"NKT_HUB_TUNNEL_HOST_ID=42",
+		"NKT_HUB_TUNNEL_LISTEN_ADDR=0.0.0.0:8078",
 		"NKT_HUB_TUNNEL_TOKEN=the-token",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("renderEnv output missing %q, got:\n%s", want, out)
 		}
-	}
-	if strings.Contains(out, "NKT_HUB_TUNNEL_CERT_SHA256") {
-		t.Errorf("renderEnv output with an empty PinnedCertSHA256 contains NKT_HUB_TUNNEL_CERT_SHA256, got:\n%s", out)
-	}
-
-	withPin := renderEnv("admin", "s3cr3t-pw", false, tunnelEnvParams{
-		Enabled: true, HubAddr: "hub.example.com:8077", HostID: 42, Token: "t",
-		PinnedCertSHA256: "deadbeef",
-	})
-	if !strings.Contains(withPin, "NKT_HUB_TUNNEL_CERT_SHA256=deadbeef") {
-		t.Errorf("renderEnv output missing NKT_HUB_TUNNEL_CERT_SHA256=deadbeef, got:\n%s", withPin)
 	}
 }
 
