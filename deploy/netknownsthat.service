@@ -109,6 +109,17 @@ LockPersonality=yes
 MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
+# setns(2) сам по себе не входит в группу @system-service (она сознательно
+# исключает @mount, куда его относит systemd) — RestrictNamespaces=mnt выше
+# разрешает ЧЕМ можно пользоваться (тип пространства имён), но не отменяет
+# то, что базовый SystemCallFilter вообще блокирует сам системный вызов.
+# Без этой строки nsenter --target 1 --mount падает с "reassociate to
+# namespaces failed: Operation not permitted" несмотря на CAP_SYS_ADMIN и
+# правильный RestrictNamespaces — сам setns() отфильтровывается раньше,
+# чем ядро успевает проверить capability. Добавлен только этот один вызов,
+# не вся группа @mount: mount/umount2/pivot_root и т.п. nsenter --mount не
+# использует и они по-прежнему запрещены.
+SystemCallFilter=setns
 SystemCallErrorNumber=EPERM
 
 # Слушает только localhost по умолчанию (см. NKT_ADDR); наружу — через reverse
