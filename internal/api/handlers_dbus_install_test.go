@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -17,6 +18,20 @@ func decodeJSONBody(t *testing.T, rec *httptest.ResponseRecorder, v any) {
 	if err := json.NewDecoder(rec.Body).Decode(v); err != nil {
 		t.Fatalf("decode response body: %v (body: %s)", err, rec.Body.String())
 	}
+}
+
+// withFakeSystemdRunPrependedToPath puts a fake, always-succeeds
+// systemd-run ahead of the real PATH — unlike withFakeSystemdRunOnPath
+// (pty_sandbox_test.go), which replaces PATH wholesale, this keeps the
+// rest of PATH intact for a handler that also needs to resolve a real
+// binary (apt-get) further down it.
+func withFakeSystemdRunPrependedToPath(t *testing.T) {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/systemd-run", []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("create fake systemd-run: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
 }
 
 // TestHandleDbusStatus covers the three states the "install dbus" button
@@ -86,6 +101,11 @@ func TestHandleDbusStatus(t *testing.T) {
 		socket := dir + "/private"
 		listenUnixSocket(t, socket)
 		withSystemdControlSocketPaths(t, socket, dir+"/system_bus_socket")
+		// systemdRunReachable actually invokes systemd-run once the cheap
+		// socket pre-filter passes — needs a real (fake, for the test)
+		// binary on PATH that exits 0, or it would fall through to the
+		// unmocked real PATH and depend on this machine's own D-Bus state.
+		withFakeSystemdRunOnPath(t)
 		s := &Server{cfg: &config.Config{}}
 
 		rec := httptest.NewRecorder()
@@ -143,6 +163,11 @@ func TestHandleDbusInstallWSGates(t *testing.T) {
 		socket := dir + "/private"
 		listenUnixSocket(t, socket)
 		withSystemdControlSocketPaths(t, socket, dir+"/system_bus_socket")
+		// Prepend (not replace, unlike withFakeSystemdRunOnPath) a fake
+		// systemd-run that always exits 0 — this handler also needs the
+		// real apt-get further down PATH to reach the check under test at
+		// all (an earlier gate 403s first if apt-get can't be found).
+		withFakeSystemdRunPrependedToPath(t)
 
 		rec := httptest.NewRecorder()
 		s.handleDbusInstallWS(rec, httptest.NewRequest(http.MethodGet, "/api/system/dbus-install/ws", nil))
