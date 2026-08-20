@@ -573,9 +573,12 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob, re
 		return fail(err)
 	}
 
-	tun, err := m.prepareTunnelEnv(ctx, hostID, host, requestHubAddr)
+	tun, tunWarn, err := m.prepareTunnelEnv(ctx, hostID, host, requestHubAddr)
 	if err != nil {
 		return fail(err)
+	}
+	if tunWarn != "" {
+		report(tunWarn)
 	}
 
 	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, tun)
@@ -634,29 +637,47 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob, re
 // off. The zero value (Enabled: false) tells renderEnv to write none of
 // the NKT_HUB_TUNNEL_* variables, the same as if this feature didn't exist.
 //
+// The returned warn string is non-empty exactly when hubAddrLooksUnreachableFrom
+// flags a topology no code here can actually fix — a private/loopback hub
+// address next to a public-looking host address, i.e. the hub is reachable
+// only from its own LAN while the host sits out on the public internet.
+// The channel is still configured in that case (the guess might be right —
+// this is best-effort, not a hard block), but silently is exactly how the
+// first two rounds of this exact feature went wrong before, so the caller
+// surfaces this in the install log instead of leaving it to be discovered
+// only once SSH itself later breaks too.
+//
 // A fresh random token is generated on every install/update that has
 // TunnelEnabled on — not reused from a previous install — mirroring how
 // the SSH keypair itself gets regenerated on "изменить" → "переустановить"
 // (see UpdateHostGenerated): whatever a *previous* install wrote into this
 // host's env file no longer matters once a new one is about to overwrite
 // it, and there is no benefit to keeping an old token alive.
-func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store.Host, requestHubAddr string) (tunnelEnvParams, error) {
+func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store.Host, requestHubAddr string) (tunnelEnvParams, string, error) {
 	if !host.TunnelEnabled {
-		return tunnelEnvParams{}, nil
+		return tunnelEnvParams{}, "", nil
 	}
 	hubAddr := m.cfg.HubPublicAddr
 	if hubAddr == "" && looksRoutableFromHost(requestHubAddr) {
 		hubAddr = requestHubAddr
 	}
 	if hubAddr == "" {
-		return tunnelEnvParams{}, nil
+		return tunnelEnvParams{}, "", nil
+	}
+	warn := ""
+	if hubAddrLooksUnreachableFrom(hubAddr, host.Addr) {
+		warn = fmt.Sprintf(
+			"резервный канал: адрес хаба %q похож на локальный/приватный, а адрес хоста %q — на внешний; "+
+				"если хаб и хост не в одной сети, хост не сможет дозвониться — задайте настоящий внешний "+
+				"адрес хаба через NKT_HUB_PUBLIC_ADDR",
+			hubAddr, host.Addr)
 	}
 	token, err := generatePassword() // 24 random bytes, base64 — plenty of entropy for a machine token too
 	if err != nil {
-		return tunnelEnvParams{}, fmt.Errorf("генерация токена резервного канала: %w", err)
+		return tunnelEnvParams{}, "", fmt.Errorf("генерация токена резервного канала: %w", err)
 	}
 	if err := m.db.SetHostTunnelToken(ctx, hostID, tunnel.TokenHash(token)); err != nil {
-		return tunnelEnvParams{}, fmt.Errorf("сохранение токена резервного канала: %w", err)
+		return tunnelEnvParams{}, "", fmt.Errorf("сохранение токена резервного канала: %w", err)
 	}
 	return tunnelEnvParams{
 		Enabled:          true,
@@ -664,7 +685,7 @@ func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store
 		HostID:           hostID,
 		Token:            token,
 		PinnedCertSHA256: m.hubCertFingerprint(),
-	}, nil
+	}, warn, nil
 }
 
 // hubCertFingerprint returns the SHA-256 fingerprint (hex) of this hub's

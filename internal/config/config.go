@@ -182,10 +182,11 @@ type Config struct {
 	// prepareTunnelEnv) falls back to whatever address the browser that
 	// clicked "установить"/"обновить" is itself using to reach the hub —
 	// good enough for the common case (an operator opening the hub
-	// directly at its real address), and filtered against an obviously
-	// wrong guess (loopback/private — an SSH tunnel or VPN hop into the
-	// hub) by looksRoutableFromHost, in which case the fallback channel
-	// stays off exactly like an unset HubPublicAddr always has. Set this
+	// directly at its real address, private LAN/VPC address included —
+	// only an obvious non-starter like loopback, via e.g. an SSH tunnel
+	// into the hub, is filtered out by looksRoutableFromHost), in which
+	// case the fallback channel stays off exactly like an unset
+	// HubPublicAddr always has. Set this
 	// explicitly only when that guess would be wrong for a *host* even
 	// though it works for a browser — NAT, a reverse proxy that rewrites
 	// Host, or a different public hostname than whatever NKT_ADDR binds
