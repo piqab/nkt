@@ -187,6 +187,15 @@ type hostWithOverview struct {
 	// version added.
 	RunningVersion string `json:"running_version,omitempty"`
 	LastPolledAt   string `json:"last_polled_at,omitempty"`
+	// Channel is "ssh" or "tunnel" — which path the hub most recently
+	// reached this host through (see Manager.recordChannel). Omitted
+	// before the first dial attempt.
+	Channel string `json:"channel,omitempty"`
+	// TunnelConnected reports whether this host currently has a live
+	// reverse-tunnel session registered, regardless of whether SSH is
+	// also working right now — a host can have a healthy standby channel
+	// (Channel still "ssh") long before it's ever actually needed.
+	TunnelConnected bool `json:"tunnel_connected,omitempty"`
 }
 
 // localHostID is the sentinel Host.ID for the synthetic "localhost" row —
@@ -210,10 +219,12 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 			reachable := ov.Reachable
 			row.Reachable = &reachable
 			row.RunningVersion = ov.Version
+			row.Channel = ov.Channel
 			if !ov.LastPolledAt.IsZero() {
 				row.LastPolledAt = store.FormatTime(ov.LastPolledAt)
 			}
 		}
+		row.TunnelConnected = s.hub.TunnelConnected(h.ID)
 		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, out)

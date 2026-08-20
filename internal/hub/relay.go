@@ -124,6 +124,18 @@ func (m *Manager) dropRelayAll(hostID int64) {
 	}
 }
 
+// TunnelConnected reports whether hostID currently has a live reverse-tunnel
+// session registered — independent of whether anything has actually dialed
+// through it yet (see Manager.recordChannel for that). Surfaced to the UI
+// as a standing "резервный канал подключён" badge, separate from the
+// "сейчас используется" one that only lights up once SSH has actually
+// failed and traffic is really flowing over it.
+func (m *Manager) TunnelConnected(hostID int64) bool {
+	m.relayMu.Lock()
+	defer m.relayMu.Unlock()
+	return m.relaySessions[hostID] != nil
+}
+
 // relayDial returns a dialFunc that opens a new virtual stream over
 // hostID's live reverse-tunnel session, and whether one is currently
 // registered at all — consulted by dialerFor only after an SSH dial has

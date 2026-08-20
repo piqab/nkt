@@ -89,6 +89,40 @@ function HostStatusBadge({ status }: { status: HubHost['status'] }) {
   return <Badge color={STATUS_COLOR[status]} text={STATUS_LABEL[status]} />
 }
 
+/**
+ * Reverse-tunnel fallback channel state for one host (see internal/tunnel,
+ * internal/hub's Manager.recordChannel/TunnelConnected). Three states, most
+ * urgent first: `channel === 'tunnel'` means SSH is *right now* unreachable
+ * and traffic is actually flowing over the fallback — worth a loud color,
+ * since it is standing in for a broken primary path, not just a healthy
+ * standby. `tunnel_connected` alone (channel still "ssh", or not dialed
+ * yet) means the standby connection is up and ready but not needed. Neither
+ * set, with the feature enabled, means the host hasn't connected its
+ * tunnel client yet (freshly installed, or itself offline).
+ */
+function TunnelChannelBadge({ host }: { host: HubHost }) {
+  if (!host.tunnel_enabled) return <span className="small muted">—</span>
+  if (host.channel === 'tunnel') {
+    return (
+      <Tooltip title="SSH сейчас недоступен — дашборд, терминал и переустановка/обновление идут через резервный канал">
+        <Badge color="var(--status-warning)" text="через резервный канал" />
+      </Tooltip>
+    )
+  }
+  if (host.tunnel_connected) {
+    return (
+      <Tooltip title="Резервный канал подключён и готов, но сейчас не используется — SSH работает">
+        <Badge color="var(--status-good)" text="резервный канал: подключён" />
+      </Tooltip>
+    )
+  }
+  return (
+    <Tooltip title="Резервный канал включён в настройках, но хост ещё не установил соединение с хабом">
+      <Badge color="var(--text-muted)" text="резервный канал: не подключён" />
+    </Tooltip>
+  )
+}
+
 const SEVERITY_ICON: Record<Severity, ReactNode> = {
   critical: <CloseCircleFilled style={{ color: 'var(--status-critical)' }} />,
   high: <ExclamationCircleFilled style={{ color: 'var(--status-serious)' }} />,
@@ -677,6 +711,11 @@ export default function Hosts({
         ),
     },
     {
+      title: 'Канал',
+      key: 'channel',
+      render: (_, h) => (h.id === LOCAL_HOST_ID ? <span className="small muted">—</span> : <TunnelChannelBadge host={h} />),
+    },
+    {
       title: 'Версия nkt',
       key: 'version',
       render: (_, h) => {
@@ -1171,7 +1210,12 @@ function HostForm({
         ssh_port: initial?.ssh_port ?? 22,
         ssh_user: initial?.ssh_user ?? 'root',
         terminal_enabled: initial?.terminal_enabled ?? false,
-        tunnel_enabled: initial?.tunnel_enabled ?? false,
+        // On by default for a new host (unlike terminal_enabled): unlike a
+        // root shell in the browser, the fallback channel only ever kicks
+        // in once SSH itself is already unreachable, so there is no extra
+        // exposure from having it ready. Editing an existing host still
+        // defaults to whatever it already has.
+        tunnel_enabled: initial?.tunnel_enabled ?? true,
       }}
     >
       {error && <Banner kind="error">{error}</Banner>}
@@ -1237,9 +1281,10 @@ function HostForm({
         <Checkbox>
           резервный канал связи на случай недоступности SSH
           <div className="small muted" style={{ fontWeight: 400 }}>
-            Хост держит отдельное защищённое соединение к хабу, чтобы дашборд и терминал
-            продолжали работать, даже если SSH к нему перестанет отвечать (заблокированный
-            порт 22 — обычно самая частая причина). Требует, чтобы на хабе был настроен
+            Хост держит отдельное защищённое соединение к хабу, чтобы дашборд, терминал и
+            «переустановить»/«обновить» продолжали работать, даже если SSH к нему перестанет
+            отвечать (заблокированный порт 22 — обычно самая частая причина). Включено по
+            умолчанию для новых хостов. Требует, чтобы на хабе был настроен
             NKT_HUB_PUBLIC_ADDR — свой внешний адрес, на который хостам звонить обратно;
             без него настройка сохранится, но канал не заработает.{' '}
             {editing

@@ -41,6 +41,14 @@ type hostOverview struct {
 	// installed there (store.Host.NktVersion): an update that silently
 	// failed to take effect shows up as exactly that difference.
 	version string
+	// channel is which path dialerFor last resolved for this host —
+	// channelSSH or channelTunnel — kept even across a failed poll (see
+	// recordChannel): it reflects what was actually reachable a moment
+	// ago, not just the last fully successful cycle, which is exactly what
+	// makes "сейчас работает через резервный канал" visible on the next
+	// tick after SSH breaks, not only once something else about the poll
+	// also happens to fail.
+	channel string
 }
 
 // pollOverviews periodically refreshes every online host's findings/
@@ -117,11 +125,12 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	ctx, cancel := context.WithTimeout(ctx, pollHostTimeout)
 	defer cancel()
 
-	dial, onFail, err := m.dialerFor(ctx, hostID)
+	dial, channel, onFail, err := m.dialerFor(ctx, hostID)
 	if err != nil {
 		m.recordUnreachable(hostID, err)
 		return
 	}
+	m.recordChannel(hostID, channel)
 	cookie, err := m.cookieFor(ctx, hostID, dial)
 	if err != nil {
 		onFail()
@@ -168,6 +177,20 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		lastCheckedAt: now,
 	}
 	m.overviewMu.Unlock()
+}
+
+// recordChannel updates which path dialerFor most recently resolved for a
+// host — called from both pollHost (the background poll, so this stays
+// fresh even with no dashboard open) and Proxy (so an operator actively
+// looking at a host sees the freshest possible answer, not one up to a
+// full poll interval stale). Safe to call before the caller knows whether
+// the request that follows will itself succeed — see hostOverview.channel.
+func (m *Manager) recordChannel(hostID int64, channel string) {
+	m.overviewMu.Lock()
+	defer m.overviewMu.Unlock()
+	cur := m.overview[hostID]
+	cur.channel = channel
+	m.overview[hostID] = cur
 }
 
 // recordUnreachable marks a host unreachable without touching whatever
@@ -224,6 +247,7 @@ func (m *Manager) Overview(hostID int64) (HostOverview, bool) {
 		Reachable:    cur.reachable,
 		Version:      cur.version,
 		LastPolledAt: cur.lastPolledAt,
+		Channel:      cur.channel,
 	}, true
 }
 
@@ -238,4 +262,9 @@ type HostOverview struct {
 	// which is what makes a silently-failed update visible.
 	Version      string
 	LastPolledAt time.Time
+	// Channel is channelSSH or channelTunnel — which path the hub most
+	// recently reached this host through, empty until the first
+	// successful (or attempted) dial. Surfaced to the UI as the
+	// "работает через резервный канал" badge when it's channelTunnel.
+	Channel string
 }
