@@ -3,7 +3,10 @@ package hub
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
@@ -11,11 +14,13 @@ import (
 	"sync"
 	"time"
 
+	"github.com/hashicorp/yamux"
 	"golang.org/x/crypto/ssh"
 
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
+	"github.com/althq/netknownsthat/internal/tunnel"
 )
 
 // Event is one line of progress from a StartInstall job — the same shape
@@ -122,6 +127,15 @@ type Manager struct {
 	overviewMu sync.Mutex
 	overview   map[int64]hostOverview
 
+	// relayMu/relaySessions hold each host's live reverse-tunnel session
+	// (see relay.go) — populated by handleTunnel when a host with
+	// TunnelEnabled dials in, consumed by dialerFor only after an SSH dial
+	// has already failed. Unlike conns/sessions, the hub never dials this
+	// side itself: an entry exists exactly when that host currently has
+	// the fallback channel open, nothing here ever gets "redialed".
+	relayMu       sync.Mutex
+	relaySessions map[int64]*yamux.Session
+
 	// goBinMu/resolvedGoBin cache resolveGoBin's result for the Manager's
 	// lifetime — the self-install it may trigger is expensive enough
 	// (network fetch) that it must run at most once per process.
@@ -142,11 +156,12 @@ func (m *Manager) Version() string { return m.version }
 func NewManager(cfg *config.Config, db *store.DB, key []byte, version string) *Manager {
 	return &Manager{
 		cfg: cfg, db: db, key: key, version: version,
-		jobs:      map[string]*installJob{},
-		jobByHost: map[int64]*installJob{},
-		conns:     map[int64]*hostConn{},
-		sessions:  map[int64]sessionCache{},
-		overview:  map[int64]hostOverview{},
+		jobs:          map[string]*installJob{},
+		jobByHost:     map[int64]*installJob{},
+		conns:         map[int64]*hostConn{},
+		sessions:      map[int64]sessionCache{},
+		overview:      map[int64]hostOverview{},
+		relaySessions: map[int64]*yamux.Session{},
 	}
 }
 
@@ -324,6 +339,17 @@ func (m *Manager) UpdateHostGenerated(ctx context.Context, hostID int64, name, a
 
 	m.CloseHost(hostID)
 	return authorizedKeyLine, nil
+}
+
+// SetTunnelEnabled turns the reverse-tunnel fallback channel on or off for
+// one host — a separate call from AddHost/UpdateHost (unlike
+// TerminalEnabled, which those thread through directly) so this feature's
+// wiring stays out of every existing caller/test of those two, added
+// before this feature existed. Taking effect needs an install/update
+// regardless — this alone doesn't generate a token or touch the host's env
+// file, see install()'s own tunnel-token step.
+func (m *Manager) SetTunnelEnabled(ctx context.Context, hostID int64, enabled bool) error {
+	return m.db.SetHostTunnelEnabled(ctx, hostID, enabled)
 }
 
 // StartInstall installs nkt on host id in the background and returns a job
@@ -523,7 +549,12 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		return fail(err)
 	}
 
-	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled)
+	tun, err := m.prepareTunnelEnv(ctx, hostID, host)
+	if err != nil {
+		return fail(err)
+	}
+
+	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, tun)
 	if err := stageFiles(client, host.SSHUser, binPath, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report); err != nil {
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
 		return fail(err)
@@ -540,18 +571,18 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	report("Жду, пока сервис ответит на /health…")
 	healthCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := waitForHealth(healthCtx, client); err != nil {
+	if err := waitForHealth(healthCtx, client.Dial); err != nil {
 		return fail(err)
 	}
 
 	report("Проверяю учётную запись администратора…")
-	if _, err := bootstrapLogin(ctx, client, adminUser, adminPassword); err != nil {
+	if _, err := bootstrapLogin(ctx, client.Dial, adminUser, adminPassword); err != nil {
 		report("Вход не удался — на хосте уже есть учётная запись администратора с другим паролем " +
 			"(например, от прошлой попытки установки); сбрасываю пароль на хосте…")
 		if resetErr := resetRemoteAdminPassword(client, host.SSHUser, adminUser, adminPassword, remoteDataDir, remoteBinPath); resetErr != nil {
 			return fail(fmt.Errorf("вход администратора не удался (%v), и сбросить пароль на хосте тоже не получилось: %w", err, resetErr))
 		}
-		if _, err := bootstrapLogin(ctx, client, adminUser, adminPassword); err != nil {
+		if _, err := bootstrapLogin(ctx, client.Dial, adminUser, adminPassword); err != nil {
 			return fail(fmt.Errorf("вход администратора всё ещё не удаётся после сброса пароля на хосте: %w", err))
 		}
 		report("Пароль администратора на хосте синхронизирован")
@@ -566,6 +597,65 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 
 	report("Готово")
 	return nil
+}
+
+// prepareTunnelEnv generates this install's reverse-tunnel fallback
+// credentials (see internal/tunnel) when the host has TunnelEnabled and the
+// hub itself has a public address configured (config.Config.HubPublicAddr
+// — without it there is nowhere for the host to dial back to, so the
+// feature is simply off). The zero value (Enabled: false) tells renderEnv
+// to write none of the NKT_HUB_TUNNEL_* variables, the same as if this
+// feature didn't exist.
+//
+// A fresh random token is generated on every install/update that has
+// TunnelEnabled on — not reused from a previous install — mirroring how
+// the SSH keypair itself gets regenerated on "изменить" → "переустановить"
+// (see UpdateHostGenerated): whatever a *previous* install wrote into this
+// host's env file no longer matters once a new one is about to overwrite
+// it, and there is no benefit to keeping an old token alive.
+func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store.Host) (tunnelEnvParams, error) {
+	if !host.TunnelEnabled || m.cfg.HubPublicAddr == "" {
+		return tunnelEnvParams{}, nil
+	}
+	token, err := generatePassword() // 24 random bytes, base64 — plenty of entropy for a machine token too
+	if err != nil {
+		return tunnelEnvParams{}, fmt.Errorf("генерация токена резервного канала: %w", err)
+	}
+	if err := m.db.SetHostTunnelToken(ctx, hostID, tunnel.TokenHash(token)); err != nil {
+		return tunnelEnvParams{}, fmt.Errorf("сохранение токена резервного канала: %w", err)
+	}
+	return tunnelEnvParams{
+		Enabled:          true,
+		HubAddr:          m.cfg.HubPublicAddr,
+		HostID:           hostID,
+		Token:            token,
+		PinnedCertSHA256: m.hubCertFingerprint(),
+	}, nil
+}
+
+// hubCertFingerprint returns the SHA-256 fingerprint (hex) of this hub's
+// own current self-signed TLS certificate (see internal/tlscert), for a
+// newly installed host's tunnel client to pin against instead of blind
+// trust-on-first-use — see internal/tunnel.ClientConfig.PinnedCertSHA256.
+// Empty when TLS isn't self-signed here: a manually supplied NKT_TLS_CERT/
+// NKT_TLS_KEY, or NKT_TLS_ENABLED off entirely (a reverse proxy in front
+// with its own real certificate), both rely on normal CA verification
+// instead, which needs no pin — and an empty pin is exactly what tells the
+// tunnel client to do that.
+func (m *Manager) hubCertFingerprint() string {
+	if !m.cfg.TLSEnabled || m.cfg.TLSCert != "" {
+		return ""
+	}
+	raw, err := os.ReadFile(m.cfg.TLSSelfSignedCertFile())
+	if err != nil {
+		return ""
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil {
+		return ""
+	}
+	sum := sha256.Sum256(block.Bytes)
+	return hex.EncodeToString(sum[:])
 }
 
 // resolveAdminCredential returns the bootstrap admin username/password to

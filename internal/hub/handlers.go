@@ -156,6 +156,11 @@ type addHostRequest struct {
 	// install/update (see store.Host.TerminalEnabled) — off by default,
 	// same as the env var itself.
 	TerminalEnabled bool `json:"terminal_enabled"`
+	// TunnelEnabled turns on the reverse-tunnel fallback channel for this
+	// host's next install/update (see store.Host.TunnelEnabled) — off by
+	// default. Set separately from AddHost/AddHostGenerated below (see
+	// Manager.SetTunnelEnabled's own doc comment for why).
+	TunnelEnabled bool `json:"tunnel_enabled"`
 }
 
 // hostWithOverview is store.Host plus what pollOverviews last learned about
@@ -257,6 +262,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		}
+		s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
 		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "authorized_key": authorizedKey})
 		return
 	}
@@ -266,7 +272,20 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
+}
+
+// setTunnelEnabled applies Manager.SetTunnelEnabled after the host it
+// targets has already been created/updated successfully — a failure here
+// (essentially only a DB error; the host id is always valid at this point)
+// is logged rather than turned into an error response, since the host
+// itself was already committed and reporting the whole request as failed
+// would be misleading.
+func (s *Server) setTunnelEnabled(ctx context.Context, hostID int64, enabled bool) {
+	if err := s.hub.SetTunnelEnabled(ctx, hostID, enabled); err != nil {
+		s.log.Warn("не удалось сохранить настройку резервного канала", "host_id", hostID, "err", err)
+	}
 }
 
 // updateHostRequest mirrors addHostRequest; Secret is optional here — an
@@ -281,6 +300,7 @@ type updateHostRequest struct {
 	AuthKind        string `json:"auth_kind"`
 	Secret          string `json:"secret"`
 	TerminalEnabled bool   `json:"terminal_enabled"`
+	TunnelEnabled   bool   `json:"tunnel_enabled"`
 }
 
 func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
@@ -304,6 +324,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 			fail(w, err)
 			return
 		}
+		s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "authorized_key": authorizedKey})
 		return
 	}
@@ -312,6 +333,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 		fail(w, err)
 		return
 	}
+	s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

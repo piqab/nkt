@@ -10,27 +10,34 @@ import (
 	"net/http"
 	"time"
 
-	"golang.org/x/crypto/ssh"
-
 	"github.com/althq/netknownsthat/internal/auth"
 )
 
 // remoteAPIAddr is where a host's own nkt listens, per NKT_ADDR in
-// renderEnv — loopback only, reachable exclusively through the SSH tunnel
-// dialed below, never directly over the network.
+// renderEnv — loopback only, reachable exclusively through a tunnel dialed
+// below (SSH port-forwarding, or the reverse-tunnel fallback channel in
+// internal/tunnel — see dialFunc), never directly over the network.
 const remoteAPIAddr = "127.0.0.1:8077"
 
-// tunnelHTTPClient builds an http.Client whose every request travels through
-// an already-established SSH connection to a host's own nkt API — dialing
-// straight from the remote side of that connection, with no separate
-// port-forward listener to manage. Reused by the install job's health check
-// and login, and by Server's per-host reverse proxy (see server.go).
-func tunnelHTTPClient(client *ssh.Client) *http.Client {
+// dialFunc opens a connection to a host's own nkt API — satisfied
+// identically by *ssh.Client.Dial (the primary path: SSH port-forwarding)
+// and by a fallback reverse-tunnel session's Open method wrapped to match
+// this shape (see proxy.go's dialerFor and relay.go's relayDial). Every
+// helper in this file that used to take a concrete *ssh.Client takes this
+// instead, so the install-time health check/login and Server's per-host
+// reverse proxy (see server.go) work unchanged over either channel.
+type dialFunc func(network, addr string) (net.Conn, error)
+
+// tunnelHTTPClient builds an http.Client whose every request travels
+// through dial to a host's own nkt API — no separate port-forward listener
+// to manage either way. Reused by the install job's health check and
+// login, and by Server's per-host reverse proxy (see server.go).
+func tunnelHTTPClient(dial dialFunc) *http.Client {
 	return &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-				return client.Dial("tcp", remoteAPIAddr)
+				return dial("tcp", remoteAPIAddr)
 			},
 		},
 	}
@@ -39,8 +46,8 @@ func tunnelHTTPClient(client *ssh.Client) *http.Client {
 // waitForHealth polls the remote nkt's /health endpoint through the tunnel
 // until it answers or ctx is done — systemctl reporting the unit started
 // does not guarantee the HTTP listener is bound yet.
-func waitForHealth(ctx context.Context, client *ssh.Client) error {
-	httpClient := tunnelHTTPClient(client)
+func waitForHealth(ctx context.Context, dial dialFunc) error {
+	httpClient := tunnelHTTPClient(dial)
 	var lastErr error
 	for {
 		select {
@@ -81,7 +88,7 @@ func probeHealth(ctx context.Context, httpClient *http.Client) error {
 // admin and returns the session cookie value, so the hub can later replay it
 // when proxying requests — the human operator authenticates to the hub only
 // once, never to each managed host individually.
-func bootstrapLogin(ctx context.Context, client *ssh.Client, username, password string) (string, error) {
+func bootstrapLogin(ctx context.Context, dial dialFunc, username, password string) (string, error) {
 	body, err := json.Marshal(map[string]string{"username": username, "password": password})
 	if err != nil {
 		return "", err
@@ -93,7 +100,7 @@ func bootstrapLogin(ctx context.Context, client *ssh.Client, username, password 
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := tunnelHTTPClient(client).Do(req)
+	resp, err := tunnelHTTPClient(dial).Do(req)
 	if err != nil {
 		return "", fmt.Errorf("запрос входа: %w", err)
 	}

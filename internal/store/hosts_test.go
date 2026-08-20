@@ -58,3 +58,76 @@ func TestSetHostTerminalEnabled(t *testing.T) {
 		t.Errorf("SetHostTerminalEnabled on unknown id: err = %v, want ErrNotFound", err)
 	}
 }
+
+// TestSetHostTunnelEnabledAndToken covers the reverse-tunnel opt-in flag and
+// its paired token digest — same off-by-default/per-host shape as
+// TestSetHostTerminalEnabled, plus SetHostTunnelToken (only ever stores a
+// digest, never the raw token — see its own doc comment).
+func TestSetHostTunnelEnabledAndToken(t *testing.T) {
+	db, err := Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	ctx := context.Background()
+	id, err := db.CreateHost(ctx, "h1", "10.0.0.1", 22, "root", HostAuthPassword, []byte("secret"))
+	if err != nil {
+		t.Fatalf("CreateHost: %v", err)
+	}
+
+	got, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if got.TunnelEnabled {
+		t.Error("TunnelEnabled on a freshly created host = true, want false (off by default)")
+	}
+	if got.TunnelTokenHash != nil {
+		t.Errorf("TunnelTokenHash on a freshly created host = %x, want nil", got.TunnelTokenHash)
+	}
+
+	if err := db.SetHostTunnelEnabled(ctx, id, true); err != nil {
+		t.Fatalf("SetHostTunnelEnabled(true): %v", err)
+	}
+	hash := []byte{1, 2, 3, 4}
+	if err := db.SetHostTunnelToken(ctx, id, hash); err != nil {
+		t.Fatalf("SetHostTunnelToken: %v", err)
+	}
+
+	got, err = db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if !got.TunnelEnabled {
+		t.Error("TunnelEnabled after SetHostTunnelEnabled(true) = false, want true")
+	}
+	if string(got.TunnelTokenHash) != string(hash) {
+		t.Errorf("TunnelTokenHash = %x, want %x", got.TunnelTokenHash, hash)
+	}
+
+	if err := db.SetHostTunnelEnabled(ctx, id, false); err != nil {
+		t.Fatalf("SetHostTunnelEnabled(false): %v", err)
+	}
+	got, err = db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if got.TunnelEnabled {
+		t.Error("TunnelEnabled after SetHostTunnelEnabled(false) = true, want false")
+	}
+	// Turning the flag off does not itself clear a previously stored token
+	// digest — only a fresh install/update (which calls SetHostTunnelToken
+	// again) changes it, same as TerminalEnabled leaves no matching secret
+	// to clear in the first place.
+	if string(got.TunnelTokenHash) != string(hash) {
+		t.Errorf("TunnelTokenHash after disabling = %x, want unchanged %x", got.TunnelTokenHash, hash)
+	}
+
+	if err := db.SetHostTunnelEnabled(ctx, 999999, true); err != ErrNotFound {
+		t.Errorf("SetHostTunnelEnabled on unknown id: err = %v, want ErrNotFound", err)
+	}
+	if err := db.SetHostTunnelToken(ctx, 999999, hash); err != ErrNotFound {
+		t.Errorf("SetHostTunnelToken on unknown id: err = %v, want ErrNotFound", err)
+	}
+}

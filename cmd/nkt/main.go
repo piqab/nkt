@@ -29,6 +29,7 @@ import (
 	"github.com/althq/netknownsthat/internal/store"
 	"github.com/althq/netknownsthat/internal/tlscert"
 	"github.com/althq/netknownsthat/internal/tui"
+	"github.com/althq/netknownsthat/internal/tunnel"
 	"github.com/althq/netknownsthat/internal/webui"
 )
 
@@ -325,6 +326,26 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	scheduler := monitor.NewScheduler(r.cfg, r.db, r.scanner, r.certs, log)
 	var jobs sync.WaitGroup
 	scheduler.Start(ctx, &jobs)
+
+	// The reverse-tunnel fallback channel (internal/tunnel) — only present
+	// when this host was installed by a hub with TunnelEnabled on (see
+	// internal/hub/provision.go's renderEnv); TunnelHubAddr empty is the
+	// common case (a plain standalone install, or one added to a hub
+	// without this feature turned on) and starts nothing here at all.
+	if r.cfg.TunnelHubAddr != "" {
+		jobs.Add(1)
+		go func() {
+			defer jobs.Done()
+			tunnel.Run(ctx, tunnel.ClientConfig{
+				HubAddr:          r.cfg.TunnelHubAddr,
+				HostID:           r.cfg.TunnelHostID,
+				Token:            r.cfg.TunnelToken,
+				PinnedCertSHA256: r.cfg.TunnelCertSHA256,
+				LocalAddr:        r.cfg.Addr,
+				Log:              log,
+			})
+		}()
+	}
 
 	ui := webui.FS()
 	if ui == nil {
