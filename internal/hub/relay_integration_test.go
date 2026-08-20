@@ -1,8 +1,10 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -216,4 +218,88 @@ func startTestTunnelListener(t *testing.T, token, localAddr string) string {
 	}
 	t.Fatalf("tunnel listener at %s never came up", addr)
 	return ""
+}
+
+// TestTunnelDialOncePinsCertOnFirstConnectAndRejectsLaterMismatch exercises
+// verifyPinnedTunnelCert (tunnelpin.go) against two real internal/tunnel
+// listeners, each with its own genuinely distinct self-signed certificate
+// (startTestTunnelListener generates a fresh keypair every call) — the
+// integration-level counterpart to TestVerifyPinnedTunnelCert's pure-value
+// checks: proves the pin actually gets persisted through a real TLS
+// handshake+DB round trip, and that a second host reachable at the same
+// address but presenting a different certificate is refused rather than
+// silently trusted the way plain InsecureSkipVerify used to.
+func TestTunnelDialOncePinsCertOnFirstConnectAndRejectsLaterMismatch(t *testing.T) {
+	const token = "pin-test-token"
+
+	db, err := store.Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatalf("open hub store: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	key, err := secretbox.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+
+	secretEnc, _ := secretbox.Encrypt(key, []byte("unused-ssh-secret"))
+	hostID, err := db.CreateHost(context.Background(), "pin-test-host", "127.0.0.1", 1, "root", store.HostAuthPassword, secretEnc)
+	if err != nil {
+		t.Fatalf("CreateHost: %v", err)
+	}
+	tokenEnc, _ := secretbox.Encrypt(key, []byte(token))
+	if err := db.SetHostTunnelToken(context.Background(), hostID, tokenEnc); err != nil {
+		t.Fatalf("SetHostTunnelToken: %v", err)
+	}
+
+	// First listener: a fresh cert, nothing pinned yet — tunnelDialOnce
+	// must accept it (trust-on-first-use) and record its fingerprint.
+	addrA := startTestTunnelListener(t, token, "127.0.0.1:8077")
+	_, portAStr, _ := net.SplitHostPort(addrA)
+	portA, _ := strconv.Atoi(portAStr)
+
+	managerA := NewManager(&config.Config{SessionTTL: time.Hour, HubTunnelPort: portA}, db, key, "test", slog.New(slog.DiscardHandler))
+	ctxA, cancelA := context.WithTimeout(context.Background(), 5*time.Second)
+	connected, err := managerA.tunnelDialOnce(ctxA, hostID)
+	cancelA()
+	if err != nil {
+		t.Fatalf("tunnelDialOnce against the first listener: %v", err)
+	}
+	if !connected {
+		t.Fatal("tunnelDialOnce against the first listener: connected = false, want true")
+	}
+
+	host, err := db.HostByID(context.Background(), hostID)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if len(host.TunnelCertSHA256) == 0 {
+		t.Fatal("host.TunnelCertSHA256 is empty after the first successful dial, want a pinned fingerprint")
+	}
+	pinned := host.TunnelCertSHA256
+
+	// Second listener at a different port with its own distinct
+	// certificate — stands in for the same host address later presenting
+	// a different certificate (an on-path attacker, or a reinstall that
+	// forgot to reset the pin). tunnelDialOnce must refuse it outright.
+	addrB := startTestTunnelListener(t, token, "127.0.0.1:8077")
+	_, portBStr, _ := net.SplitHostPort(addrB)
+	portB, _ := strconv.Atoi(portBStr)
+
+	managerB := NewManager(&config.Config{SessionTTL: time.Hour, HubTunnelPort: portB}, db, key, "test", slog.New(slog.DiscardHandler))
+	ctxB, cancelB := context.WithTimeout(context.Background(), 5*time.Second)
+	_, err = managerB.tunnelDialOnce(ctxB, hostID)
+	cancelB()
+	var mismatch *tunnelCertMismatchError
+	if !errors.As(err, &mismatch) {
+		t.Fatalf("tunnelDialOnce against the second (differently-certed) listener: err = %v, want a *tunnelCertMismatchError (and want it to fail fast, not via ctx timeout)", err)
+	}
+
+	host, err = db.HostByID(context.Background(), hostID)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if !bytes.Equal(host.TunnelCertSHA256, pinned) {
+		t.Errorf("host.TunnelCertSHA256 changed after a rejected dial: got %x, want it to stay %x", host.TunnelCertSHA256, pinned)
+	}
 }

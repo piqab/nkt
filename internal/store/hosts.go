@@ -73,6 +73,17 @@ type Host struct {
 	SecretEnc        []byte `json:"-"`
 	AdminPasswordEnc []byte `json:"-"`
 	TunnelTokenEnc   []byte `json:"-"`
+	// TunnelCertSHA256 is the SHA-256 fingerprint of the tunnel TLS
+	// certificate this host presented the first time the hub ever dialed
+	// it successfully — not a secret (unlike the fields above), just not
+	// useful to any API consumer, so left out of JSON like the rest of
+	// this connection-plumbing group. Empty means "not pinned yet": the
+	// next dial trusts whatever cert it sees and records it here (see
+	// internal/hub/tunnelpin.go); non-empty means every future dial must
+	// match it exactly, the same trust-on-first-use model SSH host keys
+	// use, except this one is actually enforced after the first sighting
+	// instead of trusted forever.
+	TunnelCertSHA256 []byte `json:"-"`
 }
 
 // CreateHost inserts a host with an already-encrypted SSH secret.
@@ -92,20 +103,21 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
-	tunnel_enabled, tunnel_token_enc, error_msg, created_at, last_seen_at`
+	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
 	var lastSeen sql.NullString
-	var adminPasswordEnc, tunnelTokenEnc []byte
+	var adminPasswordEnc, tunnelTokenEnc, tunnelCertSHA256 []byte
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
-		&h.TunnelEnabled, &tunnelTokenEnc, &h.ErrorMsg, &h.CreatedAt, &lastSeen)
+		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen)
 	if err != nil {
 		return Host{}, err
 	}
 	h.AdminPasswordEnc = adminPasswordEnc
 	h.TunnelTokenEnc = tunnelTokenEnc
+	h.TunnelCertSHA256 = tunnelCertSHA256
 	h.LastSeenAt = lastSeen.String
 	return h, nil
 }
@@ -252,6 +264,25 @@ func (d *DB) SetHostTunnelEnabled(ctx context.Context, id int64, enabled bool) e
 // reconnect (see internal/hub/tunneldial.go), not the side verifying one.
 func (d *DB) SetHostTunnelToken(ctx context.Context, id int64, tokenEnc []byte) error {
 	res, err := d.ExecContext(ctx, `UPDATE hosts SET tunnel_token_enc = ? WHERE id = ?`, tokenEnc, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetHostTunnelCertSHA256 records the SHA-256 fingerprint of the tunnel TLS
+// certificate this host presented — either pinning it for the first time
+// (see internal/hub/tunnelpin.go's trust-on-first-use dial logic) or, with
+// a nil fingerprint, clearing a previous pin so the next dial re-pins from
+// scratch. Called with nil from prepareTunnelEnv on every fresh
+// install/update: a new token means a new trust bootstrap, and a
+// legitimate reinstall (new DataDir, cert regenerated) must not get
+// permanently locked out by a pin left over from before.
+func (d *DB) SetHostTunnelCertSHA256(ctx context.Context, id int64, fingerprint []byte) error {
+	res, err := d.ExecContext(ctx, `UPDATE hosts SET tunnel_cert_sha256 = ? WHERE id = ?`, fingerprint, id)
 	if err != nil {
 		return err
 	}
