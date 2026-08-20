@@ -477,7 +477,10 @@ func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	force := r.URL.Query().Get("force") == "true"
-	job, err := s.hub.StartInstall(r.Context(), id, force)
+	// r.Host is whatever address the browser making this very request is
+	// itself using to reach the hub — see StartInstall's doc comment on why
+	// that is a reasonable automatic stand-in for NKT_HUB_PUBLIC_ADDR.
+	job, err := s.hub.StartInstall(r.Context(), id, force, r.Host)
 	if err != nil {
 		var foreign *ForeignInstallError
 		if errors.As(err, &foreign) {

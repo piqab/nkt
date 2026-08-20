@@ -176,13 +176,21 @@ type Config struct {
 	// HubPublicAddr is the hub's own externally-reachable address:port —
 	// where a managed host with TunnelEnabled on should dial back for the
 	// reverse-tunnel fallback channel (see internal/tunnel), used when SSH
-	// to that host stops working. The hub cannot reliably determine this
-	// itself (NAT, a reverse proxy in front, a different public hostname
-	// than whatever NKT_ADDR binds to) — left empty, the fallback channel
-	// is off entirely: no tunnel route is registered, no per-host token is
-	// generated at install. Set to whatever address a browser (or this
-	// host's own SSH dial) already reaches this hub at, e.g. "hub.example.
-	// com:8077" or an IP:port if there's no DNS name yet.
+	// to that host stops working.
+	//
+	// Optional: left empty, install()/StartInstall (see internal/hub's
+	// prepareTunnelEnv) falls back to whatever address the browser that
+	// clicked "установить"/"обновить" is itself using to reach the hub —
+	// good enough for the common case (an operator opening the hub
+	// directly at its real address), and filtered against an obviously
+	// wrong guess (loopback/private — an SSH tunnel or VPN hop into the
+	// hub) by looksRoutableFromHost, in which case the fallback channel
+	// stays off exactly like an unset HubPublicAddr always has. Set this
+	// explicitly only when that guess would be wrong for a *host* even
+	// though it works for a browser — NAT, a reverse proxy that rewrites
+	// Host, or a different public hostname than whatever NKT_ADDR binds
+	// to — e.g. "hub.example.com:8077" or an IP:port with no DNS name yet;
+	// an explicit value here always takes priority over the guess.
 	HubPublicAddr string
 }
 

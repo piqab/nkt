@@ -37,6 +37,38 @@ func (m *Manager) tunnelReinstallFallback(host store.Host) bool {
 	return ok
 }
 
+// looksRoutableFromHost reports whether hostport is a plausible address for
+// a *different* machine (a managed host) to dial back to — the filter
+// prepareTunnelEnv applies before ever trusting a browser request's own Host
+// header as an automatic stand-in for an unset NKT_HUB_PUBLIC_ADDR. Without
+// it, an operator reaching the hub through an SSH tunnel or some other
+// loopback/private hop would silently bake that unreachable-from-anywhere-
+// else address into every host's tunnel config instead of just leaving the
+// feature off the way an empty NKT_HUB_PUBLIC_ADDR always has.
+//
+// A hostname that isn't a literal IP is trusted as-is — there is no way to
+// tell a real public DNS name from an internal-only one just by its shape,
+// and rejecting it would bring back the "always needs manual setup"
+// problem this auto-detection exists to avoid for the common case
+// (an operator opening the hub directly at its real address).
+func looksRoutableFromHost(hostport string) bool {
+	if hostport == "" {
+		return false
+	}
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	if host == "localhost" {
+		return false
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return true
+	}
+	return !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast() && !ip.IsUnspecified()
+}
+
 // dynamicRelayDial returns a dialFunc that re-resolves hostID's current
 // relay session on every single call, rather than being bound to whichever
 // session happened to be live when the dial was created. installOverTunnel
@@ -141,7 +173,7 @@ func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial d
 // detecting the target architecture (host.Arch is already known, from
 // whatever earlier SSH install got this host running in the first place)
 // and SFTP+sudo (selfUpdateOverTunnel replaces both).
-func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host store.Host, job *installJob) error {
+func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host store.Host, job *installJob, requestHubAddr string) error {
 	report := job.append
 	fail := func(err error) error {
 		_ = m.db.SetHostStatus(ctx, hostID, store.HostStatusError, err.Error())
@@ -168,7 +200,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 	if err != nil {
 		return fail(err)
 	}
-	tun, err := m.prepareTunnelEnv(ctx, hostID, host)
+	tun, err := m.prepareTunnelEnv(ctx, hostID, host, requestHubAddr)
 	if err != nil {
 		return fail(err)
 	}
