@@ -34,8 +34,9 @@ type Fixtures struct {
 	commands []fixtureCommand
 	loadErr  error
 
-	mu    sync.Mutex
-	units map[string]string // simulated systemd unit states
+	mu           sync.Mutex
+	units        map[string]string // simulated systemd unit ActiveState
+	unitsEnabled map[string]string // simulated systemd unit UnitFileState
 }
 
 type fixtureCommand struct {
@@ -53,7 +54,7 @@ type fixtureIndex struct {
 
 // NewFixtures builds a collector backed by a snapshot directory.
 func NewFixtures(root string) *Fixtures {
-	return &Fixtures{root: root, units: map[string]string{}}
+	return &Fixtures{root: root, units: map[string]string{}, unitsEnabled: map[string]string{}}
 }
 
 // Mode implements Collector.
@@ -307,6 +308,17 @@ func (f *Fixtures) systemd(argv []string) (bool, string) {
 			return true, state + "\n"
 		}
 		return false, "" // fall through to the canned answer
+	case "enable":
+		f.unitsEnabled[unit] = "enabled"
+		return true, ""
+	case "disable":
+		f.unitsEnabled[unit] = "disabled"
+		return true, ""
+	case "is-enabled":
+		if state, ok := f.unitsEnabled[unit]; ok {
+			return true, state + "\n"
+		}
+		return false, "" // fall through to the canned answer
 	}
 	return false, ""
 }
@@ -320,9 +332,10 @@ func (f *Fixtures) applyUnitOverride(argv []string, stdout string) string {
 	unit := strings.TrimSuffix(argv[2], ".service")
 
 	f.mu.Lock()
-	state, ok := f.units[unit]
+	state, activeOK := f.units[unit]
+	enabledState, enabledOK := f.unitsEnabled[unit]
 	f.mu.Unlock()
-	if !ok {
+	if !activeOK && !enabledOK {
 		return stdout
 	}
 	sub := "running"
@@ -333,10 +346,12 @@ func (f *Fixtures) applyUnitOverride(argv []string, stdout string) string {
 	lines := strings.Split(stdout, "\n")
 	for i, line := range lines {
 		switch {
-		case strings.HasPrefix(line, "ActiveState="):
+		case activeOK && strings.HasPrefix(line, "ActiveState="):
 			lines[i] = "ActiveState=" + state
-		case strings.HasPrefix(line, "SubState="):
+		case activeOK && strings.HasPrefix(line, "SubState="):
 			lines[i] = "SubState=" + sub
+		case enabledOK && strings.HasPrefix(line, "UnitFileState="):
+			lines[i] = "UnitFileState=" + enabledState
 		}
 	}
 	return strings.Join(lines, "\n")

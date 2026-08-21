@@ -277,6 +277,34 @@ func (s *Server) handleMisc(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+type killProcessRequest struct {
+	PID     int    `json:"pid"`
+	Command string `json:"command"`
+	Signal  string `json:"signal"`
+}
+
+// handleKillProcess is "Остальные сервисы"'s only mutating action:
+// unlike a systemd-managed service, these listeners have no unit for
+// systemctl to act on, only a raw PID from the last scan — Command must be
+// exactly what that scan already saw for it (see ServiceManager.KillProcess's
+// own doc comment on why: a stale client acting on a PID the kernel has
+// since reused for something else must not signal the wrong process).
+func (s *Server) handleKillProcess(w http.ResponseWriter, r *http.Request) {
+	var req killProcessRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user := auth.Username(r.Context())
+
+	if err := s.services.KillProcess(r.Context(), user, req.PID, req.Command, req.Signal); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // handleInterfaces lists every network interface on the host — physical
 // NICs, bridges, VLANs, tunnels, loopback — as a plain inventory. Deliberately
 // no "public" verdict here: Listener.Public() already answers that per
@@ -429,6 +457,23 @@ func (s *Server) handleServiceValidate(w http.ResponseWriter, r *http.Request) {
 		"output":    strings.TrimSpace(res.Output()),
 		"simulated": res.Simulated,
 	})
+}
+
+// handleServiceLogs is read-only (journalctl -u, no rescanLater) — grouped
+// with the read-only surface in server.go, not behind RequireAdmin, so any
+// authenticated viewer can look at a service's recent log without also
+// needing AllowMutations.
+func (s *Server) handleServiceLogs(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	user := auth.Username(r.Context())
+	lines := intParam(r, "lines", 0) // 0 tells ServiceManager.Logs to use its own default
+
+	out, err := s.services.Logs(r.Context(), user, name, lines)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"output": out})
 }
 
 func (s *Server) handleContainerAction(w http.ResponseWriter, r *http.Request) {

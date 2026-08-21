@@ -33,6 +33,9 @@ func NewServiceManager(cfg *config.Config, c collect.Collector, db *store.DB) *S
 // so a service name or action can never be spliced into a command.
 var allowedActions = map[string]bool{
 	"start": true, "stop": true, "restart": true, "reload": true,
+	// enable/disable toggle autostart-on-boot only — unlike start/stop/
+	// restart, neither touches whether the unit is running right now.
+	"enable": true, "disable": true,
 }
 
 // Action runs a systemd action against a known service.
@@ -210,6 +213,103 @@ func (s *ServiceManager) ContainerAction(ctx context.Context, user, name, action
 	}
 	if code != 204 && code != 304 {
 		return fmt.Errorf("docker %s %s: HTTP %d", action, name, code)
+	}
+	return nil
+}
+
+// defaultLogLines/maxLogLines bound the journalctl snapshot the "Логи"
+// modal fetches — a static request-response fetch (see handlers_inventory.
+// go's handleServiceLogs), not a live tail, so this is "enough to see what
+// just happened" rather than a real budget concern; maxLogLines just keeps
+// a malicious/mistaken huge `lines` query param from asking journalctl for
+// an unbounded amount of text.
+const (
+	defaultLogLines = 200
+	maxLogLines     = 2000
+)
+
+// Logs fetches the tail of a systemd unit's journal — read-only, no
+// mutation and so no rescanLater() from the caller, but still audited like
+// every other host-touching action this type performs.
+func (s *ServiceManager) Logs(ctx context.Context, user, service string, lines int) (string, error) {
+	spec, ok := s.specs[service]
+	if !ok {
+		return "", fmt.Errorf("неизвестный сервис: %q", service)
+	}
+	if lines <= 0 || lines > maxLogLines {
+		lines = defaultLogLines
+	}
+
+	res, err := s.c.Run(ctx, "journalctl", "-u", spec.Unit, "-n", fmt.Sprint(lines), "--no-pager")
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	s.db.Audit(ctx, user, "service.logs", service, outcome, map[string]any{
+		"unit": spec.Unit, "lines": lines, "exit_code": res.ExitCode, "simulated": res.Simulated,
+	})
+	if err != nil {
+		return "", fmt.Errorf("journalctl -u %s: %w", spec.Unit, err)
+	}
+	if !res.OK() {
+		return "", fmt.Errorf("journalctl -u %s: код %d: %s", spec.Unit, res.ExitCode, strings.TrimSpace(res.Stderr))
+	}
+	return res.Stdout, nil
+}
+
+// killableSignals is deliberately narrow: TERM (graceful — the default
+// first attempt) and KILL (the escalation once TERM didn't work), nothing
+// else. This exists specifically for "Остальные сервисы" — listeners that
+// showed up in `ss` but belong to no systemd unit, so there is no
+// systemctl action to offer for them, only a raw signal to the PID itself.
+var killableSignals = map[string]bool{"TERM": true, "KILL": true}
+
+// KillProcess sends signal to pid — but only after a fresh `ps` lookup
+// confirms the process there right now still has expectedCommand, the
+// exact command line the caller last saw for that PID. Without this check,
+// a stale client (a scan result the operator has been looking at for a
+// while) could end up signalling an entirely different, unrelated process
+// that the kernel has since reused the same PID for — Unix PIDs wrap and
+// get reassigned constantly on a long-running host, and there is no
+// "process identity" more durable than this to compare against here.
+func (s *ServiceManager) KillProcess(ctx context.Context, user string, pid int, expectedCommand, signal string) error {
+	if pid <= 0 {
+		return fmt.Errorf("некорректный pid: %d", pid)
+	}
+	if !killableSignals[signal] {
+		return fmt.Errorf("недопустимый сигнал: %q", signal)
+	}
+
+	// Reuses parse.ProcessDetails — the exact same `ps` invocation and
+	// parsing EnrichListeners already relies on to populate Listener.
+	// Command in the first place — rather than a second, ad-hoc `ps`
+	// call: the fixtures collector's "ps" stub is prefix-matched and
+	// returns its whole canned table regardless of a real "-p <pid>"
+	// filter, so anything that assumed a single filtered line back would
+	// misparse it. ProcessDetails already picks the right pid's row out
+	// of a possibly-unfiltered listing correctly either way.
+	details, _ := parse.ProcessDetails(ctx, s.c, []int{pid})
+	current := details[pid].Command
+	if current == "" {
+		return fmt.Errorf("процесс %d уже не найден", pid)
+	}
+	if current != strings.TrimSpace(expectedCommand) {
+		return fmt.Errorf("процесс %d теперь другой (PID переиспользован) — действие отменено для безопасности", pid)
+	}
+
+	res, err := s.c.Run(ctx, "kill", "-"+signal, fmt.Sprint(pid))
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	s.db.Audit(ctx, user, "process.kill", fmt.Sprint(pid), outcome, map[string]any{
+		"signal": signal, "command": current, "exit_code": res.ExitCode, "simulated": res.Simulated,
+	})
+	if err != nil {
+		return err
+	}
+	if !res.OK() {
+		return fmt.Errorf("kill -%s %d: код %d: %s", signal, pid, res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return nil
 }
