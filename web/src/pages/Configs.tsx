@@ -53,7 +53,12 @@ export default function Configs({ me }: { me: Me }) {
   const [error, setError] = useState<string | null>(null)
   const [diff, setDiff] = useState<{ id: number; text: string } | null>(null)
   const [creatingPath, setCreatingPath] = useState<string | null>(null)
-  const [newFileModal, setNewFileModal] = useState(false)
+  // Set alongside creatingPath when the new file is a clone of an existing
+  // one — NewFileForm starts pre-filled with this instead of blank, and
+  // cloneFrom (the source path) just labels the form so it's clear where
+  // the content came from.
+  const [creatingInitialContent, setCreatingInitialContent] = useState('')
+  const [newFileModal, setNewFileModal] = useState<{ cloneFrom?: string; initialContent?: string } | null>(null)
   const [newFilePathInput, setNewFilePathInput] = useState('')
 
   const file = useApi<FileContent>(path ? `/configs/file${qs({ path })}` : null)
@@ -149,7 +154,7 @@ export default function Configs({ me }: { me: Me }) {
           actions={
             me.is_admin &&
             me.allow_mutations && (
-              <Button type="link" onClick={() => setNewFileModal(true)}>
+              <Button type="link" onClick={() => setNewFileModal({})}>
                 + новый файл
               </Button>
             )
@@ -203,6 +208,7 @@ export default function Configs({ me }: { me: Me }) {
           {creatingPath ? (
             <NewFileForm
               path={creatingPath}
+              initialContent={creatingInitialContent}
               onCreated={async () => {
                 setCreatingPath(null)
                 setPath(creatingPath)
@@ -253,9 +259,16 @@ export default function Configs({ me }: { me: Me }) {
                           Сбросить
                         </Button>
                         {me.is_admin && me.allow_mutations && (
-                          <Button type="primary" onClick={save} loading={busy} disabled={!dirty}>
-                            {busy ? 'Сохраняю…' : 'Проверить и сохранить'}
-                          </Button>
+                          <>
+                            <Button
+                              onClick={() => setNewFileModal({ cloneFrom: file.data!.path, initialContent: draft })}
+                            >
+                              Клонировать
+                            </Button>
+                            <Button type="primary" onClick={save} loading={busy} disabled={!dirty}>
+                              {busy ? 'Сохраняю…' : 'Проверить и сохранить'}
+                            </Button>
+                          </>
                         )}
                       </>
                     )}
@@ -340,8 +353,14 @@ export default function Configs({ me }: { me: Me }) {
       </div>
 
       {newFileModal && (
-        <Modal title="Новый файл" onClose={() => setNewFileModal(false)}>
+        <Modal title={newFileModal.cloneFrom ? 'Клонировать файл' : 'Новый файл'} onClose={() => setNewFileModal(null)}>
           <div className="col">
+            {newFileModal.cloneFrom && (
+              <p className="small muted" style={{ marginTop: 0 }}>
+                Содержимое <code className="mono">{newFileModal.cloneFrom}</code> (включая несохранённые правки,
+                если были) будет записано под новым путём — исходный файл не меняется.
+              </p>
+            )}
             <label>
               Путь
               <Input
@@ -358,18 +377,19 @@ export default function Configs({ me }: { me: Me }) {
             <div className="row" style={{ marginTop: '0.4rem' }}>
               <Button
                 type="primary"
-                disabled={!newFilePathInput.trim().startsWith('/')}
+                disabled={!newFilePathInput.trim().startsWith('/') || newFilePathInput.trim() === newFileModal.cloneFrom}
                 onClick={() => {
                   const p = newFilePathInput.trim()
                   setCreatingPath(p)
+                  setCreatingInitialContent(newFileModal.initialContent ?? '')
                   setPath(null)
-                  setNewFileModal(false)
+                  setNewFileModal(null)
                   setNewFilePathInput('')
                 }}
               >
-                Создать
+                {newFileModal.cloneFrom ? 'Клонировать' : 'Создать'}
               </Button>
-              <Button type="link" onClick={() => setNewFileModal(false)}>
+              <Button type="link" onClick={() => setNewFileModal(null)}>
                 Отмена
               </Button>
             </div>
@@ -380,8 +400,18 @@ export default function Configs({ me }: { me: Me }) {
   )
 }
 
-function NewFileForm({ path, onCreated, onCancel }: { path: string; onCreated: () => void; onCancel: () => void }) {
-  const [content, setContent] = useState('')
+function NewFileForm({
+  path,
+  initialContent = '',
+  onCreated,
+  onCancel,
+}: {
+  path: string
+  initialContent?: string
+  onCreated: () => void
+  onCancel: () => void
+}) {
+  const [content, setContent] = useState(initialContent)
   const [note, setNote] = useState('')
   const [apply, setApply] = useState(false)
   const [busy, setBusy] = useState(false)
