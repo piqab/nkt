@@ -131,11 +131,13 @@ export default function TerminalPage({ me }: { me: Me }) {
       <div className="page-head spread">
         <div>
           <h1>Терминал</h1>
-          <p>
-            Интерактивный shell на этом хосте прямо в браузере. Требует явно включённой опции
-            хоста (<code className="mono">NKT_TERMINAL_ENABLED=true</code>) — если сервер её не
-            поднял, подключение завершится ошибкой ниже.
-          </p>
+          {status !== 'connected' && (
+            <p>
+              Интерактивный shell на этом хосте прямо в браузере. Требует явно включённой опции
+              хоста (<code className="mono">NKT_TERMINAL_ENABLED=true</code>) — если сервер её не
+              поднял, подключение завершится ошибкой ниже.
+            </p>
+          )}
         </div>
         <div className="row">
           {isPopout ? (
@@ -168,47 +170,48 @@ export default function TerminalPage({ me }: { me: Me }) {
       )}
       {status === 'closed' && <Banner kind="info">Сессия завершена.</Banner>}
 
-      {dbusStatus === null ? (
-        <Banner kind="info">Проверяю доступность D-Bus на хосте…</Banner>
-      ) : dbusStatus.needed ? (
-        <Banner kind="warn">
-          На хосте не работает D-Bus — терминал (если он вообще открылся), обновление пакетов и
-          самообновление хоста через резервный канал ограничены песочницей systemd-юнита: не могут
-          писать в системные пути. Причина обычно в том, что dbus не установлен или не запущен
-          (некоторые минимальные образы, например Debian 11, не ставят его по умолчанию).{' '}
-          {dbusStatus.can_install ? (
-            dbusInstallStatus?.active ? (
-              <Button
-                size="small"
-                type="primary"
-                onClick={() => {
-                  setDbusInstallOutcome(null)
-                  setDbusInstallOpen(true)
-                }}
-              >
-                установка выполняется — открыть
-              </Button>
-            ) : (
-              <Button
-                size="small"
-                type="primary"
-                onClick={() => {
-                  if (window.confirm('Установить dbus (apt-get install -y dbus) и запустить его на этом хосте?')) {
+      {status !== 'connected' &&
+        (dbusStatus === null ? (
+          <Banner kind="info">Проверяю доступность D-Bus на хосте…</Banner>
+        ) : dbusStatus.needed ? (
+          <Banner kind="warn">
+            На хосте не работает D-Bus — терминал (если он вообще открылся), обновление пакетов и
+            самообновление хоста через резервный канал ограничены песочницей systemd-юнита: не могут
+            писать в системные пути. Причина обычно в том, что dbus не установлен или не запущен
+            (некоторые минимальные образы, например Debian 11, не ставят его по умолчанию).{' '}
+            {dbusStatus.can_install ? (
+              dbusInstallStatus?.active ? (
+                <Button
+                  size="small"
+                  type="primary"
+                  onClick={() => {
                     setDbusInstallOutcome(null)
                     setDbusInstallOpen(true)
-                  }
-                }}
-              >
-                Установить dbus
-              </Button>
-            )
-          ) : (
-            'Автоматическая установка недоступна на этом хосте — поставьте вручную: apt-get install -y dbus && systemctl enable --now dbus.'
-          )}
-        </Banner>
-      ) : (
-        <Banner kind="success">D-Bus на хосте доступен — песочница не ограничивает терминал и обновления.</Banner>
-      )}
+                  }}
+                >
+                  установка выполняется — открыть
+                </Button>
+              ) : (
+                <Button
+                  size="small"
+                  type="primary"
+                  onClick={() => {
+                    if (window.confirm('Установить dbus (apt-get install -y dbus) и запустить его на этом хосте?')) {
+                      setDbusInstallOutcome(null)
+                      setDbusInstallOpen(true)
+                    }
+                  }}
+                >
+                  Установить dbus
+                </Button>
+              )
+            ) : (
+              'Автоматическая установка недоступна на этом хосте — поставьте вручную: apt-get install -y dbus && systemctl enable --now dbus.'
+            )}
+          </Banner>
+        ) : (
+          <Banner kind="success">D-Bus на хосте доступен — песочница не ограничивает терминал и обновления.</Banner>
+        ))}
 
       <Card>
         {status === 'connected' && (
