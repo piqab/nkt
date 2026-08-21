@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button } from 'antd'
+import { useLocation } from 'react-router-dom'
 import type { Me } from '../types'
 import { api, useApi } from '../api'
 import { Banner, Card } from '../components/ui'
@@ -14,9 +15,15 @@ import PackageInstallModal from '../components/PackageInstallModal'
  * adds the same window.confirm the rest of the app uses before any
  * destructive action, since "open a root shell" is the most consequential
  * thing here, not a lesser one.
+ *
+ * Also the component App.tsx renders bare (no sidebar/nav) for a "detached"
+ * terminal window — see isPopout below, which swaps "Открепить" for
+ * "Закрыть окно" there, since offering to detach a window that is already
+ * its own separate window makes no sense.
  */
 export default function TerminalPage({ me }: { me: Me }) {
   const canUse = me.is_admin && me.allow_mutations
+  const isPopout = useLocation().pathname === '/terminal/popout'
   const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(
     wsURL('/terminal/ws'),
   )
@@ -96,9 +103,13 @@ export default function TerminalPage({ me }: { me: Me }) {
           </p>
         </div>
         <div className="row">
-          <Button disabled={!canUse} onClick={openPopout} title="Открыть в отдельном окне браузера — переживёт переход по другим страницам">
-            Открепить в отдельное окно
-          </Button>
+          {isPopout ? (
+            <Button onClick={() => window.close()}>закрыть окно</Button>
+          ) : (
+            <Button disabled={!canUse} onClick={openPopout} title="Открыть в отдельном окне браузера — переживёт переход по другим страницам">
+              Открепить в отдельное окно
+            </Button>
+          )}
           {status === 'connected' ? (
             <Button danger onClick={stop}>
               закрыть терминал

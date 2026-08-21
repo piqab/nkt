@@ -125,8 +125,7 @@ export default function App() {
 
   // A terminal "откреплённый" into its own browser window (see Terminal.tsx's
   // "Открепить" button, window.open('/terminal/popout', ...)) is a second,
-  // separate load of this very app — cookies/localStorage (hostScope's own
-  // source of truth, set inside Shell below) are already shared
+  // separate load of this very app — the session cookie is already shared
   // automatically since it's the same origin, so the only thing actually
   // needed here is skipping Shell's sidebar/nav chrome entirely: a popped-out
   // window is meant to be just the terminal, not a second copy of the whole
@@ -134,7 +133,20 @@ export default function App() {
   // (several, further down) stay unconditional — this way they're simply
   // never reached for a popout window's render tree at all, rather than
   // conditionally skipped mid-component.
+  //
+  // hostScope itself does NOT come for free though: it lives in a plain
+  // module-level variable (api.ts), not localStorage, and is normally only
+  // ever set by Shell's own render body below — which a popout never runs.
+  // Left unset, every request from this window would silently fall back to
+  // hostScope.id's default (null, "the hub's own API") instead of the
+  // managed host actually selected — on a hub, that host almost certainly
+  // has no terminal of its own enabled, which is exactly the "Терминал
+  // может быть выключен на сервере" this used to show. Set it here the same
+  // way Shell does, from the same localStorage key.
   const isPopoutTerminal = me?.is_admin && location.pathname === '/terminal/popout'
+  if (isPopoutTerminal && me) {
+    hostScope.id = me.mode === 'hub' ? (readSelectedHost()?.id ?? null) : null
+  }
 
   return (
     <ConfigProvider theme={antdTheme}>
@@ -158,6 +170,21 @@ export default function App() {
  * to it (see api.ts's hostScope) once it is set. */
 type SelectedHost = { id: number; name: string }
 
+/** Reads back whichever host Shell last stashed via selectHost — the one
+ * piece of hub state that has to survive a page load, since it decides
+ * which managed host's API hostScope proxies every request to. Shared by
+ * Shell's own initial state below and App's popout-terminal branch above:
+ * a popped-out window never mounts Shell at all, so nothing else would set
+ * hostScope for it otherwise. */
+function readSelectedHost(): SelectedHost | null {
+  try {
+    const raw = localStorage.getItem('nkt-hub-host')
+    return raw ? (JSON.parse(raw) as SelectedHost) : null
+  } catch {
+    return null
+  }
+}
+
 function Shell({
   me,
   theme,
@@ -173,15 +200,7 @@ function Shell({
   const navigate = useNavigate()
   const isHub = me.mode === 'hub'
 
-  const [selectedHost, setSelectedHost] = useState<SelectedHost | null>(() => {
-    if (!isHub) return null
-    try {
-      const raw = localStorage.getItem('nkt-hub-host')
-      return raw ? (JSON.parse(raw) as SelectedHost) : null
-    } catch {
-      return null
-    }
-  })
+  const [selectedHost, setSelectedHost] = useState<SelectedHost | null>(() => (isHub ? readSelectedHost() : null))
 
   // Every page below reads through api()/useApi() unmodified; this is the
   // one place that redirects their calls to the selected host's own API
