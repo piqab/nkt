@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ConfigProvider, type ThemeConfig } from 'antd'
-import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
+import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { api, hostScope, onUnauthorized, useApi } from './api'
 import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
 import type { Me, Overview } from './types'
@@ -93,6 +93,7 @@ export default function App() {
   const [me, setMe] = useState<Me | null>(null)
   const [checked, setChecked] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
   // Owned here, not inside Shell, so the antd theme (and the login screen
   // under it) is consistent before a session even exists — not just once
   // someone is signed in.
@@ -122,6 +123,19 @@ export default function App() {
     }
   }, [navigate])
 
+  // A terminal "откреплённый" into its own browser window (see Terminal.tsx's
+  // "Открепить" button, window.open('/terminal/popout', ...)) is a second,
+  // separate load of this very app — cookies/localStorage (hostScope's own
+  // source of truth, set inside Shell below) are already shared
+  // automatically since it's the same origin, so the only thing actually
+  // needed here is skipping Shell's sidebar/nav chrome entirely: a popped-out
+  // window is meant to be just the terminal, not a second copy of the whole
+  // dashboard. Checked ahead of Shell, not inside it, so Shell's own hooks
+  // (several, further down) stay unconditional — this way they're simply
+  // never reached for a popout window's render tree at all, rather than
+  // conditionally skipped mid-component.
+  const isPopoutTerminal = me?.is_admin && location.pathname === '/terminal/popout'
+
   return (
     <ConfigProvider theme={antdTheme}>
       {!checked ? (
@@ -131,6 +145,8 @@ export default function App() {
           <Route path="/login" element={<Login onSuccess={loadMe} />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
+      ) : isPopoutTerminal ? (
+        <TerminalPage me={me} />
       ) : (
         <Shell me={me} theme={theme} setTheme={setTheme} onLogout={() => setMe(null)} />
       )}

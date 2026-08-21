@@ -72,6 +72,18 @@ export default function TerminalPage({ me }: { me: Me }) {
     start()
   }
 
+  /** Opens this same page in its own, chrome-less browser window (see
+   * App.tsx's isPopoutTerminal) — a real OS-level window, not a modal, so it
+   * can be moved to another monitor and survives navigating around the main
+   * tab (which would otherwise unmount this page and kill the session, see
+   * usePty's own cleanup effect). Stops the in-tab session first rather than
+   * leaving two live shells behind — "detach", not "duplicate": the popout
+   * gets its own fresh "Открыть терминал" to connect with once it opens. */
+  function openPopout() {
+    if (status === 'connected' || status === 'connecting') stop()
+    window.open('/terminal/popout', 'nkt-terminal', 'width=980,height=640,resizable=yes')
+  }
+
   return (
     <>
       <div className="page-head spread">
@@ -84,6 +96,9 @@ export default function TerminalPage({ me }: { me: Me }) {
           </p>
         </div>
         <div className="row">
+          <Button disabled={!canUse} onClick={openPopout} title="Открыть в отдельном окне браузера — переживёт переход по другим страницам">
+            Открепить в отдельное окно
+          </Button>
           {status === 'connected' ? (
             <Button danger onClick={stop}>
               закрыть терминал
