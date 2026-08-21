@@ -152,15 +152,16 @@ export default function OverviewPage({ me }: { me: Me }) {
                   обновление выполняется — открыть
                 </Button>
               )
-            : canUpdate &&
-              pkgUpdates.length > 0 && (
+            : canUpdate && (
                 <Button
-                  type="primary"
+                  type={pkgUpdates.length > 0 ? 'primary' : 'default'}
+                  disabled={pkgUpdates.length === 0}
                   onClick={() => {
                     if (
                       window.confirm(
-                        `Запустить apt-get upgrade на этом хосте (${pkgUpdates.length} пакетов)? ` +
-                          'Подтверждение apt (Y/n) нужно будет дать в открывшемся окне.',
+                        `Запустить apt-get dist-upgrade на этом хосте (${pkgUpdates.length} пакетов)? ` +
+                          'При необходимости apt сам добавит/удалит зависимые пакеты — подтверждение ' +
+                          '(Y/n) нужно будет дать в открывшемся окне.',
                       )
                     ) {
                       setUpdateOutcome(null)
@@ -168,7 +169,7 @@ export default function OverviewPage({ me }: { me: Me }) {
                     }
                   }}
                 >
-                  обновить ({pkgUpdates.length})
+                  {pkgUpdates.length > 0 ? `обновить (${pkgUpdates.length})` : 'обновлений нет'}
                 </Button>
               )}
           {me.is_admin && (

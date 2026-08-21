@@ -8,11 +8,18 @@ import (
 	"github.com/althq/netknownsthat/internal/config"
 )
 
-// handleUpdatesWS runs `apt-get update && apt-get upgrade` on this host —
-// deliberately without -y, streamed live over a PTY/WebSocket bridge, so
-// apt's own "Do you want to continue? [Y/n]" (and anything else it needs
-// to ask, e.g. which services to restart after a libssl update) is
-// answered by the operator watching in real time, not decided unattended.
+// handleUpdatesWS runs `apt-get update && apt-get dist-upgrade` on this
+// host — deliberately without -y, streamed live over a PTY/WebSocket
+// bridge, so apt's own "Do you want to continue? [Y/n]" (and anything else
+// it needs to ask, e.g. which services to restart after a libssl update,
+// or which packages it wants to add/remove to resolve a dependency change)
+// is answered by the operator watching in real time, not decided
+// unattended. dist-upgrade, not plain upgrade: a plain `apt-get upgrade`
+// silently leaves packages that need a dependency added/removed on "The
+// following packages have been kept back" forever — Overview's own update
+// count (parse/packages.go, from `apt list --upgradable`) includes those
+// packages same as any other, so a plain upgrade could never actually
+// bring the count to zero no matter how many times "обновить" was clicked.
 // Unlike the general terminal this spawns one fixed command, not an
 // arbitrary shell, so it does not require NKT_TERMINAL_ENABLED — it is
 // still behind RequireAuth+RequireAdmin (admin role, AllowMutations on)
@@ -41,9 +48,9 @@ func (s *Server) handleUpdatesWS(w http.ResponseWriter, r *http.Request) {
 		// DEBIAN_FRONTEND intentionally left at its default (not
 		// "noninteractive"): the whole point is a real prompt the operator
 		// answers themselves.
-		return unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, "bash", "-c", "apt-get update && apt-get upgrade")
+		return unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, "bash", "-c", "apt-get update && apt-get dist-upgrade")
 	}
-	s.runUpdateSession(w, r, "packages", buildCmd, "packages.upgrade", "apt-get upgrade", s.cfg.TerminalIdleTimeout)
+	s.runUpdateSession(w, r, "packages", buildCmd, "packages.upgrade", "apt-get dist-upgrade", s.cfg.TerminalIdleTimeout)
 }
 
 // handleUpdatesStatus reports whether a package-update session is

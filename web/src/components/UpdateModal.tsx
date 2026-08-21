@@ -6,13 +6,14 @@ import { PtyToolbar } from './PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
 
 /**
- * Runs `apt-get update && apt-get upgrade` on this host live — deliberately
- * without -y, so apt's own "Do you want to continue? [Y/n]" (and anything
- * else it needs to ask) is answered by the operator watching the real
- * output, not decided unattended. Connects automatically on open: the
- * confirmation already happened one step earlier (the "обновить" button on
- * Overview), this dialog IS the thing that was confirmed, not another gate
- * in front of it.
+ * Runs `apt-get update && apt-get dist-upgrade` on this host live —
+ * deliberately without -y, so apt's own "Do you want to continue? [Y/n]"
+ * (and anything else it needs to ask, including which packages it wants to
+ * add/remove to resolve a dependency change) is answered by the operator
+ * watching the real output, not decided unattended. Connects automatically
+ * on open: the confirmation already happened one step earlier (the
+ * "обновить" button on Overview), this dialog IS the thing that was
+ * confirmed, not another gate in front of it.
  */
 export default function UpdateModal({
   packages,
