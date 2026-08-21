@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from 'antd'
 import { useLocation } from 'react-router-dom'
 import type { Me } from '../types'
-import { api, useApi } from '../api'
+import { api, hostScope, readSelectedHost, useApi } from '../api'
 import { Banner, Card } from '../components/ui'
 import { PtyToolbar } from '../components/PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
@@ -23,10 +23,25 @@ import PackageInstallModal from '../components/PackageInstallModal'
  */
 export default function TerminalPage({ me }: { me: Me }) {
   const canUse = me.is_admin && me.allow_mutations
-  const isPopout = useLocation().pathname === '/terminal/popout'
+  const location = useLocation()
+  const isPopout = location.pathname === '/terminal/popout'
   const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(
     wsURL('/terminal/ws'),
   )
+
+  // A distinct browser-taskbar-visible title per popout window is the whole
+  // point of being able to open several at once (see openPopout below) —
+  // without it every detached terminal window looks identical from the OS
+  // window switcher. The host's display name travels in this window's own
+  // URL (?name=) rather than through readSelectedHost()'s shared
+  // localStorage entry: that reflects whichever host the *main tab* has
+  // selected right now, which is not necessarily this window's host once
+  // more than one popout is open or the main tab has since switched hosts.
+  useEffect(() => {
+    if (!isPopout) return
+    const name = new URLSearchParams(location.search).get('name')
+    document.title = name ? `Терминал: ${name}` : 'Терминал'
+  }, [isPopout, location.search])
 
   // Whether the terminal/updates/self-update escape hatch (systemd-run) is
   // currently unusable on this host because D-Bus isn't reachable — see
@@ -79,16 +94,36 @@ export default function TerminalPage({ me }: { me: Me }) {
     start()
   }
 
-  /** Opens this same page in its own, chrome-less browser window (see
+  /**
+   * Opens this same page in its own, chrome-less browser window (see
    * App.tsx's isPopoutTerminal) — a real OS-level window, not a modal, so it
    * can be moved to another monitor and survives navigating around the main
    * tab (which would otherwise unmount this page and kill the session, see
    * usePty's own cleanup effect). Stops the in-tab session first rather than
    * leaving two live shells behind — "detach", not "duplicate": the popout
-   * gets its own fresh "Открыть терминал" to connect with once it opens. */
+   * gets its own fresh "Открыть терминал" to connect with once it opens.
+   *
+   * Under a hub, both the target host id and a window name keyed by it
+   * travel along: window.open reuses/refocuses an already-open window
+   * whenever the *name* matches, so without a per-host name, detaching a
+   * second host's terminal would just hijack the first host's popout
+   * instead of opening an independent one — the host id in the URL is what
+   * lets App.tsx scope *that* window's own hostScope correctly (see its own
+   * doc comment on why that can't just come from the normal, single shared
+   * "currently selected host" the main tab uses).
+   */
   function openPopout() {
     if (status === 'connected' || status === 'connecting') stop()
-    window.open('/terminal/popout', 'nkt-terminal', 'width=980,height=640,resizable=yes')
+    const id = hostScope.id
+    const params = new URLSearchParams()
+    if (id !== null) {
+      params.set('host', String(id))
+      const name = readSelectedHost()?.name
+      if (name) params.set('name', name)
+    }
+    const qs = params.toString()
+    const windowName = `nkt-terminal-${id ?? 'local'}`
+    window.open(`/terminal/popout${qs ? `?${qs}` : ''}`, windowName, 'width=980,height=640,resizable=yes')
   }
 
   return (

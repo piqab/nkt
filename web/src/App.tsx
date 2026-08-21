@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ConfigProvider, type ThemeConfig } from 'antd'
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
-import { api, hostScope, onUnauthorized, useApi } from './api'
+import { api, hostScope, onUnauthorized, readSelectedHost, useApi, writeSelectedHost, type SelectedHost } from './api'
 import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
 import type { Me, Overview } from './types'
 import Login from './pages/Login'
@@ -141,11 +141,24 @@ export default function App() {
   // hostScope.id's default (null, "the hub's own API") instead of the
   // managed host actually selected — on a hub, that host almost certainly
   // has no terminal of its own enabled, which is exactly the "Терминал
-  // может быть выключен на сервере" this used to show. Set it here the same
-  // way Shell does, from the same localStorage key.
+  // может быть выключен на сервере" this used to show.
+  //
+  // The host id comes from THIS window's own URL (?host=), not from
+  // readSelectedHost()'s shared localStorage entry — several popout
+  // windows can be open at once, one per managed host (see Terminal.tsx's
+  // openPopout, which gives each host its own window name too), and they
+  // would otherwise all fight over that one shared "currently selected"
+  // value instead of each staying pinned to the host it was opened for.
+  // The localStorage fallback only matters if this URL is ever opened by
+  // hand without the param.
   const isPopoutTerminal = me?.is_admin && location.pathname === '/terminal/popout'
   if (isPopoutTerminal && me) {
-    hostScope.id = me.mode === 'hub' ? (readSelectedHost()?.id ?? null) : null
+    if (me.mode !== 'hub') {
+      hostScope.id = null
+    } else {
+      const hostParam = new URLSearchParams(location.search).get('host')
+      hostScope.id = hostParam !== null && hostParam !== '' ? Number(hostParam) : (readSelectedHost()?.id ?? null)
+    }
   }
 
   return (
@@ -164,25 +177,6 @@ export default function App() {
       )}
     </ConfigProvider>
   )
-}
-
-/** A host selected in the hub shell — everything below scopes its API calls
- * to it (see api.ts's hostScope) once it is set. */
-type SelectedHost = { id: number; name: string }
-
-/** Reads back whichever host Shell last stashed via selectHost — the one
- * piece of hub state that has to survive a page load, since it decides
- * which managed host's API hostScope proxies every request to. Shared by
- * Shell's own initial state below and App's popout-terminal branch above:
- * a popped-out window never mounts Shell at all, so nothing else would set
- * hostScope for it otherwise. */
-function readSelectedHost(): SelectedHost | null {
-  try {
-    const raw = localStorage.getItem('nkt-hub-host')
-    return raw ? (JSON.parse(raw) as SelectedHost) : null
-  } catch {
-    return null
-  }
 }
 
 function Shell({
@@ -217,8 +211,7 @@ function Shell({
 
   function selectHost(host: SelectedHost | null) {
     setSelectedHost(host)
-    if (host) localStorage.setItem('nkt-hub-host', JSON.stringify(host))
-    else localStorage.removeItem('nkt-hub-host')
+    writeSelectedHost(host)
     // The URL otherwise stays wherever it was — the host picker renders
     // outside <Routes> entirely (see showingHostPicker below), so it never
     // changes the address bar on its own. Without this, opening a host
