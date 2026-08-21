@@ -200,6 +200,20 @@ export function usePty(wsUrl: string) {
           ws.onopen = () => {
             setStatus('connected')
             term.focus()
+            // fit.fit() above already sized the terminal correctly for the
+            // real container — but that happened before this socket could
+            // possibly be open yet (a WS handshake is at least one round
+            // trip), so the resize event it fired either had no listener
+            // yet (term.onResize is registered below, after this) or, even
+            // if it had, would have been silently dropped by that
+            // handler's own readyState-OPEN guard. Left uncorrected, the
+            // server's PTY (pty.Start with no explicit size) stays at
+            // whatever the kernel/pty library defaults to — commonly
+            // 80x24 — until some *later* resize happens to fire, which is
+            // exactly the reported "терминал не открывается в реальный
+            // размер окна". Send the already-correct current size
+            // explicitly now that the socket can actually carry it.
+            ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
           }
           ws.onmessage = (ev) => {
             if (ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data))
