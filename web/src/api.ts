@@ -37,6 +37,35 @@ export const hostScope: { id: number | null } = { id: null }
  * matters, everything else treats it as just another selected host. */
 export const LOCAL_HOST_ID = -1
 
+/** A host selected in the hub shell — everything reading through
+ * hostScope above scopes its API calls to it once it is set. */
+export interface SelectedHost {
+  id: number
+  name: string
+}
+
+const SELECTED_HOST_KEY = 'nkt-hub-host'
+
+/** Reads back whichever host the hub shell last selected — the one piece
+ * of hub state that has to survive a page load (App.tsx's Shell seeds its
+ * own state from this on mount) or reach an entirely separate window (a
+ * detached terminal — see Terminal.tsx's openPopout — carries its host id
+ * in its own URL instead, precisely so several such windows for different
+ * hosts don't all fight over this one shared value). */
+export function readSelectedHost(): SelectedHost | null {
+  try {
+    const raw = localStorage.getItem(SELECTED_HOST_KEY)
+    return raw ? (JSON.parse(raw) as SelectedHost) : null
+  } catch {
+    return null
+  }
+}
+
+export function writeSelectedHost(host: SelectedHost | null): void {
+  if (host) localStorage.setItem(SELECTED_HOST_KEY, JSON.stringify(host))
+  else localStorage.removeItem(SELECTED_HOST_KEY)
+}
+
 export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   // Authentication always targets the hub itself — the operator only ever
   // logs in once, never per host (see internal/hub's design notes).
