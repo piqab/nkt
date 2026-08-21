@@ -37,6 +37,51 @@ func (m *Manager) tunnelReinstallFallback(host store.Host) bool {
 	return ok
 }
 
+// tunnelReinstallFallbackWait bounds how long awaitTunnelReinstallFallback
+// polls for a tunnel session to (re)appear before giving up, and
+// tunnelReinstallFallbackPoll is how often it checks — both vars, not
+// consts, so tests can shrink them instead of actually waiting seconds
+// for a real timer.
+var (
+	tunnelReinstallFallbackWait = 5 * time.Second
+	tunnelReinstallFallbackPoll = 250 * time.Millisecond
+)
+
+// awaitTunnelReinstallFallback is tunnelReinstallFallback with a short
+// bounded wait for the "should work but isn't registered at this exact
+// instant" case — the SSH failure that just triggered this check and a
+// tunnel session dropping can easily share the same underlying network
+// blip, so runTunnelDialer's own reconnect (see tunnelDialerMaxBackoff)
+// may simply not have caught up yet at the precise moment install() asks.
+// Without this, an operator hitting "обновить"/"переустановить" right as
+// SSH drops would see the job fail outright with the raw SSH error and
+// have to click again moments later once the tunnel reconnected on its
+// own — confusing, since nothing about the feature was actually broken,
+// just its timing relative to this one check. Skips the wait entirely
+// when tunnelReinstallFallback's other two conditions (TunnelEnabled,
+// known Arch) already rule it out for good — no session will ever appear
+// for those, waiting would only delay a failure that was always coming.
+func (m *Manager) awaitTunnelReinstallFallback(ctx context.Context, host store.Host) bool {
+	if m.tunnelReinstallFallback(host) {
+		return true
+	}
+	if !host.TunnelEnabled || host.Arch == "" {
+		return false
+	}
+	deadline := time.Now().Add(tunnelReinstallFallbackWait)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(tunnelReinstallFallbackPoll):
+		}
+		if m.tunnelReinstallFallback(host) {
+			return true
+		}
+	}
+	return false
+}
+
 // dynamicRelayDial returns a dialFunc that re-resolves hostID's current
 // relay session on every single call, rather than being bound to whichever
 // session happened to be live when the dial was created. installOverTunnel

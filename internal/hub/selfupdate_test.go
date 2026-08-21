@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"testing"
+	"time"
 
 	"github.com/hashicorp/yamux"
 
@@ -80,6 +81,108 @@ func TestTunnelReinstallFallback(t *testing.T) {
 
 		if !m.tunnelReinstallFallback(host) {
 			t.Fatal("tunnelReinstallFallback() = false, want true with a live relay session")
+		}
+	})
+}
+
+// withShortTunnelReinstallFallbackWait shrinks the wait/poll intervals
+// awaitTunnelReinstallFallback uses so tests exercise real timer behavior
+// without actually waiting the production 5-second budget.
+func withShortTunnelReinstallFallbackWait(t *testing.T) {
+	t.Helper()
+	origWait, origPoll := tunnelReinstallFallbackWait, tunnelReinstallFallbackPoll
+	tunnelReinstallFallbackWait = 200 * time.Millisecond
+	tunnelReinstallFallbackPoll = 20 * time.Millisecond
+	t.Cleanup(func() {
+		tunnelReinstallFallbackWait = origWait
+		tunnelReinstallFallbackPoll = origPoll
+	})
+}
+
+// TestAwaitTunnelReinstallFallback covers the bounded-wait wrapper install()
+// actually calls: it must not wait at all when tunnelReinstallFallback's own
+// fast-fail conditions (TunnelEnabled, known Arch) already rule out the
+// fallback for good, but it must ride out a session that appears moments
+// after SSH failed — the exact "works on the second click" symptom this
+// exists to fix, reproduced here as "appears within the wait window" rather
+// than as a second manual call.
+func TestAwaitTunnelReinstallFallback(t *testing.T) {
+	t.Run("already live: returns true immediately, no wait needed", func(t *testing.T) {
+		m, _ := newTestManager(t)
+		host := store.Host{ID: 10, TunnelEnabled: true, Arch: "linux/amd64"}
+		session := newTestRelaySession(t)
+		m.registerRelay(host.ID, session)
+		t.Cleanup(func() { m.dropRelayAll(host.ID) })
+
+		start := time.Now()
+		if !m.awaitTunnelReinstallFallback(context.Background(), host) {
+			t.Fatal("awaitTunnelReinstallFallback() = false, want true with an already-live session")
+		}
+		if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+			t.Errorf("took %v to return for an already-live session, want near-instant", elapsed)
+		}
+	})
+
+	t.Run("tunnel not enabled: returns false without waiting", func(t *testing.T) {
+		m, _ := newTestManager(t)
+		host := store.Host{ID: 11, TunnelEnabled: false, Arch: "linux/amd64"}
+
+		start := time.Now()
+		if m.awaitTunnelReinstallFallback(context.Background(), host) {
+			t.Fatal("awaitTunnelReinstallFallback() = true with TunnelEnabled false")
+		}
+		if elapsed := time.Since(start); elapsed > 50*time.Millisecond {
+			t.Errorf("took %v to return false for TunnelEnabled=false, want near-instant (no point waiting)", elapsed)
+		}
+	})
+
+	t.Run("session registers partway through the wait: returns true", func(t *testing.T) {
+		withShortTunnelReinstallFallbackWait(t)
+		m, _ := newTestManager(t)
+		host := store.Host{ID: 12, TunnelEnabled: true, Arch: "linux/amd64"}
+		// Created up front, on the main test goroutine (t.Fatalf inside it
+		// would be unsafe from the background goroutine below) — only the
+		// registration itself is delayed.
+		session := newTestRelaySession(t)
+		t.Cleanup(func() { m.dropRelayAll(host.ID) })
+
+		go func() {
+			time.Sleep(60 * time.Millisecond)
+			m.registerRelay(host.ID, session)
+		}()
+
+		if !m.awaitTunnelReinstallFallback(context.Background(), host) {
+			t.Fatal("awaitTunnelReinstallFallback() = false, want true once the session registered mid-wait")
+		}
+	})
+
+	t.Run("session never appears: returns false once the wait elapses", func(t *testing.T) {
+		withShortTunnelReinstallFallbackWait(t)
+		m, _ := newTestManager(t)
+		host := store.Host{ID: 13, TunnelEnabled: true, Arch: "linux/amd64"}
+
+		if m.awaitTunnelReinstallFallback(context.Background(), host) {
+			t.Fatal("awaitTunnelReinstallFallback() = true with no session ever registered")
+		}
+	})
+
+	t.Run("ctx cancelled mid-wait: returns false promptly", func(t *testing.T) {
+		withShortTunnelReinstallFallbackWait(t)
+		m, _ := newTestManager(t)
+		host := store.Host{ID: 14, TunnelEnabled: true, Arch: "linux/amd64"}
+
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			time.Sleep(10 * time.Millisecond)
+			cancel()
+		}()
+
+		start := time.Now()
+		if m.awaitTunnelReinstallFallback(ctx, host) {
+			t.Fatal("awaitTunnelReinstallFallback() = true with a cancelled ctx and no session")
+		}
+		if elapsed := time.Since(start); elapsed > 100*time.Millisecond {
+			t.Errorf("took %v to return after ctx cancellation, want it to stop promptly", elapsed)
 		}
 	})
 }
