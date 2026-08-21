@@ -210,6 +210,7 @@ function certColumns(
 export default function Certificates({ me }: { me: Me }) {
   const { data, error, loading, reload } = useApi<CertificatesResponse>('/certificates', 300_000)
   const [busy, setBusy] = useState<string | null>(null)
+  const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   // Shared by both certbot flows — renewing an existing lineage and issuing
   // a brand-new certificate both run in the background and report progress
@@ -326,6 +327,28 @@ export default function Certificates({ me }: { me: Me }) {
   function closeJobModal() {
     setJob(null)
     setJobStatus(null)
+  }
+
+  /** Called once CombineForm has written the combined PEM. A plain reload()
+   * would only re-fetch /certificates' last cached scan (handleCertificates
+   * serves LatestOrScan, not a live parse) — the combined file's own new
+   * expiry/coverage would stay invisible until *something* rescans the
+   * host, same reasoning as Overview's own post-update rescan. Runs the
+   * same /inventory/refresh the rest of the app already uses for this,
+   * so CombineForm's result banner can show the shared "Пересканирую…"
+   * spinner instead of a bespoke one. */
+  async function refreshAfterCombine() {
+    setRescanning(true)
+    try {
+      await api('/inventory/refresh', { method: 'POST' })
+    } catch {
+      // Best-effort: the combine itself already succeeded and reported its
+      // own result — a failed rescan just means the certificate list stays
+      // one scan stale, not that anything about the combine failed.
+    } finally {
+      reload()
+      setRescanning(false)
+    }
   }
 
   if (loading && !data) return <Loading what="сертификаты" />
@@ -451,7 +474,8 @@ export default function Certificates({ me }: { me: Me }) {
         <>
           <IssueForm onStarted={startJob} />
           <CombineForm
-            onCombined={reload}
+            onCombined={refreshAfterCombine}
+            rescanning={rescanning}
             lineages={lineages.data?.lineages ?? []}
             lineagesLoading={lineages.loading}
             lineagesError={lineages.error}
@@ -669,11 +693,15 @@ const NEW_FILE = ''
 
 function CombineForm({
   onCombined,
+  rescanning,
   lineages: lineageOptions,
   lineagesLoading,
   lineagesError,
 }: {
   onCombined: () => void
+  /** Whether the host is being rescanned right now to pick up the combined
+   * file's new expiry/coverage — see Certificates' own refreshAfterCombine. */
+  rescanning: boolean
   lineages: LineageInfo[]
   lineagesLoading: boolean
   lineagesError: string | null
@@ -761,7 +789,14 @@ function CombineForm({
             <Banner kind="info">
               {result.lineage}: файл <code className="mono">{result.combined_path}</code> записан,
               действителен до {formatDateTime(result.not_after)}. haproxy перечитал конфигурацию — вставлять
-              ничего не нужно.
+              ничего не нужно.{' '}
+              {rescanning ? (
+                <span className="row" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <Spinner /> обновляю список сертификатов…
+                </span>
+              ) : (
+                'Список сертификатов уже обновлён.'
+              )}
             </Banner>
           </div>
         ))}
