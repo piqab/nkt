@@ -205,6 +205,19 @@ export function LineChart({
       <Legend items={legend} />
       <svg
         viewBox={`0 0 ${width} ${height}`}
+        // The default "xMidYMid meet" scales the viewBox uniformly and
+        // letterboxes/centers it whenever the rendered box's aspect ratio
+        // (rect.width : height, since CSS sets both independently below)
+        // doesn't match the viewBox's own (width : height) — which is the
+        // common case, since width is 100% of whatever container this
+        // lands in while height stays fixed. handleMove's own math assumes
+        // a plain linear rect.width -> viewBox-width scale with no such
+        // offset, so any letterboxing throws the cursor-to-index mapping
+        // off by however wide the (invisible) margin ends up being — the
+        // reported "курсор опережает/опаздывает". "none" makes the SVG
+        // stretch X and Y independently to fill the box exactly, matching
+        // what handleMove already assumes.
+        preserveAspectRatio="none"
         role="img"
         style={{ width: '100%', height }}
         onMouseMove={handleMove}
