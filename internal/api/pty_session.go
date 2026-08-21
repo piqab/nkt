@@ -255,6 +255,44 @@ func systemdRunBackgroundArgs(argv ...string) []string {
 	return append(args, argv...)
 }
 
+// wsKeepalivePingInterval is how often an otherwise-idle terminal/update
+// session sends a WebSocket ping — comfortably under the ~60s idle
+// timeout many reverse proxies (nginx's default proxy_read_timeout) and
+// NAT/firewall devices use to reclaim a connection with no traffic on it,
+// so a shell someone is only reading (not typing into), or a long silent
+// stretch mid apt-get download, doesn't get the underlying connection
+// pulled out from under it. A browser's WebSocket implementation answers
+// a ping with a pong automatically at the protocol level — this never
+// surfaces as a message either side's own code sees, so it does not
+// interact with resetIdle's own (much longer, real-activity-based) timer.
+const wsKeepalivePingInterval = 25 * time.Second
+
+// startWSKeepalive pings conn every interval until ctx is done — shared by
+// runPTYSession and runUpdateSession, whose sessions can both go quiet for
+// long stretches without that silence meaning the connection itself
+// should be considered dead. conn.Ping needs a concurrent conn.Read to
+// ever observe the matching pong (see its own doc comment) — both
+// callers' main loops already read continuously, so this is safe as-is.
+// interval is a parameter (both real callers pass wsKeepalivePingInterval)
+// rather than baked in, so a test can use a short one instead of actually
+// waiting 25s.
+func startWSKeepalive(ctx context.Context, conn *websocket.Conn, interval time.Duration) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := conn.Ping(ctx); err != nil {
+					return
+				}
+			}
+		}
+	}()
+}
+
 // ptyControl is the shape of a WebSocket TEXT frame — raw keystrokes and
 // process output travel as BINARY frames instead, so a text/binary split
 // (rather than an envelope around every byte) is enough to tell the one
@@ -314,6 +352,7 @@ func (s *Server) runPTYSession(w http.ResponseWriter, r *http.Request, cmd *exec
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
+	startWSKeepalive(ctx, conn, wsKeepalivePingInterval)
 
 	// Idle timeout: the safety net for a tab left open and forgotten — the
 	// process otherwise runs until someone closes it by hand. Any traffic
