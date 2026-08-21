@@ -128,6 +128,11 @@ interface LineChartProps {
   yMax?: number
   yUnit?: string
   area?: boolean
+  /** A fixed horizontal ceiling to draw and label — e.g. total host memory
+   * or CPU core count, so a value like "4 ГиБ" or "230%" has something
+   * concrete to be read against instead of an axis auto-scaled to
+   * whatever the data itself happens to peak at. */
+  reference?: { value: number; label: string }
 }
 
 export function LineChart({
@@ -138,6 +143,7 @@ export function LineChart({
   yMax,
   yUnit,
   area = false,
+  reference,
 }: LineChartProps) {
   const [tip, setTip] = useState<TipState | null>(null)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
@@ -151,8 +157,13 @@ export function LineChart({
         if (p.y > max) max = p.y
       }
     }
+    // The reference ceiling (e.g. total host memory) must stay on-chart
+    // even when every data point sits well under it — otherwise the one
+    // number the whole thing exists to be compared against would be
+    // clipped off the top.
+    if (reference && reference.value > max) max = reference.value
     return { xs: [...set].sort(), maxY: yMax ?? (max === 0 ? 1 : max * 1.12) }
-  }, [series, yMax])
+  }, [series, yMax, reference])
 
   const width = 900
   const pad = { top: 12, right: 16, bottom: 26, left: 52 }
@@ -245,6 +256,29 @@ export function LineChart({
           <text x={4} y={pad.top + 4} fontSize={10} fill="var(--text-muted)">
             {yUnit}
           </text>
+        )}
+
+        {reference && (
+          <g>
+            <line
+              x1={pad.left}
+              x2={width - pad.right}
+              y1={yAt(reference.value)}
+              y2={yAt(reference.value)}
+              stroke="var(--text-muted)"
+              strokeWidth={1}
+              strokeDasharray="4 3"
+            />
+            <text
+              x={width - pad.right}
+              y={yAt(reference.value) - 4}
+              textAnchor="end"
+              fontSize={10}
+              fill="var(--text-muted)"
+            >
+              {reference.label}
+            </text>
+          </g>
         )}
 
         {xs.map((x, i) =>

@@ -86,6 +86,34 @@ func metricQuery(r *http.Request) store.MetricQuery {
 	return q
 }
 
+// usageTotal returns the reference ceiling the frontend draws as a dashed
+// line on the CPU/memory usage charts — "100%" of what, or how many bytes
+// of what — computed from the latest scan's HostCapacity (see
+// parse.HostCapacity), not a fresh one: a chart annotation is not worth
+// forcing a scan for, and total host memory/CPU practically never changes
+// between scans anyway. nil (omitted from the response) whenever the
+// figure isn't meaningful for this metric or wasn't available from the
+// last scan (a container/restricted environment without a real /proc).
+func (s *Server) usageTotal(q store.MetricQuery) *float64 {
+	if s.scanner == nil {
+		return nil
+	}
+	snap := s.scanner.Latest()
+	if snap == nil {
+		return nil
+	}
+	switch {
+	case q.Source == "docker" && q.Metric == "cpu_pct" && snap.Capacity.CPUCores > 0:
+		total := float64(snap.Capacity.CPUCores) * 100
+		return &total
+	case q.Source == "docker" && q.Metric == "mem_bytes" && snap.Capacity.MemTotalBytes > 0:
+		total := float64(snap.Capacity.MemTotalBytes)
+		return &total
+	default:
+		return nil
+	}
+}
+
 func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	q := metricQuery(r)
 	points, err := s.db.MetricSeries(r.Context(), q)
@@ -98,6 +126,7 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 		"source":    q.Source,
 		"metric":    q.Metric,
 		"simulated": s.metricsSimulated(),
+		"total":     s.usageTotal(q),
 	})
 }
 

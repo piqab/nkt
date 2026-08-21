@@ -92,7 +92,7 @@ export default function Usage() {
   const spec = SERIES.find((s) => s.id === seriesId)!
   const rangeSpec = RANGES.find((r) => r.value === range)!
 
-  const usage = useApi<{ points: MetricPoint[]; simulated: boolean }>(
+  const usage = useApi<{ points: MetricPoint[]; simulated: boolean; total: number | null }>(
     `/monitor/usage${qs({
       source: spec.source,
       metric: spec.metric,
@@ -184,6 +184,11 @@ export default function Usage() {
             formatValue={spec.format}
             formatX={(x) => shortLabel(x, rangeSpec.granularity)}
             height={260}
+            reference={
+              usage.data?.total != null
+                ? { value: usage.data.total, label: `всего: ${spec.format(usage.data.total)}` }
+                : undefined
+            }
           />
         )}
       </Card>

@@ -1,0 +1,23 @@
+processor	: 0
+vendor_id	: GenuineIntel
+model name	: Intel(R) Xeon(R) CPU E5-2670 v3 @ 2.30GHz
+cpu MHz		: 2300.000
+cache size	: 30720 KB
+
+processor	: 1
+vendor_id	: GenuineIntel
+model name	: Intel(R) Xeon(R) CPU E5-2670 v3 @ 2.30GHz
+cpu MHz		: 2300.000
+cache size	: 30720 KB
+
+processor	: 2
+vendor_id	: GenuineIntel
+model name	: Intel(R) Xeon(R) CPU E5-2670 v3 @ 2.30GHz
+cpu MHz		: 2300.000
+cache size	: 30720 KB
+
+processor	: 3
+vendor_id	: GenuineIntel
+model name	: Intel(R) Xeon(R) CPU E5-2670 v3 @ 2.30GHz
+cpu MHz		: 2300.000
+cache size	: 30720 KB
