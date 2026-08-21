@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
-import { Banner, Card, ErrorNote, Loading, StateBadge, formatBytesShort } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
 
 const ACTION_LABEL: Record<string, string> = {
   start: 'запустить',
@@ -10,6 +10,8 @@ const ACTION_LABEL: Record<string, string> = {
   restart: 'перезапустить',
   reload: 'перечитать конфиг',
   validate: 'проверить конфиг',
+  enable: 'включить автозапуск',
+  disable: 'выключить автозапуск',
 }
 
 /** Mirrors model.Listener.Public() in Go — a socket bound to all
@@ -60,50 +62,86 @@ function OriginTag({ l }: { l: Listener }) {
   return <span className="small muted">—</span>
 }
 
-const miscColumns: TableColumnsType<Listener> = [
-  {
-    title: 'Процесс',
-    key: 'process',
-    render: (_, l) => {
-      const uptime = formatUptime(l.uptime_s)
-      return (
-        <>
-          <strong>{l.process || '—'}</strong>
-          {l.command && (
-            <div className="small mono muted" style={{ wordBreak: 'break-all' }}>
-              {l.command}
+/** listenerKey identifies a row for busy/escalation tracking — pid alone
+ * isn't quite enough (in principle two listeners could momentarily share
+ * one before a scan catches up), so paired with the socket it's already
+ * keyed by in the table (rowKey below). */
+function listenerKey(l: Listener): string {
+  return `${l.pid ?? '-'}:${l.address}:${l.port}`
+}
+
+function buildMiscColumns(
+  canControl: boolean,
+  killBusy: string | null,
+  onKill: (l: Listener, signal: 'TERM' | 'KILL') => void,
+): TableColumnsType<Listener> {
+  const columns: TableColumnsType<Listener> = [
+    {
+      title: 'Процесс',
+      key: 'process',
+      render: (_, l) => {
+        const uptime = formatUptime(l.uptime_s)
+        return (
+          <>
+            <strong>{l.process || '—'}</strong>
+            {l.command && (
+              <div className="small mono muted" style={{ wordBreak: 'break-all' }}>
+                {l.command}
+              </div>
+            )}
+            <div className="small muted">
+              {l.user ? `от ${l.user}` : ''}
+              {l.user && (uptime || l.pid) ? ' · ' : ''}
+              {uptime ? `работает ${uptime}` : ''}
+              {uptime && l.pid ? ' · ' : ''}
+              {l.pid ? `pid ${l.pid}` : ''}
             </div>
-          )}
-          <div className="small muted">
-            {l.user ? `от ${l.user}` : ''}
-            {l.user && (uptime || l.pid) ? ' · ' : ''}
-            {uptime ? `работает ${uptime}` : ''}
-            {uptime && l.pid ? ' · ' : ''}
-            {l.pid ? `pid ${l.pid}` : ''}
-          </div>
-        </>
-      )
+          </>
+        )
+      },
     },
-  },
-  { title: 'Происхождение', key: 'origin', render: (_, l) => <OriginTag l={l} /> },
-  {
-    title: 'Сокет',
-    key: 'socket',
-    render: (_, l) => (
-      <span className="small mono">
-        {l.protocol} {l.address}:{l.port}
-      </span>
-    ),
-  },
-  {
-    title: 'Доступность',
-    key: 'exposure',
-    render: (_, l) => (isPublic(l) ? <Tag color="warning">все интерфейсы</Tag> : <Tag>локально</Tag>),
-  },
-]
+    { title: 'Происхождение', key: 'origin', render: (_, l) => <OriginTag l={l} /> },
+    {
+      title: 'Сокет',
+      key: 'socket',
+      render: (_, l) => (
+        <span className="small mono">
+          {l.protocol} {l.address}:{l.port}
+        </span>
+      ),
+    },
+    {
+      title: 'Доступность',
+      key: 'exposure',
+      render: (_, l) => (isPublic(l) ? <Tag color="warning">все интерфейсы</Tag> : <Tag>локально</Tag>),
+    },
+  ]
+  if (canControl) {
+    columns.push({
+      title: '',
+      key: 'actions',
+      render: (_, l) => {
+        if (!l.pid || !l.command) return null
+        const key = listenerKey(l)
+        return (
+          <Button
+            type="link"
+            danger
+            size="small"
+            loading={killBusy === key}
+            onClick={() => onKill(l, 'TERM')}
+          >
+            завершить
+          </Button>
+        )
+      },
+    })
+  }
+  return columns
+}
 
 /**
- * "Сервисы" — systemd-юниты, и ниже, в том же разделе, «Неучтённые
+ * "Сервисы" — systemd-юниты, и ниже, в том же разделе, «Остальные
  * сервисы» (бывшая отдельная вкладка/страница «Разное», перенесённая
  * сюда же — после ps/cgroup enrichment большинство из них на деле
  * оказывается systemd-юнитом, а не контейнером, так что это соседствует
@@ -115,6 +153,12 @@ export default function Services({ me }: { me: Me }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [killBusy, setKillBusy] = useState<string | null>(null)
+  // Set when a SIGTERM'd process is still listed after a rescan — offers
+  // the SIGKILL escalation the operator asked for, without jumping
+  // straight to it: TERM first always, KILL only on request.
+  const [killEscalation, setKillEscalation] = useState<Listener | null>(null)
+  const [logsFor, setLogsFor] = useState<ServiceUnit | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
   const miscListeners = misc.data?.listeners ?? []
@@ -156,6 +200,44 @@ export default function Services({ me }: { me: Me }) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
       setBusy(null)
+    }
+  }
+
+  /**
+   * "Остальные сервисы" has no systemd unit to act on, only a raw PID from
+   * the last scan — kill is the only control available for it (see
+   * ServiceManager.KillProcess's own doc comment on why command has to
+   * come along: the server re-verifies it right before signalling, to
+   * guard against the PID having been reused for something else since the
+   * scan that surfaced it). Always TERM first; KILL only fires when the
+   * operator explicitly asks for it after seeing the process survive TERM
+   * (see the killEscalation banner below), never as this function's own
+   * automatic follow-up.
+   */
+  async function kill(l: Listener, signal: 'TERM' | 'KILL') {
+    if (!l.pid || !l.command) return
+    const verb = signal === 'TERM' ? 'завершить процесс (SIGTERM)' : 'принудительно завершить процесс (SIGKILL)'
+    if (!window.confirm(`${verb} ${l.pid}${l.process ? ` (${l.process})` : ''}?`)) return
+    const key = listenerKey(l)
+    setKillBusy(key)
+    setNotice(null)
+    setKillEscalation(null)
+    try {
+      await api('/misc/kill', { method: 'POST', body: { pid: l.pid, command: l.command, signal } })
+      await api('/inventory/refresh', { method: 'POST' })
+      const fresh = await api<{ listeners: Listener[] }>('/misc')
+      misc.reload()
+      const stillThere = fresh.listeners.some((x) => listenerKey(x) === key)
+      if (signal === 'TERM' && stillThere) {
+        setKillEscalation(l)
+        setNotice({ kind: 'info', text: `Процесс ${l.pid} не завершился после SIGTERM.` })
+      } else {
+        setNotice({ kind: 'info', text: `Процесс ${l.pid}: сигнал ${signal} отправлен.` })
+      }
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setKillBusy(null)
     }
   }
 
@@ -207,6 +289,9 @@ export default function Services({ me }: { me: Me }) {
               {ACTION_LABEL[a] ?? a}
             </Button>
           ))}
+          <Button type="link" size="small" onClick={() => setLogsFor(s)}>
+            логи
+          </Button>
         </div>
       ),
     },
@@ -237,6 +322,20 @@ export default function Services({ me }: { me: Me }) {
 
       <ErrorNote error={services.error} />
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
+      {killEscalation && (
+        <Banner kind="warn">
+          Процесс {killEscalation.pid}
+          {killEscalation.process ? ` (${killEscalation.process})` : ''} не завершился после SIGTERM.{' '}
+          <Button
+            size="small"
+            danger
+            loading={killBusy === listenerKey(killEscalation)}
+            onClick={() => kill(killEscalation, 'KILL')}
+          >
+            Отправить SIGKILL
+          </Button>
+        </Banner>
+      )}
       {!canControl && (
         <Banner kind="info">
           Действия недоступны: нужна роль admin и включённые изменения.
@@ -261,11 +360,11 @@ export default function Services({ me }: { me: Me }) {
 
       <ErrorNote error={misc.error} />
       <Card
-        title="Неучтённые сервисы"
+        title="Остальные сервисы"
         subtitle={`сокеты, не описанные ни в одном разобранном конфиге — найдено: ${miscListeners.length}${manual ? ` · из них запущено вручную: ${manual}` : ''}`}
       >
         {misc.loading && !misc.data ? (
-          <Loading what="неучтённые сервисы" />
+          <Loading what="остальные сервисы" />
         ) : miscListeners.length === 0 ? (
           <div className="chart-empty">
             Всё, что слушает сеть на этом хосте, описано в разобранных конфигах.
@@ -274,7 +373,7 @@ export default function Services({ me }: { me: Me }) {
           <div className="table-wrap">
             <Table<Listener>
               dataSource={miscListeners}
-              columns={miscColumns}
+              columns={buildMiscColumns(canControl, killBusy, kill)}
               rowKey={(l) => `${l.address}:${l.port}`}
               pagination={false}
               size="small"
@@ -282,6 +381,34 @@ export default function Services({ me }: { me: Me }) {
           </div>
         )}
       </Card>
+
+      {logsFor && <ServiceLogsModal service={logsFor} onClose={() => setLogsFor(null)} />}
     </>
+  )
+}
+
+/** A static journalctl -u snapshot (see handleServiceLogs) — "обновить"
+ * refetches rather than streaming live, deliberately: this is for "what
+ * just happened", not a tail -f, and it's available to any viewer (no
+ * canControl gate — reading a log is not a mutation). */
+function ServiceLogsModal({ service, onClose }: { service: ServiceUnit; onClose: () => void }) {
+  const logs = useApi<{ output: string }>(`/services/${service.name}/logs?lines=200`)
+
+  return (
+    <Modal title={`Логи: ${service.name}`} onClose={onClose}>
+      <div className="row" style={{ justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
+        <Button size="small" onClick={() => logs.reload()} loading={logs.loading}>
+          обновить
+        </Button>
+      </div>
+      <ErrorNote error={logs.error} />
+      {logs.loading && !logs.data ? (
+        <Loading what="логи" />
+      ) : (
+        <pre className="diff" style={{ maxHeight: '28rem' }}>
+          {logs.data?.output?.trim() || '(пусто)'}
+        </pre>
+      )}
+    </Modal>
   )
 }

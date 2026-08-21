@@ -1,0 +1,7 @@
+Aug 20 09:12:01 web-01 nginx[812]: nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+Aug 20 09:12:01 web-01 nginx[812]: nginx: configuration file /etc/nginx/nginx.conf test is successful
+Aug 20 09:12:01 web-01 systemd[1]: Reloaded A high performance web server and a reverse proxy server.
+Aug 20 11:47:33 web-01 nginx[812]: 2026/08/20 11:47:33 [error] 811#811: *4821 connect() failed (111: Connection refused) while connecting to upstream
+Aug 20 14:03:10 web-01 systemd[1]: nginx.service: Deactivated successfully.
+Aug 20 14:03:10 web-01 systemd[1]: Stopped A high performance web server and a reverse proxy server.
+Aug 20 14:03:11 web-01 systemd[1]: Started A high performance web server and a reverse proxy server.

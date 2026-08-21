@@ -713,6 +713,18 @@
         "added"
       ],
       "stdout_file": "ufw_show_added.txt"
+    },
+    {
+      "match": [
+        "journalctl"
+      ],
+      "stdout_file": "journalctl.txt"
+    },
+    {
+      "match": [
+        "kill"
+      ],
+      "stdout": ""
     }
   ]
 }
