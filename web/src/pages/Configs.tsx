@@ -182,6 +182,13 @@ export default function Configs({ me }: { me: Me }) {
                   <div className="mono small" style={{ wordBreak: 'break-all' }}>
                     {f.path}
                   </div>
+                  {f.sites && f.sites.length > 0 && (
+                    <div className="small muted" style={{ wordBreak: 'break-all' }}>
+                      {f.sites
+                        .map((site) => (site.name_unicode ? `${site.name} (${site.name_unicode})` : site.name))
+                        .join(', ')}
+                    </div>
+                  )}
                   <div className="small muted">
                     {f.service} · {formatBytes(f.size)}
                     {!f.editable && ' · только чтение'}
