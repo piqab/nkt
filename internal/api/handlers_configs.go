@@ -6,6 +6,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/control"
+	"github.com/althq/netknownsthat/internal/model"
 )
 
 func (s *Server) handleConfigList(w http.ResponseWriter, r *http.Request) {
@@ -13,6 +14,15 @@ func (s *Server) handleConfigList(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		fail(w, err)
 		return
+	}
+	// ConfigManager.List walks disk directly (live, for versioning/editing)
+	// and knows nothing about server_name/host — that's parsed separately,
+	// into Endpoint.Names, by the inventory scanner. Cross-referencing the
+	// latest scan here (best-effort: a scan failure just means no site
+	// names on this response, not that the file list itself failed) is
+	// what lets "Файлы" show which sites each file declares.
+	if snap, err := s.scanner.LatestOrScan(r.Context()); err == nil {
+		model.AttachSiteNames(files, snap.Endpoints)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"files": files})
 }

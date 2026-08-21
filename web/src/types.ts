@@ -312,6 +312,11 @@ export interface DirEntry {
   readable: boolean
 }
 
+export interface SiteName {
+  name: string
+  name_unicode?: string
+}
+
 export interface ManagedFile {
   path: string
   service: string
@@ -321,6 +326,7 @@ export interface ManagedFile {
   editable: boolean
   readable: boolean
   note?: string
+  sites?: SiteName[]
 }
 
 export interface FileContent extends ManagedFile {

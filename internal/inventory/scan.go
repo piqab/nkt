@@ -126,6 +126,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	// into it — that only exists in the separately-parsed docker network
 	// and container data, gathered above.
 	attachInterfaceOwnership(snap)
+	model.AttachSiteNames(snap.Files, snap.Endpoints)
 
 	// `ss` names the executable and nothing more. Resolving each PID to
 	// its full command line, owner and cgroup is what turns "python3 is

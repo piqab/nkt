@@ -70,6 +70,67 @@ type ManagedFile struct {
 	Editable bool      `json:"editable"`
 	Readable bool      `json:"readable"`
 	Note     string    `json:"note,omitempty"`
+	// Sites is every distinct server_name/host this file declares —
+	// gathered from Endpoint.Names across every Endpoint whose File
+	// matches this one's Path (see inventory.attachSiteNames), not parsed
+	// independently here: Endpoint already is the parsed, per-service
+	// understanding of "server_name"/"host"/whatever each backend calls
+	// it, so this just re-groups that same data by file instead of
+	// re-deriving it.
+	Sites []SiteName `json:"sites,omitempty"`
+}
+
+// SiteName is one server_name/host declared in a ManagedFile, with its
+// readable Unicode form alongside the ASCII/punycode form the config
+// itself actually contains, when they differ — see HostnameUnicode.
+type SiteName struct {
+	Name        string `json:"name"`
+	NameUnicode string `json:"name_unicode,omitempty"`
+}
+
+// AttachSiteNames groups every Endpoint.Names entry by which file it came
+// from (Endpoint.File, set by each parser to the same path a ManagedFile
+// carries as Path) and fills in each matching ManagedFile.Sites in place —
+// shared by the inventory scanner (attaching to its own snapshot) and the
+// Configs API handler (attaching to ConfigManager.List's separately-sourced
+// file listing against the latest scan's Endpoints), so both end up with
+// identically-computed site lists rather than two subtly different
+// implementations of the same join. Order-preserving and de-duplicated per
+// file: a file can easily declare the same name twice (an HTTP and an HTTPS
+// server block for the same domain, say), which would otherwise repeat the
+// line for no informational gain.
+func AttachSiteNames(files []ManagedFile, endpoints []Endpoint) {
+	if len(endpoints) == 0 {
+		return
+	}
+	namesByFile := make(map[string][]string, len(files))
+	seen := make(map[string]map[string]bool, len(files))
+	for _, e := range endpoints {
+		if e.File == "" {
+			continue
+		}
+		if seen[e.File] == nil {
+			seen[e.File] = map[string]bool{}
+		}
+		for _, name := range e.Names {
+			if name == "" || seen[e.File][name] {
+				continue
+			}
+			seen[e.File][name] = true
+			namesByFile[e.File] = append(namesByFile[e.File], name)
+		}
+	}
+	for i := range files {
+		names := namesByFile[files[i].Path]
+		if len(names) == 0 {
+			continue
+		}
+		sites := make([]SiteName, len(names))
+		for j, name := range names {
+			sites[j] = SiteName{Name: name, NameUnicode: HostnameUnicode(name)}
+		}
+		files[i].Sites = sites
+	}
 }
 
 // Route is one routing decision inside an endpoint: an nginx location, an
