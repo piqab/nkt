@@ -3,6 +3,7 @@ import { Button, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
+import { InactiveSummary } from '../components/InactiveSummary'
 
 const ACTION_LABEL: Record<string, string> = {
   start: 'запустить',
@@ -161,6 +162,9 @@ export default function Services({ me }: { me: Me }) {
   const [logsFor, setLogsFor] = useState<ServiceUnit | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
+  const allServices = services.data?.services ?? []
+  const activeServices = allServices.filter((s) => s.active_state === 'active')
+  const inactiveServices = allServices.filter((s) => s.active_state !== 'active')
   const miscListeners = misc.data?.listeners ?? []
   const manual = miscListeners.filter((l) => l.origin === 'manual').length
 
@@ -346,15 +350,34 @@ export default function Services({ me }: { me: Me }) {
         {services.loading && !services.data ? (
           <Loading what="состояние сервисов" />
         ) : (
-          <div className="table-wrap">
-            <Table<ServiceUnit>
-              dataSource={services.data?.services ?? []}
-              columns={columns}
-              rowKey="name"
-              pagination={false}
-              size="small"
+          <>
+            <InactiveSummary
+              items={inactiveServices}
+              getKey={(s) => s.name}
+              getLabel={(s) => s.name}
+              getTooltip={(s) => (
+                <>
+                  <div>{s.description || s.unit}</div>
+                  <div>
+                    состояние: {s.active_state}
+                    {s.sub_state ? ` (${s.sub_state})` : ''}
+                  </div>
+                  {!s.installed && <div>не установлен на хосте</div>}
+                </>
+              )}
+              onRescan={rescan}
+              rescanning={rescanning}
             />
-          </div>
+            <div className="table-wrap">
+              <Table<ServiceUnit>
+                dataSource={activeServices}
+                columns={columns}
+                rowKey="name"
+                pagination={false}
+                size="small"
+              />
+            </div>
+          </>
         )}
       </Card>
 

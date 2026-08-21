@@ -3,17 +3,36 @@ import { Button, Table, type TableColumnsType } from 'antd'
 import { api, qs, useApi } from '../api'
 import type { Container, DockerNetwork, FileContent, Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, StateBadge } from '../components/ui'
+import { InactiveSummary } from '../components/InactiveSummary'
 import BlockTree from '../components/BlockTree'
 import PathPicker, { ownerFromPath } from '../components/PathPicker'
 
 export default function Docker({ me }: { me: Me }) {
   const docker = useApi<{ containers: Container[]; networks: DockerNetwork[] }>('/containers', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
+  const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [configModal, setConfigModal] = useState<{ path: string; focusName?: string; autoCreate?: boolean } | null>(null)
   const [pickingPath, setPickingPath] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
+  const allContainers = docker.data?.containers ?? []
+  const activeContainers = allContainers.filter((c) => c.running)
+  const inactiveContainers = allContainers.filter((c) => !c.running)
+
+  async function rescan() {
+    setRescanning(true)
+    setNotice(null)
+    try {
+      await api('/inventory/refresh', { method: 'POST' })
+      docker.reload()
+      setNotice({ kind: 'info', text: 'Хост пересканирован.' })
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setRescanning(false)
+    }
+  }
 
   const containerColumns: TableColumnsType<Container> = [
     {
@@ -152,10 +171,17 @@ export default function Docker({ me }: { me: Me }) {
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head spread">
         <div>
           <h1>Docker</h1>
           <p>Сопоставление того, что описано в compose, с тем, что реально работает.</p>
+        </div>
+        <div className="row">
+          {me.is_admin && (
+            <Button onClick={rescan} loading={rescanning}>
+              {rescanning ? 'Сканирую…' : 'Пересканировать'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -178,15 +204,33 @@ export default function Docker({ me }: { me: Me }) {
         {docker.loading && !docker.data ? (
           <Loading what="контейнеры" />
         ) : (
-          <div className="table-wrap">
-            <Table<Container>
-              dataSource={docker.data?.containers ?? []}
-              columns={containerColumns}
-              rowKey="name"
-              pagination={false}
-              size="small"
+          <>
+            <InactiveSummary
+              items={inactiveContainers}
+              getKey={(c) => c.name}
+              getLabel={(c) => c.name}
+              getTooltip={(c) => (
+                <>
+                  <div>{c.image}</div>
+                  <div>
+                    {c.state} · {c.status}
+                  </div>
+                  <div>{c.project ? `${c.project}/${c.service_name}` : 'вне compose'}</div>
+                </>
+              )}
+              onRescan={rescan}
+              rescanning={rescanning}
             />
-          </div>
+            <div className="table-wrap">
+              <Table<Container>
+                dataSource={activeContainers}
+                columns={containerColumns}
+                rowKey="name"
+                pagination={false}
+                size="small"
+              />
+            </div>
+          </>
         )}
       </Card>
 
