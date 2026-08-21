@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import { Button, Checkbox, Input, Segmented, Table, type TableColumnsType } from 'antd'
+import { useEffect, useRef, useState } from 'react'
+import { Button, Checkbox, Input, Segmented, Table, type InputRef, type TableColumnsType } from 'antd'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
 import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, formatDateTime } from '../components/ui'
@@ -60,6 +60,7 @@ export default function Configs({ me }: { me: Me }) {
   const [creatingInitialContent, setCreatingInitialContent] = useState('')
   const [newFileModal, setNewFileModal] = useState<{ cloneFrom?: string; initialContent?: string } | null>(null)
   const [newFilePathInput, setNewFilePathInput] = useState('')
+  const newFilePathInputRef = useRef<InputRef>(null)
 
   const file = useApi<FileContent>(path ? `/configs/file${qs({ path })}` : null)
   const versions = useApi<{ versions: ConfigVersion[] }>(path ? `/configs/versions${qs({ path })}` : null)
@@ -72,6 +73,23 @@ export default function Configs({ me }: { me: Me }) {
       setDiff(null)
     }
   }, [file.data])
+
+  // Cloning starts the path field pre-filled with the source's full path
+  // (see the "Клонировать" button below) — select just the filename
+  // portion so typing a new name is a plain overwrite, the directory
+  // stays untouched unless the operator deliberately edits that part too.
+  // Keyed on newFileModal itself (a fresh object each time it opens), not
+  // on newFilePathInput, so this doesn't re-select on every keystroke.
+  useEffect(() => {
+    if (!newFileModal) return
+    const input = newFilePathInputRef.current
+    if (!input) return
+    input.focus()
+    if (newFileModal.cloneFrom) {
+      const slash = newFileModal.cloneFrom.lastIndexOf('/')
+      if (slash >= 0) input.setSelectionRange(slash + 1, newFileModal.cloneFrom.length)
+    }
+  }, [newFileModal])
 
   const dirty = file.data !== null && draft !== file.data.content
 
@@ -261,7 +279,10 @@ export default function Configs({ me }: { me: Me }) {
                         {me.is_admin && me.allow_mutations && (
                           <>
                             <Button
-                              onClick={() => setNewFileModal({ cloneFrom: file.data!.path, initialContent: draft })}
+                              onClick={() => {
+                                setNewFileModal({ cloneFrom: file.data!.path, initialContent: draft })
+                                setNewFilePathInput(file.data!.path)
+                              }}
                             >
                               Клонировать
                             </Button>
@@ -364,10 +385,10 @@ export default function Configs({ me }: { me: Me }) {
             <label>
               Путь
               <Input
+                ref={newFilePathInputRef}
                 value={newFilePathInput}
                 onChange={(e) => setNewFilePathInput(e.target.value)}
                 placeholder="/etc/nginx/sites-enabled/newsite.conf"
-                autoFocus
               />
             </label>
             <p className="small muted">

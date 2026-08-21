@@ -175,7 +175,13 @@ export default function Usage() {
         </Banner>
       )}
 
-      <Card title={spec.label} subtitle={`Единица измерения: ${spec.unit}`}>
+      <Card
+        title={spec.label}
+        subtitle={
+          `Единица измерения: ${spec.unit}` +
+          (usage.data?.total != null ? ` · всего на хосте: ${spec.format(usage.data.total)}` : '')
+        }
+      >
         {usage.loading && !usage.data ? (
           <Loading what="метрики" />
         ) : (
