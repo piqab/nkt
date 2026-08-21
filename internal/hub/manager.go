@@ -520,7 +520,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	report("Подключаюсь по SSH к " + host.Addr + "…")
 	client, sshErr := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
 	if sshErr != nil {
-		if m.tunnelReinstallFallback(host) {
+		if m.awaitTunnelReinstallFallback(ctx, host) {
 			return m.installOverTunnel(ctx, hostID, host, job)
 		}
 		return fail(sshErr)
