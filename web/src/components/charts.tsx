@@ -157,13 +157,16 @@ export function LineChart({
         if (p.y > max) max = p.y
       }
     }
-    // The reference ceiling (e.g. total host memory) must stay on-chart
-    // even when every data point sits well under it — otherwise the one
-    // number the whole thing exists to be compared against would be
-    // clipped off the top.
-    if (reference && reference.value > max) max = reference.value
+    // Deliberately NOT stretched to fit reference (e.g. total host
+    // memory/CPU) — usage sitting at a few percent of a multi-core/
+    // multi-gigabyte host would otherwise get flattened into an unreadable
+    // sliver near the bottom just to leave room for a ceiling far above
+    // anything the data ever approaches. The axis stays scaled to what's
+    // actually on the chart; the reference line only draws when it
+    // naturally falls inside that range (see below) — the caller still
+    // shows the raw figure as text regardless (see Usage.tsx's subtitle).
     return { xs: [...set].sort(), maxY: yMax ?? (max === 0 ? 1 : max * 1.12) }
-  }, [series, yMax, reference])
+  }, [series, yMax])
 
   const width = 900
   const pad = { top: 12, right: 16, bottom: 26, left: 52 }
@@ -258,7 +261,7 @@ export function LineChart({
           </text>
         )}
 
-        {reference && (
+        {reference && reference.value <= maxY && (
           <g>
             <line
               x1={pad.left}
