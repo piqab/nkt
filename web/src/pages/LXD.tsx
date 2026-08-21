@@ -3,14 +3,33 @@ import { Button, Form, Input, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { LXDInstance, Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
+import { InactiveSummary } from '../components/InactiveSummary'
 
 export default function LXD({ me }: { me: Me }) {
   const instances = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
+  const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [creating, setCreating] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
+  const allInstances = instances.data?.instances ?? []
+  const activeInstances = allInstances.filter((i) => i.status.toLowerCase() === 'running')
+  const inactiveInstances = allInstances.filter((i) => i.status.toLowerCase() !== 'running')
+
+  async function rescan() {
+    setRescanning(true)
+    setNotice(null)
+    try {
+      await api('/inventory/refresh', { method: 'POST' })
+      instances.reload()
+      setNotice({ kind: 'info', text: 'Хост пересканирован.' })
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setRescanning(false)
+    }
+  }
 
   async function act(name: string, action: string) {
     if (!window.confirm(`Выполнить «${action}» для инстанса ${name}?`)) return
@@ -77,10 +96,17 @@ export default function LXD({ me }: { me: Me }) {
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head spread">
         <div>
           <h1>LXD</h1>
           <p>Контейнеры и виртуальные машины LXD — один инструмент управляет обоими типами инстансов.</p>
+        </div>
+        <div className="row">
+          {me.is_admin && (
+            <Button onClick={rescan} loading={rescanning}>
+              {rescanning ? 'Сканирую…' : 'Пересканировать'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -102,18 +128,33 @@ export default function LXD({ me }: { me: Me }) {
       >
         {instances.loading && !instances.data ? (
           <Loading what="инстансы LXD" />
-        ) : (instances.data?.instances ?? []).length === 0 ? (
+        ) : allInstances.length === 0 ? (
           <p className="small muted">LXD не обнаружен или инстансов нет.</p>
         ) : (
-          <div className="table-wrap">
-            <Table<LXDInstance>
-              dataSource={instances.data?.instances ?? []}
-              columns={columns}
-              rowKey="name"
-              pagination={false}
-              size="small"
+          <>
+            <InactiveSummary
+              items={inactiveInstances}
+              getKey={(i) => i.name}
+              getLabel={(i) => i.name}
+              getTooltip={(i) => (
+                <>
+                  <div>{i.type === 'virtual-machine' ? 'VM' : 'контейнер'}</div>
+                  <div>состояние: {i.status}</div>
+                </>
+              )}
+              onRescan={rescan}
+              rescanning={rescanning}
             />
-          </div>
+            <div className="table-wrap">
+              <Table<LXDInstance>
+                dataSource={activeInstances}
+                columns={columns}
+                rowKey="name"
+                pagination={false}
+                size="small"
+              />
+            </div>
+          </>
         )}
       </Card>
 

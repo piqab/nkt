@@ -3,14 +3,33 @@ import { Button, Form, Input, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Me, PodmanContainer } from '../types'
 import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
+import { InactiveSummary } from '../components/InactiveSummary'
 
 export default function Podman({ me }: { me: Me }) {
   const containers = useApi<{ containers: PodmanContainer[] }>('/podman/containers', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
+  const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [creating, setCreating] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
+  const allContainers = containers.data?.containers ?? []
+  const activeContainers = allContainers.filter((c) => c.state === 'running')
+  const inactiveContainers = allContainers.filter((c) => c.state !== 'running')
+
+  async function rescan() {
+    setRescanning(true)
+    setNotice(null)
+    try {
+      await api('/inventory/refresh', { method: 'POST' })
+      containers.reload()
+      setNotice({ kind: 'info', text: 'Хост пересканирован.' })
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setRescanning(false)
+    }
+  }
 
   async function act(name: string, action: string) {
     if (!window.confirm(`Выполнить «${action}» для контейнера ${name}?`)) return
@@ -110,10 +129,17 @@ export default function Podman({ me }: { me: Me }) {
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head spread">
         <div>
           <h1>Podman</h1>
           <p>Контейнеры отдельного от docker движка Podman — те же операции: запуск, остановка, удаление.</p>
+        </div>
+        <div className="row">
+          {me.is_admin && (
+            <Button onClick={rescan} loading={rescanning}>
+              {rescanning ? 'Сканирую…' : 'Пересканировать'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -135,18 +161,35 @@ export default function Podman({ me }: { me: Me }) {
       >
         {containers.loading && !containers.data ? (
           <Loading what="контейнеры Podman" />
-        ) : (containers.data?.containers ?? []).length === 0 ? (
+        ) : allContainers.length === 0 ? (
           <p className="small muted">Podman не обнаружен или контейнеров нет.</p>
         ) : (
-          <div className="table-wrap">
-            <Table<PodmanContainer>
-              dataSource={containers.data?.containers ?? []}
-              columns={columns}
-              rowKey="id"
-              pagination={false}
-              size="small"
+          <>
+            <InactiveSummary
+              items={inactiveContainers}
+              getKey={(c) => c.id}
+              getLabel={(c) => c.name}
+              getTooltip={(c) => (
+                <>
+                  <div>{c.image}</div>
+                  <div>
+                    {c.state} · {c.status}
+                  </div>
+                </>
+              )}
+              onRescan={rescan}
+              rescanning={rescanning}
             />
-          </div>
+            <div className="table-wrap">
+              <Table<PodmanContainer>
+                dataSource={activeContainers}
+                columns={columns}
+                rowKey="id"
+                pagination={false}
+                size="small"
+              />
+            </div>
+          </>
         )}
       </Card>
 

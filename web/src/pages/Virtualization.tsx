@@ -3,6 +3,7 @@ import { Button, Checkbox, Form, Input, InputNumber, Segmented, Table, type Tabl
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
 import { Banner, Card, CodeEditor, ErrorNote, Loading, StateBadge, formatBytesShort } from '../components/ui'
+import { InactiveSummary } from '../components/InactiveSummary'
 
 const LIFECYCLE_ACTIONS = ['start', 'shutdown', 'reboot', 'suspend', 'resume']
 
@@ -164,11 +165,29 @@ function vmColumns(
 export default function Virtualization({ me }: { me: Me }) {
   const vms = useApi<{ vms: VirtualMachine[] }>('/vms', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
+  const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [creating, setCreating] = useState<{ name: string; initialContent?: string } | null>(null)
   const [chooserOpen, setChooserOpen] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
+  const allVMs = vms.data?.vms ?? []
+  const activeVMs = allVMs.filter((vm) => vm.state === 'running')
+  const inactiveVMs = allVMs.filter((vm) => vm.state !== 'running')
+
+  async function rescan() {
+    setRescanning(true)
+    setNotice(null)
+    try {
+      await api('/inventory/refresh', { method: 'POST' })
+      vms.reload()
+      setNotice({ kind: 'info', text: 'Хост пересканирован.' })
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setRescanning(false)
+    }
+  }
 
   async function act(name: string, action: string) {
     const label = action === 'destroy' ? 'принудительно завершить' : action
@@ -219,10 +238,17 @@ export default function Virtualization({ me }: { me: Me }) {
 
   return (
     <>
-      <div className="page-head">
+      <div className="page-head spread">
         <div>
           <h1>Виртуальные машины</h1>
           <p>libvirt/QEMU домены — управление через virsh. Создание и редактирование — через XML-определение.</p>
+        </div>
+        <div className="row">
+          {me.is_admin && (
+            <Button onClick={rescan} loading={rescanning}>
+              {rescanning ? 'Сканирую…' : 'Пересканировать'}
+            </Button>
+          )}
         </div>
       </div>
 
@@ -244,18 +270,33 @@ export default function Virtualization({ me }: { me: Me }) {
       >
         {vms.loading && !vms.data ? (
           <Loading what="виртуальные машины" />
-        ) : (vms.data?.vms ?? []).length === 0 ? (
+        ) : allVMs.length === 0 ? (
           <p className="small muted">libvirt не обнаружен или доменов нет.</p>
         ) : (
-          <div className="table-wrap">
-            <Table<VirtualMachine>
-              dataSource={vms.data?.vms ?? []}
-              rowKey="name"
-              pagination={false}
-              size="small"
-              columns={vmColumns(canControl, busy, act, toggleAutostart, del)}
+          <>
+            <InactiveSummary
+              items={inactiveVMs}
+              getKey={(vm) => vm.name}
+              getLabel={(vm) => vm.name}
+              getTooltip={(vm) => (
+                <>
+                  <div>состояние: {vm.state}</div>
+                  {vm.vcpus ? <div>vCPU: {vm.vcpus}</div> : null}
+                </>
+              )}
+              onRescan={rescan}
+              rescanning={rescanning}
             />
-          </div>
+            <div className="table-wrap">
+              <Table<VirtualMachine>
+                dataSource={activeVMs}
+                rowKey="name"
+                pagination={false}
+                size="small"
+                columns={vmColumns(canControl, busy, act, toggleAutostart, del)}
+              />
+            </div>
+          </>
         )}
       </Card>
 
