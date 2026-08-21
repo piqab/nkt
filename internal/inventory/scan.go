@@ -88,8 +88,10 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 		pkgStatus   model.SourceStatus
 		ifaces      []model.NetworkInterface
 		ifaceStatus model.SourceStatus
+		capRes      model.HostCapacity
+		capStatus   model.SourceStatus
 	)
-	wg.Add(11)
+	wg.Add(12)
 	go func() { defer wg.Done(); nginxRes = parse.Nginx(ctx, s.c, s.cfg.NginxMainConfig) }()
 	go func() { defer wg.Done(); hapRes = parse.HAProxy(ctx, s.c, s.cfg.HAProxyMainConf) }()
 	go func() { defer wg.Done(); caddyRes = parse.Caddy(ctx, s.c, s.cfg.CaddyMainConfig) }()
@@ -101,13 +103,15 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	go func() { defer wg.Done(); listeners, lisStatus = parse.Listeners(ctx, s.c) }()
 	go func() { defer wg.Done(); pkgRes, pkgStatus = parse.Packages(ctx, s.c) }()
 	go func() { defer wg.Done(); ifaces, ifaceStatus = parse.Interfaces(ctx, s.c) }()
+	go func() { defer wg.Done(); capRes, capStatus = parse.HostCapacity(ctx, s.c) }()
 	wg.Wait()
 
 	snap.Packages = pkgRes
 	snap.Interfaces = ifaces
+	snap.Capacity = capRes
 	snap.Sources = []model.SourceStatus{
 		nginxRes.Status, hapRes.Status, caddyRes.Status, dockerRes.Status, podmanRes.Status, lxdRes.Status,
-		libvirtRes.Status, fwRes.Status, lisStatus, pkgStatus, ifaceStatus,
+		libvirtRes.Status, fwRes.Status, lisStatus, pkgStatus, ifaceStatus, capStatus,
 	}
 	snap.Endpoints = append(append(append(append([]model.Endpoint{},
 		nginxRes.Endpoints...), hapRes.Endpoints...), caddyRes.Endpoints...), dockerRes.Endpoints...)

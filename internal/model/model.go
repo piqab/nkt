@@ -658,9 +658,20 @@ type Snapshot struct {
 	Interfaces []NetworkInterface `json:"interfaces"`
 	Certs      []Certificate      `json:"certificates"`
 	Packages   PackageUpdates     `json:"package_updates"`
+	Capacity   HostCapacity       `json:"capacity"`
 	Findings   []Finding          `json:"findings"`
 	Digest     string             `json:"digest"`
 	ScanMS     int64              `json:"scan_ms"`
+}
+
+// HostCapacity is the host's total installed memory and CPU core count —
+// see parse.HostCapacity for how it's read. Used as the reference ceiling
+// for the CPU/memory usage charts (see /monitor/usage's "total" field),
+// not tracked over time like the metrics themselves: it very rarely
+// changes on a running host, so one figure from the latest scan is enough.
+type HostCapacity struct {
+	MemTotalBytes int64 `json:"mem_total_bytes,omitempty"`
+	CPUCores      int   `json:"cpu_cores,omitempty"`
 }
 
 // PackageUpdate is one package `apt list --upgradable` reports as having a
