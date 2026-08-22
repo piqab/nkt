@@ -196,14 +196,22 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 
 		dial, channel, onFail, err := m.dialerFor(ctx, hostID)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			// writeError, not the stdlib http.Error used here until this fix:
+			// http.Error writes plain text (Content-Type: text/plain), but the
+			// frontend's api() only ever looks for a JSON {"error": "..."}
+			// body (see api.ts) — a plain-text body silently fails that
+			// lookup and falls back to a bare "Ошибка 502", discarding
+			// whatever actually useful diagnosis dialerFor/cookieFor/the
+			// proxy's own ErrorHandler had already put together (which SSH
+			// path failed, whether the tunnel is even connected, ...).
+			writeError(w, http.StatusBadGateway, err.Error())
 			return
 		}
 		m.recordChannel(hostID, channel)
 		cookie, err := m.cookieFor(ctx, hostID, dial)
 		if err != nil {
 			onFail()
-			http.Error(w, err.Error(), http.StatusBadGateway)
+			writeError(w, http.StatusBadGateway, err.Error())
 			return
 		}
 
@@ -245,7 +253,7 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 			},
 			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
 				onFail()
-				http.Error(w, "хост недоступен: "+err.Error(), http.StatusBadGateway)
+				writeError(w, http.StatusBadGateway, "хост недоступен: "+err.Error())
 			},
 		}
 		proxy.ServeHTTP(w, r)
