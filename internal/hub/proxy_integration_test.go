@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -221,6 +222,55 @@ func findRepoRoot(t *testing.T) string {
 	}
 	// internal/hub -> repo root
 	return filepath.Join(wd, "..", "..")
+}
+
+// TestManagerProxyUnreachableHostReturnsJSONError is the regression test
+// for the frontend showing a bare, useless "Ошибка 502" for a host with no
+// working path (SSH down, no tunnel connected — see docs on Proxy's
+// writeError switch) instead of the actual diagnosis the backend already
+// had. http.Error (used here until that fix) writes a plain-text body;
+// api.ts's api() only ever looks for a JSON {"error": "..."} body, so a
+// plain-text one silently degrades to the generic fallback message with the
+// real reason thrown away.
+func TestManagerProxyUnreachableHostReturnsJSONError(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	secretEnc, err := secretbox.Encrypt(m.key, []byte("unused-ssh-secret"))
+	if err != nil {
+		t.Fatalf("Encrypt: %v", err)
+	}
+	// Port 1: nothing binds a privileged port like that in a test sandbox,
+	// so dialSSH fails fast with connection refused — and no tunnel session
+	// is ever registered for this host either, so it has no working path
+	// at all, exactly the "SSH down, tunnel not connected" case reported.
+	hostID, err := db.CreateHost(ctx, "unreachable", "127.0.0.1", 1, "root", store.HostAuthPassword, secretEnc)
+	if err != nil {
+		t.Fatalf("CreateHost: %v", err)
+	}
+	if err := db.SetHostStatus(ctx, hostID, store.HostStatusOnline, ""); err != nil {
+		t.Fatalf("SetHostStatus: %v", err)
+	}
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	m.Proxy(hostID).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusBadGateway, rec.Body.String())
+	}
+	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "application/json") {
+		t.Errorf("Content-Type = %q, want application/json — see TestManagerProxyUnreachableHostReturnsJSONError's own doc comment", ct)
+	}
+	var body struct {
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &body); err != nil {
+		t.Fatalf("response body is not valid JSON: %v (body: %s)", err, rec.Body.String())
+	}
+	if body.Error == "" {
+		t.Error("body.Error is empty, want the actual dial failure reason")
+	}
 }
 
 func waitForLocalHTTP(t *testing.T, url string) {
