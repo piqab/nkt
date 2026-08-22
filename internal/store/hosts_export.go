@@ -11,8 +11,8 @@ import (
 // HostExport itself changes in a way old readers couldn't handle.
 const ExportFormatVersion = 1
 
-// HostExport is store.Host with its two encrypted-blob fields included
-// (Host itself hides them behind `json:"-"` to keep them out of the normal
+// HostExport is store.Host with its encrypted-blob fields included (Host
+// itself hides them behind `json:"-"` to keep them out of the normal
 // /hub/hosts API response) — []byte marshals to base64 automatically via
 // encoding/json, so the ciphertext round-trips through JSON as-is. It
 // decrypts only with whatever NKT_HUB_MASTER_KEY produced it in the first
@@ -20,6 +20,18 @@ const ExportFormatVersion = 1
 // different key simply fails to reach those hosts later; the same clear
 // "расшифровка SSH-секрета" error every other secretbox-consuming call
 // already gives, not something this file needs to detect ahead of time.
+//
+// TunnelEnabled/TunnelTokenEnc travel too — dropping them used to leave a
+// migrated host's reverse-tunnel fallback silently off on the new hub,
+// which is exactly backwards: a hub migrating to a new address/location is
+// the single most likely time for the *old* SSH path to stop working (a
+// firewall/security group allowlisting only the old hub's IP, say —
+// "ssh: handshake failed: EOF" the moment the new hub tries it), which is
+// precisely what this fallback exists for. TunnelCertSHA256 deliberately
+// does NOT travel: a fresh hub connecting for the first time is a genuine
+// first sighting as far as that hub is concerned, and letting it pin its
+// own trust-on-first-use fingerprint (see internal/hub/tunnelpin.go) rather
+// than inheriting a foreign hub's prior pin keeps that model honest.
 type HostExport struct {
 	Name             string `json:"name"`
 	Addr             string `json:"addr"`
@@ -34,6 +46,8 @@ type HostExport struct {
 	AdminPasswordEnc []byte `json:"admin_password_enc,omitempty"`
 	SudoStatus       string `json:"sudo_status,omitempty"`
 	TerminalEnabled  bool   `json:"terminal_enabled"`
+	TunnelEnabled    bool   `json:"tunnel_enabled"`
+	TunnelTokenEnc   []byte `json:"tunnel_token_enc,omitempty"`
 	ErrorMsg         string `json:"error_msg,omitempty"`
 	CreatedAt        string `json:"created_at"`
 	LastSeenAt       string `json:"last_seen_at,omitempty"`
@@ -60,7 +74,8 @@ func hostToExport(h Host) HostExport {
 		Name: h.Name, Addr: h.Addr, SSHPort: h.SSHPort, SSHUser: h.SSHUser, SSHAuthKind: h.SSHAuthKind,
 		SecretEnc: h.SecretEnc, Arch: h.Arch, Status: h.Status, NktVersion: h.NktVersion,
 		AdminUser: h.AdminUser, AdminPasswordEnc: h.AdminPasswordEnc, SudoStatus: h.SudoStatus,
-		TerminalEnabled: h.TerminalEnabled, ErrorMsg: h.ErrorMsg, CreatedAt: h.CreatedAt, LastSeenAt: h.LastSeenAt,
+		TerminalEnabled: h.TerminalEnabled, TunnelEnabled: h.TunnelEnabled, TunnelTokenEnc: h.TunnelTokenEnc,
+		ErrorMsg: h.ErrorMsg, CreatedAt: h.CreatedAt, LastSeenAt: h.LastSeenAt,
 	}
 }
 
@@ -104,11 +119,13 @@ func (d *DB) importOneHost(ctx context.Context, h HostExport) error {
 		`INSERT INTO hosts(
 			name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 			arch, status, nkt_version, admin_user, admin_password_enc,
-			sudo_status, terminal_enabled, error_msg, created_at, last_seen_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			sudo_status, terminal_enabled, tunnel_enabled, tunnel_token_enc,
+			error_msg, created_at, last_seen_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		h.Name, h.Addr, h.SSHPort, h.SSHUser, h.SSHAuthKind, h.SecretEnc,
 		h.Arch, h.Status, h.NktVersion, h.AdminUser, h.AdminPasswordEnc,
-		h.SudoStatus, h.TerminalEnabled, h.ErrorMsg, h.CreatedAt, h.LastSeenAt)
+		h.SudoStatus, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
+		h.ErrorMsg, h.CreatedAt, h.LastSeenAt)
 	return err
 }
 
