@@ -33,6 +33,12 @@ func TestExportImportHostsRoundTrip(t *testing.T) {
 	if err := src.SetHostTerminalEnabled(ctx, id, true); err != nil {
 		t.Fatalf("SetHostTerminalEnabled: %v", err)
 	}
+	if err := src.SetHostTunnelEnabled(ctx, id, true); err != nil {
+		t.Fatalf("SetHostTunnelEnabled: %v", err)
+	}
+	if err := src.SetHostTunnelToken(ctx, id, []byte("cipher-tunnel-token")); err != nil {
+		t.Fatalf("SetHostTunnelToken: %v", err)
+	}
 	if err := src.SetHostArch(ctx, id, "linux/amd64"); err != nil {
 		t.Fatalf("SetHostArch: %v", err)
 	}
@@ -90,6 +96,26 @@ func TestExportImportHostsRoundTrip(t *testing.T) {
 	}
 	if !h.TerminalEnabled {
 		t.Error("TerminalEnabled = false, want true")
+	}
+	// The reverse-tunnel fallback is the one thing most worth carrying over
+	// intact: a hub migrating to a new address/location — exactly what
+	// export/import is for — is the single most likely time for SSH itself
+	// to stop reaching a host (a firewall/security group allowlisting only
+	// the old hub's IP), which is precisely the case this fallback exists
+	// for. Dropping it silently here would leave a migrated host stuck with
+	// no fallback exactly when it's needed most.
+	if !h.TunnelEnabled {
+		t.Error("TunnelEnabled = false, want true")
+	}
+	if string(h.TunnelTokenEnc) != "cipher-tunnel-token" {
+		t.Errorf("TunnelTokenEnc = %q, want %q (ciphertext must round-trip byte for byte)", h.TunnelTokenEnc, "cipher-tunnel-token")
+	}
+	// TunnelCertSHA256 deliberately does NOT travel — see HostExport's own
+	// doc comment: the new hub must pin its own trust-on-first-use
+	// fingerprint on its first connection, not inherit one from whichever
+	// hub exported this.
+	if h.TunnelCertSHA256 != nil {
+		t.Errorf("TunnelCertSHA256 = %x, want nil (must re-pin fresh on the new hub, not inherit the old one)", h.TunnelCertSHA256)
 	}
 	if h.Arch != "linux/amd64" || h.NktVersion != "1.5.7" {
 		t.Errorf("Arch/NktVersion did not survive: %+v", h)
