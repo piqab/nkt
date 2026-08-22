@@ -65,9 +65,16 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport) (impo
 	return n, append(errs, storeErrs...)
 }
 
-// reencryptHostSecrets decrypts h's secret_enc/admin_password_enc with
-// oldKey and re-encrypts them with newKey, leaving every other field
-// untouched.
+// reencryptHostSecrets decrypts h's secret_enc/admin_password_enc/
+// tunnel_token_enc with oldKey and re-encrypts them with newKey, leaving
+// every other field untouched. Missing TunnelTokenEnc here (added along
+// with the field itself, but originally overlooked in this specific
+// re-encryption step) meant a host imported via "экспорт с ключом" kept a
+// tunnel token still encrypted under the *old* hub's key — the new hub's
+// own secretbox.Decrypt(m.key, ...) call in tunnelDialOnce would then
+// simply fail every time, so the reverse-tunnel session this token gates
+// could never come up, and every fallback dial silently had nothing to
+// fall back to.
 func reencryptHostSecrets(oldKey, newKey []byte, h store.HostExport) (store.HostExport, error) {
 	secret, err := secretbox.Decrypt(oldKey, h.SecretEnc)
 	if err != nil {
@@ -89,6 +96,18 @@ func reencryptHostSecrets(oldKey, newKey []byte, h store.HostExport) (store.Host
 			return store.HostExport{}, fmt.Errorf("перешифровка admin-пароля: %w", err)
 		}
 		h.AdminPasswordEnc = pwEnc
+	}
+
+	if len(h.TunnelTokenEnc) > 0 {
+		token, err := secretbox.Decrypt(oldKey, h.TunnelTokenEnc)
+		if err != nil {
+			return store.HostExport{}, fmt.Errorf("расшифровка токена резервного канала встроенным ключом: %w", err)
+		}
+		tokenEnc, err := secretbox.Encrypt(newKey, token)
+		if err != nil {
+			return store.HostExport{}, fmt.Errorf("перешифровка токена резервного канала: %w", err)
+		}
+		h.TunnelTokenEnc = tokenEnc
 	}
 	return h, nil
 }

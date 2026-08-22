@@ -36,6 +36,13 @@ func TestImportHostsWithEmbeddedKeyReencrypts(t *testing.T) {
 	if err := db1.SetHostAdmin(ctx, id, "admin", adminPwEnc); err != nil {
 		t.Fatalf("SetHostAdmin: %v", err)
 	}
+	tunnelTokenEnc, err := secretbox.Encrypt(m1.key, []byte("tunnel-token"))
+	if err != nil {
+		t.Fatalf("encrypt tunnel token: %v", err)
+	}
+	if err := db1.SetHostTunnelToken(ctx, id, tunnelTokenEnc); err != nil {
+		t.Fatalf("SetHostTunnelToken: %v", err)
+	}
 
 	export, err := m1.ExportHosts(ctx, true)
 	if err != nil {
@@ -75,12 +82,27 @@ func TestImportHostsWithEmbeddedKeyReencrypts(t *testing.T) {
 	if string(pwPlain) != "admin-pw" {
 		t.Errorf("decrypted admin password = %q, want %q", pwPlain, "admin-pw")
 	}
+	// Regression coverage for the gap this test exists to close: the tunnel
+	// token was originally left out of reencryptHostSecrets entirely, so it
+	// stayed encrypted under m1's key — m2's own tunnelDialOnce would then
+	// fail to decrypt it on every single dial, forever, with the reverse-
+	// tunnel fallback never coming up as a result.
+	tokenPlain, err := secretbox.Decrypt(m2.key, hosts[0].TunnelTokenEnc)
+	if err != nil {
+		t.Fatalf("decrypting the imported tunnel token with m2's own key: %v", err)
+	}
+	if string(tokenPlain) != "tunnel-token" {
+		t.Errorf("decrypted tunnel token = %q, want %q", tokenPlain, "tunnel-token")
+	}
 
 	// The whole point: db2's copy of the host must not still require m1's
 	// key. Confirm it does NOT decrypt under it (would only coincidentally
 	// pass if re-encryption silently hadn't happened for some other reason).
 	if _, err := secretbox.Decrypt(m1.key, hosts[0].SecretEnc); err == nil {
 		t.Error("imported secret still decrypts under the exporting hub's key — re-encryption did not happen")
+	}
+	if _, err := secretbox.Decrypt(m1.key, hosts[0].TunnelTokenEnc); err == nil {
+		t.Error("imported tunnel token still decrypts under the exporting hub's key — re-encryption did not happen")
 	}
 
 	// db1 (the exporter) must be untouched by any of this.
