@@ -27,7 +27,25 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shell := loginShell()
-	cmd := unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, shell, "-l")
+	env := map[string]string{"TERM": "xterm-256color"}
+
+	// TerminalUser (NKT_TERMINAL_USER, written by the hub at install time —
+	// see config.Config's own doc comment) is the ssh_user configured for
+	// *this* host, which has nothing to do with the root this daemon
+	// itself runs as. Empty means no such account is configured — a plain
+	// standalone nkt with no hub, where the distinction does not apply —
+	// and the shell keeps running as root exactly as it always has.
+	if s.cfg.TerminalUser != "" {
+		cmd, err := unrestrictedCommandAsUser(env, s.cfg.TerminalUser, shell, "-l")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		s.runPTYSession(w, r, cmd, "terminal", shell, s.cfg.TerminalIdleTimeout)
+		return
+	}
+
+	cmd := unrestrictedCommand(env, shell, "-l")
 	s.runPTYSession(w, r, cmd, "terminal", shell, s.cfg.TerminalIdleTimeout)
 }
 

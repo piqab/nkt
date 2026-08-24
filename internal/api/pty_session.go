@@ -3,10 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
+	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/coder/websocket"
@@ -72,6 +76,106 @@ func systemdRunArgs(env map[string]string, argv ...string) []string {
 		args = append(args, "--setenv="+k+"="+v)
 	}
 	args = append(args, "--")
+	return append(args, argv...)
+}
+
+// unrestrictedCommandAsUser is unrestrictedCommand plus dropping privileges
+// to a specific OS account instead of staying root — used only by
+// handleTerminalWS, and only when the host was installed with
+// NKT_TERMINAL_USER set (see config.Config.TerminalUser's own doc comment:
+// the ssh_user the hub actually connects with, which has nothing to do
+// with the root this daemon itself always runs as). Every other
+// unrestrictedCommand caller — package updates, self-update, dbus/ufw/
+// firewalld install — keeps running as root exactly as before; those
+// genuinely need it to write into protected system paths, an interactive
+// shell does not.
+//
+// user.Lookup resolves username against the host's own /etc/passwd (or
+// NSS) — readable even under nkt's own ProtectSystem=strict (that makes
+// most of the filesystem read-only, not hidden), so this works the same
+// whether or not the escape hatch below ends up needed at all.
+func unrestrictedCommandAsUser(env map[string]string, username string, argv ...string) (*exec.Cmd, error) {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return nil, fmt.Errorf("пользователь %q не найден на хосте: %w", username, err)
+	}
+	uid, err := strconv.ParseUint(u.Uid, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("некорректный uid пользователя %q: %w", username, err)
+	}
+	gid, err := strconv.ParseUint(u.Gid, 10, 32)
+	if err != nil {
+		return nil, fmt.Errorf("некорректный gid пользователя %q: %w", username, err)
+	}
+
+	// HOME/USER/LOGNAME travel alongside whatever the caller already
+	// wanted (TERM, currently) — systemd's own User= resolves these
+	// automatically and would just overwrite them, but the nsenter/runuser
+	// and plain-exec paths below have no such built-in resolution of their
+	// own, so this is what makes "bash -l" actually source the right
+	// profile files instead of guessing at nkt's own root HOME.
+	userEnv := make(map[string]string, len(env)+3)
+	for k, v := range env {
+		userEnv[k] = v
+	}
+	userEnv["HOME"] = u.HomeDir
+	userEnv["USER"] = username
+	userEnv["LOGNAME"] = username
+
+	if usingSystemdSandbox() {
+		return exec.Command("systemd-run", systemdRunArgsAsUser(userEnv, username, argv...)...), nil
+	}
+	if needsNsenterFallback() {
+		return exec.Command("nsenter", nsenterArgsAsUser(userEnv, username, argv...)...), nil
+	}
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Env = os.Environ()
+	for k, v := range userEnv {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}}
+	return cmd, nil
+}
+
+// systemdRunArgsAsUser mirrors systemdRunArgs, dropping to username via
+// systemd's own User= instead of CapabilityBoundingSet=~ — a User= unit
+// already starts with a normal, unprivileged effective capability set
+// (systemd resolves HOME/USER/SHELL for it directly via NSS too, unlike
+// the other two escape hatches), so there is nothing left to narrow that
+// giving it every capability would have widened in the first place.
+func systemdRunArgsAsUser(env map[string]string, username string, argv ...string) []string {
+	args := []string{"--pty", "--collect", "--quiet",
+		"-p", "ProtectSystem=no",
+		"-p", "ProtectHome=no",
+		"-p", "PrivateTmp=no",
+		"-p", "NoNewPrivileges=no",
+		"-p", "RestrictSUIDSGID=no",
+		"-p", "RestrictNamespaces=no",
+		"-p", "User=" + username,
+	}
+	for k, v := range env {
+		args = append(args, "--setenv="+k+"="+v)
+	}
+	args = append(args, "--")
+	return append(args, argv...)
+}
+
+// nsenterArgsAsUser mirrors nsenterArgs, inserting `runuser -u username --`
+// between the mount-namespace entry and the target command — nsenter
+// itself has no notion of switching user, only namespaces; runuser (same
+// util-linux package, so present wherever nsenter is) does the actual
+// uid/gid drop once already inside PID 1's mount namespace. Env vars are
+// injected via the same trailing "env KEY=value ... argv" trick
+// nsenterArgs already uses, just placed after runuser's own "--" so they
+// apply to the user-dropped process, not to runuser itself.
+func nsenterArgsAsUser(env map[string]string, username string, argv ...string) []string {
+	args := []string{"--target", "1", "--mount", "--", "runuser", "-u", username, "--"}
+	if len(env) > 0 {
+		args = append(args, "env")
+		for k, v := range env {
+			args = append(args, k+"="+v)
+		}
+	}
 	return append(args, argv...)
 }
 

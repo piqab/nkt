@@ -3,6 +3,8 @@ package api
 import (
 	"net"
 	"os"
+	"os/user"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -343,5 +345,124 @@ func TestUnrestrictedCommandFallsBackToNsenter(t *testing.T) {
 	joined := strings.Join(cmd.Args, " ")
 	if !strings.Contains(joined, "--mount") || !strings.Contains(joined, "bash -l") {
 		t.Errorf("unrestrictedCommand() args = %v, want nsenter args wrapping bash -l", cmd.Args)
+	}
+}
+
+// TestSystemdRunArgsAsUser is the User= counterpart of TestSystemdRunArgs.
+// It must NOT carry CapabilityBoundingSet=~ — that override has no effect
+// on a non-root UID (which needs AmbientCapabilities= to keep any
+// capability, not a wide bounding set) and its presence here would just be
+// misleading dead weight in the transient unit's properties.
+func TestSystemdRunArgsAsUser(t *testing.T) {
+	args := systemdRunArgsAsUser(map[string]string{"TERM": "xterm-256color"}, "deploy", "bash", "-l")
+	joined := " " + strings.Join(args, " ") + " "
+
+	for _, want := range []string{
+		" --pty ", " --collect ", " --quiet ",
+		" -p ProtectSystem=no ",
+		" -p ProtectHome=no ",
+		" -p PrivateTmp=no ",
+		" -p NoNewPrivileges=no ",
+		" -p RestrictSUIDSGID=no ",
+		" -p RestrictNamespaces=no ",
+		" -p User=deploy ",
+		" --setenv=TERM=xterm-256color ",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("systemdRunArgsAsUser() missing %q in %v", strings.TrimSpace(want), args)
+		}
+	}
+	if strings.Contains(joined, "CapabilityBoundingSet") {
+		t.Errorf("systemdRunArgsAsUser() must not set CapabilityBoundingSet, got %v", args)
+	}
+
+	if len(args) < 2 || args[len(args)-2] != "bash" || args[len(args)-1] != "-l" {
+		t.Errorf("systemdRunArgsAsUser() target command not at the end: %v", args)
+	}
+}
+
+// TestNsenterArgsAsUser is the runuser-wrapping counterpart of
+// TestNsenterArgs — nsenter itself has no notion of switching users, so the
+// user switch has to happen via runuser once already inside the target
+// mount namespace, before env/the target command.
+func TestNsenterArgsAsUser(t *testing.T) {
+	t.Run("no env", func(t *testing.T) {
+		args := nsenterArgsAsUser(nil, "deploy", "bash", "-l")
+		want := []string{"--target", "1", "--mount", "--", "runuser", "-u", "deploy", "--", "bash", "-l"}
+		if strings.Join(args, "|") != strings.Join(want, "|") {
+			t.Errorf("nsenterArgsAsUser(nil, ...) = %v, want %v", args, want)
+		}
+	})
+
+	t.Run("with env: wrapped in coreutils env after runuser", func(t *testing.T) {
+		args := nsenterArgsAsUser(map[string]string{"TERM": "xterm-256color"}, "deploy", "bash", "-l")
+		joined := " " + strings.Join(args, " ") + " "
+		for _, want := range []string{
+			" --target 1 ", " --mount ", " -- runuser -u deploy -- env ", " TERM=xterm-256color ",
+		} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("nsenterArgsAsUser() missing %q in %v", strings.TrimSpace(want), args)
+			}
+		}
+		if len(args) < 2 || args[len(args)-2] != "bash" || args[len(args)-1] != "-l" {
+			t.Errorf("nsenterArgsAsUser() target command not at the end: %v", args)
+		}
+	})
+}
+
+// TestUnrestrictedCommandAsUserRejectsUnknownUser confirms the error path
+// (a typo'd or stale ssh_user in the host's NKT_TERMINAL_USER) surfaces as
+// a clear message instead of a cryptic downstream exec failure.
+func TestUnrestrictedCommandAsUserRejectsUnknownUser(t *testing.T) {
+	_, err := unrestrictedCommandAsUser(nil, "no-such-user-xyz123", "bash", "-l")
+	if err == nil {
+		t.Fatal("unrestrictedCommandAsUser() with an unknown username: expected an error, got nil")
+	}
+}
+
+// TestUnrestrictedCommandAsUserPlainExecSetsCredential confirms the
+// outside-systemd fallback (dev machine, test suite) resolves the target
+// user's uid/gid and sets them via SysProcAttr.Credential, plus injects
+// HOME/USER/LOGNAME — the three vars systemd-run's own User= would resolve
+// automatically via NSS but plain exec.Command has no equivalent for.
+func TestUnrestrictedCommandAsUserPlainExecSetsCredential(t *testing.T) {
+	t.Setenv("INVOCATION_ID", "")
+
+	me, err := user.Current()
+	if err != nil {
+		t.Skipf("user.Current(): %v", err)
+	}
+
+	cmd, err := unrestrictedCommandAsUser(map[string]string{"TERM": "xterm-256color"}, me.Username, "echo", "hi")
+	if err != nil {
+		t.Fatalf("unrestrictedCommandAsUser: %v", err)
+	}
+
+	if got := cmd.Args; len(got) != 2 || got[0] != "echo" || got[1] != "hi" {
+		t.Errorf("cmd.Args = %v, want [echo hi]", got)
+	}
+	if cmd.SysProcAttr == nil || cmd.SysProcAttr.Credential == nil {
+		t.Fatal("cmd.SysProcAttr.Credential not set")
+	}
+	if got := strconv.FormatUint(uint64(cmd.SysProcAttr.Credential.Uid), 10); got != me.Uid {
+		t.Errorf("cmd.SysProcAttr.Credential.Uid = %s, want %s", got, me.Uid)
+	}
+
+	wantEnv := map[string]string{
+		"TERM":    "xterm-256color",
+		"HOME":    me.HomeDir,
+		"USER":    me.Username,
+		"LOGNAME": me.Username,
+	}
+	for k, v := range wantEnv {
+		found := false
+		for _, kv := range cmd.Env {
+			if kv == k+"="+v {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("cmd.Env missing %s=%s: %v", k, v, cmd.Env)
+		}
 	}
 }
