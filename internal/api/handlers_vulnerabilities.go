@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"sync"
@@ -21,11 +22,16 @@ import (
 const vulnFindingsKVKey = "vuln_last_findings"
 
 // findingKey identifies "the same vulnerability" across two scans — a CVE
-// against one specific package. The same CVE ID can legitimately appear
-// against several packages in one scan (e.g. a libc CVE affecting both
-// libc6 and libc6-dev), so ID alone would conflate them.
+// against one specific package, against one specific target. The same CVE
+// ID can legitimately appear against several packages in one scan (e.g. a
+// libc CVE affecting both libc6 and libc6-dev), so ID alone would conflate
+// them; Target keeps the host's own packages and each container image's
+// packages from colliding with each other too — the identical CVE against
+// the identical package name can genuinely exist in both a host package and
+// some unrelated container's image at once, and those are different things
+// to fix.
 func findingKey(f model.VulnFinding) string {
-	return f.ID + "\x00" + f.Package
+	return f.Target + "\x00" + f.ID + "\x00" + f.Package
 }
 
 // applyVulnDiff marks each of findings New relative to whatever scan this
@@ -159,10 +165,13 @@ func (s *Server) runVulnScan(ctx context.Context) {
 
 	report("Собираю список установленных пакетов...")
 	manifest := parse.Manifest(s.scanner.Collector())
-	if !manifest.Available {
-		// Not a dpkg-based host — nothing trivy could scan here, and no
-		// point downloading a ~1GB database to learn that. Same
-		// "not applicable, not an error" shape PackageUpdates uses.
+	images := s.runningImages(ctx)
+
+	if !manifest.Available && len(images) == 0 {
+		// Not a dpkg-based host and no Docker/Podman containers running —
+		// nothing trivy could scan here at all, and no point downloading a
+		// ~1GB database to learn that. Same "not applicable, not an error"
+		// shape PackageUpdates uses.
 		s.vuln.mu.Lock()
 		s.vuln.result = &model.VulnScan{Available: false, ScannedAt: time.Now()}
 		s.vuln.scanning = false
@@ -183,11 +192,33 @@ func (s *Server) runVulnScan(ctx context.Context) {
 		return
 	}
 
-	report("Сканирую пакеты на уязвимости...")
-	findings, err := vuln.Scan(ctx, trivyBin, dbDir, manifest)
-	if err != nil {
-		fail(err)
-		return
+	var findings []model.VulnFinding
+	if manifest.Available {
+		report("Сканирую пакеты ОС на уязвимости...")
+		osFindings, err := vuln.Scan(ctx, trivyBin, dbDir, manifest)
+		if err != nil {
+			fail(err)
+			return
+		}
+		findings = append(findings, osFindings...)
+	}
+
+	var warnings []string
+	for _, image := range images {
+		report(fmt.Sprintf("Сканирую образ %s...", image))
+		imageFindings, err := vuln.ScanImage(ctx, trivyBin, dbDir, image, s.cfg.DockerSocket, s.cfg.PodmanSocket)
+		if err != nil {
+			// One image gone missing (removed between the container list
+			// being read and the scan reaching it) or unreachable must not
+			// throw away everything else already scanned — noted instead,
+			// same as any other SourceStatus.Warnings-style degrade.
+			warnings = append(warnings, fmt.Sprintf("%s: %s", image, err.Error()))
+			continue
+		}
+		for i := range imageFindings {
+			imageFindings[i].Target = image
+		}
+		findings = append(findings, imageFindings...)
 	}
 
 	compared, newCount, fixedCount, err := s.applyVulnDiff(ctx, findings)
@@ -202,6 +233,7 @@ func (s *Server) runVulnScan(ctx context.Context) {
 		Compared:   compared,
 		NewCount:   newCount,
 		FixedCount: fixedCount,
+		Warnings:   warnings,
 		DBUpdated:  vuln.DBUpdatedAt(dbDir),
 		ScannedAt:  time.Now(),
 	}
@@ -210,4 +242,31 @@ func (s *Server) runVulnScan(ctx context.Context) {
 	s.vuln.scanning = false
 	s.vuln.progress = ""
 	s.vuln.mu.Unlock()
+}
+
+// runningImages returns the deduplicated set of image references currently
+// in use by a Docker or Podman container on this host, from the latest
+// scan snapshot — already collected for the regular dashboard (Containers/
+// Docker page), so this adds no extra work to gather.
+func (s *Server) runningImages(ctx context.Context) []string {
+	snap, err := s.scanner.LatestOrScan(ctx)
+	if err != nil {
+		return nil
+	}
+	seen := make(map[string]bool)
+	var images []string
+	add := func(ref string) {
+		if ref == "" || seen[ref] {
+			return
+		}
+		seen[ref] = true
+		images = append(images, ref)
+	}
+	for _, c := range snap.Container {
+		add(c.Image)
+	}
+	for _, c := range snap.Podman {
+		add(c.Image)
+	}
+	return images
 }

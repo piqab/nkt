@@ -278,6 +278,58 @@ func Scan(ctx context.Context, trivyBin, dbDir string, manifest model.PackageMan
 	return parseTrivyReport(out)
 }
 
+// ScanImage runs `trivy image` against ref (e.g. "nginx:1.25" or
+// "docker.io/library/nginx:1.25") as it already sits on THIS host's local
+// Docker/Podman daemon, reached via dockerSocket/podmanSocket — the same
+// socket paths internal/collect already uses (config.Config's own
+// DockerSocket/PodmanSocket) — rather than pulled fresh. --image-src is
+// narrowed to just docker,podman (trivy's default also tries containerd
+// and a remote registry) so a typo'd or since-removed image reference
+// fails outright instead of silently falling back to a slow, surprising
+// registry pull for something this is specifically meant to avoid ever
+// doing. Either socket argument may be empty (that engine isn't in use on
+// this host) — trivy's own default path is still tried for that source in
+// that case, matching how a bare `docker` CLI behaves with no DOCKER_HOST.
+//
+// Confirmed directly (not just from trivy's own docs) that --docker-host/
+// --podman-host need a "unix://" scheme prefix, not a bare filesystem path
+// — trivy's docker client rejects a bare path with "unable to parse
+// docker host" otherwise.
+func ScanImage(ctx context.Context, trivyBin, dbDir, ref, dockerSocket, podmanSocket string) ([]model.VulnFinding, error) {
+	cmd := exec.CommandContext(ctx, trivyBin, scanImageArgs(dbDir, ref, dockerSocket, podmanSocket)...)
+	out, err := cmd.Output()
+	if err != nil {
+		stderr := ""
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			stderr = strings.TrimSpace(string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("trivy image %s: %w: %s", ref, err, stderr)
+	}
+	return parseTrivyReport(out)
+}
+
+// scanImageArgs builds ScanImage's trivy argv — split out as a pure
+// function so the flags themselves are unit-testable without a real trivy
+// binary or Docker daemon, matching internal/api/pty_session.go's own
+// systemdRunArgs/nsenterArgs pattern for the same reason.
+func scanImageArgs(dbDir, ref, dockerSocket, podmanSocket string) []string {
+	args := []string{"image",
+		"--cache-dir", dbDir,
+		"--skip-db-update",
+		"--scanners", "vuln",
+		"--image-src", "docker,podman",
+		"--format", "json",
+		"--quiet",
+	}
+	if dockerSocket != "" {
+		args = append(args, "--docker-host", "unix://"+dockerSocket)
+	}
+	if podmanSocket != "" {
+		args = append(args, "--podman-host", "unix://"+podmanSocket)
+	}
+	return append(args, ref)
+}
+
 func writeManifestRootfs(root string, manifest model.PackageManifest) error {
 	writes := []struct {
 		rel     string
