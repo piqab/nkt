@@ -557,7 +557,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		return fail(err)
 	}
 
-	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, tun)
+	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, tun)
 	if err := stageFiles(client, host.SSHUser, binPath, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report); err != nil {
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
 		return fail(err)

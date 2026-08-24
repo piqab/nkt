@@ -170,7 +170,7 @@ type tunnelEnvParams struct {
 	Token      string
 }
 
-func renderEnv(adminUser, adminPassword string, terminalEnabled bool, tun tunnelEnvParams) string {
+func renderEnv(adminUser, adminPassword string, terminalEnabled bool, terminalUser string, tun tunnelEnvParams) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "NKT_MODE=local\n")
 	fmt.Fprintf(&b, "NKT_DATA_DIR=%s\n", remoteDataDir)
@@ -179,6 +179,13 @@ func renderEnv(adminUser, adminPassword string, terminalEnabled bool, tun tunnel
 	fmt.Fprintf(&b, "NKT_BOOTSTRAP_ADMIN_PASSWORD=%s\n", adminPassword)
 	fmt.Fprintf(&b, "NKT_COOKIE_SECURE=false\n")
 	fmt.Fprintf(&b, "NKT_TERMINAL_ENABLED=%t\n", terminalEnabled)
+	// Dropped entirely (not just left empty) when sshUser is root — there
+	// is no privilege to drop to in that case, and an explicit
+	// NKT_TERMINAL_USER=root would just make handleTerminalWS do a
+	// pointless setuid-to-itself for no benefit.
+	if terminalUser != "" && terminalUser != "root" {
+		fmt.Fprintf(&b, "NKT_TERMINAL_USER=%s\n", terminalUser)
+	}
 	if tun.Enabled {
 		fmt.Fprintf(&b, "NKT_HUB_TUNNEL_LISTEN_ADDR=%s\n", tun.ListenAddr)
 		fmt.Fprintf(&b, "NKT_HUB_TUNNEL_TOKEN=%s\n", tun.Token)

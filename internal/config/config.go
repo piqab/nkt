@@ -137,6 +137,18 @@ type Config struct {
 	// demo/fixtures instance must never be able to spawn a real shell on
 	// whatever machine happens to be running it.
 	TerminalEnabled bool
+	// TerminalUser, when set, is the OS account handleTerminalWS drops
+	// privileges to before starting the shell, instead of running it as
+	// root like every other unrestrictedCommand caller (package updates,
+	// self-update, dbus/ufw/firewalld install) still does. Written into a
+	// managed host's own env file by the hub at install/update time as
+	// NKT_TERMINAL_USER=<its ssh_user> (see internal/hub/provision.go's
+	// renderEnv) — the host itself has no other way to know what account
+	// the hub actually connects with; empty here just means "no such
+	// account configured," e.g. a plain standalone nkt with no hub, where
+	// this whole distinction does not apply and the terminal keeps running
+	// as root exactly as before.
+	TerminalUser string
 	// TerminalIdleTimeout closes a terminal session that has sent or
 	// received nothing for this long — the safety net for a tab left open
 	// and forgotten, since the underlying shell process otherwise runs
@@ -281,6 +293,7 @@ func Load() (*Config, error) {
 		CertbotEmail:   envStr("NKT_CERTBOT_EMAIL", ""),
 
 		TerminalEnabled:     envBool("NKT_TERMINAL_ENABLED", mode == ModeHub),
+		TerminalUser:        envStr("NKT_TERMINAL_USER", ""),
 		TerminalIdleTimeout: envDur("NKT_TERMINAL_IDLE_TIMEOUT", 30*time.Minute),
 
 		TunnelListenAddr: envStr("NKT_HUB_TUNNEL_LISTEN_ADDR", ""),

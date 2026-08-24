@@ -15,7 +15,7 @@ import (
 )
 
 func TestRenderEnvContainsExpectedLines(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw", false, tunnelEnvParams{})
+	out := renderEnv("admin", "s3cr3t-pw", false, "", tunnelEnvParams{})
 
 	for _, want := range []string{
 		"NKT_MODE=local",
@@ -48,9 +48,35 @@ func TestRenderEnvContainsExpectedLines(t *testing.T) {
 // what actually has to survive that regeneration, so this asserts renderEnv
 // itself faithfully reflects whatever it is told, not a hardcoded default.
 func TestRenderEnvPassesThroughTerminalEnabled(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw", true, tunnelEnvParams{})
+	out := renderEnv("admin", "s3cr3t-pw", true, "", tunnelEnvParams{})
 	if !strings.Contains(out, "NKT_TERMINAL_ENABLED=true") {
 		t.Errorf("renderEnv(..., true) output missing NKT_TERMINAL_ENABLED=true, got:\n%s", out)
+	}
+}
+
+// TestRenderEnvWritesTerminalUserForNonRootSSHUser covers handleTerminalWS's
+// privilege-drop path (internal/api/handlers_terminal.go): renderEnv must
+// write NKT_TERMINAL_USER for a managed host's ssh_user so the remote nkt
+// process, which has no other way to learn what account the hub connects
+// with, knows what to setuid the terminal shell to.
+func TestRenderEnvWritesTerminalUserForNonRootSSHUser(t *testing.T) {
+	out := renderEnv("admin", "s3cr3t-pw", true, "deploy", tunnelEnvParams{})
+	if !strings.Contains(out, "NKT_TERMINAL_USER=deploy") {
+		t.Errorf("renderEnv(..., \"deploy\", ...) output missing NKT_TERMINAL_USER=deploy, got:\n%s", out)
+	}
+}
+
+// TestRenderEnvOmitsTerminalUserForRootOrEmpty covers the two cases where
+// there is no privilege to drop: an empty ssh_user (standalone/no-hub
+// deployments, where TerminalUser being unset means "run as root exactly as
+// before") and ssh_user=root (dropping to root would be a pointless
+// self-setuid).
+func TestRenderEnvOmitsTerminalUserForRootOrEmpty(t *testing.T) {
+	for _, sshUser := range []string{"", "root"} {
+		out := renderEnv("admin", "s3cr3t-pw", true, sshUser, tunnelEnvParams{})
+		if strings.Contains(out, "NKT_TERMINAL_USER") {
+			t.Errorf("renderEnv(..., %q, ...) output unexpectedly contains NKT_TERMINAL_USER, got:\n%s", sshUser, out)
+		}
 	}
 }
 
@@ -58,7 +84,7 @@ func TestRenderEnvPassesThroughTerminalEnabled(t *testing.T) {
 // fallback's own env vars — written only when tunnelEnvParams.Enabled is
 // set (see Manager.prepareTunnelEnv).
 func TestRenderEnvWritesTunnelVarsWhenEnabled(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw", false, tunnelEnvParams{
+	out := renderEnv("admin", "s3cr3t-pw", false, "", tunnelEnvParams{
 		Enabled:    true,
 		ListenAddr: "0.0.0.0:8078",
 		Token:      "the-token",
