@@ -724,6 +724,11 @@ type VulnFinding struct {
 	FixedVersion string `json:"fixed_version,omitempty"`
 	Severity     string `json:"severity"` // CRITICAL/HIGH/MEDIUM/LOW/UNKNOWN, trivy's own scale
 	Title        string `json:"title,omitempty"`
+	// URL is trivy's own PrimaryURL — whichever single reference it
+	// considers most authoritative for this exact finding (NVD, a GitHub
+	// Security Advisory, a vendor bulletin, ...), not a URL nkt constructs
+	// itself. Can be empty for some vendor-specific advisory IDs.
+	URL string `json:"url,omitempty"`
 	// New is set when this (ID, Package, Target) triple was not present in
 	// the previous scan this host kept — see VulnScan.Compared for when
 	// that comparison could even happen at all (never on the very first

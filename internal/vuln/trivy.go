@@ -368,6 +368,13 @@ type trivyReport struct {
 			FixedVersion     string `json:"FixedVersion"`
 			Severity         string `json:"Severity"`
 			Title            string `json:"Title"`
+			// PrimaryURL is trivy's own choice of the single most
+			// authoritative reference for this exact finding — NVD,
+			// a GitHub Security Advisory, a vendor bulletin, whichever
+			// applies — rather than nkt guessing a URL pattern (e.g.
+			// assuming NVD) that would be wrong for a vendor-specific ID
+			// like "TEMP-..." that NVD never carries at all.
+			PrimaryURL string `json:"PrimaryURL"`
 		} `json:"Vulnerabilities"`
 	} `json:"Results"`
 }
@@ -387,6 +394,7 @@ func parseTrivyReport(out []byte) ([]model.VulnFinding, error) {
 				FixedVersion:     v.FixedVersion,
 				Severity:         v.Severity,
 				Title:            v.Title,
+				URL:              v.PrimaryURL,
 			})
 		}
 	}
