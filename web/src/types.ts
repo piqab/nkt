@@ -121,11 +121,20 @@ export interface VulnFinding {
   fixed_version?: string
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN'
   title?: string
+  /** Not present in the previous scan this host kept — see VulnScan.compared
+   * for when this comparison could even happen (never on the first scan). */
+  new?: boolean
 }
 
 export interface VulnScan {
   available: boolean
   findings?: VulnFinding[]
+  /** False only for this host's very first scan ever — nothing to diff
+   * against yet, distinct from "compared, nothing changed" (true with both
+   * counts at 0). */
+  compared: boolean
+  new_count?: number
+  fixed_count?: number
   db_updated: string
   scanned_at: string
 }

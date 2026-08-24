@@ -724,6 +724,10 @@ type VulnFinding struct {
 	FixedVersion string `json:"fixed_version,omitempty"`
 	Severity     string `json:"severity"` // CRITICAL/HIGH/MEDIUM/LOW/UNKNOWN, trivy's own scale
 	Title        string `json:"title,omitempty"`
+	// New is set when this (ID, Package) pair was not present in the
+	// previous scan this host kept — see VulnScan.Compared for when that
+	// comparison could even happen at all (never on the very first scan).
+	New bool `json:"new,omitempty"`
 }
 
 // VulnScan is the result of one vulnerability scan, plus enough metadata
@@ -732,11 +736,22 @@ type VulnFinding struct {
 // was last scanned against it. Available mirrors PackageManifest.Available
 // (Debian/Ubuntu only, matching PackageUpdates) — distinct from an empty
 // Findings, which means "scanned and clean," not "not supported here."
+//
+// NewCount/FixedCount/Compared describe this scan against the one
+// immediately before it (a rolling one-step diff, not full history — see
+// handlers_vulnerabilities.go). Compared is false only for the very first
+// scan this host has ever run: there is nothing to diff against yet, which
+// is a different thing from "compared, and nothing changed" (Compared
+// true, both counts zero) — the UI needs to tell those apart rather than
+// showing a misleading "0 new" the first time someone ever scans.
 type VulnScan struct {
-	Available bool          `json:"available"`
-	Findings  []VulnFinding `json:"findings,omitempty"`
-	DBUpdated time.Time     `json:"db_updated"`
-	ScannedAt time.Time     `json:"scanned_at"`
+	Available  bool          `json:"available"`
+	Findings   []VulnFinding `json:"findings,omitempty"`
+	Compared   bool          `json:"compared"`
+	NewCount   int           `json:"new_count,omitempty"`
+	FixedCount int           `json:"fixed_count,omitempty"`
+	DBUpdated  time.Time     `json:"db_updated"`
+	ScannedAt  time.Time     `json:"scanned_at"`
 }
 
 // HostInfo mirrors collect.HostInfo without importing that package.

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"path/filepath"
 	"sync"
@@ -11,6 +12,68 @@ import (
 	"github.com/althq/netknownsthat/internal/parse"
 	"github.com/althq/netknownsthat/internal/vuln"
 )
+
+// vulnFindingsKVKey is where the previous scan's findings are kept (see
+// internal/store's generic kv table) purely so the next scan has something
+// to diff against — a rolling one-step comparison, not a history: this key
+// always holds exactly the most recent scan, overwritten by the one after
+// it.
+const vulnFindingsKVKey = "vuln_last_findings"
+
+// findingKey identifies "the same vulnerability" across two scans — a CVE
+// against one specific package. The same CVE ID can legitimately appear
+// against several packages in one scan (e.g. a libc CVE affecting both
+// libc6 and libc6-dev), so ID alone would conflate them.
+func findingKey(f model.VulnFinding) string {
+	return f.ID + "\x00" + f.Package
+}
+
+// applyVulnDiff marks each of findings New relative to whatever scan this
+// host kept last (see vulnFindingsKVKey), then persists findings as the new
+// "last scan" for the comparison after this one. compared is false only
+// when there was no previous scan to compare against at all (this host's
+// very first scan) — see model.VulnScan.Compared's own doc comment for why
+// that has to be distinguishable from "compared, nothing changed".
+func (s *Server) applyVulnDiff(ctx context.Context, findings []model.VulnFinding) (compared bool, newCount, fixedCount int, err error) {
+	raw, ok, err := s.db.KVGet(ctx, vulnFindingsKVKey)
+	if err != nil {
+		return false, 0, 0, err
+	}
+
+	if ok {
+		var previous []model.VulnFinding
+		if err := json.Unmarshal([]byte(raw), &previous); err != nil {
+			return false, 0, 0, err
+		}
+		prevKeys := make(map[string]struct{}, len(previous))
+		for _, f := range previous {
+			prevKeys[findingKey(f)] = struct{}{}
+		}
+		currentKeys := make(map[string]struct{}, len(findings))
+		for i := range findings {
+			currentKeys[findingKey(findings[i])] = struct{}{}
+			if _, existed := prevKeys[findingKey(findings[i])]; !existed {
+				findings[i].New = true
+				newCount++
+			}
+		}
+		for _, f := range previous {
+			if _, stillPresent := currentKeys[findingKey(f)]; !stillPresent {
+				fixedCount++
+			}
+		}
+		compared = true
+	}
+
+	encoded, err := json.Marshal(findings)
+	if err != nil {
+		return false, 0, 0, err
+	}
+	if err := s.db.KVSet(ctx, vulnFindingsKVKey, string(encoded)); err != nil {
+		return false, 0, 0, err
+	}
+	return compared, newCount, fixedCount, nil
+}
 
 // vulnState is this host's own current vulnerability-scan state — see
 // Server.vuln's own doc comment for why this is a single shared value
@@ -127,11 +190,20 @@ func (s *Server) runVulnScan(ctx context.Context) {
 		return
 	}
 
+	compared, newCount, fixedCount, err := s.applyVulnDiff(ctx, findings)
+	if err != nil {
+		fail(err)
+		return
+	}
+
 	result := &model.VulnScan{
-		Available: true,
-		Findings:  findings,
-		DBUpdated: vuln.DBUpdatedAt(dbDir),
-		ScannedAt: time.Now(),
+		Available:  true,
+		Findings:   findings,
+		Compared:   compared,
+		NewCount:   newCount,
+		FixedCount: fixedCount,
+		DBUpdated:  vuln.DBUpdatedAt(dbDir),
+		ScannedAt:  time.Now(),
 	}
 	s.vuln.mu.Lock()
 	s.vuln.result = result

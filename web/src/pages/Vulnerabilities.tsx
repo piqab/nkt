@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Button, Input, Select, Spin, Table, type TableColumnsType } from 'antd'
+import { Button, Input, Select, Spin, Table, Tag, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, SeverityBadge, formatRelative } from '../components/ui'
@@ -107,7 +107,21 @@ export default function Vulnerabilities({ me }: { me: Me }) {
 
   const columns: TableColumnsType<VulnFinding> = [
     { title: 'Серьёзность', dataIndex: 'severity', width: 140, render: (s: VulnFinding['severity']) => <SeverityBadge severity={SEVERITY_MAP[s]} /> },
-    { title: 'CVE', dataIndex: 'id', width: 180, className: 'mono' },
+    {
+      title: 'CVE',
+      dataIndex: 'id',
+      width: 180,
+      render: (id: string, f: VulnFinding) => (
+        <span>
+          <span className="mono">{id}</span>
+          {f.new && (
+            <Tag color="blue" style={{ marginLeft: '0.4rem' }}>
+              новое
+            </Tag>
+          )}
+        </span>
+      ),
+    },
     { title: 'Пакет', dataIndex: 'package', width: 200, className: 'mono' },
     { title: 'Установлено', dataIndex: 'installed_version', width: 160, className: 'mono' },
     {
@@ -177,6 +191,14 @@ export default function Vulnerabilities({ me }: { me: Me }) {
             Просканировано {formatRelative(status.scan.scanned_at)}, база уязвимостей обновлена{' '}
             {formatRelative(status.scan.db_updated)}.
           </p>
+
+          {status.scan.compared && (
+            <Banner kind={(status.scan.new_count ?? 0) > 0 ? 'warn' : 'success'}>
+              {(status.scan.new_count ?? 0) === 0 && (status.scan.fixed_count ?? 0) === 0
+                ? 'С прошлого скана ничего не изменилось.'
+                : `С прошлого скана: +${status.scan.new_count ?? 0} новых, ${status.scan.fixed_count ?? 0} исправлено.`}
+            </Banner>
+          )}
 
           <Card>
             <div className="filters">

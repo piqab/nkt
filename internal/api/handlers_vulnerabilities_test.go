@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/store"
 )
 
 // TestHandleVulnerabilitiesIdleState confirms the shape of the response
@@ -77,5 +80,100 @@ func TestHandleVulnScanStartRejectsConcurrentScan(t *testing.T) {
 
 	if rec.Code != http.StatusConflict {
 		t.Errorf("status = %d, want 409 (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+func newTestServerWithDB(t *testing.T) *Server {
+	t.Helper()
+	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	return &Server{db: db}
+}
+
+// TestApplyVulnDiffFirstScan confirms the very first scan on a host — no
+// previous data in the kv table at all — reports Compared=false and marks
+// nothing New, rather than either erroring (no previous row is not a
+// failure) or (worse) treating every finding as "new" just because there
+// was nothing to diff against yet.
+func TestApplyVulnDiffFirstScan(t *testing.T) {
+	s := newTestServerWithDB(t)
+	findings := []model.VulnFinding{
+		{ID: "CVE-2024-1", Package: "openssl"},
+		{ID: "CVE-2024-2", Package: "bash"},
+	}
+
+	compared, newCount, fixedCount, err := s.applyVulnDiff(context.Background(), findings)
+	if err != nil {
+		t.Fatalf("applyVulnDiff: %v", err)
+	}
+	if compared {
+		t.Error("compared = true on the very first scan, want false")
+	}
+	if newCount != 0 || fixedCount != 0 {
+		t.Errorf("newCount=%d fixedCount=%d, want 0/0 on the first scan", newCount, fixedCount)
+	}
+	for _, f := range findings {
+		if f.New {
+			t.Errorf("finding %+v marked New on the first scan", f)
+		}
+	}
+}
+
+// TestApplyVulnDiffSecondScan covers the actual point of this feature: a
+// CVE that newly appeared gets New=true, one that's gone since the last
+// scan is counted as fixed, and one present in both scans is neither.
+func TestApplyVulnDiffSecondScan(t *testing.T) {
+	s := newTestServerWithDB(t)
+	ctx := context.Background()
+
+	first := []model.VulnFinding{
+		{ID: "CVE-2024-1", Package: "openssl"}, // survives into the second scan unchanged
+		{ID: "CVE-2024-2", Package: "bash"},    // fixed by the second scan
+	}
+	if _, _, _, err := s.applyVulnDiff(ctx, first); err != nil {
+		t.Fatalf("applyVulnDiff (first): %v", err)
+	}
+
+	second := []model.VulnFinding{
+		{ID: "CVE-2024-1", Package: "openssl"}, // unchanged
+		{ID: "CVE-2024-3", Package: "curl"},    // newly appeared
+	}
+	compared, newCount, fixedCount, err := s.applyVulnDiff(ctx, second)
+	if err != nil {
+		t.Fatalf("applyVulnDiff (second): %v", err)
+	}
+	if !compared {
+		t.Fatal("compared = false on the second scan, want true")
+	}
+	if newCount != 1 {
+		t.Errorf("newCount = %d, want 1", newCount)
+	}
+	if fixedCount != 1 {
+		t.Errorf("fixedCount = %d, want 1", fixedCount)
+	}
+
+	byKey := map[string]bool{}
+	for _, f := range second {
+		byKey[findingKey(f)] = f.New
+	}
+	if byKey[findingKey(model.VulnFinding{ID: "CVE-2024-1", Package: "openssl"})] {
+		t.Error("CVE-2024-1/openssl marked New, but it was already present in the first scan")
+	}
+	if !byKey[findingKey(model.VulnFinding{ID: "CVE-2024-3", Package: "curl"})] {
+		t.Error("CVE-2024-3/curl not marked New, but it was absent from the first scan")
+	}
+}
+
+// TestFindingKeyDistinguishesPackages confirms the same CVE ID against two
+// different packages is treated as two distinct findings, not conflated —
+// e.g. a libc CVE that shows up against both libc6 and libc6-dev.
+func TestFindingKeyDistinguishesPackages(t *testing.T) {
+	a := findingKey(model.VulnFinding{ID: "CVE-2024-1", Package: "libc6"})
+	b := findingKey(model.VulnFinding{ID: "CVE-2024-1", Package: "libc6-dev"})
+	if a == b {
+		t.Errorf("findingKey collided for the same CVE against two different packages: %q", a)
 	}
 }
