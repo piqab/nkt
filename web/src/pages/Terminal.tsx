@@ -409,6 +409,20 @@ const TMUX_HINTS: { title: string; rows: [string, string][] }[] = [
   },
 ]
 
+// TMUX_HINTS_COLLAPSED_KEY persists TmuxHints' collapsed/expanded state
+// across reloads and reopens — once someone has read the cheat sheet a
+// few times, it's just something taking up space next to the terminal
+// they now have to collapse again every single time otherwise.
+const TMUX_HINTS_COLLAPSED_KEY = 'nkt-tmux-hints-collapsed'
+
+function readTmuxHintsCollapsed(): boolean {
+  try {
+    return localStorage.getItem(TMUX_HINTS_COLLAPSED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 /**
  * TmuxHints — a static reference for tmux's own default key sequences,
  * shown next to the terminal only in tmux mode (see TMUX_HINTS above for
@@ -420,41 +434,63 @@ const TMUX_HINTS: { title: string; rows: [string, string][] }[] = [
  * that contrast loss.
  */
 function TmuxHints() {
+  const [collapsed, setCollapsed] = useState(readTmuxHintsCollapsed)
+
+  function toggle() {
+    setCollapsed((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem(TMUX_HINTS_COLLAPSED_KEY, next ? '1' : '0')
+      } catch {
+        // Per-viewer convenience only — fine to just not persist it.
+      }
+      return next
+    })
+  }
+
   return (
     <div style={{ width: 240, flexShrink: 0 }}>
-      <Card title="Управление tmux">
-        <p className="small muted" style={{ marginTop: 0 }}>
-          Сессия называется <code className="mono">nkt</code> — «Открыть в tmux» переподключается к
-          ней же, если она ещё жива на хосте.
-        </p>
-        {TMUX_HINTS.map((group) => (
-          <div key={group.title} style={{ marginTop: '0.5rem' }}>
-            <div className="small muted" style={{ marginBottom: '0.2rem' }}>
-              {group.title}
-            </div>
-            <div className="col" style={{ gap: '0.15rem' }}>
-              {group.rows.map(([keys, desc]) => (
-                <div key={keys} className="row" style={{ flexWrap: 'nowrap', gap: '0.4rem', alignItems: 'baseline' }}>
-                  <span
-                    className="mono"
-                    style={{
-                      flexShrink: 0,
-                      fontSize: '0.72rem',
-                      padding: '0.05rem 0.3rem',
-                      background: 'var(--surface-1)',
-                      border: '1px solid var(--border)',
-                      borderRadius: 'var(--radius-sm)',
-                      whiteSpace: 'nowrap',
-                    }}
+      <Card
+        title="Управление tmux"
+        actions={
+          <Button size="small" onClick={toggle}>
+            {collapsed ? 'показать' : 'скрыть'}
+          </Button>
+        }
+      >
+        {!collapsed &&
+          TMUX_HINTS.map((group) => (
+            <div key={group.title} style={{ marginTop: '0.5rem' }}>
+              <div className="small muted" style={{ marginBottom: '0.2rem' }}>
+                {group.title}
+              </div>
+              <div className="col" style={{ gap: '0.15rem' }}>
+                {group.rows.map(([keys, desc]) => (
+                  <div
+                    key={keys}
+                    className="row"
+                    style={{ flexWrap: 'nowrap', gap: '0.4rem', alignItems: 'baseline' }}
                   >
-                    {keys}
-                  </span>
-                  <span className="small muted">{desc}</span>
-                </div>
-              ))}
+                    <span
+                      className="mono"
+                      style={{
+                        flexShrink: 0,
+                        fontSize: '0.72rem',
+                        padding: '0.05rem 0.3rem',
+                        background: 'var(--surface-1)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 'var(--radius-sm)',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {keys}
+                    </span>
+                    <span className="small muted">{desc}</span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
       </Card>
     </div>
   )
