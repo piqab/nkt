@@ -95,33 +95,10 @@ func systemdRunArgs(env map[string]string, argv ...string) []string {
 // most of the filesystem read-only, not hidden), so this works the same
 // whether or not the escape hatch below ends up needed at all.
 func unrestrictedCommandAsUser(env map[string]string, username string, argv ...string) (*exec.Cmd, error) {
-	u, err := user.Lookup(username)
+	uid, gid, userEnv, err := resolveUserEnv(env, username)
 	if err != nil {
-		return nil, fmt.Errorf("пользователь %q не найден на хосте: %w", username, err)
+		return nil, err
 	}
-	uid, err := strconv.ParseUint(u.Uid, 10, 32)
-	if err != nil {
-		return nil, fmt.Errorf("некорректный uid пользователя %q: %w", username, err)
-	}
-	gid, err := strconv.ParseUint(u.Gid, 10, 32)
-	if err != nil {
-		return nil, fmt.Errorf("некорректный gid пользователя %q: %w", username, err)
-	}
-
-	// HOME/USER/LOGNAME travel alongside whatever the caller already
-	// wanted (TERM, currently) — systemd's own User= resolves these
-	// automatically and would just overwrite them, but the nsenter/runuser
-	// and plain-exec paths below have no such built-in resolution of their
-	// own, so this is what makes "bash -l" actually source the right
-	// profile files instead of guessing at nkt's own root HOME.
-	userEnv := make(map[string]string, len(env)+3)
-	for k, v := range env {
-		userEnv[k] = v
-	}
-	userEnv["HOME"] = u.HomeDir
-	userEnv["USER"] = username
-	userEnv["LOGNAME"] = username
-
 	if usingSystemdSandbox() {
 		return exec.Command("systemd-run", systemdRunArgsAsUser(userEnv, username, argv...)...), nil
 	}
@@ -133,8 +110,145 @@ func unrestrictedCommandAsUser(env map[string]string, username string, argv ...s
 	for k, v := range userEnv {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
-	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid}}
 	return cmd, nil
+}
+
+// resolveUserEnv looks username up against the host's /etc/passwd (or NSS —
+// readable even under nkt's own ProtectSystem=strict, which makes most of
+// the filesystem read-only, not hidden) and returns its uid/gid plus env
+// with HOME/USER/LOGNAME merged in atop the caller's own env — the shared
+// core of every "AsUser" command variant (unrestrictedCommandAsUser, the
+// quiet/output-capturing unrestrictedQuietCommandAsUser below), so the
+// lookup and its error messages stay in exactly one place.
+func resolveUserEnv(env map[string]string, username string) (uid, gid uint32, userEnv map[string]string, err error) {
+	u, err := user.Lookup(username)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("пользователь %q не найден на хосте: %w", username, err)
+	}
+	uid64, err := strconv.ParseUint(u.Uid, 10, 32)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("некорректный uid пользователя %q: %w", username, err)
+	}
+	gid64, err := strconv.ParseUint(u.Gid, 10, 32)
+	if err != nil {
+		return 0, 0, nil, fmt.Errorf("некорректный gid пользователя %q: %w", username, err)
+	}
+
+	// HOME/USER/LOGNAME travel alongside whatever the caller already
+	// wanted (TERM, currently) — systemd's own User= resolves these
+	// automatically and would just overwrite them, but the nsenter/runuser
+	// and plain-exec paths below have no such built-in resolution of their
+	// own, so this is what makes "bash -l" actually source the right
+	// profile files instead of guessing at nkt's own root HOME.
+	userEnv = make(map[string]string, len(env)+3)
+	for k, v := range env {
+		userEnv[k] = v
+	}
+	userEnv["HOME"] = u.HomeDir
+	userEnv["USER"] = username
+	userEnv["LOGNAME"] = username
+	return uint32(uid64), uint32(gid64), userEnv, nil
+}
+
+// unrestrictedQuietCommand is unrestrictedCommand for a short synchronous
+// command whose output the caller wants to capture (cmd.Output()/
+// cmd.CombinedOutput()) — e.g. `tmux list-windows`/`tmux select-window`
+// against the session handleTerminalWS's tmux mode opens (see
+// handlers_tmux_control.go) — rather than an interactive PTY session. Takes
+// ctx directly (unlike unrestrictedCommand/unrestrictedCommandAsUser, which
+// intentionally don't: their callers are either long-lived PTY sessions
+// tracking their own lifetime, or the fire-and-forget self-update that must
+// outlive the request) so a caller here can bound how long a wedged tmux
+// server gets to hang the request before the handler gives up.
+//
+// No --pty: unlike the interactive escape hatches, this never has a real
+// controlling terminal to attach one to (an HTTP handler goroutine, same
+// reason systemdRunReachable's own probe skips --pty) — --pipe+--wait makes
+// systemd-run instead proxy the transient unit's stdio back to this
+// process's own and block until it exits, which is what gives
+// cmd.Output() something to actually capture.
+func unrestrictedQuietCommand(ctx context.Context, env map[string]string, argv ...string) *exec.Cmd {
+	if usingSystemdSandbox() {
+		return exec.CommandContext(ctx, "systemd-run", systemdRunQuietArgs(env, argv...)...)
+	}
+	if needsNsenterFallback() {
+		return exec.CommandContext(ctx, "nsenter", nsenterArgs(env, argv...)...)
+	}
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Env = os.Environ()
+	for k, v := range env {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	return cmd
+}
+
+// unrestrictedQuietCommandAsUser is unrestrictedQuietCommand plus the same
+// ssh_user privilege drop unrestrictedCommandAsUser applies for the
+// interactive terminal — used so a tmux control command reaches the same
+// tmux server the terminal session itself is running under (tmux's default
+// socket lives under a per-uid path, so this only works when it runs as
+// the exact same user the PTY session did).
+func unrestrictedQuietCommandAsUser(ctx context.Context, env map[string]string, username string, argv ...string) (*exec.Cmd, error) {
+	uid, gid, userEnv, err := resolveUserEnv(env, username)
+	if err != nil {
+		return nil, err
+	}
+	if usingSystemdSandbox() {
+		return exec.CommandContext(ctx, "systemd-run", systemdRunQuietArgsAsUser(userEnv, username, argv...)...), nil
+	}
+	if needsNsenterFallback() {
+		return exec.CommandContext(ctx, "nsenter", nsenterArgsAsUser(userEnv, username, argv...)...), nil
+	}
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Env = os.Environ()
+	for k, v := range userEnv {
+		cmd.Env = append(cmd.Env, k+"="+v)
+	}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: &syscall.Credential{Uid: uid, Gid: gid}}
+	return cmd, nil
+}
+
+// systemdRunQuietArgs mirrors systemdRunArgs without --pty, for
+// unrestrictedQuietCommand — --pipe proxies the transient unit's stdio back
+// to this process's own instead of leaving it in the journal, and --wait
+// blocks until it exits, together turning systemd-run into something
+// cmd.Output() can use synchronously the same way it would a plain
+// exec.Command.
+func systemdRunQuietArgs(env map[string]string, argv ...string) []string {
+	args := []string{"--pipe", "--wait", "--collect", "--quiet",
+		"-p", "ProtectSystem=no",
+		"-p", "ProtectHome=no",
+		"-p", "PrivateTmp=no",
+		"-p", "NoNewPrivileges=no",
+		"-p", "RestrictSUIDSGID=no",
+		"-p", "RestrictNamespaces=no",
+		"-p", "CapabilityBoundingSet=~",
+	}
+	for k, v := range env {
+		args = append(args, "--setenv="+k+"="+v)
+	}
+	args = append(args, "--")
+	return append(args, argv...)
+}
+
+// systemdRunQuietArgsAsUser mirrors systemdRunArgsAsUser without --pty, the
+// User= counterpart of systemdRunQuietArgs — see both for why.
+func systemdRunQuietArgsAsUser(env map[string]string, username string, argv ...string) []string {
+	args := []string{"--pipe", "--wait", "--collect", "--quiet",
+		"-p", "ProtectSystem=no",
+		"-p", "ProtectHome=no",
+		"-p", "PrivateTmp=no",
+		"-p", "NoNewPrivileges=no",
+		"-p", "RestrictSUIDSGID=no",
+		"-p", "RestrictNamespaces=no",
+		"-p", "User=" + username,
+	}
+	for k, v := range env {
+		args = append(args, "--setenv="+k+"="+v)
+	}
+	args = append(args, "--")
+	return append(args, argv...)
 }
 
 // systemdRunArgsAsUser mirrors systemdRunArgs, dropping to username via

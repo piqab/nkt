@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"net"
 	"os"
 	"os/user"
@@ -408,6 +409,75 @@ func TestNsenterArgsAsUser(t *testing.T) {
 			t.Errorf("nsenterArgsAsUser() target command not at the end: %v", args)
 		}
 	})
+}
+
+// TestSystemdRunQuietArgs is the no-PTY counterpart of TestSystemdRunArgs —
+// used for output-capturing calls (tmux list-windows/select-window, ...)
+// that have no controlling terminal to attach --pty to. --pipe+--wait is
+// what makes cmd.Output() work for these the same way it would for a plain
+// exec.Command.
+func TestSystemdRunQuietArgs(t *testing.T) {
+	args := systemdRunQuietArgs(map[string]string{"TERM": "xterm-256color"}, "tmux", "list-windows")
+	joined := " " + strings.Join(args, " ") + " "
+
+	for _, want := range []string{
+		" --pipe ", " --wait ", " --collect ", " --quiet ",
+		" -p ProtectSystem=no ",
+		" -p CapabilityBoundingSet=~ ",
+		" --setenv=TERM=xterm-256color ",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("systemdRunQuietArgs() missing %q in %v", strings.TrimSpace(want), args)
+		}
+	}
+	if strings.Contains(joined, " --pty ") {
+		t.Errorf("systemdRunQuietArgs() must not request a pty (no controlling terminal to attach it to), got %v", args)
+	}
+	if len(args) < 2 || args[len(args)-2] != "tmux" || args[len(args)-1] != "list-windows" {
+		t.Errorf("systemdRunQuietArgs() target command not at the end: %v", args)
+	}
+}
+
+// TestSystemdRunQuietArgsAsUser is systemdRunQuietArgs' User= counterpart —
+// same no-CapabilityBoundingSet reasoning as systemdRunArgsAsUser.
+func TestSystemdRunQuietArgsAsUser(t *testing.T) {
+	args := systemdRunQuietArgsAsUser(map[string]string{"TERM": "xterm-256color"}, "deploy", "tmux", "list-windows")
+	joined := " " + strings.Join(args, " ") + " "
+
+	for _, want := range []string{" --pipe ", " --wait ", " -p User=deploy "} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("systemdRunQuietArgsAsUser() missing %q in %v", strings.TrimSpace(want), args)
+		}
+	}
+	if strings.Contains(joined, " --pty ") || strings.Contains(joined, "CapabilityBoundingSet") {
+		t.Errorf("systemdRunQuietArgsAsUser() must not have --pty or CapabilityBoundingSet, got %v", args)
+	}
+}
+
+// TestUnrestrictedQuietCommandAsUserRejectsUnknownUser mirrors
+// TestUnrestrictedCommandAsUserRejectsUnknownUser for the quiet variant.
+func TestUnrestrictedQuietCommandAsUserRejectsUnknownUser(t *testing.T) {
+	_, err := unrestrictedQuietCommandAsUser(context.Background(), nil, "no-such-user-xyz123", "tmux", "list-windows")
+	if err == nil {
+		t.Fatal("unrestrictedQuietCommandAsUser() with an unknown username: expected an error, got nil")
+	}
+}
+
+// TestUnrestrictedQuietCommandCapturesOutput confirms the plain-exec
+// fallback (outside any systemd unit) actually returns output through
+// cmd.Output() the way the tmux control handlers rely on — unlike
+// unrestrictedCommand, which is only ever run under a PTY.
+func TestUnrestrictedQuietCommandCapturesOutput(t *testing.T) {
+	t.Setenv("INVOCATION_ID", "")
+
+	cmd := unrestrictedQuietCommand(context.Background(), nil, "echo", "hello")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("cmd.Output(): %v", err)
+	}
+	if strings.TrimSpace(string(out)) != "hello" {
+		t.Errorf("cmd.Output() = %q, want %q", out, "hello")
+	}
 }
 
 // TestUnrestrictedCommandAsUserRejectsUnknownUser confirms the error path

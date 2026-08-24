@@ -179,6 +179,9 @@ func (s *Server) Handler() http.Handler {
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.RequireAdmin)
 
+				r.Get("/terminal/tmux/windows", s.handleTmuxWindows)
+				r.Post("/terminal/tmux/action", s.handleTmuxAction)
+
 				r.Post("/inventory/refresh", s.handleRefresh)
 				r.Post("/services/{name}/validate", s.handleServiceValidate)
 				r.Post("/services/{name}/{action}", s.handleServiceAction)
