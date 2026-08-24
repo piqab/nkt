@@ -29,18 +29,29 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	shell := loginShell()
 	argv := []string{shell, "-l"}
 	auditTarget := shell
-	// ?tmux=1 (the "Открыть в tmux" button) runs a tmux session instead of
-	// a bare login shell — -A attaches to tmuxSessionName if it already
-	// exists (e.g. this same operator reconnecting after a dropped
-	// connection, or a session left running on purpose) and creates it
-	// otherwise, matching the "resilient session" behaviour package-update
-	// sessions already have via runUpdateSession's own session tracking.
-	// Left for tmux itself to fail with "command not found" if it isn't
-	// installed — the frontend already checks /system/tmux-status and
-	// offers to install it first, so reaching here with tmux missing would
-	// mean that check was bypassed, not a case worth a nicer message for.
+	// ?tmux=1 (the "Открыть в tmux" button) attaches to tmuxSessionName
+	// instead of opening a bare login shell — matching the "resilient
+	// session" behaviour package-update sessions already have via
+	// runUpdateSession's own session tracking. ensureTmuxSession creates
+	// the session first if it doesn't exist yet, through the same quiet,
+	// non-interactive path the tmux control panel uses (see
+	// handlers_tmux_control.go) — deliberately NOT `tmux new-session -A`
+	// run directly as this interactive command: the very first time a
+	// session doesn't exist yet, tmux has to fork and daemonize a whole
+	// new server process, and doing that inside a --pty-forwarded,
+	// interactively-attached escape-hatch invocation (systemd-run/nsenter)
+	// is exactly the kind of fork/detach systemd's own process tracking
+	// for that transient unit is not guaranteed to survive cleanly — a
+	// plain login shell never forks anything like that, which is why only
+	// tmux mode is at risk here. Once the session definitely already
+	// exists, all this command has to do is attach-session — a plain
+	// connect-to-an-existing-socket operation with none of that risk.
 	if r.URL.Query().Get("tmux") == "1" {
-		argv = []string{"tmux", "new-session", "-A", "-s", tmuxSessionName}
+		if err := s.ensureTmuxSession(r.Context()); err != nil {
+			writeError(w, http.StatusInternalServerError, "не удалось запустить tmux: "+err.Error())
+			return
+		}
+		argv = []string{"tmux", "attach-session", "-t", tmuxSessionName}
 		auditTarget = "tmux"
 	}
 	env := map[string]string{"TERM": "xterm-256color"}

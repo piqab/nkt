@@ -46,6 +46,31 @@ func (s *Server) runTmux(ctx context.Context, args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+// ensureTmuxSession makes sure tmuxSessionName's server+session already
+// exist before handleTerminalWS opens an interactive PTY attached to it —
+// see its own doc comment for why the session-creating fork must not
+// happen inside that interactive, --pty-forwarded escape-hatch invocation.
+// has-session first (rather than unconditionally creating and ignoring a
+// "duplicate session" error) keeps the common case — reattaching to an
+// already-running session — down to one quick, side-effect-free check.
+func (s *Server) ensureTmuxSession(ctx context.Context) error {
+	if _, err := s.runTmux(ctx, "has-session", "-t", tmuxSessionName); err == nil {
+		return nil
+	}
+	if _, err := s.runTmux(ctx, "new-session", "-d", "-s", tmuxSessionName); err != nil {
+		// Two tabs opening "Открыть в tmux" at nearly the same instant can
+		// both reach here right after has-session fails for both — the
+		// loser's `new-session` then fails with tmux's own "duplicate
+		// session" error, which is success from this caller's point of
+		// view too (the session exists, just not because of this call).
+		if _, hasErr := s.runTmux(ctx, "has-session", "-t", tmuxSessionName); hasErr == nil {
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 // tmuxWindow is one row of `tmux list-windows` — see handleTmuxWindows.
 type tmuxWindow struct {
 	Index  int    `json:"index"`

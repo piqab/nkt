@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -96,6 +97,32 @@ func TestHandleTmuxActionUnknownAction(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("status = %d, want 400 (body: %s)", rec.Code, rec.Body.String())
+	}
+}
+
+// TestEnsureTmuxSession confirms it both creates a session that doesn't
+// exist yet and is idempotent against one that already does — the two
+// cases handleTerminalWS's tmux mode actually hits (first open, and every
+// reattach after it).
+func TestEnsureTmuxSession(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not on PATH in this environment")
+	}
+	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", tmuxSessionName).Run() })
+	_ = exec.Command("tmux", "kill-session", "-t", tmuxSessionName).Run() // in case a prior run leaked one
+
+	s := &Server{cfg: &config.Config{Mode: config.ModeLocal, TerminalEnabled: true}}
+	ctx := context.Background()
+
+	if err := s.ensureTmuxSession(ctx); err != nil {
+		t.Fatalf("ensureTmuxSession (create): %v", err)
+	}
+	if err := exec.Command("tmux", "has-session", "-t", tmuxSessionName).Run(); err != nil {
+		t.Fatalf("session %q was not actually created: %v", tmuxSessionName, err)
+	}
+
+	if err := s.ensureTmuxSession(ctx); err != nil {
+		t.Fatalf("ensureTmuxSession (already exists): %v", err)
 	}
 }
 
