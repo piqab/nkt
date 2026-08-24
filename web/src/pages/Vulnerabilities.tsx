@@ -125,15 +125,22 @@ export default function Vulnerabilities({ me }: { me: Me }) {
     return c
   }, [findings])
 
-  // Every distinct scan target present in this scan — "" stands for the
-  // host's own OS packages (see VulnFinding.target), everything else is a
-  // container image reference. Only shown as a filter when there's more
-  // than one target to actually choose between.
-  const targets = useMemo(() => {
-    const set = new Set<string>()
-    for (const f of findings) set.add(f.target ?? '')
-    return [...set].sort()
+  // Every distinct scan target present in this scan, with a per-target
+  // count — "" stands for the host's own OS packages (see
+  // VulnFinding.target), everything else is a container image reference.
+  // Only shown as a filter when there's more than one target to actually
+  // choose between. The count is shown in the dropdown (same as the
+  // severity filter already does) specifically so it's obvious at a
+  // glance whether picking one actually narrows anything.
+  const targetCounts = useMemo(() => {
+    const c = new Map<string, number>()
+    for (const f of findings) {
+      const t = f.target ?? ''
+      c.set(t, (c.get(t) ?? 0) + 1)
+    }
+    return c
   }, [findings])
+  const targets = useMemo(() => [...targetCounts.keys()].sort(), [targetCounts])
 
   const columns: TableColumnsType<VulnFinding> = [
     { title: 'Серьёзность', dataIndex: 'severity', width: 140, render: (s: VulnFinding['severity']) => <SeverityBadge severity={SEVERITY_MAP[s]} /> },
@@ -151,7 +158,18 @@ export default function Vulnerabilities({ me }: { me: Me }) {
       render: (id: string, f: VulnFinding) => (
         <span>
           {f.url ? (
-            <a className="mono" href={f.url} target="_blank" rel="noreferrer">
+            // Explicit inline colour/underline rather than relying on the
+            // app's own plain `a { color: ... }` rule — antd's Table resets
+            // link colour to inherit inside its cells, which otherwise made
+            // this render as plain, indistinguishable-from-static-text CVE
+            // IDs even though the href was genuinely there and worked.
+            <a
+              className="mono"
+              href={f.url}
+              target="_blank"
+              rel="noreferrer"
+              style={{ color: 'var(--series-1)', textDecoration: 'underline' }}
+            >
               {id}
             </a>
           ) : (
@@ -272,8 +290,11 @@ export default function Vulnerabilities({ me }: { me: Me }) {
                     onChange={changeTarget}
                     style={{ minWidth: '13rem' }}
                     options={[
-                      { value: ALL_TARGETS, label: 'все' },
-                      ...targets.map((t) => ({ value: t, label: t || 'ОС хоста' })),
+                      { value: ALL_TARGETS, label: `все (${findings.length})` },
+                      ...targets.map((t) => ({
+                        value: t,
+                        label: `${t || 'ОС хоста'} (${targetCounts.get(t) ?? 0})`,
+                      })),
                     ]}
                   />
                 </label>
