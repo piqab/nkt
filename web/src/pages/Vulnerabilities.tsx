@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Button, Input, Select, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
-import type { Severity, VulnFinding, VulnStatus } from '../types'
+import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, SeverityBadge, formatRelative } from '../components/ui'
 
 // Trivy's own severity scale, mapped onto the app's lowercase Severity
@@ -30,18 +30,26 @@ const SEVERITY_ORDER: VulnFinding['severity'][] = ['CRITICAL', 'HIGH', 'MEDIUM',
  * itself plus that whole database, not something a page load should risk
  * kicking off by accident.
  */
-export default function Vulnerabilities() {
+export default function Vulnerabilities({ me }: { me: Me }) {
+  const canUse = me.is_admin && me.allow_mutations
   const { data: status, reload } = useApi<VulnStatus>('/vulnerabilities', 3_000)
   const [severity, setSeverity] = useState('')
   const [query, setQuery] = useState('')
+  // Not part of VulnStatus: a 403 (no admin/mutations) or a network error
+  // never reaches s.vuln.lastErr on the backend at all (the request gets
+  // rejected before handleVulnScanStart ever runs), so it has nowhere to
+  // show up in the next status poll — swallowing it here used to mean the
+  // button just silently did nothing.
+  const [startError, setStartError] = useState<string | null>(null)
 
   async function startScan() {
+    setStartError(null)
     try {
       await api('/vulnerabilities/scan', { method: 'POST' })
-      reload()
-    } catch {
-      reload() // surfaces "уже выполняется" (409) via the next status poll same as any other failure
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : String(err))
     }
+    reload()
   }
 
   const findings = status?.scan?.findings ?? []
@@ -88,13 +96,16 @@ export default function Vulnerabilities() {
           </h1>
         </div>
         <div className="row">
-          <Button type="primary" loading={status?.scanning} onClick={startScan}>
+          <Button type="primary" disabled={!canUse} loading={status?.scanning} onClick={startScan}>
             {status?.scanning ? status.progress || 'Сканирую…' : status?.scan ? 'Пересканировать' : 'Сканировать'}
           </Button>
         </div>
       </div>
 
-      <ErrorNote error={status?.error ?? null} />
+      {!canUse && (
+        <Banner kind="info">Доступно только роли admin с включёнными изменениями (AllowMutations).</Banner>
+      )}
+      <ErrorNote error={startError ?? status?.error ?? null} />
 
       {!status?.scan ? (
         !status?.scanning && (
