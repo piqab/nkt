@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Button, Input, Select, Table, type TableColumnsType } from 'antd'
+import { Button, Input, Select, Spin, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, SeverityBadge, formatRelative } from '../components/ui'
@@ -106,6 +106,20 @@ export default function Vulnerabilities({ me }: { me: Me }) {
         <Banner kind="info">Доступно только роли admin с включёнными изменениями (AllowMutations).</Banner>
       )}
       <ErrorNote error={startError ?? status?.error ?? null} />
+
+      {/* Shown for the whole scan, not just while there are no results yet
+          — a re-scan over existing findings needs the same "this is
+          running" signal just as much as the very first one does. The
+          button's own antd `loading` spinner alone was easy to miss during
+          a run that can legitimately take several minutes (first-ever scan
+          on a host: downloading trivy plus its ~1GB database). */}
+      {status?.scanning && (
+        <Banner kind="info">
+          <Spin size="small" style={{ marginRight: '0.6rem' }} />
+          {status.progress || 'Сканирую…'}
+          {!status.scan && ' Первый запуск может занять несколько минут — идёт загрузка trivy и базы уязвимостей.'}
+        </Banner>
+      )}
 
       {!status?.scan ? (
         !status?.scanning && (
