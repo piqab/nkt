@@ -8,6 +8,7 @@ import Login from './pages/Login'
 import Hosts from './pages/Hosts'
 import OverviewPage from './pages/Overview'
 import Findings from './pages/Findings'
+import Vulnerabilities from './pages/Vulnerabilities'
 import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
 import Services from './pages/Services'
@@ -71,6 +72,7 @@ function useTheme(): [Theme, (t: Theme) => void, ThemeConfig] {
 const NAV = [
   { to: '/', label: 'Обзор', end: true },
   { to: '/findings', label: 'Проблемы', badge: 'findings' as const },
+  { to: '/vulnerabilities', label: 'Уязвимости' },
   { to: '/topology', label: 'Карта ресурсов' },
   { to: '/availability', label: 'Доступность' },
   { to: '/usage', label: 'Нагрузка' },
@@ -365,6 +367,7 @@ function Shell({
           <Routes>
             <Route path="/" element={<OverviewPage me={me} />} />
             <Route path="/findings" element={<Findings />} />
+            <Route path="/vulnerabilities" element={<Vulnerabilities />} />
             <Route path="/topology" element={<TopologyPage />} />
             <Route path="/availability" element={<Availability />} />
             <Route path="/usage" element={<Usage />} />

@@ -50,6 +50,14 @@ type Server struct {
 	// keeps unrelated long-running commands independent of each other.
 	sessionsMu sync.Mutex
 	sessions   map[string]*updateSession
+
+	// vuln tracks the one vulnerability scan this host cares about at a
+	// time (see handlers_vulnerabilities.go) — unlike sessions above,
+	// there is no per-task key: EnsureTrivy/EnsureDB/Scan are plain Go
+	// calls, not a PTY-attached exec.Cmd a WebSocket streams from, and a
+	// second concurrent scan would just redo the same work the first one
+	// is already doing.
+	vuln vulnState
 }
 
 // Deps bundles the constructed subsystems.
@@ -153,6 +161,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/dbus-install/status", s.handleDbusInstallStatus)
 			r.Get("/system/tmux-status", s.handleTmuxStatus)
 			r.Get("/system/tmux-install/status", s.handleTmuxInstallStatus)
+			r.Get("/vulnerabilities", s.handleVulnerabilities)
 			r.Get("/certificates", s.handleCertificates)
 
 			r.Get("/configs", s.handleConfigList)
@@ -178,6 +187,8 @@ func (s *Server) Handler() http.Handler {
 			// --- mutations, admin only ------------------------------------------
 			r.Group(func(r chi.Router) {
 				r.Use(s.auth.RequireAdmin)
+
+				r.Post("/vulnerabilities/scan", s.handleVulnScanStart)
 
 				r.Post("/inventory/refresh", s.handleRefresh)
 				r.Post("/services/{name}/validate", s.handleServiceValidate)
