@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -97,6 +98,107 @@ func TestTerminalRoundTrip(t *testing.T) {
 
 	const marker = "nkt-terminal-roundtrip-ok"
 	if err := conn.Write(ctx, websocket.MessageBinary, []byte("echo "+marker+"\n")); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	var out strings.Builder
+	found := false
+	for !found {
+		msgType, data, err := conn.Read(ctx)
+		if err != nil {
+			t.Fatalf("read (collected so far: %q): %v", out.String(), err)
+		}
+		if msgType != websocket.MessageBinary {
+			continue
+		}
+		out.Write(data)
+		if strings.Contains(out.String(), marker) {
+			found = true
+		}
+	}
+
+	conn.Close(websocket.StatusNormalClosure, "test done")
+}
+
+// TestTerminalRoundTripTmux is TestTerminalRoundTrip's tmux-mode
+// counterpart — it exercises ensureTmuxSession + `tmux attach-session`
+// end to end (real tmux server, real PTY, real WebSocket), which
+// TestTerminalRoundTrip itself never touches. Catches a regression in the
+// argv/flags handleTerminalWS builds for tmux mode (e.g. a typo in
+// tmuxSessionName or the attach-session target) that only a real tmux
+// binary would surface.
+func TestTerminalRoundTripTmux(t *testing.T) {
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not on PATH in this environment")
+	}
+	t.Cleanup(func() { _ = exec.Command("tmux", "kill-session", "-t", tmuxSessionName).Run() })
+
+	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	const password = "test-password-0123456789"
+	cfg := &config.Config{
+		Mode:                   config.ModeLocal,
+		TerminalEnabled:        true,
+		TerminalIdleTimeout:    time.Minute,
+		AllowMutations:         true,
+		SessionTTL:             time.Hour,
+		CookieSecure:           false,
+		BootstrapAdminUser:     "admin",
+		BootstrapAdminPassword: password,
+	}
+	authSvc := auth.NewService(db, cfg)
+	if _, err := authSvc.Bootstrap(context.Background()); err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+
+	srv := New(Deps{Cfg: cfg, DB: db, Auth: authSvc, Log: slog.Default()})
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+
+	loginBody, _ := json.Marshal(map[string]string{"username": "admin", "password": password})
+	res, err := client.Post(ts.URL+"/api/auth/login", "application/json", bytes.NewReader(loginBody))
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	_ = res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("login status = %d, want 200", res.StatusCode)
+	}
+
+	var cookieHeader string
+	for _, c := range jar.Cookies(res.Request.URL) {
+		if c.Name == auth.SessionCookie {
+			cookieHeader = c.Name + "=" + c.Value
+		}
+	}
+	if cookieHeader == "" {
+		t.Fatal("no session cookie captured after login")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/api/terminal/ws?tmux=1"
+	header := http.Header{}
+	header.Set("Cookie", cookieHeader)
+	conn, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: header})
+	if err != nil {
+		t.Fatalf("websocket.Dial: %v", err)
+	}
+	defer conn.CloseNow()
+
+	const marker = "nkt-terminal-tmux-roundtrip-ok"
+	if err := conn.Write(ctx, websocket.MessageBinary, []byte("echo "+marker+"\r")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
