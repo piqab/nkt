@@ -4,7 +4,7 @@ import { Button, Table, Tag, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
-import { Banner, Card, ErrorNote, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative } from '../components/ui'
 import UpdateModal from '../components/UpdateModal'
 
 const serviceColumns: TableColumnsType<ServiceUnit> = [
@@ -231,8 +231,12 @@ export default function OverviewPage({ me }: { me: Me }) {
 
       <div className="grid grid-2">
         <Card
-          title="Что сломано"
-          subtitle="Отсортировано по серьёзности. Полный список — на вкладке «Проблемы»."
+          title={
+            <>
+              Что сломано
+              <InfoHint>Отсортировано по серьёзности. Полный список — на вкладке «Проблемы».</InfoHint>
+            </>
+          }
           actions={<Link to="/findings">все проблемы →</Link>}
         >
           {data.top_findings.length === 0 ? (
@@ -301,7 +305,14 @@ export default function OverviewPage({ me }: { me: Me }) {
           )}
         </Card>
 
-        <Card title="Источники данных" subtitle="Что удалось прочитать при последнем скане">
+        <Card
+          title={
+            <>
+              Источники данных
+              <InfoHint>Что удалось прочитать при последнем скане</InfoHint>
+            </>
+          }
+        >
           <div className="table-wrap">
             <Table<SourceStatus> dataSource={data.sources} columns={sourceColumns} rowKey="name" pagination={false} size="small" />
           </div>

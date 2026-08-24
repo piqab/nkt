@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Table, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useApi } from '../api'
 import type { NetworkInterface } from '../types'
-import { Card, ErrorNote, Loading, formatBytesShort } from '../components/ui'
+import { Card, ErrorNote, InfoHint, Loading, formatBytesShort } from '../components/ui'
 
 /**
  * up alone can't tell a genuinely working interface apart from one that's
@@ -181,12 +181,14 @@ export default function Interfaces() {
     <>
       <div className="page-head">
         <div>
-          <h1>Сетевые интерфейсы</h1>
-          <p>
-            Всё, что реально есть на хосте по данным <code className="mono">ip addr</code>: физические
-            карты, мосты, VLAN, туннели, loopback. Кто из них публичный — не здесь: это точно
-            определяется по каждому сокету отдельно на страницах «Разное», Firewall и в находках.
-          </p>
+          <h1>
+            Сетевые интерфейсы
+            <InfoHint>
+              Всё, что реально есть на хосте по данным ip addr: физические карты, мосты, VLAN,
+              туннели, loopback. Кто из них публичный — не здесь: это точно определяется по каждому
+              сокету отдельно на страницах «Разное», Firewall и в находках.
+            </InfoHint>
+          </h1>
         </div>
       </div>
 

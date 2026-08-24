@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Select, Table, type TableColumnsType } from 'antd'
 import { qs, useApi } from '../api'
 import type { AuditEntry, JobStatus } from '../types'
-import { Card, ErrorNote, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
+import { Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
 
 interface JobsResponse {
   jobs: JobStatus[] | null
@@ -77,11 +77,13 @@ export default function Audit() {
     <>
       <div className="page-head">
         <div>
-          <h1>Журнал действий</h1>
-          <p>
-            Каждое изменение состояния хоста — перезапуск сервиса, правка конфига, правило firewall —
-            записывается с указанием пользователя, результата и вывода команды.
-          </p>
+          <h1>
+            Журнал действий
+            <InfoHint>
+              Каждое изменение состояния хоста — перезапуск сервиса, правка конфига, правило firewall —
+              записывается с указанием пользователя, результата и вывода команды.
+            </InfoHint>
+          </h1>
         </div>
       </div>
 

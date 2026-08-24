@@ -13,7 +13,7 @@ import type {
   SelfSignedResult,
 } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
-import { Banner, Card, ErrorNote, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
 
 /** How often to poll a running renew job for new progress lines. */
 const RENEW_POLL_MS = 800
@@ -358,13 +358,15 @@ export default function Certificates({ me }: { me: Me }) {
     <>
       <div className="page-head">
         <div>
-          <h1>TLS-сертификаты</h1>
-          <p>
-            Читаются файлы, на которые ссылаются директивы <code className="mono">ssl_certificate</code>{' '}
-            в nginx и <code className="mono">crt</code> в haproxy. Проверяются сроки, покрытие имён,
-            стойкость ключа, то, запустится ли автообновление на самом деле, и — отдельным
-            TLS-подключением к сокету — совпадает ли файл на диске с тем, что реально видят клиенты.
-          </p>
+          <h1>
+            TLS-сертификаты
+            <InfoHint>
+              Читаются файлы, на которые ссылаются директивы ssl_certificate в nginx и crt в haproxy.
+              Проверяются сроки, покрытие имён, стойкость ключа, то, запустится ли автообновление на
+              самом деле, и — отдельным TLS-подключением к сокету — совпадает ли файл на диске с тем,
+              что реально видят клиенты.
+            </InfoHint>
+          </h1>
         </div>
       </div>
 
@@ -393,8 +395,15 @@ export default function Certificates({ me }: { me: Me }) {
       </div>
 
       <Card
-        title="Расписание истечения"
-        subtitle="Запас до истечения на общей шкале в год — порядок, в котором сертификаты перестанут работать"
+        title={
+          <>
+            Расписание истечения
+            <InfoHint>
+              Запас до истечения на общей шкале в год — порядок, в котором сертификаты перестанут
+              работать
+            </InfoHint>
+          </>
+        }
       >
         {certs.length === 0 ? (
           <div className="chart-empty">
@@ -580,8 +589,16 @@ function UnattachedCard({
 
   return (
     <Card
-      title="Неподключённые сертификаты"
-      subtitle="Есть в /etc/letsencrypt/live, но ни один разобранный конфиг на них не ссылается — сюда попадает всё, что certbot certonly выпустил (вручную или через форму выше), но никто ещё не подключил к сервису"
+      title={
+        <>
+          Неподключённые сертификаты
+          <InfoHint>
+            Есть в /etc/letsencrypt/live, но ни один разобранный конфиг на них не ссылается — сюда
+            попадает всё, что certbot certonly выпустил (вручную или через форму выше), но никто ещё
+            не подключил к сервису
+          </InfoHint>
+        </>
+      }
     >
       <div className="table-wrap">
         <Table<LineageInfo> dataSource={lineages} rowKey="name" pagination={false} size="small" columns={columns} />
@@ -669,8 +686,16 @@ function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) =>
 
   return (
     <Card
-      title="Выпустить новый сертификат Let's Encrypt"
-      subtitle="Для домена, у которого ещё нет сертификата — certbot certonly --standalone. Wildcard-имена не поддерживаются: standalone доказывает владение только одним точным именем за раз."
+      title={
+        <>
+          Выпустить новый сертификат Let's Encrypt
+          <InfoHint>
+            Для домена, у которого ещё нет сертификата — certbot certonly --standalone.
+            Wildcard-имена не поддерживаются: standalone доказывает владение только одним точным
+            именем за раз.
+          </InfoHint>
+        </>
+      }
     >
       <Form form={form} layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
@@ -739,8 +764,15 @@ function CombineForm({
 
   return (
     <Card
-      title="Собрать PEM для haproxy из certbot"
-      subtitle="Берёт уже выпущенный certbot-сертификат из /etc/letsencrypt/live и склеивает его с ключом в один файл — то, что требует haproxy `crt`. certbot renew не вызывается."
+      title={
+        <>
+          Собрать PEM для haproxy из certbot
+          <InfoHint>
+            Берёт уже выпущенный certbot-сертификат из /etc/letsencrypt/live и склеивает его с ключом
+            в один файл — то, что требует haproxy crt. certbot renew не вызывается.
+          </InfoHint>
+        </>
+      }
     >
       <Form layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
@@ -845,8 +877,15 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
 
   return (
     <Card
-      title="Выпустить самоподписанный сертификат"
-      subtitle="Для внутренних сервисов или как временная мера, пока не готов сертификат от доверенного центра — браузер всё равно покажет предупреждение"
+      title={
+        <>
+          Выпустить самоподписанный сертификат
+          <InfoHint>
+            Для внутренних сервисов или как временная мера, пока не готов сертификат от доверенного
+            центра — браузер всё равно покажет предупреждение
+          </InfoHint>
+        </>
+      }
     >
       <Form<SelfSignedFormValues>
         form={form}

@@ -1,5 +1,6 @@
 import { useRef, type ChangeEvent, type ReactNode } from 'react'
-import { Alert, Badge, Button, Card as AntCard, Modal as AntModal, Spin } from 'antd'
+import { Alert, Badge, Button, Card as AntCard, Modal as AntModal, Spin, Tooltip } from 'antd'
+import { InfoCircleOutlined } from '@ant-design/icons'
 import type { Severity } from '../types'
 
 export const SEVERITY_LABEL: Record<Severity, string> = {
@@ -44,6 +45,30 @@ export function StateBadge({ state }: { state: string }) {
           ? 'medium'
           : 'info'
   return <Badge color={TONE_COLOR_VAR[tone]} text={state} />
+}
+
+/**
+ * InfoHint is an "i" icon carrying explanatory text in a tooltip, for
+ * static "what is this section for" documentation that used to sit
+ * visibly next to a heading (a page's own descriptive paragraph, or a
+ * Card's `subtitle` when that subtitle is prose rather than data) — useful
+ * once and then just permanent clutter on every later visit. Deliberately
+ * NOT for anything the user needs to read at a glance without an extra
+ * hover/tap — a live count, a status word, a selected item's own details —
+ * those stay as plain visible text (Card's own `subtitle` prop still
+ * renders that way unchanged; callers pick per call site which one a given
+ * subtitle actually is).
+ */
+export function InfoHint({ children }: { children: ReactNode }) {
+  return (
+    <Tooltip title={children}>
+      <InfoCircleOutlined
+        className="muted"
+        style={{ marginLeft: '0.4rem', fontSize: '0.8em', cursor: 'help', verticalAlign: 'middle' }}
+        tabIndex={0}
+      />
+    </Tooltip>
+  )
 }
 
 export function Card({

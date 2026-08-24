@@ -3,7 +3,7 @@ import { Button } from 'antd'
 import { useLocation } from 'react-router-dom'
 import type { Me } from '../types'
 import { api, hostScope, readSelectedHost, useApi } from '../api'
-import { Banner, Card } from '../components/ui'
+import { Banner, Card, InfoHint } from '../components/ui'
 import { PtyToolbar } from '../components/PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
 import PackageInstallModal from '../components/PackageInstallModal'
@@ -200,14 +200,14 @@ export default function TerminalPage({ me }: { me: Me }) {
     <>
       <div className="page-head spread">
         <div>
-          <h1>Терминал</h1>
-          {status !== 'connected' && (
-            <p>
-              Интерактивный shell на этом хосте прямо в браузере. Требует явно включённой опции
-              хоста (<code className="mono">NKT_TERMINAL_ENABLED=true</code>) — если сервер её не
-              поднял, подключение завершится ошибкой ниже.
-            </p>
-          )}
+          <h1>
+            Терминал
+            <InfoHint>
+              Интерактивный shell на этом хосте прямо в браузере. Требует явно включённой опции хоста
+              (NKT_TERMINAL_ENABLED=true) — если сервер её не поднял, подключение завершится ошибкой
+              ниже.
+            </InfoHint>
+          </h1>
         </div>
         <div className="row">
           {isPopout ? (

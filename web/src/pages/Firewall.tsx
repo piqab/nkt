@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Badge, Button, Checkbox, Form, Input, Radio, Select, Table, Tag, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { FirewallManagerState, FirewallPolicy, FirewallRule, Listener, Me } from '../types'
-import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
 import { formatBytes, formatNumber } from '../components/charts'
 import PackageInstallModal from '../components/PackageInstallModal'
 
@@ -588,12 +588,14 @@ export default function Firewall({ me }: { me: Me }) {
     <>
       <div className="page-head">
         <div>
-          <h1>Firewall</h1>
-          <p>
-            Полный набор правил iptables, ufw и firewalld со счётчиками. Правила меняются только
-            через ufw/firewalld: прямая правка iptables из веб-интерфейса — верный способ потерять
-            доступ к серверу.
-          </p>
+          <h1>
+            Firewall
+            <InfoHint>
+              Полный набор правил iptables, ufw и firewalld со счётчиками. Правила меняются только
+              через ufw/firewalld: прямая правка iptables из веб-интерфейса — верный способ потерять
+              доступ к серверу.
+            </InfoHint>
+          </h1>
         </div>
       </div>
 
@@ -669,7 +671,14 @@ export default function Firewall({ me }: { me: Me }) {
           </Card>
 
           {canControl && ufwManager?.installed && (
-            <Card title="Добавить правило (ufw)" subtitle="Через ufw, с записью в журнал">
+            <Card
+              title={
+                <>
+                  Добавить правило (ufw)
+                  <InfoHint>Через ufw, с записью в журнал</InfoHint>
+                </>
+              }
+            >
               <Form<AddRuleValues>
                 form={addForm}
                 layout="vertical"
@@ -705,7 +714,14 @@ export default function Firewall({ me }: { me: Me }) {
           )}
 
           {canControl && firewalldManager?.installed && (
-            <Card title="Добавить правило (firewalld)" subtitle="Порт или сервис в зоне, с записью в журнал">
+            <Card
+              title={
+                <>
+                  Добавить правило (firewalld)
+                  <InfoHint>Порт или сервис в зоне, с записью в журнал</InfoHint>
+                </>
+              }
+            >
               <Form<AddFirewalldValues>
                 form={addFirewalldForm}
                 layout="vertical"
@@ -773,8 +789,15 @@ export default function Firewall({ me }: { me: Me }) {
 
       {canControl && numbered.data?.rules.length ? (
         <Card
-          title="Правила ufw"
-          subtitle="Номера сдвигаются после каждого изменения, поэтому удаление сверяется с тем текстом, который вы видите."
+          title={
+            <>
+              Правила ufw
+              <InfoHint>
+                Номера сдвигаются после каждого изменения, поэтому удаление сверяется с тем текстом,
+                который вы видите.
+              </InfoHint>
+            </>
+          }
         >
           <div className="table-wrap">
             <Table<NumberedRule>
@@ -789,8 +812,15 @@ export default function Firewall({ me }: { me: Me }) {
       ) : null}
 
       <Card
-        title="Все правила пакетного фильтра"
-        subtitle="Счётчики берутся из iptables-save -c: нулевой счётчик означает, что правило ни разу не сработало."
+        title={
+          <>
+            Все правила пакетного фильтра
+            <InfoHint>
+              Счётчики берутся из iptables-save -c: нулевой счётчик означает, что правило ни разу не
+              сработало.
+            </InfoHint>
+          </>
+        }
         actions={
           <>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
@@ -823,7 +853,14 @@ export default function Firewall({ me }: { me: Me }) {
         )}
       </Card>
 
-      <Card title="Открытые сокеты хоста" subtitle="Вывод ss: то, что действительно слушает порты">
+      <Card
+        title={
+          <>
+            Открытые сокеты хоста
+            <InfoHint>Вывод ss: то, что действительно слушает порты</InfoHint>
+          </>
+        }
+      >
         <div className="table-wrap">
           <Table<Listener>
             dataSource={fw.data?.listeners ?? []}

@@ -3,7 +3,7 @@ import { Button, Select, Table, type TableColumnsType } from 'antd'
 import { api, qs, tzOffsetMinutes, useApi } from '../api'
 import type { Bucket, HeatCell, Outage, TargetStatus } from '../types'
 import { Heatmap, LineChart, StatTile, formatMs, formatNumber } from '../components/charts'
-import { Banner, Card, ErrorNote, Loading, StateBadge, formatDateTime } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime } from '../components/ui'
 
 interface TargetsResponse {
   targets: TargetStatus[]
@@ -170,12 +170,14 @@ export default function Availability() {
     <>
       <div className="page-head spread">
         <div>
-          <h1>Расписание доступности</h1>
-          <p>
-            Каждый объявленный слушатель и каждый backend из пулов проверяется по расписанию
-            (интервал {targets.data?.interval ?? '—'}). Ниже — когда ресурсы реально были доступны,
-            а не только их текущее состояние.
-          </p>
+          <h1>
+            Расписание доступности
+            <InfoHint>
+              Каждый объявленный слушатель и каждый backend из пулов проверяется по расписанию
+              (интервал {targets.data?.interval ?? '—'}). Ниже — когда ресурсы реально были доступны,
+              а не только их текущее состояние.
+            </InfoHint>
+          </h1>
         </div>
         <label>
           Период
@@ -204,11 +206,16 @@ export default function Availability() {
 
       <Card
         title={
-          selectedTarget
-            ? `Недоступность по часам недели — ${selectedTarget.label}`
-            : 'Недоступность по часам недели — все ресурсы'
+          <>
+            {selectedTarget
+              ? `Недоступность по часам недели — ${selectedTarget.label}`
+              : 'Недоступность по часам недели — все ресурсы'}
+            <InfoHint>
+              Каждая клетка — час недели. Чем темнее, тем больше проверок в этот час завершились
+              ошибкой.
+            </InfoHint>
+          </>
         }
-        subtitle="Каждая клетка — час недели. Чем темнее, тем больше проверок в этот час завершились ошибкой."
         actions={
           selected ? (
             <Button type="link" onClick={() => setSelected(null)}>
@@ -279,8 +286,12 @@ export default function Availability() {
       )}
 
       <Card
-        title="Ресурсы"
-        subtitle="Щёлкните по строке, чтобы посмотреть историю конкретного ресурса."
+        title={
+          <>
+            Ресурсы
+            <InfoHint>Щёлкните по строке, чтобы посмотреть историю конкретного ресурса.</InfoHint>
+          </>
+        }
       >
         <div className="table-wrap">
           <Table<TargetStatus>
@@ -297,7 +308,14 @@ export default function Availability() {
         </div>
       </Card>
 
-      <Card title="Простои" subtitle={`Непрерывные серии неудачных проверок за выбранный период`}>
+      <Card
+        title={
+          <>
+            Простои
+            <InfoHint>Непрерывные серии неудачных проверок за выбранный период</InfoHint>
+          </>
+        }
+      >
         {outages.data?.outages.length ? (
           <div className="table-wrap">
             <Table<Outage>

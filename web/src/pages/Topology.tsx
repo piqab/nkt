@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Checkbox } from 'antd'
 import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
-import { Card, ErrorNote, Loading, SeverityBadge } from '../components/ui'
+import { Card, ErrorNote, InfoHint, Loading, SeverityBadge } from '../components/ui'
 
 /**
  * The resource map is laid out in fixed columns by node kind rather than by a
@@ -322,11 +322,13 @@ export default function TopologyPage() {
     <>
       <div className="page-head spread">
         <div>
-          <h1>Карта сетевых ресурсов</h1>
-          <p>
-            Красным — критичные проблемы, жёлтым — предупреждения. Наведите на узел или щёлкните
-            его, чтобы увидеть весь путь — от внешней сети до backend'а и обратно, — и подробности.
-          </p>
+          <h1>
+            Карта сетевых ресурсов
+            <InfoHint>
+              Красным — критичные проблемы, жёлтым — предупреждения. Наведите на узел или щёлкните
+              его, чтобы увидеть весь путь — от внешней сети до backend'а и обратно, — и подробности.
+            </InfoHint>
+          </h1>
         </div>
 
         {/* Fixed height and always rendered, whether or not something is

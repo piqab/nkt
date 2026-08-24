@@ -3,7 +3,7 @@ import { Select } from 'antd'
 import { qs, tzOffsetMinutes, useApi } from '../api'
 import type { HeatCell, MetricPoint, SubjectTotal } from '../types'
 import { BarChart, Heatmap, LineChart, formatBytes, formatNumber } from '../components/charts'
-import { Banner, Card, ErrorNote, Loading } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 
 /**
  * Usage series the backend collects. Each entry fixes the unit and the
@@ -142,12 +142,14 @@ export default function Usage() {
     <>
       <div className="page-head spread">
         <div>
-          <h1>Использование сетевых ресурсов</h1>
-          <p>
-            Счётчики firewall, статистика контейнеров и разбор access-логов nginx и haproxy.
-            Логи разбираются по времени записи, поэтому график показывает, когда нагрузка была
-            на самом деле, а не когда её собрали.
-          </p>
+          <h1>
+            Использование сетевых ресурсов
+            <InfoHint>
+              Счётчики firewall, статистика контейнеров и разбор access-логов nginx и haproxy. Логи
+              разбираются по времени записи, поэтому график показывает, когда нагрузка была на самом
+              деле, а не когда её собрали.
+            </InfoHint>
+          </h1>
         </div>
         <div className="row">
           <label>
@@ -216,8 +218,12 @@ export default function Usage() {
         </Card>
 
         <Card
-          title="Расписание использования"
-          subtitle="Средняя нагрузка по часам недели: видно рабочие часы, ночные окна и выходные."
+          title={
+            <>
+              Расписание использования
+              <InfoHint>Средняя нагрузка по часам недели: видно рабочие часы, ночные окна и выходные.</InfoHint>
+            </>
+          }
         >
           {heat.loading && !heat.data ? (
             <Loading what="расписание" />

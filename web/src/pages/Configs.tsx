@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button, Checkbox, Input, Segmented, Table, type InputRef, type TableColumnsType } from 'antd'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
-import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, formatDateTime } from '../components/ui'
+import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDateTime } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import BlockTree from '../components/BlockTree'
 
@@ -152,14 +152,15 @@ export default function Configs({ me }: { me: Me }) {
     <>
       <div className="page-head">
         <div>
-          <h1>Конфигурации</h1>
-          <p>
-            Файлы, найденные при разборе конфигурации. Перед записью содержимое проверяется самим
-            сервисом (<code className="mono">nginx -t</code>, <code className="mono">haproxy -c</code>,{' '}
-            <code className="mono">caddy validate</code>, <code className="mono">docker compose config</code>);
-            если проверка не прошла, файл
-            автоматически возвращается в прежнее состояние. Каждая правка сохраняется в истории.
-          </p>
+          <h1>
+            Конфигурации
+            <InfoHint>
+              Файлы, найденные при разборе конфигурации. Перед записью содержимое проверяется самим
+              сервисом (nginx -t, haproxy -c, caddy validate, docker compose config); если проверка не
+              прошла, файл автоматически возвращается в прежнее состояние. Каждая правка сохраняется в
+              истории.
+            </InfoHint>
+          </h1>
         </div>
       </div>
 
@@ -349,7 +350,14 @@ export default function Configs({ me }: { me: Me }) {
                 )}
               </Card>
 
-              <Card title="История версий" subtitle="Первая запись создаётся автоматически перед первой правкой">
+              <Card
+                title={
+                  <>
+                    История версий
+                    <InfoHint>Первая запись создаётся автоматически перед первой правкой</InfoHint>
+                  </>
+                }
+              >
                 {versions.data?.versions.length ? (
                   <div className="table-wrap">
                     <Table<ConfigVersion>

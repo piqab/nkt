@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Form, Input, Select, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Account, Me } from '../types'
-import { Banner, Card, ErrorNote, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
 
 /** Matches the minimum the API enforces, counted in characters. */
 const MIN_LENGTH = 10
@@ -126,12 +126,14 @@ export default function Users({ me }: { me: Me }) {
     <>
       <div className="page-head">
         <div>
-          <h1>Учётные записи</h1>
-          <p>
-            Кто может входить в веб-интерфейс и с какой ролью. Пароли хранятся необратимо
-            (argon2id) — сбросить забытый пароль можно только выпуском нового, командой{' '}
-            <code className="mono">sudo nkt passwd &lt;логин&gt;</code> на самом хосте.
-          </p>
+          <h1>
+            Учётные записи
+            <InfoHint>
+              Кто может входить в веб-интерфейс и с какой ролью. Пароли хранятся необратимо
+              (argon2id) — сбросить забытый пароль можно только выпуском нового, командой
+              sudo nkt passwd &lt;логин&gt; на самом хосте.
+            </InfoHint>
+          </h1>
         </div>
       </div>
 
@@ -180,7 +182,14 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
   }
 
   return (
-    <Card title="Новая учётная запись" subtitle="Роль viewer — только просмотр, admin — полное управление хостом">
+    <Card
+      title={
+        <>
+          Новая учётная запись
+          <InfoHint>Роль viewer — только просмотр, admin — полное управление хостом</InfoHint>
+        </>
+      }
+    >
       <Form<CreateUserValues> form={form} layout="vertical" onFinish={submit} initialValues={{ role: 'viewer' }}>
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">

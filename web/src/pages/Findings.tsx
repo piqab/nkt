@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { Input, Select, Tag } from 'antd'
 import { qs, useApi } from '../api'
 import type { Finding, Severity } from '../types'
-import { Card, ErrorNote, Loading, SeverityBadge, SEVERITIES, SEVERITY_LABEL } from '../components/ui'
+import { Card, ErrorNote, InfoHint, Loading, SeverityBadge, SEVERITIES, SEVERITY_LABEL } from '../components/ui'
 import { formatNumber } from '../components/charts'
 
 interface FindingsResponse {
@@ -40,11 +40,13 @@ export default function Findings() {
     <>
       <div className="page-head">
         <div>
-          <h1>Проблемы конфигурации</h1>
-          <p>
-            Результат сопоставления конфигов nginx, haproxy и docker с реальными слушателями хоста
-            и правилами firewall. Каждая запись содержит объяснение и конкретное действие.
-          </p>
+          <h1>
+            Проблемы конфигурации
+            <InfoHint>
+              Результат сопоставления конфигов nginx, haproxy и docker с реальными слушателями хоста
+              и правилами firewall. Каждая запись содержит объяснение и конкретное действие.
+            </InfoHint>
+          </h1>
         </div>
       </div>
 
