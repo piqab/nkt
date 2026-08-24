@@ -27,6 +27,22 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shell := loginShell()
+	argv := []string{shell, "-l"}
+	auditTarget := shell
+	// ?tmux=1 (the "Открыть в tmux" button) runs a tmux session instead of
+	// a bare login shell — -A attaches to tmuxSessionName if it already
+	// exists (e.g. this same operator reconnecting after a dropped
+	// connection, or a session left running on purpose) and creates it
+	// otherwise, matching the "resilient session" behaviour package-update
+	// sessions already have via runUpdateSession's own session tracking.
+	// Left for tmux itself to fail with "command not found" if it isn't
+	// installed — the frontend already checks /system/tmux-status and
+	// offers to install it first, so reaching here with tmux missing would
+	// mean that check was bypassed, not a case worth a nicer message for.
+	if r.URL.Query().Get("tmux") == "1" {
+		argv = []string{"tmux", "new-session", "-A", "-s", tmuxSessionName}
+		auditTarget = "tmux"
+	}
 	env := map[string]string{"TERM": "xterm-256color"}
 
 	// TerminalUser (NKT_TERMINAL_USER, written by the hub at install time —
@@ -36,18 +52,25 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	// standalone nkt with no hub, where the distinction does not apply —
 	// and the shell keeps running as root exactly as it always has.
 	if s.cfg.TerminalUser != "" {
-		cmd, err := unrestrictedCommandAsUser(env, s.cfg.TerminalUser, shell, "-l")
+		cmd, err := unrestrictedCommandAsUser(env, s.cfg.TerminalUser, argv...)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		s.runPTYSession(w, r, cmd, "terminal", shell, s.cfg.TerminalIdleTimeout)
+		s.runPTYSession(w, r, cmd, "terminal", auditTarget, s.cfg.TerminalIdleTimeout)
 		return
 	}
 
-	cmd := unrestrictedCommand(env, shell, "-l")
-	s.runPTYSession(w, r, cmd, "terminal", shell, s.cfg.TerminalIdleTimeout)
+	cmd := unrestrictedCommand(env, argv...)
+	s.runPTYSession(w, r, cmd, "terminal", auditTarget, s.cfg.TerminalIdleTimeout)
 }
+
+// tmuxSessionName is the fixed tmux session name handleTerminalWS attaches
+// to/creates in tmux mode — one shared session per OS account (root, or
+// TerminalUser's ssh_user) is what makes reattaching after a dropped
+// connection actually useful, rather than every "Открыть в tmux" click
+// starting a brand new, unnamed session nobody could get back to.
+const tmuxSessionName = "nkt"
 
 // loginShell picks the shell handleTerminalWS runs: bash if it exists —
 // the predictable, consistent choice regardless of what $SHELL happens to

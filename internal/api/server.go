@@ -116,6 +116,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/firewall/ufw-install/ws", s.handleUFWInstallWS)
 			r.Get("/firewall/firewalld-install/ws", s.handleFirewalldInstallWS)
 			r.Get("/system/dbus-install/ws", s.handleDbusInstallWS)
+			r.Get("/system/tmux-install/ws", s.handleTmuxInstallWS)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -150,6 +151,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/firewall/firewalld-install/status", s.handleFirewalldInstallStatus)
 			r.Get("/system/dbus-status", s.handleDbusStatus)
 			r.Get("/system/dbus-install/status", s.handleDbusInstallStatus)
+			r.Get("/system/tmux-status", s.handleTmuxStatus)
+			r.Get("/system/tmux-install/status", s.handleTmuxInstallStatus)
 			r.Get("/certificates", s.handleCertificates)
 
 			r.Get("/configs", s.handleConfigList)

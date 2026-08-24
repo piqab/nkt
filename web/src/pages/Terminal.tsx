@@ -25,9 +25,28 @@ export default function TerminalPage({ me }: { me: Me }) {
   const canUse = me.is_admin && me.allow_mutations
   const location = useLocation()
   const isPopout = location.pathname === '/terminal/popout'
-  const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(
-    wsURL('/terminal/ws'),
-  )
+
+  // tmuxMode picks which WebSocket endpoint the next start() connects to
+  // (plain login shell vs. `tmux new-session -A`, see handleTerminalWS) —
+  // it has to be state, not a query-time flag, because usePty's start()
+  // closes over wsUrl at the moment it's (re)created, and this component
+  // only ever keeps one usePty session alive at a time regardless of which
+  // mode opened it.
+  const [tmuxMode, setTmuxMode] = useState(false)
+  const [pendingStart, setPendingStart] = useState(false)
+  const wsUrl = wsURL(tmuxMode ? '/terminal/ws?tmux=1' : '/terminal/ws')
+  const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(wsUrl)
+
+  // Deferred one tick: setTmuxMode above only takes effect on the next
+  // render, which is also when usePty hands back a start() closing over the
+  // now-updated wsUrl — calling start() in the same event handler that just
+  // changed tmuxMode would still fire the *previous* mode's connection.
+  useEffect(() => {
+    if (!pendingStart) return
+    setPendingStart(false)
+    start()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingStart, wsUrl])
 
   // A distinct browser-taskbar-visible title per popout window is the whole
   // point of being able to open several at once (see openPopout below) —
@@ -76,11 +95,28 @@ export default function TerminalPage({ me }: { me: Me }) {
     setDbusInstallOutcome(fresh?.succeeded ? { ok: true } : { ok: false, exitCode: fresh?.exit_code })
   }
 
-  function handleStart() {
+  // Whether tmux is on this host's PATH — the "Открыть в tmux" button uses
+  // this to decide between connecting directly and offering to install it
+  // first (see handleTmuxButtonClick below).
+  const { data: tmuxStatus, reload: reloadTmuxStatus } = useApi<{ available: boolean }>('/system/tmux-status', 30_000)
+  const { data: tmuxInstallStatus, reload: reloadTmuxInstallStatus } = useApi<{
+    active: boolean
+    finished: boolean
+    succeeded: boolean
+  }>('/system/tmux-install/status', 5_000)
+  const [tmuxInstallOpen, setTmuxInstallOpen] = useState(false)
+  const [tmuxInstallOutcome, setTmuxInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
+
+  function handleStart(tmux: boolean) {
     if (
       !window.confirm(
-        'Открыть терминал на этом хосте? Это полноценный доступ к shell от имени пользователя, ' +
-          'под которым запущен nkt — обычно root. Действие записывается в журнал.',
+        tmux
+          ? 'Открыть терминал в tmux на этом хосте? Это полноценный доступ к shell от имени пользователя, ' +
+              'под которым запущен nkt (или ssh-пользователя хоста, если он задан). Сессия tmux переживёт ' +
+              'закрытие вкладки — переподключиться можно тем же способом. Действие записывается в журнал.'
+          : 'Открыть терминал на этом хосте? Это полноценный доступ к shell от имени пользователя, ' +
+              'под которым запущен nkt — обычно root, либо ssh-пользователь хоста, если он задан. ' +
+              'Действие записывается в журнал.',
       )
     ) {
       return
@@ -91,7 +127,41 @@ export default function TerminalPage({ me }: { me: Me }) {
     // the badge below reflects the state the terminal is about to run
     // under, not whatever it was up to half a minute ago.
     reloadDbusStatus()
-    start()
+    setTmuxMode(tmux)
+    setPendingStart(true)
+  }
+
+  // Direct connect when tmux is already there; otherwise offer to install
+  // it first (PackageInstallModal below) and auto-connect once that
+  // succeeds — see handleTmuxInstallFinished.
+  function handleTmuxButtonClick() {
+    if (tmuxStatus?.available) {
+      handleStart(true)
+      return
+    }
+    if (tmuxInstallStatus?.active) {
+      setTmuxInstallOutcome(null)
+      setTmuxInstallOpen(true)
+      return
+    }
+    if (window.confirm('tmux не установлен на этом хосте. Установить (apt-get install -y tmux) и открыть сессию?')) {
+      setTmuxInstallOutcome(null)
+      setTmuxInstallOpen(true)
+    }
+  }
+
+  async function handleTmuxInstallFinished() {
+    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>('/system/tmux-install/status').catch(
+      () => null,
+    )
+    reloadTmuxInstallStatus()
+    reloadTmuxStatus()
+    const ok = !!fresh?.succeeded
+    setTmuxInstallOutcome(ok ? { ok: true } : { ok: false, exitCode: fresh?.exit_code })
+    if (ok) {
+      setTmuxInstallOpen(false)
+      handleStart(true)
+    }
   }
 
   /**
@@ -152,9 +222,24 @@ export default function TerminalPage({ me }: { me: Me }) {
               закрыть терминал
             </Button>
           ) : (
-            <Button type="primary" loading={status === 'connecting'} disabled={!canUse} onClick={handleStart}>
-              {status === 'connecting' ? 'Подключаюсь…' : 'Открыть терминал'}
-            </Button>
+            <>
+              <Button
+                type="primary"
+                loading={status === 'connecting' && !tmuxMode}
+                disabled={!canUse || (status === 'connecting' && tmuxMode)}
+                onClick={() => handleStart(false)}
+              >
+                {status === 'connecting' && !tmuxMode ? 'Подключаюсь…' : 'Открыть терминал'}
+              </Button>
+              <Button
+                loading={status === 'connecting' && tmuxMode}
+                disabled={!canUse || (status === 'connecting' && !tmuxMode)}
+                onClick={handleTmuxButtonClick}
+                title="Сессия tmux переживает закрытие вкладки — переподключение продолжает её же"
+              >
+                {status === 'connecting' && tmuxMode ? 'Подключаюсь…' : 'Открыть в tmux'}
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -213,46 +298,52 @@ export default function TerminalPage({ me }: { me: Me }) {
           <Banner kind="success">D-Bus на хосте доступен — песочница не ограничивает терминал и обновления.</Banner>
         ))}
 
-      <Card>
-        {status === 'connected' && (
-          <PtyToolbar onCopy={copySelection} onClear={clear} onFontSize={changeFontSize} onSearch={search} />
-        )}
-        {/* The xterm container stays mounted and laid out (never
-            display:none) from the very first render — xterm.js measures
-            character-cell metrics as part of opening, and doing that on a
-            hidden element bakes in a broken measurement no later resize
-            fixes (see usePty's own comment on this). The "not started yet"
-            state is an overlay on top of it instead of a replacement for
-            it, so the terminal is always sitting on a real, visible,
-            correctly-sized element by the time start() actually opens it. */}
-        <div style={{ position: 'relative' }}>
-          <div
-            ref={containerRef}
-            style={{
-              height: '65vh',
-              background: '#141414',
-              borderRadius: 'var(--radius-sm)',
-              padding: '0.5rem',
-            }}
-          />
-          {status === 'idle' && (
-            <div
-              className="chart-empty"
-              style={{
-                position: 'absolute',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: '#141414',
-                borderRadius: 'var(--radius-sm)',
-              }}
-            >
-              Терминал ещё не открыт.
+      <div className="row" style={{ alignItems: 'flex-start', gap: '1rem' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <Card>
+            {status === 'connected' && (
+              <PtyToolbar onCopy={copySelection} onClear={clear} onFontSize={changeFontSize} onSearch={search} />
+            )}
+            {/* The xterm container stays mounted and laid out (never
+                display:none) from the very first render — xterm.js measures
+                character-cell metrics as part of opening, and doing that on a
+                hidden element bakes in a broken measurement no later resize
+                fixes (see usePty's own comment on this). The "not started yet"
+                state is an overlay on top of it instead of a replacement for
+                it, so the terminal is always sitting on a real, visible,
+                correctly-sized element by the time start() actually opens it. */}
+            <div style={{ position: 'relative' }}>
+              <div
+                ref={containerRef}
+                style={{
+                  height: '65vh',
+                  background: '#141414',
+                  borderRadius: 'var(--radius-sm)',
+                  padding: '0.5rem',
+                }}
+              />
+              {status === 'idle' && (
+                <div
+                  className="chart-empty"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: '#141414',
+                    borderRadius: 'var(--radius-sm)',
+                  }}
+                >
+                  Терминал ещё не открыт.
+                </div>
+              )}
             </div>
-          )}
+          </Card>
         </div>
-      </Card>
+
+        {tmuxMode && <TmuxCheatSheet />}
+      </div>
 
       {dbusInstallOpen && (
         <PackageInstallModal
@@ -263,6 +354,59 @@ export default function TerminalPage({ me }: { me: Me }) {
           outcome={dbusInstallOutcome}
         />
       )}
+
+      {tmuxInstallOpen && (
+        <PackageInstallModal
+          packageName="tmux"
+          wsPath="/system/tmux-install/ws"
+          onClose={() => setTmuxInstallOpen(false)}
+          onFinished={handleTmuxInstallFinished}
+          outcome={tmuxInstallOutcome}
+        />
+      )}
     </>
+  )
+}
+
+// TmuxCheatSheet is a static reference of the tmux control sequences most
+// relevant to a session opened through this page — shown next to the
+// terminal only in tmux mode, since none of it applies to a plain login
+// shell. Ctrl+b is tmux's own default prefix (not something nkt configures)
+// — every one of these starts with pressing and releasing it first.
+function TmuxCheatSheet() {
+  const rows: [string, string][] = [
+    ['Ctrl+b d', 'отключиться (сессия продолжает работать)'],
+    ['Ctrl+b c', 'новое окно'],
+    ['Ctrl+b n / p', 'следующее / предыдущее окно'],
+    ['Ctrl+b 0…9', 'переключиться на окно N'],
+    ['Ctrl+b %', 'разделить панель по вертикали'],
+    ['Ctrl+b "', 'разделить панель по горизонтали'],
+    ['Ctrl+b ←↑↓→', 'переключиться на соседнюю панель'],
+    ['Ctrl+b [', 'режим прокрутки/копирования (q — выйти)'],
+    ['Ctrl+b x', 'закрыть текущую панель'],
+  ]
+  return (
+    <div style={{ width: 280, flexShrink: 0 }}>
+      <Card title="Управление tmux">
+        <table className="small" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tbody>
+            {rows.map(([keys, desc]) => (
+              <tr key={keys}>
+                <td className="mono" style={{ padding: '0.15rem 0.5rem 0.15rem 0', whiteSpace: 'nowrap', verticalAlign: 'top' }}>
+                  {keys}
+                </td>
+                <td className="muted" style={{ padding: '0.15rem 0' }}>
+                  {desc}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="small muted" style={{ marginTop: '0.75rem' }}>
+          Сессия называется <code className="mono">nkt</code> — «Открыть в tmux» переподключается к
+          ней же, если она ещё жива на хосте.
+        </p>
+      </Card>
+    </div>
   )
 }
