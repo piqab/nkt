@@ -412,31 +412,43 @@ const TMUX_HINTS: { title: string; rows: [string, string][] }[] = [
 /**
  * TmuxHints — a static reference for tmux's own default key sequences,
  * shown next to the terminal only in tmux mode (see TMUX_HINTS above for
- * why this is documentation, not live controls). Styled as disabled
- * buttons rather than a plain table specifically so the key combination
- * reads as "this is a button you'd press" at a glance, without actually
- * being clickable — antd's own disabled styling already signals "not
- * interactive" clearly, which is the point.
+ * why this is documentation, not live controls). The key combination is a
+ * plain chip (background + border, ordinary text colour) rather than an
+ * antd disabled Button — disabled buttons render their label in antd's own
+ * low-contrast disabled grey, which made the keys themselves hard to read;
+ * a chip keeps the same "this is a key, not prose" visual grouping without
+ * that contrast loss.
  */
 function TmuxHints() {
   return (
-    <div style={{ width: 280, flexShrink: 0 }}>
+    <div style={{ width: 240, flexShrink: 0 }}>
       <Card title="Управление tmux">
         <p className="small muted" style={{ marginTop: 0 }}>
           Сессия называется <code className="mono">nkt</code> — «Открыть в tmux» переподключается к
           ней же, если она ещё жива на хосте.
         </p>
         {TMUX_HINTS.map((group) => (
-          <div key={group.title} style={{ marginTop: '0.75rem' }}>
-            <div className="small muted" style={{ marginBottom: '0.35rem' }}>
+          <div key={group.title} style={{ marginTop: '0.5rem' }}>
+            <div className="small muted" style={{ marginBottom: '0.2rem' }}>
               {group.title}
             </div>
-            <div className="col" style={{ gap: '0.35rem' }}>
+            <div className="col" style={{ gap: '0.15rem' }}>
               {group.rows.map(([keys, desc]) => (
-                <div key={keys} className="row" style={{ flexWrap: 'nowrap', gap: '0.5rem' }}>
-                  <Button size="small" disabled style={{ flexShrink: 0, minWidth: '6.5rem' }}>
+                <div key={keys} className="row" style={{ flexWrap: 'nowrap', gap: '0.4rem', alignItems: 'baseline' }}>
+                  <span
+                    className="mono"
+                    style={{
+                      flexShrink: 0,
+                      fontSize: '0.72rem',
+                      padding: '0.05rem 0.3rem',
+                      background: 'var(--surface-1)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
                     {keys}
-                  </Button>
+                  </span>
                   <span className="small muted">{desc}</span>
                 </div>
               ))}
