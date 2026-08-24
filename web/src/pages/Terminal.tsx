@@ -342,7 +342,7 @@ export default function TerminalPage({ me }: { me: Me }) {
           </Card>
         </div>
 
-        {tmuxMode && <TmuxPanel />}
+        {tmuxMode && <TmuxHints />}
       </div>
 
       {dbusInstallOpen && (
@@ -368,121 +368,81 @@ export default function TerminalPage({ me }: { me: Me }) {
   )
 }
 
-interface TmuxWindow {
-  index: number
-  name: string
-  active: boolean
-  panes: number
-}
+// TMUX_HINTS groups tmux's own default key sequences (Ctrl+b is the prefix
+// — not something nkt configures) by what they do. Purely a reference: the
+// "buttons" below are disabled (see TmuxHints) — an earlier version of this
+// panel actually ran these as live commands against the session by clicking
+// them, but that path proved unreliable on a systemd-sandboxed hub host
+// (see handleTerminalWS's own doc comment on why tmux specifically, unlike
+// a plain shell, is at risk there) and was removed; this is deliberately
+// just documentation now, styled to stay visually consistent with the rest
+// of the page rather than as a plain text block.
+const TMUX_HINTS: { title: string; rows: [string, string][] }[] = [
+  {
+    title: 'Окна',
+    rows: [
+      ['Ctrl+b c', 'новое окно'],
+      ['Ctrl+b ,', 'переименовать текущее окно'],
+      ['Ctrl+b n / p', 'следующее / предыдущее окно'],
+      ['Ctrl+b 0…9', 'переключиться на окно N'],
+      ['Ctrl+b w', 'список окон (интерактивный)'],
+      ['Ctrl+b &', 'закрыть текущее окно'],
+    ],
+  },
+  {
+    title: 'Панели',
+    rows: [
+      ['Ctrl+b %', 'разделить панель по вертикали'],
+      ['Ctrl+b "', 'разделить панель по горизонтали'],
+      ['Ctrl+b ←↑↓→', 'переключиться на соседнюю панель'],
+      ['Ctrl+b z', 'развернуть/свернуть панель на весь экран'],
+      ['Ctrl+b x', 'закрыть текущую панель'],
+    ],
+  },
+  {
+    title: 'Сессия',
+    rows: [
+      ['Ctrl+b d', 'отключиться (сессия продолжает работать)'],
+      ['Ctrl+b [', 'режим прокрутки/копирования (q — выйти)'],
+      ['Ctrl+b ]', 'вставить скопированное'],
+    ],
+  },
+]
 
 /**
- * TmuxPanel is the clickable counterpart to typing tmux's own key sequences
- * (Ctrl+b n/c/x/%/") — a live window list (click a window to switch to it,
- * ✕ to close it) plus buttons for the window-level actions that make sense
- * as discrete, targetable controls (new window, split). Backed by
- * GET/POST /terminal/tmux/... (internal/api/handlers_tmux_control.go),
- * which run against the exact same session (tmuxSessionName="nkt") the
- * terminal's own tmux mode attaches to — a click here takes effect in the
- * live terminal to the left immediately, the same way it would if someone
- * had typed the key sequence into it directly. Polls every 2s so the list
- * follows windows opened/closed from the keyboard too, not just from here.
- *
- * Pane-level control (splitting targets tmux's own "current pane", closing
- * a specific one, arrow-key pane navigation) stays keyboard-only below —
- * turning that into buttons needs a pane list with a layout, not just a
- * flat list of names, and the keyboard shortcuts already cover it well.
+ * TmuxHints — a static reference for tmux's own default key sequences,
+ * shown next to the terminal only in tmux mode (see TMUX_HINTS above for
+ * why this is documentation, not live controls). Styled as disabled
+ * buttons rather than a plain table specifically so the key combination
+ * reads as "this is a button you'd press" at a glance, without actually
+ * being clickable — antd's own disabled styling already signals "not
+ * interactive" clearly, which is the point.
  */
-function TmuxPanel() {
-  const { data, reload } = useApi<{ running: boolean; windows: TmuxWindow[] }>('/terminal/tmux/windows', 2_000)
-  const [error, setError] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-
-  async function act(action: string, index?: number) {
-    setBusy(true)
-    setError(null)
-    try {
-      await api('/terminal/tmux/action', { method: 'POST', body: { action, index: index ?? 0 } })
-      reload()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const rows: [string, string][] = [
-    ['Ctrl+b d', 'отключиться (сессия продолжает работать)'],
-    ['Ctrl+b n / p', 'следующее / предыдущее окно'],
-    ['Ctrl+b ←↑↓→', 'переключиться на соседнюю панель'],
-    ['Ctrl+b [', 'режим прокрутки/копирования (q — выйти)'],
-  ]
-
+function TmuxHints() {
   return (
     <div style={{ width: 280, flexShrink: 0 }}>
-      <Card title="Окна tmux">
-        {error && (
-          <Banner kind="error">
-            {error}
-          </Banner>
-        )}
-        {!data || !data.running ? (
-          <p className="small muted">
-            Сессия <code className="mono">nkt</code> ещё не запущена — откроется, как только
-            терминал слева подключится.
-          </p>
-        ) : (
-          <div className="col">
-            {data.windows.map((win) => (
-              <div key={win.index} className="row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
-                <Button
-                  size="small"
-                  type={win.active ? 'primary' : 'default'}
-                  disabled={busy}
-                  onClick={() => act('select-window', win.index)}
-                  style={{ flex: 1, textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis' }}
-                >
-                  {win.index}: {win.name}
-                  {win.panes > 1 ? ` (${win.panes})` : ''}
-                </Button>
-                <Button
-                  size="small"
-                  danger
-                  disabled={busy}
-                  onClick={() => act('kill-window', win.index)}
-                  title="Закрыть окно"
-                >
-                  ✕
-                </Button>
-              </div>
-            ))}
+      <Card title="Управление tmux">
+        <p className="small muted" style={{ marginTop: 0 }}>
+          Сессия называется <code className="mono">nkt</code> — «Открыть в tmux» переподключается к
+          ней же, если она ещё жива на хосте.
+        </p>
+        {TMUX_HINTS.map((group) => (
+          <div key={group.title} style={{ marginTop: '0.75rem' }}>
+            <div className="small muted" style={{ marginBottom: '0.35rem' }}>
+              {group.title}
+            </div>
+            <div className="col" style={{ gap: '0.35rem' }}>
+              {group.rows.map(([keys, desc]) => (
+                <div key={keys} className="row" style={{ flexWrap: 'nowrap', gap: '0.5rem' }}>
+                  <Button size="small" disabled style={{ flexShrink: 0, minWidth: '6.5rem' }}>
+                    {keys}
+                  </Button>
+                  <span className="small muted">{desc}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        )}
-        <div className="row" style={{ marginTop: '0.75rem' }}>
-          <Button size="small" disabled={busy} onClick={() => act('new-window')}>
-            + окно
-          </Button>
-          <Button size="small" disabled={busy} onClick={() => act('split-h')} title="Разделить текущее окно по вертикали">
-            разделить ↔
-          </Button>
-          <Button size="small" disabled={busy} onClick={() => act('split-v')} title="Разделить текущее окно по горизонтали">
-            разделить ↕
-          </Button>
-        </div>
-
-        <table className="small" style={{ width: '100%', borderCollapse: 'collapse', marginTop: '1rem' }}>
-          <tbody>
-            {rows.map(([keys, desc]) => (
-              <tr key={keys}>
-                <td className="mono" style={{ padding: '0.15rem 0.5rem 0.15rem 0', whiteSpace: 'nowrap', verticalAlign: 'top' }}>
-                  {keys}
-                </td>
-                <td className="muted" style={{ padding: '0.15rem 0' }}>
-                  {desc}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        ))}
       </Card>
     </div>
   )
