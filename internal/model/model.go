@@ -724,18 +724,30 @@ type VulnFinding struct {
 	FixedVersion string `json:"fixed_version,omitempty"`
 	Severity     string `json:"severity"` // CRITICAL/HIGH/MEDIUM/LOW/UNKNOWN, trivy's own scale
 	Title        string `json:"title,omitempty"`
-	// New is set when this (ID, Package) pair was not present in the
-	// previous scan this host kept — see VulnScan.Compared for when that
-	// comparison could even happen at all (never on the very first scan).
+	// New is set when this (ID, Package, Target) triple was not present in
+	// the previous scan this host kept — see VulnScan.Compared for when
+	// that comparison could even happen at all (never on the very first
+	// scan).
 	New bool `json:"new,omitempty"`
+	// Target is empty for the host's own OS packages, or a container image
+	// reference (e.g. "nginx:1.25") for a vulnerability found inside a
+	// running Docker/Podman container's image — see internal/vuln.ScanImage.
+	// Part of what makes a finding "the same" across scans (see findingKey
+	// in handlers_vulnerabilities.go): the identical CVE against the same
+	// package name can legitimately exist in both the host's own packages
+	// and inside some container's image at once, and those are different
+	// things to fix.
+	Target string `json:"target,omitempty"`
 }
 
 // VulnScan is the result of one vulnerability scan, plus enough metadata
 // for the UI to show how current it is — the vulnerability DB is refreshed
 // on its own schedule (see internal/vuln), independent of when this host
-// was last scanned against it. Available mirrors PackageManifest.Available
-// (Debian/Ubuntu only, matching PackageUpdates) — distinct from an empty
-// Findings, which means "scanned and clean," not "not supported here."
+// was last scanned against it. Available is true when there was anything
+// at all to scan — either the host itself is dpkg-based (matching
+// PackageManifest.Available) or at least one Docker/Podman image was
+// found running — distinct from an empty Findings, which means "scanned
+// and clean," not "nothing here to scan."
 //
 // NewCount/FixedCount/Compared describe this scan against the one
 // immediately before it (a rolling one-step diff, not full history — see
@@ -750,8 +762,14 @@ type VulnScan struct {
 	Compared   bool          `json:"compared"`
 	NewCount   int           `json:"new_count,omitempty"`
 	FixedCount int           `json:"fixed_count,omitempty"`
-	DBUpdated  time.Time     `json:"db_updated"`
-	ScannedAt  time.Time     `json:"scanned_at"`
+	// Warnings holds one entry per image that could not be scanned (e.g.
+	// removed between the container list being read and the scan actually
+	// reaching it) — noted rather than failing the whole scan over one
+	// image, the same "degrade, don't abort" shape SourceStatus.Warnings
+	// uses elsewhere.
+	Warnings  []string  `json:"warnings,omitempty"`
+	DBUpdated time.Time `json:"db_updated"`
+	ScannedAt time.Time `json:"scanned_at"`
 }
 
 // HostInfo mirrors collect.HostInfo without importing that package.

@@ -90,14 +90,27 @@ export default function Vulnerabilities({ me }: { me: Me }) {
     reload()
   }
 
+  const [target, setTarget] = useState('')
+  function changeTarget(v: string) {
+    setTarget(v)
+    setPage(1)
+  }
+
   const findings = status?.scan?.findings ?? []
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
     return findings
       .filter((f) => !severity || f.severity === severity)
-      .filter((f) => !needle || f.id.toLowerCase().includes(needle) || f.package.toLowerCase().includes(needle))
+      .filter((f) => !target || (f.target ?? '') === target)
+      .filter(
+        (f) =>
+          !needle ||
+          f.id.toLowerCase().includes(needle) ||
+          f.package.toLowerCase().includes(needle) ||
+          (f.target ?? '').toLowerCase().includes(needle),
+      )
       .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
-  }, [findings, severity, query])
+  }, [findings, severity, target, query])
 
   const counts = useMemo(() => {
     const c: Partial<Record<VulnFinding['severity'], number>> = {}
@@ -105,8 +118,25 @@ export default function Vulnerabilities({ me }: { me: Me }) {
     return c
   }, [findings])
 
+  // Every distinct scan target present in this scan — "" stands for the
+  // host's own OS packages (see VulnFinding.target), everything else is a
+  // container image reference. Only shown as a filter when there's more
+  // than one target to actually choose between.
+  const targets = useMemo(() => {
+    const set = new Set<string>()
+    for (const f of findings) set.add(f.target ?? '')
+    return [...set].sort()
+  }, [findings])
+
   const columns: TableColumnsType<VulnFinding> = [
     { title: 'Серьёзность', dataIndex: 'severity', width: 140, render: (s: VulnFinding['severity']) => <SeverityBadge severity={SEVERITY_MAP[s]} /> },
+    {
+      title: 'Источник',
+      dataIndex: 'target',
+      width: 160,
+      render: (t: string | undefined) =>
+        t ? <span className="mono">{t}</span> : <span className="small muted">ОС хоста</span>,
+    },
     {
       title: 'CVE',
       dataIndex: 'id',
@@ -141,9 +171,9 @@ export default function Vulnerabilities({ me }: { me: Me }) {
           <h1>
             Уязвимости
             <InfoHint>
-              Известные CVE для установленных пакетов ОС — сверка со свежей базой trivy. Пока
-              поддерживаются только Debian/Ubuntu (dpkg); контейнерные образы (Docker/Podman/LXD) —
-              отдельным этапом позже.
+              Известные CVE для установленных пакетов ОС (Debian/Ubuntu) и для образов уже
+              запущенных Docker/Podman-контейнеров — сверка со свежей базой trivy. LXD пока не
+              поддерживается — там нет OCI-образов в привычном смысле, нужен отдельный механизм.
             </InfoHint>
           </h1>
         </div>
@@ -200,6 +230,13 @@ export default function Vulnerabilities({ me }: { me: Me }) {
             </Banner>
           )}
 
+          {status.scan.warnings && status.scan.warnings.length > 0 && (
+            <Banner kind="warn">
+              Не удалось просканировать {status.scan.warnings.length === 1 ? 'образ' : 'образы'}:{' '}
+              {status.scan.warnings.join('; ')}
+            </Banner>
+          )}
+
           <Card>
             <div className="filters">
               <label>
@@ -214,9 +251,27 @@ export default function Vulnerabilities({ me }: { me: Me }) {
                   ]}
                 />
               </label>
+              {targets.length > 1 && (
+                <label>
+                  Источник
+                  <Select
+                    value={target}
+                    onChange={changeTarget}
+                    style={{ minWidth: '13rem' }}
+                    options={[
+                      { value: '', label: 'все' },
+                      ...targets.map((t) => ({ value: t, label: t || 'ОС хоста' })),
+                    ]}
+                  />
+                </label>
+              )}
               <label style={{ flex: 1, minWidth: '14rem' }}>
                 Поиск
-                <Input value={query} onChange={(e) => changeQuery(e.target.value)} placeholder="CVE или имя пакета…" />
+                <Input
+                  value={query}
+                  onChange={(e) => changeQuery(e.target.value)}
+                  placeholder="CVE, пакет или образ…"
+                />
               </label>
               <span className="small muted" style={{ paddingBottom: '0.4rem' }}>
                 показано {visible.length} из {findings.length}
@@ -236,7 +291,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
                 <Table<VulnFinding>
                   dataSource={visible}
                   columns={columns}
-                  rowKey={(f) => `${f.id}-${f.package}`}
+                  rowKey={(f) => `${f.target ?? ''}-${f.id}-${f.package}`}
                   size="small"
                   pagination={{
                     current: page,

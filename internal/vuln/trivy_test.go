@@ -6,7 +6,9 @@ import (
 	"compress/gzip"
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,6 +92,44 @@ func TestScanUnavailableManifest(t *testing.T) {
 	if findings != nil {
 		t.Errorf("findings = %+v, want nil", findings)
 	}
+}
+
+// TestScanImageArgs locks in the flags scanImageArgs builds — confirmed
+// directly against a real trivy binary + local Docker daemon (see this
+// package's own doc comment): --docker-host/--podman-host specifically
+// need a "unix://" scheme prefix, a bare filesystem path fails with
+// "unable to parse docker host", and --image-src must stay narrowed to
+// docker,podman so a missing image fails outright instead of silently
+// falling back to a registry pull.
+func TestScanImageArgs(t *testing.T) {
+	t.Run("both sockets set", func(t *testing.T) {
+		args := scanImageArgs("/data/vuln/db", "nginx:1.25", "/var/run/docker.sock", "/run/podman/podman.sock")
+		joined := " " + strings.Join(args, " ") + " "
+		for _, want := range []string{
+			" image ",
+			" --cache-dir /data/vuln/db ",
+			" --skip-db-update ",
+			" --scanners vuln ",
+			" --image-src docker,podman ",
+			" --docker-host unix:///var/run/docker.sock ",
+			" --podman-host unix:///run/podman/podman.sock ",
+		} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("scanImageArgs() missing %q in %v", strings.TrimSpace(want), args)
+			}
+		}
+		if args[len(args)-1] != "nginx:1.25" {
+			t.Errorf("scanImageArgs() target image ref not last: %v", args)
+		}
+	})
+
+	t.Run("empty sockets omit their flags", func(t *testing.T) {
+		args := scanImageArgs("/data/vuln/db", "alpine:3.18", "", "")
+		joined := " " + strings.Join(args, " ") + " "
+		if strings.Contains(joined, "--docker-host") || strings.Contains(joined, "--podman-host") {
+			t.Errorf("scanImageArgs() with empty sockets still set a host flag: %v", args)
+		}
+	})
 }
 
 // TestExtractTrivyBinary builds a minimal in-memory tarball shaped like
@@ -226,4 +266,25 @@ func TestEnsureTrivyAndScanLive(t *testing.T) {
 	if len(events) != 0 {
 		t.Errorf("EnsureDB re-downloaded a fresh DB: events = %v", events)
 	}
+
+	// Same trivy + already-warm DB, now against a real local Docker image
+	// instead of the host's own packages — the part TestEnsureTrivyAndScanLive
+	// itself doesn't cover.
+	t.Run("ScanImage against a real local Docker image", func(t *testing.T) {
+		if _, err := exec.LookPath("docker"); err != nil {
+			t.Skip("docker not on PATH in this environment")
+		}
+		const image = "alpine:3.18"
+		pull := exec.CommandContext(ctx, "docker", "pull", image)
+		if out, err := pull.CombinedOutput(); err != nil {
+			t.Skipf("docker pull %s: %v: %s", image, err, out)
+		}
+		t.Cleanup(func() { _ = exec.Command("docker", "rmi", image).Run() })
+
+		findings, err := ScanImage(ctx, trivyBin, dbDir, image, "/var/run/docker.sock", "")
+		if err != nil {
+			t.Fatalf("ScanImage: %v", err)
+		}
+		t.Logf("scanned local image %s: %d findings", image, len(findings))
+	})
 }

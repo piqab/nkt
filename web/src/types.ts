@@ -124,6 +124,10 @@ export interface VulnFinding {
   /** Not present in the previous scan this host kept — see VulnScan.compared
    * for when this comparison could even happen (never on the first scan). */
   new?: boolean
+  /** Empty for the host's own OS packages, or a container image reference
+   * (e.g. "nginx:1.25") for a vulnerability found inside a running
+   * Docker/Podman container's image. */
+  target?: string
 }
 
 export interface VulnScan {
@@ -135,6 +139,9 @@ export interface VulnScan {
   compared: boolean
   new_count?: number
   fixed_count?: number
+  /** One entry per container image that could not be scanned (removed
+   * mid-scan, unreachable) — the rest of the scan still completed. */
+  warnings?: string[]
   db_updated: string
   scanned_at: string
 }
