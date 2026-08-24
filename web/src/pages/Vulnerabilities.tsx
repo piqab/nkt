@@ -90,7 +90,14 @@ export default function Vulnerabilities({ me }: { me: Me }) {
     reload()
   }
 
-  const [target, setTarget] = useState('')
+  // A plain '' can't double as both "источник: не выбран" and the real
+  // value for "источник: ОС хоста" (VulnFinding.target is itself '' for
+  // OS findings) — '' is falsy in JS, so a bare `!target` check treated
+  // both the same and picking "ОС хоста" silently behaved exactly like
+  // "все". A sentinel that can never be a real target value keeps them
+  // apart.
+  const ALL_TARGETS = '__all__'
+  const [target, setTarget] = useState(ALL_TARGETS)
   function changeTarget(v: string) {
     setTarget(v)
     setPage(1)
@@ -101,7 +108,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
     const needle = query.trim().toLowerCase()
     return findings
       .filter((f) => !severity || f.severity === severity)
-      .filter((f) => !target || (f.target ?? '') === target)
+      .filter((f) => target === ALL_TARGETS || (f.target ?? '') === target)
       .filter(
         (f) =>
           !needle ||
@@ -259,7 +266,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
                     onChange={changeTarget}
                     style={{ minWidth: '13rem' }}
                     options={[
-                      { value: '', label: 'все' },
+                      { value: ALL_TARGETS, label: 'все' },
                       ...targets.map((t) => ({ value: t, label: t || 'ОС хоста' })),
                     ]}
                   />
