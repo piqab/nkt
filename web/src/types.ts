@@ -121,6 +121,11 @@ export interface VulnFinding {
   fixed_version?: string
   severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN'
   title?: string
+  /** trivy's own choice of the single most authoritative reference for this
+   * finding (NVD, a GitHub Security Advisory, a vendor bulletin, ...) — not
+   * a URL nkt constructs itself. Can be empty for some vendor-specific
+   * advisory IDs. */
+  url?: string
   /** Not present in the previous scan this host kept — see VulnScan.compared
    * for when this comparison could even happen (never on the first scan). */
   new?: boolean

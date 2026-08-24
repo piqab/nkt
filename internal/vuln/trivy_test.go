@@ -34,7 +34,8 @@ func TestParseTrivyReport(t *testing.T) {
 						"InstalledVersion": "3.0.11-1",
 						"FixedVersion": "3.0.13-1",
 						"Severity": "HIGH",
-						"Title": "openssl: something bad"
+						"Title": "openssl: something bad",
+						"PrimaryURL": "https://avd.aquasec.com/nvd/cve-2024-12345"
 					},
 					{
 						"VulnerabilityID": "CVE-2023-99999",
@@ -58,11 +59,20 @@ func TestParseTrivyReport(t *testing.T) {
 		findings[0].FixedVersion != "3.0.13-1" || findings[0].Severity != "HIGH" {
 		t.Errorf("findings[0] = %+v, unexpected parse", findings[0])
 	}
+	if findings[0].URL != "https://avd.aquasec.com/nvd/cve-2024-12345" {
+		t.Errorf("findings[0].URL = %q, want trivy's own PrimaryURL carried through", findings[0].URL)
+	}
 	// No fix available yet must come through as an empty string, not a
 	// literal "" the JSON omits some other way — this is what the UI uses
 	// to tell "upgrade now" apart from "nothing to do yet".
 	if findings[1].FixedVersion != "" {
 		t.Errorf("findings[1].FixedVersion = %q, want empty (no fix published yet)", findings[1].FixedVersion)
+	}
+	// findings[1] has no PrimaryURL in the canned report at all (some
+	// vendor-specific advisory IDs genuinely don't have one) — must come
+	// through empty, not error or a guessed URL.
+	if findings[1].URL != "" {
+		t.Errorf("findings[1].URL = %q, want empty (no PrimaryURL in the source report)", findings[1].URL)
 	}
 }
 

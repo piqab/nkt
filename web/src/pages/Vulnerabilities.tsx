@@ -150,7 +150,13 @@ export default function Vulnerabilities({ me }: { me: Me }) {
       width: 180,
       render: (id: string, f: VulnFinding) => (
         <span>
-          <span className="mono">{id}</span>
+          {f.url ? (
+            <a className="mono" href={f.url} target="_blank" rel="noreferrer">
+              {id}
+            </a>
+          ) : (
+            <span className="mono">{id}</span>
+          )}
           {f.new && (
             <Tag color="blue" style={{ marginLeft: '0.4rem' }}>
               новое
