@@ -35,6 +35,22 @@ export default function Vulnerabilities({ me }: { me: Me }) {
   const { data: status, reload } = useApi<VulnStatus>('/vulnerabilities', 3_000)
   const [severity, setSeverity] = useState('')
   const [query, setQuery] = useState('')
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(50)
+
+  // Narrowing the filter can easily leave the table sitting on a page that
+  // no longer has anything on it (e.g. page 3 of "все", then filtered down
+  // to a severity with only one page's worth) — reset back to the start
+  // whenever what's being filtered changes, same as Findings.tsx's own
+  // Table would need if it paginated.
+  function changeSeverity(v: string) {
+    setSeverity(v)
+    setPage(1)
+  }
+  function changeQuery(v: string) {
+    setQuery(v)
+    setPage(1)
+  }
   // Not part of VulnStatus: a 403 (no admin/mutations) or a network error
   // never reaches s.vuln.lastErr on the backend at all (the request gets
   // rejected before handleVulnScanStart ever runs), so it has nowhere to
@@ -146,7 +162,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
                 Серьёзность
                 <Select
                   value={severity}
-                  onChange={setSeverity}
+                  onChange={changeSeverity}
                   style={{ minWidth: '11rem' }}
                   options={[
                     { value: '', label: 'все' },
@@ -156,7 +172,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
               </label>
               <label style={{ flex: 1, minWidth: '14rem' }}>
                 Поиск
-                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="CVE или имя пакета…" />
+                <Input value={query} onChange={(e) => changeQuery(e.target.value)} placeholder="CVE или имя пакета…" />
               </label>
               <span className="small muted" style={{ paddingBottom: '0.4rem' }}>
                 показано {visible.length} из {findings.length}
@@ -178,7 +194,18 @@ export default function Vulnerabilities({ me }: { me: Me }) {
                   columns={columns}
                   rowKey={(f) => `${f.id}-${f.package}`}
                   size="small"
-                  pagination={{ pageSize: 50, showSizeChanger: false }}
+                  pagination={{
+                    current: page,
+                    pageSize,
+                    total: visible.length,
+                    position: ['topRight'],
+                    showSizeChanger: true,
+                    pageSizeOptions: [...new Set([50, 100, Math.max(visible.length, 50)])],
+                    onChange: (p, ps) => {
+                      setPage(p)
+                      setPageSize(ps)
+                    },
+                  }}
                 />
               </div>
             </Card>
