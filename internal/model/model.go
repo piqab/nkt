@@ -695,6 +695,50 @@ type PackageUpdates struct {
 	RebootRequired bool `json:"reboot_required"`
 }
 
+// PackageManifest is the raw dpkg/os-release content internal/vuln needs to
+// run a vulnerability scan against — Debian/Ubuntu only for now, matching
+// PackageUpdates. Collected as three plain file reads (cheap, no exec) by
+// internal/parse.Manifest, deliberately kept separate from PackageUpdates/
+// the regular scan snapshot: it exists purely to travel to wherever the
+// actual trivy scan runs (this host itself in standalone/localhost mode, or
+// the hub for a real managed host — see internal/vuln's own doc comment on
+// why the vulnerability DB only ever lives there, not on every host), not
+// to be displayed on its own.
+type PackageManifest struct {
+	Available     bool   `json:"available"`
+	OSRelease     string `json:"os_release,omitempty"`
+	DebianVersion string `json:"debian_version,omitempty"`
+	DpkgStatus    string `json:"dpkg_status,omitempty"`
+}
+
+// VulnFinding is one vulnerability trivy reported for an installed package —
+// see internal/vuln.Scan.
+type VulnFinding struct {
+	ID               string `json:"id"` // CVE-2024-... or a vendor-specific advisory ID (e.g. TEMP-...)
+	Package          string `json:"package"`
+	InstalledVersion string `json:"installed_version"`
+	// FixedVersion is empty when trivy reports no fix is available yet —
+	// distinct from "not a security update at all" (VulnFinding isn't
+	// created for those), so the UI can tell "upgrade now" apart from
+	// "nothing to do yet but watch this one".
+	FixedVersion string `json:"fixed_version,omitempty"`
+	Severity     string `json:"severity"` // CRITICAL/HIGH/MEDIUM/LOW/UNKNOWN, trivy's own scale
+	Title        string `json:"title,omitempty"`
+}
+
+// VulnScan is the result of one vulnerability scan, plus enough metadata
+// for the UI to show how current it is — the vulnerability DB is refreshed
+// on its own schedule (see internal/vuln), independent of when this host
+// was last scanned against it. Available mirrors PackageManifest.Available
+// (Debian/Ubuntu only, matching PackageUpdates) — distinct from an empty
+// Findings, which means "scanned and clean," not "not supported here."
+type VulnScan struct {
+	Available bool          `json:"available"`
+	Findings  []VulnFinding `json:"findings,omitempty"`
+	DBUpdated time.Time     `json:"db_updated"`
+	ScannedAt time.Time     `json:"scanned_at"`
+}
+
 // HostInfo mirrors collect.HostInfo without importing that package.
 type HostInfo struct {
 	Mode     string   `json:"mode"`

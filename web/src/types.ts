@@ -110,6 +110,33 @@ export interface Finding {
   refs?: string[]
 }
 
+/** One CVE trivy reported for an installed package — severity is trivy's
+ * own scale (CRITICAL/HIGH/MEDIUM/LOW/UNKNOWN), not the app's own
+ * lowercase Severity union, since it comes from an external scanner rather
+ * than nkt's own analyzer. */
+export interface VulnFinding {
+  id: string
+  package: string
+  installed_version: string
+  fixed_version?: string
+  severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN'
+  title?: string
+}
+
+export interface VulnScan {
+  available: boolean
+  findings?: VulnFinding[]
+  db_updated: string
+  scanned_at: string
+}
+
+export interface VulnStatus {
+  scanning: boolean
+  progress?: string
+  scan?: VulnScan
+  error?: string
+}
+
 export interface ServiceUnit {
   name: string
   unit: string
