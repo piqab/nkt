@@ -57,14 +57,36 @@ export default function Vulnerabilities({ me }: { me: Me }) {
   // show up in the next status poll — swallowing it here used to mean the
   // button just silently did nothing.
   const [startError, setStartError] = useState<string | null>(null)
+  // Once trivy + its DB are already cached (true for every scan after the
+  // very first one), a re-scan itself finishes in well under a second —
+  // faster than the 3s poll below could ever catch a scanning:true in
+  // flight, and often faster than the single reload() right after the
+  // POST too. Relying on the polled status alone meant the button's own
+  // spinner could flash for 0ms or not appear at all, which read as
+  // "clicking did nothing" even though the scan genuinely ran and
+  // updated. `starting` gives the click itself immediate, guaranteed-
+  // visible feedback for a fixed minimum stretch, independent of how fast
+  // the backend actually finishes; status.scanning takes back over
+  // seamlessly for a slow first run (downloading trivy + a ~1GB DB) that
+  // outlives this window.
+  const [starting, setStarting] = useState(false)
+  const scanning = starting || (status?.scanning ?? false)
 
   async function startScan() {
     setStartError(null)
+    setStarting(true)
     try {
       await api('/vulnerabilities/scan', { method: 'POST' })
     } catch (err) {
       setStartError(err instanceof Error ? err.message : String(err))
+      setStarting(false)
+      return
     }
+    // Only the successful path waits out the minimum visible stretch — an
+    // error (e.g. 409 "already running") should surface immediately, not
+    // after a pointless delay.
+    await new Promise((resolve) => setTimeout(resolve, 700))
+    setStarting(false)
     reload()
   }
 
@@ -112,8 +134,8 @@ export default function Vulnerabilities({ me }: { me: Me }) {
           </h1>
         </div>
         <div className="row">
-          <Button type="primary" disabled={!canUse} loading={status?.scanning} onClick={startScan}>
-            {status?.scanning ? status.progress || 'Сканирую…' : status?.scan ? 'Пересканировать' : 'Сканировать'}
+          <Button type="primary" disabled={!canUse} loading={scanning} onClick={startScan}>
+            {scanning ? status?.progress || 'Сканирую…' : status?.scan ? 'Пересканировать' : 'Сканировать'}
           </Button>
         </div>
       </div>
@@ -129,16 +151,16 @@ export default function Vulnerabilities({ me }: { me: Me }) {
           button's own antd `loading` spinner alone was easy to miss during
           a run that can legitimately take several minutes (first-ever scan
           on a host: downloading trivy plus its ~1GB database). */}
-      {status?.scanning && (
+      {scanning && (
         <Banner kind="info">
           <Spin size="small" style={{ marginRight: '0.6rem' }} />
-          {status.progress || 'Сканирую…'}
-          {!status.scan && ' Первый запуск может занять несколько минут — идёт загрузка trivy и базы уязвимостей.'}
+          {status?.progress || 'Сканирую…'}
+          {!status?.scan && ' Первый запуск может занять несколько минут — идёт загрузка trivy и базы уязвимостей.'}
         </Banner>
       )}
 
       {!status?.scan ? (
-        !status?.scanning && (
+        !scanning && (
           <Banner kind="info">
             Сканирование ещё не запускалось на этом хосте. При первом запуске может понадобиться
             скачать trivy и базу уязвимостей (около 1 ГБ) — это займёт несколько минут.
