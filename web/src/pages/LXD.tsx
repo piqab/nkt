@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Form, Input, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { LXDInstance, Me } from '../types'
-import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 
 export default function LXD({ me }: { me: Me }) {
@@ -98,8 +98,10 @@ export default function LXD({ me }: { me: Me }) {
     <>
       <div className="page-head spread">
         <div>
-          <h1>LXD</h1>
-          <p>Контейнеры и виртуальные машины LXD — один инструмент управляет обоими типами инстансов.</p>
+          <h1>
+            LXD
+            <InfoHint>Контейнеры и виртуальные машины LXD — один инструмент управляет обоими типами инстансов.</InfoHint>
+          </h1>
         </div>
         <div className="row">
           {me.is_admin && (
@@ -192,8 +194,12 @@ function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCre
 
   return (
     <Card
-      title="Новый инстанс LXD"
-      subtitle="lxc launch — образ скачивается автоматически, инстанс сразу запускается."
+      title={
+        <>
+          Новый инстанс LXD
+          <InfoHint>lxc launch — образ скачивается автоматически, инстанс сразу запускается.</InfoHint>
+        </>
+      }
       actions={
         <Button type="link" onClick={onClose}>
           закрыть

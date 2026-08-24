@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
-import { Banner, Card, ErrorNote, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 
 const ACTION_LABEL: Record<string, string> = {
@@ -305,11 +305,10 @@ export default function Services({ me }: { me: Me }) {
     <>
       <div className="page-head spread">
         <div>
-          <h1>Сервисы</h1>
-          <p>
-            Управление systemd-юнитами. Все действия записываются в журнал с указанием
-            пользователя.
-          </p>
+          <h1>
+            Сервисы
+            <InfoHint>Управление systemd-юнитами. Все действия записываются в журнал с указанием пользователя.</InfoHint>
+          </h1>
         </div>
         <div className="row">
           {me.is_admin && (

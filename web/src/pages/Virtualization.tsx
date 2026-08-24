@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Checkbox, Form, Input, InputNumber, Segmented, Table, type TableColumnsType } from 'antd'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
-import { Banner, Card, CodeEditor, ErrorNote, Loading, StateBadge, formatBytesShort } from '../components/ui'
+import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, StateBadge, formatBytesShort } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 
 const LIFECYCLE_ACTIONS = ['start', 'shutdown', 'reboot', 'suspend', 'resume']
@@ -240,8 +240,10 @@ export default function Virtualization({ me }: { me: Me }) {
     <>
       <div className="page-head spread">
         <div>
-          <h1>Виртуальные машины</h1>
-          <p>libvirt/QEMU домены — управление через virsh. Создание и редактирование — через XML-определение.</p>
+          <h1>
+            Виртуальные машины
+            <InfoHint>libvirt/QEMU домены — управление через virsh. Создание и редактирование — через XML-определение.</InfoHint>
+          </h1>
         </div>
         <div className="row">
           {me.is_admin && (
@@ -376,8 +378,12 @@ function VMCreateChooser({
 
   return (
     <Card
-      title="Новая VM"
-      subtitle="Оба способа заканчиваются одним и тем же — проверкой и правкой XML перед сохранением."
+      title={
+        <>
+          Новая VM
+          <InfoHint>Оба способа заканчиваются одним и тем же — проверкой и правкой XML перед сохранением.</InfoHint>
+        </>
+      }
       actions={
         <Button type="link" onClick={onClose}>
           закрыть

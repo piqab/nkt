@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Form, Input, Table, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Me, PodmanContainer } from '../types'
-import { Banner, Card, ErrorNote, Loading, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 
 export default function Podman({ me }: { me: Me }) {
@@ -131,8 +131,10 @@ export default function Podman({ me }: { me: Me }) {
     <>
       <div className="page-head spread">
         <div>
-          <h1>Podman</h1>
-          <p>Контейнеры отдельного от docker движка Podman — те же операции: запуск, остановка, удаление.</p>
+          <h1>
+            Podman
+            <InfoHint>Контейнеры отдельного от docker движка Podman — те же операции: запуск, остановка, удаление.</InfoHint>
+          </h1>
         </div>
         <div className="row">
           {me.is_admin && (
@@ -227,8 +229,12 @@ function CreateContainerForm({ onClose, onCreated }: { onClose: () => void; onCr
 
   return (
     <Card
-      title="Новый контейнер Podman"
-      subtitle="Образ будет скачан (если нужно), контейнер создан и сразу запущен."
+      title={
+        <>
+          Новый контейнер Podman
+          <InfoHint>Образ будет скачан (если нужно), контейнер создан и сразу запущен.</InfoHint>
+        </>
+      }
       actions={
         <Button type="link" onClick={onClose}>
           закрыть

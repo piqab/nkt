@@ -10,7 +10,7 @@ import {
 } from '@ant-design/icons'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
 import type { HubHost, RenewEvent, RenewJobStatus, Severity } from '../types'
-import { Banner, Card, ErrorNote, Loading, Modal, SEVERITIES, SEVERITY_LABEL, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, SEVERITY_LABEL, formatRelative } from '../components/ui'
 import { checkForNewProblems, notificationsEnabled, requestNotificationPermission, setNotificationsEnabled, type NotifyState } from '../notifications'
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 
@@ -762,12 +762,14 @@ export default function Hosts({
     <>
       <div className="page-head">
         <div>
-          <h1>Хосты</h1>
-          <p>
-            Каждый хост — отдельная VPS с собственным nkt: хаб заливает на неё бинарник по SSH,
-            поднимает как systemd-сервис и дальше проксирует к нему запросы, так что дашборд и
-            управление ничем не отличаются от обычного nkt на одном хосте.
-          </p>
+          <h1>
+            Хосты
+            <InfoHint>
+              Каждый хост — отдельная VPS с собственным nkt: хаб заливает на неё бинарник по SSH,
+              поднимает как systemd-сервис и дальше проксирует к нему запросы, так что дашборд и
+              управление ничем не отличаются от обычного nkt на одном хосте.
+            </InfoHint>
+          </h1>
         </div>
         <div className="row" style={{ gap: '1rem' }}>
           <Button loading={bulkBusy === 'start'} disabled={bulkBusy === 'stop'} onClick={() => bulkSetServiceRunning(true)}>
@@ -1306,8 +1308,15 @@ function HostForm({
 
   return (
     <Card
-      title="Добавить хост"
-      subtitle="Хаб подключится по SSH, определит архитектуру, соберёт или возьмёт из кэша бинарник nkt и установит его как systemd-сервис"
+      title={
+        <>
+          Добавить хост
+          <InfoHint>
+            Хаб подключится по SSH, определит архитектуру, соберёт или возьмёт из кэша бинарник nkt и
+            установит его как systemd-сервис
+          </InfoHint>
+        </>
+      }
     >
       {formEl}
     </Card>

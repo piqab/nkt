@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Table, type TableColumnsType } from 'antd'
 import { api, qs, useApi } from '../api'
 import type { Container, DockerNetwork, FileContent, Me } from '../types'
-import { Banner, Card, ErrorNote, Loading, Modal, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 import BlockTree from '../components/BlockTree'
 import PathPicker, { ownerFromPath } from '../components/PathPicker'
@@ -173,8 +173,10 @@ export default function Docker({ me }: { me: Me }) {
     <>
       <div className="page-head spread">
         <div>
-          <h1>Docker</h1>
-          <p>Сопоставление того, что описано в compose, с тем, что реально работает.</p>
+          <h1>
+            Docker
+            <InfoHint>Сопоставление того, что описано в compose, с тем, что реально работает.</InfoHint>
+          </h1>
         </div>
         <div className="row">
           {me.is_admin && (
