@@ -327,6 +327,18 @@ export default function Vulnerabilities({ me }: { me: Me }) {
             <Card>
               <div className="table-wrap">
                 <Table<VulnFinding>
+                  // Forces a full remount whenever what's being filtered
+                  // changes, rather than letting antd's Table reconcile the
+                  // new dataSource in place — filtering by "Источник" could
+                  // show rows from an entirely different target still stuck
+                  // from before the change even though `visible`'s own
+                  // length matched the new filter correctly, which pointed
+                  // at stale internal Table state (row virtualization/
+                  // pagination cache) rather than the filtering logic
+                  // itself. A remount is a blunter fix than tracking down
+                  // the exact antd internal at fault, but it's guaranteed
+                  // to leave nothing stale behind.
+                  key={`${severity}|${target}|${query}`}
                   dataSource={visible}
                   columns={columns}
                   rowKey={(f) => `${f.target ?? ''}-${f.id}-${f.package}`}
