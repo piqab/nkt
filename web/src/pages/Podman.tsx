@@ -22,7 +22,7 @@ export default function Podman({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api('/inventory/refresh', { method: 'POST' })
-      containers.reload()
+      await containers.reload()
       setNotice({ kind: 'info', text: 'Хост пересканирован.' })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -38,7 +38,7 @@ export default function Podman({ me }: { me: Me }) {
     try {
       await api(`/podman/containers/${name}/${action}`, { method: 'POST' })
       setNotice({ kind: 'info', text: `${name}: ${action} выполнено.` })
-      containers.reload()
+      await containers.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -53,7 +53,7 @@ export default function Podman({ me }: { me: Me }) {
     try {
       await api(`/podman/containers/${name}`, { method: 'DELETE' })
       setNotice({ kind: 'info', text: `${name}: удалён.` })
-      containers.reload()
+      await containers.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {

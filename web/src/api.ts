@@ -125,7 +125,14 @@ export interface Loadable<T> {
   data: T | null
   error: string | null
   loading: boolean
-  reload: () => void
+  // Awaitable: a caller that does `await x.reload()` right before clearing
+  // its own busy/spinner state is guaranteed the fetch has actually landed
+  // (data/error already set) by the time that await resolves — unlike a
+  // bare fire-and-forget call, which only *starts* the fetch and returns
+  // immediately. Every existing call site that never awaits it keeps
+  // working exactly as before; this only adds a capability, not a
+  // requirement.
+  reload: () => Promise<void>
 }
 
 /**
@@ -136,12 +143,14 @@ export function useApi<T>(path: string | null, pollMs = 0): Loadable<T> {
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(path !== null)
-  const [nonce, setNonce] = useState(0)
   const abortRef = useRef<AbortController | null>(null)
 
-  const reload = useCallback(() => setNonce((n) => n + 1), [])
-
-  useEffect(() => {
+  // The one place an actual fetch happens — used for the initial load, a
+  // path change, the poll timer, and an explicit reload() call alike, so
+  // "reload" can just be this function directly instead of indirecting
+  // through a nonce state bump that only *triggers* a fetch on some later
+  // render without anything to await.
+  const load = useCallback(async () => {
     if (path === null) {
       setData(null)
       setLoading(false)
@@ -151,33 +160,30 @@ export function useApi<T>(path: string | null, pollMs = 0): Loadable<T> {
     const controller = new AbortController()
     abortRef.current = controller
 
-    let cancelled = false
     setLoading(true)
-    api<T>(path, { signal: controller.signal })
-      .then((result) => {
-        if (cancelled) return
-        setData(result)
-        setError(null)
-      })
-      .catch((err: unknown) => {
-        if (cancelled || (err instanceof DOMException && err.name === 'AbortError')) return
-        setError(err instanceof Error ? err.message : String(err))
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-      controller.abort()
+    try {
+      const result = await api<T>(path, { signal: controller.signal })
+      if (controller.signal.aborted) return
+      setData(result)
+      setError(null)
+    } catch (err) {
+      if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      if (!controller.signal.aborted) setLoading(false)
     }
-  }, [path, nonce])
+  }, [path])
+
+  useEffect(() => {
+    load()
+    return () => abortRef.current?.abort()
+  }, [load])
 
   useEffect(() => {
     if (!pollMs || path === null) return
-    const timer = window.setInterval(reload, pollMs)
+    const timer = window.setInterval(load, pollMs)
     return () => window.clearInterval(timer)
-  }, [pollMs, path, reload])
+  }, [pollMs, path, load])
 
-  return { data, error, loading, reload }
+  return { data, error, loading, reload: load }
 }

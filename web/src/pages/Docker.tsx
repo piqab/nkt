@@ -25,7 +25,7 @@ export default function Docker({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api('/inventory/refresh', { method: 'POST' })
-      docker.reload()
+      await docker.reload()
       setNotice({ kind: 'info', text: 'Хост пересканирован.' })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -161,7 +161,11 @@ export default function Docker({ me }: { me: Me }) {
     try {
       await api(`/containers/${name}/${action}`, { method: 'POST' })
       setNotice({ kind: 'info', text: `${name}: ${action} выполнено.` })
-      docker.reload()
+      // Awaited, not fire-and-forget: clearing `busy` (below, in finally)
+      // before the refreshed list has actually landed made the spinner
+      // disappear while the table still showed the pre-action state for a
+      // moment — reads as "did that even do anything?".
+      await docker.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
