@@ -14,12 +14,22 @@ import (
 	"github.com/althq/netknownsthat/internal/vuln"
 )
 
-// vulnFindingsKVKey is where the previous scan's findings are kept (see
-// internal/store's generic kv table) purely so the next scan has something
-// to diff against — a rolling one-step comparison, not a history: this key
-// always holds exactly the most recent scan, overwritten by the one after
-// it.
-const vulnFindingsKVKey = "vuln_last_findings"
+// vulnScanKVKey is where the last completed scan (the full model.VulnScan,
+// not just its findings) is kept — see internal/store's generic kv table.
+// Two independent reasons this exists, not one:
+//
+//  1. applyVulnDiff needs the previous scan's findings to compare against
+//     (a rolling one-step comparison, not a history — this key always
+//     holds exactly the most recent scan, overwritten by the one after it).
+//  2. handleVulnerabilities needs *something* to answer a GET with even
+//     when Server.vuln.result is nil — which is not only "never scanned
+//     yet": it is also true of every freshly-started process, including a
+//     plain restart of an nkt that had already scanned before. Without
+//     this, navigating away from the Уязвимости page and back looks
+//     identical to a host that has genuinely never been scanned, prompting
+//     a needless re-scan for no reason but nkt's own process having
+//     restarted at some point in between.
+const vulnScanKVKey = "vuln_last_scan"
 
 // findingKey identifies "the same vulnerability" across two scans — a CVE
 // against one specific package, against one specific target. The same CVE
@@ -34,51 +44,55 @@ func findingKey(f model.VulnFinding) string {
 	return f.Target + "\x00" + f.ID + "\x00" + f.Package
 }
 
+// loadPersistedVulnScan reads whatever scan was last saved under
+// vulnScanKVKey, if any — used both by applyVulnDiff (to diff against) and
+// by handleVulnerabilities (as a fallback when Server.vuln.result is nil).
+func (s *Server) loadPersistedVulnScan(ctx context.Context) (*model.VulnScan, error) {
+	raw, ok, err := s.db.KVGet(ctx, vulnScanKVKey)
+	if err != nil || !ok {
+		return nil, err
+	}
+	var scan model.VulnScan
+	if err := json.Unmarshal([]byte(raw), &scan); err != nil {
+		return nil, err
+	}
+	return &scan, nil
+}
+
 // applyVulnDiff marks each of findings New relative to whatever scan this
-// host kept last (see vulnFindingsKVKey), then persists findings as the new
-// "last scan" for the comparison after this one. compared is false only
-// when there was no previous scan to compare against at all (this host's
-// very first scan) — see model.VulnScan.Compared's own doc comment for why
-// that has to be distinguishable from "compared, nothing changed".
+// host kept last (see vulnScanKVKey) — persisting the result of this scan
+// is runVulnScan's own job once the rest of model.VulnScan is filled in,
+// not this function's. compared is false only when there was no previous
+// scan to compare against at all (this host's very first scan) — see
+// model.VulnScan.Compared's own doc comment for why that has to be
+// distinguishable from "compared, nothing changed".
 func (s *Server) applyVulnDiff(ctx context.Context, findings []model.VulnFinding) (compared bool, newCount, fixedCount int, err error) {
-	raw, ok, err := s.db.KVGet(ctx, vulnFindingsKVKey)
+	previous, err := s.loadPersistedVulnScan(ctx)
 	if err != nil {
 		return false, 0, 0, err
 	}
-
-	if ok {
-		var previous []model.VulnFinding
-		if err := json.Unmarshal([]byte(raw), &previous); err != nil {
-			return false, 0, 0, err
-		}
-		prevKeys := make(map[string]struct{}, len(previous))
-		for _, f := range previous {
-			prevKeys[findingKey(f)] = struct{}{}
-		}
-		currentKeys := make(map[string]struct{}, len(findings))
-		for i := range findings {
-			currentKeys[findingKey(findings[i])] = struct{}{}
-			if _, existed := prevKeys[findingKey(findings[i])]; !existed {
-				findings[i].New = true
-				newCount++
-			}
-		}
-		for _, f := range previous {
-			if _, stillPresent := currentKeys[findingKey(f)]; !stillPresent {
-				fixedCount++
-			}
-		}
-		compared = true
+	if previous == nil {
+		return false, 0, 0, nil
 	}
 
-	encoded, err := json.Marshal(findings)
-	if err != nil {
-		return false, 0, 0, err
+	prevKeys := make(map[string]struct{}, len(previous.Findings))
+	for _, f := range previous.Findings {
+		prevKeys[findingKey(f)] = struct{}{}
 	}
-	if err := s.db.KVSet(ctx, vulnFindingsKVKey, string(encoded)); err != nil {
-		return false, 0, 0, err
+	currentKeys := make(map[string]struct{}, len(findings))
+	for i := range findings {
+		currentKeys[findingKey(findings[i])] = struct{}{}
+		if _, existed := prevKeys[findingKey(findings[i])]; !existed {
+			findings[i].New = true
+			newCount++
+		}
 	}
-	return compared, newCount, fixedCount, nil
+	for _, f := range previous.Findings {
+		if _, stillPresent := currentKeys[findingKey(f)]; !stillPresent {
+			fixedCount++
+		}
+	}
+	return true, newCount, fixedCount, nil
 }
 
 // vulnState is this host's own current vulnerability-scan state — see
@@ -109,17 +123,37 @@ func (s *Server) vulnDir() string {
 // accident (see handleVulnScanStart, which the frontend calls explicitly).
 func (s *Server) handleVulnerabilities(w http.ResponseWriter, r *http.Request) {
 	s.vuln.mu.Lock()
-	resp := map[string]any{
-		"scanning": s.vuln.scanning,
-		"progress": s.vuln.progress,
-	}
-	if s.vuln.result != nil {
-		resp["scan"] = s.vuln.result
-	}
-	if s.vuln.lastErr != "" {
-		resp["error"] = s.vuln.lastErr
-	}
+	scanning, progress, result, lastErr := s.vuln.scanning, s.vuln.progress, s.vuln.result, s.vuln.lastErr
 	s.vuln.mu.Unlock()
+
+	// result is nil not only when this host has genuinely never been
+	// scanned, but also on every fresh process start after one that HAD
+	// scanned before — Server.vuln is plain in-memory state, gone the
+	// moment nkt restarts. Falling back to what was persisted (see
+	// vulnScanKVKey) means a restart doesn't masquerade as "never scanned"
+	// and prompt a needless re-scan; found once, cached back into
+	// Server.vuln.result so this fallback only ever runs once per process.
+	if result == nil && !scanning {
+		if persisted, err := s.loadPersistedVulnScan(r.Context()); err == nil && persisted != nil {
+			s.vuln.mu.Lock()
+			if s.vuln.result == nil {
+				s.vuln.result = persisted
+			}
+			result = s.vuln.result
+			s.vuln.mu.Unlock()
+		}
+	}
+
+	resp := map[string]any{
+		"scanning": scanning,
+		"progress": progress,
+	}
+	if result != nil {
+		resp["scan"] = result
+	}
+	if lastErr != "" {
+		resp["error"] = lastErr
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -237,6 +271,20 @@ func (s *Server) runVulnScan(ctx context.Context) {
 		DBUpdated:  vuln.DBUpdatedAt(dbDir),
 		ScannedAt:  time.Now(),
 	}
+
+	// Persisted whole, not just the findings applyVulnDiff itself needed —
+	// see vulnScanKVKey's own doc comment: this is also what
+	// handleVulnerabilities falls back to across a process restart, so it
+	// has to carry everything a GET would otherwise show. Not fatal to the
+	// scan itself if this fails — the in-memory result below is still good
+	// for as long as this process keeps running — just logged so a
+	// persistently broken kv table doesn't fail silently forever.
+	if encoded, err := json.Marshal(result); err != nil {
+		s.log.Warn("не удалось сериализовать результат сканирования уязвимостей", "error", err)
+	} else if err := s.db.KVSet(ctx, vulnScanKVKey, string(encoded)); err != nil {
+		s.log.Warn("не удалось сохранить результат сканирования уязвимостей", "error", err)
+	}
+
 	s.vuln.mu.Lock()
 	s.vuln.result = result
 	s.vuln.scanning = false
