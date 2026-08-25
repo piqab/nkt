@@ -179,10 +179,31 @@ export function useApi<T>(path: string | null, pollMs = 0): Loadable<T> {
     return () => abortRef.current?.abort()
   }, [load])
 
+  // Self-rescheduling rather than a fixed setInterval: the next tick is
+  // only scheduled once `load()` has actually settled. A plain
+  // setInterval(load, pollMs) fires on the wall clock regardless of
+  // whether the previous request finished — and load() aborts whatever
+  // request is still in flight the moment a new one starts. Under a slow
+  // path (a scan consuming the backend's CPU, a hub host proxied over an
+  // SSH tunnel) a single request can easily outlive pollMs, so every tick
+  // would cancel the last one before it ever resolved — data.scanning (or
+  // whatever the endpoint reports) could freeze indefinitely no matter how
+  // long the real operation ran, because no poll was ever given the time
+  // to complete. Waiting for load() first means a slow network degrades
+  // to a longer effective interval instead of a permanently stuck one.
   useEffect(() => {
     if (!pollMs || path === null) return
-    const timer = window.setInterval(load, pollMs)
-    return () => window.clearInterval(timer)
+    let cancelled = false
+    let timer: number | undefined
+    const tick = async () => {
+      await load()
+      if (!cancelled) timer = window.setTimeout(tick, pollMs)
+    }
+    timer = window.setTimeout(tick, pollMs)
+    return () => {
+      cancelled = true
+      if (timer !== undefined) window.clearTimeout(timer)
+    }
   }, [pollMs, path, load])
 
   return { data, error, loading, reload: load }
