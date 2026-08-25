@@ -226,7 +226,10 @@ func generatePassword() (string, error) {
 // Kept separate from activateService so the upload half — the genuinely new
 // code here — can be exercised in a test against a plain SSH server with no
 // systemd or root privileges involved at all.
-func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envContent, binPath, servicePath, envPath string, report func(string)) error {
+// progress reports a step's repeated in-flight updates (currently just the
+// binary upload's percentage) — replacing the last log line in place rather
+// than adding a new one each time, unlike report's one-off step messages.
+func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envContent, binPath, servicePath, envPath string, report, progress func(string)) error {
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
 		return fmt.Errorf("открытие SFTP: %w", err)
@@ -237,7 +240,7 @@ func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envCo
 	defer func() { _, _ = runRemote(client, "rm -rf "+tmpDir) }()
 
 	tmpBin := gopath.Join(tmpDir, "nkt")
-	if err := uploadFile(sftpClient, localBinaryPath, tmpBin, 0o644, report); err != nil {
+	if err := uploadFile(sftpClient, localBinaryPath, tmpBin, 0o644, progress); err != nil {
 		return fmt.Errorf("заливка бинарника: %w", err)
 	}
 
@@ -413,11 +416,12 @@ func resetRemoteAdminPassword(client *ssh.Client, sshUser, adminUser, adminPassw
 }
 
 // uploadFile copies localPath to remotePath over sftpClient, reporting
-// progress through report as it goes — the binary is the one file in
+// progress through progress as it goes — the binary is the one file in
 // stageFiles big enough (tens of MB) that "Заливаю бинарник…" then nothing
 // until it either finishes or times out was worth more than a single text
-// line for the whole transfer.
-func uploadFile(sftpClient *sftp.Client, localPath, remotePath string, mode os.FileMode, report func(string)) error {
+// line for the whole transfer. progress replaces its last-reported line in
+// place rather than adding a new one each tick (see installJob.replaceLast).
+func uploadFile(sftpClient *sftp.Client, localPath, remotePath string, mode os.FileMode, progress func(string)) error {
 	local, err := os.Open(localPath)
 	if err != nil {
 		return err
@@ -443,7 +447,7 @@ func uploadFile(sftpClient *sftp.Client, localPath, remotePath string, mode os.F
 	// concurrent max-packet-sized chunks under the hood. Wrapping `local`
 	// this way rides along with that without touching the SFTP protocol
 	// handling at all.
-	pr := &progressReader{r: local, total: info.Size(), report: report}
+	pr := &progressReader{r: local, total: info.Size(), report: progress}
 	if _, err := remote.ReadFrom(pr); err != nil {
 		return err
 	}

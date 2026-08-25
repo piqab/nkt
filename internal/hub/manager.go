@@ -56,6 +56,21 @@ func (j *installJob) append(text string) {
 	j.events = append(j.events, Event{Time: time.Now(), Text: text})
 }
 
+// replaceLast overwrites the most recent event instead of adding a new one
+// — for a step that reports progress repeatedly (an upload percentage
+// ticking up) and should read as one line changing in place, not a new log
+// line every tick stretching the job modal taller with each update. Falls
+// back to appending when there is nothing yet to replace.
+func (j *installJob) replaceLast(text string) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if len(j.events) == 0 {
+		j.events = append(j.events, Event{Time: time.Now(), Text: text})
+		return
+	}
+	j.events[len(j.events)-1] = Event{Time: time.Now(), Text: text}
+}
+
 func (j *installJob) finish(err error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
@@ -558,7 +573,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	}
 
 	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, tun)
-	if err := stageFiles(client, host.SSHUser, binPath, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report); err != nil {
+	if err := stageFiles(client, host.SSHUser, binPath, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report, job.replaceLast); err != nil {
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
 		return fail(err)
 	}
