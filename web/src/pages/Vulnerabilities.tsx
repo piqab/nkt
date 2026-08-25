@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, Select, Table, Tag, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Modal, SeverityBadge, Spinner, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SeverityBadge, Spinner, formatRelative } from '../components/ui'
 
 // Trivy's own severity scale, mapped onto the app's lowercase Severity
 // union so this page can reuse SeverityBadge instead of inventing its own
@@ -40,7 +40,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
   // one resolves (see api.ts), so this can never pile up self-aborting
   // requests even over a slow hub-proxied connection.
   const [pollMs, setPollMs] = useState(5_000)
-  const { data: status, reload } = useApi<VulnStatus>('/vulnerabilities', pollMs)
+  const { data: status, loading: statusLoading, reload } = useApi<VulnStatus>('/vulnerabilities', pollMs)
   useEffect(() => {
     setPollMs(status?.scanning ? 800 : 5_000)
   }, [status?.scanning])
@@ -230,7 +230,15 @@ export default function Vulnerabilities({ me }: { me: Me }) {
       )}
       <ErrorNote error={startError ?? status?.error ?? null} />
 
-      {!status?.scan ? (
+      {statusLoading && status === null ? (
+        // Distinguishes "haven't fetched status yet" from "fetched it, and
+        // this host genuinely has no scan on record" — status starts out
+        // null before the very first /vulnerabilities response lands, and
+        // without this check that window showed the "never scanned" banner
+        // below unconditionally, even on a host with plenty of scan
+        // history, for as long as that first request took.
+        <Loading what="статус сканирования" />
+      ) : !status?.scan ? (
         !scanning && (
           <Banner kind="info">
             Сканирование ещё не запускалось на этом хосте. При первом запуске может понадобиться
