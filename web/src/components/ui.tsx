@@ -150,11 +150,18 @@ export function Modal({
   title,
   onClose,
   closeLabel = 'Закрыть',
+  maskClosable,
   children,
 }: {
   title: string
   onClose?: () => void
   closeLabel?: string
+  // Defaults to true (click outside to close) for ordinary content modals.
+  // A modal tracking a background job that keeps running after it's closed
+  // (scan progress, install/renew logs) should pass false explicitly — a
+  // stray click on the mask otherwise dismisses it silently, with nothing
+  // on screen afterwards to show the job is still going.
+  maskClosable?: boolean
   children: ReactNode
 }) {
   return (
@@ -162,7 +169,7 @@ export function Modal({
       title={title}
       open
       closable={false}
-      maskClosable={!!onClose}
+      maskClosable={maskClosable ?? !!onClose}
       onCancel={onClose}
       footer={onClose ? <Button onClick={onClose}>{closeLabel}</Button> : null}
       destroyOnHidden
