@@ -198,6 +198,12 @@ export default function Services({ me }: { me: Me }) {
         kind: res.valid === false ? 'error' : 'info',
         text: `${service}: ${ACTION_LABEL[action]} — ${res.output?.trim() || 'выполнено'}${suffix}`,
       })
+      // The backend only kicks off a fire-and-forget background rescan
+      // (rescanLater) — a bare reload() right after would just reread the
+      // still-stale cached snapshot. /inventory/refresh runs the same
+      // rescan synchronously, same as "Пересканировать" below (and same
+      // as kill() just above already does).
+      await api('/inventory/refresh', { method: 'POST' })
       await services.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })

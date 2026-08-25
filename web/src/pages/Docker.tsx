@@ -161,10 +161,16 @@ export default function Docker({ me }: { me: Me }) {
     try {
       await api(`/containers/${name}/${action}`, { method: 'POST' })
       setNotice({ kind: 'info', text: `${name}: ${action} выполнено.` })
-      // Awaited, not fire-and-forget: clearing `busy` (below, in finally)
-      // before the refreshed list has actually landed made the spinner
-      // disappear while the table still showed the pre-action state for a
-      // moment — reads as "did that even do anything?".
+      // handleContainerAction itself only calls rescanLater() — a fire-
+      // and-forget *background* full rescan, deliberately not blocking
+      // that response — so a bare docker.reload() right after would just
+      // reread the still-stale cached snapshot from before the action.
+      // /inventory/refresh runs the same rescan synchronously (the same
+      // one "Пересканировать" below uses); awaiting it first is what
+      // makes the reload right after it actually fresh, at the cost of
+      // the spinner honestly staying up for a full rescan instead of
+      // clearing early and then quietly going stale for a few seconds.
+      await api('/inventory/refresh', { method: 'POST' })
       await docker.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
