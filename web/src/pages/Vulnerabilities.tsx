@@ -90,12 +90,20 @@ export default function Vulnerabilities({ me }: { me: Me }) {
       setStarting(false)
       return
     }
-    // Only the successful path waits out the minimum visible stretch — an
+    // Only the successful path waits for a confirmed-fresh status — an
     // error (e.g. 409 "already running") should surface immediately, not
-    // after a pointless delay.
-    await new Promise((resolve) => setTimeout(resolve, 700))
+    // after a pointless delay. Awaiting reload() here (rather than firing
+    // it and clearing `starting` right away) matters: handleVulnScanStart
+    // sets s.vuln.scanning=true synchronously before the scan goroutine
+    // even starts doing work, so this fetch — made strictly after the POST
+    // above returned — is guaranteed to observe status.scanning as true
+    // for any scan that's still running. Clearing `starting` before this
+    // resolved left `scanning` briefly falling back to whatever stale
+    // status the last poll happened to have cached from *before* the
+    // click (usually false) — the modal and button spinner would drop out
+    // for that window even though the scan was still running.
+    await reload()
     setStarting(false)
-    reload()
   }
 
   // A plain '' can't double as both "источник: не выбран" and the real
