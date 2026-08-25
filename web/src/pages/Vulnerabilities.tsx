@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
-import { Button, Input, Select, Spin, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Input, Select, Table, Tag, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, SeverityBadge, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Modal, SeverityBadge, Spinner, formatRelative } from '../components/ui'
 
 // Trivy's own severity scale, mapped onto the app's lowercase Severity
 // union so this page can reuse SeverityBadge instead of inventing its own
@@ -71,9 +71,17 @@ export default function Vulnerabilities({ me }: { me: Me }) {
   // outlives this window.
   const [starting, setStarting] = useState(false)
   const scanning = starting || (status?.scanning ?? false)
+  // The progress modal (see below) can be dismissed early without
+  // cancelling anything — the scan is a fire-and-forget background job on
+  // the server, entirely decoupled from whether this modal happens to be
+  // open, the same way the certbot renew job's own progress Modal works.
+  // Reset on every new scan so dismissing one scan's modal doesn't also
+  // suppress the next one's.
+  const [modalDismissed, setModalDismissed] = useState(false)
 
   async function startScan() {
     setStartError(null)
+    setModalDismissed(false)
     setStarting(true)
     try {
       await api('/vulnerabilities/scan', { method: 'POST' })
@@ -220,20 +228,6 @@ export default function Vulnerabilities({ me }: { me: Me }) {
       )}
       <ErrorNote error={startError ?? status?.error ?? null} />
 
-      {/* Shown for the whole scan, not just while there are no results yet
-          — a re-scan over existing findings needs the same "this is
-          running" signal just as much as the very first one does. The
-          button's own antd `loading` spinner alone was easy to miss during
-          a run that can legitimately take several minutes (first-ever scan
-          on a host: downloading trivy plus its ~1GB database). */}
-      {scanning && (
-        <Banner kind="info">
-          <Spin size="small" style={{ marginRight: '0.6rem' }} />
-          {status?.progress || 'Сканирую…'}
-          {!status?.scan && ' Первый запуск может занять несколько минут — идёт загрузка trivy и базы уязвимостей.'}
-        </Banner>
-      )}
-
       {!status?.scan ? (
         !scanning && (
           <Banner kind="info">
@@ -344,6 +338,25 @@ export default function Vulnerabilities({ me }: { me: Me }) {
             </Card>
           )}
         </>
+      )}
+
+      {scanning && !modalDismissed && (
+        <Modal
+          title="Сканирование уязвимостей"
+          onClose={() => setModalDismissed(true)}
+          closeLabel="Скрыть (продолжится в фоне)"
+        >
+          <p className="small muted row" style={{ alignItems: 'center', marginBottom: 0 }}>
+            <Spinner />
+            {status?.progress || 'Сканирую…'}
+          </p>
+          {!status?.scan && (
+            <p className="small muted" style={{ marginTop: '0.6rem' }}>
+              Первый запуск может понадобиться скачать trivy и базу уязвимостей (около 1 ГБ) — это
+              займёт несколько минут.
+            </p>
+          )}
+        </Modal>
       )}
     </>
   )
