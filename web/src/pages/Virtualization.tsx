@@ -197,6 +197,11 @@ export default function Virtualization({ me }: { me: Me }) {
     try {
       await api(`/vms/${name}/${action}`, { method: 'POST' })
       setNotice({ kind: 'info', text: `${name}: ${label} выполнено.` })
+      // The backend only kicks off a fire-and-forget background rescan
+      // (rescanLater) — a bare reload() right after would just reread the
+      // still-stale cached snapshot. /inventory/refresh runs the same
+      // rescan synchronously, same as "Пересканировать" below.
+      await api('/inventory/refresh', { method: 'POST' })
       await vms.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -210,6 +215,7 @@ export default function Virtualization({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(`/vms/${name}/${on ? 'autostart-on' : 'autostart-off'}`, { method: 'POST' })
+      await api('/inventory/refresh', { method: 'POST' })
       await vms.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -228,6 +234,7 @@ export default function Virtualization({ me }: { me: Me }) {
     try {
       await api(`/vms/${name}${qs({ remove_storage: removeStorage ? 'true' : '' })}`, { method: 'DELETE' })
       setNotice({ kind: 'info', text: `${name}: определение удалено.` })
+      await api('/inventory/refresh', { method: 'POST' })
       await vms.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })

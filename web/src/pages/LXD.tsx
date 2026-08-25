@@ -38,6 +38,11 @@ export default function LXD({ me }: { me: Me }) {
     try {
       await api(`/lxd/instances/${name}/${action}`, { method: 'POST' })
       setNotice({ kind: 'info', text: `${name}: ${action} выполнено.` })
+      // The backend only kicks off a fire-and-forget background rescan
+      // (rescanLater) — a bare reload() right after would just reread the
+      // still-stale cached snapshot. /inventory/refresh runs the same
+      // rescan synchronously, same as "Пересканировать" below.
+      await api('/inventory/refresh', { method: 'POST' })
       await instances.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -53,6 +58,7 @@ export default function LXD({ me }: { me: Me }) {
     try {
       await api(`/lxd/instances/${name}`, { method: 'DELETE' })
       setNotice({ kind: 'info', text: `${name}: удалён.` })
+      await api('/inventory/refresh', { method: 'POST' })
       await instances.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
