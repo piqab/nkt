@@ -189,7 +189,12 @@ func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial d
 func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host store.Host, job *installJob) error {
 	report := job.append
 	fail := func(err error) error {
-		_ = m.db.SetHostStatus(ctx, hostID, store.HostStatusError, err.Error())
+		// See install's identical guard in manager.go: a job superseded by
+		// a newer StartInstall for the same host must not still be able to
+		// write that host's status once it eventually unwinds.
+		if m.isCurrentJob(hostID, job) {
+			_ = m.db.SetHostStatus(ctx, hostID, store.HostStatusError, err.Error())
+		}
 		return err
 	}
 	dial := m.dynamicRelayDial(hostID)
@@ -292,8 +297,10 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 		return fail(err)
 	}
 	_ = m.db.TouchHostSeen(ctx, hostID)
-	if err := m.db.SetHostStatus(ctx, hostID, store.HostStatusOnline, ""); err != nil {
-		return fail(err)
+	if m.isCurrentJob(hostID, job) {
+		if err := m.db.SetHostStatus(ctx, hostID, store.HostStatusOnline, ""); err != nil {
+			return fail(err)
+		}
 	}
 
 	report("Готово (через резервный канал)")

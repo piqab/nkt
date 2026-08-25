@@ -100,6 +100,21 @@ func (j *installJob) isDone() bool {
 	return j.done
 }
 
+// isCurrentJob reports whether job is still the one StartInstall most
+// recently registered for hostID — false once a later StartInstall call has
+// superseded it (see StartInstall's cancelNow of a still-running previous
+// job). install/installOverTunnel guard every host-status write with this:
+// a superseded job's goroutine keeps running for a little while after being
+// cancelled (SSH/HTTP calls returning, cleanup), and without this check its
+// eventual terminal SetHostStatus call could land after the newer job's own
+// writes and silently overwrite them — the exact stuck-on-"installing" bug
+// this whole guard exists to prevent.
+func (m *Manager) isCurrentJob(hostID int64, job *installJob) bool {
+	m.jobsMu.Lock()
+	defer m.jobsMu.Unlock()
+	return m.jobByHost[hostID] == job
+}
+
 // cancelNow stops the job as promptly as the underlying APIs allow: the
 // context cancellation covers everything ctx-aware, and force-closing the
 // SSH connection covers whatever it might currently be blocked inside that
@@ -469,6 +484,20 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool) (s
 	job.cancel = cancel
 
 	m.jobsMu.Lock()
+	// A still-running previous job for this host (a stray double click, or
+	// "открыть"'s auto-update racing a manual "обновить") must not be left
+	// running alongside this one: two install() goroutines both writing
+	// this host's status is a straight last-write-wins race — whichever
+	// finishes last decides the host's final status, so a slower goroutine
+	// that's still stuck (or simply behind) can silently overwrite a
+	// perfectly good "error"/"online" from the other with a stale
+	// "installing" that then never gets corrected, leaving the "обновить"
+	// button spinning forever. cancelNow forces it to stop and write its
+	// own terminal status (see CancelInstall) before this one starts, so
+	// only ever one install runs per host at a time.
+	if prev, ok := m.jobByHost[hostID]; ok && !prev.isDone() {
+		prev.cancelNow()
+	}
 	m.jobs[id] = job
 	m.jobByHost[hostID] = job
 	m.evictOldJobsLocked()
@@ -519,12 +548,16 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	}
 
 	fail := func(err error) error {
-		_ = m.db.SetHostStatus(ctx, hostID, store.HostStatusError, err.Error())
+		if m.isCurrentJob(hostID, job) {
+			_ = m.db.SetHostStatus(ctx, hostID, store.HostStatusError, err.Error())
+		}
 		return err
 	}
 
-	if err := m.db.SetHostStatus(ctx, hostID, store.HostStatusInstalling, ""); err != nil {
-		return fail(err)
+	if m.isCurrentJob(hostID, job) {
+		if err := m.db.SetHostStatus(ctx, hostID, store.HostStatusInstalling, ""); err != nil {
+			return fail(err)
+		}
 	}
 
 	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
@@ -609,8 +642,10 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		return fail(err)
 	}
 	_ = m.db.TouchHostSeen(ctx, hostID)
-	if err := m.db.SetHostStatus(ctx, hostID, store.HostStatusOnline, ""); err != nil {
-		return fail(err)
+	if m.isCurrentJob(hostID, job) {
+		if err := m.db.SetHostStatus(ctx, hostID, store.HostStatusOnline, ""); err != nil {
+			return fail(err)
+		}
 	}
 
 	report("Готово")

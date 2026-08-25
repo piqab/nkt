@@ -401,3 +401,77 @@ func TestSetServiceRunningRejectsUninstalledHost(t *testing.T) {
 		t.Errorf("error does not explain the host is not installed: %v", err)
 	}
 }
+
+// TestStartInstallSupersedesRunningJob covers the race a real double-click
+// (or "открыть"'s auto-update overlapping a manual "обновить") could
+// trigger: two install() goroutines for the same host, each writing that
+// host's status independently. Without a guard, whichever one finishes last
+// wins regardless of which actually reflects reality — a slow or stuck
+// straggler can silently overwrite a perfectly good terminal status with a
+// stale one, leaving the host's "обновить" button spinning forever. This
+// exercises the guard directly (isCurrentJob + StartInstall's supersede
+// logic) rather than through two real SSH installs, which the rest of this
+// package's tests already show is expensive to set up.
+func TestStartInstallSupersedesRunningJob(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	if err != nil {
+		t.Fatalf("AddHost: %v", err)
+	}
+
+	jobACtx, cancelA := context.WithCancel(context.Background())
+	jobA := &installJob{id: "job-a", hostID: id, cancel: cancelA}
+
+	m.jobsMu.Lock()
+	m.jobs[jobA.id] = jobA
+	m.jobByHost[id] = jobA
+	m.jobsMu.Unlock()
+
+	if !m.isCurrentJob(id, jobA) {
+		t.Fatal("jobA should be the current job right after registration")
+	}
+
+	// Mirrors StartInstall's own supersede block exactly: a still-running
+	// previous job for this host is cancelled before the new one takes over.
+	jobB := &installJob{id: "job-b", hostID: id}
+	m.jobsMu.Lock()
+	if prev, ok := m.jobByHost[id]; ok && !prev.isDone() {
+		prev.cancelNow()
+	}
+	m.jobs[jobB.id] = jobB
+	m.jobByHost[id] = jobB
+	m.jobsMu.Unlock()
+
+	select {
+	case <-jobACtx.Done():
+	default:
+		t.Error("jobA's context should have been cancelled when jobB superseded it")
+	}
+	if m.isCurrentJob(id, jobA) {
+		t.Error("jobA must no longer be the current job once superseded")
+	}
+	if !m.isCurrentJob(id, jobB) {
+		t.Error("jobB should be the current job")
+	}
+
+	// The actual bug this whole guard exists for: jobA finally unwinds
+	// after being cancelled and tries to write its terminal status — same
+	// isCurrentJob-guarded pattern as install()'s fail() closure. It must
+	// be a no-op now that jobB is in charge.
+	if m.isCurrentJob(id, jobA) {
+		_ = db.SetHostStatus(ctx, id, store.HostStatusError, "jobA belated write")
+	}
+	if err := db.SetHostStatus(ctx, id, store.HostStatusOnline, ""); err != nil {
+		t.Fatalf("jobB's own status write: %v", err)
+	}
+
+	host, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if host.Status != store.HostStatusOnline {
+		t.Errorf("host.Status = %q, want %q — jobA's belated write must not have landed", host.Status, store.HostStatusOnline)
+	}
+}
