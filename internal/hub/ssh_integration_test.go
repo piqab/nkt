@@ -101,22 +101,30 @@ func TestSSHProvisioningRoundTrip(t *testing.T) {
 
 	var events []string
 	report := func(s string) { events = append(events, s) }
+	// Mirrors installJob.replaceLast: repeated progress ticks for the same
+	// step overwrite the last line instead of piling up a new one per tick.
+	progress := func(s string) {
+		if n := len(events); n > 0 {
+			events[n-1] = s
+			return
+		}
+		events = append(events, s)
+	}
 
-	if err := stageFiles(client, "root", localBin, "unit-content", "env-content", binPath, servicePath, envPath, report); err != nil {
+	if err := stageFiles(client, "root", localBin, "unit-content", "env-content", binPath, servicePath, envPath, report, progress); err != nil {
 		t.Fatalf("stageFiles: %v", err)
 	}
 	if len(events) == 0 {
 		t.Error("stageFiles reported no progress")
 	}
-	sawBinaryProgress := false
+	binaryProgressLines := 0
 	for _, e := range events {
 		if strings.Contains(e, "Заливаю бинарник") && strings.Contains(e, "%") {
-			sawBinaryProgress = true
-			break
+			binaryProgressLines++
 		}
 	}
-	if !sawBinaryProgress {
-		t.Errorf("stageFiles events = %v, want at least one binary-upload progress line with a percentage", events)
+	if binaryProgressLines != 1 {
+		t.Errorf("stageFiles events = %v, want exactly one binary-upload progress line (later ticks should replace it in place, not add new lines)", events)
 	}
 
 	gotBin, err := os.ReadFile(binPath)
