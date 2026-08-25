@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	gopath "path"
@@ -235,9 +236,8 @@ func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envCo
 	tmpDir := fmt.Sprintf("/tmp/nkt-install-%d", time.Now().UnixNano())
 	defer func() { _, _ = runRemote(client, "rm -rf "+tmpDir) }()
 
-	report("Заливаю бинарник…")
 	tmpBin := gopath.Join(tmpDir, "nkt")
-	if err := uploadFile(sftpClient, localBinaryPath, tmpBin, 0o644); err != nil {
+	if err := uploadFile(sftpClient, localBinaryPath, tmpBin, 0o644, report); err != nil {
 		return fmt.Errorf("заливка бинарника: %w", err)
 	}
 
@@ -412,12 +412,22 @@ func resetRemoteAdminPassword(client *ssh.Client, sshUser, adminUser, adminPassw
 	return nil
 }
 
-func uploadFile(sftpClient *sftp.Client, localPath, remotePath string, mode os.FileMode) error {
+// uploadFile copies localPath to remotePath over sftpClient, reporting
+// progress through report as it goes — the binary is the one file in
+// stageFiles big enough (tens of MB) that "Заливаю бинарник…" then nothing
+// until it either finishes or times out was worth more than a single text
+// line for the whole transfer.
+func uploadFile(sftpClient *sftp.Client, localPath, remotePath string, mode os.FileMode, report func(string)) error {
 	local, err := os.Open(localPath)
 	if err != nil {
 		return err
 	}
 	defer local.Close()
+
+	info, err := local.Stat()
+	if err != nil {
+		return err
+	}
 
 	if err := sftpClient.MkdirAll(gopath.Dir(remotePath)); err != nil {
 		return fmt.Errorf("создание каталога %s: %w", gopath.Dir(remotePath), err)
@@ -428,10 +438,50 @@ func uploadFile(sftpClient *sftp.Client, localPath, remotePath string, mode os.F
 	}
 	defer remote.Close()
 
-	if _, err := remote.ReadFrom(local); err != nil {
+	// sftp.File.ReadFrom is the reading side of the transfer — it repeatedly
+	// calls Read on whatever io.Reader it's handed, splitting into several
+	// concurrent max-packet-sized chunks under the hood. Wrapping `local`
+	// this way rides along with that without touching the SFTP protocol
+	// handling at all.
+	pr := &progressReader{r: local, total: info.Size(), report: report}
+	if _, err := remote.ReadFrom(pr); err != nil {
 		return err
 	}
+	pr.reportNow()
 	return sftpClient.Chmod(remotePath, mode)
+}
+
+// progressReader periodically reports "N%% (X МБ из Y МБ)" through report as
+// bytes are read from an underlying file — throttled by time rather than by
+// byte count so a slow link reports often and a fast one doesn't flood the
+// job's event log with a line per chunk.
+type progressReader struct {
+	r      io.Reader
+	total  int64
+	read   int64
+	report func(string)
+	last   time.Time
+}
+
+const progressReportInterval = 700 * time.Millisecond
+
+func (p *progressReader) Read(b []byte) (int, error) {
+	n, err := p.r.Read(b)
+	p.read += int64(n)
+	if p.total > 0 && time.Since(p.last) >= progressReportInterval {
+		p.reportNow()
+	}
+	return n, err
+}
+
+func (p *progressReader) reportNow() {
+	p.last = time.Now()
+	pct := int(p.read * 100 / p.total)
+	p.report(fmt.Sprintf("Заливаю бинарник… %d%% (%s из %s)", pct, formatMB(p.read), formatMB(p.total)))
+}
+
+func formatMB(bytes int64) string {
+	return fmt.Sprintf("%.1f МБ", float64(bytes)/(1<<20))
 }
 
 func uploadBytes(sftpClient *sftp.Client, data []byte, remotePath string, mode os.FileMode) error {

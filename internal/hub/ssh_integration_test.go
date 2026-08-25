@@ -108,6 +108,16 @@ func TestSSHProvisioningRoundTrip(t *testing.T) {
 	if len(events) == 0 {
 		t.Error("stageFiles reported no progress")
 	}
+	sawBinaryProgress := false
+	for _, e := range events {
+		if strings.Contains(e, "Заливаю бинарник") && strings.Contains(e, "%") {
+			sawBinaryProgress = true
+			break
+		}
+	}
+	if !sawBinaryProgress {
+		t.Errorf("stageFiles events = %v, want at least one binary-upload progress line with a percentage", events)
+	}
 
 	gotBin, err := os.ReadFile(binPath)
 	if err != nil {
