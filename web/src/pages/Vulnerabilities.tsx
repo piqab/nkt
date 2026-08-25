@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, Select, Table, Tag, type TableColumnsType } from 'antd'
 import { api, useApi } from '../api'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
@@ -32,7 +32,18 @@ const SEVERITY_ORDER: VulnFinding['severity'][] = ['CRITICAL', 'HIGH', 'MEDIUM',
  */
 export default function Vulnerabilities({ me }: { me: Me }) {
   const canUse = me.is_admin && me.allow_mutations
-  const { data: status, reload } = useApi<VulnStatus>('/vulnerabilities', 3_000)
+  // Polls fast while a scan is actually running (for prompt progress text
+  // and a modal that closes right when it's really done) and relaxes back
+  // once idle — findings only ever change from an explicit scan, so there
+  // is nothing to catch by polling aggressively the rest of the time.
+  // useApi's own poll loop only schedules its next tick after the current
+  // one resolves (see api.ts), so this can never pile up self-aborting
+  // requests even over a slow hub-proxied connection.
+  const [pollMs, setPollMs] = useState(5_000)
+  const { data: status, reload } = useApi<VulnStatus>('/vulnerabilities', pollMs)
+  useEffect(() => {
+    setPollMs(status?.scanning ? 800 : 5_000)
+  }, [status?.scanning])
   const [severity, setSeverity] = useState('')
   const [query, setQuery] = useState('')
   const [page, setPage] = useState(1)
@@ -57,20 +68,18 @@ export default function Vulnerabilities({ me }: { me: Me }) {
   // show up in the next status poll — swallowing it here used to mean the
   // button just silently did nothing.
   const [startError, setStartError] = useState<string | null>(null)
-  // Once trivy + its DB are already cached (true for every scan after the
-  // very first one), a re-scan itself finishes in well under a second —
-  // faster than the 3s poll below could ever catch a scanning:true in
-  // flight, and often faster than the single reload() right after the
-  // POST too. Relying on the polled status alone meant the button's own
-  // spinner could flash for 0ms or not appear at all, which read as
-  // "clicking did nothing" even though the scan genuinely ran and
-  // updated. `starting` gives the click itself immediate, guaranteed-
-  // visible feedback for a fixed minimum stretch, independent of how fast
-  // the backend actually finishes; status.scanning takes back over
-  // seamlessly for a slow first run (downloading trivy + a ~1GB DB) that
-  // outlives this window.
-  const [starting, setStarting] = useState(false)
-  const scanning = starting || (status?.scanning ?? false)
+  // No local "am I starting" flag — status.scanning from the server is the
+  // single source of truth. handleVulnScanStart sets it synchronously
+  // before the scan goroutine even starts doing work, so the reload()
+  // right after the POST below is guaranteed to observe it as true for
+  // any scan that's still running by the time that request lands; a scan
+  // that finished before then genuinely has nothing left to show. A prior
+  // version tracked a separate `starting` boolean on a fixed timer to
+  // paper over the 3s poll not catching a fast scan in flight — real fix
+  // was polling faster while a scan runs (see pollMs above) and fixing
+  // useApi's poll loop to never self-abort a slow request, not adding a
+  // second, disconnected notion of "is it running".
+  const scanning = status?.scanning ?? false
   // The progress modal (see below) can be dismissed early without
   // cancelling anything — the scan is a fire-and-forget background job on
   // the server, entirely decoupled from whether this modal happens to be
@@ -82,28 +91,13 @@ export default function Vulnerabilities({ me }: { me: Me }) {
   async function startScan() {
     setStartError(null)
     setModalDismissed(false)
-    setStarting(true)
     try {
       await api('/vulnerabilities/scan', { method: 'POST' })
     } catch (err) {
       setStartError(err instanceof Error ? err.message : String(err))
-      setStarting(false)
       return
     }
-    // Only the successful path waits for a confirmed-fresh status — an
-    // error (e.g. 409 "already running") should surface immediately, not
-    // after a pointless delay. Awaiting reload() here (rather than firing
-    // it and clearing `starting` right away) matters: handleVulnScanStart
-    // sets s.vuln.scanning=true synchronously before the scan goroutine
-    // even starts doing work, so this fetch — made strictly after the POST
-    // above returned — is guaranteed to observe status.scanning as true
-    // for any scan that's still running. Clearing `starting` before this
-    // resolved left `scanning` briefly falling back to whatever stale
-    // status the last poll happened to have cached from *before* the
-    // click (usually false) — the modal and button spinner would drop out
-    // for that window even though the scan was still running.
     await reload()
-    setStarting(false)
   }
 
   // A plain '' can't double as both "источник: не выбран" and the real
