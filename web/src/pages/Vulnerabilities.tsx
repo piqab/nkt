@@ -353,6 +353,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
           title="Сканирование уязвимостей"
           onClose={() => setModalDismissed(true)}
           closeLabel="Скрыть (продолжится в фоне)"
+          maskClosable={false}
         >
           <p className="small muted row" style={{ alignItems: 'center', marginBottom: 0 }}>
             <Spinner />

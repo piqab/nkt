@@ -494,7 +494,7 @@ export default function Certificates({ me }: { me: Me }) {
       )}
 
       {job && (
-        <Modal title={job.label} onClose={closeJobModal}>
+        <Modal title={job.label} onClose={closeJobModal} maskClosable={false}>
           <RenewLog events={jobStatus?.events ?? []} />
           {jobStatus?.done ? (
             <Banner kind={jobStatus.error ? 'error' : 'info'}>

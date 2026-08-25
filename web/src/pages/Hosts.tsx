@@ -882,7 +882,7 @@ export default function Hosts({
       )}
 
       {job && (
-        <Modal title={`Установка на ${installingHost?.name ?? 'хост'}`} onClose={closeJobModal}>
+        <Modal title={`Установка на ${installingHost?.name ?? 'хост'}`} onClose={closeJobModal} maskClosable={false}>
           <InstallLog events={jobStatus?.events ?? []} />
           {jobStatus?.done ? (
             <Banner kind={jobStatus.error ? 'error' : 'info'}>
