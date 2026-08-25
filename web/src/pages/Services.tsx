@@ -173,8 +173,7 @@ export default function Services({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api('/inventory/refresh', { method: 'POST' })
-      services.reload()
-      misc.reload()
+      await Promise.all([services.reload(), misc.reload()])
       setNotice({ kind: 'info', text: 'Хост пересканирован.' })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -199,7 +198,7 @@ export default function Services({ me }: { me: Me }) {
         kind: res.valid === false ? 'error' : 'info',
         text: `${service}: ${ACTION_LABEL[action]} — ${res.output?.trim() || 'выполнено'}${suffix}`,
       })
-      services.reload()
+      await services.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -230,7 +229,7 @@ export default function Services({ me }: { me: Me }) {
       await api('/misc/kill', { method: 'POST', body: { pid: l.pid, command: l.command, signal } })
       await api('/inventory/refresh', { method: 'POST' })
       const fresh = await api<{ listeners: Listener[] }>('/misc')
-      misc.reload()
+      await misc.reload()
       const stillThere = fresh.listeners.some((x) => listenerKey(x) === key)
       if (signal === 'TERM' && stillThere) {
         setKillEscalation(l)

@@ -180,7 +180,7 @@ export default function Virtualization({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api('/inventory/refresh', { method: 'POST' })
-      vms.reload()
+      await vms.reload()
       setNotice({ kind: 'info', text: 'Хост пересканирован.' })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -197,7 +197,7 @@ export default function Virtualization({ me }: { me: Me }) {
     try {
       await api(`/vms/${name}/${action}`, { method: 'POST' })
       setNotice({ kind: 'info', text: `${name}: ${label} выполнено.` })
-      vms.reload()
+      await vms.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -210,7 +210,7 @@ export default function Virtualization({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(`/vms/${name}/${on ? 'autostart-on' : 'autostart-off'}`, { method: 'POST' })
-      vms.reload()
+      await vms.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -228,7 +228,7 @@ export default function Virtualization({ me }: { me: Me }) {
     try {
       await api(`/vms/${name}${qs({ remove_storage: removeStorage ? 'true' : '' })}`, { method: 'DELETE' })
       setNotice({ kind: 'info', text: `${name}: определение удалено.` })
-      vms.reload()
+      await vms.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
