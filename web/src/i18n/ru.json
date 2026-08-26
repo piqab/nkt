@@ -1018,5 +1018,36 @@
       "requests": "запросов",
       "responses": "ответов"
     }
+  },
+  "blocks": {
+    "loadingStructure": "Загрузка структуры файла…",
+    "confirmDelete": "Удалить {{label}}?",
+    "noBlocksFound": "В файле не найдено ни одного узнаваемого блока.",
+    "lines": "строки {{start}}–{{end}}",
+    "edit": "изменить",
+    "delete": "удалить",
+    "close": "закрыть",
+    "notEditableNote": "Создание и удаление недоступны для этого раздела — только правка.",
+    "newBlock": "Новый блок: {{kind}}",
+    "editBlock": "Правка: {{kind}}",
+    "editComment": "Комментарий к правке",
+    "editCommentPlaceholder": "зачем меняем",
+    "reloadServiceAfterSave": "перезагрузить сервис после сохранения",
+    "saving": "Сохраняю…",
+    "save": "Сохранить",
+    "cancel": "Отмена"
+  },
+  "pathPicker": {
+    "owner": "пользователь: {{owner}}",
+    "directory": "каталог",
+    "empty": "Пусто.",
+    "useThisFile": "{{name}} — использовать этот файл",
+    "newFolderLabel": "Новая папка в этом каталоге",
+    "creating": "Создаю…",
+    "addFolder": "+ папка",
+    "newFileLabel": "Или создать новый файл в этом каталоге",
+    "create": "Создать",
+    "cancel": "Отмена",
+    "newComposeStackNote": "создан новый compose-стек"
   }
 }
