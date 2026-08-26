@@ -202,6 +202,7 @@ export default function Hosts({
   const [job, setJob] = useState<string | null>(null)
   const [jobStatus, setJobStatus] = useState<RenewJobStatus | null>(null)
   const [editingHost, setEditingHost] = useState<HubHost | null>(null)
+  const [creatingHost, setCreatingHost] = useState(false)
   const [pubKeyInfo, setPubKeyInfo] = useState<{ hostName: string; key: string } | null>(null)
   const [notifyOn, setNotifyOn] = useState(() => notificationsEnabled())
   const [busyServiceIds, setBusyServiceIds] = useState<Set<number>>(new Set())
@@ -755,6 +756,9 @@ export default function Hosts({
           </h1>
         </div>
         <div className="row" style={{ gap: '1rem' }}>
+          <Button type="primary" onClick={() => setCreatingHost(true)}>
+            {t('hosts.addHost')}
+          </Button>
           <Button loading={bulkBusy === 'start'} disabled={bulkBusy === 'stop'} onClick={() => bulkSetServiceRunning(true)}>
             {t('hosts.startAll')}
           </Button>
@@ -820,12 +824,17 @@ export default function Hosts({
         )}
       </Card>
 
-      <HostForm
-        onDone={(name, authorizedKey) => {
-          reload()
-          if (authorizedKey) setPubKeyInfo({ hostName: name, key: authorizedKey })
-        }}
-      />
+      {creatingHost && (
+        <Modal title={t('hosts.addHostTitle')} onClose={() => setCreatingHost(false)}>
+          <HostForm
+            onDone={(name, authorizedKey) => {
+              setCreatingHost(false)
+              reload()
+              if (authorizedKey) setPubKeyInfo({ hostName: name, key: authorizedKey })
+            }}
+          />
+        </Modal>
+      )}
 
       {editingHost && (
         <Modal title={t('hosts.editHostTitle', { name: editingHost.name })} onClose={() => setEditingHost(null)}>
@@ -1202,6 +1211,7 @@ function HostForm({
         tunnel_enabled: initial?.tunnel_enabled ?? true,
       }}
     >
+      {!editing && <p className="small muted">{t('hosts.addHostHint')}</p>}
       {error && <Banner kind="error">{error}</Banner>}
       <div className="filters">
         <Form.Item name="name" label={t('hosts.name')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '10rem' }}>
@@ -1277,18 +1287,5 @@ function HostForm({
     </Form>
   )
 
-  if (editing) return formEl
-
-  return (
-    <Card
-      title={
-        <>
-          {t('hosts.addHostTitle')}
-          <InfoHint>{t('hosts.addHostHint')}</InfoHint>
-        </>
-      }
-    >
-      {formEl}
-    </Card>
-  )
+  return formEl
 }
