@@ -47,6 +47,11 @@ var ruCatalog = map[string]string{
 
 	"configs.staleContent":         "Файл изменился с момента открытия в редакторе. Перечитайте его и повторите правку.",
 	"configs.invalidVersionNumber": "Некорректный номер версии",
+	"configs.validationFailed":     "Конфигурация не прошла проверку, изменения отменены.",
+	"configs.fileSaved":            "Файл сохранён.",
+	"configs.fileSavedAndReloaded": "Файл сохранён и конфигурация перезагружена.",
+	"configs.applyFailed":          " Применить не удалось: %s",
+	"configs.versionRestored":      "Восстановлена версия #%d.",
 
 	"server.unknownApiMethod": "Неизвестный метод API: %s",
 	"server.frontendNotBuilt": "Фронтенд не собран: запустите npm run build в каталоге web/",

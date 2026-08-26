@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/althq/netknownsthat/internal/collect"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // argvRecordingCollector records every argv Run is called with, so a test
@@ -29,7 +30,7 @@ func TestWriteAppliesDockerComposeUpD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if _, err := m.Write(context.Background(), "test", composeFile, content.Content, "", true); err != nil {
+	if _, err := m.Write(context.Background(), msgs.RU, "test", composeFile, content.Content, "", true); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 
@@ -53,7 +54,7 @@ func TestWriteAppliesNginxReloadNotComposeUp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Read: %v", err)
 	}
-	if _, err := m.Write(context.Background(), "test", nginxSiteFile, content.Content, "", true); err != nil {
+	if _, err := m.Write(context.Background(), msgs.RU, "test", nginxSiteFile, content.Content, "", true); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 
@@ -86,7 +87,7 @@ func TestWriteSurfacesApplyFailureWithoutFailingWrite(t *testing.T) {
 		t.Fatalf("Read: %v", err)
 	}
 
-	res, err := m.Write(context.Background(), "test", composeFile, content.Content, "", true)
+	res, err := m.Write(context.Background(), msgs.RU, "test", composeFile, content.Content, "", true)
 	if err != nil {
 		t.Fatalf("Write должен завершиться успешно, даже если apply не удался: %v", err)
 	}

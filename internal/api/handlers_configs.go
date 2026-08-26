@@ -97,7 +97,7 @@ func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	res, err := s.configs.Write(r.Context(), user, req.Path, req.Content, req.Note, req.Apply)
+	res, err := s.configs.Write(r.Context(), msgs.LangFromRequest(r), user, req.Path, req.Content, req.Note, req.Apply)
 	if err != nil {
 		s.db.Audit(r.Context(), user, "config.write", req.Path, "error", err.Error())
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error(), "result": res})
@@ -131,7 +131,7 @@ func (s *Server) handleConfigBlockWrite(w http.ResponseWriter, r *http.Request) 
 	}
 	user := auth.Username(r.Context())
 
-	res, err := s.configs.WriteBlock(r.Context(), user, req.Path, req.BlockWriteRequest)
+	res, err := s.configs.WriteBlock(r.Context(), msgs.LangFromRequest(r), user, req.Path, req.BlockWriteRequest)
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, control.ErrStaleContent) {
@@ -203,7 +203,7 @@ func (s *Server) handleConfigRollback(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 
-	res, err := s.configs.Rollback(r.Context(), user, id, req.Apply)
+	res, err := s.configs.Rollback(r.Context(), msgs.LangFromRequest(r), user, id, req.Apply)
 	if err != nil {
 		s.db.Audit(r.Context(), user, "config.rollback", res.Path, "error", err.Error())
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error(), "result": res})
