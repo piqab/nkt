@@ -20,7 +20,18 @@ var enCatalog = map[string]string{
 	"auth.createUserFailed":         "Couldn't create the user: %s",
 	"auth.loginRequired":            "Sign-in required",
 
-	"certgen.lineageRequired": "specify a lineage",
+	"certgen.lineageRequired":       "specify a lineage",
+	"certgen.stoppingForStandalone": "Stopping nginx and haproxy for --standalone…",
+	"certgen.serviceStopped":        "%s: stopped",
+	"certgen.serviceStarted":        "%s: started",
+	"certgen.errorPrefix":           "Error: %s",
+	"certgen.running":               "Running: %s",
+	"certgen.certRenewed":           "certbot: certificate renewed",
+	"certgen.certIssued":            "certbot: certificate issued for %s",
+	"certgen.recombinedFile":        "Rebuilt the file for %s: %s",
+	"certgen.checkingPort":          "Checking port %d…",
+	"certgen.startingRenewal":       "Starting renewal of %s",
+	"certgen.startingIssuance":      "Starting certificate issuance for %s",
 
 	"job.notFound": "Job not found",
 

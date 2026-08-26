@@ -23,6 +23,7 @@ import (
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/parse"
 	"github.com/althq/netknownsthat/internal/store"
 )
@@ -321,32 +322,29 @@ func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (c
 // reports the final outcome only afterward — "Готово" must mean the site is
 // actually back, not just that certbot finished.
 func (m *CertManager) renewCertbot(
-	ctx context.Context, user, lineage string, report func(string),
+	ctx context.Context, user, lineage string, report *certProgress,
 ) (collect.CommandResult, error) {
-	if report == nil {
-		report = func(string) {}
-	}
 	if !lineageRe.MatchString(lineage) {
 		return collect.CommandResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
 	}
 
-	report("Останавливаю nginx и haproxy для --standalone…")
+	report.Msg("certgen.stoppingForStandalone")
 	stopped, stopErr := m.stopForStandalone(ctx, user)
 	for _, svc := range stopped {
-		report(svc + ": остановлен")
+		report.Msg("certgen.serviceStopped", svc)
 	}
 
 	finish := func(res collect.CommandResult, err error) (collect.CommandResult, error) {
 		if len(stopped) > 0 {
 			m.restartAfterStandalone(user, stopped)
 			for _, svc := range stopped {
-				report(svc + ": запущен")
+				report.Msg("certgen.serviceStarted", svc)
 			}
 		}
 		if err != nil {
-			report("Ошибка: " + err.Error())
+			report.Msg("certgen.errorPrefix", err.Error())
 		} else {
-			report("Готово")
+			report.Msg("hub.done")
 		}
 		return res, err
 	}
@@ -360,15 +358,15 @@ func (m *CertManager) renewCertbot(
 	}
 
 	cmdLine := fmt.Sprintf("certbot renew --cert-name %s --non-interactive --standalone", lineage)
-	report("Запускаю: " + cmdLine)
+	report.Msg("certgen.running", cmdLine)
 	res, err := m.runCertbotRenew(ctx, user, lineage)
 	if out := strings.TrimSpace(res.Output()); out != "" {
-		report("certbot:\n" + out)
+		report.Raw("certbot:\n" + out)
 	}
 	if err != nil {
 		return finish(res, err)
 	}
-	report("certbot: сертификат продлён")
+	report.Msg("certgen.certRenewed")
 
 	if _, err := m.recombineDerivedCerts(ctx, user, lineage, report); err != nil {
 		return finish(res, fmt.Errorf(
@@ -378,10 +376,35 @@ func (m *CertManager) renewCertbot(
 	return finish(res, nil)
 }
 
-// RenewEvent is one line of progress from a StartRenewCertbot job.
+// RenewEvent is one line of progress from a StartRenewCertbot/
+// StartIssueCertbot job — see internal/hub's identical Event for why
+// Key/Args (unexported from JSON) carry a translatable line instead of the
+// final text: resolved only at read time (resolveText), against whichever
+// language the poll asking for it is in.
 type RenewEvent struct {
 	Time time.Time `json:"time"`
 	Text string    `json:"text"`
+	Key  string    `json:"-"`
+	Args []any     `json:"-"`
+}
+
+func (e RenewEvent) resolveText(lang msgs.Lang) string {
+	if e.Key == "" {
+		return e.Text
+	}
+	return msgs.T(lang, e.Key, e.Args...)
+}
+
+// LocalizeRenewEvents mirrors internal/hub's own (unexported) localizeEvents
+// — exported here since the caller (the API handler serving a job-status
+// poll) lives in a different package.
+func LocalizeRenewEvents(lang msgs.Lang, events []RenewEvent) []RenewEvent {
+	out := make([]RenewEvent, len(events))
+	for i, e := range events {
+		e.Text = e.resolveText(lang)
+		out[i] = e
+	}
+	return out
 }
 
 // renewJob tracks one StartRenewCertbot run in memory.
@@ -394,10 +417,43 @@ type renewJob struct {
 	errMsg string
 }
 
-func (j *renewJob) append(text string) {
+// append logs a translatable line — key looked up in internal/msgs,
+// resolved against the reader's language at snapshot time.
+func (j *renewJob) append(key string, args ...any) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.events = append(j.events, RenewEvent{Time: time.Now(), Key: key, Args: args})
+}
+
+// appendRaw logs a literal, never-translated line — certbot's own stdout,
+// which is not ours to translate (see certProgress.Raw and TODO.md).
+func (j *renewJob) appendRaw(text string) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.events = append(j.events, RenewEvent{Time: time.Now(), Text: text})
+}
+
+// certProgress is what renewCertbot/issueCertbot/checkPortFreeForStandalone/
+// recombineDerivedCerts report progress through: Msg for a translatable
+// Go-authored line, Raw for opaque passthrough text (certbot's own output)
+// that must never go through the catalog. A nil *certProgress is fine —
+// both methods no-op — for the unattended auto-renew path, which has no
+// one to show progress to.
+type certProgress struct {
+	msg func(key string, args ...any)
+	raw func(text string)
+}
+
+func (p *certProgress) Msg(key string, args ...any) {
+	if p != nil && p.msg != nil {
+		p.msg(key, args...)
+	}
+}
+
+func (p *certProgress) Raw(text string) {
+	if p != nil && p.raw != nil {
+		p.raw(text)
+	}
 }
 
 func (j *renewJob) finish(err error) {
@@ -427,7 +483,7 @@ func (m *CertManager) StartRenewCertbot(user, lineage string) (string, error) {
 	}
 
 	job := &renewJob{created: time.Now()}
-	job.append("Начинаю продление " + lineage)
+	job.append("certgen.startingRenewal", lineage)
 
 	id, err := newJobID()
 	if err != nil {
@@ -447,7 +503,7 @@ func (m *CertManager) StartRenewCertbot(user, lineage string) (string, error) {
 		// headroom here covers the stop/start/recombine steps around it.
 		ctx, cancel := context.WithTimeout(context.Background(), m.cfg.CertbotTimeout+2*time.Minute)
 		defer cancel()
-		_, err := m.renewCertbot(ctx, user, lineage, job.append)
+		_, err := m.renewCertbot(ctx, user, lineage, &certProgress{msg: job.append, raw: job.appendRaw})
 		// The cached snapshot still has the pre-renewal expiry (and the
 		// pre-recombine haproxy file contents) until the next scan; run one
 		// now that there's actually something new to pick up, and do it
@@ -511,7 +567,7 @@ func newJobID() (string, error) {
 // step at all is confirming which haproxy file changed, not just that "some
 // copy" did.
 func (m *CertManager) recombineDerivedCerts(
-	ctx context.Context, user, lineage string, report func(string),
+	ctx context.Context, user, lineage string, report *certProgress,
 ) ([]string, error) {
 	snap := m.scanner.Latest()
 	if snap == nil {
@@ -544,7 +600,7 @@ func (m *CertManager) recombineDerivedCerts(
 			return services, fmt.Errorf("запись %s: %w", cert.Path, err)
 		}
 		m.db.Audit(ctx, user, "cert.recombine", cert.Path, "ok", map[string]any{"lineage": lineage})
-		report("Пересобран файл для " + cert.Service + ": " + cert.Path)
+		report.Msg("certgen.recombinedFile", cert.Service, cert.Path)
 
 		if !seen[cert.Service] {
 			seen[cert.Service] = true
@@ -791,11 +847,11 @@ const standalonePort = 80
 // reports the same listeners regardless of what stopForStandalone just
 // "stopped" (fixtures commands don't simulate state changes between calls),
 // so checking it there would reject every renewal in fixtures mode.
-func (m *CertManager) checkPortFreeForStandalone(ctx context.Context, report func(string)) error {
+func (m *CertManager) checkPortFreeForStandalone(ctx context.Context, report *certProgress) error {
 	if m.cfg.IsFixtures() {
 		return nil
 	}
-	report(fmt.Sprintf("Проверяю порт %d…", standalonePort))
+	report.Msg("certgen.checkingPort", standalonePort)
 	holder, free := m.checkPortFree(ctx, standalonePort)
 	if free {
 		return nil
@@ -951,33 +1007,30 @@ func normaliseCertbotDomains(names []string) ([]string, error) {
 // on every exit path via the same finish-closure pattern renewCertbot uses —
 // "Готово" must mean the site is back up, not just that certbot returned.
 func (m *CertManager) issueCertbot(
-	ctx context.Context, user string, domains []string, report func(string),
+	ctx context.Context, user string, domains []string, report *certProgress,
 ) (collect.CommandResult, error) {
-	if report == nil {
-		report = func(string) {}
-	}
 	domains, err := normaliseCertbotDomains(domains)
 	if err != nil {
 		return collect.CommandResult{}, err
 	}
 
-	report("Останавливаю nginx и haproxy для --standalone…")
+	report.Msg("certgen.stoppingForStandalone")
 	stopped, stopErr := m.stopForStandalone(ctx, user)
 	for _, svc := range stopped {
-		report(svc + ": остановлен")
+		report.Msg("certgen.serviceStopped", svc)
 	}
 
 	finish := func(res collect.CommandResult, err error) (collect.CommandResult, error) {
 		if len(stopped) > 0 {
 			m.restartAfterStandalone(user, stopped)
 			for _, svc := range stopped {
-				report(svc + ": запущен")
+				report.Msg("certgen.serviceStarted", svc)
 			}
 		}
 		if err != nil {
-			report("Ошибка: " + err.Error())
+			report.Msg("certgen.errorPrefix", err.Error())
 		} else {
-			report("Готово")
+			report.Msg("hub.done")
 		}
 		return res, err
 	}
@@ -995,15 +1048,15 @@ func (m *CertManager) issueCertbot(
 		emailFlag = "--email " + m.cfg.CertbotEmail
 	}
 	cmdLine := "certbot certonly --standalone --non-interactive --agree-tos " + emailFlag + " -d " + strings.Join(domains, " -d ")
-	report("Запускаю: " + cmdLine)
+	report.Msg("certgen.running", cmdLine)
 	res, err := m.runCertbotCertonly(ctx, user, domains)
 	if out := strings.TrimSpace(res.Output()); out != "" {
-		report("certbot:\n" + out)
+		report.Raw("certbot:\n" + out)
 	}
 	if err != nil {
 		return finish(res, err)
 	}
-	report("certbot: сертификат выпущен для " + strings.Join(domains, ", "))
+	report.Msg("certgen.certIssued", strings.Join(domains, ", "))
 	return finish(res, nil)
 }
 
@@ -1051,7 +1104,7 @@ func (m *CertManager) StartIssueCertbot(user string, domains []string) (string, 
 	}
 
 	job := &renewJob{created: time.Now()}
-	job.append("Начинаю выпуск сертификата для " + strings.Join(domains, ", "))
+	job.append("certgen.startingIssuance", strings.Join(domains, ", "))
 
 	id, err := newJobID()
 	if err != nil {
@@ -1069,7 +1122,7 @@ func (m *CertManager) StartIssueCertbot(user string, domains []string) (string, 
 		// before certbot finishes.
 		ctx, cancel := context.WithTimeout(context.Background(), m.cfg.CertbotTimeout+2*time.Minute)
 		defer cancel()
-		_, err := m.issueCertbot(ctx, user, domains, job.append)
+		_, err := m.issueCertbot(ctx, user, domains, &certProgress{msg: job.append, raw: job.appendRaw})
 		// Rescan before marking done, same reasoning as StartRenewCertbot —
 		// a caller reacting to "done" should already see the new lineage.
 		_, _ = m.scanner.Scan(context.Background())

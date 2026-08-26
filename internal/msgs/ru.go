@@ -19,7 +19,18 @@ var ruCatalog = map[string]string{
 	"auth.createUserFailed":         "Не удалось создать пользователя: %s",
 	"auth.loginRequired":            "Требуется вход в систему",
 
-	"certgen.lineageRequired": "укажите lineage",
+	"certgen.lineageRequired":       "укажите lineage",
+	"certgen.stoppingForStandalone": "Останавливаю nginx и haproxy для --standalone…",
+	"certgen.serviceStopped":        "%s: остановлен",
+	"certgen.serviceStarted":        "%s: запущен",
+	"certgen.errorPrefix":           "Ошибка: %s",
+	"certgen.running":               "Запускаю: %s",
+	"certgen.certRenewed":           "certbot: сертификат продлён",
+	"certgen.certIssued":            "certbot: сертификат выпущен для %s",
+	"certgen.recombinedFile":        "Пересобран файл для %s: %s",
+	"certgen.checkingPort":          "Проверяю порт %d…",
+	"certgen.startingRenewal":       "Начинаю продление %s",
+	"certgen.startingIssuance":      "Начинаю выпуск сертификата для %s",
 
 	"job.notFound": "Задача не найдена",
 

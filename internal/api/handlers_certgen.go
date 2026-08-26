@@ -99,6 +99,7 @@ func (s *Server) handleRenewJobStatus(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "job.notFound"))
 		return
 	}
+	events = control.LocalizeRenewEvents(msgs.LangFromRequest(r), events)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"events": events,
 		"done":   done,
