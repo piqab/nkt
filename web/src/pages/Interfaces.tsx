@@ -1,8 +1,10 @@
 import { useMemo } from 'react'
 import { Table, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
 import type { NetworkInterface } from '../types'
 import { Card, ErrorNote, InfoHint, Loading, formatBytesShort } from '../components/ui'
+import i18n from '../i18n'
 
 /**
  * up alone can't tell a genuinely working interface apart from one that's
@@ -11,15 +13,16 @@ import { Card, ErrorNote, InfoHint, Loading, formatBytesShort } from '../compone
  * out" or "switch port disabled on the other end".
  */
 function StateTag({ i }: { i: NetworkInterface }) {
-  if (!i.up) return <Tag>down</Tag>
+  const { t } = useTranslation()
+  if (!i.up) return <Tag>{t('interfaces.down')}</Tag>
   if (!i.lower_up) {
     return (
-      <Tooltip title="Интерфейс включён администратором, но нет отклика от линк-партнёра — вынут кабель, отключён порт коммутатора, либо peer не поднят">
-        <Tag color="warning">нет линка</Tag>
+      <Tooltip title={t('interfaces.noLinkTooltip')}>
+        <Tag color="warning">{t('interfaces.noLink')}</Tag>
       </Tooltip>
     )
   }
-  return <Tag color="success">up</Tag>
+  return <Tag color="success">{t('interfaces.up')}</Tag>
 }
 
 /** A raw byte counter never shows this: an interface can carry plenty of
@@ -28,6 +31,7 @@ function StateTag({ i }: { i: NetworkInterface }) {
  * only when something is actually non-zero — a column of "0 / 0" on every
  * healthy row would just be noise. */
 function ErrorsCell({ i }: { i: NetworkInterface }) {
+  const { t } = useTranslation()
   const rxErr = i.rx_errors ?? 0
   const rxDrop = i.rx_dropped ?? 0
   const txErr = i.tx_errors ?? 0
@@ -36,14 +40,10 @@ function ErrorsCell({ i }: { i: NetworkInterface }) {
   return (
     <div className="small">
       {(rxErr > 0 || rxDrop > 0) && (
-        <div style={{ color: 'var(--status-warning)' }}>
-          RX: {rxErr} ошибок, {rxDrop} потеряно
-        </div>
+        <div style={{ color: 'var(--status-warning)' }}>{t('interfaces.rxErrors', { errors: rxErr, dropped: rxDrop })}</div>
       )}
       {(txErr > 0 || txDrop > 0) && (
-        <div style={{ color: 'var(--status-warning)' }}>
-          TX: {txErr} ошибок, {txDrop} потеряно
-        </div>
+        <div style={{ color: 'var(--status-warning)' }}>{t('interfaces.txErrors', { errors: txErr, dropped: txDrop })}</div>
       )}
     </div>
   )
@@ -58,12 +58,15 @@ function ErrorsCell({ i }: { i: NetworkInterface }) {
  * from the interface's name alone, shown visibly less certain (outlined,
  * not filled) so the two are never confused for the same kind of claim. */
 function OwnerCell({ i }: { i: NetworkInterface }) {
+  const { t } = useTranslation()
   if (i.docker_network) {
     return (
       <>
         <Tag color="blue">docker: {i.docker_network}</Tag>
         <div className="small muted">
-          {i.attached_containers ? `контейнеров: ${i.attached_containers}` : 'ни одного контейнера не подключено'}
+          {i.attached_containers
+            ? t('interfaces.containersAttached', { count: i.attached_containers })
+            : t('interfaces.noContainersAttached')}
         </div>
       </>
     )
@@ -71,18 +74,21 @@ function OwnerCell({ i }: { i: NetworkInterface }) {
   const guess = guessInterfaceKind(i.name)
   if (!guess) return <span className="small muted">—</span>
   return (
-    <Tooltip title="По имени интерфейса — не проверено, в отличие от docker-меток выше">
+    <Tooltip title={t('interfaces.guessTooltip')}>
       <Tag>{guess}</Tag>
     </Tooltip>
   )
 }
 
+// A plain function, not a component — reads the standalone i18n singleton
+// directly (see ui.tsx's severityLabel for why that's still reactive
+// enough).
 function guessInterfaceKind(name: string): string | null {
-  if (/^veth/.test(name)) return 'veth — контейнер/namespace'
-  if (/^wg/.test(name)) return 'WireGuard (VPN)'
-  if (/^(tun|tap)/.test(name)) return 'туннель (VPN)'
-  if (/^virbr/.test(name)) return 'libvirt/QEMU'
-  if (/^br-/.test(name)) return 'мост (bridge)'
+  if (/^veth/.test(name)) return i18n.t('interfaces.kindVeth')
+  if (/^wg/.test(name)) return i18n.t('interfaces.kindWireguard')
+  if (/^(tun|tap)/.test(name)) return i18n.t('interfaces.kindTunnel')
+  if (/^virbr/.test(name)) return i18n.t('interfaces.kindLibvirt')
+  if (/^br-/.test(name)) return i18n.t('interfaces.kindBridge')
   return null
 }
 
@@ -101,66 +107,6 @@ function interfaceRank(i: NetworkInterface): number {
   return 0 // physical / unclassified — the actual uplinks
 }
 
-const columns: TableColumnsType<NetworkInterface> = [
-  {
-    title: 'Интерфейс',
-    key: 'name',
-    render: (_, i) => (
-      <>
-        <strong>{i.name}</strong>
-        {i.mac && <div className="small mono muted">{i.mac}</div>}
-      </>
-    ),
-  },
-  {
-    title: 'Кому принадлежит',
-    key: 'owner',
-    render: (_, i) => <OwnerCell i={i} />,
-  },
-  {
-    title: 'Состояние',
-    key: 'up',
-    render: (_, i) => (
-      <>
-        <StateTag i={i} />
-        {i.loopback && <Tag>loopback</Tag>}
-      </>
-    ),
-  },
-  {
-    title: 'Адреса',
-    key: 'addresses',
-    render: (_, i) =>
-      i.addresses?.length ? (
-        <div className="small mono">
-          {i.addresses.map((a) => (
-            <div key={a}>{a}</div>
-          ))}
-        </div>
-      ) : (
-        <span className="small muted">—</span>
-      ),
-  },
-  { title: 'MTU', key: 'mtu', align: 'right', render: (_, i) => <span className="small">{i.mtu || '—'}</span> },
-  {
-    title: 'Принято',
-    key: 'rx',
-    align: 'right',
-    render: (_, i) => <span className="small">{formatBytesShort(i.rx_bytes)}</span>,
-  },
-  {
-    title: 'Передано',
-    key: 'tx',
-    align: 'right',
-    render: (_, i) => <span className="small">{formatBytesShort(i.tx_bytes)}</span>,
-  },
-  {
-    title: 'Ошибки/потери',
-    key: 'errors',
-    render: (_, i) => <ErrorsCell i={i} />,
-  },
-]
-
 /**
  * Plain inventory of every network interface on the host — physical NICs,
  * bridges, VLANs, tunnels, loopback — from `ip addr` plus traffic counters
@@ -171,34 +117,91 @@ const columns: TableColumnsType<NetworkInterface> = [
  * a question already answered correctly elsewhere.
  */
 export default function Interfaces() {
+  const { t } = useTranslation()
   const { data, error, loading } = useApi<{ interfaces: NetworkInterface[] }>('/interfaces', 60_000)
   const interfaces = useMemo(() => {
     const list = data?.interfaces ?? []
     return [...list].sort((a, b) => interfaceRank(a) - interfaceRank(b) || a.name.localeCompare(b.name))
   }, [data])
 
+  const columns: TableColumnsType<NetworkInterface> = [
+    {
+      title: t('interfaces.colInterface'),
+      key: 'name',
+      render: (_, i) => (
+        <>
+          <strong>{i.name}</strong>
+          {i.mac && <div className="small mono muted">{i.mac}</div>}
+        </>
+      ),
+    },
+    {
+      title: t('interfaces.colOwner'),
+      key: 'owner',
+      render: (_, i) => <OwnerCell i={i} />,
+    },
+    {
+      title: t('interfaces.colState'),
+      key: 'up',
+      render: (_, i) => (
+        <>
+          <StateTag i={i} />
+          {i.loopback && <Tag>loopback</Tag>}
+        </>
+      ),
+    },
+    {
+      title: t('interfaces.colAddresses'),
+      key: 'addresses',
+      render: (_, i) =>
+        i.addresses?.length ? (
+          <div className="small mono">
+            {i.addresses.map((a) => (
+              <div key={a}>{a}</div>
+            ))}
+          </div>
+        ) : (
+          <span className="small muted">—</span>
+        ),
+    },
+    { title: 'MTU', key: 'mtu', align: 'right', render: (_, i) => <span className="small">{i.mtu || '—'}</span> },
+    {
+      title: t('interfaces.colRx'),
+      key: 'rx',
+      align: 'right',
+      render: (_, i) => <span className="small">{formatBytesShort(i.rx_bytes)}</span>,
+    },
+    {
+      title: t('interfaces.colTx'),
+      key: 'tx',
+      align: 'right',
+      render: (_, i) => <span className="small">{formatBytesShort(i.tx_bytes)}</span>,
+    },
+    {
+      title: t('interfaces.colErrors'),
+      key: 'errors',
+      render: (_, i) => <ErrorsCell i={i} />,
+    },
+  ]
+
   return (
     <>
       <div className="page-head">
         <div>
           <h1>
-            Сетевые интерфейсы
-            <InfoHint>
-              Всё, что реально есть на хосте по данным ip addr: физические карты, мосты, VLAN,
-              туннели, loopback. Кто из них публичный — не здесь: это точно определяется по каждому
-              сокету отдельно на страницах «Разное», Firewall и в находках.
-            </InfoHint>
+            {t('interfaces.title')}
+            <InfoHint>{t('interfaces.hint')}</InfoHint>
           </h1>
         </div>
       </div>
 
       <ErrorNote error={error} />
 
-      <Card title="Интерфейсы" subtitle={`найдено: ${interfaces.length}`}>
+      <Card title={t('interfaces.cardTitle')} subtitle={t('interfaces.found', { count: interfaces.length })}>
         {loading && !data ? (
-          <Loading what="сетевые интерфейсы" />
+          <Loading what={t('interfaces.loading')} />
         ) : interfaces.length === 0 ? (
-          <div className="chart-empty">Интерфейсы не обнаружены.</div>
+          <div className="chart-empty">{t('interfaces.none')}</div>
         ) : (
           <div className="table-wrap">
             <Table<NetworkInterface>
