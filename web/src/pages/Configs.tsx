@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, Checkbox, Input, Segmented, Table, type InputRef, type TableColumnsType } from 'antd'
+import { Trans, useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
 import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDateTime } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import BlockTree from '../components/BlockTree'
+import i18n from '../i18n'
 
 const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker', 'caddy'])
 
@@ -15,24 +17,25 @@ function versionColumns(
   busy: boolean,
   me: Me,
 ): TableColumnsType<ConfigVersion> {
+  const t = i18n.t.bind(i18n)
   return [
     { title: '#', dataIndex: 'id', key: 'id', align: 'right' },
-    { title: 'Когда', key: 'ts', render: (_, v) => <span className="small nowrap">{formatDateTime(v.ts)}</span> },
-    { title: 'Кто', dataIndex: 'author', key: 'author', className: 'small' },
-    { title: 'Событие', dataIndex: 'action', key: 'action', className: 'small' },
-    { title: 'Комментарий', dataIndex: 'note', key: 'note', className: 'small secondary' },
-    { title: 'Размер', key: 'size', align: 'right', render: (_, v) => <span className="num small">{formatBytes(v.size)}</span> },
+    { title: t('configs.colTs'), key: 'ts', render: (_, v) => <span className="small nowrap">{formatDateTime(v.ts)}</span> },
+    { title: t('configs.colAuthor'), dataIndex: 'author', key: 'author', className: 'small' },
+    { title: t('configs.colAction'), dataIndex: 'action', key: 'action', className: 'small' },
+    { title: t('configs.colNote'), dataIndex: 'note', key: 'note', className: 'small secondary' },
+    { title: t('configs.colSize'), key: 'size', align: 'right', render: (_, v) => <span className="num small">{formatBytes(v.size)}</span> },
     {
       title: '',
       key: 'actions',
       render: (_, v) => (
         <div className="row">
           <Button type="link" size="small" onClick={() => showDiff(v.id)}>
-            {diff?.id === v.id ? 'скрыть' : 'diff'}
+            {diff?.id === v.id ? t('configs.hide') : t('configs.diff')}
           </Button>
           {me.is_admin && me.allow_mutations && (
             <Button type="link" size="small" loading={busy} onClick={() => rollback(v.id)}>
-              откатить
+              {t('configs.rollback')}
             </Button>
           )}
         </div>
@@ -42,6 +45,7 @@ function versionColumns(
 }
 
 export default function Configs({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const [view, setView] = useState<'text' | 'blocks'>('text')
   const files = useApi<{ files: ManagedFile[] }>('/configs')
   const [path, setPath] = useState<string | null>(null)
@@ -121,7 +125,7 @@ export default function Configs({ me }: { me: Me }) {
   }
 
   async function rollback(id: number) {
-    if (!window.confirm(`Восстановить версию #${id}? Текущее содержимое файла будет заменено.`)) return
+    if (!window.confirm(t('configs.confirmRollback', { id }))) return
     setBusy(true)
     setError(null)
     try {
@@ -145,7 +149,7 @@ export default function Configs({ me }: { me: Me }) {
       return
     }
     const res = await api<{ diff: string }>(`/configs/versions/${id}/diff`)
-    setDiff({ id, text: res.diff || '(различий нет)' })
+    setDiff({ id, text: res.diff || t('configs.noDiff') })
   }
 
   return (
@@ -153,13 +157,8 @@ export default function Configs({ me }: { me: Me }) {
       <div className="page-head">
         <div>
           <h1>
-            Конфигурации
-            <InfoHint>
-              Файлы, найденные при разборе конфигурации. Перед записью содержимое проверяется самим
-              сервисом (nginx -t, haproxy -c, caddy validate, docker compose config); если проверка не
-              прошла, файл автоматически возвращается в прежнее состояние. Каждая правка сохраняется в
-              истории.
-            </InfoHint>
+            {t('configs.title')}
+            <InfoHint>{t('configs.hint')}</InfoHint>
           </h1>
         </div>
       </div>
@@ -168,19 +167,19 @@ export default function Configs({ me }: { me: Me }) {
 
       <div className="grid" style={{ gridTemplateColumns: 'minmax(240px, 320px) 1fr' }}>
         <Card
-          title="Файлы"
-          subtitle={`${files.data?.files.length ?? 0} шт.`}
+          title={t('configs.filesTitle')}
+          subtitle={t('configs.filesCount', { count: files.data?.files.length ?? 0 })}
           actions={
             me.is_admin &&
             me.allow_mutations && (
               <Button type="link" onClick={() => setNewFileModal({})}>
-                + новый файл
+                {t('configs.newFile')}
               </Button>
             )
           }
         >
           {files.loading && !files.data ? (
-            <Loading what="список файлов" />
+            <Loading what={t('configs.loadingFileList')} />
           ) : (
             <div className="col" style={{ gap: '0.15rem' }}>
               {files.data?.files.map((f) => (
@@ -215,7 +214,7 @@ export default function Configs({ me }: { me: Me }) {
                   )}
                   <div className="small muted">
                     {f.service} · {formatBytes(f.size)}
-                    {!f.editable && ' · только чтение'}
+                    {!f.editable && t('configs.readOnlySuffix')}
                   </div>
                 </Button>
               ))}
@@ -248,17 +247,17 @@ export default function Configs({ me }: { me: Me }) {
             />
           ) : !path ? (
             <Card>
-              <div className="chart-empty">Выберите файл слева.</div>
+              <div className="chart-empty">{t('configs.selectFileLeft')}</div>
             </Card>
           ) : file.loading && !file.data ? (
-            <Loading what="файл" />
+            <Loading what={t('configs.loadingFile')} />
           ) : file.error ? (
             <ErrorNote error={file.error} />
           ) : file.data ? (
             <>
               <Card
                 title={file.data.path}
-                subtitle={`${file.data.service} · ${formatBytes(file.data.size)} · изменён ${formatDateTime(file.data.mod_time)}`}
+                subtitle={t('configs.modified', { service: file.data.service, size: formatBytes(file.data.size), time: formatDateTime(file.data.mod_time) })}
                 actions={
                   <>
                     {BLOCK_SERVICES.has(file.data.service) && (
@@ -266,16 +265,16 @@ export default function Configs({ me }: { me: Me }) {
                         value={view}
                         onChange={(v) => setView(v as 'text' | 'blocks')}
                         options={[
-                          { value: 'text', label: 'текст' },
-                          { value: 'blocks', label: 'блоки' },
+                          { value: 'text', label: t('configs.text') },
+                          { value: 'blocks', label: t('configs.blocks') },
                         ]}
                       />
                     )}
                     {view === 'text' && (
                       <>
-                        {dirty && <span className="small" style={{ color: 'var(--status-warning)' }}>есть несохранённые правки</span>}
+                        {dirty && <span className="small" style={{ color: 'var(--status-warning)' }}>{t('configs.unsavedChanges')}</span>}
                         <Button onClick={() => setDraft(file.data!.content)} disabled={!dirty}>
-                          Сбросить
+                          {t('configs.reset')}
                         </Button>
                         {me.is_admin && me.allow_mutations && (
                           <>
@@ -285,10 +284,10 @@ export default function Configs({ me }: { me: Me }) {
                                 setNewFilePathInput(file.data!.path)
                               }}
                             >
-                              Клонировать
+                              {t('configs.clone')}
                             </Button>
                             <Button type="primary" onClick={save} loading={busy} disabled={!dirty}>
-                              {busy ? 'Сохраняю…' : 'Проверить и сохранить'}
+                              {busy ? t('configs.saving') : t('configs.validateAndSave')}
                             </Button>
                           </>
                         )}
@@ -316,13 +315,11 @@ export default function Configs({ me }: { me: Me }) {
                         <div>{result.message}</div>
                         {result.validation && (
                           <div className="small mono" style={{ marginTop: '0.25rem' }}>
-                            проверка: {result.validation.stdout || result.validation.stderr || 'без вывода'}
+                            {t('configs.validation', { output: result.validation.stdout || result.validation.stderr || t('configs.noOutput') })}
                           </div>
                         )}
                         {!result.validated && (
-                          <div className="small muted">
-                            Проверка конфигурации недоступна для этого сервиса — файл записан без валидации.
-                          </div>
+                          <div className="small muted">{t('configs.noValidation')}</div>
                         )}
                       </Banner>
                     )}
@@ -330,12 +327,12 @@ export default function Configs({ me }: { me: Me }) {
                     {me.is_admin && me.allow_mutations && (
                       <div className="filters" style={{ marginBottom: '0.6rem' }}>
                         <label style={{ flex: 1, minWidth: '14rem' }}>
-                          Комментарий к правке
-                          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="зачем меняем" />
+                          {t('configs.editNote')}
+                          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('configs.editNotePlaceholder')} />
                         </label>
                         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
                           <Checkbox checked={apply} onChange={(e) => setApply(e.target.checked)} />
-                          перезагрузить сервис после сохранения
+                          {t('configs.reloadAfterSave')}
                         </label>
                       </div>
                     )}
@@ -353,8 +350,8 @@ export default function Configs({ me }: { me: Me }) {
               <Card
                 title={
                   <>
-                    История версий
-                    <InfoHint>Первая запись создаётся автоматически перед первой правкой</InfoHint>
+                    {t('configs.versionHistoryTitle')}
+                    <InfoHint>{t('configs.versionHistoryHint')}</InfoHint>
                   </>
                 }
               >
@@ -369,9 +366,7 @@ export default function Configs({ me }: { me: Me }) {
                     />
                   </div>
                 ) : (
-                  <div className="chart-empty">
-                    История пуста — файл ещё не редактировался через этот интерфейс.
-                  </div>
+                  <div className="chart-empty">{t('configs.emptyHistory')}</div>
                 )}
 
                 {diff && <DiffView text={diff.text} />}
@@ -382,16 +377,15 @@ export default function Configs({ me }: { me: Me }) {
       </div>
 
       {newFileModal && (
-        <Modal title={newFileModal.cloneFrom ? 'Клонировать файл' : 'Новый файл'} onClose={() => setNewFileModal(null)}>
+        <Modal title={t(newFileModal.cloneFrom ? 'configs.cloneTitle' : 'configs.newFileTitle')} onClose={() => setNewFileModal(null)}>
           <div className="col">
             {newFileModal.cloneFrom && (
               <p className="small muted" style={{ marginTop: 0 }}>
-                Содержимое <code className="mono">{newFileModal.cloneFrom}</code> (включая несохранённые правки,
-                если были) будет записано под новым путём — исходный файл не меняется.
+                <Trans i18nKey="configs.cloneBody" values={{ path: newFileModal.cloneFrom }} components={{ code: <code className="mono" /> }} />
               </p>
             )}
             <label>
-              Путь
+              {t('configs.pathLabel')}
               <Input
                 ref={newFilePathInputRef}
                 value={newFilePathInput}
@@ -400,8 +394,7 @@ export default function Configs({ me }: { me: Me }) {
               />
             </label>
             <p className="small muted">
-              Каталог должен относиться к nginx, haproxy, caddy или быть путём из{' '}
-              <code className="mono">NKT_COMPOSE_FILES</code> — иначе запись отклонит сервер.
+              <Trans i18nKey="configs.pathHint" components={{ code: <code className="mono" /> }} />
             </p>
             <div className="row" style={{ marginTop: '0.4rem' }}>
               <Button
@@ -416,10 +409,10 @@ export default function Configs({ me }: { me: Me }) {
                   setNewFilePathInput('')
                 }}
               >
-                {newFileModal.cloneFrom ? 'Клонировать' : 'Создать'}
+                {t(newFileModal.cloneFrom ? 'configs.clone' : 'configs.create')}
               </Button>
               <Button type="link" onClick={() => setNewFileModal(null)}>
-                Отмена
+                {t('configs.cancel')}
               </Button>
             </div>
           </div>
@@ -440,6 +433,7 @@ function NewFileForm({
   onCreated: () => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation()
   const [content, setContent] = useState(initialContent)
   const [note, setNote] = useState('')
   const [apply, setApply] = useState(false)
@@ -468,14 +462,14 @@ function NewFileForm({
   return (
     <Card
       title={path}
-      subtitle="новый файл — пока не существует на диске"
+      subtitle={t('configs.newFileSubtitle')}
       actions={
         <>
           <Button type="link" onClick={onCancel} disabled={busy}>
-            Отмена
+            {t('configs.cancel')}
           </Button>
           <Button type="primary" onClick={create} loading={busy} disabled={!content.trim()}>
-            {busy ? 'Создаю…' : 'Проверить и создать'}
+            {busy ? t('configs.creating') : t('configs.validateAndCreate')}
           </Button>
         </>
       }
@@ -486,22 +480,22 @@ function NewFileForm({
           <div>{result.message}</div>
           {result.validation && (
             <div className="small mono" style={{ marginTop: '0.25rem' }}>
-              проверка: {result.validation.stdout || result.validation.stderr || 'без вывода'}
+              {t('configs.validation', { output: result.validation.stdout || result.validation.stderr || t('configs.noOutput') })}
             </div>
           )}
           {result.rolled_back && (
-            <div className="small muted">Файл не был создан — исправьте содержимое и попробуйте снова.</div>
+            <div className="small muted">{t('configs.notCreated')}</div>
           )}
         </Banner>
       )}
       <div className="filters" style={{ marginBottom: '0.6rem' }}>
         <label style={{ flex: 1, minWidth: '14rem' }}>
-          Комментарий
-          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="зачем создаём" />
+          {t('configs.commentLabel')}
+          <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('configs.commentPlaceholder')} />
         </label>
         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
           <Checkbox checked={apply} onChange={(e) => setApply(e.target.checked)} />
-          перезагрузить сервис после сохранения
+          {t('configs.reloadAfterSave')}
         </label>
       </div>
       <CodeEditor value={content} onChange={(e) => setContent(e.target.value)} rows={22} autoFocus />
