@@ -70,7 +70,13 @@
     "all": "все",
     "search": "Поиск",
     "shown": "показано {{shown}} из {{total}}",
-    "noMatch": "Ничего не найдено под заданные условия."
+    "noMatch": "Ничего не найдено под заданные условия.",
+    "hostRescanned": "Хост пересканирован.",
+    "delete": "удалить",
+    "confirmDelete": "Удалить {{what}} {{name}}? Это необратимо.",
+    "deleted": "{{name}}: удалён.",
+    "mutationsDisabled": "Действия недоступны: нужна роль admin и включённые изменения.",
+    "actions": "Действия"
   },
   "containers": {
     "vms": "Виртуальные машины"
@@ -220,5 +226,49 @@
     "role": "Роль",
     "passwordTooShort": "Пароль не короче {{count}} символов",
     "create": "Создать"
+  },
+  "lxd": {
+    "confirmAction": "Выполнить «{{action}}» для инстанса {{name}}?",
+    "actionDone": "{{name}}: {{action}} выполнено.",
+    "instance": "инстанс",
+    "colName": "Имя",
+    "colType": "Тип",
+    "vm": "VM",
+    "container": "контейнер",
+    "colState": "Состояние",
+    "colArch": "Архитектура",
+    "hint": "Контейнеры и виртуальные машины LXD — один инструмент управляет обоими типами инстансов.",
+    "instances": "Инстансы LXD",
+    "newInstance": "+ новый инстанс",
+    "loading": "инстансы LXD",
+    "none": "LXD не обнаружен или инстансов нет.",
+    "state": "состояние: {{state}}",
+    "newInstanceTitle": "Новый инстанс LXD",
+    "newInstanceHint": "lxc launch — образ скачивается автоматически, инстанс сразу запускается.",
+    "image": "Образ",
+    "instanceName": "Имя инстанса",
+    "launching": "Запускаю…",
+    "createAndStart": "Создать и запустить"
+  },
+  "podman": {
+    "confirmAction": "Выполнить «{{action}}» для контейнера {{name}}?",
+    "actionDone": "{{name}}: {{action}} выполнено.",
+    "container": "контейнер",
+    "colContainer": "Контейнер",
+    "colPod": "Под",
+    "colImage": "Образ",
+    "colState": "Состояние",
+    "colPorts": "Порты",
+    "notPublished": "{{port}} (не опубликован)",
+    "hint": "Контейнеры отдельного от docker движка Podman — те же операции: запуск, остановка, удаление.",
+    "containers": "Контейнеры Podman",
+    "newContainer": "+ новый контейнер",
+    "loading": "контейнеры Podman",
+    "none": "Podman не обнаружен или контейнеров нет.",
+    "newContainerTitle": "Новый контейнер Podman",
+    "newContainerHint": "Образ будет скачан (если нужно), контейнер создан и сразу запущен.",
+    "containerName": "Имя контейнера",
+    "creating": "Создаю…",
+    "createAndStart": "Создать и запустить"
   }
 }

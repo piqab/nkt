@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Button, Form, Input, Table, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me, PodmanContainer } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 
 export default function Podman({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const containers = useApi<{ containers: PodmanContainer[] }>('/podman/containers', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [rescanning, setRescanning] = useState(false)
@@ -23,7 +25,7 @@ export default function Podman({ me }: { me: Me }) {
     try {
       await api('/inventory/refresh', { method: 'POST' })
       await containers.reload()
-      setNotice({ kind: 'info', text: 'Хост пересканирован.' })
+      setNotice({ kind: 'info', text: t('common.hostRescanned') })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -32,12 +34,12 @@ export default function Podman({ me }: { me: Me }) {
   }
 
   async function act(name: string, action: string) {
-    if (!window.confirm(`Выполнить «${action}» для контейнера ${name}?`)) return
+    if (!window.confirm(t('podman.confirmAction', { action, name }))) return
     setBusy(`${name}:${action}`)
     setNotice(null)
     try {
       await api(`/podman/containers/${name}/${action}`, { method: 'POST' })
-      setNotice({ kind: 'info', text: `${name}: ${action} выполнено.` })
+      setNotice({ kind: 'info', text: t('podman.actionDone', { name, action }) })
       // The backend only kicks off a fire-and-forget background rescan
       // (rescanLater) — a bare reload() right after would just reread the
       // still-stale cached snapshot. /inventory/refresh runs the same
@@ -52,12 +54,12 @@ export default function Podman({ me }: { me: Me }) {
   }
 
   async function del(name: string) {
-    if (!window.confirm(`Удалить контейнер ${name}? Это необратимо.`)) return
+    if (!window.confirm(t('common.confirmDelete', { what: t('podman.container'), name }))) return
     setBusy(`${name}:delete`)
     setNotice(null)
     try {
       await api(`/podman/containers/${name}`, { method: 'DELETE' })
-      setNotice({ kind: 'info', text: `${name}: удалён.` })
+      setNotice({ kind: 'info', text: t('common.deleted', { name }) })
       await api('/inventory/refresh', { method: 'POST' })
       await containers.reload()
     } catch (err) {
@@ -68,10 +70,10 @@ export default function Podman({ me }: { me: Me }) {
   }
 
   const columns: TableColumnsType<PodmanContainer> = [
-    { title: 'Контейнер', key: 'name', render: (_, c) => <strong>{c.name}</strong> },
-    { title: 'Под', key: 'pod', render: (_, c) => <span className="small">{c.pod || '—'}</span> },
+    { title: t('podman.colContainer'), key: 'name', render: (_, c) => <strong>{c.name}</strong> },
+    { title: t('podman.colPod'), key: 'pod', render: (_, c) => <span className="small">{c.pod || '—'}</span> },
     {
-      title: 'Образ',
+      title: t('podman.colImage'),
       key: 'image',
       render: (_, c) => (
         <span className="small mono" style={{ wordBreak: 'break-all' }}>
@@ -80,7 +82,7 @@ export default function Podman({ me }: { me: Me }) {
       ),
     },
     {
-      title: 'Состояние',
+      title: t('podman.colState'),
       key: 'state',
       render: (_, c) => (
         <>
@@ -90,7 +92,7 @@ export default function Podman({ me }: { me: Me }) {
       ),
     },
     {
-      title: 'Порты',
+      title: t('podman.colPorts'),
       key: 'ports',
       render: (_, c) => (
         <span className="small mono">
@@ -100,14 +102,14 @@ export default function Podman({ me }: { me: Me }) {
                 <div key={i}>
                   {p.host_port
                     ? `${p.host_ip || '0.0.0.0'}:${p.host_port} → ${p.container_port}/${p.protocol}`
-                    : `${p.container_port}/${p.protocol} (не опубликован)`}
+                    : t('podman.notPublished', { port: `${p.container_port}/${p.protocol}` })}
                 </div>
               ))}
         </span>
       ),
     },
     {
-      title: 'Действия',
+      title: t('common.actions'),
       key: 'actions',
       render: (_, c) => (
         <div className="row">
@@ -125,7 +127,7 @@ export default function Podman({ me }: { me: Me }) {
           ))}
           {canControl && (
             <Button danger type="link" size="small" loading={busy === `${c.name}:delete`} onClick={() => del(c.name)}>
-              удалить
+              {t('common.delete')}
             </Button>
           )}
         </div>
@@ -139,13 +141,13 @@ export default function Podman({ me }: { me: Me }) {
         <div>
           <h1>
             Podman
-            <InfoHint>Контейнеры отдельного от docker движка Podman — те же операции: запуск, остановка, удаление.</InfoHint>
+            <InfoHint>{t('podman.hint')}</InfoHint>
           </h1>
         </div>
         <div className="row">
           {me.is_admin && (
             <Button onClick={rescan} loading={rescanning}>
-              {rescanning ? 'Сканирую…' : 'Пересканировать'}
+              {rescanning ? t('common.scanning') : t('common.rescan')}
             </Button>
           )}
         </div>
@@ -153,24 +155,22 @@ export default function Podman({ me }: { me: Me }) {
 
       <ErrorNote error={containers.error} />
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
-      {!canControl && (
-        <Banner kind="info">Действия недоступны: нужна роль admin и включённые изменения.</Banner>
-      )}
+      {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}
 
       <Card
-        title="Контейнеры Podman"
+        title={t('podman.containers')}
         actions={
           canControl && (
             <Button type="link" onClick={() => setCreating(true)}>
-              + новый контейнер
+              {t('podman.newContainer')}
             </Button>
           )
         }
       >
         {containers.loading && !containers.data ? (
-          <Loading what="контейнеры Podman" />
+          <Loading what={t('podman.loading')} />
         ) : allContainers.length === 0 ? (
-          <p className="small muted">Podman не обнаружен или контейнеров нет.</p>
+          <p className="small muted">{t('podman.none')}</p>
         ) : (
           <>
             <InactiveSummary
@@ -217,6 +217,7 @@ export default function Podman({ me }: { me: Me }) {
 type CreateContainerValues = { image: string; name: string }
 
 function CreateContainerForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -237,29 +238,29 @@ function CreateContainerForm({ onClose, onCreated }: { onClose: () => void; onCr
     <Card
       title={
         <>
-          Новый контейнер Podman
-          <InfoHint>Образ будет скачан (если нужно), контейнер создан и сразу запущен.</InfoHint>
+          {t('podman.newContainerTitle')}
+          <InfoHint>{t('podman.newContainerHint')}</InfoHint>
         </>
       }
       actions={
         <Button type="link" onClick={onClose}>
-          закрыть
+          {t('common.close')}
         </Button>
       }
     >
       <Form<CreateContainerValues> layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <Form.Item name="image" label="Образ" rules={[{ required: true }]} style={{ flex: 1, minWidth: '16rem' }}>
+          <Form.Item name="image" label={t('podman.colImage')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '16rem' }}>
             <Input placeholder="docker.io/library/nginx:1.27" />
           </Form.Item>
-          <Form.Item name="name" label="Имя контейнера" rules={[{ required: true }]} style={{ flex: 1, minWidth: '12rem' }}>
+          <Form.Item name="name" label={t('podman.containerName')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '12rem' }}>
             <Input placeholder="my-container" />
           </Form.Item>
         </div>
         <Form.Item style={{ marginBottom: 0 }}>
           <Button type="primary" htmlType="submit" loading={busy}>
-            {busy ? 'Создаю…' : 'Создать и запустить'}
+            {busy ? t('podman.creating') : t('podman.createAndStart')}
           </Button>
         </Form.Item>
       </Form>
