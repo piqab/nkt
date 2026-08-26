@@ -355,6 +355,12 @@
     "editNote": "edited VM definition"
   },
   "hosts": {
+    "notPasswordEncrypted": "This file doesn't look like a password-encrypted export",
+    "corruptedFileTooShort": "The file is corrupted (too short)",
+    "wrongPasswordOrCorrupted": "Wrong password or corrupted file",
+    "notifyNewProblems": "{{name}}: new problems",
+    "notifyUnreachable": "{{name}}: unreachable",
+    "notifyUnreachableBody": "The hub couldn't reach the host on the last attempt",
     "statusNew": "new",
     "statusInstalling": "installing…",
     "statusOnline": "online",

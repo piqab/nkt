@@ -8,6 +8,7 @@
 // tied to the tab.
 
 import type { HubHost } from './types'
+import i18n from './i18n'
 
 const STORAGE_KEY = 'nkt-hub-notify'
 
@@ -65,13 +66,17 @@ export function checkForNewProblems(hosts: HubHost[], state: NotifyState): void 
 
     if (now.criticalHigh > prev.criticalHigh) {
       notify(
-        `${h.name}: новые проблемы`,
+        i18n.t('hosts.notifyNewProblems', { name: h.name }),
         `critical+high: ${prev.criticalHigh} → ${now.criticalHigh}`,
         `nkt-host-${h.id}-problems`,
       )
     }
     if (prev.reachable !== false && now.reachable === false) {
-      notify(`${h.name}: недоступен`, 'Хаб не смог опросить хост при последней попытке', `nkt-host-${h.id}-unreachable`)
+      notify(
+        i18n.t('hosts.notifyUnreachable', { name: h.name }),
+        i18n.t('hosts.notifyUnreachableBody'),
+        `nkt-host-${h.id}-unreachable`,
+      )
     }
   }
 }

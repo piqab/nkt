@@ -355,6 +355,12 @@
     "editNote": "правка определения VM"
   },
   "hosts": {
+    "notPasswordEncrypted": "Файл не похож на зашифрованный паролем экспорт",
+    "corruptedFileTooShort": "Файл повреждён (слишком короткий)",
+    "wrongPasswordOrCorrupted": "Неверный пароль или повреждённый файл",
+    "notifyNewProblems": "{{name}}: новые проблемы",
+    "notifyUnreachable": "{{name}}: недоступен",
+    "notifyUnreachableBody": "Хаб не смог опросить хост при последней попытке",
     "statusNew": "новый",
     "statusInstalling": "установка…",
     "statusOnline": "подключён",
