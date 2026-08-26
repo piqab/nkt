@@ -54,13 +54,20 @@ func LXD(ctx context.Context, c collect.Collector) LXDResult {
 	out, err := c.Run(ctx, "lxc", "list", "--format", "json")
 	if err != nil {
 		res.Status.Warnings = append(res.Status.Warnings, err.Error())
+		res.Status.WarningRefs = append(res.Status.WarningRefs, model.TextRef{})
 		res.Status.Error = "lxd недоступен: " + err.Error()
+		res.Status.ErrorKey = "parse.lxdUnavailable"
+		res.Status.ErrorArgs = []any{err.Error()}
 		return res
 	}
 	if !out.OK() {
 		msg := fmt.Sprintf("lxd: lxc list вернул код %d: %s", out.ExitCode, strings.TrimSpace(out.Output()))
 		res.Status.Warnings = append(res.Status.Warnings, msg)
+		ref := model.TextRef{Key: "parse.lxdListFailed", Args: []any{out.ExitCode, strings.TrimSpace(out.Output())}}
+		res.Status.WarningRefs = append(res.Status.WarningRefs, ref)
 		res.Status.Error = msg
+		res.Status.ErrorKey = ref.Key
+		res.Status.ErrorArgs = ref.Args
 		return res
 	}
 	res.Status.Available = true
@@ -68,6 +75,8 @@ func LXD(ctx context.Context, c collect.Collector) LXDResult {
 	var list []lxdInstance
 	if err := json.Unmarshal([]byte(out.Stdout), &list); err != nil {
 		res.Status.Warnings = append(res.Status.Warnings, fmt.Sprintf("lxd: разбор списка: %v", err))
+		res.Status.WarningRefs = append(res.Status.WarningRefs,
+			model.TextRef{Key: "parse.lxdListParseFailed", Args: []any{err}})
 		return res
 	}
 

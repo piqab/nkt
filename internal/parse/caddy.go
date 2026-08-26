@@ -40,6 +40,8 @@ func Caddy(ctx context.Context, c collect.Collector, mainConfig string) CaddyRes
 	raw, err := c.ReadFile(mainConfig)
 	if err != nil {
 		res.Status.Error = fmt.Sprintf("конфиг %s недоступен: %v", mainConfig, err)
+		res.Status.ErrorKey = "parse.configUnavailable"
+		res.Status.ErrorArgs = []any{mainConfig, err}
 		return res
 	}
 	res.Status.Available = true

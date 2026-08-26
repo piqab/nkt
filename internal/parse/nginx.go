@@ -41,6 +41,8 @@ func Nginx(ctx context.Context, c collect.Collector, mainConfig string) NginxRes
 
 	if !c.Exists(mainConfig) {
 		res.Status.Error = fmt.Sprintf("основной конфиг %s не найден", mainConfig)
+		res.Status.ErrorKey = "parse.nginxMainConfigNotFound"
+		res.Status.ErrorArgs = []any{mainConfig}
 		return res
 	}
 	res.Status.Available = true
@@ -141,6 +143,8 @@ func (p *nginxParser) resolveInclude(pattern, fromFile string) []string {
 		}
 		p.res.Status.Warnings = append(p.res.Status.Warnings,
 			fmt.Sprintf("%s: include %s — файл не найден", fromFile, pattern))
+		p.res.Status.WarningRefs = append(p.res.Status.WarningRefs,
+			model.TextRef{Key: "parse.includeFileNotFound", Args: []any{fromFile, pattern}})
 		return nil
 	}
 	matches, err := p.c.Glob(pattern)

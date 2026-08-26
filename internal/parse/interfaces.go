@@ -50,12 +50,16 @@ func Interfaces(ctx context.Context, c collect.Collector) ([]model.NetworkInterf
 	}
 	if !out.OK() {
 		status.Error = fmt.Sprintf("ip addr завершился с кодом %d: %s", out.ExitCode, strings.TrimSpace(out.Stderr))
+		status.ErrorKey = "parse.commandFailed"
+		status.ErrorArgs = []any{"ip addr", out.ExitCode, strings.TrimSpace(out.Stderr)}
 		return ifaces, status
 	}
 
 	var entries []ipAddrEntry
 	if err := json.Unmarshal([]byte(out.Stdout), &entries); err != nil {
 		status.Error = fmt.Sprintf("разбор вывода ip addr: %v", err)
+		status.ErrorKey = "parse.ipAddrParseFailed"
+		status.ErrorArgs = []any{err}
 		return ifaces, status
 	}
 	status.Available = true

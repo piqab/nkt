@@ -58,6 +58,32 @@ type SourceStatus struct {
 	Warnings   []string `json:"warnings,omitempty"`
 	Error      string   `json:"error,omitempty"`
 	DurationMS int64    `json:"duration_ms"`
+	// ErrorKey/ErrorArgs (never serialized) let LocalizeSnapshot re-render
+	// Error in a request's own language — Error itself always stays the
+	// Russian default text a scan produced, unchanged, for any consumer
+	// (internal/tui, a direct field read) that doesn't go through that
+	// resolution step. Empty ErrorKey means Error hasn't been converted to
+	// the msgs catalog yet (or there's nothing to report) — resolve() just
+	// returns Error as-is in that case, same as before this field existed.
+	ErrorKey  string `json:"-"`
+	ErrorArgs []any  `json:"-"`
+	// WarningRefs mirrors Warnings position-for-position, only when every
+	// warning was appended through a converted call site — LocalizeSnapshot
+	// checks the lengths match before using it, so a partially-converted
+	// source (some warnings appended the old way) safely falls back to the
+	// literal Russian Warnings text instead of a misaligned translation.
+	WarningRefs []TextRef `json:"-"`
+}
+
+// TextRef is a catalog key plus its Sprintf args — internal/parse and
+// internal/analyze record one of these alongside a field's default-language
+// text wherever that text is user-facing, so internal/model.LocalizeSnapshot
+// can re-render it against a specific request's language later, instead of
+// whatever language happened to be active during the scan/analysis run that
+// produced it.
+type TextRef struct {
+	Key  string
+	Args []any
 }
 
 // ManagedFile is a config file the dashboard can show, diff and edit.
@@ -527,6 +553,10 @@ type RenewalInfo struct {
 	Managed   bool   `json:"managed"`          // an automation owns this lineage
 	Automatic bool   `json:"automatic"`        // a timer or cron job actually runs
 	Detail    string `json:"detail,omitempty"` // what was found, in words
+	// DetailKey/DetailArgs — see SourceStatus.ErrorKey's doc comment, same
+	// pattern.
+	DetailKey  string `json:"-"`
+	DetailArgs []any  `json:"-"`
 	// Lineage is the certbot lineage name (the directory under
 	// /etc/letsencrypt/live/), set whenever Tool is "certbot" — including an
 	// orphan lineage with Managed false, so the UI can explain which lineage
@@ -576,6 +606,10 @@ type Certificate struct {
 	Renewal RenewalInfo `json:"renewal"`
 	Serving CertServing `json:"serving"`
 	Error   string      `json:"error,omitempty"`
+	// ErrorKey/ErrorArgs — see SourceStatus.ErrorKey's doc comment, same
+	// pattern.
+	ErrorKey  string `json:"-"`
+	ErrorArgs []any  `json:"-"`
 }
 
 // CertServing describes what a TLS endpoint actually presents on the wire,
@@ -636,6 +670,18 @@ type Finding struct {
 	Line       int      `json:"line,omitempty"`
 	Suggestion string   `json:"suggestion,omitempty"`
 	Refs       []string `json:"refs,omitempty"`
+	// TitleKey/DetailKey/SuggestionKey (+ their Args) — see
+	// SourceStatus.ErrorKey's doc comment, same pattern. Populated by
+	// internal/analyze at the same ~35 rule sites that set Title/Detail/
+	// Suggestion themselves; Rule already doubles as a de-facto catalog
+	// namespace (see internal/analyze's own convention), so most keys read
+	// "finding.<rule>.title" etc.
+	TitleKey       string `json:"-"`
+	TitleArgs      []any  `json:"-"`
+	DetailKey      string `json:"-"`
+	DetailArgs     []any  `json:"-"`
+	SuggestionKey  string `json:"-"`
+	SuggestionArgs []any  `json:"-"`
 }
 
 // Snapshot is the complete picture of the host at one moment.
