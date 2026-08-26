@@ -261,6 +261,25 @@ function Shell({
             <div className="brand-sub">{t('app.brandSub')}</div>
           </div>
           <div className="sidebar-foot">
+            <div className="row" style={{ marginBottom: '0.4rem' }}>
+              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
+                {t('app.theme')}
+                <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
+                  <option value="auto">{t('app.themeAuto')}</option>
+                  <option value="light">{t('app.themeLight')}</option>
+                  <option value="dark">{t('app.themeDark')}</option>
+                </select>
+              </label>
+            </div>
+            <div className="row" style={{ marginBottom: '0.4rem' }}>
+              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
+                {t('app.language')}
+                <select value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
+                  <option value="ru">Русский</option>
+                  <option value="en">English</option>
+                </select>
+              </label>
+            </div>
             <div>
               {me.username} · {me.role}
             </div>
