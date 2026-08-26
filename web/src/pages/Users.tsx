@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Form, Input, Select, Table, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Account, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
@@ -8,18 +9,21 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime,
 const MIN_LENGTH = 10
 
 export default function Users({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const { data, error, loading, reload } = useApi<{ users: Account[] }>('/users', 30_000)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   async function toggleDisabled(u: Account) {
-    const verb = u.disabled ? 'включить' : 'отключить'
-    if (!window.confirm(`${verb === 'включить' ? 'Включить' : 'Отключить'} учётную запись ${u.username}?`)) return
+    if (!window.confirm(t(u.disabled ? 'users.confirmEnable' : 'users.confirmDisable', { username: u.username }))) return
     setBusy(u.username)
     setNotice(null)
     try {
       await api(`/users/${u.username}`, { method: 'PATCH', body: { disabled: !u.disabled } })
-      setNotice({ kind: 'info', text: `${u.username}: учётная запись ${u.disabled ? 'включена' : 'отключена'}.` })
+      setNotice({
+        kind: 'info',
+        text: t(u.disabled ? 'users.enabledNotice' : 'users.disabledNotice', { username: u.username }),
+      })
       reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -30,12 +34,12 @@ export default function Users({ me }: { me: Me }) {
 
   async function toggleRole(u: Account) {
     const nextRole = u.role === 'admin' ? 'viewer' : 'admin'
-    if (!window.confirm(`Сменить роль ${u.username} на ${nextRole}?`)) return
+    if (!window.confirm(t('users.confirmRoleChange', { username: u.username, role: nextRole }))) return
     setBusy(u.username)
     setNotice(null)
     try {
       await api(`/users/${u.username}`, { method: 'PATCH', body: { role: nextRole } })
-      setNotice({ kind: 'info', text: `${u.username}: роль изменена на ${nextRole}.` })
+      setNotice({ kind: 'info', text: t('users.roleChanged', { username: u.username, role: nextRole }) })
       reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -45,12 +49,12 @@ export default function Users({ me }: { me: Me }) {
   }
 
   async function remove(u: Account) {
-    if (!window.confirm(`Удалить учётную запись ${u.username}? Это необратимо.`)) return
+    if (!window.confirm(t('users.confirmDelete', { username: u.username }))) return
     setBusy(u.username)
     setNotice(null)
     try {
       await api(`/users/${u.username}`, { method: 'DELETE' })
-      setNotice({ kind: 'info', text: `${u.username}: учётная запись удалена.` })
+      setNotice({ kind: 'info', text: t('users.deletedNotice', { username: u.username }) })
       reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -61,25 +65,25 @@ export default function Users({ me }: { me: Me }) {
 
   const columns: TableColumnsType<Account> = [
     {
-      title: 'Логин',
+      title: t('users.colLogin'),
       key: 'username',
       render: (_, u) => (
         <>
           <strong>{u.username}</strong>
-          {u.username === me.username && <span className="small muted"> (это вы)</span>}
+          {u.username === me.username && <span className="small muted">{t('users.you')}</span>}
         </>
       ),
     },
-    { title: 'Роль', dataIndex: 'role', key: 'role' },
-    { title: 'Состояние', key: 'state', render: (_, u) => <StateBadge state={u.disabled ? 'inactive' : 'active'} /> },
-    { title: 'Создана', key: 'created_at', render: (_, u) => <span className="small nowrap">{formatDateTime(u.created_at)}</span> },
+    { title: t('users.colRole'), dataIndex: 'role', key: 'role' },
+    { title: t('users.colState'), key: 'state', render: (_, u) => <StateBadge state={u.disabled ? 'inactive' : 'active'} /> },
+    { title: t('users.colCreated'), key: 'created_at', render: (_, u) => <span className="small nowrap">{formatDateTime(u.created_at)}</span> },
     {
-      title: 'Последний вход',
+      title: t('users.colLastLogin'),
       key: 'last_login_at',
-      render: (_, u) => <span className="small nowrap">{u.last_login_at ? formatRelative(u.last_login_at) : 'ни разу'}</span>,
+      render: (_, u) => <span className="small nowrap">{u.last_login_at ? formatRelative(u.last_login_at) : t('users.never')}</span>,
     },
     {
-      title: 'Действия',
+      title: t('users.colActions'),
       key: 'actions',
       render: (_, u) => {
         const self = u.username === me.username
@@ -90,20 +94,20 @@ export default function Users({ me }: { me: Me }) {
               size="small"
               loading={busy === u.username}
               disabled={self}
-              title={self ? 'Нельзя изменить роль себе' : undefined}
+              title={self ? t('users.cannotChangeOwnRole') : undefined}
               onClick={() => toggleRole(u)}
             >
-              {u.role === 'admin' ? 'сделать viewer' : 'сделать admin'}
+              {u.role === 'admin' ? t('users.makeViewer') : t('users.makeAdmin')}
             </Button>
             <Button
               type="link"
               size="small"
               loading={busy === u.username}
               disabled={self && !u.disabled}
-              title={self && !u.disabled ? 'Нельзя отключить себя' : undefined}
+              title={self && !u.disabled ? t('users.cannotDisableSelf') : undefined}
               onClick={() => toggleDisabled(u)}
             >
-              {u.disabled ? 'включить' : 'отключить'}
+              {u.disabled ? t('users.enable') : t('users.disable')}
             </Button>
             <Button
               danger
@@ -111,10 +115,10 @@ export default function Users({ me }: { me: Me }) {
               size="small"
               loading={busy === u.username}
               disabled={self}
-              title={self ? 'Нельзя удалить себя' : undefined}
+              title={self ? t('users.cannotDeleteSelf') : undefined}
               onClick={() => remove(u)}
             >
-              удалить
+              {t('users.delete')}
             </Button>
           </div>
         )
@@ -127,12 +131,8 @@ export default function Users({ me }: { me: Me }) {
       <div className="page-head">
         <div>
           <h1>
-            Учётные записи
-            <InfoHint>
-              Кто может входить в веб-интерфейс и с какой ролью. Пароли хранятся необратимо
-              (argon2id) — сбросить забытый пароль можно только выпуском нового, командой
-              sudo nkt passwd &lt;логин&gt; на самом хосте.
-            </InfoHint>
+            {t('users.title')}
+            <InfoHint>{t('users.hint')}</InfoHint>
           </h1>
         </div>
       </div>
@@ -140,9 +140,9 @@ export default function Users({ me }: { me: Me }) {
       <ErrorNote error={error} />
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
 
-      <Card title="Существующие учётные записи">
+      <Card title={t('users.existingAccounts')}>
         {loading && !data ? (
-          <Loading what="учётные записи" />
+          <Loading what={t('users.loadingAccounts')} />
         ) : (
           <div className="table-wrap">
             <Table<Account> dataSource={data?.users ?? []} columns={columns} rowKey="id" pagination={false} size="small" />
@@ -158,6 +158,7 @@ export default function Users({ me }: { me: Me }) {
 type CreateUserValues = { username: string; password: string; role: 'admin' | 'viewer' }
 
 function CreateUserForm({ onCreated }: { onCreated: () => void }) {
+  const { t } = useTranslation()
   const [form] = Form.useForm<CreateUserValues>()
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -185,21 +186,21 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
     <Card
       title={
         <>
-          Новая учётная запись
-          <InfoHint>Роль viewer — только просмотр, admin — полное управление хостом</InfoHint>
+          {t('users.newAccount')}
+          <InfoHint>{t('users.roleHint')}</InfoHint>
         </>
       }
     >
       <Form<CreateUserValues> form={form} layout="vertical" onFinish={submit} initialValues={{ role: 'viewer' }}>
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <Form.Item name="username" label="Логин" rules={[{ required: true }]} style={{ flex: 1, minWidth: '12rem' }}>
+          <Form.Item name="username" label={t('users.login')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '12rem' }}>
             <Input autoComplete="off" />
           </Form.Item>
-          <Form.Item name="password" label="Пароль" rules={[{ required: true }]} style={{ flex: 1, minWidth: '14rem' }}>
+          <Form.Item name="password" label={t('users.password')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '14rem' }}>
             <Input.Password autoComplete="new-password" onChange={(e) => setPassword(e.target.value)} />
           </Form.Item>
-          <Form.Item name="role" label="Роль">
+          <Form.Item name="role" label={t('users.role')}>
             <Select
               options={[
                 { value: 'viewer', label: 'viewer' },
@@ -210,12 +211,12 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
         </div>
         {tooShort && (
           <p className="small" style={{ color: 'var(--status-warning)', marginTop: '-0.5rem' }}>
-            Пароль не короче {MIN_LENGTH} символов
+            {t('users.passwordTooShort', { count: MIN_LENGTH })}
           </p>
         )}
         <Form.Item style={{ marginBottom: 0 }}>
           <Button type="primary" htmlType="submit" loading={busy} disabled={tooShort}>
-            Создать
+            {t('users.create')}
           </Button>
         </Form.Item>
       </Form>
