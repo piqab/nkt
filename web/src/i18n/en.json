@@ -14,7 +14,9 @@
     "simulatedModeTitle": "Snapshot mode (fixtures).",
     "simulatedModeBody": "Configs are read from a sample directory, not a real host. Control commands run in simulation, and probe/metric values are synthetic — they exist to demonstrate the interface. To work against a real server, run with <code>NKT_MODE=local</code>.",
     "readOnlyMode": "Changes are disabled by the <code>NKT_ALLOW_MUTATIONS=false</code> setting — the interface is read-only.",
-    "loading": "Loading…"
+    "loading": "Loading…",
+    "backToHostList": "← back to host list",
+    "hubBrand": "NetKnownsThat — hub"
   },
   "nav": {
     "overview": "Overview",

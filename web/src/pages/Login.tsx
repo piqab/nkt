@@ -3,11 +3,14 @@ import { Button, Form, Input } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Banner } from '../components/ui'
+import { useLang } from '../hooks/useLang'
+import type { Lang } from '../i18n'
 
 type LoginValues = { username: string; password: string }
 
 export default function Login({ onSuccess }: { onSuccess: () => void }) {
   const { t } = useTranslation()
+  const [lang, setLang] = useLang()
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -27,11 +30,24 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
   return (
     <div className="login-wrap">
       <Form<LoginValues> className="login-card" layout="vertical" onFinish={submit}>
-        <div>
-          <h1>NetKnownsThat</h1>
-          <p className="secondary small" style={{ margin: '0.25rem 0 0' }}>
-            {t('login.subtitle')}
-          </p>
+        <div className="row spread" style={{ alignItems: 'flex-start' }}>
+          <div>
+            <h1>NetKnownsThat</h1>
+            <p className="secondary small" style={{ margin: '0.25rem 0 0' }}>
+              {t('login.subtitle')}
+            </p>
+          </div>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
+            <select
+              value={lang}
+              onChange={(e) => setLang(e.target.value as Lang)}
+              className="small"
+              aria-label={t('app.language')}
+            >
+              <option value="ru">Русский</option>
+              <option value="en">English</option>
+            </select>
+          </label>
         </div>
 
         {error && <Banner kind="error">{error}</Banner>}

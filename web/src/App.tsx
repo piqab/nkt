@@ -4,7 +4,8 @@ import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'reac
 import { Trans, useTranslation } from 'react-i18next'
 import { api, hostScope, onUnauthorized, readSelectedHost, useApi, writeSelectedHost, type SelectedHost } from './api'
 import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
-import { getStoredLang, setStoredLang, type Lang } from './i18n'
+import type { Lang } from './i18n'
+import { useLang } from './hooks/useLang'
 import type { Me, Overview } from './types'
 import Login from './pages/Login'
 import Hosts from './pages/Hosts'
@@ -69,24 +70,6 @@ function useTheme(): [Theme, (t: Theme) => void, ThemeConfig] {
   }, [theme])
 
   return [theme, setTheme, antdTheme]
-}
-
-/** Mirrors useTheme's own localStorage-first persistence (see i18n/index.ts
- * for why getStoredLang isn't just "always start from i18n's own default").
- * Language switches are instant (i18next.changeLanguage doesn't reload
- * anything) — the returned setter both persists the choice and applies it. */
-function useLang(): [Lang, (l: Lang) => void] {
-  const { i18n } = useTranslation()
-  const [lang, setLangState] = useState<Lang>(() => getStoredLang())
-  const setLang = useCallback(
-    (l: Lang) => {
-      setStoredLang(l)
-      setLangState(l)
-      void i18n.changeLanguage(l)
-    },
-    [i18n],
-  )
-  return [lang, setLang]
 }
 
 // label is a translation key (resolved via t() where NAV is rendered), not
@@ -437,9 +420,9 @@ function Shell({
     <div className="hub-frame">
       <div className="hub-topbar">
         <button className="ghost" onClick={() => selectHost(null)}>
-          ← к списку хостов
+          {t('app.backToHostList')}
         </button>
-        <span className="hub-topbar-brand">NetKnownsThat — хаб</span>
+        <span className="hub-topbar-brand">{t('app.hubBrand')}</span>
         <span className="hub-topbar-sep">→</span>
         <span className="hub-topbar-host">{selectedHost!.name}</span>
         <span className="hub-topbar-spacer" />
@@ -447,7 +430,7 @@ function Shell({
           {me.username} · {me.role}
         </span>
         <button className="ghost" onClick={logout}>
-          Выйти
+          {t('app.logout')}
         </button>
       </div>
       {shell}
