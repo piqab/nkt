@@ -1,4 +1,5 @@
 import { Tabs } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
 import type { Container, LXDInstance, Me, PodmanContainer, VirtualMachine } from '../types'
 import Docker from './Docker'
@@ -26,6 +27,7 @@ function tabLabel(text: string, count: number | undefined): string {
  * data through every one of these otherwise-independent pages.
  */
 export default function Containers({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const docker = useApi<{ containers: Container[] }>('/containers', 30_000)
   const podman = useApi<{ containers: PodmanContainer[] }>('/podman/containers', 30_000)
   const lxd = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
@@ -52,7 +54,7 @@ export default function Containers({ me }: { me: Me }) {
         },
         {
           key: 'vms',
-          label: tabLabel('Виртуальные машины', vms.data?.vms.length),
+          label: tabLabel(t('containers.vms'), vms.data?.vms.length),
           children: <Virtualization me={me} />,
         },
       ]}

@@ -40,5 +40,119 @@
     "checking": "Checking…",
     "signIn": "Sign in",
     "adminPasswordNote": "The admin password is printed to the server log on first startup."
+  },
+  "common": {
+    "loading": "Loading {{what}}…",
+    "loadingDefault": "data",
+    "close": "Close",
+    "requestFailed": "The request failed.",
+    "justNow": "just now",
+    "minutesAgo": "{{count}} min ago",
+    "hoursAgo": "{{count}} h ago",
+    "daysAgo": "{{count}} d ago",
+    "severity": {
+      "critical": "critical",
+      "high": "high",
+      "medium": "medium",
+      "low": "low",
+      "info": "info"
+    },
+    "unit": {
+      "byte": "B",
+      "kb": "KB",
+      "mb": "MB",
+      "gb": "GB",
+      "tb": "TB"
+    },
+    "inactive": "inactive ({{count}}):",
+    "scanning": "Scanning…",
+    "rescan": "Rescan",
+    "all": "all",
+    "search": "Search",
+    "shown": "showing {{shown}} of {{total}}",
+    "noMatch": "Nothing matches these filters."
+  },
+  "containers": {
+    "vms": "Virtual machines"
+  },
+  "ptyToolbar": {
+    "copySelection": "Copy selection",
+    "copy": "copy",
+    "clearBuffer": "Clear visible buffer",
+    "clear": "clear",
+    "decreaseFont": "decrease font size",
+    "increaseFont": "increase font size",
+    "searchPlaceholder": "search output… (Enter / Shift+Enter)"
+  },
+  "packageInstall": {
+    "title": "Installing {{packageName}}",
+    "running": "Running <code>apt-get install -y {{packageName}}</code>.",
+    "connectError": "Could not connect to the install session.",
+    "sessionEnded": "Session ended.",
+    "rescanning": "Rescanning the host…",
+    "rescanned": "Host rescanned.",
+    "installed": "{{packageName}} installed. {{status}}",
+    "failed": "Installation failed{{code}}. See the output above for what went wrong.",
+    "failedCode": " (exit code {{code}})"
+  },
+  "passwordForm": {
+    "sessionsEnd": "Changing your password ends every session — you'll need to sign in again.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "tooShort": "at least {{count}} characters",
+    "repeatPassword": "Repeat the new password",
+    "mismatch": "passwords don't match",
+    "changing": "Changing…",
+    "submit": "Change password",
+    "forgot": "Forgot your password and can't sign in? On the host, run <code>sudo nkt passwd</code> — this sets a new admin password without touching accumulated history."
+  },
+  "updateModal": {
+    "title": "Package update",
+    "willOffer": "About to offer an update for: {{names}}. Confirmation (<code>Y/n</code>) happens right in the window below, like a normal terminal.",
+    "connectError": "Could not connect to the update session.",
+    "sessionEnded": "Session ended.",
+    "rescanning": "Rescanning the host…",
+    "rescanned": "Host rescanned — the package list is already up to date.",
+    "succeeded": "Update completed successfully. {{status}}",
+    "failed": "Update failed{{code}}. See the output above for what went wrong.",
+    "failedCode": " (exit code {{code}})"
+  },
+  "findings": {
+    "title": "Configuration issues",
+    "hint": "The result of matching nginx, haproxy, and docker configs against the host's actual listeners and firewall rules. Each entry has an explanation and a concrete action.",
+    "severity": "Severity",
+    "service": "Service",
+    "searchPlaceholder": "port, file, rule name…",
+    "loadingList": "issue list",
+    "whatToDo": "What to do: "
+  },
+  "audit": {
+    "title": "Audit log",
+    "hint": "Every change to the host's state — a service restart, a config edit, a firewall rule — is logged with the user, the result, and the command output.",
+    "actionAll": "all",
+    "resultAll": "all",
+    "jobName": "Job",
+    "jobInterval": "Interval",
+    "jobLastRun": "Last run",
+    "jobProcessed": "Processed",
+    "jobMs": "ms",
+    "jobRuns": "Runs",
+    "jobError": "Error",
+    "auditWhen": "When",
+    "auditWho": "Who",
+    "auditAction": "Action",
+    "auditTarget": "Target",
+    "auditResult": "Result",
+    "auditDetail": "Details",
+    "backgroundJobs": "Background jobs",
+    "schedulerRunning": "scheduler running",
+    "schedulerDisabled": "scheduler disabled",
+    "loadingJobStatus": "job status",
+    "changeHistory": "Change history",
+    "action": "action",
+    "result": "result",
+    "rows": "rows",
+    "loadingLog": "log",
+    "noEntries": "No entries."
   }
 }

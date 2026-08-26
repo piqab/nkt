@@ -1,14 +1,17 @@
 import { useRef, type ChangeEvent, type ReactNode } from 'react'
 import { Alert, Badge, Button, Card as AntCard, Modal as AntModal, Spin, Tooltip } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
+import i18n from '../i18n'
 import type { Severity } from '../types'
 
-export const SEVERITY_LABEL: Record<Severity, string> = {
-  critical: 'критично',
-  high: 'высокая',
-  medium: 'средняя',
-  low: 'низкая',
-  info: 'инфо',
+// A function, not a plain lookup object, so it always reads whatever
+// language is current at call time — most call sites are inside a render
+// that's already reactive to language changes (an ancestor subscribed via
+// useTranslation() re-renders the whole subtree on change; this doesn't
+// need its own subscription for that to reach it).
+export function severityLabel(s: Severity): string {
+  return i18n.t(`common.severity.${s}`)
 }
 
 const SEVERITY_ORDER: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
@@ -32,7 +35,7 @@ const TONE_COLOR_VAR: Record<'critical' | 'high' | 'medium' | 'low' | 'info' | '
  * Status is never carried by colour alone: every badge pairs its dot with a word.
  */
 export function SeverityBadge({ severity }: { severity: Severity }) {
-  return <Badge color={TONE_COLOR_VAR[severity]} text={SEVERITY_LABEL[severity]} />
+  return <Badge color={TONE_COLOR_VAR[severity]} text={severityLabel(severity)} />
 }
 
 export function StateBadge({ state }: { state: string }) {
@@ -125,10 +128,11 @@ export function Banner({
   )
 }
 
-export function Loading({ what = 'данные' }: { what?: string }) {
+export function Loading({ what }: { what?: string }) {
+  const { t } = useTranslation()
   return (
     <div className="chart-empty">
-      <Spin size="small" /> Загружаю {what}…
+      <Spin size="small" /> {t('common.loading', { what: what ?? t('common.loadingDefault') })}
     </div>
   )
 }
@@ -149,7 +153,7 @@ export function Spinner() {
 export function Modal({
   title,
   onClose,
-  closeLabel = 'Закрыть',
+  closeLabel,
   maskClosable,
   children,
 }: {
@@ -164,6 +168,7 @@ export function Modal({
   maskClosable?: boolean
   children: ReactNode
 }) {
+  const { t } = useTranslation()
   return (
     <AntModal
       title={title}
@@ -171,7 +176,7 @@ export function Modal({
       closable={false}
       maskClosable={maskClosable ?? !!onClose}
       onCancel={onClose}
-      footer={onClose ? <Button onClick={onClose}>{closeLabel}</Button> : null}
+      footer={onClose ? <Button onClick={onClose}>{closeLabel ?? t('common.close')}</Button> : null}
       destroyOnHidden
     >
       {children}
@@ -230,10 +235,11 @@ export function CodeEditor({
 }
 
 export function ErrorNote({ error }: { error: string | null }) {
+  const { t } = useTranslation()
   if (!error) return null
   return (
     <Banner kind="error">
-      <strong>Не удалось выполнить запрос.</strong> {error}
+      <strong>{t('common.requestFailed')}</strong> {error}
     </Banner>
   )
 }
@@ -242,11 +248,15 @@ export function Empty({ children }: { children: ReactNode }) {
   return <div className="chart-empty">{children}</div>
 }
 
+// Plain functions, not components — can't call useTranslation(), so they
+// read the standalone i18n singleton directly (see severityLabel above for
+// why that's still reactive enough: called fresh from within a render that
+// cascades on language change, not memoized against it).
 export function formatDateTime(iso: string | undefined | null): string {
   if (!iso) return '—'
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'medium' })
+  return d.toLocaleString(i18n.language === 'en' ? 'en-US' : 'ru-RU', { dateStyle: 'short', timeStyle: 'medium' })
 }
 
 export function formatRelative(iso: string | undefined | null): string {
@@ -254,15 +264,15 @@ export function formatRelative(iso: string | undefined | null): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   const diff = (Date.now() - d.getTime()) / 1000
-  if (diff < 60) return 'только что'
-  if (diff < 3600) return `${Math.floor(diff / 60)} мин назад`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} ч назад`
-  return `${Math.floor(diff / 86400)} дн назад`
+  if (diff < 60) return i18n.t('common.justNow')
+  if (diff < 3600) return i18n.t('common.minutesAgo', { count: Math.floor(diff / 60) })
+  if (diff < 86400) return i18n.t('common.hoursAgo', { count: Math.floor(diff / 3600) })
+  return i18n.t('common.daysAgo', { count: Math.floor(diff / 86400) })
 }
 
 export function formatBytesShort(n: number): string {
   if (!n) return '0'
-  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ']
+  const units = ['common.unit.byte', 'common.unit.kb', 'common.unit.mb', 'common.unit.gb', 'common.unit.tb']
   const i = Math.min(Math.floor(Math.log(n) / Math.log(1024)), units.length - 1)
-  return `${(n / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${units[i]}`
+  return `${(n / 1024 ** i).toFixed(i === 0 ? 0 : 1)} ${i18n.t(units[i])}`
 }
