@@ -8,6 +8,7 @@
  * export step (or another hub's export button) encrypts decrypts here —
  * same format either direction.
  */
+import i18n from './i18n'
 
 const MAGIC = new Uint8Array([0x4e, 0x4b, 0x54, 0x31]) // "NKT1"
 const SALT_SIZE = 16
@@ -76,11 +77,11 @@ export async function encryptWithPassword(password: string, plaintext: Uint8Arra
 
 export async function decryptWithPassword(password: string, envelope: Uint8Array): Promise<Uint8Array> {
   if (!isPasswordEncrypted(envelope)) {
-    throw new Error('Файл не похож на зашифрованный паролем экспорт')
+    throw new Error(i18n.t('hosts.notPasswordEncrypted'))
   }
   const headerSize = MAGIC.length + SALT_SIZE + 4
   if (envelope.length < headerSize + NONCE_SIZE) {
-    throw new Error('Файл повреждён (слишком короткий)')
+    throw new Error(i18n.t('hosts.corruptedFileTooShort'))
   }
   let offset = MAGIC.length
   const salt = envelope.slice(offset, offset + SALT_SIZE)
@@ -96,6 +97,6 @@ export async function decryptWithPassword(password: string, envelope: Uint8Array
     const plaintext = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: nonce as BufferSource }, key, ciphertext as BufferSource)
     return new Uint8Array(plaintext)
   } catch {
-    throw new Error('Неверный пароль или повреждённый файл')
+    throw new Error(i18n.t('hosts.wrongPasswordOrCorrupted'))
   }
 }
