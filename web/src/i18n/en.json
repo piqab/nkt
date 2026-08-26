@@ -80,7 +80,9 @@
     "adminMutationsOnly": "Available only to the admin role with mutations enabled (AllowMutations).",
     "actions": "Actions",
     "notPublished": "{{port}} (not published)",
-    "httpError": "Error {{status}}"
+    "httpError": "Error {{status}}",
+    "period": "Period",
+    "schedule": "schedule"
   },
   "containers": {
     "vms": "Virtual machines"
@@ -939,7 +941,6 @@
     "what": "monitoring targets",
     "title": "Availability schedule",
     "hint": "Every declared listener and every pool backend is checked on a schedule (interval {{interval}}). Below is when resources were actually available, not just their current state.",
-    "period": "Period",
     "range": {
       "day": "24h",
       "week": "7 days",
@@ -955,7 +956,6 @@
     "downtimeByHourAll": "Downtime by hour of week — all resources",
     "heatmapHint": "Each cell is one hour of the week. The darker it is, the more checks failed during that hour.",
     "showAllTargets": "show all resources",
-    "schedule": "schedule",
     "downtimeScale": "downtime",
     "noChecksThisHour": "no checks during this hour",
     "availabilityAndLatencyFor": "Availability and latency — {{label}}",
@@ -983,6 +983,40 @@
       "start": "Start",
       "end": "End",
       "error": "Error"
+    }
+  },
+  "usage": {
+    "title": "Network resource usage",
+    "hint": "Firewall counters, container stats, and parsed nginx/haproxy access logs. Logs are parsed by their record timestamp, so the chart shows when the load actually happened, not when it was collected.",
+    "metric": "Metric",
+    "simulated": "Metrics are synthetic: the host snapshot is static, so counters are simulated against a daily load profile. On a real host these would be increments of iptables counters and docker stats.",
+    "unitLabel": "Unit: {{unit}}",
+    "totalOnHost": " · total on host: {{value}}",
+    "metrics": "metrics",
+    "total": "total: {{value}}",
+    "topLoad": "Heaviest users",
+    "sumForPeriod": "Sum for the period, {{unit}}",
+    "rating": "ranking",
+    "measurementsCount": "samples: {{count}}",
+    "usageSchedule": "Usage schedule",
+    "scheduleHint": "Average load by hour of week: shows working hours, night windows, and weekends.",
+    "load": "load",
+    "noMeasurementsThisHour": "no measurements during this hour",
+    "other": "Other",
+    "series": {
+      "dockerNet": "Container network traffic",
+      "dockerCpu": "Container CPU",
+      "dockerMem": "Container memory",
+      "firewallBytes": "Firewall rule traffic",
+      "nginxRequests": "nginx requests (from access logs)",
+      "nginxErrors": "nginx 5xx errors",
+      "haproxyRequests": "haproxy requests"
+    },
+    "unit": {
+      "bytes": "bytes",
+      "percent": "%",
+      "requests": "requests",
+      "responses": "responses"
     }
   }
 }
