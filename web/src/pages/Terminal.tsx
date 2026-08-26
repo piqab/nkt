@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Button } from 'antd'
 import { useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import type { Me } from '../types'
 import { api, hostScope, readSelectedHost, useApi } from '../api'
 import { Banner, Card, InfoHint } from '../components/ui'
@@ -22,6 +23,7 @@ import PackageInstallModal from '../components/PackageInstallModal'
  * its own separate window makes no sense.
  */
 export default function TerminalPage({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const canUse = me.is_admin && me.allow_mutations
   const location = useLocation()
   const isPopout = location.pathname === '/terminal/popout'
@@ -59,7 +61,7 @@ export default function TerminalPage({ me }: { me: Me }) {
   useEffect(() => {
     if (!isPopout) return
     const name = new URLSearchParams(location.search).get('name')
-    document.title = name ? `Терминал: ${name}` : 'Терминал'
+    document.title = name ? t('terminal.popoutTitle', { name }) : t('terminal.popoutTitleDefault')
   }, [isPopout, location.search])
 
   // Whether the terminal/updates/self-update escape hatch (systemd-run) is
@@ -108,17 +110,7 @@ export default function TerminalPage({ me }: { me: Me }) {
   const [tmuxInstallOutcome, setTmuxInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
 
   function handleStart(tmux: boolean) {
-    if (
-      !window.confirm(
-        tmux
-          ? 'Открыть терминал в tmux на этом хосте? Это полноценный доступ к shell от имени пользователя, ' +
-              'под которым запущен nkt (или ssh-пользователя хоста, если он задан). Сессия tmux переживёт ' +
-              'закрытие вкладки — переподключиться можно тем же способом. Действие записывается в журнал.'
-          : 'Открыть терминал на этом хосте? Это полноценный доступ к shell от имени пользователя, ' +
-              'под которым запущен nkt — обычно root, либо ssh-пользователь хоста, если он задан. ' +
-              'Действие записывается в журнал.',
-      )
-    ) {
+    if (!window.confirm(t(tmux ? 'terminal.confirmOpenTmux' : 'terminal.confirmOpen'))) {
       return
     }
     // dbusStatus polls every 30s in the background — too stale to trust
@@ -144,7 +136,7 @@ export default function TerminalPage({ me }: { me: Me }) {
       setTmuxInstallOpen(true)
       return
     }
-    if (window.confirm('tmux не установлен на этом хосте. Установить (apt-get install -y tmux) и открыть сессию?')) {
+    if (window.confirm(t('terminal.confirmInstallTmux'))) {
       setTmuxInstallOutcome(null)
       setTmuxInstallOpen(true)
     }
@@ -201,25 +193,21 @@ export default function TerminalPage({ me }: { me: Me }) {
       <div className="page-head spread">
         <div>
           <h1>
-            Терминал
-            <InfoHint>
-              Интерактивный shell на этом хосте прямо в браузере. Требует явно включённой опции хоста
-              (NKT_TERMINAL_ENABLED=true) — если сервер её не поднял, подключение завершится ошибкой
-              ниже.
-            </InfoHint>
+            {t('terminal.title')}
+            <InfoHint>{t('terminal.hint')}</InfoHint>
           </h1>
         </div>
         <div className="row">
           {isPopout ? (
-            <Button onClick={() => window.close()}>закрыть окно</Button>
+            <Button onClick={() => window.close()}>{t('terminal.closeWindow')}</Button>
           ) : (
-            <Button disabled={!canUse} onClick={openPopout} title="Открыть в отдельном окне браузера — переживёт переход по другим страницам">
-              Открепить в отдельное окно
+            <Button disabled={!canUse} onClick={openPopout} title={t('terminal.detachTooltip')}>
+              {t('terminal.detach')}
             </Button>
           )}
           {status === 'connected' ? (
             <Button danger onClick={stop}>
-              закрыть терминал
+              {t('terminal.closeTerminal')}
             </Button>
           ) : (
             <>
@@ -229,41 +217,31 @@ export default function TerminalPage({ me }: { me: Me }) {
                 disabled={!canUse || (status === 'connecting' && tmuxMode)}
                 onClick={() => handleStart(false)}
               >
-                {status === 'connecting' && !tmuxMode ? 'Подключаюсь…' : 'Открыть терминал'}
+                {status === 'connecting' && !tmuxMode ? t('terminal.connecting') : t('terminal.openTerminal')}
               </Button>
               <Button
                 loading={status === 'connecting' && tmuxMode}
                 disabled={!canUse || (status === 'connecting' && !tmuxMode)}
                 onClick={handleTmuxButtonClick}
-                title="Сессия tmux переживает закрытие вкладки — переподключение продолжает её же"
+                title={t('terminal.tmuxTooltip')}
               >
-                {status === 'connecting' && tmuxMode ? 'Подключаюсь…' : 'Открыть в tmux'}
+                {status === 'connecting' && tmuxMode ? t('terminal.connecting') : t('terminal.openInTmux')}
               </Button>
             </>
           )}
         </div>
       </div>
 
-      {!canUse && (
-        <Banner kind="info">Доступно только роли admin с включёнными изменениями (AllowMutations).</Banner>
-      )}
-      {status === 'error' && (
-        <Banner kind="error">
-          Не удалось подключиться. Терминал может быть выключен на сервере
-          (NKT_TERMINAL_ENABLED) — либо это обычная сетевая ошибка.
-        </Banner>
-      )}
-      {status === 'closed' && <Banner kind="info">Сессия завершена.</Banner>}
+      {!canUse && <Banner kind="info">{t('terminal.mutationsDisabled')}</Banner>}
+      {status === 'error' && <Banner kind="error">{t('terminal.connectError')}</Banner>}
+      {status === 'closed' && <Banner kind="info">{t('terminal.sessionEnded')}</Banner>}
 
       {status !== 'connected' &&
         (dbusStatus === null ? (
-          <Banner kind="info">Проверяю доступность D-Bus на хосте…</Banner>
+          <Banner kind="info">{t('terminal.checkingDbus')}</Banner>
         ) : dbusStatus.needed ? (
           <Banner kind="warn">
-            На хосте не работает D-Bus — терминал (если он вообще открылся), обновление пакетов и
-            самообновление хоста через резервный канал ограничены песочницей systemd-юнита: не могут
-            писать в системные пути. Причина обычно в том, что dbus не установлен или не запущен
-            (некоторые минимальные образы, например Debian 11, не ставят его по умолчанию).{' '}
+            {t('terminal.dbusMissing')}{' '}
             {dbusStatus.can_install ? (
               dbusInstallStatus?.active ? (
                 <Button
@@ -274,28 +252,28 @@ export default function TerminalPage({ me }: { me: Me }) {
                     setDbusInstallOpen(true)
                   }}
                 >
-                  установка выполняется — открыть
+                  {t('terminal.installRunningOpen')}
                 </Button>
               ) : (
                 <Button
                   size="small"
                   type="primary"
                   onClick={() => {
-                    if (window.confirm('Установить dbus (apt-get install -y dbus) и запустить его на этом хосте?')) {
+                    if (window.confirm(t('terminal.confirmInstallDbus'))) {
                       setDbusInstallOutcome(null)
                       setDbusInstallOpen(true)
                     }
                   }}
                 >
-                  Установить dbus
+                  {t('terminal.installDbus')}
                 </Button>
               )
             ) : (
-              'Автоматическая установка недоступна на этом хосте — поставьте вручную: apt-get install -y dbus && systemctl enable --now dbus.'
+              t('terminal.manualDbusInstall')
             )}
           </Banner>
         ) : (
-          <Banner kind="success">D-Bus на хосте доступен — песочница не ограничивает терминал и обновления.</Banner>
+          <Banner kind="success">{t('terminal.dbusOk')}</Banner>
         ))}
 
       <div className="row" style={{ alignItems: 'flex-start', gap: '1rem' }}>
@@ -335,7 +313,7 @@ export default function TerminalPage({ me }: { me: Me }) {
                     borderRadius: 'var(--radius-sm)',
                   }}
                 >
-                  Терминал ещё не открыт.
+                  {t('terminal.notOpenYet')}
                 </div>
               )}
             </div>
@@ -377,34 +355,34 @@ export default function TerminalPage({ me }: { me: Me }) {
 // a plain shell, is at risk there) and was removed; this is deliberately
 // just documentation now, styled to stay visually consistent with the rest
 // of the page rather than as a plain text block.
-const TMUX_HINTS: { title: string; rows: [string, string][] }[] = [
+const TMUX_HINTS: { titleKey: string; rows: [string, string][] }[] = [
   {
-    title: 'Окна',
+    titleKey: 'terminal.windowsGroup',
     rows: [
-      ['Ctrl+b c', 'новое окно'],
-      ['Ctrl+b ,', 'переименовать текущее окно'],
-      ['Ctrl+b n / p', 'следующее / предыдущее окно'],
-      ['Ctrl+b 0…9', 'переключиться на окно N'],
-      ['Ctrl+b w', 'список окон (интерактивный)'],
-      ['Ctrl+b &', 'закрыть текущее окно'],
+      ['Ctrl+b c', 'terminal.newWindow'],
+      ['Ctrl+b ,', 'terminal.renameWindow'],
+      ['Ctrl+b n / p', 'terminal.nextPrevWindow'],
+      ['Ctrl+b 0…9', 'terminal.switchWindow'],
+      ['Ctrl+b w', 'terminal.listWindows'],
+      ['Ctrl+b &', 'terminal.closeWindowHint'],
     ],
   },
   {
-    title: 'Панели',
+    titleKey: 'terminal.panesGroup',
     rows: [
-      ['Ctrl+b %', 'разделить панель по вертикали'],
-      ['Ctrl+b "', 'разделить панель по горизонтали'],
-      ['Ctrl+b ←↑↓→', 'переключиться на соседнюю панель'],
-      ['Ctrl+b z', 'развернуть/свернуть панель на весь экран'],
-      ['Ctrl+b x', 'закрыть текущую панель'],
+      ['Ctrl+b %', 'terminal.splitVertical'],
+      ['Ctrl+b "', 'terminal.splitHorizontal'],
+      ['Ctrl+b ←↑↓→', 'terminal.switchPane'],
+      ['Ctrl+b z', 'terminal.toggleZoom'],
+      ['Ctrl+b x', 'terminal.closePane'],
     ],
   },
   {
-    title: 'Сессия',
+    titleKey: 'terminal.sessionGroup',
     rows: [
-      ['Ctrl+b d', 'отключиться (сессия продолжает работать)'],
-      ['Ctrl+b [', 'режим прокрутки/копирования (q — выйти)'],
-      ['Ctrl+b ]', 'вставить скопированное'],
+      ['Ctrl+b d', 'terminal.detachSession'],
+      ['Ctrl+b [', 'terminal.copyMode'],
+      ['Ctrl+b ]', 'terminal.paste'],
     ],
   },
 ]
@@ -434,6 +412,7 @@ function readTmuxHintsCollapsed(): boolean {
  * that contrast loss.
  */
 function TmuxHints() {
+  const { t } = useTranslation()
   const [collapsed, setCollapsed] = useState(readTmuxHintsCollapsed)
 
   function toggle() {
@@ -451,21 +430,21 @@ function TmuxHints() {
   return (
     <div style={{ width: 240, flexShrink: 0 }}>
       <Card
-        title="Управление tmux"
+        title={t('terminal.tmuxManage')}
         actions={
           <Button size="small" onClick={toggle}>
-            {collapsed ? 'показать' : 'скрыть'}
+            {collapsed ? t('terminal.show') : t('terminal.hide')}
           </Button>
         }
       >
         {!collapsed &&
           TMUX_HINTS.map((group) => (
-            <div key={group.title} style={{ marginTop: '0.5rem' }}>
+            <div key={group.titleKey} style={{ marginTop: '0.5rem' }}>
               <div className="small muted" style={{ marginBottom: '0.2rem' }}>
-                {group.title}
+                {t(group.titleKey)}
               </div>
               <div className="col" style={{ gap: '0.15rem' }}>
-                {group.rows.map(([keys, desc]) => (
+                {group.rows.map(([keys, descKey]) => (
                   <div
                     key={keys}
                     className="row"
@@ -485,7 +464,7 @@ function TmuxHints() {
                     >
                       {keys}
                     </span>
-                    <span className="small muted">{desc}</span>
+                    <span className="small muted">{t(descKey)}</span>
                   </div>
                 ))}
               </div>
