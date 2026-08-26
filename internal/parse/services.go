@@ -87,6 +87,7 @@ func Services(ctx context.Context, c collect.Collector, specs []ServiceSpec) ([]
 
 	if !status.Available {
 		status.Error = "systemctl недоступен: состояние сервисов прочитать не удалось"
+		status.ErrorKey = "parse.systemctlUnavailable"
 	}
 	return out, status
 }

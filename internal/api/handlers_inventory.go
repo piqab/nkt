@@ -10,6 +10,7 @@ import (
 	"github.com/althq/netknownsthat/internal/analyze"
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 	"github.com/althq/netknownsthat/internal/topology"
 )
@@ -70,6 +71,13 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
+	// A scan runs once and gets cached (Scanner.Latest); its Sources/Certs/
+	// Findings text was generated in whatever language happened to be
+	// active then — LocalizeSnapshot re-renders it fresh against THIS
+	// request's language without touching the cached snapshot itself, so
+	// two requests in different languages against the same cached scan
+	// never step on each other.
+	snap = model.LocalizeSnapshot(msgs.LangFromRequest(r), snap)
 
 	publicEndpoints, tlsEndpoints := 0, 0
 	for _, e := range snap.Endpoints {
@@ -177,7 +185,7 @@ func (s *Server) handleInventory(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, snap)
+	writeJSON(w, http.StatusOK, model.LocalizeSnapshot(msgs.LangFromRequest(r), snap))
 }
 
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
@@ -203,6 +211,7 @@ func (s *Server) handleFindings(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
+	snap = model.LocalizeSnapshot(msgs.LangFromRequest(r), snap)
 	severity := r.URL.Query().Get("severity")
 	service := r.URL.Query().Get("service")
 	rule := r.URL.Query().Get("rule")
@@ -376,6 +385,7 @@ func (s *Server) handleCertificates(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
+	snap = model.LocalizeSnapshot(msgs.LangFromRequest(r), snap)
 
 	expired, expiring, unreadable, unmanaged := 0, 0, 0, 0
 	for _, c := range snap.Certs {

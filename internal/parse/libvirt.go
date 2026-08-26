@@ -84,13 +84,20 @@ func Libvirt(ctx context.Context, c collect.Collector, uri string) LibvirtResult
 	out, err := c.Run(ctx, "virsh", "-c", uri, "list", "--all", "--name")
 	if err != nil {
 		res.Status.Warnings = append(res.Status.Warnings, err.Error())
+		res.Status.WarningRefs = append(res.Status.WarningRefs, model.TextRef{})
 		res.Status.Error = "libvirt недоступен: " + err.Error()
+		res.Status.ErrorKey = "parse.libvirtUnavailable"
+		res.Status.ErrorArgs = []any{err.Error()}
 		return res
 	}
 	if !out.OK() {
 		msg := fmt.Sprintf("libvirt: virsh list вернул код %d: %s", out.ExitCode, strings.TrimSpace(out.Output()))
 		res.Status.Warnings = append(res.Status.Warnings, msg)
+		ref := model.TextRef{Key: "parse.libvirtListFailed", Args: []any{out.ExitCode, strings.TrimSpace(out.Output())}}
+		res.Status.WarningRefs = append(res.Status.WarningRefs, ref)
 		res.Status.Error = msg
+		res.Status.ErrorKey = ref.Key
+		res.Status.ErrorArgs = ref.Args
 		return res
 	}
 	res.Status.Available = true
@@ -100,9 +107,10 @@ func Libvirt(ctx context.Context, c collect.Collector, uri string) LibvirtResult
 		if name == "" {
 			continue
 		}
-		vm, warn := readDomain(ctx, c, uri, name)
+		vm, warn, warnRef := readDomain(ctx, c, uri, name)
 		if warn != "" {
 			res.Status.Warnings = append(res.Status.Warnings, warn)
+			res.Status.WarningRefs = append(res.Status.WarningRefs, warnRef)
 		}
 		res.VMs = append(res.VMs, vm)
 		if vm.Persistent {
@@ -116,22 +124,25 @@ func Libvirt(ctx context.Context, c collect.Collector, uri string) LibvirtResult
 	return res
 }
 
-func readDomain(ctx context.Context, c collect.Collector, uri, name string) (model.VirtualMachine, string) {
+func readDomain(ctx context.Context, c collect.Collector, uri, name string) (model.VirtualMachine, string, model.TextRef) {
 	vm := model.VirtualMachine{Name: name}
 
 	if info, err := c.Run(ctx, "virsh", "-c", uri, "dominfo", name); err == nil && info.OK() {
 		applyDominfo(&vm, info.Stdout)
 	} else {
-		return vm, fmt.Sprintf("libvirt: dominfo %s недоступен", name)
+		return vm, fmt.Sprintf("libvirt: dominfo %s недоступен", name),
+			model.TextRef{Key: "parse.libvirtDominfoUnavailable", Args: []any{name}}
 	}
 
 	xmlOut, err := c.Run(ctx, "virsh", "-c", uri, "dumpxml", name)
 	if err != nil || !xmlOut.OK() {
-		return vm, fmt.Sprintf("libvirt: dumpxml %s недоступен", name)
+		return vm, fmt.Sprintf("libvirt: dumpxml %s недоступен", name),
+			model.TextRef{Key: "parse.libvirtDumpxmlUnavailable", Args: []any{name}}
 	}
 	var dom domainXML
 	if err := xml.Unmarshal([]byte(xmlOut.Stdout), &dom); err != nil {
-		return vm, fmt.Sprintf("libvirt: разбор XML домена %s: %v", name, err)
+		return vm, fmt.Sprintf("libvirt: разбор XML домена %s: %v", name, err),
+			model.TextRef{Key: "parse.libvirtXMLParseFailed", Args: []any{name, err}}
 	}
 	if dom.UUID != "" {
 		vm.UUID = dom.UUID
@@ -153,7 +164,7 @@ func readDomain(ctx context.Context, c collect.Collector, uri, name string) (mod
 			Source: src, MAC: i.MAC.Address, Model: i.Model.Type,
 		})
 	}
-	return vm, ""
+	return vm, "", model.TextRef{}
 }
 
 // applyDominfo fills state/CPU/memory/persistent/autostart from `virsh

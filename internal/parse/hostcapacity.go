@@ -34,6 +34,7 @@ func HostCapacity(ctx context.Context, c collect.Collector) (model.HostCapacity,
 		capacity.MemTotalBytes = kb * 1024
 	} else {
 		status.Warnings = append(status.Warnings, "/proc/meminfo: строка MemTotal не найдена")
+		status.WarningRefs = append(status.WarningRefs, model.TextRef{Key: "parse.memTotalNotFound"})
 	}
 
 	cpuRaw, err := c.ReadFile("/proc/cpuinfo")

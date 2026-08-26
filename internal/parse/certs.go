@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	gopath "path"
 	"sort"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // CertResult is everything the certificate reader produces.
@@ -93,11 +95,13 @@ func Certificates(ctx context.Context, c collect.Collector, endpoints []model.En
 			files, err := certDirEntries(c, path)
 			if err != nil {
 				res.Certs = append(res.Certs, dirError(&res, path, u, renewals,
-					fmt.Sprintf("каталог сертификатов недоступен: %v", err)))
+					fmt.Sprintf("каталог сертификатов недоступен: %v", err),
+					model.TextRef{Key: "parse.certDirUnavailable", Args: []any{err}}))
 				continue
 			}
 			if len(files) == 0 {
-				res.Certs = append(res.Certs, dirError(&res, path, u, renewals, "каталог сертификатов пуст"))
+				res.Certs = append(res.Certs, dirError(&res, path, u, renewals, "каталог сертификатов пуст",
+					model.TextRef{Key: "parse.certDirEmpty"}))
 				continue
 			}
 			for _, file := range files {
@@ -122,8 +126,11 @@ func Certificates(ctx context.Context, c collect.Collector, endpoints []model.En
 }
 
 // dirError builds a placeholder certificate describing why a "crt" directory
-// itself could not be resolved into any certificate bundle.
-func dirError(res *CertResult, path string, u *certUsage, renewals renewalIndex, reason string) model.Certificate {
+// itself could not be resolved into any certificate bundle. ref is the
+// catalog key/args behind reason (zero value if reason isn't converted yet)
+// — see model.SourceStatus.ErrorKey's doc comment for why Certificate.Error
+// itself always stays the literal Russian reason regardless.
+func dirError(res *CertResult, path string, u *certUsage, renewals renewalIndex, reason string, ref model.TextRef) model.Certificate {
 	cert := model.Certificate{
 		ID:        "cert:" + path,
 		Path:      path,
@@ -132,7 +139,16 @@ func dirError(res *CertResult, path string, u *certUsage, renewals renewalIndex,
 		Sites:     u.sites,
 		Renewal:   renewals.forPath(path),
 		Error:     reason,
+		ErrorKey:  ref.Key,
+		ErrorArgs: ref.Args,
 	}
+	// The per-source Warnings line concatenates path+reason — reason may
+	// itself be a resolved catalog string, and model.LocalizeSnapshot
+	// doesn't support resolving one key's output as another key's arg, so
+	// this line is left as the (always Russian) default rather than adding
+	// that nesting for a secondary, less-visible list. Certificate.Error
+	// above — what Certificates.tsx actually renders per-row — is the
+	// higher-value target and is fully localized.
 	res.Status.Warnings = append(res.Status.Warnings, path+": "+reason)
 	return cert
 }
@@ -152,11 +168,17 @@ func readCertFile(res *CertResult, c collect.Collector, path string, u *certUsag
 	raw, err := c.ReadFile(path)
 	if err != nil {
 		cert.Error = fmt.Sprintf("файл недоступен: %v", err)
+		cert.ErrorKey = "parse.certFileUnavailable"
+		cert.ErrorArgs = []any{err}
 		res.Status.Warnings = append(res.Status.Warnings, path+": "+cert.Error)
 		return cert
 	}
 	if err := fillFromPEM(&cert, raw); err != nil {
 		cert.Error = err.Error()
+		var me *msgs.Err
+		if errors.As(err, &me) {
+			cert.ErrorKey, cert.ErrorArgs = me.Key, me.Args
+		}
 		res.Status.Warnings = append(res.Status.Warnings, path+": "+cert.Error)
 	}
 	return cert
@@ -219,12 +241,12 @@ func fillFromPEM(cert *model.Certificate, raw []byte) error {
 		}
 		x, err := x509.ParseCertificate(block.Bytes)
 		if err != nil {
-			return fmt.Errorf("разбор сертификата: %v", err)
+			return msgs.Errorf("parse.certParseFailed", err)
 		}
 		parsed = append(parsed, x)
 	}
 	if len(parsed) == 0 {
-		return fmt.Errorf("в файле нет ни одного сертификата в формате PEM")
+		return msgs.Errorf("parse.noPEMCertsInFile")
 	}
 
 	leaf := parsed[0]
@@ -286,9 +308,11 @@ type renewalIndex struct {
 	// lineages are the certbot lineage names found under /etc/letsencrypt/renewal.
 	lineages map[string]bool
 	// automatic reports whether a timer or cron job actually runs the renewal.
-	automatic bool
-	detail    string
-	tool      string
+	automatic  bool
+	detail     string
+	detailKey  string
+	detailArgs []any
+	tool       string
 	// fingerprints maps a leaf certificate's SHA-256 fingerprint (hex, the
 	// same value model.Certificate.Fingerprint carries) to its certbot
 	// lineage name. Built by reading every /etc/letsencrypt/live/<lineage>/
@@ -303,8 +327,9 @@ type renewalIndex struct {
 func (r renewalIndex) forPath(path string) model.RenewalInfo {
 	if !strings.HasPrefix(path, LetsEncryptLive) {
 		return model.RenewalInfo{
-			Tool:   "manual",
-			Detail: "путь вне /etc/letsencrypt — обновление, скорее всего, ручное",
+			Tool:      "manual",
+			Detail:    "путь вне /etc/letsencrypt — обновление, скорее всего, ручное",
+			DetailKey: "parse.renewalManualOutsideLE",
 		}
 	}
 
@@ -320,14 +345,18 @@ func (r renewalIndex) forPath(path string) model.RenewalInfo {
 				"сертификат лежит в /etc/letsencrypt/live/%s, но файла обновления "+
 					"/etc/letsencrypt/renewal/%s.conf нет — certbot его не продлит",
 				lineage, lineage),
+			DetailKey:  "parse.renewalConfMissing",
+			DetailArgs: []any{lineage, lineage},
 		}
 	}
 	return model.RenewalInfo{
-		Tool:      firstNonEmpty(r.tool, "certbot"),
-		Managed:   true,
-		Automatic: r.automatic,
-		Detail:    r.detail,
-		Lineage:   lineage,
+		Tool:       firstNonEmpty(r.tool, "certbot"),
+		Managed:    true,
+		Automatic:  r.automatic,
+		Detail:     r.detail,
+		DetailKey:  r.detailKey,
+		DetailArgs: r.detailArgs,
+		Lineage:    lineage,
 	}
 }
 
@@ -433,6 +462,8 @@ func discoverRenewals(ctx context.Context, c collect.Collector) renewalIndex {
 		if err == nil && strings.TrimSpace(res.Stdout) == "active" {
 			idx.automatic = true
 			idx.detail = fmt.Sprintf("автообновление включено: таймер %s активен", unit)
+			idx.detailKey = "parse.renewalTimerActive"
+			idx.detailArgs = []any{unit}
 			return idx
 		}
 	}
@@ -440,11 +471,14 @@ func discoverRenewals(ctx context.Context, c collect.Collector) renewalIndex {
 		if c.Exists(cron) {
 			idx.automatic = true
 			idx.detail = "автообновление включено: задание " + cron
+			idx.detailKey = "parse.renewalCronActive"
+			idx.detailArgs = []any{cron}
 			return idx
 		}
 	}
 	idx.detail = "certbot знает о сертификате, но ни таймер certbot.timer, " +
 		"ни задание cron не найдены — продление не запустится само"
+	idx.detailKey = "parse.renewalNoAutomationFound"
 	return idx
 }
 

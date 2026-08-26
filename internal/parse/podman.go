@@ -64,13 +64,20 @@ func Podman(ctx context.Context, c collect.Collector) PodmanResult {
 	raw, code, err := c.PodmanAPI(ctx, "GET", "/libpod/containers/json?all=true", nil)
 	if err != nil {
 		res.Status.Warnings = append(res.Status.Warnings, err.Error())
+		res.Status.WarningRefs = append(res.Status.WarningRefs, model.TextRef{})
 		res.Status.Error = "podman недоступен: " + err.Error()
+		res.Status.ErrorKey = "parse.podmanUnavailable"
+		res.Status.ErrorArgs = []any{err.Error()}
 		return res
 	}
 	if code != 200 {
 		msg := fmt.Sprintf("podman: список контейнеров вернул HTTP %d", code)
 		res.Status.Warnings = append(res.Status.Warnings, msg)
+		ref := model.TextRef{Key: "parse.podmanListFailed", Args: []any{code}}
+		res.Status.WarningRefs = append(res.Status.WarningRefs, ref)
 		res.Status.Error = msg
+		res.Status.ErrorKey = ref.Key
+		res.Status.ErrorArgs = ref.Args
 		return res
 	}
 	res.Status.Available = true
@@ -78,6 +85,8 @@ func Podman(ctx context.Context, c collect.Collector) PodmanResult {
 	var list []podmanContainer
 	if err := json.Unmarshal(raw, &list); err != nil {
 		res.Status.Warnings = append(res.Status.Warnings, fmt.Sprintf("podman: разбор списка контейнеров: %v", err))
+		res.Status.WarningRefs = append(res.Status.WarningRefs,
+			model.TextRef{Key: "parse.podmanListParseFailed", Args: []any{err}})
 		return res
 	}
 

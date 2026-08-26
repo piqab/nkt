@@ -100,7 +100,10 @@ func ProcessDetails(ctx context.Context, c collect.Collector, pids []int) (map[i
 		// extra detail to show.
 		status.Error = fmt.Sprintf("ps: %v", err)
 	case !out.OK():
-		status.Error = fmt.Sprintf("ps завершился с кодом %d: %s", out.ExitCode, strings.TrimSpace(out.Stderr))
+		stderr := strings.TrimSpace(out.Stderr)
+		status.Error = fmt.Sprintf("ps завершился с кодом %d: %s", out.ExitCode, stderr)
+		status.ErrorKey = "parse.commandFailed"
+		status.ErrorArgs = []any{"ps", out.ExitCode, stderr}
 	default:
 		status.Available = true
 		for _, line := range strings.Split(strings.ReplaceAll(out.Stdout, "\r\n", "\n"), "\n") {
@@ -113,6 +116,7 @@ func ProcessDetails(ctx context.Context, c collect.Collector, pids []int) (map[i
 		if len(details) == 0 {
 			status.Warnings = append(status.Warnings,
 				"ps отработал, но ни одной строки разобрать не удалось — возможно, у него другой формат вывода (busybox?)")
+			status.WarningRefs = append(status.WarningRefs, model.TextRef{Key: "parse.psNoParsedLines"})
 		}
 	}
 
@@ -134,6 +138,7 @@ func ProcessDetails(ctx context.Context, c collect.Collector, pids []int) (map[i
 	if cgroupsRead == 0 {
 		status.Warnings = append(status.Warnings,
 			"ни один /proc/<pid>/cgroup не прочитан — происхождение процессов (сервис/контейнер/вручную) определить нельзя")
+		status.WarningRefs = append(status.WarningRefs, model.TextRef{Key: "parse.noCgroupsRead"})
 	}
 
 	return details, status

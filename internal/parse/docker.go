@@ -149,6 +149,7 @@ func Docker(ctx context.Context, c collect.Collector, composePaths []string) Doc
 
 	if !res.Status.Available && res.Status.Error == "" {
 		res.Status.Error = "docker недоступен: нет ни сокета движка, ни compose-файлов"
+		res.Status.ErrorKey = "parse.dockerUnavailable"
 	}
 	return res
 }
