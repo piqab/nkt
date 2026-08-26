@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, Select, Table, Tag, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SeverityBadge, Spinner, formatRelative } from '../components/ui'
@@ -31,6 +32,7 @@ const SEVERITY_ORDER: VulnFinding['severity'][] = ['CRITICAL', 'HIGH', 'MEDIUM',
  * kicking off by accident.
  */
 export default function Vulnerabilities({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const canUse = me.is_admin && me.allow_mutations
   // Polls fast while a scan is actually running (for prompt progress text
   // and a modal that closes right when it's really done) and relaxes back
@@ -145,24 +147,24 @@ export default function Vulnerabilities({ me }: { me: Me }) {
   const targetCounts = useMemo(() => {
     const c = new Map<string, number>()
     for (const f of findings) {
-      const t = f.target ?? ''
-      c.set(t, (c.get(t) ?? 0) + 1)
+      const tgt = f.target ?? ''
+      c.set(tgt, (c.get(tgt) ?? 0) + 1)
     }
     return c
   }, [findings])
   const targets = useMemo(() => [...targetCounts.keys()].sort(), [targetCounts])
 
   const columns: TableColumnsType<VulnFinding> = [
-    { title: 'Серьёзность', dataIndex: 'severity', width: 140, render: (s: VulnFinding['severity']) => <SeverityBadge severity={SEVERITY_MAP[s]} /> },
+    { title: t('vulns.col.severity'), dataIndex: 'severity', width: 140, render: (s: VulnFinding['severity']) => <SeverityBadge severity={SEVERITY_MAP[s]} /> },
     {
-      title: 'Источник',
+      title: t('vulns.col.source'),
       dataIndex: 'target',
       width: 160,
-      render: (t: string | undefined) =>
-        t ? <span className="mono">{t}</span> : <span className="small muted">ОС хоста</span>,
+      render: (tgt: string | undefined) =>
+        tgt ? <span className="mono">{tgt}</span> : <span className="small muted">{t('vulns.osHost')}</span>,
     },
     {
-      title: 'CVE',
+      title: t('vulns.col.cve'),
       dataIndex: 'id',
       width: 180,
       render: (id: string, f: VulnFinding) => (
@@ -187,22 +189,22 @@ export default function Vulnerabilities({ me }: { me: Me }) {
           )}
           {f.new && (
             <Tag color="blue" style={{ marginLeft: '0.4rem' }}>
-              новое
+              {t('vulns.new')}
             </Tag>
           )}
         </span>
       ),
     },
-    { title: 'Пакет', dataIndex: 'package', width: 200, className: 'mono' },
-    { title: 'Установлено', dataIndex: 'installed_version', width: 160, className: 'mono' },
+    { title: t('vulns.col.package'), dataIndex: 'package', width: 200, className: 'mono' },
+    { title: t('vulns.col.installed'), dataIndex: 'installed_version', width: 160, className: 'mono' },
     {
-      title: 'Исправление',
+      title: t('vulns.col.fix'),
       dataIndex: 'fixed_version',
       width: 160,
       className: 'mono',
-      render: (v: string | undefined) => v || <span className="small muted">пока нет</span>,
+      render: (v: string | undefined) => v || <span className="small muted">{t('vulns.noFixYet')}</span>,
     },
-    { title: 'Описание', dataIndex: 'title' },
+    { title: t('vulns.col.description'), dataIndex: 'title' },
   ]
 
   return (
@@ -210,24 +212,18 @@ export default function Vulnerabilities({ me }: { me: Me }) {
       <div className="page-head">
         <div>
           <h1>
-            Уязвимости
-            <InfoHint>
-              Известные CVE для установленных пакетов ОС (Debian/Ubuntu) и для образов уже
-              запущенных Docker/Podman-контейнеров — сверка со свежей базой trivy. LXD пока не
-              поддерживается — там нет OCI-образов в привычном смысле, нужен отдельный механизм.
-            </InfoHint>
+            {t('vulns.title')}
+            <InfoHint>{t('vulns.hint')}</InfoHint>
           </h1>
         </div>
         <div className="row">
           <Button type="primary" disabled={!canUse} loading={scanning} onClick={startScan}>
-            {scanning ? status?.progress || 'Сканирую…' : status?.scan ? 'Пересканировать' : 'Сканировать'}
+            {scanning ? status?.progress || t('common.scanning') : status?.scan ? t('common.rescan') : t('vulns.scan')}
           </Button>
         </div>
       </div>
 
-      {!canUse && (
-        <Banner kind="info">Доступно только роли admin с включёнными изменениями (AllowMutations).</Banner>
-      )}
+      {!canUse && <Banner kind="info">{t('common.adminMutationsOnly')}</Banner>}
       <ErrorNote error={startError ?? status?.error ?? null} />
 
       {statusLoading && status === null ? (
@@ -237,91 +233,88 @@ export default function Vulnerabilities({ me }: { me: Me }) {
         // without this check that window showed the "never scanned" banner
         // below unconditionally, even on a host with plenty of scan
         // history, for as long as that first request took.
-        <Loading what="статус сканирования" />
+        <Loading what={t('vulns.scanStatus')} />
       ) : !status?.scan ? (
-        !scanning && (
-          <Banner kind="info">
-            Сканирование ещё не запускалось на этом хосте. При первом запуске может понадобиться
-            скачать trivy и базу уязвимостей (около 1 ГБ) — это займёт несколько минут.
-          </Banner>
-        )
+        !scanning && <Banner kind="info">{t('vulns.neverScanned')}</Banner>
       ) : !status.scan.available ? (
-        <Banner kind="info">
-          На этом хосте нет /var/lib/dpkg/status — сканирование пакетов поддерживается только на
-          Debian/Ubuntu.
-        </Banner>
+        <Banner kind="info">{t('vulns.noDpkgStatus')}</Banner>
       ) : (
         <>
           <p className="small muted">
-            Просканировано {formatRelative(status.scan.scanned_at)}, база уязвимостей обновлена{' '}
-            {formatRelative(status.scan.db_updated)}.
+            {t('vulns.scannedAt', {
+              scanned: formatRelative(status.scan.scanned_at),
+              updated: formatRelative(status.scan.db_updated),
+            })}
           </p>
 
           {status.scan.compared && (
             <Banner kind={(status.scan.new_count ?? 0) > 0 ? 'warn' : 'success'}>
               {(status.scan.new_count ?? 0) === 0 && (status.scan.fixed_count ?? 0) === 0
-                ? 'С прошлого скана ничего не изменилось.'
-                : `С прошлого скана: +${status.scan.new_count ?? 0} новых, ${status.scan.fixed_count ?? 0} исправлено.`}
+                ? t('vulns.noChangeSinceLast')
+                : t('vulns.changeSinceLast', {
+                    newCount: status.scan.new_count ?? 0,
+                    fixedCount: status.scan.fixed_count ?? 0,
+                  })}
             </Banner>
           )}
 
           {status.scan.warnings && status.scan.warnings.length > 0 && (
             <Banner kind="warn">
-              Не удалось просканировать {status.scan.warnings.length === 1 ? 'образ' : 'образы'}:{' '}
-              {status.scan.warnings.join('; ')}
+              {t('vulns.failedToScan', {
+                what: status.scan.warnings.length === 1 ? t('vulns.failedToScanImage') : t('vulns.failedToScanImages'),
+                list: status.scan.warnings.join('; '),
+              })}
             </Banner>
           )}
 
           <Card>
             <div className="filters">
               <label>
-                Серьёзность
+                {t('vulns.severity')}
                 <Select
                   value={severity}
                   onChange={changeSeverity}
                   style={{ minWidth: '11rem' }}
                   options={[
-                    { value: '', label: 'все' },
+                    { value: '', label: t('common.all') },
                     ...SEVERITY_ORDER.map((s) => ({ value: s, label: `${SEVERITY_MAP[s]} (${counts[s] ?? 0})` })),
                   ]}
                 />
               </label>
               {targets.length > 1 && (
                 <label>
-                  Источник
+                  {t('vulns.source')}
                   <Select
                     value={target}
                     onChange={changeTarget}
                     style={{ minWidth: '13rem' }}
                     options={[
-                      { value: ALL_TARGETS, label: `все (${findings.length})` },
-                      ...targets.map((t) => ({
-                        value: t,
-                        label: `${t || 'ОС хоста'} (${targetCounts.get(t) ?? 0})`,
+                      { value: ALL_TARGETS, label: `${t('common.all')} (${findings.length})` },
+                      ...targets.map((tgt) => ({
+                        value: tgt,
+                        label: `${tgt || t('vulns.osHost')} (${targetCounts.get(tgt) ?? 0})`,
                       })),
                     ]}
                   />
                 </label>
               )}
               <label style={{ flex: 1, minWidth: '14rem' }}>
-                Поиск
+                {t('common.search')}
                 <Input
                   value={query}
                   onChange={(e) => changeQuery(e.target.value)}
-                  placeholder="CVE, пакет или образ…"
+                  placeholder={t('vulns.searchPlaceholder')}
                 />
               </label>
               <span className="small muted" style={{ paddingBottom: '0.4rem' }}>
-                показано {visible.length} из {findings.length}
+                {t('common.shown', { shown: visible.length, total: findings.length })}
               </span>
             </div>
           </Card>
 
           {visible.length === 0 ? (
             <Card>
-              <div className="chart-empty">
-                {findings.length === 0 ? 'Уязвимостей не найдено.' : 'Ничего не найдено под заданные условия.'}
-              </div>
+              <div className="chart-empty">{findings.length === 0 ? t('vulns.notFound') : t('common.noMatch')}</div>
             </Card>
           ) : (
             <Card>
@@ -364,19 +357,18 @@ export default function Vulnerabilities({ me }: { me: Me }) {
 
       {scanning && !modalDismissed && (
         <Modal
-          title="Сканирование уязвимостей"
+          title={t('vulns.scanTitle')}
           onClose={() => setModalDismissed(true)}
-          closeLabel="Скрыть (продолжится в фоне)"
+          closeLabel={t('vulns.hideContinuesBackground')}
           maskClosable={false}
         >
           <p className="small muted row" style={{ alignItems: 'center', marginBottom: 0 }}>
             <Spinner />
-            {status?.progress || 'Сканирую…'}
+            {status?.progress || t('common.scanning')}
           </p>
           {!status?.scan && (
             <p className="small muted" style={{ marginTop: '0.6rem' }}>
-              Первый запуск может понадобиться скачать trivy и базу уязвимостей (около 1 ГБ) — это
-              займёт несколько минут.
+              {t('vulns.firstRunNote')}
             </p>
           )}
         </Modal>

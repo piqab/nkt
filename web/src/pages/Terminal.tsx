@@ -232,7 +232,7 @@ export default function TerminalPage({ me }: { me: Me }) {
         </div>
       </div>
 
-      {!canUse && <Banner kind="info">{t('terminal.mutationsDisabled')}</Banner>}
+      {!canUse && <Banner kind="info">{t('common.adminMutationsOnly')}</Banner>}
       {status === 'error' && <Banner kind="error">{t('terminal.connectError')}</Banner>}
       {status === 'closed' && <Banner kind="info">{t('terminal.sessionEnded')}</Banner>}
 
