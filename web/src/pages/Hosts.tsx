@@ -8,11 +8,13 @@ import {
   QuestionCircleOutlined,
   WarningFilled,
 } from '@ant-design/icons'
+import { Trans, useTranslation } from 'react-i18next'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
 import type { HubHost, RenewEvent, RenewJobStatus, Severity } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, formatRelative, severityLabel } from '../components/ui'
 import { checkForNewProblems, notificationsEnabled, requestNotificationPermission, setNotificationsEnabled, type NotifyState } from '../notifications'
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
+import i18n from '../i18n'
 
 /** How often to poll a running install job for new progress lines — same
  * cadence Certificates.tsx uses for certbot jobs. */
@@ -49,11 +51,11 @@ function isOutdated(h: HubHost, hubVersion?: string): boolean {
   return h.status !== 'new' && !!hubVersion && !!h.nkt_version && isOlderVersion(h.nkt_version, hubVersion)
 }
 
-const STATUS_LABEL: Record<HubHost['status'], string> = {
-  new: 'новый',
-  installing: 'установка…',
-  online: 'подключён',
-  error: 'ошибка',
+const STATUS_LABEL_KEY: Record<HubHost['status'], string> = {
+  new: 'hosts.statusNew',
+  installing: 'hosts.statusInstalling',
+  online: 'hosts.statusOnline',
+  error: 'hosts.statusError',
 }
 
 const STATUS_COLOR: Record<HubHost['status'], string> = {
@@ -63,11 +65,11 @@ const STATUS_COLOR: Record<HubHost['status'], string> = {
   error: 'var(--status-critical)',
 }
 
-const SUDO_LABEL: Record<NonNullable<HubHost['sudo_status']>, string> = {
-  '': 'неизвестно',
-  root: 'root',
-  nopasswd: 'без пароля',
-  password_required: 'нужен пароль',
+const SUDO_LABEL_KEY: Record<NonNullable<HubHost['sudo_status']>, string> = {
+  '': 'hosts.sudoUnknown',
+  root: 'hosts.sudoRoot',
+  nopasswd: 'hosts.sudoNopasswd',
+  password_required: 'hosts.sudoPasswordRequired',
 }
 
 const SUDO_COLOR: Record<NonNullable<HubHost['sudo_status']>, string> = {
@@ -81,12 +83,14 @@ const SUDO_COLOR: Record<NonNullable<HubHost['sudo_status']>, string> = {
  * — set as a side effect (Manager.recordSudoOutcome), never probed on its
  * own, so this can be stale until the next install/update touches the host. */
 function SudoBadge({ status }: { status: HubHost['sudo_status'] }) {
+  const { t } = useTranslation()
   const s = status ?? ''
-  return <Badge color={SUDO_COLOR[s]} text={SUDO_LABEL[s]} />
+  return <Badge color={SUDO_COLOR[s]} text={t(SUDO_LABEL_KEY[s])} />
 }
 
 function HostStatusBadge({ status }: { status: HubHost['status'] }) {
-  return <Badge color={STATUS_COLOR[status]} text={STATUS_LABEL[status]} />
+  const { t } = useTranslation()
+  return <Badge color={STATUS_COLOR[status]} text={t(STATUS_LABEL_KEY[status])} />
 }
 
 /**
@@ -102,24 +106,25 @@ function HostStatusBadge({ status }: { status: HubHost['status'] }) {
  * offline/unreachable on that port).
  */
 function TunnelChannelBadge({ host }: { host: HubHost }) {
+  const { t } = useTranslation()
   if (!host.tunnel_enabled) return <span className="small muted">—</span>
   if (host.channel === 'tunnel') {
     return (
-      <Tooltip title="SSH сейчас недоступен — дашборд, терминал и переустановка/обновление идут через резервный канал">
-        <Badge color="var(--status-warning)" text="через резервный канал" />
+      <Tooltip title={t('hosts.tunnelActiveTooltip')}>
+        <Badge color="var(--status-warning)" text={t('hosts.tunnelActive')} />
       </Tooltip>
     )
   }
   if (host.tunnel_connected) {
     return (
-      <Tooltip title="Резервный канал подключён и готов, но сейчас не используется — SSH работает">
-        <Badge color="var(--status-good)" text="резервный канал: подключён" />
+      <Tooltip title={t('hosts.tunnelConnectedTooltip')}>
+        <Badge color="var(--status-good)" text={t('hosts.tunnelConnected')} />
       </Tooltip>
     )
   }
   return (
-    <Tooltip title="Резервный канал включён в настройках, но хаб ещё не подключился к хосту">
-      <Badge color="var(--text-muted)" text="резервный канал: не подключён" />
+    <Tooltip title={t('hosts.tunnelDisconnectedTooltip')}>
+      <Badge color="var(--text-muted)" text={t('hosts.tunnelDisconnected')} />
     </Tooltip>
   )
 }
@@ -140,10 +145,11 @@ const SEVERITY_ICON: Record<Severity, ReactNode> = {
  * zero-findings reading.
  */
 function ProblemsCell({ host }: { host: HubHost }) {
+  const { t } = useTranslation()
   if (host.reachable === undefined) {
     return (
       <span className="small muted row" style={{ gap: '0.3rem', flexWrap: 'nowrap' }}>
-        <QuestionCircleOutlined /> неизвестно
+        <QuestionCircleOutlined /> {t('hosts.problemsUnknown')}
       </span>
     )
   }
@@ -154,7 +160,7 @@ function ProblemsCell({ host }: { host: HubHost }) {
       <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap' }}>
         {present.length === 0 ? (
           <span className="row small" style={{ gap: '0.3rem', color: 'var(--status-good)', flexWrap: 'nowrap' }}>
-            <CheckCircleFilled /> нет проблем
+            <CheckCircleFilled /> {t('hosts.noProblems')}
           </span>
         ) : (
           present.map((s) => (
@@ -168,7 +174,9 @@ function ProblemsCell({ host }: { host: HubHost }) {
       </div>
       {host.reachable === false && (
         <span className="small" style={{ color: 'var(--status-critical)' }}>
-          недоступен{host.last_polled_at ? ` (данные от ${formatRelative(host.last_polled_at)})` : ''}
+          {t('hosts.unreachable', {
+            stale: host.last_polled_at ? t('hosts.unreachableStale', { time: formatRelative(host.last_polled_at) }) : '',
+          })}
         </span>
       )}
     </div>
@@ -187,6 +195,7 @@ export default function Hosts({
   onSelect: (host: { id: number; name: string }) => void
   hubVersion?: string
 }) {
+  const { t } = useTranslation()
   const { data: hosts, error, loading, reload } = useApi<HubHost[]>('/hub/hosts', 30_000)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [installHostId, setInstallHostId] = useState<number | null>(null)
@@ -226,7 +235,7 @@ export default function Hosts({
     if (checked) {
       const granted = await requestNotificationPermission()
       if (!granted) {
-        setNotice({ kind: 'error', text: 'Браузер не дал разрешение на уведомления.' })
+        setNotice({ kind: 'error', text: t('hosts.notificationDenied') })
         return
       }
     }
@@ -253,7 +262,7 @@ export default function Hosts({
         if (cancelled) return
         setJobStatus({ events: [], done: true, error: err instanceof Error ? err.message : String(err) })
         window.clearInterval(timer)
-        finishAutoOpen('не удалось получить статус установки')
+        finishAutoOpen(t('hosts.installStatusFailed'))
       }
     }
 
@@ -308,14 +317,7 @@ export default function Hosts({
         (err.payload as { foreign_install?: boolean }).foreign_install
       ) {
         const detail = (err.payload as { detail?: string }).detail ?? ''
-        if (
-          window.confirm(
-            `На хосте уже есть nkt, установленный не этим хабом: ${detail}.\n\n` +
-              'Продолжить всё равно? Бинарник, systemd-юнит и env будут перезаписаны, ' +
-              'а пароль администратора синхронизирован с тем, что хранит хаб — ' +
-              'если это чужая установка, доступ к ней текущим паролем будет потерян.',
-          )
-        ) {
+        if (window.confirm(t('hosts.confirmForeignInstall', { detail }))) {
           return startInstall(host, true)
         }
         return false
@@ -362,14 +364,7 @@ export default function Hosts({
   }
 
   async function removeSudoAccess(host: HubHost) {
-    if (
-      !window.confirm(
-        `Убрать passwordless sudo у «${host.ssh_user}» на «${host.name}»?\n\n` +
-          'Хаб не сможет заливать обновления или менять что-либо на хосте, требующее ' +
-          'root, пока доступ не будет выдан заново (или SSH-пользователь не станет root).',
-      )
-    )
-      return
+    if (!window.confirm(t('hosts.confirmRemoveSudo', { user: host.ssh_user, name: host.name }))) return
     setNotice(null)
     try {
       await api(`/hub/hosts/${host.id}/sudo/remove`, { method: 'POST' })
@@ -401,7 +396,7 @@ export default function Hosts({
   }
 
   async function stopHost(host: HubHost) {
-    if (!window.confirm(`Остановить nkt на «${host.name}»? Хост станет недоступен через хаб, пока вы не запустите его снова.`)) return
+    if (!window.confirm(t('hosts.confirmStopHost', { name: host.name }))) return
     setNotice(null)
     const err = await setServiceRunning(host, false)
     if (err) setNotice({ kind: 'error', text: err })
@@ -422,12 +417,7 @@ export default function Hosts({
   async function bulkSetServiceRunning(running: boolean) {
     const targets = (hosts ?? []).filter((h) => h.status !== 'new' && h.status !== 'installing')
     if (targets.length === 0) return
-    if (
-      !window.confirm(
-        `${running ? 'Запустить' : 'Остановить'} nkt сразу на всех хостах (${targets.length} шт.)?` +
-          (running ? '' : ' Все они станут недоступны через хаб, пока вы не запустите их снова.'),
-      )
-    ) {
+    if (!window.confirm(t(running ? 'hosts.confirmBulkStart' : 'hosts.confirmBulkStop', { count: targets.length }))) {
       return
     }
     setNotice(null)
@@ -436,7 +426,7 @@ export default function Hosts({
       const results = await Promise.all(targets.map((h) => setServiceRunning(h, running)))
       const failed = results.filter((e): e is string => e !== null).length
       if (failed > 0) {
-        setNotice({ kind: 'error', text: `Не удалось на ${failed} из ${targets.length} хостов.` })
+        setNotice({ kind: 'error', text: t('hosts.bulkFailed', { failed, total: targets.length }) })
       }
       reload()
     } finally {
@@ -469,7 +459,7 @@ export default function Hosts({
       const res = await fetch(`/api/hub/export${includeKey ? '?include_key=1' : ''}`, { credentials: 'same-origin' })
       if (!res.ok) {
         const payload = await res.json().catch(() => null)
-        throw new Error(payload?.error ?? `Ошибка ${res.status}`)
+        throw new Error(payload?.error ?? t('common.httpError', { status: res.status }))
       }
       let blob = await res.blob()
       const filename = /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'nkt-hub-export.json'
@@ -529,13 +519,7 @@ export default function Hosts({
   }
 
   async function doImport(jsonText: string) {
-    if (
-      !window.confirm(
-        'Импортировать хосты из файла? Хосты добавятся к уже существующим (файл не заменяет и не ' +
-          'сверяет дубликаты по имени/адресу). Секреты в файле расшифруются только если он экспортирован ' +
-          'с тем же NKT_HUB_MASTER_KEY, что и у этого хаба.',
-      )
-    ) {
+    if (!window.confirm(t('hosts.confirmImport'))) {
       return
     }
     setImporting(true)
@@ -547,11 +531,14 @@ export default function Hosts({
         body: jsonText,
       })
       const payload = await res.json()
-      if (!res.ok) throw new Error(payload?.error ?? `Ошибка ${res.status}`)
+      if (!res.ok) throw new Error(payload?.error ?? t('common.httpError', { status: res.status }))
       const { imported, errors } = payload as { imported: number; errors?: string[] }
       setNotice({
         kind: errors?.length ? 'error' : 'info',
-        text: `Импортировано хостов: ${imported}.${errors?.length ? ` Ошибки: ${errors.join('; ')}` : ''}`,
+        text: t('hosts.imported', {
+          count: imported,
+          errors: errors?.length ? t('hosts.importedErrors', { errors: errors.join('; ') }) : '',
+        }),
       })
       reload()
     } catch (err) {
@@ -562,7 +549,7 @@ export default function Hosts({
   }
 
   async function remove(host: HubHost) {
-    if (!window.confirm(`Удалить хост «${host.name}» из хаба? Сам nkt на нём не удаляется.`)) return
+    if (!window.confirm(t('hosts.confirmRemoveHost', { name: host.name }))) return
     try {
       await api(`/hub/hosts/${host.id}`, { method: 'DELETE' })
       reload()
@@ -607,7 +594,7 @@ export default function Hosts({
       return (
         <div className="row">
           <Button type="link" onClick={() => onSelect({ id: h.id, name: h.name })}>
-            открыть
+            {t('hosts.open')}
           </Button>
         </div>
       )
@@ -617,7 +604,7 @@ export default function Hosts({
       <div className="row">
         {h.status === 'online' && (
           <Button type="link" loading={autoOpenHost?.id === h.id} onClick={() => openHost(h)}>
-            {autoOpenHost?.id === h.id ? 'обновляю перед открытием…' : 'открыть'}
+            {autoOpenHost?.id === h.id ? t('hosts.updatingBeforeOpen') : t('hosts.open')}
           </Button>
         )}
         <Button
@@ -625,70 +612,70 @@ export default function Hosts({
           loading={h.status === 'installing'}
           onClick={() => startInstall(h)}
         >
-          {h.status === 'new' ? 'установить' : outdated ? 'обновить' : 'переустановить'}
+          {h.status === 'new' ? t('hosts.install') : outdated ? t('hosts.update') : t('hosts.reinstall')}
         </Button>
         {h.status === 'installing' && (
           <Button danger type="link" onClick={() => cancelInstall(h)}>
-            отменить
+            {t('hosts.cancel')}
           </Button>
         )}
         {h.status !== 'new' && (
           <Button type="link" onClick={() => openInstallLog(h)}>
-            журнал установки
+            {t('hosts.installLog')}
           </Button>
         )}
         {h.status !== 'new' && h.status !== 'installing' && (
           <>
             <Button type="link" loading={busyServiceIds.has(h.id)} onClick={() => startHost(h)}>
-              запустить
+              {t('hosts.start')}
             </Button>
             <Button danger type="link" loading={busyServiceIds.has(h.id)} onClick={() => stopHost(h)}>
-              остановить
+              {t('hosts.stop')}
             </Button>
           </>
         )}
         <Button type="link" disabled={h.status === 'installing'} onClick={() => setEditingHost(h)}>
-          изменить
+          {t('hosts.edit')}
         </Button>
         {h.ssh_auth_kind === 'key' && (
           <Button type="link" onClick={() => showPubKey(h)}>
-            публичный ключ
+            {t('hosts.publicKey')}
           </Button>
         )}
         {h.sudo_status === 'nopasswd' && (
           <Button danger type="link" onClick={() => removeSudoAccess(h)}>
-            снять NOPASSWD
+            {t('hosts.removeNopasswd')}
           </Button>
         )}
         <Button danger type="link" onClick={() => remove(h)}>
-          удалить
+          {t('hosts.delete')}
         </Button>
       </div>
     )
   }
 
   const columns: TableColumnsType<HubHost> = [
-    { title: 'Имя', dataIndex: 'name', key: 'name', render: (name: string) => <strong>{name}</strong> },
+    { title: t('hosts.colName'), dataIndex: 'name', key: 'name', render: (name: string) => <strong>{name}</strong> },
     {
-      title: 'Адрес',
+      title: t('hosts.colAddr'),
       key: 'addr',
       render: (_, h) =>
         h.id === LOCAL_HOST_ID ? (
-          <span className="small muted">эта машина — хаб сканирует сам себя, без SSH</span>
+          <span className="small muted">{t('hosts.thisMachine')}</span>
         ) : (
           <span className="mono small">
             {h.ssh_user}@{h.addr}:{h.ssh_port}
           </span>
         ),
     },
-    { title: 'Проблемы', key: 'problems', render: (_, h) => <ProblemsCell host={h} /> },
+    { title: t('hosts.colProblems'), key: 'problems', render: (_, h) => <ProblemsCell host={h} /> },
     {
-      title: 'Архитектура',
+      title: t('hosts.colArch'),
       key: 'arch',
       render: (_, h) => <span className="small">{h.id === LOCAL_HOST_ID ? '—' : h.arch || '—'}</span>,
     },
     {
-      title: 'Состояние',
+      title: t('hosts.colStatus'),
       key: 'status',
       render: (_, h) => (
         <>
@@ -702,7 +689,7 @@ export default function Hosts({
       ),
     },
     {
-      title: 'Sudo',
+      title: t('hosts.colSudo'),
       key: 'sudo',
       render: (_, h) =>
         h.ssh_user === 'root' || h.id === LOCAL_HOST_ID ? (
@@ -712,12 +699,12 @@ export default function Hosts({
         ),
     },
     {
-      title: 'Канал',
+      title: t('hosts.colChannel'),
       key: 'channel',
       render: (_, h) => (h.id === LOCAL_HOST_ID ? <span className="small muted">—</span> : <TunnelChannelBadge host={h} />),
     },
     {
-      title: 'Версия nkt',
+      title: t('hosts.colVersion'),
       key: 'version',
       render: (_, h) => {
         const outdated = isOutdated(h, hubVersion)
@@ -735,12 +722,12 @@ export default function Hosts({
             {h.running_version || h.nkt_version || '—'}
             {stale && (
               <div className="small" style={{ color: 'var(--status-warning)' }}>
-                установлено {h.nkt_version} — обновление не применилось
+                {t('hosts.staleVersion', { version: h.nkt_version })}
               </div>
             )}
             {!stale && outdated && (
               <div className="small" style={{ color: 'var(--status-warning)' }}>
-                на хабе: {hubVersion}
+                {t('hosts.hubVersion', { version: hubVersion })}
               </div>
             )}
           </span>
@@ -748,11 +735,11 @@ export default function Hosts({
       },
     },
     {
-      title: 'Виден в сети',
+      title: t('hosts.colLastSeen'),
       key: 'last_seen',
       render: (_, h) => (
         <span className="small nowrap">
-          {h.id === LOCAL_HOST_ID ? '—' : h.last_seen_at ? formatRelative(h.last_seen_at) : 'ни разу'}
+          {h.id === LOCAL_HOST_ID ? '—' : h.last_seen_at ? formatRelative(h.last_seen_at) : t('hosts.never')}
         </span>
       ),
     },
@@ -763,17 +750,13 @@ export default function Hosts({
       <div className="page-head">
         <div>
           <h1>
-            Хосты
-            <InfoHint>
-              Каждый хост — отдельная VPS с собственным nkt: хаб заливает на неё бинарник по SSH,
-              поднимает как systemd-сервис и дальше проксирует к нему запросы, так что дашборд и
-              управление ничем не отличаются от обычного nkt на одном хосте.
-            </InfoHint>
+            {t('hosts.title')}
+            <InfoHint>{t('hosts.hint')}</InfoHint>
           </h1>
         </div>
         <div className="row" style={{ gap: '1rem' }}>
           <Button loading={bulkBusy === 'start'} disabled={bulkBusy === 'stop'} onClick={() => bulkSetServiceRunning(true)}>
-            запустить все
+            {t('hosts.startAll')}
           </Button>
           <Button
             danger
@@ -781,14 +764,14 @@ export default function Hosts({
             disabled={bulkBusy === 'start'}
             onClick={() => bulkSetServiceRunning(false)}
           >
-            остановить все
+            {t('hosts.stopAll')}
           </Button>
-          <Button onClick={() => exportHosts(false)}>экспорт</Button>
-          <Tooltip title="Для переноса на новый хаб без ручного копирования NKT_HUB_MASTER_KEY — файл станет самодостаточным для расшифровки, храните его так же осторожно, как пароли">
-            <Button onClick={() => exportHosts(true)}>экспорт с ключом</Button>
+          <Button onClick={() => exportHosts(false)}>{t('hosts.export')}</Button>
+          <Tooltip title={t('hosts.exportWithKeyTooltip')}>
+            <Button onClick={() => exportHosts(true)}>{t('hosts.exportWithKey')}</Button>
           </Tooltip>
           <Button loading={importing} onClick={() => importInputRef.current?.click()}>
-            импорт
+            {t('hosts.import')}
           </Button>
           <input
             ref={importInputRef}
@@ -801,10 +784,10 @@ export default function Hosts({
               if (file) void importHosts(file)
             }}
           />
-          <Tooltip title="Уведомит браузером о новой critical/high-проблеме или о потере связи с хостом — пока эта вкладка открыта">
+          <Tooltip title={t('hosts.notifyTooltip')}>
             <span className="row" style={{ gap: '0.4rem' }}>
               <Switch checked={notifyOn} onChange={toggleNotify} />
-              Уведомлять о проблемах
+              {t('hosts.notifyLabel')}
             </span>
           </Tooltip>
         </div>
@@ -813,11 +796,11 @@ export default function Hosts({
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
       <ErrorNote error={error} />
 
-      <Card title="Зарегистрированные хосты">
+      <Card title={t('hosts.registeredHosts')}>
         {loading && !hosts ? (
-          <Loading what="хосты" />
+          <Loading what={t('hosts.loading')} />
         ) : !hosts?.length ? (
-          <p className="small muted">Хостов ещё нет — добавьте первый ниже.</p>
+          <p className="small muted">{t('hosts.noHosts')}</p>
         ) : (
           <div className="table-wrap">
             <Table<HubHost>
@@ -845,7 +828,7 @@ export default function Hosts({
       />
 
       {editingHost && (
-        <Modal title={`Изменить хост «${editingHost.name}»`} onClose={() => setEditingHost(null)}>
+        <Modal title={t('hosts.editHostTitle', { name: editingHost.name })} onClose={() => setEditingHost(null)}>
           <HostForm
             initial={editingHost}
             onDone={(name, authorizedKey, terminalEnabledChanged, tunnelEnabledChanged) => {
@@ -882,15 +865,19 @@ export default function Hosts({
       )}
 
       {job && (
-        <Modal title={`Установка на ${installingHost?.name ?? 'хост'}`} onClose={closeJobModal} maskClosable={false}>
+        <Modal
+          title={t('hosts.installTitle', { name: installingHost?.name ?? t('hosts.installTitleFallback') })}
+          onClose={closeJobModal}
+          maskClosable={false}
+        >
           <InstallLog events={jobStatus?.events ?? []} />
           {jobStatus?.done ? (
             <Banner kind={jobStatus.error ? 'error' : 'info'}>
-              {jobStatus.error ? `Ошибка: ${jobStatus.error}` : 'Готово.'}
+              {jobStatus.error ? t('hosts.jobError', { error: jobStatus.error }) : t('hosts.jobDone')}
             </Banner>
           ) : (
             <p className="small muted row" style={{ alignItems: 'center', marginBottom: 0 }}>
-              выполняется — можно закрыть окно, установка продолжится в фоне.
+              {t('hosts.jobRunning')}
             </p>
           )}
         </Modal>
@@ -929,6 +916,7 @@ function PublicKeyModal({
   authorizedKey: string
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [copied, setCopied] = useState(false)
 
   async function copy() {
@@ -943,17 +931,15 @@ function PublicKeyModal({
   }
 
   return (
-    <Modal title={`Публичный ключ для «${hostName}»`} onClose={onClose}>
+    <Modal title={t('hosts.publicKeyTitle', { name: hostName })} onClose={onClose}>
       <p className="small muted">
-        Добавьте эту строку в <code className="mono">~/.ssh/authorized_keys</code> на самом
-        хосте (пользователю, указанному при добавлении), затем нажмите «установить». Приватная
-        половина ключа хранится только на хабе и никуда больше не передаётся.
+        <Trans i18nKey="hosts.publicKeyBody" components={{ code: <code className="mono" /> }} />
       </p>
       <pre className="diff mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
         {authorizedKey}
       </pre>
       <div>
-        <Button onClick={copy}>{copied ? 'скопировано' : 'скопировать'}</Button>
+        <Button onClick={copy}>{copied ? t('hosts.copied') : t('hosts.copy')}</Button>
       </div>
     </Modal>
   )
@@ -978,18 +964,12 @@ function ExportPasswordModal({
   onDownload: (password?: string) => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [password, setPassword] = useState('')
 
   function download() {
     if (!password) {
-      if (
-        !window.confirm(
-          'Скачать БЕЗ шифрования?\n\n' +
-            'Файл экспорта — открытый JSON с ключом шифрования хаба и SSH-/admin-секретами всех ' +
-            'хостов внутри: у кого файл — у того и они. Без пароля любой, кто его получит, читает ' +
-            'всё напрямую.',
-        )
-      ) {
+      if (!window.confirm(t('hosts.confirmExportUnencrypted'))) {
         return
       }
       onDownload(undefined)
@@ -999,15 +979,12 @@ function ExportPasswordModal({
   }
 
   return (
-    <Modal title="Экспорт с ключом" onClose={onClose}>
+    <Modal title={t('hosts.exportWithKeyTitle')} onClose={onClose}>
       <p className="small muted">
-        Этот файл несёт ключ шифрования хаба и SSH-/admin-секреты всех хостов открытым текстом —
-        того, кто им завладеет, достаточно, чтобы расшифровать всё. <strong>Настоятельно
-        рекомендуется</strong> зашифровать файл паролем прямо сейчас, а не хранить его как есть.
-        Пароль нигде не сохраняется — потеряете его, файл станет бесполезен.
+        <Trans i18nKey="hosts.exportWithKeyBody" components={{ strong: <strong /> }} />
       </p>
       <Form layout="vertical" onFinish={download}>
-        <Form.Item label="Пароль для шифрования файла (необязательно, но рекомендуется)">
+        <Form.Item label={t('hosts.encryptPasswordLabel')}>
           <Input.Password
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -1017,7 +994,7 @@ function ExportPasswordModal({
         </Form.Item>
         <Form.Item style={{ marginBottom: 0 }}>
           <Button type="primary" htmlType="submit" loading={busy}>
-            {password ? 'Скачать зашифрованным' : 'Скачать'}
+            {password ? t('hosts.downloadEncrypted') : t('hosts.download')}
           </Button>
         </Form.Item>
       </Form>
@@ -1038,6 +1015,7 @@ function ImportPasswordModal({
   onDecrypt: (password: string) => Promise<void>
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1055,13 +1033,11 @@ function ImportPasswordModal({
   }
 
   return (
-    <Modal title="Файл зашифрован паролем" onClose={onClose}>
-      <p className="small muted">
-        «{fileName}» зашифрован паролем — введите его, чтобы расшифровать и импортировать хосты.
-      </p>
+    <Modal title={t('hosts.encryptedFileTitle')} onClose={onClose}>
+      <p className="small muted">{t('hosts.encryptedFileBody', { fileName })}</p>
       {error && <Banner kind="error">{error}</Banner>}
       <Form layout="vertical" onFinish={submit}>
-        <Form.Item label="Пароль">
+        <Form.Item label={t('hosts.password')}>
           <Input.Password
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -1071,7 +1047,7 @@ function ImportPasswordModal({
         </Form.Item>
         <Form.Item style={{ marginBottom: 0 }}>
           <Button type="primary" htmlType="submit" loading={busy} disabled={!password}>
-            Расшифровать и импортировать
+            {t('hosts.decryptAndImport')}
           </Button>
         </Form.Item>
       </Form>
@@ -1082,6 +1058,7 @@ function ImportPasswordModal({
 /** Auto-scrolling live log of an install job's progress — same shape as
  * Certificates.tsx's RenewLog. */
 function InstallLog({ events }: { events: RenewEvent[] }) {
+  const { t } = useTranslation()
   const preRef = useRef<HTMLPreElement>(null)
 
   useEffect(() => {
@@ -1090,22 +1067,24 @@ function InstallLog({ events }: { events: RenewEvent[] }) {
   }, [events.length])
 
   if (events.length === 0) {
-    return <p className="small muted">Начинаю…</p>
+    return <p className="small muted">{t('hosts.startingLog')}</p>
   }
 
   return (
     <pre ref={preRef} className="diff" style={{ maxHeight: '22rem' }}>
-      {events.map((e) => `[${new Date(e.time).toLocaleTimeString('ru-RU')}] ${e.text}`).join('\n')}
+      {events
+        .map((e) => `[${new Date(e.time).toLocaleTimeString(i18n.language === 'en' ? 'en-US' : 'ru-RU')}] ${e.text}`)
+        .join('\n')}
     </pre>
   )
 }
 
 type AuthKind = 'generated' | 'password' | 'key'
 
-const AUTH_KIND_OPTIONS: { value: AuthKind; label: string }[] = [
-  { value: 'generated', label: 'хаб сгенерирует ключ (рекомендуется)' },
-  { value: 'key', label: 'свой приватный ключ' },
-  { value: 'password', label: 'пароль' },
+const AUTH_KIND_OPTIONS: { value: AuthKind; labelKey: string }[] = [
+  { value: 'generated', labelKey: 'hosts.authGenerated' },
+  { value: 'key', labelKey: 'hosts.authKey' },
+  { value: 'password', labelKey: 'hosts.authPassword' },
 ]
 
 type HostFormValues = {
@@ -1141,6 +1120,7 @@ function HostForm({
     tunnelEnabledChanged?: boolean,
   ) => void
 }) {
+  const { t } = useTranslation()
   const editing = initial !== undefined
   const [form] = Form.useForm<HostFormValues>()
   // New hosts default to a hub-generated key — the operator's own private
@@ -1193,14 +1173,15 @@ function HostForm({
     }
   }
 
-  const secretLabel =
+  const secretLabel = t(
     authKind === 'key'
       ? editing
-        ? 'Новый приватный ключ (PEM) — оставьте пустым, чтобы не менять'
-        : 'Приватный ключ (PEM)'
+        ? 'hosts.secretKeyEditing'
+        : 'hosts.secretKeyNew'
       : editing
-        ? 'Новый пароль — оставьте пустым, чтобы не менять'
-        : 'Пароль'
+        ? 'hosts.secretPasswordEditing'
+        : 'hosts.secretPasswordNew',
+  )
 
   const formEl = (
     <Form<HostFormValues>
@@ -1223,33 +1204,35 @@ function HostForm({
     >
       {error && <Banner kind="error">{error}</Banner>}
       <div className="filters">
-        <Form.Item name="name" label="Имя" rules={[{ required: true }]} style={{ flex: 1, minWidth: '10rem' }}>
+        <Form.Item name="name" label={t('hosts.name')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '10rem' }}>
           <Input />
         </Form.Item>
         <Form.Item
           name="addr"
-          label="IP-адрес или имя хоста"
+          label={t('hosts.addr')}
           rules={[{ required: true }]}
           style={{ flex: 1, minWidth: '10rem' }}
         >
           <Input />
         </Form.Item>
-        <Form.Item name="ssh_port" label="SSH-порт" rules={[{ required: true }]} style={{ minWidth: '6rem' }}>
+        <Form.Item name="ssh_port" label={t('hosts.sshPort')} rules={[{ required: true }]} style={{ minWidth: '6rem' }}>
           <InputNumber min={1} max={65535} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item name="ssh_user" label="SSH-пользователь" rules={[{ required: true }]} style={{ minWidth: '8rem' }}>
+        <Form.Item name="ssh_user" label={t('hosts.sshUser')} rules={[{ required: true }]} style={{ minWidth: '8rem' }}>
           <Input />
         </Form.Item>
-        <Form.Item label="Способ входа" style={{ minWidth: '14rem' }}>
-          <Select<AuthKind> value={authKind} onChange={setAuthKind} options={AUTH_KIND_OPTIONS} />
+        <Form.Item label={t('hosts.authMethod')} style={{ minWidth: '14rem' }}>
+          <Select<AuthKind>
+            value={authKind}
+            onChange={setAuthKind}
+            options={AUTH_KIND_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
+          />
         </Form.Item>
       </div>
       {authKind === 'generated' ? (
         <p className="small muted">
-          Приватный ключ никуда вставлять не нужно — хаб сгенерирует пару сам и после
-          сохранения покажет публичную часть, которую нужно добавить в{' '}
-          <code className="mono">~/.ssh/authorized_keys</code> на хосте.
-          {editing && ' Старый способ входа этого хоста будет заменён на новый ключ.'}
+          <Trans i18nKey="hosts.generatedKeyHint" components={{ code: <code className="mono" /> }} />
+          {editing && t('hosts.generatedKeyHintReplace')}
         </p>
       ) : (
         <Form.Item name="secret" label={secretLabel} rules={[{ required: !editing }]}>
@@ -1270,35 +1253,25 @@ function HostForm({
       )}
       <Form.Item name="terminal_enabled" valuePropName="checked" style={{ marginBottom: '0.4rem' }}>
         <Checkbox>
-          включить веб-терминал на хосте
+          {t('hosts.terminalEnabled')}
           <div className="small muted" style={{ fontWeight: 400 }}>
-            Полноценный root-shell прямо в браузере (раздел «Терминал» на самом хосте) —
-            выключено по умолчанию.{' '}
-            {editing
-              ? 'Изменение этой настройки сразу переустановит nkt на хосте (если он уже установлен), чтобы применить её.'
-              : 'Применится при первой установке этого хоста.'}
+            {t('hosts.terminalEnabledHint')}
+            {t(editing ? 'hosts.reinstallsOnChange' : 'hosts.appliesOnFirstInstall')}
           </div>
         </Checkbox>
       </Form.Item>
       <Form.Item name="tunnel_enabled" valuePropName="checked" style={{ marginBottom: '0.4rem' }}>
         <Checkbox>
-          резервный канал связи на случай недоступности SSH
+          {t('hosts.tunnelEnabled')}
           <div className="small muted" style={{ fontWeight: 400 }}>
-            Хаб держит отдельное защищённое соединение к хосту (порт 8078 по умолчанию —
-            NKT_HUB_TUNNEL_PORT на хабе), чтобы дашборд, терминал и «переустановить»/«обновить»
-            продолжали работать, даже если SSH к нему перестанет отвечать. Настраивать адрес
-            самого хаба не нужно — хаб дозванивается так же, как и по SSH, тем же адресом хоста.
-            Включено по умолчанию для новых хостов; не подменяет SSH для самой первой установки
-            (тогда ещё нечему было раньше подключиться).{' '}
-            {editing
-              ? 'Изменение этой настройки сразу переустановит nkt на хосте (если он уже установлен), чтобы применить её.'
-              : 'Применится при первой установке этого хоста.'}
+            {t('hosts.tunnelEnabledHint')}
+            {t(editing ? 'hosts.reinstallsOnChange' : 'hosts.appliesOnFirstInstall')}
           </div>
         </Checkbox>
       </Form.Item>
       <Form.Item style={{ marginBottom: 0 }}>
         <Button type="primary" htmlType="submit" loading={busy}>
-          {editing ? 'Сохранить' : 'Добавить хост'}
+          {editing ? t('hosts.save') : t('hosts.addHost')}
         </Button>
       </Form.Item>
     </Form>
@@ -1310,11 +1283,8 @@ function HostForm({
     <Card
       title={
         <>
-          Добавить хост
-          <InfoHint>
-            Хаб подключится по SSH, определит архитектуру, соберёт или возьмёт из кэша бинарник nkt и
-            установит его как systemd-сервис
-          </InfoHint>
+          {t('hosts.addHostTitle')}
+          <InfoHint>{t('hosts.addHostHint')}</InfoHint>
         </>
       }
     >
