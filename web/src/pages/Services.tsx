@@ -1,18 +1,20 @@
 import { useState } from 'react'
 import { Button, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
+import i18n from '../i18n'
 
-const ACTION_LABEL: Record<string, string> = {
-  start: 'запустить',
-  stop: 'остановить',
-  restart: 'перезапустить',
-  reload: 'перечитать конфиг',
-  validate: 'проверить конфиг',
-  enable: 'включить автозапуск',
-  disable: 'выключить автозапуск',
+const ACTION_LABEL_KEY: Record<string, string> = {
+  start: 'services.actionStart',
+  stop: 'services.actionStop',
+  restart: 'services.actionRestart',
+  reload: 'services.actionReload',
+  validate: 'services.actionValidate',
+  enable: 'services.actionEnable',
+  disable: 'services.actionDisable',
 }
 
 /** Mirrors model.Listener.Public() in Go — a socket bound to all
@@ -24,12 +26,12 @@ function isPublic(l: Listener): boolean {
 /** Rough but readable — the point is "minutes vs months", not precision. */
 function formatUptime(seconds?: number): string | null {
   if (!seconds || seconds < 0) return null
-  if (seconds < 60) return `${seconds} с`
+  if (seconds < 60) return i18n.t('services.uptimeSeconds', { count: seconds })
   const m = Math.floor(seconds / 60)
-  if (m < 60) return `${m} мин`
+  if (m < 60) return i18n.t('services.uptimeMinutes', { count: m })
   const h = Math.floor(m / 60)
-  if (h < 24) return `${h} ч`
-  return `${Math.floor(h / 24)} дн`
+  if (h < 24) return i18n.t('services.uptimeHours', { count: h })
+  return i18n.t('services.uptimeDays', { count: Math.floor(h / 24) })
 }
 
 /**
@@ -39,24 +41,25 @@ function formatUptime(seconds?: number): string | null {
  * declared it in the first place.
  */
 function OriginTag({ l }: { l: Listener }) {
+  const { t } = useTranslation()
   if (l.origin === 'manual') {
     return (
-      <Tooltip title="Процесс запущен из интерактивной сессии (SSH), а не сервисом — после перезагрузки не вернётся">
-        <Tag color="warning">запущен вручную</Tag>
+      <Tooltip title={t('services.manualOriginTooltip')}>
+        <Tag color="warning">{t('services.manualOrigin')}</Tag>
       </Tooltip>
     )
   }
   if (l.origin === 'service') {
     return (
-      <Tooltip title={`systemd-юнит: ${l.unit}`}>
+      <Tooltip title={t('services.serviceUnitTooltip', { unit: l.unit })}>
         <Tag color="processing">{l.unit || 'systemd'}</Tag>
       </Tooltip>
     )
   }
   if (l.origin === 'container') {
     return (
-      <Tooltip title={l.container_id ? `Контейнер ${l.container_id}` : 'Процесс внутри контейнера'}>
-        <Tag color="default">контейнер{l.container_id ? ` ${l.container_id.slice(0, 12)}` : ''}</Tag>
+      <Tooltip title={l.container_id ? t('services.containerTooltip', { id: l.container_id }) : t('services.containerTooltipGeneric')}>
+        <Tag color="default">{t('services.container', { id: l.container_id ? ` ${l.container_id.slice(0, 12)}` : '' })}</Tag>
       </Tooltip>
     )
   }
@@ -76,9 +79,10 @@ function buildMiscColumns(
   killBusy: string | null,
   onKill: (l: Listener, signal: 'TERM' | 'KILL') => void,
 ): TableColumnsType<Listener> {
+  const t = i18n.t.bind(i18n)
   const columns: TableColumnsType<Listener> = [
     {
-      title: 'Процесс',
+      title: t('services.colProcess'),
       key: 'process',
       render: (_, l) => {
         const uptime = formatUptime(l.uptime_s)
@@ -91,19 +95,19 @@ function buildMiscColumns(
               </div>
             )}
             <div className="small muted">
-              {l.user ? `от ${l.user}` : ''}
+              {l.user ? t('services.fromUser', { user: l.user }) : ''}
               {l.user && (uptime || l.pid) ? ' · ' : ''}
-              {uptime ? `работает ${uptime}` : ''}
+              {uptime ? t('services.running', { uptime }) : ''}
               {uptime && l.pid ? ' · ' : ''}
-              {l.pid ? `pid ${l.pid}` : ''}
+              {l.pid ? t('services.pid', { pid: l.pid }) : ''}
             </div>
           </>
         )
       },
     },
-    { title: 'Происхождение', key: 'origin', render: (_, l) => <OriginTag l={l} /> },
+    { title: t('services.colOrigin'), key: 'origin', render: (_, l) => <OriginTag l={l} /> },
     {
-      title: 'Сокет',
+      title: t('services.colSocket'),
       key: 'socket',
       render: (_, l) => (
         <span className="small mono">
@@ -112,9 +116,9 @@ function buildMiscColumns(
       ),
     },
     {
-      title: 'Доступность',
+      title: t('services.colExposure'),
       key: 'exposure',
-      render: (_, l) => (isPublic(l) ? <Tag color="warning">все интерфейсы</Tag> : <Tag>локально</Tag>),
+      render: (_, l) => (isPublic(l) ? <Tag color="warning">{t('services.allInterfaces')}</Tag> : <Tag>{t('services.local')}</Tag>),
     },
   ]
   if (canControl) {
@@ -132,7 +136,7 @@ function buildMiscColumns(
             loading={killBusy === key}
             onClick={() => onKill(l, 'TERM')}
           >
-            завершить
+            {t('services.kill')}
           </Button>
         )
       },
@@ -149,6 +153,7 @@ function buildMiscColumns(
  * с остальным перечнем сервисов, а не с Docker/Podman/LXD/VMs).
  */
 export default function Services({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const services = useApi<{ services: ServiceUnit[]; allow_mutations: boolean }>('/services', 30_000)
   const misc = useApi<{ listeners: Listener[] }>('/misc', 60_000)
   const [busy, setBusy] = useState<string | null>(null)
@@ -174,7 +179,7 @@ export default function Services({ me }: { me: Me }) {
     try {
       await api('/inventory/refresh', { method: 'POST' })
       await Promise.all([services.reload(), misc.reload()])
-      setNotice({ kind: 'info', text: 'Хост пересканирован.' })
+      setNotice({ kind: 'info', text: t('common.hostRescanned') })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -184,7 +189,7 @@ export default function Services({ me }: { me: Me }) {
 
   async function act(service: string, action: string) {
     if (action !== 'validate' && action !== 'reload') {
-      if (!window.confirm(`Выполнить «${ACTION_LABEL[action]}» для сервиса ${service}?`)) return
+      if (!window.confirm(t('services.confirmAction', { action: t(ACTION_LABEL_KEY[action]), service }))) return
     }
     setBusy(`${service}:${action}`)
     setNotice(null)
@@ -193,10 +198,10 @@ export default function Services({ me }: { me: Me }) {
       const res = await api<{ output?: string; valid?: boolean; simulated?: boolean }>(path, {
         method: 'POST',
       })
-      const suffix = res.simulated ? ' (симуляция, режим снапшота)' : ''
+      const suffix = res.simulated ? t('services.simulatedSuffix') : ''
       setNotice({
         kind: res.valid === false ? 'error' : 'info',
-        text: `${service}: ${ACTION_LABEL[action]} — ${res.output?.trim() || 'выполнено'}${suffix}`,
+        text: t('services.actionDone', { service, action: t(ACTION_LABEL_KEY[action]), output: res.output?.trim() || t('services.done'), suffix }),
       })
       // The backend only kicks off a fire-and-forget background rescan
       // (rescanLater) — a bare reload() right after would just reread the
@@ -225,8 +230,8 @@ export default function Services({ me }: { me: Me }) {
    */
   async function kill(l: Listener, signal: 'TERM' | 'KILL') {
     if (!l.pid || !l.command) return
-    const verb = signal === 'TERM' ? 'завершить процесс (SIGTERM)' : 'принудительно завершить процесс (SIGKILL)'
-    if (!window.confirm(`${verb} ${l.pid}${l.process ? ` (${l.process})` : ''}?`)) return
+    const verb = signal === 'TERM' ? t('services.confirmTerm') : t('services.confirmKill')
+    if (!window.confirm(t('services.confirmKillKind', { verb, pid: l.pid, process: l.process ? ` (${l.process})` : '' }))) return
     const key = listenerKey(l)
     setKillBusy(key)
     setNotice(null)
@@ -239,9 +244,9 @@ export default function Services({ me }: { me: Me }) {
       const stillThere = fresh.listeners.some((x) => listenerKey(x) === key)
       if (signal === 'TERM' && stillThere) {
         setKillEscalation(l)
-        setNotice({ kind: 'info', text: `Процесс ${l.pid} не завершился после SIGTERM.` })
+        setNotice({ kind: 'info', text: t('services.notTerminated', { pid: l.pid }) })
       } else {
-        setNotice({ kind: 'info', text: `Процесс ${l.pid}: сигнал ${signal} отправлен.` })
+        setNotice({ kind: 'info', text: t('services.signalSent', { pid: l.pid, signal }) })
       }
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -252,18 +257,18 @@ export default function Services({ me }: { me: Me }) {
 
   const columns: TableColumnsType<ServiceUnit> = [
     {
-      title: 'Сервис',
+      title: t('services.colService'),
       key: 'name',
       render: (_, s) => (
         <>
           <strong>{s.name}</strong>
           <div className="small muted">{s.description || s.unit}</div>
-          {!s.installed && <div className="small muted">не установлен на хосте</div>}
+          {!s.installed && <div className="small muted">{t('services.notInstalled')}</div>}
         </>
       ),
     },
     {
-      title: 'Состояние',
+      title: t('services.colState'),
       key: 'state',
       render: (_, s) => (
         <>
@@ -272,17 +277,17 @@ export default function Services({ me }: { me: Me }) {
         </>
       ),
     },
-    { title: 'Автозапуск', key: 'enabled', render: (_, s) => <span className="small">{s.enabled || '—'}</span> },
+    { title: t('services.colAutostart'), key: 'enabled', render: (_, s) => <span className="small">{s.enabled || '—'}</span> },
     { title: 'PID', key: 'main_pid', align: 'right', render: (_, s) => <span className="small">{s.main_pid || '—'}</span> },
     {
-      title: 'Память',
+      title: t('services.colMemory'),
       key: 'memory_bytes',
       align: 'right',
       render: (_, s) => <span className="small">{s.memory_bytes ? formatBytesShort(s.memory_bytes) : '—'}</span>,
     },
-    { title: 'Перезапусков', key: 'restarts', align: 'right', render: (_, s) => <span className="small">{s.restarts ?? 0}</span> },
+    { title: t('services.colRestarts'), key: 'restarts', align: 'right', render: (_, s) => <span className="small">{s.restarts ?? 0}</span> },
     {
-      title: 'Действия',
+      title: t('services.colActions'),
       key: 'actions',
       render: (_, s) => (
         <div className="row">
@@ -295,11 +300,11 @@ export default function Services({ me }: { me: Me }) {
               loading={busy === `${s.name}:${a}`}
               onClick={() => act(s.name, a)}
             >
-              {ACTION_LABEL[a] ?? a}
+              {ACTION_LABEL_KEY[a] ? t(ACTION_LABEL_KEY[a]) : a}
             </Button>
           ))}
           <Button type="link" size="small" onClick={() => setLogsFor(s)}>
-            логи
+            {t('services.logs')}
           </Button>
         </div>
       ),
@@ -311,8 +316,8 @@ export default function Services({ me }: { me: Me }) {
       <div className="page-head spread">
         <div>
           <h1>
-            Сервисы
-            <InfoHint>Управление systemd-юнитами. Все действия записываются в журнал с указанием пользователя.</InfoHint>
+            {t('services.title')}
+            <InfoHint>{t('services.hint')}</InfoHint>
           </h1>
         </div>
         <div className="row">
@@ -320,9 +325,9 @@ export default function Services({ me }: { me: Me }) {
             <Button
               onClick={rescan}
               loading={rescanning}
-              title="Список ниже — снапшот, обновляется раз в несколько минут; эта кнопка пересканирует хост сейчас"
+              title={t('services.rescanTooltip')}
             >
-              {rescanning ? 'Сканирую…' : 'Пересканировать'}
+              {rescanning ? t('common.scanning') : t('common.rescan')}
             </Button>
           )}
         </div>
@@ -332,27 +337,22 @@ export default function Services({ me }: { me: Me }) {
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
       {killEscalation && (
         <Banner kind="warn">
-          Процесс {killEscalation.pid}
-          {killEscalation.process ? ` (${killEscalation.process})` : ''} не завершился после SIGTERM.{' '}
+          {t('services.notTerminatedInline', { pid: killEscalation.pid, process: killEscalation.process ? ` (${killEscalation.process})` : '' })}
           <Button
             size="small"
             danger
             loading={killBusy === listenerKey(killEscalation)}
             onClick={() => kill(killEscalation, 'KILL')}
           >
-            Отправить SIGKILL
+            {t('services.sendSigkill')}
           </Button>
         </Banner>
       )}
-      {!canControl && (
-        <Banner kind="info">
-          Действия недоступны: нужна роль admin и включённые изменения.
-        </Banner>
-      )}
+      {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}
 
-      <Card title="systemd">
+      <Card title={t('services.systemdTitle')}>
         {services.loading && !services.data ? (
-          <Loading what="состояние сервисов" />
+          <Loading what={t('services.loadingServiceState')} />
         ) : (
           <>
             <InactiveSummary
@@ -362,11 +362,8 @@ export default function Services({ me }: { me: Me }) {
               getTooltip={(s) => (
                 <>
                   <div>{s.description || s.unit}</div>
-                  <div>
-                    состояние: {s.active_state}
-                    {s.sub_state ? ` (${s.sub_state})` : ''}
-                  </div>
-                  {!s.installed && <div>не установлен на хосте</div>}
+                  <div>{t('services.state', { state: s.active_state, sub: s.sub_state ? ` (${s.sub_state})` : '' })}</div>
+                  {!s.installed && <div>{t('services.notInstalled')}</div>}
                 </>
               )}
               onRescan={rescan}
@@ -387,15 +384,16 @@ export default function Services({ me }: { me: Me }) {
 
       <ErrorNote error={misc.error} />
       <Card
-        title="Остальные сервисы"
-        subtitle={`сокеты, не описанные ни в одном разобранном конфиге — найдено: ${miscListeners.length}${manual ? ` · из них запущено вручную: ${manual}` : ''}`}
+        title={t('services.otherServicesTitle')}
+        subtitle={t('services.otherServicesSubtitle', {
+          count: miscListeners.length,
+          manual: manual ? t('services.manualCount', { count: manual }) : '',
+        })}
       >
         {misc.loading && !misc.data ? (
-          <Loading what="остальные сервисы" />
+          <Loading what={t('services.loadingOtherServices')} />
         ) : miscListeners.length === 0 ? (
-          <div className="chart-empty">
-            Всё, что слушает сеть на этом хосте, описано в разобранных конфигах.
-          </div>
+          <div className="chart-empty">{t('services.allDescribed')}</div>
         ) : (
           <div className="table-wrap">
             <Table<Listener>
@@ -419,21 +417,22 @@ export default function Services({ me }: { me: Me }) {
  * just happened", not a tail -f, and it's available to any viewer (no
  * canControl gate — reading a log is not a mutation). */
 function ServiceLogsModal({ service, onClose }: { service: ServiceUnit; onClose: () => void }) {
+  const { t } = useTranslation()
   const logs = useApi<{ output: string }>(`/services/${service.name}/logs?lines=200`)
 
   return (
-    <Modal title={`Логи: ${service.name}`} onClose={onClose}>
+    <Modal title={t('services.logsTitle', { name: service.name })} onClose={onClose}>
       <div className="row" style={{ justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
         <Button size="small" onClick={() => logs.reload()} loading={logs.loading}>
-          обновить
+          {t('services.refresh')}
         </Button>
       </div>
       <ErrorNote error={logs.error} />
       {logs.loading && !logs.data ? (
-        <Loading what="логи" />
+        <Loading what={t('services.loadingLogs')} />
       ) : (
         <pre className="diff" style={{ maxHeight: '28rem' }}>
-          {logs.data?.output?.trim() || '(пусто)'}
+          {logs.data?.output?.trim() || t('services.empty')}
         </pre>
       )}
     </Modal>
