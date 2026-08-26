@@ -9,41 +9,72 @@
       (`x.reload()` без await перед сбросом busy/loading) остался в
       Firewall.tsx (~8 мест), Configs.tsx (~6 мест), Availability.tsx —
       надо пройтись и добавить `await`, ничего больше менять не нужно.
-- [ ] Английский язык интерфейса — нужен для реальных англоязычных
-      пользователей продукта, работающих параллельно с русскими и надолго,
-      поэтому i18n в этом же репозитории, а не форк в отдельный
-      англоязычный (форк означал бы вручную переносить в него каждую
-      будущую фичу навсегда). Два этапа: (1) фронтенд через react-i18next,
-      (2) бэкенд — сообщения API (`writeError` и т.п.) со своим каталогом
-      в Go, языком из запроса; обычные фронтенд-i18n-библиотеки эту часть
-      не решают. Вывод внешних утилит (`nginx -t`, `certbot`, `haproxy -c`)
-      переводу не подлежит в принципе — не в нашей власти, остаётся как есть.
+- [x] Английский язык интерфейса — завершено целиком, оба этапа.
+      Нужен был для реальных англоязычных пользователей продукта,
+      работающих параллельно с русскими и надолго, поэтому i18n в этом же
+      репозитории, а не форк в отдельный англоязычный. Вывод внешних
+      утилит (`nginx -t`, `certbot`, `haproxy -c`, `ss`, `ip`, `virsh`,
+      `lxc`...) переводу не подлежит в принципе — не в нашей власти,
+      остаётся как есть везде, где встречается.
 
-      Этап 1 (фронтенд) завершён — весь интерфейс переведён, 981 ключ в
-      `web/src/i18n/{ru,en}.json` (проверено `npm run typecheck`/`build` +
-      сверка множества ключей ru/en после каждого файла, `go build ./...`
-      без изменений на бэкенде):
-      - [x] `react-i18next`/`i18next` подключены, ключи по неймспейсам
-            (`app.*`, `nav.*`, `login.*`, по одному на страницу/компонент...),
-            выбор языка в `localStorage` (`nkt-lang`, тот же паттерн, что
-            `nkt-theme` у темы), переключатель — и в подвале сайдбара рядом
-            с темой (уже вошедшие), и на `Login.tsx` (общий хук `useLang()`
-            вынесен в `hooks/useLang.ts`, чтобы избежать циклического
-            импорта App↔Login).
-      - [x] Все страницы (`pages/*.tsx`) и переиспользуемые компоненты
-            (`components/*.tsx`) переведены, включая не-компонентные модули
-            с пользовательским текстом (`api.ts`, `exportCrypto.ts`,
-            `notifications.ts` — через прямой `i18n.t()`, см. `ui.tsx`'s
-            `severityLabel` для образца паттерна). Общие ключи собраны под
-            `common.*` (`all`/`search`/`shown`/`rescan`/`delete`/
-            `confirmDelete`/`deleted`/`hostRescanned`/`actions`/
-            `mutationsDisabled`/`adminMutationsOnly`/`notPublished`/
-            `httpError`/`period`/`schedule`/`severity.*`/`unit.*`) —
-            переиспользуются между страницами вместо дублирования под
-            разными именами.
-      Этап 2 (бэкенд: `writeError` и другие сообщения API со своим
-      каталогом в Go, языком из запроса) не начат — отдельная будущая
-      задача, план для неё ещё не набросан.
+      Этап 1 (фронтенд, react-i18next) — весь интерфейс переведён, 981
+      ключ в `web/src/i18n/{ru,en}.json`:
+      - [x] `react-i18next`/`i18next` подключены, ключи по неймспейсам,
+            выбор языка в `localStorage` (`nkt-lang`), переключатель — и в
+            сайдбаре, и на `Login.tsx` (`hooks/useLang.ts`).
+      - [x] Все страницы и переиспользуемые компоненты переведены,
+            включая не-компонентные модули (`api.ts`, `exportCrypto.ts`,
+            `notifications.ts` — через прямой `i18n.t()`).
+
+      Этап 2 (бэкенд, свой каталог сообщений в Go) — 229 ключей в
+      `internal/msgs/{ru,en}.go`, язык передаётся заголовком `X-NKT-Lang`
+      (HTTP, `web/src/api.ts`) или query-параметром `lang` (WebSocket,
+      `usePty.ts`'s `wsURL`, браузер не даёт кастомных заголовков на
+      handshake). Пять фаз:
+      - [x] Фаза 1 — `internal/msgs` (каталог + `msgs.Errorf`/`*msgs.Err`
+            для структурных ошибок), `writeError`/`fail` в `internal/api`
+            и `internal/hub`, ~55 прямых литералов конвертированы. Деп
+            `fmt.Errorf` (188 мест) внутри пакетов сознательно не тронуты
+            — конвертация без искажения контекста обёрток (`%w`) требует
+            по-пакетного аудита, не сделано ни в этой, ни в следующих
+            фазах.
+      - [x] Фаза 2 — `control.WriteResult.Message` (сохранение/откат
+            конфига) — `Write`/`WriteBlock`/`Rollback` получили параметр
+            `lang msgs.Lang`, TUI передаёт `msgs.RU` явно (свой язык не
+            знает).
+      - [x] Фаза 3 — прогресс установки хоста (`internal/hub/manager.go`
+            и др.) и продления/выпуска сертификата (`internal/control/
+            certgen.go`) в модалках логов. `Event`/`RenewEvent` получили
+            `Key`/`Args` (`json:"-"`) рядом с `Text`, резолвятся в
+            обработчике (`handleInstallJobStatus`/`handleRenewJobStatus`)
+            на язык ИМЕННО текущего опроса, не языка старта job'а. certgen
+            дополнительно поддерживает сырой непереводимый текст (вывод
+            certbot) через `*certProgress{msg, raw}`.
+      - [x] Фаза 4 — статусы источников/сертификатов
+            (`model.SourceStatus.Error`, `model.Certificate.Error`,
+            `model.RenewalInfo.Detail`) из `internal/parse` (~30 мест, 13
+            файлов). Генерируются один раз при сканировании и кэшируются
+            (`Scanner.Latest`) — поэтому текст не переводится в момент
+            сканирования, а хранит `Key+Args` (`model.TextRef`),
+            резолвится заново на каждый запрос через новый
+            `internal/model/localize.go`'s `LocalizeSnapshot(lang, snap)`
+            — вызывается в начале `handleOverview`/`handleFindings`/
+            `handleCertificates`/`handleInventory`, кэш не трогает.
+      - [x] Фаза 5 — диагностические находки (`model.Finding.Title/
+            Detail/Suggestion`) из `internal/analyze` — все 35 правил, тем
+            же аддитивным `Key+Args`-паттерном, тем же `LocalizeSnapshot`.
+            `Finding`'s `Renewal.Detail` переиспользует уже переведённый
+            `cert.Renewal.DetailKey/Args` из фазы 4 напрямую.
+
+      Сознательно не переведено (задокументировано в коде, не забыто):
+      составной текст `certs.go`'s `markDerivedCertbotCerts` и
+      `analyze.go`'s `renewalState()` (конкатенация нескольких уже
+      локализованных фрагментов — резолв одного ключа как аргумента
+      другого `LocalizeSnapshot` не поддерживает), `docker.go`'s более
+      глубокие `Warnings`-хелперы (`dockerFromEngine`/`dockerNetworks`/
+      `parseCompose` — ошибка возвращается как `error` без `TextRef`),
+      `model.Container.Status`/`model.Endpoint.Label` (не получили
+      `Key`/`Args` полей).
 - [ ] Страница «Уязвимости» — централизованная сверка для управляемых
       хостов хаба. Сейчас (`internal/vuln`, `internal/api/handlers_
       vulnerabilities.go`) работает для standalone nkt и для localhost
