@@ -36,22 +36,22 @@
       `useTranslation`, см. комментарий в файле), `components/
       {InactiveSummary,PtyToolbar,PackageInstallModal,PasswordForm,
       UpdateModal}.tsx`, `pages/{Containers,Findings,Audit,Interfaces,
-      Users,LXD,Podman,Docker,Virtualization}.tsx` — 17 файлов, 312 ключей.
-      Общие ключи собраны под `common.*` (`all`/`search`/`shown`/`rescan`/
-      `delete`/`confirmDelete`/`deleted`/`hostRescanned`/`actions`/
-      `mutationsDisabled`/`notPublished`/`severity.*`/`unit.*`) —
-      переиспользуются между Docker/Podman/LXD/Virtualization и дальше, а
-      не дублируются по страницам под разными именами.
+      Users,LXD,Podman,Docker,Virtualization,Hosts,Certificates,
+      Firewall}.tsx` — 20 файлов, 598 ключей. Общие ключи собраны под
+      `common.*` (`all`/`search`/`shown`/`rescan`/`delete`/`confirmDelete`/
+      `deleted`/`hostRescanned`/`actions`/`mutationsDisabled`/
+      `notPublished`/`httpError`/`severity.*`/`unit.*`) — переиспользуются
+      между страницами, а не дублируются под разными именами. api.ts's
+      собственный HTTP-фолбэк-текст ("Ошибка {{status}}", раньше был
+      хардкожен в трёх местах) тоже переведён через `common.httpError`.
 
       - [ ] Ещё не тронуты: `pages/{Overview,Vulnerabilities,Topology,
-            Availability,Usage,Configs,Services,Terminal,Firewall,
-            Certificates,Hosts}.tsx` и `components/{BlockTree,PathPicker,
-            charts}.tsx` — порядка 400 строк по оставшемуся дереву. Самые
-            крупные — `Hosts.tsx` (1324 строки), `Certificates.tsx` (937),
-            `Firewall.tsx` (887), `Topology.tsx` (611), `Configs.tsx` (531)
-            — в них же и большинство оставшихся `window.confirm()` и
-            шаблонных строк с интерполяцией/склонением («Включить»/
-            «Отключить» и т.п.), которые остаются непереведёнными.
+            Availability,Usage,Configs,Services,Terminal}.tsx` и
+            `components/{BlockTree,PathPicker,charts}.tsx` — порядка 300
+            строк по оставшемуся дереву. Самый крупный — `Topology.tsx`
+            (611), `Configs.tsx` (531) — в них же остаётся большинство
+            непереведённых `window.confirm()` и шаблонных строк с
+            интерполяцией/склонением («Включить»/«Отключить» и т.п.).
             Продолжать файл за файлом тем же паттерном: ключ по неймспейсу
             = имя файла/страницы, module-level константы с переводимым
             текстом (колонки таблиц, списки опций) — переносить внутрь
