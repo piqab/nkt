@@ -77,6 +77,7 @@
     "confirmDelete": "Delete the {{what}} {{name}}? This can't be undone.",
     "deleted": "{{name}}: deleted.",
     "mutationsDisabled": "Actions unavailable: needs the admin role and mutations enabled.",
+    "adminMutationsOnly": "Available only to the admin role with mutations enabled (AllowMutations).",
     "actions": "Actions",
     "notPublished": "{{port}} (not published)",
     "httpError": "Error {{status}}"
@@ -812,7 +813,6 @@
     "openTerminal": "Open terminal",
     "tmuxTooltip": "A tmux session survives closing the tab — reconnecting resumes the same one",
     "openInTmux": "Open in tmux",
-    "mutationsDisabled": "Available only to the admin role with mutations enabled (AllowMutations).",
     "connectError": "Couldn't connect. The terminal may be disabled on the server (NKT_TERMINAL_ENABLED) — or this could be a plain network error.",
     "sessionEnded": "Session ended.",
     "checkingDbus": "Checking D-Bus availability on the host…",
@@ -901,5 +901,38 @@
       "version": "Version",
       "ms": "ms"
     }
+  },
+  "vulns": {
+    "title": "Vulnerabilities",
+    "hint": "Known CVEs for installed OS packages (Debian/Ubuntu) and for the images of already-running Docker/Podman containers — checked against a fresh trivy database. LXD isn't supported yet — it has no OCI images in the usual sense, that needs a separate mechanism.",
+    "scan": "Scan",
+    "scanStatus": "scan status",
+    "neverScanned": "No scan has been run on this host yet. The first run may need to download trivy and the vulnerability database (about 1 GB) — this can take a few minutes.",
+    "noDpkgStatus": "This host has no /var/lib/dpkg/status — package scanning is only supported on Debian/Ubuntu.",
+    "scannedAt": "Scanned {{scanned}}, vulnerability database updated {{updated}}.",
+    "noChangeSinceLast": "Nothing changed since the last scan.",
+    "changeSinceLast": "Since the last scan: +{{newCount}} new, {{fixedCount}} fixed.",
+    "failedToScanImage": "image",
+    "failedToScanImages": "images",
+    "failedToScan": "Couldn't scan {{what}}: {{list}}",
+    "severity": "Severity",
+    "source": "Source",
+    "osHost": "host OS",
+    "searchPlaceholder": "CVE, package, or image…",
+    "notFound": "No vulnerabilities found.",
+    "new": "new",
+    "noFixYet": "not yet",
+    "col": {
+      "severity": "Severity",
+      "source": "Source",
+      "cve": "CVE",
+      "package": "Package",
+      "installed": "Installed",
+      "fix": "Fix",
+      "description": "Description"
+    },
+    "scanTitle": "Vulnerability scan",
+    "hideContinuesBackground": "Hide (continues in the background)",
+    "firstRunNote": "The first run may need to download trivy and the vulnerability database (about 1 GB) — this can take a few minutes."
   }
 }
