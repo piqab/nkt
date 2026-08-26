@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { BlockKind, ConfigBlock, Me, WriteResult } from '../types'
 import { Banner, CodeEditor, Modal, Spinner } from './ui'
@@ -62,6 +63,7 @@ export default function BlockTree({
   autoCreate?: boolean
   onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const blocks = useApi<{ blocks: ConfigBlock[] }>(`/configs/blocks${qs({ path })}`)
   const [selected, setSelected] = useState<string | null>(null)
   const [modal, setModal] = useState<ModalState | null>(null)
@@ -144,14 +146,15 @@ export default function BlockTree({
   }
 
   async function remove(block: ConfigBlock) {
-    if (!window.confirm(`Удалить ${KIND_LABEL[block.kind]}${block.name ? ' ' + block.name : ''}?`)) return
+    const label = `${KIND_LABEL[block.kind]}${block.name ? ' ' + block.name : ''}`
+    if (!window.confirm(t('blocks.confirmDelete', { label }))) return
     const ok = await writeBlock({
       op: 'delete', kind: block.kind, start_line: block.start_line, end_line: block.end_line, apply: false,
     })
     if (ok) setSelected(null)
   }
 
-  if (blocks.loading && !blocks.data) return <div className="chart-empty">Загрузка структуры файла…</div>
+  if (blocks.loading && !blocks.data) return <div className="chart-empty">{t('blocks.loadingStructure')}</div>
   if (blocks.error) return <Banner kind="error">{blocks.error}</Banner>
 
   return (
@@ -169,7 +172,7 @@ export default function BlockTree({
       )}
 
       {list.length === 0 ? (
-        <div className="chart-empty">В файле не найдено ни одного узнаваемого блока.</div>
+        <div className="chart-empty">{t('blocks.noBlocksFound')}</div>
       ) : (
         <div className="col" style={{ gap: '0.15rem' }}>
           {list.map((b) => (
@@ -194,47 +197,41 @@ export default function BlockTree({
                 {KIND_LABEL[selectedBlock.kind]}
                 {selectedBlock.name ? ` ${selectedBlock.name}` : ''}
               </h2>
-              <p>
-                строки {selectedBlock.start_line}–{selectedBlock.end_line}
-              </p>
+              <p>{t('blocks.lines', { start: selectedBlock.start_line, end: selectedBlock.end_line })}</p>
             </div>
             <div className="row">
               {canControl && (
                 <button onClick={() => openEdit(selectedBlock)} disabled={busy}>
-                  изменить
+                  {t('blocks.edit')}
                 </button>
               )}
               {canControl && selectedBlock.editable && (
                 <button className="ghost" onClick={() => remove(selectedBlock)} disabled={busy}>
                   {busy && <Spinner />}
-                  удалить
+                  {t('blocks.delete')}
                 </button>
               )}
               <button className="ghost" onClick={() => setSelected(null)}>
-                закрыть
+                {t('blocks.close')}
               </button>
             </div>
           </div>
-          {!selectedBlock.editable && (
-            <p className="small muted">
-              Создание и удаление недоступны для этого раздела — только правка.
-            </p>
-          )}
+          {!selectedBlock.editable && <p className="small muted">{t('blocks.notEditableNote')}</p>}
           <pre className="diff">{selectedBlock.raw}</pre>
         </div>
       )}
 
       {modal && (
         <Modal
-          title={modal.mode === 'create' ? `Новый блок: ${KIND_LABEL[modal.kind]}` : `Правка: ${KIND_LABEL[modal.kind]}`}
+          title={t(modal.mode === 'create' ? 'blocks.newBlock' : 'blocks.editBlock', { kind: KIND_LABEL[modal.kind] })}
           onClose={() => setModal(null)}
         >
           <div className="col">
             <CodeEditor value={draft} onChange={(e) => setDraft(e.target.value)} rows={12} />
             <div className="filters" style={{ marginTop: '0.5rem' }}>
               <label style={{ flex: 1, minWidth: '14rem' }}>
-                Комментарий к правке
-                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="зачем меняем" />
+                {t('blocks.editComment')}
+                <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('blocks.editCommentPlaceholder')} />
               </label>
               <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
                 <input
@@ -243,16 +240,16 @@ export default function BlockTree({
                   onChange={(e) => setApply(e.target.checked)}
                   style={{ width: 'auto' }}
                 />
-                перезагрузить сервис после сохранения
+                {t('blocks.reloadServiceAfterSave')}
               </label>
             </div>
             <div className="row" style={{ marginTop: '0.5rem' }}>
               <button className="primary" onClick={submitModal} disabled={busy || !draft.trim()}>
                 {busy && <Spinner />}
-                {busy ? 'Сохраняю…' : 'Сохранить'}
+                {busy ? t('blocks.saving') : t('blocks.save')}
               </button>
               <button className="ghost" onClick={() => setModal(null)} disabled={busy}>
-                Отмена
+                {t('blocks.cancel')}
               </button>
             </div>
           </div>
@@ -296,6 +293,7 @@ function BlockRow({
   canControl: boolean
   onAddLocation?: (block: ConfigBlock) => void
 }) {
+  const { t } = useTranslation()
   const firstLine = block.raw.split('\n')[0]?.trim() ?? ''
   return (
     <div>
@@ -309,9 +307,7 @@ function BlockRow({
           {block.kind}
         </span>
         <span className="mono small">{block.name || firstLine}</span>
-        <span className="small muted">
-          строки {block.start_line}–{block.end_line}
-        </span>
+        <span className="small muted">{t('blocks.lines', { start: block.start_line, end: block.end_line })}</span>
         {canControl && block.kind === 'server' && onAddLocation && (
           <button
             className="ghost small block-row-action"

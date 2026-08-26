@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { DirEntry } from '../types'
 import { Banner, Loading, Spinner } from './ui'
@@ -31,6 +32,7 @@ export default function PathPicker({
   onPick: (path: string) => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation()
   const [dir, setDir] = useState('/home')
   const [newName, setNewName] = useState('docker-compose.yml')
   const [newFolderName, setNewFolderName] = useState('')
@@ -74,7 +76,7 @@ export default function PathPicker({
         // that ("services must be a mapping"). An explicit empty mapping
         // validates, and internal/parse/blocks.go knows to rewrite it back
         // to block style when the first service gets added.
-        body: { path, content: 'services: {}\n', note: 'создан новый compose-стек', apply: false, expected_sha256: '' },
+        body: { path, content: 'services: {}\n', note: t('pathPicker.newComposeStackNote'), apply: false, expected_sha256: '' },
       })
       onPick(path)
     } catch (err) {
@@ -101,14 +103,14 @@ export default function PathPicker({
           )
         })}
       </div>
-      {owner && <div className="small muted">пользователь: {owner}</div>}
+      {owner && <div className="small muted">{t('pathPicker.owner', { owner })}</div>}
 
       {listing.loading && !listing.data ? (
-        <Loading what="каталог" />
+        <Loading what={t('pathPicker.directory')} />
       ) : listing.error ? (
         <Banner kind="error">{listing.error}</Banner>
       ) : entries.length === 0 ? (
-        <div className="chart-empty">Пусто.</div>
+        <div className="chart-empty">{t('pathPicker.empty')}</div>
       ) : (
         <div className="col" style={{ gap: '0.15rem', maxHeight: '14rem', overflowY: 'auto' }}>
           {dirs.map((d) => (
@@ -128,7 +130,7 @@ export default function PathPicker({
               style={{ textAlign: 'left', fontWeight: 600 }}
               onClick={() => onPick(f.path)}
             >
-              {baseName(f.path)} — использовать этот файл
+              {t('pathPicker.useThisFile', { name: baseName(f.path) })}
             </button>
           ))}
         </div>
@@ -136,7 +138,7 @@ export default function PathPicker({
 
       <div className="filters">
         <label style={{ flex: 1, minWidth: '12rem' }}>
-          Новая папка в этом каталоге
+          {t('pathPicker.newFolderLabel')}
           <input
             value={newFolderName}
             onChange={(e) => setNewFolderName(e.target.value)}
@@ -145,21 +147,21 @@ export default function PathPicker({
         </label>
         <button onClick={createFolder} disabled={folderBusy || !newFolderName.trim()}>
           {folderBusy && <Spinner />}
-          {folderBusy ? 'Создаю…' : '+ папка'}
+          {folderBusy ? t('pathPicker.creating') : t('pathPicker.addFolder')}
         </button>
       </div>
 
       <div className="filters" style={{ marginTop: '0.6rem' }}>
         <label style={{ flex: 1, minWidth: '12rem' }}>
-          Или создать новый файл в этом каталоге
+          {t('pathPicker.newFileLabel')}
           <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="docker-compose.yml" />
         </label>
         <button className="primary" onClick={createHere} disabled={busy || !newName.trim()}>
           {busy && <Spinner />}
-          {busy ? 'Создаю…' : 'Создать'}
+          {busy ? t('pathPicker.creating') : t('pathPicker.create')}
         </button>
         <button className="ghost" onClick={onCancel} disabled={busy}>
-          Отмена
+          {t('pathPicker.cancel')}
         </button>
       </div>
     </div>

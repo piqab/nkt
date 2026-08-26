@@ -1018,5 +1018,36 @@
       "requests": "requests",
       "responses": "responses"
     }
+  },
+  "blocks": {
+    "loadingStructure": "Loading file structure…",
+    "confirmDelete": "Delete {{label}}?",
+    "noBlocksFound": "No recognizable blocks found in this file.",
+    "lines": "lines {{start}}–{{end}}",
+    "edit": "edit",
+    "delete": "delete",
+    "close": "close",
+    "notEditableNote": "Creating and deleting aren't available for this section — editing only.",
+    "newBlock": "New block: {{kind}}",
+    "editBlock": "Edit: {{kind}}",
+    "editComment": "Edit comment",
+    "editCommentPlaceholder": "why this change",
+    "reloadServiceAfterSave": "reload the service after saving",
+    "saving": "Saving…",
+    "save": "Save",
+    "cancel": "Cancel"
+  },
+  "pathPicker": {
+    "owner": "user: {{owner}}",
+    "directory": "directory",
+    "empty": "Empty.",
+    "useThisFile": "{{name}} — use this file",
+    "newFolderLabel": "New folder in this directory",
+    "creating": "Creating…",
+    "addFolder": "+ folder",
+    "newFileLabel": "Or create a new file in this directory",
+    "create": "Create",
+    "cancel": "Cancel",
+    "newComposeStackNote": "created a new compose stack"
   }
 }
