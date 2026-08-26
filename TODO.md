@@ -19,52 +19,31 @@
       не решают. Вывод внешних утилит (`nginx -t`, `certbot`, `haproxy -c`)
       переводу не подлежит в принципе — не в нашей власти, остаётся как есть.
 
-      Этап 1 (фронтенд) начат — инфраструктура готова и обкатана на первом
-      куске интерфейса:
-      - [x] `react-i18next`/`i18next` подключены, `web/src/i18n/{index.ts,
-            ru.json,en.json}` — ключи по неймспейсам (`app.*`, `nav.*`,
-            `login.*`...), выбор языка в `localStorage` (`nkt-lang`, тот же
-            паттерн, что `nkt-theme` у темы), переключатель — в подвале
-            сайдбара рядом с темой (только для уже вошедших — на Login
-            переключателя пока нет, только автоопределение по языку
-            браузера при первом заходе).
-      Полностью переведены (проверено `npm run typecheck`/`build` +
-      сверка множества ключей ru/en после каждого): `App.tsx`, `Login.tsx`,
-      `components/ui.tsx` (включая `severityLabel`/`formatRelative`/
-      `formatDateTime`/`formatBytesShort` — обычные функции, не компоненты,
-      читают `i18n.t()`/`i18n.language` напрямую вместо хука
-      `useTranslation`, см. комментарий в файле), `components/
-      {InactiveSummary,PtyToolbar,PackageInstallModal,PasswordForm,
-      UpdateModal}.tsx`, `pages/{Containers,Findings,Audit,Interfaces,
-      Users,LXD,Podman,Docker,Virtualization,Hosts,Certificates,
-      Firewall}.tsx` — 20 файлов, 598 ключей. Общие ключи собраны под
-      `common.*` (`all`/`search`/`shown`/`rescan`/`delete`/`confirmDelete`/
-      `deleted`/`hostRescanned`/`actions`/`mutationsDisabled`/
-      `notPublished`/`httpError`/`severity.*`/`unit.*`) — переиспользуются
-      между страницами, а не дублируются под разными именами. api.ts's
-      собственный HTTP-фолбэк-текст ("Ошибка {{status}}", раньше был
-      хардкожен в трёх местах) тоже переведён через `common.httpError`.
-
-      - [ ] Ещё не тронуты: `pages/{Overview,Vulnerabilities,Topology,
-            Availability,Usage,Configs,Services,Terminal}.tsx` и
-            `components/{BlockTree,PathPicker,charts}.tsx` — порядка 300
-            строк по оставшемуся дереву. Самый крупный — `Topology.tsx`
-            (611), `Configs.tsx` (531) — в них же остаётся большинство
-            непереведённых `window.confirm()` и шаблонных строк с
-            интерполяцией/склонением («Включить»/«Отключить» и т.п.).
-            Продолжать файл за файлом тем же паттерном: ключ по неймспейсу
-            = имя файла/страницы, module-level константы с переводимым
-            текстом (колонки таблиц, списки опций) — переносить внутрь
-            компонента как обычные `const`, вычисляемые при рендере (не
-            `useMemo`, если не оптимизация — см. `Audit.tsx`'s
-            `jobColumns`/`actionOptions` для образца), а модульные ФУНКЦИИ
-            (не компоненты) — через `i18n.t()` напрямую (см. `ui.tsx`'s
-            `severityLabel`, `Interfaces.tsx`'s `guessInterfaceKind`,
-            `Virtualization.tsx`'s `vmColumns` — там же пример
-            `const t = i18n.t.bind(i18n)` для функции с несколькими
-            переводами внутри).
-      - [ ] Языковой переключатель на самом Login.tsx (сейчас только в
-            сайдбаре уже вошедшего пользователя).
+      Этап 1 (фронтенд) завершён — весь интерфейс переведён, 981 ключ в
+      `web/src/i18n/{ru,en}.json` (проверено `npm run typecheck`/`build` +
+      сверка множества ключей ru/en после каждого файла, `go build ./...`
+      без изменений на бэкенде):
+      - [x] `react-i18next`/`i18next` подключены, ключи по неймспейсам
+            (`app.*`, `nav.*`, `login.*`, по одному на страницу/компонент...),
+            выбор языка в `localStorage` (`nkt-lang`, тот же паттерн, что
+            `nkt-theme` у темы), переключатель — и в подвале сайдбара рядом
+            с темой (уже вошедшие), и на `Login.tsx` (общий хук `useLang()`
+            вынесен в `hooks/useLang.ts`, чтобы избежать циклического
+            импорта App↔Login).
+      - [x] Все страницы (`pages/*.tsx`) и переиспользуемые компоненты
+            (`components/*.tsx`) переведены, включая не-компонентные модули
+            с пользовательским текстом (`api.ts`, `exportCrypto.ts`,
+            `notifications.ts` — через прямой `i18n.t()`, см. `ui.tsx`'s
+            `severityLabel` для образца паттерна). Общие ключи собраны под
+            `common.*` (`all`/`search`/`shown`/`rescan`/`delete`/
+            `confirmDelete`/`deleted`/`hostRescanned`/`actions`/
+            `mutationsDisabled`/`adminMutationsOnly`/`notPublished`/
+            `httpError`/`period`/`schedule`/`severity.*`/`unit.*`) —
+            переиспользуются между страницами вместо дублирования под
+            разными именами.
+      Этап 2 (бэкенд: `writeError` и другие сообщения API со своим
+      каталогом в Go, языком из запроса) не начат — отдельная будущая
+      задача, план для неё ещё не набросан.
 - [ ] Страница «Уязвимости» — централизованная сверка для управляемых
       хостов хаба. Сейчас (`internal/vuln`, `internal/api/handlers_
       vulnerabilities.go`) работает для standalone nkt и для localhost
