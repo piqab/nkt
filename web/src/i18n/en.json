@@ -1,0 +1,44 @@
+{
+  "app": {
+    "brandSub": "control center",
+    "mode": "mode",
+    "logout": "Sign out",
+    "changePassword": "Change password",
+    "theme": "Theme",
+    "themeAuto": "system",
+    "themeLight": "light",
+    "themeDark": "dark",
+    "language": "Language",
+    "changePasswordTitle": "Change password",
+    "close": "close",
+    "simulatedModeTitle": "Snapshot mode (fixtures).",
+    "simulatedModeBody": "Configs are read from a sample directory, not a real host. Control commands run in simulation, and probe/metric values are synthetic — they exist to demonstrate the interface. To work against a real server, run with <code>NKT_MODE=local</code>.",
+    "readOnlyMode": "Changes are disabled by the <code>NKT_ALLOW_MUTATIONS=false</code> setting — the interface is read-only.",
+    "loading": "Loading…"
+  },
+  "nav": {
+    "overview": "Overview",
+    "findings": "Findings",
+    "vulnerabilities": "Vulnerabilities",
+    "topology": "Resource map",
+    "availability": "Availability",
+    "usage": "Load",
+    "configs": "Configs",
+    "services": "Services",
+    "containers": "Containers & VMs",
+    "terminal": "Terminal",
+    "firewall": "Firewall",
+    "interfaces": "Network interfaces",
+    "certificates": "Certificates",
+    "audit": "Audit log",
+    "users": "Users"
+  },
+  "login": {
+    "subtitle": "Network resource map, config auditing, and host service management.",
+    "username": "Username",
+    "password": "Password",
+    "checking": "Checking…",
+    "signIn": "Sign in",
+    "adminPasswordNote": "The admin password is printed to the server log on first startup."
+  }
+}

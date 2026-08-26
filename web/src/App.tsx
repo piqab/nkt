@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ConfigProvider, type ThemeConfig } from 'antd'
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Trans, useTranslation } from 'react-i18next'
 import { api, hostScope, onUnauthorized, readSelectedHost, useApi, writeSelectedHost, type SelectedHost } from './api'
 import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
+import { getStoredLang, setStoredLang, type Lang } from './i18n'
 import type { Me, Overview } from './types'
 import Login from './pages/Login'
 import Hosts from './pages/Hosts'
@@ -69,29 +71,52 @@ function useTheme(): [Theme, (t: Theme) => void, ThemeConfig] {
   return [theme, setTheme, antdTheme]
 }
 
+/** Mirrors useTheme's own localStorage-first persistence (see i18n/index.ts
+ * for why getStoredLang isn't just "always start from i18n's own default").
+ * Language switches are instant (i18next.changeLanguage doesn't reload
+ * anything) — the returned setter both persists the choice and applies it. */
+function useLang(): [Lang, (l: Lang) => void] {
+  const { i18n } = useTranslation()
+  const [lang, setLangState] = useState<Lang>(() => getStoredLang())
+  const setLang = useCallback(
+    (l: Lang) => {
+      setStoredLang(l)
+      setLangState(l)
+      void i18n.changeLanguage(l)
+    },
+    [i18n],
+  )
+  return [lang, setLang]
+}
+
+// label is a translation key (resolved via t() where NAV is rendered), not
+// the display text itself — NAV is a module-level constant built once, long
+// before i18next has necessarily finished initializing, and it must not go
+// stale when the language changes later.
 const NAV = [
-  { to: '/', label: 'Обзор', end: true },
-  { to: '/findings', label: 'Проблемы', badge: 'findings' as const },
-  { to: '/vulnerabilities', label: 'Уязвимости' },
-  { to: '/topology', label: 'Карта ресурсов' },
-  { to: '/availability', label: 'Доступность' },
-  { to: '/usage', label: 'Нагрузка' },
-  { to: '/configs', label: 'Конфигурации' },
-  { to: '/services', label: 'Сервисы' },
-  { to: '/containers', label: 'Контейнеры и ВМ' },
+  { to: '/', labelKey: 'nav.overview', end: true },
+  { to: '/findings', labelKey: 'nav.findings', badge: 'findings' as const },
+  { to: '/vulnerabilities', labelKey: 'nav.vulnerabilities' },
+  { to: '/topology', labelKey: 'nav.topology' },
+  { to: '/availability', labelKey: 'nav.availability' },
+  { to: '/usage', labelKey: 'nav.usage' },
+  { to: '/configs', labelKey: 'nav.configs' },
+  { to: '/services', labelKey: 'nav.services' },
+  { to: '/containers', labelKey: 'nav.containers' },
   // A viewer has nothing to look at here without connecting (unlike the
   // read-only pages above) — hidden rather than shown-but-disabled.
-  { to: '/terminal', label: 'Терминал', adminOnly: true },
-  { to: '/firewall', label: 'Firewall' },
-  { to: '/interfaces', label: 'Сетевые интерфейсы' },
-  { to: '/certificates', label: 'Сертификаты', badge: 'certs' as const },
-  { to: '/audit', label: 'Журнал действий' },
+  { to: '/terminal', labelKey: 'nav.terminal', adminOnly: true },
+  { to: '/firewall', labelKey: 'nav.firewall' },
+  { to: '/interfaces', labelKey: 'nav.interfaces' },
+  { to: '/certificates', labelKey: 'nav.certificates', badge: 'certs' as const },
+  { to: '/audit', labelKey: 'nav.audit' },
   // Managing who can sign in is itself an admin action — a viewer has no use
   // for this screen and the API would refuse every request from it anyway.
-  { to: '/users', label: 'Пользователи', adminOnly: true },
+  { to: '/users', labelKey: 'nav.users', adminOnly: true },
 ]
 
 export default function App() {
+  const { t } = useTranslation()
   const [me, setMe] = useState<Me | null>(null)
   const [checked, setChecked] = useState(false)
   const navigate = useNavigate()
@@ -166,7 +191,7 @@ export default function App() {
   return (
     <ConfigProvider theme={antdTheme}>
       {!checked ? (
-        <div className="login-wrap">Загрузка…</div>
+        <div className="login-wrap">{t('app.loading')}</div>
       ) : !me ? (
         <Routes>
           <Route path="/login" element={<Login onSuccess={loadMe} />} />
@@ -192,6 +217,8 @@ function Shell({
   setTheme: (t: Theme) => void
   onLogout: () => void
 }) {
+  const { t } = useTranslation()
+  const [lang, setLang] = useLang()
   const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
   const isHub = me.mode === 'hub'
@@ -248,7 +275,7 @@ function Shell({
         <aside className="sidebar">
           <div className="brand">
             <div className="brand-name">NetKnownsThat</div>
-            <div className="brand-sub">управляющий центр</div>
+            <div className="brand-sub">{t('app.brandSub')}</div>
           </div>
           <div className="sidebar-foot">
             <div>
@@ -256,7 +283,7 @@ function Shell({
             </div>
             <div className="row" style={{ gap: '0.25rem' }}>
               <button className="ghost" onClick={logout}>
-                Выйти
+                {t('app.logout')}
               </button>
             </div>
           </div>
@@ -277,7 +304,7 @@ function Shell({
           <div className="brand-name">NetKnownsThat</div>
           {!isHub && (
             <div className="brand-sub">
-              {overview.data?.host.hostname ?? '…'} · режим {me.mode}
+              {overview.data?.host.hostname ?? '…'} · {t('app.mode')} {me.mode}
             </div>
           )}
         </div>
@@ -285,7 +312,7 @@ function Shell({
         <nav className="nav">
           {NAV.filter((item) => !item.adminOnly || me.is_admin).map((item) => (
             <NavLink key={item.to} to={item.to} end={item.end}>
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
               {item.badge === 'findings' && criticalCount > 0 && (
                 <span className="nav-count">{criticalCount}</span>
               )}
@@ -299,11 +326,20 @@ function Shell({
         <div className="sidebar-foot">
           <div className="row" style={{ marginBottom: '0.4rem' }}>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-              Тема
+              {t('app.theme')}
               <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
-                <option value="auto">системная</option>
-                <option value="light">светлая</option>
-                <option value="dark">тёмная</option>
+                <option value="auto">{t('app.themeAuto')}</option>
+                <option value="light">{t('app.themeLight')}</option>
+                <option value="dark">{t('app.themeDark')}</option>
+              </select>
+            </label>
+          </div>
+          <div className="row" style={{ marginBottom: '0.4rem' }}>
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
+              {t('app.language')}
+              <select value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
+                <option value="ru">Русский</option>
+                <option value="en">English</option>
               </select>
             </label>
           </div>
@@ -314,10 +350,10 @@ function Shell({
               </div>
               <div className="row" style={{ gap: '0.25rem' }}>
                 <button className="ghost" onClick={() => setShowPassword(true)} style={{ paddingLeft: 0 }}>
-                  Сменить пароль
+                  {t('app.changePassword')}
                 </button>
                 <button className="ghost" onClick={logout}>
-                  Выйти
+                  {t('app.logout')}
                 </button>
               </div>
             </>
@@ -332,10 +368,10 @@ function Shell({
         <div className="content" key={isHub ? selectedHost!.id : 'local'}>
           {showPassword && (
             <Card
-              title="Смена пароля"
+              title={t('app.changePasswordTitle')}
               actions={
                 <button className="ghost" onClick={() => setShowPassword(false)}>
-                  закрыть
+                  {t('app.close')}
                 </button>
               }
             >
@@ -351,16 +387,13 @@ function Shell({
 
           {me.simulated && (
             <Banner kind="warn">
-              <strong>Режим снапшота (fixtures).</strong> Конфигурации читаются из каталога
-              примеров, а не с реального хоста. Команды управления выполняются в симуляции,
-              значения проб и метрик синтетические — они нужны, чтобы показать работу интерфейса.
-              Для работы с настоящим сервером запустите с <code className="mono">NKT_MODE=local</code>.
+              <strong>{t('app.simulatedModeTitle')}</strong>{' '}
+              <Trans i18nKey="app.simulatedModeBody" components={{ code: <code className="mono" /> }} />
             </Banner>
           )}
           {!me.allow_mutations && (
             <Banner kind="info">
-              Изменения запрещены настройкой <code className="mono">NKT_ALLOW_MUTATIONS=false</code> —
-              интерфейс работает только на чтение.
+              <Trans i18nKey="app.readOnlyMode" components={{ code: <code className="mono" /> }} />
             </Banner>
           )}
 
