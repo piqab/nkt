@@ -28,16 +28,35 @@
             сайдбара рядом с темой (только для уже вошедших — на Login
             переключателя пока нет, только автоопределение по языку
             браузера при первом заходе).
-      - [x] `App.tsx` (шелл целиком: nav, sidebar, бренд, смена пароля,
-            баннеры simulated/read-only) и `Login.tsx` — полностью переведены.
-      - [ ] Остальные 20 страниц (`web/src/pages/*.tsx` кроме Login) и 8
-            общих компонентов (`web/src/components/*.tsx` кроме уже
-            перенесённого) — ещё на русском, порядка 800 строк по всему
-            дереву. Продолжать файл за файлом тем же паттерном (ключ по
-            неймспейсу = имя файла/страницы), включая ~24 `window.confirm()`
-            и ~120 шаблонных строк с интерполяцией/склонением («Включить»/
-            «Отключить» и т.п. — под `Trans`/`i18next`-плюрализацию, не
-            плоские ключи).
+      Полностью переведены (проверено `npm run typecheck`/`build` после
+      каждого): `App.tsx`, `Login.tsx`, `components/ui.tsx` (включая
+      `severityLabel`/`formatRelative`/`formatDateTime`/`formatBytesShort` —
+      обычные функции, не компоненты, читают `i18n.t()`/`i18n.language`
+      напрямую вместо хука `useTranslation`, см. комментарий в файле),
+      `components/InactiveSummary.tsx`, `components/PtyToolbar.tsx`,
+      `components/PackageInstallModal.tsx`, `components/PasswordForm.tsx`,
+      `components/UpdateModal.tsx`, `pages/Containers.tsx`,
+      `pages/Findings.tsx`, `pages/Audit.tsx`. Общие ключи собраны под
+      `common.*` (см. `all`/`search`/`shown`/`rescan`/`severity.*`/`unit.*` —
+      переиспользуются, а не дублируются по страницам).
+
+      - [ ] Ещё не тронуты: `pages/{Overview,Vulnerabilities,Topology,
+            Availability,Usage,Configs,Services,Docker,Podman,LXD,
+            Virtualization,Terminal,Firewall,Interfaces,Certificates,Users,
+            Hosts}.tsx` и `components/{BlockTree,PathPicker,charts}.tsx` —
+            порядка 700 строк по оставшемуся дереву. Самые крупные —
+            `Hosts.tsx` (1324 строки), `Certificates.tsx` (937),
+            `Firewall.tsx` (887), `Topology.tsx` (611), `Virtualization.tsx`
+            (541), `Configs.tsx` (531) — в них же и большинство из ~24
+            `window.confirm()` и ~120 шаблонных строк с интерполяцией/
+            склонением («Включить»/«Отключить» и т.п.), которые остаются
+            непереведёнными. Продолжать файл за файлом тем же паттерном:
+            ключ по неймспейсу = имя файла/страницы, module-level константы
+            с переводимым текстом (колонки таблиц, списки опций) — переносить
+            внутрь компонента как обычные `const`, вычисляемые при рендере
+            (не `useMemo`, если не оптимизация — см. `Audit.tsx`'s
+            `jobColumns`/`actionOptions` для образца), а не оставлять
+            снаружи, где `t()` недоступен.
       - [ ] Языковой переключатель на самом Login.tsx (сейчас только в
             сайдбаре уже вошедшего пользователя).
 - [ ] Страница «Уязвимости» — централизованная сверка для управляемых

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Input, Tooltip } from 'antd'
+import { useTranslation } from 'react-i18next'
 
 /**
  * Shared action row for anything built on usePty (Terminal.tsx and
@@ -18,29 +19,30 @@ export function PtyToolbar({
   onFontSize: (delta: number) => void
   onSearch: (query: string, backwards?: boolean) => void
 }) {
+  const { t } = useTranslation()
   const [query, setQuery] = useState('')
 
   return (
     <div className="row" style={{ gap: '0.4rem', marginBottom: '0.4rem' }}>
-      <Tooltip title="Скопировать выделенное">
+      <Tooltip title={t('ptyToolbar.copySelection')}>
         <Button size="small" onClick={onCopy}>
-          копировать
+          {t('ptyToolbar.copy')}
         </Button>
       </Tooltip>
-      <Tooltip title="Очистить видимый буфер">
+      <Tooltip title={t('ptyToolbar.clearBuffer')}>
         <Button size="small" onClick={onClear}>
-          очистить
+          {t('ptyToolbar.clear')}
         </Button>
       </Tooltip>
-      <Button size="small" onClick={() => onFontSize(-1)} aria-label="уменьшить шрифт">
+      <Button size="small" onClick={() => onFontSize(-1)} aria-label={t('ptyToolbar.decreaseFont')}>
         A−
       </Button>
-      <Button size="small" onClick={() => onFontSize(1)} aria-label="увеличить шрифт">
+      <Button size="small" onClick={() => onFontSize(1)} aria-label={t('ptyToolbar.increaseFont')}>
         A+
       </Button>
       <Input
         size="small"
-        placeholder="найти в выводе… (Enter / Shift+Enter)"
+        placeholder={t('ptyToolbar.searchPlaceholder')}
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onPressEnter={(e) => onSearch(query, e.shiftKey)}

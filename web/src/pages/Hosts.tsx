@@ -10,7 +10,7 @@ import {
 } from '@ant-design/icons'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
 import type { HubHost, RenewEvent, RenewJobStatus, Severity } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, SEVERITY_LABEL, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, formatRelative, severityLabel } from '../components/ui'
 import { checkForNewProblems, notificationsEnabled, requestNotificationPermission, setNotificationsEnabled, type NotifyState } from '../notifications'
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 
@@ -158,7 +158,7 @@ function ProblemsCell({ host }: { host: HubHost }) {
           </span>
         ) : (
           present.map((s) => (
-            <Tooltip key={s} title={SEVERITY_LABEL[s]}>
+            <Tooltip key={s} title={severityLabel(s)}>
               <span className="row small" style={{ gap: '0.25rem', flexWrap: 'nowrap' }}>
                 {SEVERITY_ICON[s]} {findings[s]}
               </span>

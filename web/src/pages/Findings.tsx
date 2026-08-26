@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react'
 import { Input, Select, Tag } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { qs, useApi } from '../api'
 import type { Finding, Severity } from '../types'
-import { Card, ErrorNote, InfoHint, Loading, SeverityBadge, SEVERITIES, SEVERITY_LABEL } from '../components/ui'
+import { Card, ErrorNote, InfoHint, Loading, SeverityBadge, SEVERITIES, severityLabel } from '../components/ui'
 import { formatNumber } from '../components/charts'
 
 interface FindingsResponse {
@@ -12,6 +13,7 @@ interface FindingsResponse {
 }
 
 export default function Findings() {
+  const { t } = useTranslation()
   const [severity, setSeverity] = useState('')
   const [service, setService] = useState('')
   const [query, setQuery] = useState('')
@@ -41,11 +43,8 @@ export default function Findings() {
       <div className="page-head">
         <div>
           <h1>
-            Проблемы конфигурации
-            <InfoHint>
-              Результат сопоставления конфигов nginx, haproxy и docker с реальными слушателями хоста
-              и правилами firewall. Каждая запись содержит объяснение и конкретное действие.
-            </InfoHint>
+            {t('findings.title')}
+            <InfoHint>{t('findings.hint')}</InfoHint>
           </h1>
         </div>
       </div>
@@ -55,41 +54,41 @@ export default function Findings() {
       <Card>
         <div className="filters">
           <label>
-            Серьёзность
+            {t('findings.severity')}
             <Select
               value={severity}
               onChange={setSeverity}
               style={{ minWidth: '11rem' }}
               options={[
-                { value: '', label: 'все' },
-                ...SEVERITIES.map((s) => ({ value: s, label: `${SEVERITY_LABEL[s]} (${data?.counts[s] ?? 0})` })),
+                { value: '', label: t('common.all') },
+                ...SEVERITIES.map((s) => ({ value: s, label: `${severityLabel(s)} (${data?.counts[s] ?? 0})` })),
               ]}
             />
           </label>
           <label>
-            Сервис
+            {t('findings.service')}
             <Select
               value={service}
               onChange={setService}
               style={{ minWidth: '9rem' }}
-              options={[{ value: '', label: 'все' }, ...services.map((s) => ({ value: s, label: s }))]}
+              options={[{ value: '', label: t('common.all') }, ...services.map((s) => ({ value: s, label: s }))]}
             />
           </label>
           <label style={{ flex: 1, minWidth: '14rem' }}>
-            Поиск
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="порт, файл, имя правила…" />
+            {t('common.search')}
+            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('findings.searchPlaceholder')} />
           </label>
           <span className="small muted" style={{ paddingBottom: '0.4rem' }}>
-            показано {formatNumber(visible.length)} из {formatNumber(data?.total ?? 0)}
+            {t('common.shown', { shown: formatNumber(visible.length), total: formatNumber(data?.total ?? 0) })}
           </span>
         </div>
       </Card>
 
       {loading && !data ? (
-        <Loading what="список проблем" />
+        <Loading what={t('findings.loadingList')} />
       ) : visible.length === 0 ? (
         <Card>
-          <div className="chart-empty">Ничего не найдено под заданные условия.</div>
+          <div className="chart-empty">{t('common.noMatch')}</div>
         </Card>
       ) : (
         <div className="col">
@@ -109,7 +108,7 @@ export default function Findings() {
                   </p>
                   {f.suggestion && (
                     <p style={{ margin: '0.45rem 0 0' }}>
-                      <strong>Что сделать: </strong>
+                      <strong>{t('findings.whatToDo')}</strong>
                       <span className="secondary">{f.suggestion}</span>
                     </p>
                   )}

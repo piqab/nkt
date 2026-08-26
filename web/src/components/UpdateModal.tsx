@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Modal as AntModal, Button } from 'antd'
+import { Trans, useTranslation } from 'react-i18next'
 import type { PackageUpdate } from '../types'
 import { Banner } from './ui'
 import { PtyToolbar } from './PtyToolbar'
@@ -32,6 +33,7 @@ export default function UpdateModal({
    * package list it shows is about to change. */
   rescanning?: boolean
 }) {
+  const { t } = useTranslation()
   const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(
     wsURL('/updates/ws'),
   )
@@ -58,20 +60,21 @@ export default function UpdateModal({
 
   return (
     <AntModal
-      title="Обновление пакетов"
+      title={t('updateModal.title')}
       open
       onCancel={handleClose}
       width={760}
-      footer={<Button onClick={handleClose}>Закрыть</Button>}
+      footer={<Button onClick={handleClose}>{t('common.close')}</Button>}
       destroyOnHidden
     >
       <p className="small muted">
-        Будет предложено обновить: {packages.map((p) => p.name).join(', ')}. Подтверждение
-        (<code className="mono">Y/n</code>) — прямо в окне ниже, как в обычном терминале.
+        <Trans
+          i18nKey="updateModal.willOffer"
+          values={{ names: packages.map((p) => p.name).join(', ') }}
+          components={{ code: <code className="mono" /> }}
+        />
       </p>
-      {status === 'error' && (
-        <Banner kind="error">Не удалось подключиться к сессии обновления.</Banner>
-      )}
+      {status === 'error' && <Banner kind="error">{t('updateModal.connectError')}</Banner>}
       {status === 'connected' && (
         <PtyToolbar onCopy={copySelection} onClear={clear} onFontSize={changeFontSize} onSearch={search} />
       )}
@@ -86,17 +89,21 @@ export default function UpdateModal({
       />
       {status === 'closed' &&
         (outcome === null || outcome === undefined ? (
-          <Banner kind="info">Сессия завершена.</Banner>
+          <Banner kind="info">{t('updateModal.sessionEnded')}</Banner>
         ) : outcome.ok ? (
           <Banner kind="info">
-            Обновление завершено успешно.{' '}
-            {rescanning ? 'Пересканирую хост…' : 'Хост пересканирован — список пакетов уже обновлён.'}
+            {t('updateModal.succeeded', {
+              status: rescanning ? t('updateModal.rescanning') : t('updateModal.rescanned'),
+            })}
           </Banner>
         ) : (
           <Banner kind="error">
-            Обновление завершилось с ошибкой
-            {outcome.exitCode !== undefined && outcome.exitCode >= 0 ? ` (код ${outcome.exitCode})` : ''}. Что
-            именно пошло не так — в выводе выше.
+            {t('updateModal.failed', {
+              code:
+                outcome.exitCode !== undefined && outcome.exitCode >= 0
+                  ? t('updateModal.failedCode', { code: outcome.exitCode })
+                  : '',
+            })}
           </Banner>
         ))}
     </AntModal>

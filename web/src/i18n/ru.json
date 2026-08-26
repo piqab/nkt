@@ -40,5 +40,119 @@
     "checking": "Проверяю…",
     "signIn": "Войти",
     "adminPasswordNote": "Пароль администратора печатается в журнал сервера при первом запуске."
+  },
+  "common": {
+    "loading": "Загружаю {{what}}…",
+    "loadingDefault": "данные",
+    "close": "Закрыть",
+    "requestFailed": "Не удалось выполнить запрос.",
+    "justNow": "только что",
+    "minutesAgo": "{{count}} мин назад",
+    "hoursAgo": "{{count}} ч назад",
+    "daysAgo": "{{count}} дн назад",
+    "severity": {
+      "critical": "критично",
+      "high": "высокая",
+      "medium": "средняя",
+      "low": "низкая",
+      "info": "инфо"
+    },
+    "unit": {
+      "byte": "Б",
+      "kb": "КБ",
+      "mb": "МБ",
+      "gb": "ГБ",
+      "tb": "ТБ"
+    },
+    "inactive": "неактивны ({{count}}):",
+    "scanning": "Сканирую…",
+    "rescan": "Пересканировать",
+    "all": "все",
+    "search": "Поиск",
+    "shown": "показано {{shown}} из {{total}}",
+    "noMatch": "Ничего не найдено под заданные условия."
+  },
+  "containers": {
+    "vms": "Виртуальные машины"
+  },
+  "ptyToolbar": {
+    "copySelection": "Скопировать выделенное",
+    "copy": "копировать",
+    "clearBuffer": "Очистить видимый буфер",
+    "clear": "очистить",
+    "decreaseFont": "уменьшить шрифт",
+    "increaseFont": "увеличить шрифт",
+    "searchPlaceholder": "найти в выводе… (Enter / Shift+Enter)"
+  },
+  "packageInstall": {
+    "title": "Установка {{packageName}}",
+    "running": "Выполняется <code>apt-get install -y {{packageName}}</code>.",
+    "connectError": "Не удалось подключиться к сессии установки.",
+    "sessionEnded": "Сессия завершена.",
+    "rescanning": "Пересканирую хост…",
+    "rescanned": "Хост пересканирован.",
+    "installed": "{{packageName}} установлен. {{status}}",
+    "failed": "Установка завершилась с ошибкой{{code}}. Что именно пошло не так — в выводе выше.",
+    "failedCode": " (код {{code}})"
+  },
+  "passwordForm": {
+    "sessionsEnd": "После смены пароля все сессии завершаются — потребуется войти заново.",
+    "currentPassword": "Текущий пароль",
+    "newPassword": "Новый пароль",
+    "tooShort": "не короче {{count}} символов",
+    "repeatPassword": "Повторите новый пароль",
+    "mismatch": "пароли не совпадают",
+    "changing": "Меняю…",
+    "submit": "Сменить пароль",
+    "forgot": "Забыли пароль и не можете войти? На хосте выполните <code>sudo nkt passwd</code> — это задаст новый пароль администратора, не трогая накопленную историю."
+  },
+  "updateModal": {
+    "title": "Обновление пакетов",
+    "willOffer": "Будет предложено обновить: {{names}}. Подтверждение (<code>Y/n</code>) — прямо в окне ниже, как в обычном терминале.",
+    "connectError": "Не удалось подключиться к сессии обновления.",
+    "sessionEnded": "Сессия завершена.",
+    "rescanning": "Пересканирую хост…",
+    "rescanned": "Хост пересканирован — список пакетов уже обновлён.",
+    "succeeded": "Обновление завершено успешно. {{status}}",
+    "failed": "Обновление завершилось с ошибкой{{code}}. Что именно пошло не так — в выводе выше.",
+    "failedCode": " (код {{code}})"
+  },
+  "findings": {
+    "title": "Проблемы конфигурации",
+    "hint": "Результат сопоставления конфигов nginx, haproxy и docker с реальными слушателями хоста и правилами firewall. Каждая запись содержит объяснение и конкретное действие.",
+    "severity": "Серьёзность",
+    "service": "Сервис",
+    "searchPlaceholder": "порт, файл, имя правила…",
+    "loadingList": "список проблем",
+    "whatToDo": "Что сделать: "
+  },
+  "audit": {
+    "title": "Журнал действий",
+    "hint": "Каждое изменение состояния хоста — перезапуск сервиса, правка конфига, правило firewall — записывается с указанием пользователя, результата и вывода команды.",
+    "actionAll": "все",
+    "resultAll": "все",
+    "jobName": "Задача",
+    "jobInterval": "Интервал",
+    "jobLastRun": "Последний запуск",
+    "jobProcessed": "Обработано",
+    "jobMs": "мс",
+    "jobRuns": "Запусков",
+    "jobError": "Ошибка",
+    "auditWhen": "Когда",
+    "auditWho": "Кто",
+    "auditAction": "Действие",
+    "auditTarget": "Объект",
+    "auditResult": "Результат",
+    "auditDetail": "Подробности",
+    "backgroundJobs": "Фоновые задачи",
+    "schedulerRunning": "планировщик работает",
+    "schedulerDisabled": "планировщик отключён",
+    "loadingJobStatus": "состояние задач",
+    "changeHistory": "История изменений",
+    "action": "действие",
+    "result": "результат",
+    "rows": "строк",
+    "loadingLog": "журнал",
+    "noEntries": "Записей нет."
   }
 }

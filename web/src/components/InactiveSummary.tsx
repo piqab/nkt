@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { Button, Tag, Tooltip } from 'antd'
+import { useTranslation } from 'react-i18next'
 
 export interface InactiveSummaryProps<T> {
   items: T[]
@@ -20,17 +21,18 @@ export interface InactiveSummaryProps<T> {
  * operator is looking specifically because of it.
  */
 export function InactiveSummary<T>({ items, getKey, getLabel, getTooltip, onRescan, rescanning }: InactiveSummaryProps<T>) {
+  const { t } = useTranslation()
   if (items.length === 0) return null
   return (
     <div className="row" style={{ alignItems: 'center', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '0.75rem' }}>
-      <span className="small muted">неактивны ({items.length}):</span>
+      <span className="small muted">{t('common.inactive', { count: items.length })}</span>
       {items.map((item) => (
         <Tooltip key={getKey(item)} title={getTooltip(item)}>
           <Tag style={{ cursor: 'default' }}>{getLabel(item)}</Tag>
         </Tooltip>
       ))}
       <Button size="small" onClick={onRescan} loading={rescanning} style={{ marginLeft: 'auto' }}>
-        {rescanning ? 'Сканирую…' : 'Пересканировать'}
+        {rescanning ? t('common.scanning') : t('common.rescan')}
       </Button>
     </div>
   )

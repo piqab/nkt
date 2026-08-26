@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Modal as AntModal, Button } from 'antd'
+import { Trans, useTranslation } from 'react-i18next'
 import { Banner } from './ui'
 import { PtyToolbar } from './PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
@@ -29,6 +30,7 @@ export default function PackageInstallModal({
   outcome?: { ok: boolean; exitCode?: number } | null
   rescanning?: boolean
 }) {
+  const { t } = useTranslation()
   const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(wsURL(wsPath))
 
   useEffect(() => {
@@ -48,17 +50,17 @@ export default function PackageInstallModal({
 
   return (
     <AntModal
-      title={`Установка ${packageName}`}
+      title={t('packageInstall.title', { packageName })}
       open
       onCancel={handleClose}
       width={760}
-      footer={<Button onClick={handleClose}>Закрыть</Button>}
+      footer={<Button onClick={handleClose}>{t('common.close')}</Button>}
       destroyOnHidden
     >
       <p className="small muted">
-        Выполняется <code className="mono">apt-get install -y {packageName}</code>.
+        <Trans i18nKey="packageInstall.running" values={{ packageName }} components={{ code: <code className="mono" /> }} />
       </p>
-      {status === 'error' && <Banner kind="error">Не удалось подключиться к сессии установки.</Banner>}
+      {status === 'error' && <Banner kind="error">{t('packageInstall.connectError')}</Banner>}
       {status === 'connected' && (
         <PtyToolbar onCopy={copySelection} onClear={clear} onFontSize={changeFontSize} onSearch={search} />
       )}
@@ -73,16 +75,22 @@ export default function PackageInstallModal({
       />
       {status === 'closed' &&
         (outcome === null || outcome === undefined ? (
-          <Banner kind="info">Сессия завершена.</Banner>
+          <Banner kind="info">{t('packageInstall.sessionEnded')}</Banner>
         ) : outcome.ok ? (
           <Banner kind="info">
-            {packageName} установлен. {rescanning ? 'Пересканирую хост…' : 'Хост пересканирован.'}
+            {t('packageInstall.installed', {
+              packageName,
+              status: rescanning ? t('packageInstall.rescanning') : t('packageInstall.rescanned'),
+            })}
           </Banner>
         ) : (
           <Banner kind="error">
-            Установка завершилась с ошибкой
-            {outcome.exitCode !== undefined && outcome.exitCode >= 0 ? ` (код ${outcome.exitCode})` : ''}. Что
-            именно пошло не так — в выводе выше.
+            {t('packageInstall.failed', {
+              code:
+                outcome.exitCode !== undefined && outcome.exitCode >= 0
+                  ? t('packageInstall.failedCode', { code: outcome.exitCode })
+                  : '',
+            })}
           </Banner>
         ))}
     </AntModal>

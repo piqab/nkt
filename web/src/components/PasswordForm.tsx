@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Trans, useTranslation } from 'react-i18next'
 import { api } from '../api'
 import { Banner, Spinner } from './ui'
 
@@ -10,6 +11,7 @@ const MIN_LENGTH = 10
  * left open on someone else's screen cannot be used to take the account over.
  */
 export default function PasswordForm({ onDone }: { onDone: () => void }) {
+  const { t } = useTranslation()
   const [oldPassword, setOld] = useState('')
   const [newPassword, setNew] = useState('')
   const [repeat, setRepeat] = useState('')
@@ -40,13 +42,13 @@ export default function PasswordForm({ onDone }: { onDone: () => void }) {
   return (
     <form className="col" onSubmit={submit}>
       <p className="small secondary" style={{ margin: 0 }}>
-        После смены пароля все сессии завершаются — потребуется войти заново.
+        {t('passwordForm.sessionsEnd')}
       </p>
 
       {error && <Banner kind="error">{error}</Banner>}
 
       <label>
-        Текущий пароль
+        {t('passwordForm.currentPassword')}
         <input
           type="password"
           value={oldPassword}
@@ -57,7 +59,7 @@ export default function PasswordForm({ onDone }: { onDone: () => void }) {
         />
       </label>
       <label>
-        Новый пароль
+        {t('passwordForm.newPassword')}
         <input
           type="password"
           value={newPassword}
@@ -67,12 +69,12 @@ export default function PasswordForm({ onDone }: { onDone: () => void }) {
         />
         {tooShort && (
           <span className="small" style={{ color: 'var(--status-warning)' }}>
-            не короче {MIN_LENGTH} символов
+            {t('passwordForm.tooShort', { count: MIN_LENGTH })}
           </span>
         )}
       </label>
       <label>
-        Повторите новый пароль
+        {t('passwordForm.repeatPassword')}
         <input
           type="password"
           value={repeat}
@@ -82,7 +84,7 @@ export default function PasswordForm({ onDone }: { onDone: () => void }) {
         />
         {mismatch && (
           <span className="small" style={{ color: 'var(--status-warning)' }}>
-            пароли не совпадают
+            {t('passwordForm.mismatch')}
           </span>
         )}
       </label>
@@ -90,14 +92,12 @@ export default function PasswordForm({ onDone }: { onDone: () => void }) {
       <div className="row">
         <button className="primary" type="submit" disabled={busy || tooShort || mismatch}>
           {busy && <Spinner />}
-          {busy ? 'Меняю…' : 'Сменить пароль'}
+          {busy ? t('passwordForm.changing') : t('passwordForm.submit')}
         </button>
       </div>
 
       <p className="small muted" style={{ margin: 0 }}>
-        Забыли пароль и не можете войти? На хосте выполните{' '}
-        <code className="mono">sudo nkt passwd</code> — это задаст новый пароль администратора,
-        не трогая накопленную историю.
+        <Trans i18nKey="passwordForm.forgot" components={{ code: <code className="mono" /> }} />
       </p>
     </form>
   )
