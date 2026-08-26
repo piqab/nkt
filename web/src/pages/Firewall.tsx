@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react'
 import { Badge, Button, Checkbox, Form, Input, Radio, Select, Table, Tag, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { FirewallManagerState, FirewallPolicy, FirewallRule, Listener, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
 import { formatBytes, formatNumber } from '../components/charts'
 import PackageInstallModal from '../components/PackageInstallModal'
+import i18n from '../i18n'
 
 interface FirewallResponse {
   managers: FirewallManagerState[]
@@ -67,11 +69,11 @@ function parseNumberedRule(text: string): { port: number; protocol?: string; act
   return { port: Number(portMatch[1]), protocol: portMatch[2], action: actionMatch?.[1] }
 }
 
-const UFW_ACTION_LABEL: Record<string, string> = {
-  ALLOW: 'разрешено',
-  DENY: 'запрещено',
-  REJECT: 'отклонено',
-  LIMIT: 'ограничено (limit)',
+const UFW_ACTION_LABEL_KEY: Record<string, string> = {
+  ALLOW: 'fw.ufwActionAllow',
+  DENY: 'fw.ufwActionDeny',
+  REJECT: 'fw.ufwActionReject',
+  LIMIT: 'fw.ufwActionLimit',
 }
 const UFW_ACTION_COLOR: Record<string, string> = {
   ALLOW: 'success',
@@ -93,13 +95,7 @@ const CRITICAL_PORTS = new Set([22])
 
 function confirmCriticalPort(port: number, action: string): boolean {
   if (!CRITICAL_PORTS.has(port)) return true
-  return window.confirm(
-    `ВНИМАНИЕ: порт ${port} — стандартный порт SSH.\n\n` +
-      `${action} может отрезать доступ по SSH к этому хосту. Уже открытая сессия обычно не ` +
-      `оборвётся сразу, но следующее подключение — не пройдёт. Восстановить доступ тогда можно ` +
-      `будет только через консоль хостинг-провайдера или физически.\n\n` +
-      `Точно продолжить?`,
-  )
+  return window.confirm(i18n.t('fw.confirmCriticalPort', { port, action }))
 }
 
 type AddRuleValues = {
@@ -127,6 +123,7 @@ type AddFirewalldValues = {
 }
 
 export default function Firewall({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const fw = useApi<FirewallResponse>('/firewall', 60_000)
   const numbered = useApi<{ rules: NumberedRule[]; added: AddedRule[] }>('/firewall/rules', 60_000)
   const [backend, setBackend] = useState('')
@@ -191,7 +188,7 @@ export default function Firewall({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(MANAGER_META[name].reloadPath, { method: 'POST' })
-      setNotice({ kind: 'info', text: `${MANAGER_META[name].label} перезагружен.` })
+      setNotice({ kind: 'info', text: t('fw.reloaded', { label: MANAGER_META[name].label }) })
       fw.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -226,7 +223,7 @@ export default function Firewall({ me }: { me: Me }) {
 
   async function addRule(values: AddRuleValues) {
     const port = Number(values.port)
-    if (values.action !== 'allow' && !confirmCriticalPort(port, `«${values.action}» для порта ${port}`)) return
+    if (values.action !== 'allow' && !confirmCriticalPort(port, t('fw.actionForPort', { action: values.action, port }))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -240,10 +237,10 @@ export default function Firewall({ me }: { me: Me }) {
           comment: values.comment,
         },
       })
-      const ufwOffNote = ufwManager && !ufwManager.active ? ' ufw сейчас выключен — правило сохранено, но не действует, пока вы его не включите.' : ''
+      const ufwOffNote = ufwManager && !ufwManager.active ? t('fw.ufwOffNote') : ''
       setNotice({
         kind: 'info',
-        text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}.${ufwOffNote}`,
+        text: t('fw.ruleAdded', { simulated: res.simulated ? t('fw.simulated') : '', output: res.output?.trim() || 'ok', note: ufwOffNote }),
       })
       addForm.setFieldsValue({ port: '', comment: '' })
       fw.reload()
@@ -257,11 +254,11 @@ export default function Firewall({ me }: { me: Me }) {
 
   async function addFirewalldRule(values: AddFirewalldValues) {
     if (!values.runtime && !values.permanent) {
-      setNotice({ kind: 'error', text: 'Выберите хотя бы один вариант: применить сейчас или сохранить постоянно.' })
+      setNotice({ kind: 'error', text: t('fw.selectOneOption') })
       return
     }
     const isService = values.targetType === 'service'
-    if (!isService && !confirmCriticalPort(Number(values.port), 'Добавление правила firewalld')) return
+    if (!isService && !confirmCriticalPort(Number(values.port), t('fw.addingFirewalldRule'))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -277,7 +274,7 @@ export default function Firewall({ me }: { me: Me }) {
       })
       setNotice({
         kind: 'info',
-        text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}.`,
+        text: t('fw.ruleAdded', { simulated: res.simulated ? t('fw.simulated') : '', output: res.output?.trim() || 'ok', note: '' }),
       })
       addFirewalldForm.setFieldsValue({ port: '', service: '' })
       fw.reload()
@@ -296,9 +293,9 @@ export default function Firewall({ me }: { me: Me }) {
    * than risk deleting the wrong thing from a reconstructed string. */
   async function deleteFirewalldRule(r: FirewallRule) {
     const isPort = (r.ports?.length ?? 0) > 0
-    if (isPort && r.ports && !confirmCriticalPort(r.ports[0], 'Удаление этого правила firewalld')) return
+    if (isPort && r.ports && !confirmCriticalPort(r.ports[0], t('fw.deletingFirewalldRule'))) return
     const label = isPort ? `${r.port_spec}/${r.protocol}` : r.port_spec
-    if (!window.confirm(`Удалить правило firewalld: зона ${r.zone}, ${label}?`)) return
+    if (!window.confirm(t('fw.confirmDeleteFirewalldRule', { zone: r.zone, label }))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -310,7 +307,7 @@ export default function Firewall({ me }: { me: Me }) {
         body.service = r.port_spec
       }
       await api('/firewall/firewalld/rules', { method: 'DELETE', body })
-      setNotice({ kind: 'info', text: `Правило firewalld удалено: зона ${r.zone}, ${label}.` })
+      setNotice({ kind: 'info', text: t('fw.firewalldRuleDeleted', { zone: r.zone, label }) })
       fw.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -321,13 +318,13 @@ export default function Firewall({ me }: { me: Me }) {
 
   async function deleteRule(rule: NumberedRule) {
     const parsed = parseNumberedRule(rule.text)
-    if (parsed && !confirmCriticalPort(parsed.port, 'Удаление этого правила')) return
-    if (!window.confirm(`Удалить правило ufw №${rule.number}?\n\n${rule.text}`)) return
+    if (parsed && !confirmCriticalPort(parsed.port, t('fw.deletingRule'))) return
+    if (!window.confirm(t('fw.confirmDeleteRule', { number: rule.number, text: rule.text }))) return
     setBusy(true)
     setNotice(null)
     try {
       await api(`/firewall/rules/${rule.number}`, { method: 'DELETE', body: { expected: rule.text } })
-      setNotice({ kind: 'info', text: `Правило №${rule.number} удалено.` })
+      setNotice({ kind: 'info', text: t('fw.ruleNumberDeleted', { number: rule.number }) })
       fw.reload()
       numbered.reload()
     } catch (err) {
@@ -344,8 +341,8 @@ export default function Firewall({ me }: { me: Me }) {
    * row creates a plain allow, so that's what a quick-remove from the same
    * row is undoing. */
   async function deleteAddedRule(added: AddedRule) {
-    if (added.port && !confirmCriticalPort(added.port, 'Удаление этого правила')) return
-    if (!window.confirm(`Удалить правило ufw: ${added.spec}?`)) return
+    if (added.port && !confirmCriticalPort(added.port, t('fw.deletingRule'))) return
+    if (!window.confirm(t('fw.confirmDeleteAddedRule', { spec: added.spec }))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -353,7 +350,7 @@ export default function Firewall({ me }: { me: Me }) {
         method: 'DELETE',
         body: { action: added.action || 'allow', port: added.port, protocol: added.protocol || 'tcp', from: '', comment: '' },
       })
-      setNotice({ kind: 'info', text: `Правило удалено: ${added.spec}` })
+      setNotice({ kind: 'info', text: t('fw.ruleDeletedSpec', { spec: added.spec }) })
       fw.reload()
       numbered.reload()
     } catch (err) {
@@ -367,7 +364,7 @@ export default function Firewall({ me }: { me: Me }) {
    * shape as the form above, just triggered straight from the socket's own
    * row instead of typing the port in by hand. */
   async function quickAllowListener(l: Listener) {
-    if (!window.confirm(`Разрешить в ufw ${l.port}/${l.protocol} от любого источника?`)) return
+    if (!window.confirm(t('fw.confirmQuickAllow', { port: l.port, protocol: l.protocol }))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -375,10 +372,10 @@ export default function Firewall({ me }: { me: Me }) {
         method: 'POST',
         body: { action: 'allow', port: l.port, protocol: l.protocol, from: '', comment: '' },
       })
-      const ufwOffNote = ufwManager && !ufwManager.active ? ' ufw сейчас выключен — правило сохранено, но не действует, пока вы его не включите.' : ''
+      const ufwOffNote = ufwManager && !ufwManager.active ? t('fw.ufwOffNote') : ''
       setNotice({
         kind: 'info',
-        text: `Правило добавлено${res.simulated ? ' (симуляция)' : ''}: ${res.output?.trim() || 'ok'}.${ufwOffNote}`,
+        text: t('fw.ruleAdded', { simulated: res.simulated ? t('fw.simulated') : '', output: res.output?.trim() || 'ok', note: ufwOffNote }),
       })
       fw.reload()
       numbered.reload()
@@ -420,20 +417,20 @@ export default function Firewall({ me }: { me: Me }) {
   }
 
   const policyColumns: TableColumnsType<FirewallPolicy> = [
-    { title: 'Цепочка', key: 'chain', render: (_, p) => <span className="mono small">{p.backend}/{p.table}/{p.chain}</span> },
-    { title: 'Политика', dataIndex: 'policy', key: 'policy', className: 'mono small' },
-    { title: 'Пакетов', key: 'packets', align: 'right', render: (_, p) => <span className="num small">{formatNumber(p.packets)}</span> },
+    { title: t('fw.colChain'), key: 'chain', render: (_, p) => <span className="mono small">{p.backend}/{p.table}/{p.chain}</span> },
+    { title: t('fw.colPolicy'), dataIndex: 'policy', key: 'policy', className: 'mono small' },
+    { title: t('fw.colPackets'), key: 'packets', align: 'right', render: (_, p) => <span className="num small">{formatNumber(p.packets)}</span> },
   ]
 
   const numberedColumns: TableColumnsType<NumberedRule> = [
-    { title: '№', dataIndex: 'number', key: 'number', align: 'right' },
-    { title: 'Правило', dataIndex: 'text', key: 'text', className: 'mono small' },
+    { title: t('fw.colNumber'), dataIndex: 'number', key: 'number', align: 'right' },
+    { title: t('fw.colRule'), dataIndex: 'text', key: 'text', className: 'mono small' },
     {
       title: '',
       key: 'actions',
       render: (_, r) => (
         <Button danger type="link" size="small" loading={busy} onClick={() => deleteRule(r)}>
-          удалить
+          {t('fw.delete')}
         </Button>
       ),
     },
@@ -441,7 +438,7 @@ export default function Firewall({ me }: { me: Me }) {
 
   const ruleColumns: TableColumnsType<FirewallRule> = [
     {
-      title: 'Цепочка',
+      title: t('fw.colChain'),
       key: 'chain',
       render: (_, r) => (
         <span className="mono small nowrap">
@@ -451,7 +448,7 @@ export default function Firewall({ me }: { me: Me }) {
       ),
     },
     {
-      title: 'Действие',
+      title: t('fw.colAction'),
       key: 'action',
       render: (_, r) => (
         <span className="mono small">
@@ -461,7 +458,7 @@ export default function Firewall({ me }: { me: Me }) {
       ),
     },
     {
-      title: 'Порт',
+      title: t('fw.colPort'),
       key: 'port',
       render: (_, r) => (
         <span className="mono small">
@@ -469,34 +466,34 @@ export default function Firewall({ me }: { me: Me }) {
           {r.protocol ? `/${r.protocol}` : ''}
           {r.ports?.length === 1 && !listeningPorts.has(r.ports[0]) && (
             <div className="small" style={{ color: 'var(--status-warning)' }}>
-              никто не слушает
+              {t('fw.notListening')}
             </div>
           )}
         </span>
       ),
     },
     {
-      title: 'Зона',
+      title: t('fw.colZone'),
       key: 'zone',
       render: (_, r) => (r.zone ? <span className="small mono">{r.zone}</span> : <span className="small muted">—</span>),
     },
     {
-      title: 'Хранилище',
+      title: t('fw.colStore'),
       key: 'store',
       render: (_, r) => {
         if (r.backend !== 'firewalld') return <span className="small muted">—</span>
         return (
           <>
-            {r.runtime && <Tag color="success">сейчас</Tag>}
-            {r.permanent && <Tag>постоянно</Tag>}
+            {r.runtime && <Tag color="success">{t('fw.storeNow')}</Tag>}
+            {r.permanent && <Tag>{t('fw.storePermanent')}</Tag>}
           </>
         )
       },
     },
-    { title: 'Источник', key: 'source', render: (_, r) => <span className="mono small">{r.source || 'any'}</span> },
-    { title: 'Кем создано', key: 'managed_by', render: (_, r) => <span className="small">{r.managed_by || '—'}</span> },
-    { title: 'Пакетов', key: 'packets', align: 'right', render: (_, r) => <span className="num small">{formatNumber(r.packets)}</span> },
-    { title: 'Байт', key: 'bytes', align: 'right', render: (_, r) => <span className="num small">{formatBytes(r.bytes)}</span> },
+    { title: t('fw.colSource'), key: 'source', render: (_, r) => <span className="mono small">{r.source || 'any'}</span> },
+    { title: t('fw.colManagedBy'), key: 'managed_by', render: (_, r) => <span className="small">{r.managed_by || '—'}</span> },
+    { title: t('fw.colPackets'), key: 'packets', align: 'right', render: (_, r) => <span className="num small">{formatNumber(r.packets)}</span> },
+    { title: t('fw.colBytes'), key: 'bytes', align: 'right', render: (_, r) => <span className="num small">{formatBytes(r.bytes)}</span> },
     ...(canControl
       ? [
           {
@@ -508,7 +505,7 @@ export default function Firewall({ me }: { me: Me }) {
               if (r.backend !== 'firewalld' || r.raw) return null
               return (
                 <Button danger type="link" size="small" loading={busy} onClick={() => deleteFirewalldRule(r)}>
-                  удалить
+                  {t('fw.delete')}
                 </Button>
               )
             },
@@ -518,11 +515,11 @@ export default function Firewall({ me }: { me: Me }) {
   ]
 
   const listenerColumns: TableColumnsType<Listener> = [
-    { title: 'Протокол', key: 'protocol', render: (_, l) => <span className="small mono">{l.protocol}</span> },
-    { title: 'Адрес', key: 'address', render: (_, l) => <span className="small mono">{l.address}</span> },
-    { title: 'Порт', key: 'port', align: 'right', render: (_, l) => <span className="num small">{l.port}</span> },
+    { title: t('fw.colProtocol'), key: 'protocol', render: (_, l) => <span className="small mono">{l.protocol}</span> },
+    { title: t('fw.colAddress'), key: 'address', render: (_, l) => <span className="small mono">{l.address}</span> },
+    { title: t('fw.colPort'), key: 'port', align: 'right', render: (_, l) => <span className="num small">{l.port}</span> },
     {
-      title: 'Процесс',
+      title: t('fw.colProcess'),
       key: 'process',
       render: (_, l) => (
         <span className="small">
@@ -532,28 +529,28 @@ export default function Firewall({ me }: { me: Me }) {
       ),
     },
     {
-      title: 'Доступность',
+      title: t('fw.colExposure'),
       key: 'exposure',
       render: (_, l) =>
         l.address === '0.0.0.0' || l.address === '::' ? (
-          <Badge color="var(--status-warning)" text="все интерфейсы" />
+          <Badge color="var(--status-warning)" text={t('fw.allInterfaces')} />
         ) : (
-          <Badge color="var(--status-good)" text="локально" />
+          <Badge color="var(--status-good)" text={t('fw.local')} />
         ),
     },
     {
-      title: 'Правило ufw',
+      title: t('fw.colUfwRule'),
       key: 'ufw_rule',
       render: (_, l) => {
         const found = ufwRuleForListener(l)
-        if (!found) return <Tag>нет правила</Tag>
+        if (!found) return <Tag>{t('fw.noRule')}</Tag>
         const { action } = found
         return (
           <>
             <Tag color={(action && UFW_ACTION_COLOR[action]) || 'default'}>
-              {(action && UFW_ACTION_LABEL[action]) || action || 'правило есть'}
+              {(action && t(UFW_ACTION_LABEL_KEY[action])) || action || t('fw.hasRule')}
             </Tag>
-            {!ufwManager?.active && <div className="small muted">ufw выключен — не действует</div>}
+            {!ufwManager?.active && <div className="small muted">{t('fw.ufwDisabledNote')}</div>}
           </>
         )
       },
@@ -568,14 +565,14 @@ export default function Firewall({ me }: { me: Me }) {
               if (!found) {
                 return (
                   <Button type="link" size="small" loading={busy} onClick={() => quickAllowListener(l)}>
-                    разрешить
+                    {t('fw.allow')}
                   </Button>
                 )
               }
               const onDelete = found.source === 'numbered' ? () => deleteRule(found.rule) : () => deleteAddedRule(found.added)
               return (
                 <Button danger type="link" size="small" loading={busy} onClick={onDelete}>
-                  удалить
+                  {t('fw.delete')}
                 </Button>
               )
             },
@@ -590,11 +587,7 @@ export default function Firewall({ me }: { me: Me }) {
         <div>
           <h1>
             Firewall
-            <InfoHint>
-              Полный набор правил iptables, ufw и firewalld со счётчиками. Правила меняются только
-              через ufw/firewalld: прямая правка iptables из веб-интерфейса — верный способ потерять
-              доступ к серверу.
-            </InfoHint>
+            <InfoHint>{t('fw.hint')}</InfoHint>
           </h1>
         </div>
       </div>
@@ -604,7 +597,7 @@ export default function Firewall({ me }: { me: Me }) {
 
       {fw.data && (
         <div className="grid grid-3">
-          <Card title="Менеджеры firewall">
+          <Card title={t('fw.managersTitle')}>
             {fw.data.managers.map((m, i) => (
               <div key={m.name} style={i > 0 ? { marginTop: '0.8rem', paddingTop: '0.8rem', borderTop: '1px solid var(--border)' } : undefined}>
                 <div className="small muted" style={{ marginBottom: '0.2rem' }}>
@@ -614,17 +607,17 @@ export default function Firewall({ me }: { me: Me }) {
                   <>
                     <div className="row">
                       <StateBadge state={m.active ? 'active' : 'inactive'} />
-                      <span className="small secondary">{m.policy || 'политика не прочитана'}</span>
+                      <span className="small secondary">{m.policy || t('fw.policyNotRead')}</span>
                     </div>
                     {canControl && (
                       <Button style={{ marginTop: '0.6rem' }} loading={busy} onClick={() => reloadManager(m.name)}>
-                        Перезагрузить {MANAGER_META[m.name]?.label ?? m.name}
+                        {t('fw.reload', { label: MANAGER_META[m.name]?.label ?? m.name })}
                       </Button>
                     )}
                   </>
                 ) : (
                   <>
-                    <Banner kind="warn">{MANAGER_META[m.name]?.label ?? m.name} не установлен на этом хосте.</Banner>
+                    <Banner kind="warn">{t('fw.notInstalled', { label: MANAGER_META[m.name]?.label ?? m.name })}</Banner>
                     {canControl &&
                       (installActiveFor(m.name) ? (
                         <Button
@@ -635,7 +628,7 @@ export default function Firewall({ me }: { me: Me }) {
                             setInstallTarget(m.name as 'ufw' | 'firewalld')
                           }}
                         >
-                          установка выполняется — открыть
+                          {t('fw.installRunningOpen')}
                         </Button>
                       ) : (
                         <Button
@@ -643,13 +636,13 @@ export default function Firewall({ me }: { me: Me }) {
                           type="primary"
                           onClick={() => {
                             const label = MANAGER_META[m.name]?.label ?? m.name
-                            if (window.confirm(`Установить ${label} (apt-get install -y ${label}) на этом хосте?`)) {
+                            if (window.confirm(t('fw.confirmInstall', { label }))) {
                               setInstallOutcome(null)
                               setInstallTarget(m.name as 'ufw' | 'firewalld')
                             }
                           }}
                         >
-                          Установить {MANAGER_META[m.name]?.label ?? m.name}
+                          {t('fw.install', { label: MANAGER_META[m.name]?.label ?? m.name })}
                         </Button>
                       ))}
                   </>
@@ -658,7 +651,7 @@ export default function Firewall({ me }: { me: Me }) {
             ))}
           </Card>
 
-          <Card title="Политики цепочек">
+          <Card title={t('fw.policiesTitle')}>
             <div className="table-wrap">
               <Table<FirewallPolicy>
                 dataSource={fw.data.policies.filter((p) => p.policy !== '-')}
@@ -674,8 +667,8 @@ export default function Firewall({ me }: { me: Me }) {
             <Card
               title={
                 <>
-                  Добавить правило (ufw)
-                  <InfoHint>Через ufw, с записью в журнал</InfoHint>
+                  {t('fw.addUfwRuleTitle')}
+                  <InfoHint>{t('fw.addUfwRuleHint')}</InfoHint>
                 </>
               }
             >
@@ -686,27 +679,27 @@ export default function Firewall({ me }: { me: Me }) {
                 initialValues={{ action: 'allow', port: '', protocol: 'tcp', from: '', comment: '' }}
               >
                 <div className="row">
-                  <Form.Item name="action" label="Действие" style={{ flex: 1 }}>
+                  <Form.Item name="action" label={t('fw.actionLabel')} style={{ flex: 1 }}>
                     <Select
                       options={['allow', 'deny', 'reject', 'limit'].map((v) => ({ value: v, label: v }))}
                     />
                   </Form.Item>
-                  <Form.Item name="port" label="Порт" rules={[{ required: true }]} style={{ flex: 1 }}>
+                  <Form.Item name="port" label={t('fw.portLabel')} rules={[{ required: true }]} style={{ flex: 1 }}>
                     <Input inputMode="numeric" />
                   </Form.Item>
-                  <Form.Item name="protocol" label="Протокол" style={{ flex: 1 }}>
+                  <Form.Item name="protocol" label={t('fw.protocolLabel')} style={{ flex: 1 }}>
                     <Select options={['tcp', 'udp'].map((v) => ({ value: v, label: v }))} />
                   </Form.Item>
                 </div>
-                <Form.Item name="from" label="Источник (IP или CIDR, пусто = отовсюду)">
+                <Form.Item name="from" label={t('fw.sourceLabel')}>
                   <Input placeholder="10.10.0.0/24" />
                 </Form.Item>
-                <Form.Item name="comment" label="Комментарий">
+                <Form.Item name="comment" label={t('fw.commentLabel')}>
                   <Input />
                 </Form.Item>
                 <Form.Item style={{ marginBottom: 0 }}>
                   <Button type="primary" htmlType="submit" loading={busy}>
-                    Добавить правило
+                    {t('fw.addRule')}
                   </Button>
                 </Form.Item>
               </Form>
@@ -717,8 +710,8 @@ export default function Firewall({ me }: { me: Me }) {
             <Card
               title={
                 <>
-                  Добавить правило (firewalld)
-                  <InfoHint>Порт или сервис в зоне, с записью в журнал</InfoHint>
+                  {t('fw.addFirewalldRuleTitle')}
+                  <InfoHint>{t('fw.addFirewalldRuleHint')}</InfoHint>
                 </>
               }
             >
@@ -737,14 +730,14 @@ export default function Firewall({ me }: { me: Me }) {
                 }}
               >
                 <div className="row">
-                  <Form.Item name="zone" label="Зона" rules={[{ required: true }]} style={{ flex: 1 }}>
+                  <Form.Item name="zone" label={t('fw.zoneLabel')} rules={[{ required: true }]} style={{ flex: 1 }}>
                     <Select options={knownZones.map((z) => ({ value: z, label: z }))} />
                   </Form.Item>
-                  <Form.Item name="targetType" label="Что разрешить" style={{ flex: 1 }}>
+                  <Form.Item name="targetType" label={t('fw.whatToAllow')} style={{ flex: 1 }}>
                     <Radio.Group
                       options={[
-                        { value: 'port', label: 'порт' },
-                        { value: 'service', label: 'сервис' },
+                        { value: 'port', label: t('fw.port') },
+                        { value: 'service', label: t('fw.service') },
                       ]}
                       optionType="button"
                     />
@@ -753,15 +746,15 @@ export default function Firewall({ me }: { me: Me }) {
                 <Form.Item shouldUpdate={(prev, next) => prev.targetType !== next.targetType} noStyle>
                   {({ getFieldValue }) =>
                     getFieldValue('targetType') === 'service' ? (
-                      <Form.Item name="service" label="Сервис" rules={[{ required: true }]}>
+                      <Form.Item name="service" label={t('fw.serviceLabel')} rules={[{ required: true }]}>
                         <Input placeholder="ssh" />
                       </Form.Item>
                     ) : (
                       <div className="row">
-                        <Form.Item name="port" label="Порт" rules={[{ required: true }]} style={{ flex: 1 }}>
+                        <Form.Item name="port" label={t('fw.portLabel')} rules={[{ required: true }]} style={{ flex: 1 }}>
                           <Input inputMode="numeric" />
                         </Form.Item>
-                        <Form.Item name="protocol" label="Протокол" style={{ flex: 1 }}>
+                        <Form.Item name="protocol" label={t('fw.protocolLabel')} style={{ flex: 1 }}>
                           <Select options={['tcp', 'udp'].map((v) => ({ value: v, label: v }))} />
                         </Form.Item>
                       </div>
@@ -770,15 +763,15 @@ export default function Firewall({ me }: { me: Me }) {
                 </Form.Item>
                 <div className="row">
                   <Form.Item name="runtime" valuePropName="checked">
-                    <Checkbox>применить сейчас</Checkbox>
+                    <Checkbox>{t('fw.applyNow')}</Checkbox>
                   </Form.Item>
                   <Form.Item name="permanent" valuePropName="checked">
-                    <Checkbox>сохранить постоянно</Checkbox>
+                    <Checkbox>{t('fw.saveForever')}</Checkbox>
                   </Form.Item>
                 </div>
                 <Form.Item style={{ marginBottom: 0 }}>
                   <Button type="primary" htmlType="submit" loading={busy}>
-                    Добавить правило
+                    {t('fw.addRule')}
                   </Button>
                 </Form.Item>
               </Form>
@@ -791,11 +784,8 @@ export default function Firewall({ me }: { me: Me }) {
         <Card
           title={
             <>
-              Правила ufw
-              <InfoHint>
-                Номера сдвигаются после каждого изменения, поэтому удаление сверяется с тем текстом,
-                который вы видите.
-              </InfoHint>
+              {t('fw.ufwRulesTitle')}
+              <InfoHint>{t('fw.ufwRulesHint')}</InfoHint>
             </>
           }
         >
@@ -814,38 +804,35 @@ export default function Firewall({ me }: { me: Me }) {
       <Card
         title={
           <>
-            Все правила пакетного фильтра
-            <InfoHint>
-              Счётчики берутся из iptables-save -c: нулевой счётчик означает, что правило ни разу не
-              сработало.
-            </InfoHint>
+            {t('fw.allRulesTitle')}
+            <InfoHint>{t('fw.allRulesHint')}</InfoHint>
           </>
         }
         actions={
           <>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-              backend
+              {t('fw.backendLabel')}
               <Select
                 value={backend}
                 onChange={setBackend}
                 style={{ minWidth: '8rem' }}
-                options={[{ value: '', label: 'все' }, ...(fw.data?.backends ?? []).map((b) => ({ value: b, label: b }))]}
+                options={[{ value: '', label: t('common.all') }, ...(fw.data?.backends ?? []).map((b) => ({ value: b, label: b }))]}
               />
             </label>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-              цепочка
+              {t('fw.chainLabel')}
               <Select
                 value={chain}
                 onChange={setChain}
                 style={{ minWidth: '8rem' }}
-                options={[{ value: '', label: 'все' }, ...chains.map((c) => ({ value: c, label: c }))]}
+                options={[{ value: '', label: t('common.all') }, ...chains.map((c) => ({ value: c, label: c }))]}
               />
             </label>
           </>
         }
       >
         {fw.loading && !fw.data ? (
-          <Loading what="правила" />
+          <Loading what={t('fw.loadingRules')} />
         ) : (
           <div className="table-wrap">
             <Table<FirewallRule> dataSource={rules} columns={ruleColumns} rowKey="id" pagination={false} size="small" />
@@ -856,8 +843,8 @@ export default function Firewall({ me }: { me: Me }) {
       <Card
         title={
           <>
-            Открытые сокеты хоста
-            <InfoHint>Вывод ss: то, что действительно слушает порты</InfoHint>
+            {t('fw.socketsTitle')}
+            <InfoHint>{t('fw.socketsHint')}</InfoHint>
           </>
         }
       >
