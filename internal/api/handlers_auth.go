@@ -9,13 +9,12 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/althq/netknownsthat/internal/auth"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
 // minPasswordRunes is the shortest password accepted anywhere in the API.
 const minPasswordRunes = 10
-
-const minPasswordMessage = "Пароль должен быть не короче 10 символов"
 
 // passwordLongEnough counts characters rather than bytes: five Cyrillic letters
 // occupy ten bytes in UTF-8 and would otherwise pass a byte-based check.
@@ -56,7 +55,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" || req.Password == "" {
-		writeError(w, http.StatusBadRequest, "Укажите логин и пароль")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "auth.usernamePasswordRequired"))
 		return
 	}
 
@@ -110,7 +109,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !passwordLongEnough(req.NewPassword) {
-		writeError(w, http.StatusBadRequest, minPasswordMessage)
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "auth.minPasswordLength"))
 		return
 	}
 	user, _ := auth.UserFromContext(r.Context())
@@ -129,7 +128,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUserList(w http.ResponseWriter, r *http.Request) {
 	users, err := s.db.ListUsers(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"users": users})
@@ -149,7 +148,7 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" || !passwordLongEnough(req.Password) {
-		writeError(w, http.StatusBadRequest, "Нужен логин и "+strings.ToLower(minPasswordMessage))
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "auth.loginAndPasswordRequired"))
 		return
 	}
 	if req.Role == "" {
@@ -157,12 +156,12 @@ func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	hash, err := auth.HashPassword(req.Password)
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	if _, err := s.db.CreateUser(r.Context(), req.Username, hash, req.Role); err != nil {
 		s.db.Audit(r.Context(), auth.Username(r.Context()), "user.create", req.Username, "error", err.Error())
-		writeError(w, http.StatusBadRequest, "Не удалось создать пользователя: "+err.Error())
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "auth.createUserFailed", err.Error()))
 		return
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "user.create", req.Username, "ok",
@@ -187,36 +186,36 @@ func (s *Server) handleUserPatch(w http.ResponseWriter, r *http.Request) {
 
 	if req.Role != nil {
 		if name == actor.Username && *req.Role != store.RoleAdmin {
-			writeError(w, http.StatusBadRequest, "Нельзя снять с себя роль admin")
+			writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "auth.cannotRemoveOwnAdmin"))
 			return
 		}
 		if err := s.db.SetUserRole(r.Context(), name, *req.Role); err != nil {
-			fail(w, err)
+			fail(w, r, err)
 			return
 		}
 	}
 	if req.Disabled != nil {
 		if name == actor.Username && *req.Disabled {
-			writeError(w, http.StatusBadRequest, "Нельзя отключить собственную учётную запись")
+			writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "auth.cannotDisableOwnAccount"))
 			return
 		}
 		if err := s.db.SetUserDisabled(r.Context(), name, *req.Disabled); err != nil {
-			fail(w, err)
+			fail(w, r, err)
 			return
 		}
 	}
 	if req.Password != nil {
 		if !passwordLongEnough(*req.Password) {
-			writeError(w, http.StatusBadRequest, minPasswordMessage)
+			writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "auth.minPasswordLength"))
 			return
 		}
 		hash, err := auth.HashPassword(*req.Password)
 		if err != nil {
-			fail(w, err)
+			fail(w, r, err)
 			return
 		}
 		if err := s.db.SetPasswordHash(r.Context(), name, hash); err != nil {
-			fail(w, err)
+			fail(w, r, err)
 			return
 		}
 	}
@@ -228,11 +227,11 @@ func (s *Server) handleUserDelete(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	actor, _ := auth.UserFromContext(r.Context())
 	if name == actor.Username {
-		writeError(w, http.StatusBadRequest, "Нельзя удалить собственную учётную запись")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "auth.cannotDeleteOwnAccount"))
 		return
 	}
 	if err := s.db.DeleteUser(r.Context(), name); err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	s.db.Audit(r.Context(), actor.Username, "user.delete", name, "ok", nil)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/control"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // handleGenerateSelfSigned issues a self-signed certificate on the host. It
@@ -51,7 +52,7 @@ func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Lineage == "" {
-		writeError(w, http.StatusBadRequest, "укажите lineage")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "certgen.lineageRequired"))
 		return
 	}
 
@@ -95,7 +96,7 @@ func (s *Server) handleRenewJobStatus(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "job")
 	events, done, errMsg, ok := s.certs.RenewJobStatus(id)
 	if !ok {
-		writeError(w, http.StatusNotFound, "задача не найдена")
+		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "job.notFound"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -111,7 +112,7 @@ func (s *Server) handleRenewJobStatus(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCertLineages(w http.ResponseWriter, r *http.Request) {
 	lineages, err := s.certs.ListLetsEncryptLineages()
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"lineages": lineages})
@@ -142,7 +143,7 @@ func (s *Server) handleCombineForHAProxy(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	if req.Lineage == "" {
-		writeError(w, http.StatusBadRequest, "укажите lineage")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "certgen.lineageRequired"))
 		return
 	}
 

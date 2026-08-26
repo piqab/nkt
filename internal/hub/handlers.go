@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/althq/netknownsthat/internal/auth"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -21,8 +22,6 @@ import (
 // hub admin's password is never held to a looser standard just because the
 // account lives on the hub instead of a plain nkt.
 const minPasswordRunes = 10
-
-const minPasswordMessage = "Пароль должен быть не короче 10 символов"
 
 func passwordLongEnough(password string) bool {
 	return utf8.RuneCountInString(password) >= minPasswordRunes
@@ -61,7 +60,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	req.Username = strings.TrimSpace(req.Username)
 	if req.Username == "" || req.Password == "" {
-		writeError(w, http.StatusBadRequest, "Укажите логин и пароль")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "auth.usernamePasswordRequired"))
 		return
 	}
 
@@ -102,7 +101,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !passwordLongEnough(req.NewPassword) {
-		writeError(w, http.StatusBadRequest, minPasswordMessage)
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "auth.minPasswordLength"))
 		return
 	}
 	user, _ := auth.UserFromContext(r.Context())
@@ -122,7 +121,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	user, ok := auth.UserFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "Требуется вход в систему")
+		writeError(w, http.StatusUnauthorized, msgs.T(msgs.LangFromRequest(r), "auth.loginRequired"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -332,7 +331,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 	if req.AuthKind == authKindGenerated {
 		authorizedKey, err := s.hub.UpdateHostGenerated(r.Context(), id, name, addr, req.SSHPort, sshUser, req.TerminalEnabled)
 		if err != nil {
-			fail(w, err)
+			fail(w, r, err)
 			return
 		}
 		s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
@@ -341,7 +340,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.hub.UpdateHost(r.Context(), id, name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret, req.TerminalEnabled); err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
@@ -356,7 +355,7 @@ func (s *Server) handleHostPubKey(w http.ResponseWriter, r *http.Request) {
 	}
 	line, err := s.hub.PublicKeyLine(r.Context(), id)
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"authorized_key": line})
@@ -373,7 +372,7 @@ func (s *Server) handleRemoveSudoAccess(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := s.hub.RemoveSudoAccess(r.Context(), id); err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -392,7 +391,7 @@ func (s *Server) handleStopHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.hub.SetServiceRunning(r.Context(), id, false); err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -405,7 +404,7 @@ func (s *Server) handleStartHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.hub.SetServiceRunning(r.Context(), id, true); err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -423,7 +422,7 @@ func (s *Server) handleExportHosts(w http.ResponseWriter, r *http.Request) {
 	includeKey := r.URL.Query().Get("include_key") == "1"
 	export, err := s.hub.ExportHosts(r.Context(), includeKey)
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	filename := fmt.Sprintf("nkt-hub-export-%s.json", strings.ReplaceAll(export.ExportedAt[:10], "-", ""))
@@ -460,7 +459,7 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	}
 	s.hub.CloseHost(id)
 	if err := s.db.DeleteHost(r.Context(), id); err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -473,7 +472,7 @@ func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := s.db.HostByID(r.Context(), id); err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	force := r.URL.Query().Get("force") == "true"
@@ -507,7 +506,7 @@ func (s *Server) handleCancelInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.hub.CancelInstall(r.Context(), id); err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -516,7 +515,7 @@ func (s *Server) handleCancelInstall(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleInstallJobStatus(w http.ResponseWriter, r *http.Request) {
 	events, done, errMsg, ok := s.hub.InstallJobStatus(chi.URLParam(r, "job"))
 	if !ok {
-		writeError(w, http.StatusNotFound, "Задача не найдена")
+		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "job.notFound"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"events": events, "done": done, "error": errMsg})
@@ -533,7 +532,7 @@ func (s *Server) handleLatestInstallJob(w http.ResponseWriter, r *http.Request) 
 	}
 	jobID, ok := s.hub.LatestJobID(id)
 	if !ok {
-		writeError(w, http.StatusNotFound, "для этого хоста ещё не было установок")
+		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "hub.noInstallsYet"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"job": jobID})
@@ -547,9 +546,9 @@ func hostIDParam(r *http.Request) (int64, error) {
 	return id, nil
 }
 
-func fail(w http.ResponseWriter, err error) {
+func fail(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, store.ErrNotFound) {
-		writeError(w, http.StatusNotFound, err.Error())
+		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "err.notFound"))
 		return
 	}
 	writeError(w, http.StatusBadRequest, err.Error())
@@ -563,7 +562,7 @@ func fail(w http.ResponseWriter, err error) {
 // cookie swap, since there is nothing remote to reach.
 func (s *Server) proxyLocal(w http.ResponseWriter, r *http.Request) {
 	if s.local == nil {
-		writeError(w, http.StatusServiceUnavailable, "локальный сканер хаба не запущен")
+		writeError(w, http.StatusServiceUnavailable, msgs.T(msgs.LangFromRequest(r), "hub.localScannerNotRunning"))
 		return
 	}
 	rest := chi.URLParam(r, "*")

@@ -11,13 +11,14 @@ import (
 
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/control"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
 func (s *Server) handleTargets(w http.ResponseWriter, r *http.Request) {
 	statuses, err := s.db.TargetStatuses(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -30,18 +31,18 @@ func (s *Server) handleTargets(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTargetHistory(w http.ResponseWriter, r *http.Request) {
 	id, err := int64Path(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Некорректный идентификатор цели")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "monitor.invalidTargetId"))
 		return
 	}
 	target, err := s.db.TargetByID(r.Context(), id)
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	buckets, err := s.db.AvailabilityBuckets(r.Context(), id,
 		sinceParam(r, 7*24*time.Hour), granularityParam(r, "hour"), tzParam(r))
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"target": target, "buckets": buckets})
@@ -51,7 +52,7 @@ func (s *Server) handleAvailabilityHeatmap(w http.ResponseWriter, r *http.Reques
 	id := int64(intParam(r, "target", 0))
 	cells, err := s.db.AvailabilityHeatmap(r.Context(), id, sinceParam(r, 14*24*time.Hour), tzParam(r))
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"cells": cells, "target": id})
@@ -60,7 +61,7 @@ func (s *Server) handleAvailabilityHeatmap(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleOutages(w http.ResponseWriter, r *http.Request) {
 	outages, err := s.db.RecentOutages(r.Context(), sinceParam(r, 7*24*time.Hour), intParam(r, "limit", 50))
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"outages": outages})
@@ -118,7 +119,7 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	q := metricQuery(r)
 	points, err := s.db.MetricSeries(r.Context(), q)
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -136,7 +137,7 @@ func (s *Server) handleUsageTop(w http.ResponseWriter, r *http.Request) {
 	rows, err := s.db.MetricTop(r.Context(), source, metric,
 		sinceParam(r, 24*time.Hour), intParam(r, "limit", 10))
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"top": rows, "source": source, "metric": metric})
@@ -148,7 +149,7 @@ func (s *Server) handleUsageHeatmap(w http.ResponseWriter, r *http.Request) {
 	cells, err := s.db.UsageHeatmap(r.Context(), source, metric, r.URL.Query().Get("subject"),
 		sinceParam(r, 14*24*time.Hour), tzParam(r))
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -177,21 +178,21 @@ func (s *Server) handleJobs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTargetCheck(w http.ResponseWriter, r *http.Request) {
 	id, err := int64Path(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Некорректный идентификатор цели")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "monitor.invalidTargetId"))
 		return
 	}
 	target, err := s.db.TargetByID(r.Context(), id)
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	if s.scheduler == nil {
-		writeError(w, http.StatusServiceUnavailable, "Планировщик не запущен")
+		writeError(w, http.StatusServiceUnavailable, msgs.T(msgs.LangFromRequest(r), "monitor.schedulerNotRunning"))
 		return
 	}
 	result := s.scheduler.Prober().ProbeTarget(r.Context(), target)
 	if err := s.db.InsertProbeResults(r.Context(), []store.ProbeResult{result}); err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"target": target, "result": result})
@@ -204,7 +205,7 @@ type targetPatchRequest struct {
 func (s *Server) handleTargetPatch(w http.ResponseWriter, r *http.Request) {
 	id, err := int64Path(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Некорректный идентификатор цели")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "monitor.invalidTargetId"))
 		return
 	}
 	var req targetPatchRequest
@@ -213,11 +214,11 @@ func (s *Server) handleTargetPatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Enabled == nil {
-		writeError(w, http.StatusBadRequest, "Нечего менять")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "monitor.nothingToChange"))
 		return
 	}
 	if err := s.db.SetTargetEnabled(r.Context(), id, *req.Enabled); err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "monitor.target", chi.URLParam(r, "id"), "ok",
@@ -251,7 +252,7 @@ type firewallDeleteRequest struct {
 func (s *Server) handleFirewallDelete(w http.ResponseWriter, r *http.Request) {
 	number, err := strconv.Atoi(chi.URLParam(r, "number"))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Некорректный номер правила")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "monitor.invalidRuleNumber"))
 		return
 	}
 	var req firewallDeleteRequest

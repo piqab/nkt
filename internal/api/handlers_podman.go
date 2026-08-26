@@ -11,7 +11,7 @@ import (
 func (s *Server) handlePodmanContainers(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"containers": snap.Podman})

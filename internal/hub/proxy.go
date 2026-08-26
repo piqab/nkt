@@ -11,6 +11,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/althq/netknownsthat/internal/auth"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
 )
@@ -252,8 +253,13 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 				},
 			},
 			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {
+				// Localizes against the outer r (this handler's own request
+				// param is unused — httputil.ReverseProxy passes it the
+				// proxied request, but that request already carries whatever
+				// headers came from the browser, same as r itself here; using
+				// the outer r just avoids relying on that being true).
 				onFail()
-				writeError(w, http.StatusBadGateway, "хост недоступен: "+err.Error())
+				writeError(w, http.StatusBadGateway, msgs.T(msgs.LangFromRequest(r), "hub.hostUnreachable", err.Error()))
 			},
 		}
 		proxy.ServeHTTP(w, r)

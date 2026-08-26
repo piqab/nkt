@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // selfUpdateReadTimeout overrides the server-wide 30s http.Server.
@@ -70,7 +71,7 @@ const (
 // unrestricted transient unit.
 func (s *Server) handleSelfUpdate(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Mode != config.ModeLocal {
-		writeError(w, http.StatusForbidden, "самообновление доступно только в режиме local")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "selfupdate.localModeOnly"))
 		return
 	}
 
@@ -83,13 +84,13 @@ func (s *Server) handleSelfUpdate(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, selfUpdateMaxRequestSize)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeError(w, http.StatusBadRequest, "разбор запроса: "+err.Error())
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "selfupdate.parseRequestFailed", err.Error()))
 		return
 	}
 
 	binFile, _, err := r.FormFile("binary")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "нет файла binary: "+err.Error())
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "selfupdate.missingBinaryFile", err.Error()))
 		return
 	}
 	defer binFile.Close()
@@ -98,13 +99,13 @@ func (s *Server) handleSelfUpdate(w http.ResponseWriter, r *http.Request) {
 	env := r.FormValue("env")
 	wantSHA := r.FormValue("sha256")
 	if unit == "" || env == "" || wantSHA == "" {
-		writeError(w, http.StatusBadRequest, "запрос неполный: нужны unit, env и sha256")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "selfupdate.incompleteRequest"))
 		return
 	}
 
 	stageDir, err := os.MkdirTemp(s.cfg.DataDir, "selfupdate-")
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "каталог для обновления: "+err.Error())
+		writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "selfupdate.stageDirFailed", err.Error()))
 		return
 	}
 	// Removed by the background script itself on success (its files must
@@ -122,34 +123,32 @@ func (s *Server) handleSelfUpdate(w http.ResponseWriter, r *http.Request) {
 	sum := sha256.New()
 	out, err := os.OpenFile(stageBin, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "запись бинарника: "+err.Error())
+		writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "selfupdate.writeBinaryFailed", err.Error()))
 		return
 	}
 	_, copyErr := io.Copy(io.MultiWriter(out, sum), binFile)
 	closeErr := out.Close()
 	if copyErr != nil {
-		writeError(w, http.StatusInternalServerError, "запись бинарника: "+copyErr.Error())
+		writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "selfupdate.writeBinaryFailed", copyErr.Error()))
 		return
 	}
 	if closeErr != nil {
-		writeError(w, http.StatusInternalServerError, "запись бинарника: "+closeErr.Error())
+		writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "selfupdate.writeBinaryFailed", closeErr.Error()))
 		return
 	}
 	if gotSHA := hex.EncodeToString(sum.Sum(nil)); gotSHA != wantSHA {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf(
-			"контрольная сумма бинарника не совпала (получено %s, ожидалось %s) — передача повреждена, попробуйте ещё раз",
-			gotSHA, wantSHA))
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "selfupdate.checksumMismatch", gotSHA, wantSHA))
 		return
 	}
 
 	stageUnit := filepath.Join(stageDir, "netknownsthat.service")
 	if err := os.WriteFile(stageUnit, []byte(unit), 0o644); err != nil {
-		writeError(w, http.StatusInternalServerError, "запись systemd-юнита: "+err.Error())
+		writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "selfupdate.writeUnitFailed", err.Error()))
 		return
 	}
 	stageEnv := filepath.Join(stageDir, "nkt.env")
 	if err := os.WriteFile(stageEnv, []byte(env), 0o600); err != nil {
-		writeError(w, http.StatusInternalServerError, "запись nkt.env: "+err.Error())
+		writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "selfupdate.writeEnvFailed", err.Error()))
 		return
 	}
 
@@ -170,7 +169,7 @@ systemctl restart netknownsthat
 
 	cmd := unrestrictedBackgroundCommand("bash", "-c", script)
 	if err := cmd.Start(); err != nil {
-		writeError(w, http.StatusInternalServerError, "запуск обновления: "+err.Error())
+		writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "selfupdate.startFailed", err.Error()))
 		return
 	}
 	// Not Wait()'d, and the stage dir is now cleaned up by the script

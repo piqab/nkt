@@ -75,7 +75,14 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   const res = await fetch(`/api${prefix}${path}`, {
     method: opts.method ?? 'GET',
     credentials: 'same-origin',
-    headers: opts.body === undefined ? undefined : { 'Content-Type': 'application/json' },
+    // X-NKT-Lang lets the Go backend localize its own generated text
+    // (internal/msgs) against the same language the UI is already in —
+    // the hub's reverse proxy forwards this header unmodified to a managed
+    // host's own api.Server, so it works identically scoped or not.
+    headers: {
+      'X-NKT-Lang': i18n.language,
+      ...(opts.body === undefined ? undefined : { 'Content-Type': 'application/json' }),
+    },
     body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
     signal: opts.signal,
   })
