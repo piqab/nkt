@@ -478,6 +478,19 @@ func (p *progressReader) Read(b []byte) (int, error) {
 	return n, err
 }
 
+// Size lets sftp.File.ReadFrom see the total length up front through this
+// wrapper exactly as it would through the *os.File underneath (which
+// satisfies this same duck-typed interface itself, via Stat). Without it,
+// ReadFrom has no way to learn the size and falls back to sending one
+// request at a time and waiting for each reply before starting the next —
+// versus dozens of requests in flight at once when the size is known. That
+// fallback is far slower over any real latency even when raw throughput to
+// the host is fine, which is exactly the regression this fixes: wrapping
+// the file in progressReader hid Stat (and thus the size) from ReadFrom
+// without this method restoring it through a different, equally-recognized
+// spelling.
+func (p *progressReader) Size() int64 { return p.total }
+
 func (p *progressReader) reportNow() {
 	p.last = time.Now()
 	pct := int(p.read * 100 / p.total)
