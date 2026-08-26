@@ -360,3 +360,22 @@ func TestResolveSourceRoot(t *testing.T) {
 		}
 	})
 }
+
+// TestProgressReaderExposesSize guards against a real regression: wrapping
+// uploadFile's local *os.File in progressReader for upload-progress
+// reporting hid Stat() (and every other size hint sftp.File.ReadFrom
+// checks for) from it, which made ReadFrom fall back to sending one
+// SFTP request at a time and waiting for the reply before the next —
+// dozens of times slower than its concurrent-request fast path over any
+// real latency, even though raw throughput to the host was fine. Size()
+// is the fix: it's one of the interfaces ReadFrom's own type switch
+// checks for. This doesn't exercise ReadFrom itself (that needs a real
+// SFTP server, covered by TestSSHProvisioningRoundTrip), just the one
+// contract progressReader must keep satisfying.
+func TestProgressReaderExposesSize(t *testing.T) {
+	pr := &progressReader{total: 12345, report: func(string) {}}
+	var sized interface{ Size() int64 } = pr
+	if got := sized.Size(); got != 12345 {
+		t.Errorf("progressReader.Size() = %d, want 12345", got)
+	}
+}
