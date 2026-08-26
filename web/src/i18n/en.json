@@ -640,5 +640,32 @@
     "loadingRules": "rules",
     "socketsTitle": "Open sockets on the host",
     "socketsHint": "ss output: what's actually listening on ports"
+  },
+  "topology": {
+    "colInternet": "External network",
+    "colServices": "Services",
+    "colListeners": "Listeners",
+    "colUndeclared": "Other",
+    "colUpstreams": "Pools",
+    "colBackends": "Backend addresses",
+    "colContainers": "Containers",
+    "colPodman": "Podman",
+    "colLxd": "LXD",
+    "colVms": "Virtual machines",
+    "colNetworks": "Docker networks",
+    "title": "Resource map",
+    "hint": "Red for critical problems, yellow for warnings. Hover or click a node to see the whole route — from the external network to the backend and back — and its details.",
+    "findingsHint": "{{count}} findings on the map — click a node for details",
+    "clickNodeHint": "Click a node on the map for details.",
+    "legendOk": "ok",
+    "legendWarn": "warning",
+    "legendError": "problem",
+    "legendUnknown": "unknown",
+    "onlyProblems": "problems only",
+    "nodesEdgesCount": "{{nodes}} nodes, {{edges}} links",
+    "zoomIn": "Zoom in",
+    "zoomOut": "Zoom out",
+    "resetView": "Reset view",
+    "loadingMap": "resource map"
   }
 }

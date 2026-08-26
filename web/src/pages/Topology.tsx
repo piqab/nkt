@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Checkbox } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
 import { Card, ErrorNote, InfoHint, Loading, SeverityBadge } from '../components/ui'
@@ -10,18 +11,18 @@ import { Card, ErrorNote, InfoHint, Loading, SeverityBadge } from '../components
  * слушатель → пул → backend → контейнер), so the reading order matches the
  * direction requests actually travel, and the layout is stable between scans.
  */
-const COLUMNS: { kind: string; title: string }[] = [
-  { kind: 'internet', title: 'Внешняя сеть' },
-  { kind: 'service', title: 'Сервисы' },
-  { kind: 'endpoint', title: 'Слушатели' },
-  { kind: 'undeclared', title: 'Разное' },
-  { kind: 'upstream', title: 'Пулы' },
-  { kind: 'backend', title: 'Backend-адреса' },
-  { kind: 'container', title: 'Контейнеры' },
-  { kind: 'podman_container', title: 'Podman' },
-  { kind: 'lxd_instance', title: 'LXD' },
-  { kind: 'vm', title: 'Виртуальные машины' },
-  { kind: 'network', title: 'Сети docker' },
+const COLUMNS: { kind: string; titleKey: string }[] = [
+  { kind: 'internet', titleKey: 'topology.colInternet' },
+  { kind: 'service', titleKey: 'topology.colServices' },
+  { kind: 'endpoint', titleKey: 'topology.colListeners' },
+  { kind: 'undeclared', titleKey: 'topology.colUndeclared' },
+  { kind: 'upstream', titleKey: 'topology.colUpstreams' },
+  { kind: 'backend', titleKey: 'topology.colBackends' },
+  { kind: 'container', titleKey: 'topology.colContainers' },
+  { kind: 'podman_container', titleKey: 'topology.colPodman' },
+  { kind: 'lxd_instance', titleKey: 'topology.colLxd' },
+  { kind: 'vm', titleKey: 'topology.colVms' },
+  { kind: 'network', titleKey: 'topology.colNetworks' },
 ]
 
 const NODE_W = 168
@@ -61,6 +62,7 @@ interface Placed extends GraphNode {
 }
 
 export default function TopologyPage() {
+  const { t } = useTranslation()
   const { data, error, loading } = useApi<Graph>('/topology', 120_000)
   const [selected, setSelected] = useState<string | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
@@ -302,7 +304,7 @@ export default function TopologyPage() {
   const connected = route?.nodes ?? null
   const edgeColors = route?.edgeColors ?? null
 
-  if (loading && !data) return <Loading what="карту ресурсов" />
+  if (loading && !data) return <Loading what={t('topology.loadingMap')} />
   if (error && !data) return <ErrorNote error={error} />
   if (!data) return null
 
@@ -323,11 +325,8 @@ export default function TopologyPage() {
       <div className="page-head spread">
         <div>
           <h1>
-            Карта сетевых ресурсов
-            <InfoHint>
-              Красным — критичные проблемы, жёлтым — предупреждения. Наведите на узел или щёлкните
-              его, чтобы увидеть весь путь — от внешней сети до backend'а и обратно, — и подробности.
-            </InfoHint>
+            {t('topology.title')}
+            <InfoHint>{t('topology.hint')}</InfoHint>
           </h1>
         </div>
 
@@ -341,7 +340,7 @@ export default function TopologyPage() {
             <>
               <div className="topology-focus-head">
                 <strong>{selectedNode.label}</strong>
-                <Button type="text" size="small" onClick={() => setSelected(null)} title="закрыть" style={{ padding: '0 0.3rem' }}>
+                <Button type="text" size="small" onClick={() => setSelected(null)} title={t('common.close')} style={{ padding: '0 0.3rem' }}>
                   ×
                 </Button>
               </div>
@@ -367,9 +366,7 @@ export default function TopologyPage() {
             </>
           ) : (
             <span className="small muted">
-              {data.findings.length > 0
-                ? `${data.findings.length} находок на карте — щёлкните узел, чтобы увидеть подробности`
-                : 'Щёлкните узел на карте, чтобы увидеть подробности.'}
+              {data.findings.length > 0 ? t('topology.findingsHint', { count: data.findings.length }) : t('topology.clickNodeHint')}
             </span>
           )}
         </div>
@@ -380,34 +377,34 @@ export default function TopologyPage() {
           <>
             <div className="chart-legend">
               <span className="legend-item">
-                <span className="legend-swatch" style={{ background: STATUS_COLOR.ok }} /> в порядке
+                <span className="legend-swatch" style={{ background: STATUS_COLOR.ok }} /> {t('topology.legendOk')}
               </span>
               <span className="legend-item">
-                <span className="legend-swatch" style={{ background: STATUS_COLOR.warn }} /> предупреждение
+                <span className="legend-swatch" style={{ background: STATUS_COLOR.warn }} /> {t('topology.legendWarn')}
               </span>
               <span className="legend-item">
-                <span className="legend-swatch" style={{ background: STATUS_COLOR.error }} /> проблема
+                <span className="legend-swatch" style={{ background: STATUS_COLOR.error }} /> {t('topology.legendError')}
               </span>
               <span className="legend-item">
-                <span className="legend-swatch" style={{ background: STATUS_COLOR.unknown }} /> неизвестно
+                <span className="legend-swatch" style={{ background: STATUS_COLOR.unknown }} /> {t('topology.legendUnknown')}
               </span>
             </div>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
               <Checkbox checked={hideHealthy} onChange={(e) => setHideHealthy(e.target.checked)} />
-              только проблемы
+              {t('topology.onlyProblems')}
             </label>
             <span className="small muted">
-              {data.nodes.length} узлов, {data.edges.length} связей
+              {t('topology.nodesEdgesCount', { nodes: data.nodes.length, edges: data.edges.length })}
             </span>
           </>
         }
       >
         <div className="map-wrap">
           <div className="map-controls">
-            <Button size="small" onClick={() => setZoom((z) => Math.min(z * ZOOM_STEP, MAX_ZOOM))} title="Приблизить">
+            <Button size="small" onClick={() => setZoom((z) => Math.min(z * ZOOM_STEP, MAX_ZOOM))} title={t('topology.zoomIn')}>
               +
             </Button>
-            <Button size="small" onClick={() => setZoom((z) => Math.max(z / ZOOM_STEP, MIN_ZOOM))} title="Отдалить">
+            <Button size="small" onClick={() => setZoom((z) => Math.max(z / ZOOM_STEP, MIN_ZOOM))} title={t('topology.zoomOut')}>
               −
             </Button>
             <Button
@@ -416,7 +413,7 @@ export default function TopologyPage() {
                 setZoom(1)
                 setPan({ x: 0, y: 0 })
               }}
-              title="Сбросить вид"
+              title={t('topology.resetView')}
             >
               ⤢
             </Button>
@@ -456,7 +453,7 @@ export default function TopologyPage() {
                 fontWeight={600}
                 fill="var(--text-muted)"
               >
-                {col.title}
+                {t(col.titleKey)}
               </text>
             ))}
 
