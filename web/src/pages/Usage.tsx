@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Select } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { qs, tzOffsetMinutes, useApi } from '../api'
 import type { HeatCell, MetricPoint, SubjectTotal } from '../types'
 import { BarChart, Heatmap, LineChart, formatBytes, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
+import i18n from '../i18n'
 
 /**
  * Usage series the backend collects. Each entry fixes the unit and the
@@ -12,79 +14,80 @@ import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 const SERIES = [
   {
     id: 'docker-net',
-    label: 'Сетевой трафик контейнеров',
+    labelKey: 'usage.series.dockerNet',
     source: 'docker',
     metric: 'net_rx_bytes',
     agg: 'sum',
-    unit: 'байт',
+    unitKey: 'usage.unit.bytes',
     format: formatBytes,
   },
   {
     id: 'docker-cpu',
-    label: 'CPU контейнеров',
+    labelKey: 'usage.series.dockerCpu',
     source: 'docker',
     metric: 'cpu_pct',
     agg: 'avg',
-    unit: '%',
+    unitKey: 'usage.unit.percent',
     format: (n: number) => `${n.toFixed(1)}%`,
   },
   {
     id: 'docker-mem',
-    label: 'Память контейнеров',
+    labelKey: 'usage.series.dockerMem',
     source: 'docker',
     metric: 'mem_bytes',
     agg: 'avg',
-    unit: 'байт',
+    unitKey: 'usage.unit.bytes',
     format: formatBytes,
   },
   {
     id: 'firewall-bytes',
-    label: 'Трафик по правилам firewall',
+    labelKey: 'usage.series.firewallBytes',
     source: 'iptables',
     metric: 'bytes',
     agg: 'sum',
-    unit: 'байт',
+    unitKey: 'usage.unit.bytes',
     format: formatBytes,
   },
   {
     id: 'nginx-requests',
-    label: 'Запросы nginx (из access-логов)',
+    labelKey: 'usage.series.nginxRequests',
     source: 'nginx_log',
     metric: 'requests',
     agg: 'sum',
-    unit: 'запросов',
+    unitKey: 'usage.unit.requests',
     format: (n: number) => formatNumber(n),
   },
   {
     id: 'nginx-errors',
-    label: 'Ошибки 5xx у nginx',
+    labelKey: 'usage.series.nginxErrors',
     source: 'nginx_log',
     metric: 'errors_5xx',
     agg: 'sum',
-    unit: 'ответов',
+    unitKey: 'usage.unit.responses',
     format: (n: number) => formatNumber(n),
   },
   {
     id: 'haproxy-requests',
-    label: 'Запросы haproxy',
+    labelKey: 'usage.series.haproxyRequests',
     source: 'haproxy_log',
     metric: 'requests',
     agg: 'sum',
-    unit: 'запросов',
+    unitKey: 'usage.unit.requests',
     format: (n: number) => formatNumber(n),
   },
 ] as const
 
 const RANGES = [
-  { value: '24h', label: 'сутки', granularity: 'hour' },
-  { value: '7d', label: '7 дней', granularity: 'hour' },
-  { value: '30d', label: '30 дней', granularity: 'day' },
+  { value: '24h', labelKey: 'availability.range.day', granularity: 'hour' },
+  { value: '7d', labelKey: 'availability.range.week', granularity: 'hour' },
+  { value: '30d', labelKey: 'availability.range.month', granularity: 'day' },
 ]
 
-/** Past eight series the palette folds the tail into "Другое" rather than cycling hues. */
+/** Past eight series the palette folds the tail into usage.other rather than cycling hues. */
 const MAX_SERIES = 8
 
 export default function Usage() {
+  const { t } = useTranslation()
   const [seriesId, setSeriesId] = useState<string>(SERIES[0].id)
   const [range, setRange] = useState('7d')
   const tz = tzOffsetMinutes()
@@ -118,16 +121,17 @@ export default function Usage() {
     const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name)
     const keep = new Set(ranked.slice(0, MAX_SERIES - (ranked.length > MAX_SERIES ? 1 : 0)))
 
+    const other = i18n.t('usage.other')
     const grouped = new Map<string, Map<string, number>>()
     for (const p of points) {
-      const name = keep.has(p.subject) ? p.subject : 'Другое'
+      const name = keep.has(p.subject) ? p.subject : other
       const bucketMap = grouped.get(name) ?? new Map<string, number>()
       bucketMap.set(p.bucket, (bucketMap.get(p.bucket) ?? 0) + p.value)
       grouped.set(name, bucketMap)
     }
 
     // Preserve the ranked order so colour follows the entity, not the loop index.
-    const order = [...ranked.filter((n) => keep.has(n)), ...(grouped.has('Другое') ? ['Другое'] : [])]
+    const order = [...ranked.filter((n) => keep.has(n)), ...(grouped.has(other) ? [other] : [])]
     return order
       .filter((name) => grouped.has(name))
       .map((name) => ({
@@ -143,49 +147,44 @@ export default function Usage() {
       <div className="page-head spread">
         <div>
           <h1>
-            Использование сетевых ресурсов
-            <InfoHint>
-              Счётчики firewall, статистика контейнеров и разбор access-логов nginx и haproxy. Логи
-              разбираются по времени записи, поэтому график показывает, когда нагрузка была на самом
-              деле, а не когда её собрали.
-            </InfoHint>
+            {t('usage.title')}
+            <InfoHint>{t('usage.hint')}</InfoHint>
           </h1>
         </div>
         <div className="row">
           <label>
-            Показатель
+            {t('usage.metric')}
             <Select
               value={seriesId}
               onChange={setSeriesId}
               style={{ minWidth: '16rem' }}
-              options={SERIES.map((s) => ({ value: s.id, label: s.label }))}
+              options={SERIES.map((s) => ({ value: s.id, label: t(s.labelKey) }))}
             />
           </label>
           <label>
-            Период
-            <Select value={range} onChange={setRange} style={{ minWidth: '8rem' }} options={RANGES} />
+            {t('common.period')}
+            <Select
+              value={range}
+              onChange={setRange}
+              style={{ minWidth: '8rem' }}
+              options={RANGES.map((r) => ({ value: r.value, label: t(r.labelKey) }))}
+            />
           </label>
         </div>
       </div>
 
       <ErrorNote error={usage.error} />
-      {usage.data?.simulated && (
-        <Banner kind="warn">
-          Метрики синтетические: снимок хоста статичен, поэтому счётчики моделируются по
-          суточному профилю нагрузки. На реальном хосте здесь будут приросты счётчиков iptables и
-          docker stats.
-        </Banner>
-      )}
+      {usage.data?.simulated && <Banner kind="warn">{t('usage.simulated')}</Banner>}
 
       <Card
-        title={spec.label}
+        title={t(spec.labelKey)}
         subtitle={
-          `Единица измерения: ${spec.unit}` +
-          (usage.data?.total != null ? ` · всего на хосте: ${spec.format(usage.data.total)}` : '')
+          t('usage.unitLabel', { unit: t(spec.unitKey) }) +
+          (usage.data?.total != null ? t('usage.totalOnHost', { value: spec.format(usage.data.total) }) : '')
         }
       >
         {usage.loading && !usage.data ? (
-          <Loading what="метрики" />
+          <Loading what={t('usage.metrics')} />
         ) : (
           <LineChart
             series={chartSeries}
@@ -194,7 +193,7 @@ export default function Usage() {
             height={260}
             reference={
               usage.data?.total != null
-                ? { value: usage.data.total, label: `всего: ${spec.format(usage.data.total)}` }
+                ? { value: usage.data.total, label: t('usage.total', { value: spec.format(usage.data.total) }) }
                 : undefined
             }
           />
@@ -202,15 +201,15 @@ export default function Usage() {
       </Card>
 
       <div className="grid grid-2">
-        <Card title="Кто нагружает больше всех" subtitle={`Сумма за период, ${spec.unit}`}>
+        <Card title={t('usage.topLoad')} subtitle={t('usage.sumForPeriod', { unit: t(spec.unitKey) })}>
           {top.loading && !top.data ? (
-            <Loading what="рейтинг" />
+            <Loading what={t('usage.rating')} />
           ) : (
             <BarChart
-              data={(top.data?.top ?? []).map((t) => ({
-                label: t.subject,
-                value: t.total,
-                note: `измерений: ${formatNumber(t.samples)}`,
+              data={(top.data?.top ?? []).map((s) => ({
+                label: s.subject,
+                value: s.total,
+                note: t('usage.measurementsCount', { count: formatNumber(s.samples) }),
               }))}
               formatValue={spec.format}
             />
@@ -220,19 +219,19 @@ export default function Usage() {
         <Card
           title={
             <>
-              Расписание использования
-              <InfoHint>Средняя нагрузка по часам недели: видно рабочие часы, ночные окна и выходные.</InfoHint>
+              {t('usage.usageSchedule')}
+              <InfoHint>{t('usage.scheduleHint')}</InfoHint>
             </>
           }
         >
           {heat.loading && !heat.data ? (
-            <Loading what="расписание" />
+            <Loading what={t('common.schedule')} />
           ) : (
             <Heatmap
               cells={heat.data?.cells ?? []}
-              scaleLabel="нагрузка"
+              scaleLabel={t('usage.load')}
               formatValue={spec.format}
-              emptyLabel="в этот час измерений не было"
+              emptyLabel={t('usage.noMeasurementsThisHour')}
             />
           )}
         </Card>
@@ -245,8 +244,9 @@ function shortLabel(x: string, granularity: string): string {
   const iso = x.length === 13 ? `${x}:00Z` : x.length === 10 ? `${x}T00:00:00Z` : x
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return x
+  const locale = i18n.language === 'en' ? 'en-US' : 'ru-RU'
   if (granularity === 'day') {
-    return d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' })
+    return d.toLocaleDateString(locale, { day: '2-digit', month: '2-digit' })
   }
-  return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit' })
+  return d.toLocaleString(locale, { day: '2-digit', month: '2-digit', hour: '2-digit' })
 }

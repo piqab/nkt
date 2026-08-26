@@ -185,7 +185,7 @@ export default function Availability() {
           </h1>
         </div>
         <label>
-          {t('availability.period')}
+          {t('common.period')}
           <Select
             value={range}
             onChange={setRange}
@@ -227,7 +227,7 @@ export default function Availability() {
         }
       >
         {heatmap.loading && !heatmap.data ? (
-          <Loading what={t('availability.schedule')} />
+          <Loading what={t('common.schedule')} />
         ) : (
           <Heatmap
             cells={downtimeCells}
