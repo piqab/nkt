@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/althq/netknownsthat/internal/collect"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 const newVMFile = "/etc/libvirt/qemu/new-vm.xml"
@@ -28,7 +29,7 @@ func TestWriteCreatesAndDefinesNewVM(t *testing.T) {
 	rec := &argvRecordingCollector{Collector: collect.NewFixtures(root)}
 	m := configsSetupWithCollector(t, root, rec)
 
-	res, err := m.Write(context.Background(), "test", newVMFile, newVMXML, "новая VM", true)
+	res, err := m.Write(context.Background(), msgs.RU, "test", newVMFile, newVMXML, "новая VM", true)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestWriteNewVMWithoutApplyLeavesFileUndefined(t *testing.T) {
 	rec := &argvRecordingCollector{Collector: collect.NewFixtures(root)}
 	m := configsSetupWithCollector(t, root, rec)
 
-	res, err := m.Write(context.Background(), "test", newVMFile, newVMXML, "черновик VM", false)
+	res, err := m.Write(context.Background(), msgs.RU, "test", newVMFile, newVMXML, "черновик VM", false)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
 	}

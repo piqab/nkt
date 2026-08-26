@@ -10,6 +10,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/control"
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -162,7 +163,10 @@ func (s *configsScreen) openEditor() {
 		}
 		s.app.closeModal("editor")
 		s.app.runAsync("Проверяю и сохраняю "+file.Path, true, func(ctx context.Context) (string, error) {
-			res, err := s.app.Configs.Write(ctx, s.app.actor, file.Path, content,
+			// The TUI has no per-viewer language of its own (no HTTP request
+			// to read it from) — it always renders Russian, same as every
+			// other string on screen here.
+			res, err := s.app.Configs.Write(ctx, msgs.RU, s.app.actor, file.Path, content,
 				note.GetText(), apply.IsChecked())
 			if err != nil {
 				if res.RolledBack {
@@ -298,7 +302,7 @@ func (s *configsScreen) confirmRollback(v store.ConfigVersion) {
 		v.ID, shortTime(v.TS)), func() {
 		s.app.runAsync(fmt.Sprintf("Восстанавливаю версию #%d", v.ID), true,
 			func(ctx context.Context) (string, error) {
-				res, err := s.app.Configs.Rollback(ctx, s.app.actor, v.ID, false)
+				res, err := s.app.Configs.Rollback(ctx, msgs.RU, s.app.actor, v.ID, false)
 				if err != nil {
 					return "", err
 				}
@@ -332,5 +336,5 @@ func colorizeDiff(diff string) string {
 
 // interface assertion: the config manager is the only writer of host configs.
 var _ interface {
-	Write(ctx context.Context, user, path, content, note string, apply bool) (control.WriteResult, error)
+	Write(ctx context.Context, lang msgs.Lang, user, path, content, note string, apply bool) (control.WriteResult, error)
 } = (*control.ConfigManager)(nil)

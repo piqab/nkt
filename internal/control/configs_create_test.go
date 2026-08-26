@@ -5,13 +5,14 @@ import (
 	"testing"
 
 	"github.com/althq/netknownsthat/internal/collect"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 func TestWriteCreatesNewFile(t *testing.T) {
 	m := configsSetup(t)
 	const path = "/etc/nginx/sites-enabled/newsite.conf"
 
-	res, err := m.Write(context.Background(), "test", path,
+	res, err := m.Write(context.Background(), msgs.RU, "test", path,
 		"server {\n    listen 80;\n    server_name new.example.com;\n}\n", "новый сайт", false)
 	if err != nil {
 		t.Fatalf("Write: %v", err)
@@ -31,7 +32,7 @@ func TestWriteCreatesNewFile(t *testing.T) {
 
 func TestWriteRejectsNewFileOutsideAllowlist(t *testing.T) {
 	m := configsSetup(t)
-	if _, err := m.Write(context.Background(), "test", "/etc/passwd", "root:x:0:0::/root:/bin/sh\n", "", false); err == nil {
+	if _, err := m.Write(context.Background(), msgs.RU, "test", "/etc/passwd", "root:x:0:0::/root:/bin/sh\n", "", false); err == nil {
 		t.Error("ожидалась ошибка для пути вне разрешённых каталогов")
 	}
 }
@@ -59,7 +60,7 @@ func TestWriteDeletesNewFileOnValidationFailure(t *testing.T) {
 	m := configsSetupWithCollector(t, root, c)
 	const path = "/etc/nginx/sites-enabled/broken.conf"
 
-	_, err := m.Write(context.Background(), "test", path, "server { this is not valid nginx", "", false)
+	_, err := m.Write(context.Background(), msgs.RU, "test", path, "server { this is not valid nginx", "", false)
 	if err == nil {
 		t.Fatal("ожидалась ошибка из-за проваленной валидации")
 	}
@@ -83,7 +84,7 @@ func TestWriteRestoresExistingFileOnValidationFailure(t *testing.T) {
 		t.Fatalf("Read: %v", err)
 	}
 
-	res, err := m.Write(context.Background(), "test", path, "server { this is not valid nginx", "", false)
+	res, err := m.Write(context.Background(), msgs.RU, "test", path, "server { this is not valid nginx", "", false)
 	if err == nil {
 		t.Fatal("ожидалась ошибка из-за проваленной валидации")
 	}

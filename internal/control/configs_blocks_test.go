@@ -10,6 +10,7 @@ import (
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/inventory"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/parse"
 	"github.com/althq/netknownsthat/internal/store"
 )
@@ -120,7 +121,7 @@ func TestWriteBlockUpdateAppliesAndValidates(t *testing.T) {
 		t.Fatalf("ожидался location /static/, получено %q", loc.Raw)
 	}
 
-	res, err := m.WriteBlock(context.Background(), "test", nginxSiteFile, BlockWriteRequest{
+	res, err := m.WriteBlock(context.Background(), msgs.RU, "test", nginxSiteFile, BlockWriteRequest{
 		Op:      "update",
 		Kind:    parse.BlockLocation,
 		Start:   loc.StartLine,
@@ -151,7 +152,7 @@ func TestWriteBlockRejectsStaleExpectedSHA256(t *testing.T) {
 	}
 	loc := blocks[0].Children[0]
 
-	_, err = m.WriteBlock(context.Background(), "test", nginxSiteFile, BlockWriteRequest{
+	_, err = m.WriteBlock(context.Background(), msgs.RU, "test", nginxSiteFile, BlockWriteRequest{
 		Op:       "update",
 		Kind:     parse.BlockLocation,
 		Start:    loc.StartLine,
@@ -167,7 +168,7 @@ func TestWriteBlockRejectsStaleExpectedSHA256(t *testing.T) {
 func TestWriteBlockRejectsCreateDeleteOnSingletonHAProxySections(t *testing.T) {
 	m := configsSetup(t)
 	for _, op := range []string{"create", "delete"} {
-		_, err := m.WriteBlock(context.Background(), "test", "/etc/haproxy/haproxy.cfg", BlockWriteRequest{
+		_, err := m.WriteBlock(context.Background(), msgs.RU, "test", "/etc/haproxy/haproxy.cfg", BlockWriteRequest{
 			Op: op, Kind: parse.BlockGlobal, Start: 1, End: 10, Content: "global\n    daemon",
 		})
 		if err == nil {
@@ -178,7 +179,7 @@ func TestWriteBlockRejectsCreateDeleteOnSingletonHAProxySections(t *testing.T) {
 
 func TestWriteBlockCreateAppendsHAProxyBackend(t *testing.T) {
 	m := configsSetup(t)
-	res, err := m.WriteBlock(context.Background(), "test", "/etc/haproxy/haproxy.cfg", BlockWriteRequest{
+	res, err := m.WriteBlock(context.Background(), msgs.RU, "test", "/etc/haproxy/haproxy.cfg", BlockWriteRequest{
 		Op:      "create",
 		Kind:    parse.BlockBackend,
 		Content: "backend be_new\n    balance roundrobin\n    server n1 10.0.0.9:9090 check",
@@ -214,7 +215,7 @@ func TestWriteBlockDeleteRemovesLocation(t *testing.T) {
 	https := blocks[1]
 	healthz := https.Children[2] // location = /healthz
 
-	if _, err := m.WriteBlock(context.Background(), "test", nginxSiteFile, BlockWriteRequest{
+	if _, err := m.WriteBlock(context.Background(), msgs.RU, "test", nginxSiteFile, BlockWriteRequest{
 		Op: "delete", Kind: parse.BlockLocation, Start: healthz.StartLine, End: healthz.EndLine,
 	}); err != nil {
 		t.Fatalf("WriteBlock(delete): %v", err)
@@ -273,7 +274,7 @@ func TestWriteBlockUpdateDockerService(t *testing.T) {
 	// (only nginx -t / haproxy -c do) — the write still must succeed and land
 	// on disk, just unvalidated, exactly like the plain text editor already
 	// behaves for a service without a fixture rule.
-	res, err := m.WriteBlock(context.Background(), "test", composeFile, BlockWriteRequest{
+	res, err := m.WriteBlock(context.Background(), msgs.RU, "test", composeFile, BlockWriteRequest{
 		Op: "update", Kind: parse.BlockService, Start: redis.StartLine, End: redis.EndLine,
 		Content: "  redis:\n    image: redis:7.2-alpine\n    restart: unless-stopped",
 	})
@@ -295,7 +296,7 @@ func TestWriteBlockUpdateDockerService(t *testing.T) {
 
 func TestWriteBlockCreateDockerServiceLandsBeforeVolumes(t *testing.T) {
 	m := configsSetup(t)
-	res, err := m.WriteBlock(context.Background(), "test", composeFile, BlockWriteRequest{
+	res, err := m.WriteBlock(context.Background(), msgs.RU, "test", composeFile, BlockWriteRequest{
 		Op: "create", Kind: parse.BlockService,
 		Content: "  worker:\n    image: ghcr.io/acme/worker:1.0.0\n    restart: unless-stopped",
 	})
@@ -341,7 +342,7 @@ func TestWriteBlockDeleteDockerService(t *testing.T) {
 		t.Fatal("сервис minio не найден")
 	}
 
-	if _, err := m.WriteBlock(context.Background(), "test", composeFile, BlockWriteRequest{
+	if _, err := m.WriteBlock(context.Background(), msgs.RU, "test", composeFile, BlockWriteRequest{
 		Op: "delete", Kind: parse.BlockService, Start: minio.StartLine, End: minio.EndLine,
 	}); err != nil {
 		t.Fatalf("WriteBlock(delete): %v", err)

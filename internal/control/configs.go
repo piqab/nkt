@@ -11,6 +11,7 @@ import (
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/parse"
 	"github.com/althq/netknownsthat/internal/store"
 )
@@ -286,7 +287,7 @@ var singletonHAProxySections = map[parse.BlockKind]bool{
 // write to Write unchanged — validation by the real nginx/haproxy binary,
 // automatic rollback on failure, versioning and audit logging all come from
 // there, so none of that safety logic is duplicated here.
-func (m *ConfigManager) WriteBlock(ctx context.Context, user, path string, req BlockWriteRequest) (WriteResult, error) {
+func (m *ConfigManager) WriteBlock(ctx context.Context, lang msgs.Lang, user, path string, req BlockWriteRequest) (WriteResult, error) {
 	if (req.Op == "create" || req.Op == "delete") && singletonHAProxySections[req.Kind] {
 		return WriteResult{}, fmt.Errorf("%s: создание и удаление недоступны для этого раздела, доступна только правка", req.Kind)
 	}
@@ -321,13 +322,13 @@ func (m *ConfigManager) WriteBlock(ctx context.Context, user, path string, req B
 	if note == "" {
 		note = fmt.Sprintf("блок %s: %s", req.Kind, req.Op)
 	}
-	return m.Write(ctx, user, path, newText, note, req.Apply)
+	return m.Write(ctx, lang, user, path, newText, note, req.Apply)
 }
 
 // Write replaces a config file. The previous content is captured first, the new
 // content is validated by the owning service, and a failed validation restores
 // the file before returning — the host is never left with a config it rejects.
-func (m *ConfigManager) Write(ctx context.Context, user, path, content, note string, apply bool) (WriteResult, error) {
+func (m *ConfigManager) Write(ctx context.Context, lang msgs.Lang, user, path, content, note string, apply bool) (WriteResult, error) {
 	service, err := m.checkPath(path)
 	if err != nil {
 		return WriteResult{}, err
@@ -366,7 +367,7 @@ func (m *ConfigManager) Write(ctx context.Context, user, path, content, note str
 				}
 				res.RolledBack = true
 			}
-			res.Message = "Конфигурация не прошла проверку, изменения отменены."
+			res.Message = msgs.T(lang, "configs.validationFailed")
 			return res, fmt.Errorf("%s отклонил конфигурацию: %s",
 				service, strings.TrimSpace(validation.Output()))
 		}
@@ -377,7 +378,7 @@ func (m *ConfigManager) Write(ctx context.Context, user, path, content, note str
 		return res, err
 	}
 	res.VersionID = versionID
-	res.Message = "Файл сохранён."
+	res.Message = msgs.T(lang, "configs.fileSaved")
 
 	if apply {
 		var out collect.CommandResult
@@ -404,12 +405,16 @@ func (m *ConfigManager) Write(ctx context.Context, user, path, content, note str
 			res.Applied = out.OK()
 			res.Apply = &out
 			if out.OK() {
-				res.Message = "Файл сохранён и конфигурация перезагружена."
+				res.Message = msgs.T(lang, "configs.fileSavedAndReloaded")
 			}
 		} else {
 			// The write itself succeeded — only the follow-up apply step
 			// failed. That must stay visible instead of silently vanishing.
-			res.Message += " Применить не удалось: " + applyErr.Error()
+			// applyErr.Error() itself isn't localized (Phase 1/2 scope, see
+			// internal/msgs) — it travels as a raw arg, same as everywhere
+			// else a deep error gets embedded in an otherwise-translated
+			// sentence.
+			res.Message += msgs.T(lang, "configs.applyFailed", applyErr.Error())
 		}
 	}
 
@@ -470,13 +475,13 @@ func (m *ConfigManager) VersionContent(ctx context.Context, id int64) (store.Con
 
 // Rollback restores a previous revision, going through the same validation path
 // as a normal edit.
-func (m *ConfigManager) Rollback(ctx context.Context, user string, id int64, apply bool) (WriteResult, error) {
+func (m *ConfigManager) Rollback(ctx context.Context, lang msgs.Lang, user string, id int64, apply bool) (WriteResult, error) {
 	v, content, err := m.VersionContent(ctx, id)
 	if err != nil {
 		return WriteResult{}, err
 	}
 	note := fmt.Sprintf("откат к версии #%d от %s", v.ID, v.TS)
-	res, err := m.Write(ctx, user, v.Path, content, note, apply)
+	res, err := m.Write(ctx, lang, user, v.Path, content, note, apply)
 	if err != nil {
 		return res, err
 	}
@@ -485,7 +490,7 @@ func (m *ConfigManager) Rollback(ctx context.Context, user string, id int64, app
 		_, _ = m.db.ExecContext(ctx, `UPDATE config_versions SET action = ? WHERE id = ?`,
 			store.ActionRollback, res.VersionID)
 	}
-	res.Message = fmt.Sprintf("Восстановлена версия #%d.", v.ID)
+	res.Message = msgs.T(lang, "configs.versionRestored", v.ID)
 	return res, nil
 }
 

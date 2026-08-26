@@ -48,6 +48,11 @@ var enCatalog = map[string]string{
 
 	"configs.staleContent":         "The file changed since it was opened in the editor. Reload it and try the edit again.",
 	"configs.invalidVersionNumber": "Invalid version number",
+	"configs.validationFailed":     "The configuration failed validation, changes were rolled back.",
+	"configs.fileSaved":            "File saved.",
+	"configs.fileSavedAndReloaded": "File saved and the configuration was reloaded.",
+	"configs.applyFailed":          " Apply failed: %s",
+	"configs.versionRestored":      "Restored version #%d.",
 
 	"server.unknownApiMethod": "Unknown API method: %s",
 	"server.frontendNotBuilt": "Frontend isn't built: run npm run build in the web/ directory",
