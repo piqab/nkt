@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Button, Select, Table, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { api, qs, tzOffsetMinutes, useApi } from '../api'
 import type { Bucket, HeatCell, Outage, TargetStatus } from '../types'
 import { Heatmap, LineChart, StatTile, formatMs, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime } from '../components/ui'
+import i18n from '../i18n'
 
 interface TargetsResponse {
   targets: TargetStatus[]
@@ -12,71 +14,75 @@ interface TargetsResponse {
 }
 
 const RANGES = [
-  { value: '24h', label: 'сутки' },
-  { value: '7d', label: '7 дней' },
-  { value: '14d', label: '14 дней' },
-  { value: '30d', label: '30 дней' },
+  { value: '24h', labelKey: 'availability.range.day' },
+  { value: '7d', labelKey: 'availability.range.week' },
+  { value: '14d', labelKey: 'availability.range.twoWeeks' },
+  { value: '30d', labelKey: 'availability.range.month' },
 ]
 
+// Module-level column builders take t() as an argument rather than calling
+// useTranslation() themselves — see Overview.tsx's serviceColumns for the
+// same pattern.
 function targetColumns(
+  t: typeof i18n.t,
   checking: number | null,
   checkNow: (id: number) => void,
   toggle: (id: number, enabled: boolean) => void,
 ): TableColumnsType<TargetStatus> {
   return [
     {
-      title: 'Ресурс',
+      title: t('availability.col.resource'),
       key: 'label',
-      render: (_, t) => (
+      render: (_, tgt) => (
         <>
-          <strong>{t.label}</strong>
-          <div className="small muted">{t.source}</div>
+          <strong>{tgt.label}</strong>
+          <div className="small muted">{tgt.source}</div>
         </>
       ),
     },
     {
-      title: 'Адрес',
+      title: t('availability.col.address'),
       key: 'addr',
-      render: (_, t) => (
+      render: (_, tgt) => (
         <span className="mono small nowrap">
-          {t.kind}://{t.host}:{t.port}
-          {t.host_header ? ` (Host: ${t.host_header})` : ''}
+          {tgt.kind}://{tgt.host}:{tgt.port}
+          {tgt.host_header ? ` (Host: ${tgt.host_header})` : ''}
         </span>
       ),
     },
     {
-      title: 'Сейчас',
+      title: t('availability.col.now'),
       key: 'last_ok',
-      render: (_, t) => (
+      render: (_, tgt) => (
         <>
-          <StateBadge state={t.last_ok === undefined ? 'нет данных' : t.last_ok ? 'active' : 'failed'} />
-          {t.last_error && <div className="small muted mono">{t.last_error}</div>}
+          <StateBadge state={tgt.last_ok === undefined ? t('availability.noData') : tgt.last_ok ? 'active' : 'failed'} />
+          {tgt.last_error && <div className="small muted mono">{tgt.last_error}</div>}
         </>
       ),
     },
     {
-      title: 'Доступность 24 ч',
+      title: t('availability.col.uptime24h'),
       key: 'uptime_24h',
       align: 'right',
-      render: (_, t) => <span className="num">{t.checks_24h ? `${t.uptime_24h.toFixed(1)}%` : '—'}</span>,
+      render: (_, tgt) => <span className="num">{tgt.checks_24h ? `${tgt.uptime_24h.toFixed(1)}%` : '—'}</span>,
     },
     {
-      title: 'Задержка',
+      title: t('availability.col.latency'),
       key: 'last_latency_ms',
       align: 'right',
-      render: (_, t) => <span className="num">{t.last_latency_ms ? formatMs(t.last_latency_ms) : '—'}</span>,
+      render: (_, tgt) => <span className="num">{tgt.last_latency_ms ? formatMs(tgt.last_latency_ms) : '—'}</span>,
     },
-    { title: 'Проверок', dataIndex: 'checks_24h', key: 'checks_24h', align: 'right' },
+    { title: t('availability.col.checks'), dataIndex: 'checks_24h', key: 'checks_24h', align: 'right' },
     {
       title: '',
       key: 'actions',
-      render: (_, t) => (
+      render: (_, tgt) => (
         <div className="row" onClick={(e) => e.stopPropagation()}>
-          <Button type="link" size="small" disabled={checking === t.id} onClick={() => checkNow(t.id)}>
-            {checking === t.id ? '…' : 'проверить'}
+          <Button type="link" size="small" disabled={checking === tgt.id} onClick={() => checkNow(tgt.id)}>
+            {checking === tgt.id ? '…' : t('availability.check')}
           </Button>
-          <Button type="link" size="small" onClick={() => toggle(t.id, !t.enabled)}>
-            {t.enabled ? 'пауза' : 'включить'}
+          <Button type="link" size="small" onClick={() => toggle(tgt.id, !tgt.enabled)}>
+            {tgt.enabled ? t('availability.pause') : t('availability.enable')}
           </Button>
         </div>
       ),
@@ -84,15 +90,18 @@ function targetColumns(
   ]
 }
 
-const outageColumns: TableColumnsType<Outage> = [
-  { title: 'Ресурс', dataIndex: 'label', key: 'label' },
-  { title: 'Начало', key: 'start', render: (_, o) => <span className="small nowrap">{formatDateTime(o.start)}</span> },
-  { title: 'Окончание', key: 'end', render: (_, o) => <span className="small nowrap">{formatDateTime(o.end)}</span> },
-  { title: 'Проверок', dataIndex: 'checks', key: 'checks', align: 'right' },
-  { title: 'Ошибка', key: 'error', render: (_, o) => <span className="small mono">{o.error}</span> },
-]
+function outageColumns(t: typeof i18n.t): TableColumnsType<Outage> {
+  return [
+    { title: t('availability.col.resource'), dataIndex: 'label', key: 'label' },
+    { title: t('availability.col.start'), key: 'start', render: (_, o) => <span className="small nowrap">{formatDateTime(o.start)}</span> },
+    { title: t('availability.col.end'), key: 'end', render: (_, o) => <span className="small nowrap">{formatDateTime(o.end)}</span> },
+    { title: t('availability.col.checks'), dataIndex: 'checks', key: 'checks', align: 'right' },
+    { title: t('availability.col.error'), key: 'error', render: (_, o) => <span className="small mono">{o.error}</span> },
+  ]
+}
 
 export default function Availability() {
+  const { t } = useTranslation()
   const [range, setRange] = useState('7d')
   const [selected, setSelected] = useState<number | null>(null)
   const [checking, setChecking] = useState<number | null>(null)
@@ -162,7 +171,7 @@ export default function Availability() {
     targets.reload()
   }
 
-  if (targets.loading && !targets.data) return <Loading what="цели мониторинга" />
+  if (targets.loading && !targets.data) return <Loading what={t('availability.what')} />
 
   const selectedTarget = sorted.find((t) => t.id === selected) ?? null
 
@@ -171,84 +180,77 @@ export default function Availability() {
       <div className="page-head spread">
         <div>
           <h1>
-            Расписание доступности
-            <InfoHint>
-              Каждый объявленный слушатель и каждый backend из пулов проверяется по расписанию
-              (интервал {targets.data?.interval ?? '—'}). Ниже — когда ресурсы реально были доступны,
-              а не только их текущее состояние.
-            </InfoHint>
+            {t('availability.title')}
+            <InfoHint>{t('availability.hint', { interval: targets.data?.interval ?? '—' })}</InfoHint>
           </h1>
         </div>
         <label>
-          Период
-          <Select value={range} onChange={setRange} options={RANGES} style={{ minWidth: '8rem' }} />
+          {t('availability.period')}
+          <Select
+            value={range}
+            onChange={setRange}
+            options={RANGES.map((r) => ({ value: r.value, label: t(r.labelKey) }))}
+            style={{ minWidth: '8rem' }}
+          />
         </label>
       </div>
 
       <ErrorNote error={targets.error} />
-      {targets.data?.simulated && (
-        <Banner kind="warn">
-          Значения проб синтетические: в режиме снапшота описанных сокетов на этой машине не
-          существует, поэтому результаты моделируются, а не измеряются.
-        </Banner>
-      )}
+      {targets.data?.simulated && <Banner kind="warn">{t('availability.simulated')}</Banner>}
 
       <div className="grid grid-4">
-        <StatTile label="Целей под наблюдением" value={formatNumber(summary.total)} />
+        <StatTile label={t('availability.targetsMonitored')} value={formatNumber(summary.total)} />
         <StatTile
-          label="Недоступно сейчас"
+          label={t('availability.downNow')}
           value={formatNumber(summary.down)}
           tone={summary.down > 0 ? 'critical' : 'good'}
         />
-        <StatTile label="Средняя доступность за 24 ч" value={`${summary.avg.toFixed(2)}%`} />
-        <StatTile label="Средняя задержка" value={formatMs(summary.latency)} />
+        <StatTile label={t('availability.avgUptime24h')} value={`${summary.avg.toFixed(2)}%`} />
+        <StatTile label={t('availability.avgLatency')} value={formatMs(summary.latency)} />
       </div>
 
       <Card
         title={
           <>
             {selectedTarget
-              ? `Недоступность по часам недели — ${selectedTarget.label}`
-              : 'Недоступность по часам недели — все ресурсы'}
-            <InfoHint>
-              Каждая клетка — час недели. Чем темнее, тем больше проверок в этот час завершились
-              ошибкой.
-            </InfoHint>
+              ? t('availability.downtimeByHourFor', { label: selectedTarget.label })
+              : t('availability.downtimeByHourAll')}
+            <InfoHint>{t('availability.heatmapHint')}</InfoHint>
           </>
         }
         actions={
           selected ? (
             <Button type="link" onClick={() => setSelected(null)}>
-              показать все ресурсы
+              {t('availability.showAllTargets')}
             </Button>
           ) : null
         }
       >
         {heatmap.loading && !heatmap.data ? (
-          <Loading what="расписание" />
+          <Loading what={t('availability.schedule')} />
         ) : (
           <Heatmap
             cells={downtimeCells}
-            scaleLabel="недоступность"
+            scaleLabel={t('availability.downtimeScale')}
             formatValue={(n) => `${n.toFixed(1)}%`}
-            emptyLabel="в этот час проверок не было"
+            emptyLabel={t('availability.noChecksThisHour')}
           />
         )}
       </Card>
 
       {selectedTarget && (
         <Card
-          title={`Доступность и задержка — ${selectedTarget.label}`}
+          title={t('availability.availabilityAndLatencyFor', { label: selectedTarget.label })}
           subtitle={`${selectedTarget.kind}://${selectedTarget.host}:${selectedTarget.port}${selectedTarget.path ?? ''}`}
         >
           {history.loading && !history.data ? (
-            <Loading what="историю" />
+            <Loading what={t('availability.history')} />
           ) : (
             <>
               <LineChart
                 series={[
                   {
-                    name: 'доступность, %',
+                    name: t('availability.uptimePercentSeries'),
                     points: (history.data?.buckets ?? []).map((b) => ({ x: b.bucket, y: b.uptime })),
                   },
                 ]}
@@ -261,14 +263,14 @@ export default function Availability() {
                 <LineChart
                   series={[
                     {
-                      name: 'средняя задержка',
+                      name: t('availability.avgLatencySeries'),
                       points: (history.data?.buckets ?? []).map((b) => ({
                         x: b.bucket,
                         y: b.avg_latency_ms,
                       })),
                     },
                     {
-                      name: 'максимальная задержка',
+                      name: t('availability.maxLatencySeries'),
                       points: (history.data?.buckets ?? []).map((b) => ({
                         x: b.bucket,
                         y: b.max_latency_ms,
@@ -277,7 +279,7 @@ export default function Availability() {
                   ]}
                   formatValue={formatMs}
                   formatX={shortTime}
-                  yUnit="мс"
+                  yUnit={t('availability.msUnit')}
                 />
               </div>
             </>
@@ -288,8 +290,8 @@ export default function Availability() {
       <Card
         title={
           <>
-            Ресурсы
-            <InfoHint>Щёлкните по строке, чтобы посмотреть историю конкретного ресурса.</InfoHint>
+            {t('availability.resources')}
+            <InfoHint>{t('availability.resourcesHint')}</InfoHint>
           </>
         }
       >
@@ -299,11 +301,11 @@ export default function Availability() {
             rowKey="id"
             pagination={false}
             size="small"
-            onRow={(t) => ({
-              onClick: () => setSelected(t.id === selected ? null : t.id),
-              style: { cursor: 'pointer', opacity: t.enabled ? 1 : 0.5 },
+            onRow={(tgt) => ({
+              onClick: () => setSelected(tgt.id === selected ? null : tgt.id),
+              style: { cursor: 'pointer', opacity: tgt.enabled ? 1 : 0.5 },
             })}
-            columns={targetColumns(checking, checkNow, toggle)}
+            columns={targetColumns(t, checking, checkNow, toggle)}
           />
         </div>
       </Card>
@@ -311,8 +313,8 @@ export default function Availability() {
       <Card
         title={
           <>
-            Простои
-            <InfoHint>Непрерывные серии неудачных проверок за выбранный период</InfoHint>
+            {t('availability.outages')}
+            <InfoHint>{t('availability.outagesHint')}</InfoHint>
           </>
         }
       >
@@ -323,11 +325,11 @@ export default function Availability() {
               rowKey={(_, i) => i ?? 0}
               pagination={false}
               size="small"
-              columns={outageColumns}
+              columns={outageColumns(t)}
             />
           </div>
         ) : (
-          <div className="chart-empty">Простоев за период не зафиксировано.</div>
+          <div className="chart-empty">{t('availability.noOutagesForPeriod')}</div>
         )}
       </Card>
     </>
@@ -337,5 +339,5 @@ export default function Availability() {
 function shortTime(iso: string): string {
   const d = new Date(iso.length === 13 ? `${iso}:00Z` : iso)
   if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit' })
+  return d.toLocaleString(i18n.language === 'en' ? 'en-US' : 'ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit' })
 }
