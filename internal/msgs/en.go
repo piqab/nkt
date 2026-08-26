@@ -71,4 +71,34 @@ var enCatalog = map[string]string{
 	"hub.noInstallsYet":          "there haven't been any installs for this host yet",
 	"hub.localScannerNotRunning": "the hub's local scanner isn't running",
 	"hub.hostUnreachable":        "host unreachable: %s",
+
+	"hub.startingInstall":        "Starting install",
+	"hub.installCancelledByUser": "Install cancelled by user",
+	"hub.connectingSSH":          "Connecting via SSH to %s…",
+	"hub.hostArch":               "Host: %s/%s",
+	"hub.waitingHealth":          "Waiting for the service to answer /health…",
+	"hub.checkingAdminAccount":   "Checking the admin account…",
+	"hub.loginFailedResetting": "Login failed — the host already has an admin account with a different " +
+		"password (e.g. from an earlier install attempt); resetting the password on the host…",
+	"hub.adminPasswordSynced": "The admin password on the host is now in sync",
+	"hub.done":                "Done",
+
+	"hub.goNotWorkingInstalling": "go (%s) isn't available — installing the hub's own Go…",
+	"hub.usingCachedGo":          "Using the hub's already-installed Go: %s",
+	"hub.downloadingGo":          "Downloading %s for linux-%s…",
+	"hub.goInstalled":            "Go installed: %s",
+
+	"hub.sourceNotFoundUsingBinDir": "Sources not found in %s — using %s (the hub binary's directory) instead",
+	"hub.usingCachedBinary":         "Using an already-built binary for %s/%s",
+	"hub.buildingBinary":            "Building the binary for %s/%s…",
+	"hub.uploadingUnitAndConfig":    "Uploading the systemd unit and config…",
+	"hub.installingFiles":           "Installing files…",
+	"hub.startingSystemdService":    "Starting the systemd service…",
+	"hub.uploadingBinary":           "Uploading the binary… %d%% (%.1f MB of %.1f MB)",
+
+	"hub.sendingViaTunnel":          "Sending the binary and config over the fallback channel…",
+	"hub.hostAcceptedRestarting":    "The host accepted the update and is restarting the service…",
+	"hub.sshUnavailableUsingTunnel": "SSH unavailable — updating over the fallback channel (%s/%s)…",
+	"hub.retryingTunnelUpdate":      "Retrying the update over the fallback channel…",
+	"hub.doneViaTunnel":             "Done (via the fallback channel)",
 }

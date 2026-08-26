@@ -41,7 +41,7 @@ func goWorks(ctx context.Context, path string) bool {
 // never have to fight PATH, install Go by hand, or work around a
 // snap-confined one, on this machine any more than on their own.
 // Resolved once and cached for the Manager's lifetime.
-func (m *Manager) resolveGoBin(ctx context.Context, report func(string)) (string, error) {
+func (m *Manager) resolveGoBin(ctx context.Context, report func(key string, args ...any)) (string, error) {
 	m.goBinMu.Lock()
 	defer m.goBinMu.Unlock()
 	if m.resolvedGoBin != "" {
@@ -53,7 +53,7 @@ func (m *Manager) resolveGoBin(ctx context.Context, report func(string)) (string
 		return path, nil
 	}
 
-	report(fmt.Sprintf("go (%s) недоступен — устанавливаю собственный Go для хаба…", m.cfg.HubGoBin))
+	report("hub.goNotWorkingInstalling", m.cfg.HubGoBin)
 	path, err := installGoToolchain(ctx, m.cfg.HubGoToolchainDir(), report)
 	if err != nil {
 		return "", fmt.Errorf(
@@ -66,10 +66,10 @@ func (m *Manager) resolveGoBin(ctx context.Context, report func(string)) (string
 // installGoToolchain downloads and unpacks the latest Go release from
 // go.dev into dir (reusing an already-installed one if it already works),
 // returning the path to its go binary.
-func installGoToolchain(ctx context.Context, dir string, report func(string)) (string, error) {
+func installGoToolchain(ctx context.Context, dir string, report func(key string, args ...any)) (string, error) {
 	binPath := filepath.Join(dir, "go", "bin", "go")
 	if goWorks(ctx, binPath) {
-		report("Использую ранее установленный Go хаба: " + binPath)
+		report("hub.usingCachedGo", binPath)
 		return binPath, nil
 	}
 
@@ -87,7 +87,7 @@ func installGoToolchain(ctx context.Context, dir string, report func(string)) (s
 	if err != nil {
 		return "", fmt.Errorf("определение последней версии Go: %w", err)
 	}
-	report(fmt.Sprintf("Скачиваю %s для linux-%s…", version, arch))
+	report("hub.downloadingGo", version, arch)
 
 	url := fmt.Sprintf("https://go.dev/dl/%s.linux-%s.tar.gz", version, arch)
 	body, err := fetchTarGz(ctx, url)
@@ -103,7 +103,7 @@ func installGoToolchain(ctx context.Context, dir string, report func(string)) (s
 	if !goWorks(ctx, binPath) {
 		return "", fmt.Errorf("установленный по %s Go не запускается", binPath)
 	}
-	report("Go установлен: " + binPath)
+	report("hub.goInstalled", binPath)
 	return binPath, nil
 }
 

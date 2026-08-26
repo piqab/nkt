@@ -100,15 +100,15 @@ func TestSSHProvisioningRoundTrip(t *testing.T) {
 	envPath := filepath.Join(scratch, "env", "nkt.env")
 
 	var events []string
-	report := func(s string) { events = append(events, s) }
+	report := func(key string, args ...any) { events = append(events, key) }
 	// Mirrors installJob.replaceLast: repeated progress ticks for the same
 	// step overwrite the last line instead of piling up a new one per tick.
-	progress := func(s string) {
+	progress := func(key string, args ...any) {
 		if n := len(events); n > 0 {
-			events[n-1] = s
+			events[n-1] = key
 			return
 		}
-		events = append(events, s)
+		events = append(events, key)
 	}
 
 	if err := stageFiles(client, "root", localBin, "unit-content", "env-content", binPath, servicePath, envPath, report, progress); err != nil {
@@ -119,7 +119,7 @@ func TestSSHProvisioningRoundTrip(t *testing.T) {
 	}
 	binaryProgressLines := 0
 	for _, e := range events {
-		if strings.Contains(e, "Заливаю бинарник") && strings.Contains(e, "%") {
+		if e == "hub.uploadingBinary" {
 			binaryProgressLines++
 		}
 	}

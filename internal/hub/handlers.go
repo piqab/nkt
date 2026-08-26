@@ -518,6 +518,7 @@ func (s *Server) handleInstallJobStatus(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "job.notFound"))
 		return
 	}
+	events = localizeEvents(msgs.LangFromRequest(r), events)
 	writeJSON(w, http.StatusOK, map[string]any{"events": events, "done": done, "error": errMsg})
 }
 
