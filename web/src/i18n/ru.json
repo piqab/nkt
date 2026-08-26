@@ -62,7 +62,8 @@
       "kb": "КБ",
       "mb": "МБ",
       "gb": "ГБ",
-      "tb": "ТБ"
+      "tb": "ТБ",
+      "pb": "ПБ"
     },
     "inactive": "неактивны ({{count}}):",
     "scanning": "Сканирую…",
@@ -718,5 +719,23 @@
     "notCreated": "Файл не был создан — исправьте содержимое и попробуйте снова.",
     "commentLabel": "Комментарий",
     "commentPlaceholder": "зачем создаём"
+  },
+  "charts": {
+    "seconds": "{{value}} с",
+    "ms": "{{value}} мс",
+    "noData": "Нет данных за выбранный период.",
+    "value": "значение",
+    "details": "подробности",
+    "measurements": "измерений",
+    "noMeasurements": "нет измерений",
+    "less": "{{label}}: меньше",
+    "more": "больше",
+    "dowSun": "вс",
+    "dowMon": "пн",
+    "dowTue": "вт",
+    "dowWed": "ср",
+    "dowThu": "чт",
+    "dowFri": "пт",
+    "dowSat": "сб"
   }
 }

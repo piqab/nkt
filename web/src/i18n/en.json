@@ -62,7 +62,8 @@
       "kb": "KB",
       "mb": "MB",
       "gb": "GB",
-      "tb": "TB"
+      "tb": "TB",
+      "pb": "PB"
     },
     "inactive": "inactive ({{count}}):",
     "scanning": "Scanning…",
@@ -718,5 +719,23 @@
     "notCreated": "The file wasn't created — fix the content and try again.",
     "commentLabel": "Comment",
     "commentPlaceholder": "why create it"
+  },
+  "charts": {
+    "seconds": "{{value}} s",
+    "ms": "{{value}} ms",
+    "noData": "No data for the selected period.",
+    "value": "value",
+    "details": "details",
+    "measurements": "measurements",
+    "noMeasurements": "no measurements",
+    "less": "{{label}}: less",
+    "more": "more",
+    "dowSun": "Su",
+    "dowMon": "Mo",
+    "dowTue": "Tu",
+    "dowWed": "We",
+    "dowThu": "Th",
+    "dowFri": "Fr",
+    "dowSat": "Sa"
   }
 }

@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import i18n from '../i18n'
 
 /**
  * Chart primitives, hand-built in SVG.
@@ -38,21 +39,22 @@ export function seriesColor(index: number): string {
   return SERIES_COLORS[Math.min(index, SERIES_COLORS.length - 1)]
 }
 
+const BYTE_UNIT_KEYS = ['common.unit.byte', 'common.unit.kb', 'common.unit.mb', 'common.unit.gb', 'common.unit.tb', 'common.unit.pb']
+
 export function formatBytes(n: number): string {
-  if (!Number.isFinite(n) || n === 0) return '0 Б'
-  const units = ['Б', 'КБ', 'МБ', 'ГБ', 'ТБ', 'ПБ']
-  const i = Math.min(Math.floor(Math.log(Math.abs(n)) / Math.log(1024)), units.length - 1)
+  if (!Number.isFinite(n) || n === 0) return `0 ${i18n.t(BYTE_UNIT_KEYS[0])}`
+  const i = Math.min(Math.floor(Math.log(Math.abs(n)) / Math.log(1024)), BYTE_UNIT_KEYS.length - 1)
   const value = n / 1024 ** i
-  return `${value.toFixed(value >= 100 || i === 0 ? 0 : 1)} ${units[i]}`
+  return `${value.toFixed(value >= 100 || i === 0 ? 0 : 1)} ${i18n.t(BYTE_UNIT_KEYS[i])}`
 }
 
 export function formatNumber(n: number, digits = 0): string {
-  return n.toLocaleString('ru-RU', { maximumFractionDigits: digits })
+  return n.toLocaleString(i18n.language === 'en' ? 'en-US' : 'ru-RU', { maximumFractionDigits: digits })
 }
 
 export function formatMs(n: number): string {
-  if (n >= 1000) return `${(n / 1000).toFixed(2)} с`
-  return `${n.toFixed(n < 10 ? 2 : 0)} мс`
+  if (n >= 1000) return i18n.t('charts.seconds', { value: (n / 1000).toFixed(2) })
+  return i18n.t('charts.ms', { value: n.toFixed(n < 10 ? 2 : 0) })
 }
 
 // ------------------------------------------------------------------- tooltip
@@ -174,7 +176,7 @@ export function LineChart({
   const plotH = height - pad.top - pad.bottom
 
   if (xs.length === 0) {
-    return <div className="chart-empty">Нет данных за выбранный период.</div>
+    return <div className="chart-empty">{i18n.t('charts.noData')}</div>
   }
 
   const xAt = (i: number) => pad.left + (xs.length === 1 ? plotW / 2 : (i / (xs.length - 1)) * plotW)
@@ -376,7 +378,7 @@ interface BarChartProps {
 /** Horizontal bars: the right form when the category labels are names, not time. */
 export function BarChart({ data, formatValue = (n) => formatNumber(n), color }: BarChartProps) {
   const [tip, setTip] = useState<TipState | null>(null)
-  if (data.length === 0) return <div className="chart-empty">Нет данных за выбранный период.</div>
+  if (data.length === 0) return <div className="chart-empty">{i18n.t('charts.noData')}</div>
 
   const max = Math.max(...data.map((d) => d.value), 1)
   const rowH = 26
@@ -399,8 +401,8 @@ export function BarChart({ data, formatValue = (n) => formatNumber(n), color }: 
                   y: e.clientY,
                   title: d.label,
                   rows: [
-                    { label: 'значение', value: formatValue(d.value) },
-                    ...(d.note ? [{ label: 'подробности', value: d.note }] : []),
+                    { label: i18n.t('charts.value'), value: formatValue(d.value) },
+                    ...(d.note ? [{ label: i18n.t('charts.details'), value: d.note }] : []),
                   ],
                 })
               }
@@ -433,7 +435,7 @@ export function BarChart({ data, formatValue = (n) => formatNumber(n), color }: 
 
 // ------------------------------------------------------------------- heatmap
 
-const DOW_LABELS = ['вс', 'пн', 'вт', 'ср', 'чт', 'пт', 'сб']
+const DOW_LABEL_KEYS = ['charts.dowSun', 'charts.dowMon', 'charts.dowTue', 'charts.dowWed', 'charts.dowThu', 'charts.dowFri', 'charts.dowSat']
 
 interface HeatmapProps {
   cells: { dow: number; hour: number; value: number; total?: number }[]
@@ -452,9 +454,11 @@ export function Heatmap({
   cells,
   formatValue = (n) => formatNumber(n, 1),
   scaleLabel,
-  emptyLabel = 'нет измерений',
+  emptyLabel,
 }: HeatmapProps) {
   const [tip, setTip] = useState<TipState | null>(null)
+  const dowLabels = DOW_LABEL_KEYS.map((k) => i18n.t(k))
+  const resolvedEmptyLabel = emptyLabel ?? i18n.t('charts.noMeasurements')
 
   const { grid, max } = useMemo(() => {
     const g = new Map<string, { value: number; total: number }>()
@@ -491,7 +495,7 @@ export function Heatmap({
         )}
         {Array.from({ length: 7 }, (_, d) => (
           <text key={d} x={left - 6} y={top + d * (cell + gap) + cell / 2 + 3.5} textAnchor="end" fontSize={9.5} fill="var(--text-muted)">
-            {DOW_LABELS[d]}
+            {dowLabels[d]}
           </text>
         ))}
         {Array.from({ length: 7 }, (_, d) =>
@@ -514,13 +518,13 @@ export function Heatmap({
                   setTip({
                     x: e.clientX,
                     y: e.clientY,
-                    title: `${DOW_LABELS[d]}, ${String(h).padStart(2, '0')}:00`,
+                    title: `${dowLabels[d]}, ${String(h).padStart(2, '0')}:00`,
                     rows: entry
                       ? [
                           { label: scaleLabel, value: formatValue(entry.value) },
-                          ...(entry.total ? [{ label: 'измерений', value: formatNumber(entry.total) }] : []),
+                          ...(entry.total ? [{ label: i18n.t('charts.measurements'), value: formatNumber(entry.total) }] : []),
                         ]
-                      : [{ label: '', value: emptyLabel }],
+                      : [{ label: '', value: resolvedEmptyLabel }],
                   })
                 }
                 onMouseLeave={() => setTip(null)}
@@ -530,11 +534,11 @@ export function Heatmap({
         )}
       </svg>
       <div className="chart-legend">
-        <span className="legend-item">{scaleLabel}: меньше</span>
+        <span className="legend-item">{i18n.t('charts.less', { label: scaleLabel })}</span>
         {SEQ_RAMP.map((c) => (
           <span key={c} className="legend-swatch" style={{ background: c }} />
         ))}
-        <span className="legend-item">больше</span>
+        <span className="legend-item">{i18n.t('charts.more')}</span>
       </div>
       <Tooltip tip={tip} />
     </div>
