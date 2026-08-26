@@ -76,7 +76,8 @@
     "confirmDelete": "Удалить {{what}} {{name}}? Это необратимо.",
     "deleted": "{{name}}: удалён.",
     "mutationsDisabled": "Действия недоступны: нужна роль admin и включённые изменения.",
-    "actions": "Действия"
+    "actions": "Действия",
+    "notPublished": "{{port}} (не опубликован)"
   },
   "containers": {
     "vms": "Виртуальные машины"
@@ -259,7 +260,6 @@
     "colImage": "Образ",
     "colState": "Состояние",
     "colPorts": "Порты",
-    "notPublished": "{{port}} (не опубликован)",
     "hint": "Контейнеры отдельного от docker движка Podman — те же операции: запуск, остановка, удаление.",
     "containers": "Контейнеры Podman",
     "newContainer": "+ новый контейнер",
@@ -270,5 +270,32 @@
     "containerName": "Имя контейнера",
     "creating": "Создаю…",
     "createAndStart": "Создать и запустить"
+  },
+  "docker": {
+    "confirmAction": "Выполнить «{{action}}» для контейнера {{name}}?",
+    "actionDone": "{{name}}: {{action}} выполнено.",
+    "colContainer": "Контейнер",
+    "outsideCompose": "вне compose",
+    "restart": " · restart: {{policy}}",
+    "colOwner": "Пользователь",
+    "colImage": "Образ",
+    "colState": "Состояние",
+    "declaredNotRunning": "описан, но не запущен",
+    "runningOutsideCompose": "запущен вне compose",
+    "colPorts": "Порты",
+    "colNetworks": "Сети",
+    "editConfig": "редактировать конфиг",
+    "colNetwork": "Сеть",
+    "colDriver": "Драйвер",
+    "colSubnets": "Подсети",
+    "colGateway": "Шлюз",
+    "colInterface": "Интерфейс",
+    "hint": "Сопоставление того, что описано в compose, с тем, что реально работает.",
+    "containers": "Контейнеры docker",
+    "newContainer": "+ новый контейнер",
+    "loading": "контейнеры",
+    "networks": "Сети docker",
+    "newContainerLocation": "Новый контейнер — выберите расположение",
+    "loadingFile": "файл"
   }
 }

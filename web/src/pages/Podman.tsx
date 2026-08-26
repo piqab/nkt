@@ -102,7 +102,7 @@ export default function Podman({ me }: { me: Me }) {
                 <div key={i}>
                   {p.host_port
                     ? `${p.host_ip || '0.0.0.0'}:${p.host_port} → ${p.container_port}/${p.protocol}`
-                    : t('podman.notPublished', { port: `${p.container_port}/${p.protocol}` })}
+                    : t('common.notPublished', { port: `${p.container_port}/${p.protocol}` })}
                 </div>
               ))}
         </span>
