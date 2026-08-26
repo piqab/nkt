@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Form, Input, InputNumber, Select, Table, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type {
   Certificate,
@@ -14,6 +15,7 @@ import type {
 } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
+import i18n from '../i18n'
 
 /** How often to poll a running renew job for new progress lines. */
 const RENEW_POLL_MS = 800
@@ -43,18 +45,18 @@ function expiryTone(cert: Certificate): Tone {
 
 /** Status is never colour alone: every bar and badge carries this wording. */
 function expiryWord(cert: Certificate): string {
-  if (cert.error) return 'не читается'
-  if (cert.days_left < 0) return `просрочен на ${-cert.days_left} дн.`
-  if (cert.days_left === 0) return 'истекает сегодня'
-  return `${cert.days_left} дн.`
+  if (cert.error) return i18n.t('certs.unreadable')
+  if (cert.days_left < 0) return i18n.t('certs.expired', { days: -cert.days_left })
+  if (cert.days_left === 0) return i18n.t('certs.expiresToday')
+  return i18n.t('certs.daysLeft', { days: cert.days_left })
 }
 
 function renewalWord(cert: Certificate): string {
-  const prefix = cert.renewal.derived ? 'копия certbot, ' : ''
-  if (cert.renewal.automatic) return prefix + 'автоматическое'
-  if (cert.renewal.managed) return prefix + 'настроено, но не запускается'
-  if (cert.renewal.tool === 'certbot') return prefix + 'запись certbot потеряна'
-  return 'вручную'
+  const prefix = cert.renewal.derived ? i18n.t('certs.renewalDerivedPrefix') : ''
+  if (cert.renewal.automatic) return prefix + i18n.t('certs.renewalAutomatic')
+  if (cert.renewal.managed) return prefix + i18n.t('certs.renewalManagedNotRunning')
+  if (cert.renewal.tool === 'certbot') return prefix + i18n.t('certs.renewalCertbotLost')
+  return i18n.t('certs.renewalManual')
 }
 
 /** A "Продлить" button only makes sense when certbot itself can act on this
@@ -74,9 +76,9 @@ function renewalTone(cert: Certificate): Tone | 'muted' {
 /** What the socket actually hands back, checked by dialing it directly. This
  * is the only signal in the app that does not trust the file on disk. */
 function servingWord(cert: Certificate): string {
-  if (!cert.serving.checked) return 'не проверялось'
-  if (cert.serving.error) return 'не отвечает'
-  return cert.serving.match ? 'совпадает' : 'отличается от файла'
+  if (!cert.serving.checked) return i18n.t('certs.servingNotChecked')
+  if (cert.serving.error) return i18n.t('certs.servingNotResponding')
+  return cert.serving.match ? i18n.t('certs.servingMatch') : i18n.t('certs.servingMismatch')
 }
 
 function servingTone(cert: Certificate): Tone | 'muted' {
@@ -105,14 +107,15 @@ function certColumns(
   busy: string | null,
   renew: (cert: Certificate) => void,
 ): TableColumnsType<Certificate> {
+  const t = i18n.t.bind(i18n)
   const columns: TableColumnsType<Certificate> = [
     {
-      title: 'Сайты',
+      title: t('certs.colSites'),
       key: 'name',
       render: (_, cert) => (
         <>
           <strong>{certName(cert)}</strong>
-          {cert.self_signed && <div className="small muted">самоподписанный</div>}
+          {cert.self_signed && <div className="small muted">{t('certs.selfSigned')}</div>}
           {cert.error && (
             <div className="small" style={{ color: TONE_COLOR.critical }}>
               {cert.error}
@@ -122,7 +125,7 @@ function certColumns(
       ),
     },
     {
-      title: 'Файл',
+      title: t('certs.colFile'),
       key: 'path',
       render: (_, cert) => (
         <span className="small mono" style={{ wordBreak: 'break-all' }}>
@@ -131,12 +134,12 @@ function certColumns(
       ),
     },
     {
-      title: 'Действителен до',
+      title: t('certs.colValidUntil'),
       key: 'not_after',
       render: (_, cert) => <span className="small nowrap">{cert.error ? '—' : formatDateTime(cert.not_after)}</span>,
     },
     {
-      title: 'Осталось',
+      title: t('certs.colRemaining'),
       key: 'days_left',
       render: (_, cert) => (
         <span className="small nowrap" style={{ color: TONE_COLOR[expiryTone(cert)] }}>
@@ -145,7 +148,7 @@ function certColumns(
       ),
     },
     {
-      title: 'Ключ',
+      title: t('certs.colKey'),
       key: 'key',
       render: (_, cert) => (
         <span className="small nowrap">
@@ -154,9 +157,9 @@ function certColumns(
         </span>
       ),
     },
-    { title: 'Издатель', key: 'issuer', render: (_, cert) => <span className="small">{commonName(cert.issuer)}</span> },
+    { title: t('certs.colIssuer'), key: 'issuer', render: (_, cert) => <span className="small">{commonName(cert.issuer)}</span> },
     {
-      title: 'Обновление',
+      title: t('certs.colRenewal'),
       key: 'renewal',
       render: (_, cert) => {
         const rTone = renewalTone(cert)
@@ -171,7 +174,7 @@ function certColumns(
       },
     },
     {
-      title: 'На сокете',
+      title: t('certs.colServing'),
       key: 'serving',
       render: (_, cert) => {
         const sTone = servingTone(cert)
@@ -182,8 +185,7 @@ function certColumns(
             </span>
             {cert.serving.checked && !cert.serving.error && !cert.serving.match && (
               <div className="small muted">
-                на сокете действителен до{' '}
-                {cert.serving.served_not_after ? formatDateTime(cert.serving.served_not_after) : '—'}
+                {t('certs.servedUntil', { date: cert.serving.served_not_after ? formatDateTime(cert.serving.served_not_after) : '—' })}
               </div>
             )}
             {cert.serving.endpoint && <div className="small muted mono">{cert.serving.endpoint}</div>}
@@ -194,12 +196,12 @@ function certColumns(
   ]
   if (canControl) {
     columns.push({
-      title: 'Действия',
+      title: t('certs.colActions'),
       key: 'actions',
       render: (_, cert) =>
         canRenew(cert) && (
           <Button type="link" size="small" loading={busy === cert.id} onClick={() => renew(cert)}>
-            {busy === cert.id ? 'продлеваю…' : 'продлить'}
+            {busy === cert.id ? t('certs.renewing') : t('certs.renew')}
           </Button>
         ),
     })
@@ -208,6 +210,7 @@ function certColumns(
 }
 
 export default function Certificates({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const { data, error, loading, reload } = useApi<CertificatesResponse>('/certificates', 300_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [rescanning, setRescanning] = useState(false)
@@ -282,11 +285,8 @@ export default function Certificates({ me }: { me: Me }) {
   async function renew(cert: Certificate) {
     const lineage = cert.renewal.lineage
     if (!lineage) return
-    const caveat = cert.renewal.derived
-      ? `\n\nЭто копия сертификата из ${cert.renewal.source_path} — продлится оригинал, а эта копия ` +
-        'будет автоматически пересобрана из нового сертификата и ключа, после чего перечитается сервис.'
-      : ''
-    if (!window.confirm(`Запустить certbot renew --cert-name ${lineage}?${caveat}`)) return
+    const caveat = cert.renewal.derived ? t('certs.confirmRenewDerived', { source: cert.renewal.source_path }) : ''
+    if (!window.confirm(t('certs.confirmRenew', { lineage, caveat }))) return
     setBusy(cert.id)
     setNotice(null)
     try {
@@ -294,7 +294,7 @@ export default function Certificates({ me }: { me: Me }) {
         method: 'POST',
         body: { lineage },
       })
-      startJob(res.job, `Продление ${lineage}`)
+      startJob(res.job, t('certs.renewLabel', { lineage }))
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -308,7 +308,7 @@ export default function Certificates({ me }: { me: Me }) {
    * either way: `certbot renew --cert-name X` works on any lineage it
    * manages, attached or not. */
   async function renewLineage(lineageName: string) {
-    if (!window.confirm(`Запустить certbot renew --cert-name ${lineageName}?`)) return
+    if (!window.confirm(t('certs.confirmRenew', { lineage: lineageName, caveat: '' }))) return
     setBusy(`lineage:${lineageName}`)
     setNotice(null)
     try {
@@ -316,7 +316,7 @@ export default function Certificates({ me }: { me: Me }) {
         method: 'POST',
         body: { lineage: lineageName },
       })
-      startJob(res.job, `Продление ${lineageName}`)
+      startJob(res.job, t('certs.renewLabel', { lineage: lineageName }))
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -351,7 +351,7 @@ export default function Certificates({ me }: { me: Me }) {
     }
   }
 
-  if (loading && !data) return <Loading what="сертификаты" />
+  if (loading && !data) return <Loading what={t('certs.loading')} />
   if (error && !data) return <ErrorNote error={error} />
 
   return (
@@ -359,13 +359,8 @@ export default function Certificates({ me }: { me: Me }) {
       <div className="page-head">
         <div>
           <h1>
-            TLS-сертификаты
-            <InfoHint>
-              Читаются файлы, на которые ссылаются директивы ssl_certificate в nginx и crt в haproxy.
-              Проверяются сроки, покрытие имён, стойкость ключа, то, запустится ли автообновление на
-              самом деле, и — отдельным TLS-подключением к сокету — совпадает ли файл на диске с тем,
-              что реально видят клиенты.
-            </InfoHint>
+            {t('certs.title')}
+            <InfoHint>{t('certs.hint')}</InfoHint>
           </h1>
         </div>
       </div>
@@ -373,22 +368,22 @@ export default function Certificates({ me }: { me: Me }) {
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
 
       <div className="grid grid-4">
-        <StatTile label="Сертификатов" value={formatNumber(summary?.total ?? 0)} />
+        <StatTile label={t('certs.statTotal')} value={formatNumber(summary?.total ?? 0)} />
         <StatTile
-          label="Просрочено"
+          label={t('certs.statExpired')}
           value={formatNumber(summary?.expired ?? 0)}
           tone={(summary?.expired ?? 0) > 0 ? 'critical' : 'good'}
         />
         <StatTile
-          label="Истекают в течение месяца"
+          label={t('certs.statExpiring')}
           value={formatNumber(summary?.expiring ?? 0)}
           tone={(summary?.expiring ?? 0) > 0 ? 'warning' : 'good'}
         />
         <StatTile
-          label="Без автообновления"
+          label={t('certs.statUnmanaged')}
           value={formatNumber(summary?.unmanaged ?? 0)}
           note={
-            (summary?.unreadable ?? 0) > 0 ? `не читается файлов: ${summary?.unreadable}` : undefined
+            (summary?.unreadable ?? 0) > 0 ? t('certs.statUnreadableNote', { count: summary?.unreadable }) : undefined
           }
           tone={(summary?.unmanaged ?? 0) > 0 ? 'warning' : 'good'}
         />
@@ -397,18 +392,13 @@ export default function Certificates({ me }: { me: Me }) {
       <Card
         title={
           <>
-            Расписание истечения
-            <InfoHint>
-              Запас до истечения на общей шкале в год — порядок, в котором сертификаты перестанут
-              работать
-            </InfoHint>
+            {t('certs.scheduleTitle')}
+            <InfoHint>{t('certs.scheduleHint')}</InfoHint>
           </>
         }
       >
         {certs.length === 0 ? (
-          <div className="chart-empty">
-            В разобранных конфигурациях нет ни одной директивы ssl_certificate.
-          </div>
+          <div className="chart-empty">{t('certs.noCertsDirectives')}</div>
         ) : (
           <div className="col" style={{ gap: '0.45rem' }}>
             {certs.map((cert) => {
@@ -457,13 +447,11 @@ export default function Certificates({ me }: { me: Me }) {
           </div>
         )}
         <p className="small muted" style={{ marginBottom: 0 }}>
-          Пороги: {WARN_DAYS} дн. — предупреждение, {CRITICAL_DAYS} дн. — срочно. Let's Encrypt
-          продлевает за 30 дней до конца, поэтому меньший запас означает, что автоматика уже
-          не сработала.
+          {t('certs.thresholdsNote', { warn: WARN_DAYS, critical: CRITICAL_DAYS })}
         </p>
       </Card>
 
-      <Card title="Подробности">
+      <Card title={t('certs.detailsTitle')}>
         <div className="table-wrap">
           <Table<Certificate>
             dataSource={certs}
@@ -498,12 +486,12 @@ export default function Certificates({ me }: { me: Me }) {
           <RenewLog events={jobStatus?.events ?? []} />
           {jobStatus?.done ? (
             <Banner kind={jobStatus.error ? 'error' : 'info'}>
-              {jobStatus.error ? `Ошибка: ${jobStatus.error}` : 'Готово.'}
+              {jobStatus.error ? t('certs.jobError', { error: jobStatus.error }) : t('certs.jobDone')}
             </Banner>
           ) : (
             <p className="small muted row" style={{ alignItems: 'center', marginBottom: 0 }}>
               <Spinner />
-              Выполняется — можно закрыть окно, процесс на хосте продолжится в фоне.
+              {t('certs.jobRunning')}
             </p>
           )}
         </Modal>
@@ -532,9 +520,10 @@ function UnattachedCard({
   busy: string | null
   onRenew: (name: string) => void
 }) {
+  const { t } = useTranslation()
   const columns: TableColumnsType<LineageInfo> = [
     {
-      title: 'Домен',
+      title: t('certs.unattachedDomain'),
       key: 'name',
       render: (_, info) => (
         <>
@@ -544,10 +533,10 @@ function UnattachedCard({
       ),
     },
     {
-      title: 'Осталось',
+      title: t('certs.colRemaining'),
       key: 'days_left',
       render: (_, info) => {
-        if (!info.known) return <span className="small muted">срок неизвестен</span>
+        if (!info.known) return <span className="small muted">{t('certs.unknownExpiry')}</span>
         const tone: Tone =
           info.days_left < 0
             ? 'critical'
@@ -558,10 +547,10 @@ function UnattachedCard({
                 : 'good'
         const word =
           info.days_left < 0
-            ? `просрочен на ${-info.days_left} дн.`
+            ? t('certs.expired', { days: -info.days_left })
             : info.days_left === 0
-              ? 'истекает сегодня'
-              : `${info.days_left} дн.`
+              ? t('certs.expiresToday')
+              : t('certs.daysLeft', { days: info.days_left })
         return (
           <span className="small nowrap" style={{ color: TONE_COLOR[tone] }}>
             ● {word}
@@ -581,7 +570,7 @@ function UnattachedCard({
           loading={busy === `lineage:${info.name}`}
           onClick={() => onRenew(info.name)}
         >
-          продлить
+          {t('certs.renew')}
         </Button>
       ),
     })
@@ -591,12 +580,8 @@ function UnattachedCard({
     <Card
       title={
         <>
-          Неподключённые сертификаты
-          <InfoHint>
-            Есть в /etc/letsencrypt/live, но ни один разобранный конфиг на них не ссылается — сюда
-            попадает всё, что certbot certonly выпустил (вручную или через форму выше), но никто ещё
-            не подключил к сервису
-          </InfoHint>
+          {t('certs.unattachedTitle')}
+          <InfoHint>{t('certs.unattachedHint')}</InfoHint>
         </>
       }
     >
@@ -604,8 +589,7 @@ function UnattachedCard({
         <Table<LineageInfo> dataSource={lineages} rowKey="name" pagination={false} size="small" columns={columns} />
       </div>
       <p className="small muted" style={{ marginBottom: 0, marginTop: '0.6rem' }}>
-        Чтобы сертификат появился в «Подробности» выше — подключите его в конфиг сервиса (страница
-        «Конфигурации») или соберите PEM для haproxy формой ниже.
+        {t('certs.unattachedFooter')}
       </p>
     </Card>
   )
@@ -613,6 +597,7 @@ function UnattachedCard({
 
 /** Auto-scrolling live log of a renew job's progress, one line per step. */
 function RenewLog({ events }: { events: RenewEvent[] }) {
+  const { t } = useTranslation()
   const preRef = useRef<HTMLPreElement>(null)
 
   useEffect(() => {
@@ -621,12 +606,14 @@ function RenewLog({ events }: { events: RenewEvent[] }) {
   }, [events.length])
 
   if (events.length === 0) {
-    return <p className="small muted">Начинаю…</p>
+    return <p className="small muted">{t('certs.startingLog')}</p>
   }
 
   return (
     <pre ref={preRef} className="diff" style={{ maxHeight: '22rem' }}>
-      {events.map((e) => `[${new Date(e.time).toLocaleTimeString('ru-RU')}] ${e.text}`).join('\n')}
+      {events
+        .map((e) => `[${new Date(e.time).toLocaleTimeString(i18n.language === 'en' ? 'en-US' : 'ru-RU')}] ${e.text}`)
+        .join('\n')}
     </pre>
   )
 }
@@ -635,10 +622,10 @@ function RenewLog({ events }: { events: RenewEvent[] }) {
  * certificates table first. */
 function lineageLabel(info: LineageInfo): string {
   const name = info.name_unicode ? `${info.name} (${info.name_unicode})` : info.name
-  if (!info.known) return `${name} — срок неизвестен`
-  if (info.days_left < 0) return `${name} — просрочен ${-info.days_left} дн. назад`
-  if (info.days_left === 0) return `${name} — истекает сегодня`
-  return `${name} — ${info.days_left} дн.`
+  if (!info.known) return i18n.t('certs.lineageUnknown', { name })
+  if (info.days_left < 0) return i18n.t('certs.lineageExpired', { name, days: -info.days_left })
+  if (info.days_left === 0) return i18n.t('certs.lineageExpiresToday', { name })
+  return i18n.t('certs.lineageDaysLeft', { name, days: info.days_left })
 }
 
 /** Requests a brand-new Let's Encrypt certificate for domain(s) certbot
@@ -646,6 +633,7 @@ function lineageLabel(info: LineageInfo): string {
  * the self-signed form below (no real CA involved at all). Runs in the
  * background through the same job/progress Modal "продлить" already uses. */
 function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) => void }) {
+  const { t } = useTranslation()
   const [form] = Form.useForm<{ domains: string }>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -656,16 +644,10 @@ function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) =>
       .map((d) => d.trim())
       .filter(Boolean)
     if (domainList.length === 0) {
-      setError('Укажите хотя бы одно доменное имя')
+      setError(t('certs.specifyDomain'))
       return
     }
-    if (
-      !window.confirm(
-        `Выпустить сертификат для ${domainList.join(', ')}?\n\n` +
-          'certbot certonly --standalone требует свободный порт 80/443 — nginx и haproxy будут ' +
-          'ненадолго остановлены и автоматически запущены обратно после завершения.',
-      )
-    ) {
+    if (!window.confirm(t('certs.confirmIssue', { domains: domainList.join(', ') }))) {
       return
     }
     setBusy(true)
@@ -676,7 +658,7 @@ function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) =>
         body: { domains: domainList },
       })
       form.resetFields()
-      onStarted(res.job, `Выпуск сертификата: ${domainList.join(', ')}`)
+      onStarted(res.job, t('certs.issuingLabel', { domains: domainList.join(', ') }))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -688,25 +670,21 @@ function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) =>
     <Card
       title={
         <>
-          Выпустить новый сертификат Let's Encrypt
-          <InfoHint>
-            Для домена, у которого ещё нет сертификата — certbot certonly --standalone.
-            Wildcard-имена не поддерживаются: standalone доказывает владение только одним точным
-            именем за раз.
-          </InfoHint>
+          {t('certs.issueTitle')}
+          <InfoHint>{t('certs.issueHint')}</InfoHint>
         </>
       }
     >
       <Form form={form} layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <Form.Item name="domains" label="Доменные имена через запятую" rules={[{ required: true }]} style={{ flex: 1, minWidth: '18rem' }}>
+          <Form.Item name="domains" label={t('certs.domainsLabel')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '18rem' }}>
             <Input placeholder="new.example.com, www.new.example.com" />
           </Form.Item>
         </div>
         <Form.Item style={{ marginBottom: 0 }}>
           <Button type="primary" htmlType="submit" loading={busy}>
-            {busy ? 'Запускаю…' : 'Выпустить'}
+            {busy ? t('certs.issuing') : t('certs.issue')}
           </Button>
         </Form.Item>
       </Form>
@@ -731,6 +709,7 @@ function CombineForm({
   lineagesLoading: boolean
   lineagesError: string | null
 }) {
+  const { t } = useTranslation()
   const haproxyPaths = useApi<{ paths: string[] }>('/certificates/haproxy-paths', 0)
   const [lineage, setLineage] = useState('')
   const [targetPath, setTargetPath] = useState(NEW_FILE)
@@ -742,7 +721,7 @@ function CombineForm({
 
   async function submit() {
     if (!lineage) {
-      setError('Выберите lineage')
+      setError(t('certs.selectLineage'))
       return
     }
     setBusy(true)
@@ -766,11 +745,8 @@ function CombineForm({
     <Card
       title={
         <>
-          Собрать PEM для haproxy из certbot
-          <InfoHint>
-            Берёт уже выпущенный certbot-сертификат из /etc/letsencrypt/live и склеивает его с ключом
-            в один файл — то, что требует haproxy crt. certbot renew не вызывается.
-          </InfoHint>
+          {t('certs.combineTitle')}
+          <InfoHint>{t('certs.combineHint')}</InfoHint>
         </>
       }
     >
@@ -778,30 +754,30 @@ function CombineForm({
         {error && <Banner kind="error">{error}</Banner>}
         <ErrorNote error={lineagesError} />
         <div className="filters">
-          <Form.Item label="Lineage (/etc/letsencrypt/live/…)" style={{ flex: 1, minWidth: '18rem' }}>
+          <Form.Item label={t('certs.lineageFieldLabel')} style={{ flex: 1, minWidth: '18rem' }}>
             <Select
               value={lineage || undefined}
               onChange={setLineage}
-              placeholder="— выберите —"
+              placeholder={t('certs.selectPlaceholder')}
               options={lineageOptions.map((info) => ({ value: info.name, label: lineageLabel(info) }))}
             />
           </Form.Item>
-          <Form.Item label="Куда записать" style={{ flex: 1, minWidth: '18rem' }}>
+          <Form.Item label={t('certs.targetPathLabel')} style={{ flex: 1, minWidth: '18rem' }}>
             <Select
               value={targetPath}
               onChange={setTargetPath}
-              options={[{ value: NEW_FILE, label: '— новый файл —' }, ...pathOptions.map((path) => ({ value: path, label: path }))]}
+              options={[{ value: NEW_FILE, label: t('certs.newFile') }, ...pathOptions.map((path) => ({ value: path, label: path }))]}
             />
           </Form.Item>
         </div>
         <Form.Item style={{ marginBottom: 0 }}>
           <Button type="primary" htmlType="submit" loading={busy} disabled={lineageOptions.length === 0}>
-            {busy ? 'Собираю…' : 'Собрать'}
+            {busy ? t('certs.combining') : t('certs.combine')}
           </Button>
         </Form.Item>
         {!lineagesLoading && lineageOptions.length === 0 && !lineagesError && (
           <p className="small muted" style={{ marginBottom: 0 }}>
-            В /etc/letsencrypt/live не найдено ни одной lineage.
+            {t('certs.noLineages')}
           </p>
         )}
       </Form>
@@ -810,24 +786,22 @@ function CombineForm({
         (result.snippet ? (
           <div className="col" style={{ marginTop: '0.85rem' }}>
             <Banner kind="info">
-              {result.lineage}: PEM собран, действителен до {formatDateTime(result.not_after)}. Он ещё не
-              подключён ни к одному сервису — вставьте директиву ниже в нужный файл через страницу
-              «Конфигурации».
+              {t('certs.combinedSnippet', { lineage: result.lineage, date: formatDateTime(result.not_after) })}
             </Banner>
             <pre className="diff">{result.snippet}</pre>
           </div>
         ) : (
           <div style={{ marginTop: '0.85rem' }}>
             <Banner kind="info">
-              {result.lineage}: файл <code className="mono">{result.combined_path}</code> записан,
-              действителен до {formatDateTime(result.not_after)}. haproxy перечитал конфигурацию — вставлять
-              ничего не нужно.{' '}
+              {t('certs.combinedFile', { lineage: result.lineage })}
+              <code className="mono">{result.combined_path}</code>
+              {t('certs.combinedFileSuffix', { date: formatDateTime(result.not_after) })}
               {rescanning ? (
                 <span className="row" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
-                  <Spinner /> обновляю список сертификатов…
+                  <Spinner /> {t('certs.refreshingList')}
                 </span>
               ) : (
-                'Список сертификатов уже обновлён.'
+                t('certs.listUpdated')
               )}
             </Banner>
           </div>
@@ -844,6 +818,7 @@ const SERVICE_OPTIONS: { value: SelfSignedRequest['service']; label: string }[] 
 type SelfSignedFormValues = { names: string; service: SelfSignedRequest['service']; bits: number; days: number }
 
 function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
+  const { t } = useTranslation()
   const [form] = Form.useForm<SelfSignedFormValues>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -855,7 +830,7 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
       .map((n) => n.trim())
       .filter(Boolean)
     if (nameList.length === 0) {
-      setError('Укажите хотя бы одно имя')
+      setError(t('certs.specifyName'))
       return
     }
     setBusy(true)
@@ -879,11 +854,8 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
     <Card
       title={
         <>
-          Выпустить самоподписанный сертификат
-          <InfoHint>
-            Для внутренних сервисов или как временная мера, пока не готов сертификат от доверенного
-            центра — браузер всё равно покажет предупреждение
-          </InfoHint>
+          {t('certs.selfSignedTitle')}
+          <InfoHint>{t('certs.selfSignedHint')}</InfoHint>
         </>
       }
     >
@@ -895,22 +867,22 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
       >
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <Form.Item name="names" label="Имена через запятую" rules={[{ required: true }]} style={{ flex: 2, minWidth: '16rem' }}>
+          <Form.Item name="names" label={t('certs.namesLabel')} rules={[{ required: true }]} style={{ flex: 2, minWidth: '16rem' }}>
             <Input placeholder="internal.example.com, *.internal.example.com" />
           </Form.Item>
-          <Form.Item name="service" label="Сервис">
+          <Form.Item name="service" label={t('certs.serviceLabel')}>
             <Select options={SERVICE_OPTIONS} />
           </Form.Item>
-          <Form.Item name="bits" label="Длина ключа">
+          <Form.Item name="bits" label={t('certs.keyLength')}>
             <Select options={[2048, 3072, 4096].map((n) => ({ value: n, label: String(n) }))} />
           </Form.Item>
-          <Form.Item name="days" label="Срок действия, дней">
+          <Form.Item name="days" label={t('certs.validityDays')}>
             <InputNumber min={1} max={825} />
           </Form.Item>
         </div>
         <Form.Item style={{ marginBottom: 0 }}>
           <Button type="primary" htmlType="submit" loading={busy}>
-            {busy ? 'Генерирую…' : 'Создать'}
+            {busy ? t('certs.generating') : t('certs.create')}
           </Button>
         </Form.Item>
       </Form>
@@ -918,9 +890,7 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
       {result && (
         <div className="col" style={{ marginTop: '0.85rem' }}>
           <Banner kind="info">
-            Сертификат для {result.names.join(', ')} создан, действителен до{' '}
-            {formatDateTime(result.not_after)}. Он ещё не подключён ни к одному сервису — вставьте
-            директивы ниже в нужный файл через страницу «Конфигурации».
+            {t('certs.selfSignedResult', { names: result.names.join(', '), date: formatDateTime(result.not_after) })}
           </Banner>
           {result.unicode_names && (
             <p className="small muted">
