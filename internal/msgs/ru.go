@@ -70,4 +70,34 @@ var ruCatalog = map[string]string{
 	"hub.noInstallsYet":          "для этого хоста ещё не было установок",
 	"hub.localScannerNotRunning": "локальный сканер хаба не запущен",
 	"hub.hostUnreachable":        "хост недоступен: %s",
+
+	"hub.startingInstall":        "Начинаю установку",
+	"hub.installCancelledByUser": "Установка отменена пользователем",
+	"hub.connectingSSH":          "Подключаюсь по SSH к %s…",
+	"hub.hostArch":               "Хост: %s/%s",
+	"hub.waitingHealth":          "Жду, пока сервис ответит на /health…",
+	"hub.checkingAdminAccount":   "Проверяю учётную запись администратора…",
+	"hub.loginFailedResetting": "Вход не удался — на хосте уже есть учётная запись администратора с другим " +
+		"паролем (например, от прошлой попытки установки); сбрасываю пароль на хосте…",
+	"hub.adminPasswordSynced": "Пароль администратора на хосте синхронизирован",
+	"hub.done":                "Готово",
+
+	"hub.goNotWorkingInstalling": "go (%s) недоступен — устанавливаю собственный Go для хаба…",
+	"hub.usingCachedGo":          "Использую ранее установленный Go хаба: %s",
+	"hub.downloadingGo":          "Скачиваю %s для linux-%s…",
+	"hub.goInstalled":            "Go установлен: %s",
+
+	"hub.sourceNotFoundUsingBinDir": "Исходники не найдены в %s — использую %s (каталог бинарника хаба)",
+	"hub.usingCachedBinary":         "Использую уже собранный бинарник для %s/%s",
+	"hub.buildingBinary":            "Собираю бинарник для %s/%s…",
+	"hub.uploadingUnitAndConfig":    "Заливаю systemd-юнит и конфигурацию…",
+	"hub.installingFiles":           "Устанавливаю файлы…",
+	"hub.startingSystemdService":    "Запускаю systemd-сервис…",
+	"hub.uploadingBinary":           "Заливаю бинарник… %d%% (%.1f МБ из %.1f МБ)",
+
+	"hub.sendingViaTunnel":          "Отправляю бинарник и конфигурацию через резервный канал…",
+	"hub.hostAcceptedRestarting":    "Хост принял обновление и перезапускает сервис…",
+	"hub.sshUnavailableUsingTunnel": "SSH недоступен — обновляю через резервный канал (%s/%s)…",
+	"hub.retryingTunnelUpdate":      "Повторяю отправку обновления через резервный канал…",
+	"hub.doneViaTunnel":             "Готово (через резервный канал)",
 }

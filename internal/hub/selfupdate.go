@@ -116,7 +116,7 @@ func (m *Manager) dynamicRelayDial(hostID int64) dialFunc {
 // definition, is only in play here because the primary one (SSH) is
 // already having trouble. ctx's own deadline (the install job's 10-minute
 // budget) is what actually bounds this instead.
-func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial dialFunc, binPath, unitContent, envContent string, report func(string)) error {
+func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial dialFunc, binPath, unitContent, envContent string, report func(key string, args ...any)) error {
 	binBytes, err := os.ReadFile(binPath)
 	if err != nil {
 		return fmt.Errorf("чтение собранного бинарника: %w", err)
@@ -157,7 +157,7 @@ func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial d
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
 
-	report("Отправляю бинарник и конфигурацию через резервный канал…")
+	report("hub.sendingViaTunnel")
 	client := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
@@ -174,7 +174,7 @@ func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial d
 		b, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("обновление через резервный канал не удалось (код %d): %s", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
-	report("Хост принял обновление и перезапускает сервис…")
+	report("hub.hostAcceptedRestarting")
 	return nil
 }
 
@@ -204,7 +204,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 		return fail(fmt.Errorf("SSH недоступен, и для хоста ещё не известна архитектура для обновления через резервный канал"))
 	}
 	goos, goarch := parts[0], parts[1]
-	report(fmt.Sprintf("SSH недоступен — обновляю через резервный канал (%s/%s)…", goos, goarch))
+	report("hub.sshUnavailableUsingTunnel", goos, goarch)
 
 	binPath, err := m.ensureBinary(ctx, goos, goarch, report)
 	if err != nil {
@@ -241,7 +241,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 				return fail(fmt.Errorf("обновление через резервный канал не удалось: %w", updateErr))
 			case <-time.After(2 * time.Second):
 			}
-			report("Повторяю отправку обновления через резервный канал…")
+			report("hub.retryingTunnelUpdate")
 		}
 		if updateErr = m.selfUpdateOverTunnel(ctx, hostID, dial, binPath, unitContent, envContent, report); updateErr == nil {
 			break
@@ -251,14 +251,14 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 		return fail(updateErr)
 	}
 
-	report("Жду, пока сервис ответит на /health…")
+	report("hub.waitingHealth")
 	healthCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := waitForHealth(healthCtx, dial); err != nil {
 		return fail(err)
 	}
 
-	report("Проверяю учётную запись администратора…")
+	report("hub.checkingAdminAccount")
 	// waitForHealth just above only proves the freshly restarted host's
 	// /health responds — it says nothing about whether the very next
 	// request over the very same (or a moments-later-replaced) relay
@@ -303,6 +303,6 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 		}
 	}
 
-	report("Готово (через резервный канал)")
+	report("hub.doneViaTunnel")
 	return nil
 }

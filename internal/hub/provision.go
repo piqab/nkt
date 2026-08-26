@@ -45,7 +45,7 @@ const sudoersDropIn = "/etc/sudoers.d/nkt-hub"
 // parents (running ./nkt from inside a checkout, or bin/nkt one level
 // down), and only then give up — naming the paths tried and the variable
 // that fixes it.
-func (m *Manager) resolveSourceRoot(report func(string)) (string, error) {
+func (m *Manager) resolveSourceRoot(report func(key string, args ...any)) (string, error) {
 	hasGoMod := func(dir string) bool {
 		_, err := os.Stat(filepath.Join(dir, "go.mod"))
 		return err == nil
@@ -60,7 +60,7 @@ func (m *Manager) resolveSourceRoot(report func(string)) (string, error) {
 		if exe, err = filepath.EvalSymlinks(exe); err == nil {
 			for dir := filepath.Dir(exe); ; dir = filepath.Dir(dir) {
 				if hasGoMod(dir) {
-					report(fmt.Sprintf("Исходники не найдены в %s — использую %s (каталог бинарника хаба)", m.cfg.HubSourceRoot, dir))
+					report("hub.sourceNotFoundUsingBinDir", m.cfg.HubSourceRoot, dir)
 					return dir, nil
 				}
 				tried = append(tried, dir)
@@ -86,11 +86,11 @@ func (m *Manager) resolveSourceRoot(report func(string)) (string, error) {
 // already works from any machine with Go installed. The compiler itself is
 // resolved by resolveGoBin, which self-installs one if NKT_HUB_GO_BIN
 // doesn't already point at something that runs.
-func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report func(string)) (string, error) {
+func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report func(key string, args ...any)) (string, error) {
 	name := fmt.Sprintf("nkt-%s-%s-%s", goos, goarch, m.version)
 	path := filepath.Join(m.cfg.HubBinCacheDir(), name)
 	if _, err := os.Stat(path); err == nil {
-		report(fmt.Sprintf("Использую уже собранный бинарник для %s/%s", goos, goarch))
+		report("hub.usingCachedBinary", goos, goarch)
 		return path, nil
 	}
 
@@ -104,7 +104,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 		return "", err
 	}
 
-	report(fmt.Sprintf("Собираю бинарник для %s/%s…", goos, goarch))
+	report("hub.buildingBinary", goos, goarch)
 	if err := os.MkdirAll(m.cfg.HubBinCacheDir(), 0o750); err != nil {
 		return "", fmt.Errorf("каталог кэша бинарников: %w", err)
 	}
@@ -229,7 +229,7 @@ func generatePassword() (string, error) {
 // progress reports a step's repeated in-flight updates (currently just the
 // binary upload's percentage) — replacing the last log line in place rather
 // than adding a new one each time, unlike report's one-off step messages.
-func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envContent, binPath, servicePath, envPath string, report, progress func(string)) error {
+func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envContent, binPath, servicePath, envPath string, report, progress func(key string, args ...any)) error {
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
 		return fmt.Errorf("открытие SFTP: %w", err)
@@ -244,7 +244,7 @@ func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envCo
 		return fmt.Errorf("заливка бинарника: %w", err)
 	}
 
-	report("Заливаю systemd-юнит и конфигурацию…")
+	report("hub.uploadingUnitAndConfig")
 	tmpUnit := gopath.Join(tmpDir, "netknownsthat.service")
 	if err := uploadBytes(sftpClient, []byte(unitContent), tmpUnit, 0o644); err != nil {
 		return fmt.Errorf("заливка systemd-юнита: %w", err)
@@ -254,7 +254,7 @@ func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envCo
 		return fmt.Errorf("заливка nkt.env: %w", err)
 	}
 
-	report("Устанавливаю файлы…")
+	report("hub.installingFiles")
 	if err := installRemoteFile(client, sshUser, tmpBin, binPath, 0o755); err != nil {
 		return fmt.Errorf("установка бинарника: %w", err)
 	}
@@ -351,8 +351,8 @@ func sudoRequiresPassword(err error) bool {
 // hub still holds the SSH connection that just failed, so it fetches the
 // journal tail itself and puts the actual failure reason in the install
 // log, instead of forwarding systemd's go-look-elsewhere message alone.
-func activateService(client *ssh.Client, sshUser string, report func(string)) error {
-	report("Запускаю systemd-сервис…")
+func activateService(client *ssh.Client, sshUser string, report func(key string, args ...any)) error {
+	report("hub.startingSystemdService")
 	// `enable --now` is a no-op on a unit that's already active — on a host
 	// this install/update already had once (i.e. every "обновить"/
 	// "переустановить", not just the first install), the freshly rewritten
@@ -421,7 +421,7 @@ func resetRemoteAdminPassword(client *ssh.Client, sshUser, adminUser, adminPassw
 // until it either finishes or times out was worth more than a single text
 // line for the whole transfer. progress replaces its last-reported line in
 // place rather than adding a new one each tick (see installJob.replaceLast).
-func uploadFile(sftpClient *sftp.Client, localPath, remotePath string, mode os.FileMode, progress func(string)) error {
+func uploadFile(sftpClient *sftp.Client, localPath, remotePath string, mode os.FileMode, progress func(key string, args ...any)) error {
 	local, err := os.Open(localPath)
 	if err != nil {
 		return err
@@ -463,7 +463,7 @@ type progressReader struct {
 	r      io.Reader
 	total  int64
 	read   int64
-	report func(string)
+	report func(key string, args ...any)
 	last   time.Time
 }
 
@@ -494,11 +494,11 @@ func (p *progressReader) Size() int64 { return p.total }
 func (p *progressReader) reportNow() {
 	p.last = time.Now()
 	pct := int(p.read * 100 / p.total)
-	p.report(fmt.Sprintf("Заливаю бинарник… %d%% (%s из %s)", pct, formatMB(p.read), formatMB(p.total)))
-}
-
-func formatMB(bytes int64) string {
-	return fmt.Sprintf("%.1f МБ", float64(bytes)/(1<<20))
+	// Byte counts travel as plain numbers, not pre-formatted "X МБ" strings
+	// — the catalog template itself supplies the (localized) unit word, so
+	// the English side doesn't end up with a Russian "МБ" baked into an
+	// otherwise-translated line.
+	p.report("hub.uploadingBinary", pct, float64(p.read)/(1<<20), float64(p.total)/(1<<20))
 }
 
 func uploadBytes(sftpClient *sftp.Client, data []byte, remotePath string, mode os.FileMode) error {

@@ -109,7 +109,7 @@ func TestResolveGoBinUsesWorkingGoWithoutInstalling(t *testing.T) {
 	m.cfg.HubGoBin = "go"
 
 	var reports []string
-	path, err := m.resolveGoBin(context.Background(), func(s string) { reports = append(reports, s) })
+	path, err := m.resolveGoBin(context.Background(), func(key string, args ...any) { reports = append(reports, key) })
 	if err != nil {
 		t.Fatalf("resolveGoBin: %v", err)
 	}
@@ -117,13 +117,13 @@ func TestResolveGoBinUsesWorkingGoWithoutInstalling(t *testing.T) {
 		t.Fatal("resolveGoBin returned an empty path")
 	}
 	for _, r := range reports {
-		if strings.Contains(r, "Скачиваю") || strings.Contains(r, "устанавливаю") {
+		if r == "hub.downloadingGo" || r == "hub.goNotWorkingInstalling" {
 			t.Errorf("resolveGoBin attempted to install a toolchain when the existing go already works: %q", r)
 		}
 	}
 
 	// Second call must reuse the cached result rather than re-resolving.
-	path2, err := m.resolveGoBin(context.Background(), func(string) {})
+	path2, err := m.resolveGoBin(context.Background(), func(string, ...any) {})
 	if err != nil {
 		t.Fatalf("resolveGoBin (cached): %v", err)
 	}
@@ -181,7 +181,7 @@ func TestSelfInstallGoToolchainLive(t *testing.T) {
 	defer cancel()
 
 	var events []string
-	path, err := installGoToolchain(ctx, dir, func(s string) { events = append(events, s) })
+	path, err := installGoToolchain(ctx, dir, func(key string, args ...any) { events = append(events, key) })
 	if err != nil {
 		t.Fatalf("installGoToolchain: %v\nevents: %v", err, events)
 	}
@@ -200,7 +200,7 @@ func TestSelfInstallGoToolchainLive(t *testing.T) {
 	// A second call must reuse the already-installed toolchain rather than
 	// downloading again.
 	events = nil
-	path2, err := installGoToolchain(ctx, dir, func(s string) { events = append(events, s) })
+	path2, err := installGoToolchain(ctx, dir, func(key string, args ...any) { events = append(events, key) })
 	if err != nil {
 		t.Fatalf("installGoToolchain (second call): %v", err)
 	}
@@ -208,7 +208,7 @@ func TestSelfInstallGoToolchainLive(t *testing.T) {
 		t.Errorf("second installGoToolchain call returned a different path: %q vs %q", path2, path)
 	}
 	for _, e := range events {
-		if strings.Contains(e, "Скачиваю") {
+		if e == "hub.downloadingGo" {
 			t.Errorf("second installGoToolchain call re-downloaded instead of reusing the install: %q", e)
 		}
 	}
@@ -325,7 +325,7 @@ func TestGeneratePasswordIsRandomAndLong(t *testing.T) {
 // used to surface as go's own bare "go.mod file not found" with no hint
 // that NKT_HUB_SOURCE_ROOT exists.
 func TestResolveSourceRoot(t *testing.T) {
-	discard := func(string) {}
+	discard := func(string, ...any) {}
 
 	t.Run("configured root with go.mod wins", func(t *testing.T) {
 		dir := t.TempDir()
@@ -373,7 +373,7 @@ func TestResolveSourceRoot(t *testing.T) {
 // SFTP server, covered by TestSSHProvisioningRoundTrip), just the one
 // contract progressReader must keep satisfying.
 func TestProgressReaderExposesSize(t *testing.T) {
-	pr := &progressReader{total: 12345, report: func(string) {}}
+	pr := &progressReader{total: 12345, report: func(string, ...any) {}}
 	var sized interface{ Size() int64 } = pr
 	if got := sized.Size(); got != 12345 {
 		t.Errorf("progressReader.Size() = %d, want 12345", got)

@@ -16,6 +16,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/secretbox"
 	"github.com/althq/netknownsthat/internal/store"
 )
@@ -23,9 +24,43 @@ import (
 // Event is one line of progress from a StartInstall job — the same shape
 // control.RenewEvent already uses for certificate-renewal progress, so the
 // frontend can reuse the same polling/log-panel component for both.
+//
+// Key/Args (unexported from JSON) carry a translatable line — looked up
+// against internal/msgs and resolved into Text only at read time (see
+// resolveText), against whichever language the poll asking for it is in,
+// not whatever was selected when the job produced the line. Text alone
+// (Key empty) is a literal, never-translated line — nothing this job type
+// currently produces needs that, but installJob.appendRaw exists for
+// symmetry with control.renewJob, which does (raw certbot output).
 type Event struct {
 	Time time.Time `json:"time"`
 	Text string    `json:"text"`
+	Key  string    `json:"-"`
+	Args []any     `json:"-"`
+}
+
+// resolveText renders lang's localized text for the event — its own Text
+// verbatim for a raw/literal line (Key empty), or a fresh msgs.T lookup
+// against Key/Args otherwise.
+func (e Event) resolveText(lang msgs.Lang) string {
+	if e.Key == "" {
+		return e.Text
+	}
+	return msgs.T(lang, e.Key, e.Args...)
+}
+
+// localizeEvents returns a copy of events with Text resolved against lang —
+// events themselves (msgs.LangFromRequest-independent, from installJob's
+// own internal state) always store Key/Args; only the HTTP handler serving
+// a poll knows the request's language, so localization happens here, right
+// before that response is built, never when a line is first appended.
+func localizeEvents(lang msgs.Lang, events []Event) []Event {
+	out := make([]Event, len(events))
+	for i, e := range events {
+		e.Text = e.resolveText(lang)
+		out[i] = e
+	}
+	return out
 }
 
 // installJob tracks one StartInstall run in memory, mirroring
@@ -50,7 +85,20 @@ type installJob struct {
 	client *ssh.Client
 }
 
-func (j *installJob) append(text string) {
+// append logs a translatable line — key looked up in internal/msgs,
+// resolved against the reader's language at snapshot time (see
+// localizeEvents), not now.
+func (j *installJob) append(key string, args ...any) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	j.events = append(j.events, Event{Time: time.Now(), Key: key, Args: args})
+}
+
+// appendRaw logs a literal, never-translated line — kept for symmetry with
+// control.renewJob's identical method, which needs it for raw certbot
+// output; nothing installJob currently reports is like that, but the two
+// job types are meant to stay interchangeable (see Event's own comment).
+func (j *installJob) appendRaw(text string) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.events = append(j.events, Event{Time: time.Now(), Text: text})
@@ -61,14 +109,14 @@ func (j *installJob) append(text string) {
 // ticking up) and should read as one line changing in place, not a new log
 // line every tick stretching the job modal taller with each update. Falls
 // back to appending when there is nothing yet to replace.
-func (j *installJob) replaceLast(text string) {
+func (j *installJob) replaceLast(key string, args ...any) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if len(j.events) == 0 {
-		j.events = append(j.events, Event{Time: time.Now(), Text: text})
+		j.events = append(j.events, Event{Time: time.Now(), Key: key, Args: args})
 		return
 	}
-	j.events[len(j.events)-1] = Event{Time: time.Now(), Text: text}
+	j.events[len(j.events)-1] = Event{Time: time.Now(), Key: key, Args: args}
 }
 
 func (j *installJob) finish(err error) {
@@ -469,7 +517,7 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool) (s
 	}
 
 	job := &installJob{created: time.Now(), hostID: hostID}
-	job.append("Начинаю установку")
+	job.append("hub.startingInstall")
 
 	id, err := newJobID()
 	if err != nil {
@@ -528,7 +576,7 @@ func (m *Manager) CancelInstall(ctx context.Context, hostID int64) error {
 	}
 
 	job.cancelNow()
-	job.append(message)
+	job.append("hub.installCancelledByUser")
 	job.finish(errors.New(message))
 	return m.db.SetHostStatus(ctx, hostID, store.HostStatusError, message)
 }
@@ -565,7 +613,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		return fail(fmt.Errorf("расшифровка SSH-секрета: %w", err))
 	}
 
-	report("Подключаюсь по SSH к " + host.Addr + "…")
+	report("hub.connectingSSH", host.Addr)
 	client, sshErr := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
 	if sshErr != nil {
 		if m.awaitTunnelReinstallFallback(ctx, host) {
@@ -580,7 +628,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	if err != nil {
 		return fail(err)
 	}
-	report(fmt.Sprintf("Хост: %s/%s", goos, goarch))
+	report("hub.hostArch", goos, goarch)
 	if err := m.db.SetHostArch(ctx, hostID, goos+"/"+goarch); err != nil {
 		return fail(err)
 	}
@@ -619,24 +667,23 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// confirmed working, right here, for free, with no separate probe.
 	m.recordSudoOutcome(ctx, hostID, host.SSHUser, nil)
 
-	report("Жду, пока сервис ответит на /health…")
+	report("hub.waitingHealth")
 	healthCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := waitForHealth(healthCtx, client.Dial); err != nil {
 		return fail(err)
 	}
 
-	report("Проверяю учётную запись администратора…")
+	report("hub.checkingAdminAccount")
 	if _, err := bootstrapLogin(ctx, client.Dial, adminUser, adminPassword); err != nil {
-		report("Вход не удался — на хосте уже есть учётная запись администратора с другим паролем " +
-			"(например, от прошлой попытки установки); сбрасываю пароль на хосте…")
+		report("hub.loginFailedResetting")
 		if resetErr := resetRemoteAdminPassword(client, host.SSHUser, adminUser, adminPassword, remoteDataDir, remoteBinPath); resetErr != nil {
 			return fail(fmt.Errorf("вход администратора не удался (%v), и сбросить пароль на хосте тоже не получилось: %w", err, resetErr))
 		}
 		if _, err := bootstrapLogin(ctx, client.Dial, adminUser, adminPassword); err != nil {
 			return fail(fmt.Errorf("вход администратора всё ещё не удаётся после сброса пароля на хосте: %w", err))
 		}
-		report("Пароль администратора на хосте синхронизирован")
+		report("hub.adminPasswordSynced")
 	}
 	if err := m.db.SetHostVersion(ctx, hostID, m.version); err != nil {
 		return fail(err)
@@ -648,7 +695,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		}
 	}
 
-	report("Готово")
+	report("hub.done")
 	return nil
 }
 
