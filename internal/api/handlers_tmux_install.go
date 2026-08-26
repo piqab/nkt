@@ -6,6 +6,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // handleTmuxStatus reports whether tmux is on this host's PATH — the
@@ -25,15 +26,15 @@ func (s *Server) handleTmuxStatus(w http.ResponseWriter, r *http.Request) {
 // tmux afterwards.
 func (s *Server) handleTmuxInstallWS(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Mode == config.ModeFixtures {
-		writeError(w, http.StatusForbidden, "установка пакетов недоступна в режиме fixtures")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.fixturesDisabled"))
 		return
 	}
 	if !collect.Which(r.Context(), s.scanner.Collector(), "apt-get") {
-		writeError(w, http.StatusForbidden, "apt-get не найден — установка пакетов поддерживается только на Debian/Ubuntu")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.aptGetMissing"))
 		return
 	}
 	if collect.Which(r.Context(), s.scanner.Collector(), "tmux") {
-		writeError(w, http.StatusConflict, "tmux уже установлен")
+		writeError(w, http.StatusConflict, msgs.T(msgs.LangFromRequest(r), "pkgInstall.tmuxAlreadyInstalled"))
 		return
 	}
 

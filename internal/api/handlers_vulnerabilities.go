@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/parse"
 	"github.com/althq/netknownsthat/internal/vuln"
 )
@@ -167,7 +168,7 @@ func (s *Server) handleVulnScanStart(w http.ResponseWriter, r *http.Request) {
 	s.vuln.mu.Lock()
 	if s.vuln.scanning {
 		s.vuln.mu.Unlock()
-		writeError(w, http.StatusConflict, "сканирование уже выполняется")
+		writeError(w, http.StatusConflict, msgs.T(msgs.LangFromRequest(r), "vulns.scanAlreadyRunning"))
 		return
 	}
 	s.vuln.scanning = true

@@ -7,6 +7,7 @@ import { CanvasAddon } from '@xterm/addon-canvas'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import '@xterm/xterm/css/xterm.css'
 import { hostScope, LOCAL_HOST_ID } from '../api'
+import i18n from '../i18n'
 
 export type PtyStatus = 'idle' | 'connecting' | 'connected' | 'closed' | 'error'
 
@@ -291,9 +292,15 @@ export function usePty(wsUrl: string) {
  * (internal/hub/server.go's `/hosts/local/*`), not under the sentinel's
  * numeric id — a plain `/hosts/${hostScope.id}` would build `/hosts/-1/...`,
  * which the hub's router instead parses as a real (nonexistent) host id and
- * fails on, rather than ever reaching the local terminal/updates session. */
+ * fails on, rather than ever reaching the local terminal/updates session.
+ *
+ * Also appends the current UI language as a `lang` query param — the
+ * WebSocket-upgrade equivalent of api.ts's X-NKT-Lang header, since browser
+ * JS cannot set custom headers on a WebSocket handshake (see
+ * internal/msgs's own doc comment on the backend side of this). */
 export function wsURL(path: string): string {
   const prefix = hostScope.id !== null ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${proto}//${location.host}/api${prefix}${path}`
+  const sep = path.includes('?') ? '&' : '?'
+  return `${proto}//${location.host}/api${prefix}${path}${sep}lang=${i18n.language}`
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // handleDbusStatus reports whether this host's terminal/package-update/
@@ -46,20 +47,19 @@ func (s *Server) handleDbusStatus(w http.ResponseWriter, r *http.Request) {
 // nsenter here specifically because systemd-run is what's broken.
 func (s *Server) handleDbusInstallWS(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Mode == config.ModeFixtures {
-		writeError(w, http.StatusForbidden, "установка пакетов недоступна в режиме fixtures")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.fixturesDisabled"))
 		return
 	}
 	if !collect.Which(r.Context(), s.scanner.Collector(), "apt-get") {
-		writeError(w, http.StatusForbidden, "apt-get не найден — установка пакетов поддерживается только на Debian/Ubuntu")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.aptGetMissing"))
 		return
 	}
 	if systemdRunReachable() {
-		writeError(w, http.StatusConflict, "D-Bus уже доступен")
+		writeError(w, http.StatusConflict, msgs.T(msgs.LangFromRequest(r), "pkgInstall.dbusAlreadyAvailable"))
 		return
 	}
 	if !needsNsenterFallback() {
-		writeError(w, http.StatusForbidden,
-			"автоматическая установка недоступна (нужен CAP_SYS_ADMIN в systemd-юните и nsenter на хосте) — установите dbus вручную")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.dbusManualOnly"))
 		return
 	}
 

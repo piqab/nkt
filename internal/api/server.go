@@ -21,6 +21,7 @@ import (
 	"github.com/althq/netknownsthat/internal/control"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/monitor"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -240,7 +241,7 @@ func (s *Server) Handler() http.Handler {
 		})
 
 		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-			writeError(w, http.StatusNotFound, "Неизвестный метод API: "+r.URL.Path)
+			writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "server.unknownApiMethod", r.URL.Path))
 		})
 	})
 
@@ -272,7 +273,7 @@ func (s *Server) spaHandler() http.Handler {
 		}
 		index, err := fs.ReadFile(s.ui, "index.html")
 		if err != nil {
-			writeError(w, http.StatusNotFound, "Фронтенд не собран: запустите npm run build в каталоге web/")
+			writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "server.frontendNotBuilt"))
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -347,15 +348,26 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
-// fail maps a domain error onto an HTTP status.
-func fail(w http.ResponseWriter, err error) {
+// fail maps a domain error onto an HTTP status. The four sentinel branches
+// below are identity-compared via errors.Is — their own Go text
+// (store.ErrNotFound, control.ErrNotFound, ...) is never shown to a user
+// directly, only used for comparison, so it stays untranslated; the actual
+// user-facing message is looked up fresh from the catalog for each,
+// against the request's own language. Anything else (the default branch)
+// is a deep, not-yet-converted business error — falls through to its raw
+// (Russian) .Error() text unchanged, exactly as before this package
+// existed.
+func fail(w http.ResponseWriter, r *http.Request, err error) {
+	lang := msgs.LangFromRequest(r)
 	switch {
-	case errors.Is(err, store.ErrNotFound), errors.Is(err, control.ErrNotFound):
-		writeError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, store.ErrNotFound):
+		writeError(w, http.StatusNotFound, msgs.T(lang, "err.notFound"))
+	case errors.Is(err, control.ErrNotFound):
+		writeError(w, http.StatusNotFound, msgs.T(lang, "err.fileNotFound"))
 	case errors.Is(err, control.ErrPathNotAllowed):
-		writeError(w, http.StatusForbidden, err.Error())
+		writeError(w, http.StatusForbidden, msgs.T(lang, "err.pathNotAllowed"))
 	case errors.Is(err, control.ErrTooLarge):
-		writeError(w, http.StatusRequestEntityTooLarge, err.Error())
+		writeError(w, http.StatusRequestEntityTooLarge, msgs.T(lang, "err.tooLarge"))
 	default:
 		writeError(w, http.StatusBadRequest, err.Error())
 	}

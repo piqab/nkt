@@ -18,6 +18,7 @@ import (
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/inventory"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -146,7 +147,7 @@ func (s *Server) Handler() http.Handler {
 			})
 
 			r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-				writeError(w, http.StatusNotFound, "Неизвестный метод API: "+r.URL.Path)
+				writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "server.unknownApiMethod", r.URL.Path))
 			})
 		})
 	})
@@ -179,7 +180,7 @@ func (s *Server) spaHandler() http.Handler {
 		}
 		index, err := fs.ReadFile(s.ui, "index.html")
 		if err != nil {
-			writeError(w, http.StatusNotFound, "Фронтенд не собран: запустите npm run build в каталоге web/")
+			writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "server.frontendNotBuilt"))
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")

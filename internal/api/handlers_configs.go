@@ -7,12 +7,13 @@ import (
 	"github.com/althq/netknownsthat/internal/auth"
 	"github.com/althq/netknownsthat/internal/control"
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 func (s *Server) handleConfigList(w http.ResponseWriter, r *http.Request) {
 	files, err := s.configs.List(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	// ConfigManager.List walks disk directly (live, for versioning/editing)
@@ -30,7 +31,7 @@ func (s *Server) handleConfigList(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleConfigBrowse(w http.ResponseWriter, r *http.Request) {
 	entries, err := s.configs.BrowseDir(r.URL.Query().Get("path"))
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
@@ -49,7 +50,7 @@ func (s *Server) handleConfigMkdir(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	if err := s.configs.Mkdir(req.Path); err != nil {
 		s.db.Audit(r.Context(), user, "config.mkdir", req.Path, "error", err.Error())
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "config.mkdir", req.Path, "ok", nil)
@@ -60,7 +61,7 @@ func (s *Server) handleConfigRead(w http.ResponseWriter, r *http.Request) {
 	path := r.URL.Query().Get("path")
 	file, err := s.configs.Read(path)
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, file)
@@ -87,12 +88,11 @@ func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
 	if req.Expected != "" {
 		current, err := s.configs.Read(req.Path)
 		if err != nil {
-			fail(w, err)
+			fail(w, r, err)
 			return
 		}
 		if current.SHA256 != req.Expected {
-			writeError(w, http.StatusConflict,
-				"Файл изменился с момента открытия в редакторе. Перечитайте его и повторите правку.")
+			writeError(w, http.StatusConflict, msgs.T(msgs.LangFromRequest(r), "configs.staleContent"))
 			return
 		}
 	}
@@ -112,7 +112,7 @@ func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleConfigBlocks(w http.ResponseWriter, r *http.Request) {
 	blocks, err := s.configs.ListBlocks(r.URL.Query().Get("path"))
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"blocks": blocks})
@@ -150,7 +150,7 @@ func (s *Server) handleConfigBlockWrite(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleConfigVersions(w http.ResponseWriter, r *http.Request) {
 	versions, err := s.configs.Versions(r.Context(), r.URL.Query().Get("path"), intParam(r, "limit", 100))
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"versions": versions})
@@ -159,12 +159,12 @@ func (s *Server) handleConfigVersions(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleConfigVersion(w http.ResponseWriter, r *http.Request) {
 	id, err := int64Path(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Некорректный номер версии")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "configs.invalidVersionNumber"))
 		return
 	}
 	version, content, err := s.configs.VersionContent(r.Context(), id)
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"version": version, "content": content})
@@ -173,12 +173,12 @@ func (s *Server) handleConfigVersion(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleConfigDiff(w http.ResponseWriter, r *http.Request) {
 	id, err := int64Path(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Некорректный номер версии")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "configs.invalidVersionNumber"))
 		return
 	}
 	diff, err := s.configs.Diff(r.Context(), id)
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"diff": diff})
@@ -191,7 +191,7 @@ type rollbackRequest struct {
 func (s *Server) handleConfigRollback(w http.ResponseWriter, r *http.Request) {
 	id, err := int64Path(r, "id")
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "Некорректный номер версии")
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "configs.invalidVersionNumber"))
 		return
 	}
 	var req rollbackRequest

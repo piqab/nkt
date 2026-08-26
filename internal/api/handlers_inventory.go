@@ -67,7 +67,7 @@ func auditFilter(r *http.Request) store.AuditFilter {
 func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 
@@ -92,7 +92,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 
 	statuses, err := s.db.TargetStatuses(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	up, down, uptimeSum, uptimeN := 0, 0, 0.0, 0
@@ -116,7 +116,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 
 	outages, err := s.db.RecentOutages(r.Context(), sinceParam(r, 24*time.Hour), 5)
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 
@@ -174,7 +174,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleInventory(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, snap)
@@ -184,7 +184,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.Scan(r.Context())
 	if err != nil {
 		s.db.Audit(r.Context(), auth.Username(r.Context()), "inventory.refresh", "", "error", err.Error())
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "inventory.refresh", "", "ok",
@@ -200,7 +200,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFindings(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	severity := r.URL.Query().Get("severity")
@@ -230,7 +230,7 @@ func (s *Server) handleFindings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, topology.Build(snap))
@@ -239,7 +239,7 @@ func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -251,7 +251,7 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -268,7 +268,7 @@ func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMisc(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	listeners := analyze.UndeclaredListeners(snap)
@@ -314,7 +314,7 @@ func (s *Server) handleKillProcess(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleInterfaces(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -325,7 +325,7 @@ func (s *Server) handleInterfaces(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFirewall(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	backend := r.URL.Query().Get("backend")
@@ -357,12 +357,12 @@ func (s *Server) handleFirewall(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFirewallNumbered(w http.ResponseWriter, r *http.Request) {
 	rules, err := s.firewall.NumberedRules(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	added, err := s.firewall.AddedRules(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"rules": rules, "added": added})
@@ -373,7 +373,7 @@ func (s *Server) handleFirewallNumbered(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleCertificates(w http.ResponseWriter, r *http.Request) {
 	snap, err := s.scanner.LatestOrScan(r.Context())
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 
@@ -407,7 +407,7 @@ func (s *Server) handleCertificates(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleSnapshots(w http.ResponseWriter, r *http.Request) {
 	list, err := s.db.ListSnapshots(r.Context(), intParam(r, "limit", 30))
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"snapshots": list})
@@ -416,7 +416,7 @@ func (s *Server) handleSnapshots(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 	entries, err := s.db.ListAudit(r.Context(), auditFilter(r))
 	if err != nil {
-		fail(w, err)
+		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})

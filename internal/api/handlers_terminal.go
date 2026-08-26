@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // handleTerminalWS opens a real login shell on this host and streams it
@@ -21,11 +22,11 @@ import (
 // able to spawn a real shell on whatever machine happens to be running it.
 func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	if !s.cfg.TerminalEnabled {
-		writeError(w, http.StatusForbidden, "веб-терминал выключен: задайте NKT_TERMINAL_ENABLED=true")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "terminal.disabled"))
 		return
 	}
 	if s.cfg.Mode == config.ModeFixtures {
-		writeError(w, http.StatusForbidden, "веб-терминал недоступен в режиме fixtures")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "terminal.fixturesDisabled"))
 		return
 	}
 
@@ -50,7 +51,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	// connect-to-an-existing-socket operation with none of that risk.
 	if r.URL.Query().Get("tmux") == "1" {
 		if err := s.ensureTmuxSession(r.Context()); err != nil {
-			writeError(w, http.StatusInternalServerError, "не удалось запустить tmux: "+err.Error())
+			writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "terminal.tmuxStartFailed", err.Error()))
 			return
 		}
 		argv = []string{"tmux", "attach-session", "-t", tmuxSessionName}

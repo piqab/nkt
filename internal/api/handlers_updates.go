@@ -6,6 +6,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // handleUpdatesWS runs `apt-get update && apt-get dist-upgrade` on this
@@ -36,11 +37,11 @@ import (
 // process that would just deadlock on apt's own lock file.
 func (s *Server) handleUpdatesWS(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Mode == config.ModeFixtures {
-		writeError(w, http.StatusForbidden, "обновление пакетов недоступно в режиме fixtures")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgUpdate.fixturesDisabled"))
 		return
 	}
 	if !collect.Which(r.Context(), s.scanner.Collector(), "apt-get") {
-		writeError(w, http.StatusForbidden, "apt-get не найден — обновление пакетов поддерживается только на Debian/Ubuntu")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgUpdate.aptGetMissing"))
 		return
 	}
 

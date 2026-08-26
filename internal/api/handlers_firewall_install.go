@@ -6,6 +6,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // handleUFWInstallWS runs `apt-get install -y ufw` on this host, streamed
@@ -18,16 +19,16 @@ import (
 // does, so there is nothing worth pausing for a prompt over.
 func (s *Server) handleUFWInstallWS(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Mode == config.ModeFixtures {
-		writeError(w, http.StatusForbidden, "установка пакетов недоступна в режиме fixtures")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.fixturesDisabled"))
 		return
 	}
 	c := s.scanner.Collector()
 	if !collect.Which(r.Context(), c, "apt-get") {
-		writeError(w, http.StatusForbidden, "apt-get не найден — установка пакетов поддерживается только на Debian/Ubuntu")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.aptGetMissing"))
 		return
 	}
 	if collect.Which(r.Context(), c, "ufw") {
-		writeError(w, http.StatusConflict, "ufw уже установлен")
+		writeError(w, http.StatusConflict, msgs.T(msgs.LangFromRequest(r), "pkgInstall.ufwAlreadyInstalled"))
 		return
 	}
 
@@ -54,16 +55,16 @@ func (s *Server) handleUFWInstallStatus(w http.ResponseWriter, r *http.Request) 
 // where it's the default and this button would rarely be needed at all).
 func (s *Server) handleFirewalldInstallWS(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.Mode == config.ModeFixtures {
-		writeError(w, http.StatusForbidden, "установка пакетов недоступна в режиме fixtures")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.fixturesDisabled"))
 		return
 	}
 	c := s.scanner.Collector()
 	if !collect.Which(r.Context(), c, "apt-get") {
-		writeError(w, http.StatusForbidden, "apt-get не найден — установка пакетов поддерживается только на Debian/Ubuntu")
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.aptGetMissing"))
 		return
 	}
 	if collect.Which(r.Context(), c, "firewall-cmd") {
-		writeError(w, http.StatusConflict, "firewalld уже установлен")
+		writeError(w, http.StatusConflict, msgs.T(msgs.LangFromRequest(r), "pkgInstall.firewalldAlreadyInstalled"))
 		return
 	}
 
