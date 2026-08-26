@@ -268,13 +268,19 @@ func rulePortConflicts(c *collector, s *model.Snapshot) {
 					Service:  x.Service,
 					Object:   fmt.Sprintf("%s:%d", x.Address, port),
 					Title:    fmt.Sprintf("Конфликт порта %d между %s и %s", port, x.Service, y.Service),
+					TitleKey: "finding.portConflict.title", TitleArgs: []any{port, x.Service, y.Service},
 					Detail: fmt.Sprintf("%s (%s, %s:%d) и %s (%s, %s:%d) объявляют один и тот же порт. "+
 						"Второй сервис не сможет занять сокет и будет падать при старте.",
 						x.Service, x.Label, x.Address, x.Port, y.Service, y.Label, y.Address, y.Port),
-					File:       x.File,
-					Line:       x.Line,
-					Suggestion: "Разведите сервисы по разным портам или адресам привязки.",
-					Refs:       []string{x.File, y.File},
+					DetailKey: "finding.portConflict.detail",
+					DetailArgs: []any{
+						x.Service, x.Label, x.Address, x.Port, y.Service, y.Label, y.Address, y.Port,
+					},
+					File:          x.File,
+					Line:          x.Line,
+					Suggestion:    "Разведите сервисы по разным портам или адресам привязки.",
+					SuggestionKey: "finding.portConflict.suggestion",
+					Refs:          []string{x.File, y.File},
 				})
 			}
 		}
@@ -344,12 +350,16 @@ func ruleDeclaredNotListening(c *collector, s *model.Snapshot, idx *index) {
 			Service:  e.Service,
 			Object:   e.Socket(),
 			Title:    fmt.Sprintf("Порт %d объявлен в конфиге, но никто его не слушает", e.Port),
+			TitleKey: "finding.declaredNotListening.title", TitleArgs: []any{e.Port},
 			Detail: fmt.Sprintf("%s (%s) объявляет %s, но в выводе ss такого слушателя нет. "+
 				"Либо конфиг не применён (нужен reload), либо сервис не смог занять порт.",
 				e.Service, e.Label, e.Socket()),
-			File:       e.File,
-			Line:       e.Line,
-			Suggestion: fmt.Sprintf("Проверьте, применён ли конфиг: перезагрузите %s и посмотрите журнал.", e.Service),
+			DetailKey:     "finding.declaredNotListening.detail",
+			DetailArgs:    []any{e.Service, e.Label, e.Socket()},
+			File:          e.File,
+			Line:          e.Line,
+			Suggestion:    fmt.Sprintf("Проверьте, применён ли конфиг: перезагрузите %s и посмотрите журнал.", e.Service),
+			SuggestionKey: "finding.declaredNotListening.suggestion", SuggestionArgs: []any{e.Service},
 		})
 	}
 }
@@ -386,19 +396,25 @@ func ruleListeningNotDeclared(c *collector, s *model.Snapshot, idx *index) {
 		severity := model.SeverityInfo
 		detail := fmt.Sprintf("Процесс %s слушает %s:%d, но этот порт не описан ни в одном из разобранных конфигов.",
 			l.Process, l.Address, l.Port)
+		detailKey := "finding.listeningNotDeclared.detail"
 		if l.Public() {
 			severity = model.SeverityMedium
 			detail += " Сокет открыт на всех интерфейсах."
+			detailKey = "finding.listeningNotDeclared.detailPublic"
 		}
 		c.add(model.Finding{
-			Rule:       "listening-not-declared",
-			ID:         fmt.Sprintf("listening-not-declared:%s:%d", l.Address, l.Port),
-			Severity:   severity,
-			Service:    model.ServiceHost,
-			Object:     fmt.Sprintf("%s:%d", l.Address, l.Port),
-			Title:      fmt.Sprintf("Неучтённый слушатель на порту %d (%s)", l.Port, l.Process),
-			Detail:     detail,
-			Suggestion: "Убедитесь, что сервис нужен, и опишите его в конфигурации или закройте порт.",
+			Rule:     "listening-not-declared",
+			ID:       fmt.Sprintf("listening-not-declared:%s:%d", l.Address, l.Port),
+			Severity: severity,
+			Service:  model.ServiceHost,
+			Object:   fmt.Sprintf("%s:%d", l.Address, l.Port),
+			Title:    fmt.Sprintf("Неучтённый слушатель на порту %d (%s)", l.Port, l.Process),
+			TitleKey: "finding.listeningNotDeclared.title", TitleArgs: []any{l.Port, l.Process},
+			Detail:        detail,
+			DetailKey:     detailKey,
+			DetailArgs:    []any{l.Process, l.Address, l.Port},
+			Suggestion:    "Убедитесь, что сервис нужен, и опишите его в конфигурации или закройте порт.",
+			SuggestionKey: "finding.listeningNotDeclared.suggestion",
 		})
 	}
 }
@@ -415,10 +431,13 @@ func ruleFirewallDefaultPolicy(c *collector, s *model.Snapshot, idx *index) {
 			Service:  model.ServiceIptables,
 			Object:   "filter/INPUT",
 			Title:    "Политика INPUT по умолчанию — ACCEPT, менеджер firewall не активен",
+			TitleKey: "finding.noDefaultDeny.title",
 			Detail: "Входящий трафик разрешён по умолчанию: любой открытый порт доступен извне " +
 				"вне зависимости от того, планировали вы это или нет.",
+			DetailKey: "finding.noDefaultDeny.detail",
 			Suggestion: "Включите ufw (ufw default deny incoming) или firewalld, либо задайте " +
 				"iptables -P INPUT DROP и явно разрешите нужные порты.",
+			SuggestionKey: "finding.noDefaultDeny.suggestion",
 		})
 	}
 }
@@ -444,12 +463,16 @@ func rulePublicPortWithoutRule(c *collector, s *model.Snapshot, idx *index) {
 			Service:  e.Service,
 			Object:   e.Socket(),
 			Title:    fmt.Sprintf("Порт %d открыт сервисом, но закрыт firewall", e.Port),
+			TitleKey: "finding.publicPortBlocked.title", TitleArgs: []any{e.Port},
 			Detail: fmt.Sprintf("%s (%s) слушает %s на всех интерфейсах, но правил, разрешающих "+
 				"входящий трафик на этот порт, нет, а политика INPUT — %s. Снаружи сервис недоступен.",
 				e.Service, e.Label, e.Socket(), idx.inputPolicy),
-			File:       e.File,
-			Line:       e.Line,
-			Suggestion: fmt.Sprintf("Если сервис должен быть доступен: ufw allow %d/tcp.", e.Port),
+			DetailKey:     "finding.publicPortBlocked.detail",
+			DetailArgs:    []any{e.Service, e.Label, e.Socket(), idx.inputPolicy},
+			File:          e.File,
+			Line:          e.Line,
+			Suggestion:    fmt.Sprintf("Если сервис должен быть доступен: ufw allow %d/tcp.", e.Port),
+			SuggestionKey: "finding.publicPortBlocked.suggestion", SuggestionArgs: []any{e.Port},
 		})
 	}
 }
@@ -465,9 +488,13 @@ func ruleDockerBypassesFirewall(c *collector, s *model.Snapshot, idx *index) {
 			}
 			severity := model.SeverityHigh
 			extra := ""
+			detailKey := "finding.dockerBypassesFirewall.detail"
+			detailArgs := []any{p.HostPort}
 			if name, ok := sensitivePorts[p.HostPort]; ok {
 				severity = model.SeverityCritical
 				extra = fmt.Sprintf(" На этом порту работает %s — публиковать его наружу почти наверняка не нужно.", name)
+				detailKey = "finding.dockerBypassesFirewall.detailSensitive"
+				detailArgs = []any{p.HostPort, name}
 			}
 			c.add(model.Finding{
 				Rule:     "docker-bypasses-firewall",
@@ -477,12 +504,16 @@ func ruleDockerBypassesFirewall(c *collector, s *model.Snapshot, idx *index) {
 				Object:   fmt.Sprintf("%s:%d", ct.Name, p.HostPort),
 				Title: fmt.Sprintf("Контейнер %s публикует порт %d на 0.0.0.0 в обход firewall",
 					ct.Name, p.HostPort),
+				TitleKey: "finding.dockerBypassesFirewall.title", TitleArgs: []any{ct.Name, p.HostPort},
 				Detail: fmt.Sprintf("Docker добавляет правила DNAT в цепочку PREROUTING/FORWARD, "+
 					"поэтому опубликованный порт %d не проходит через INPUT и не закрывается правилами ufw.%s",
 					p.HostPort, extra),
-				File: ct.ComposeFile,
+				DetailKey:  detailKey,
+				DetailArgs: detailArgs,
+				File:       ct.ComposeFile,
 				Suggestion: fmt.Sprintf("Привяжите публикацию к localhost (\"127.0.0.1:%d:%d\") "+
 					"или используйте цепочку DOCKER-USER для фильтрации.", p.HostPort, p.ContainerPort),
+				SuggestionKey: "finding.dockerBypassesFirewall.suggestion", SuggestionArgs: []any{p.HostPort, p.ContainerPort},
 			})
 		}
 	}
@@ -527,19 +558,25 @@ func ruleStaleFirewallRules(c *collector, s *model.Snapshot, idx *index) {
 		r := best[port].rule
 		detail := fmt.Sprintf("Правило разрешает входящий трафик на порт %d, но на хосте нет "+
 			"процесса, который его слушает.", port)
+		detailKey := "finding.staleFirewallRule.detail"
 		if r.Packets == 0 {
 			detail += " Счётчик правила равен нулю — трафика по нему не было."
+			detailKey = "finding.staleFirewallRule.detailZeroPackets"
 		}
 		c.add(model.Finding{
-			Rule:       "stale-firewall-rule",
-			ID:         fmt.Sprintf("stale-firewall-rule:%d", port),
-			Severity:   model.SeverityLow,
-			Service:    model.ServiceIptables,
-			Object:     fmt.Sprintf("%s %d/tcp", r.Backend, port),
-			Title:      fmt.Sprintf("Правило firewall для порта %d не используется", port),
-			Detail:     detail,
-			Suggestion: fmt.Sprintf("Удалите правило, если сервис больше не нужен: ufw delete allow %d/tcp.", port),
-			Refs:       []string{r.Raw},
+			Rule:     "stale-firewall-rule",
+			ID:       fmt.Sprintf("stale-firewall-rule:%d", port),
+			Severity: model.SeverityLow,
+			Service:  model.ServiceIptables,
+			Object:   fmt.Sprintf("%s %d/tcp", r.Backend, port),
+			Title:    fmt.Sprintf("Правило firewall для порта %d не используется", port),
+			TitleKey: "finding.staleFirewallRule.title", TitleArgs: []any{port},
+			Detail:        detail,
+			DetailKey:     detailKey,
+			DetailArgs:    []any{port},
+			Suggestion:    fmt.Sprintf("Удалите правило, если сервис больше не нужен: ufw delete allow %d/tcp.", port),
+			SuggestionKey: "finding.staleFirewallRule.suggestion", SuggestionArgs: []any{port},
+			Refs: []string{r.Raw},
 		})
 	}
 }
@@ -557,9 +594,11 @@ func ruleSensitivePortsPublic(c *collector, s *model.Snapshot, idx *index) {
 			(idx.inputPolicy == "ACCEPT" && !s.Firewall.AnyManagerActive())
 		severity := model.SeverityHigh
 		suffix := ""
+		detailKey := "finding.sensitivePortPublic.detail"
 		if reachable {
 			severity = model.SeverityCritical
 			suffix = " Порт при этом не закрыт правилами firewall."
+			detailKey = "finding.sensitivePortPublic.detailReachable"
 		}
 		c.add(model.Finding{
 			Rule:     "sensitive-port-public",
@@ -568,10 +607,14 @@ func ruleSensitivePortsPublic(c *collector, s *model.Snapshot, idx *index) {
 			Service:  model.ServiceHost,
 			Object:   fmt.Sprintf("0.0.0.0:%d", l.Port),
 			Title:    fmt.Sprintf("%s слушает порт %d на всех интерфейсах", name, l.Port),
+			TitleKey: "finding.sensitivePortPublic.title", TitleArgs: []any{name, l.Port},
 			Detail: fmt.Sprintf("Процесс %s принимает подключения на 0.0.0.0:%d.%s Такие сервисы обычно "+
 				"не рассчитаны на публичный доступ и не имеют собственной защиты от перебора.",
 				l.Process, l.Port, suffix),
-			Suggestion: "Привяжите сервис к 127.0.0.1 или к внутренней сети и закройте порт на firewall.",
+			DetailKey:     detailKey,
+			DetailArgs:    []any{l.Process, l.Port},
+			Suggestion:    "Привяжите сервис к 127.0.0.1 или к внутренней сети и закройте порт на firewall.",
+			SuggestionKey: "finding.sensitivePortPublic.suggestion",
 		})
 	}
 }
@@ -592,16 +635,20 @@ func ruleTLS(c *collector, s *model.Snapshot) {
 		}
 		if len(weak) > 0 {
 			c.add(model.Finding{
-				Rule:       "weak-tls",
-				ID:         "weak-tls:" + e.ID,
-				Severity:   model.SeverityMedium,
-				Service:    e.Service,
-				Object:     e.Socket(),
-				Title:      "Включены устаревшие версии TLS: " + strings.Join(weak, ", "),
-				Detail:     fmt.Sprintf("ssl_protocols = %q. Эти версии считаются небезопасными и отключены в современных браузерах.", protocols),
-				File:       e.File,
-				Line:       e.Line,
-				Suggestion: "Оставьте только TLSv1.2 и TLSv1.3: ssl_protocols TLSv1.2 TLSv1.3;",
+				Rule:     "weak-tls",
+				ID:       "weak-tls:" + e.ID,
+				Severity: model.SeverityMedium,
+				Service:  e.Service,
+				Object:   e.Socket(),
+				Title:    "Включены устаревшие версии TLS: " + strings.Join(weak, ", "),
+				TitleKey: "finding.weakTLS.title", TitleArgs: []any{strings.Join(weak, ", ")},
+				Detail:        fmt.Sprintf("ssl_protocols = %q. Эти версии считаются небезопасными и отключены в современных браузерах.", protocols),
+				DetailKey:     "finding.weakTLS.detail",
+				DetailArgs:    []any{protocols},
+				File:          e.File,
+				Line:          e.Line,
+				Suggestion:    "Оставьте только TLSv1.2 и TLSv1.3: ssl_protocols TLSv1.2 TLSv1.3;",
+				SuggestionKey: "finding.weakTLS.suggestion",
 			})
 		}
 	}
@@ -611,16 +658,19 @@ func ruleTLS(c *collector, s *model.Snapshot) {
 		}
 		if e.Extra["hsts"] == "" {
 			c.add(model.Finding{
-				Rule:       "missing-hsts",
-				ID:         "missing-hsts:" + e.ID,
-				Severity:   model.SeverityLow,
-				Service:    e.Service,
-				Object:     e.Socket(),
-				Title:      fmt.Sprintf("Нет заголовка HSTS на %s", e.Label),
-				Detail:     "TLS-сервер не отдаёт Strict-Transport-Security, поэтому клиент может быть возвращён на http.",
-				File:       e.File,
-				Line:       e.Line,
-				Suggestion: `add_header Strict-Transport-Security "max-age=31536000" always;`,
+				Rule:     "missing-hsts",
+				ID:       "missing-hsts:" + e.ID,
+				Severity: model.SeverityLow,
+				Service:  e.Service,
+				Object:   e.Socket(),
+				Title:    fmt.Sprintf("Нет заголовка HSTS на %s", e.Label),
+				TitleKey: "finding.missingHSTS.title", TitleArgs: []any{e.Label},
+				Detail:        "TLS-сервер не отдаёт Strict-Transport-Security, поэтому клиент может быть возвращён на http.",
+				DetailKey:     "finding.missingHSTS.detail",
+				File:          e.File,
+				Line:          e.Line,
+				Suggestion:    `add_header Strict-Transport-Security "max-age=31536000" always;`,
+				SuggestionKey: "finding.missingHSTS.suggestion",
 			})
 		}
 		if e.Extra["tls_cert_missing"] == "yes" {
@@ -631,11 +681,14 @@ func ruleTLS(c *collector, s *model.Snapshot) {
 				Service:  e.Service,
 				Object:   e.Socket(),
 				Title:    fmt.Sprintf("listen ... ssl без ssl_certificate на %s", e.Label),
-				Detail:   "Слушатель объявлен как TLS, но сертификат в блоке не задан — nginx не запустится.",
-				File:     e.File,
-				Line:     e.Line,
+				TitleKey: "finding.tlsCertMissing.title", TitleArgs: []any{e.Label},
+				Detail:    "Слушатель объявлен как TLS, но сертификат в блоке не задан — nginx не запустится.",
+				DetailKey: "finding.tlsCertMissing.detail",
+				File:      e.File,
+				Line:      e.Line,
 				Suggestion: "Добавьте ssl_certificate и ssl_certificate_key — быстрый способ получить " +
 					"файлы: сгенерировать самоподписанный сертификат на странице «Сертификаты».",
+				SuggestionKey: "finding.tlsCertMissing.suggestion",
 			})
 		}
 	}
@@ -666,15 +719,25 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Service:  cert.Service,
 				Object:   cert.Path,
 				Title:    "Сертификат не читается: " + certLabel(cert),
+				TitleKey: "finding.tlsCertUnreadable.title", TitleArgs: []any{certLabel(cert)},
 				Detail: fmt.Sprintf("%s указан в конфигурации для %s, но прочитать его не удалось: %s. "+
 					"Если файла действительно нет, сервис не поднимет TLS-слушатель.",
 					cert.Path, where, cert.Error),
-				File:       cert.Path,
-				Suggestion: "Проверьте путь и права доступа, при необходимости выпустите сертификат заново.",
+				// cert.Error itself travels as an opaque arg here (not
+				// resolved against its own ErrorKey/ErrorArgs) — nesting one
+				// key's resolved output as another key's arg isn't something
+				// model.LocalizeSnapshot supports, same tradeoff as certs.go's
+				// markDerivedCertbotCerts detail (see internal/parse).
+				DetailKey:     "finding.tlsCertUnreadable.detail",
+				DetailArgs:    []any{cert.Path, where, cert.Error},
+				File:          cert.Path,
+				Suggestion:    "Проверьте путь и права доступа, при необходимости выпустите сертификат заново.",
+				SuggestionKey: "finding.tlsCertUnreadable.suggestion",
 			})
 			continue
 		}
 
+		renewSuggestText, renewSuggestRef := renewalSuggestion(cert)
 		switch {
 		case cert.DaysLeft < 0:
 			c.add(model.Finding{
@@ -685,11 +748,16 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Object:   cert.Path,
 				Title: fmt.Sprintf("Сертификат %s просрочен на %d дн.",
 					strings.Join(cert.Names, ", "), -cert.DaysLeft),
+				TitleKey: "finding.tlsCertExpired.title", TitleArgs: []any{strings.Join(cert.Names, ", "), -cert.DaysLeft},
 				Detail: fmt.Sprintf("Срок действия истёк %s. Обслуживает %s. "+
 					"Браузеры показывают ошибку и не пускают пользователей дальше.",
 					cert.NotAfter.Local().Format("02.01.2006"), where),
-				File:       cert.Path,
-				Suggestion: renewalSuggestion(cert),
+				DetailKey:      "finding.tlsCertExpired.detail",
+				DetailArgs:     []any{cert.NotAfter.Local().Format("02.01.2006"), where},
+				File:           cert.Path,
+				Suggestion:     renewSuggestText,
+				SuggestionKey:  renewSuggestRef.Key,
+				SuggestionArgs: renewSuggestRef.Args,
 			})
 		case cert.DaysLeft <= certCriticalDays:
 			c.add(model.Finding{
@@ -700,10 +768,18 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Object:   cert.Path,
 				Title: fmt.Sprintf("Сертификат %s истекает через %d дн.",
 					strings.Join(cert.Names, ", "), cert.DaysLeft),
+				TitleKey: "finding.tlsCertExpiring.title", TitleArgs: []any{strings.Join(cert.Names, ", "), cert.DaysLeft},
 				Detail: fmt.Sprintf("Действителен до %s, обслуживает %s. %s",
 					cert.NotAfter.Local().Format("02.01.2006 15:04"), where, renewalState(cert)),
-				File:       cert.Path,
-				Suggestion: renewalSuggestion(cert),
+				// renewalState(cert) is itself Russian prose composed from
+				// cert.Renewal.Detail — travels as an opaque arg, same
+				// nesting tradeoff as tls-cert-unreadable above.
+				DetailKey:      "finding.tlsCertExpiring.detailWithTime",
+				DetailArgs:     []any{cert.NotAfter.Local().Format("02.01.2006 15:04"), where, renewalState(cert)},
+				File:           cert.Path,
+				Suggestion:     renewSuggestText,
+				SuggestionKey:  renewSuggestRef.Key,
+				SuggestionArgs: renewSuggestRef.Args,
 			})
 		case cert.DaysLeft <= certWarnDays:
 			c.add(model.Finding{
@@ -714,10 +790,15 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Object:   cert.Path,
 				Title: fmt.Sprintf("Сертификат %s истекает через %d дн.",
 					strings.Join(cert.Names, ", "), cert.DaysLeft),
+				TitleKey: "finding.tlsCertExpiring.title", TitleArgs: []any{strings.Join(cert.Names, ", "), cert.DaysLeft},
 				Detail: fmt.Sprintf("Действителен до %s, обслуживает %s. %s",
 					cert.NotAfter.Local().Format("02.01.2006"), where, renewalState(cert)),
-				File:       cert.Path,
-				Suggestion: renewalSuggestion(cert),
+				DetailKey:      "finding.tlsCertExpiring.detail",
+				DetailArgs:     []any{cert.NotAfter.Local().Format("02.01.2006"), where, renewalState(cert)},
+				File:           cert.Path,
+				Suggestion:     renewSuggestText,
+				SuggestionKey:  renewSuggestRef.Key,
+				SuggestionArgs: renewSuggestRef.Args,
 			})
 		}
 
@@ -729,11 +810,15 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Service:  cert.Service,
 				Object:   cert.Path,
 				Title:    "Сертификат ещё не вступил в силу: " + certLabel(cert),
+				TitleKey: "finding.tlsCertNotYetValid.title", TitleArgs: []any{certLabel(cert)},
 				Detail: fmt.Sprintf("Действителен только с %s. Обычно это значит, что часы на хосте "+
 					"отстают или сертификат выпущен «на будущее».",
 					cert.NotBefore.Local().Format("02.01.2006 15:04")),
-				File:       cert.Path,
-				Suggestion: "Проверьте системное время и дату выпуска сертификата.",
+				DetailKey:     "finding.tlsCertNotYetValid.detail",
+				DetailArgs:    []any{cert.NotBefore.Local().Format("02.01.2006 15:04")},
+				File:          cert.Path,
+				Suggestion:    "Проверьте системное время и дату выпуска сертификата.",
+				SuggestionKey: "finding.tlsCertNotYetValid.suggestion",
 			})
 		}
 
@@ -747,24 +832,35 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Service:  cert.Service,
 				Object:   cert.Path,
 				Title:    "Автообновление сертификата не запускается: " + certLabel(cert),
-				Detail:   cert.Renewal.Detail,
-				File:     cert.Path,
+				TitleKey: "finding.tlsCertRenewalNotAutomatic.title", TitleArgs: []any{certLabel(cert)},
+				// Detail is cert.Renewal.Detail verbatim — forwarding its own
+				// Key/Args (set in internal/parse) resolves it the same way,
+				// no new catalog entry needed.
+				Detail:     cert.Renewal.Detail,
+				DetailKey:  cert.Renewal.DetailKey,
+				DetailArgs: cert.Renewal.DetailArgs,
+				File:       cert.Path,
 				Suggestion: "Включите таймер: systemctl enable --now certbot.timer — " +
 					"либо добавьте задание cron.",
+				SuggestionKey: "finding.tlsCertRenewalNotAutomatic.suggestion",
 			})
 		}
 		if !cert.Renewal.Managed && cert.Renewal.Tool == "certbot" {
 			c.add(model.Finding{
-				Rule:     "tls-cert-orphan-lineage",
-				ID:       "tls-cert-orphan-lineage:" + cert.Path,
-				Severity: model.SeverityHigh,
-				Service:  cert.Service,
-				Object:   cert.Path,
-				Title:    "Сертификат certbot остался без файла обновления",
-				Detail:   cert.Renewal.Detail,
-				File:     cert.Path,
+				Rule:       "tls-cert-orphan-lineage",
+				ID:         "tls-cert-orphan-lineage:" + cert.Path,
+				Severity:   model.SeverityHigh,
+				Service:    cert.Service,
+				Object:     cert.Path,
+				Title:      "Сертификат certbot остался без файла обновления",
+				TitleKey:   "finding.tlsCertOrphanLineage.title",
+				Detail:     cert.Renewal.Detail, // see the forwarding note above
+				DetailKey:  cert.Renewal.DetailKey,
+				DetailArgs: cert.Renewal.DetailArgs,
+				File:       cert.Path,
 				Suggestion: "Выпустите сертификат заново через certbot certonly, " +
 					"чтобы восстановить запись обновления.",
+				SuggestionKey: "finding.tlsCertOrphanLineage.suggestion",
 			})
 		}
 
@@ -780,13 +876,20 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Service:  cert.Service,
 				Object:   cert.Path,
 				Title:    "На сокете отдаётся другой сертификат, чем указан в конфиге",
+				TitleKey: "finding.tlsCertNotReloaded.title",
 				Detail: fmt.Sprintf("Файл %s не совпадает с тем, что реально отдаёт %s при TLS-подключении: "+
 					"на сокете сертификат с серийным номером %s, действителен до %s. Обычно это значит, "+
 					"что файл на диске обновили (например, certbot renew), а сервис не перечитал конфигурацию.",
 					cert.Path, cert.Serving.Endpoint, cert.Serving.ServedSerial,
 					cert.Serving.ServedNotAfter.Local().Format("02.01.2006")),
-				File:       cert.Path,
-				Suggestion: fmt.Sprintf("Перезагрузите %s, чтобы он подхватил актуальный сертификат.", cert.Service),
+				DetailKey: "finding.tlsCertNotReloaded.detail",
+				DetailArgs: []any{
+					cert.Path, cert.Serving.Endpoint, cert.Serving.ServedSerial,
+					cert.Serving.ServedNotAfter.Local().Format("02.01.2006"),
+				},
+				File:          cert.Path,
+				Suggestion:    fmt.Sprintf("Перезагрузите %s, чтобы он подхватил актуальный сертификат.", cert.Service),
+				SuggestionKey: "finding.tlsCertNotReloaded.suggestion", SuggestionArgs: []any{cert.Service},
 			})
 		}
 
@@ -798,11 +901,15 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Service:  cert.Service,
 				Object:   cert.Path,
 				Title:    "Самоподписанный сертификат на " + where,
+				TitleKey: "finding.tlsCertSelfSigned.title", TitleArgs: []any{where},
 				Detail: fmt.Sprintf("Издатель совпадает с субъектом (%s). Такому сертификату не доверяет "+
 					"ни один браузер; для внутренних сервисов это допустимо, для публичных — нет.",
 					cert.Subject),
-				File:       cert.Path,
-				Suggestion: "Для публичного сервиса выпустите сертификат в доверенном центре.",
+				DetailKey:     "finding.tlsCertSelfSigned.detail",
+				DetailArgs:    []any{cert.Subject},
+				File:          cert.Path,
+				Suggestion:    "Для публичного сервиса выпустите сертификат в доверенном центре.",
+				SuggestionKey: "finding.tlsCertSelfSigned.suggestion",
 			})
 		}
 
@@ -814,10 +921,14 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Service:  cert.Service,
 				Object:   cert.Path,
 				Title:    fmt.Sprintf("Слабый ключ RSA %d бит", cert.KeyBits),
+				TitleKey: "finding.tlsCertWeakKey.title", TitleArgs: []any{cert.KeyBits},
 				Detail: fmt.Sprintf("Сертификат %s использует ключ короче %d бит. "+
 					"Современные клиенты такие соединения отклоняют.", cert.Path, minRSABits),
-				File:       cert.Path,
-				Suggestion: "Перевыпустите сертификат с ключом RSA 2048+ или ECDSA P-256.",
+				DetailKey:     "finding.tlsCertWeakKey.detail",
+				DetailArgs:    []any{cert.Path, minRSABits},
+				File:          cert.Path,
+				Suggestion:    "Перевыпустите сертификат с ключом RSA 2048+ или ECDSA P-256.",
+				SuggestionKey: "finding.tlsCertWeakKey.suggestion",
 			})
 		}
 
@@ -829,10 +940,13 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Service:  cert.Service,
 				Object:   cert.Path,
 				Title:    "Устаревший алгоритм подписи: " + cert.SigAlgorithm,
+				TitleKey: "finding.tlsCertWeakSignature.title", TitleArgs: []any{cert.SigAlgorithm},
 				Detail: "Подписи на основе SHA-1 и MD5 считаются небезопасными и не принимаются " +
 					"современными браузерами.",
-				File:       cert.Path,
-				Suggestion: "Перевыпустите сертификат с подписью SHA-256 или сильнее.",
+				DetailKey:     "finding.tlsCertWeakSignature.detail",
+				File:          cert.Path,
+				Suggestion:    "Перевыпустите сертификат с подписью SHA-256 или сильнее.",
+				SuggestionKey: "finding.tlsCertWeakSignature.suggestion",
 			})
 		}
 
@@ -849,11 +963,15 @@ func ruleCertificates(c *collector, s *model.Snapshot) {
 				Service:  cert.Service,
 				Object:   site,
 				Title:    fmt.Sprintf("Сертификат не покрывает имя %s", site),
+				TitleKey: "finding.tlsCertNameMismatch.title", TitleArgs: []any{site},
 				Detail: fmt.Sprintf("Сервер отвечает на %s, но сертификат %s выписан на %s. "+
 					"Клиент увидит предупреждение о несоответствии имени.",
 					site, cert.Path, strings.Join(cert.Names, ", ")),
-				File:       cert.Path,
-				Suggestion: fmt.Sprintf("Добавьте %s в SAN сертификата или используйте отдельный сертификат.", site),
+				DetailKey:     "finding.tlsCertNameMismatch.detail",
+				DetailArgs:    []any{site, cert.Path, strings.Join(cert.Names, ", ")},
+				File:          cert.Path,
+				Suggestion:    fmt.Sprintf("Добавьте %s в SAN сертификата или используйте отдельный сертификат.", site),
+				SuggestionKey: "finding.tlsCertNameMismatch.suggestion", SuggestionArgs: []any{site},
 			})
 		}
 	}
@@ -871,12 +989,14 @@ func renewalState(cert model.Certificate) string {
 	}
 }
 
-func renewalSuggestion(cert model.Certificate) string {
+func renewalSuggestion(cert model.Certificate) (string, model.TextRef) {
 	if cert.Renewal.Tool == "certbot" {
-		return "Продлите сейчас: certbot renew --cert-name " + lineageOf(cert.Path) +
-			", затем перезагрузите сервис."
+		lineage := lineageOf(cert.Path)
+		return "Продлите сейчас: certbot renew --cert-name " + lineage + ", затем перезагрузите сервис.",
+			model.TextRef{Key: "finding.renewalSuggestionCertbot", Args: []any{lineage}}
 	}
-	return "Выпустите и установите новый сертификат, затем перезагрузите сервис."
+	return "Выпустите и установите новый сертификат, затем перезагрузите сервис.",
+		model.TextRef{Key: "finding.renewalSuggestionManual"}
 }
 
 // lineageOf extracts the certbot lineage name from a live path.
@@ -935,13 +1055,17 @@ func rulePlaintextProxy(c *collector, s *model.Snapshot) {
 			Service:  e.Service,
 			Object:   e.Socket(),
 			Title:    fmt.Sprintf("%s проксирует трафик по HTTP без TLS", e.Label),
+			TitleKey: "finding.publicPlaintextProxy.title", TitleArgs: []any{e.Label},
 			Detail: fmt.Sprintf("Слушатель %s принимает запросы на всех интерфейсах без шифрования "+
 				"и передаёт их дальше. Заголовки, cookie и токены идут открытым текстом.", e.Socket()),
-			File: e.File,
-			Line: e.Line,
+			DetailKey:  "finding.publicPlaintextProxy.detail",
+			DetailArgs: []any{e.Socket()},
+			File:       e.File,
+			Line:       e.Line,
 			Suggestion: "Переведите сервис на https (для быстрого теста можно сгенерировать " +
 				"самоподписанный сертификат на странице «Сертификаты») или оставьте на 80 только " +
 				"редирект на https.",
+			SuggestionKey: "finding.publicPlaintextProxy.suggestion",
 		})
 	}
 }
@@ -963,11 +1087,15 @@ func ruleUpstreams(c *collector, s *model.Snapshot, idx *index) {
 				Service:  e.Service,
 				Object:   r.Target,
 				Title:    fmt.Sprintf("Ссылка на несуществующий upstream %q", r.Target),
+				TitleKey: "finding.upstreamUndefined.title", TitleArgs: []any{r.Target},
 				Detail: fmt.Sprintf("Маршрут %q в %s указывает на пул %q, но такой пул не определён.",
 					r.Match, e.Label, r.Target),
-				File:       r.File,
-				Line:       r.Line,
-				Suggestion: "Проверьте имя пула или добавьте соответствующий блок upstream/backend.",
+				DetailKey:     "finding.upstreamUndefined.detail",
+				DetailArgs:    []any{r.Match, e.Label, r.Target},
+				File:          r.File,
+				Line:          r.Line,
+				Suggestion:    "Проверьте имя пула или добавьте соответствующий блок upstream/backend.",
+				SuggestionKey: "finding.upstreamUndefined.suggestion",
 			})
 		}
 	}
@@ -977,16 +1105,19 @@ func ruleUpstreams(c *collector, s *model.Snapshot, idx *index) {
 
 		if !idx.upstreamUsed[u.Service+"|"+u.Name] {
 			c.add(model.Finding{
-				Rule:       "upstream-orphan",
-				ID:         "upstream-orphan:" + u.ID,
-				Severity:   model.SeverityLow,
-				Service:    u.Service,
-				Object:     u.Name,
-				Title:      fmt.Sprintf("Пул %q объявлен, но нигде не используется", u.Name),
-				Detail:     "Ни один маршрут не ссылается на этот пул — вероятно, остаток от прошлой конфигурации.",
-				File:       u.File,
-				Line:       u.Line,
-				Suggestion: "Удалите неиспользуемый блок или подключите его к нужному маршруту.",
+				Rule:     "upstream-orphan",
+				ID:       "upstream-orphan:" + u.ID,
+				Severity: model.SeverityLow,
+				Service:  u.Service,
+				Object:   u.Name,
+				Title:    fmt.Sprintf("Пул %q объявлен, но нигде не используется", u.Name),
+				TitleKey: "finding.upstreamOrphan.title", TitleArgs: []any{u.Name},
+				Detail:        "Ни один маршрут не ссылается на этот пул — вероятно, остаток от прошлой конфигурации.",
+				DetailKey:     "finding.upstreamOrphan.detail",
+				File:          u.File,
+				Line:          u.Line,
+				Suggestion:    "Удалите неиспользуемый блок или подключите его к нужному маршруту.",
+				SuggestionKey: "finding.upstreamOrphan.suggestion",
 			})
 		}
 
@@ -1005,11 +1136,15 @@ func ruleUpstreams(c *collector, s *model.Snapshot, idx *index) {
 				Service:  u.Service,
 				Object:   fmt.Sprintf("%s -> %s", u.Name, srv.Socket()),
 				Title:    fmt.Sprintf("Backend %s пула %q не слушает порт", srv.Socket(), u.Name),
+				TitleKey: "finding.upstreamMemberDown.title", TitleArgs: []any{srv.Socket(), u.Name},
 				Detail: fmt.Sprintf("Пул %q отправляет трафик на %s, но локально этот порт никем не занят. "+
 					"Запросы будут завершаться ошибкой 502/504.", u.Name, srv.Socket()),
-				File:       u.File,
-				Line:       u.Line,
-				Suggestion: "Поднимите сервис на этом порту или уберите его из пула.",
+				DetailKey:     "finding.upstreamMemberDown.detail",
+				DetailArgs:    []any{u.Name, srv.Socket()},
+				File:          u.File,
+				Line:          u.Line,
+				Suggestion:    "Поднимите сервис на этом порту или уберите его из пула.",
+				SuggestionKey: "finding.upstreamMemberDown.suggestion",
 			})
 		}
 
@@ -1021,30 +1156,36 @@ func ruleUpstreams(c *collector, s *model.Snapshot, idx *index) {
 		}
 		if active == 1 && len(u.Servers) == 1 {
 			c.add(model.Finding{
-				Rule:       "single-backend",
-				ID:         "single-backend:" + u.ID,
-				Severity:   model.SeverityInfo,
-				Service:    u.Service,
-				Object:     u.Name,
-				Title:      fmt.Sprintf("В пуле %q один сервер — нет резерва", u.Name),
-				Detail:     "Отказ единственного backend приведёт к полной недоступности маршрута.",
-				File:       u.File,
-				Line:       u.Line,
-				Suggestion: "Добавьте второй сервер или явный backup.",
+				Rule:     "single-backend",
+				ID:       "single-backend:" + u.ID,
+				Severity: model.SeverityInfo,
+				Service:  u.Service,
+				Object:   u.Name,
+				Title:    fmt.Sprintf("В пуле %q один сервер — нет резерва", u.Name),
+				TitleKey: "finding.singleBackend.title", TitleArgs: []any{u.Name},
+				Detail:        "Отказ единственного backend приведёт к полной недоступности маршрута.",
+				DetailKey:     "finding.singleBackend.detail",
+				File:          u.File,
+				Line:          u.Line,
+				Suggestion:    "Добавьте второй сервер или явный backup.",
+				SuggestionKey: "finding.singleBackend.suggestion",
 			})
 		}
 		if active == 0 && len(u.Servers) > 0 {
 			c.add(model.Finding{
-				Rule:       "all-backends-disabled",
-				ID:         "all-backends-disabled:" + u.ID,
-				Severity:   model.SeverityCritical,
-				Service:    u.Service,
-				Object:     u.Name,
-				Title:      fmt.Sprintf("Все серверы пула %q помечены down/backup", u.Name),
-				Detail:     "Активных серверов не осталось — весь трафик на этот пул будет отвергнут.",
-				File:       u.File,
-				Line:       u.Line,
-				Suggestion: "Верните в строй хотя бы один сервер.",
+				Rule:     "all-backends-disabled",
+				ID:       "all-backends-disabled:" + u.ID,
+				Severity: model.SeverityCritical,
+				Service:  u.Service,
+				Object:   u.Name,
+				Title:    fmt.Sprintf("Все серверы пула %q помечены down/backup", u.Name),
+				TitleKey: "finding.allBackendsDisabled.title", TitleArgs: []any{u.Name},
+				Detail:        "Активных серверов не осталось — весь трафик на этот пул будет отвергнут.",
+				DetailKey:     "finding.allBackendsDisabled.detail",
+				File:          u.File,
+				Line:          u.Line,
+				Suggestion:    "Верните в строй хотя бы один сервер.",
+				SuggestionKey: "finding.allBackendsDisabled.suggestion",
 			})
 		}
 	}
@@ -1071,14 +1212,22 @@ func ruleHealthChecks(c *collector, s *model.Snapshot) {
 			Service:  u.Service,
 			Object:   u.Name,
 			Title:    fmt.Sprintf("В пуле %q нет проверки здоровья серверов", u.Name),
+			TitleKey: "finding.backendNoHealthcheck.title", TitleArgs: []any{u.Name},
 			Detail: fmt.Sprintf("Из %d серверов проверку имеют %d. Балансировщик будет продолжать "+
 				"отправлять запросы на упавший backend.", len(u.Servers), checked),
-			File: u.File,
-			Line: u.Line,
+			DetailKey:  "finding.backendNoHealthcheck.detail",
+			DetailArgs: []any{len(u.Servers), checked},
+			File:       u.File,
+			Line:       u.Line,
 			Suggestion: map[string]string{
 				model.ServiceHAProxy: "Добавьте параметр check к каждой строке server и option httpchk в backend.",
 				model.ServiceNginx:   "Задайте max_fails и fail_timeout для пассивной проверки.",
 				model.ServiceCaddy:   "Добавьте health_uri/health_interval в reverse_proxy для активной проверки.",
+			}[u.Service],
+			SuggestionKey: map[string]string{
+				model.ServiceHAProxy: "finding.backendNoHealthcheck.suggestionHAProxy",
+				model.ServiceNginx:   "finding.backendNoHealthcheck.suggestionNginx",
+				model.ServiceCaddy:   "finding.backendNoHealthcheck.suggestionCaddy",
 			}[u.Service],
 		})
 	}
@@ -1089,52 +1238,66 @@ func ruleContainers(c *collector, s *model.Snapshot) {
 		switch {
 		case ct.State == "restarting":
 			c.add(model.Finding{
-				Rule:       "container-restarting",
-				ID:         "container-restarting:" + ct.Name,
-				Severity:   model.SeverityHigh,
-				Service:    model.ServiceDocker,
-				Object:     ct.Name,
-				Title:      fmt.Sprintf("Контейнер %s в цикле перезапуска", ct.Name),
-				Detail:     fmt.Sprintf("Статус: %s. Обычно это конфликт порта, ошибка конфигурации или падение процесса на старте.", ct.Status),
-				File:       ct.ComposeFile,
-				Suggestion: fmt.Sprintf("Посмотрите журнал: docker logs %s.", ct.Name),
+				Rule:     "container-restarting",
+				ID:       "container-restarting:" + ct.Name,
+				Severity: model.SeverityHigh,
+				Service:  model.ServiceDocker,
+				Object:   ct.Name,
+				Title:    fmt.Sprintf("Контейнер %s в цикле перезапуска", ct.Name),
+				TitleKey: "finding.containerRestarting.title", TitleArgs: []any{ct.Name},
+				Detail:        fmt.Sprintf("Статус: %s. Обычно это конфликт порта, ошибка конфигурации или падение процесса на старте.", ct.Status),
+				DetailKey:     "finding.containerRestarting.detail",
+				DetailArgs:    []any{ct.Status},
+				File:          ct.ComposeFile,
+				Suggestion:    fmt.Sprintf("Посмотрите журнал: docker logs %s.", ct.Name),
+				SuggestionKey: "finding.containerRestarting.suggestion", SuggestionArgs: []any{ct.Name},
 			})
 		case ct.Declared && !ct.Running:
 			c.add(model.Finding{
-				Rule:       "container-not-running",
-				ID:         "container-not-running:" + ct.Name,
-				Severity:   model.SeverityMedium,
-				Service:    model.ServiceDocker,
-				Object:     ct.Name,
-				Title:      fmt.Sprintf("Контейнер %s описан в compose, но не запущен", ct.Name),
-				Detail:     fmt.Sprintf("Сервис %q из файла %s отсутствует среди работающих контейнеров.", ct.ServiceName, ct.ComposeFile),
-				File:       ct.ComposeFile,
-				Suggestion: "Запустите стек: docker compose up -d.",
+				Rule:     "container-not-running",
+				ID:       "container-not-running:" + ct.Name,
+				Severity: model.SeverityMedium,
+				Service:  model.ServiceDocker,
+				Object:   ct.Name,
+				Title:    fmt.Sprintf("Контейнер %s описан в compose, но не запущен", ct.Name),
+				TitleKey: "finding.containerNotRunning.title", TitleArgs: []any{ct.Name},
+				Detail:        fmt.Sprintf("Сервис %q из файла %s отсутствует среди работающих контейнеров.", ct.ServiceName, ct.ComposeFile),
+				DetailKey:     "finding.containerNotRunning.detail",
+				DetailArgs:    []any{ct.ServiceName, ct.ComposeFile},
+				File:          ct.ComposeFile,
+				Suggestion:    "Запустите стек: docker compose up -d.",
+				SuggestionKey: "finding.containerNotRunning.suggestion",
 			})
 		case ct.Running && !ct.Declared:
 			c.add(model.Finding{
-				Rule:       "container-undeclared",
-				ID:         "container-undeclared:" + ct.Name,
-				Severity:   model.SeverityLow,
-				Service:    model.ServiceDocker,
-				Object:     ct.Name,
-				Title:      fmt.Sprintf("Контейнер %s запущен вне compose-файлов", ct.Name),
-				Detail:     "Контейнер работает, но не описан ни в одном из известных compose-файлов — его состояние не воспроизводимо.",
-				Suggestion: "Опишите контейнер в compose или добавьте его файл в NKT_COMPOSE_FILES.",
+				Rule:     "container-undeclared",
+				ID:       "container-undeclared:" + ct.Name,
+				Severity: model.SeverityLow,
+				Service:  model.ServiceDocker,
+				Object:   ct.Name,
+				Title:    fmt.Sprintf("Контейнер %s запущен вне compose-файлов", ct.Name),
+				TitleKey: "finding.containerUndeclared.title", TitleArgs: []any{ct.Name},
+				Detail:        "Контейнер работает, но не описан ни в одном из известных compose-файлов — его состояние не воспроизводимо.",
+				DetailKey:     "finding.containerUndeclared.detail",
+				Suggestion:    "Опишите контейнер в compose или добавьте его файл в NKT_COMPOSE_FILES.",
+				SuggestionKey: "finding.containerUndeclared.suggestion",
 			})
 		}
 
 		if ct.Declared && ct.Restart == "" {
 			c.add(model.Finding{
-				Rule:       "container-no-restart-policy",
-				ID:         "container-no-restart-policy:" + ct.Name,
-				Severity:   model.SeverityLow,
-				Service:    model.ServiceDocker,
-				Object:     ct.Name,
-				Title:      fmt.Sprintf("У контейнера %s не задана политика перезапуска", ct.Name),
-				Detail:     "После перезагрузки хоста или падения процесса контейнер не поднимется сам.",
-				File:       ct.ComposeFile,
-				Suggestion: "Добавьте restart: unless-stopped.",
+				Rule:     "container-no-restart-policy",
+				ID:       "container-no-restart-policy:" + ct.Name,
+				Severity: model.SeverityLow,
+				Service:  model.ServiceDocker,
+				Object:   ct.Name,
+				Title:    fmt.Sprintf("У контейнера %s не задана политика перезапуска", ct.Name),
+				TitleKey: "finding.containerNoRestartPolicy.title", TitleArgs: []any{ct.Name},
+				Detail:        "После перезагрузки хоста или падения процесса контейнер не поднимется сам.",
+				DetailKey:     "finding.containerNoRestartPolicy.detail",
+				File:          ct.ComposeFile,
+				Suggestion:    "Добавьте restart: unless-stopped.",
+				SuggestionKey: "finding.containerNoRestartPolicy.suggestion",
 			})
 		}
 	}
@@ -1159,11 +1322,15 @@ func ruleAdminInterfaces(c *collector, s *model.Snapshot) {
 			Service:  e.Service,
 			Object:   e.Socket(),
 			Title:    fmt.Sprintf("Панель статистики %s доступна без пароля", e.Label),
+			TitleKey: "finding.adminInterfaceOpen.title", TitleArgs: []any{e.Label},
 			Detail: fmt.Sprintf("Секция %q включает stats и слушает %s, но директивы stats auth нет. "+
 				"Любой, кто дотянется до порта, увидит состав backend-ов и состояние сервисов.", e.Label, e.Socket()),
-			File:       e.File,
-			Line:       e.Line,
-			Suggestion: "Добавьте stats auth <user>:<password> и привяжите bind к внутреннему адресу.",
+			DetailKey:     "finding.adminInterfaceOpen.detail",
+			DetailArgs:    []any{e.Label, e.Socket()},
+			File:          e.File,
+			Line:          e.Line,
+			Suggestion:    "Добавьте stats auth <user>:<password> и привяжите bind к внутреннему адресу.",
+			SuggestionKey: "finding.adminInterfaceOpen.suggestion",
 		})
 	}
 }

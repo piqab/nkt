@@ -149,4 +149,146 @@ var enCatalog = map[string]string{
 	"parse.renewalTimerActive":       "auto-renewal enabled: timer %s is active",
 	"parse.renewalCronActive":        "auto-renewal enabled: cron job %s",
 	"parse.renewalNoAutomationFound": "certbot knows about the certificate, but neither certbot.timer nor a cron job was found — renewal won't run on its own",
+
+	"finding.portConflict.title":      "Port %d conflict between %s and %s",
+	"finding.portConflict.detail":     "%s (%s, %s:%d) and %s (%s, %s:%d) declare the same port. The second service won't be able to bind the socket and will fail to start.",
+	"finding.portConflict.suggestion": "Split the services across different ports or bind addresses.",
+
+	"finding.declaredNotListening.title":      "Port %d is declared in the config, but nothing is listening on it",
+	"finding.declaredNotListening.detail":     "%s (%s) declares %s, but there's no such listener in ss's output. Either the config wasn't applied (needs a reload), or the service failed to bind the port.",
+	"finding.declaredNotListening.suggestion": "Check whether the config was applied: reload %s and check its log.",
+
+	"finding.listeningNotDeclared.title":        "Unaccounted-for listener on port %d (%s)",
+	"finding.listeningNotDeclared.detail":       "Process %s is listening on %s:%d, but this port isn't described in any parsed config.",
+	"finding.listeningNotDeclared.detailPublic": "Process %s is listening on %s:%d, but this port isn't described in any parsed config. The socket is open on all interfaces.",
+	"finding.listeningNotDeclared.suggestion":   "Make sure the service is actually needed, and describe it in the config or close the port.",
+
+	"finding.noDefaultDeny.title":      "Default INPUT policy is ACCEPT, and no firewall manager is active",
+	"finding.noDefaultDeny.detail":     "Incoming traffic is allowed by default: any open port is reachable from outside, whether you intended that or not.",
+	"finding.noDefaultDeny.suggestion": "Enable ufw (ufw default deny incoming) or firewalld, or set iptables -P INPUT DROP and explicitly allow the ports you need.",
+
+	"finding.publicPortBlocked.title":      "Port %d is open on the service, but blocked by the firewall",
+	"finding.publicPortBlocked.detail":     "%s (%s) listens on %s on all interfaces, but there are no rules allowing incoming traffic to this port, and the INPUT policy is %s. The service is unreachable from outside.",
+	"finding.publicPortBlocked.suggestion": "If the service should be reachable: ufw allow %d/tcp.",
+
+	"finding.dockerBypassesFirewall.title":           "Container %s publishes port %d on 0.0.0.0, bypassing the firewall",
+	"finding.dockerBypassesFirewall.detail":          "Docker adds DNAT rules to the PREROUTING/FORWARD chain, so published port %d never passes through INPUT and isn't blocked by ufw rules.",
+	"finding.dockerBypassesFirewall.detailSensitive": "Docker adds DNAT rules to the PREROUTING/FORWARD chain, so published port %d never passes through INPUT and isn't blocked by ufw rules. %s runs on this port — publishing it externally is almost certainly not intended.",
+	"finding.dockerBypassesFirewall.suggestion":      "Bind the publication to localhost (\"127.0.0.1:%d:%d\") or use the DOCKER-USER chain for filtering.",
+
+	"finding.staleFirewallRule.title":             "Firewall rule for port %d is unused",
+	"finding.staleFirewallRule.detail":            "The rule allows incoming traffic on port %d, but no process on the host is listening on it.",
+	"finding.staleFirewallRule.detailZeroPackets": "The rule allows incoming traffic on port %d, but no process on the host is listening on it. The rule's packet counter is zero — no traffic has ever hit it.",
+	"finding.staleFirewallRule.suggestion":        "Delete the rule if the service is no longer needed: ufw delete allow %d/tcp.",
+
+	"finding.sensitivePortPublic.title":           "%s is listening on port %d on all interfaces",
+	"finding.sensitivePortPublic.detail":          "Process %s accepts connections on 0.0.0.0:%d. Services like this usually aren't meant for public access and have no brute-force protection of their own.",
+	"finding.sensitivePortPublic.detailReachable": "Process %s accepts connections on 0.0.0.0:%d. The port isn't blocked by any firewall rule. Services like this usually aren't meant for public access and have no brute-force protection of their own.",
+	"finding.sensitivePortPublic.suggestion":      "Bind the service to 127.0.0.1 or an internal network, and close the port on the firewall.",
+
+	"finding.weakTLS.title":      "Outdated TLS versions enabled: %s",
+	"finding.weakTLS.detail":     "ssl_protocols = %q. These versions are considered unsafe and are disabled in modern browsers.",
+	"finding.weakTLS.suggestion": "Keep only TLSv1.2 and TLSv1.3: ssl_protocols TLSv1.2 TLSv1.3;",
+
+	"finding.missingHSTS.title":      "No HSTS header on %s",
+	"finding.missingHSTS.detail":     "The TLS server doesn't send Strict-Transport-Security, so a client can be redirected back to http.",
+	"finding.missingHSTS.suggestion": `add_header Strict-Transport-Security "max-age=31536000" always;`,
+
+	"finding.tlsCertMissing.title":      "listen ... ssl without ssl_certificate on %s",
+	"finding.tlsCertMissing.detail":     "The listener is declared as TLS, but no certificate is set in the block — nginx won't start.",
+	"finding.tlsCertMissing.suggestion": "Add ssl_certificate and ssl_certificate_key — a quick way to get the files: generate a self-signed certificate on the \"Certificates\" page.",
+
+	"finding.tlsCertUnreadable.title":      "Certificate can't be read: %s",
+	"finding.tlsCertUnreadable.detail":     "%s is set in the configuration for %s, but couldn't be read: %s. If the file genuinely doesn't exist, the service won't bring up its TLS listener.",
+	"finding.tlsCertUnreadable.suggestion": "Check the path and permissions, and reissue the certificate if needed.",
+
+	"finding.tlsCertExpired.title":  "Certificate %s expired %d day(s) ago",
+	"finding.tlsCertExpired.detail": "Validity ended %s. Serves %s. Browsers show an error and block users from proceeding.",
+
+	"finding.tlsCertExpiring.title":          "Certificate %s expires in %d day(s)",
+	"finding.tlsCertExpiring.detail":         "Valid until %s, serves %s. %s",
+	"finding.tlsCertExpiring.detailWithTime": "Valid until %s, serves %s. %s",
+
+	"finding.tlsCertNotYetValid.title":      "Certificate isn't valid yet: %s",
+	"finding.tlsCertNotYetValid.detail":     "Only valid from %s. This usually means the host's clock is behind, or the certificate was issued for the future.",
+	"finding.tlsCertNotYetValid.suggestion": "Check the system time and the certificate's issue date.",
+
+	"finding.tlsCertRenewalNotAutomatic.title":      "Certificate auto-renewal isn't running: %s",
+	"finding.tlsCertRenewalNotAutomatic.suggestion": "Enable the timer: systemctl enable --now certbot.timer — or add a cron job.",
+
+	"finding.tlsCertOrphanLineage.title":      "certbot certificate is missing its renewal file",
+	"finding.tlsCertOrphanLineage.suggestion": "Reissue the certificate via certbot certonly to restore the renewal record.",
+
+	"finding.tlsCertNotReloaded.title":      "The socket serves a different certificate than the one in the config",
+	"finding.tlsCertNotReloaded.detail":     "File %s doesn't match what %s actually serves on a TLS connection: the socket presents a certificate with serial %s, valid until %s. This usually means the file on disk was updated (e.g. certbot renew) but the service never reread its config.",
+	"finding.tlsCertNotReloaded.suggestion": "Reload %s so it picks up the current certificate.",
+
+	"finding.tlsCertSelfSigned.title":      "Self-signed certificate on %s",
+	"finding.tlsCertSelfSigned.detail":     "The issuer matches the subject (%s). No browser trusts a certificate like this; that's fine for internal services, not for public ones.",
+	"finding.tlsCertSelfSigned.suggestion": "For a public service, issue a certificate from a trusted CA.",
+
+	"finding.tlsCertWeakKey.title":      "Weak RSA key: %d bits",
+	"finding.tlsCertWeakKey.detail":     "Certificate %s uses a key shorter than %d bits. Modern clients reject connections like this.",
+	"finding.tlsCertWeakKey.suggestion": "Reissue the certificate with an RSA 2048+ or ECDSA P-256 key.",
+
+	"finding.tlsCertWeakSignature.title":      "Outdated signature algorithm: %s",
+	"finding.tlsCertWeakSignature.detail":     "SHA-1- and MD5-based signatures are considered unsafe and aren't accepted by modern browsers.",
+	"finding.tlsCertWeakSignature.suggestion": "Reissue the certificate with a SHA-256 (or stronger) signature.",
+
+	"finding.tlsCertNameMismatch.title":      "Certificate doesn't cover name %s",
+	"finding.tlsCertNameMismatch.detail":     "The server responds on %s, but certificate %s was issued for %s. The client will see a name-mismatch warning.",
+	"finding.tlsCertNameMismatch.suggestion": "Add %s to the certificate's SAN, or use a separate certificate.",
+
+	"finding.renewalSuggestionCertbot": "Renew it now: certbot renew --cert-name %s, then reload the service.",
+	"finding.renewalSuggestionManual":  "Issue and install a new certificate, then reload the service.",
+
+	"finding.publicPlaintextProxy.title":      "%s proxies traffic over plain HTTP, no TLS",
+	"finding.publicPlaintextProxy.detail":     "Listener %s accepts requests on all interfaces without encryption and forwards them onward. Headers, cookies, and tokens travel in plain text.",
+	"finding.publicPlaintextProxy.suggestion": "Move the service to https (for a quick test, generate a self-signed certificate on the \"Certificates\" page), or leave port 80 as a redirect to https only.",
+
+	"finding.upstreamUndefined.title":      "Reference to a nonexistent upstream %q",
+	"finding.upstreamUndefined.detail":     "Route %q in %s points at pool %q, but no such pool is defined.",
+	"finding.upstreamUndefined.suggestion": "Check the pool name, or add the corresponding upstream/backend block.",
+
+	"finding.upstreamOrphan.title":      "Pool %q is declared but never used",
+	"finding.upstreamOrphan.detail":     "No route references this pool — likely a leftover from an earlier config.",
+	"finding.upstreamOrphan.suggestion": "Remove the unused block, or wire it up to the route that needs it.",
+
+	"finding.upstreamMemberDown.title":      "Backend %s of pool %q isn't listening on its port",
+	"finding.upstreamMemberDown.detail":     "Pool %q sends traffic to %s, but locally nothing is bound to that port. Requests will fail with a 502/504.",
+	"finding.upstreamMemberDown.suggestion": "Start a service on that port, or remove it from the pool.",
+
+	"finding.singleBackend.title":      "Pool %q has a single server — no redundancy",
+	"finding.singleBackend.detail":     "Losing the only backend takes the whole route down.",
+	"finding.singleBackend.suggestion": "Add a second server, or an explicit backup.",
+
+	"finding.allBackendsDisabled.title":      "Every server in pool %q is marked down/backup",
+	"finding.allBackendsDisabled.detail":     "No active servers remain — all traffic to this pool will be rejected.",
+	"finding.allBackendsDisabled.suggestion": "Bring at least one server back into service.",
+
+	"finding.backendNoHealthcheck.title":             "Pool %q has no server health check",
+	"finding.backendNoHealthcheck.detail":            "%d of %d servers have a check. The load balancer will keep sending requests to a downed backend.",
+	"finding.backendNoHealthcheck.suggestionHAProxy": "Add the check parameter to each server line, and option httpchk in the backend.",
+	"finding.backendNoHealthcheck.suggestionNginx":   "Set max_fails and fail_timeout for passive checking.",
+	"finding.backendNoHealthcheck.suggestionCaddy":   "Add health_uri/health_interval to reverse_proxy for active checking.",
+
+	"finding.containerRestarting.title":      "Container %s is stuck in a restart loop",
+	"finding.containerRestarting.detail":     "Status: %s. Usually a port conflict, a config error, or the process crashing on startup.",
+	"finding.containerRestarting.suggestion": "Check its log: docker logs %s.",
+
+	"finding.containerNotRunning.title":      "Container %s is declared in compose, but isn't running",
+	"finding.containerNotRunning.detail":     "Service %q from file %s is missing from the running containers.",
+	"finding.containerNotRunning.suggestion": "Start the stack: docker compose up -d.",
+
+	"finding.containerUndeclared.title":      "Container %s is running outside any compose files",
+	"finding.containerUndeclared.detail":     "The container is running, but isn't described in any known compose file — its state isn't reproducible.",
+	"finding.containerUndeclared.suggestion": "Describe the container in compose, or add its file to NKT_COMPOSE_FILES.",
+
+	"finding.containerNoRestartPolicy.title":      "Container %s has no restart policy set",
+	"finding.containerNoRestartPolicy.detail":     "After a host reboot or a process crash, the container won't come back on its own.",
+	"finding.containerNoRestartPolicy.suggestion": "Add restart: unless-stopped.",
+
+	"finding.adminInterfaceOpen.title":      "Stats panel %s is reachable without a password",
+	"finding.adminInterfaceOpen.detail":     "Section %q enables stats and listens on %s, but there's no stats auth directive. Anyone who reaches the port sees the backend composition and service state.",
+	"finding.adminInterfaceOpen.suggestion": "Add stats auth <user>:<password> and bind it to an internal address.",
 }
