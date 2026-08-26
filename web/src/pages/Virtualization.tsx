@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Button, Checkbox, Form, Input, InputNumber, Segmented, Table, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
 import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, StateBadge, formatBytesShort } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
+import i18n from '../i18n'
 
 const LIFECYCLE_ACTIONS = ['start', 'shutdown', 'reboot', 'suspend', 'resume']
 
@@ -50,9 +52,10 @@ function vmColumns(
   toggleAutostart: (name: string, on: boolean) => void,
   del: (name: string, removeStorage: boolean) => void,
 ): TableColumnsType<VirtualMachine> {
+  const t = i18n.t.bind(i18n)
   return [
     {
-      title: 'Имя',
+      title: t('virt.colName'),
       key: 'name',
       render: (_, vm) => (
         <>
@@ -61,16 +64,16 @@ function vmColumns(
         </>
       ),
     },
-    { title: 'Состояние', key: 'state', render: (_, vm) => <StateBadge state={vm.state} /> },
-    { title: 'vCPU', key: 'vcpus', align: 'right', render: (_, vm) => <span className="num small">{vm.vcpus || '—'}</span> },
+    { title: t('virt.colState'), key: 'state', render: (_, vm) => <StateBadge state={vm.state} /> },
+    { title: t('virt.colVcpus'), key: 'vcpus', align: 'right', render: (_, vm) => <span className="num small">{vm.vcpus || '—'}</span> },
     {
-      title: 'Память',
+      title: t('virt.colMemory'),
       key: 'memory_kb',
       align: 'right',
       render: (_, vm) => <span className="num small">{vm.memory_kb ? formatBytesShort(vm.memory_kb * 1024) : '—'}</span>,
     },
     {
-      title: 'Диски',
+      title: t('virt.colDisks'),
       key: 'disks',
       render: (_, vm) => (
         <span className="small mono">
@@ -84,7 +87,7 @@ function vmColumns(
       ),
     },
     {
-      title: 'Сети',
+      title: t('virt.colNetworks'),
       key: 'networks',
       render: (_, vm) => (
         <span className="small">
@@ -95,7 +98,7 @@ function vmColumns(
       ),
     },
     {
-      title: 'Автозапуск',
+      title: t('virt.colAutostart'),
       key: 'autostart',
       render: (_, vm) =>
         vm.persistent ? (
@@ -106,19 +109,16 @@ function vmColumns(
             loading={busy === `${vm.name}:autostart`}
             onClick={() => toggleAutostart(vm.name, !vm.autostart)}
           >
-            {vm.autostart ? 'включён' : 'выключен'}
+            {vm.autostart ? t('virt.autostartOn') : t('virt.autostartOff')}
           </Button>
         ) : (
-          <span
-            className="small muted"
-            title="Домен временный: не зарегистрирован через virsh define, поэтому у него нет ни сохранённого определения, ни автозапуска. Пропадёт из списка при остановке."
-          >
-            недоступен (временный домен)
+          <span className="small muted" title={t('virt.transientTooltip')}>
+            {t('virt.transientUnavailable')}
           </span>
         ),
     },
     {
-      title: 'Действия',
+      title: t('common.actions'),
       key: 'actions',
       render: (_, vm) => (
         <div className="row">
@@ -141,18 +141,18 @@ function vmColumns(
               size="small"
               loading={busy === `${vm.name}:destroy`}
               onClick={() => act(vm.name, 'destroy')}
-              title="Немедленное принудительное отключение — как выдернуть шнур питания"
+              title={t('virt.forceDestroyTooltip')}
             >
-              завершить принудительно
+              {t('virt.forceDestroy')}
             </Button>
           )}
           {canControl && vm.persistent && (
             <>
               <Button danger type="link" size="small" loading={busy === `${vm.name}:delete`} onClick={() => del(vm.name, false)}>
-                удалить
+                {t('common.delete')}
               </Button>
               <Button danger type="link" size="small" loading={busy === `${vm.name}:delete`} onClick={() => del(vm.name, true)}>
-                удалить с дисками
+                {t('virt.deleteWithDisks')}
               </Button>
             </>
           )}
@@ -163,6 +163,7 @@ function vmColumns(
 }
 
 export default function Virtualization({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const vms = useApi<{ vms: VirtualMachine[] }>('/vms', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [rescanning, setRescanning] = useState(false)
@@ -181,7 +182,7 @@ export default function Virtualization({ me }: { me: Me }) {
     try {
       await api('/inventory/refresh', { method: 'POST' })
       await vms.reload()
-      setNotice({ kind: 'info', text: 'Хост пересканирован.' })
+      setNotice({ kind: 'info', text: t('common.hostRescanned') })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -190,13 +191,13 @@ export default function Virtualization({ me }: { me: Me }) {
   }
 
   async function act(name: string, action: string) {
-    const label = action === 'destroy' ? 'принудительно завершить' : action
-    if (!window.confirm(`Выполнить «${label}» для VM ${name}?`)) return
+    const label = action === 'destroy' ? t('virt.forceDestroy') : action
+    if (!window.confirm(t('virt.confirmAction', { action: label, name }))) return
     setBusy(`${name}:${action}`)
     setNotice(null)
     try {
       await api(`/vms/${name}/${action}`, { method: 'POST' })
-      setNotice({ kind: 'info', text: `${name}: ${label} выполнено.` })
+      setNotice({ kind: 'info', text: t('virt.actionDone', { name, action: label }) })
       // The backend only kicks off a fire-and-forget background rescan
       // (rescanLater) — a bare reload() right after would just reread the
       // still-stale cached snapshot. /inventory/refresh runs the same
@@ -225,15 +226,13 @@ export default function Virtualization({ me }: { me: Me }) {
   }
 
   async function del(name: string, removeStorage: boolean) {
-    const warning = removeStorage
-      ? `Удалить VM ${name} вместе с дисками? Образы дисков будут удалены безвозвратно.`
-      : `Удалить определение VM ${name}? Диски останутся на месте.`
+    const warning = t(removeStorage ? 'virt.confirmDeleteWithDisks' : 'virt.confirmDeleteDefinition', { name })
     if (!window.confirm(warning)) return
     setBusy(`${name}:delete`)
     setNotice(null)
     try {
       await api(`/vms/${name}${qs({ remove_storage: removeStorage ? 'true' : '' })}`, { method: 'DELETE' })
-      setNotice({ kind: 'info', text: `${name}: определение удалено.` })
+      setNotice({ kind: 'info', text: t('virt.definitionDeleted', { name }) })
       await api('/inventory/refresh', { method: 'POST' })
       await vms.reload()
     } catch (err) {
@@ -248,14 +247,14 @@ export default function Virtualization({ me }: { me: Me }) {
       <div className="page-head spread">
         <div>
           <h1>
-            Виртуальные машины
-            <InfoHint>libvirt/QEMU домены — управление через virsh. Создание и редактирование — через XML-определение.</InfoHint>
+            {t('virt.title')}
+            <InfoHint>{t('virt.hint')}</InfoHint>
           </h1>
         </div>
         <div className="row">
           {me.is_admin && (
             <Button onClick={rescan} loading={rescanning}>
-              {rescanning ? 'Сканирую…' : 'Пересканировать'}
+              {rescanning ? t('common.scanning') : t('common.rescan')}
             </Button>
           )}
         </div>
@@ -263,24 +262,22 @@ export default function Virtualization({ me }: { me: Me }) {
 
       <ErrorNote error={vms.error} />
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
-      {!canControl && (
-        <Banner kind="info">Действия недоступны: нужна роль admin и включённые изменения.</Banner>
-      )}
+      {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}
 
       <Card
-        title="Домены libvirt"
+        title={t('virt.domains')}
         actions={
           canControl && (
             <Button type="link" onClick={() => setChooserOpen(true)}>
-              + новая VM
+              {t('virt.newVm')}
             </Button>
           )
         }
       >
         {vms.loading && !vms.data ? (
-          <Loading what="виртуальные машины" />
+          <Loading what={t('virt.loading')} />
         ) : allVMs.length === 0 ? (
-          <p className="small muted">libvirt не обнаружен или доменов нет.</p>
+          <p className="small muted">{t('virt.none')}</p>
         ) : (
           <>
             <InactiveSummary
@@ -289,7 +286,7 @@ export default function Virtualization({ me }: { me: Me }) {
               getLabel={(vm) => vm.name}
               getTooltip={(vm) => (
                 <>
-                  <div>состояние: {vm.state}</div>
+                  <div>{t('virt.state', { state: vm.state })}</div>
                   {vm.vcpus ? <div>vCPU: {vm.vcpus}</div> : null}
                 </>
               )}
@@ -348,6 +345,7 @@ function VMCreateChooser({
   onClose: () => void
   onReady: (name: string, initialContent?: string) => void
 }) {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<'wizard' | 'raw'>('wizard')
   const [name, setName] = useState('')
   const [memoryMB, setMemoryMB] = useState(2048)
@@ -362,7 +360,7 @@ function VMCreateChooser({
 
   async function submit() {
     if (!domainNameRe.test(name)) {
-      setError('Имя может содержать только латинские буквы, цифры, точку, дефис и подчёркивание')
+      setError(t('virt.invalidName'))
       return
     }
     if (mode === 'raw') {
@@ -387,13 +385,13 @@ function VMCreateChooser({
     <Card
       title={
         <>
-          Новая VM
-          <InfoHint>Оба способа заканчиваются одним и тем же — проверкой и правкой XML перед сохранением.</InfoHint>
+          {t('virt.newVmTitle')}
+          <InfoHint>{t('virt.newVmHint')}</InfoHint>
         </>
       }
       actions={
         <Button type="link" onClick={onClose}>
-          закрыть
+          {t('common.close')}
         </Button>
       }
     >
@@ -403,44 +401,45 @@ function VMCreateChooser({
           value={mode}
           onChange={(v) => setMode(v as 'wizard' | 'raw')}
           options={[
-            { value: 'wizard', label: 'Мастер' },
-            { value: 'raw', label: 'Сырой XML' },
+            { value: 'wizard', label: t('virt.wizard') },
+            { value: 'raw', label: t('virt.rawXml') },
           ]}
           style={{ marginBottom: '0.75rem' }}
         />
-        <Form.Item label="Имя VM" style={{ maxWidth: '20rem' }}>
+        <Form.Item label={t('virt.vmName')} style={{ maxWidth: '20rem' }}>
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="new-vm" autoFocus />
         </Form.Item>
 
         {mode === 'wizard' && (
           <>
             <div className="filters">
-              <Form.Item label="Память, МБ" style={{ minWidth: '10rem' }}>
+              <Form.Item label={t('virt.memoryMb')} style={{ minWidth: '10rem' }}>
                 <InputNumber min={256} step={256} value={memoryMB} onChange={(v) => setMemoryMB(v ?? 256)} style={{ width: '100%' }} />
               </Form.Item>
               <Form.Item label="vCPU" style={{ minWidth: '8rem' }}>
                 <InputNumber min={1} max={64} value={vcpus} onChange={(v) => setVcpus(v ?? 1)} style={{ width: '100%' }} />
               </Form.Item>
-              <Form.Item label="Диск, ГБ" style={{ minWidth: '8rem' }}>
+              <Form.Item label={t('virt.diskGb')} style={{ minWidth: '8rem' }}>
                 <InputNumber min={1} max={65536} value={diskGB} onChange={(v) => setDiskGB(v ?? 1)} style={{ width: '100%' }} />
               </Form.Item>
-              <Form.Item label="Сетевой мост" style={{ minWidth: '10rem' }}>
+              <Form.Item label={t('virt.networkBridge')} style={{ minWidth: '10rem' }}>
                 <Input value={bridge} onChange={(e) => setBridge(e.target.value)} placeholder="br0" />
               </Form.Item>
             </div>
             <p className="small muted" style={{ margin: 0 }}>
-              Файл диска: <code className="mono">{diskPath}</code>
+              {t('virt.diskFile')}
+              <code className="mono">{diskPath}</code>
             </p>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', marginTop: '0.5rem' }}>
               <Checkbox checked={createDiskFile} onChange={(e) => setCreateDiskFile(e.target.checked)} />
-              Создать файл диска (qemu-img create) — без этого XML будет ссылаться на несуществующий файл
+              {t('virt.createDiskFile')}
             </label>
           </>
         )}
 
         <Form.Item style={{ marginTop: '0.75rem', marginBottom: 0 }}>
           <Button type="primary" htmlType="submit" loading={busy}>
-            {busy ? 'Готовлю…' : 'Далее — проверить XML'}
+            {busy ? t('virt.preparing') : t('virt.nextReviewXml')}
           </Button>
         </Form.Item>
       </Form>
@@ -466,6 +465,7 @@ function VMEditor({
   onClose: () => void
   onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const path = `/etc/libvirt/qemu/${name}.xml`
   const existing = useApi<FileContent>(`/configs/file${qs({ path })}`)
   const isNew = existing.error !== null
@@ -488,7 +488,7 @@ function VMEditor({
         body: {
           path,
           content,
-          note: note || (isNew ? 'создание VM' : 'правка определения VM'),
+          note: note || t(isNew ? 'virt.createNote' : 'virt.editNote'),
           apply,
           expected_sha256: existing.data?.sha256 ?? '',
         },
@@ -504,16 +504,16 @@ function VMEditor({
 
   return (
     <Card
-      title={isNew ? `Новая VM: ${name}` : `Редактирование VM: ${name}`}
+      title={t(isNew ? 'virt.newVmName' : 'virt.editVmName', { name })}
       subtitle={path}
       actions={
         <Button type="link" onClick={onClose}>
-          закрыть
+          {t('common.close')}
         </Button>
       }
     >
       {existing.loading && !isNew ? (
-        <Loading what="определение VM" />
+        <Loading what={t('virt.loadingDefinition')} />
       ) : (
         <div className="col">
           {error && <Banner kind="error">{error}</Banner>}
@@ -522,16 +522,16 @@ function VMEditor({
           )}
           <CodeEditor value={content} onChange={(e) => setDraft(e.target.value)} rows={20} />
           <label>
-            Заметка
-            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="необязательно" />
+            {t('virt.note')}
+            <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('virt.optional')} />
           </label>
           <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
             <Checkbox checked={apply} onChange={(e) => setApply(e.target.checked)} />
-            Применить (virsh define) — без этого XML сохраняется, но домен не регистрируется
+            {t('virt.applyVirshDefine')}
           </label>
           <div>
             <Button type="primary" onClick={save} loading={busy}>
-              {busy ? 'Сохраняю…' : 'Сохранить'}
+              {busy ? t('virt.saving') : t('virt.save')}
             </Button>
           </div>
         </div>

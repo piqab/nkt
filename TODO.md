@@ -28,35 +28,41 @@
             сайдбара рядом с темой (только для уже вошедших — на Login
             переключателя пока нет, только автоопределение по языку
             браузера при первом заходе).
-      Полностью переведены (проверено `npm run typecheck`/`build` после
-      каждого): `App.tsx`, `Login.tsx`, `components/ui.tsx` (включая
-      `severityLabel`/`formatRelative`/`formatDateTime`/`formatBytesShort` —
-      обычные функции, не компоненты, читают `i18n.t()`/`i18n.language`
-      напрямую вместо хука `useTranslation`, см. комментарий в файле),
-      `components/InactiveSummary.tsx`, `components/PtyToolbar.tsx`,
-      `components/PackageInstallModal.tsx`, `components/PasswordForm.tsx`,
-      `components/UpdateModal.tsx`, `pages/Containers.tsx`,
-      `pages/Findings.tsx`, `pages/Audit.tsx`. Общие ключи собраны под
-      `common.*` (см. `all`/`search`/`shown`/`rescan`/`severity.*`/`unit.*` —
-      переиспользуются, а не дублируются по страницам).
+      Полностью переведены (проверено `npm run typecheck`/`build` +
+      сверка множества ключей ru/en после каждого): `App.tsx`, `Login.tsx`,
+      `components/ui.tsx` (включая `severityLabel`/`formatRelative`/
+      `formatDateTime`/`formatBytesShort` — обычные функции, не компоненты,
+      читают `i18n.t()`/`i18n.language` напрямую вместо хука
+      `useTranslation`, см. комментарий в файле), `components/
+      {InactiveSummary,PtyToolbar,PackageInstallModal,PasswordForm,
+      UpdateModal}.tsx`, `pages/{Containers,Findings,Audit,Interfaces,
+      Users,LXD,Podman,Docker,Virtualization}.tsx` — 17 файлов, 312 ключей.
+      Общие ключи собраны под `common.*` (`all`/`search`/`shown`/`rescan`/
+      `delete`/`confirmDelete`/`deleted`/`hostRescanned`/`actions`/
+      `mutationsDisabled`/`notPublished`/`severity.*`/`unit.*`) —
+      переиспользуются между Docker/Podman/LXD/Virtualization и дальше, а
+      не дублируются по страницам под разными именами.
 
       - [ ] Ещё не тронуты: `pages/{Overview,Vulnerabilities,Topology,
-            Availability,Usage,Configs,Services,Docker,Podman,LXD,
-            Virtualization,Terminal,Firewall,Interfaces,Certificates,Users,
-            Hosts}.tsx` и `components/{BlockTree,PathPicker,charts}.tsx` —
-            порядка 700 строк по оставшемуся дереву. Самые крупные —
-            `Hosts.tsx` (1324 строки), `Certificates.tsx` (937),
-            `Firewall.tsx` (887), `Topology.tsx` (611), `Virtualization.tsx`
-            (541), `Configs.tsx` (531) — в них же и большинство из ~24
-            `window.confirm()` и ~120 шаблонных строк с интерполяцией/
-            склонением («Включить»/«Отключить» и т.п.), которые остаются
-            непереведёнными. Продолжать файл за файлом тем же паттерном:
-            ключ по неймспейсу = имя файла/страницы, module-level константы
-            с переводимым текстом (колонки таблиц, списки опций) — переносить
-            внутрь компонента как обычные `const`, вычисляемые при рендере
-            (не `useMemo`, если не оптимизация — см. `Audit.tsx`'s
-            `jobColumns`/`actionOptions` для образца), а не оставлять
-            снаружи, где `t()` недоступен.
+            Availability,Usage,Configs,Services,Terminal,Firewall,
+            Certificates,Hosts}.tsx` и `components/{BlockTree,PathPicker,
+            charts}.tsx` — порядка 400 строк по оставшемуся дереву. Самые
+            крупные — `Hosts.tsx` (1324 строки), `Certificates.tsx` (937),
+            `Firewall.tsx` (887), `Topology.tsx` (611), `Configs.tsx` (531)
+            — в них же и большинство оставшихся `window.confirm()` и
+            шаблонных строк с интерполяцией/склонением («Включить»/
+            «Отключить» и т.п.), которые остаются непереведёнными.
+            Продолжать файл за файлом тем же паттерном: ключ по неймспейсу
+            = имя файла/страницы, module-level константы с переводимым
+            текстом (колонки таблиц, списки опций) — переносить внутрь
+            компонента как обычные `const`, вычисляемые при рендере (не
+            `useMemo`, если не оптимизация — см. `Audit.tsx`'s
+            `jobColumns`/`actionOptions` для образца), а модульные ФУНКЦИИ
+            (не компоненты) — через `i18n.t()` напрямую (см. `ui.tsx`'s
+            `severityLabel`, `Interfaces.tsx`'s `guessInterfaceKind`,
+            `Virtualization.tsx`'s `vmColumns` — там же пример
+            `const t = i18n.t.bind(i18n)` для функции с несколькими
+            переводами внутри).
       - [ ] Языковой переключатель на самом Login.tsx (сейчас только в
             сайдбаре уже вошедшего пользователя).
 - [ ] Страница «Уязвимости» — централизованная сверка для управляемых
