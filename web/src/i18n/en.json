@@ -70,7 +70,13 @@
     "all": "all",
     "search": "Search",
     "shown": "showing {{shown}} of {{total}}",
-    "noMatch": "Nothing matches these filters."
+    "noMatch": "Nothing matches these filters.",
+    "hostRescanned": "Host rescanned.",
+    "delete": "delete",
+    "confirmDelete": "Delete the {{what}} {{name}}? This can't be undone.",
+    "deleted": "{{name}}: deleted.",
+    "mutationsDisabled": "Actions unavailable: needs the admin role and mutations enabled.",
+    "actions": "Actions"
   },
   "containers": {
     "vms": "Virtual machines"
@@ -220,5 +226,49 @@
     "role": "Role",
     "passwordTooShort": "At least {{count}} characters",
     "create": "Create"
+  },
+  "lxd": {
+    "confirmAction": "Run \"{{action}}\" on the instance {{name}}?",
+    "actionDone": "{{name}}: {{action}} done.",
+    "instance": "instance",
+    "colName": "Name",
+    "colType": "Type",
+    "vm": "VM",
+    "container": "container",
+    "colState": "State",
+    "colArch": "Architecture",
+    "hint": "LXD containers and virtual machines — one tool manages both instance types.",
+    "instances": "LXD instances",
+    "newInstance": "+ new instance",
+    "loading": "LXD instances",
+    "none": "LXD not found, or there are no instances.",
+    "state": "state: {{state}}",
+    "newInstanceTitle": "New LXD instance",
+    "newInstanceHint": "lxc launch — the image downloads automatically, the instance starts right away.",
+    "image": "Image",
+    "instanceName": "Instance name",
+    "launching": "Launching…",
+    "createAndStart": "Create and start"
+  },
+  "podman": {
+    "confirmAction": "Run \"{{action}}\" on the container {{name}}?",
+    "actionDone": "{{name}}: {{action}} done.",
+    "container": "container",
+    "colContainer": "Container",
+    "colPod": "Pod",
+    "colImage": "Image",
+    "colState": "State",
+    "colPorts": "Ports",
+    "notPublished": "{{port}} (not published)",
+    "hint": "Containers on Podman, a separate engine from docker — the same operations: start, stop, delete.",
+    "containers": "Podman containers",
+    "newContainer": "+ new container",
+    "loading": "Podman containers",
+    "none": "Podman not found, or there are no containers.",
+    "newContainerTitle": "New Podman container",
+    "newContainerHint": "The image is pulled if needed, the container is created and started right away.",
+    "containerName": "Container name",
+    "creating": "Creating…",
+    "createAndStart": "Create and start"
   }
 }

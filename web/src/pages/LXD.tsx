@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Button, Form, Input, Table, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { LXDInstance, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 
 export default function LXD({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const instances = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [rescanning, setRescanning] = useState(false)
@@ -23,7 +25,7 @@ export default function LXD({ me }: { me: Me }) {
     try {
       await api('/inventory/refresh', { method: 'POST' })
       await instances.reload()
-      setNotice({ kind: 'info', text: 'Хост пересканирован.' })
+      setNotice({ kind: 'info', text: t('common.hostRescanned') })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -32,12 +34,12 @@ export default function LXD({ me }: { me: Me }) {
   }
 
   async function act(name: string, action: string) {
-    if (!window.confirm(`Выполнить «${action}» для инстанса ${name}?`)) return
+    if (!window.confirm(t('lxd.confirmAction', { action, name }))) return
     setBusy(`${name}:${action}`)
     setNotice(null)
     try {
       await api(`/lxd/instances/${name}/${action}`, { method: 'POST' })
-      setNotice({ kind: 'info', text: `${name}: ${action} выполнено.` })
+      setNotice({ kind: 'info', text: t('lxd.actionDone', { name, action }) })
       // The backend only kicks off a fire-and-forget background rescan
       // (rescanLater) — a bare reload() right after would just reread the
       // still-stale cached snapshot. /inventory/refresh runs the same
@@ -52,12 +54,12 @@ export default function LXD({ me }: { me: Me }) {
   }
 
   async function del(name: string) {
-    if (!window.confirm(`Удалить инстанс ${name}? Это необратимо.`)) return
+    if (!window.confirm(t('common.confirmDelete', { what: t('lxd.instance'), name }))) return
     setBusy(`${name}:delete`)
     setNotice(null)
     try {
       await api(`/lxd/instances/${name}`, { method: 'DELETE' })
-      setNotice({ kind: 'info', text: `${name}: удалён.` })
+      setNotice({ kind: 'info', text: t('common.deleted', { name }) })
       await api('/inventory/refresh', { method: 'POST' })
       await instances.reload()
     } catch (err) {
@@ -68,13 +70,13 @@ export default function LXD({ me }: { me: Me }) {
   }
 
   const columns: TableColumnsType<LXDInstance> = [
-    { title: 'Имя', key: 'name', render: (_, i) => <strong>{i.name}</strong> },
-    { title: 'Тип', key: 'type', render: (_, i) => <span className="small">{i.type === 'virtual-machine' ? 'VM' : 'контейнер'}</span> },
-    { title: 'Состояние', key: 'status', render: (_, i) => <StateBadge state={i.status} /> },
-    { title: 'Архитектура', key: 'architecture', render: (_, i) => <span className="small mono">{i.architecture || '—'}</span> },
+    { title: t('lxd.colName'), key: 'name', render: (_, i) => <strong>{i.name}</strong> },
+    { title: t('lxd.colType'), key: 'type', render: (_, i) => <span className="small">{i.type === 'virtual-machine' ? t('lxd.vm') : t('lxd.container')}</span> },
+    { title: t('lxd.colState'), key: 'status', render: (_, i) => <StateBadge state={i.status} /> },
+    { title: t('lxd.colArch'), key: 'architecture', render: (_, i) => <span className="small mono">{i.architecture || '—'}</span> },
     { title: 'IPv4', key: 'ipv4', render: (_, i) => <span className="small mono">{(i.ipv4 ?? []).join(', ') || '—'}</span> },
     {
-      title: 'Действия',
+      title: t('common.actions'),
       key: 'actions',
       render: (_, i) => (
         <div className="row">
@@ -92,7 +94,7 @@ export default function LXD({ me }: { me: Me }) {
           ))}
           {canControl && (
             <Button danger type="link" size="small" loading={busy === `${i.name}:delete`} onClick={() => del(i.name)}>
-              удалить
+              {t('common.delete')}
             </Button>
           )}
         </div>
@@ -106,13 +108,13 @@ export default function LXD({ me }: { me: Me }) {
         <div>
           <h1>
             LXD
-            <InfoHint>Контейнеры и виртуальные машины LXD — один инструмент управляет обоими типами инстансов.</InfoHint>
+            <InfoHint>{t('lxd.hint')}</InfoHint>
           </h1>
         </div>
         <div className="row">
           {me.is_admin && (
             <Button onClick={rescan} loading={rescanning}>
-              {rescanning ? 'Сканирую…' : 'Пересканировать'}
+              {rescanning ? t('common.scanning') : t('common.rescan')}
             </Button>
           )}
         </div>
@@ -120,24 +122,22 @@ export default function LXD({ me }: { me: Me }) {
 
       <ErrorNote error={instances.error} />
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
-      {!canControl && (
-        <Banner kind="info">Действия недоступны: нужна роль admin и включённые изменения.</Banner>
-      )}
+      {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}
 
       <Card
-        title="Инстансы LXD"
+        title={t('lxd.instances')}
         actions={
           canControl && (
             <Button type="link" onClick={() => setCreating(true)}>
-              + новый инстанс
+              {t('lxd.newInstance')}
             </Button>
           )
         }
       >
         {instances.loading && !instances.data ? (
-          <Loading what="инстансы LXD" />
+          <Loading what={t('lxd.loading')} />
         ) : allInstances.length === 0 ? (
-          <p className="small muted">LXD не обнаружен или инстансов нет.</p>
+          <p className="small muted">{t('lxd.none')}</p>
         ) : (
           <>
             <InactiveSummary
@@ -146,8 +146,8 @@ export default function LXD({ me }: { me: Me }) {
               getLabel={(i) => i.name}
               getTooltip={(i) => (
                 <>
-                  <div>{i.type === 'virtual-machine' ? 'VM' : 'контейнер'}</div>
-                  <div>состояние: {i.status}</div>
+                  <div>{i.type === 'virtual-machine' ? t('lxd.vm') : t('lxd.container')}</div>
+                  <div>{t('lxd.state', { state: i.status })}</div>
                 </>
               )}
               onRescan={rescan}
@@ -182,6 +182,7 @@ export default function LXD({ me }: { me: Me }) {
 type CreateInstanceValues = { image: string; name: string }
 
 function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -202,29 +203,29 @@ function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCre
     <Card
       title={
         <>
-          Новый инстанс LXD
-          <InfoHint>lxc launch — образ скачивается автоматически, инстанс сразу запускается.</InfoHint>
+          {t('lxd.newInstanceTitle')}
+          <InfoHint>{t('lxd.newInstanceHint')}</InfoHint>
         </>
       }
       actions={
         <Button type="link" onClick={onClose}>
-          закрыть
+          {t('common.close')}
         </Button>
       }
     >
       <Form<CreateInstanceValues> layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <Form.Item name="image" label="Образ" rules={[{ required: true }]} style={{ flex: 1, minWidth: '16rem' }}>
+          <Form.Item name="image" label={t('lxd.image')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '16rem' }}>
             <Input placeholder="ubuntu:24.04" />
           </Form.Item>
-          <Form.Item name="name" label="Имя инстанса" rules={[{ required: true }]} style={{ flex: 1, minWidth: '12rem' }}>
+          <Form.Item name="name" label={t('lxd.instanceName')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '12rem' }}>
             <Input placeholder="my-instance" />
           </Form.Item>
         </div>
         <Form.Item style={{ marginBottom: 0 }}>
           <Button type="primary" htmlType="submit" loading={busy}>
-            {busy ? 'Запускаю…' : 'Создать и запустить'}
+            {busy ? t('lxd.launching') : t('lxd.createAndStart')}
           </Button>
         </Form.Item>
       </Form>
