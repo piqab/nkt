@@ -13,6 +13,7 @@ import (
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
 	"github.com/althq/netknownsthat/internal/inventory"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -434,10 +435,15 @@ func waitForJob(t *testing.T, m *CertManager, id string) ([]RenewEvent, string) 
 	}
 }
 
+// eventTexts resolves each event's text in Russian (msgs.RU, the default/
+// baseline catalog language) — tests assert against the pre-i18n Russian
+// wording, which is exactly what resolveText renders for msgs.RU regardless
+// of whether an event carries a Key (translatable) or plain Text (raw
+// certbot output, unaffected either way).
 func eventTexts(events []RenewEvent) []string {
 	out := make([]string, len(events))
 	for i, e := range events {
-		out[i] = e.Text
+		out[i] = e.resolveText(msgs.RU)
 	}
 	return out
 }

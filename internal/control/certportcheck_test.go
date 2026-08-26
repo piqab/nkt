@@ -43,7 +43,7 @@ func TestCheckPortFreePortNotInUse(t *testing.T) {
 func TestCheckPortFreeForStandaloneSkippedInFixtures(t *testing.T) {
 	m, _ := renewSetup(t)
 	var reported []string
-	err := m.checkPortFreeForStandalone(context.Background(), func(s string) { reported = append(reported, s) })
+	err := m.checkPortFreeForStandalone(context.Background(), &certProgress{msg: func(key string, args ...any) { reported = append(reported, key) }})
 	if err != nil {
 		t.Errorf("ожидался nil в режиме fixtures, получено: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestCheckPortFreeForStandaloneBlocksOutsideFixtures(t *testing.T) {
 	m := NewCertManager(cfg, c, db, services, scanner)
 
 	var reported []string
-	err = m.checkPortFreeForStandalone(context.Background(), func(s string) { reported = append(reported, s) })
+	err = m.checkPortFreeForStandalone(context.Background(), &certProgress{msg: func(key string, args ...any) { reported = append(reported, key) }})
 	if err == nil {
 		t.Fatal("ожидалась ошибка — порт 80 занят nginx в фикстурах ss.txt")
 	}
