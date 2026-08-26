@@ -640,5 +640,32 @@
     "loadingRules": "правила",
     "socketsTitle": "Открытые сокеты хоста",
     "socketsHint": "Вывод ss: то, что действительно слушает порты"
+  },
+  "topology": {
+    "colInternet": "Внешняя сеть",
+    "colServices": "Сервисы",
+    "colListeners": "Слушатели",
+    "colUndeclared": "Разное",
+    "colUpstreams": "Пулы",
+    "colBackends": "Backend-адреса",
+    "colContainers": "Контейнеры",
+    "colPodman": "Podman",
+    "colLxd": "LXD",
+    "colVms": "Виртуальные машины",
+    "colNetworks": "Сети docker",
+    "title": "Карта сетевых ресурсов",
+    "hint": "Красным — критичные проблемы, жёлтым — предупреждения. Наведите на узел или щёлкните его, чтобы увидеть весь путь — от внешней сети до backend'а и обратно, — и подробности.",
+    "findingsHint": "{{count}} находок на карте — щёлкните узел, чтобы увидеть подробности",
+    "clickNodeHint": "Щёлкните узел на карте, чтобы увидеть подробности.",
+    "legendOk": "в порядке",
+    "legendWarn": "предупреждение",
+    "legendError": "проблема",
+    "legendUnknown": "неизвестно",
+    "onlyProblems": "только проблемы",
+    "nodesEdgesCount": "{{nodes}} узлов, {{edges}} связей",
+    "zoomIn": "Приблизить",
+    "zoomOut": "Отдалить",
+    "resetView": "Сбросить вид",
+    "loadingMap": "карту ресурсов"
   }
 }
