@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import i18n from './i18n'
 
 /** Raised for any non-2xx API response, carrying the server's message. */
 export class ApiError extends Error {
@@ -101,7 +102,7 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
     const message =
       (payload && typeof payload === 'object' && 'error' in payload
         ? String((payload as { error: unknown }).error)
-        : null) ?? `Ошибка ${res.status}`
+        : null) ?? i18n.t('common.httpError', { status: res.status })
     throw new ApiError(res.status, message, payload)
   }
   return payload as T
