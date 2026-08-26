@@ -76,7 +76,8 @@
     "confirmDelete": "Delete the {{what}} {{name}}? This can't be undone.",
     "deleted": "{{name}}: deleted.",
     "mutationsDisabled": "Actions unavailable: needs the admin role and mutations enabled.",
-    "actions": "Actions"
+    "actions": "Actions",
+    "notPublished": "{{port}} (not published)"
   },
   "containers": {
     "vms": "Virtual machines"
@@ -259,7 +260,6 @@
     "colImage": "Image",
     "colState": "State",
     "colPorts": "Ports",
-    "notPublished": "{{port}} (not published)",
     "hint": "Containers on Podman, a separate engine from docker — the same operations: start, stop, delete.",
     "containers": "Podman containers",
     "newContainer": "+ new container",
@@ -270,5 +270,32 @@
     "containerName": "Container name",
     "creating": "Creating…",
     "createAndStart": "Create and start"
+  },
+  "docker": {
+    "confirmAction": "Run \"{{action}}\" on the container {{name}}?",
+    "actionDone": "{{name}}: {{action}} done.",
+    "colContainer": "Container",
+    "outsideCompose": "outside compose",
+    "restart": " · restart: {{policy}}",
+    "colOwner": "Owner",
+    "colImage": "Image",
+    "colState": "State",
+    "declaredNotRunning": "declared, but not running",
+    "runningOutsideCompose": "running outside compose",
+    "colPorts": "Ports",
+    "colNetworks": "Networks",
+    "editConfig": "edit config",
+    "colNetwork": "Network",
+    "colDriver": "Driver",
+    "colSubnets": "Subnets",
+    "colGateway": "Gateway",
+    "colInterface": "Interface",
+    "hint": "Matching what's declared in compose against what's actually running.",
+    "containers": "Docker containers",
+    "newContainer": "+ new container",
+    "loading": "containers",
+    "networks": "Docker networks",
+    "newContainerLocation": "New container — pick a location",
+    "loadingFile": "file"
   }
 }

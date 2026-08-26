@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Table, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { Container, DockerNetwork, FileContent, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
@@ -8,6 +9,7 @@ import BlockTree from '../components/BlockTree'
 import PathPicker, { ownerFromPath } from '../components/PathPicker'
 
 export default function Docker({ me }: { me: Me }) {
+  const { t } = useTranslation()
   const docker = useApi<{ containers: Container[]; networks: DockerNetwork[] }>('/containers', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [rescanning, setRescanning] = useState(false)
@@ -26,7 +28,7 @@ export default function Docker({ me }: { me: Me }) {
     try {
       await api('/inventory/refresh', { method: 'POST' })
       await docker.reload()
-      setNotice({ kind: 'info', text: 'Хост пересканирован.' })
+      setNotice({ kind: 'info', text: t('common.hostRescanned') })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -36,25 +38,25 @@ export default function Docker({ me }: { me: Me }) {
 
   const containerColumns: TableColumnsType<Container> = [
     {
-      title: 'Контейнер',
+      title: t('docker.colContainer'),
       key: 'name',
       render: (_, c) => (
         <>
           <strong>{c.name}</strong>
           <div className="small muted">
-            {c.project ? `${c.project}/${c.service_name}` : 'вне compose'}
-            {c.restart ? ` · restart: ${c.restart}` : ''}
+            {c.project ? `${c.project}/${c.service_name}` : t('docker.outsideCompose')}
+            {c.restart ? t('docker.restart', { policy: c.restart }) : ''}
           </div>
         </>
       ),
     },
     {
-      title: 'Пользователь',
+      title: t('docker.colOwner'),
       key: 'owner',
       render: (_, c) => <span className="small">{(c.compose_file && ownerFromPath(c.compose_file)) || '—'}</span>,
     },
     {
-      title: 'Образ',
+      title: t('docker.colImage'),
       key: 'image',
       render: (_, c) => (
         <span className="small mono" style={{ wordBreak: 'break-all' }}>
@@ -63,19 +65,19 @@ export default function Docker({ me }: { me: Me }) {
       ),
     },
     {
-      title: 'Состояние',
+      title: t('docker.colState'),
       key: 'state',
       render: (_, c) => (
         <>
           <StateBadge state={c.state} />
           <div className="small muted">{c.status}</div>
-          {c.declared && !c.running && <div className="small muted">описан, но не запущен</div>}
-          {!c.declared && c.running && <div className="small muted">запущен вне compose</div>}
+          {c.declared && !c.running && <div className="small muted">{t('docker.declaredNotRunning')}</div>}
+          {!c.declared && c.running && <div className="small muted">{t('docker.runningOutsideCompose')}</div>}
         </>
       ),
     },
     {
-      title: 'Порты',
+      title: t('docker.colPorts'),
       key: 'ports',
       render: (_, c) => (
         <span className="small mono">
@@ -90,14 +92,14 @@ export default function Docker({ me }: { me: Me }) {
                 >
                   {p.host_port
                     ? `${p.host_ip || '0.0.0.0'}:${p.host_port} → ${p.container_port}/${p.protocol}`
-                    : `${p.container_port}/${p.protocol} (не опубликован)`}
+                    : t('common.notPublished', { port: `${p.container_port}/${p.protocol}` })}
                 </div>
               ))}
         </span>
       ),
     },
     {
-      title: 'Сети',
+      title: t('docker.colNetworks'),
       key: 'networks',
       render: (_, c) => (
         <span className="small">
@@ -111,7 +113,7 @@ export default function Docker({ me }: { me: Me }) {
       ),
     },
     {
-      title: 'Действия',
+      title: t('common.actions'),
       key: 'actions',
       render: (_, c) => (
         <div className="row">
@@ -129,7 +131,7 @@ export default function Docker({ me }: { me: Me }) {
           ))}
           {canControl && c.compose_file && c.service_name && (
             <Button type="link" size="small" onClick={() => setConfigModal({ path: c.compose_file!, focusName: c.service_name })}>
-              редактировать конфиг
+              {t('docker.editConfig')}
             </Button>
           )}
         </div>
@@ -139,7 +141,7 @@ export default function Docker({ me }: { me: Me }) {
 
   const networkColumns: TableColumnsType<DockerNetwork> = [
     {
-      title: 'Сеть',
+      title: t('docker.colNetwork'),
       key: 'name',
       render: (_, n) => (
         <>
@@ -148,19 +150,19 @@ export default function Docker({ me }: { me: Me }) {
         </>
       ),
     },
-    { title: 'Драйвер', key: 'driver', render: (_, n) => <span className="small">{n.driver}</span> },
-    { title: 'Подсети', key: 'subnets', render: (_, n) => <span className="small mono">{(n.subnets ?? []).join(', ') || '—'}</span> },
-    { title: 'Шлюз', key: 'gateway', render: (_, n) => <span className="small mono">{n.gateway || '—'}</span> },
-    { title: 'Интерфейс', key: 'bridge', render: (_, n) => <span className="small mono">{n.bridge || '—'}</span> },
+    { title: t('docker.colDriver'), key: 'driver', render: (_, n) => <span className="small">{n.driver}</span> },
+    { title: t('docker.colSubnets'), key: 'subnets', render: (_, n) => <span className="small mono">{(n.subnets ?? []).join(', ') || '—'}</span> },
+    { title: t('docker.colGateway'), key: 'gateway', render: (_, n) => <span className="small mono">{n.gateway || '—'}</span> },
+    { title: t('docker.colInterface'), key: 'bridge', render: (_, n) => <span className="small mono">{n.bridge || '—'}</span> },
   ]
 
   async function containerAct(name: string, action: string) {
-    if (!window.confirm(`Выполнить «${action}» для контейнера ${name}?`)) return
+    if (!window.confirm(t('docker.confirmAction', { action, name }))) return
     setBusy(`${name}:${action}`)
     setNotice(null)
     try {
       await api(`/containers/${name}/${action}`, { method: 'POST' })
-      setNotice({ kind: 'info', text: `${name}: ${action} выполнено.` })
+      setNotice({ kind: 'info', text: t('docker.actionDone', { name, action }) })
       // handleContainerAction itself only calls rescanLater() — a fire-
       // and-forget *background* full rescan, deliberately not blocking
       // that response — so a bare docker.reload() right after would just
@@ -185,13 +187,13 @@ export default function Docker({ me }: { me: Me }) {
         <div>
           <h1>
             Docker
-            <InfoHint>Сопоставление того, что описано в compose, с тем, что реально работает.</InfoHint>
+            <InfoHint>{t('docker.hint')}</InfoHint>
           </h1>
         </div>
         <div className="row">
           {me.is_admin && (
             <Button onClick={rescan} loading={rescanning}>
-              {rescanning ? 'Сканирую…' : 'Пересканировать'}
+              {rescanning ? t('common.scanning') : t('common.rescan')}
             </Button>
           )}
         </div>
@@ -199,22 +201,20 @@ export default function Docker({ me }: { me: Me }) {
 
       <ErrorNote error={docker.error} />
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
-      {!canControl && (
-        <Banner kind="info">Действия недоступны: нужна роль admin и включённые изменения.</Banner>
-      )}
+      {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}
 
       <Card
-        title="Контейнеры docker"
+        title={t('docker.containers')}
         actions={
           canControl && (
             <Button type="link" onClick={() => setPickingPath(true)}>
-              + новый контейнер
+              {t('docker.newContainer')}
             </Button>
           )
         }
       >
         {docker.loading && !docker.data ? (
-          <Loading what="контейнеры" />
+          <Loading what={t('docker.loading')} />
         ) : (
           <>
             <InactiveSummary
@@ -227,7 +227,7 @@ export default function Docker({ me }: { me: Me }) {
                   <div>
                     {c.state} · {c.status}
                   </div>
-                  <div>{c.project ? `${c.project}/${c.service_name}` : 'вне compose'}</div>
+                  <div>{c.project ? `${c.project}/${c.service_name}` : t('docker.outsideCompose')}</div>
                 </>
               )}
               onRescan={rescan}
@@ -246,7 +246,7 @@ export default function Docker({ me }: { me: Me }) {
         )}
       </Card>
 
-      <Card title="Сети docker">
+      <Card title={t('docker.networks')}>
         <div className="table-wrap">
           <Table<DockerNetwork>
             dataSource={docker.data?.networks ?? []}
@@ -259,7 +259,7 @@ export default function Docker({ me }: { me: Me }) {
       </Card>
 
       {pickingPath && (
-        <Modal title="Новый контейнер — выберите расположение" onClose={() => setPickingPath(false)}>
+        <Modal title={t('docker.newContainerLocation')} onClose={() => setPickingPath(false)}>
           <PathPicker
             onPick={(path) => {
               setPickingPath(false)
@@ -302,12 +302,13 @@ function ContainerConfigModal({
   onClose: () => void
   onSaved: () => void
 }) {
+  const { t } = useTranslation()
   const file = useApi<FileContent>(`/configs/file${qs({ path })}`)
 
   return (
     <Modal title={path} onClose={onClose}>
       {file.loading && !file.data ? (
-        <Loading what="файл" />
+        <Loading what={t('docker.loadingFile')} />
       ) : file.error ? (
         <ErrorNote error={file.error} />
       ) : file.data ? (
