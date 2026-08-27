@@ -494,24 +494,43 @@ const wsKeepalivePingInterval = 25 * time.Second
 // looking "connected" to the browser for just as long: the ping never
 // fails, it just blocks forever, so this "keepalive" detected nothing.
 // Timing out each ping independently turns it into a real liveness check.
-const wsKeepalivePingTimeout = 10 * time.Second
+const wsKeepalivePingTimeout = 15 * time.Second
+
+// wsKeepaliveMaxMissed is how many consecutive missed pongs it takes
+// before a connection is declared dead. A single slow pong is not by
+// itself proof of that: a browser tab that has lost focus gets its
+// networking deprioritised by the OS/browser for a while (backgrounded-tab
+// power saving), which can delay a pong well past one ping's timeout with
+// the underlying connection still perfectly fine — the very first version
+// of this liveness check killed exactly those sessions ("зависает, если
+// окно терминала не активно"), overcorrecting for the original bug (no
+// deadline at all, so a truly dead connection went undetected for up to
+// resetIdle's tens of minutes). Requiring a run of consecutive misses
+// spanning multiple ping intervals tolerates that backgrounding stall
+// while still tearing down a genuinely dead connection within a couple of
+// minutes rather than tens of them.
+const wsKeepaliveMaxMissed = 4
 
 // startWSKeepalive pings conn every interval until ctx is done, and calls
-// cancel (tearing down the session) the first time a ping doesn't get its
-// pong back within timeout — shared by runPTYSession and runUpdateSession,
-// whose sessions can both go quiet for long stretches without that silence
-// meaning the connection itself should be considered dead, but which also
-// must not be left looking alive once it demonstrably isn't. conn.Ping
-// needs a concurrent conn.Read to ever observe the matching pong (see its
-// own doc comment) — both callers' main loops already read continuously,
-// so this is safe as-is. interval and timeout are parameters (both real
-// callers pass wsKeepalivePingInterval/wsKeepalivePingTimeout) rather than
-// baked in, so a test can use short ones instead of actually waiting out
-// the real values.
-func startWSKeepalive(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, interval, timeout time.Duration) {
+// cancel (tearing down the session) once maxMissed consecutive pings in a
+// row don't get their pong back within timeout — shared by runPTYSession
+// and runUpdateSession, whose sessions can both go quiet for long
+// stretches without that silence meaning the connection itself should be
+// considered dead, but which also must not be left looking alive once
+// it's demonstrably not. A single missed pong resets to zero misses on
+// the next successful one rather than accumulating across unrelated
+// stalls. conn.Ping needs a concurrent conn.Read to ever observe the
+// matching pong (see its own doc comment) — both callers' main loops
+// already read continuously, so this is safe as-is. interval, timeout and
+// maxMissed are parameters (both real callers pass
+// wsKeepalivePingInterval/wsKeepalivePingTimeout/wsKeepaliveMaxMissed)
+// rather than baked in, so a test can use small ones instead of actually
+// waiting out the real values.
+func startWSKeepalive(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, interval, timeout time.Duration, maxMissed int) {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
+		missed := 0
 		for {
 			select {
 			case <-ctx.Done():
@@ -521,9 +540,14 @@ func startWSKeepalive(ctx context.Context, cancel context.CancelFunc, conn *webs
 				err := conn.Ping(pingCtx)
 				pingCancel()
 				if err != nil {
-					cancel()
-					return
+					missed++
+					if missed >= maxMissed {
+						cancel()
+						return
+					}
+					continue
 				}
+				missed = 0
 			}
 		}
 	}()
@@ -588,7 +612,7 @@ func (s *Server) runPTYSession(w http.ResponseWriter, r *http.Request, cmd *exec
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	startWSKeepalive(ctx, cancel, conn, wsKeepalivePingInterval, wsKeepalivePingTimeout)
+	startWSKeepalive(ctx, cancel, conn, wsKeepalivePingInterval, wsKeepalivePingTimeout, wsKeepaliveMaxMissed)
 
 	// Idle timeout: the safety net for a tab left open and forgotten — the
 	// process otherwise runs until someone closes it by hand. Any traffic
