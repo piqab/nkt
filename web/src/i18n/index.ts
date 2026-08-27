@@ -13,7 +13,10 @@ const LANG_KEY = 'nkt-lang'
 export function getStoredLang(): Lang {
   const stored = localStorage.getItem(LANG_KEY)
   if (stored === 'en' || stored === 'ru') return stored
-  return navigator.language.toLowerCase().startsWith('en') ? 'en' : 'ru'
+  // Only a Russian browser locale defaults to Russian — everything else
+  // (English, any other language, or no locale info at all) defaults to
+  // English rather than assuming Russian.
+  return navigator.language.toLowerCase().startsWith('ru') ? 'ru' : 'en'
 }
 
 export function setStoredLang(lang: Lang): void {

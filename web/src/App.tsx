@@ -204,7 +204,28 @@ function Shell({
   const [lang, setLang] = useLang()
   const [showPassword, setShowPassword] = useState(false)
   const navigate = useNavigate()
+  const location = useLocation()
   const isHub = me.mode === 'hub'
+
+  // The terminal's own WebSocket+xterm.js session (see usePty) is torn down
+  // the moment its owning component unmounts — desired when the user
+  // explicitly closes it, not just because they clicked over to another
+  // page and back. Rendering TerminalPage as an ordinary <Route> element
+  // would unmount it on every navigation away from /terminal, killing the
+  // live shell (and, for a non-tmux session, the remote process itself —
+  // see usePty's own comment on why). Instead it renders once (lazily, the
+  // first time /terminal is visited — most sessions never open it at all)
+  // as a sibling of <Routes>, toggled by plain CSS visibility instead of by
+  // mounting/unmounting, so navigating elsewhere and back finds the same
+  // live session still connected. The <Route> below still has to match
+  // "/terminal" itself (element: null) — without it, <Routes>' own
+  // catch-all would redirect away from that path entirely, since nothing
+  // else in the switch claims it.
+  const isTerminalRoute = location.pathname === '/terminal'
+  const [terminalMounted, setTerminalMounted] = useState(isTerminalRoute)
+  useEffect(() => {
+    if (isTerminalRoute) setTerminalMounted(true)
+  }, [isTerminalRoute])
 
   const [selectedHost, setSelectedHost] = useState<SelectedHost | null>(() => (isHub ? readSelectedHost() : null))
 
@@ -415,7 +436,7 @@ function Shell({
             <Route path="/podman" element={<Navigate to="/containers" replace />} />
             <Route path="/lxd" element={<Navigate to="/containers" replace />} />
             <Route path="/vms" element={<Navigate to="/containers" replace />} />
-            {me.is_admin && <Route path="/terminal" element={<TerminalPage me={me} />} />}
+            {me.is_admin && <Route path="/terminal" element={null} />}
             <Route path="/firewall" element={<Firewall me={me} />} />
             <Route path="/interfaces" element={<Interfaces />} />
             <Route path="/certificates" element={<Certificates me={me} />} />
@@ -424,6 +445,11 @@ function Shell({
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          {me.is_admin && terminalMounted && (
+            <div style={{ display: isTerminalRoute ? 'contents' : 'none' }}>
+              <TerminalPage me={me} />
+            </div>
+          )}
         </div>
       </main>
     </div>
