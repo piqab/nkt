@@ -257,6 +257,110 @@ func TestHostsLocalRouteAuthAndForwarding(t *testing.T) {
 	})
 }
 
+// TestHostsLocalWSRoutesExemptFromTimeout is the regression test for
+// "терминал зависает" reproduced live as: Go's own net/http logs
+// "response.WriteHeader on hijacked connection" and the browser terminal
+// stops responding. Root cause was chi's middleware.Timeout(2*time.Minute),
+// wrapped around the whole /api group including the /hosts/local/* and
+// /hosts/{id}/* proxy wildcards — a WS session proxied through either one
+// inherited a hard 2-minute ceiling on top of the age-old Timeout, killing
+// any terminal/install/update session that legitimately ran longer,
+// regardless of activity. Fixed by registering every known WS sub-path
+// (server.go's hubWSPaths) as its own literal route, outside the Timeout
+// group — chi matches the more specific literal pattern over the wildcard
+// regardless of which group registered it. This only exercises the
+// /hosts/local/* mount (proxyLocal, a same-process call with no SSH
+// involved) since /hosts/{id}/* would need a real reachable managed host to
+// drive all the way through Manager.Proxy — but registration for both
+// mounts is symmetric (server.go builds them from the same hubWSPaths loop
+// side by side), so this exercises the shared mechanism that matters.
+func TestHostsLocalWSRoutesExemptFromTimeout(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	cfg := &config.Config{AllowMutations: true, SessionTTL: time.Hour, CookieSecure: false}
+	authSvc := auth.NewService(db, cfg)
+
+	hash, err := auth.HashPassword("admin-password-1234")
+	if err != nil {
+		t.Fatalf("HashPassword: %v", err)
+	}
+	if _, err := db.CreateUser(context.Background(), "admin", hash, store.RoleAdmin); err != nil {
+		t.Fatalf("create admin: %v", err)
+	}
+
+	key, err := secretbox.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	manager := NewManager(cfg, db, key, "test", slog.New(slog.DiscardHandler))
+
+	var gotDeadline bool
+	local := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, gotDeadline = r.Context().Deadline()
+		w.WriteHeader(http.StatusOK)
+	})
+
+	srv := New(Deps{Cfg: cfg, DB: db, Auth: authSvc, Hub: manager, Local: local, Log: slog.Default()})
+	handler := srv.Handler()
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/api/auth/login",
+		strings.NewReader(`{"username":"admin","password":"admin-password-1234"}`))
+	req.Header.Set("Content-Type", "application/json")
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("login: status %d: %s", rec.Code, rec.Body.String())
+	}
+	var cookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == auth.SessionCookie {
+			cookie = c
+		}
+	}
+	if cookie == nil {
+		t.Fatal("login: no session cookie set")
+	}
+
+	get := func(t *testing.T, path string) {
+		t.Helper()
+		gotDeadline = false
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.AddCookie(cookie)
+		handler.ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+		}
+	}
+
+	t.Run("REST call still carries the Timeout deadline", func(t *testing.T) {
+		get(t, "/api/hosts/local/overview")
+		if !gotDeadline {
+			t.Error("r.Context() had no deadline — the Timeout group itself is broken, not just over-broad")
+		}
+	})
+
+	for _, p := range []string{
+		"/terminal/ws",
+		"/updates/ws",
+		"/firewall/ufw-install/ws",
+		"/firewall/firewalld-install/ws",
+		"/system/dbus-install/ws",
+		"/system/tmux-install/ws",
+	} {
+		t.Run("WS route exempt: "+p, func(t *testing.T) {
+			get(t, "/api/hosts/local"+p)
+			if gotDeadline {
+				t.Error("r.Context() had a deadline — this WS route must be exempt from the Timeout group, or a long-lived session gets silently killed partway through")
+			}
+		})
+	}
+}
+
 // TestHostsLocalRouteWithRealEmbeddedAPIServer is the end-to-end version of
 // the test above: instead of a hand-written stub http.HandlerFunc standing
 // in for Local, this wires up the actual api.New(...) the same way runHub

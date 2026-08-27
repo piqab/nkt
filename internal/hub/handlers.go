@@ -566,7 +566,12 @@ func (s *Server) proxyLocal(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, msgs.T(msgs.LangFromRequest(r), "hub.localScannerNotRunning"))
 		return
 	}
-	rest := chi.URLParam(r, "*")
+	// Derived from the URL path itself, not chi.URLParam(r, "*") — this
+	// handler is also mounted on literal (non-wildcard) routes for the
+	// long-lived WebSocket endpoints, kept outside the router's blanket
+	// request Timeout (see server.go's own comment on that split), which
+	// leave "*" unset.
+	rest := strings.TrimPrefix(r.URL.Path, "/api/hosts/local/")
 	// r.Context() already carries THIS router's own *chi.Context (set by
 	// chi.Mux.ServeHTTP when it first dispatched this very request) — left
 	// in place, s.local's chi.Mux.ServeHTTP would see a non-nil route
@@ -593,7 +598,11 @@ func (s *Server) proxyHost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	rest := chi.URLParam(r, "*")
+	// Derived from the URL path itself, not chi.URLParam(r, "*") — see
+	// proxyLocal's identical comment above. The raw {id} path segment
+	// (not id re-formatted from the parsed int64) so this can't mismatch
+	// on some hypothetical non-canonical numeric spelling.
+	rest := strings.TrimPrefix(r.URL.Path, "/api/hosts/"+chi.URLParam(r, "id")+"/")
 
 	r2 := r.Clone(r.Context())
 	r2.URL.Path = "/api/" + rest
