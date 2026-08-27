@@ -33,7 +33,7 @@ func TestStartWSKeepalivePingsUntilCtxDone(t *testing.T) {
 		defer conn.CloseNow()
 		ctx, cancel := context.WithTimeout(r.Context(), serverCtxLife)
 		defer cancel()
-		startWSKeepalive(ctx, conn, pingInterval)
+		startWSKeepalive(ctx, cancel, conn, pingInterval, time.Second)
 		// Ping needs a concurrent Read to ever observe the matching pong
 		// (see Conn.Ping's own doc comment) — block here reading until ctx
 		// ends, exactly like runPTYSession/runUpdateSession's own main
@@ -96,5 +96,76 @@ func TestStartWSKeepalivePingsUntilCtxDone(t *testing.T) {
 	time.Sleep(500 * time.Millisecond)
 	if got := pings.Load(); got != afterStop {
 		t.Errorf("pings kept arriving after the server ctx should have ended (%d -> %d)", afterStop, got)
+	}
+}
+
+// TestStartWSKeepaliveCancelsOnMissedPong is the regression test for the
+// bug behind "терминал зависает, помогает только полное закрытие": a
+// connection black-holed by a NAT device or proxy (packets simply stop
+// being delivered, with neither a FIN nor a RST) used to leave the session
+// looking alive indefinitely, because conn.Ping(ctx) had no deadline of
+// its own and only gave up once the same long-lived session ctx that
+// resetIdle governs eventually ended. Simulates a black hole by having the
+// client suppress its automatic pong reply, then asserts cancel fires
+// (ctx.Done() closes) within one missed ping, not after ctx's full
+// lifetime.
+func TestStartWSKeepaliveCancelsOnMissedPong(t *testing.T) {
+	const pingInterval = 50 * time.Millisecond
+	const pingTimeout = 100 * time.Millisecond
+	const serverCtxLife = 10 * time.Second // must never be reached by this test
+
+	cancelled := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.CloseNow()
+		ctx, cancel := context.WithTimeout(r.Context(), serverCtxLife)
+		defer cancel()
+		startWSKeepalive(ctx, cancel, conn, pingInterval, pingTimeout)
+		go func() {
+			<-ctx.Done()
+			close(cancelled)
+		}()
+		for {
+			if _, _, err := conn.Read(ctx); err != nil {
+				return
+			}
+		}
+	}))
+	defer ts.Close()
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http")
+
+	start := time.Now()
+	dialCtx, dialCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer dialCancel()
+	conn, _, err := websocket.Dial(dialCtx, wsURL, &websocket.DialOptions{
+		OnPingReceived: func(_ context.Context, _ []byte) bool {
+			return false // swallow it — never reply, as a black-holed connection would
+		},
+	})
+	if err != nil {
+		t.Fatalf("Dial: %v", err)
+	}
+	defer conn.CloseNow()
+
+	readCtx, readCancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer readCancel()
+	go func() {
+		for {
+			if _, _, err := conn.Read(readCtx); err != nil {
+				return
+			}
+		}
+	}()
+
+	select {
+	case <-cancelled:
+		if elapsed := time.Since(start); elapsed > time.Second {
+			t.Errorf("cancel took %v — should fire within roughly pingInterval+pingTimeout, not sit until serverCtxLife", elapsed)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("session ctx was never cancelled after pings went unanswered")
 	}
 }

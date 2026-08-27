@@ -485,16 +485,30 @@ func systemdRunBackgroundArgs(argv ...string) []string {
 // interact with resetIdle's own (much longer, real-activity-based) timer.
 const wsKeepalivePingInterval = 25 * time.Second
 
-// startWSKeepalive pings conn every interval until ctx is done — shared by
-// runPTYSession and runUpdateSession, whose sessions can both go quiet for
-// long stretches without that silence meaning the connection itself
-// should be considered dead. conn.Ping needs a concurrent conn.Read to
-// ever observe the matching pong (see its own doc comment) — both
-// callers' main loops already read continuously, so this is safe as-is.
-// interval is a parameter (both real callers pass wsKeepalivePingInterval)
-// rather than baked in, so a test can use a short one instead of actually
-// waiting 25s.
-func startWSKeepalive(ctx context.Context, conn *websocket.Conn, interval time.Duration) {
+// wsKeepalivePingTimeout bounds how long a single ping waits for its pong.
+// Without its own deadline, conn.Ping(ctx) only ever gives up when ctx
+// itself ends — which for both callers is the same long-lived session ctx
+// that resetIdle governs (tens of minutes of real inactivity). A
+// connection black-holed by a NAT device or proxy (no RST, no FIN — the
+// common failure mode, as opposed to a clean disconnect) would then sit
+// looking "connected" to the browser for just as long: the ping never
+// fails, it just blocks forever, so this "keepalive" detected nothing.
+// Timing out each ping independently turns it into a real liveness check.
+const wsKeepalivePingTimeout = 10 * time.Second
+
+// startWSKeepalive pings conn every interval until ctx is done, and calls
+// cancel (tearing down the session) the first time a ping doesn't get its
+// pong back within timeout — shared by runPTYSession and runUpdateSession,
+// whose sessions can both go quiet for long stretches without that silence
+// meaning the connection itself should be considered dead, but which also
+// must not be left looking alive once it demonstrably isn't. conn.Ping
+// needs a concurrent conn.Read to ever observe the matching pong (see its
+// own doc comment) — both callers' main loops already read continuously,
+// so this is safe as-is. interval and timeout are parameters (both real
+// callers pass wsKeepalivePingInterval/wsKeepalivePingTimeout) rather than
+// baked in, so a test can use short ones instead of actually waiting out
+// the real values.
+func startWSKeepalive(ctx context.Context, cancel context.CancelFunc, conn *websocket.Conn, interval, timeout time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
@@ -503,7 +517,11 @@ func startWSKeepalive(ctx context.Context, conn *websocket.Conn, interval time.D
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if err := conn.Ping(ctx); err != nil {
+				pingCtx, pingCancel := context.WithTimeout(ctx, timeout)
+				err := conn.Ping(pingCtx)
+				pingCancel()
+				if err != nil {
+					cancel()
 					return
 				}
 			}
@@ -570,7 +588,7 @@ func (s *Server) runPTYSession(w http.ResponseWriter, r *http.Request, cmd *exec
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	startWSKeepalive(ctx, conn, wsKeepalivePingInterval)
+	startWSKeepalive(ctx, cancel, conn, wsKeepalivePingInterval, wsKeepalivePingTimeout)
 
 	// Idle timeout: the safety net for a tab left open and forgotten — the
 	// process otherwise runs until someone closes it by hand. Any traffic
