@@ -159,11 +159,14 @@ export default function TerminalPage({ me }: { me: Me }) {
   /**
    * Opens this same page in its own, chrome-less browser window (see
    * App.tsx's isPopoutTerminal) — a real OS-level window, not a modal, so it
-   * can be moved to another monitor and survives navigating around the main
-   * tab (which would otherwise unmount this page and kill the session, see
-   * usePty's own cleanup effect). Stops the in-tab session first rather than
-   * leaving two live shells behind — "detach", not "duplicate": the popout
-   * gets its own fresh "Открыть терминал" to connect with once it opens.
+   * can be moved to another monitor and survives a full reload/close of the
+   * main tab (the in-tab terminal itself now survives ordinary navigation
+   * around the main tab too — see App.tsx's own terminal-persistence
+   * comment — a popout is for when the main tab's own lifetime isn't enough,
+   * not for surviving a click to another page and back). Stops the in-tab
+   * session first rather than leaving two live shells behind — "detach",
+   * not "duplicate": the popout gets its own fresh "Открыть терминал" to
+   * connect with once it opens.
    *
    * Under a hub, both the target host id and a window name keyed by it
    * travel along: window.open reuses/refocuses an already-open window

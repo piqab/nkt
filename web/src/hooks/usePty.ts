@@ -235,6 +235,13 @@ export function usePty(wsUrl: string) {
             if (container.clientWidth > 0 && container.clientHeight > 0) openAndConnect()
             return
           }
+          // A container that's still mounted but hidden behind a
+          // display:none ancestor (see App.tsx's own terminal-persistence
+          // comment — navigating away no longer unmounts this) collapses to
+          // 0x0. Fitting to that would shrink the remote PTY to a
+          // degenerate size; skip until it's actually visible again, same
+          // as the "not laid out yet" case above.
+          if (container.clientWidth === 0 || container.clientHeight === 0) return
           fit.fit()
         })
         resizeObserver.observe(container)
