@@ -37,7 +37,18 @@ export default function TerminalPage({ me }: { me: Me }) {
   const [tmuxMode, setTmuxMode] = useState(false)
   const [pendingStart, setPendingStart] = useState(false)
   const wsUrl = wsURL(tmuxMode ? '/terminal/ws?tmux=1' : '/terminal/ws')
-  const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(wsUrl)
+  const { containerRef, status, start, stop, focus, copySelection, clear, changeFontSize, search } = usePty(wsUrl)
+
+  // Re-focus whenever this page becomes the visible one again — covers
+  // returning to an already-connected session that was merely hidden
+  // (display:none, not unmounted — see App.tsx's own terminal-persistence
+  // comment) while the user was on another page. ws.onopen's own term.focus()
+  // only ever fires once, at initial connect, so nothing else does this for
+  // a session that was already live before the page was hidden.
+  const isActive = isPopout || location.pathname === '/terminal'
+  useEffect(() => {
+    if (isActive && status === 'connected') focus()
+  }, [isActive, status, focus])
 
   // Deferred one tick: setTmuxMode above only takes effect on the next
   // render, which is also when usePty hands back a start() closing over the
@@ -430,49 +441,62 @@ function TmuxHints() {
     })
   }
 
+  // Collapsed hides the card entirely — title included, not just the key
+  // list — leaving only this one small button to bring it back; the toggle
+  // itself can't live inside the card's own header/actions area then, since
+  // that would disappear along with everything else.
+  if (collapsed) {
+    return (
+      <div style={{ flexShrink: 0 }}>
+        <Button size="small" onClick={toggle}>
+          {t('terminal.show')}
+        </Button>
+      </div>
+    )
+  }
+
   return (
     <div style={{ width: 240, flexShrink: 0 }}>
       <Card
         title={t('terminal.tmuxManage')}
         actions={
           <Button size="small" onClick={toggle}>
-            {collapsed ? t('terminal.show') : t('terminal.hide')}
+            {t('terminal.hide')}
           </Button>
         }
       >
-        {!collapsed &&
-          TMUX_HINTS.map((group) => (
-            <div key={group.titleKey} style={{ marginTop: '0.5rem' }}>
-              <div className="small muted" style={{ marginBottom: '0.2rem' }}>
-                {t(group.titleKey)}
-              </div>
-              <div className="col" style={{ gap: '0.15rem' }}>
-                {group.rows.map(([keys, descKey]) => (
-                  <div
-                    key={keys}
-                    className="row"
-                    style={{ flexWrap: 'nowrap', gap: '0.4rem', alignItems: 'baseline' }}
-                  >
-                    <span
-                      className="mono"
-                      style={{
-                        flexShrink: 0,
-                        fontSize: '0.72rem',
-                        padding: '0.05rem 0.3rem',
-                        background: 'var(--surface-1)',
-                        border: '1px solid var(--border)',
-                        borderRadius: 'var(--radius-sm)',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {keys}
-                    </span>
-                    <span className="small muted">{t(descKey)}</span>
-                  </div>
-                ))}
-              </div>
+        {TMUX_HINTS.map((group) => (
+          <div key={group.titleKey} style={{ marginTop: '0.5rem' }}>
+            <div className="small muted" style={{ marginBottom: '0.2rem' }}>
+              {t(group.titleKey)}
             </div>
-          ))}
+            <div className="col" style={{ gap: '0.15rem' }}>
+              {group.rows.map(([keys, descKey]) => (
+                <div
+                  key={keys}
+                  className="row"
+                  style={{ flexWrap: 'nowrap', gap: '0.4rem', alignItems: 'baseline' }}
+                >
+                  <span
+                    className="mono"
+                    style={{
+                      flexShrink: 0,
+                      fontSize: '0.72rem',
+                      padding: '0.05rem 0.3rem',
+                      background: 'var(--surface-1)',
+                      border: '1px solid var(--border)',
+                      borderRadius: 'var(--radius-sm)',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {keys}
+                  </span>
+                  <span className="small muted">{t(descKey)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </Card>
     </div>
   )
