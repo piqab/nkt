@@ -261,6 +261,15 @@ export function usePty(wsUrl: string) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wsUrl])
 
+  // xterm.js captures keystrokes through an internal helper element that
+  // has to actually hold browser focus — set once, in ws.onopen above, at
+  // the moment a session first connects. Returning to an *already*
+  // connected session (the terminal page hidden behind display:none while
+  // the user was elsewhere, not torn down — see App.tsx's own terminal-
+  // persistence comment) never re-fires onopen, so nothing else calls this
+  // again; the caller re-focuses explicitly once the page is visible again.
+  const focus = useCallback(() => termRef.current?.focus(), [])
+
   const copySelection = useCallback(() => {
     const text = termRef.current?.getSelection()
     if (text) void navigator.clipboard.writeText(text)
@@ -289,7 +298,7 @@ export function usePty(wsUrl: string) {
     else addon.findNext(query)
   }, [])
 
-  return { containerRef, status, start, stop, copySelection, clear, changeFontSize, search }
+  return { containerRef, status, start, stop, focus, copySelection, clear, changeFontSize, search }
 }
 
 /** Mirrors api.ts's own hostScope-aware prefixing — WebSocket needs its own
