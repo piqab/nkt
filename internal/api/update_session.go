@@ -187,7 +187,7 @@ func (s *Server) runUpdateSession(w http.ResponseWriter, r *http.Request, key st
 
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
-	startWSKeepalive(ctx, conn, wsKeepalivePingInterval)
+	startWSKeepalive(ctx, cancel, conn, wsKeepalivePingInterval, wsKeepalivePingTimeout)
 	if live {
 		defer sess.detach(ch)
 	}
