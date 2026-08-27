@@ -81,6 +81,44 @@ func (s *Server) Handler() http.Handler {
 	r.Use(securityHeaders)
 
 	r.Route("/api", func(r chi.Router) {
+		// Long-lived WebSocket endpoints proxied onto the local or a
+		// managed host — must never inherit the Timeout group below. Chi's
+		// Timeout middleware caps a request's *total* lifetime, not idle
+		// time; applied to a hijacked WS connection mid-proxy, it fires a
+		// deferred w.WriteHeader(504) on that already-hijacked
+		// ResponseWriter once the deadline passes, which both logs Go's
+		// own "response.WriteHeader on hijacked connection" and leaves the
+		// browser side of the session hung — any terminal/install/update
+		// session that legitimately runs longer than the timeout would be
+		// silently killed. Mirrors api/server.go's identical exemption for
+		// these same underlying routes on the direct (single-host) server;
+		// listed explicitly here too since the hub's /hosts/local/* and
+		// /hosts/{id}/* wildcard mounts below don't otherwise distinguish
+		// a WS upgrade from an ordinary REST call at the router level. A
+		// sibling group, not nested inside the Timeout one — chi matches
+		// the more specific literal path here over the wildcard regardless
+		// of which group registered it.
+		hubWSPaths := []string{
+			"/terminal/ws",
+			"/updates/ws",
+			"/firewall/ufw-install/ws",
+			"/firewall/firewalld-install/ws",
+			"/system/dbus-install/ws",
+			"/system/tmux-install/ws",
+		}
+		r.Group(func(r chi.Router) {
+			r.Use(s.auth.RequireAuth)
+			for _, p := range hubWSPaths {
+				r.Get("/hosts/local"+p, s.proxyLocal)
+			}
+			r.Group(func(r chi.Router) {
+				r.Use(s.auth.RequireAdmin)
+				for _, p := range hubWSPaths {
+					r.Get("/hosts/{id}"+p, s.proxyHost)
+				}
+			})
+		})
+
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(2 * time.Minute))
 
