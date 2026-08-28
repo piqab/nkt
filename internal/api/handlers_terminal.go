@@ -79,6 +79,21 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	s.runPTYSession(w, r, cmd, "terminal", auditTarget, s.cfg.TerminalIdleTimeout)
 }
 
+// handleTerminalConfig reports this host's own TerminalIdleTimeout so the
+// frontend can show a countdown to the same disconnect runPTYSession/
+// runUpdateSession actually enforce (see acceptWS's/resetIdle's own
+// comments) — not gated on TerminalEnabled/ModeFixtures like
+// handleTerminalWS, since PtyToolbar (and so this value) is shared by every
+// WS session idleTimeout applies to, including the update/install ones
+// that work regardless of whether the interactive shell itself is enabled.
+// idle_timeout_s of 0 means disabled (see runPTYSession's own idleTimeout>0
+// check) — the frontend hides the countdown rather than showing "0:00".
+func (s *Server) handleTerminalConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"idle_timeout_s": int(s.cfg.TerminalIdleTimeout.Seconds()),
+	})
+}
+
 // tmuxSessionName is the fixed tmux session name handleTerminalWS attaches
 // to/creates in tmux mode — one shared session per OS account (root, or
 // TerminalUser's ssh_user) is what makes reattaching after a dropped

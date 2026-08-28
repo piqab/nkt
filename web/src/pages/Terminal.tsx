@@ -37,7 +37,16 @@ export default function TerminalPage({ me }: { me: Me }) {
   const [tmuxMode, setTmuxMode] = useState(false)
   const [pendingStart, setPendingStart] = useState(false)
   const wsUrl = wsURL(tmuxMode ? '/terminal/ws?tmux=1' : '/terminal/ws')
-  const { containerRef, status, start, stop, focus, copySelection, clear, changeFontSize, search } = usePty(wsUrl)
+
+  // Static for the page's lifetime (host config, not something that
+  // changes mid-session) — fetched once rather than polled, unlike the
+  // dbus/tmux status below which genuinely can change while this page is
+  // open. 0 (including "not loaded yet") means usePty's own
+  // getIdleRemainingMs stays disabled, so the countdown just doesn't show
+  // rather than showing a wrong value.
+  const { data: terminalConfig } = useApi<{ idle_timeout_s: number }>('/terminal/config')
+  const { containerRef, status, start, stop, focus, copySelection, clear, changeFontSize, search, getIdleRemainingMs } =
+    usePty(wsUrl, terminalConfig ? terminalConfig.idle_timeout_s * 1000 : undefined)
 
   // Re-focus whenever this page becomes the visible one again — covers
   // returning to an already-connected session that was merely hidden
@@ -294,7 +303,13 @@ export default function TerminalPage({ me }: { me: Me }) {
         <div style={{ flex: 1, minWidth: 0 }}>
           <Card>
             {status === 'connected' && (
-              <PtyToolbar onCopy={copySelection} onClear={clear} onFontSize={changeFontSize} onSearch={search} />
+              <PtyToolbar
+                onCopy={copySelection}
+                onClear={clear}
+                onFontSize={changeFontSize}
+                onSearch={search}
+                getIdleRemainingMs={getIdleRemainingMs}
+              />
             )}
             {/* The xterm container stays mounted and laid out (never
                 display:none) from the very first render — xterm.js measures

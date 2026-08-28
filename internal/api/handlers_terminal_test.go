@@ -2,10 +2,12 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os/exec"
 	"testing"
+	"time"
 
 	"github.com/althq/netknownsthat/internal/config"
 )
@@ -91,6 +93,38 @@ func TestLoginShellFallsBackToPOSIXBaseline(t *testing.T) {
 
 	if got := loginShell(); got != "/bin/sh" {
 		t.Errorf("loginShell() = %q, want %q", got, "/bin/sh")
+	}
+}
+
+// TestHandleTerminalConfig is the regression test for the frontend's idle
+// countdown (PtyToolbar): confirms the reported idle_timeout_s is this
+// host's own TerminalIdleTimeout in seconds, and that it's reported
+// regardless of TerminalEnabled/Mode — unlike handleTerminalWS, this value
+// is shared by every WS session runPTYSession/runUpdateSession's idle
+// timer governs (packages/ufw/firewalld/dbus/tmux install too), not just
+// the interactive shell.
+func TestHandleTerminalConfig(t *testing.T) {
+	s := &Server{cfg: &config.Config{
+		Mode:                config.ModeFixtures,
+		TerminalEnabled:     false,
+		TerminalIdleTimeout: 90 * time.Second,
+	}}
+	req := httptest.NewRequest(http.MethodGet, "/api/terminal/config", nil)
+	rec := httptest.NewRecorder()
+
+	s.handleTerminalConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		IdleTimeoutS int `json:"idle_timeout_s"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v (body: %s)", err, rec.Body.String())
+	}
+	if got.IdleTimeoutS != 90 {
+		t.Errorf("idle_timeout_s = %d, want 90", got.IdleTimeoutS)
 	}
 }
 

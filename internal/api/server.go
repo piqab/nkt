@@ -126,6 +126,13 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/firewall/firewalld-install/ws", s.handleFirewalldInstallWS)
 			r.Get("/system/dbus-install/ws", s.handleDbusInstallWS)
 			r.Get("/system/tmux-install/ws", s.handleTmuxInstallWS)
+			// Ordinary REST, not itself long-lived — grouped here anyway
+			// since it shares the exact same admin-only gating and exists
+			// only for the WS sessions just above (the frontend's idle
+			// countdown: TerminalIdleTimeout is per-host config, invisible
+			// to a hub user until fetched from whichever host's own /api
+			// this request actually reaches — see hostScope in api.ts).
+			r.Get("/terminal/config", s.handleTerminalConfig)
 		})
 
 		r.Group(func(r chi.Router) {
