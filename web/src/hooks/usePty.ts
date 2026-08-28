@@ -268,6 +268,37 @@ export function usePty(wsUrl: string, idleTimeoutMs?: number) {
           // handler slot rather than accumulating listeners.
           container.oncontextmenu = (e) => e.preventDefault()
 
+          // OSC 52 ("set clipboard") is how a program running inside the
+          // PTY — tmux copy-mode, vim/nvim's own "y"/its mouse-menu Copy,
+          // less, various REPLs — asks the *terminal* to put text on the
+          // system clipboard, since it has no display/X11 of its own to
+          // reach one directly. xterm.js parses the escape sequence but
+          // does nothing with it unless something registers a handler —
+          // silently swallowed otherwise, which is why "Copy" in nvim's own
+          // menu looked like it did nothing at all. copyToClipboard is the
+          // same helper the toolbar's own Copy button uses, so this gets
+          // the same execCommand fallback for a plain-HTTP install.
+          // Ps == "?" is a *query* for the current clipboard contents
+          // (asking the terminal to reply with its own OSC 52) — answering
+          // that needs navigator.clipboard.readText() (a separate
+          // permission prompt, itself unavailable without HTTPS) and a
+          // reply written back over the WebSocket; skipped as out of scope
+          // for "copy doesn't work" — only the write direction matters here.
+          term.parser.registerOscHandler(52, (data: string) => {
+            const separator = data.indexOf(';')
+            if (separator === -1) return false
+            const payload = data.slice(separator + 1)
+            if (payload === '?') return false
+            try {
+              const binary = atob(payload)
+              const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0))
+              copyToClipboard(new TextDecoder().decode(bytes))
+              return true
+            } catch {
+              return false
+            }
+          })
+
           const ws = new WebSocket(wsUrl)
           ws.binaryType = 'arraybuffer'
           wsRef.current = ws
