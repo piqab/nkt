@@ -65,6 +65,46 @@ const THEME: ITheme = {
  * something this central, versus 5.5.0's long, widely deployed track
  * record (VS Code's own integrated terminal included).
  */
+// copyToClipboard: navigator.clipboard is only defined in a "secure
+// context" (HTTPS, or the browser's own host being exactly localhost/
+// 127.0.0.1) — nkt's own NKT_TLS_ENABLED defaults to false, so a typical
+// LAN install reached as e.g. http://192.168.1.5:8077 leaves
+// navigator.clipboard undefined, and the Copy button did nothing at all
+// (a TypeError calling .writeText on undefined, thrown synchronously and
+// never surfaced anywhere the user could see it). document.execCommand
+// ('copy') is deprecated but still works in every context, including
+// plain HTTP — used as the fallback whenever the modern API isn't there,
+// or its own promise rejects (e.g. a browser that exposes the object but
+// still refuses without a permissions prompt the user never granted).
+function copyToClipboard(text: string): void {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(text).catch(() => legacyCopyToClipboard(text))
+    return
+  }
+  legacyCopyToClipboard(text)
+}
+
+function legacyCopyToClipboard(text: string): void {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  // Off-screen but still focusable/selectable — execCommand('copy') only
+  // acts on the current selection, which requires the element to actually
+  // be part of the layout (display:none would make select() a no-op).
+  textarea.style.position = 'fixed'
+  textarea.style.top = '0'
+  textarea.style.left = '0'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.focus()
+  textarea.select()
+  try {
+    document.execCommand('copy')
+  } catch {
+    // Nothing more this can do — both copy mechanisms unavailable.
+  }
+  document.body.removeChild(textarea)
+}
+
 // idleTimeoutMs is the server's own TerminalIdleTimeout (see
 // internal/api/handlers_terminal.go's handleTerminalConfig — 0/undefined
 // means "unknown or disabled", hides the countdown rather than showing
@@ -218,6 +258,16 @@ export function usePty(wsUrl: string, idleTimeoutMs?: number) {
           term.open(container)
           fit.fit()
 
+          // A real terminal emulator owns right-click entirely — tmux mode
+          // (mouse reporting on) draws its own context menu right inside
+          // the buffer in response to the same click, so the browser's own
+          // native menu appearing over it read as two menus stacked on top
+          // of each other. Assigning .oncontextmenu (not addEventListener)
+          // is idempotent across repeated openAndConnect calls on the same
+          // long-lived container — reassigning just replaces the one
+          // handler slot rather than accumulating listeners.
+          container.oncontextmenu = (e) => e.preventDefault()
+
           const ws = new WebSocket(wsUrl)
           ws.binaryType = 'arraybuffer'
           wsRef.current = ws
@@ -319,7 +369,7 @@ export function usePty(wsUrl: string, idleTimeoutMs?: number) {
     // \n here can't break any paste target — everything treats \n as a
     // newline — so this is strictly safer regardless of which of the two
     // xterm already chose.
-    void navigator.clipboard.writeText(text.replace(/\r\n/g, '\n'))
+    copyToClipboard(text.replace(/\r\n/g, '\n'))
   }, [])
 
   const clear = useCallback(() => termRef.current?.clear(), [])
