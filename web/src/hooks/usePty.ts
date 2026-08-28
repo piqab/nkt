@@ -65,7 +65,16 @@ const THEME: ITheme = {
  * something this central, versus 5.5.0's long, widely deployed track
  * record (VS Code's own integrated terminal included).
  */
-export function usePty(wsUrl: string) {
+// idleTimeoutMs is the server's own TerminalIdleTimeout (see
+// internal/api/handlers_terminal.go's handleTerminalConfig — 0/undefined
+// means "unknown or disabled", hides the countdown rather than showing
+// "0:00"), used purely to show a countdown to the same disconnect
+// runPTYSession/runUpdateSession's own resetIdle already enforces
+// server-side — this hook does not itself close anything on expiry, the
+// server still owns that; a client-side clock drifting a little from the
+// server's own timer is fine for a UI hint but would be the wrong thing to
+// actually cut a session on.
+export function usePty(wsUrl: string, idleTimeoutMs?: number) {
   const [status, setStatus] = useState<PtyStatus>('idle')
   const [fontSize, setFontSize] = useState(13)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -75,6 +84,11 @@ export function usePty(wsUrl: string) {
   const wsRef = useRef<WebSocket | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
   const stopWaitRef = useRef<() => void>(() => {})
+  // 0 = "no session live yet" — mirrors pty_session.go's own resetIdle:
+  // bumped on every keystroke sent, every resize sent and every byte of
+  // PTY output received, the same three points that reset the real
+  // server-side timer (see below).
+  const lastActivityRef = useRef<number>(0)
 
   const stop = useCallback(() => {
     stopWaitRef.current()
@@ -86,8 +100,19 @@ export function usePty(wsUrl: string) {
     termRef.current = null
     fitAddonRef.current = null
     searchAddonRef.current = null
+    lastActivityRef.current = 0
     setStatus((s) => (s === 'idle' ? s : 'closed'))
   }, [])
+
+  // Polled by a consumer's own setInterval (PtyToolbar's countdown) rather
+  // than returned as reactive state — re-rendering this whole hook (and
+  // everything downstream of it, including the xterm container) every
+  // second just to tick a number down would be wasteful; a plain getter
+  // lets the countdown display own its own render cadence instead.
+  const getIdleRemainingMs = useCallback(() => {
+    if (!idleTimeoutMs || !lastActivityRef.current) return null
+    return Math.max(0, idleTimeoutMs - (Date.now() - lastActivityRef.current))
+  }, [idleTimeoutMs])
 
   // Belt-and-braces cleanup if the caller unmounts mid-session — the
   // process on the host is killed by the server the moment the socket
@@ -200,6 +225,7 @@ export function usePty(wsUrl: string) {
 
           ws.onopen = () => {
             setStatus('connected')
+            lastActivityRef.current = Date.now()
             term.focus()
             // fit.fit() above already sized the terminal correctly for the
             // real container — but that happened before this socket could
@@ -217,16 +243,25 @@ export function usePty(wsUrl: string) {
             ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
           }
           ws.onmessage = (ev) => {
-            if (ev.data instanceof ArrayBuffer) term.write(new Uint8Array(ev.data))
+            if (ev.data instanceof ArrayBuffer) {
+              lastActivityRef.current = Date.now()
+              term.write(new Uint8Array(ev.data))
+            }
           }
           ws.onerror = () => setStatus('error')
           ws.onclose = () => setStatus((s) => (s === 'error' ? s : 'closed'))
 
           term.onData((data) => {
-            if (ws.readyState === WebSocket.OPEN) ws.send(encoder.encode(data))
+            if (ws.readyState === WebSocket.OPEN) {
+              lastActivityRef.current = Date.now()
+              ws.send(encoder.encode(data))
+            }
           })
           term.onResize(({ cols, rows }) => {
-            if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'resize', cols, rows }))
+            if (ws.readyState === WebSocket.OPEN) {
+              lastActivityRef.current = Date.now()
+              ws.send(JSON.stringify({ type: 'resize', cols, rows }))
+            }
           })
         }
 
@@ -298,7 +333,7 @@ export function usePty(wsUrl: string) {
     else addon.findNext(query)
   }, [])
 
-  return { containerRef, status, start, stop, focus, copySelection, clear, changeFontSize, search }
+  return { containerRef, status, start, stop, focus, copySelection, clear, changeFontSize, search, getIdleRemainingMs }
 }
 
 /** Mirrors api.ts's own hostScope-aware prefixing — WebSocket needs its own

@@ -96,7 +96,9 @@
     "clear": "clear",
     "decreaseFont": "decrease font size",
     "increaseFont": "increase font size",
-    "searchPlaceholder": "search output… (Enter / Shift+Enter)"
+    "searchPlaceholder": "search output… (Enter / Shift+Enter)",
+    "idleCountdown": "session closes in {{time}}",
+    "idleCountdownTooltip": "Time until the session auto-closes from inactivity — resets on any input or output"
   },
   "packageInstall": {
     "title": "Installing {{packageName}}",

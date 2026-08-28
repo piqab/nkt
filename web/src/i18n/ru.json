@@ -96,7 +96,9 @@
     "clear": "очистить",
     "decreaseFont": "уменьшить шрифт",
     "increaseFont": "увеличить шрифт",
-    "searchPlaceholder": "найти в выводе… (Enter / Shift+Enter)"
+    "searchPlaceholder": "найти в выводе… (Enter / Shift+Enter)",
+    "idleCountdown": "сессия закроется через {{time}}",
+    "idleCountdownTooltip": "Время до автоматического закрытия сессии из-за отсутствия активности — сбрасывается при вводе или выводе"
   },
   "packageInstall": {
     "title": "Установка {{packageName}}",
