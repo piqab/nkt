@@ -307,7 +307,19 @@ export function usePty(wsUrl: string, idleTimeoutMs?: number) {
 
   const copySelection = useCallback(() => {
     const text = termRef.current?.getSelection()
-    if (text) void navigator.clipboard.writeText(text)
+    if (!text) return
+    // xterm.js joins a multi-row selection with '\r\n' on Windows, '\n'
+    // elsewhere (its own Browser.isWindows check) — a bare \r read back by
+    // a paste target that treats it as a literal carriage return (move to
+    // column 0, don't advance a line — real terminal CR semantics, not
+    // universally normalized by every text control) overwrites each
+    // preceding line instead of starting a new one, which pastes as what
+    // looks like a single line even though every row genuinely was
+    // selected and is present in the clipboard text. Normalizing to a bare
+    // \n here can't break any paste target — everything treats \n as a
+    // newline — so this is strictly safer regardless of which of the two
+    // xterm already chose.
+    void navigator.clipboard.writeText(text.replace(/\r\n/g, '\n'))
   }, [])
 
   const clear = useCallback(() => termRef.current?.clear(), [])
