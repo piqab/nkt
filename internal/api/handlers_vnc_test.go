@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	osuser "os/user"
 	"strings"
 	"testing"
 	"time"
@@ -175,6 +176,108 @@ func TestHandleVNCStartSurfacesRealReasonOnSilentFailure(t *testing.T) {
 	if !strings.Contains(body.Error, "exit status") {
 		t.Errorf("error = %q, want a real reason after the colon (e.g. \"exit status 1\"), not empty", body.Error)
 	}
+}
+
+// TestHandleVNCStartSurfacesLogfileContent is the regression test for
+// x11vnc's own documented behavior — "-bg... messages to stderr are lost
+// unless -o is used" — meaning the invoking process's own captured output
+// often carries none of the real diagnostic text on failure; it ends up in
+// the -o logfile instead. The fake x11vnc here finds its own "-o <path>"
+// argument and writes a distinctive message there before exiting nonzero,
+// simulating exactly that handoff.
+func TestHandleVNCStartSurfacesLogfileContent(t *testing.T) {
+	dir := t.TempDir()
+	script := `#!/bin/sh
+prev=""
+for arg in "$@"; do
+  if [ "$prev" = "-o" ]; then
+    echo "XOpenDisplay failed: no such display" > "$arg"
+    exit 1
+  fi
+  prev="$arg"
+done
+exit 1
+`
+	if err := os.WriteFile(dir+"/x11vnc", []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake x11vnc: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	cfg := &config.Config{Mode: config.ModeLocal, TerminalEnabled: true}
+	scanner := inventory.New(cfg, collect.NewLocal("", "", 5*time.Second), nil)
+	s := &Server{cfg: cfg, scanner: scanner}
+
+	rec := httptest.NewRecorder()
+	s.handleVNCStart(rec, httptest.NewRequest(http.MethodPost, "/api/system/vnc/start", nil))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusInternalServerError, rec.Body.String())
+	}
+	var body struct {
+		Error string `json:"error"`
+	}
+	decodeJSONBody(t, rec, &body)
+	if !strings.Contains(body.Error, "XOpenDisplay failed") {
+		t.Errorf("error = %q, want it to include the logfile's own diagnostic text", body.Error)
+	}
+}
+
+// TestHandleVNCStartResolvesTerminalUserForFileOwnership is the regression
+// test for x11vnc failing immediately with "Permission denied" whenever
+// TerminalUser is set: nkt itself normally runs as root, so the password/
+// log temp files os.CreateTemp creates are root-owned 0600 — a
+// non-root TerminalUser had no access to either one at all until
+// handleVNCStart started chowning them. Covers both halves: an unknown
+// TerminalUser is refused before ever touching the filesystem, and a real
+// account's chown succeeds (reaching the actual — here fake and
+// failing — invocation, not erroring out earlier on the ownership step).
+func TestHandleVNCStartResolvesTerminalUserForFileOwnership(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/x11vnc", []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write fake x11vnc: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	t.Run("unknown TerminalUser refused before touching the filesystem", func(t *testing.T) {
+		cfg := &config.Config{Mode: config.ModeLocal, TerminalEnabled: true, TerminalUser: "nkt-test-no-such-user"}
+		scanner := inventory.New(cfg, collect.NewLocal("", "", 5*time.Second), nil)
+		s := &Server{cfg: cfg, scanner: scanner}
+
+		rec := httptest.NewRecorder()
+		s.handleVNCStart(rec, httptest.NewRequest(http.MethodPost, "/api/system/vnc/start", nil))
+
+		if rec.Code != http.StatusInternalServerError {
+			t.Errorf("status = %d, want %d (body: %s)", rec.Code, http.StatusInternalServerError, rec.Body.String())
+		}
+	})
+
+	t.Run("real account: uid/gid resolve and the chown itself succeed", func(t *testing.T) {
+		// Actually exec'ing under cmd.SysProcAttr.Credential — even set to
+		// this same already-unprivileged uid, a no-op switch on paper —
+		// needs a setuid() call only root can reliably make; sandboxed test
+		// environments commonly refuse it outright ("operation not
+		// permitted" at fork/exec) regardless of target uid. That's an
+		// unrelated OS-level restriction on privilege-dropping itself, not
+		// what this test is after: whether resolveUserEnv + os.Chown (the
+		// actual fix) succeed for a real account. Checking the temp files'
+		// ownership directly sidesteps needing a real privileged exec.
+		me, err := osuser.Current()
+		if err != nil {
+			t.Fatalf("os/user.Current: %v", err)
+		}
+		uid, gid, _, err := resolveUserEnv(nil, me.Username)
+		if err != nil {
+			t.Fatalf("resolveUserEnv(%q): %v", me.Username, err)
+		}
+		f, err := os.CreateTemp(t.TempDir(), "chown-check-*")
+		if err != nil {
+			t.Fatalf("CreateTemp: %v", err)
+		}
+		f.Close()
+		if err := os.Chown(f.Name(), int(uid), int(gid)); err != nil {
+			t.Errorf("os.Chown to the resolved uid/gid of the current user: %v", err)
+		}
+	})
 }
 
 // TestHandleVNCStopNotRunning confirms stopping when nothing is running

@@ -136,6 +136,25 @@ func (s *Server) handleVNCStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// nkt itself normally runs as root — os.CreateTemp below therefore
+	// creates both files root-owned, 0600. When x11vnc is about to run as
+	// TerminalUser instead (the branch below, and the reason this matters:
+	// see this function's own doc comment on why it has to), that account
+	// has no access to a root-owned 0600 file at all: not to read the
+	// password, not to write its own log. Without this, x11vnc fails
+	// immediately trying to open the password file — a "Permission denied"
+	// that used to be swallowed just like the empty-output case below,
+	// surfacing as a bare "exit status 1" with no explanation.
+	uid, gid := -1, -1
+	if s.cfg.TerminalUser != "" {
+		u32, g32, _, err := resolveUserEnv(nil, s.cfg.TerminalUser)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		uid, gid = int(u32), int(g32)
+	}
+
 	// A file, not -passwd on the command line — the latter would sit in
 	// plain sight to any other account on the host via `ps aux` or
 	// /proc/<pid>/cmdline. Removed immediately after x11vnc has started:
@@ -161,6 +180,35 @@ func (s *Server) handleVNCStart(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if uid != -1 {
+		if err := os.Chown(pwPath, uid, gid); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
+
+	// x11vnc's own -bg redirects its stderr/stdout to -o's logfile the
+	// moment it backgrounds (its man page is explicit: "Messages to stderr
+	// are lost unless -o is used") — a failure right around that handoff
+	// often leaves the invoking process's own captured output (below)
+	// empty or just a bare exit status, with the actual reason ending up
+	// in this logfile instead. A fresh temp path per attempt, not a fixed
+	// one, so a failed run's diagnostics can never be confused with a
+	// stale one from an earlier attempt.
+	logFile, err := os.CreateTemp("", "nkt-x11vnc-log-*")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	logPath := logFile.Name()
+	logFile.Close()
+	defer os.Remove(logPath)
+	if uid != -1 {
+		if err := os.Chown(logPath, uid, gid); err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+	}
 
 	argv := []string{
 		"x11vnc",
@@ -170,7 +218,7 @@ func (s *Server) handleVNCStart(w http.ResponseWriter, r *http.Request) {
 		"-bg",
 		"-forever",
 		"-noxdamage",
-		"-o", "/tmp/nkt-x11vnc.log",
+		"-o", logPath,
 	}
 
 	ctx, cancel := context.WithTimeout(r.Context(), vncControlTimeout)
@@ -194,14 +242,30 @@ func (s *Server) handleVNCStart(w http.ResponseWriter, r *http.Request) {
 	// to let the now-detached x11vnc process outlive this quiet command.
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// out is empty whenever the command never actually ran at all —
-		// x11vnc missing from PATH inside whatever sandbox/user context it
-		// was just invoked under (systemd-run/nsenter/TerminalUser can all
-		// resolve PATH differently than the scanner's own collect.Which
-		// check above), or vncControlTimeout firing before it printed
-		// anything. Falling back to err's own text there is the difference
-		// between a message and a bare trailing colon with nothing after it.
+		// out alone is frequently empty or just a bare "exit status 1" —
+		// see logPath's own comment above: x11vnc's real diagnostic text
+		// usually goes there instead once -bg hands off. Best-effort: a
+		// failure to read it (permission, TerminalUser owns it not us,
+		// x11vnc never got far enough to create it) just means detail
+		// falls through to whatever out/err already had.
 		detail := strings.TrimSpace(string(out))
+		if logContent, logErr := os.ReadFile(logPath); logErr == nil {
+			if logText := strings.TrimSpace(string(logContent)); logText != "" && logText != detail {
+				if detail != "" {
+					detail += "\n" + logText
+				} else {
+					detail = logText
+				}
+			}
+		}
+		// Both out and the logfile can still be empty — the command never
+		// actually ran at all (x11vnc missing from PATH inside whatever
+		// sandbox/user context it was just invoked under: systemd-run/
+		// nsenter/TerminalUser can all resolve PATH differently than the
+		// scanner's own collect.Which check above), or vncControlTimeout
+		// firing before anything was written anywhere. Falling back to
+		// err's own text there is the difference between a message and a
+		// bare trailing colon with nothing after it.
 		if detail == "" {
 			detail = err.Error()
 		}
