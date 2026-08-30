@@ -280,6 +280,60 @@ func TestHandleVNCStartResolvesTerminalUserForFileOwnership(t *testing.T) {
 	})
 }
 
+// TestHandleVNCStartVNCUserOverridesTerminalUser confirms VNCUser takes
+// priority over TerminalUser when both are set — the whole point of
+// config.Config.VNCUser existing as its own setting (see its own comment):
+// x11vnc has to run as whoever owns the desktop session, which is not
+// necessarily who the shell terminal should drop to. Deliberately gives
+// TerminalUser a name that does not exist (resolveUserEnv would fail
+// immediately if it were the one actually used) alongside a real VNCUser,
+// and confirms the request proceeds past the resolve/chown stage — a
+// bogus-TerminalUser error there would mean VNCUser was silently ignored.
+func TestHandleVNCStartVNCUserOverridesTerminalUser(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/x11vnc", []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write fake x11vnc: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+	cfg := &config.Config{
+		Mode:            config.ModeLocal,
+		TerminalEnabled: true,
+		TerminalUser:    "nkt-test-no-such-user",
+		VNCUser:         me.Username,
+	}
+	scanner := inventory.New(cfg, collect.NewLocal("", "", 5*time.Second), nil)
+	s := &Server{cfg: cfg, scanner: scanner}
+
+	rec := httptest.NewRecorder()
+	s.handleVNCStart(rec, httptest.NewRequest(http.MethodPost, "/api/system/vnc/start", nil))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusInternalServerError, rec.Body.String())
+	}
+	var body struct {
+		Error string `json:"error"`
+	}
+	decodeJSONBody(t, rec, &body)
+	// Not "exit status" specifically (like the sibling tests above) —
+	// actually exec'ing under cmd.SysProcAttr.Credential needs a real
+	// setuid() only root can reliably make, which sandboxed test
+	// environments commonly refuse outright regardless of target uid (see
+	// TestHandleVNCStartResolvesTerminalUserForFileOwnership's identical
+	// note); either failure shape proves resolveUserEnv succeeded for
+	// VNCUser. What actually matters: it must NOT be the
+	// "пользователь ... не найден" error resolveUserEnv would produce for
+	// the bogus TerminalUser — that specific failure is the one proof that
+	// VNCUser was ignored in favor of it.
+	if strings.Contains(body.Error, "не найден") {
+		t.Errorf("error = %q, looks like TerminalUser's bogus name was resolved instead of VNCUser", body.Error)
+	}
+}
+
 // TestHandleVNCStopNotRunning confirms stopping when nothing is running
 // reports 404 rather than a bare unexplained pkill failure — this reaches
 // a real pgrep/pkill -x x11vnc on the test machine (not through the

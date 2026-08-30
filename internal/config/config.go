@@ -156,6 +156,19 @@ type Config struct {
 	// this whole distinction does not apply and the terminal keeps running
 	// as root exactly as before.
 	TerminalUser string
+	// VNCUser, when set, overrides TerminalUser specifically for x11vnc.
+	// Unlike the shell (where dropping privilege is a hardening choice,
+	// not a hard requirement — root can always open a root shell), x11vnc
+	// genuinely cannot work as the wrong account: X11 access control is
+	// per-account via ~/.Xauthority, so it must run as whoever actually
+	// owns the running desktop session, or it fails to open the display
+	// at all. That account is not necessarily the same one the shell
+	// terminal should drop to (an operator may want a root shell but a
+	// desktop-user VNC session), which is why this exists as its own
+	// setting instead of just reusing TerminalUser outright — though it
+	// still falls back to TerminalUser, then root, when left empty, so a
+	// setup that already relies on TerminalUser for both needs no change.
+	VNCUser string
 	// TerminalIdleTimeout closes a terminal session that has sent or
 	// received nothing for this long — the safety net for a tab left open
 	// and forgotten, since the underlying shell process otherwise runs
@@ -302,6 +315,7 @@ func Load() (*Config, error) {
 
 		TerminalEnabled:     envBool("NKT_TERMINAL_ENABLED", mode == ModeHub),
 		TerminalUser:        envStr("NKT_TERMINAL_USER", ""),
+		VNCUser:             envStr("NKT_VNC_USER", ""),
 		TerminalIdleTimeout: envDur("NKT_TERMINAL_IDLE_TIMEOUT", 30*time.Minute),
 
 		TunnelListenAddr: envStr("NKT_HUB_TUNNEL_LISTEN_ADDR", ""),
