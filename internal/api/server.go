@@ -126,6 +126,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/firewall/firewalld-install/ws", s.handleFirewalldInstallWS)
 			r.Get("/system/dbus-install/ws", s.handleDbusInstallWS)
 			r.Get("/system/tmux-install/ws", s.handleTmuxInstallWS)
+			r.Get("/system/vnc-install/ws", s.handleVNCInstallWS)
 			// Ordinary REST, not itself long-lived — grouped here anyway
 			// since it shares the exact same admin-only gating and exists
 			// only for the WS sessions just above (the frontend's idle
@@ -169,6 +170,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/dbus-install/status", s.handleDbusInstallStatus)
 			r.Get("/system/tmux-status", s.handleTmuxStatus)
 			r.Get("/system/tmux-install/status", s.handleTmuxInstallStatus)
+			r.Get("/system/vnc-status", s.handleVNCStatus)
+			r.Get("/system/vnc-install/status", s.handleVNCInstallStatus)
 			r.Get("/vulnerabilities", s.handleVulnerabilities)
 			r.Get("/certificates", s.handleCertificates)
 
@@ -202,6 +205,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/services/{name}/validate", s.handleServiceValidate)
 				r.Post("/services/{name}/{action}", s.handleServiceAction)
 				r.Post("/misc/kill", s.handleKillProcess)
+				r.Post("/system/vnc/start", s.handleVNCStart)
+				r.Post("/system/vnc/stop", s.handleVNCStop)
 				r.Post("/containers/{name}/{action}", s.handleContainerAction)
 				r.Post("/podman/containers", s.handlePodmanContainerCreate)
 				r.Post("/podman/containers/{name}/{action}", s.handlePodmanContainerAction)

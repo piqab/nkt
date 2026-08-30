@@ -8,6 +8,7 @@ import { Banner, Card, InfoHint } from '../components/ui'
 import { PtyToolbar } from '../components/PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
 import PackageInstallModal from '../components/PackageInstallModal'
+import VNCPanel from '../components/VNCPanel'
 
 /**
  * A real login shell on the host, streamed over WebSocket into xterm.js.
@@ -349,6 +350,14 @@ export default function TerminalPage({ me }: { me: Me }) {
           </Card>
         </div>
 
+        {/* Not in the detached popout window — that's a chrome-less,
+            shell-only view (see openPopout's own doc comment), VNC
+            management belongs on the main page only. */}
+        {!isPopout && (
+          <div style={{ width: 240, flexShrink: 0 }}>
+            <VNCPanel canUse={canUse} />
+          </div>
+        )}
         {tmuxMode && <TmuxHints />}
       </div>
 
