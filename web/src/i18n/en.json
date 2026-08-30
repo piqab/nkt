@@ -794,6 +794,7 @@
     "colService": "Service",
     "notInstalled": "not installed on the host",
     "clickToInstall": "not installed on the host — click to install",
+    "clickToStart": "installed but not running — click to start",
     "colState": "State",
     "colAutostart": "Autostart",
     "colMemory": "Memory",
