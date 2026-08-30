@@ -116,8 +116,13 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Endpoints = append(append(append(append([]model.Endpoint{},
 		nginxRes.Endpoints...), hapRes.Endpoints...), caddyRes.Endpoints...), dockerRes.Endpoints...)
 	snap.Upstreams = append(append(append([]model.Upstream{}, nginxRes.Upstreams...), hapRes.Upstreams...), caddyRes.Upstreams...)
+	// No goroutine of its own, unlike the parsers above — just a couple of
+	// stat/glob calls against the local filesystem, not worth the
+	// WaitGroup ceremony the command-running parsers actually need.
+	fail2banFiles := parse.Fail2ban(s.c, s.cfg.Fail2banRoot)
 	snap.Files = append(append(append([]model.ManagedFile{}, nginxRes.Files...), hapRes.Files...), caddyRes.Files...)
 	snap.Files = append(snap.Files, dockerRes.Files...)
+	snap.Files = append(snap.Files, fail2banFiles...)
 	snap.Container = dockerRes.Containers
 	snap.Networks = dockerRes.Networks
 	snap.LXD = lxdRes.Instances
@@ -167,6 +172,8 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 			specs[i].ConfigFiles = fileList(caddyRes.Files)
 		case model.ServiceDocker:
 			specs[i].ConfigFiles = fileList(dockerRes.Files)
+		case model.ServiceFail2ban:
+			specs[i].ConfigFiles = fileList(fail2banFiles)
 		}
 	}
 	services, svcStatus := parse.Services(ctx, s.c, specs)

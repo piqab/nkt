@@ -45,7 +45,7 @@ func DefaultServiceSpecs() []ServiceSpec {
 			Actions: []string{"reload", "start", "stop", "enable", "disable"}},
 		{Name: model.ServiceFirewalld, Unit: "firewalld", Binary: "firewall-cmd",
 			Actions: []string{"reload", "restart", "start", "stop", "enable", "disable"}},
-		{Name: "fail2ban", Unit: "fail2ban", Binary: "fail2ban-client",
+		{Name: model.ServiceFail2ban, Unit: "fail2ban", Binary: "fail2ban-client",
 			Actions: []string{"restart", "start", "stop", "enable", "disable"}},
 	}
 }
