@@ -63,6 +63,19 @@ func dialSSH(ctx context.Context, addr string, port int, user, authKind string, 
 
 // runRemote executes one command over a fresh SSH session and returns its
 // combined stdout+stderr, mirroring what an interactive shell would show.
+//
+// "export LC_ALL=C; " forces every tool's own diagnostic text (sudo's own
+// messages above all — diagnoseInstallError pattern-matches them to decide
+// whether to show the NOPASSWD setup hint) into English regardless of the
+// remote host's configured locale — a host set up with, say, ru_RU.UTF-8
+// has sudo print "требуется указать пароль" for what would be "a password
+// is required" in C, which matched none of diagnoseInstallError's English
+// substrings and silently fell through to the generic, unhelpful error
+// instead of the actual instructions. `export` (not a `VAR=value cmd`
+// prefix, which POSIX shell only applies to the single simple command
+// immediately following it) so this reaches every command in a `&&`-
+// chained string too, e.g. activateService's three separate `sudo -n
+// systemctl ...` calls.
 func runRemote(client *ssh.Client, cmd string) (string, error) {
 	session, err := client.NewSession()
 	if err != nil {
@@ -70,7 +83,7 @@ func runRemote(client *ssh.Client, cmd string) (string, error) {
 	}
 	defer session.Close()
 
-	out, err := session.CombinedOutput(cmd)
+	out, err := session.CombinedOutput("export LC_ALL=C; " + cmd)
 	return string(out), err
 }
 
