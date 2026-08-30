@@ -250,7 +250,7 @@ func (m *Manager) Run(ctx context.Context) {
 
 // AddHost registers a host and encrypts its SSH secret at rest. It does not
 // connect to the host — that happens in StartInstall.
-func (m *Manager) AddHost(ctx context.Context, name, addr string, sshPort int, sshUser, authKind, secret string, terminalEnabled bool) (int64, error) {
+func (m *Manager) AddHost(ctx context.Context, name, addr string, sshPort int, sshUser, authKind, secret string, terminalEnabled bool, vncUser string) (int64, error) {
 	if name == "" || addr == "" || sshUser == "" || secret == "" {
 		return 0, fmt.Errorf("укажите имя, адрес, пользователя SSH и секрет (пароль или приватный ключ)")
 	}
@@ -278,6 +278,9 @@ func (m *Manager) AddHost(ctx context.Context, name, addr string, sshPort int, s
 	if err := m.db.SetHostTerminalEnabled(ctx, id, terminalEnabled); err != nil {
 		return 0, err
 	}
+	if err := m.db.SetHostVNCUser(ctx, id, vncUser); err != nil {
+		return 0, err
+	}
 	return id, nil
 }
 
@@ -287,7 +290,7 @@ func (m *Manager) AddHost(ctx context.Context, name, addr string, sshPort int, s
 // never leaves the hub; authorizedKeyLine is the public half the caller
 // must then place in the host's own ~/.ssh/authorized_keys before
 // StartInstall can connect.
-func (m *Manager) AddHostGenerated(ctx context.Context, name, addr string, sshPort int, sshUser string, terminalEnabled bool) (hostID int64, authorizedKeyLine string, err error) {
+func (m *Manager) AddHostGenerated(ctx context.Context, name, addr string, sshPort int, sshUser string, terminalEnabled bool, vncUser string) (hostID int64, authorizedKeyLine string, err error) {
 	if name == "" || addr == "" || sshUser == "" {
 		return 0, "", fmt.Errorf("укажите имя, адрес и пользователя SSH")
 	}
@@ -308,6 +311,9 @@ func (m *Manager) AddHostGenerated(ctx context.Context, name, addr string, sshPo
 		return 0, "", err
 	}
 	if err := m.db.SetHostTerminalEnabled(ctx, id, terminalEnabled); err != nil {
+		return 0, "", err
+	}
+	if err := m.db.SetHostVNCUser(ctx, id, vncUser); err != nil {
 		return 0, "", err
 	}
 	return id, authorizedKeyLine, nil
@@ -340,7 +346,7 @@ func (m *Manager) PublicKeyLine(ctx context.Context, hostID int64) (string, erro
 // UpdateHost changes a host's connection details. secret is optional — an
 // empty string keeps whatever SSH credential is already stored, so renaming
 // a host or fixing a typo'd address does not force re-entering it.
-func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr string, sshPort int, sshUser, authKind, secret string, terminalEnabled bool) error {
+func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr string, sshPort int, sshUser, authKind, secret string, terminalEnabled bool, vncUser string) error {
 	if name == "" || addr == "" || sshUser == "" {
 		return fmt.Errorf("укажите имя, адрес и пользователя SSH")
 	}
@@ -356,6 +362,9 @@ func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr strin
 		return err
 	}
 	if err := m.db.SetHostTerminalEnabled(ctx, hostID, terminalEnabled); err != nil {
+		return err
+	}
+	if err := m.db.SetHostVNCUser(ctx, hostID, vncUser); err != nil {
 		return err
 	}
 
@@ -387,7 +396,7 @@ func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr strin
 // stored credential with a freshly hub-generated keypair, the same way
 // AddHostGenerated does for a new host — useful to switch an existing
 // password-authenticated host over to a key, or to rotate a compromised one.
-func (m *Manager) UpdateHostGenerated(ctx context.Context, hostID int64, name, addr string, sshPort int, sshUser string, terminalEnabled bool) (authorizedKeyLine string, err error) {
+func (m *Manager) UpdateHostGenerated(ctx context.Context, hostID int64, name, addr string, sshPort int, sshUser string, terminalEnabled bool, vncUser string) (authorizedKeyLine string, err error) {
 	if name == "" || addr == "" || sshUser == "" {
 		return "", fmt.Errorf("укажите имя, адрес и пользователя SSH")
 	}
@@ -399,6 +408,9 @@ func (m *Manager) UpdateHostGenerated(ctx context.Context, hostID int64, name, a
 		return "", err
 	}
 	if err := m.db.SetHostTerminalEnabled(ctx, hostID, terminalEnabled); err != nil {
+		return "", err
+	}
+	if err := m.db.SetHostVNCUser(ctx, hostID, vncUser); err != nil {
 		return "", err
 	}
 
@@ -653,7 +665,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		return fail(err)
 	}
 
-	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, tun)
+	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, host.VNCUser, tun)
 	if err := stageFiles(client, host.SSHUser, binPath, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report, job.replaceLast); err != nil {
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
 		return fail(err)

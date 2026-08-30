@@ -15,7 +15,7 @@ import (
 )
 
 func TestRenderEnvContainsExpectedLines(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw", false, "", tunnelEnvParams{})
+	out := renderEnv("admin", "s3cr3t-pw", false, "", "", tunnelEnvParams{})
 
 	for _, want := range []string{
 		"NKT_MODE=local",
@@ -48,7 +48,7 @@ func TestRenderEnvContainsExpectedLines(t *testing.T) {
 // what actually has to survive that regeneration, so this asserts renderEnv
 // itself faithfully reflects whatever it is told, not a hardcoded default.
 func TestRenderEnvPassesThroughTerminalEnabled(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw", true, "", tunnelEnvParams{})
+	out := renderEnv("admin", "s3cr3t-pw", true, "", "", tunnelEnvParams{})
 	if !strings.Contains(out, "NKT_TERMINAL_ENABLED=true") {
 		t.Errorf("renderEnv(..., true) output missing NKT_TERMINAL_ENABLED=true, got:\n%s", out)
 	}
@@ -60,7 +60,7 @@ func TestRenderEnvPassesThroughTerminalEnabled(t *testing.T) {
 // process, which has no other way to learn what account the hub connects
 // with, knows what to setuid the terminal shell to.
 func TestRenderEnvWritesTerminalUserForNonRootSSHUser(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw", true, "deploy", tunnelEnvParams{})
+	out := renderEnv("admin", "s3cr3t-pw", true, "deploy", "", tunnelEnvParams{})
 	if !strings.Contains(out, "NKT_TERMINAL_USER=deploy") {
 		t.Errorf("renderEnv(..., \"deploy\", ...) output missing NKT_TERMINAL_USER=deploy, got:\n%s", out)
 	}
@@ -73,10 +73,41 @@ func TestRenderEnvWritesTerminalUserForNonRootSSHUser(t *testing.T) {
 // self-setuid).
 func TestRenderEnvOmitsTerminalUserForRootOrEmpty(t *testing.T) {
 	for _, sshUser := range []string{"", "root"} {
-		out := renderEnv("admin", "s3cr3t-pw", true, sshUser, tunnelEnvParams{})
+		out := renderEnv("admin", "s3cr3t-pw", true, sshUser, "", tunnelEnvParams{})
 		if strings.Contains(out, "NKT_TERMINAL_USER") {
 			t.Errorf("renderEnv(..., %q, ...) output unexpectedly contains NKT_TERMINAL_USER, got:\n%s", sshUser, out)
 		}
+	}
+}
+
+// TestRenderEnvWritesVNCUser covers x11vnc's own privilege-drop path
+// (internal/api/handlers_vnc.go): renderEnv must write NKT_VNC_USER for a
+// managed host's configured VNCUser — separate from NKT_TERMINAL_USER,
+// since the account that owns the X11 desktop session is not necessarily
+// the same one ssh_user connects as.
+func TestRenderEnvWritesVNCUser(t *testing.T) {
+	out := renderEnv("admin", "s3cr3t-pw", false, "", "desktop-alice", tunnelEnvParams{})
+	if !strings.Contains(out, "NKT_VNC_USER=desktop-alice") {
+		t.Errorf("renderEnv(..., \"desktop-alice\", ...) output missing NKT_VNC_USER=desktop-alice, got:\n%s", out)
+	}
+}
+
+// TestRenderEnvOmitsVNCUserWhenEmptyButKeepsRoot is TestRenderEnvOmitsTerminalUserForRootOrEmpty's
+// counterpart for VNCUser — but only half of it applies: empty is still
+// omitted (nothing configured), but unlike TerminalUser, "root" must NOT
+// be special-cased away. x11vnc's target account is dictated by who owns
+// the desktop, and root is a legitimate answer to that (an admin console
+// actually logged in as root), unlike the shell's self-setuid-to-root
+// which really is always a no-op.
+func TestRenderEnvOmitsVNCUserWhenEmptyButKeepsRoot(t *testing.T) {
+	out := renderEnv("admin", "s3cr3t-pw", false, "", "", tunnelEnvParams{})
+	if strings.Contains(out, "NKT_VNC_USER") {
+		t.Errorf("renderEnv(..., \"\", ...) output unexpectedly contains NKT_VNC_USER, got:\n%s", out)
+	}
+
+	out = renderEnv("admin", "s3cr3t-pw", false, "", "root", tunnelEnvParams{})
+	if !strings.Contains(out, "NKT_VNC_USER=root") {
+		t.Errorf("renderEnv(..., \"root\", ...) output missing NKT_VNC_USER=root — root must not be silently omitted here, got:\n%s", out)
 	}
 }
 
@@ -84,7 +115,7 @@ func TestRenderEnvOmitsTerminalUserForRootOrEmpty(t *testing.T) {
 // fallback's own env vars — written only when tunnelEnvParams.Enabled is
 // set (see Manager.prepareTunnelEnv).
 func TestRenderEnvWritesTunnelVarsWhenEnabled(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw", false, "", tunnelEnvParams{
+	out := renderEnv("admin", "s3cr3t-pw", false, "", "", tunnelEnvParams{
 		Enabled:    true,
 		ListenAddr: "0.0.0.0:8078",
 		Token:      "the-token",
