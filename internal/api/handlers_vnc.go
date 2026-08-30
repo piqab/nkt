@@ -105,13 +105,15 @@ type vncStartResponse struct {
 // at least as consequential as a root shell, not a lesser action like the
 // install button above.
 //
-// Runs as TerminalUser when configured, root otherwise — exactly
-// handleTerminalWS's own branch. This matters here for a reason the shell
-// doesn't have: X11 access control is per-account (via ~/.Xauthority,
-// which resolveUserEnv already points HOME at for the right user), so
-// x11vnc has to run as whichever account actually owns the running desktop
-// session it's attaching to, or it simply won't be able to open the
-// display at all.
+// Runs as VNCUser when configured, else TerminalUser, else root — see
+// config.Config.VNCUser's own comment on why this needs a setting separate
+// from TerminalUser: X11 access control is per-account (via
+// ~/.Xauthority, which resolveUserEnv already points HOME at for the
+// right user), so x11vnc has to run as whichever account actually owns
+// the running desktop session it's attaching to, or it simply won't be
+// able to open the display at all — confirmed directly: running it by
+// hand as root fails silently (no diagnostic text anywhere x11vnc's own
+// -bg/-o redirection reaches), running it as the desktop's own user works.
 func (s *Server) handleVNCStart(w http.ResponseWriter, r *http.Request) {
 	if !s.cfg.TerminalEnabled {
 		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "vnc.disabled"))
@@ -130,6 +132,11 @@ func (s *Server) handleVNCStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	vncUser := s.cfg.VNCUser
+	if vncUser == "" {
+		vncUser = s.cfg.TerminalUser
+	}
+
 	password, err := auth.GeneratePassword()
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -138,16 +145,16 @@ func (s *Server) handleVNCStart(w http.ResponseWriter, r *http.Request) {
 
 	// nkt itself normally runs as root — os.CreateTemp below therefore
 	// creates both files root-owned, 0600. When x11vnc is about to run as
-	// TerminalUser instead (the branch below, and the reason this matters:
-	// see this function's own doc comment on why it has to), that account
-	// has no access to a root-owned 0600 file at all: not to read the
+	// vncUser instead (the branch below, and the reason this matters: see
+	// this function's own doc comment on why it has to), that account has
+	// no access to a root-owned 0600 file at all: not to read the
 	// password, not to write its own log. Without this, x11vnc fails
 	// immediately trying to open the password file — a "Permission denied"
 	// that used to be swallowed just like the empty-output case below,
 	// surfacing as a bare "exit status 1" with no explanation.
 	uid, gid := -1, -1
-	if s.cfg.TerminalUser != "" {
-		u32, g32, _, err := resolveUserEnv(nil, s.cfg.TerminalUser)
+	if vncUser != "" {
+		u32, g32, _, err := resolveUserEnv(nil, vncUser)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -225,8 +232,8 @@ func (s *Server) handleVNCStart(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	var cmd *exec.Cmd
-	if s.cfg.TerminalUser != "" {
-		cmd, err = unrestrictedQuietCommandAsUser(ctx, nil, s.cfg.TerminalUser, argv...)
+	if vncUser != "" {
+		cmd, err = unrestrictedQuietCommandAsUser(ctx, nil, vncUser, argv...)
 		if err != nil {
 			writeError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -245,7 +252,7 @@ func (s *Server) handleVNCStart(w http.ResponseWriter, r *http.Request) {
 		// out alone is frequently empty or just a bare "exit status 1" —
 		// see logPath's own comment above: x11vnc's real diagnostic text
 		// usually goes there instead once -bg hands off. Best-effort: a
-		// failure to read it (permission, TerminalUser owns it not us,
+		// failure to read it (permission, vncUser owns it not us,
 		// x11vnc never got far enough to create it) just means detail
 		// falls through to whatever out/err already had.
 		detail := strings.TrimSpace(string(out))
