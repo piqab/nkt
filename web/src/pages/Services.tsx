@@ -393,6 +393,7 @@ export default function Services({ me }: { me: Me }) {
                 setInstallTarget(s.name)
               }}
               isClickable={(s) => !s.installed && canControl}
+              getColor={(s) => (s.installed ? undefined : 'gold')}
             />
             <div className="table-wrap">
               <Table<ServiceUnit>

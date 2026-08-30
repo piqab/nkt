@@ -18,6 +18,11 @@ export interface InactiveSummaryProps<T> {
   // every chip clickable, including ones merely stopped-but-installed.
   onItemClick?: (item: T) => void
   isClickable?: (item: T) => boolean
+  // Optional antd Tag color — lets a caller (Services.tsx) visually tell
+  // "not installed at all" apart from "installed but just stopped", two
+  // states this same chip row used to render identically. Omitted keeps
+  // every other caller's plain default-gray chip exactly as before.
+  getColor?: (item: T) => string | undefined
 }
 
 /**
@@ -38,6 +43,7 @@ export function InactiveSummary<T>({
   rescanning,
   onItemClick,
   isClickable,
+  getColor,
 }: InactiveSummaryProps<T>) {
   const { t } = useTranslation()
   if (items.length === 0) return null
@@ -49,6 +55,7 @@ export function InactiveSummary<T>({
         return (
           <Tooltip key={getKey(item)} title={getTooltip(item)}>
             <Tag
+              color={getColor?.(item)}
               style={{ cursor: clickable ? 'pointer' : 'default' }}
               onClick={clickable ? () => onItemClick!(item) : undefined}
             >
