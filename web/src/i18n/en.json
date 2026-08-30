@@ -864,9 +864,9 @@
   },
   "vnc": {
     "title": "VNC",
-    "notInstalledHint": "x11vnc isn't installed on this host — needed to connect to the desktop with an external VNC client.",
     "install": "Install x11vnc",
     "installRunningOpen": "Install running — open",
+    "confirmInstall": "x11vnc isn't installed on this host — needed to connect to the desktop with an external VNC client. Install it?",
     "start": "Start VNC",
     "stop": "Stop VNC",
     "confirmStart": "Start x11vnc? The host's desktop will become reachable over the network to anyone with the password.",
