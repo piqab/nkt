@@ -50,6 +50,65 @@ func DefaultServiceSpecs() []ServiceSpec {
 	}
 }
 
+// ServiceInstallMethod is how InstallTarget says a service's underlying
+// package should be installed — apt-get for most of this catalogue, but
+// not all of it (see InstallTarget's own comment).
+type ServiceInstallMethod string
+
+const (
+	InstallViaAPT  ServiceInstallMethod = "apt"
+	InstallViaSnap ServiceInstallMethod = "snap"
+)
+
+// ServiceInstallInfo is InstallTarget's result.
+type ServiceInstallInfo struct {
+	Method  ServiceInstallMethod
+	Package string
+	// Binary is spec.Binary — what a caller checks with collect.Which to
+	// decide "already installed" before ever attempting this.
+	Binary string
+}
+
+// serviceInstallOverride lists services whose apt package name doesn't
+// match spec.Name (the default InstallTarget falls back to) — either
+// because the real package is spelled differently (docker's own
+// default-repo package is docker.io, not "docker"; bare "libvirt" isn't
+// installable at all, the daemon lives in libvirt-daemon-system) or
+// because it isn't an apt package to begin with (current Debian/Ubuntu
+// ship LXD only as a snap — Unit: "snap.lxd.daemon" in DefaultServiceSpecs
+// already reflects this). Every other spec's Name already IS its own real
+// apt package (nginx, haproxy, caddy, podman, ufw, firewalld, fail2ban),
+// so nothing else needs an entry here.
+var serviceInstallOverride = map[string]struct {
+	Method  ServiceInstallMethod
+	Package string
+}{
+	"docker":  {InstallViaAPT, "docker.io"},
+	"lxd":     {InstallViaSnap, "lxd"},
+	"libvirt": {InstallViaAPT, "libvirt-daemon-system"},
+}
+
+// InstallTarget resolves how to install a known ServiceSpec's underlying
+// package. ok is false for any name not in DefaultServiceSpecs() at all —
+// callers must treat that as "reject the request", the allowlist that
+// keeps a URL path parameter from ever reaching a shell command
+// unvalidated (the same role ServiceManager.Action's own s.specs[service]
+// lookup already plays for start/stop/restart).
+func InstallTarget(service string) (ServiceInstallInfo, bool) {
+	for _, spec := range DefaultServiceSpecs() {
+		if spec.Name != service {
+			continue
+		}
+		info := ServiceInstallInfo{Method: InstallViaAPT, Package: spec.Name, Binary: spec.Binary}
+		if o, has := serviceInstallOverride[service]; has {
+			info.Method = o.Method
+			info.Package = o.Package
+		}
+		return info, true
+	}
+	return ServiceInstallInfo{}, false
+}
+
 // systemctlProperties is the fixed property set the status reader asks for.
 var systemctlProperties = []string{
 	"Description", "ActiveState", "SubState", "UnitFileState",

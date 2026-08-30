@@ -5,6 +5,7 @@ import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
+import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 
 const ACTION_LABEL_KEY: Record<string, string> = {
@@ -165,6 +166,13 @@ export default function Services({ me }: { me: Me }) {
   // straight to it: TERM first always, KILL only on request.
   const [killEscalation, setKillEscalation] = useState<Listener | null>(null)
   const [logsFor, setLogsFor] = useState<ServiceUnit | null>(null)
+  // Set when the operator clicks a not-installed service's chip in the
+  // inactive summary below — opens PackageInstallModal against
+  // /services/{name}/install/ws, the same shared apt-get-install-live
+  // component tmux/dbus/x11vnc already use, just pointed at this
+  // service's own install route.
+  const [installTarget, setInstallTarget] = useState<string | null>(null)
+  const [installOutcome, setInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
   const allServices = services.data?.services ?? []
@@ -215,6 +223,16 @@ export default function Services({ me }: { me: Me }) {
     } finally {
       setBusy(null)
     }
+  }
+
+  async function handleInstallFinished() {
+    if (!installTarget) return
+    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>(
+      `/services/${installTarget}/install/status`,
+    ).catch(() => null)
+    setInstallOutcome(fresh?.succeeded ? { ok: true } : { ok: false, exitCode: fresh?.exit_code })
+    await api('/inventory/refresh', { method: 'POST' }).catch(() => {})
+    await services.reload()
   }
 
   /**
@@ -363,11 +381,18 @@ export default function Services({ me }: { me: Me }) {
                 <>
                   <div>{s.description || s.unit}</div>
                   <div>{t('services.state', { state: s.active_state, sub: s.sub_state ? ` (${s.sub_state})` : '' })}</div>
-                  {!s.installed && <div>{t('services.notInstalled')}</div>}
+                  {!s.installed && (
+                    <div>{canControl ? t('services.clickToInstall') : t('services.notInstalled')}</div>
+                  )}
                 </>
               )}
               onRescan={rescan}
               rescanning={rescanning}
+              onItemClick={(s) => {
+                setInstallOutcome(null)
+                setInstallTarget(s.name)
+              }}
+              isClickable={(s) => !s.installed && canControl}
             />
             <div className="table-wrap">
               <Table<ServiceUnit>
@@ -408,6 +433,16 @@ export default function Services({ me }: { me: Me }) {
       </Card>
 
       {logsFor && <ServiceLogsModal service={logsFor} onClose={() => setLogsFor(null)} />}
+
+      {installTarget && (
+        <PackageInstallModal
+          packageName={installTarget}
+          wsPath={`/services/${installTarget}/install/ws`}
+          onClose={() => setInstallTarget(null)}
+          onFinished={handleInstallFinished}
+          outcome={installOutcome}
+        />
+      )}
     </>
   )
 }
