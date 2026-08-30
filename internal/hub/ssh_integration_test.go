@@ -205,6 +205,39 @@ func TestGeneratedKeyWorksAgainstRealSSHD(t *testing.T) {
 	}
 }
 
+// TestRunRemoteForcesCLocale is the regression test for a host whose own
+// default locale isn't English: sudo (and everything else) prints its own
+// diagnostic text in whatever LC_ALL/LANG the remote shell inherits — a
+// ru_RU.UTF-8 host's sudo -n says "требуется указать пароль" instead of "a
+// password is required", which matched none of diagnoseInstallError's
+// English substrings and silently fell back to a generic, uninstructive
+// error instead of the NOPASSWD setup hint. runRemote now forces LC_ALL=C
+// for every command it runs — this confirms that actually reaches the
+// remote shell rather than just checking the string it sends locally.
+func TestRunRemoteForcesCLocale(t *testing.T) {
+	addr, port, clientKeyPEM := startTestSSHD(t)
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	client, err := dialSSH(ctx, addr, port, me.Username, store.HostAuthKey, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("dialSSH: %v", err)
+	}
+	defer client.Close()
+
+	out, err := runRemote(client, "echo $LC_ALL")
+	if err != nil {
+		t.Fatalf("runRemote: %v", err)
+	}
+	if got := strings.TrimSpace(out); got != "C" {
+		t.Errorf("LC_ALL as seen by the remote command = %q, want %q", got, "C")
+	}
+}
+
 // TestInstallRemoteFileNeedsSudoForNonRoot exercises the actual `sudo -n`
 // escalation path against a real sshd: passing any sshUser other than
 // "root" makes installRemoteFile prefix the remote command with `sudo -n`,
