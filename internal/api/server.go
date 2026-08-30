@@ -127,6 +127,9 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/dbus-install/ws", s.handleDbusInstallWS)
 			r.Get("/system/tmux-install/ws", s.handleTmuxInstallWS)
 			r.Get("/system/vnc-install/ws", s.handleVNCInstallWS)
+			r.Get("/services/{name}/install/ws", s.handleServiceInstallWS)
+			r.Get("/system/packages/install/ws", s.handleCommonPackagesInstallWS)
+			r.Get("/system/packages/remove/ws", s.handleCommonPackagesRemoveWS)
 			// Ordinary REST, not itself long-lived — grouped here anyway
 			// since it shares the exact same admin-only gating and exists
 			// only for the WS sessions just above (the frontend's idle
@@ -156,6 +159,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/topology", s.handleTopology)
 			r.Get("/services", s.handleServices)
 			r.Get("/services/{name}/logs", s.handleServiceLogs)
+			r.Get("/services/{name}/install/status", s.handleServiceInstallStatus)
 			r.Get("/containers", s.handleContainers)
 			r.Get("/podman/containers", s.handlePodmanContainers)
 			r.Get("/lxd/instances", s.handleLXDInstances)
@@ -172,6 +176,9 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/tmux-install/status", s.handleTmuxInstallStatus)
 			r.Get("/system/vnc-status", s.handleVNCStatus)
 			r.Get("/system/vnc-install/status", s.handleVNCInstallStatus)
+			r.Get("/system/packages/status", s.handleCommonPackagesStatus)
+			r.Get("/system/packages/install/status", s.handleCommonPackagesInstallStatus)
+			r.Get("/system/packages/remove/status", s.handleCommonPackagesRemoveStatus)
 			r.Get("/vulnerabilities", s.handleVulnerabilities)
 			r.Get("/certificates", s.handleCertificates)
 

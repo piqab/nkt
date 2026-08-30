@@ -793,6 +793,7 @@
     "signalSent": "Process {{pid}}: signal {{signal}} sent.",
     "colService": "Service",
     "notInstalled": "not installed on the host",
+    "clickToInstall": "not installed on the host — click to install",
     "colState": "State",
     "colAutostart": "Autostart",
     "colMemory": "Memory",
@@ -872,6 +873,20 @@
     "confirmStop": "Stop x11vnc?",
     "runningOn": "Running, port {{port}} — connect with a VNC client.",
     "passwordShownOnce": "Password (shown once, never stored): {{password}}"
+  },
+  "commonPackages": {
+    "title": "Packages",
+    "installed": "installed",
+    "notInstalled": "not installed",
+    "installSelected": "Install selected",
+    "removeSelected": "Remove selected",
+    "descNvim": "Neovim text editor",
+    "descTmux": "terminal multiplexer — sessions survive a dropped connection",
+    "descGpg": "encryption and signature verification (GnuPG)",
+    "descCurl": "command-line HTTP(S) and other protocol requests",
+    "descSsh": "SSH server — accept incoming SSH connections",
+    "descGit": "version control system",
+    "descWget": "download files by URL"
   },
   "overview": {
     "what": "host overview",

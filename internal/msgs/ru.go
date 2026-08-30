@@ -47,6 +47,10 @@ var ruCatalog = map[string]string{
 	"pkgInstall.ufwAlreadyInstalled":       "ufw уже установлен",
 	"pkgInstall.firewalldAlreadyInstalled": "firewalld уже установлен",
 	"pkgInstall.x11vncAlreadyInstalled":    "x11vnc уже установлен",
+	"pkgInstall.unknownService":            "неизвестный сервис: %s",
+	"pkgInstall.serviceAlreadyInstalled":   "%s уже установлен",
+	"pkgInstall.unknownPackage":            "неизвестный пакет: %s",
+	"pkgInstall.noPackagesSelected":        "не выбрано ни одного пакета",
 
 	"pkgUpdate.fixturesDisabled": "обновление пакетов недоступно в режиме fixtures",
 	"pkgUpdate.aptGetMissing":    "apt-get не найден — обновление пакетов поддерживается только на Debian/Ubuntu",

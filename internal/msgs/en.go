@@ -48,6 +48,10 @@ var enCatalog = map[string]string{
 	"pkgInstall.ufwAlreadyInstalled":       "ufw is already installed",
 	"pkgInstall.firewalldAlreadyInstalled": "firewalld is already installed",
 	"pkgInstall.x11vncAlreadyInstalled":    "x11vnc is already installed",
+	"pkgInstall.unknownService":            "unknown service: %s",
+	"pkgInstall.serviceAlreadyInstalled":   "%s is already installed",
+	"pkgInstall.unknownPackage":            "unknown package: %s",
+	"pkgInstall.noPackagesSelected":        "no packages selected",
 
 	"pkgUpdate.fixturesDisabled": "package updates aren't available in fixtures mode",
 	"pkgUpdate.aptGetMissing":    "apt-get not found — package updates are only supported on Debian/Ubuntu",
