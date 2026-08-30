@@ -215,6 +215,24 @@ func unrestrictedQuietCommandAsUser(ctx context.Context, env map[string]string, 
 // blocks until it exits, together turning systemd-run into something
 // cmd.Output() can use synchronously the same way it would a plain
 // exec.Command.
+//
+// KillMode=process (systemd's default is control-group) is specifically
+// for runTmux's `tmux new-session -d`: -d makes the tmux client fork off a
+// whole new daemonized tmux *server* and exit immediately, so the quiet
+// unit's own main process (the client) is gone almost at once — but the
+// server it just forked stays in the exact same cgroup (fork/setsid never
+// moves a process to a different one). With the default KillMode, once
+// --wait sees the main process exit and the unit starts stopping, systemd
+// SIGTERMs every other process still in that cgroup too — including the
+// server that has to survive to be attached to a moment later. This was
+// exactly the "терминал tmux: no sessions" bug: `ensureTmuxSession`
+// reported success (new-session -d really did exit 0), but the server it
+// had just started was reaped a moment later, so the subsequent
+// `tmux attach-session` (a separate unit) found nothing and printed
+// tmux's own "no sessions". No other caller of unrestrictedQuietCommand
+// forks anything that needs to outlive its own invocation, so this is
+// safe to set unconditionally rather than threading a per-call flag
+// through for just the one caller that needs it.
 func systemdRunQuietArgs(env map[string]string, argv ...string) []string {
 	args := []string{"--pipe", "--wait", "--collect", "--quiet",
 		"-p", "ProtectSystem=no",
@@ -224,6 +242,7 @@ func systemdRunQuietArgs(env map[string]string, argv ...string) []string {
 		"-p", "RestrictSUIDSGID=no",
 		"-p", "RestrictNamespaces=no",
 		"-p", "CapabilityBoundingSet=~",
+		"-p", "KillMode=process",
 	}
 	for k, v := range env {
 		args = append(args, "--setenv="+k+"="+v)
@@ -243,6 +262,7 @@ func systemdRunQuietArgsAsUser(env map[string]string, username string, argv ...s
 		"-p", "RestrictSUIDSGID=no",
 		"-p", "RestrictNamespaces=no",
 		"-p", "User=" + username,
+		"-p", "KillMode=process",
 	}
 	for k, v := range env {
 		args = append(args, "--setenv="+k+"="+v)

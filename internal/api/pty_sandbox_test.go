@@ -424,6 +424,7 @@ func TestSystemdRunQuietArgs(t *testing.T) {
 		" --pipe ", " --wait ", " --collect ", " --quiet ",
 		" -p ProtectSystem=no ",
 		" -p CapabilityBoundingSet=~ ",
+		" -p KillMode=process ",
 		" --setenv=TERM=xterm-256color ",
 	} {
 		if !strings.Contains(joined, want) {
@@ -444,7 +445,7 @@ func TestSystemdRunQuietArgsAsUser(t *testing.T) {
 	args := systemdRunQuietArgsAsUser(map[string]string{"TERM": "xterm-256color"}, "deploy", "tmux", "list-windows")
 	joined := " " + strings.Join(args, " ") + " "
 
-	for _, want := range []string{" --pipe ", " --wait ", " -p User=deploy "} {
+	for _, want := range []string{" --pipe ", " --wait ", " -p User=deploy ", " -p KillMode=process "} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("systemdRunQuietArgsAsUser() missing %q in %v", strings.TrimSpace(want), args)
 		}
