@@ -381,18 +381,28 @@ export default function Services({ me }: { me: Me }) {
                 <>
                   <div>{s.description || s.unit}</div>
                   <div>{t('services.state', { state: s.active_state, sub: s.sub_state ? ` (${s.sub_state})` : '' })}</div>
-                  {!s.installed && (
-                    <div>{canControl ? t('services.clickToInstall') : t('services.notInstalled')}</div>
+                  {!canControl ? (
+                    !s.installed && <div>{t('services.notInstalled')}</div>
+                  ) : (
+                    <div>{s.installed ? t('services.clickToStart') : t('services.clickToInstall')}</div>
                   )}
                 </>
               )}
               onRescan={rescan}
               rescanning={rescanning}
               onItemClick={(s) => {
-                setInstallOutcome(null)
-                setInstallTarget(s.name)
+                if (!s.installed) {
+                  setInstallOutcome(null)
+                  setInstallTarget(s.name)
+                  return
+                }
+                // Already installed, just not active — no table row of its
+                // own to offer a Start button (activeServices filters it
+                // out), so the chip that already tells you it's stopped is
+                // the only place left to act on that.
+                void act(s.name, 'start')
               }}
-              isClickable={(s) => !s.installed && canControl}
+              isClickable={() => canControl}
               getColor={(s) => (s.installed ? undefined : 'gold')}
             />
             <div className="table-wrap">
