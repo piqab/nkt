@@ -7,6 +7,7 @@ import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } 
 import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative } from '../components/ui'
 import UpdateModal from '../components/UpdateModal'
+import CommonPackagesCard from '../components/CommonPackagesCard'
 import i18n from '../i18n'
 
 // Module-level column builders take t() as an argument rather than calling
@@ -328,6 +329,8 @@ export default function OverviewPage({ me }: { me: Me }) {
           </div>
         </Card>
       </div>
+
+      <CommonPackagesCard canUse={canReopenUpdate} />
 
       {updating && (
         <UpdateModal
