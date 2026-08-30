@@ -881,9 +881,23 @@ export default function Hosts({
         >
           <InstallLog events={jobStatus?.events ?? []} />
           {jobStatus?.done ? (
-            <Banner kind={jobStatus.error ? 'error' : 'info'}>
-              {jobStatus.error ? t('hosts.jobError', { error: jobStatus.error }) : t('hosts.jobDone')}
-            </Banner>
+            jobStatus.error ? (
+              <Banner kind="error">
+                <div>{t('hosts.jobErrorLabel')}</div>
+                {/* Plain text through Alert's own message prop collapses
+                    newlines like any other inline content — losing exactly
+                    the line breaks diagnoseInstallError's sudoersHint
+                    depends on to be readable/copyable (the two commands an
+                    operator needs to grant passwordless sudo). A <pre>
+                    block, same styling PublicKeyModal already uses for its
+                    own copyable multi-line text, preserves them. */}
+                <pre className="diff mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', marginTop: '0.4rem' }}>
+                  {jobStatus.error}
+                </pre>
+              </Banner>
+            ) : (
+              <Banner kind="info">{t('hosts.jobDone')}</Banner>
+            )
           ) : (
             <p className="small muted row" style={{ alignItems: 'center', marginBottom: 0 }}>
               {t('hosts.jobRunning')}
