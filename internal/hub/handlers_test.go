@@ -20,21 +20,21 @@ func TestHandleListHostsMergesOverview(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := t.Context()
 
-	polledID, err := m.AddHost(ctx, "polled", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	polledID, err := m.AddHost(ctx, "polled", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false, "")
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
 	if err := db.SetHostStatus(ctx, polledID, store.HostStatusOnline, ""); err != nil {
 		t.Fatalf("SetHostStatus: %v", err)
 	}
-	downID, err := m.AddHost(ctx, "down", "10.0.0.2", 22, "root", store.HostAuthPassword, "pw", false)
+	downID, err := m.AddHost(ctx, "down", "10.0.0.2", 22, "root", store.HostAuthPassword, "pw", false, "")
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
 	if err := db.SetHostStatus(ctx, downID, store.HostStatusOnline, ""); err != nil {
 		t.Fatalf("SetHostStatus: %v", err)
 	}
-	unpolledID, err := m.AddHost(ctx, "unpolled", "10.0.0.3", 22, "root", store.HostAuthPassword, "pw", false)
+	unpolledID, err := m.AddHost(ctx, "unpolled", "10.0.0.3", 22, "root", store.HostAuthPassword, "pw", false, "")
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestExportImportHostsHandlersRoundTrip(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := t.Context()
 
-	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", true)
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", true, "")
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}

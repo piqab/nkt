@@ -151,7 +151,9 @@ CREATE TABLE IF NOT EXISTS hosts (
                                                     -- (trust-on-first-use pin, see internal/hub/tunnelpin.go); NULL until then
     error_msg          TEXT NOT NULL DEFAULT '',
     created_at         TEXT NOT NULL,
-    last_seen_at       TEXT
+    last_seen_at       TEXT,
+    vnc_user           TEXT NOT NULL DEFAULT '' -- OS account x11vnc runs as on this host, passed through as
+                                                 -- NKT_VNC_USER on install/update; separate from ssh_user, see Host.VNCUser
 );
 CREATE INDEX IF NOT EXISTS idx_hosts_name ON hosts(name);
 `
@@ -174,6 +176,7 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"hosts", "tunnel_token_hash", `ALTER TABLE hosts ADD COLUMN tunnel_token_hash BLOB`},
 	{"hosts", "tunnel_token_enc", `ALTER TABLE hosts ADD COLUMN tunnel_token_enc BLOB`},
 	{"hosts", "tunnel_cert_sha256", `ALTER TABLE hosts ADD COLUMN tunnel_cert_sha256 BLOB`},
+	{"hosts", "vnc_user", `ALTER TABLE hosts ADD COLUMN vnc_user TEXT NOT NULL DEFAULT ''`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

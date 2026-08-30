@@ -148,7 +148,7 @@ func TestPollOverviewSkipsNonOnlineHosts(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := context.Background()
 
-	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false, "")
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}

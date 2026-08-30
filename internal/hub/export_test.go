@@ -25,7 +25,7 @@ func TestImportHostsWithEmbeddedKeyReencrypts(t *testing.T) {
 		t.Fatal("test setup bug: the two managers ended up with the same key")
 	}
 
-	id, err := m1.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "correct horse battery staple", false)
+	id, err := m1.AddHost(ctx, "h1", "10.0.0.1", 22, "root", store.HostAuthPassword, "correct horse battery staple", false, "")
 	if err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
