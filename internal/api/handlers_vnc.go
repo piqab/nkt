@@ -194,7 +194,18 @@ func (s *Server) handleVNCStart(w http.ResponseWriter, r *http.Request) {
 	// to let the now-detached x11vnc process outlive this quiet command.
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "vnc.startFailed", strings.TrimSpace(string(out))))
+		// out is empty whenever the command never actually ran at all —
+		// x11vnc missing from PATH inside whatever sandbox/user context it
+		// was just invoked under (systemd-run/nsenter/TerminalUser can all
+		// resolve PATH differently than the scanner's own collect.Which
+		// check above), or vncControlTimeout firing before it printed
+		// anything. Falling back to err's own text there is the difference
+		// between a message and a bare trailing colon with nothing after it.
+		detail := strings.TrimSpace(string(out))
+		if detail == "" {
+			detail = err.Error()
+		}
+		writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "vnc.startFailed", detail))
 		return
 	}
 

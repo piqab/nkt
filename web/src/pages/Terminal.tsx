@@ -4,11 +4,10 @@ import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { Me } from '../types'
 import { api, hostScope, readSelectedHost, useApi } from '../api'
-import { Banner, Card, InfoHint } from '../components/ui'
+import { Banner, Card, InfoHint, Modal } from '../components/ui'
 import { PtyToolbar } from '../components/PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
 import PackageInstallModal from '../components/PackageInstallModal'
-import VNCPanel from '../components/VNCPanel'
 
 /**
  * A real login shell on the host, streamed over WebSocket into xterm.js.
@@ -177,6 +176,97 @@ export default function TerminalPage({ me }: { me: Me }) {
     }
   }
 
+  // x11vnc control — same install-status-poll shape as tmux/dbus above,
+  // plus start/stop for the actual VNC server itself (see
+  // internal/api/handlers_vnc.go). No in-browser viewer: a successful
+  // start hands back a password shown exactly once (vncCredentials, a
+  // dedicated Modal below) for connecting with an external VNC client.
+  const { data: vncStatus, reload: reloadVncStatus } = useApi<{
+    installed: boolean
+    running: boolean
+    port: number
+  }>('/system/vnc-status', 10_000)
+  const { data: vncInstallStatus, reload: reloadVncInstallStatus } = useApi<{
+    active: boolean
+    finished: boolean
+    succeeded: boolean
+  }>('/system/vnc-install/status', 5_000)
+  const [vncInstallOpen, setVncInstallOpen] = useState(false)
+  const [vncInstallOutcome, setVncInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
+  const [vncBusy, setVncBusy] = useState(false)
+  const [vncCredentials, setVncCredentials] = useState<{ password: string; port: number } | null>(null)
+  const [vncError, setVncError] = useState<string | null>(null)
+
+  async function handleVncInstallFinished() {
+    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>('/system/vnc-install/status').catch(
+      () => null,
+    )
+    reloadVncInstallStatus()
+    reloadVncStatus()
+    setVncInstallOutcome(fresh?.succeeded ? { ok: true } : { ok: false, exitCode: fresh?.exit_code })
+  }
+
+  async function handleVncStart() {
+    setVncBusy(true)
+    setVncError(null)
+    try {
+      const res = await api<{ password: string; port: number }>('/system/vnc/start', { method: 'POST' })
+      setVncCredentials(res)
+      reloadVncStatus()
+    } catch (err) {
+      setVncError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setVncBusy(false)
+    }
+  }
+
+  async function handleVncStop() {
+    setVncBusy(true)
+    setVncError(null)
+    try {
+      await api('/system/vnc/stop', { method: 'POST' })
+      setVncCredentials(null)
+      reloadVncStatus()
+    } catch (err) {
+      setVncError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setVncBusy(false)
+    }
+  }
+
+  // Mirrors handleTmuxButtonClick's own branching exactly: not installed
+  // yet → offer to install (reattaching to one already running elsewhere
+  // rather than starting a duplicate); installed → start or stop the
+  // server itself, confirmed the same way every other consequential
+  // action on this page already is.
+  function handleVncButtonClick() {
+    if (!vncStatus?.installed) {
+      if (vncInstallStatus?.active) {
+        setVncInstallOutcome(null)
+        setVncInstallOpen(true)
+        return
+      }
+      if (window.confirm(t('vnc.confirmInstall'))) {
+        setVncInstallOutcome(null)
+        setVncInstallOpen(true)
+      }
+      return
+    }
+    if (vncStatus.running) {
+      if (window.confirm(t('vnc.confirmStop'))) void handleVncStop()
+      return
+    }
+    if (window.confirm(t('vnc.confirmStart'))) void handleVncStart()
+  }
+
+  function vncButtonLabel(): string {
+    if (!vncStatus) return t('vnc.title')
+    if (!vncStatus.installed) {
+      return vncInstallStatus?.active ? t('vnc.installRunningOpen') : t('vnc.install')
+    }
+    return vncStatus.running ? t('vnc.stop') : t('vnc.start')
+  }
+
   /**
    * Opens this same page in its own, chrome-less browser window (see
    * App.tsx's isPopoutTerminal) — a real OS-level window, not a modal, so it
@@ -236,7 +326,6 @@ export default function TerminalPage({ me }: { me: Me }) {
           ) : (
             <>
               <Button
-                type="primary"
                 loading={status === 'connecting' && !tmuxMode}
                 disabled={!canUse || (status === 'connecting' && tmuxMode)}
                 onClick={() => handleStart(false)}
@@ -251,6 +340,9 @@ export default function TerminalPage({ me }: { me: Me }) {
               >
                 {status === 'connecting' && tmuxMode ? t('terminal.connecting') : t('terminal.openInTmux')}
               </Button>
+              <Button disabled={!canUse} loading={vncBusy} onClick={handleVncButtonClick}>
+                {vncButtonLabel()}
+              </Button>
             </>
           )}
         </div>
@@ -259,6 +351,7 @@ export default function TerminalPage({ me }: { me: Me }) {
       {!canUse && <Banner kind="info">{t('common.adminMutationsOnly')}</Banner>}
       {status === 'error' && <Banner kind="error">{t('terminal.connectError')}</Banner>}
       {status === 'closed' && <Banner kind="info">{t('terminal.sessionEnded')}</Banner>}
+      {vncError && <Banner kind="error">{vncError}</Banner>}
 
       {status !== 'connected' &&
         (dbusStatus === null ? (
@@ -350,14 +443,6 @@ export default function TerminalPage({ me }: { me: Me }) {
           </Card>
         </div>
 
-        {/* Not in the detached popout window — that's a chrome-less,
-            shell-only view (see openPopout's own doc comment), VNC
-            management belongs on the main page only. */}
-        {!isPopout && (
-          <div style={{ width: 240, flexShrink: 0 }}>
-            <VNCPanel canUse={canUse} />
-          </div>
-        )}
         {tmuxMode && <TmuxHints />}
       </div>
 
@@ -379,6 +464,23 @@ export default function TerminalPage({ me }: { me: Me }) {
           onFinished={handleTmuxInstallFinished}
           outcome={tmuxInstallOutcome}
         />
+      )}
+
+      {vncInstallOpen && (
+        <PackageInstallModal
+          packageName="x11vnc"
+          wsPath="/system/vnc-install/ws"
+          onClose={() => setVncInstallOpen(false)}
+          onFinished={handleVncInstallFinished}
+          outcome={vncInstallOutcome}
+        />
+      )}
+
+      {vncCredentials && (
+        <Modal title={t('vnc.title')} onClose={() => setVncCredentials(null)}>
+          <p>{t('vnc.runningOn', { port: vncCredentials.port })}</p>
+          <Banner kind="warn">{t('vnc.passwordShownOnce', { password: vncCredentials.password })}</Banner>
+        </Modal>
       )}
     </>
   )

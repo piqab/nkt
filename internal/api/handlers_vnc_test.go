@@ -3,7 +3,10 @@ package api
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
@@ -135,6 +138,43 @@ func TestHandleVNCStartGates(t *testing.T) {
 			t.Errorf("status = %d, want %d (body: %s)", rec.Code, http.StatusConflict, rec.Body.String())
 		}
 	})
+}
+
+// TestHandleVNCStartSurfacesRealReasonOnSilentFailure is the regression
+// test for "не удалось запустить x11vnc: " with nothing after the colon —
+// happened whenever x11vnc's own combined output was empty (the process
+// exits immediately without printing anything, or the invocation never
+// actually ran at all), since only cmd.CombinedOutput()'s out fed the
+// error message, discarding err's own text entirely. Uses a real
+// collect.Local (not the fixtures collector every other test in this file
+// uses) with a fake x11vnc on PATH that exits 1 with zero output —
+// collect.Which sees it as "installed" via the same real PATH lookup the
+// actual invocation then fails through, reaching the exact code path the
+// fixtures-backed gate tests above never touch.
+func TestHandleVNCStartSurfacesRealReasonOnSilentFailure(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(dir+"/x11vnc", []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write fake x11vnc: %v", err)
+	}
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	cfg := &config.Config{Mode: config.ModeLocal, TerminalEnabled: true}
+	scanner := inventory.New(cfg, collect.NewLocal("", "", 5*time.Second), nil)
+	s := &Server{cfg: cfg, scanner: scanner}
+
+	rec := httptest.NewRecorder()
+	s.handleVNCStart(rec, httptest.NewRequest(http.MethodPost, "/api/system/vnc/start", nil))
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, want %d (body: %s)", rec.Code, http.StatusInternalServerError, rec.Body.String())
+	}
+	var body struct {
+		Error string `json:"error"`
+	}
+	decodeJSONBody(t, rec, &body)
+	if !strings.Contains(body.Error, "exit status") {
+		t.Errorf("error = %q, want a real reason after the colon (e.g. \"exit status 1\"), not empty", body.Error)
+	}
 }
 
 // TestHandleVNCStopNotRunning confirms stopping when nothing is running
