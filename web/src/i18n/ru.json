@@ -437,7 +437,7 @@
     "editHostTitle": "Изменить хост «{{name}}»",
     "installTitle": "Установка на {{name}}",
     "installTitleFallback": "хост",
-    "jobError": "Ошибка: {{error}}",
+    "jobErrorLabel": "Ошибка:",
     "jobDone": "Готово.",
     "jobRunning": "выполняется — можно закрыть окно, установка продолжится в фоне.",
     "publicKeyTitle": "Публичный ключ для «{{name}}»",

@@ -437,7 +437,7 @@
     "editHostTitle": "Edit host \"{{name}}\"",
     "installTitle": "Installing on {{name}}",
     "installTitleFallback": "host",
-    "jobError": "Error: {{error}}",
+    "jobErrorLabel": "Error:",
     "jobDone": "Done.",
     "jobRunning": "in progress — you can close this window, the install continues in the background.",
     "publicKeyTitle": "Public key for \"{{name}}\"",
