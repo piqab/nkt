@@ -33,12 +33,19 @@ type Config struct {
 	DataDir      string
 
 	// Inspected locations, expressed as paths on the target host.
-	NginxRoot        string
-	NginxMainConfig  string
-	HAProxyRoot      string
-	HAProxyMainConf  string
-	CaddyRoot        string
-	CaddyMainConfig  string
+	NginxRoot       string
+	NginxMainConfig string
+	HAProxyRoot     string
+	HAProxyMainConf string
+	CaddyRoot       string
+	CaddyMainConfig string
+	// Fail2banRoot is where jail.local/jail.d live — fail2ban has no
+	// structured block parser like nginx/haproxy/caddy do (see
+	// parse.Fail2ban's own comment), so this only bounds which paths the
+	// Configs page is allowed to open/write as plain text, the same
+	// underRoot(path, ...) check ConfigManager.serviceForPath already does
+	// for the other services' own roots.
+	Fail2banRoot     string
 	ComposeFiles     []string
 	NginxAccessLogs  []string
 	HAProxyAccessLog []string
@@ -271,6 +278,7 @@ func Load() (*Config, error) {
 		HAProxyMainConf:  envStr("NKT_HAPROXY_MAIN_CONFIG", "/etc/haproxy/haproxy.cfg"),
 		CaddyRoot:        envStr("NKT_CADDY_ROOT", "/etc/caddy"),
 		CaddyMainConfig:  envStr("NKT_CADDY_MAIN_CONFIG", "/etc/caddy/Caddyfile"),
+		Fail2banRoot:     envStr("NKT_FAIL2BAN_ROOT", "/etc/fail2ban"),
 		ComposeFiles:     envList("NKT_COMPOSE_FILES", "/srv/docker/docker-compose.yml,/opt/stacks/docker-compose.yml"),
 		NginxAccessLogs:  envList("NKT_NGINX_ACCESS_LOGS", "/var/log/nginx/access.log"),
 		HAProxyAccessLog: envList("NKT_HAPROXY_ACCESS_LOGS", "/var/log/haproxy.log"),

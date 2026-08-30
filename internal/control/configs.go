@@ -80,6 +80,8 @@ func (m *ConfigManager) serviceForPath(path string) string {
 		return model.ServiceHAProxy
 	case underRoot(path, m.cfg.CaddyRoot):
 		return model.ServiceCaddy
+	case underRoot(path, m.cfg.Fail2banRoot):
+		return model.ServiceFail2ban
 	case underRoot(path, parse.LibvirtQEMUDir):
 		// libvirt itself stores a defined domain's persistent XML here — this
 		// is not a config file some other service merely reads, it IS

@@ -21,6 +21,7 @@ const (
 	ServiceIptables  = "iptables"
 	ServiceUFW       = "ufw"
 	ServiceFirewalld = "firewalld"
+	ServiceFail2ban  = "fail2ban"
 	ServiceHost      = "host"
 )
 
