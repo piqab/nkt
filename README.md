@@ -1,5 +1,7 @@
 # NetKnownsThat
 
+**English** | [Русский](README.ru.md)
+
 Looks at a Linux host and answers the question that's usually answered by
 hand through half a dozen commands: **what's actually listening on the
 network here, does it match the configuration, and what's broken.**
