@@ -53,12 +53,6 @@ export interface HubHost {
    * down) — see internal/tunnel. Same "regenerated on every install/
    * update" shape as terminal_enabled. */
   tunnel_enabled: boolean
-  /** Passed as NKT_VNC_USER when the hub (re)installs this host — the OS
-   * account that owns the running desktop session, which x11vnc must run
-   * as (X11 access control is per-account, root cannot open another
-   * user's display). Empty means "not set" — falls back to
-   * terminal_enabled's ssh_user, then root. See config.Config.VNCUser. */
-  vnc_user?: string
   /** "ssh" or "tunnel" — which path the hub most recently reached this
    * host through (see internal/hub's Manager.recordChannel). Absent before
    * the first dial attempt. */

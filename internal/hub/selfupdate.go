@@ -222,7 +222,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 	if err != nil {
 		return fail(err)
 	}
-	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, host.VNCUser, tun)
+	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, tun)
 
 	// A single attempt sometimes hits a transient stall on the relay itself
 	// (read i/o timeout while parsing the multipart body) — plausible on

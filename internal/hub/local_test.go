@@ -110,7 +110,7 @@ func TestLocalHostEntryPopulatesFromScanner(t *testing.T) {
 func TestHandleListHostsPrependsLocalhost(t *testing.T) {
 	m, db := newTestManager(t)
 	ctx := t.Context()
-	if _, err := m.AddHost(ctx, "zzz-real-host", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false, ""); err != nil {
+	if _, err := m.AddHost(ctx, "zzz-real-host", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false); err != nil {
 		t.Fatalf("AddHost: %v", err)
 	}
 

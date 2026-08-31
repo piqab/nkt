@@ -29,7 +29,7 @@ const PACKAGE_DESC_KEY: Record<string, string> = {
  * install or remove them in one apt-get call. Deliberately not a generic
  * "search any apt package" surface: short, recognizable names only. Shares
  * PackageInstallModal with every other install button in the app
- * (tmux/dbus/ufw/firewalld/x11vnc/Services' own per-service install) —
+ * (tmux/dbus/ufw/firewalld/Services' own per-service install) —
  * pointed at the bulk /system/packages/{install,remove}/ws routes here
  * instead of a single fixed package.
  */

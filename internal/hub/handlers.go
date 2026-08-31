@@ -160,9 +160,6 @@ type addHostRequest struct {
 	// default. Set separately from AddHost/AddHostGenerated below (see
 	// Manager.SetTunnelEnabled's own doc comment for why).
 	TunnelEnabled bool `json:"tunnel_enabled"`
-	// VNCUser becomes NKT_VNC_USER on this host's next install/update (see
-	// store.Host.VNCUser) — empty by default, same as the env var itself.
-	VNCUser string `json:"vnc_user"`
 }
 
 // hostWithOverview is store.Host plus what pollOverviews last learned about
@@ -268,10 +265,9 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(req.Name)
 	addr := strings.TrimSpace(req.Addr)
 	sshUser := strings.TrimSpace(req.SSHUser)
-	vncUser := strings.TrimSpace(req.VNCUser)
 
 	if req.AuthKind == authKindGenerated {
-		id, authorizedKey, err := s.hub.AddHostGenerated(r.Context(), name, addr, req.SSHPort, sshUser, req.TerminalEnabled, vncUser)
+		id, authorizedKey, err := s.hub.AddHostGenerated(r.Context(), name, addr, req.SSHPort, sshUser, req.TerminalEnabled)
 		if err != nil {
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
@@ -281,7 +277,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id, err := s.hub.AddHost(r.Context(), name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret, req.TerminalEnabled, vncUser)
+	id, err := s.hub.AddHost(r.Context(), name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret, req.TerminalEnabled)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -315,7 +311,6 @@ type updateHostRequest struct {
 	Secret          string `json:"secret"`
 	TerminalEnabled bool   `json:"terminal_enabled"`
 	TunnelEnabled   bool   `json:"tunnel_enabled"`
-	VNCUser         string `json:"vnc_user"`
 }
 
 func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
@@ -332,10 +327,9 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(req.Name)
 	addr := strings.TrimSpace(req.Addr)
 	sshUser := strings.TrimSpace(req.SSHUser)
-	vncUser := strings.TrimSpace(req.VNCUser)
 
 	if req.AuthKind == authKindGenerated {
-		authorizedKey, err := s.hub.UpdateHostGenerated(r.Context(), id, name, addr, req.SSHPort, sshUser, req.TerminalEnabled, vncUser)
+		authorizedKey, err := s.hub.UpdateHostGenerated(r.Context(), id, name, addr, req.SSHPort, sshUser, req.TerminalEnabled)
 		if err != nil {
 			fail(w, r, err)
 			return
@@ -345,7 +339,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.hub.UpdateHost(r.Context(), id, name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret, req.TerminalEnabled, vncUser); err != nil {
+	if err := s.hub.UpdateHost(r.Context(), id, name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret, req.TerminalEnabled); err != nil {
 		fail(w, r, err)
 		return
 	}

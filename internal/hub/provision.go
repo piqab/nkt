@@ -171,7 +171,7 @@ type tunnelEnvParams struct {
 	Token      string
 }
 
-func renderEnv(adminUser, adminPassword string, terminalEnabled bool, terminalUser, vncUser string, tun tunnelEnvParams) string {
+func renderEnv(adminUser, adminPassword string, terminalEnabled bool, terminalUser string, tun tunnelEnvParams) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "NKT_MODE=local\n")
 	fmt.Fprintf(&b, "NKT_DATA_DIR=%s\n", remoteDataDir)
@@ -186,16 +186,6 @@ func renderEnv(adminUser, adminPassword string, terminalEnabled bool, terminalUs
 	// pointless setuid-to-itself for no benefit.
 	if terminalUser != "" && terminalUser != "root" {
 		fmt.Fprintf(&b, "NKT_TERMINAL_USER=%s\n", terminalUser)
-	}
-	// No "not root" exclusion here unlike NKT_TERMINAL_USER above: unlike
-	// the shell (where dropping privilege is a hardening choice with no
-	// effect when there's nothing to drop to), x11vnc's own target account
-	// is dictated entirely by who owns the X11 session it needs to attach
-	// to — root is a perfectly valid answer to that if the desktop really
-	// is running as root, so it must not be silently omitted the way it is
-	// above.
-	if vncUser != "" {
-		fmt.Fprintf(&b, "NKT_VNC_USER=%s\n", vncUser)
 	}
 	if tun.Enabled {
 		fmt.Fprintf(&b, "NKT_HUB_TUNNEL_LISTEN_ADDR=%s\n", tun.ListenAddr)
