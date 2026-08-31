@@ -205,7 +205,7 @@ export default function Packages({ me }: { me: Me }) {
               columns={installedColumns}
               rowKey="name"
               size="small"
-              pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100] }}
+              pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100] }}
             />
           </div>
         )}
