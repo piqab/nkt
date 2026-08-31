@@ -22,6 +22,7 @@ export default function PackageInstallModal({
   onFinished,
   outcome,
   rescanning,
+  action = 'install',
 }: {
   packageName: string
   wsPath: string
@@ -29,6 +30,11 @@ export default function PackageInstallModal({
   onFinished?: () => void
   outcome?: { ok: boolean; exitCode?: number } | null
   rescanning?: boolean
+  /** 'remove' swaps the title/running/done copy for apt-get remove instead
+   * of apt-get install — everything else (error/session-ended banners) is
+   * already worded generically enough to cover both. Defaults to 'install'
+   * so every existing caller keeps its current text unchanged. */
+  action?: 'install' | 'remove'
 }) {
   const { t } = useTranslation()
   const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(wsURL(wsPath))
@@ -50,7 +56,7 @@ export default function PackageInstallModal({
 
   return (
     <AntModal
-      title={t('packageInstall.title', { packageName })}
+      title={t(action === 'remove' ? 'packageInstall.titleRemove' : 'packageInstall.title', { packageName })}
       open
       onCancel={handleClose}
       width={760}
@@ -58,7 +64,11 @@ export default function PackageInstallModal({
       destroyOnHidden
     >
       <p className="small muted">
-        <Trans i18nKey="packageInstall.running" values={{ packageName }} components={{ code: <code className="mono" /> }} />
+        <Trans
+          i18nKey={action === 'remove' ? 'packageInstall.runningRemove' : 'packageInstall.running'}
+          values={{ packageName }}
+          components={{ code: <code className="mono" /> }}
+        />
       </p>
       {status === 'error' && <Banner kind="error">{t('packageInstall.connectError')}</Banner>}
       {status === 'connected' && (
@@ -78,7 +88,7 @@ export default function PackageInstallModal({
           <Banner kind="info">{t('packageInstall.sessionEnded')}</Banner>
         ) : outcome.ok ? (
           <Banner kind="info">
-            {t('packageInstall.installed', {
+            {t(action === 'remove' ? 'packageInstall.removed' : 'packageInstall.installed', {
               packageName,
               status: rescanning ? t('packageInstall.rescanning') : t('packageInstall.rescanned'),
             })}

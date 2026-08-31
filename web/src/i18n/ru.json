@@ -28,6 +28,7 @@
     "configs": "Конфигурации",
     "services": "Сервисы",
     "containers": "Контейнеры и ВМ",
+    "packages": "Пакеты",
     "terminal": "Терминал",
     "firewall": "Firewall",
     "interfaces": "Сетевые интерфейсы",
@@ -102,12 +103,15 @@
   },
   "packageInstall": {
     "title": "Установка {{packageName}}",
+    "titleRemove": "Удаление {{packageName}}",
     "running": "Выполняется <code>apt-get install -y {{packageName}}</code>.",
+    "runningRemove": "Выполняется <code>apt-get remove -y {{packageName}}</code>.",
     "connectError": "Не удалось подключиться к сессии установки.",
     "sessionEnded": "Сессия завершена.",
     "rescanning": "Пересканирую хост…",
     "rescanned": "Хост пересканирован.",
     "installed": "{{packageName}} установлен. {{status}}",
+    "removed": "{{packageName}} удалён. {{status}}",
     "failed": "Установка завершилась с ошибкой{{code}}. Что именно пошло не так — в выводе выше.",
     "failedCode": " (код {{code}})"
   },
@@ -864,7 +868,7 @@
     "paste": "вставить скопированное"
   },
   "commonPackages": {
-    "title": "Пакеты",
+    "title": "Быстрая установка",
     "installed": "установлен",
     "notInstalled": "не установлен",
     "installSelected": "Установить выбранное",
@@ -886,6 +890,23 @@
     "descMtr": "traceroute и ping в одном — диагностика маршрута",
     "descTcpdump": "перехват и анализ сетевого трафика",
     "descPython3": "интерпретатор Python 3"
+  },
+  "packages": {
+    "title": "Пакеты",
+    "hint": "Быстрая установка типовых инструментов, поиск и установка любого пакета из apt, просмотр и удаление уже установленных.",
+    "searchTitle": "Поиск пакета",
+    "searchPlaceholder": "Название или часть описания…",
+    "searchMinLength": "Введите минимум 2 символа.",
+    "searchTruncated": "Показаны первые 200 совпадений — уточните запрос, чтобы увидеть остальные.",
+    "install": "Установить",
+    "installedTitle": "Установленные пакеты",
+    "filterPlaceholder": "Фильтр по имени…",
+    "remove": "Удалить",
+    "confirmRemove": "Удалить пакет {{name}}? Конфигурационные файлы останутся (без --purge).",
+    "col": {
+      "name": "Пакет",
+      "version": "Версия"
+    }
   },
   "overview": {
     "what": "обзор хоста",

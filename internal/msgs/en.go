@@ -51,6 +51,7 @@ var enCatalog = map[string]string{
 	"pkgInstall.serviceAlreadyInstalled":   "%s is already installed",
 	"pkgInstall.unknownPackage":            "unknown package: %s",
 	"pkgInstall.noPackagesSelected":        "no packages selected",
+	"pkgInstall.invalidPackageName":        "invalid package name: %s",
 
 	"pkgUpdate.fixturesDisabled": "package updates aren't available in fixtures mode",
 	"pkgUpdate.aptGetMissing":    "apt-get not found — package updates are only supported on Debian/Ubuntu",

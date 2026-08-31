@@ -50,6 +50,7 @@ var ruCatalog = map[string]string{
 	"pkgInstall.serviceAlreadyInstalled":   "%s уже установлен",
 	"pkgInstall.unknownPackage":            "неизвестный пакет: %s",
 	"pkgInstall.noPackagesSelected":        "не выбрано ни одного пакета",
+	"pkgInstall.invalidPackageName":        "недопустимое имя пакета: %s",
 
 	"pkgUpdate.fixturesDisabled": "обновление пакетов недоступно в режиме fixtures",
 	"pkgUpdate.aptGetMissing":    "apt-get не найден — обновление пакетов поддерживается только на Debian/Ubuntu",

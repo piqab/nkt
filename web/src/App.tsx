@@ -16,6 +16,7 @@ import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
+import Packages from './pages/Packages'
 import TerminalPage from './pages/Terminal'
 import Firewall from './pages/Firewall'
 import Interfaces from './pages/Interfaces'
@@ -86,6 +87,7 @@ const NAV = [
   { to: '/configs', labelKey: 'nav.configs' },
   { to: '/services', labelKey: 'nav.services' },
   { to: '/containers', labelKey: 'nav.containers' },
+  { to: '/packages', labelKey: 'nav.packages' },
   // A viewer has nothing to look at here without connecting (unlike the
   // read-only pages above) — hidden rather than shown-but-disabled.
   { to: '/terminal', labelKey: 'nav.terminal', adminOnly: true },
@@ -430,6 +432,7 @@ function Shell({
             <Route path="/configs" element={<Configs me={me} />} />
             <Route path="/services" element={<Services me={me} />} />
             <Route path="/containers" element={<Containers me={me} />} />
+            <Route path="/packages" element={<Packages me={me} />} />
             {/* Docker/Podman/LXD/ВМ were separate nav entries before —
                 redirect their old URLs to the merged page's default tab
                 rather than a bare 404 for anyone with these bookmarked. */}
