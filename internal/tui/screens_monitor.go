@@ -10,6 +10,7 @@ import (
 	"github.com/rivo/tview"
 
 	"github.com/althq/netknownsthat/internal/monitor"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -28,9 +29,11 @@ type availabilityScreen struct {
 
 func newAvailabilityScreen(a *App) *availabilityScreen {
 	s := &availabilityScreen{app: a, window: 7 * 24 * time.Hour}
-	s.table = newTable("Ресурс", "Адрес", "Сейчас", "Доступность 24ч", "Задержка", "Проверок")
-	s.heat = newPanel("Недоступность по часам недели")
-	s.detail = newPanel("Ресурс")
+	s.table = newTable(a.T("tui.monitor.availability.colResource"), a.T("tui.monitor.availability.colAddress"),
+		a.T("tui.monitor.availability.colNow"), a.T("tui.monitor.availability.colUptime24h"),
+		a.T("tui.monitor.availability.colLatency"), a.T("tui.monitor.availability.colChecks"))
+	s.heat = newPanel(a.T("tui.monitor.availability.downtimeByHourTitle"))
+	s.detail = newPanel(a.T("tui.monitor.availability.colResource"))
 
 	s.table.SetSelectionChangedFunc(func(row, _ int) { go s.loadDetail(row - 1) })
 	s.table.SetInputCapture(s.onKey)
@@ -45,24 +48,24 @@ func newAvailabilityScreen(a *App) *availabilityScreen {
 	return s
 }
 
-func (s *availabilityScreen) title() string          { return "Доступность" }
+func (s *availabilityScreen) title() string          { return s.app.T("tui.monitor.availability.title") }
 func (s *availabilityScreen) view() tview.Primitive  { return s.root }
 func (s *availabilityScreen) focus() tview.Primitive { return s.table }
 
 func (s *availabilityScreen) hints() string {
-	return dim("p проверить сейчас · space пауза · w период: ") + tag(hexSeries1, windowLabel(s.window))
+	return dim(s.app.T("tui.monitor.availability.hints")) + tag(hexSeries1, windowLabel(s.app.Lang, s.window))
 }
 
-func windowLabel(d time.Duration) string {
+func windowLabel(lang msgs.Lang, d time.Duration) string {
 	switch d {
 	case 24 * time.Hour:
-		return "сутки"
+		return msgs.T(lang, "tui.monitor.windowDay")
 	case 7 * 24 * time.Hour:
-		return "7 дней"
+		return msgs.T(lang, "tui.monitor.windowWeek")
 	case 14 * 24 * time.Hour:
-		return "14 дней"
+		return msgs.T(lang, "tui.monitor.windowTwoWeeks")
 	default:
-		return "30 дней"
+		return msgs.T(lang, "tui.monitor.windowMonth")
 	}
 }
 
@@ -103,15 +106,15 @@ func (s *availabilityScreen) probeNow() {
 	if !ok {
 		return
 	}
-	s.app.runAsync("Проверяю "+target.Label, false, func(ctx context.Context) (string, error) {
+	s.app.runAsync(s.app.T("tui.monitor.availability.checking", target.Label), false, func(ctx context.Context) (string, error) {
 		result := s.app.Prober.ProbeTarget(ctx, target.Target)
 		if err := s.app.DB.InsertProbeResults(ctx, []store.ProbeResult{result}); err != nil {
 			return "", err
 		}
 		if !result.OK {
-			return "", fmt.Errorf("%s недоступен: %s", target.Label, result.Error)
+			return "", fmt.Errorf("%s", s.app.T("tui.monitor.availability.unreachable", target.Label, result.Error))
 		}
-		return fmt.Sprintf("%s отвечает за %s", target.Label, formatMS(result.LatencyMS)), nil
+		return s.app.T("tui.monitor.availability.respondsIn", target.Label, formatMS(s.app.Lang, result.LatencyMS)), nil
 	})
 }
 
@@ -121,11 +124,13 @@ func (s *availabilityScreen) toggleEnabled() {
 		return
 	}
 	want := !target.Enabled
-	verb := "возобновляю проверки"
+	verb := s.app.T("tui.monitor.availability.resuming")
+	msg := s.app.T("tui.monitor.availability.resumingFor", target.Label)
 	if !want {
-		verb = "ставлю проверки на паузу"
+		verb = s.app.T("tui.monitor.availability.pausing")
+		msg = s.app.T("tui.monitor.availability.pausingFor", target.Label)
 	}
-	s.app.runAsync(verb+" для "+target.Label, true, func(ctx context.Context) (string, error) {
+	s.app.runAsync(msg, true, func(ctx context.Context) (string, error) {
 		if err := s.app.DB.SetTargetEnabled(ctx, target.ID, want); err != nil {
 			return "", err
 		}
@@ -145,7 +150,12 @@ func (s *availabilityScreen) refresh(ctx context.Context) {
 	s.app.queue(func() {
 		s.targets = statuses
 		s.table.Clear()
-		for i, h := range []string{"Ресурс", "Адрес", "Сейчас", "Доступность 24ч", "Задержка", "Проверок"} {
+		headers := []string{
+			s.app.T("tui.monitor.availability.colResource"), s.app.T("tui.monitor.availability.colAddress"),
+			s.app.T("tui.monitor.availability.colNow"), s.app.T("tui.monitor.availability.colUptime24h"),
+			s.app.T("tui.monitor.availability.colLatency"), s.app.T("tui.monitor.availability.colChecks"),
+		}
+		for i, h := range headers {
 			s.table.SetCell(0, i, tview.NewTableCell(" "+h).
 				SetTextColor(colorSecondary).SetSelectable(false).SetAttributes(tcell.AttrBold))
 		}
@@ -158,12 +168,12 @@ func (s *availabilityScreen) refresh(ctx context.Context) {
 			s.table.SetCell(row, 0, cell(truncate(label, 40)))
 			s.table.SetCell(row, 1, cellDim(fmt.Sprintf("%s://%s:%d", t.Kind, t.Host, t.Port)))
 
-			state, tone := "нет данных", hexMuted
+			state, tone := s.app.T("tui.noData"), hexMuted
 			if t.LastOK != nil {
 				if *t.LastOK {
-					state, tone = "доступен", hexGood
+					state, tone = s.app.T("tui.monitor.availability.stateUp"), hexGood
 				} else {
-					state, tone = "недоступен", hexCritical
+					state, tone = s.app.T("tui.monitor.availability.stateDown"), hexCritical
 				}
 			}
 			s.table.SetCell(row, 2, cellColor("●"+state, tone))
@@ -175,25 +185,25 @@ func (s *availabilityScreen) refresh(ctx context.Context) {
 			s.table.SetCell(row, 3, cellRight(uptime))
 			latency := "—"
 			if t.LastLatency > 0 {
-				latency = formatMS(t.LastLatency)
+				latency = formatMS(s.app.Lang, t.LastLatency)
 			}
 			s.table.SetCell(row, 4, cellRight(latency))
 			s.table.SetCell(row, 5, cellRight(fmt.Sprintf("%d", t.Checks24h)))
 		}
-		s.table.SetTitle(fmt.Sprintf(" Ресурсы под наблюдением — %d ", len(statuses)))
+		s.table.SetTitle(fmt.Sprintf(" %s ", s.app.T("tui.monitor.availability.tableTitle", len(statuses))))
 
 		// The heatmap shows downtime, not uptime: the eye is drawn to dark
-		// cells, and "когда было недоступно" is the question being asked.
-		s.heat.SetText(heatmap(cells,
+		// cells, and "when was it unavailable" is the question being asked.
+		s.heat.SetText(heatmap(s.app.Lang, cells,
 			func(c store.HeatCell) float64 {
 				if c.Total == 0 {
 					return 0
 				}
 				return 100 - c.Uptime
 			},
-			"недоступность",
+			s.app.T("tui.monitor.availability.downtimeScaleLabel"),
 			func(v float64) string { return fmt.Sprintf("%.1f%%", v) }))
-		s.heat.SetTitle(fmt.Sprintf(" Недоступность по часам недели — %s ", windowLabel(s.window)))
+		s.heat.SetTitle(fmt.Sprintf(" %s ", s.app.T("tui.monitor.availability.downtimeByHourTitleWindowed", windowLabel(s.app.Lang, s.window))))
 
 		if len(statuses) > 0 {
 			go s.loadDetail(0)
@@ -232,25 +242,28 @@ func (s *availabilityScreen) loadDetail(index int) {
 			sb.WriteString(dim("  Host: " + t.HostHeader))
 		}
 		sb.WriteString("\n\n")
-		sb.WriteString(dim(" источник: ") + t.Source + dim("   проверок за сутки: ") +
-			fmt.Sprintf("%d", t.Checks24h) + dim("   сбоев: ") + fmt.Sprintf("%d", t.Failures24h) + "\n")
+		sb.WriteString(dim(s.app.T("tui.monitor.availability.sourceLabel")) + t.Source +
+			dim(s.app.T("tui.monitor.availability.checksLabel")) +
+			fmt.Sprintf("%d", t.Checks24h) + dim(s.app.T("tui.monitor.availability.failuresLabel")) +
+			fmt.Sprintf("%d", t.Failures24h) + "\n")
 		if t.LastError != "" {
-			sb.WriteString(" " + tag(hexCritical, "последняя ошибка: "+truncate(t.LastError, 60)) + "\n")
+			sb.WriteString(" " + tag(hexCritical, s.app.T("tui.monitor.availability.lastError", truncate(t.LastError, 60))) + "\n")
 		}
-		sb.WriteString(dim(" последняя проверка: ") + relativeTime(t.LastCheck) + "\n\n")
+		sb.WriteString(dim(s.app.T("tui.monitor.availability.lastCheckLabel")) + relativeTime(s.app.Lang, t.LastCheck) + "\n\n")
 
-		sb.WriteString(dim(" доступность  ") + tag(hexGood, sparkline(uptimes, 64)) + "\n")
-		sb.WriteString(dim(" задержка     ") + tag(hexSeries1, sparkline(latencies, 64)) + "\n")
+		sb.WriteString(dim(s.app.T("tui.monitor.availability.uptimeLabel")) + tag(hexGood, sparkline(s.app.Lang, uptimes, 64)) + "\n")
+		sb.WriteString(dim(s.app.T("tui.monitor.availability.latencyLabel")) + tag(hexSeries1, sparkline(s.app.Lang, latencies, 64)) + "\n")
 		if len(buckets) > 0 {
-			sb.WriteString(dim(fmt.Sprintf("              %s … %s, по часам\n",
-				shortTime(bucketToTS(buckets[0].Bucket)), shortTime(bucketToTS(buckets[len(buckets)-1].Bucket)))))
+			sb.WriteString(dim(fmt.Sprintf("              %s … %s, %s\n",
+				shortTime(bucketToTS(buckets[0].Bucket)), shortTime(bucketToTS(buckets[len(buckets)-1].Bucket)),
+				s.app.T("tui.monitor.availability.byHours"))))
 		}
 
 		if len(mine) > 0 {
-			sb.WriteString("\n" + dim(fmt.Sprintf(" простои за %s:\n", windowLabel(s.window))))
+			sb.WriteString("\n" + dim(fmt.Sprintf(" %s\n", s.app.T("tui.monitor.availability.outagesFor", windowLabel(s.app.Lang, s.window)))))
 			for i, o := range mine {
 				if i >= 5 {
-					sb.WriteString(dim(fmt.Sprintf("  …ещё %d\n", len(mine)-i)))
+					sb.WriteString(dim(fmt.Sprintf("  %s\n", s.app.T("tui.monitor.availability.andMore", len(mine)-i))))
 					break
 				}
 				sb.WriteString(fmt.Sprintf("  %s %s — %s %s\n", tag(hexCritical, "●"),
@@ -277,21 +290,26 @@ func bucketToTS(bucket string) string {
 // usageSeries fixes the unit and aggregate of each metric, so a chart never
 // mixes measures of different scale.
 type usageSeries struct {
-	label  string
-	source string
-	metric string
-	agg    string
-	format func(float64) string
+	labelKey string
+	source   string
+	metric   string
+	agg      string
+	format   func(float64) string
 }
 
-var usageCatalogue = []usageSeries{
-	{"Сетевой трафик контейнеров", monitor.SourceDocker, "net_rx_bytes", "sum", formatBytes},
-	{"CPU контейнеров", monitor.SourceDocker, "cpu_pct", "avg", func(v float64) string { return fmt.Sprintf("%.1f%%", v) }},
-	{"Память контейнеров", monitor.SourceDocker, "mem_bytes", "avg", formatBytes},
-	{"Трафик по правилам firewall", monitor.SourceIptables, "bytes", "sum", formatBytes},
-	{"Запросы nginx", monitor.SourceNginxLog, "requests", "sum", formatCount},
-	{"Ошибки 5xx у nginx", monitor.SourceNginxLog, "errors_5xx", "sum", formatCount},
-	{"Запросы haproxy", monitor.SourceHAProxyLog, "requests", "sum", formatCount},
+// usageCatalogue builds the metric catalogue for the given language: the
+// format funcs for byte-valued metrics close over lang so their unit labels
+// (Б/КБ/… vs B/KB/…) match the rest of the screen.
+func usageCatalogue(lang msgs.Lang) []usageSeries {
+	return []usageSeries{
+		{"tui.monitor.usage.dockerNetTraffic", monitor.SourceDocker, "net_rx_bytes", "sum", func(v float64) string { return formatBytes(lang, v) }},
+		{"tui.monitor.usage.dockerCPU", monitor.SourceDocker, "cpu_pct", "avg", func(v float64) string { return fmt.Sprintf("%.1f%%", v) }},
+		{"tui.monitor.usage.dockerMemory", monitor.SourceDocker, "mem_bytes", "avg", func(v float64) string { return formatBytes(lang, v) }},
+		{"tui.monitor.usage.firewallTraffic", monitor.SourceIptables, "bytes", "sum", func(v float64) string { return formatBytes(lang, v) }},
+		{"tui.monitor.usage.nginxRequests", monitor.SourceNginxLog, "requests", "sum", formatCount},
+		{"tui.monitor.usage.nginx5xxErrors", monitor.SourceNginxLog, "errors_5xx", "sum", formatCount},
+		{"tui.monitor.usage.haproxyRequests", monitor.SourceHAProxyLog, "requests", "sum", formatCount},
+	}
 }
 
 type usageScreen struct {
@@ -307,9 +325,9 @@ type usageScreen struct {
 
 func newUsageScreen(a *App) *usageScreen {
 	s := &usageScreen{app: a, window: 7 * 24 * time.Hour}
-	s.trend = newPanel("Динамика")
-	s.top = newPanel("Кто нагружает больше всех")
-	s.heat = newPanel("Расписание использования")
+	s.trend = newPanel(a.T("tui.monitor.usage.trendTitle"))
+	s.top = newPanel(a.T("tui.monitor.usage.topTitle"))
+	s.heat = newPanel(a.T("tui.monitor.usage.scheduleTitle"))
 
 	left := tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(s.trend, 10, 0, false).
@@ -324,19 +342,20 @@ func newUsageScreen(a *App) *usageScreen {
 	return s
 }
 
-func (s *usageScreen) title() string          { return "Нагрузка" }
+func (s *usageScreen) title() string          { return s.app.T("tui.monitor.usage.title") }
 func (s *usageScreen) view() tview.Primitive  { return s.root }
 func (s *usageScreen) focus() tview.Primitive { return s.top }
 
 func (s *usageScreen) hints() string {
-	return dim("m показатель: ") + tag(hexSeries1, usageCatalogue[s.current].label) +
-		dim("  w период: ") + tag(hexSeries1, windowLabel(s.window))
+	spec := usageCatalogue(s.app.Lang)[s.current]
+	return dim(s.app.T("tui.monitor.usage.metricLabel")) + tag(hexSeries1, s.app.T(spec.labelKey)) +
+		dim(s.app.T("tui.monitor.usage.periodLabel")) + tag(hexSeries1, windowLabel(s.app.Lang, s.window))
 }
 
 func (s *usageScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 	switch event.Rune() {
 	case 'm', 'M':
-		s.current = (s.current + 1) % len(usageCatalogue)
+		s.current = (s.current + 1) % len(usageCatalogue(s.app.Lang))
 	case 'w', 'W':
 		windows := []time.Duration{24 * time.Hour, 7 * 24 * time.Hour, 14 * 24 * time.Hour, 30 * 24 * time.Hour}
 		for i, w := range windows {
@@ -354,7 +373,7 @@ func (s *usageScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 }
 
 func (s *usageScreen) refresh(ctx context.Context) {
-	spec := usageCatalogue[s.current]
+	spec := usageCatalogue(s.app.Lang)[s.current]
 	granularity := "hour"
 	if s.window > 14*24*time.Hour {
 		granularity = "day"
@@ -382,11 +401,12 @@ func (s *usageScreen) refresh(ctx context.Context) {
 	}
 
 	s.app.queue(func() {
-		s.trend.SetTitle(fmt.Sprintf(" %s — %s ", spec.label, windowLabel(s.window)))
+		specLabel := s.app.T(spec.labelKey)
+		s.trend.SetTitle(fmt.Sprintf(" %s — %s ", specLabel, windowLabel(s.app.Lang, s.window)))
 		var tb strings.Builder
 		if len(series) == 0 {
-			tb.WriteString("\n " + dim("Данных за период нет. Метрики собирает фоновый планировщик — "))
-			tb.WriteString("\n " + dim("запустите сервис netknownsthat или нажмите r для скана."))
+			tb.WriteString("\n " + dim(s.app.T("tui.monitor.usage.noDataLine1")))
+			tb.WriteString("\n " + dim(s.app.T("tui.monitor.usage.noDataLine2")))
 		} else {
 			sum, max := 0.0, 0.0
 			for _, v := range series {
@@ -395,20 +415,19 @@ func (s *usageScreen) refresh(ctx context.Context) {
 					max = v
 				}
 			}
-			tb.WriteString("\n " + tag(hexSeries1, sparkline(series, 96)) + "\n\n")
-			tb.WriteString(dim(fmt.Sprintf(" всего %s   пик %s   точек %d   шаг %s",
-				spec.format(sum), spec.format(max), len(series),
-				map[string]string{"hour": "час", "day": "сутки"}[granularity])))
+			tb.WriteString("\n " + tag(hexSeries1, sparkline(s.app.Lang, series, 96)) + "\n\n")
+			step := map[string]string{"hour": s.app.T("tui.monitor.usage.stepHour"), "day": s.app.T("tui.monitor.usage.stepDay")}[granularity]
+			tb.WriteString(dim(" " + s.app.T("tui.monitor.usage.totalPeakPointsStep",
+				spec.format(sum), spec.format(max), len(series), step)))
 			if s.app.Cfg.IsFixtures() {
-				tb.WriteString("\n " + tag(hexWarning,
-					"режим снапшота: значения синтетические, а не измеренные"))
+				tb.WriteString("\n " + tag(hexWarning, s.app.T("tui.monitor.usage.fixturesWarning")))
 			}
 		}
 		s.trend.SetText(tb.String())
 
 		var bb strings.Builder
 		if len(top) == 0 {
-			bb.WriteString("\n " + dim("Нет данных за период."))
+			bb.WriteString("\n " + dim(s.app.T("tui.monitor.usage.noDataInPeriod")))
 		} else {
 			maxTotal := top[0].Total
 			if maxTotal == 0 {
@@ -422,11 +441,11 @@ func (s *usageScreen) refresh(ctx context.Context) {
 			}
 		}
 		s.top.SetText(bb.String())
-		s.top.SetTitle(fmt.Sprintf(" Кто нагружает больше всех — %s ", spec.label))
+		s.top.SetTitle(fmt.Sprintf(" %s ", s.app.T("tui.monitor.usage.topTitleWithMetric", specLabel)))
 
-		s.heat.SetText(heatmap(cells,
+		s.heat.SetText(heatmap(s.app.Lang, cells,
 			func(c store.HeatCell) float64 { return c.Value },
-			"нагрузка", spec.format))
+			s.app.T("tui.monitor.usage.loadScaleLabel"), spec.format))
 	})
 }
 
@@ -442,9 +461,10 @@ type auditScreen struct {
 
 func newAuditScreen(a *App) *auditScreen {
 	s := &auditScreen{app: a}
-	s.table = newTable("Когда", "Кто", "Действие", "Объект", "Результат", "Подробности")
-	s.table.SetTitle(" Журнал действий ")
-	s.jobs = newPanel("Фоновые задачи")
+	s.table = newTable(a.T("tui.configs.colWhen"), a.T("tui.configs.colWho"), a.T("tui.monitor.audit.colAction"),
+		a.T("tui.monitor.audit.colTarget"), a.T("tui.monitor.audit.colResult"), a.T("tui.monitor.audit.colDetails"))
+	s.table.SetTitle(fmt.Sprintf(" %s ", a.T("tui.monitor.audit.tableTitle")))
+	s.jobs = newPanel(a.T("tui.monitor.audit.jobsTitle"))
 
 	s.root = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(s.table, 0, 1, true).
@@ -452,10 +472,10 @@ func newAuditScreen(a *App) *auditScreen {
 	return s
 }
 
-func (s *auditScreen) title() string          { return "Журнал" }
+func (s *auditScreen) title() string          { return s.app.T("tui.monitor.audit.title") }
 func (s *auditScreen) view() tview.Primitive  { return s.root }
 func (s *auditScreen) focus() tview.Primitive { return s.table }
-func (s *auditScreen) hints() string          { return dim("Enter полный текст записи") }
+func (s *auditScreen) hints() string          { return dim(s.app.T("tui.monitor.audit.hints")) }
 
 func (s *auditScreen) refresh(ctx context.Context) {
 	entries, err := s.app.DB.ListAudit(ctx, store.AuditFilter{Limit: 300})
@@ -465,7 +485,11 @@ func (s *auditScreen) refresh(ctx context.Context) {
 
 	s.app.queue(func() {
 		s.table.Clear()
-		for i, h := range []string{"Когда", "Кто", "Действие", "Объект", "Результат", "Подробности"} {
+		headers := []string{
+			s.app.T("tui.configs.colWhen"), s.app.T("tui.configs.colWho"), s.app.T("tui.monitor.audit.colAction"),
+			s.app.T("tui.monitor.audit.colTarget"), s.app.T("tui.monitor.audit.colResult"), s.app.T("tui.monitor.audit.colDetails"),
+		}
+		for i, h := range headers {
 			s.table.SetCell(0, i, tview.NewTableCell(" "+h).
 				SetTextColor(colorSecondary).SetSelectable(false).SetAttributes(tcell.AttrBold))
 		}
@@ -490,25 +514,27 @@ func (s *auditScreen) refresh(ctx context.Context) {
 			e := entries[idx]
 			body := fmt.Sprintf(" %s\n %s\n\n %s %s\n %s %s\n %s %s\n\n%s",
 				bold(e.Action), dim(shortTime(e.TS)),
-				dim("пользователь:"), e.Username,
-				dim("объект:      "), orDash(e.Target),
-				dim("результат:   "), e.Result,
+				dim(s.app.T("tui.monitor.audit.userLabel")), e.Username,
+				dim(s.app.T("tui.monitor.audit.targetLabel")), orDash(e.Target),
+				dim(s.app.T("tui.monitor.audit.resultLabel")), e.Result,
 				tview.Escape(e.Detail))
-			s.app.showText("audit", "Запись журнала", body)
+			s.app.showText("audit", s.app.T("tui.monitor.audit.entryTitle"), body)
 		})
-		s.table.SetTitle(fmt.Sprintf(" Журнал действий — %d записей ", len(entries)))
+		s.table.SetTitle(fmt.Sprintf(" %s ", s.app.T("tui.monitor.audit.tableTitleWithCount", len(entries))))
 
 		var sb strings.Builder
-		sb.WriteString(dim(" Планировщик собирает историю только когда запущен сервис netknownsthat.\n"))
-		sb.WriteString(dim(" Терминальный интерфейс читает ту же базу и ничего не собирает сам.\n\n"))
+		sb.WriteString(dim(" " + s.app.T("tui.monitor.audit.schedulerNote1") + "\n"))
+		sb.WriteString(dim(" " + s.app.T("tui.monitor.audit.schedulerNote2") + "\n\n"))
 		sb.WriteString(fmt.Sprintf(" %-14s %-10s %-16s %s\n",
-			dim("интервалы:"), dim("пробы"), dim("метрики"), dim("инвентаризация")))
+			dim(s.app.T("tui.monitor.audit.intervalsLabel")), dim(s.app.T("tui.monitor.audit.probesLabel")),
+			dim(s.app.T("tui.monitor.audit.metricsLabel")), dim(s.app.T("tui.monitor.audit.inventoryLabel"))))
 		sb.WriteString(fmt.Sprintf(" %-14s %-10s %-16s %s\n", "",
 			s.app.Cfg.ProbeInterval, s.app.Cfg.MetricsInterval, s.app.Cfg.InventoryInterval))
 		if s.app.Cfg.AutoRenewCerts && s.app.Cfg.AllowMutations {
-			sb.WriteString(fmt.Sprintf(" %s каждые %s продлевает certbot-сертификаты не старше %d дн. до истечения\n",
-				dim("авто-renew:"), s.app.Cfg.AutoRenewCertsInterval,
-				int(s.app.Cfg.AutoRenewCertsWithin.Hours()/24)))
+			sb.WriteString(fmt.Sprintf(" %s %s\n",
+				dim(s.app.T("tui.monitor.audit.autoRenewLabel")),
+				s.app.T("tui.monitor.audit.autoRenewTemplate", s.app.Cfg.AutoRenewCertsInterval,
+					int(s.app.Cfg.AutoRenewCertsWithin.Hours()/24))))
 		}
 		s.jobs.SetText(sb.String())
 	})

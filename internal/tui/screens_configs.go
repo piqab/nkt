@@ -25,9 +25,9 @@ type configsScreen struct {
 
 func newConfigsScreen(a *App) *configsScreen {
 	s := &configsScreen{app: a}
-	s.list = newTable("Файл", "Сервис", "Размер", "Изменён")
-	s.list.SetTitle(" Файлы конфигурации ")
-	s.preview = newPanel("Содержимое")
+	s.list = newTable(a.T("tui.configs.colFile"), a.T("tui.configs.colService"), a.T("tui.configs.colSize"), a.T("tui.configs.colModified"))
+	s.list.SetTitle(" " + a.T("tui.configs.listTitle") + " ")
+	s.preview = newPanel(a.T("tui.configs.contentTitle"))
 	s.preview.SetScrollable(true)
 
 	s.list.SetSelectionChangedFunc(func(row, _ int) { go s.loadPreview(row - 1) })
@@ -39,12 +39,12 @@ func newConfigsScreen(a *App) *configsScreen {
 	return s
 }
 
-func (s *configsScreen) title() string          { return "Конфигурации" }
+func (s *configsScreen) title() string          { return s.app.T("tui.configs.title") }
 func (s *configsScreen) view() tview.Primitive  { return s.root }
 func (s *configsScreen) focus() tview.Primitive { return s.list }
 
 func (s *configsScreen) hints() string {
-	return dim("e править · v история версий · u откат к версии")
+	return dim(s.app.T("tui.configs.hints"))
 }
 
 func (s *configsScreen) selected() (model.ManagedFile, bool) {
@@ -74,14 +74,14 @@ func (s *configsScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 func (s *configsScreen) refresh(ctx context.Context) {
 	files, err := s.app.Configs.List(ctx)
 	if err != nil {
-		s.app.queue(func() { s.app.setStatus(hexCritical, "список файлов: "+err.Error()) })
+		s.app.queue(func() { s.app.setStatus(hexCritical, s.app.T("tui.configs.listError", err.Error())) })
 		return
 	}
 
 	s.app.queue(func() {
 		s.files = files
 		s.list.Clear()
-		for i, h := range []string{"Файл", "Сервис", "Размер", "Изменён"} {
+		for i, h := range []string{s.app.T("tui.configs.colFile"), s.app.T("tui.configs.colService"), s.app.T("tui.configs.colSize"), s.app.T("tui.configs.colModified")} {
 			s.list.SetCell(0, i, tview.NewTableCell(" "+h).
 				SetTextColor(colorSecondary).SetSelectable(false).SetAttributes(tcell.AttrBold))
 		}
@@ -93,10 +93,10 @@ func (s *configsScreen) refresh(ctx context.Context) {
 			}
 			s.list.SetCell(row, 0, cell(name))
 			s.list.SetCell(row, 1, cellDim(f.Service))
-			s.list.SetCell(row, 2, cellRight(formatBytes(float64(f.Size))))
+			s.list.SetCell(row, 2, cellRight(formatBytes(s.app.Lang, float64(f.Size))))
 			s.list.SetCell(row, 3, cellDim(f.ModTime.Local().Format("02.01 15:04")))
 		}
-		s.list.SetTitle(fmt.Sprintf(" Файлы конфигурации — %d ", len(files)))
+		s.list.SetTitle(" " + s.app.T("tui.configs.listTitleCount", len(files)) + " ")
 		if len(files) > 0 {
 			go s.loadPreview(0)
 		}
@@ -110,7 +110,7 @@ func (s *configsScreen) loadPreview(index int) {
 	file, err := s.app.Configs.Read(s.files[index].Path)
 	s.app.queue(func() {
 		if err != nil {
-			s.preview.SetText(" " + tag(hexCritical, "не удалось прочитать: "+err.Error()))
+			s.preview.SetText(" " + tag(hexCritical, s.app.T("tui.configs.readError", err.Error())))
 			return
 		}
 		s.preview.SetTitle(fmt.Sprintf(" %s ", file.Path))
@@ -129,22 +129,22 @@ func (s *configsScreen) openEditor() {
 		return
 	}
 	if !s.app.canMutate() {
-		s.app.setStatus(hexWarning, "Изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
+		s.app.setStatus(hexWarning, s.app.T("tui.mutationsDisabled"))
 		return
 	}
 
 	file, err := s.app.Configs.Read(target.Path)
 	if err != nil {
-		s.app.setStatus(hexCritical, "не удалось открыть файл: "+err.Error())
+		s.app.setStatus(hexCritical, s.app.T("tui.configs.openError", err.Error()))
 		return
 	}
 
 	area := tview.NewTextArea().SetText(file.Content, false)
 	area.SetBorder(true).SetBorderColor(colorAccent).
-		SetTitle(fmt.Sprintf(" %s — Ctrl+S сохранить, Esc отменить ", file.Path))
+		SetTitle(" " + s.app.T("tui.configs.editorTitle", file.Path) + " ")
 
-	note := tview.NewInputField().SetLabel(" Комментарий к правке: ").SetFieldWidth(50)
-	apply := tview.NewCheckbox().SetLabel(" Перезагрузить сервис после сохранения: ")
+	note := tview.NewInputField().SetLabel(" " + s.app.T("tui.configs.noteLabel") + ": ").SetFieldWidth(50)
+	apply := tview.NewCheckbox().SetLabel(" " + s.app.T("tui.configs.applyLabel") + ": ")
 
 	bar := tview.NewFlex().
 		AddItem(note, 0, 3, false).
@@ -158,28 +158,25 @@ func (s *configsScreen) openEditor() {
 		content := area.GetText()
 		if content == file.Content {
 			s.app.closeModal("editor")
-			s.app.setStatus(hexMuted, "Файл не изменился — ничего не сохранял.")
+			s.app.setStatus(hexMuted, s.app.T("tui.configs.unchanged"))
 			return
 		}
 		s.app.closeModal("editor")
-		s.app.runAsync("Проверяю и сохраняю "+file.Path, true, func(ctx context.Context) (string, error) {
-			// The TUI has no per-viewer language of its own (no HTTP request
-			// to read it from) — it always renders Russian, same as every
-			// other string on screen here.
-			res, err := s.app.Configs.Write(ctx, msgs.RU, s.app.actor, file.Path, content,
+		s.app.runAsync(s.app.T("tui.configs.saving", file.Path), true, func(ctx context.Context) (string, error) {
+			res, err := s.app.Configs.Write(ctx, s.app.Lang, s.app.actor, file.Path, content,
 				note.GetText(), apply.IsChecked())
 			if err != nil {
 				if res.RolledBack {
-					return "", fmt.Errorf("%w — файл возвращён в прежнее состояние", err)
+					return "", fmt.Errorf("%w"+s.app.T("tui.configs.rolledBackSuffix"), err)
 				}
 				return "", err
 			}
-			msg := fmt.Sprintf("%s сохранён, версия #%d", file.Path, res.VersionID)
+			msg := s.app.T("tui.configs.saved", file.Path, res.VersionID)
 			if !res.Validated {
-				msg += " (проверка конфигурации для этого сервиса недоступна)"
+				msg += s.app.T("tui.configs.notValidatedSuffix")
 			}
 			if res.Applied {
-				msg += ", сервис перезагружен"
+				msg += s.app.T("tui.configs.appliedSuffix")
 			}
 			return msg, nil
 		})
@@ -221,7 +218,7 @@ func (a *App) confirmDiscard(dirty bool, discard func()) {
 		discard()
 		return
 	}
-	a.confirm("Правки не сохранены. Закрыть редактор и потерять их?", discard)
+	a.confirm(a.T("tui.configs.confirmDiscard"), discard)
 }
 
 // showVersions lists the stored revisions of the selected file. In rollback
@@ -238,15 +235,15 @@ func (s *configsScreen) showVersions(rollback bool) {
 		return
 	}
 	if len(versions) == 0 {
-		s.app.setStatus(hexMuted,
-			"История пуста: файл ещё не редактировался через это приложение.")
+		s.app.setStatus(hexMuted, s.app.T("tui.configs.emptyHistory"))
 		return
 	}
 
-	table := newTable("#", "Когда", "Кто", "Событие", "Размер", "Комментарий")
-	title := " История версий — Enter показать различия, Esc закрыть "
+	table := newTable(s.app.T("tui.configs.colVersion"), s.app.T("tui.configs.colWhen"), s.app.T("tui.configs.colWho"),
+		s.app.T("tui.configs.colEvent"), s.app.T("tui.configs.colSize"), s.app.T("tui.configs.colNote"))
+	title := " " + s.app.T("tui.configs.versionsTitle") + " "
 	if rollback {
-		title = " Откат — Enter восстановить выбранную версию, Esc закрыть "
+		title = " " + s.app.T("tui.configs.rollbackTitle") + " "
 	}
 	table.SetTitle(title).SetBorderColor(colorAccent)
 
@@ -256,7 +253,7 @@ func (s *configsScreen) showVersions(rollback bool) {
 		table.SetCell(row, 1, cell(shortTime(v.TS)))
 		table.SetCell(row, 2, cellDim(v.Author))
 		table.SetCell(row, 3, cellDim(v.Action))
-		table.SetCell(row, 4, cellRight(formatBytes(float64(v.Size))))
+		table.SetCell(row, 4, cellRight(formatBytes(s.app.Lang, float64(v.Size))))
 		table.SetCell(row, 5, cellDim(truncate(v.Note, 40)))
 	}
 
@@ -291,18 +288,17 @@ func (s *configsScreen) showDiff(v store.ConfigVersion) {
 		return
 	}
 	if strings.TrimSpace(diff) == "" {
-		s.app.setStatus(hexMuted, fmt.Sprintf("Версия #%d совпадает с текущим файлом.", v.ID))
+		s.app.setStatus(hexMuted, s.app.T("tui.configs.versionMatchesCurrent", v.ID))
 		return
 	}
-	s.app.showText("diff", fmt.Sprintf("Различия: версия #%d и текущий файл", v.ID), colorizeDiff(diff))
+	s.app.showText("diff", s.app.T("tui.configs.diffTitle", v.ID), colorizeDiff(diff))
 }
 
 func (s *configsScreen) confirmRollback(v store.ConfigVersion) {
-	s.app.confirm(fmt.Sprintf("Восстановить версию #%d от %s?\n\nТекущее содержимое файла будет заменено.",
-		v.ID, shortTime(v.TS)), func() {
-		s.app.runAsync(fmt.Sprintf("Восстанавливаю версию #%d", v.ID), true,
+	s.app.confirm(s.app.T("tui.configs.confirmRollback", v.ID, shortTime(v.TS)), func() {
+		s.app.runAsync(s.app.T("tui.configs.rollingBack", v.ID), true,
 			func(ctx context.Context) (string, error) {
-				res, err := s.app.Configs.Rollback(ctx, msgs.RU, s.app.actor, v.ID, false)
+				res, err := s.app.Configs.Rollback(ctx, s.app.Lang, s.app.actor, v.ID, false)
 				if err != nil {
 					return "", err
 				}

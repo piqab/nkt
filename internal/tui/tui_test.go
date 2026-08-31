@@ -16,6 +16,7 @@ import (
 	"github.com/althq/netknownsthat/internal/control"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/monitor"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -117,6 +118,9 @@ func depsAgainstRoot(t *testing.T, screen tcell.Screen, root string) Deps {
 		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
 		Prober:    monitor.NewProber(db, cfg),
 		Screen:    screen,
+		// Fixes the language so these fixture-text assertions never race
+		// the first-launch language prompt — see Deps.Lang's own comment.
+		Lang: msgs.RU,
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/control"
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // ------------------------------------------------------------------- services
@@ -35,8 +36,9 @@ type servicesScreen struct {
 
 func newServicesScreen(a *App) *servicesScreen {
 	s := &servicesScreen{app: a}
-	s.table = newTable("Тип", "Имя", "Состояние", "Подробности", "Порты и память")
-	s.detail = newPanel("Выбранный объект")
+	s.table = newTable(s.app.T("tui.services.colType"), s.app.T("tui.services.colName"),
+		s.app.T("tui.services.colState"), s.app.T("tui.services.colDetails"), s.app.T("tui.services.colPortsMemory"))
+	s.detail = newPanel(s.app.T("tui.services.selectedPanelTitle"))
 
 	s.table.SetSelectionChangedFunc(func(row, _ int) { s.showDetail(row - 1) })
 	s.table.SetInputCapture(s.onKey)
@@ -47,12 +49,12 @@ func newServicesScreen(a *App) *servicesScreen {
 	return s
 }
 
-func (s *servicesScreen) title() string          { return "Сервисы" }
+func (s *servicesScreen) title() string          { return s.app.T("tui.services.title") }
 func (s *servicesScreen) view() tview.Primitive  { return s.root }
 func (s *servicesScreen) focus() tview.Primitive { return s.table }
 
 func (s *servicesScreen) hints() string {
-	return dim("s запуск · x стоп · t перезапуск · l reload · c проверить конфиг")
+	return dim(s.app.T("tui.services.hints"))
 }
 
 func (s *servicesScreen) selected() (serviceRow, bool) {
@@ -86,33 +88,34 @@ func (s *servicesScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 	if !contains(target.actions, action) {
-		s.app.setStatus(hexWarning, fmt.Sprintf("«%s» недоступно для %s", action, target.name))
+		s.app.setStatus(hexWarning, s.app.T("tui.services.actionUnavailable", action, target.name))
 		return nil
 	}
 
 	if action == "validate" {
-		s.app.runAsync("Проверяю конфигурацию "+target.name, false,
+		s.app.runAsync(s.app.T("tui.services.validatingConfig", target.name), false,
 			func(ctx context.Context) (string, error) {
 				res, ok, err := s.app.Services.ValidateOnly(ctx, s.app.actor, target.name)
 				if err != nil {
 					return "", err
 				}
 				if !ok {
-					return "проверка для этого сервиса недоступна", nil
+					return s.app.T("tui.services.validationUnavailable"), nil
 				}
 				out := strings.TrimSpace(res.Output())
 				if !res.OK() {
-					return "", fmt.Errorf("конфигурация отклонена: %s", out)
+					return "", fmt.Errorf("%s", s.app.T("tui.services.configRejected", out))
 				}
 				return target.name + ": " + truncate(out, 120), nil
 			})
 		return nil
 	}
 
-	s.app.confirm(fmt.Sprintf("Выполнить «%s» для %s «%s»?", action,
+	s.app.confirm(s.app.T("tui.services.confirmAction", action,
 		map[string]string{
-			"unit": "сервиса", "container": "контейнера", "podman": "контейнера Podman",
-			"lxd": "инстанса LXD", "vm": "виртуальной машины",
+			"unit": s.app.T("tui.services.kindUnit"), "container": s.app.T("tui.services.kindContainer"),
+			"podman": s.app.T("tui.services.kindPodman"), "lxd": s.app.T("tui.services.kindLXD"),
+			"vm": s.app.T("tui.services.kindVM"),
 		}[target.kind],
 		target.name),
 		func() {
@@ -123,17 +126,17 @@ func (s *servicesScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 						if err := s.app.Services.ContainerAction(ctx, s.app.actor, target.name, action); err != nil {
 							return "", err
 						}
-						return fmt.Sprintf("контейнер %s: %s выполнено", target.name, action), nil
+						return s.app.T("tui.services.containerActionDone", target.name, action), nil
 					case "podman":
 						if err := s.app.Podman.ContainerAction(ctx, s.app.actor, target.name, action); err != nil {
 							return "", err
 						}
-						return fmt.Sprintf("podman-контейнер %s: %s выполнено", target.name, action), nil
+						return s.app.T("tui.services.podmanActionDone", target.name, action), nil
 					case "lxd":
 						if err := s.app.LXD.InstanceAction(ctx, s.app.actor, target.name, action); err != nil {
 							return "", err
 						}
-						return fmt.Sprintf("lxd-инстанс %s: %s выполнено", target.name, action), nil
+						return s.app.T("tui.services.lxdActionDone", target.name, action), nil
 					case "vm":
 						vmAction := action
 						if vmAction == "stop" {
@@ -142,15 +145,15 @@ func (s *servicesScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 						if err := s.app.Libvirt.VMAction(ctx, s.app.actor, target.name, vmAction); err != nil {
 							return "", err
 						}
-						return fmt.Sprintf("VM %s: %s выполнено", target.name, vmAction), nil
+						return s.app.T("tui.services.vmActionDone", target.name, vmAction), nil
 					}
 					res, err := s.app.Services.Action(ctx, s.app.actor, target.name, action)
 					if err != nil {
 						return "", err
 					}
-					msg := fmt.Sprintf("%s: %s выполнено", target.name, action)
+					msg := s.app.T("tui.services.actionDone", target.name, action)
 					if res.Simulated {
-						msg += " (симуляция, режим снапшота)"
+						msg += s.app.T("tui.services.simulatedSuffix")
 					}
 					return msg, nil
 				})
@@ -167,7 +170,11 @@ func (s *servicesScreen) refresh(ctx context.Context) {
 	s.app.queue(func() {
 		s.rows = s.rows[:0]
 		s.table.Clear()
-		for i, h := range []string{"Тип", "Имя", "Состояние", "Подробности", "Порты и память"} {
+		headers := []string{
+			s.app.T("tui.services.colType"), s.app.T("tui.services.colName"), s.app.T("tui.services.colState"),
+			s.app.T("tui.services.colDetails"), s.app.T("tui.services.colPortsMemory"),
+		}
+		for i, h := range headers {
 			s.table.SetCell(0, i, tview.NewTableCell(" "+h).
 				SetTextColor(colorSecondary).SetSelectable(false).SetAttributes(tcell.AttrBold))
 		}
@@ -180,12 +187,12 @@ func (s *servicesScreen) refresh(ctx context.Context) {
 			s.table.SetCell(row, 2, cellColor("●"+svc.ActiveState, stateColor(svc.ActiveState)))
 			extra := svc.Description
 			if !svc.Installed {
-				extra = "не установлен на хосте"
+				extra = s.app.T("tui.services.notInstalled")
 			}
 			s.table.SetCell(row, 3, cellDim(truncate(extra, 46)))
 			mem := "—"
 			if svc.MemoryBytes > 0 {
-				mem = formatBytes(float64(svc.MemoryBytes))
+				mem = formatBytes(s.app.Lang, float64(svc.MemoryBytes))
 			}
 			s.table.SetCell(row, 4, cellDim(fmt.Sprintf("pid %s · %s", intOrDash(svc.MainPID), mem)))
 			row++
@@ -199,7 +206,7 @@ func (s *servicesScreen) refresh(ctx context.Context) {
 			s.table.SetCell(row, 1, cell(ct.Name))
 			s.table.SetCell(row, 2, cellColor("●"+ct.State, stateColor(ct.State)))
 			s.table.SetCell(row, 3, cellDim(truncate(ct.Image, 46)))
-			s.table.SetCell(row, 4, cellDim(truncate(portSummary(ct), 40)))
+			s.table.SetCell(row, 4, cellDim(truncate(portSummary(s.app.Lang, ct), 40)))
 			row++
 		}
 
@@ -211,7 +218,7 @@ func (s *servicesScreen) refresh(ctx context.Context) {
 			s.table.SetCell(row, 1, cell(ct.Name))
 			s.table.SetCell(row, 2, cellColor("●"+ct.State, stateColor(ct.State)))
 			s.table.SetCell(row, 3, cellDim(truncate(ct.Image, 46)))
-			s.table.SetCell(row, 4, cellDim(truncate(podmanPortSummary(ct), 40)))
+			s.table.SetCell(row, 4, cellDim(truncate(podmanPortSummary(s.app.Lang, ct), 40)))
 			row++
 		}
 
@@ -241,20 +248,20 @@ func (s *servicesScreen) refresh(ctx context.Context) {
 			s.table.SetCell(row, 0, cellDim("libvirt"))
 			s.table.SetCell(row, 1, cell(vm.Name))
 			s.table.SetCell(row, 2, cellColor("●"+vm.State, stateColor(vm.State)))
-			s.table.SetCell(row, 3, cellDim(fmt.Sprintf("%d vCPU, %s", vm.VCPUs, formatBytes(float64(vm.MemoryKB*1024)))))
+			s.table.SetCell(row, 3, cellDim(fmt.Sprintf("%d vCPU, %s", vm.VCPUs, formatBytes(s.app.Lang, float64(vm.MemoryKB*1024)))))
 			s.table.SetCell(row, 4, cellDim(orDash(vm.UUID)))
 			row++
 		}
-		s.table.SetTitle(fmt.Sprintf(" Сервисы и контейнеры — %d ", len(s.rows)))
+		s.table.SetTitle(s.app.T("tui.services.tableTitle", len(s.rows)))
 		if len(s.rows) > 0 {
 			s.showDetail(0)
 		}
 	})
 }
 
-func portSummary(ct model.Container) string {
+func portSummary(lang msgs.Lang, ct model.Container) string {
 	if len(ct.Ports) == 0 {
-		return "портов не публикует"
+		return msgs.T(lang, "tui.services.noPortsPublished")
 	}
 	var parts []string
 	for _, p := range ct.Ports {
@@ -268,14 +275,14 @@ func portSummary(ct model.Container) string {
 		parts = append(parts, fmt.Sprintf("%s:%d→%d", ip, p.HostPort, p.ContainerPort))
 	}
 	if len(parts) == 0 {
-		return "портов не публикует"
+		return msgs.T(lang, "tui.services.noPortsPublished")
 	}
 	return strings.Join(parts, " ")
 }
 
-func podmanPortSummary(ct model.PodmanContainer) string {
+func podmanPortSummary(lang msgs.Lang, ct model.PodmanContainer) string {
 	if len(ct.Ports) == 0 {
-		return "портов не публикует"
+		return msgs.T(lang, "tui.services.noPortsPublished")
 	}
 	var parts []string
 	for _, p := range ct.Ports {
@@ -289,7 +296,7 @@ func podmanPortSummary(ct model.PodmanContainer) string {
 		parts = append(parts, fmt.Sprintf("%s:%d→%d", ip, p.HostPort, p.ContainerPort))
 	}
 	if len(parts) == 0 {
-		return "портов не публикует"
+		return msgs.T(lang, "tui.services.noPortsPublished")
 	}
 	return strings.Join(parts, " ")
 }
@@ -308,19 +315,19 @@ func (s *servicesScreen) showDetail(index int) {
 			if svc.Name != target.name {
 				continue
 			}
-			sb.WriteString(" " + bold(svc.Name) + dim(" · юнит "+svc.Unit) + "\n")
+			sb.WriteString(" " + bold(svc.Name) + dim(s.app.T("tui.services.unitSuffix", svc.Unit)) + "\n")
 			sb.WriteString(" " + dim(svc.Description) + "\n\n")
-			sb.WriteString(fmt.Sprintf(" состояние: %s %s   автозапуск: %s   перезапусков: %d\n",
+			sb.WriteString(s.app.T("tui.services.stateLineUnit",
 				tag(stateColor(svc.ActiveState), svc.ActiveState), dim(svc.SubState),
 				orDash(svc.Enabled), svc.Restarts))
 			if svc.SinceText != "" {
-				sb.WriteString(dim(" работает с " + svc.SinceText + "\n"))
+				sb.WriteString(dim(s.app.T("tui.services.runningSince", svc.SinceText)))
 			}
 			if len(svc.ConfigFiles) > 0 {
-				sb.WriteString(dim(fmt.Sprintf(" файлы конфигурации (%d): ", len(svc.ConfigFiles))) +
+				sb.WriteString(dim(s.app.T("tui.services.configFilesCount", len(svc.ConfigFiles))) +
 					truncate(strings.Join(svc.ConfigFiles, ", "), 100) + "\n")
 			}
-			sb.WriteString(dim(" доступные действия: " + strings.Join(svc.Actions, ", ")))
+			sb.WriteString(dim(s.app.T("tui.services.availableActions", strings.Join(svc.Actions, ", "))))
 		}
 	case "podman":
 		for _, ct := range snap.Podman {
@@ -328,12 +335,12 @@ func (s *servicesScreen) showDetail(index int) {
 				continue
 			}
 			sb.WriteString(" " + bold(ct.Name) + dim(" · "+ct.Image) + "\n")
-			sb.WriteString(fmt.Sprintf(" состояние: %s   %s\n",
+			sb.WriteString(s.app.T("tui.services.stateBasic",
 				tag(stateColor(ct.State), ct.State), dim(ct.Status)))
 			if ct.Pod != "" {
-				sb.WriteString(dim(" под: " + ct.Pod + "\n"))
+				sb.WriteString(dim(s.app.T("tui.services.podLabel", ct.Pod)))
 			}
-			sb.WriteString(" порты: " + podmanPortSummary(ct))
+			sb.WriteString(s.app.T("tui.services.portsPrefix") + podmanPortSummary(s.app.Lang, ct))
 		}
 	case "lxd":
 		for _, inst := range snap.LXD {
@@ -341,12 +348,12 @@ func (s *servicesScreen) showDetail(index int) {
 				continue
 			}
 			sb.WriteString(" " + bold(inst.Name) + dim(" · "+inst.Type) + "\n")
-			sb.WriteString(fmt.Sprintf(" состояние: %s   архитектура: %s\n",
+			sb.WriteString(s.app.T("tui.services.stateArch",
 				tag(stateColor(inst.Status), inst.Status), orDash(inst.Architecture)))
 			if len(inst.IPv4) > 0 {
-				sb.WriteString(dim(" IPv4: ") + strings.Join(inst.IPv4, ", "))
+				sb.WriteString(dim(s.app.T("tui.services.ipv4Prefix")) + strings.Join(inst.IPv4, ", "))
 			} else {
-				sb.WriteString(dim(" IPv4: нет данных"))
+				sb.WriteString(dim(s.app.T("tui.services.ipv4NoData")))
 			}
 		}
 	case "vm":
@@ -355,20 +362,20 @@ func (s *servicesScreen) showDetail(index int) {
 				continue
 			}
 			sb.WriteString(" " + bold(vm.Name) + dim(" · "+orDash(vm.UUID)) + "\n")
-			sb.WriteString(fmt.Sprintf(" состояние: %s   vCPU: %d   память: %s\n",
-				tag(stateColor(vm.State), vm.State), vm.VCPUs, formatBytes(float64(vm.MemoryKB*1024))))
-			sb.WriteString(fmt.Sprintf(" постоянный домен: %s   автозапуск: %s\n",
+			sb.WriteString(s.app.T("tui.services.stateVCPUMem",
+				tag(stateColor(vm.State), vm.State), vm.VCPUs, formatBytes(s.app.Lang, float64(vm.MemoryKB*1024))))
+			sb.WriteString(s.app.T("tui.services.persistentAutostart",
 				boolState(vm.Persistent), boolState(vm.Autostart)))
 			var disks []string
 			for _, d := range vm.Disks {
 				disks = append(disks, fmt.Sprintf("%s(%s)", d.Source, d.Bus))
 			}
-			sb.WriteString(dim(" диски: ") + strings.Join(disks, ", ") + "\n")
+			sb.WriteString(dim(s.app.T("tui.services.disksPrefix")) + strings.Join(disks, ", ") + "\n")
 			var nets []string
 			for _, n := range vm.Networks {
 				nets = append(nets, n.Source)
 			}
-			sb.WriteString(dim(" сети: ") + strings.Join(nets, ", "))
+			sb.WriteString(dim(s.app.T("tui.services.networksPrefix")) + strings.Join(nets, ", "))
 		}
 	default:
 		for _, ct := range snap.Container {
@@ -376,13 +383,13 @@ func (s *servicesScreen) showDetail(index int) {
 				continue
 			}
 			sb.WriteString(" " + bold(ct.Name) + dim(" · "+ct.Image) + "\n")
-			sb.WriteString(fmt.Sprintf(" состояние: %s   %s\n",
+			sb.WriteString(s.app.T("tui.services.stateBasic",
 				tag(stateColor(ct.State), ct.State), dim(ct.Status)))
 			if ct.Project != "" {
-				sb.WriteString(dim(fmt.Sprintf(" проект %s, сервис %s, файл %s\n",
+				sb.WriteString(dim(s.app.T("tui.services.projectServiceFile",
 					ct.Project, ct.ServiceName, ct.ComposeFile)))
 			}
-			sb.WriteString(" порты: " + portSummary(ct) + "\n")
+			sb.WriteString(s.app.T("tui.services.portsPrefix") + portSummary(s.app.Lang, ct) + "\n")
 			var nets []string
 			for _, n := range ct.Networks {
 				if n.IPAddress != "" {
@@ -391,12 +398,12 @@ func (s *servicesScreen) showDetail(index int) {
 					nets = append(nets, n.Name)
 				}
 			}
-			sb.WriteString(dim(" сети: ") + strings.Join(nets, ", "))
+			sb.WriteString(dim(s.app.T("tui.services.networksPrefix")) + strings.Join(nets, ", "))
 			if !ct.Declared {
-				sb.WriteString("\n " + tag(hexWarning, "запущен вне compose-файлов"))
+				sb.WriteString("\n " + tag(hexWarning, s.app.T("tui.services.runningOutsideCompose")))
 			}
 			if ct.Declared && !ct.Running {
-				sb.WriteString("\n " + tag(hexWarning, "описан в compose, но не запущен"))
+				sb.WriteString("\n " + tag(hexWarning, s.app.T("tui.services.declaredNotRunning")))
 			}
 		}
 	}
@@ -432,8 +439,10 @@ type firewallScreen struct {
 
 func newFirewallScreen(a *App) *firewallScreen {
 	s := &firewallScreen{app: a}
-	s.table = newTable("№", "Источник правил", "Цепочка", "Действие", "Порт", "Откуда", "Пакетов", "Байт")
-	s.detail = newPanel("Состояние firewall")
+	s.table = newTable(s.app.T("tui.firewall.colNumber"), s.app.T("tui.firewall.colRuleSource"),
+		s.app.T("tui.firewall.colChain"), s.app.T("tui.firewall.colAction"), s.app.T("tui.firewall.colPort"),
+		s.app.T("tui.firewall.colFrom"), s.app.T("tui.firewall.colPackets"), s.app.T("tui.firewall.colBytes"))
+	s.detail = newPanel(s.app.T("tui.firewall.statusPanelTitle"))
 
 	s.table.SetInputCapture(s.onKey)
 	s.root = tview.NewFlex().SetDirection(tview.FlexRow).
@@ -446,7 +455,7 @@ func (s *firewallScreen) title() string          { return "Firewall" }
 func (s *firewallScreen) view() tview.Primitive  { return s.root }
 func (s *firewallScreen) focus() tview.Primitive { return s.table }
 func (s *firewallScreen) hints() string {
-	return dim("a добавить правило · x удалить правило ufw")
+	return dim(s.app.T("tui.firewall.hints"))
 }
 
 func (s *firewallScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
@@ -465,27 +474,26 @@ func (s *firewallScreen) deleteSelected() {
 	row, _ := s.table.GetSelection()
 	idx := row - 1
 	if idx < 0 || idx >= len(s.rows) || s.rows[idx].ufwNumber == 0 {
-		s.app.setStatus(hexWarning,
-			"Удалять можно только правила ufw — правила iptables и docker меняются вне этого интерфейса")
+		s.app.setStatus(hexWarning, s.app.T("tui.firewall.onlyUfwDeletable"))
 		return
 	}
 	target := s.rows[idx]
-	s.app.confirm(fmt.Sprintf("Удалить правило ufw №%d?\n\n%s", target.ufwNumber, target.ufwText), func() {
-		s.app.runAsync(fmt.Sprintf("Удаляю правило ufw №%d", target.ufwNumber), true,
+	s.app.confirm(s.app.T("tui.firewall.confirmDelete", target.ufwNumber, target.ufwText), func() {
+		s.app.runAsync(s.app.T("tui.firewall.deletingRule", target.ufwNumber), true,
 			func(ctx context.Context) (string, error) {
 				res, err := s.app.Firewall.DeleteRule(ctx, s.app.actor, target.ufwNumber, target.ufwText)
 				if err != nil {
 					return "", err
 				}
 				go s.app.rescan(context.Background())
-				return "правило удалено: " + truncate(strings.TrimSpace(res.Output()), 80), nil
+				return s.app.T("tui.firewall.ruleDeleted", truncate(strings.TrimSpace(res.Output()), 80)), nil
 			})
 	})
 }
 
 func (s *firewallScreen) showAddForm() {
 	if !s.app.canMutate() {
-		s.app.setStatus(hexWarning, "Изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
+		s.app.setStatus(hexWarning, s.app.T("tui.mutationsDisabled"))
 		return
 	}
 	spec := control.RuleSpec{Action: "allow", Protocol: "tcp"}
@@ -494,13 +502,13 @@ func (s *firewallScreen) showAddForm() {
 	port, from, comment := "", "", ""
 
 	form := tview.NewForm().
-		AddDropDown("Действие", actions, 0, func(option string, _ int) { spec.Action = option }).
-		AddInputField("Порт", "", 8, tview.InputFieldInteger, func(text string) { port = text }).
-		AddDropDown("Протокол", protocols, 0, func(option string, _ int) { spec.Protocol = option }).
-		AddInputField("Источник (IP или CIDR, пусто — отовсюду)", "", 24, nil, func(text string) { from = text }).
-		AddInputField("Комментарий", "", 40, nil, func(text string) { comment = text })
+		AddDropDown(s.app.T("tui.firewall.colAction"), actions, 0, func(option string, _ int) { spec.Action = option }).
+		AddInputField(s.app.T("tui.firewall.colPort"), "", 8, tview.InputFieldInteger, func(text string) { port = text }).
+		AddDropDown(s.app.T("tui.firewall.fieldProtocol"), protocols, 0, func(option string, _ int) { spec.Protocol = option }).
+		AddInputField(s.app.T("tui.firewall.fieldSource"), "", 24, nil, func(text string) { from = text }).
+		AddInputField(s.app.T("tui.firewall.fieldComment"), "", 40, nil, func(text string) { comment = text })
 
-	form.AddButton("Добавить", func() {
+	form.AddButton(s.app.T("tui.firewall.addButton"), func() {
 		spec.Port, _ = strconv.Atoi(port)
 		spec.From, spec.Comment = strings.TrimSpace(from), strings.TrimSpace(comment)
 		if err := spec.Validate(); err != nil {
@@ -508,19 +516,19 @@ func (s *firewallScreen) showAddForm() {
 			return
 		}
 		s.app.closeModal("fwadd")
-		s.app.runAsync(fmt.Sprintf("Добавляю правило %s %d/%s", spec.Action, spec.Port, spec.Protocol), true,
+		s.app.runAsync(s.app.T("tui.firewall.addingRule", spec.Action, spec.Port, spec.Protocol), true,
 			func(ctx context.Context) (string, error) {
 				res, err := s.app.Firewall.AddRule(ctx, s.app.actor, spec)
 				if err != nil {
 					return "", err
 				}
 				go s.app.rescan(context.Background())
-				return "правило добавлено: " + truncate(strings.TrimSpace(res.Output()), 80), nil
+				return s.app.T("tui.firewall.ruleAdded", truncate(strings.TrimSpace(res.Output()), 80)), nil
 			})
 	})
-	form.AddButton("Отмена", func() { s.app.closeModal("fwadd") })
+	form.AddButton(s.app.T("tui.cancel"), func() { s.app.closeModal("fwadd") })
 
-	form.SetBorder(true).SetTitle(" Новое правило ufw ").SetBorderColor(colorBorder)
+	form.SetBorder(true).SetTitle(s.app.T("tui.firewall.newRuleFormTitle")).SetBorderColor(colorBorder)
 	form.SetCancelFunc(func() { s.app.closeModal("fwadd") })
 
 	s.app.editing = true
@@ -539,7 +547,12 @@ func (s *firewallScreen) refresh(ctx context.Context) {
 	s.app.queue(func() {
 		s.rows = s.rows[:0]
 		s.table.Clear()
-		for i, h := range []string{"№", "Источник правил", "Цепочка", "Действие", "Порт", "Откуда", "Пакетов", "Байт"} {
+		headers := []string{
+			s.app.T("tui.firewall.colNumber"), s.app.T("tui.firewall.colRuleSource"), s.app.T("tui.firewall.colChain"),
+			s.app.T("tui.firewall.colAction"), s.app.T("tui.firewall.colPort"), s.app.T("tui.firewall.colFrom"),
+			s.app.T("tui.firewall.colPackets"), s.app.T("tui.firewall.colBytes"),
+		}
+		for i, h := range headers {
 			s.table.SetCell(0, i, tview.NewTableCell(" "+h).
 				SetTextColor(colorSecondary).SetSelectable(false).SetAttributes(tcell.AttrBold))
 		}
@@ -578,13 +591,12 @@ func (s *firewallScreen) refresh(ctx context.Context) {
 				portSpec += "/" + r.Protocol
 			}
 			s.table.SetCell(row, 4, cell(portSpec))
-			s.table.SetCell(row, 5, cellDim(orAny(r.Source)))
+			s.table.SetCell(row, 5, cellDim(orAny(s.app.Lang, r.Source)))
 			s.table.SetCell(row, 6, cellRight(formatCount(float64(r.Packets))))
-			s.table.SetCell(row, 7, cellRight(formatBytes(float64(r.Bytes))))
+			s.table.SetCell(row, 7, cellRight(formatBytes(s.app.Lang, float64(r.Bytes))))
 			row++
 		}
-		s.table.SetTitle(fmt.Sprintf(" Правила — ufw %d, пакетный фильтр %d ",
-			len(numbered), len(s.rows)-len(numbered)))
+		s.table.SetTitle(s.app.T("tui.firewall.tableTitle", len(numbered), len(s.rows)-len(numbered)))
 
 		var sb strings.Builder
 		ufw := snap.Firewall.Manager("ufw")
@@ -595,11 +607,11 @@ func (s *firewallScreen) refresh(ctx context.Context) {
 		if fd := snap.Firewall.Manager("firewalld"); fd.Installed {
 			sb.WriteString("\n firewalld: " + tag(stateColor(boolState(fd.Active)), boolState(fd.Active)))
 			if fd.Policy != "" {
-				sb.WriteString(dim("   зона по умолчанию: " + fd.Policy))
+				sb.WriteString(dim("   " + s.app.T("tui.firewall.defaultZonePrefix") + fd.Policy))
 			}
 		}
 		if numErr != nil {
-			sb.WriteString("\n " + tag(hexWarning, "список правил ufw недоступен: "+numErr.Error()))
+			sb.WriteString("\n " + tag(hexWarning, s.app.T("tui.firewall.ufwRulesUnavailable", numErr.Error())))
 		}
 		sb.WriteString("\n\n")
 		for _, p := range snap.Firewall.Policies {
@@ -611,9 +623,9 @@ func (s *firewallScreen) refresh(ctx context.Context) {
 				tone = hexGood
 			}
 			sb.WriteString(fmt.Sprintf(" %-24s %s %s\n", p.Backend+"/"+p.Chain, tag(tone, p.Policy),
-				dim(fmt.Sprintf("%s пакетов, %s", formatCount(float64(p.Packets)), formatBytes(float64(p.Bytes))))))
+				dim(s.app.T("tui.firewall.packetsBytes", formatCount(float64(p.Packets)), formatBytes(s.app.Lang, float64(p.Bytes))))))
 		}
-		sb.WriteString(dim(fmt.Sprintf("\n открытых сокетов на хосте: %d", len(snap.Listeners))))
+		sb.WriteString(dim(s.app.T("tui.firewall.openSockets", len(snap.Listeners))))
 		s.detail.SetText(sb.String())
 	})
 }
@@ -631,9 +643,9 @@ func actionColor(action string) string {
 	}
 }
 
-func orAny(s string) string {
+func orAny(lang msgs.Lang, s string) string {
 	if s == "" {
-		return "любой"
+		return msgs.T(lang, "tui.firewall.any")
 	}
 	return s
 }
