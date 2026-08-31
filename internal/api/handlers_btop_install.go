@@ -9,12 +9,21 @@ import (
 	"github.com/althq/netknownsthat/internal/msgs"
 )
 
-// handleBtopStatus reports whether btop is on this host's PATH — the Usage
-// page uses this to decide whether "Открыть btop" can just open a session
-// directly or first needs to offer the install dialog.
+// handleBtopStatus reports whether btop is on this host's PATH, plus every
+// other precondition handleBtopWS/handleBtopInstallWS themselves gate on
+// (terminal_enabled, fixtures_mode, apt_get_available) — a browser's
+// WebSocket API has no way to read the response body of a rejected
+// upgrade, so a 403 from either of those handlers is invisible to the
+// frontend beyond "it failed somehow". Checking these here, over a plain
+// REST call, before ever attempting the WS, is what actually lets the
+// Usage page explain *why* instead of just showing a generic connection
+// error.
 func (s *Server) handleBtopStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"available": collect.Which(r.Context(), s.scanner.Collector(), "btop"),
+		"available":         collect.Which(r.Context(), s.scanner.Collector(), "btop"),
+		"terminal_enabled":  s.cfg.TerminalEnabled,
+		"fixtures_mode":     s.cfg.Mode == config.ModeFixtures,
+		"apt_get_available": collect.Which(r.Context(), s.scanner.Collector(), "apt-get"),
 	})
 }
 

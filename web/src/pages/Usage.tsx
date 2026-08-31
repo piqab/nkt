@@ -301,8 +301,20 @@ function UsageBtop({ me }: { me: Me }) {
 
   // Whether btop is on this host's PATH — the "Открыть btop" button uses
   // this to decide between connecting directly and offering to install it
-  // first, same shape as Terminal.tsx's tmux button.
-  const { data: btopStatus, reload: reloadBtopStatus } = useApi<{ available: boolean }>('/system/btop-status', 30_000)
+  // first, same shape as Terminal.tsx's tmux button. terminal_enabled/
+  // fixtures_mode/apt_get_available ride along on the same REST call
+  // specifically because a browser's WebSocket API cannot read the
+  // response body of a rejected upgrade — handleBtopWS/handleBtopInstallWS
+  // reject with exactly these reasons, but that 403 is otherwise invisible
+  // to this page beyond "the connection failed somehow" (see status ===
+  // 'error' below). Checking them here first is what lets the button
+  // explain why instead of just failing silently.
+  const { data: btopStatus, reload: reloadBtopStatus } = useApi<{
+    available: boolean
+    terminal_enabled: boolean
+    fixtures_mode: boolean
+    apt_get_available: boolean
+  }>('/system/btop-status', 30_000)
   const { data: btopInstallStatus, reload: reloadBtopInstallStatus } = useApi<{
     active: boolean
     finished: boolean
@@ -310,6 +322,14 @@ function UsageBtop({ me }: { me: Me }) {
   }>('/system/btop-install/status', 5_000)
   const [btopInstallOpen, setBtopInstallOpen] = useState(false)
   const [btopInstallOutcome, setBtopInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
+
+  const btopBlockedReason = !btopStatus
+    ? null
+    : btopStatus.fixtures_mode
+      ? t('usage.btopFixturesDisabled')
+      : !btopStatus.terminal_enabled
+        ? t('usage.btopDisabled')
+        : null
 
   function handleStart() {
     if (!window.confirm(t('usage.confirmOpenBtop'))) return
@@ -324,6 +344,10 @@ function UsageBtop({ me }: { me: Me }) {
     if (btopInstallStatus?.active) {
       setBtopInstallOutcome(null)
       setBtopInstallOpen(true)
+      return
+    }
+    if (btopStatus && !btopStatus.apt_get_available) {
+      window.alert(t('usage.btopAptGetMissing'))
       return
     }
     if (window.confirm(t('usage.confirmInstallBtop'))) {
@@ -354,13 +378,18 @@ function UsageBtop({ me }: { me: Me }) {
             {t('usage.closeBtop')}
           </Button>
         ) : (
-          <Button loading={status === 'connecting'} disabled={!canUse} onClick={handleBtopButtonClick}>
+          <Button
+            loading={status === 'connecting'}
+            disabled={!canUse || !!btopBlockedReason}
+            onClick={handleBtopButtonClick}
+          >
             {status === 'connecting' ? t('terminal.connecting') : t('usage.openBtop')}
           </Button>
         )}
       </div>
 
       {!canUse && <Banner kind="info">{t('common.adminMutationsOnly')}</Banner>}
+      {canUse && btopBlockedReason && <Banner kind="warn">{btopBlockedReason}</Banner>}
       {status === 'error' && <Banner kind="error">{t('terminal.connectError')}</Banner>}
       {status === 'closed' && <Banner kind="info">{t('terminal.sessionEnded')}</Banner>}
 

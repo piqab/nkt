@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -54,5 +55,38 @@ func TestHandleBtopInstallWSRefusedInFixturesMode(t *testing.T) {
 
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("status = %d, want %d (body: %s)", rec.Code, http.StatusForbidden, rec.Body.String())
+	}
+}
+
+// TestHandleBtopStatusReportsWSPreconditions locks in the reason
+// handleBtopStatus carries terminal_enabled/fixtures_mode/apt_get_available
+// at all: a browser's WebSocket API can't read the response body of a
+// rejected upgrade, so handleBtopWS/handleBtopInstallWS's own 403 reasons
+// are otherwise invisible to the frontend — this REST endpoint is the only
+// place that can explain *why* before ever attempting the WS.
+func TestHandleBtopStatusReportsWSPreconditions(t *testing.T) {
+	s := newTestServer(t, &config.Config{Mode: config.ModeFixtures, TerminalEnabled: false})
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/system/btop-status", nil)
+	s.handleBtopStatus(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200 (body: %s)", rec.Code, rec.Body.String())
+	}
+	var got struct {
+		Available       bool `json:"available"`
+		TerminalEnabled bool `json:"terminal_enabled"`
+		FixturesMode    bool `json:"fixtures_mode"`
+		AptGetAvailable bool `json:"apt_get_available"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode response: %v (body: %s)", err, rec.Body.String())
+	}
+	if got.TerminalEnabled {
+		t.Error("terminal_enabled = true, want false (cfg.TerminalEnabled is false)")
+	}
+	if !got.FixturesMode {
+		t.Error("fixtures_mode = false, want true (cfg.Mode is ModeFixtures)")
 	}
 }
