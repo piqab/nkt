@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Checkbox, Tag } from 'antd'
+import { Button, Checkbox, Tag, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { Banner, Card, Loading } from './ui'
@@ -22,6 +22,16 @@ const PACKAGE_DESC_KEY: Record<string, string> = {
   ssh: 'commonPackages.descSsh',
   git: 'commonPackages.descGit',
   wget: 'commonPackages.descWget',
+  htop: 'commonPackages.descHtop',
+  ncdu: 'commonPackages.descNcdu',
+  tree: 'commonPackages.descTree',
+  unzip: 'commonPackages.descUnzip',
+  rsync: 'commonPackages.descRsync',
+  jq: 'commonPackages.descJq',
+  'net-tools': 'commonPackages.descNetTools',
+  mtr: 'commonPackages.descMtr',
+  tcpdump: 'commonPackages.descTcpdump',
+  python3: 'commonPackages.descPython3',
 }
 
 /**
@@ -74,20 +84,27 @@ export default function CommonPackagesCard({ canUse }: { canUse: boolean }) {
         <Loading what={t('commonPackages.title')} />
       ) : (
         <>
-          <div className="col" style={{ gap: '0.4rem' }}>
+          <div className="row" style={{ gap: '0.4rem' }}>
             {packages.map((p) => (
-              <label
-                key={p.name}
-                className="row"
-                style={{ alignItems: 'center', gap: '0.5rem', cursor: canUse ? 'pointer' : 'default' }}
-              >
-                <Checkbox checked={selected.has(p.name)} disabled={!canUse} onChange={() => toggle(p.name)} />
-                <span className="mono">{p.name}</span>
-                <Tag color={p.installed ? 'green' : undefined}>
-                  {p.installed ? t('commonPackages.installed') : t('commonPackages.notInstalled')}
-                </Tag>
-                <span className="small muted">{t(PACKAGE_DESC_KEY[p.name])}</span>
-              </label>
+              <Tooltip key={p.name} title={t(PACKAGE_DESC_KEY[p.name])}>
+                <label
+                  className="row"
+                  style={{
+                    alignItems: 'center',
+                    gap: '0.35rem',
+                    padding: '0.15rem 0.5rem',
+                    border: '1px solid var(--border-strong)',
+                    borderRadius: 999,
+                    cursor: canUse ? 'pointer' : 'default',
+                  }}
+                >
+                  <Checkbox checked={selected.has(p.name)} disabled={!canUse} onChange={() => toggle(p.name)} />
+                  <span className="mono">{p.name}</span>
+                  <Tag color={p.installed ? 'green' : undefined} style={{ margin: 0 }}>
+                    {p.installed ? t('commonPackages.installed') : t('commonPackages.notInstalled')}
+                  </Tag>
+                </label>
+              </Tooltip>
             ))}
           </div>
           <div className="row" style={{ gap: '0.5rem', marginTop: '0.75rem' }}>
