@@ -129,6 +129,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/services/{name}/install/ws", s.handleServiceInstallWS)
 			r.Get("/system/packages/install/ws", s.handleCommonPackagesInstallWS)
 			r.Get("/system/packages/remove/ws", s.handleCommonPackagesRemoveWS)
+			r.Get("/system/apt/packages/{name}/install/ws", s.handleAptInstallWS)
+			r.Get("/system/apt/packages/{name}/remove/ws", s.handleAptRemoveWS)
 			// Ordinary REST, not itself long-lived — grouped here anyway
 			// since it shares the exact same admin-only gating and exists
 			// only for the WS sessions just above (the frontend's idle
@@ -176,6 +178,10 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/packages/status", s.handleCommonPackagesStatus)
 			r.Get("/system/packages/install/status", s.handleCommonPackagesInstallStatus)
 			r.Get("/system/packages/remove/status", s.handleCommonPackagesRemoveStatus)
+			r.Get("/system/apt/search", s.handleAptSearch)
+			r.Get("/system/apt/installed", s.handleAptInstalled)
+			r.Get("/system/apt/packages/{name}/install/status", s.handleAptInstallStatus)
+			r.Get("/system/apt/packages/{name}/remove/status", s.handleAptRemoveStatus)
 			r.Get("/vulnerabilities", s.handleVulnerabilities)
 			r.Get("/certificates", s.handleCertificates)
 

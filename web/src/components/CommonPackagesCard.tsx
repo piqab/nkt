@@ -125,6 +125,7 @@ export default function CommonPackagesCard({ canUse }: { canUse: boolean }) {
           onClose={() => setAction(null)}
           onFinished={handleFinished}
           outcome={outcome}
+          action={action}
         />
       )}
     </Card>

@@ -74,19 +74,19 @@ func (s *Server) handleCommonPackagesStatus(w http.ResponseWriter, r *http.Reque
 }
 
 // installedCommonPackages runs one dpkg-query for the whole catalogue at
-// once. dpkg-query -W keeps going and reports what it does find even when
-// some of the names given aren't installed, or dpkg has never heard of
-// them at all — a package missing from the output entirely (rather than
-// erroring the whole call) is exactly what "not installed" looks like
-// here, so nothing needs an explicit not-found branch.
+// once — dpkgQueryInstalled (internal/api/handlers_apt.go) generalizes this
+// to an arbitrary name list for handleAptSearch's own cross-reference.
+// dpkg-query -W keeps going and reports what it does find even when some of
+// the names given aren't installed, or dpkg has never heard of them at all
+// — a package missing from the output entirely (rather than erroring the
+// whole call) is exactly what "not installed" looks like here, so nothing
+// needs an explicit not-found branch.
 func installedCommonPackages(ctx context.Context, c collect.Collector) map[string]bool {
-	argv := make([]string, 0, len(commonPackages)+2)
-	argv = append(argv, "-W", "-f=${Package} ${Status}\n")
-	for _, p := range commonPackages {
-		argv = append(argv, p.Package)
+	pkgs := make([]string, len(commonPackages))
+	for i, p := range commonPackages {
+		pkgs[i] = p.Package
 	}
-	res, _ := c.Run(ctx, "dpkg-query", argv...)
-	return parseDpkgQueryOutput(res.Stdout)
+	return dpkgQueryInstalled(ctx, c, pkgs)
 }
 
 // parseDpkgQueryOutput is installedCommonPackages' own parsing, pulled out
