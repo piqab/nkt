@@ -395,6 +395,8 @@
     "confirmBulkStart": "Start nkt on every host at once ({{count}})?",
     "confirmBulkStop": "Stop nkt on every host at once ({{count}})? They'll all become unreachable through the hub until you start them again.",
     "bulkFailed": "Failed on {{failed}} of {{total}} hosts.",
+    "confirmUpdateAll": "Update nkt on {{count}} hosts that are behind the hub's version? This runs sequentially, one host at a time.",
+    "bulkUpdateFinished": "Update finished: {{total}} hosts, {{failed}} failed.",
     "confirmImport": "Import hosts from this file? Hosts are added alongside existing ones (the file doesn't replace or dedupe by name/address). Secrets in the file only decrypt if it was exported with this same hub's NKT_HUB_MASTER_KEY.",
     "imported": "Imported hosts: {{count}}.{{errors}}",
     "importedErrors": " Errors: {{errors}}.",
@@ -427,6 +429,8 @@
     "never": "never",
     "title": "Hosts",
     "hint": "Each host is a separate VPS running its own nkt: the hub pushes the binary over SSH, sets it up as a systemd service, and proxies requests to it — so the dashboard and controls look no different from a plain single-host nkt.",
+    "updateAllCount": "update all ({{count}})",
+    "updateAllNone": "no updates",
     "startAll": "start all",
     "stopAll": "stop all",
     "export": "export",
@@ -440,6 +444,7 @@
     "noHosts": "No hosts yet — add the first one below.",
     "editHostTitle": "Edit host \"{{name}}\"",
     "installTitle": "Installing on {{name}}",
+    "installTitleBatch": "Installing on {{name}} ({{current}} of {{total}})",
     "installTitleFallback": "host",
     "jobErrorLabel": "Error:",
     "jobDone": "Done.",
@@ -893,7 +898,7 @@
   },
   "packages": {
     "title": "Packages",
-    "hint": "Quick-install everyday tools, search and install any apt package, browse and remove what's already installed.",
+    "hint": "Update OS packages, quick-install everyday tools, search and install any apt package, browse and remove what's already installed.",
     "searchTitle": "Search for a package",
     "searchPlaceholder": "Name or part of the description…",
     "searchMinLength": "Type at least 2 characters.",
@@ -906,17 +911,18 @@
     "col": {
       "name": "Package",
       "version": "Version"
-    }
-  },
-  "overview": {
-    "what": "host overview",
-    "summary": "{{os}} · kernel {{kernel}} · last scan {{relative}} ({{ms}} ms)",
+    },
+    "updatesTitle": "OS updates",
     "updateRunningOpen": "update is running — open",
     "confirmUpdate": "Run apt-get dist-upgrade on this host ({{count}} packages)? apt will add/remove dependent packages as needed — you'll need to confirm (Y/n) in the window that opens.",
     "updateCount": "update ({{count}})",
     "noUpdates": "no updates",
+    "updatedRescanned": "Packages updated, host rescanned."
+  },
+  "overview": {
+    "what": "host overview",
+    "summary": "{{os}} · kernel {{kernel}} · last scan {{relative}} ({{ms}} ms)",
     "rebootRequired": "Host reboot required — an update (not necessarily started from here) has already been applied and is waiting for a restart, e.g. after a kernel update.",
-    "packagesUpdatedRescanned": "Packages updated, host rescanned.",
     "problemsNeedAttention": "Problems needing attention",
     "criticalHighNote": "critical {{critical}}, high {{high}}",
     "listenersDeclared": "Listeners declared",

@@ -12,6 +12,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/model"
 	"github.com/althq/netknownsthat/internal/msgs"
 )
 
@@ -215,4 +216,33 @@ func (s *Server) handleAptRemoveStatus(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	active, finished, exitCode := s.sessionStatus("apt-remove:" + name)
 	writeSessionStatus(w, active, finished, exitCode)
+}
+
+// handleAptUpdates reports pending OS package upgrades — the narrow slice
+// of handleOverview's payload the Packages page actually needs (the
+// pending-upgrade list, whether a reboot is already required, and whether
+// the "packages" source could even be checked), without re-shipping the
+// rest of the dashboard snapshot just for this.
+func (s *Server) handleAptUpdates(w http.ResponseWriter, r *http.Request) {
+	snap, err := s.scanner.LatestOrScan(r.Context())
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	available := false
+	for _, src := range snap.Sources {
+		if src.Name == "packages" {
+			available = src.Available
+			break
+		}
+	}
+	packages := snap.Packages.Packages
+	if packages == nil {
+		packages = []model.PackageUpdate{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"available":       available,
+		"packages":        packages,
+		"reboot_required": snap.Packages.RebootRequired,
+	})
 }
