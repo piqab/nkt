@@ -125,7 +125,7 @@ func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
 
 	if err := dispatch(command, opts, log); err != nil {
-		log.Error("не удалось выполнить команду", "команда", command, "err", err)
+		log.Error("command failed", "command", command, "err", err)
 		os.Exit(1)
 	}
 }
@@ -296,15 +296,15 @@ func ensureTLS(cfg *config.Config, log *slog.Logger) (certFile, keyFile string, 
 		return "", "", nil
 	}
 	if cfg.TLSCert != "" && cfg.TLSKey != "" {
-		log.Info("TLS включён", "cert", cfg.TLSCert, "самоподписанный", false)
+		log.Info("TLS enabled", "cert", cfg.TLSCert, "self_signed", false)
 		return cfg.TLSCert, cfg.TLSKey, nil
 	}
 	certFile = cfg.TLSSelfSignedCertFile()
 	keyFile = cfg.TLSSelfSignedKeyFile()
 	if err := tlscert.EnsureSelfSigned(certFile, keyFile, cfg.TLSHosts); err != nil {
-		return "", "", fmt.Errorf("подготовка самоподписанного TLS-сертификата: %w", err)
+		return "", "", fmt.Errorf("preparing self-signed TLS certificate: %w", err)
 	}
-	log.Info("TLS включён: самоподписанный сертификат", "hosts", cfg.TLSHosts, "cert", certFile)
+	log.Info("TLS enabled: self-signed certificate", "hosts", cfg.TLSHosts, "cert", certFile)
 	return certFile, keyFile, nil
 }
 
@@ -312,13 +312,13 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	authSvc := auth.NewService(r.db, r.cfg)
 	generated, err := authSvc.Bootstrap(context.Background())
 	if err != nil {
-		return fmt.Errorf("создание учётной записи администратора: %w", err)
+		return fmt.Errorf("creating admin account: %w", err)
 	}
 	if generated != "" {
 		// Printed once and never stored in clear text anywhere.
 		fmt.Fprintf(os.Stderr,
-			"\n=== Создана учётная запись администратора ===\n  логин:  %s\n  пароль: %s\n"+
-				"  Сохраните пароль: он больше нигде не отображается.\n\n",
+			"\n=== Admin account created ===\n  username: %s\n  password: %s\n"+
+				"  Save this password: it is never shown again.\n\n",
 			r.cfg.BootstrapAdminUser, generated)
 	}
 
@@ -345,11 +345,11 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		certFile := filepath.Join(r.cfg.DataDir, "tunnel-tls", "cert.pem")
 		keyFile := filepath.Join(r.cfg.DataDir, "tunnel-tls", "key.pem")
 		if err := tlscert.EnsureSelfSigned(certFile, keyFile, []string{"nkt-tunnel"}); err != nil {
-			return fmt.Errorf("подготовка сертификата резервного канала: %w", err)
+			return fmt.Errorf("preparing fallback channel certificate: %w", err)
 		}
 		tlsCert, err := tls.LoadX509KeyPair(certFile, keyFile)
 		if err != nil {
-			return fmt.Errorf("загрузка сертификата резервного канала: %w", err)
+			return fmt.Errorf("loading fallback channel certificate: %w", err)
 		}
 		jobs.Add(1)
 		go func() {
@@ -361,14 +361,14 @@ func (r *runtime) runServer(log *slog.Logger) error {
 				LocalAddr:  r.cfg.Addr,
 				Log:        log,
 			}); err != nil && ctx.Err() == nil {
-				log.Error("резервный канал: не удалось запустить приём соединений", "err", err)
+				log.Error("fallback channel: could not start accepting connections", "err", err)
 			}
 		}()
 	}
 
 	ui := webui.FS()
 	if ui == nil {
-		log.Warn("фронтенд не собран, отдаётся только API (соберите web/ через npm run build)")
+		log.Warn("frontend not built, serving API only (run npm run build in web/)")
 	}
 
 	server := api.New(api.Deps{
@@ -394,7 +394,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("сервер запущен",
+		log.Info("server started",
 			"addr", r.cfg.Addr, "mode", r.cfg.Mode, "mutations", r.cfg.AllowMutations, "version", version, "tls", tlsCert != "")
 		var serveErr error
 		if tlsCert != "" {
@@ -532,7 +532,7 @@ func newHubRuntime() (*hubRuntime, error) {
 		return nil, err
 	}
 	if cfg.Mode != config.ModeHub {
-		return nil, fmt.Errorf("nkt hub требует NKT_MODE=hub, сейчас %q", cfg.Mode)
+		return nil, fmt.Errorf("nkt hub requires NKT_MODE=hub, currently %q", cfg.Mode)
 	}
 	db, err := store.Open(cfg.DBPath())
 	if err != nil {
@@ -576,18 +576,18 @@ func (r *hubRuntime) close() {
 func (r *hubRuntime) runHub(log *slog.Logger) error {
 	key, err := secretbox.ResolveKey(r.cfg.HubMasterKey, r.cfg.HubKeyFile())
 	if err != nil {
-		return fmt.Errorf("ключ шифрования секретов хаба: %w", err)
+		return fmt.Errorf("hub secret encryption key: %w", err)
 	}
 
 	authSvc := auth.NewService(r.db, r.cfg)
 	generated, err := authSvc.Bootstrap(context.Background())
 	if err != nil {
-		return fmt.Errorf("создание учётной записи администратора хаба: %w", err)
+		return fmt.Errorf("creating hub admin account: %w", err)
 	}
 	if generated != "" {
 		fmt.Fprintf(os.Stderr,
-			"\n=== Создана учётная запись администратора хаба ===\n  логин:  %s\n  пароль: %s\n"+
-				"  Сохраните пароль: он больше нигде не отображается.\n\n",
+			"\n=== Hub admin account created ===\n  username: %s\n  password: %s\n"+
+				"  Save this password: it is never shown again.\n\n",
 			r.cfg.BootstrapAdminUser, generated)
 	}
 
@@ -595,10 +595,15 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// finished (a crash, or this very restart) — nothing left alive can
 	// ever complete it, so it must not stay stuck forever with its
 	// "переустановить"/cancel controls unable to act on anything real.
+	// This reason string lands in Host.ErrorMsg, shown in the web UI, not
+	// the console — left in Russian like every other install-failure
+	// message that field carries today (internal/hub's own error text is
+	// entirely Russian still; translating only this one would be a random
+	// half-measure, not what console-startup-message English covers).
 	if n, err := r.db.ResetStuckInstalls(context.Background(), "установка прервана перезапуском хаба"); err != nil {
-		log.Warn("не удалось сбросить зависшие установки", "err", err)
+		log.Warn("could not reset stuck installs", "err", err)
 	} else if n > 0 {
-		log.Info("сброшены зависшие установки хостов", "число", n)
+		log.Info("reset stuck host installs", "count", n)
 	}
 
 	manager := hub.NewManager(r.cfg, r.db, key, version, log)
@@ -630,7 +635,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 
 	ui := webui.FS()
 	if ui == nil {
-		log.Warn("фронтенд не собран, отдаётся только API (соберите web/ через npm run build)")
+		log.Warn("frontend not built, serving API only (run npm run build in web/)")
 	}
 
 	server := hub.New(hub.Deps{
@@ -654,7 +659,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("хаб запущен", "addr", r.cfg.Addr, "version", version, "tls", tlsCert != "")
+		log.Info("hub started", "addr", r.cfg.Addr, "version", version, "tls", tlsCert != "")
 		var serveErr error
 		if tlsCert != "" {
 			serveErr = httpServer.ListenAndServeTLS(tlsCert, tlsKey)

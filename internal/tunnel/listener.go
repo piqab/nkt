@@ -65,7 +65,7 @@ func Run(ctx context.Context, cfg ListenerConfig) error {
 		_ = ln.Close()
 	}()
 
-	cfg.Log.Info("резервный канал: слушаю подключения хаба", "addr", cfg.ListenAddr)
+	cfg.Log.Info("fallback channel: listening for hub connections", "addr", cfg.ListenAddr)
 
 	attempts := auth.NewAttemptLimiter()
 	for {
