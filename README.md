@@ -1,102 +1,49 @@
 # NetKnownsThat
 
-Смотрит на Linux-хост и отвечает на вопрос, на который обычно отвечают
-руками через полдюжины команд: **что здесь на самом деле слушает сеть,
-совпадает ли это с конфигурацией, и что из этого сломано.**
+Looks at a Linux host and answers the question that's usually answered by
+hand through half a dozen commands: **what's actually listening on the
+network here, does it match the configuration, and what's broken.**
 
-Разбирает **nginx**, **haproxy**, **docker/compose**, **podman**, **LXD**,
-**libvirt**, **iptables** и **ufw** — и сверяет прочитанное с тем, что
-реально происходит на машине: вывод `ss`, счётчики пакетов, живые
-контейнеры, настоящее TLS-соединение к собственному сокету. Из
-расхождений получается список проблем, из связей между конфигами — карта
-сетевых ресурсов, из истории проверок — расписание доступности. И тут же
-даёт всё это чинить: редактор конфигов с проверкой и автооткатом,
-управление сервисами и контейнерами, правила firewall, выпуск и
-продление сертификатов.
+Parses **nginx**, **haproxy**, **docker/compose**, **podman**, **LXD**,
+**libvirt**, **iptables**, and **ufw** — and cross-checks what it read
+against what's actually happening on the machine: `ss` output, packet
+counters, live containers, a real TLS connection to the service's own
+socket. Discrepancies become a list of problems, the connections between
+configs become a resource map, and a history of checks becomes an
+availability schedule. And it fixes all of this right there: a config
+editor with validation and auto-rollback, service and container
+management, firewall rules, certificate issuance and renewal.
 
-Один статический бинарник (~16 МБ), три интерфейса:
+One static binary (~16 MB), three interfaces:
 
 ```
-nkt          веб-дашборд и фоновый сбор данных
-nkt tui      терминальный интерфейс для работы по SSH
-nkt scan     разовая проверка, код возврата 2 при критичных находках
-nkt hub      управляющий центр для нескольких хостов
+nkt          web dashboard and background data collection
+nkt tui      terminal interface for working over SSH
+nkt scan     one-off check, exit code 2 on critical findings
+nkt hub      control center for multiple hosts
 ```
 
-На хосте не нужны ни Python, ни Node, ни отдельные статические файлы:
-веб-интерфейс вшит в бинарник.
+No Python, no Node, no separate static files needed on the host: the web UI
+is embedded in the binary.
 
 ---
 
-## С чего начать
+## Launch on a host
 
-Разные сценарии, и они действительно разные — выбирайте по тому, что у вас
-сейчас на руках:
+**Target platform is Linux only.** The production binary is built for
+Linux and doesn't run anywhere else: trying to turn on `NKT_MODE=local` on
+Windows or macOS fails with a clear error, not a half-working dashboard.
 
-| Что вам нужно | Куда идти | Сколько это займёт |
-|---|---|---|
-| Просто посмотреть, что это такое, ничего не разворачивая | [Попробовать локально](#попробовать-локально) | 5 минут, сервер не нужен |
-| Поставить на один настоящий Linux-хост | [Развернуть на хосте](#развернуть-на-хосте) | 10 минут |
-| Работать по SSH, без проброса портов и браузера | [Терминальный интерфейс](#терминальный-интерфейс) | сразу после установки |
-| Управлять несколькими VPS из одного места | [Хаб](#хаб-много-хостов-из-одного-места) | 15 минут на первый хост |
-| Хаб в Docker Compose или Kubernetes, без сборки | [Хаб в контейнере](#хаб-в-контейнере-docker-compose-и-kubernetes) | 5 минут |
+### 1. Get the binary
 
----
-
-## Попробовать локально
-
-Самый быстрый способ увидеть работающий продукт — режим `fixtures`. Он
-читает не ваш компьютер, а **снапшот** настоящего production-сервера из
-каталога `fixtures/host`, в который намеренно заложены проблемы. Работает
-на Windows, macOS и Linux, ничего не требует от системы и ничего в ней не
-трогает.
-
-```bash
-make build-dev        # нативный бинарник для вашей ОС
-./nkt                 # на Windows: .\nkt.exe
-```
-
-На Windows и macOS этот режим включается сам. Если пробуете **на Linux** —
-задайте его явно, иначе приложение полезет читать настоящий хост:
-
-```bash
-NKT_MODE=fixtures ./nkt
-```
-
-Пароль администратора печатается в консоль при первом запуске. Откройте
-<http://127.0.0.1:8077> — на дашборде сразу будет 25 находок: открытый
-наружу Redis, конфликт порта 8443, контейнер в цикле перезапуска, панель
-haproxy без пароля, устаревший TLS.
-
-**Про синтетические данные.** Описанных в снапшоте сокетов на вашей машине
-нет, а счётчики в нём заморожены — поэтому пробы и метрики моделируются, а
-история за 14 дней засевается один раз при первом запуске. Интерфейс
-говорит об этом баннером, API отдаёт `"simulated": true`, отключается
-через `NKT_DEMO_BACKFILL=false`. В боевом режиме всё измеряется
-по-настоящему.
-
-Если хочется не снапшот, а настоящие nginx, haproxy и docker — есть
-[проверочный стенд](#проверочный-стенд) на docker compose.
-
----
-
-## Развернуть на хосте
-
-**Целевая платформа — только Linux.** Продакшен-бинарник собирается для
-Linux и нигде больше не запускается: попытка включить `NKT_MODE=local` на
-Windows или macOS завершится понятной ошибкой, а не наполовину работающим
-дашбордом.
-
-### 1. Получить бинарник
-
-Самый быстрый путь — готовый бинарник со страницы
-[Releases](https://github.com/piqab/nkt/releases): под каждый тег `vX.Y.Z`
-`.github/workflows/release.yml` сам собирает и публикует статический ELF
-для `linux/amd64`, `linux/arm64` и `linux/arm` (armv6+), вместе с
+The fastest path is a prebuilt binary from the
+[Releases](https://github.com/piqab/nkt/releases) page: for every `vX.Y.Z`
+tag, `.github/workflows/release.yml` builds and publishes a static ELF for
+`linux/amd64`, `linux/arm64`, and `linux/arm` (armv6+), along with
 `SHA256SUMS`.
 
 ```bash
-# подставьте свою архитектуру и нужную версию
+# swap in your architecture and the version you want
 curl -fsSLO https://github.com/piqab/nkt/releases/download/v1.7.0/nkt-linux-amd64
 curl -fsSLO https://github.com/piqab/nkt/releases/download/v1.7.0/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
@@ -104,31 +51,33 @@ chmod +x nkt-linux-amd64
 sudo mv nkt-linux-amd64 /usr/local/bin/nkt
 ```
 
-Сборка из исходников (нужен только `make`; сама решает — через Docker или
-`native-build` на голом хосте) — в [DEVELOPMENT.md](DEVELOPMENT.md).
+Building from source (needs only `make` — it decides on its own whether to
+build via Docker or `native-build` on a bare host) is covered in
+[DEVELOPMENT.md](DEVELOPMENT.md).
 
-### 2. Проверить, что хост читается
+### 2. Check the host is readable
 
-Прежде чем ставить сервис, убедитесь, что приложение вообще видит
-конфигурации:
+Before installing the service, confirm the app can actually see the
+configuration at all:
 
 ```bash
 sudo nkt scan
 ```
 
-Команда напечатает найденные слушатели, контейнеры, правила firewall и
-список проблем. Root обязателен: `iptables-save` и `systemctl` обычному
-пользователю недоступны.
+The command prints the listeners, containers, firewall rules, and problems
+it found. Root is required: `iptables-save` and `systemctl` aren't
+available to a regular user.
 
-На Linux боевой режим включён по умолчанию — `NKT_MODE` задавать не нужно.
-Состояние пишется в `/var/lib/netknownsthat`, то есть туда же, куда его
-пишет systemd-юнит: запущенный вручную `nkt tui` читает ту же базу, что
-наполняет сервис, а не заводит рядом пустую.
+Production mode is on by default on Linux — no need to set `NKT_MODE`.
+State is written to `/var/lib/netknownsthat`, the same place the systemd
+unit writes to: running `nkt tui` by hand reads the same database the
+service fills, rather than starting an empty one alongside it.
 
-### 3. Установить
+### 3. Install
 
-Бинарник уже на месте (шаг 1) — остаются конфиг и systemd-юнит. Репозиторий
-клонировать не обязательно, оба файла можно взять прямо с GitHub:
+The binary is already in place (step 1) — what's left is the config and
+the systemd unit. There's no need to clone the repo; both files can be
+grabbed straight from GitHub:
 
 ```bash
 sudo install -d -m 0750 /etc/netknownsthat
@@ -139,589 +88,636 @@ curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/netknownsthat
 sudo $EDITOR /etc/netknownsthat/nkt.env
 sudo systemctl daemon-reload
 sudo systemctl enable --now netknownsthat
-sudo journalctl -u netknownsthat -n 30     # здесь будет пароль администратора
+sudo journalctl -u netknownsthat -n 30     # the admin password will be here
 ```
 
-Если вместо этого собирали из исходников (см. [DEVELOPMENT.md](DEVELOPMENT.md)) —
-`sudo make install` делает всё то же самое, включая копирование бинарника,
-одной командой; существующий `nkt.env` не перезаписывает.
+If you built from source instead (see [DEVELOPMENT.md](DEVELOPMENT.md)) —
+`sudo make install` does all of the same, including copying the binary, in
+one command; it won't overwrite an existing `nkt.env`.
 
-Пароль администратора печатается в журнал **один раз** при первом запуске
-и больше нигде в открытом виде не хранится. Чтобы задать его заранее —
-впишите `NKT_BOOTSTRAP_ADMIN_PASSWORD` в `nkt.env` до старта. Дальше
-пароли меняются командой `nkt passwd` (см. [Учётные записи](#учётные-записи-и-пароли)).
+The admin password is printed to the journal **once**, on first launch,
+and is never stored anywhere in plain text again. To set it in advance,
+put `NKT_BOOTSTRAP_ADMIN_PASSWORD` in `nkt.env` before the first start.
+After that, passwords are changed with `nkt passwd` (see
+[Accounts and passwords](#accounts-and-passwords)).
 
-### 4. Открыть
+### 4. Open it
 
-По умолчанию сервис слушает `127.0.0.1:8077`. Наружу отдавайте **только**
-через reverse proxy с TLS: `NKT_COOKIE_SECURE=true` включён по умолчанию,
-и куку сессии без HTTPS браузер просто не примет.
+By default the service listens on `127.0.0.1:8077`. Expose it externally
+**only** through a reverse proxy with TLS: `NKT_COOKIE_SECURE=true` is on
+by default, and the browser simply won't accept the session cookie without
+HTTPS.
 
-Быстрый доступ без проксирования — SSH-туннель:
+Quick access without a proxy — an SSH tunnel:
 
 ```bash
 ssh -L 8077:127.0.0.1:8077 user@host
 ```
 
-Туннель отдаёт браузеру голый HTTP, поэтому для входа через него добавьте
-в `nkt.env` строку `NKT_COOKIE_SECURE=false`.
+A tunnel hands the browser plain HTTP, so add `NKT_COOKIE_SECURE=false` to
+`nkt.env` to log in through it.
 
-Третий вариант — пусть `nkt`/`nkt hub` сам отдаёт HTTPS, без отдельного
-nginx/Caddy перед собой:
+A third option — let `nkt`/`nkt hub` serve HTTPS itself, with no separate
+nginx/Caddy in front:
 
 ```
 NKT_TLS_ENABLED=true
 ```
 
-При первом запуске приложение сгенерирует и сохранит в `NKT_DATA_DIR/tls/`
-самоподписанный сертификат (браузер один раз покажет предупреждение
-«небезопасно» — его нужно принять/добавить исключение, как с любым
-самоподписанным сертификатом) и переиспользует его при следующих запусках,
-а не выпускает заново каждый раз. По умолчанию сертификат покрывает
-`127.0.0.1`, `::1` и hostname этой машины — этого достаточно для
-SSH-туннеля или локального доступа; чтобы открывать по другому адресу
-(имя в LAN, публичный IP VPS) без несовпадения имени в сертификате, задайте
-его явно: `NKT_TLS_HOSTS=127.0.0.1,::1,vps.example.internal`. Свой
-сертификат (например, уже выпущенный) — `NKT_TLS_CERT`/`NKT_TLS_KEY` вместо
-самоподписанного.
+On first launch the app generates and saves a self-signed certificate
+under `NKT_DATA_DIR/tls/` (the browser will show a "not secure" warning
+once — you'll need to accept it/add an exception, same as with any
+self-signed certificate) and reuses it on later launches instead of
+reissuing it every time. By default the certificate covers `127.0.0.1`,
+`::1`, and this machine's hostname — enough for an SSH tunnel or local
+access; to open it at a different address (a LAN name, a VPS's public IP)
+without a name mismatch in the certificate, set it explicitly:
+`NKT_TLS_HOSTS=127.0.0.1,::1,vps.example.internal`. Bring your own
+certificate (e.g. one already issued) with `NKT_TLS_CERT`/`NKT_TLS_KEY`
+instead of the self-signed one.
 
-> **Доступ к приложению равносилен root на хосте** — оно правит конфиги,
-> управляет сервисами и меняет firewall. Не выставляйте его в интернет без
-> отдельного слоя аутентификации.
-
----
-
-## Терминальный интерфейс
-
-Если вы и так по SSH на хосте, браузер и проброс портов — лишний шаг:
-
-```bash
-sudo nkt tui
-```
-
-Тот же набор данных и те же действия, что в вебе. Экраны переключаются
-цифрами `1`…`9`, `0` или `Tab`:
-
-| Экран | Что показывает и что умеет |
-|---|---|
-| Обзор | плитки состояния, список проблем, сервисы, firewall, доступность |
-| Проблемы | таблица находок с подробностями; `f` фильтр по серьёзности |
-| Карта | дерево «внешняя сеть → слушатель → пул → backend → контейнер → сеть» |
-| Доступность | тепловая карта простоев по часам недели, графики, список простоев; `p` проверить сейчас, `space` пауза |
-| Нагрузка | динамика, рейтинг потребителей, расписание использования; `m` сменить показатель |
-| Конфигурации | просмотр и правка; `e` редактор, `v` история версий, `u` откат |
-| Сервисы | systemd, docker/podman, LXD, libvirt; `s` `x` `t` `l` запуск, стоп, перезапуск, reload; `c` проверить конфиг |
-| Firewall | правила ufw и пакетного фильтра; `a` добавить, `x` удалить |
-| Сертификаты | сроки, расписание истечения, автообновление, сверка с сокетом; `Enter` показать файл, `r` продлить, `g` самоподписанный, `c` собрать PEM для haproxy |
-| Журнал | все изменения с указанием пользователя и результата |
-
-Общие клавиши: `F5` обновить, `r` пересканировать хост, `?` справка, `q`
-выход. В редакторе `Ctrl+S` сохраняет — с той же проверкой сервисом и
-автооткатом при отказе, что и в вебе.
-
-Две особенности, о которых стоит знать заранее:
-
-* **TUI не собирает историю.** Пробы, метрики и разбор логов выполняет
-  фоновый планировщик, то есть запущенный сервис `netknownsthat`. Терминал
-  читает ту же базу; без сервиса экраны доступности и нагрузки будут
-  пустыми. Разовая проверка ресурса — клавиша `p`.
-* **Входа по паролю нет.** Если вы на хосте, вы и так root. Действия
-  пишутся в журнал под именем `tui:<логин>`, причём под `sudo` берётся
-  исходный пользователь, а не `root`. Ограничение
-  `NKT_ALLOW_MUTATIONS=false` действует и здесь.
+> **Access to the app is equivalent to root on the host** — it edits
+> configs, manages services, and changes the firewall. Don't expose it to
+> the internet without a separate authentication layer.
 
 ---
 
-## Хаб: много хостов из одного места
+## Launch the hub in Docker
 
-Обычный `nkt` управляет одним хостом. `nkt hub` — тот же бинарник в другом
-режиме: разворачивается на отдельной VPS и управляет остальными **по
-SSH**, показывая для каждого тот же дашборд, что и обычный `nkt`, — просто
-с выбором хоста в интерфейсе, а не отдельным развёртыванием на каждый.
-
-```bash
-make hub            # в Docker: docker compose -f deploy/docker-compose.hub.yml up -d --build
-sudo make hub-install   # либо как обычный systemd-сервис, без Docker
-```
-
-Пароль администратора генерируется при первом старте и печатается в лог —
-так же, как у обычного `nkt`.
-
-Дальше на странице «Хосты» вы вводите имя, адрес и SSH-пользователя, а хаб
-сам:
-
-1. подключается по SSH и определяет архитектуру (`uname`);
-2. собирает бинарник `nkt` под неё — кросс-компиляция кэшируется, второй
-   хост той же архитектуры ставится без пересборки;
-3. заливает бинарник, systemd-юнит и сгенерированный `nkt.env` по SFTP;
-4. поднимает `nkt` как обычный systemd-сервис — ровно тот же `deploy/`,
-   что и при ручной установке;
-5. заходит под сгенерированной учётной записью администратора через
-   SSH-туннель и запоминает её зашифрованной, чтобы дальше проксировать
-   запросы к API этого хоста без повторного входа.
-
-По умолчанию хаб **сам генерирует ключевую пару** под каждый хост: вы
-вставляете только публичную половину в `authorized_keys`, приватная
-никогда не покидает хаб. Свой существующий ключ или пароль остаются
-запасным способом.
-
-Что ещё умеет хаб помимо проксирования:
-
-* **сканирует саму машину, на которой запущен** — строка «localhost»
-  закреплена первой в таблице «Хосты» без установки и SSH (см. HUB.md,
-  раздел 4); требует, чтобы сам хаб был запущен с тем же профилем прав
-  (root + capabilities), что и обычный `nkt`, а не изолированным
-  `DynamicUser`;
-* **старт/стоп `nkt`** на конкретном хосте или сразу на всех;
-* **веб-терминал** — галочка на хосте включает полноценный root-shell в
-  браузере; её изменение сразу переустанавливает `nkt` на хосте, чтобы
-  настройка реально применилась;
-* **резервный канал связи на случай недоступности SSH** — включён по
-  умолчанию для новых хостов: хаб сам открывает на хосте ещё один порт
-  (`8078` по умолчанию) и сам же на него дозванивается — тем же адресом
-  хоста, что и SSH, так что настраивать отдельный адрес самого хаба не
-  нужно, даже если сам хаб сидит в приватной сети без публичного адреса.
-  Если входящие на хосте заблокирует файрвол не целиком, а именно порт 22
-  (упавший/неверно настроенный sshd, протухшие учётные данные), дашборд,
-  терминал и «обновить»/«переустановить» продолжают работать через этот
-  канал; если файрвол блокирует входящие целиком — резервный канал идёт в
-  том же направлении, что и SSH, и попадёт под ту же блокировку. Хаб всегда
-  сначала пробует обычный SSH, переключается на этот канал только при
-  неудаче дозвона — кроме самой первой установки хоста, которая всегда
-  требует настоящего SSH. Таблица хостов показывает бейджем, подключён ли
-  канал и используется ли он прямо сейчас — см. HUB.md, раздел 5;
-* **обновление пакетов ОС** — живой `apt-get upgrade` в окне терминала,
-  намеренно без `-y`: подтверждение `[Y/n]` даёте вы, глядя на настоящий
-  вывод. Процесс переживает закрытие окна, а не обрывает транзакцию dpkg
-  на середине;
-* **экспорт и импорт конфигурации** — реестр хостов со всеми секретами,
-  опционально вместе с мастер-ключом, чтобы при переезде на новую VPS
-  секреты расшифровались сами (перешифруются ключом нового хаба при
-  импорте).
-
-Сеть между хабом и управляемыми хостами наружу не раскрывается — виден
-только тот порт хаба, который вы сами опубликовали.
-
-Известные ограничения:
-
-* Секреты SSH хранятся на хабе, зашифрованными мастер-ключом
-  (`NKT_HUB_MASTER_KEY` — генерируется сам при первом старте и живёт в
-  томе данных, если не задан явно). Хаб — точка сосредоточения доступа ко
-  всем управляемым хостам: относитесь к нему как к любой машине с доступом
-  к продакшену. `sudo nkt hub delete` безвозвратно затирает этот ключ и
-  всю базу (с обязательным предложением предварительно сохранить экспорт с
-  ключом — и зашифровать сам файл экспорта паролем — для восстановления
-  через `nkt hub import`) — см. HUB.md, раздел «Остановить / удалить».
-* Ключ хоста SSH принимается при первом подключении без сверки с
-  `known_hosts` — то же доверие «первому подключению», что и у
-  интерактивного `ssh`.
-* Управляющие операции идут через SSH-туннель к API самого хоста, и тот
-  полностью применяет собственные правила (`NKT_ALLOW_MUTATIONS`, роль
-  пользователя); хаб их не подменяет.
-
-**Пошаговый запуск, добавление первого хоста и диагностика —
-[HUB.md](HUB.md).**
-
----
-
-## Хаб в контейнере: Docker Compose и Kubernetes
-
-Здесь — только хаб. Обычный `nkt` (режим `local`) шеллится в `systemctl`,
-`iptables-save` и docker-сокет **самого хоста**, поэтому его место —
-установка прямо на хост (раздел выше), а не контейнер без доступа к этому
-хосту. Хаб же со своими хостами общается наружу по SSH, поэтому для него
-контейнерное развёртывание — обычный случай.
-
-Готовый образ (`Dockerfile.hub`) публикует `.github/workflows/release.yml`
-под каждый тег `vX.Y.Z` в `ghcr.io/piqab/nkt-hub` — можно развернуть без
-клонирования репозитория. Пакет приватный (репозиторий приватный) — нужен
-токен с правом `read:packages`.
+A prebuilt image (`Dockerfile.hub`) is published by
+`.github/workflows/release.yml` for every `vX.Y.Z` tag, to
+`ghcr.io/piqab/nkt-hub` — you can deploy it without cloning the repo. The
+package is private (the repo is private), so you need a token with
+`read:packages`.
 
 ### Docker Compose
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/piqab/nkt/main/deploy/docker-compose.hub.release.yml
-docker login ghcr.io -u <логин GitHub>          # токен с read:packages вместо пароля
+docker login ghcr.io -u <your GitHub login>     # a token with read:packages instead of a password
 docker compose -f docker-compose.hub.release.yml up -d
-docker compose -f docker-compose.hub.release.yml logs hub    # пароль администратора
+docker compose -f docker-compose.hub.release.yml logs hub    # the admin password
 ```
 
-Сборка из исходников тем же `docker compose`, но локально (`make hub`) —
-файл `deploy/docker-compose.hub.yml`, описан в начале этого раздела.
+Building from source with the same `docker compose`, but locally
+(`make hub`), uses `deploy/docker-compose.hub.yml` — more on the hub itself
+in the [section below](#hub-many-hosts-from-one-place).
 
 ### Kubernetes
 
-Манифест — [deploy/k8s/hub.yaml](deploy/k8s/hub.yaml): `Namespace`,
-`PersistentVolumeClaim` для базы хаба, `Deployment` (**строго один
-реплика** — хаб хранит реестр хостов в SQLite на ReadWriteOnce-томе и сам
-генерирует ключ шифрования при первом старте, второй под с тем же томом
-координации не имеет) и `Service` на порту 8077.
+The manifest is [deploy/k8s/hub.yaml](deploy/k8s/hub.yaml): a `Namespace`,
+a `PersistentVolumeClaim` for the hub's database, a `Deployment` (**strictly
+one replica** — the hub keeps its host registry in SQLite on a
+ReadWriteOnce volume and generates its own encryption key on first start; a
+second pod sharing the same volume has no way to coordinate with the
+first), and a `Service` on port 8077.
 
 ```bash
 kubectl apply -f deploy/k8s/hub.yaml
 kubectl create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io --docker-username=<логин GitHub> \
-  --docker-password=<токен с read:packages> -n netknownsthat
-kubectl logs -n netknownsthat deploy/nkt-hub       # пароль администратора
+  --docker-server=ghcr.io --docker-username=<your GitHub login> \
+  --docker-password=<a token with read:packages> -n netknownsthat
+kubectl logs -n netknownsthat deploy/nkt-hub       # the admin password
 kubectl port-forward -n netknownsthat svc/nkt-hub 8443:8077
 ```
 
-Доступ снаружи кластера — через свой Ingress с TLS перед этим `Service`
-(в манифест намеренно не включён — у каждого кластера свой контроллер).
-Резервный канал (HUB.md, раздел 5) отдельной настройки Ingress/сети не
-требует — хаб сам дозванивается наружу из пода до каждого хоста, обычный
-egress-трафик.
+Access from outside the cluster goes through your own Ingress with TLS in
+front of this `Service` (deliberately not included in the manifest — every
+cluster has its own controller). The fallback channel (see
+[Hub, item 5](#hub-many-hosts-from-one-place)) needs no separate
+Ingress/network setup of its own — the hub dials out from the pod to each
+host itself, ordinary egress traffic.
 
 ---
 
-## Что оно находит
+## Try it locally first
 
-Конфиги не просто читаются, а сопоставляются друг с другом и с реальным
-состоянием хоста. Каждая находка содержит объяснение, ссылку на файл и
-строку и конкретное действие для исправления.
-
-**Сеть и firewall**
-
-| Правило | Серьёзность | Что находит |
-|---|---|---|
-| `port-conflict` | high | Два сервиса объявляют один порт на пересекающихся адресах |
-| `declared-not-listening` | high | Порт описан в конфиге, но никто его не слушает |
-| `listening-not-declared` | medium/info | Процесс слушает порт, не описанный ни в одном конфиге |
-| `no-default-deny` | high | Политика INPUT — ACCEPT и ufw выключен |
-| `public-port-blocked` | medium | Сервис слушает 0.0.0.0, но firewall его не пропускает |
-| `docker-bypasses-firewall` | critical/high | Контейнер публикует порт на 0.0.0.0 — DNAT обходит INPUT и ufw |
-| `stale-firewall-rule` | low | Правило разрешает порт, который никто не слушает |
-| `sensitive-port-public` | critical/high | Redis, PostgreSQL, MongoDB и т. п. слушают все интерфейсы |
-
-**TLS и сертификаты**
-
-| Правило | Серьёзность | Что находит |
-|---|---|---|
-| `weak-tls` | medium | В `ssl_protocols` остались TLSv1 / TLSv1.1 |
-| `missing-hsts` | low | TLS-сервер не отдаёт Strict-Transport-Security |
-| `tls-cert-missing` | high | `listen ... ssl` без `ssl_certificate` |
-| `tls-cert-expired` / `-expiring` | critical / high-medium | Срок истёк или истекает в ближайшие 7–30 дней |
-| `tls-cert-not-yet-valid` | high | Ещё не вступил в силу — обычно сбиты часы хоста |
-| `tls-cert-unreadable` | high | Файл, указанный в конфиге, не читается |
-| `tls-cert-name-mismatch` | high | Сертификат не покрывает имя, под которым отвечает сервер |
-| `tls-cert-renewal-not-automatic` | medium | certbot знает о сертификате, но ни таймер, ни cron его не продлят |
-| `tls-cert-orphan-lineage` | high | Лежит в `/etc/letsencrypt/live`, а файла обновления нет |
-| `tls-cert-self-signed` / `-weak-key` / `-weak-signature` | low / medium | Самоподписанный, RSA короче 2048, подпись SHA-1 или MD5 |
-| `tls-cert-not-reloaded` | high | На сокете отдаётся не тот сертификат, что в конфиге — сервис не перечитал файл |
-| `public-plaintext-proxy` | medium | Публичный HTTP-слушатель проксирует трафик без шифрования |
-
-**Пулы и контейнеры**
-
-| Правило | Серьёзность | Что находит |
-|---|---|---|
-| `upstream-undefined` / `-orphan` | high / low | Маршрут ссылается на несуществующий пул; пул объявлен, но не используется |
-| `upstream-member-down` | high | Локальный backend пула не слушает свой порт |
-| `all-backends-disabled` | critical | Все серверы пула помечены down/backup |
-| `single-backend` / `backend-no-healthcheck` | info / medium | Нет резерва; нет проверки здоровья при нескольких серверах |
-| `container-restarting` | high | Контейнер в цикле перезапуска |
-| `container-not-running` / `-undeclared` / `-no-restart-policy` | medium / low / low | Описан, но не запущен; запущен, но не описан; нет политики перезапуска |
-| `admin-interface-open` | high/medium | Панель статистики haproxy доступна без пароля |
-
-### Карта сетевых ресурсов
-
-Граф, где трафик читается слева направо:
-
-```
-внешняя сеть → сервис → слушатель → пул → backend-адрес → контейнер → сеть docker
-```
-
-Связи берутся из конфигураций (`proxy_pass`, `upstream`, `use_backend`,
-`default_backend`, публикация портов), состояние узлов — из реальных
-слушателей, состояний контейнеров и найденных проблем. Раскладка по
-колонкам, а не силовая: она стабильна между сканами и читается как схема
-потока запросов. В терминале та же карта показывается деревом.
-
-### Доступность и использование
-
-**Доступность.** Каждый объявленный слушатель и каждый backend пула
-проверяется по расписанию — TCP-коннект или HTTP-запрос с правильным
-заголовком `Host`. Из истории строятся тепловая карта «час недели ×
-недоступность», графики доступности и задержки, список простоев.
-
-**Использование.** Приросты счётчиков iptables, `docker stats` и разбор
-access-логов nginx и haproxy. Записи логов раскладываются по времени самой
-записи, поэтому график показывает, когда нагрузка была на самом деле, а не
-когда её собрали.
-
-### Сертификаты: не только сроки
-
-Пути берутся из `ssl_certificate` в nginx и `crt` в haproxy, файлы
-разбираются как X.509: до какой даты действителен, какие имена покрывает,
-кем выпущен, алгоритм и длина ключа, самоподписанный или нет. У haproxy
-`crt` может указывать на каталог — он разворачивается в список отдельных
-сертификатов по SNI.
-
-Но просроченный сертификат почти всегда — результат не забывчивости, а
-**сломанной автоматики**, поэтому отдельно проверяется само обновление:
-известен ли сертификат certbot'у, активен ли `certbot.timer` или задание
-cron, и не является ли файл производной копией для haproxy (certbot не
-пишет haproxy напрямую — deploy-hook склеивает `fullchain.pem`+`privkey.pem`
-в отдельный файл, который в конфигурации может быть нигде не упомянут;
-такие копии находятся сверкой отпечатков SHA-256 и наследуют статус
-оригинала вместо ложного «вручную»).
-
-Чинится тут же, из интерфейса:
-
-* **продлить** существующую lineage — всегда через `--standalone`
-  (сохранённый authenticator оказался слишком хрупким: сломанный webroot
-  падает голым «код 1»), с остановкой nginx/haproxy до и гарантированным
-  запуском после — независимо от исхода продления; перед вызовом
-  проверяется, свободен ли порт 80, чтобы ошибка называла процесс-блокировщик,
-  а не «Problem binding to port 80»;
-* **выпустить новый** сертификат Let's Encrypt для домена, которого у
-  certbot ещё нет (wildcard форма не принимает — `--standalone` доказывает
-  владение только точным именем);
-* **собрать PEM для haproxy** из уже выпущенной lineage — с перезаписью
-  конкретного файла и `reload`, либо записью в директорийный `bind ... crt`,
-  если он настроен;
-* **самоподписанный** сертификат, когда TLS не настроен вовсе: RSA
-  2048/3072/4096, несколько имён, включая wildcard и Unicode (`испытание.рф`
-  → punycode автоматически).
-
-Всё это — минуты работы (сеть до Let's Encrypt, остановка сервисов),
-поэтому кнопка не блокирует интерфейс спиннером: операция уходит в фон на
-сервер, а окно показывает живой лог по строкам. Окно можно закрыть — на
-хосте ничего не остановится.
-
-Автопродление (`NKT_AUTO_RENEW_CERTS=true`) делает то же самое по
-расписанию. Учтите: это означает, что фоновая задача сама, без участия
-человека, ненадолго останавливает сайт при каждом продлении.
-
-**Сверка с проводом.** Файл на диске может быть здоровым — и всё равно не
-тем, что видят клиенты: `certbot renew` подменил файл, но сервис не сделал
-`reload` и отдаёт старый сертификат из памяти. Разница не видна нигде,
-кроме самого TLS-соединения, поэтому при каждом скане на реальном хосте
-приложение **устанавливает настоящее TLS-подключение** к первому известному
-адресу каждого сертификата, с тем же SNI, и сравнивает отпечатки. Ошибка
-подключения расхождением не считается — помечается как «не проверялось»,
-чтобы сетевая проблема не превращалась в ложное обвинение сервиса.
-
-### Управление
-
-* **systemd**: `start` / `stop` / `restart` / `reload`, проверка конфигурации.
-* **docker** и **Podman**: жизненный цикл контейнеров, создание и удаление —
-  через Engine API и собственный unix-сокет соответственно, отдельными
-  страницами.
-* **LXD**: контейнеры и виртуальные машины одним инструментом
-  (`lxc list --format json`), включая `lxc launch` и удаление.
-* **libvirt/QEMU**: жизненный цикл VM через `virsh`, тумблер автозапуска,
-  удаление определения (отдельно — с дисками). Создание и правка VM
-  отдельного API не получили намеренно: домен определяется тем же
-  редактором конфигов — путь `/etc/libvirt/qemu/<имя>.xml` распознаётся
-  автоматически, XML проверяется `virt-xml-validate`, сохранение с флагом
-  «применить» регистрирует домен через `virsh define`.
-* **Конфиги**: редактор с версионированием. Перед записью содержимое
-  проверяется самим сервисом (`nginx -t`, `haproxy -c -f`,
-  `docker compose config -q`); **если проверка не прошла, файл
-  автоматически возвращается в прежнее состояние**. Любую версию можно
-  посмотреть, сравнить (unified diff) и откатить.
-* **firewall**: добавление и удаление правил через `ufw`. Прямая правка
-  iptables из интерфейса намеренно не поддерживается.
-* **Веб-терминал** (`NKT_TERMINAL_ENABLED=true`): полноценный
-  интерактивный shell на хосте прямо в браузере. Выключен по умолчанию —
-  это прямой доступ к shell, а не ограниченное действие.
-* **Обновление пакетов ОС**: живой `apt-get update && apt-get upgrade` в
-  окне терминала, намеренно без `-y`.
-
-Все изменения пишутся в журнал с указанием пользователя, результата и
-вывода команды.
-
----
-
-## Учётные записи и пароли
-
-Пароли хранятся только в собственной базе (`argon2id`, необратимо) —
-достать «текущий» пароль неоткуда, даже из базы напрямую. Сброс всегда
-идёт через выпуск нового.
+The fastest way to see a working product is `fixtures` mode. It doesn't
+read your computer — it reads a **snapshot** of a real production server
+from the `fixtures/host` directory, deliberately seeded with problems.
+Works on Windows, macOS, and Linux, requires nothing from the system, and
+touches nothing on it.
 
 ```bash
-sudo nkt passwd                      # сменить пароль администратора
-sudo nkt passwd ops -role viewer     # завести учётную запись только на чтение
-sudo nkt passwd -random              # сгенерировать пароль вместо ввода
-sudo nkt users                       # кто есть, кто когда заходил, кто отключён
-echo 'новый-пароль' | sudo nkt passwd ops    # без интерактива, для скриптов
+make build-dev        # a native binary for your OS
+./nkt                 # on Windows: .\nkt.exe
 ```
 
-`nkt passwd` задаёт пароль напрямую в базе, без входа в старую сессию —
-это же решение и для «забыл пароль, не могу войти».
+This mode turns on by itself on Windows and macOS. If you're trying it
+**on Linux**, set it explicitly, or the app will try to read the real
+host:
 
-Из веб-интерфейса: кнопка «Сменить пароль» внизу боковой панели (после
-смены все сессии этой учётной записи завершаются, включая текущую), и
-страница «Пользователи» для `admin` — создание, смена роли, отключение,
-удаление. Сбросить чужой забытый пароль страница не умеет — только
-`sudo nkt passwd <логин>` на хосте. Собственную учётную запись нельзя ни
-разжаловать, ни отключить, ни удалить: так исключается случайная потеря
-доступа. Минимальная длина пароля везде — 10 символов.
+```bash
+NKT_MODE=fixtures ./nkt
+```
 
-Каждая смена пароля и создание учётной записи пишутся в журнал с пометкой
-`cli:<логин хоста>`.
+The admin password is printed to the console on first launch. Open
+<http://127.0.0.1:8077> — the dashboard immediately shows 25 findings: a
+Redis exposed to the world, a port 8443 conflict, a container stuck in a
+restart loop, an haproxy panel with no password, stale TLS.
+
+**About the synthetic data.** The sockets described in the snapshot don't
+exist on your machine, and its counters are frozen — so probes and metrics
+are simulated, and 14 days of history is seeded once on first launch. The
+UI says so with a banner, the API returns `"simulated": true`, and it can
+be turned off with `NKT_DEMO_BACKFILL=false`. In production mode
+everything is measured for real.
+
+If you'd rather have real nginx, haproxy, and docker instead of a
+snapshot, there's a [test rig](DEVELOPMENT.md#проверочный-стенд) on docker
+compose.
 
 ---
 
-## Настройка
+## Terminal interface
 
-Все параметры — переменные окружения `NKT_*`, полный список с пояснениями
-в [deploy/nkt.env.example](deploy/nkt.env.example). Самое нужное:
+If you're already on the host over SSH, a browser and port-forwarding are
+an extra step you don't need:
 
-| Переменная | Смысл |
+```bash
+sudo nkt tui
+```
+
+The same data and the same actions as in the web UI. Screens switch with
+digits `1`…`9`, `0`, or `Tab`:
+
+| Screen | What it shows and does |
 |---|---|
-| `NKT_MODE` | `local` — читать настоящий хост, `fixtures` — снапшот. По умолчанию `local` на Linux, `fixtures` на остальных системах |
-| `NKT_DATA_DIR` | Где хранить базу и историю конфигураций. По умолчанию `/var/lib/netknownsthat` в `local` и `./data` в `fixtures` |
-| `NKT_ADDR` | Адрес прослушивания, по умолчанию `127.0.0.1:8077` |
-| `NKT_ALLOW_MUTATIONS` | `false` переводит всё приложение в режим только чтения |
-| `NKT_COOKIE_SECURE` | `true` по умолчанию (кука только по HTTPS); `false` — для голого HTTP, например SSH-туннеля |
-| `NKT_TLS_ENABLED` | `true` — сам слушает HTTPS вместо голого HTTP (см. раздел «Открыть»), самоподписанным сертификатом, если не заданы `NKT_TLS_CERT`/`NKT_TLS_KEY`. По умолчанию `false` |
-| `NKT_TLS_HOSTS` | Какие имена/IP должен покрывать сгенерированный самоподписанный сертификат. По умолчанию `127.0.0.1,::1,<hostname>` |
-| `NKT_TLS_CERT`, `NKT_TLS_KEY` | Свой сертификат/ключ вместо самоподписанного — оба должны быть заданы одновременно |
-| `NKT_COMPOSE_FILES` | Список compose-файлов через запятую |
-| `NKT_PODMAN_SOCKET` | Сокет Podman, по умолчанию `/run/podman/podman.sock` |
-| `NKT_LIBVIRT_URI` | URI подключения libvirt, по умолчанию `qemu:///system` |
-| `NKT_PROBE_INTERVAL` | Как часто проверять доступность; голое число — секунды |
-| `NKT_AUTO_RENEW_CERTS` | `true` — сама продлевает certbot-сертификаты по расписанию (`NKT_AUTO_RENEW_INTERVAL`, по умолчанию 6h) не позднее чем за `NKT_AUTO_RENEW_WITHIN` (30 дней) до истечения. По умолчанию `false` |
-| `NKT_CERTBOT_TIMEOUT` | Сколько ждать `certbot renew` — отдельно от `NKT_COMMAND_TIMEOUT`, потому что это сетевой запрос к Let's Encrypt, а не быстрая команда. По умолчанию `3m` |
-| `NKT_TERMINAL_ENABLED` | `true` включает веб-терминал — полноценный shell на хосте в браузере, поверх уже обязательных роли admin и `NKT_ALLOW_MUTATIONS=true`. По умолчанию `false` для обычного `nkt` и для управляемых хостов хаба (отдельная галочка на хосте — см. HUB.md); по умолчанию `true` для самого хаба (`NKT_MODE=hub`) — это тот же терминал для строки «localhost», то есть той же машины, где уже работает хаб, лишним доступом не является |
-| `NKT_TERMINAL_IDLE_TIMEOUT` | Закрыть терминал без ввода/вывода это время — забытая вкладка не держит shell вечно. По умолчанию `30m` |
+| Overview | status tiles, problem list, services, firewall, availability |
+| Findings | findings table with details; `f` filters by severity |
+| Map | "external network → listener → pool → backend → container → network" tree |
+| Availability | a downtime heatmap by hour of the week, graphs, an outage list; `p` checks now, `space` pauses |
+| Usage | trends, a ranking of top consumers, a usage schedule; `m` switches the metric |
+| Configs | view and edit; `e` editor, `v` version history, `u` rollback |
+| Services | systemd, docker/podman, LXD, libvirt; `s` `x` `t` `l` start, stop, restart, reload; `c` validate config |
+| Firewall | ufw rules and the packet filter; `a` add, `x` delete |
+| Certificates | expiry, an expiry schedule, auto-renewal, socket cross-check; `Enter` shows the file, `r` renews, `g` self-signed, `c` builds a PEM for haproxy |
+| Audit | every change, with the user and the outcome |
+
+Common keys: `F5` refresh, `r` rescan the host, `?` help, `q` quit. In the
+editor, `Ctrl+S` saves — with the same service-side validation and
+auto-rollback on failure as in the web UI.
+
+Two things worth knowing up front:
+
+* **The TUI doesn't collect history.** Probes, metrics, and log parsing
+  are done by the background scheduler — that is, the running
+  `netknownsthat` service. The terminal reads the same database; without
+  the service, the availability and usage screens will be empty. A one-off
+  check of a resource is the `p` key.
+* **There's no password login.** If you're on the host, you're already
+  root. Actions are logged under the name `tui:<login>`, and under `sudo`
+  it's the original user that's recorded, not `root`. The
+  `NKT_ALLOW_MUTATIONS=false` restriction applies here too.
 
 ---
 
-## Безопасность
+## Hub: many hosts from one place
 
-* Пароли — argon2id (64 МиБ, t=3, p=2). Сессии — случайные отзываемые
-  токены в SQLite; cookie `HttpOnly`, `SameSite=Lax`. После пяти неудачных
-  попыток вход блокируется с нарастающей задержкой.
-* Роли: `viewer` — только чтение, `admin` — изменения. Плюс глобальный
-  выключатель `NKT_ALLOW_MUTATIONS=false`.
-* Правка конфигов ограничена белым списком каталогов (корни nginx и
-  haproxy, перечисленные compose-файлы, `/etc/libvirt/qemu`). Пути с `..`
-  отвергаются.
-* Действия над сервисами и firewall принимают только значения из
-  фиксированных списков — имя сервиса или действие невозможно подставить в
-  команду.
-* Удаление правила ufw сверяется с текстом, который видел оператор: номера
-  сдвигаются после каждого изменения, и удаление «не того» правила
-  способно отрезать SSH.
-* Оптимистичная блокировка при сохранении конфига по SHA-256: файл,
-  изменившийся на диске после открытия в редакторе, не будет перезаписан
-  молча.
-* Каждое изменяющее действие пишется в `audit_log`.
-* systemd-юнит из `deploy/` сужает права: `ProtectSystem=strict` с явным
-  списком доступных на запись каталогов, урезанный `CapabilityBoundingSet`,
-  `SystemCallFilter=@system-service`.
+A plain `nkt` manages one host. `nkt hub` is the same binary in a
+different mode: it's deployed on a separate VPS and manages the rest
+**over SSH**, showing the same dashboard for each one that a plain `nkt`
+would — just with a host picker in the UI instead of a separate deployment
+for every one.
 
-  **Веб-терминал, обновление пакетов и самообновление хоста через
-  резервный канал — единственное намеренное исключение.** Они запускаются
-  через `systemd-run --pty` в отдельном, ничем не урезанном
-  transient-юните, а не как дочерние процессы самого `nkt`: иначе
-  интерактивный root-шелл или внутренний сброс привилегий `apt-get`
-  (setuid/setgid до `_apt`) упирались бы в те же ограничения, что защищают
-  демон. Ограничения демона существуют, чтобы сузить последствия **его
-  собственной** компрометации, а не действия уже аутентифицированного
-  администратора, который явно запросил root-доступ. Срабатывает только
-  когда `nkt` действительно запущен как unit (`INVOCATION_ID` в окружении)
-  и `systemd-run` есть в PATH.
+```bash
+make hub                # in Docker: docker compose -f deploy/docker-compose.hub.yml up -d --build
+sudo make hub-install    # or as a plain systemd service, no Docker
+```
 
-  `systemd-run` сам требует живого D-Bus/systemd-manager — на хосте без
-  него (некоторые минимальные образы, например Debian 11, не ставят dbus
-  по умолчанию) он падает с ошибкой подключения к шине. Запасной путь —
-  `CAP_SYS_ADMIN` в `CapabilityBoundingSet` юнита и `nsenter --mount` в
-  пространство имён PID 1 напрямую, без D-Bus вообще; `RestrictNamespaces`
-  сужен ровно до `mnt`, ничего шире не разрешено даже с этой capability.
-  Раздел «Терминал» сообщает, если ни один из двух путей недоступен, и
-  предлагает кнопку установки dbus, когда `nsenter`-путь рабочий.
+The admin password is generated on first start and printed to the log —
+same as with a plain `nkt`.
+
+From there, on the "Hosts" page you enter a name, address, and SSH user,
+and the hub itself:
+
+1. connects over SSH and detects the architecture (`uname`);
+2. builds an `nkt` binary for it — cross-compilation is cached, so a
+   second host of the same architecture is provisioned without a rebuild;
+3. uploads the binary, the systemd unit, and a generated `nkt.env` over
+   SFTP;
+4. brings `nkt` up as a plain systemd service — exactly the same
+   `deploy/` as a manual install;
+5. logs in with the generated admin account over the SSH tunnel and
+   remembers it, encrypted, so it can proxy requests to that host's API
+   from then on without logging in again.
+
+By default the hub **generates its own keypair** for each host: you only
+paste the public half into `authorized_keys`, the private half never
+leaves the hub. Your own existing key or password remain a fallback
+option.
+
+What else the hub can do besides proxying:
+
+* **scans the machine it's running on itself** — a "localhost" row is
+  pinned first in the "Hosts" table, with no install and no SSH (see
+  HUB.md, section 4); requires the hub itself to run with the same
+  privilege profile (root + capabilities) as a plain `nkt`, not an
+  isolated `DynamicUser`;
+* **start/stop `nkt`** on one host, or all of them at once;
+* **web terminal** — a checkbox on the host turns on a full root shell in
+  the browser; changing it immediately reinstalls `nkt` on the host so the
+  setting actually takes effect;
+* **a fallback channel for when SSH is unreachable** — on by default for
+  new hosts: the hub opens another port on the host itself (`8078` by
+  default) and dials into it itself — using the same host address as SSH,
+  so there's no need to configure a separate address for the hub even if
+  the hub itself sits in a private network with no public address. If
+  something blocks inbound not entirely but specifically port 22 on the
+  host (a down or misconfigured sshd, stale credentials), the dashboard,
+  terminal, and "update"/"reinstall" keep working over this channel; if
+  the firewall blocks inbound entirely, the fallback channel goes the same
+  direction as SSH and hits the same block. The hub always tries plain SSH
+  first, switching to this channel only when the dial fails — except for
+  a host's very first install, which always needs real SSH. The hosts
+  table shows a badge for whether the channel is connected and whether
+  it's actually in use right now — see HUB.md, section 5;
+* **OS package updates** — a live `apt-get upgrade` in a terminal window,
+  deliberately without `-y`: you give the `[Y/n]` confirmation yourself,
+  looking at the real output. The process survives closing the window
+  instead of cutting a dpkg transaction off partway through;
+* **config export and import** — the host registry with every secret,
+  optionally along with the master key, so secrets decrypt themselves when
+  moving to a new VPS (re-encrypted with the new hub's key on import).
+
+The network between the hub and its managed hosts isn't exposed
+externally — only whatever port of the hub you chose to publish is
+visible.
+
+Known limitations:
+
+* SSH secrets are stored on the hub, encrypted with a master key
+  (`NKT_HUB_MASTER_KEY` — generated on first start and kept in the data
+  volume if not set explicitly). The hub is a single point of access to
+  every managed host: treat it like any machine with production access.
+  `sudo nkt hub delete` irreversibly wipes this key and the whole database
+  (with a mandatory offer to save a keyed export first — and encrypt the
+  export file itself with a password — for recovery via `nkt hub import`)
+  — see HUB.md, "Stop / delete".
+* An SSH host key is accepted on first connection with no `known_hosts`
+  cross-check — the same trust-on-first-use as an interactive `ssh`.
+* Management operations go through an SSH tunnel to the host's own API,
+  which fully applies its own rules (`NKT_ALLOW_MUTATIONS`, the user's
+  role); the hub doesn't override them.
+
+**Step-by-step launch, adding your first host, and troubleshooting —
+[HUB.md](HUB.md).**
 
 ---
 
-## Если что-то пошло не так
+## What it finds
 
-| Симптом | Причина и что делать |
+Configs aren't just read — they're cross-checked against each other and
+against the host's real state. Every finding includes an explanation, a
+link to the file and line, and a concrete action to fix it.
+
+**Network and firewall**
+
+| Rule | Severity | What it finds |
+|---|---|---|
+| `port-conflict` | high | Two services declare the same port on overlapping addresses |
+| `declared-not-listening` | high | A port is described in a config, but nothing is listening on it |
+| `listening-not-declared` | medium/info | A process listens on a port not described in any config |
+| `no-default-deny` | high | The INPUT policy is ACCEPT and ufw is off |
+| `public-port-blocked` | medium | A service listens on 0.0.0.0, but the firewall blocks it |
+| `docker-bypasses-firewall` | critical/high | A container publishes a port on 0.0.0.0 — DNAT bypasses INPUT and ufw |
+| `stale-firewall-rule` | low | A rule allows a port nothing is listening on |
+| `sensitive-port-public` | critical/high | Redis, PostgreSQL, MongoDB, etc. listening on all interfaces |
+
+**TLS and certificates**
+
+| Rule | Severity | What it finds |
+|---|---|---|
+| `weak-tls` | medium | TLSv1 / TLSv1.1 left in `ssl_protocols` |
+| `missing-hsts` | low | A TLS server doesn't send Strict-Transport-Security |
+| `tls-cert-missing` | high | `listen ... ssl` with no `ssl_certificate` |
+| `tls-cert-expired` / `-expiring` | critical / high-medium | Expired, or expiring within 7–30 days |
+| `tls-cert-not-yet-valid` | high | Not yet valid — usually the host's clock is wrong |
+| `tls-cert-unreadable` | high | The file a config points to can't be read |
+| `tls-cert-name-mismatch` | high | The certificate doesn't cover the name the server answers as |
+| `tls-cert-renewal-not-automatic` | medium | certbot knows about the certificate, but neither a timer nor cron will renew it |
+| `tls-cert-orphan-lineage` | high | Sits in `/etc/letsencrypt/live`, but has no renewal config |
+| `tls-cert-self-signed` / `-weak-key` / `-weak-signature` | low / medium | Self-signed, RSA shorter than 2048, or a SHA-1/MD5 signature |
+| `tls-cert-not-reloaded` | high | The socket serves a different certificate than the one in the config — the service hasn't reread the file |
+| `public-plaintext-proxy` | medium | A public HTTP listener proxies traffic with no encryption |
+
+**Pools and containers**
+
+| Rule | Severity | What it finds |
+|---|---|---|
+| `upstream-undefined` / `-orphan` | high / low | A route references a pool that doesn't exist; a pool is declared but never used |
+| `upstream-member-down` | high | A pool's local backend isn't listening on its own port |
+| `all-backends-disabled` | critical | Every server in a pool is marked down/backup |
+| `single-backend` / `backend-no-healthcheck` | info / medium | No redundancy; no health check with multiple servers |
+| `container-restarting` | high | A container stuck in a restart loop |
+| `container-not-running` / `-undeclared` / `-no-restart-policy` | medium / low / low | Declared but not running; running but not declared; no restart policy |
+| `admin-interface-open` | high/medium | haproxy's stats panel is reachable with no password |
+
+### Resource map
+
+A graph where traffic reads left to right:
+
+```
+external network → service → listener → pool → backend address → container → docker network
+```
+
+Connections come from configs (`proxy_pass`, `upstream`, `use_backend`,
+`default_backend`, published ports); node state comes from real listeners,
+container states, and findings. Laid out by column rather than a
+force-directed layout: it stays stable between scans and reads like a
+diagram of request flow. The terminal interface shows the same map as a
+tree.
+
+### Availability and usage
+
+**Availability.** Every declared listener and every pool backend is
+checked on a schedule — a TCP connect or an HTTP request with the correct
+`Host` header. History becomes an "hour of week × downtime" heatmap,
+availability and latency graphs, and an outage list.
+
+**Usage.** Increments of iptables counters, `docker stats`, and parsed
+nginx/haproxy access logs. Log entries are sorted by their own record
+timestamp, so the chart shows when the load actually happened, not when
+it was collected.
+
+### Certificates: more than expiry dates
+
+Paths come from `ssl_certificate` in nginx and `crt` in haproxy; files are
+parsed as X.509: expiry date, covered names, issuer, key algorithm and
+length, self-signed or not. haproxy's `crt` can point at a directory — it
+gets expanded into a list of individual certificates by SNI.
+
+But an expired certificate is almost never a matter of forgetfulness — it's
+**broken automation** — so renewal itself is checked separately: does
+certbot know about the certificate, is `certbot.timer` or a cron job
+active, and is the file a derived copy for haproxy (certbot doesn't write
+to haproxy directly — a deploy hook glues `fullchain.pem`+`privkey.pem`
+into a separate file that may not be mentioned anywhere in the config;
+such copies are found by cross-checking SHA-256 fingerprints and inherit
+the original's status instead of a false "manual" one).
+
+Fixed right there, from the UI:
+
+* **renew** an existing lineage — always via `--standalone` (a saved
+  authenticator turned out to be too fragile — a broken webroot fails with
+  a bare "code 1"), stopping nginx/haproxy before and guaranteeing they
+  start again after, regardless of the renewal's outcome; before the call,
+  it checks whether port 80 is free, so an error names the blocking
+  process instead of a bare "Problem binding to port 80";
+* **issue a new** Let's Encrypt certificate for a domain certbot doesn't
+  know about yet (no wildcard form — `--standalone` only proves ownership
+  of the exact name);
+* **build a PEM for haproxy** from an already-issued lineage — overwriting
+  the specific file and `reload`ing, or writing into a directory
+  `bind ... crt` if one is configured;
+* **self-signed** certificate, when TLS isn't set up at all: RSA
+  2048/3072/4096, multiple names, including wildcard and Unicode
+  (`испытание.рф` → punycode automatically).
+
+All of this takes minutes (a round trip to Let's Encrypt, stopping
+services), so the button doesn't block the UI with a spinner: the
+operation goes to the server in the background, and the window shows a
+live line-by-line log. The window can be closed — nothing on the host
+stops.
+
+Auto-renewal (`NKT_AUTO_RENEW_CERTS=true`) does the same thing on a
+schedule. Keep in mind: this means a background job briefly stops the site
+by itself, with no human involved, on every renewal.
+
+**Cross-checking with the wire.** A file on disk can be healthy — and
+still not what clients actually see: `certbot renew` swapped the file, but
+the service never did a `reload` and is still serving the old certificate
+from memory. The difference is invisible anywhere except the TLS
+connection itself, so on every scan against a real host the app
+**opens a real TLS connection** to the first known address of each
+certificate, with the matching SNI, and compares fingerprints. A
+connection error doesn't count as a mismatch — it's marked "not checked",
+so a network problem doesn't turn into a false accusation against the
+service.
+
+### Management
+
+* **systemd**: `start` / `stop` / `restart` / `reload`, config validation.
+* **docker** and **Podman**: container lifecycle, create and remove — via
+  the Engine API and its own unix socket respectively, on separate pages.
+* **LXD**: containers and virtual machines with one tool
+  (`lxc list --format json`), including `lxc launch` and removal.
+* **libvirt/QEMU**: VM lifecycle via `virsh`, an autostart toggle, removing
+  a definition (disks separately). Creating and editing VMs deliberately
+  didn't get their own API: a domain is defined through the same config
+  editor — the path `/etc/libvirt/qemu/<name>.xml` is recognized
+  automatically, the XML is validated with `virt-xml-validate`, and saving
+  with the "apply" flag registers the domain via `virsh define`.
+* **Configs**: an editor with versioning. Before writing, content is
+  validated by the service itself (`nginx -t`, `haproxy -c -f`,
+  `docker compose config -q`); **if validation fails, the file is
+  automatically restored to its previous state**. Any version can be
+  viewed, compared (unified diff), and rolled back to.
+* **firewall**: adding and removing rules via `ufw`. Editing iptables
+  directly from the UI is deliberately not supported.
+* **Web terminal** (`NKT_TERMINAL_ENABLED=true`): a full interactive shell
+  on the host, right in the browser. Off by default — this is direct shell
+  access, not a bounded action.
+* **OS package updates**: a live `apt-get update && apt-get upgrade` in a
+  terminal window, deliberately without `-y`.
+
+Every change is logged with the user, the outcome, and the command's
+output.
+
+---
+
+## Accounts and passwords
+
+Passwords are stored only in the app's own database (`argon2id`,
+irreversibly) — there's nowhere to recover the "current" password from,
+not even from the database directly. A reset always goes through issuing
+a new one.
+
+```bash
+sudo nkt passwd                      # change the admin password
+sudo nkt passwd ops -role viewer     # create a read-only account
+sudo nkt passwd -random              # generate a password instead of typing one
+sudo nkt users                       # who exists, who logged in when, who's disabled
+echo 'new-password' | sudo nkt passwd ops    # non-interactive, for scripts
+```
+
+`nkt passwd` sets the password directly in the database, without logging
+into an existing session — this is also the fix for "I forgot my
+password and can't log in".
+
+From the web UI: a "Change password" button at the bottom of the sidebar
+(after changing it, every session for that account ends, including the
+current one), and a "Users" page for `admin` — create, change role,
+disable, delete. The page can't reset someone else's forgotten password —
+only `sudo nkt passwd <login>` on the host can. You can't demote, disable,
+or delete your own account — this rules out accidentally losing access.
+The minimum password length everywhere is 10 characters.
+
+Every password change and account creation is logged, tagged
+`cli:<host login>`.
+
+---
+
+## Configuration
+
+Every setting is an `NKT_*` environment variable; the full list with
+explanations is in [deploy/nkt.env.example](deploy/nkt.env.example). The
+essentials:
+
+| Variable | Meaning |
 |---|---|
-| Страница «Фронтенд не собран» | Бинарник собран раньше интерфейса. Выполните `npm run build`, затем **заново** `go build`: `go:embed` вшивает файлы при компиляции |
-| `режим local работает только на Linux` | Боевой режим на Windows и macOS не запускается. Для разработки — `NKT_MODE=fixtures` |
-| `каталог снапшота … не найден` | Включён `fixtures`, а каталога с примерами рядом нет. На боевом хосте нужен `local` (на Linux он и так по умолчанию — значит, переменная задана где-то явно). Для разработки запускайте из корня репозитория или укажите `NKT_FIXTURES_ROOT` |
-| `не удалось создать каталог данных /var/lib/netknownsthat` | Запуск не от root. Либо `sudo`, либо своё расположение через `NKT_DATA_DIR` |
-| `failed to connect to the docker API` | Не запущен Docker |
-| Источники `firewall` и `services` недоступны | Нужен root: `iptables-save` и `systemctl` обычному пользователю не работают. Запускайте через systemd-юнит из `deploy/` |
-| Пароль потерян | `sudo nkt passwd`. Крайний случай — остановить сервис и удалить `/var/lib/netknownsthat/netknownsthat.db` |
-| `bind: address already in use` | Порт занят, задайте другой через `NKT_ADDR` |
-| Правки конфигов отклоняются с `Read-only file system` | Каталог примонтирован только на чтение, либо нет прав на запись в каталог логов, который открывает `nginx -t` |
-| Кнопки неактивны, изменения запрещены | Либо роль `viewer`, либо `NKT_ALLOW_MUTATIONS=false` |
-| В консоли Windows кракозябры | Кодовая страница не UTF-8: `chcp 65001` |
-| После `make build` сломалась нативная сборка фронтенда | `make web` ставит зависимости внутри Linux-контейнера поверх того же каталога, и `node_modules` заполняется linux-сборками. Выполните `npm install` в `web/` заново |
-
-Диагностика хаба — отдельным разделом в [HUB.md](HUB.md).
+| `NKT_MODE` | `local` — read the real host, `fixtures` — a snapshot. Defaults to `local` on Linux, `fixtures` everywhere else |
+| `NKT_DATA_DIR` | Where to store the database and config history. Defaults to `/var/lib/netknownsthat` in `local`, `./data` in `fixtures` |
+| `NKT_ADDR` | Listen address, defaults to `127.0.0.1:8077` |
+| `NKT_ALLOW_MUTATIONS` | `false` puts the whole app into read-only mode |
+| `NKT_COOKIE_SECURE` | `true` by default (the cookie only travels over HTTPS); `false` for plain HTTP, e.g. an SSH tunnel |
+| `NKT_TLS_ENABLED` | `true` — serve HTTPS itself instead of plain HTTP (see [Open it](#4-open-it)), with a self-signed certificate unless `NKT_TLS_CERT`/`NKT_TLS_KEY` are set. `false` by default |
+| `NKT_TLS_HOSTS` | Which names/IPs the generated self-signed certificate should cover. Defaults to `127.0.0.1,::1,<hostname>` |
+| `NKT_TLS_CERT`, `NKT_TLS_KEY` | Your own certificate/key instead of the self-signed one — both must be set together |
+| `NKT_COMPOSE_FILES` | A comma-separated list of compose files |
+| `NKT_PODMAN_SOCKET` | Podman's socket, defaults to `/run/podman/podman.sock` |
+| `NKT_LIBVIRT_URI` | libvirt connection URI, defaults to `qemu:///system` |
+| `NKT_PROBE_INTERVAL` | How often to check availability; a bare number means seconds |
+| `NKT_AUTO_RENEW_CERTS` | `true` — renews certbot certificates on a schedule (`NKT_AUTO_RENEW_INTERVAL`, 6h by default) no later than `NKT_AUTO_RENEW_WITHIN` (30 days) before expiry. `false` by default |
+| `NKT_CERTBOT_TIMEOUT` | How long to wait for `certbot renew` — separate from `NKT_COMMAND_TIMEOUT`, since this is a network call to Let's Encrypt, not a quick command. Defaults to `3m` |
+| `NKT_TERMINAL_ENABLED` | `true` turns on the web terminal — a full shell on the host in the browser, on top of the already-required admin role and `NKT_ALLOW_MUTATIONS=true`. `false` by default for a plain `nkt` and for hub-managed hosts (a separate checkbox per host — see HUB.md); `true` by default for the hub itself (`NKT_MODE=hub`) — that's the same terminal for the "localhost" row, i.e. the same machine the hub is already running on, so it isn't extra access |
+| `NKT_TERMINAL_IDLE_TIMEOUT` | Close the terminal after this long with no input/output — a forgotten tab doesn't hold a shell open forever. Defaults to `30m` |
 
 ---
 
-## Разработка
+## Security
 
-Сборка из исходников, проверочный стенд, тесты и внутреннее устройство
-пакетов — в [DEVELOPMENT.md](DEVELOPMENT.md).
+* Passwords are argon2id (64 MiB, t=3, p=2). Sessions are random,
+  revocable tokens in SQLite; the cookie is `HttpOnly`, `SameSite=Lax`.
+  After five failed attempts, login is blocked with an increasing delay.
+* Roles: `viewer` — read-only, `admin` — changes. Plus a global
+  `NKT_ALLOW_MUTATIONS=false` kill switch.
+* Editing configs is limited to an allowlist of directories (nginx and
+  haproxy roots, the compose files listed, `/etc/libvirt/qemu`). Paths
+  with `..` are rejected.
+* Actions on services and the firewall only accept values from fixed
+  lists — a service name or action can't be substituted into a command.
+* Removing a ufw rule is cross-checked against the exact text the
+  operator saw: numbers shift after every change, and deleting the
+  "wrong" rule can cut off SSH.
+* Optimistic locking on config save, by SHA-256: a file that changed on
+  disk after being opened in the editor won't be silently overwritten.
+* Every mutating action is logged to `audit_log`.
+* The systemd unit in `deploy/` narrows privileges: `ProtectSystem=strict`
+  with an explicit list of writable directories, a trimmed
+  `CapabilityBoundingSet`, `SystemCallFilter=@system-service`.
+
+  **The web terminal, OS package updates, and self-update over the
+  fallback channel are the one deliberate exception.** They run through
+  `systemd-run --pty` in a separate, entirely unrestricted transient unit,
+  rather than as child processes of `nkt` itself: otherwise an interactive
+  root shell, or `apt-get`'s own internal privilege drop (setuid/setgid to
+  `_apt`), would run into the same restrictions that protect the daemon.
+  The daemon's own restrictions exist to limit the blast radius of **its
+  own** compromise, not the actions of an already-authenticated admin who
+  explicitly asked for root access. This only fires when `nkt` is actually
+  running as a unit (`INVOCATION_ID` is in the environment) and
+  `systemd-run` is on PATH.
+
+  `systemd-run` itself needs a live D-Bus/systemd-manager — on a host
+  without one (some minimal images, e.g. Debian 11, don't install dbus by
+  default) it fails with a bus-connection error. The fallback path is
+  `CAP_SYS_ADMIN` in the unit's `CapabilityBoundingSet` and
+  `nsenter --mount` straight into PID 1's namespace, with no D-Bus at all;
+  `RestrictNamespaces` is narrowed to exactly `mnt`, nothing wider is
+  allowed even with that capability. The "Terminal" page reports it if
+  neither path is available, and offers an install button for dbus
+  whenever the `nsenter` path would work.
+
+---
+
+## If something goes wrong
+
+| Symptom | Cause and what to do |
+|---|---|
+| A "frontend not built" page | The binary was built before the UI. Run `npm run build`, then `go build` **again**: `go:embed` bakes the files in at compile time |
+| `production mode only works on Linux` | Production mode doesn't run on Windows or macOS. For development, use `NKT_MODE=fixtures` |
+| `snapshot directory ... not found` | `fixtures` is on, but there's no samples directory next to it. A production host needs `local` (it's already the default on Linux — so the variable is set explicitly somewhere). For development, run from the repo root or set `NKT_FIXTURES_ROOT` |
+| `could not create data directory /var/lib/netknownsthat` | Not running as root. Either `sudo`, or point `NKT_DATA_DIR` somewhere of your own |
+| `failed to connect to the docker API` | Docker isn't running |
+| The `firewall` and `services` sources are unavailable | Root is required: `iptables-save` and `systemctl` don't work for a regular user. Run it through the systemd unit in `deploy/` |
+| Lost the password | `sudo nkt passwd`. As a last resort, stop the service and delete `/var/lib/netknownsthat/netknownsthat.db` |
+| `bind: address already in use` | The port is taken, set a different one with `NKT_ADDR` |
+| Config edits are rejected with `Read-only file system` | The directory is mounted read-only, or there's no write access to the log directory `nginx -t` opens |
+| Buttons are disabled, changes are refused | Either the `viewer` role, or `NKT_ALLOW_MUTATIONS=false` |
+| Garbled characters in the Windows console | The code page isn't UTF-8: run `chcp 65001` |
+| The native frontend build broke after `make build` | `make web` installs dependencies inside a Linux container over the same directory, filling `node_modules` with Linux builds. Run `npm install` again inside `web/` |
+
+Hub troubleshooting has its own section in [HUB.md](HUB.md).
+
+---
+
+## Development
+
+Building from source, the test rig, tests, and the internals of each
+package are covered in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ---
 
 ## API
 
-Всё под `/api`, аутентификация по cookie-сессии. У хаба те же пути
-доступны с префиксом `/api/hosts/{id}/...` — они проксируются на
-соответствующий хост по SSH.
+Everything is under `/api`, authenticated by a cookie session. On the hub,
+the same paths are also available prefixed with `/api/hosts/{id}/...` —
+they're proxied to the matching host over SSH.
 
-| Метод | Путь | Роль | Назначение |
+| Method | Path | Role | Purpose |
 |---|---|---|---|
-| POST | `/auth/login`, `/auth/logout`, `/auth/password` | — / любая | Вход, выход, смена своего пароля |
-| GET | `/overview` | viewer | Сводка для дашборда одним запросом |
-| GET | `/inventory`, `/findings`, `/topology` | viewer | Полный снапшот, проблемы, граф |
-| GET | `/services`, `/containers`, `/firewall` | viewer | Состояние сервисов, контейнеров, правил |
+| POST | `/auth/login`, `/auth/logout`, `/auth/password` | — / any | Log in, log out, change your own password |
+| GET | `/overview` | viewer | Dashboard summary in one request |
+| GET | `/inventory`, `/findings`, `/topology` | viewer | Full snapshot, findings, graph |
+| GET | `/services`, `/containers`, `/firewall` | viewer | Service, container, and rule state |
 | GET | `/podman/containers`, `/lxd/instances`, `/vms` | viewer | Podman, LXD, libvirt/QEMU |
-| GET | `/certificates` | viewer | Сертификаты, сроки и состояние автообновления |
-| GET | `/configs`, `/configs/file`, `/configs/versions*` | viewer | Файлы, содержимое, история, diff |
-| GET | `/monitor/targets`, `/monitor/heatmap`, `/monitor/outages`, `/monitor/usage*` | viewer | Доступность и нагрузка |
-| GET | `/audit`, `/monitor/jobs`, `/snapshots` | viewer | Журнал, фоновые задачи, история сканов |
-| GET | `/updates/status` | viewer | Идёт ли сейчас обновление пакетов ОС |
-| POST | `/inventory/refresh` | admin | Пересканировать хост |
+| GET | `/certificates` | viewer | Certificates, expiry, and auto-renewal state |
+| GET | `/configs`, `/configs/file`, `/configs/versions*` | viewer | Files, content, history, diff |
+| GET | `/monitor/targets`, `/monitor/heatmap`, `/monitor/outages`, `/monitor/usage*` | viewer | Availability and usage |
+| GET | `/audit`, `/monitor/jobs`, `/snapshots` | viewer | Audit log, background jobs, scan history |
+| GET | `/updates/status` | viewer | Whether an OS package update is currently running |
+| POST | `/inventory/refresh` | admin | Rescan the host |
 | POST | `/services/{name}/{action}` | admin | start / stop / restart / reload |
-| POST | `/containers/{name}/{action}` | admin | Управление контейнером docker |
+| POST | `/containers/{name}/{action}` | admin | Manage a docker container |
 | POST/DELETE | `/podman/containers*`, `/lxd/instances*`, `/vms/{name}/*` | admin | Podman, LXD, libvirt |
-| PUT | `/configs/file` | admin | Правка с проверкой и автооткатом |
-| POST | `/configs/versions/{id}/rollback` | admin | Откат к версии |
-| POST/DELETE | `/firewall/rules` | admin | Добавить / удалить правило ufw |
-| POST | `/certificates/self-signed`, `/certificates/issue` | admin | Выпустить сертификат |
-| GET/POST/PATCH/DELETE | `/users*` | admin | Управление учётными записями |
-| WS | `/terminal/ws`, `/updates/ws` | admin | Веб-терминал и обновление пакетов ОС |
+| PUT | `/configs/file` | admin | Edit, with validation and auto-rollback |
+| POST | `/configs/versions/{id}/rollback` | admin | Roll back to a version |
+| POST/DELETE | `/firewall/rules` | admin | Add / remove a ufw rule |
+| POST | `/certificates/self-signed`, `/certificates/issue` | admin | Issue a certificate |
+| GET/POST/PATCH/DELETE | `/users*` | admin | Account management |
+| WS | `/terminal/ws`, `/updates/ws` | admin | Web terminal and OS package updates |
 
 ---
 
-## Ограничения
+## Limitations
 
-* Каждый `nkt` управляет одним хостом: своя карта, свои конфиги, своя
-  база. Несколько хостов из одного места — только через хаб,
-  проксированием к каждому отдельно, а не общей моделью данных.
-* Пишутся только правила `ufw`; прямая правка iptables не поддерживается
-  намеренно. Из бэкендов поддержаны iptables/ip6tables и ufw — чистый
-  `nftables` (без слоя iptables-nft) не разбирается.
-* Правило `declared-not-listening` требует доступного `ss`. Оно молчит,
-  если таблица сокетов не подтверждает ни одного объявленного порта —
-  значит, читается чужое сетевое пространство имён. Опубликованные порты
-  контейнеров этим правилом не проверяются вовсе: при
-  `userland-proxy: false` docker пробрасывает их чистым DNAT, и слушателя
-  на хосте не существует.
-* Проверка конфигурации в режиме `fixtures` всегда «успешна» — ветка
-  отказа проверяется на стенде или на настоящем хосте.
-* Из веб-серверов и балансировщиков поддержаны nginx и haproxy. Caddy,
-  Traefik, Envoy — нужен новый файл в `internal/parse`.
-* Из виртуализации: классический LXC (`lxc-ls`/`lxc-info`, без JSON) не
-  поддержан — только LXD. Podman Quadlet не разбирается — виден только
-  рантайм-список контейнеров.
-* Сверка «что реально отдаётся на сокете» — один TLS-дозвон на сертификат,
-  к первому известному адресу. Если несколько сертификатов
-  мультиплексируются по SNI на одном порту, проверяется только основной
-  (`Sites[0]`). В режиме `fixtures` не выполняется вовсе.
-* Самоподписанный сертификат не отменяет предупреждение браузера — это
-  стопгэп для внутренних и тестовых сервисов. Приложение не редактирует
-  конфигурацию автоматически: директивы нужно вставить руками через
-  редактор, где правка проходит проверку сервисом с автооткатом.
-* Обновление пакетов ОС поддержано только для Debian/Ubuntu (`apt-get`).
+* Each `nkt` manages one host: its own map, its own configs, its own
+  database. Multiple hosts from one place only happens through the hub,
+  by proxying to each one separately, not a shared data model.
+* Only `ufw` rules are written; editing iptables directly isn't
+  supported, deliberately. Supported backends are iptables/ip6tables and
+  ufw — plain `nftables` (with no iptables-nft layer) isn't parsed.
+* The `declared-not-listening` rule needs `ss` to be available. It stays
+  silent if the socket table doesn't confirm even one declared port —
+  that means it's reading a different network namespace. Published
+  container ports aren't checked by this rule at all: with
+  `userland-proxy: false`, docker forwards them via plain DNAT, and no
+  listener exists on the host at all.
+* Config validation in `fixtures` mode always "succeeds" — the failure
+  path is tested on the test rig or a real host.
+* Supported web servers and load balancers are nginx and haproxy. Caddy,
+  Traefik, Envoy — would need a new file in `internal/parse`.
+* Of virtualization tools: classic LXC (`lxc-ls`/`lxc-info`, no JSON) isn't
+  supported — only LXD. Podman Quadlet isn't parsed — only the runtime
+  container list is visible.
+* Cross-checking "what the socket actually serves" is one TLS dial per
+  certificate, to its first known address. If several certificates are
+  multiplexed by SNI on one port, only the primary one is checked
+  (`Sites[0]`). Not run at all in `fixtures` mode.
+* A self-signed certificate doesn't remove the browser warning — it's a
+  stopgap for internal and test services. The app doesn't edit the config
+  automatically: the directives need to be pasted in by hand through the
+  editor, where the edit goes through the service's own validation with
+  auto-rollback.
+* OS package updates are only supported for Debian/Ubuntu (`apt-get`).

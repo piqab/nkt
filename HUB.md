@@ -8,7 +8,7 @@
 хосте, просто с выбором хоста наверху.
 
 Подробное описание архитектуры и API — в
-[README.md](README.md#хаб-много-хостов-из-одного-места). Этот файл — только
+[README.md](README.md#hub-many-hosts-from-one-place). Этот файл — только
 про то, как запустить.
 
 По умолчанию — обычный systemd-сервис, как и у самого `nkt` (раздел 1
@@ -93,7 +93,7 @@ curl -s http://127.0.0.1:8443/api/health
 Не нужен ни `git clone`, ни локальная сборка — образ публикуется в GHCR под
 каждый релиз. Команды и манифест (`deploy/docker-compose.hub.release.yml`,
 `deploy/k8s/hub.yaml`) — в README, раздел
-[«Хаб в контейнере»](README.md#хаб-в-контейнере-docker-compose-и-kubernetes).
+[«Хаб в контейнере»](README.md#launch-the-hub-in-docker).
 
 ## 3. Первый вход
 
