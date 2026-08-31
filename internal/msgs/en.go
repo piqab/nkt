@@ -45,6 +45,7 @@ var enCatalog = map[string]string{
 	"pkgInstall.dbusAlreadyAvailable":      "D-Bus is already available",
 	"pkgInstall.dbusManualOnly":            "automatic install isn't available (needs CAP_SYS_ADMIN in the systemd unit and nsenter on the host) — install dbus by hand",
 	"pkgInstall.tmuxAlreadyInstalled":      "tmux is already installed",
+	"pkgInstall.btopAlreadyInstalled":      "btop is already installed",
 	"pkgInstall.ufwAlreadyInstalled":       "ufw is already installed",
 	"pkgInstall.firewalldAlreadyInstalled": "firewalld is already installed",
 	"pkgInstall.unknownService":            "unknown service: %s",
