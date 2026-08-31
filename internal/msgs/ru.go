@@ -44,6 +44,7 @@ var ruCatalog = map[string]string{
 	"pkgInstall.dbusAlreadyAvailable":      "D-Bus уже доступен",
 	"pkgInstall.dbusManualOnly":            "автоматическая установка недоступна (нужен CAP_SYS_ADMIN в systemd-юните и nsenter на хосте) — установите dbus вручную",
 	"pkgInstall.tmuxAlreadyInstalled":      "tmux уже установлен",
+	"pkgInstall.btopAlreadyInstalled":      "btop уже установлен",
 	"pkgInstall.ufwAlreadyInstalled":       "ufw уже установлен",
 	"pkgInstall.firewalldAlreadyInstalled": "firewalld уже установлен",
 	"pkgInstall.unknownService":            "неизвестный сервис: %s",

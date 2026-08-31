@@ -100,11 +100,18 @@ func (s *Server) Handler() http.Handler {
 		// of which group registered it.
 		hubWSPaths := []string{
 			"/terminal/ws",
+			"/terminal/btop/ws",
 			"/updates/ws",
 			"/firewall/ufw-install/ws",
 			"/firewall/firewalld-install/ws",
 			"/system/dbus-install/ws",
 			"/system/tmux-install/ws",
+			"/system/btop-install/ws",
+			"/services/{name}/install/ws",
+			"/system/packages/install/ws",
+			"/system/packages/remove/ws",
+			"/system/apt/packages/{name}/install/ws",
+			"/system/apt/packages/{name}/remove/ws",
 		}
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.RequireAuth)

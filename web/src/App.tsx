@@ -428,7 +428,7 @@ function Shell({
             <Route path="/vulnerabilities" element={<Vulnerabilities me={me} />} />
             <Route path="/topology" element={<TopologyPage />} />
             <Route path="/availability" element={<Availability />} />
-            <Route path="/usage" element={<Usage />} />
+            <Route path="/usage" element={<Usage me={me} />} />
             <Route path="/configs" element={<Configs me={me} />} />
             <Route path="/services" element={<Services me={me} />} />
             <Route path="/containers" element={<Containers me={me} />} />
