@@ -281,9 +281,9 @@ func (s *Server) runVulnScan(ctx context.Context) {
 	// for as long as this process keeps running — just logged so a
 	// persistently broken kv table doesn't fail silently forever.
 	if encoded, err := json.Marshal(result); err != nil {
-		s.log.Warn("не удалось сериализовать результат сканирования уязвимостей", "error", err)
+		s.log.Warn("could not serialize vulnerability scan result", "error", err)
 	} else if err := s.db.KVSet(ctx, vulnScanKVKey, string(encoded)); err != nil {
-		s.log.Warn("не удалось сохранить результат сканирования уязвимостей", "error", err)
+		s.log.Warn("could not save vulnerability scan result", "error", err)
 	}
 
 	s.vuln.mu.Lock()

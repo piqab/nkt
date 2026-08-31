@@ -87,7 +87,7 @@ func (m *Manager) runTunnelDialer(ctx context.Context, hostID int64) {
 	for ctx.Err() == nil {
 		connected, err := m.tunnelDialOnce(ctx, hostID)
 		if err != nil && ctx.Err() == nil {
-			m.log.Debug("резервный канал: соединение с хостом не установлено или прервано", "host_id", hostID, "err", err)
+			m.log.Debug("fallback channel: connection to host not established or dropped", "host_id", hostID, "err", err)
 		}
 		if connected {
 			backoff = time.Second
@@ -155,16 +155,16 @@ func (m *Manager) tunnelDialOnce(ctx context.Context, hostID int64) (connected b
 		// is very likely still a perfectly healthy SSH connection.
 		var mismatch *tunnelCertMismatchError
 		if errors.As(err, &mismatch) {
-			m.log.Warn("резервный канал: сертификат хоста не совпал с привязанным — возможна подмена соединения, либо хост был переустановлен без сброса привязки",
+			m.log.Warn("fallback channel: host certificate did not match the pinned one — possible connection spoofing, or the host was reinstalled without clearing the pin",
 				"host_id", hostID, "host", host.Name, "err", mismatch)
 		}
 		return false, err
 	}
 	if len(host.TunnelCertSHA256) == 0 && len(fingerprint) > 0 {
 		if err := m.db.SetHostTunnelCertSHA256(ctx, hostID, fingerprint); err != nil {
-			m.log.Warn("резервный канал: не удалось сохранить привязку сертификата хоста", "host_id", hostID, "err", err)
+			m.log.Warn("fallback channel: could not save host certificate pin", "host_id", hostID, "err", err)
 		} else {
-			m.log.Info("резервный канал: привязал сертификат хоста при первом подключении", "host_id", hostID, "host", host.Name)
+			m.log.Info("fallback channel: pinned host certificate on first connection", "host_id", hostID, "host", host.Name)
 		}
 	}
 	if err := tunnel.WriteToken(conn, string(token)); err != nil {
@@ -182,12 +182,12 @@ func (m *Manager) tunnelDialOnce(ctx context.Context, hostID int64) (connected b
 	m.registerRelay(hostID, session)
 	defer m.dropRelay(hostID, session)
 
-	m.log.Info("резервный канал: подключился к хосту", "host_id", hostID, "host", host.Name)
+	m.log.Info("fallback channel: connected to host", "host_id", hostID, "host", host.Name)
 	select {
 	case <-ctx.Done():
 		return true, nil
 	case <-session.CloseChan():
-		m.log.Info("резервный канал: соединение с хостом разорвано", "host_id", hostID, "host", host.Name)
+		m.log.Info("fallback channel: connection to host closed", "host_id", hostID, "host", host.Name)
 		return true, nil
 	}
 }

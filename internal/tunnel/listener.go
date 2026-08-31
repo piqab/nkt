@@ -74,7 +74,7 @@ func Run(ctx context.Context, cfg ListenerConfig) error {
 			if ctx.Err() != nil {
 				return nil
 			}
-			cfg.Log.Warn("резервный канал: ошибка приёма соединения", "err", err)
+			cfg.Log.Warn("fallback channel: error accepting connection", "err", err)
 			continue
 		}
 		go handleConn(ctx, cfg, conn, attempts)
@@ -104,7 +104,7 @@ func handleConn(ctx context.Context, cfg ListenerConfig, conn net.Conn, attempts
 	}
 	if subtle.ConstantTimeCompare([]byte(token), []byte(cfg.Token)) != 1 {
 		attempts.Fail(remote)
-		cfg.Log.Warn("резервный канал: неверный токен", "remote", remote)
+		cfg.Log.Warn("fallback channel: invalid token", "remote", remote)
 		return
 	}
 	attempts.Clear(remote)
@@ -117,12 +117,12 @@ func handleConn(ctx context.Context, cfg ListenerConfig, conn net.Conn, attempts
 	wrapped := wrappedConn{Reader: reader, Writer: conn, Closer: conn}
 	session, err := yamux.Server(wrapped, Config())
 	if err != nil {
-		cfg.Log.Warn("резервный канал: настройка мультиплексирования", "remote", remote, "err", err)
+		cfg.Log.Warn("fallback channel: multiplexing setup", "remote", remote, "err", err)
 		return
 	}
 	defer session.Close()
 
-	cfg.Log.Info("резервный канал: хаб подключился", "remote", remote)
+	cfg.Log.Info("fallback channel: hub connected", "remote", remote)
 	go func() {
 		<-ctx.Done()
 		_ = session.Close()
@@ -131,7 +131,7 @@ func handleConn(ctx context.Context, cfg ListenerConfig, conn net.Conn, attempts
 	for {
 		stream, err := session.Accept()
 		if err != nil {
-			cfg.Log.Info("резервный канал: хаб отключился", "remote", remote)
+			cfg.Log.Info("fallback channel: hub disconnected", "remote", remote)
 			return
 		}
 		go pipeStream(cfg, stream)
@@ -163,7 +163,7 @@ func pipeStream(cfg ListenerConfig, stream net.Conn) {
 	defer stream.Close()
 	local, err := net.DialTimeout("tcp", cfg.LocalAddr, 5*time.Second)
 	if err != nil {
-		cfg.Log.Warn("резервный канал: не удалось подключиться к локальному nkt", "addr", cfg.LocalAddr, "err", err)
+		cfg.Log.Warn("fallback channel: could not connect to local nkt", "addr", cfg.LocalAddr, "err", err)
 		return
 	}
 	defer local.Close()
