@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
-import type { Me } from '../types'
+import type { Me, PackageUpdate } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 import CommonPackagesCard from '../components/CommonPackagesCard'
 import PackageInstallModal from '../components/PackageInstallModal'
+import UpdateModal from '../components/UpdateModal'
 
 interface AptSearchResult {
   name: string
@@ -34,6 +35,49 @@ const SEARCH_DEBOUNCE_MS = 400
 export default function Packages({ me }: { me: Me }) {
   const { t } = useTranslation()
   const canUse = me.is_admin && me.allow_mutations
+
+  // --- OS package updates (apt-get dist-upgrade) ---
+  const updates = useApi<{ available: boolean; packages: PackageUpdate[]; reboot_required: boolean }>(
+    '/system/apt/updates',
+    30_000,
+  )
+  const pkgUpdates = updates.data?.packages ?? []
+  const pkgAvailable = updates.data?.available ?? false
+  // Polled independently of whether the update dialog is open — otherwise
+  // there's no way to tell, from the button alone, whether "обновить"
+  // would reattach to an apt-get already running (started earlier, or by
+  // someone else) or start a brand new one; both look identical at first
+  // glance (a black terminal with a spinner) once the dialog opens.
+  const updateStatus = useApi<{ active: boolean; finished: boolean; succeeded: boolean }>('/updates/status', 5_000)
+  const updateActive = updateStatus.data?.active ?? false
+  const [updating, setUpdating] = useState(false)
+  const [updateOutcome, setUpdateOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
+  const [rescanningAfterUpdate, setRescanningAfterUpdate] = useState(false)
+
+  /**
+   * Called the moment the update session's socket closes, i.e. as soon as
+   * apt actually exits. /system/apt/updates serves the last inventory
+   * scan, so its package list would still show the versions apt just
+   * replaced until something rescans the host — only worth doing for a
+   * successful run; a failed one leaves the previous state in place and
+   * its error on screen instead.
+   */
+  async function handleUpdateFinished() {
+    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>('/updates/status').catch(() => null)
+    updateStatus.reload()
+    if (fresh?.succeeded) {
+      setUpdateOutcome({ ok: true })
+      setRescanningAfterUpdate(true)
+      try {
+        await api('/inventory/refresh', { method: 'POST' })
+      } finally {
+        setRescanningAfterUpdate(false)
+      }
+      await updates.reload()
+    } else {
+      setUpdateOutcome({ ok: false, exitCode: fresh?.exit_code })
+    }
+  }
 
   // --- search any package ---
   const [query, setQuery] = useState('')
@@ -119,6 +163,40 @@ export default function Packages({ me }: { me: Me }) {
       </div>
 
       {!canUse && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}
+
+      {pkgAvailable && (
+        <Card title={t('packages.updatesTitle')}>
+          {updateActive ? (
+            <Button
+              type="primary"
+              disabled={!canUse}
+              onClick={() => {
+                setUpdateOutcome(null)
+                setUpdating(true)
+              }}
+            >
+              {t('packages.updateRunningOpen')}
+            </Button>
+          ) : (
+            <Button
+              type={pkgUpdates.length > 0 ? 'primary' : 'default'}
+              disabled={!canUse || pkgUpdates.length === 0}
+              onClick={() => {
+                if (!window.confirm(t('packages.confirmUpdate', { count: pkgUpdates.length }))) return
+                setUpdateOutcome(null)
+                setUpdating(true)
+              }}
+            >
+              {pkgUpdates.length > 0 ? t('packages.updateCount', { count: pkgUpdates.length }) : t('packages.noUpdates')}
+            </Button>
+          )}
+          {updates.data?.reboot_required && (
+            <div style={{ marginTop: '0.75rem' }}>
+              <Banner kind="warn">{t('overview.rebootRequired')}</Banner>
+            </div>
+          )}
+        </Card>
+      )}
 
       <CommonPackagesCard canUse={canUse} />
 
@@ -229,6 +307,18 @@ export default function Packages({ me }: { me: Me }) {
           onFinished={handleRemoveFinished}
           outcome={removeOutcome}
           action="remove"
+        />
+      )}
+      {updating && (
+        <UpdateModal
+          packages={pkgUpdates}
+          outcome={updateOutcome}
+          rescanning={rescanningAfterUpdate}
+          onFinished={handleUpdateFinished}
+          onClose={() => {
+            setUpdating(false)
+            updates.reload()
+          }}
         />
       )}
     </>

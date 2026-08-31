@@ -207,6 +207,16 @@ export default function Hosts({
   const [notifyOn, setNotifyOn] = useState(() => notificationsEnabled())
   const [busyServiceIds, setBusyServiceIds] = useState<Set<number>>(new Set())
   const [bulkBusy, setBulkBusy] = useState<'stop' | 'start' | null>(null)
+  // Drives "Обновить всё": the hosts still waiting their turn (shrinks by
+  // one every time the shared job/jobStatus state above clears — see the
+  // two effects below), and the outcome of each host already processed,
+  // for the combined summary notice once the queue empties. null means no
+  // batch update is running; an empty array (not null) means the last host
+  // is still being recorded/closed, distinct from "never started" — see
+  // the completion effect's own guard.
+  const [updateAllQueue, setUpdateAllQueue] = useState<HubHost[] | null>(null)
+  const [updateAllResults, setUpdateAllResults] = useState<{ name: string; ok: boolean }[]>([])
+  const [updateAllTotal, setUpdateAllTotal] = useState(0)
   const [importing, setImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
   // Set when "экспорт с ключом" is clicked — opens ExportPasswordModal
@@ -327,6 +337,62 @@ export default function Hosts({
       return false
     }
   }
+
+  /** Kicks off "Обновить всё": every non-local host that isOutdated says is
+   * behind the hub's own build. Deliberately sequential (see the two
+   * effects below), not Promise.all like bulkSetServiceRunning — updating
+   * several hosts' running nkt binary at once is riskier to watch/debug
+   * than starting/stopping a service, so this walks the queue one host's
+   * install-log modal at a time instead. */
+  function updateAllOutdated() {
+    const targets = (hosts ?? []).filter((h) => h.id !== LOCAL_HOST_ID && isOutdated(h, hubVersion))
+    if (targets.length === 0) return
+    if (!window.confirm(t('hosts.confirmUpdateAll', { count: targets.length }))) return
+    setNotice(null)
+    setUpdateAllResults([])
+    setUpdateAllTotal(targets.length)
+    setUpdateAllQueue(targets)
+  }
+
+  // Advances the queue: fires whenever it changes, or whenever `job`
+  // clears (the completion effect below calls closeJobModal() once a
+  // host's install finishes, which is what actually unblocks this). Popping
+  // the next host *before* startInstall resolves means a host whose
+  // startInstall call itself fails synchronously (network error, or the
+  // foreign-install confirm being declined) still advances the queue —
+  // recorded as a failure in the .then() below, not left stuck forever.
+  useEffect(() => {
+    if (updateAllQueue === null || job) return
+    if (updateAllQueue.length === 0) {
+      const failed = updateAllResults.filter((r) => !r.ok).length
+      setNotice({
+        kind: failed > 0 ? 'error' : 'info',
+        text: t('hosts.bulkUpdateFinished', { total: updateAllResults.length, failed }),
+      })
+      setUpdateAllQueue(null)
+      setUpdateAllTotal(0)
+      return
+    }
+    const [next, ...rest] = updateAllQueue
+    setUpdateAllQueue(rest)
+    void startInstall(next).then((started) => {
+      if (!started) setUpdateAllResults((prev) => [...prev, { name: next.name, ok: false }])
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [updateAllQueue, job])
+
+  // Records the just-finished host's outcome and closes its modal — which
+  // clears `job`, letting the effect above pick the next one. Only active
+  // while a batch is actually running (updateAllQueue !== null, including
+  // the empty-array "last host still settling" state — see its own
+  // declaration comment), so a manual single-host update never trips this.
+  useEffect(() => {
+    if (updateAllQueue === null || !jobStatus?.done) return
+    const finishedHost = hosts?.find((h) => h.id === installHostId)
+    setUpdateAllResults((prev) => [...prev, { name: finishedHost?.name ?? '', ok: !jobStatus.error }])
+    closeJobModal()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobStatus])
 
   /** "открыть" on a host whose nkt_version trails the hub's own: the
    * dashboard it would open into is for a build that's already known to be
@@ -746,6 +812,8 @@ export default function Hosts({
     },
   ]
 
+  const outdatedCount = (hosts ?? []).filter((h) => h.id !== LOCAL_HOST_ID && isOutdated(h, hubVersion)).length
+
   return (
     <>
       <div className="page-head">
@@ -759,13 +827,25 @@ export default function Hosts({
           <Button type="primary" onClick={() => setCreatingHost(true)}>
             {t('hosts.addHost')}
           </Button>
-          <Button loading={bulkBusy === 'start'} disabled={bulkBusy === 'stop'} onClick={() => bulkSetServiceRunning(true)}>
+          <Button
+            type={outdatedCount > 0 ? 'primary' : 'default'}
+            loading={updateAllQueue !== null}
+            disabled={outdatedCount === 0 || bulkBusy !== null}
+            onClick={updateAllOutdated}
+          >
+            {outdatedCount > 0 ? t('hosts.updateAllCount', { count: outdatedCount }) : t('hosts.updateAllNone')}
+          </Button>
+          <Button
+            loading={bulkBusy === 'start'}
+            disabled={bulkBusy === 'stop' || updateAllQueue !== null}
+            onClick={() => bulkSetServiceRunning(true)}
+          >
             {t('hosts.startAll')}
           </Button>
           <Button
             danger
             loading={bulkBusy === 'stop'}
-            disabled={bulkBusy === 'start'}
+            disabled={bulkBusy === 'start' || updateAllQueue !== null}
             onClick={() => bulkSetServiceRunning(false)}
           >
             {t('hosts.stopAll')}
@@ -875,7 +955,15 @@ export default function Hosts({
 
       {job && (
         <Modal
-          title={t('hosts.installTitle', { name: installingHost?.name ?? t('hosts.installTitleFallback') })}
+          title={
+            updateAllQueue !== null
+              ? t('hosts.installTitleBatch', {
+                  name: installingHost?.name ?? t('hosts.installTitleFallback'),
+                  current: updateAllResults.length + 1,
+                  total: updateAllTotal,
+                })
+              : t('hosts.installTitle', { name: installingHost?.name ?? t('hosts.installTitleFallback') })
+          }
           onClose={closeJobModal}
           maskClosable={false}
         >

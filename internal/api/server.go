@@ -180,6 +180,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/packages/remove/status", s.handleCommonPackagesRemoveStatus)
 			r.Get("/system/apt/search", s.handleAptSearch)
 			r.Get("/system/apt/installed", s.handleAptInstalled)
+			r.Get("/system/apt/updates", s.handleAptUpdates)
 			r.Get("/system/apt/packages/{name}/install/status", s.handleAptInstallStatus)
 			r.Get("/system/apt/packages/{name}/remove/status", s.handleAptRemoveStatus)
 			r.Get("/vulnerabilities", s.handleVulnerabilities)

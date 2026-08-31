@@ -6,7 +6,6 @@ import { api, useApi } from '../api'
 import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative } from '../components/ui'
-import UpdateModal from '../components/UpdateModal'
 import i18n from '../i18n'
 
 // Module-level column builders take t() as an argument rather than calling
@@ -82,19 +81,6 @@ export default function OverviewPage({ me }: { me: Me }) {
   const { data, error, loading, reload } = useApi<Overview>('/overview', 60_000)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const [updating, setUpdating] = useState(false)
-  const [updateOutcome, setUpdateOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
-  // Polled independently of whether the update dialog is open — otherwise
-  // there's no way to tell, from the button alone, whether "обновить"
-  // would reattach to an apt-get already running (started earlier, or by
-  // someone else) or start a brand new one; both look identical at first
-  // glance (a black terminal with a spinner) once the dialog opens.
-  const { data: updateStatus, reload: reloadUpdateStatus } = useApi<{
-    active: boolean
-    finished: boolean
-    succeeded: boolean
-  }>('/updates/status', 5_000)
-  const updateActive = updateStatus?.active ?? false
 
   async function rescan(successNotice = t('common.hostRescanned')) {
     setBusy(true)
@@ -110,26 +96,6 @@ export default function OverviewPage({ me }: { me: Me }) {
     }
   }
 
-  /**
-   * Called the moment the update session's socket closes, i.e. as soon as
-   * apt actually exits. A plain reload() would not be enough: /overview
-   * serves the last inventory scan, so the package list would still show
-   * the versions apt just replaced — which reads as "the upgrade never
-   * finished" rather than "nothing rescanned the host yet". Only a
-   * successful run is worth rescanning for; a failed one leaves the
-   * previous state in place and its error on screen instead.
-   */
-  async function handleUpdateFinished() {
-    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>('/updates/status').catch(() => null)
-    reloadUpdateStatus()
-    if (fresh?.succeeded) {
-      setUpdateOutcome({ ok: true })
-      await rescan(t('overview.packagesUpdatedRescanned'))
-    } else {
-      setUpdateOutcome({ ok: false, exitCode: fresh?.exit_code })
-    }
-  }
-
   if (loading && !data) return <Loading what={t('overview.what')} />
   if (error && !data) return <ErrorNote error={error} />
   if (!data) return null
@@ -140,8 +106,6 @@ export default function OverviewPage({ me }: { me: Me }) {
   const pkgSource = data.sources.find((s) => s.name === 'packages')
   const pkgAvailable = pkgSource?.available ?? false
   const pkgUpdates = data.package_updates?.packages ?? []
-  const canUpdate = me.is_admin && me.allow_mutations && pkgAvailable
-  const canReopenUpdate = me.is_admin && me.allow_mutations
 
   return (
     <>
@@ -158,32 +122,6 @@ export default function OverviewPage({ me }: { me: Me }) {
           </p>
         </div>
         <div className="row">
-          {updateActive
-            ? canReopenUpdate && (
-                <Button
-                  type="primary"
-                  onClick={() => {
-                    setUpdateOutcome(null)
-                    setUpdating(true)
-                  }}
-                >
-                  {t('overview.updateRunningOpen')}
-                </Button>
-              )
-            : canUpdate && (
-                <Button
-                  type={pkgUpdates.length > 0 ? 'primary' : 'default'}
-                  disabled={pkgUpdates.length === 0}
-                  onClick={() => {
-                    if (window.confirm(t('overview.confirmUpdate', { count: pkgUpdates.length }))) {
-                      setUpdateOutcome(null)
-                      setUpdating(true)
-                    }
-                  }}
-                >
-                  {pkgUpdates.length > 0 ? t('overview.updateCount', { count: pkgUpdates.length }) : t('overview.noUpdates')}
-                </Button>
-              )}
           {me.is_admin && (
             <Button onClick={() => rescan()} loading={busy}>
               {busy ? t('common.scanning') : t('common.rescan')}
@@ -328,19 +266,6 @@ export default function OverviewPage({ me }: { me: Me }) {
           </div>
         </Card>
       </div>
-
-      {updating && (
-        <UpdateModal
-          packages={pkgUpdates}
-          outcome={updateOutcome}
-          rescanning={busy}
-          onFinished={handleUpdateFinished}
-          onClose={() => {
-            setUpdating(false)
-            reload()
-          }}
-        />
-      )}
     </>
   )
 }
