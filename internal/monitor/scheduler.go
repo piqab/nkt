@@ -106,13 +106,13 @@ func (s *Scheduler) Start(ctx context.Context, wg *sync.WaitGroup) {
 		n, err := BackfillDemoHistory(ctx, s.db, 14)
 		if n > 0 || err != nil {
 			s.record("demo-backfill", 0, started, n, err)
-			s.log.Info("в режиме снапшота засеяна синтетическая история",
-				"rows", n, "note", "данные вымышленные, помечены как simulated")
+			s.log.Info("seeded synthetic history in fixtures mode",
+				"rows", n, "note", "data is fabricated, marked as simulated")
 		}
 	}
 
 	if !s.cfg.SchedulerEnabled {
-		s.log.Info("планировщик отключён (NKT_SCHEDULER_ENABLED=false)")
+		s.log.Info("scheduler disabled (NKT_SCHEDULER_ENABLED=false)")
 		return
 	}
 
@@ -136,7 +136,7 @@ func (s *Scheduler) Start(ctx context.Context, wg *sync.WaitGroup) {
 	if s.cfg.AutoRenewCerts && s.cfg.AllowMutations {
 		s.every(ctx, wg, "cert-renew", s.cfg.AutoRenewCertsInterval, s.certRenewer.RunOnce)
 	} else if s.cfg.AutoRenewCerts {
-		s.log.Warn("NKT_AUTO_RENEW_CERTS включён, но NKT_ALLOW_MUTATIONS=false — задача не запущена")
+		s.log.Warn("NKT_AUTO_RENEW_CERTS is on, but NKT_ALLOW_MUTATIONS=false — job not started")
 	}
 }
 
