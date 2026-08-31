@@ -15,8 +15,15 @@ import (
 	"github.com/althq/netknownsthat/internal/control"
 	"github.com/althq/netknownsthat/internal/inventory"
 	"github.com/althq/netknownsthat/internal/monitor"
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
+
+// tuiLangKey is the internal/store KV key the TUI's language choice is
+// persisted under — the same generic KVGet/KVSet mechanism
+// internal/monitor already uses for a log-tailer position and the demo
+// backfill flag, not a new table/column.
+const tuiLangKey = "tui_lang"
 
 // screen is one page of the interface.
 type screen interface {
@@ -52,6 +59,14 @@ type Deps struct {
 	// simulation screen; in normal use this stays nil and tcell picks the
 	// real terminal.
 	Screen tcell.Screen
+
+	// Lang picks the TUI's display language up front, skipping both the
+	// tuiLangKey DB lookup and the first-launch prompt — tests set this
+	// explicitly (msgs.RU, matching every existing fixture assertion) so
+	// they never need to script an answer to a prompt they don't expect.
+	// Left empty in normal use: Run resolves it from the DB, or prompts
+	// and persists the answer if this is genuinely the first launch.
+	Lang msgs.Lang
 }
 
 // App is the terminal application.
@@ -72,31 +87,68 @@ type App struct {
 	editing bool
 	// busy counts operations in flight, for the header indicator.
 	busy int
+	// bootstrapping is true from the moment the "loading host state" status
+	// line is first set until the first refreshAll actually completes —
+	// replaces a substring check against that status line's own (now
+	// translatable, so no longer a stable match target) text.
+	bootstrapping bool
 }
 
 // Run starts the terminal interface and blocks until the user quits.
 func Run(ctx context.Context, deps Deps) error {
 	a := &App{Deps: deps, tv: tview.NewApplication(), actor: actorName()}
 
+	// A caller-supplied Lang (only ever set by tests) skips both the DB
+	// lookup and the first-launch prompt below — see Deps.Lang's own doc
+	// comment. Otherwise, a language chosen on a previous run is
+	// persisted under tuiLangKey; nothing there means this really is the
+	// first launch, and promptLang below asks and saves the answer before
+	// the interface's first real screen shows.
+	langKnown := a.Lang != ""
+	if !langKnown {
+		if raw, ok, err := a.DB.KVGet(ctx, tuiLangKey); err == nil && ok {
+			a.Lang = msgs.ParseLang(raw)
+			langKnown = true
+		}
+	}
+	if a.Lang == "" {
+		// Transient default: only ever visibly used for the brief instant
+		// before promptLang's own SetDoneFunc overwrites it, since nothing
+		// else is on screen yet at this point.
+		a.Lang = msgs.DefaultLang
+	}
+
 	a.header = tview.NewTextView().SetDynamicColors(true)
 	a.status = tview.NewTextView().SetDynamicColors(true)
 	a.nav = tview.NewTextView().SetDynamicColors(true)
 	a.pages = tview.NewPages()
 
-	a.screens = []screen{
-		newOverviewScreen(a),
-		newFindingsScreen(a),
-		newMapScreen(a),
-		newAvailabilityScreen(a),
-		newUsageScreen(a),
-		newConfigsScreen(a),
-		newServicesScreen(a),
-		newFirewallScreen(a),
-		newCertsScreen(a),
-		newAuditScreen(a),
+	// Screens carry chrome (panel/table titles) that each constructor sets
+	// once via SetTitle, never revisited by refresh() — building them here
+	// unconditionally would freeze that chrome in whatever a.Lang held at
+	// this instant. On a first launch that's still the transient default
+	// above, not the operator's actual choice, so construction waits for
+	// langKnown; promptLang's SetDoneFunc calls buildScreens itself once the
+	// answer is in.
+	buildScreens := func() {
+		a.screens = []screen{
+			newOverviewScreen(a),
+			newFindingsScreen(a),
+			newMapScreen(a),
+			newAvailabilityScreen(a),
+			newUsageScreen(a),
+			newConfigsScreen(a),
+			newServicesScreen(a),
+			newFirewallScreen(a),
+			newCertsScreen(a),
+			newAuditScreen(a),
+		}
+		for i, s := range a.screens {
+			a.pages.AddPage(pageName(i), s.view(), true, i == 0)
+		}
 	}
-	for i, s := range a.screens {
-		a.pages.AddPage(pageName(i), s.view(), true, i == 0)
+	if langKnown {
+		buildScreens()
 	}
 
 	root := tview.NewFlex().SetDirection(tview.FlexRow).
@@ -111,16 +163,66 @@ func Run(ctx context.Context, deps Deps) error {
 	a.tv.SetRoot(root, true).EnableMouse(true).SetInputCapture(a.onKey)
 
 	a.renderHeader()
-	a.renderNav()
-	a.setStatus(hexMuted, "Загружаю состояние хоста…")
+	if langKnown {
+		a.renderNav()
+	}
+	a.setStatus(hexMuted, a.T("tui.loadingHostState"))
+	a.bootstrapping = true
 
-	// The first scan happens in the background so the interface appears at once.
-	go a.refreshAll(ctx)
-
-	// A slow periodic refresh keeps the screen honest without hammering the host.
-	go a.autoRefresh(ctx)
+	start := func() {
+		// The first scan happens in the background so the interface appears at once.
+		go a.refreshAll(ctx)
+		// A slow periodic refresh keeps the screen honest without hammering the host.
+		go a.autoRefresh(ctx)
+	}
+	if langKnown {
+		start()
+	} else {
+		a.promptLang(ctx, buildScreens, start)
+	}
 
 	return a.tv.Run()
+}
+
+// promptLang shows the one-time "English or Russian?" choice a genuinely
+// first launch needs — worded so it reads regardless of which language the
+// operator ends up picking, since a.Lang isn't known yet at this point.
+// Persists the answer under tuiLangKey so this never asks again, then calls
+// buildScreens now that a.Lang is finally settled — screens must not be
+// constructed any earlier, since each one bakes chrome like panel titles
+// into a one-time SetTitle call that nothing ever re-runs afterward — before
+// re-rendering the header/nav/status text (built before the answer existed)
+// and calling onDone to start the background refreshes the normal path
+// already kicked off by this point.
+func (a *App) promptLang(ctx context.Context, buildScreens, onDone func()) {
+	modal := tview.NewModal().
+		SetText("Language / Язык").
+		AddButtons([]string{"English", "Русский"}).
+		SetDoneFunc(func(_ int, label string) {
+			if label == "English" {
+				a.Lang = msgs.EN
+			} else {
+				a.Lang = msgs.RU
+			}
+			_ = a.DB.KVSet(ctx, tuiLangKey, string(a.Lang))
+			buildScreens()
+			a.pages.RemovePage("modal-lang")
+			a.renderHeader()
+			a.renderNav()
+			a.setStatus(hexMuted, a.T("tui.loadingHostState"))
+			a.tv.SetFocus(a.screens[a.current].focus())
+			onDone()
+		})
+	a.pages.AddPage("modal-lang", modal, true, true)
+	a.tv.SetFocus(modal)
+}
+
+// T looks up key in the TUI's own chosen language — the tui.* namespace
+// counterpart to internal/api's per-request msgs.T, just resolved once at
+// Run() instead of per-request, since the TUI has one operator per
+// process, not one per HTTP request.
+func (a *App) T(key string, args ...any) string {
+	return msgs.T(a.Lang, key, args...)
 }
 
 func pageName(i int) string { return fmt.Sprintf("page-%d", i) }
@@ -223,7 +325,7 @@ func (a *App) renderNav() {
 	if hints != "" {
 		line += "   " + dim("│") + "  " + hints
 	}
-	a.nav.SetText(line + "   " + dim("│  F5 обновить · r пересканировать · ? помощь · q выход"))
+	a.nav.SetText(line + "   " + dim("│  "+a.T("tui.globalHints")))
 }
 
 func (a *App) renderHeader() {
@@ -232,22 +334,22 @@ func (a *App) renderHeader() {
 	if snap != nil {
 		counts := snap.FindingCounts()
 		worst := counts["critical"] + counts["high"]
-		findings := tag(hexGood, "проблем не найдено")
+		findings := tag(hexGood, a.T("tui.noProblemsFound"))
 		if worst > 0 {
-			findings = tag(hexCritical, fmt.Sprintf("требуют внимания: %d", worst))
+			findings = tag(hexCritical, a.T("tui.needsAttention", worst))
 		} else if len(snap.Findings) > 0 {
-			findings = tag(hexWarning, fmt.Sprintf("замечаний: %d", len(snap.Findings)))
+			findings = tag(hexWarning, a.T("tui.notesCount", len(snap.Findings)))
 		}
 		left += dim(" · ") + snap.Host.Hostname +
-			dim(" · режим ") + snap.Mode +
+			dim(" · "+a.T("tui.modeLabel")+" ") + snap.Mode +
 			dim(" · ") + findings +
-			dim(" · скан ") + shortTime(snap.TS)
+			dim(" · "+a.T("tui.scanLabel")+" ") + shortTime(snap.TS)
 	}
 	if a.busy > 0 {
-		left += tag(hexWarning, "  ● работаю…")
+		left += tag(hexWarning, "  ● "+a.T("tui.working"))
 	}
 	if !a.canMutate() {
-		left += tag(hexWarning, "  ● только чтение")
+		left += tag(hexWarning, "  ● "+a.T("tui.readOnly"))
 	}
 	a.header.SetText(left)
 }
@@ -269,7 +371,7 @@ func (a *App) queue(fn func()) {
 // outcome on the status line. Refusing to mutate is handled here once.
 func (a *App) runAsync(what string, needsMutation bool, fn func(ctx context.Context) (string, error)) {
 	if needsMutation && !a.canMutate() {
-		a.setStatus(hexWarning, "Изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
+		a.setStatus(hexWarning, a.T("tui.mutationsDisabled"))
 		return
 	}
 	a.busy++
@@ -287,7 +389,7 @@ func (a *App) runAsync(what string, needsMutation bool, fn func(ctx context.Cont
 				a.setStatus(hexCritical, "✖ "+err.Error())
 			} else {
 				if msg == "" {
-					msg = what + ": готово"
+					msg = what + a.T("tui.doneSuffix")
 				}
 				a.setStatus(hexGood, "✔ "+msg)
 			}
@@ -303,7 +405,7 @@ func (a *App) runAsync(what string, needsMutation bool, fn func(ctx context.Cont
 func (a *App) confirm(question string, onYes func()) {
 	modal := tview.NewModal().
 		SetText(question).
-		AddButtons([]string{"Отмена", "Выполнить"}).
+		AddButtons([]string{a.T("tui.cancel"), a.T("tui.execute")}).
 		SetDoneFunc(func(index int, _ string) {
 			a.pages.RemovePage("modal-confirm")
 			a.tv.SetFocus(a.screens[a.current].focus())
@@ -353,29 +455,29 @@ func (a *App) showText(name, title, body string) {
 
 func (a *App) showHelp() {
 	body := strings.Join([]string{
-		bold("Навигация"),
-		"  1…9, 0       перейти на экран",
-		"  Tab / Shift+Tab   следующий и предыдущий экран",
-		"  ↑ ↓ PgUp PgDn     перемещение по таблице",
-		"  Enter        подробности выбранной строки",
+		bold(a.T("tui.help.navigation")),
+		a.T("tui.help.switchScreen"),
+		a.T("tui.help.tabNextPrev"),
+		a.T("tui.help.tableNav"),
+		a.T("tui.help.enterDetails"),
 		"",
-		bold("Общие действия"),
-		"  F5           обновить данные текущего экрана",
-		"  r            пересканировать хост целиком",
-		"  ?            эта справка",
-		"  q            выход",
+		bold(a.T("tui.help.commonActions")),
+		a.T("tui.help.f5Refresh"),
+		a.T("tui.help.rRescan"),
+		a.T("tui.help.qmarkHelp"),
+		a.T("tui.help.qQuit"),
 		"",
-		bold("Экраны"),
-		"  Конфигурации  e править, d различия с версией, v история, u откат",
-		"  Сервисы       s запустить, x остановить, t перезапустить, l перечитать, c проверить конфиг",
-		"  Firewall      a добавить правило, x удалить правило",
-		"  Сертификаты   Enter показать файл, g выпустить самоподписанный",
-		"  Доступность   p проверить сейчас, space пауза и возобновление",
+		bold(a.T("tui.help.screensHeading")),
+		a.T("tui.help.configsKeys"),
+		a.T("tui.help.servicesKeys"),
+		a.T("tui.help.firewallKeys"),
+		a.T("tui.help.certsKeys"),
+		a.T("tui.help.availabilityKeys"),
 		"",
-		dim("Все изменения записываются в журнал под именем " + a.actor + "."),
-		dim("Если задано NKT_ALLOW_MUTATIONS=false, действия недоступны."),
+		dim(a.T("tui.help.auditNote", a.actor)),
+		dim(a.T("tui.help.mutationsNote")),
 	}, "\n")
-	a.showText("help", "Справка", body)
+	a.showText("help", a.T("tui.help.title"), body)
 }
 
 // --------------------------------------------------------------------- reload
@@ -386,8 +488,9 @@ func (a *App) refreshAll(ctx context.Context) {
 	}
 	a.queue(func() {
 		a.renderHeader()
-		if strings.Contains(a.status.GetText(true), "Загружаю") {
-			a.setStatus(hexMuted, "Готово. F5 обновить, r пересканировать, ? справка.")
+		if a.bootstrapping {
+			a.bootstrapping = false
+			a.setStatus(hexMuted, a.T("tui.readyHint"))
 		}
 	})
 }
@@ -395,7 +498,7 @@ func (a *App) refreshAll(ctx context.Context) {
 func (a *App) rescan(ctx context.Context) {
 	a.queue(func() {
 		a.busy++
-		a.setStatus(hexMuted, "Сканирую хост…")
+		a.setStatus(hexMuted, a.T("tui.scanningHost"))
 		a.renderHeader()
 	})
 
@@ -404,10 +507,9 @@ func (a *App) rescan(ctx context.Context) {
 	a.queue(func() {
 		a.busy--
 		if err != nil {
-			a.setStatus(hexCritical, "✖ скан не удался: "+err.Error())
+			a.setStatus(hexCritical, "✖ "+a.T("tui.scanFailed", err.Error()))
 		} else {
-			a.setStatus(hexGood, fmt.Sprintf("✔ хост пересканирован за %d мс, находок: %d",
-				snap.ScanMS, len(snap.Findings)))
+			a.setStatus(hexGood, "✔ "+a.T("tui.rescanDone", snap.ScanMS, len(snap.Findings)))
 		}
 		a.renderHeader()
 	})
@@ -494,7 +596,7 @@ func shortTime(ts string) string {
 }
 
 // relativeTime renders how long ago something happened.
-func relativeTime(ts string) string {
+func relativeTime(lang msgs.Lang, ts string) string {
 	if ts == "" {
 		return "—"
 	}
@@ -505,13 +607,13 @@ func relativeTime(ts string) string {
 	d := time.Since(t)
 	switch {
 	case d < time.Minute:
-		return "только что"
+		return msgs.T(lang, "tui.justNow")
 	case d < time.Hour:
-		return fmt.Sprintf("%d мин назад", int(d.Minutes()))
+		return msgs.T(lang, "tui.minutesAgo", int(d.Minutes()))
 	case d < 24*time.Hour:
-		return fmt.Sprintf("%d ч назад", int(d.Hours()))
+		return msgs.T(lang, "tui.hoursAgo", int(d.Hours()))
 	default:
-		return fmt.Sprintf("%d дн назад", int(d.Hours()/24))
+		return msgs.T(lang, "tui.daysAgo", int(d.Hours()/24))
 	}
 }
 

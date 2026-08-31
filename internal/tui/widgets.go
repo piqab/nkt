@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/althq/netknownsthat/internal/msgs"
 	"github.com/althq/netknownsthat/internal/store"
 )
 
@@ -15,9 +16,9 @@ import (
 var sparkChars = []rune{'▁', '▂', '▃', '▄', '▅', '▆', '▇', '█'}
 
 // sparkline renders a series as one line of block characters.
-func sparkline(values []float64, width int) string {
+func sparkline(lang msgs.Lang, values []float64, width int) string {
 	if len(values) == 0 || width <= 0 {
-		return dim("нет данных")
+		return dim(msgs.T(lang, "tui.noData"))
 	}
 	// Take the tail that fits, so the most recent points are always visible.
 	if len(values) > width {
@@ -67,18 +68,26 @@ func hbar(fraction float64, width int, hex string) string {
 	return tag(hex, strings.Repeat("█", filled)) + dim(strings.Repeat("░", width-filled))
 }
 
-// dowLabels indexes SQLite's %w, which starts the week on Sunday.
-var dowLabels = [7]string{"вс", "пн", "вт", "ср", "чт", "пт", "сб"}
+// dowLabelsRU indexes SQLite's %w, which starts the week on Sunday.
+var dowLabelsRU = [7]string{"вс", "пн", "вт", "ср", "чт", "пт", "сб"}
+var dowLabelsEN = [7]string{"Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"}
+
+func dowLabels(lang msgs.Lang) [7]string {
+	if lang == msgs.EN {
+		return dowLabelsEN
+	}
+	return dowLabelsRU
+}
 
 // heatmap renders a week of hourly cells: seven rows of twenty-four columns,
 // magnitude on the sequential ramp. Cells with no measurement stay blank rather
 // than pretending to be zero.
-func heatmap(cells []store.HeatCell, valueOf func(store.HeatCell) float64, scaleLabel string,
+func heatmap(lang msgs.Lang, cells []store.HeatCell, valueOf func(store.HeatCell) float64, scaleLabel string,
 	format func(float64) string) string {
 
 	if len(cells) == 0 {
-		return "\n " + dim("Измерений за период нет.") +
-			"\n " + dim("Историю собирает фоновый планировщик — запустите сервис netknownsthat.")
+		return "\n " + dim(msgs.T(lang, "tui.noMeasurementsInPeriod")) +
+			"\n " + dim(msgs.T(lang, "tui.historyCollectedByScheduler"))
 	}
 
 	type key struct{ dow, hour int }
@@ -107,8 +116,9 @@ func heatmap(cells []store.HeatCell, valueOf func(store.HeatCell) float64, scale
 	}
 	sb.WriteString("\n")
 
+	labels := dowLabels(lang)
 	for d := 0; d < 7; d++ {
-		sb.WriteString(dim(fmt.Sprintf(" %s  ", dowLabels[d])))
+		sb.WriteString(dim(fmt.Sprintf(" %s  ", labels[d])))
 		for h := 0; h < 24; h++ {
 			k := key{d, h}
 			if !present[k] {
@@ -128,11 +138,11 @@ func heatmap(cells []store.HeatCell, valueOf func(store.HeatCell) float64, scale
 		sb.WriteString("\n")
 	}
 
-	sb.WriteString("\n " + dim(scaleLabel+": меньше "))
+	sb.WriteString("\n " + dim(scaleLabel+": "+msgs.T(lang, "tui.heatmapLess")+" "))
 	for _, hex := range seqRamp {
 		sb.WriteString(fmt.Sprintf("[:%s]  [:-]", hex))
 	}
-	sb.WriteString(dim(fmt.Sprintf(" больше   (максимум %s, ·· — измерений не было)", format(max))))
+	sb.WriteString(dim(" " + msgs.T(lang, "tui.heatmapMore", format(max))))
 	return sb.String()
 }
 
@@ -147,11 +157,17 @@ func statTile(label, value, note, hex string) string {
 
 // --------------------------------------------------------------------- format
 
-func formatBytes(n float64) string {
-	if n == 0 {
-		return "0 Б"
+var byteUnitsRU = []string{"Б", "КБ", "МБ", "ГБ", "ТБ", "ПБ"}
+var byteUnitsEN = []string{"B", "KB", "MB", "GB", "TB", "PB"}
+
+func formatBytes(lang msgs.Lang, n float64) string {
+	units := byteUnitsRU
+	if lang == msgs.EN {
+		units = byteUnitsEN
 	}
-	units := []string{"Б", "КБ", "МБ", "ГБ", "ТБ", "ПБ"}
+	if n == 0 {
+		return "0 " + units[0]
+	}
 	i := 0
 	for n >= 1024 && i < len(units)-1 {
 		n /= 1024
@@ -163,14 +179,18 @@ func formatBytes(n float64) string {
 	return fmt.Sprintf("%.1f %s", n, units[i])
 }
 
-func formatMS(n float64) string {
+func formatMS(lang msgs.Lang, n float64) string {
+	sUnit, msUnit := "с", "мс"
+	if lang == msgs.EN {
+		sUnit, msUnit = "s", "ms"
+	}
 	if n >= 1000 {
-		return fmt.Sprintf("%.2f с", n/1000)
+		return fmt.Sprintf("%.2f %s", n/1000, sUnit)
 	}
 	if n < 10 {
-		return fmt.Sprintf("%.2f мс", n)
+		return fmt.Sprintf("%.2f %s", n, msUnit)
 	}
-	return fmt.Sprintf("%.0f мс", n)
+	return fmt.Sprintf("%.0f %s", n, msUnit)
 }
 
 func formatCount(n float64) string {

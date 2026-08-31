@@ -9,6 +9,7 @@ import (
 	"github.com/gdamore/tcell/v2"
 
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // The palette mirrors the web interface so both surfaces describe severity and
@@ -64,20 +65,20 @@ func severityColor(severity string) string {
 	}
 }
 
-// severityLabel is the Russian word shown beside the colour, so severity is
-// never carried by colour alone.
-func severityLabel(severity string) string {
+// severityLabel is the word shown beside the colour, so severity is never
+// carried by colour alone.
+func severityLabel(lang msgs.Lang, severity string) string {
 	switch severity {
 	case model.SeverityCritical:
-		return "критично"
+		return msgs.T(lang, "tui.severity.critical")
 	case model.SeverityHigh:
-		return "высокая"
+		return msgs.T(lang, "tui.severity.high")
 	case model.SeverityMedium:
-		return "средняя"
+		return msgs.T(lang, "tui.severity.medium")
 	case model.SeverityLow:
-		return "низкая"
+		return msgs.T(lang, "tui.severity.low")
 	default:
-		return "инфо"
+		return msgs.T(lang, "tui.severity.info")
 	}
 }
 

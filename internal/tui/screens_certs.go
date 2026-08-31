@@ -13,6 +13,7 @@ import (
 
 	"github.com/althq/netknownsthat/internal/control"
 	"github.com/althq/netknownsthat/internal/model"
+	"github.com/althq/netknownsthat/internal/msgs"
 )
 
 // Expiry bands, matching the analyzer's thresholds.
@@ -35,9 +36,10 @@ type certsScreen struct {
 
 func newCertsScreen(a *App) *certsScreen {
 	s := &certsScreen{app: a}
-	s.table = newTable("Сайты", "Истекает", "Осталось", "Ключ", "Издатель", "Автообновление")
-	s.detail = newPanel("Сертификат")
-	s.schedule = newPanel("Расписание истечения")
+	s.table = newTable(a.T("tui.certs.colSites"), a.T("tui.certs.colExpires"), a.T("tui.certs.colRemaining"),
+		a.T("tui.certs.colKey"), a.T("tui.certs.colIssuer"), a.T("tui.certs.colAutoRenew"))
+	s.detail = newPanel(a.T("tui.certs.detailTitle"))
+	s.schedule = newPanel(a.T("tui.certs.scheduleTitle"))
 
 	s.table.SetSelectionChangedFunc(func(row, _ int) { s.showDetail(row - 1) })
 	s.table.SetInputCapture(s.onKey)
@@ -52,12 +54,11 @@ func newCertsScreen(a *App) *certsScreen {
 	return s
 }
 
-func (s *certsScreen) title() string          { return "Сертификаты" }
+func (s *certsScreen) title() string          { return s.app.T("tui.certs.title") }
 func (s *certsScreen) view() tview.Primitive  { return s.root }
 func (s *certsScreen) focus() tview.Primitive { return s.table }
 func (s *certsScreen) hints() string {
-	return dim("Enter показать файл · g выпустить самоподписанный · r продлить через certbot · " +
-		"c собрать PEM для haproxy")
+	return dim(s.app.T("tui.certs.hints"))
 }
 
 func (s *certsScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
@@ -97,18 +98,18 @@ func (s *certsScreen) onKey(event *tcell.EventKey) *tcell.EventKey {
 // validates the change and rolls back automatically if the service rejects it.
 func (s *certsScreen) showGenerateForm() {
 	if !s.app.canMutate() {
-		s.app.setStatus(hexWarning, "Изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
+		s.app.setStatus(hexWarning, s.app.T("tui.mutationsDisabled"))
 		return
 	}
 
 	names, service, bits, days := "", "nginx", "2048", "397"
 	form := tview.NewForm().
-		AddInputField("Имена через запятую", "", 44, nil, func(t string) { names = t }).
-		AddDropDown("Сервис", []string{"nginx", "haproxy"}, 0, func(o string, _ int) { service = o }).
-		AddDropDown("Длина ключа", []string{"2048", "3072", "4096"}, 0, func(o string, _ int) { bits = o }).
-		AddInputField("Срок действия, дней", days, 8, tview.InputFieldInteger, func(t string) { days = t })
+		AddInputField(s.app.T("tui.certs.formNames"), "", 44, nil, func(t string) { names = t }).
+		AddDropDown(s.app.T("tui.certs.formService"), []string{"nginx", "haproxy"}, 0, func(o string, _ int) { service = o }).
+		AddDropDown(s.app.T("tui.certs.formKeyBits"), []string{"2048", "3072", "4096"}, 0, func(o string, _ int) { bits = o }).
+		AddInputField(s.app.T("tui.certs.formDays"), days, 8, tview.InputFieldInteger, func(t string) { days = t })
 
-	form.AddButton("Создать", func() {
+	form.AddButton(s.app.T("tui.certs.createButton"), func() {
 		var nameList []string
 		for _, n := range strings.Split(names, ",") {
 			if n = strings.TrimSpace(n); n != "" {
@@ -120,24 +121,23 @@ func (s *certsScreen) showGenerateForm() {
 		req := control.SelfSignedRequest{Names: nameList, Service: service, Bits: b, Days: d}
 
 		s.app.closeModal("certgen")
-		s.app.runAsync("Генерирую самоподписанный сертификат", true, func(ctx context.Context) (string, error) {
+		s.app.runAsync(s.app.T("tui.certs.generatingSelfSigned"), true, func(ctx context.Context) (string, error) {
 			res, err := s.app.Certs.GenerateSelfSigned(ctx, s.app.actor, req)
 			if err != nil {
 				return "", err
 			}
 			s.app.queue(func() {
-				s.app.showText("certgen-result", "Сертификат создан", fmt.Sprintf(
-					" %s\n действителен до %s\n\n Файл в конфигурацию ещё не добавлен — вставьте через "+
-						"редактор (экран «Конфигурации»):\n\n%s\n",
-					bold(strings.Join(res.Names, ", ")), res.NotAfter.Local().Format("02.01.2006"),
-					tview.Escape(res.Snippet)))
+				body := s.app.T("tui.certs.certValidUntil", bold(strings.Join(res.Names, ", ")),
+					res.NotAfter.Local().Format("02.01.2006")) +
+					" " + s.app.T("tui.certs.configNotAddedHint", tview.Escape(res.Snippet))
+				s.app.showText("certgen-result", s.app.T("tui.certs.certCreatedTitle"), body)
 			})
-			return "сертификат создан, отпечаток " + res.Fingerprint[:16] + "…", nil
+			return s.app.T("tui.certs.certCreatedStatus", res.Fingerprint[:16]), nil
 		})
 	})
-	form.AddButton("Отмена", func() { s.app.closeModal("certgen") })
+	form.AddButton(s.app.T("tui.cancel"), func() { s.app.closeModal("certgen") })
 
-	form.SetBorder(true).SetTitle(" Новый самоподписанный сертификат ").SetBorderColor(colorBorder)
+	form.SetBorder(true).SetTitle(" " + s.app.T("tui.certs.generateFormTitle") + " ").SetBorderColor(colorBorder)
 	form.SetCancelFunc(func() { s.app.closeModal("certgen") })
 
 	s.app.editing = true
@@ -147,17 +147,17 @@ func (s *certsScreen) showGenerateForm() {
 // lineageLabel describes one /etc/letsencrypt/live lineage with its expiry,
 // so picking one in the dropdown doesn't require checking the certificates
 // table first.
-func lineageLabel(info control.LineageInfo) string {
+func lineageLabel(lang msgs.Lang, info control.LineageInfo) string {
 	if !info.Known {
-		return info.Name + " — срок неизвестен"
+		return msgs.T(lang, "tui.certs.lineageExpiryUnknown", info.Name)
 	}
 	switch {
 	case info.DaysLeft < 0:
-		return fmt.Sprintf("%s — просрочен %d дн. назад", info.Name, -info.DaysLeft)
+		return msgs.T(lang, "tui.certs.lineageExpiredAgo", info.Name, -info.DaysLeft)
 	case info.DaysLeft == 0:
-		return info.Name + " — истекает сегодня"
+		return msgs.T(lang, "tui.certs.lineageExpiresToday", info.Name)
 	default:
-		return fmt.Sprintf("%s — %d дн.", info.Name, info.DaysLeft)
+		return msgs.T(lang, "tui.certs.lineageDaysLeft", info.Name, info.DaysLeft)
 	}
 }
 
@@ -169,30 +169,30 @@ func lineageLabel(info control.LineageInfo) string {
 // written instead and the directive to paste in is shown.
 func (s *certsScreen) showCombineForm() {
 	if !s.app.canMutate() {
-		s.app.setStatus(hexWarning, "Изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
+		s.app.setStatus(hexWarning, s.app.T("tui.mutationsDisabled"))
 		return
 	}
 
 	lineages, err := s.app.Certs.ListLetsEncryptLineages()
 	if err != nil {
-		s.app.setStatus(hexWarning, "Не удалось прочитать /etc/letsencrypt/live: "+err.Error())
+		s.app.setStatus(hexWarning, s.app.T("tui.certs.letsencryptReadError", err.Error()))
 		return
 	}
 	if len(lineages) == 0 {
-		s.app.setStatus(hexWarning, "В /etc/letsencrypt/live не найдено ни одной lineage")
+		s.app.setStatus(hexWarning, s.app.T("tui.certs.noLineagesFound"))
 		return
 	}
 	lineageLabels := make([]string, len(lineages))
 	for i, info := range lineages {
-		lineageLabels[i] = lineageLabel(info)
+		lineageLabels[i] = lineageLabel(s.app.Lang, info)
 	}
-	pathOptions := append([]string{"— новый файл —"}, s.app.Certs.ListHAProxyCertPaths()...)
+	pathOptions := append([]string{s.app.T("tui.certs.newFileOption")}, s.app.Certs.ListHAProxyCertPaths()...)
 
 	lineage := lineages[0].Name
 	targetPath := ""
 	form := tview.NewForm().
 		AddDropDown("Lineage", lineageLabels, 0, func(_ string, i int) { lineage = lineages[i].Name }).
-		AddDropDown("Куда записать", pathOptions, 0, func(o string, i int) {
+		AddDropDown(s.app.T("tui.certs.formTargetPath"), pathOptions, 0, func(o string, i int) {
 			if i == 0 {
 				targetPath = ""
 			} else {
@@ -200,31 +200,28 @@ func (s *certsScreen) showCombineForm() {
 			}
 		})
 
-	form.AddButton("Собрать", func() {
+	form.AddButton(s.app.T("tui.certs.combineButton"), func() {
 		s.app.closeModal("certcombine")
-		s.app.runAsync("Собираю PEM для haproxy", true, func(ctx context.Context) (string, error) {
+		s.app.runAsync(s.app.T("tui.certs.combiningPEM"), true, func(ctx context.Context) (string, error) {
 			res, err := s.app.Certs.CombineForHAProxy(ctx, s.app.actor, lineage, targetPath)
 			if err != nil {
 				return "", err
 			}
 			s.app.queue(func() {
-				body := fmt.Sprintf(" %s\n действителен до %s\n\n",
-					bold(res.Lineage), res.NotAfter.Local().Format("02.01.2006"))
+				body := s.app.T("tui.certs.certValidUntil", bold(res.Lineage), res.NotAfter.Local().Format("02.01.2006"))
 				if res.Snippet != "" {
-					body += fmt.Sprintf("Файл в конфигурацию ещё не добавлен — вставьте через редактор "+
-						"(экран «Конфигурации»):\n\n%s\n", tview.Escape(res.Snippet))
+					body += s.app.T("tui.certs.configNotAddedHint", tview.Escape(res.Snippet))
 				} else {
-					body += fmt.Sprintf("Файл %s перезаписан, haproxy перечитал конфигурацию — вставлять "+
-						"ничего не нужно.\n", res.CombinedPath)
+					body += s.app.T("tui.certs.overwrittenNoInsertNeeded", res.CombinedPath)
 				}
-				s.app.showText("certcombine-result", "PEM собран", body)
+				s.app.showText("certcombine-result", s.app.T("tui.certs.pemCreatedTitle"), body)
 			})
-			return "PEM собран, отпечаток " + res.Fingerprint[:16] + "…", nil
+			return s.app.T("tui.certs.pemCreatedStatus", res.Fingerprint[:16]), nil
 		})
 	})
-	form.AddButton("Отмена", func() { s.app.closeModal("certcombine") })
+	form.AddButton(s.app.T("tui.cancel"), func() { s.app.closeModal("certcombine") })
 
-	form.SetBorder(true).SetTitle(" Собрать PEM для haproxy из certbot ").SetBorderColor(colorBorder)
+	form.SetBorder(true).SetTitle(" " + s.app.T("tui.certs.combineFormTitle") + " ").SetBorderColor(colorBorder)
 	form.SetCancelFunc(func() { s.app.closeModal("certcombine") })
 
 	s.app.editing = true
@@ -243,20 +240,18 @@ func (s *certsScreen) renewSelected() {
 	}
 	cert := s.certs[idx]
 	if cert.Renewal.Tool != "certbot" || !cert.Renewal.Managed || cert.Renewal.Lineage == "" {
-		s.app.setStatus(hexWarning, "certbot не управляет этим сертификатом — продлить нечем")
+		s.app.setStatus(hexWarning, s.app.T("tui.certs.notManagedByCertbot"))
 		return
 	}
 	if !s.app.canMutate() {
-		s.app.setStatus(hexWarning, "Изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
+		s.app.setStatus(hexWarning, s.app.T("tui.mutationsDisabled"))
 		return
 	}
 
 	lineage := cert.Renewal.Lineage
-	question := fmt.Sprintf("Выполнить certbot renew --cert-name %s?", lineage)
+	question := s.app.T("tui.certs.confirmRenew", lineage)
 	if cert.Renewal.Derived {
-		question += fmt.Sprintf("\n\nЭто копия сертификата из %s — продлится оригинал, а эта копия "+
-			"будет автоматически пересобрана из нового сертификата и ключа, после чего перечитается сервис.",
-			cert.Renewal.SourcePath)
+		question += s.app.T("tui.certs.confirmRenewDerivedNote", cert.Renewal.SourcePath)
 	}
 	s.app.confirm(question, func() {
 		s.startRenewProgress(lineage)
@@ -276,9 +271,9 @@ func (s *certsScreen) startRenewProgress(lineage string) {
 
 	const modalName = "renew-progress"
 	view := tview.NewTextView().SetDynamicColors(true).SetWrap(true).SetScrollable(true)
-	view.SetText(" " + dim("Начинаю…"))
+	view.SetText(" " + dim(s.app.T("tui.certs.starting")))
 	view.SetBorder(true).
-		SetTitle(fmt.Sprintf(" Продление %s — Esc скрыть (в фоне продолжится) ", lineage)).
+		SetTitle(" " + s.app.T("tui.certs.renewProgressTitle", lineage) + " ").
 		SetBorderColor(colorBorder)
 
 	stop := make(chan struct{})
@@ -310,7 +305,7 @@ func (s *certsScreen) startRenewProgress(lineage string) {
 					return
 				}
 				s.app.queue(func() {
-					view.SetText(renderRenewLog(events, done, errMsg))
+					view.SetText(renderRenewLog(s.app.Lang, events, done, errMsg))
 					view.ScrollToEnd()
 				})
 				if done {
@@ -324,7 +319,7 @@ func (s *certsScreen) startRenewProgress(lineage string) {
 
 // renderRenewLog formats a renew job's progress for the live panel — one
 // timestamped line per step, ending with the outcome once done.
-func renderRenewLog(events []control.RenewEvent, done bool, errMsg string) string {
+func renderRenewLog(lang msgs.Lang, events []control.RenewEvent, done bool, errMsg string) string {
 	var sb strings.Builder
 	for _, e := range events {
 		sb.WriteString(fmt.Sprintf(" [%s] %s\n", e.Time.Local().Format("15:04:05"), tview.Escape(e.Text)))
@@ -332,9 +327,9 @@ func renderRenewLog(events []control.RenewEvent, done bool, errMsg string) strin
 	if done {
 		sb.WriteString("\n")
 		if errMsg != "" {
-			sb.WriteString(" " + tag(hexCritical, "Ошибка: "+tview.Escape(errMsg)))
+			sb.WriteString(" " + tag(hexCritical, msgs.T(lang, "tui.certs.renewError", tview.Escape(errMsg))))
 		} else {
-			sb.WriteString(" " + tag(hexGood, "Готово."))
+			sb.WriteString(" " + tag(hexGood, msgs.T(lang, "tui.certs.renewDone")))
 		}
 	}
 	return sb.String()
@@ -357,16 +352,16 @@ func expiryTone(cert model.Certificate) string {
 }
 
 // expiryWord states the situation in words, so the colour is never alone.
-func expiryWord(cert model.Certificate) string {
+func expiryWord(lang msgs.Lang, cert model.Certificate) string {
 	switch {
 	case cert.Error != "":
-		return "не читается"
+		return msgs.T(lang, "tui.certs.unreadable")
 	case cert.DaysLeft < 0:
-		return fmt.Sprintf("просрочен на %d дн.", -cert.DaysLeft)
+		return msgs.T(lang, "tui.certs.expiredDaysAgo", -cert.DaysLeft)
 	case cert.DaysLeft == 0:
-		return "истекает сегодня"
+		return msgs.T(lang, "tui.certs.expiresToday")
 	default:
-		return fmt.Sprintf("%d дн.", cert.DaysLeft)
+		return msgs.T(lang, "tui.certs.daysLeft", cert.DaysLeft)
 	}
 }
 
@@ -379,7 +374,11 @@ func (s *certsScreen) refresh(ctx context.Context) {
 	s.app.queue(func() {
 		s.certs = snap.Certs
 		s.table.Clear()
-		for i, h := range []string{"Сайты", "Истекает", "Осталось", "Ключ", "Издатель", "Автообновление"} {
+		headers := []string{
+			s.app.T("tui.certs.colSites"), s.app.T("tui.certs.colExpires"), s.app.T("tui.certs.colRemaining"),
+			s.app.T("tui.certs.colKey"), s.app.T("tui.certs.colIssuer"), s.app.T("tui.certs.colAutoRenew"),
+		}
+		for i, h := range headers {
 			s.table.SetCell(0, i, tview.NewTableCell(" "+h).
 				SetTextColor(colorSecondary).SetSelectable(false).SetAttributes(tcell.AttrBold))
 		}
@@ -392,22 +391,22 @@ func (s *certsScreen) refresh(ctx context.Context) {
 			} else {
 				s.table.SetCell(row, 1, cell(cert.NotAfter.Local().Format("02.01.2006")))
 			}
-			s.table.SetCell(row, 2, cellColor("●"+expiryWord(cert), expiryTone(cert)))
+			s.table.SetCell(row, 2, cellColor("●"+expiryWord(s.app.Lang, cert), expiryTone(cert)))
 			key := "—"
 			if cert.KeyAlgorithm != "" {
 				key = fmt.Sprintf("%s %d", cert.KeyAlgorithm, cert.KeyBits)
 			}
 			s.table.SetCell(row, 3, cellDim(key))
 			s.table.SetCell(row, 4, cellDim(truncate(commonName(cert.Issuer), 24)))
-			s.table.SetCell(row, 5, cellColor(renewalWord(cert), renewalTone(cert)))
+			s.table.SetCell(row, 5, cellColor(renewalWord(s.app.Lang, cert), renewalTone(cert)))
 		}
-		s.table.SetTitle(fmt.Sprintf(" Сертификаты — %d ", len(snap.Certs)))
+		s.table.SetTitle(" " + s.app.T("tui.certs.titleCount", len(snap.Certs)) + " ")
 
 		s.schedule.SetText(s.renderSchedule(snap.Certs))
 		if len(snap.Certs) > 0 {
 			s.showDetail(0)
 		} else {
-			s.detail.SetText("\n " + dim("В разобранных конфигурациях нет ни одного ssl_certificate."))
+			s.detail.SetText("\n " + dim(s.app.T("tui.certs.noSslCertificates")))
 		}
 	})
 }
@@ -416,15 +415,15 @@ func (s *certsScreen) refresh(ctx context.Context) {
 // order in which they will break is visible at a glance.
 func (s *certsScreen) renderSchedule(certs []model.Certificate) string {
 	if len(certs) == 0 {
-		return "\n " + dim("Нечего показывать.")
+		return "\n " + dim(s.app.T("tui.certs.scheduleNoData"))
 	}
 	var sb strings.Builder
-	sb.WriteString(dim(" запас до истечения, шкала — год\n\n"))
+	sb.WriteString(dim(s.app.T("tui.certs.scheduleHeader")))
 
 	for _, cert := range certs {
 		name := truncate(certNames(cert), 22)
 		if cert.Error != "" {
-			sb.WriteString(fmt.Sprintf(" %-22s %s\n", name, tag(hexCritical, "файл не читается")))
+			sb.WriteString(fmt.Sprintf(" %-22s %s\n", name, tag(hexCritical, s.app.T("tui.certs.fileUnreadable"))))
 			continue
 		}
 		fraction := float64(cert.DaysLeft) / certScaleDays
@@ -433,11 +432,10 @@ func (s *certsScreen) renderSchedule(certs []model.Certificate) string {
 		}
 		sb.WriteString(fmt.Sprintf(" %-22s %s %s\n",
 			name, hbar(fraction, 26, expiryTone(cert)),
-			tag(expiryTone(cert), expiryWord(cert))))
+			tag(expiryTone(cert), expiryWord(s.app.Lang, cert))))
 	}
 
-	sb.WriteString("\n" + dim(fmt.Sprintf(" пороги: %d дн. — предупреждение, %d дн. — срочно",
-		certWarnDays, certCriticalDays)))
+	sb.WriteString("\n" + dim(s.app.T("tui.certs.scheduleThresholds", certWarnDays, certCriticalDays)))
 	return sb.String()
 }
 
@@ -454,48 +452,48 @@ func (s *certsScreen) describe(cert model.Certificate) string {
 	sb.WriteString(" " + dim(cert.Path) + "\n\n")
 
 	if cert.Error != "" {
-		sb.WriteString(" " + tag(hexCritical, "ошибка: "+cert.Error) + "\n")
+		sb.WriteString(" " + tag(hexCritical, s.app.T("tui.certs.certErrorLabel", cert.Error)) + "\n")
 		return sb.String()
 	}
 
-	sb.WriteString(fmt.Sprintf(" срок: %s — %s   %s\n",
+	sb.WriteString(s.app.T("tui.certs.detailValidity",
 		cert.NotBefore.Local().Format("02.01.2006"),
 		cert.NotAfter.Local().Format("02.01.2006"),
-		tag(expiryTone(cert), "●"+expiryWord(cert))))
-	sb.WriteString(dim(" издатель: ") + truncate(cert.Issuer, 60) + "\n")
-	sb.WriteString(dim(" субъект:  ") + truncate(cert.Subject, 60) + "\n")
-	sb.WriteString(dim(" ключ: ") + fmt.Sprintf("%s %d бит", cert.KeyAlgorithm, cert.KeyBits) +
-		dim("   подпись: ") + cert.SigAlgorithm + "\n")
-	sb.WriteString(dim(" цепочка: ") + fmt.Sprintf("%d сертификат(а)", cert.ChainLength))
+		tag(expiryTone(cert), "●"+expiryWord(s.app.Lang, cert))))
+	sb.WriteString(dim(s.app.T("tui.certs.issuerLabel")) + truncate(cert.Issuer, 60) + "\n")
+	sb.WriteString(dim(s.app.T("tui.certs.subjectLabel")) + truncate(cert.Subject, 60) + "\n")
+	sb.WriteString(dim(s.app.T("tui.certs.keyLabel")) + s.app.T("tui.certs.keyBitsFormat", cert.KeyAlgorithm, cert.KeyBits) +
+		dim(s.app.T("tui.certs.sigLabel")) + cert.SigAlgorithm + "\n")
+	sb.WriteString(dim(s.app.T("tui.certs.chainLabel")) + s.app.T("tui.certs.chainCountFormat", cert.ChainLength))
 	if cert.SelfSigned {
-		sb.WriteString("   " + tag(hexWarning, "самоподписанный"))
+		sb.WriteString("   " + tag(hexWarning, s.app.T("tui.certs.selfSignedLabel")))
 	}
 	sb.WriteString("\n")
 
 	if len(cert.Endpoints) > 0 {
-		sb.WriteString(dim(" обслуживает: ") + strings.Join(cert.Endpoints, ", ") + "\n")
+		sb.WriteString(dim(s.app.T("tui.certs.servesLabel")) + strings.Join(cert.Endpoints, ", ") + "\n")
 	}
-	sb.WriteString("\n " + tag(renewalTone(cert), "обновление: "+renewalWord(cert)) + "\n")
+	sb.WriteString("\n " + tag(renewalTone(cert), s.app.T("tui.certs.renewalLabel", renewalWord(s.app.Lang, cert))) + "\n")
 	if cert.Renewal.Detail != "" {
 		sb.WriteString(" " + dim(cert.Renewal.Detail) + "\n")
 	}
 	return sb.String()
 }
 
-func renewalWord(cert model.Certificate) string {
+func renewalWord(lang msgs.Lang, cert model.Certificate) string {
 	prefix := ""
 	if cert.Renewal.Derived {
-		prefix = "копия certbot, "
+		prefix = msgs.T(lang, "tui.certs.derivedCopyPrefix")
 	}
 	switch {
 	case cert.Renewal.Automatic:
-		return prefix + "автоматическое"
+		return prefix + msgs.T(lang, "tui.certs.renewalAutomatic")
 	case cert.Renewal.Managed:
-		return prefix + "настроено, но не запускается"
+		return prefix + msgs.T(lang, "tui.certs.renewalConfiguredNotRunning")
 	case cert.Renewal.Tool == "certbot":
-		return prefix + "запись certbot потеряна"
+		return prefix + msgs.T(lang, "tui.certs.renewalCertbotRecordLost")
 	default:
-		return "вручную"
+		return msgs.T(lang, "tui.certs.renewalManual")
 	}
 }
 

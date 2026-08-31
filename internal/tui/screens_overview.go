@@ -36,13 +36,14 @@ func newOverviewScreen(a *App) *overviewScreen {
 		tileRow.AddItem(s.tiles[i], 0, 1, false)
 	}
 
-	s.findings = newPanel("Что требует внимания")
+	s.findings = newPanel(a.T("tui.overview.attentionTitle"))
 	s.findings.SetScrollable(true)
-	s.services = newTable("Сервис", "Состояние", "Автозапуск", "PID", "Память")
-	s.services.SetTitle(" Сервисы ")
+	s.services = newTable(a.T("tui.overview.colService"), a.T("tui.overview.colState"),
+		a.T("tui.overview.colAutostart"), "PID", a.T("tui.overview.colMemory"))
+	s.services.SetTitle(" " + a.T("tui.overview.servicesTitle") + " ")
 
 	s.firewall = newPanel("Firewall")
-	s.health = newPanel("Доступность")
+	s.health = newPanel(a.T("tui.overview.availabilityTitle"))
 
 	middle := tview.NewFlex().
 		AddItem(s.findings, 0, 3, false).
@@ -59,16 +60,16 @@ func newOverviewScreen(a *App) *overviewScreen {
 	return s
 }
 
-func (s *overviewScreen) title() string          { return "Обзор" }
+func (s *overviewScreen) title() string          { return s.app.T("tui.overview.title") }
 func (s *overviewScreen) view() tview.Primitive  { return s.root }
 func (s *overviewScreen) focus() tview.Primitive { return s.services }
-func (s *overviewScreen) hints() string          { return dim("Enter подробности сервиса") }
+func (s *overviewScreen) hints() string          { return dim(s.app.T("tui.overview.hints")) }
 
 func (s *overviewScreen) refresh(ctx context.Context) {
 	snap, err := s.app.Scanner.LatestOrScan(ctx)
 	if err != nil || snap == nil {
 		s.app.queue(func() {
-			s.app.setStatus(hexCritical, "не удалось прочитать состояние хоста")
+			s.app.setStatus(hexCritical, s.app.T("tui.overview.statusReadFailed"))
 		})
 		return
 	}
@@ -119,49 +120,50 @@ func (s *overviewScreen) refresh(ctx context.Context) {
 		} else if len(snap.Findings) > 0 {
 			findingTone = hexWarning
 		}
-		s.tiles[0].SetText(statTile("Требуют внимания", fmt.Sprintf("%d", worst),
-			fmt.Sprintf("критичных %d, высоких %d", counts[model.SeverityCritical], counts[model.SeverityHigh]),
+		s.tiles[0].SetText(statTile(s.app.T("tui.overview.tileAttentionLabel"), fmt.Sprintf("%d", worst),
+			s.app.T("tui.overview.tileAttentionNote", counts[model.SeverityCritical], counts[model.SeverityHigh]),
 			findingTone))
-		s.tiles[1].SetText(statTile("Слушателей объявлено", fmt.Sprintf("%d", len(snap.Endpoints)),
-			fmt.Sprintf("публичных %d, с TLS %d", publicCount, tlsCount), hexSeries1))
+		s.tiles[1].SetText(statTile(s.app.T("tui.overview.tileListenersLabel"), fmt.Sprintf("%d", len(snap.Endpoints)),
+			s.app.T("tui.overview.tileListenersNote", publicCount, tlsCount), hexSeries1))
 		containerTone := hexGood
 		if running < len(snap.Container) {
 			containerTone = hexWarning
 		}
-		s.tiles[2].SetText(statTile("Контейнеры", fmt.Sprintf("%d/%d", running, len(snap.Container)),
-			fmt.Sprintf("сетей docker: %d", len(snap.Networks)), containerTone))
+		s.tiles[2].SetText(statTile(s.app.T("tui.overview.tileContainersLabel"), fmt.Sprintf("%d/%d", running, len(snap.Container)),
+			s.app.T("tui.overview.tileContainersNote", len(snap.Networks)), containerTone))
 		// With no probe history at all, a bare "0.0%" would read as "всё лежит";
 		// say plainly that nothing has been measured yet instead.
 		uptimeTone, uptimeValue := hexGood, fmt.Sprintf("%.1f%%", avgUptime)
-		uptimeNote := fmt.Sprintf("целей %d: живы %d, мертвы %d", len(statuses), up, down)
+		uptimeNote := s.app.T("tui.overview.tileUptimeNote", len(statuses), up, down)
 		switch {
 		case uptimeN == 0:
-			uptimeTone, uptimeValue = hexMuted, "нет данных"
-			uptimeNote = fmt.Sprintf("целей %d, проверок ещё не было", len(statuses))
+			uptimeTone, uptimeValue = hexMuted, s.app.T("tui.noData")
+			uptimeNote = s.app.T("tui.overview.tileUptimeNoDataNote", len(statuses))
 		case down > 0:
 			uptimeTone = hexWarning
 		}
-		s.tiles[3].SetText(statTile("Доступность за 24 ч", uptimeValue, uptimeNote, uptimeTone))
+		s.tiles[3].SetText(statTile(s.app.T("tui.overview.tileUptime24hLabel"), uptimeValue, uptimeNote, uptimeTone))
 
 		// Findings, worst first.
 		var sb strings.Builder
 		if len(snap.Findings) == 0 {
-			sb.WriteString("\n " + tag(hexGood, "Проблем не найдено."))
+			sb.WriteString("\n " + tag(hexGood, s.app.T("tui.overview.noFindings")))
 		}
 		for i, f := range snap.Findings {
 			if i >= 14 {
-				sb.WriteString(dim(fmt.Sprintf("\n  …ещё %d, см. экран «Проблемы»", len(snap.Findings)-i)))
+				sb.WriteString(dim("\n  " + s.app.T("tui.overview.moreFindings", len(snap.Findings)-i)))
 				break
 			}
 			sb.WriteString(fmt.Sprintf(" %s %s\n   %s\n",
-				tag(severityColor(f.Severity), "●"+severityLabel(f.Severity)),
+				tag(severityColor(f.Severity), "●"+severityLabel(s.app.Lang, f.Severity)),
 				bold(truncate(f.Title, 78)),
 				dim(truncate(f.Detail, 150))))
 		}
 		s.findings.SetText(sb.String()).ScrollToBeginning()
 
 		s.services.Clear()
-		headers := []string{"Сервис", "Состояние", "Автозапуск", "PID", "Память"}
+		headers := []string{s.app.T("tui.overview.colService"), s.app.T("tui.overview.colState"),
+			s.app.T("tui.overview.colAutostart"), "PID", s.app.T("tui.overview.colMemory")}
 		for i, h := range headers {
 			s.services.SetCell(0, i, tview.NewTableCell(" "+h).
 				SetTextColor(colorSecondary).SetSelectable(false).SetAttributes(tcell.AttrBold))
@@ -174,7 +176,7 @@ func (s *overviewScreen) refresh(ctx context.Context) {
 			s.services.SetCell(row, 3, cellRight(intOrDash(svc.MainPID)))
 			mem := "—"
 			if svc.MemoryBytes > 0 {
-				mem = formatBytes(float64(svc.MemoryBytes))
+				mem = formatBytes(s.app.Lang, float64(svc.MemoryBytes))
 			}
 			s.services.SetCell(row, 4, cellRight(mem))
 		}
@@ -202,18 +204,18 @@ func (s *overviewScreen) refresh(ctx context.Context) {
 			}
 			fb.WriteString(fmt.Sprintf(" %-22s %s  %s\n",
 				p.Backend+"/"+p.Chain, tag(tone, p.Policy),
-				dim(fmt.Sprintf("%s пакетов", formatCount(float64(p.Packets))))))
+				dim(s.app.T("tui.overview.packetsSuffix", formatCount(float64(p.Packets))))))
 		}
-		fb.WriteString(dim(fmt.Sprintf("\n правил всего: %d", len(fw.Rules))))
+		fb.WriteString(dim("\n " + s.app.T("tui.overview.rulesTotal", len(fw.Rules))))
 		s.firewall.SetText(fb.String())
 
 		var hb strings.Builder
-		hb.WriteString(fmt.Sprintf(" целей %d, недоступно сейчас %s\n\n",
-			len(statuses), tag(map[bool]string{true: hexCritical, false: hexGood}[down > 0], fmt.Sprintf("%d", down))))
+		hb.WriteString(" " + s.app.T("tui.overview.targetsDownSummary",
+			len(statuses), tag(map[bool]string{true: hexCritical, false: hexGood}[down > 0], fmt.Sprintf("%d", down))) + "\n\n")
 		if len(outages) == 0 {
-			hb.WriteString(dim(" за сутки простоев не зафиксировано"))
+			hb.WriteString(dim(" " + s.app.T("tui.overview.noOutages24h")))
 		} else {
-			hb.WriteString(dim(" последние простои:\n"))
+			hb.WriteString(dim(" " + s.app.T("tui.overview.recentOutages") + "\n"))
 			for _, o := range outages {
 				hb.WriteString(fmt.Sprintf("  %s %s %s\n",
 					tag(hexCritical, "●"), truncate(o.Label, 34), dim(shortTime(o.Start))))
@@ -259,8 +261,9 @@ type findingsScreen struct {
 
 func newFindingsScreen(a *App) *findingsScreen {
 	s := &findingsScreen{app: a, counts: map[string]int{}}
-	s.table = newTable("Серьёзность", "Правило", "Объект", "Что не так")
-	s.detail = newPanel("Подробности")
+	s.table = newTable(a.T("tui.findings.colSeverity"), a.T("tui.findings.colRule"),
+		a.T("tui.findings.colObject"), a.T("tui.findings.colWhatsWrong"))
+	s.detail = newPanel(a.T("tui.findings.detailsTitle"))
 	s.detail.SetScrollable(true)
 
 	s.table.SetSelectionChangedFunc(func(row, _ int) { s.showDetail(row - 1) })
@@ -279,16 +282,16 @@ func newFindingsScreen(a *App) *findingsScreen {
 	return s
 }
 
-func (s *findingsScreen) title() string          { return "Проблемы" }
+func (s *findingsScreen) title() string          { return s.app.T("tui.findings.title") }
 func (s *findingsScreen) view() tview.Primitive  { return s.root }
 func (s *findingsScreen) focus() tview.Primitive { return s.table }
 
 func (s *findingsScreen) hints() string {
-	label := "все"
+	label := s.app.T("tui.findings.filterAll")
 	if s.filter != "" {
-		label = severityLabel(s.filter)
+		label = severityLabel(s.app.Lang, s.filter)
 	}
-	return dim("f фильтр: ") + tag(hexSeries1, label)
+	return dim(s.app.T("tui.findings.filterHintPrefix")) + tag(hexSeries1, label)
 }
 
 func (s *findingsScreen) cycleFilter() {
@@ -322,23 +325,24 @@ func (s *findingsScreen) refresh(ctx context.Context) {
 		s.items = items
 		s.counts = snap.FindingCounts()
 		s.table.Clear()
-		for i, h := range []string{"Серьёзность", "Правило", "Объект", "Что не так"} {
+		for i, h := range []string{s.app.T("tui.findings.colSeverity"), s.app.T("tui.findings.colRule"),
+			s.app.T("tui.findings.colObject"), s.app.T("tui.findings.colWhatsWrong")} {
 			s.table.SetCell(0, i, tview.NewTableCell(" "+h).
 				SetTextColor(colorSecondary).SetSelectable(false).SetAttributes(tcell.AttrBold))
 		}
 		for i, f := range items {
 			row := i + 1
-			s.table.SetCell(row, 0, cellColor("●"+severityLabel(f.Severity), severityColor(f.Severity)))
+			s.table.SetCell(row, 0, cellColor("●"+severityLabel(s.app.Lang, f.Severity), severityColor(f.Severity)))
 			s.table.SetCell(row, 1, cellDim(f.Rule))
 			s.table.SetCell(row, 2, cell(truncate(f.Object, 30)))
 			s.table.SetCell(row, 3, cell(truncate(f.Title, 70)))
 		}
-		s.table.SetTitle(fmt.Sprintf(" Проблемы — показано %d из %d ", len(items), len(snap.Findings)))
+		s.table.SetTitle(" " + s.app.T("tui.findings.titleWithCount", len(items), len(snap.Findings)) + " ")
 		if len(items) > 0 {
 			s.table.Select(1, 0)
 			s.showDetail(0)
 		} else {
-			s.detail.SetText("\n " + tag(hexGood, "Под выбранный фильтр ничего не подходит."))
+			s.detail.SetText("\n " + tag(hexGood, s.app.T("tui.findings.noneMatchFilter")))
 		}
 	})
 }
@@ -349,21 +353,21 @@ func (s *findingsScreen) showDetail(index int) {
 	}
 	f := s.items[index]
 	var sb strings.Builder
-	sb.WriteString(" " + tag(severityColor(f.Severity), "●"+severityLabel(f.Severity)) + "  " + bold(f.Title) + "\n\n")
+	sb.WriteString(" " + tag(severityColor(f.Severity), "●"+severityLabel(s.app.Lang, f.Severity)) + "  " + bold(f.Title) + "\n\n")
 	sb.WriteString(" " + f.Detail + "\n")
 	if f.Suggestion != "" {
-		sb.WriteString("\n " + bold("Что сделать: ") + f.Suggestion + "\n")
+		sb.WriteString("\n " + bold(s.app.T("tui.findings.suggestionLabel")) + f.Suggestion + "\n")
 	}
-	sb.WriteString("\n " + dim(fmt.Sprintf("правило %s · сервис %s", f.Rule, f.Service)))
+	sb.WriteString("\n " + dim(s.app.T("tui.findings.ruleServiceLine", f.Rule, f.Service)))
 	if f.Object != "" {
-		sb.WriteString(dim(" · объект " + f.Object))
+		sb.WriteString(dim(" " + s.app.T("tui.findings.objectSuffix", f.Object)))
 	}
 	if f.File != "" {
 		loc := f.File
 		if f.Line > 0 {
 			loc = fmt.Sprintf("%s:%d", f.File, f.Line)
 		}
-		sb.WriteString("\n " + dim("файл ") + loc)
+		sb.WriteString("\n " + dim(s.app.T("tui.findings.fileLabel")) + loc)
 	}
 	s.detail.SetText(sb.String()).ScrollToBeginning()
 }
@@ -380,8 +384,8 @@ type mapScreen struct {
 func newMapScreen(a *App) *mapScreen {
 	s := &mapScreen{app: a}
 	s.tree = tview.NewTreeView()
-	s.tree.SetBorder(true).SetTitle(" Карта сетевых ресурсов ").SetBorderColor(colorBorder)
-	s.info = newPanel("Узел")
+	s.tree.SetBorder(true).SetTitle(" " + a.T("tui.map.treeTitle") + " ").SetBorderColor(colorBorder)
+	s.info = newPanel(a.T("tui.map.nodeTitle"))
 
 	s.root = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(s.tree, 0, 3, true).
@@ -389,11 +393,11 @@ func newMapScreen(a *App) *mapScreen {
 	return s
 }
 
-func (s *mapScreen) title() string          { return "Карта" }
+func (s *mapScreen) title() string          { return s.app.T("tui.map.title") }
 func (s *mapScreen) view() tview.Primitive  { return s.root }
 func (s *mapScreen) focus() tview.Primitive { return s.tree }
 func (s *mapScreen) hints() string {
-	return dim("Enter свернуть и развернуть ветку")
+	return dim(s.app.T("tui.map.hints"))
 }
 
 func (s *mapScreen) refresh(ctx context.Context) {
@@ -452,13 +456,13 @@ func (s *mapScreen) refresh(ctx context.Context) {
 	sort.Strings(internal)
 	sort.Strings(orphanContainers)
 
-	addSection("Доступно из внешней сети", public)
-	addSection("Только изнутри хоста", internal)
-	addSection("Контейнеры", orphanContainers)
+	addSection(s.app.T("tui.map.sectionPublic"), public)
+	addSection(s.app.T("tui.map.sectionInternal"), internal)
+	addSection(s.app.T("tui.map.sectionContainers"), orphanContainers)
 
 	s.app.queue(func() {
 		s.tree.SetRoot(root).SetCurrentNode(root)
-		s.info.SetText(dim("\n Выберите узел, чтобы увидеть подробности."))
+		s.info.SetText(dim("\n " + s.app.T("tui.map.selectNodeHint")))
 		s.tree.SetChangedFunc(func(node *tview.TreeNode) {
 			if n, ok := node.GetReference().(*topology.Node); ok {
 				s.showNode(n, outgoing[n.ID], byID)
@@ -519,9 +523,9 @@ func (s *mapScreen) showNode(n *topology.Node, edges []topology.Edge, byID map[s
 	if n.Sublabel != "" {
 		sb.WriteString(" " + dim(n.Sublabel) + "\n")
 	}
-	sb.WriteString(" состояние: " + tag(statusHex(n.Status), n.Status))
+	sb.WriteString(" " + s.app.T("tui.map.stateLabel") + tag(statusHex(n.Status), n.Status))
 	if n.Findings > 0 {
-		sb.WriteString(dim(fmt.Sprintf("   проблем: %d (худшая: %s)", n.Findings, n.Severity)))
+		sb.WriteString(dim("   " + s.app.T("tui.map.findingsSummary", n.Findings, n.Severity)))
 	}
 	sb.WriteString("\n")
 
@@ -536,7 +540,7 @@ func (s *mapScreen) showNode(n *topology.Node, edges []topology.Edge, byID map[s
 		sb.WriteString(dim(" "+k+": ") + truncate(n.Meta[k], 90) + "\n")
 	}
 	if len(edges) > 0 {
-		sb.WriteString(dim(" ведёт к: "))
+		sb.WriteString(dim(" " + s.app.T("tui.map.leadsTo")))
 		var names []string
 		for _, e := range edges {
 			if to := byID[e.To]; to != nil {
