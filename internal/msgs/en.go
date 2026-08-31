@@ -47,7 +47,6 @@ var enCatalog = map[string]string{
 	"pkgInstall.tmuxAlreadyInstalled":      "tmux is already installed",
 	"pkgInstall.ufwAlreadyInstalled":       "ufw is already installed",
 	"pkgInstall.firewalldAlreadyInstalled": "firewalld is already installed",
-	"pkgInstall.x11vncAlreadyInstalled":    "x11vnc is already installed",
 	"pkgInstall.unknownService":            "unknown service: %s",
 	"pkgInstall.serviceAlreadyInstalled":   "%s is already installed",
 	"pkgInstall.unknownPackage":            "unknown package: %s",
@@ -59,13 +58,6 @@ var enCatalog = map[string]string{
 	"terminal.disabled":         "the web terminal is disabled: set NKT_TERMINAL_ENABLED=true",
 	"terminal.fixturesDisabled": "the web terminal isn't available in fixtures mode",
 	"terminal.tmuxStartFailed":  "couldn't start tmux: %s",
-
-	"vnc.disabled":         "the VNC server is disabled: set NKT_TERMINAL_ENABLED=true",
-	"vnc.fixturesDisabled": "the VNC server isn't available in fixtures mode",
-	"vnc.notInstalled":     "x11vnc is not installed",
-	"vnc.alreadyRunning":   "x11vnc is already running",
-	"vnc.notRunning":       "x11vnc is not running",
-	"vnc.startFailed":      "couldn't start x11vnc: %s",
 
 	"vulns.scanAlreadyRunning": "a scan is already running",
 

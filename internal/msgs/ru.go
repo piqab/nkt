@@ -46,7 +46,6 @@ var ruCatalog = map[string]string{
 	"pkgInstall.tmuxAlreadyInstalled":      "tmux уже установлен",
 	"pkgInstall.ufwAlreadyInstalled":       "ufw уже установлен",
 	"pkgInstall.firewalldAlreadyInstalled": "firewalld уже установлен",
-	"pkgInstall.x11vncAlreadyInstalled":    "x11vnc уже установлен",
 	"pkgInstall.unknownService":            "неизвестный сервис: %s",
 	"pkgInstall.serviceAlreadyInstalled":   "%s уже установлен",
 	"pkgInstall.unknownPackage":            "неизвестный пакет: %s",
@@ -58,13 +57,6 @@ var ruCatalog = map[string]string{
 	"terminal.disabled":         "веб-терминал выключен: задайте NKT_TERMINAL_ENABLED=true",
 	"terminal.fixturesDisabled": "веб-терминал недоступен в режиме fixtures",
 	"terminal.tmuxStartFailed":  "не удалось запустить tmux: %s",
-
-	"vnc.disabled":         "VNC-сервер выключен: задайте NKT_TERMINAL_ENABLED=true",
-	"vnc.fixturesDisabled": "VNC-сервер недоступен в режиме fixtures",
-	"vnc.notInstalled":     "x11vnc не установлен",
-	"vnc.alreadyRunning":   "x11vnc уже запущен",
-	"vnc.notRunning":       "x11vnc не запущен",
-	"vnc.startFailed":      "не удалось запустить x11vnc: %s",
 
 	"vulns.scanAlreadyRunning": "сканирование уже выполняется",
 

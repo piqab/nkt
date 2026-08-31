@@ -840,21 +840,21 @@ export default function Hosts({
         <Modal title={t('hosts.editHostTitle', { name: editingHost.name })} onClose={() => setEditingHost(null)}>
           <HostForm
             initial={editingHost}
-            onDone={(name, authorizedKey, terminalEnabledChanged, tunnelEnabledChanged, vncUserChanged) => {
+            onDone={(name, authorizedKey, terminalEnabledChanged, tunnelEnabledChanged) => {
               const host = editingHost
               setEditingHost(null)
               reload()
               if (authorizedKey) setPubKeyInfo({ hostName: name, key: authorizedKey })
-              // Saving either checkbox (or the VNC user field) alone only
-              // updates the hub's own record — nothing changes on the host
-              // itself until nkt.env is rewritten and the service
-              // restarted, which is exactly what a reinstall does. Only
-              // for a host already past its first install: a brand new one
-              // goes through that install for the first time via its own
-              // separate flow, and one already installing must not get a
-              // second, concurrent job racing the first.
+              // Saving either checkbox alone only updates the hub's own
+              // record — nothing changes on the host itself until
+              // nkt.env is rewritten and the service restarted, which is
+              // exactly what a reinstall does. Only for a host already
+              // past its first install: a brand new one goes through
+              // that install for the first time via its own separate
+              // flow, and one already installing must not get a second,
+              // concurrent job racing the first.
               if (
-                (terminalEnabledChanged || tunnelEnabledChanged || vncUserChanged) &&
+                (terminalEnabledChanged || tunnelEnabledChanged) &&
                 host.status !== 'new' &&
                 host.status !== 'installing'
               ) {
@@ -1118,7 +1118,6 @@ type HostFormValues = {
   secret?: string
   terminal_enabled: boolean
   tunnel_enabled: boolean
-  vnc_user: string
 }
 
 /**
@@ -1142,7 +1141,6 @@ function HostForm({
     generatedAuthorizedKey?: string,
     terminalEnabledChanged?: boolean,
     tunnelEnabledChanged?: boolean,
-    vncUserChanged?: boolean,
   ) => void
 }) {
   const { t } = useTranslation()
@@ -1162,7 +1160,6 @@ function HostForm({
     try {
       const terminalEnabled = values.terminal_enabled ?? false
       const tunnelEnabled = values.tunnel_enabled ?? false
-      const vncUser = values.vnc_user?.trim() ?? ''
       const body = {
         name: values.name,
         addr: values.addr,
@@ -1172,7 +1169,6 @@ function HostForm({
         secret: values.secret ?? '',
         terminal_enabled: terminalEnabled,
         tunnel_enabled: tunnelEnabled,
-        vnc_user: vncUser,
       }
       let authorizedKey: string | undefined
       if (editing) {
@@ -1192,8 +1188,7 @@ function HostForm({
       form.setFieldsValue({ secret: '' })
       const terminalEnabledChanged = editing && terminalEnabled !== (initial.terminal_enabled ?? false)
       const tunnelEnabledChanged = editing && tunnelEnabled !== (initial.tunnel_enabled ?? false)
-      const vncUserChanged = editing && vncUser !== (initial.vnc_user ?? '')
-      onDone(values.name, authorizedKey, terminalEnabledChanged, tunnelEnabledChanged, vncUserChanged)
+      onDone(values.name, authorizedKey, terminalEnabledChanged, tunnelEnabledChanged)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -1228,7 +1223,6 @@ function HostForm({
         // exposure from having it ready. Editing an existing host still
         // defaults to whatever it already has.
         tunnel_enabled: initial?.tunnel_enabled ?? true,
-        vnc_user: initial?.vnc_user ?? '',
       }}
     >
       {!editing && <p className="small muted">{t('hosts.addHostHint')}</p>}
@@ -1290,13 +1284,6 @@ function HostForm({
           </div>
         </Checkbox>
       </Form.Item>
-      <Form.Item name="vnc_user" label={t('hosts.vncUser')} style={{ marginBottom: '0.4rem' }}>
-        <Input placeholder={t('hosts.vncUserPlaceholder')} style={{ maxWidth: '16rem' }} />
-      </Form.Item>
-      <p className="small muted" style={{ marginTop: '-0.2rem', marginBottom: '0.8rem' }}>
-        {t('hosts.vncUserHint')}
-        {t(editing ? 'hosts.reinstallsOnChange' : 'hosts.appliesOnFirstInstall')}
-      </p>
       <Form.Item name="tunnel_enabled" valuePropName="checked" style={{ marginBottom: '0.4rem' }}>
         <Checkbox>
           {t('hosts.tunnelEnabled')}

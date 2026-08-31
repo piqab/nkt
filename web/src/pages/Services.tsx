@@ -169,7 +169,7 @@ export default function Services({ me }: { me: Me }) {
   // Set when the operator clicks a not-installed service's chip in the
   // inactive summary below — opens PackageInstallModal against
   // /services/{name}/install/ws, the same shared apt-get-install-live
-  // component tmux/dbus/x11vnc already use, just pointed at this
+  // component tmux/dbus already use, just pointed at this
   // service's own install route.
   const [installTarget, setInstallTarget] = useState<string | null>(null)
   const [installOutcome, setInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)

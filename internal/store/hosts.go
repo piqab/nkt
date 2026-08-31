@@ -58,20 +58,10 @@ type Host struct {
 	// the dashboard/terminal if SSH becomes unreachable. Off by default,
 	// same reasoning as TerminalEnabled: a new opt-in surface, not
 	// something every host should get just by being added.
-	TunnelEnabled bool `json:"tunnel_enabled"`
-	// VNCUser is passed through as NKT_VNC_USER when the hub (re)installs
-	// this host — see internal/hub/provision.go's renderEnv. Deliberately
-	// separate from SSHUser: x11vnc has to run as whichever OS account
-	// actually owns the running desktop session (X11 access control is
-	// per-account), which is not necessarily the account SSH provisioning
-	// connects as — that's very often root, while the desktop session
-	// belongs to a different, ordinary local user. Empty means "not set,"
-	// same three-tier fallback config.Config.VNCUser itself already
-	// implements (VNCUser, then TerminalUser, then root).
-	VNCUser    string `json:"vnc_user,omitempty"`
-	ErrorMsg   string `json:"error_msg,omitempty"`
-	CreatedAt  string `json:"created_at"`
-	LastSeenAt string `json:"last_seen_at,omitempty"`
+	TunnelEnabled bool   `json:"tunnel_enabled"`
+	ErrorMsg      string `json:"error_msg,omitempty"`
+	CreatedAt     string `json:"created_at"`
+	LastSeenAt    string `json:"last_seen_at,omitempty"`
 
 	// SecretEnc, AdminPasswordEnc and TunnelTokenEnc are secretbox-encrypted
 	// and never serialised to JSON — only the hub package that holds the
@@ -113,7 +103,7 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
-	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, vnc_user`
+	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
@@ -121,7 +111,7 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var adminPasswordEnc, tunnelTokenEnc, tunnelCertSHA256 []byte
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
-		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen, &h.VNCUser)
+		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen)
 	if err != nil {
 		return Host{}, err
 	}
@@ -239,19 +229,6 @@ func (d *DB) SetHostSudoStatus(ctx context.Context, id int64, status string) err
 // Host.TerminalEnabled.
 func (d *DB) SetHostTerminalEnabled(ctx context.Context, id int64, enabled bool) error {
 	res, err := d.ExecContext(ctx, `UPDATE hosts SET terminal_enabled = ? WHERE id = ?`, enabled, id)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	return nil
-}
-
-// SetHostVNCUser records which OS account x11vnc should run as on this
-// host's next install/update — see Host.VNCUser.
-func (d *DB) SetHostVNCUser(ctx context.Context, id int64, vncUser string) error {
-	res, err := d.ExecContext(ctx, `UPDATE hosts SET vnc_user = ? WHERE id = ?`, vncUser, id)
 	if err != nil {
 		return err
 	}

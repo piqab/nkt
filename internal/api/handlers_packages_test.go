@@ -5,8 +5,16 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/althq/netknownsthat/internal/collect"
 	"github.com/althq/netknownsthat/internal/config"
+	"github.com/althq/netknownsthat/internal/inventory"
 )
+
+func newTestServer(t *testing.T, cfg *config.Config) *Server {
+	t.Helper()
+	scanner := inventory.New(cfg, collect.NewFixtures(t.TempDir()), nil)
+	return &Server{cfg: cfg, scanner: scanner}
+}
 
 // TestParseDpkgQueryOutput locks in the "last field, not substring" status
 // check — the regression risk being "not-installed" itself ending in the
@@ -78,7 +86,7 @@ func TestParsePackageNames(t *testing.T) {
 // must return before ever spawning apt-get.
 func TestHandleCommonPackagesInstallWSGates(t *testing.T) {
 	t.Run("refused in fixtures mode", func(t *testing.T) {
-		s := newVNCTestServer(t, &config.Config{Mode: config.ModeFixtures})
+		s := newTestServer(t, &config.Config{Mode: config.ModeFixtures})
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/api/system/packages/install/ws?pkgs=nvim", nil)
@@ -90,7 +98,7 @@ func TestHandleCommonPackagesInstallWSGates(t *testing.T) {
 	})
 
 	t.Run("refused without apt-get", func(t *testing.T) {
-		s := newVNCTestServer(t, &config.Config{Mode: config.ModeLocal})
+		s := newTestServer(t, &config.Config{Mode: config.ModeLocal})
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/api/system/packages/install/ws?pkgs=nvim", nil)
@@ -102,13 +110,13 @@ func TestHandleCommonPackagesInstallWSGates(t *testing.T) {
 	})
 }
 
-// TestHandleServiceInstallWSGates mirrors TestHandleVNCInstallWSGates for
-// the per-service install route — fixtures mode and an unknown/unmanaged
+// TestHandleServiceInstallWSGates covers the guard clauses for the
+// per-service install route — fixtures mode and an unknown/unmanaged
 // service name (the allowlist check) both refuse before ever reaching
 // parse.InstallTarget's resolved package.
 func TestHandleServiceInstallWSGates(t *testing.T) {
 	t.Run("refused in fixtures mode", func(t *testing.T) {
-		s := newVNCTestServer(t, &config.Config{Mode: config.ModeFixtures})
+		s := newTestServer(t, &config.Config{Mode: config.ModeFixtures})
 
 		rec := httptest.NewRecorder()
 		req := httptest.NewRequest(http.MethodGet, "/api/services/nginx/install/ws", nil)
