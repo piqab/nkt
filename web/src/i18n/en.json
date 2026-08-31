@@ -875,7 +875,17 @@
     "descCurl": "command-line HTTP(S) and other protocol requests",
     "descSsh": "SSH server — accept incoming SSH connections",
     "descGit": "version control system",
-    "descWget": "download files by URL"
+    "descWget": "download files by URL",
+    "descHtop": "interactive process monitor",
+    "descNcdu": "disk usage analyzer, browsable by directory",
+    "descTree": "directory tree as text",
+    "descUnzip": "extract zip archives",
+    "descRsync": "fast file copying and syncing",
+    "descJq": "command-line JSON processor",
+    "descNetTools": "ifconfig, netstat, route and other classic networking tools",
+    "descMtr": "traceroute and ping combined — route diagnostics",
+    "descTcpdump": "capture and analyze network traffic",
+    "descPython3": "Python 3 interpreter"
   },
   "overview": {
     "what": "host overview",

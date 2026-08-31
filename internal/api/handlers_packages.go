@@ -25,9 +25,11 @@ type commonPackage struct {
 
 // commonPackages: Package differs from Name exactly where the everyday
 // tool name isn't the real apt package — nvim's package is neovim, gpg's
-// is gnupg, and "ssh" here means the *server* (openssh-server, so the host
-// can accept incoming SSH), not the client (openssh-client, almost always
-// already present since it's what this very connection came in on).
+// is gnupg, mtr's is mtr-tiny (Debian/Ubuntu ship the statically linked
+// build under that name), and "ssh" here means the *server*
+// (openssh-server, so the host can accept incoming SSH), not the client
+// (openssh-client, almost always already present since it's what this very
+// connection came in on).
 var commonPackages = []commonPackage{
 	{Name: "nvim", Package: "neovim"},
 	{Name: "tmux", Package: "tmux"},
@@ -36,6 +38,16 @@ var commonPackages = []commonPackage{
 	{Name: "ssh", Package: "openssh-server"},
 	{Name: "git", Package: "git"},
 	{Name: "wget", Package: "wget"},
+	{Name: "htop", Package: "htop"},
+	{Name: "ncdu", Package: "ncdu"},
+	{Name: "tree", Package: "tree"},
+	{Name: "unzip", Package: "unzip"},
+	{Name: "rsync", Package: "rsync"},
+	{Name: "jq", Package: "jq"},
+	{Name: "net-tools", Package: "net-tools"},
+	{Name: "mtr", Package: "mtr-tiny"},
+	{Name: "tcpdump", Package: "tcpdump"},
+	{Name: "python3", Package: "python3"},
 }
 
 func commonPackageByName(name string) (commonPackage, bool) {
