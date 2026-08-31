@@ -411,16 +411,16 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		log.Info("получен сигнал завершения, останавливаемся")
+		log.Info("shutdown signal received, stopping")
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Error("остановка HTTP-сервера", "err", err)
+		log.Error("stopping HTTP server", "err", err)
 	}
 	jobs.Wait()
-	log.Info("завершено")
+	log.Info("stopped")
 	return nil
 }
 
@@ -675,15 +675,15 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		log.Info("получен сигнал завершения, останавливаемся")
+		log.Info("shutdown signal received, stopping")
 	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Error("остановка HTTP-сервера", "err", err)
+		log.Error("stopping HTTP server", "err", err)
 	}
 	jobs.Wait()
-	log.Info("завершено")
+	log.Info("stopped")
 	return nil
 }

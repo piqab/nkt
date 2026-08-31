@@ -294,7 +294,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 // would be misleading.
 func (s *Server) setTunnelEnabled(ctx context.Context, hostID int64, enabled bool) {
 	if err := s.hub.SetTunnelEnabled(ctx, hostID, enabled); err != nil {
-		s.log.Warn("не удалось сохранить настройку резервного канала", "host_id", hostID, "err", err)
+		s.log.Warn("could not save fallback channel setting", "host_id", hostID, "err", err)
 	}
 }
 

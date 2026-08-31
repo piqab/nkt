@@ -742,7 +742,7 @@ func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store
 	// dial's cert-mismatch warning explains why, not a reason to fail the
 	// install itself.
 	if err := m.db.SetHostTunnelCertSHA256(ctx, hostID, nil); err != nil {
-		m.log.Warn("резервный канал: не удалось сбросить привязку сертификата хоста перед переустановкой", "host_id", hostID, "err", err)
+		m.log.Warn("fallback channel: could not clear host certificate pin before reinstall", "host_id", hostID, "err", err)
 	}
 	return tunnelEnvParams{
 		Enabled:    true,
