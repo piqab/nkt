@@ -282,8 +282,29 @@ sudo nkt tui
 
 ```bash
 make hub                # в Docker: docker compose -f deploy/docker-compose.hub.yml up -d --build
-sudo make hub-install    # или как обычный systemd-сервис, без Docker
 ```
+
+Без Docker хаб сам кросс-компилирует бинарник `nkt` для каждого вновь
+добавленного хоста — для этого на машине, где работает хаб, нужны
+исходники самого репозитория, а не только бинарник `nkt`:
+
+```bash
+git clone https://github.com/piqab/nkt.git /opt/netknownsthat
+cd /opt/netknownsthat
+make build
+sudo make hub-install
+```
+
+`deploy/hub.env.example` (копируется в `/etc/netknownsthat/hub.env`
+при первой установке) уже указывает `NKT_HUB_SOURCE_ROOT` на
+`/opt/netknownsthat` — держите клон именно там. Он лежит вне
+`StateDirectory` systemd-юнита, поэтому не зависит от каталога данных
+хаба; обновляйте его вместе с самим хабом (`git pull && make build &&
+sudo make hub-install`). Если установка хоста падает с ошибкой
+«исходники nkt не найдены», значит `NKT_HUB_SOURCE_ROOT` в `hub.env`
+не задан или указывает на каталог без `go.mod` — пропишите
+абсолютный путь к клону и выполните
+`systemctl restart netknownsthat-hub`.
 
 Пароль администратора генерируется при первом старте и печатается в
 лог — как и у обычного `nkt`.

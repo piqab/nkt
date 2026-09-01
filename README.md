@@ -279,8 +279,28 @@ for every one.
 
 ```bash
 make hub                # in Docker: docker compose -f deploy/docker-compose.hub.yml up -d --build
-sudo make hub-install    # or as a plain systemd service, no Docker
 ```
+
+Without Docker, the hub cross-compiles an `nkt` binary for each newly
+added host itself — for that it needs this repo's own source checked
+out on the machine running the hub, not just the `nkt` binary:
+
+```bash
+git clone https://github.com/piqab/nkt.git /opt/netknownsthat
+cd /opt/netknownsthat
+make build
+sudo make hub-install
+```
+
+`deploy/hub.env.example` (copied to `/etc/netknownsthat/hub.env` on
+first install) already points `NKT_HUB_SOURCE_ROOT` at
+`/opt/netknownsthat` — keep the clone there. It lives outside the
+systemd unit's `StateDirectory`, so it survives independently of the
+hub's own data directory; update it together with the hub itself
+(`git pull && make build && sudo make hub-install`). If a host install
+fails with `nkt sources not found`, `NKT_HUB_SOURCE_ROOT` in
+`hub.env` is missing or points at a path with no `go.mod` — set it to
+the clone's absolute path and `systemctl restart netknownsthat-hub`.
 
 The admin password is generated on first start and printed to the log —
 same as with a plain `nkt`.
