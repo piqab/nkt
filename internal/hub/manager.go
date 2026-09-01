@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
@@ -751,6 +752,13 @@ func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store
 	}, nil
 }
 
+// validAdminUser is deliberately narrow: this field is only ever "admin" in
+// every real code path (see resolveAdminCredential's own comment) — this
+// charset just needs to admit that and reject anything that could act as a
+// shell metacharacter or an EnvironmentFile line break wherever the value
+// ends up interpolated downstream.
+var validAdminUser = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
+
 // resolveAdminCredential returns the bootstrap admin username/password to
 // write into the remote's env file, reusing whatever is already stored for
 // this host instead of generating a fresh one every time install runs.
@@ -772,6 +780,20 @@ func (m *Manager) resolveAdminCredential(ctx context.Context, hostID int64, host
 	user = host.AdminUser
 	if user == "" {
 		user = "admin"
+	}
+	// Every real UI path only ever leaves AdminUser at its "admin" default —
+	// nothing lets an operator set it to anything else. The one way it can
+	// hold something different is store.DB.ImportHosts, which inserts an
+	// uploaded export file's fields with no validation of its own. This
+	// value later gets interpolated into a remote shell command
+	// (resetRemoteAdminPassword) and a systemd EnvironmentFile line
+	// (renderEnv) — checking it here, at the single choke point both of
+	// those production call sites (install and installOverTunnel) go
+	// through, closes both regardless of how an untrusted value got into
+	// the hosts table.
+	if !validAdminUser.MatchString(user) {
+		return "", "", fmt.Errorf(
+			"недопустимое имя администратора хоста %q (вероятно, повреждённый или подделанный импорт реестра хостов)", user)
 	}
 	if len(host.AdminPasswordEnc) > 0 {
 		decrypted, err := secretbox.Decrypt(m.key, host.AdminPasswordEnc)

