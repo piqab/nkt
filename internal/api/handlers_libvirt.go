@@ -5,7 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/althq/netknownsthat/internal/auth"
+	"github.com/piqab/nkt/internal/auth"
 )
 
 func (s *Server) handleVMs(w http.ResponseWriter, r *http.Request) {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/althq/netknownsthat/internal/config"
+	"github.com/piqab/nkt/internal/config"
 )
 
 func TestAptPackageNameRe(t *testing.T) {

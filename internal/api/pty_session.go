@@ -16,7 +16,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/creack/pty"
 
-	"github.com/althq/netknownsthat/internal/auth"
+	"github.com/piqab/nkt/internal/auth"
 )
 
 // unrestrictedCommand builds argv the way a caller who wants to run it

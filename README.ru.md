@@ -153,14 +153,12 @@ NKT_TLS_ENABLED=true
 Готовый образ (`Dockerfile.hub`) публикуется
 `.github/workflows/release.yml` для каждого тега `vX.Y.Z` в
 `ghcr.io/piqab/nkt-hub` — его можно развернуть без клонирования
-репозитория. Пакет приватный (репозиторий приватный), поэтому нужен
-токен с правом `read:packages`.
+репозитория, `docker login` не нужен.
 
 ### Docker Compose
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/piqab/nkt/main/deploy/docker-compose.hub.release.yml
-docker login ghcr.io -u <ваш логин на GitHub>     # вместо пароля — токен с read:packages
 docker compose -f docker-compose.hub.release.yml up -d
 docker compose -f docker-compose.hub.release.yml logs hub    # пароль администратора
 ```
@@ -180,9 +178,6 @@ docker compose -f docker-compose.hub.release.yml logs hub    # пароль ад
 
 ```bash
 kubectl apply -f deploy/k8s/hub.yaml
-kubectl create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io --docker-username=<ваш логин на GitHub> \
-  --docker-password=<токен с read:packages> -n netknownsthat
 kubectl logs -n netknownsthat deploy/nkt-hub       # пароль администратора
 kubectl port-forward -n netknownsthat svc/nkt-hub 8443:8077
 ```

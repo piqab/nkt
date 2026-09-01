@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/secretbox"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/secretbox"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // TestManagerProxyRoundTrip is the closest thing to an end-to-end test of

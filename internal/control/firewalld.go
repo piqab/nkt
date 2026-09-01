@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // FirewalldManager changes firewall rules through firewall-cmd — the second

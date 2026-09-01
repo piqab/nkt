@@ -1,4 +1,4 @@
-module github.com/althq/netknownsthat
+module github.com/piqab/nkt
 
 go 1.25.0
 

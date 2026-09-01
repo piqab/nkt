@@ -6,9 +6,9 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // commonPackage is one entry in the Overview page's "common packages"

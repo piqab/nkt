@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/control"
-	"github.com/althq/netknownsthat/internal/inventory"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/inventory"
 )
 
 // certRenewActor is the audit-log actor for renewals the scheduler triggers

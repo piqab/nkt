@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // sensitivePorts are services that must never face the public internet.

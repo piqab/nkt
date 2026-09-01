@@ -10,8 +10,8 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/topology"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/topology"
 )
 
 // ------------------------------------------------------------------- overview

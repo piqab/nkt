@@ -11,8 +11,8 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/althq/netknownsthat/internal/auth"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // minPasswordLength matches what the HTTP API enforces.

@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/auth"
-	"github.com/althq/netknownsthat/internal/control"
+	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/control"
 )
 
 func (s *Server) handleFirewalldAdd(w http.ResponseWriter, r *http.Request) {

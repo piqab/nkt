@@ -3,7 +3,7 @@ package analyze
 import (
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/model"
 )
 
 func rules(findings []model.Finding) map[string][]model.Finding {

@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/analyze"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/analyze"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // Node kinds.

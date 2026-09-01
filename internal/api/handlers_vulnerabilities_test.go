@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // TestHandleVulnerabilitiesIdleState confirms the shape of the response

@@ -10,13 +10,13 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/control"
-	"github.com/althq/netknownsthat/internal/inventory"
-	"github.com/althq/netknownsthat/internal/monitor"
-	"github.com/althq/netknownsthat/internal/msgs"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/inventory"
+	"github.com/piqab/nkt/internal/monitor"
+	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // tuiLangKey is the internal/store KV key the TUI's language choice is

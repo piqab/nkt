@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/tlscheck"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/tlscheck"
 )
 
 // maxParallelCertChecks bounds how many live TLS dials run at once during a

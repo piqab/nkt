@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // LXDManager performs actions against the local LXD daemon via its `lxc`

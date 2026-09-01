@@ -8,9 +8,9 @@ import (
 
 	"github.com/hashicorp/yamux"
 
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/secretbox"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/secretbox"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // newTestRelaySession wires a real yamux client/server pair over an

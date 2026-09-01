@@ -148,15 +148,13 @@ instead of the self-signed one.
 
 A prebuilt image (`Dockerfile.hub`) is published by
 `.github/workflows/release.yml` for every `vX.Y.Z` tag, to
-`ghcr.io/piqab/nkt-hub` — you can deploy it without cloning the repo. The
-package is private (the repo is private), so you need a token with
-`read:packages`.
+`ghcr.io/piqab/nkt-hub` — you can deploy it without cloning the repo, no
+`docker login` needed.
 
 ### Docker Compose
 
 ```bash
 curl -fsSLO https://raw.githubusercontent.com/piqab/nkt/main/deploy/docker-compose.hub.release.yml
-docker login ghcr.io -u <your GitHub login>     # a token with read:packages instead of a password
 docker compose -f docker-compose.hub.release.yml up -d
 docker compose -f docker-compose.hub.release.yml logs hub    # the admin password
 ```
@@ -176,9 +174,6 @@ first), and a `Service` on port 8077.
 
 ```bash
 kubectl apply -f deploy/k8s/hub.yaml
-kubectl create secret docker-registry ghcr-pull \
-  --docker-server=ghcr.io --docker-username=<your GitHub login> \
-  --docker-password=<a token with read:packages> -n netknownsthat
 kubectl logs -n netknownsthat deploy/nkt-hub       # the admin password
 kubectl port-forward -n netknownsthat svc/nkt-hub 8443:8077
 ```

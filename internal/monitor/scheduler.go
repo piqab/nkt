@@ -6,10 +6,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/control"
-	"github.com/althq/netknownsthat/internal/inventory"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/inventory"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // JobStatus records the outcome of the last run of one background job.

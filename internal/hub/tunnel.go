@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/auth"
+	"github.com/piqab/nkt/internal/auth"
 )
 
 // remoteAPIAddr is where a host's own nkt listens, per NKT_ADDR in

@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // CertResult is everything the certificate reader produces.

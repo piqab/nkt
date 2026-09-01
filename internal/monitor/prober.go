@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // maxParallelProbes bounds how many checks run at once. Probes are almost pure

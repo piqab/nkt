@@ -11,9 +11,9 @@ import (
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 
-	"github.com/althq/netknownsthat/internal/control"
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // Expiry bands, matching the analyzer's thresholds.

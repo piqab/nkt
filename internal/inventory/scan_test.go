@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/model"
 )
 
 func fixtureScanner(t *testing.T) *Scanner {

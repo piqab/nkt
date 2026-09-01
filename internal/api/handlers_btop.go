@@ -3,8 +3,8 @@ package api
 import (
 	"net/http"
 
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // handleBtopWS opens a live, fully interactive btop session over the same

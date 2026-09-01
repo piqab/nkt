@@ -13,7 +13,7 @@ import (
 
 	"github.com/hashicorp/yamux"
 
-	"github.com/althq/netknownsthat/internal/auth"
+	"github.com/piqab/nkt/internal/auth"
 )
 
 // ListenerConfig configures the host-side reverse-tunnel listener — see Run.

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // PodmanManager performs actions against the local Podman engine. It is a

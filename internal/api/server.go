@@ -16,13 +16,13 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
-	"github.com/althq/netknownsthat/internal/auth"
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/control"
-	"github.com/althq/netknownsthat/internal/inventory"
-	"github.com/althq/netknownsthat/internal/monitor"
-	"github.com/althq/netknownsthat/internal/msgs"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/inventory"
+	"github.com/piqab/nkt/internal/monitor"
+	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // Server holds everything the handlers need.

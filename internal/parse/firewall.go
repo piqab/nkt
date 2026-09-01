@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // FirewallResult is everything the packet-filter parsers produce.

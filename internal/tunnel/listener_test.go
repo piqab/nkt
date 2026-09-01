@@ -12,7 +12,7 @@ import (
 
 	"github.com/hashicorp/yamux"
 
-	"github.com/althq/netknownsthat/internal/tlscert"
+	"github.com/piqab/nkt/internal/tlscert"
 )
 
 // newTestListener starts a real Run listener on an ephemeral port, backed

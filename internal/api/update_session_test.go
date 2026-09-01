@@ -13,7 +13,7 @@ import (
 
 	"github.com/coder/websocket"
 
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // TestUpdateSessionSurvivesDisconnect is the regression test for the bug

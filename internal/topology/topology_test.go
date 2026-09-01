@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // TestBuildNeverReturnsNilEdgesOrFindings guards against a real production

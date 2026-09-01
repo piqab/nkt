@@ -8,9 +8,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/althq/netknownsthat/internal/auth"
-	"github.com/althq/netknownsthat/internal/msgs"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // minPasswordRunes is the shortest password accepted anywhere in the API.

@@ -6,8 +6,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // parseFirewalld checks and (if active) reads firewalld, appending anything

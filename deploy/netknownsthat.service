@@ -1,6 +1,6 @@
 [Unit]
 Description=NetKnownsThat — карта сетевых ресурсов и проверка конфигураций
-Documentation=https://github.com/althq/netknownsthat
+Documentation=https://github.com/piqab/nkt
 After=network-online.target docker.service
 Wants=network-online.target
 

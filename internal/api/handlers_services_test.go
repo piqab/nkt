@@ -11,11 +11,11 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/control"
-	"github.com/althq/netknownsthat/internal/inventory"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/inventory"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // servicesTestServer wires a Server with a real ServiceManager against the

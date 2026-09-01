@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // selfUpdateReadTimeout overrides the server-wide 30s http.Server.

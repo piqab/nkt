@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/secretbox"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/secretbox"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // TestInstallJobCancelNowClosesSSHClient proves cancelNow actually renders

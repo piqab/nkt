@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/inventory"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/inventory"
 )
 
 // TestHandleUFWInstallWSGates mirrors TestHandleUpdatesWSGates: ModeFixtures

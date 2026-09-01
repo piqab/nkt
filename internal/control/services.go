@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/parse"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/parse"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // ServiceManager performs systemd and docker actions.

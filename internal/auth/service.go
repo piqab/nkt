@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // SessionCookie is the name of the cookie carrying the opaque session token.

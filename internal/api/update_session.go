@@ -12,7 +12,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/creack/pty"
 
-	"github.com/althq/netknownsthat/internal/auth"
+	"github.com/piqab/nkt/internal/auth"
 )
 
 // maxUpdateSessionBuf bounds how much of a session's output is kept for

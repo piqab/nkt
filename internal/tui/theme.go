@@ -8,8 +8,8 @@ import (
 
 	"github.com/gdamore/tcell/v2"
 
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // The palette mirrors the web interface so both surfaces describe severity and

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // syncTargets derives the probe list from the snapshot. Targets an operator

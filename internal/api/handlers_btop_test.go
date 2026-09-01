@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/config"
+	"github.com/piqab/nkt/internal/config"
 )
 
 // TestHandleBtopWSGates mirrors TestHandleTerminalWSGates: btop rides the

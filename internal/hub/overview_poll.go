@@ -8,8 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/auth"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // pollHostConcurrency bounds how many hosts pollOverviews contacts at once —

@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 func TestWriteCreatesNewFile(t *testing.T) {
