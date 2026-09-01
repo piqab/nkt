@@ -4,7 +4,20 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"regexp"
 )
+
+// validAdminUser mirrors internal/hub's own check on the same field — kept
+// as a separate copy rather than a shared export since store cannot import
+// hub (hub already imports store). AdminUser is only ever "admin" in every
+// real code path; an imported export is untrusted data (a file an operator
+// chose to upload, not something this hub generated), and this field later
+// gets interpolated into a remote shell command and a systemd
+// EnvironmentFile line on whatever host it's later installed to — reject
+// anything that isn't a plain identifier right at import time, rather than
+// only failing (still safely — internal/hub checks again) much later at
+// install.
+var validAdminUser = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 
 // ExportFormatVersion guards against feeding an export from an incompatible
 // future (or malformed) file into ImportHosts — bumped only if the shape of
@@ -114,6 +127,9 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 func (d *DB) importOneHost(ctx context.Context, h HostExport) error {
 	if h.Name == "" || h.Addr == "" {
 		return fmt.Errorf("пустое имя или адрес")
+	}
+	if h.AdminUser != "" && !validAdminUser.MatchString(h.AdminUser) {
+		return fmt.Errorf("недопустимое имя администратора %q", h.AdminUser)
 	}
 	_, err := d.ExecContext(ctx,
 		`INSERT INTO hosts(

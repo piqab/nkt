@@ -412,6 +412,14 @@ func activateService(client *ssh.Client, sshUser string, report func(key string,
 // metacharacters) would already be safe unquoted, but a password decrypted
 // from a much older host record is worth not assuming anything about.
 func resetRemoteAdminPassword(client *ssh.Client, sshUser, adminUser, adminPassword, dataDir, binPath string) error {
+	// adminUser is interpolated into the shell command below completely
+	// unquoted — the caller (Manager.resolveAdminCredential) is the one
+	// place that's supposed to guarantee this is safe, but checking again
+	// here means a future caller can never reintroduce this as an
+	// injection point by skipping that step.
+	if !validAdminUser.MatchString(adminUser) {
+		return fmt.Errorf("недопустимое имя администратора хоста %q", adminUser)
+	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(adminPassword))
 	inner := fmt.Sprintf("echo %s | base64 -d | env NKT_MODE=local NKT_DATA_DIR=%s %s passwd %s",
 		encoded, dataDir, binPath, adminUser)

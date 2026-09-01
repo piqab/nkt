@@ -219,7 +219,22 @@ func (s *Server) handleUserPatch(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.db.Audit(r.Context(), actor.Username, "user.update", name, "ok", req)
+	// Never audit req directly: it carries the plaintext new password when
+	// req.Password is set, and Audit's detail is stored as-is and readable
+	// by anyone with a viewer session via GET /audit — a summary that
+	// records *that* the password changed, not what it changed to, is all
+	// an audit trail needs here.
+	detail := map[string]any{}
+	if req.Role != nil {
+		detail["role"] = *req.Role
+	}
+	if req.Disabled != nil {
+		detail["disabled"] = *req.Disabled
+	}
+	if req.Password != nil {
+		detail["password_changed"] = true
+	}
+	s.db.Audit(r.Context(), actor.Username, "user.update", name, "ok", detail)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

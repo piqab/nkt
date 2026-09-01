@@ -214,6 +214,20 @@ func TestSelfInstallGoToolchainLive(t *testing.T) {
 	}
 }
 
+// TestResetRemoteAdminPasswordRejectsUnsafeAdminUser is the defense-in-depth
+// half of the AdminUser injection fix: resolveAdminCredential is supposed
+// to be the only gate, but this function is where an unescaped adminUser
+// would actually get interpolated into a shell command run on the remote
+// host — it must never build that command at all for a value that isn't a
+// plain identifier, regardless of what any caller already checked. No real
+// SSH client is needed: rejection happens before runRemote is ever called.
+func TestResetRemoteAdminPasswordRejectsUnsafeAdminUser(t *testing.T) {
+	err := resetRemoteAdminPassword(nil, "root", "admin'; rm -rf / #", "pw", "/var/lib/netknownsthat", "/usr/local/bin/nkt")
+	if err == nil {
+		t.Fatal("resetRemoteAdminPassword accepted a shell-metacharacter adminUser instead of rejecting it")
+	}
+}
+
 func TestSafeJoinRejectsEscapes(t *testing.T) {
 	root := "/tmp/nkt-toolchain-test"
 	cases := []struct {
