@@ -86,6 +86,15 @@ func (m *Manager) resolveSourceRoot(report func(key string, args ...any)) (strin
 // already works from any machine with Go installed. The compiler itself is
 // resolved by resolveGoBin, which self-installs one if NKT_HUB_GO_BIN
 // doesn't already point at something that runs.
+//
+// When resolveSourceRoot finds no local checkout at all — the hub itself
+// was installed from the prebuilt Releases binary, not `git clone`d, so
+// there is no source anywhere NKT_HUB_SOURCE_ROOT could even point at —
+// this falls back to downloading a matching prebuilt binary from the
+// project's own GitHub Releases instead of giving up. Both failures are
+// reported together if that fallback also fails, since by then the operator
+// needs to know cross-compiling wasn't even attempted for a source-tree
+// reason, not because the download itself is what's broken.
 func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report func(key string, args ...any)) (string, error) {
 	name := fmt.Sprintf("nkt-%s-%s-%s", goos, goarch, m.version)
 	path := filepath.Join(m.cfg.HubBinCacheDir(), name)
@@ -94,9 +103,12 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 		return path, nil
 	}
 
-	sourceRoot, err := m.resolveSourceRoot(report)
-	if err != nil {
-		return "", err
+	sourceRoot, srcErr := m.resolveSourceRoot(report)
+	if srcErr != nil {
+		if dlErr := m.downloadReleaseBinary(ctx, goos, goarch, path, report); dlErr != nil {
+			return "", fmt.Errorf("%w; попытка скачать готовый бинарник с GitHub Releases тоже не удалась: %v", srcErr, dlErr)
+		}
+		return path, nil
 	}
 
 	goBin, err := m.resolveGoBin(ctx, report)
