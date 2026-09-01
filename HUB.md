@@ -44,7 +44,7 @@
 Соберите и установите как обычный `nkt`, только другой юнит и env-файл:
 
 ```bash
-git clone <этот репозиторий> /opt/netknownsthat
+git clone https://github.com/piqab/nkt.git /opt/netknownsthat
 cd /opt/netknownsthat
 make build                    # или make native-build, если нет Docker для самой сборки
 sudo make hub-install
