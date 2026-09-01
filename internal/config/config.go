@@ -194,6 +194,12 @@ type Config struct {
 	// never the interactive shell's. Set this to an absolute path in that
 	// case instead of relying on PATH.
 	HubGoBin string
+	// HubReleaseRepo is the "owner/repo" whose GitHub Releases the hub
+	// downloads a prebuilt nkt binary from when HubSourceRoot has no source
+	// to cross-compile from at all — a hub installed from the prebuilt
+	// binary (no `git clone`) rather than built from a checkout. Only ever
+	// needs changing on a fork with its own Releases page.
+	HubReleaseRepo string
 	// HubFindingsPollInterval is how often the hub polls every online
 	// managed host's own /api/overview in the background to cache its
 	// findings counts and reachability (see Manager.pollOverviews) — this
@@ -328,6 +334,7 @@ func Load() (*Config, error) {
 		HubMasterKey:            envStr("NKT_HUB_MASTER_KEY", ""),
 		HubSourceRoot:           envStr("NKT_HUB_SOURCE_ROOT", wd),
 		HubGoBin:                envStr("NKT_HUB_GO_BIN", "go"),
+		HubReleaseRepo:          envStr("NKT_HUB_RELEASE_REPO", "piqab/nkt"),
 		HubFindingsPollInterval: envDur("NKT_HUB_FINDINGS_POLL_INTERVAL", 60*time.Second),
 		HubTunnelPort:           envInt("NKT_HUB_TUNNEL_PORT", 8078),
 	}

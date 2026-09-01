@@ -403,7 +403,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 			serveErr = httpServer.ListenAndServe()
 		}
 		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			errCh <- serveErr
+			errCh <- diagnoseListenError(ctx, serveErr, r.cfg.Addr)
 		}
 	}()
 
@@ -667,7 +667,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 			serveErr = httpServer.ListenAndServe()
 		}
 		if serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			errCh <- serveErr
+			errCh <- diagnoseListenError(ctx, serveErr, r.cfg.Addr)
 		}
 	}()
 

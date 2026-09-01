@@ -281,9 +281,9 @@ for every one.
 make hub                # in Docker: docker compose -f deploy/docker-compose.hub.yml up -d --build
 ```
 
-Without Docker, the hub cross-compiles an `nkt` binary for each newly
-added host itself — for that it needs this repo's own source checked
-out on the machine running the hub, not just the `nkt` binary:
+Without Docker, the hub normally cross-compiles an `nkt` binary for
+each newly added host itself, from this repo's own source checked out
+on the machine running the hub:
 
 ```bash
 git clone https://github.com/piqab/nkt.git /opt/netknownsthat
@@ -297,10 +297,18 @@ first install) already points `NKT_HUB_SOURCE_ROOT` at
 `/opt/netknownsthat` — keep the clone there. It lives outside the
 systemd unit's `StateDirectory`, so it survives independently of the
 hub's own data directory; update it together with the hub itself
-(`git pull && make build && sudo make hub-install`). If a host install
-fails with `nkt sources not found`, `NKT_HUB_SOURCE_ROOT` in
-`hub.env` is missing or points at a path with no `go.mod` — set it to
-the clone's absolute path and `systemctl restart netknownsthat-hub`.
+(`git pull && make build && sudo make hub-install`).
+
+This clone isn't strictly required, though: if the hub itself was
+installed from the [prebuilt binary](#1-get-the-binary) instead — no
+checkout at all, so `NKT_HUB_SOURCE_ROOT` has nothing to point at no
+matter how it's set — the hub falls back to downloading a matching
+prebuilt `nkt` binary and systemd unit straight from this project's own
+GitHub Releases the first time a host of a given architecture is
+installed, verifying the binary's checksum before using it. That needs
+outbound access to `github.com`; the clone above avoids that dependency
+entirely and works offline. See [HUB.md](HUB.md) if a host install
+fails with "nkt sources not found" even so.
 
 The admin password is generated on first start and printed to the log —
 same as with a plain `nkt`.
@@ -659,7 +667,7 @@ essentials:
 | `failed to connect to the docker API` | Docker isn't running |
 | The `firewall` and `services` sources are unavailable | Root is required: `iptables-save` and `systemctl` don't work for a regular user. Run it through the systemd unit in `deploy/` |
 | Lost the password | `sudo nkt passwd`. As a last resort, stop the service and delete `/var/lib/netknownsthat/netknownsthat.db` |
-| `bind: address already in use` | The port is taken, set a different one with `NKT_ADDR` |
+| `bind: address already in use` | The port is taken — the error itself names the process holding it (`port already held by: nginx (pid 812)`), best-effort via `ss`; either stop that process or set a different port with `NKT_ADDR` |
 | Config edits are rejected with `Read-only file system` | The directory is mounted read-only, or there's no write access to the log directory `nginx -t` opens |
 | Buttons are disabled, changes are refused | Either the `viewer` role, or `NKT_ALLOW_MUTATIONS=false` |
 | Garbled characters in the Windows console | The code page isn't UTF-8: run `chcp 65001` |

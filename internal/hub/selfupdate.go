@@ -210,7 +210,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 	if err != nil {
 		return fail(err)
 	}
-	unitContent, err := m.loadUnitTemplate()
+	unitContent, err := m.loadUnitTemplate(ctx, report)
 	if err != nil {
 		return fail(err)
 	}

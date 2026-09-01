@@ -638,7 +638,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		return fail(err)
 	}
 
-	unitContent, err := m.loadUnitTemplate()
+	unitContent, err := m.loadUnitTemplate(ctx, report)
 	if err != nil {
 		return fail(err)
 	}
@@ -895,13 +895,28 @@ func (m *Manager) RemoveSudoAccess(ctx context.Context, hostID int64) error {
 // loadUnitTemplate reads deploy/netknownsthat.service as-is from the hub's
 // source checkout — the same file a manual install would copy — rather than
 // keeping a second embedded copy in internal/hub that could drift from it.
-func (m *Manager) loadUnitTemplate() (string, error) {
+//
+// When there is no local checkout at all (the same situation ensureBinary's
+// own downloadReleaseBinary fallback exists for — a hub installed from the
+// prebuilt Releases binary rather than `git clone`d), this falls back to
+// fetching the exact same file from the repository itself, pinned to the
+// tag matching the hub's own version rather than whatever HEAD currently
+// has — the same unauthenticated raw.githubusercontent.com fetch README's
+// own manual install instructions already use for a plain host, just
+// performed by the hub instead of by hand.
+func (m *Manager) loadUnitTemplate(ctx context.Context, report func(key string, args ...any)) (string, error) {
 	path := filepath.Join(m.cfg.HubSourceRoot, "deploy", "netknownsthat.service")
 	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", fmt.Errorf("чтение шаблона systemd-юнита %s: %w", path, err)
+	if err == nil {
+		return string(data), nil
 	}
-	return string(data), nil
+
+	report("hub.unitTemplateFallback")
+	content, dlErr := m.downloadUnitTemplate(ctx)
+	if dlErr != nil {
+		return "", fmt.Errorf("чтение шаблона systemd-юнита %s: %w; скачать его с GitHub тоже не удалось: %v", path, err, dlErr)
+	}
+	return content, nil
 }
 
 // InstallJobStatus returns everything reported for an install job so far.
