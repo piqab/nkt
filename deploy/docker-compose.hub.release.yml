@@ -6,9 +6,6 @@
 #   curl -fsSLO https://raw.githubusercontent.com/piqab/nkt/main/deploy/docker-compose.hub.release.yml
 #   docker compose -f docker-compose.hub.release.yml up -d
 #
-# Пакет — приватный (репозиторий приватный): нужен `docker login ghcr.io`
-# токеном с правом read:packages, прежде чем `up` сможет его скачать.
-#
 # На первом старте пароль администратора печатается в лог:
 #   docker compose -f docker-compose.hub.release.yml logs hub
 #

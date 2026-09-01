@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // HostCapacity reads the host's total installed memory and CPU core count

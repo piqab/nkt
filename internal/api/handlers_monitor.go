@@ -9,10 +9,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/althq/netknownsthat/internal/auth"
-	"github.com/althq/netknownsthat/internal/control"
-	"github.com/althq/netknownsthat/internal/msgs"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 )
 
 func (s *Server) handleTargets(w http.ResponseWriter, r *http.Request) {

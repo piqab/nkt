@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // TestHandleListHostsMergesOverview confirms handleListHosts folds in

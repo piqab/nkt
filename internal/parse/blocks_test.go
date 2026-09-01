@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 func splitLines(text string) []string {

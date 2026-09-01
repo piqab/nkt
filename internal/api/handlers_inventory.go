@@ -7,12 +7,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/althq/netknownsthat/internal/analyze"
-	"github.com/althq/netknownsthat/internal/auth"
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/msgs"
-	"github.com/althq/netknownsthat/internal/store"
-	"github.com/althq/netknownsthat/internal/topology"
+	"github.com/piqab/nkt/internal/analyze"
+	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
+	"github.com/piqab/nkt/internal/topology"
 )
 
 // certSummary condenses the certificate state for the dashboard landing page:

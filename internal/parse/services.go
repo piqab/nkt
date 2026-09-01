@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // ServiceSpec describes a service the dashboard knows how to manage.

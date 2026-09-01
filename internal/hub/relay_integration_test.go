@@ -17,11 +17,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/secretbox"
-	"github.com/althq/netknownsthat/internal/store"
-	"github.com/althq/netknownsthat/internal/tlscert"
-	"github.com/althq/netknownsthat/internal/tunnel"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/secretbox"
+	"github.com/piqab/nkt/internal/store"
+	"github.com/piqab/nkt/internal/tlscert"
+	"github.com/piqab/nkt/internal/tunnel"
 )
 
 // TestProxyFallsBackToRelayWhenSSHUnreachable is the reverse-tunnel

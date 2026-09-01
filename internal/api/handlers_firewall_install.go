@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"os/exec"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // handleUFWInstallWS runs `apt-get install -y ufw` on this host, streamed

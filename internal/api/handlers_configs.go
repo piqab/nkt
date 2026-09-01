@@ -4,10 +4,10 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/althq/netknownsthat/internal/auth"
-	"github.com/althq/netknownsthat/internal/control"
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 func (s *Server) handleConfigList(w http.ResponseWriter, r *http.Request) {

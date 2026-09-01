@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/collect"
+	"github.com/piqab/nkt/internal/collect"
 )
 
 // TestLXDNeverReturnsNilInstances guards against a real production crash: a

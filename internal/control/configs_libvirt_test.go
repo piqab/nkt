@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 const newVMFile = "/etc/libvirt/qemu/new-vm.xml"

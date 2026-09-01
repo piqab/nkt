@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // TestDockerNeverReturnsNilSlices guards against a real production crash: a

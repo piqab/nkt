@@ -15,8 +15,8 @@ import (
 
 	crossplane "github.com/nginxinc/nginx-go-crossplane"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // NginxResult is everything the nginx parser produces.

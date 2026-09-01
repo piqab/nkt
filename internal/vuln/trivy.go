@@ -32,7 +32,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // dbMaxAge is how long a cached vulnerability DB is trusted before EnsureDB

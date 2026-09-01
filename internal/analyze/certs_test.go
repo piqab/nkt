@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // cert builds a certificate that is healthy in every respect except what the

@@ -1,8 +1,8 @@
 package parse
 
 import (
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // Fail2ban discovers fail2ban's own config files for the Configs page's

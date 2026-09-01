@@ -1,8 +1,8 @@
 package parse
 
 import (
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // Manifest reads the raw dpkg/os-release files internal/vuln needs to run a

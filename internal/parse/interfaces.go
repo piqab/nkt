@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // ipAddrEntry mirrors the JSON `ip -j addr show` emits — one object per

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // TestCertificatesExpandsHAProxyCrtDirectory covers haproxy's "bind ... crt

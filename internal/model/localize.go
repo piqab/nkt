@@ -1,6 +1,6 @@
 package model
 
-import "github.com/althq/netknownsthat/internal/msgs"
+import "github.com/piqab/nkt/internal/msgs"
 
 // resolve returns text unchanged when key is empty — either this field
 // hasn't been converted to the msgs catalog yet, or there's nothing to

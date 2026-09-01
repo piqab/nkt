@@ -3,10 +3,10 @@ package control
 import (
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/inventory"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/inventory"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // TestServiceForPathRecognizesFail2banRoot confirms a path under

@@ -8,8 +8,8 @@ import (
 
 	crossplane "github.com/nginxinc/nginx-go-crossplane"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // BlockKind identifies the kind of structural block a Block describes.

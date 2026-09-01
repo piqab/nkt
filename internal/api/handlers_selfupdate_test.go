@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/config"
+	"github.com/piqab/nkt/internal/config"
 )
 
 // buildSelfUpdateRequest assembles a valid multipart/form-data body for

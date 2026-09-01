@@ -13,8 +13,8 @@ import (
 	"github.com/haproxytech/config-parser/v5/options"
 	"github.com/haproxytech/config-parser/v5/types"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // HAProxyResult is everything the haproxy parser produces.

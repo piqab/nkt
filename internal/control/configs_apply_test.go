@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/collect"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // argvRecordingCollector records every argv Run is called with, so a test

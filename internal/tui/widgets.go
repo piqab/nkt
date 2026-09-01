@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/althq/netknownsthat/internal/msgs"
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // Terminal chart primitives. The rules are the same as in the web interface:

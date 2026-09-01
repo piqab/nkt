@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/config"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // handleTerminalWS opens a real login shell on this host and streams it

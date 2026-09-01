@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // TestParseTrivyReport locks in the subset of trivy's own JSON schema Scan

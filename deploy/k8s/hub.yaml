@@ -14,10 +14,6 @@
 #
 # Применить:
 #   kubectl apply -f deploy/k8s/hub.yaml
-#   kubectl create secret docker-registry ghcr-pull \
-#     --docker-server=ghcr.io --docker-username=<логин GitHub> \
-#     --docker-password=<PAT с read:packages> -n netknownsthat
-#     # пакет приватный — без этого секрета образ не скачается
 #   kubectl logs -n netknownsthat deploy/nkt-hub    # пароль администратора
 #   kubectl port-forward -n netknownsthat svc/nkt-hub 8443:8077
 #
@@ -62,8 +58,6 @@ spec:
       labels:
         app: nkt-hub
     spec:
-      imagePullSecrets:
-        - name: ghcr-pull
       containers:
         - name: hub
           image: ghcr.io/piqab/nkt-hub:latest

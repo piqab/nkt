@@ -9,10 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/model"
-	"github.com/althq/netknownsthat/internal/msgs"
-	"github.com/althq/netknownsthat/internal/parse"
-	"github.com/althq/netknownsthat/internal/vuln"
+	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/parse"
+	"github.com/piqab/nkt/internal/vuln"
 )
 
 // vulnScanKVKey is where the last completed scan (the full model.VulnScan,

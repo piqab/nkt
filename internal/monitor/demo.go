@@ -7,7 +7,7 @@ import (
 	"math/rand"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // demoBackfillKey marks the database as already seeded.

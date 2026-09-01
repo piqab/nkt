@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/model"
 )
 
 // TestAttachInterfaceOwnership covers the three ways a bridge interface's

@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/model"
+	"github.com/piqab/nkt/internal/model"
 )
 
 func TestCheckLiveCertificatesMatch(t *testing.T) {

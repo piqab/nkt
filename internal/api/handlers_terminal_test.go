@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/althq/netknownsthat/internal/config"
+	"github.com/piqab/nkt/internal/config"
 )
 
 // TestHandleTerminalWSGates locks in the two guards handleTerminalWS checks

@@ -11,8 +11,8 @@ import (
 
 	"github.com/hashicorp/yamux"
 
-	"github.com/althq/netknownsthat/internal/secretbox"
-	"github.com/althq/netknownsthat/internal/tunnel"
+	"github.com/piqab/nkt/internal/secretbox"
+	"github.com/piqab/nkt/internal/tunnel"
 )
 
 // tunnelDialerScanInterval is how often maintainTunnelDialers re-reads the

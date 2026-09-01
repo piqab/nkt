@@ -9,7 +9,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
-	"github.com/althq/netknownsthat/internal/store"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // sshDialTimeout bounds both the TCP connect and the SSH handshake.

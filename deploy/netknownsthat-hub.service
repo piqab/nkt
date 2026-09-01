@@ -1,6 +1,6 @@
 [Unit]
 Description=NetKnownsThat hub — управляющий центр для нескольких VPS по SSH
-Documentation=https://github.com/althq/netknownsthat
+Documentation=https://github.com/piqab/nkt
 After=network-online.target docker.service
 Wants=network-online.target
 

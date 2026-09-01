@@ -5,9 +5,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/althq/netknownsthat/internal/auth"
-	"github.com/althq/netknownsthat/internal/control"
-	"github.com/althq/netknownsthat/internal/msgs"
+	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // handleGenerateSelfSigned issues a self-signed certificate on the host. It
