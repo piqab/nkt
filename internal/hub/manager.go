@@ -204,6 +204,23 @@ type Manager struct {
 	overviewMu sync.Mutex
 	overview   map[int64]hostOverview
 
+	// vulnMu/vulnScans track each host's in-flight/last vulnerability scan —
+	// see vulnscan.go. Keyed by hostID like overview above, for the same
+	// reason: one hub process serves every managed host's own Уязвимости
+	// page, so this cannot be the single shared value a standalone nkt's
+	// own Server.vuln is.
+	vulnMu    sync.Mutex
+	vulnScans map[int64]*hubVulnState
+
+	// vulnDBMu guards the hub's own single shared trivy+DB refresh state —
+	// see vulndb.go. Unlike vulnScans above, there is exactly one of these
+	// per hub (the DB itself is shared across every host's scan), so this
+	// is a plain value, not a per-host map.
+	vulnDBMu         sync.Mutex
+	vulnDBRefreshing bool
+	vulnDBProgress   string
+	vulnDBErr        string
+
 	// relayMu/relaySessions hold each host's live reverse-tunnel session
 	// (see relay.go) — populated by tunneldial.go's runTunnelDialer, which
 	// keeps one such connection alive per TunnelEnabled host, consumed by
@@ -244,6 +261,7 @@ func NewManager(cfg *config.Config, db *store.DB, key []byte, version string, lo
 		sessions:      map[int64]sessionCache{},
 		overview:      map[int64]hostOverview{},
 		relaySessions: map[int64]*yamux.Session{},
+		vulnScans:     map[int64]*hubVulnState{},
 	}
 }
 
@@ -255,6 +273,7 @@ func (m *Manager) Run(ctx context.Context) {
 	go m.pollOverviews(ctx)
 	go m.maintainTunnelDialers(ctx)
 	go m.versionCheckLoop(ctx)
+	go m.vulnDBRefreshLoop(ctx)
 	m.evictIdleConns(ctx)
 }
 

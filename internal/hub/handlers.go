@@ -180,6 +180,96 @@ func (s *Server) handleHubUpdate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// handleHubVulnDBStatus reports the hub's own centralized trivy DB state —
+// the "О системе" page's own vulnerability-database card.
+func (s *Server) handleHubVulnDBStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, vulnDBInfoJSON(s.hub.VulnDBStatus()))
+}
+
+// handleHubVulnDBRefresh triggers RefreshVulnDB in the background and
+// returns immediately — admin-only (see server.go's routing). The first
+// real download of the day can take minutes, same as
+// handleHostVulnScanStart; the frontend polls handleHubVulnDBStatus's own
+// VulnDBInfo.Refreshing/Progress for status instead of holding this request
+// open.
+func (s *Server) handleHubVulnDBRefresh(w http.ResponseWriter, r *http.Request) {
+	go func() { _ = s.hub.RefreshVulnDB(context.Background()) }()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
+}
+
+func vulnDBInfoJSON(v VulnDBInfo) map[string]any {
+	out := map[string]any{
+		"available":  v.Available,
+		"refreshing": v.Refreshing,
+	}
+	if !v.UpdatedAt.IsZero() {
+		out["updated_at"] = v.UpdatedAt
+	}
+	if v.Progress != "" {
+		out["progress"] = v.Progress
+	}
+	if v.Error != "" {
+		out["error"] = v.Error
+	}
+	return out
+}
+
+// ------------------------------------------------------------- vulnerabilities
+
+// handleHostVulnStatus reports a managed host's current vulnerability-scan
+// state — the hub-centralized counterpart to a standalone nkt's own
+// handleVulnerabilities (internal/api/handlers_vulnerabilities.go), same
+// response shape so the frontend's Vulnerabilities.tsx needs no changes at
+// all to work against either. Registered at the exact path a browser
+// already calls through hostScope (see server.go) — takes precedence over
+// the generic /hosts/{id}/* proxy, which would otherwise have forwarded
+// this straight to the host's own (now OS-package-scan-less) handler.
+func (s *Server) handleHostVulnStatus(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	scanning, progress, result, lastErr := s.hub.HostVulnStatus(r.Context(), id)
+	resp := map[string]any{
+		"scanning": scanning,
+		"progress": progress,
+	}
+	if result != nil {
+		resp["scan"] = result
+	}
+	if lastErr != "" {
+		resp["error"] = lastErr
+	}
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleHostVulnScanStart kicks off a centralized scan for a managed host —
+// see Manager.StartHostVulnScan's own doc comment for what that actually
+// does (fetch the manifest, scan it against the hub's own DB, ask the host
+// to scan its own container images).
+func (s *Server) handleHostVulnScanStart(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Same upfront existence check handleStartInstall makes: without it, a
+	// stale/deleted host id would still get back {"status":"started"} — the
+	// background goroutine fails moments later once dialerFor's own
+	// HostByID lookup misses, but the caller has no way to see that from
+	// this response alone.
+	if _, err := s.db.HostByID(r.Context(), id); err != nil {
+		fail(w, r, err)
+		return
+	}
+	if err := s.hub.StartHostVulnScan(id); err != nil {
+		writeError(w, http.StatusConflict, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
+}
+
 // ------------------------------------------------------------------- hosts
 
 // authKindGenerated is a request-only auth_kind value (never stored — see

@@ -309,6 +309,7 @@ func (m *Manager) CloseHost(hostID int64) {
 	m.dropSSHPool(hostID)
 	m.dropOverview(hostID)
 	m.dropRelayAll(hostID)
+	m.dropVulnScan(hostID)
 }
 
 // dropSSHPool forgets hostID's pooled SSH connection and cached session

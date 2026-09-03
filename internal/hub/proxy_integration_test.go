@@ -254,6 +254,115 @@ func TestManagerProxyRetriesAfterStalePooledConnection(t *testing.T) {
 	}
 }
 
+// TestFetchHostManifestOverRealTunnel proves the new manifest-fetch half of
+// centralized vulnerability scanning (vulnscan.go) actually works over a
+// real SSH tunnel to a real nkt — the plumbing runHostVulnScan depends on
+// (dialerFor, cookieFor, tunnelHTTPClientNoTimeout, the cookie the remote
+// host's own RequireAuth checks). Deliberately does not exercise the rest
+// of runHostVulnScan: the fixtures host has no dpkg fixture (manifest ends
+// up Available:false, which is itself a valid, worth-confirming response
+// shape) and does carry container fixtures that would make
+// fetchHostImageScan trigger a *real* trivy self-install + ~1GB DB
+// download — exactly the cost TestDownloadReleaseBinaryLive/
+// TestSelfInstallGoToolchainLive are gated behind NKT_TEST_LIVE_* env vars
+// to avoid running by default; nothing here needs that gate because nothing
+// here reaches trivy at all.
+func TestFetchHostManifestOverRealTunnel(t *testing.T) {
+	sshAddr, sshPort, clientKeyPEM := startTestSSHD(t)
+
+	repoRoot := findRepoRoot(t)
+	nktBin := filepath.Join(t.TempDir(), "nkt")
+	buildCmd := exec.Command("go", "build", "-o", nktBin, "./cmd/nkt")
+	buildCmd.Dir = repoRoot
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("build nkt for the test: %v\n%s", err, out)
+	}
+
+	const adminPassword = "integration-test-password-1234"
+	remoteDataDir := t.TempDir()
+	remoteCmd := exec.Command(nktBin)
+	remoteCmd.Dir = repoRoot
+	remoteCmd.Env = append(os.Environ(),
+		"NKT_MODE=fixtures",
+		"NKT_ADDR=127.0.0.1:8077",
+		"NKT_DATA_DIR="+remoteDataDir,
+		"NKT_BOOTSTRAP_ADMIN_USER=admin",
+		"NKT_BOOTSTRAP_ADMIN_PASSWORD="+adminPassword,
+		"NKT_COOKIE_SECURE=false",
+		"NKT_SCHEDULER_ENABLED=false",
+	)
+	if err := remoteCmd.Start(); err != nil {
+		t.Fatalf("start remote nkt: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = remoteCmd.Process.Kill()
+		_, _ = remoteCmd.Process.Wait()
+	})
+	waitForLocalHTTP(t, "http://127.0.0.1:8077/api/health")
+
+	db, err := store.Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatalf("open hub store: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	key, err := secretbox.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+	secretEnc, err := secretbox.Encrypt(key, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("encrypt ssh key: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	hostID, err := db.CreateHost(ctx, "test-host", sshAddr, sshPort, me.Username, store.HostAuthKey, secretEnc)
+	if err != nil {
+		t.Fatalf("CreateHost: %v", err)
+	}
+	adminPasswordEnc, err := secretbox.Encrypt(key, []byte(adminPassword))
+	if err != nil {
+		t.Fatalf("encrypt admin password: %v", err)
+	}
+	if err := db.SetHostAdmin(ctx, hostID, "admin", adminPasswordEnc); err != nil {
+		t.Fatalf("SetHostAdmin: %v", err)
+	}
+	if err := db.SetHostStatus(ctx, hostID, store.HostStatusOnline, ""); err != nil {
+		t.Fatalf("SetHostStatus: %v", err)
+	}
+
+	manager := NewManager(&config.Config{}, db, key, "test", slog.New(slog.DiscardHandler))
+
+	dial, _, onFail, err := manager.dialerFor(ctx, hostID)
+	if err != nil {
+		t.Fatalf("dialerFor: %v", err)
+	}
+	cookie, err := manager.cookieFor(ctx, hostID, dial)
+	if err != nil {
+		onFail()
+		t.Fatalf("cookieFor: %v", err)
+	}
+
+	manifest, err := fetchHostManifest(ctx, tunnelHTTPClientNoTimeout(dial), cookie)
+	if err != nil {
+		t.Fatalf("fetchHostManifest: %v", err)
+	}
+	// The fixtures snapshot carries no /var/lib/dpkg/status file — this is
+	// itself the thing worth confirming: a real, well-formed, authenticated
+	// response through the whole tunnel+cookie chain, reporting honestly
+	// that there is nothing to scan, not a connection/auth failure that
+	// happens to also decode as a zero value.
+	if manifest.Available {
+		t.Errorf("manifest.Available = true, want false (fixtures host has no dpkg fixture): %+v", manifest)
+	}
+}
+
 // TestResetRemoteAdminPasswordSyncsRealNkt reproduces the exact scenario
 // that motivated resetRemoteAdminPassword: a real nkt instance already
 // bootstrapped with one admin password (simulating an earlier, independent
