@@ -41,8 +41,11 @@ func (m *Manager) ApplyUpdate(ctx context.Context) error {
 	status := m.VersionStatus()
 	if !status.Updatable {
 		return fmt.Errorf(
-			"самообновление недоступно для этого варианта развёртывания хаба (Docker/Kubernetes — " +
-				"обновите образ и пересоздайте контейнер: docker compose pull && docker compose up -d)")
+			"самообновление недоступно: хаб сейчас не запущен как systemd-юнит (нет INVOCATION_ID в " +
+				"окружении) — либо это Docker/Kubernetes-развёртывание (обновите образ и пересоздайте " +
+				"контейнер: docker compose pull && docker compose up -d), либо бинарник запущен вручную, " +
+				"не через systemd (установите и запустите как сервис: sudo make hub-install && " +
+				"sudo systemctl enable --now netknownsthat-hub)")
 	}
 	if status.Latest == "" {
 		return fmt.Errorf("версия ещё не проверялась — сначала выполните проверку обновлений")
