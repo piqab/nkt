@@ -369,7 +369,15 @@ What else the hub can do besides proxying:
   exists; "Update" downloads it, verifies its checksum, and restarts the
   hub itself, no SSH needed. Bare-systemd installs only (`sudo make
   hub-install`) — a Docker/Kubernetes deployment updates by pulling a new
-  image instead, same as any container.
+  image instead, same as any container;
+* **centralized vulnerability scanning** — the "About" section also keeps
+  one shared trivy vulnerability database on the hub (~1GB, refreshed in
+  the background) instead of every managed host downloading its own copy.
+  Scanning a host's OS packages sends the hub only its package manifest (a
+  few hundred KB) over the same SSH connection and scans it centrally;
+  container image scanning still happens on the host itself (it needs that
+  host's own Docker/Podman socket), so a host with containers running still
+  installs trivy locally for just that part.
 
 The network between the hub and its managed hosts isn't exposed
 externally — only whatever port of the hub you chose to publish is

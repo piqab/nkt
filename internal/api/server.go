@@ -188,6 +188,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/apt/packages/{name}/install/status", s.handleAptInstallStatus)
 			r.Get("/system/apt/packages/{name}/remove/status", s.handleAptRemoveStatus)
 			r.Get("/vulnerabilities", s.handleVulnerabilities)
+			r.Get("/vulnerabilities/manifest", s.handleVulnManifest)
 			r.Get("/certificates", s.handleCertificates)
 
 			r.Get("/configs", s.handleConfigList)
@@ -215,6 +216,7 @@ func (s *Server) Handler() http.Handler {
 				r.Use(s.auth.RequireAdmin)
 
 				r.Post("/vulnerabilities/scan", s.handleVulnScanStart)
+				r.Post("/vulnerabilities/scan-images", s.handleVulnScanImages)
 
 				r.Post("/inventory/refresh", s.handleRefresh)
 				r.Post("/services/{name}/validate", s.handleServiceValidate)

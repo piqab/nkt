@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import type { HubVersionInfo } from '../types'
+import type { HubVersionInfo, HubVulnDBInfo } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, formatRelative } from '../components/ui'
 
 /**
@@ -24,6 +24,32 @@ export default function About() {
   const [updating, setUpdating] = useState(false)
   const [restarting, setRestarting] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+
+  // 5s while a refresh is actually running (rare — background-refreshed
+  // every NKT_HUB_VULNDB_REFRESH_INTERVAL, 12h by default) so a manual
+  // "Обновить сейчас" click's progress is visible promptly; 60s otherwise,
+  // matching Vulnerabilities.tsx's own scanning/idle poll-rate split.
+  const [vulnDBFast, setVulnDBFast] = useState(false)
+  const vulndb = useApi<HubVulnDBInfo>('/hub/vulndb', vulnDBFast ? 5_000 : 60_000)
+  const [vulnDBBusy, setVulnDBBusy] = useState(false)
+
+  useEffect(() => {
+    setVulnDBFast(!!vulndb.data?.refreshing)
+  }, [vulndb.data?.refreshing])
+
+  async function refreshVulnDB() {
+    setVulnDBBusy(true)
+    setNotice(null)
+    try {
+      await api('/hub/vulndb/refresh', { method: 'POST' })
+      setVulnDBFast(true)
+      await vulndb.reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setVulnDBBusy(false)
+    }
+  }
 
   async function checkNow() {
     setChecking(true)
@@ -153,6 +179,46 @@ export default function About() {
                 {t('about.updatableFalse')}
               </div>
             )}
+          </>
+        )}
+      </Card>
+
+      <Card title={t('about.vulnDBTitle')} subtitle={t('about.vulnDBHint')}>
+        {vulndb.loading && !vulndb.data ? (
+          <Loading what={t('about.loadingVulnDB')} />
+        ) : (
+          <>
+            <div className="row" style={{ gap: '2rem', flexWrap: 'wrap' }}>
+              <div>
+                <div className="small muted">{t('about.vulnDBStatus')}</div>
+                <div>
+                  {vulndb.data?.refreshing
+                    ? t('about.vulnDBRefreshing')
+                    : vulndb.data?.available
+                      ? t('about.vulnDBReady')
+                      : t('about.vulnDBNotReady')}
+                </div>
+              </div>
+              {vulndb.data?.updated_at && (
+                <div>
+                  <div className="small muted">{t('about.checkedAt')}</div>
+                  <div className="small">{formatRelative(vulndb.data.updated_at)}</div>
+                </div>
+              )}
+            </div>
+
+            {vulndb.data?.progress && <div className="small muted" style={{ marginTop: '0.5rem' }}>{vulndb.data.progress}</div>}
+            {vulndb.data?.error && (
+              <div className="small" style={{ color: 'var(--status-warning)', marginTop: '0.5rem' }}>
+                {t('about.checkFailed', { error: vulndb.data.error })}
+              </div>
+            )}
+
+            <div className="row" style={{ marginTop: '1rem' }}>
+              <Button onClick={refreshVulnDB} loading={vulnDBBusy || vulndb.data?.refreshing}>
+                {t('about.vulnDBRefreshNow')}
+              </Button>
+            </div>
           </>
         )}
       </Card>

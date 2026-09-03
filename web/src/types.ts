@@ -25,6 +25,15 @@ export interface HubVersionInfo {
   check_error?: string
 }
 
+/** GET /hub/vulndb's shape (internal/hub/handlers.go's vulnDBInfoJSON). */
+export interface HubVulnDBInfo {
+  available: boolean
+  refreshing: boolean
+  updated_at?: string
+  progress?: string
+  error?: string
+}
+
 /** A remote VPS registered with the hub (internal/store.Host). */
 export interface HubHost {
   id: number

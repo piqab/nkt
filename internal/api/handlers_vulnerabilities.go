@@ -293,6 +293,81 @@ func (s *Server) runVulnScan(ctx context.Context) {
 	s.vuln.mu.Unlock()
 }
 
+// handleVulnManifest returns this host's own package manifest as JSON — a
+// hub centralizing OS-package scanning (see internal/hub/vulnscan.go) calls
+// this instead of running trivy locally on every managed host: the manifest
+// is a few hundred KB to a few MB, the vulnerability DB it would otherwise
+// need locally is roughly 1GB uncompressed (see internal/vuln's own package
+// doc). Cheap and synchronous — unlike handleVulnScanStart, nothing here
+// downloads anything.
+func (s *Server) handleVulnManifest(w http.ResponseWriter, r *http.Request) {
+	manifest := parse.Manifest(s.scanner.Collector())
+	writeJSON(w, http.StatusOK, map[string]any{"manifest": manifest})
+}
+
+// vulnScanImagesResponse is handleVulnScanImages' own response shape —
+// distinct from model.VulnScan (that struct is a *combined* OS+image
+// result with diff bookkeeping only the scan that owns persistence, host or
+// hub, should compute; this is just "here's what I found on my own local
+// Docker/Podman sockets").
+type vulnScanImagesResponse struct {
+	Findings  []model.VulnFinding `json:"findings"`
+	Warnings  []string            `json:"warnings,omitempty"`
+	DBUpdated time.Time           `json:"db_updated"`
+}
+
+// handleVulnScanImages runs just the container-image half of runVulnScan —
+// the half a hub centralizing OS-package scanning still cannot take over,
+// since matching an image's own packages against the vulnerability DB needs
+// this host's local Docker/Podman socket access (internal/vuln.ScanImage).
+// Self-installs trivy+DB into this host's own vulnDir exactly like a
+// standalone scan would — but only when this host actually has running
+// containers to scan (see runningImages); most hosts with none pay nothing
+// for this at all. Synchronous, unlike handleVulnScanStart: called
+// server-to-server from within the hub's own background scan goroutine
+// (internal/hub/vulnscan.go), which already isn't blocking anything the
+// browser is waiting on either.
+func (s *Server) handleVulnScanImages(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	images := s.runningImages(ctx)
+	if len(images) == 0 {
+		writeJSON(w, http.StatusOK, vulnScanImagesResponse{})
+		return
+	}
+
+	dir := s.vulnDir()
+	trivyBin, err := vuln.EnsureTrivy(ctx, filepath.Join(dir, "bin"), func(string) {})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	dbDir := filepath.Join(dir, "db")
+	if err := vuln.EnsureDB(ctx, trivyBin, dbDir, func(string) {}); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var findings []model.VulnFinding
+	var warnings []string
+	for _, image := range images {
+		imageFindings, err := vuln.ScanImage(ctx, trivyBin, dbDir, image, s.cfg.DockerSocket, s.cfg.PodmanSocket)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s: %s", image, err.Error()))
+			continue
+		}
+		for i := range imageFindings {
+			imageFindings[i].Target = image
+		}
+		findings = append(findings, imageFindings...)
+	}
+
+	writeJSON(w, http.StatusOK, vulnScanImagesResponse{
+		Findings:  findings,
+		Warnings:  warnings,
+		DBUpdated: vuln.DBUpdatedAt(dbDir),
+	})
+}
+
 // runningImages returns the deduplicated set of image references currently
 // in use by a Docker or Podman container on this host, from the latest
 // scan snapshot — already collected for the regular dashboard (Containers/

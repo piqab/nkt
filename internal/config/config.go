@@ -216,6 +216,13 @@ type Config struct {
 	// GitHub's unauthenticated API rate limit (60 req/hour per source IP)
 	// is worth not leaning on.
 	HubUpdateCheckInterval time.Duration
+	// HubVulnDBRefreshInterval is how often the hub in the background makes
+	// sure its own centralized trivy vulnerability DB (see
+	// internal/hub/vulndb.go, internal/vuln's own package doc) is no older
+	// than internal/vuln's dbMaxAge (24h) — EnsureDB itself is a no-op when
+	// already fresh, so this just needs to run more often than that TTL,
+	// not on every tick actually re-download anything.
+	HubVulnDBRefreshInterval time.Duration
 	// HubTunnelPort is the port the hub dials on every TunnelEnabled host
 	// for the reverse-tunnel fallback channel (see internal/hub/tunneldial.go)
 	// — the same port is pushed to each such host at install time as
@@ -340,13 +347,14 @@ func Load() (*Config, error) {
 		TLSKey:     envStr("NKT_TLS_KEY", ""),
 		TLSHosts:   envList("NKT_TLS_HOSTS", defaultTLSHosts()),
 
-		HubMasterKey:            envStr("NKT_HUB_MASTER_KEY", ""),
-		HubSourceRoot:           envStr("NKT_HUB_SOURCE_ROOT", wd),
-		HubGoBin:                envStr("NKT_HUB_GO_BIN", "go"),
-		HubReleaseRepo:          envStr("NKT_HUB_RELEASE_REPO", "piqab/nkt"),
-		HubFindingsPollInterval: envDur("NKT_HUB_FINDINGS_POLL_INTERVAL", 60*time.Second),
-		HubUpdateCheckInterval:  envDur("NKT_HUB_UPDATE_CHECK_INTERVAL", 6*time.Hour),
-		HubTunnelPort:           envInt("NKT_HUB_TUNNEL_PORT", 8078),
+		HubMasterKey:             envStr("NKT_HUB_MASTER_KEY", ""),
+		HubSourceRoot:            envStr("NKT_HUB_SOURCE_ROOT", wd),
+		HubGoBin:                 envStr("NKT_HUB_GO_BIN", "go"),
+		HubReleaseRepo:           envStr("NKT_HUB_RELEASE_REPO", "piqab/nkt"),
+		HubFindingsPollInterval:  envDur("NKT_HUB_FINDINGS_POLL_INTERVAL", 60*time.Second),
+		HubUpdateCheckInterval:   envDur("NKT_HUB_UPDATE_CHECK_INTERVAL", 6*time.Hour),
+		HubVulnDBRefreshInterval: envDur("NKT_HUB_VULNDB_REFRESH_INTERVAL", 12*time.Hour),
+		HubTunnelPort:            envInt("NKT_HUB_TUNNEL_PORT", 8078),
 	}
 
 	switch c.Mode {

@@ -142,6 +142,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/auth/password", s.handleChangePassword)
 
 				r.Get("/hub/version", s.handleHubVersion)
+				r.Get("/hub/vulndb", s.handleHubVulnDBStatus)
 
 				r.Get("/hub/hosts", s.handleListHosts)
 				r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
@@ -167,6 +168,7 @@ func (s *Server) Handler() http.Handler {
 
 					r.Post("/hub/version/check", s.handleHubVersionCheck)
 					r.Post("/hub/update", s.handleHubUpdate)
+					r.Post("/hub/vulndb/refresh", s.handleHubVulnDBRefresh)
 
 					r.Post("/hub/hosts", s.handleAddHost)
 					r.Patch("/hub/hosts/{id}", s.handleUpdateHost)
@@ -192,6 +194,17 @@ func (s *Server) Handler() http.Handler {
 					// viewer — who cannot add/install/remove a host — could
 					// still open any already-connected one and get full admin
 					// control over it.
+					//
+					// Vulnerability scanning is intercepted here rather than left
+					// to fall through to the wildcard below — chi matches the
+					// more specific literal path over "/hosts/{id}/*" regardless
+					// of registration order, so this fully replaces (never
+					// reaches) that host's own OS-package scan for a
+					// hub-managed host; see Manager.runHostVulnScan's own doc
+					// comment for why.
+					r.Get("/hosts/{id}/vulnerabilities", s.handleHostVulnStatus)
+					r.Post("/hosts/{id}/vulnerabilities/scan", s.handleHostVulnScanStart)
+
 					r.HandleFunc("/hosts/{id}/*", s.proxyHost)
 				})
 			})
