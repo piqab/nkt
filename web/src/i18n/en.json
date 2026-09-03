@@ -48,7 +48,7 @@
     "checkNow": "Check again",
     "checkFailed": "Check failed: {{error}}",
     "updateTo": "Update to {{version}}",
-    "updatableFalse": "Self-update isn't available for this deployment (Docker/Kubernetes) — pull the new image and recreate the container: docker compose pull && docker compose up -d.",
+    "updatableFalse": "Self-update isn't available: the hub isn't currently running as a systemd unit. If this is Docker/Kubernetes — pull the new image and recreate the container: docker compose pull && docker compose up -d. If the binary was just launched by hand (e.g. right after downloading it with curl) — install and start it as a systemd service instead: sudo make hub-install && sudo systemctl enable --now netknownsthat-hub.",
     "confirmUpdate": "Update the hub to version {{version}}? It will download the binary, verify its checksum, and restart itself — unavailable for a few seconds.",
     "restarting": "The hub is updating and restarting itself — this can take up to a minute. This page will reload automatically once it responds again.",
     "vulnDBTitle": "Vulnerability database",
