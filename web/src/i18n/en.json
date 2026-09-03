@@ -34,7 +34,23 @@
     "interfaces": "Network interfaces",
     "certificates": "Certificates",
     "audit": "Audit log",
-    "users": "Users"
+    "users": "Users",
+    "about": "About"
+  },
+  "about": {
+    "title": "About",
+    "hint": "The hub's own version and update check against GitHub Releases — separate from managed hosts' versions on the \"Hosts\" page.",
+    "hubVersionTitle": "Hub version",
+    "loadingVersion": "Loading version…",
+    "currentVersion": "Current version",
+    "latestVersion": "Latest available",
+    "checkedAt": "Checked",
+    "checkNow": "Check again",
+    "checkFailed": "Check failed: {{error}}",
+    "updateTo": "Update to {{version}}",
+    "updatableFalse": "Self-update isn't available for this deployment (Docker/Kubernetes) — pull the new image and recreate the container: docker compose pull && docker compose up -d.",
+    "confirmUpdate": "Update the hub to version {{version}}? It will download the binary, verify its checksum, and restart itself — unavailable for a few seconds.",
+    "restarting": "The hub is updating and restarting itself — this can take up to a minute. This page will reload automatically once it responds again."
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",

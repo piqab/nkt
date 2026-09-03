@@ -458,14 +458,14 @@ func nsenterArgs(env map[string]string, argv ...string) []string {
 	return append(args, argv...)
 }
 
-// unrestrictedBackgroundCommand is unrestrictedCommand's non-interactive
+// UnrestrictedBackgroundCommand is unrestrictedCommand's non-interactive
 // counterpart: no --pty, no controlling terminal expected. For a
 // fire-and-forget command (see handleSelfUpdate) that is meant to outlive
 // the request handling it — including, deliberately, outliving *this very
 // process* when the command itself restarts the unit this process belongs
 // to — rather than an interactive session tied to a WebSocket someone is
 // watching live.
-func unrestrictedBackgroundCommand(argv ...string) *exec.Cmd {
+func UnrestrictedBackgroundCommand(argv ...string) *exec.Cmd {
 	if usingSystemdSandbox() {
 		return exec.Command("systemd-run", systemdRunBackgroundArgs(argv...)...)
 	}
@@ -473,6 +473,20 @@ func unrestrictedBackgroundCommand(argv ...string) *exec.Cmd {
 		return exec.Command("nsenter", nsenterArgs(nil, argv...)...)
 	}
 	return exec.Command(argv[0], argv[1:]...)
+}
+
+// SandboxEscapeAvailable reports whether UnrestrictedBackgroundCommand has
+// any real escape route out of this process's own ProtectSystem=strict
+// sandbox — the same two checks it tries in order, exposed standalone for
+// callers that need to know the answer *before* committing to an action
+// that only makes sense with one (e.g. internal/hub's own self-update,
+// which needs to write /usr/local/bin and /etc/systemd/system exactly the
+// way handleSelfUpdate does for a managed host). false means this process
+// is not running as its own systemd unit at all — a container, a plain
+// interactive run, or a test — where a self-update wouldn't have anywhere
+// real to install itself back onto in the first place.
+func SandboxEscapeAvailable() bool {
+	return usingSystemdSandbox() || needsNsenterFallback()
 }
 
 // systemdRunBackgroundArgs mirrors systemdRunArgs' sandbox-escape overrides

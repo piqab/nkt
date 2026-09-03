@@ -167,7 +167,7 @@ systemctl restart netknownsthat
 		stageEnv, selfUpdateEnvPath,
 		stageDir)
 
-	cmd := unrestrictedBackgroundCommand("bash", "-c", script)
+	cmd := UnrestrictedBackgroundCommand("bash", "-c", script)
 	if err := cmd.Start(); err != nil {
 		writeError(w, http.StatusInternalServerError, msgs.T(msgs.LangFromRequest(r), "selfupdate.startFailed", err.Error()))
 		return

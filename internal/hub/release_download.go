@@ -31,24 +31,30 @@ import (
 // -ldflags this hub would have used to cross-compile it itself. A version
 // with no matching release (a local/dev build never tagged, or a fork with
 // no Releases page yet) surfaces as a plain 404, reported as-is.
-func (m *Manager) downloadReleaseBinary(ctx context.Context, goos, goarch, destPath string, report func(key string, args ...any)) error {
+//
+// version is an explicit parameter rather than always m.version: ensureBinary
+// passes the hub's own running version (the only thing it ever needs), but
+// the hub's own self-update (checkAndApplyHubUpdate) needs exactly this same
+// download-and-verify logic for whatever *newer* version versionCheckLoop
+// last found — a different value than m.version by definition.
+func (m *Manager) downloadReleaseBinary(ctx context.Context, goos, goarch, version, destPath string, report func(key string, args ...any)) error {
 	assetName := fmt.Sprintf("nkt-%s-%s", goos, goarch)
-	base := fmt.Sprintf("https://github.com/%s/releases/download/v%s", m.cfg.HubReleaseRepo, m.version)
+	base := fmt.Sprintf("https://github.com/%s/releases/download/v%s", m.cfg.HubReleaseRepo, version)
 
-	report("hub.downloadingReleaseBinary", goos, goarch, m.version)
+	report("hub.downloadingReleaseBinary", goos, goarch, version)
 
 	sums, err := fetchReleaseBytes(ctx, base+"/SHA256SUMS")
 	if err != nil {
-		return fmt.Errorf("контрольные суммы релиза v%s: %w", m.version, err)
+		return fmt.Errorf("контрольные суммы релиза v%s: %w", version, err)
 	}
 	want, err := findSHA256(sums, assetName)
 	if err != nil {
-		return fmt.Errorf("релиз v%s: %w", m.version, err)
+		return fmt.Errorf("релиз v%s: %w", version, err)
 	}
 
 	binBytes, err := fetchReleaseBytes(ctx, base+"/"+assetName)
 	if err != nil {
-		return fmt.Errorf("бинарник релиза v%s: %w", m.version, err)
+		return fmt.Errorf("бинарник релиза v%s: %w", version, err)
 	}
 
 	got := sha256.Sum256(binBytes)
@@ -75,16 +81,19 @@ func (m *Manager) downloadReleaseBinary(ctx context.Context, goos, goarch, destP
 	return nil
 }
 
-// downloadUnitTemplate fetches deploy/netknownsthat.service straight from
-// this project's own repository, pinned to the tag matching the hub's own
-// version — the same file loadUnitTemplate reads from a local checkout when
-// one exists, and the same unauthenticated raw.githubusercontent.com fetch
-// README's own manual install instructions already use for a plain host.
-// Reached only when loadUnitTemplate's local read failed, i.e. the hub has
-// no source checkout to begin with — the same situation
-// downloadReleaseBinary exists for.
-func (m *Manager) downloadUnitTemplate(ctx context.Context) (string, error) {
-	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/v%s/deploy/netknownsthat.service", m.cfg.HubReleaseRepo, m.version)
+// downloadUnitTemplate fetches deploy/<unitFile> straight from this
+// project's own repository, pinned to the tag matching version — the same
+// file loadUnitTemplate reads from a local checkout when one exists, and
+// the same unauthenticated raw.githubusercontent.com fetch README's own
+// manual install instructions already use for a plain host. Reached only
+// when loadUnitTemplate's local read failed, i.e. the hub has no source
+// checkout to begin with — the same situation downloadReleaseBinary exists
+// for. unitFile is "netknownsthat.service" for a managed host's unit
+// (loadUnitTemplate's own use) or "netknownsthat-hub.service" for the
+// hub's own (checkAndApplyHubUpdate) — both live side by side under
+// deploy/ in the same repository.
+func (m *Manager) downloadUnitTemplate(ctx context.Context, version, unitFile string) (string, error) {
+	url := fmt.Sprintf("https://raw.githubusercontent.com/%s/v%s/deploy/%s", m.cfg.HubReleaseRepo, version, unitFile)
 	data, err := fetchReleaseBytes(ctx, url)
 	if err != nil {
 		return "", err

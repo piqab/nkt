@@ -139,7 +139,7 @@ func TestSystemdRunBackgroundArgs(t *testing.T) {
 func TestUnrestrictedBackgroundCommandFallsBackOutsideSystemd(t *testing.T) {
 	t.Setenv("INVOCATION_ID", "")
 
-	cmd := unrestrictedBackgroundCommand("echo", "hi")
+	cmd := UnrestrictedBackgroundCommand("echo", "hi")
 
 	if got := cmd.Args; len(got) != 2 || got[0] != "echo" || got[1] != "hi" {
 		t.Errorf("cmd.Args = %v, want [echo hi]", got)

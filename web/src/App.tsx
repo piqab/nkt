@@ -6,9 +6,10 @@ import { api, hostScope, onUnauthorized, readSelectedHost, useApi, writeSelected
 import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
 import type { Lang } from './i18n'
 import { useLang } from './hooks/useLang'
-import type { Me, Overview } from './types'
+import type { HubVersionInfo, Me, Overview } from './types'
 import Login from './pages/Login'
 import Hosts from './pages/Hosts'
+import About from './pages/About'
 import OverviewPage from './pages/Overview'
 import Findings from './pages/Findings'
 import Vulnerabilities from './pages/Vulnerabilities'
@@ -230,6 +231,19 @@ function Shell({
   }, [isTerminalRoute])
 
   const [selectedHost, setSelectedHost] = useState<SelectedHost | null>(() => (isHub ? readSelectedHost() : null))
+  // Which of the two host-picker-level sections is showing — the host
+  // registry itself, or the hub's own "О системе" page. Plain local state
+  // rather than a route: the picker renders outside <Routes> entirely (see
+  // showingHostPicker below), and selectHost's own navigate('/') already
+  // depends on the address bar staying whatever it was from a previous
+  // host session — introducing routing here would have to interact with
+  // that, for no real benefit (this is not something worth bookmarking).
+  const [hubView, setHubView] = useState<'hosts' | 'about'>('hosts')
+  // Polled independently of whichever section is actually showing, so the
+  // sidebar's own "доступно обновление" badge stays current even while
+  // looking at the host list — matches how criticalCount/certAlerts below
+  // are always live regardless of which per-host page is open.
+  const hubUpdate = useApi<HubVersionInfo>(isHub ? '/hub/version' : null, 5 * 60_000)
 
   // Every page below reads through api()/useApi() unmodified; this is the
   // one place that redirects their calls to the selected host's own API
@@ -283,6 +297,17 @@ function Shell({
             <div className="brand-name">NetKnownsThat</div>
             <div className="brand-sub">{t('app.brandSub')}</div>
           </div>
+
+          <nav className="nav">
+            <a href="#" className={hubView === 'hosts' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('hosts') }}>
+              <span>{t('hosts.title')}</span>
+            </a>
+            <a href="#" className={hubView === 'about' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('about') }}>
+              <span>{t('nav.about')}</span>
+              {hubUpdate.data?.update_available && <span className="nav-count">1</span>}
+            </a>
+          </nav>
+
           <div className="sidebar-foot">
             <div className="row" style={{ marginBottom: '0.4rem' }}>
               <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
@@ -315,7 +340,11 @@ function Shell({
         </aside>
         <main className="main">
           <div className="content">
-            <Hosts onSelect={selectHost} hubVersion={me.hub_version} />
+            {hubView === 'hosts' ? (
+              <Hosts onSelect={selectHost} hubVersion={me.hub_version} />
+            ) : (
+              <About />
+            )}
           </div>
         </main>
       </div>

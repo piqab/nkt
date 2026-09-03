@@ -207,6 +207,15 @@ type Config struct {
 	// tab is open, so it deliberately defaults slower than the frontend's
 	// own 30s Hosts.tsx poll.
 	HubFindingsPollInterval time.Duration
+	// HubUpdateCheckInterval is how often the hub polls GitHub Releases
+	// (HubReleaseRepo) in the background for a newer nkt version than its
+	// own (see Manager.versionCheckLoop) — purely informational (a badge in
+	// the UI), never applies anything by itself; applying an update is
+	// always a separate, explicit admin action. Long default: this is a
+	// "is there something new" check, not anything time-sensitive, and
+	// GitHub's unauthenticated API rate limit (60 req/hour per source IP)
+	// is worth not leaning on.
+	HubUpdateCheckInterval time.Duration
 	// HubTunnelPort is the port the hub dials on every TunnelEnabled host
 	// for the reverse-tunnel fallback channel (see internal/hub/tunneldial.go)
 	// — the same port is pushed to each such host at install time as
@@ -336,6 +345,7 @@ func Load() (*Config, error) {
 		HubGoBin:                envStr("NKT_HUB_GO_BIN", "go"),
 		HubReleaseRepo:          envStr("NKT_HUB_RELEASE_REPO", "piqab/nkt"),
 		HubFindingsPollInterval: envDur("NKT_HUB_FINDINGS_POLL_INTERVAL", 60*time.Second),
+		HubUpdateCheckInterval:  envDur("NKT_HUB_UPDATE_CHECK_INTERVAL", 6*time.Hour),
 		HubTunnelPort:           envInt("NKT_HUB_TUNNEL_PORT", 8078),
 	}
 

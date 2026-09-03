@@ -363,7 +363,13 @@ What else the hub can do besides proxying:
   instead of cutting a dpkg transaction off partway through;
 * **config export and import** — the host registry with every secret,
   optionally along with the master key, so secrets decrypt themselves when
-  moving to a new VPS (re-encrypted with the new hub's key on import).
+  moving to a new VPS (re-encrypted with the new hub's key on import);
+* **the hub updating itself** — the "About" section (next to "Hosts")
+  background-checks GitHub Releases and shows a badge when a newer version
+  exists; "Update" downloads it, verifies its checksum, and restarts the
+  hub itself, no SSH needed. Bare-systemd installs only (`sudo make
+  hub-install`) — a Docker/Kubernetes deployment updates by pulling a new
+  image instead, same as any container.
 
 The network between the hub and its managed hosts isn't exposed
 externally — only whatever port of the hub you chose to publish is

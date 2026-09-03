@@ -15,6 +15,16 @@ export interface Me {
   hub_version?: string
 }
 
+/** GET/POST /hub/version's shape (internal/hub/handlers.go's versionInfoJSON). */
+export interface HubVersionInfo {
+  current: string
+  latest?: string
+  update_available: boolean
+  updatable: boolean
+  checked_at?: string
+  check_error?: string
+}
+
 /** A remote VPS registered with the hub (internal/store.Host). */
 export interface HubHost {
   id: number
