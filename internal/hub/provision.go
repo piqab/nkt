@@ -105,7 +105,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 
 	sourceRoot, srcErr := m.resolveSourceRoot(report)
 	if srcErr != nil {
-		if dlErr := m.downloadReleaseBinary(ctx, goos, goarch, path, report); dlErr != nil {
+		if dlErr := m.downloadReleaseBinary(ctx, goos, goarch, m.version, path, report); dlErr != nil {
 			return "", fmt.Errorf("%w; попытка скачать готовый бинарник с GitHub Releases тоже не удалась: %v", srcErr, dlErr)
 		}
 		return path, nil

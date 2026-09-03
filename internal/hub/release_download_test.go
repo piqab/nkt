@@ -71,12 +71,11 @@ func TestDownloadReleaseBinaryLive(t *testing.T) {
 	}
 
 	m, _ := newTestManager(t)
-	m.version = version
 	m.cfg.HubReleaseRepo = "piqab/nkt"
 
 	dest := filepath.Join(t.TempDir(), "nkt-linux-amd64")
 	var events []string
-	err := m.downloadReleaseBinary(context.Background(), "linux", "amd64", dest,
+	err := m.downloadReleaseBinary(context.Background(), "linux", "amd64", version, dest,
 		func(key string, args ...any) { events = append(events, key) })
 	if err != nil {
 		t.Fatalf("downloadReleaseBinary: %v\nevents: %v", err, events)

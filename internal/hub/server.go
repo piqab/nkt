@@ -141,6 +141,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/auth/logout", s.handleLogout)
 				r.Post("/auth/password", s.handleChangePassword)
 
+				r.Get("/hub/version", s.handleHubVersion)
+
 				r.Get("/hub/hosts", s.handleListHosts)
 				r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
 				r.Get("/hub/hosts/{id}/install/latest", s.handleLatestInstallJob)
@@ -162,6 +164,9 @@ func (s *Server) Handler() http.Handler {
 
 				r.Group(func(r chi.Router) {
 					r.Use(s.auth.RequireAdmin)
+
+					r.Post("/hub/version/check", s.handleHubVersionCheck)
+					r.Post("/hub/update", s.handleHubUpdate)
 
 					r.Post("/hub/hosts", s.handleAddHost)
 					r.Patch("/hub/hosts/{id}", s.handleUpdateHost)

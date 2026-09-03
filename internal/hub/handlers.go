@@ -135,6 +135,51 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ---------------------------------------------------------- hub's own version
+
+// handleHubVersion returns the hub's own version alongside whatever the
+// background check (versionCheckLoop) last learned about the latest
+// release — never triggers a fresh check itself, that's handleHubVersionCheck.
+func (s *Server) handleHubVersion(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, versionInfoJSON(s.hub.VersionStatus()))
+}
+
+// handleHubVersionCheck runs a fresh check against GitHub right now — the
+// "О системе" page's own "Проверить снова" button, distinct from the
+// passive GET above.
+func (s *Server) handleHubVersionCheck(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, versionInfoJSON(s.hub.CheckNow(r.Context())))
+}
+
+func versionInfoJSON(v VersionInfo) map[string]any {
+	out := map[string]any{
+		"current":          v.Current,
+		"latest":           v.Latest,
+		"update_available": v.UpdateAvailable,
+		"updatable":        v.Updatable,
+	}
+	if !v.CheckedAt.IsZero() {
+		out["checked_at"] = v.CheckedAt
+	}
+	if v.CheckError != "" {
+		out["check_error"] = v.CheckError
+	}
+	return out
+}
+
+// handleHubUpdate applies the latest known release to the hub itself —
+// admin-only (see server.go's routing), and only ever acts on whatever
+// VersionStatus already cached: it does not implicitly check-then-apply,
+// so an operator always sees the target version (via the "О системе" page)
+// before triggering this.
+func (s *Server) handleHubUpdate(w http.ResponseWriter, r *http.Request) {
+	if err := s.hub.ApplyUpdate(r.Context()); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // ------------------------------------------------------------------- hosts
 
 // authKindGenerated is a request-only auth_kind value (never stored — see

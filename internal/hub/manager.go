@@ -216,6 +216,13 @@ type Manager struct {
 	// (network fetch) that it must run at most once per process.
 	goBinMu       sync.Mutex
 	resolvedGoBin string
+
+	// versionMu guards the fields versionCheckLoop writes and VersionStatus
+	// reads — see versioncheck.go.
+	versionMu        sync.Mutex
+	latestVersion    string
+	versionCheckedAt time.Time
+	versionCheckErr  string
 }
 
 // Version returns the hub's own build version — every binary it
@@ -241,11 +248,13 @@ func NewManager(cfg *config.Config, db *store.DB, key []byte, version string, lo
 }
 
 // Run starts the manager's background maintenance — idle SSH connection
-// eviction, the periodic host findings/reachability poll, and the
-// reverse-tunnel dialers — and blocks until ctx is done.
+// eviction, the periodic host findings/reachability poll, the reverse-tunnel
+// dialers, and the hub's own update-availability check — and blocks until
+// ctx is done.
 func (m *Manager) Run(ctx context.Context) {
 	go m.pollOverviews(ctx)
 	go m.maintainTunnelDialers(ctx)
+	go m.versionCheckLoop(ctx)
 	m.evictIdleConns(ctx)
 }
 
@@ -934,7 +943,7 @@ func (m *Manager) loadUnitTemplate(ctx context.Context, report func(key string, 
 	}
 
 	report("hub.unitTemplateFallback")
-	content, dlErr := m.downloadUnitTemplate(ctx)
+	content, dlErr := m.downloadUnitTemplate(ctx, m.version, "netknownsthat.service")
 	if dlErr != nil {
 		return "", fmt.Errorf("чтение шаблона systemd-юнита %s: %w; скачать его с GitHub тоже не удалось: %v", path, err, dlErr)
 	}
