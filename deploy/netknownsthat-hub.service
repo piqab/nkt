@@ -45,24 +45,34 @@ Environment=GOMODCACHE=/var/lib/netknownsthat-hub/go-mod
 # Исходники для кросс-компиляции (NKT_HUB_SOURCE_ROOT в hub.env) читаются,
 # но не пишутся — держите чекаут репозитория вне StateDirectory, например
 # в /opt/netknownsthat, и обновляйте его отдельно от systemd самого хаба.
+# /var/log/{nginx,haproxy,caddy} — см. netknownsthat.service: без этого
+# `nginx -t`/`haproxy -c` (ServiceManager.Validate, для собственной строки
+# «localhost» хаба) падают на открытии access_log/error_log с Permission
+# denied и ложно помечают исправный конфиг как невалидный.
 ProtectSystem=strict
 ReadWritePaths=/var/lib/netknownsthat-hub
 ReadWritePaths=-/etc/nginx
 ReadWritePaths=-/etc/haproxy
 ReadWritePaths=-/etc/caddy
 ReadWritePaths=-/etc/letsencrypt
+ReadWritePaths=-/var/log/nginx
+ReadWritePaths=-/var/log/haproxy
+ReadWritePaths=-/var/log/caddy
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes
 
 # Тот же набор, что и у netknownsthat.service, по тем же причинам — см.
 # комментарий там про CAP_SYS_PTRACE (чтение /proc/<pid>/* чужого
-# процесса), CAP_NET_BIND_SERVICE (certbot --standalone на портах <1024) и
-# CAP_SYS_ADMIN (запасной выход из песочницы через nsenter, когда на самом
-# хабе нет D-Bus — тот же терминал, что и у "localhost" в таблице хостов,
-# идёт через тот же internal/api/pty_session.go).
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_SYS_PTRACE CAP_SYS_ADMIN
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_SYS_PTRACE CAP_SYS_ADMIN
+# процесса), CAP_NET_BIND_SERVICE (certbot --standalone на портах <1024),
+# CAP_DAC_OVERRIDE (`nginx -t`/`haproxy -c` для "localhost"-строки падают
+# на открытии access_log/error_log с errno 13 без неё — CAP_DAC_READ_SEARCH
+# покрывает только чтение, не запись) и CAP_SYS_ADMIN (запасной выход из
+# песочницы через nsenter, когда на самом хабе нет D-Bus — тот же терминал,
+# что и у "localhost" в таблице хостов, идёт через тот же
+# internal/api/pty_session.go).
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN CAP_FOWNER CAP_SYS_PTRACE CAP_SYS_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_SYS_PTRACE CAP_SYS_ADMIN
 
 ProtectKernelTunables=yes
 ProtectKernelModules=yes

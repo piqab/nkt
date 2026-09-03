@@ -669,6 +669,7 @@ essentials:
 | Lost the password | `sudo nkt passwd`. As a last resort, stop the service and delete `/var/lib/netknownsthat/netknownsthat.db` |
 | `bind: address already in use` | The port is taken — the error itself names the process holding it (`port already held by: nginx (pid 812)`), best-effort via `ss`; either stop that process or set a different port with `NKT_ADDR` |
 | Config edits are rejected with `Read-only file system` | The directory is mounted read-only, or there's no write access to the log directory `nginx -t` opens |
+| `nginx -t`/`haproxy -c` rejects a valid config with `open() "/var/log/nginx/error.log" failed (13: Permission denied)` | The host's `netknownsthat.service` predates `/var/log/{nginx,haproxy,caddy}` being added to `ReadWritePaths`/`CAP_DAC_OVERRIDE` being added to `CapabilityBoundingSet` — reinstall (`sudo make hub-install` again, or "reinstall" from the hub) to pick up the current unit, or manually re-copy [deploy/netknownsthat.service](deploy/netknownsthat.service) and `systemctl daemon-reload && systemctl restart netknownsthat` |
 | Buttons are disabled, changes are refused | Either the `viewer` role, or `NKT_ALLOW_MUTATIONS=false` |
 | Garbled characters in the Windows console | The code page isn't UTF-8: run `chcp 65001` |
 | The native frontend build broke after `make build` | `make web` installs dependencies inside a Linux container over the same directory, filling `node_modules` with Linux builds. Run `npm install` again inside `web/` |
