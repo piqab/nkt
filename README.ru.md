@@ -312,6 +312,24 @@ Releases этого проекта, сверяя контрольную сумм
 зависимости не зависит и работает офлайн. Если установка хоста всё
 равно падает с «исходники nkt не найдены» — см. [HUB.md](HUB.md).
 
+Соответственно, тот же бинарник из [шага 1](#1-получить-бинарник) можно
+поставить как хаб и вовсе без клонирования — те же команды, что и шаг 3
+для обычного `nkt`, только файлы `hub.env.example`/
+`netknownsthat-hub.service` вместо `nkt.env.example`/
+`netknownsthat.service`:
+
+```bash
+sudo install -d -m 0750 /etc/netknownsthat
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/hub.env.example \
+  | sudo install -m 0640 /dev/stdin /etc/netknownsthat/hub.env
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/netknownsthat-hub.service \
+  | sudo install -m 0644 /dev/stdin /etc/systemd/system/netknownsthat-hub.service
+sudo $EDITOR /etc/netknownsthat/hub.env
+sudo systemctl daemon-reload
+sudo systemctl enable --now netknownsthat-hub
+sudo journalctl -u netknownsthat-hub -n 30     # здесь будет пароль администратора
+```
+
 Пароль администратора генерируется при первом старте и печатается в
 лог — как и у обычного `nkt`.
 
