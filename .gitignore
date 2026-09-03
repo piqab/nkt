@@ -21,5 +21,8 @@ Thumbs.db
 # Local overrides
 .env
 
+# Personal/promotional writing — not project documentation, not tracked.
+/articles/
+
 # NOTE: internal/webui/dist is intentionally committed — it is embedded into the
 # binary, so `go build ./cmd/nkt` must work on a fresh clone without npm.
