@@ -50,11 +50,23 @@ WorkingDirectory=/var/lib/netknownsthat
 # сделано так специально, чтобы обычный сервис не мог сам менять свой
 # конфиг, но certbot должен писать именно туда (это его хранилище
 # сертификатов, не конфиг nkt), поэтому явно переопределяется на запись.
+#
+# /var/log/{nginx,haproxy,caddy} — без этого `nginx -t`/`haproxy -c`,
+# которыми nkt проверяет сохраняемый конфиг (ServiceManager.Validate),
+# падают с «open() "/var/log/nginx/error.log" failed (13: Permission
+# denied)» и попадают в лог как отказ валидации — конфиг откатывается,
+# хотя синтаксически он был исправен: nginx/haproxy при -t всё равно
+# пытаются открыть свои access_log/error_log файлы, а под
+# ProtectSystem=strict всё, что явно не перечислено здесь, смонтировано
+# read-only, независимо от того, что процесс работает от root.
 ProtectSystem=strict
 ReadWritePaths=/var/lib/netknownsthat
 ReadWritePaths=-/etc/nginx
 ReadWritePaths=-/etc/haproxy
 ReadWritePaths=-/etc/caddy
+ReadWritePaths=-/var/log/nginx
+ReadWritePaths=-/var/log/haproxy
+ReadWritePaths=-/var/log/caddy
 ReadWritePaths=-/etc/letsencrypt
 ProtectHome=yes
 PrivateTmp=yes
@@ -92,8 +104,20 @@ NoNewPrivileges=yes
 # процесс и так root с CAP_SYS_PTRACE и уже умеет полностью выходить из
 # песочницы через systemd-run, когда D-Bus жив — это лишь альтернативный
 # способ того же самого выхода на случай, когда основной недоступен.
-CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_CHOWN CAP_FOWNER CAP_SYS_PTRACE CAP_SYS_ADMIN
-AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_SYS_PTRACE CAP_SYS_ADMIN
+#
+# CAP_DAC_OVERRIDE — без неё root под CapabilityBoundingSet подчиняется
+# обычным Unix-правам доступа как любой процесс: `nginx -t`/`haproxy -c`
+# (ServiceManager.Validate, запускаются как дети nkt) падают на открытии
+# access_log/error_log с «open() "/var/log/nginx/error.log" failed (13:
+# Permission denied)», если владелец/права файла не дают доступа этому
+# урезанному root — CAP_DAC_READ_SEARCH выше покрывает только чтение и
+# обход поиска по каталогам, не запись. Тот же самый `nginx -t` из-под
+# обычного `sudo` (где root не ограничен CapabilityBoundingSet) этой
+# ошибки не даёт — разница именно в этой capability, эмпирически
+# проверено (errno 13 у отсутствия CAP_DAC_OVERRIDE, отличается от errno
+# 30/EROFS, который дал бы просто ReadWritePaths без этой capability).
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_CHOWN CAP_FOWNER CAP_SYS_PTRACE CAP_SYS_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_RAW CAP_NET_BIND_SERVICE CAP_DAC_READ_SEARCH CAP_DAC_OVERRIDE CAP_SYS_PTRACE CAP_SYS_ADMIN
 
 ProtectKernelTunables=yes
 ProtectKernelModules=yes

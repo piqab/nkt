@@ -678,6 +678,7 @@ echo 'new-password' | sudo nkt passwd ops    # неинтерактивно, д�
 | `failed to connect to the docker API` | Docker не запущен |
 | Источники `firewall` и `services` недоступны | Нужен root: `iptables-save` и `systemctl` не работают для обычного пользователя. Запускайте через systemd-юнит из `deploy/` |
 | Забыт пароль | `sudo nkt passwd`. В крайнем случае — остановить сервис и удалить `/var/lib/netknownsthat/netknownsthat.db` |
+| `nginx -t`/`haproxy -c` отклоняет исправный конфиг с `open() "/var/log/nginx/error.log" failed (13: Permission denied)` | На хосте установлен `netknownsthat.service` до того, как в `ReadWritePaths` добавили `/var/log/{nginx,haproxy,caddy}`, а в `CapabilityBoundingSet` — `CAP_DAC_OVERRIDE`. Переустановите (`sudo make hub-install` заново, либо «переустановить» из хаба) — заберётся актуальный юнит; либо вручную перезалейте [deploy/netknownsthat.service](deploy/netknownsthat.service) и выполните `systemctl daemon-reload && systemctl restart netknownsthat` |
 | `bind: address already in use` | Порт занят — сама ошибка называет процесс, который его держит (`port already held by: nginx (pid 812)`), по данным `ss`, по возможности; остановите этот процесс либо задайте другой порт через `NKT_ADDR` |
 | Правки конфига отклоняются с `Read-only file system` | Каталог смонтирован только для чтения, либо нет доступа на запись в каталог логов, который открывает `nginx -t` |
 | Кнопки отключены, изменения отклоняются | Либо роль `viewer`, либо `NKT_ALLOW_MUTATIONS=false` |
