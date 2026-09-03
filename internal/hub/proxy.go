@@ -248,8 +248,37 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 				req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
 			},
 			Transport: &http.Transport{
-				DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-					return dial("tcp", remoteAPIAddr)
+				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+					conn, err := dial("tcp", remoteAPIAddr)
+					if err == nil {
+						return conn, nil
+					}
+					// The pooled connection dialerFor handed back a moment
+					// ago can have silently died since — no keepalive ever
+					// proves it's still alive before reuse, so an idle
+					// network blip or a NAT/router timeout only surfaces the
+					// next time something actually tries to open a channel
+					// on it. That single stale connection's teardown fails
+					// every channel-open racing it at once (mux.loop's own
+					// cleanup, see x/crypto/ssh), which is exactly what a
+					// page that fires several concurrent proxied requests on
+					// open (e.g. Usage.tsx's usage/top/heatmap trio) turns
+					// into several simultaneous "unexpected packet in
+					// response to channel open: <nil>" failures instead of
+					// one. Evict it and dial fresh exactly once before
+					// giving up — a routine dead-pooled-connection blip
+					// should never reach the user as an error at all.
+					onFail()
+					freshDial, _, freshOnFail, dialErr := m.dialerFor(ctx, hostID)
+					if dialErr != nil {
+						return nil, err
+					}
+					conn, err = freshDial("tcp", remoteAPIAddr)
+					if err != nil {
+						freshOnFail()
+						return nil, err
+					}
+					return conn, nil
 				},
 			},
 			ErrorHandler: func(w http.ResponseWriter, _ *http.Request, err error) {

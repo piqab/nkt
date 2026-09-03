@@ -140,6 +140,120 @@ func TestManagerProxyRoundTrip(t *testing.T) {
 	}
 }
 
+// TestManagerProxyRetriesAfterStalePooledConnection reproduces the bug
+// behind the reported "хост недоступен: ssh: unexpected packet in response
+// to channel open: <nil>" error: clientFor's cache-hit path hands out a
+// pooled *ssh.Client with no liveness check at all, so a connection that
+// silently died since the last request (network blip, NAT/router idle
+// timeout) looks exactly as "live" as a healthy one right up until
+// something tries to open a channel on it. Proxy's DialContext must evict
+// that stale client and dial a fresh one transparently — a routine dead-
+// pooled-connection blip should never reach the user as an error.
+func TestManagerProxyRetriesAfterStalePooledConnection(t *testing.T) {
+	sshAddr, sshPort, clientKeyPEM := startTestSSHD(t)
+
+	repoRoot := findRepoRoot(t)
+	nktBin := filepath.Join(t.TempDir(), "nkt")
+	buildCmd := exec.Command("go", "build", "-o", nktBin, "./cmd/nkt")
+	buildCmd.Dir = repoRoot
+	if out, err := buildCmd.CombinedOutput(); err != nil {
+		t.Fatalf("build nkt for the test: %v\n%s", err, out)
+	}
+
+	const adminPassword = "integration-test-password-1234"
+	remoteDataDir := t.TempDir()
+	remoteCmd := exec.Command(nktBin)
+	remoteCmd.Dir = repoRoot
+	remoteCmd.Env = append(os.Environ(),
+		"NKT_MODE=fixtures",
+		"NKT_ADDR=127.0.0.1:8077",
+		"NKT_DATA_DIR="+remoteDataDir,
+		"NKT_BOOTSTRAP_ADMIN_USER=admin",
+		"NKT_BOOTSTRAP_ADMIN_PASSWORD="+adminPassword,
+		"NKT_COOKIE_SECURE=false",
+		"NKT_SCHEDULER_ENABLED=false",
+	)
+	if err := remoteCmd.Start(); err != nil {
+		t.Fatalf("start remote nkt: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = remoteCmd.Process.Kill()
+		_, _ = remoteCmd.Process.Wait()
+	})
+	waitForLocalHTTP(t, "http://127.0.0.1:8077/api/health")
+
+	db, err := store.Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatalf("open hub store: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	key, err := secretbox.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey: %v", err)
+	}
+	me, err := osuser.Current()
+	if err != nil {
+		t.Fatalf("os/user.Current: %v", err)
+	}
+	secretEnc, err := secretbox.Encrypt(key, clientKeyPEM)
+	if err != nil {
+		t.Fatalf("encrypt ssh key: %v", err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	hostID, err := db.CreateHost(ctx, "test-host", sshAddr, sshPort, me.Username, store.HostAuthKey, secretEnc)
+	if err != nil {
+		t.Fatalf("CreateHost: %v", err)
+	}
+	adminPasswordEnc, err := secretbox.Encrypt(key, []byte(adminPassword))
+	if err != nil {
+		t.Fatalf("encrypt admin password: %v", err)
+	}
+	if err := db.SetHostAdmin(ctx, hostID, "admin", adminPasswordEnc); err != nil {
+		t.Fatalf("SetHostAdmin: %v", err)
+	}
+	if err := db.SetHostStatus(ctx, hostID, store.HostStatusOnline, ""); err != nil {
+		t.Fatalf("SetHostStatus: %v", err)
+	}
+
+	manager := NewManager(&config.Config{}, db, key, "test", slog.New(slog.DiscardHandler))
+
+	// Warm the pool — clientFor now caches a live *ssh.Client for this host.
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	manager.Proxy(hostID).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("warm-up GET /api/health through proxy: status %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	// Simulate the connection silently dying since the last request —
+	// closed out from under the pool, deliberately not through dropClient,
+	// so it's still sitting in manager.conns exactly the way a network
+	// blip would leave it: present, cached, and dead.
+	manager.connsMu.Lock()
+	hc, ok := manager.conns[hostID]
+	manager.connsMu.Unlock()
+	if !ok {
+		t.Fatal("expected a pooled connection after the warm-up request")
+	}
+	if err := hc.client.Close(); err != nil {
+		t.Fatalf("closing the pooled client to simulate a dead connection: %v", err)
+	}
+
+	// The request that would have failed with "unexpected packet in
+	// response to channel open" before this fix — must now succeed,
+	// transparently, via a freshly dialed connection.
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	manager.Proxy(hostID).ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /api/health after a stale pooled connection: status %d, body %s", rec.Code, rec.Body.String())
+	}
+}
+
 // TestResetRemoteAdminPasswordSyncsRealNkt reproduces the exact scenario
 // that motivated resetRemoteAdminPassword: a real nkt instance already
 // bootstrapped with one admin password (simulating an earlier, independent
