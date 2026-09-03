@@ -310,6 +310,23 @@ outbound access to `github.com`; the clone above avoids that dependency
 entirely and works offline. See [HUB.md](HUB.md) if a host install
 fails with "nkt sources not found" even so.
 
+So the same binary from [step 1](#1-get-the-binary) can be set up as a
+hub with no cloning at all — the same commands as step 3 for a plain
+`nkt`, just `hub.env.example`/`netknownsthat-hub.service` instead of
+`nkt.env.example`/`netknownsthat.service`:
+
+```bash
+sudo install -d -m 0750 /etc/netknownsthat
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/hub.env.example \
+  | sudo install -m 0640 /dev/stdin /etc/netknownsthat/hub.env
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/netknownsthat-hub.service \
+  | sudo install -m 0644 /dev/stdin /etc/systemd/system/netknownsthat-hub.service
+sudo $EDITOR /etc/netknownsthat/hub.env
+sudo systemctl daemon-reload
+sudo systemctl enable --now netknownsthat-hub
+sudo journalctl -u netknownsthat-hub -n 30     # the admin password will be here
+```
+
 The admin password is generated on first start and printed to the log —
 same as with a plain `nkt`.
 

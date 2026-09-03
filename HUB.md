@@ -69,6 +69,21 @@ sudo systemctl enable --now netknownsthat-hub
 рекомендованным путём: работает без доступа к `github.com` и без
 привязки к тому, опубликован ли уже релиз конкретной версии.
 
+Соответственно, тот же бинарник с Releases можно поставить как хаб и
+вовсе без клонирования — вручную теми же двумя файлами, что и
+`hub-install` кладёт сам:
+
+```bash
+sudo install -d -m 0750 /etc/netknownsthat
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/hub.env.example \
+  | sudo install -m 0640 /dev/stdin /etc/netknownsthat/hub.env
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/netknownsthat-hub.service \
+  | sudo install -m 0644 /dev/stdin /etc/systemd/system/netknownsthat-hub.service
+sudo $EDITOR /etc/netknownsthat/hub.env
+sudo systemctl daemon-reload
+sudo systemctl enable --now netknownsthat-hub
+```
+
 Проверить, что поднялось:
 
 ```bash
