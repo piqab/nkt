@@ -46,8 +46,8 @@ tag, `.github/workflows/release.yml` builds and publishes a static ELF for
 
 ```bash
 # swap in your architecture and the version you want
-curl -fsSLO https://github.com/piqab/nkt/releases/download/v1.8.46/nkt-linux-amd64
-curl -fsSLO https://github.com/piqab/nkt/releases/download/v1.8.46/SHA256SUMS
+curl -fsSLO https://github.com/piqab/nkt/releases/download/v1.8.68/nkt-linux-amd64
+curl -fsSLO https://github.com/piqab/nkt/releases/download/v1.8.68/SHA256SUMS
 sha256sum -c SHA256SUMS --ignore-missing
 chmod +x nkt-linux-amd64
 sudo mv nkt-linux-amd64 /usr/local/bin/nkt
