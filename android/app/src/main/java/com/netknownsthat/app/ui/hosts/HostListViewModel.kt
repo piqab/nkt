@@ -25,10 +25,6 @@ class HostListViewModel(private val hubClient: HubClient) : ViewModel() {
     var uiState by mutableStateOf(HostListUiState())
         private set
 
-    init {
-        refresh()
-    }
-
     fun refresh() {
         viewModelScope.launch {
             uiState = uiState.copy(loading = true, error = null)
