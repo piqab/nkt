@@ -34,13 +34,19 @@ Configs, Certificates, Vulnerabilities, Topology, ...), управление
 
 ## Сборка из командной строки, без Android Studio
 
-Один раз на машину — установка тулчейна (JDK 17, Gradle, Android SDK).
-Ставится в `$HOME/.local`, root/sudo не нужен, ничего системного не
-трогает — та же схема, что у go/node в этом репозитории:
+Один раз на машину — подготовка тулчейна (JDK 17, Android SDK). Работает
+на Linux и macOS (Intel и Apple Silicon), root/sudo не нужен:
 
 ```bash
-android/scripts/setup-linux-toolchain.sh
+android/scripts/setup-toolchain.sh
 ```
+
+Скрипт сначала ищет то, что уже стоит на машине, — JDK 17+ (включая
+встроенный в Android Studio и поставленный через Homebrew), Android SDK
+(в том числе SDK самой Android Studio) и уже установленные его пакеты, —
+и скачивает только реально недостающее, в `$HOME/.local`. Повторный
+запуск не качает ничего. Сам Gradle не ставится: `android/gradlew`
+скачает нужную версию при первой сборке.
 
 Дальше сборка:
 
