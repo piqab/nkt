@@ -18,6 +18,10 @@ android/gradlew.bat text eol=crlf
 *.apk binary
 *.aar binary
 *.keystore binary
+# Снятый вывод терминала: \r там — управляющий символ протокола, а не
+# конец строки. Нормализация CRLF->LF молча испортила бы эти данные и
+# изменила бы то, что проверяют тесты эмулятора.
+android/app/src/test/resources/terminal/** -text
 
 # Собранный фронтенд вшивается в бинарник — в diff его показывать бессмысленно.
 internal/webui/dist/** linguist-generated=true -diff
