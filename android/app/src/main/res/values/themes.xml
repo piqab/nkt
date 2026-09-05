@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Compose owns the actual Material 3 theme (see ui/theme/Theme.kt) —
+         this is only the pre-Compose window theme the system needs before
+         the first Compose frame draws (splash background, status bar). -->
+    <style name="Theme.Nkt" parent="android:Theme.Material.Light.NoActionBar" />
+</resources>

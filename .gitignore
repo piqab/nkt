@@ -1,5 +1,5 @@
 # Runtime state
-data/
+/data/
 
 # Node
 node_modules/
