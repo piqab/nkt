@@ -25,6 +25,12 @@ fi
 source "$SCRIPT_DIR/env.sh"
 
 cd "$ANDROID_DIR"
+
+# Клон может приехать без прав на исполнение — через zip/scp, с
+# core.fileMode=false или из Windows-чекаута. Тогда ./gradlew падает с
+# невнятным сообщением; проще выставить бит, чем объяснять его отсутствие.
+[ -x ./gradlew ] || chmod +x ./gradlew
+
 ./gradlew "${@:-assembleDebug}"
 
 APK="$ANDROID_DIR/app/build/outputs/apk/debug/app-debug.apk"
