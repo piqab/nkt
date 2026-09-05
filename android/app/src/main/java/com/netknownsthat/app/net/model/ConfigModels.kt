@@ -30,6 +30,69 @@ data class ConfigFileResponse(
     val editable: Boolean = false,
 )
 
+/** GET /api/configs/versions?path=… — newest first. */
+@Serializable
+data class ConfigVersionsResponse(
+    val versions: List<ConfigVersion> = emptyList(),
+)
+
+@Serializable
+data class ConfigVersion(
+    val id: Long = 0,
+    val path: String = "",
+    val service: String = "",
+    val ts: String = "",
+    val author: String = "",
+    /** "edit", "rollback", or "observed" — the state recorded before the
+     * first edit, which has no author behind it. */
+    val action: String = "",
+    val note: String = "",
+    val size: Long = 0,
+    val sha256: String = "",
+)
+
+/**
+ * GET /api/configs/versions/{id}/diff.
+ *
+ * A unified diff of that version against the file as it is **now**, not
+ * against the version before it (see ConfigManager.Diff) — so it reads as
+ * "what rolling back to this version would change", and is empty for the
+ * version that is already current.
+ */
+@Serializable
+data class ConfigDiffResponse(
+    val diff: String = "",
+)
+
+/**
+ * Result of PUT /api/configs/file and of a rollback.
+ *
+ * [rolledBack] is the safety net that makes editing from a phone reasonable:
+ * the host validates the new content with the owning service and restores the
+ * previous file if it does not pass, so a bad edit cannot leave a service
+ * with a config it refuses to start on.
+ */
+@Serializable
+data class ConfigWriteResult(
+    val path: String = "",
+    @SerialName("version_id") val versionId: Long = 0,
+    val validated: Boolean = false,
+    val validation: CommandResult? = null,
+    @SerialName("rolled_back") val rolledBack: Boolean = false,
+    val message: String = "",
+    val applied: Boolean = false,
+    val apply: CommandResult? = null,
+)
+
+@Serializable
+data class CommandResult(
+    val argv: List<String> = emptyList(),
+    @SerialName("exit_code") val exitCode: Int = 0,
+    val stdout: String = "",
+    val stderr: String = "",
+    val simulated: Boolean = false,
+)
+
 @Serializable
 data class FirewallResponse(
     val managers: List<FirewallManager> = emptyList(),
