@@ -19,6 +19,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -74,6 +75,30 @@ fun AboutScreen(
                                 Text(
                                     text = "Проверка не удалась: $it",
                                     color = MaterialTheme.colorScheme.error,
+                                )
+                            }
+                        }
+                    }
+
+                    state.certFingerprint?.let { fingerprint ->
+                        Card(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Text(
+                                    "Сертификат хаба",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    text = "Самоподписанный, закреплён при первом подключении. " +
+                                        "Сверьте отпечаток с тем, что показывает сам хаб:",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.padding(top = 8.dp),
+                                )
+                                Text(
+                                    text = fingerprint.chunked(16).joinToString("\n"),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(top = 8.dp),
                                 )
                             }
                         }

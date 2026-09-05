@@ -14,6 +14,7 @@ data class AboutUiState(
     val loading: Boolean = true,
     val version: HubVersionInfo? = null,
     val vulnDb: HubVulnDBInfo? = null,
+    val certFingerprint: String? = null,
     val error: String? = null,
 )
 
@@ -48,6 +49,7 @@ class AboutViewModel(private val hubClient: HubClient) : ViewModel() {
                 loading = false,
                 version = (versionResult as? HubClient.ApiResult.Success)?.value,
                 vulnDb = (vulnDbResult as? HubClient.ApiResult.Success)?.value,
+                certFingerprint = hubClient.pinnedCertFingerprint(),
                 error = error,
             )
         }
