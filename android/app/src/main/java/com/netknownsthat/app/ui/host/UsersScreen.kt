@@ -28,6 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.User
+import com.netknownsthat.app.status.userHealth
+import com.netknownsthat.app.ui.theme.StatusDot
+import com.netknownsthat.app.ui.theme.statusColor
 
 @Composable
 fun UsersScreen(viewModel: UsersViewModel) {
@@ -92,7 +95,11 @@ private fun UserCard(
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StatusDot(userHealth(user.disabled))
                 Text(
                     text = user.username,
                     style = MaterialTheme.typography.titleSmall,
@@ -105,10 +112,12 @@ private fun UserCard(
                 )
             }
             if (user.disabled) {
+                // Grey, not red: an account switched off on purpose is not a
+                // fault.
                 Text(
                     text = "Отключён",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
+                    color = statusColor(userHealth(true)),
                 )
             }
             val details = listOfNotNull(

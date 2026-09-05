@@ -11,10 +11,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.NetworkInterface
+import com.netknownsthat.app.status.interfaceHealth
+import com.netknownsthat.app.ui.theme.StatusDot
+import com.netknownsthat.app.ui.theme.statusColor
 import java.util.Locale
 
 @Composable
@@ -34,7 +38,12 @@ fun InterfacesScreen(viewModel: InterfacesViewModel) {
 private fun InterfaceCard(iface: NetworkInterface) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            val health = interfaceHealth(iface.up, iface.lowerUp, iface.loopback)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StatusDot(health)
                 Text(
                     text = iface.name,
                     style = MaterialTheme.typography.titleSmall,
@@ -43,11 +52,7 @@ private fun InterfaceCard(iface: NetworkInterface) {
                 Text(
                     text = linkState(iface),
                     style = MaterialTheme.typography.labelMedium,
-                    color = when {
-                        iface.up && iface.lowerUp -> MaterialTheme.colorScheme.primary
-                        iface.up -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    color = statusColor(health),
                 )
             }
 

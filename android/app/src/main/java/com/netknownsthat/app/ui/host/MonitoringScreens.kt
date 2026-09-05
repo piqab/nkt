@@ -16,9 +16,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.Target
+import com.netknownsthat.app.status.targetHealth
+import com.netknownsthat.app.ui.theme.StatusDot
+import com.netknownsthat.app.ui.theme.statusColor
 import com.netknownsthat.app.net.model.VulnFinding
 import java.util.Locale
 
@@ -217,7 +221,12 @@ fun AvailabilityScreen(viewModel: AvailabilityViewModel) {
 private fun TargetCard(target: Target) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            val health = targetHealth(target.lastOk, target.enabled)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StatusDot(health)
                 Text(
                     text = target.label,
                     style = MaterialTheme.typography.titleSmall,
@@ -226,17 +235,14 @@ private fun TargetCard(target: Target) {
                 Text(
                     // last_ok is nullable on the Go side: null means the
                     // target has never been checked, which is not "down".
-                    text = when (target.lastOk) {
-                        true -> "доступен"
-                        false -> "недоступен"
-                        null -> "не проверялся"
+                    text = when {
+                        !target.enabled -> "проверки выключены"
+                        target.lastOk == true -> "доступен"
+                        target.lastOk == false -> "недоступен"
+                        else -> "не проверялся"
                     },
                     style = MaterialTheme.typography.labelMedium,
-                    color = when (target.lastOk) {
-                        true -> MaterialTheme.colorScheme.primary
-                        false -> MaterialTheme.colorScheme.error
-                        null -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    color = statusColor(health),
                 )
             }
             Text(

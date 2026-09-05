@@ -20,9 +20,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.ServiceUnit
+import com.netknownsthat.app.status.serviceHealth
+import com.netknownsthat.app.ui.theme.StatusDot
+import com.netknownsthat.app.ui.theme.statusColor
 
 private val ACTION_LABELS = mapOf(
     "start" to "Запустить",
@@ -65,6 +69,7 @@ fun ServicesScreen(viewModel: ServicesViewModel) {
             items(response.services, key = { it.name }) { service ->
                 ServiceCard(
                     service = service,
+                    busy = viewModel.pendingKey == service.name,
                     // allow_mutations is the host's own switch (a read-only
                     // deployment sets it false); honouring it here keeps the
                     // app from offering buttons the server will refuse.
@@ -82,25 +87,26 @@ fun ServicesScreen(viewModel: ServicesViewModel) {
 @Composable
 private fun ServiceCard(
     service: ServiceUnit,
+    busy: Boolean,
     actionsEnabled: Boolean,
     onAction: (String) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StatusDot(serviceHealth(service.activeState), busy = busy)
                 Text(
                     text = service.name,
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = service.activeState,
+                    text = if (busy) "\u2026" else service.activeState,
                     style = MaterialTheme.typography.labelMedium,
-                    color = when (service.activeState) {
-                        "active" -> MaterialTheme.colorScheme.primary
-                        "failed" -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.onSurfaceVariant
-                    },
+                    color = statusColor(serviceHealth(service.activeState)),
                 )
             }
             if (service.description.isNotBlank()) {
