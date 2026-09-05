@@ -1,6 +1,7 @@
 package com.netknownsthat.app.data
 
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
@@ -23,6 +24,7 @@ class SettingsStore(private val context: Context) {
         val HUB_BASE_URL = stringPreferencesKey("hub_base_url")
         val COOKIES = stringSetPreferencesKey("session_cookies")
         val PINNED_CERTS = stringSetPreferencesKey("pinned_certs")
+        val BETA_NOTICE_HIDDEN = booleanPreferencesKey("beta_notice_hidden")
     }
 
     suspend fun hubBaseUrl(): String? =
@@ -46,6 +48,14 @@ class SettingsStore(private val context: Context) {
 
     suspend fun clearSession() {
         context.dataStore.edit { it.remove(Keys.COOKIES) }
+    }
+
+    /** Whether the operator asked not to see the beta notice again. */
+    suspend fun betaNoticeHidden(): Boolean =
+        context.dataStore.data.first()[Keys.BETA_NOTICE_HIDDEN] ?: false
+
+    suspend fun hideBetaNotice() {
+        context.dataStore.edit { it[Keys.BETA_NOTICE_HIDDEN] = true }
     }
 
     /**

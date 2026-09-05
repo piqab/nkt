@@ -27,11 +27,28 @@ class HostScope {
 
     /** path must start with "/", e.g. "/overview", "/auth/me". */
     fun scoped(path: String): String {
-        if (path.startsWith("/auth/")) return path
+        if (isNeverScoped(path)) return path
         return when (val id = _currentHostId.value) {
             null -> path
             HubHost.LOCAL_HOST_ID -> "/hosts/local$path"
             else -> "/hosts/$id$path"
         }
+    }
+
+    private companion object {
+        /**
+         * Prefixes that belong to the hub itself and must never be scoped to
+         * a managed host.
+         *
+         * `/auth/` because authentication always targets the hub's own
+         * session. `/hub/` because those routes exist only on the hub
+         * (internal/hub/server.go) — scoping one sends it through the proxy,
+         * which strips the prefix and forwards it to a host whose API has no
+         * such route, and the host answers "Неизвестный метод API" about a
+         * path the caller never asked for. That is exactly what the About
+         * screen hit after a host had been opened once.
+         */
+        fun isNeverScoped(path: String): Boolean =
+            path.startsWith("/auth/") || path.startsWith("/hub/")
     }
 }

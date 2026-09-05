@@ -49,4 +49,11 @@ class HostListViewModel(private val hubClient: HubClient) : ViewModel() {
         selectedHost = host
         hubClient.hostScope.select(host.id)
     }
+
+    /** Back to hub scope: hub-level screens ("О системе", this list itself)
+     * must not inherit the host that happened to be open last. */
+    fun deselectHost() {
+        selectedHost = null
+        hubClient.hostScope.select(null)
+    }
 }

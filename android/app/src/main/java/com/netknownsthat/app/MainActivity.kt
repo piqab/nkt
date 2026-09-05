@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -22,6 +23,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.netknownsthat.app.net.HubClient
 import com.netknownsthat.app.ui.AppViewModelFactory
+import com.netknownsthat.app.ui.BetaNotice
+import kotlinx.coroutines.launch
 import com.netknownsthat.app.ui.about.AboutScreen
 import com.netknownsthat.app.ui.about.AboutViewModel
 import com.netknownsthat.app.ui.host.AuditViewModel
@@ -106,6 +109,7 @@ class MainActivity : ComponentActivity() {
             NktTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
                     NktApp(
+                        settingsStore = app.settingsStore,
                         hubClient = app.hubClient,
                         authViewModel = authViewModel,
                         hostListViewModel = hostListViewModel,
@@ -126,6 +130,7 @@ class MainActivity : ComponentActivity() {
  */
 @Composable
 private fun NktApp(
+    settingsStore: com.netknownsthat.app.data.SettingsStore,
     hubClient: HubClient,
     authViewModel: AuthViewModel,
     hostListViewModel: HostListViewModel,
@@ -134,8 +139,18 @@ private fun NktApp(
 ) {
     val navController = rememberNavController()
     var startDestination by remember { mutableStateOf<String?>(null) }
+    var showBetaNotice by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    if (showBetaNotice) {
+        BetaNotice(onDismiss = { dontShowAgain ->
+            showBetaNotice = false
+            if (dontShowAgain) scope.launch { settingsStore.hideBetaNotice() }
+        })
+    }
 
     LaunchedEffect(Unit) {
+        showBetaNotice = !settingsStore.betaNoticeHidden()
         val hasHub = hubClient.bootstrap()
         startDestination = if (hasHub && hubClient.me() is HubClient.ApiResult.Success) {
             Routes.HOSTS

@@ -46,7 +46,14 @@ fun HostListScreen(
     // Loaded here rather than from the ViewModel's init: the ViewModel is
     // created during composition, before the hub URL has been restored, so an
     // eager fetch reported a configured hub as missing.
-    LaunchedEffect(Unit) { viewModel.refresh() }
+    //
+    // Returning to this list also means leaving whatever host was open, so
+    // the scope goes back to the hub — the same thing the web UI does when
+    // its host view closes.
+    LaunchedEffect(Unit) {
+        viewModel.deselectHost()
+        viewModel.refresh()
+    }
 
     Scaffold(
         topBar = {
