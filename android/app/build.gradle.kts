@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.serialization")
+    id("org.jetbrains.kotlin.plugin.compose")
 }
 
 android {
@@ -36,11 +37,10 @@ android {
     buildFeatures {
         compose = true
     }
-    composeOptions {
-        // Matches the Kotlin plugin version in the root build.gradle.kts —
-        // bump both together if Android Studio suggests a newer Kotlin.
-        kotlinCompilerExtensionVersion = "1.5.14"
-    }
+    // No composeOptions.kotlinCompilerExtensionVersion here — since Kotlin
+    // 2.0 the Compose compiler is the separate org.jetbrains.kotlin.plugin.compose
+    // plugin (applied above), versioned in lockstep with the Kotlin plugin
+    // itself rather than pinned independently.
 
     packaging {
         resources {
