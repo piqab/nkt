@@ -25,10 +25,22 @@ import com.netknownsthat.app.ui.AppViewModelFactory
 import com.netknownsthat.app.ui.about.AboutScreen
 import com.netknownsthat.app.ui.about.AboutViewModel
 import com.netknownsthat.app.ui.host.AuditViewModel
+import com.netknownsthat.app.ui.host.AvailabilityViewModel
+import com.netknownsthat.app.ui.host.CertificatesViewModel
+import com.netknownsthat.app.ui.host.ConfigsViewModel
+import com.netknownsthat.app.ui.host.ContainersViewModel
 import com.netknownsthat.app.ui.host.FindingsViewModel
+import com.netknownsthat.app.ui.host.FirewallViewModel
 import com.netknownsthat.app.ui.host.HostScreen
+import com.netknownsthat.app.ui.host.HostViewModels
 import com.netknownsthat.app.ui.host.InterfacesViewModel
+import com.netknownsthat.app.ui.host.MiscViewModel
 import com.netknownsthat.app.ui.host.OverviewViewModel
+import com.netknownsthat.app.ui.host.ServicesViewModel
+import com.netknownsthat.app.ui.host.TopologyViewModel
+import com.netknownsthat.app.ui.host.UsageViewModel
+import com.netknownsthat.app.ui.host.UsersViewModel
+import com.netknownsthat.app.ui.host.VulnerabilitiesViewModel
 import com.netknownsthat.app.ui.hosts.HostListScreen
 import com.netknownsthat.app.ui.hosts.HostListViewModel
 import com.netknownsthat.app.ui.login.AuthViewModel
@@ -53,6 +65,37 @@ class MainActivity : ComponentActivity() {
     private val findingsViewModel: FindingsViewModel by viewModels { factory }
     private val interfacesViewModel: InterfacesViewModel by viewModels { factory }
     private val auditViewModel: AuditViewModel by viewModels { factory }
+    private val servicesViewModel: ServicesViewModel by viewModels { factory }
+    private val containersViewModel: ContainersViewModel by viewModels { factory }
+    private val usersViewModel: UsersViewModel by viewModels { factory }
+    private val miscViewModel: MiscViewModel by viewModels { factory }
+    private val vulnerabilitiesViewModel: VulnerabilitiesViewModel by viewModels { factory }
+    private val availabilityViewModel: AvailabilityViewModel by viewModels { factory }
+    private val usageViewModel: UsageViewModel by viewModels { factory }
+    private val configsViewModel: ConfigsViewModel by viewModels { factory }
+    private val firewallViewModel: FirewallViewModel by viewModels { factory }
+    private val certificatesViewModel: CertificatesViewModel by viewModels { factory }
+    private val topologyViewModel: TopologyViewModel by viewModels { factory }
+
+    private val hostViewModels by lazy {
+        HostViewModels(
+            overview = overviewViewModel,
+            findings = findingsViewModel,
+            interfaces = interfacesViewModel,
+            audit = auditViewModel,
+            services = servicesViewModel,
+            containers = containersViewModel,
+            users = usersViewModel,
+            misc = miscViewModel,
+            vulnerabilities = vulnerabilitiesViewModel,
+            availability = availabilityViewModel,
+            usage = usageViewModel,
+            configs = configsViewModel,
+            firewall = firewallViewModel,
+            certificates = certificatesViewModel,
+            topology = topologyViewModel,
+        )
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -64,10 +107,7 @@ class MainActivity : ComponentActivity() {
                         authViewModel = authViewModel,
                         hostListViewModel = hostListViewModel,
                         aboutViewModel = aboutViewModel,
-                        overviewViewModel = overviewViewModel,
-                        findingsViewModel = findingsViewModel,
-                        interfacesViewModel = interfacesViewModel,
-                        auditViewModel = auditViewModel,
+                        hostViewModels = hostViewModels,
                     )
                 }
             }
@@ -87,10 +127,7 @@ private fun NktApp(
     authViewModel: AuthViewModel,
     hostListViewModel: HostListViewModel,
     aboutViewModel: AboutViewModel,
-    overviewViewModel: OverviewViewModel,
-    findingsViewModel: FindingsViewModel,
-    interfacesViewModel: InterfacesViewModel,
-    auditViewModel: AuditViewModel,
+    hostViewModels: HostViewModels,
 ) {
     val navController = rememberNavController()
     var startDestination by remember { mutableStateOf<String?>(null) }
@@ -138,10 +175,7 @@ private fun NktApp(
             HostScreen(
                 hostName = host?.name ?: "Хост",
                 hostId = host?.id,
-                overviewViewModel = overviewViewModel,
-                findingsViewModel = findingsViewModel,
-                interfacesViewModel = interfacesViewModel,
-                auditViewModel = auditViewModel,
+                viewModels = hostViewModels,
                 onBack = { navController.popBackStack() },
             )
         }
