@@ -184,8 +184,12 @@ class HubClient(
             val base = baseUrl
                 ?: return@withContext RawResult.Err("Хаб не настроен — укажите адрес на экране входа", null)
             try {
-                val scopedPath = hostScope.scoped(path)
-                val url = base.newBuilder().encodedPath("/api$scopedPath").build()
+                // Scope the path only; the query string must stay a query
+                // string (see buildApiUrl).
+                val separator = path.indexOf('?')
+                val bare = if (separator >= 0) path.substring(0, separator) else path
+                val query = if (separator >= 0) path.substring(separator) else ""
+                val url = buildApiUrl(base, "/api${hostScope.scoped(bare)}$query")
                 val builder = Request.Builder().url(url)
                 val body = jsonBody?.toRequestBody("application/json; charset=utf-8".toMediaType())
                 when (method) {
