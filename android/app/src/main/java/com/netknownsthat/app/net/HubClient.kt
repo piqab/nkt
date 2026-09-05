@@ -39,6 +39,7 @@ class HubClient(
     val hostScope = HostScope()
 
     private val cookieJar = PersistentCookieJar(scope, settingsStore)
+    private val certPins = CertPinStore(scope, settingsStore)
     private var baseUrl: HttpUrl? = null
 
     // internal, not private: the reified `execute` below is inline, and an
@@ -55,6 +56,14 @@ class HubClient(
         .cookieJar(cookieJar)
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
+        .apply {
+            // A hub with NKT_TLS_ENABLED generates its own self-signed
+            // certificate, so plain chain validation cannot work — see
+            // net/CertPinning.kt for what replaces it.
+            val (factory, trustManager) = tofuSslSocketFactory(certPins)
+            sslSocketFactory(factory, trustManager)
+            hostnameVerifier(tofuHostnameVerifier(certPins))
+        }
         .build()
 
     /** OkHttp instance other layers (WebSocket client, phase 3+) share, so
@@ -67,10 +76,26 @@ class HubClient(
      * previous run. Returns true if a hub URL was configured at all (not
      * whether the session is still valid — call [me] to find that out). */
     suspend fun bootstrap(): Boolean {
+        certPins.load()
         val saved = settingsStore.hubBaseUrl()?.toHttpUrlOrNull() ?: return false
         baseUrl = saved
+        certPins.currentAuthority = saved.authority()
         cookieJar.restore(saved)
         return true
+    }
+
+    private fun HttpUrl.authority(): String = "$host:$port"
+
+    /** SHA-256 of the certificate pinned for the configured hub, if it is
+     * using a self-signed one — shown on the About screen so an operator can
+     * compare it with what the hub itself reports. */
+    fun pinnedCertFingerprint(): String? =
+        baseUrl?.let { certPins.pinnedFor(it.authority()) }
+
+    /** Forgets the pinned certificate, so the next connection trusts on first
+     * use again — what is needed after deliberately reinstalling a hub. */
+    fun forgetPinnedCert() {
+        baseUrl?.let { certPins.forget(it.authority()) }
     }
 
     /** Validates and persists a new hub base URL — called from the login
@@ -80,6 +105,7 @@ class HubClient(
         val parsed = normalized.toHttpUrlOrNull()
             ?: return Result.failure(IllegalArgumentException("Не похоже на адрес хаба: $rawUrl"))
         baseUrl = parsed
+        certPins.currentAuthority = parsed.authority()
         settingsStore.setHubBaseUrl(parsed.toString())
         return Result.success(Unit)
     }
@@ -139,7 +165,12 @@ class HubClient(
                     RawResult.Ok(text)
                 }
             } catch (e: IOException) {
-                RawResult.Err(e.message ?: "Сетевая ошибка", null)
+                // A pin mismatch arrives wrapped in an SSL failure, and the
+                // wrapper's own message says nothing useful — dig out ours.
+                val mismatch = generateSequence(e as Throwable) { it.cause }
+                    .filterIsInstance<CertPinMismatchException>()
+                    .firstOrNull()
+                RawResult.Err(mismatch?.message ?: e.message ?: "Сетевая ошибка", null)
             }
         }
 

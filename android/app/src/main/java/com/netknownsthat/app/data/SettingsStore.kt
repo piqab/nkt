@@ -22,6 +22,7 @@ class SettingsStore(private val context: Context) {
     private object Keys {
         val HUB_BASE_URL = stringPreferencesKey("hub_base_url")
         val COOKIES = stringSetPreferencesKey("session_cookies")
+        val PINNED_CERTS = stringSetPreferencesKey("pinned_certs")
     }
 
     suspend fun hubBaseUrl(): String? =
@@ -45,5 +46,17 @@ class SettingsStore(private val context: Context) {
 
     suspend fun clearSession() {
         context.dataStore.edit { it.remove(Keys.COOKIES) }
+    }
+
+    /**
+     * Pinned TLS certificate fingerprints, one "host:port=sha256hex" entry per
+     * hub (see net/CertPinning.kt). Survives relaunch on purpose: a pin that
+     * is forgotten every time protects against nothing.
+     */
+    suspend fun pinnedCerts(): Set<String> =
+        context.dataStore.data.first()[Keys.PINNED_CERTS].orEmpty()
+
+    suspend fun savePinnedCerts(entries: Set<String>) {
+        context.dataStore.edit { it[Keys.PINNED_CERTS] = entries }
     }
 }
