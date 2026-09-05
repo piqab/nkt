@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Cleartext (plain HTTP) is allowed app-wide, deliberately: the hub address
+  is whatever the operator types in on the login screen, most often
+  something like http://127.0.0.1:8077 reached through an SSH port-forward
+  (adb reverse / a local VPN-based SSH client) or a plain LAN address — see
+  README.md's own "Открыть его" section, which documents exactly this same
+  tradeoff for the web UI (NKT_COOKIE_SECURE=false for a tunnel). There is no
+  fixed hostname to scope a <domain-config> to at build time. HTTPS through a
+  real reverse proxy or NKT_TLS_ENABLED still works the same as any HTTPS
+  endpoint; this config only widens what's *additionally* allowed.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

@@ -1,0 +1,159 @@
+package com.netknownsthat.app.net
+
+import com.netknownsthat.app.data.SettingsStore
+import com.netknownsthat.app.net.model.LoginRequest
+import com.netknownsthat.app.net.model.Me
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okhttp3.RequestBody.Companion.toRequestBody
+import java.io.IOException
+import java.util.concurrent.TimeUnit
+
+/**
+ * The one networking chokepoint every screen goes through — REST today,
+ * WebSocket joins it from phase 3 onward (see the plan's shared
+ * live-log-job component). Deliberately just one configured hub at a time
+ * for now (see SettingsStore's own doc comment); a real multi-hub picker is
+ * the plan's phase 7, layered on top without changing this class's shape.
+ *
+ * The hub's own base URL is assumed to have no meaningful path component —
+ * matching how the Go server itself always serves the API at `/api/...`
+ * from the origin root (see internal/hub/server.go, internal/api/server.go)
+ * — a value like "http://127.0.0.1:8077" or "https://hub.example.com" is
+ * expected, not one with its own sub-path.
+ */
+class HubClient(
+    private val settingsStore: SettingsStore,
+    scope: CoroutineScope,
+) {
+    val hostScope = HostScope()
+
+    private val cookieJar = PersistentCookieJar(scope, settingsStore)
+    private var baseUrl: HttpUrl? = null
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        explicitNulls = false
+    }
+
+    private val okHttp = OkHttpClient.Builder()
+        .cookieJar(cookieJar)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .build()
+
+    /** OkHttp instance other layers (WebSocket client, phase 3+) share, so
+     * every connection carries the same cookie jar/timeouts. */
+    fun okHttpClient(): OkHttpClient = okHttp
+
+    fun currentBaseUrl(): HttpUrl? = baseUrl
+
+    /** Loads whatever hub URL + session cookie were persisted from a
+     * previous run. Returns true if a hub URL was configured at all (not
+     * whether the session is still valid — call [me] to find that out). */
+    suspend fun bootstrap(): Boolean {
+        val saved = settingsStore.hubBaseUrl()?.toHttpUrlOrNull() ?: return false
+        baseUrl = saved
+        cookieJar.restore(saved)
+        return true
+    }
+
+    /** Validates and persists a new hub base URL — called from the login
+     * screen before the first request there. */
+    suspend fun setHubBaseUrl(rawUrl: String): Result<Unit> {
+        val normalized = rawUrl.trim().let { if ("://" in it) it else "http://$it" }
+        val parsed = normalized.toHttpUrlOrNull()
+            ?: return Result.failure(IllegalArgumentException("Не похоже на адрес хаба: $rawUrl"))
+        baseUrl = parsed
+        settingsStore.setHubBaseUrl(parsed.toString())
+        return Result.success(Unit)
+    }
+
+    sealed class ApiResult<out T> {
+        data class Success<T>(val value: T) : ApiResult<T>()
+        data class Failure(val message: String, val httpCode: Int? = null) : ApiResult<Nothing>()
+    }
+
+    suspend inline fun <reified T> get(path: String): ApiResult<T> = execute("GET", path, null)
+    suspend inline fun <reified T> post(path: String, jsonBody: String? = null): ApiResult<T> =
+        execute("POST", path, jsonBody)
+    suspend inline fun <reified T> put(path: String, jsonBody: String): ApiResult<T> =
+        execute("PUT", path, jsonBody)
+    suspend inline fun <reified T> patch(path: String, jsonBody: String): ApiResult<T> =
+        execute("PATCH", path, jsonBody)
+    suspend inline fun <reified T> delete(path: String): ApiResult<T> = execute("DELETE", path, null)
+
+    @Serializable
+    private data class ErrorBody(val error: String)
+
+    /** Every REST call funnels through here — GET/POST/PUT/PATCH/DELETE
+     * differ only in method and whether a body is attached. */
+    suspend inline fun <reified T> execute(method: String, path: String, jsonBody: String?): ApiResult<T> =
+        withContext(Dispatchers.IO) {
+            val base = baseUrl
+                ?: return@withContext ApiResult.Failure("Хаб не настроен — укажите адрес на экране входа")
+            try {
+                val scopedPath = hostScope.scoped(path)
+                val url = base.newBuilder().encodedPath("/api$scopedPath").build()
+                val builder = Request.Builder().url(url)
+                val body = jsonBody?.toRequestBody("application/json; charset=utf-8".toMediaType())
+                when (method) {
+                    "GET" -> builder.get()
+                    "DELETE" -> if (body != null) builder.delete(body) else builder.delete()
+                    else -> builder.method(method, body ?: ByteArray(0).toRequestBody(null))
+                }
+
+                okHttp.newCall(builder.build()).execute().use { response ->
+                    val text = response.body?.string().orEmpty()
+                    if (!response.isSuccessful) {
+                        val message = runCatching { json.decodeFromString<ErrorBody>(text).error }
+                            .getOrNull()
+                            ?.takeIf { it.isNotBlank() }
+                            ?: "Ошибка ${response.code}"
+                        return@withContext ApiResult.Failure(message, response.code)
+                    }
+                    if (T::class == Unit::class) {
+                        @Suppress("UNCHECKED_CAST")
+                        return@withContext ApiResult.Success(Unit as T)
+                    }
+                    ApiResult.Success(json.decodeFromString(text))
+                }
+            } catch (e: IOException) {
+                ApiResult.Failure(e.message ?: "Сетевая ошибка")
+            } catch (e: kotlinx.serialization.SerializationException) {
+                ApiResult.Failure("Не удалось разобрать ответ сервера: ${e.message}")
+            }
+        }
+
+    /**
+     * Login, then fetch /auth/me separately — mirrors web/src/App.tsx's own
+     * loadMe(), rather than assuming a particular shape for the login
+     * response body itself (unconfirmed on the Go side; only writeError's
+     * {"error": "..."} failure shape is confirmed from this session's own
+     * work on internal/api/server.go).
+     */
+    suspend fun login(username: String, password: String): ApiResult<Me> {
+        val body = json.encodeToString(LoginRequest(username, password))
+        return when (val loginResp = post<Unit>("/auth/login", body)) {
+            is ApiResult.Failure -> loginResp
+            is ApiResult.Success -> me()
+        }
+    }
+
+    suspend fun me(): ApiResult<Me> = get("/auth/me")
+
+    suspend fun logout() {
+        post<Unit>("/auth/logout")
+        cookieJar.clear()
+    }
+}
