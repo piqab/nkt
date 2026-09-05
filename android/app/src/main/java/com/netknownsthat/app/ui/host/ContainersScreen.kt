@@ -20,9 +20,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.Container
+import com.netknownsthat.app.status.containerHealth
+import com.netknownsthat.app.status.instanceHealth
+import com.netknownsthat.app.ui.theme.StatusDot
+import com.netknownsthat.app.ui.theme.statusColor
 
 private val LIFECYCLE = listOf("start" to "Пуск", "stop" to "Стоп", "restart" to "Рестарт")
 
@@ -63,15 +68,19 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
             when (current.second) {
                 0 -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
                     items(data.docker.containers, key = { it.id }) {
-                        DockerCard(it, enabled) { action -> viewModel.dockerAction(it.name, action) }
+                        DockerCard(it, enabled, viewModel.pendingKey == it.name) { action ->
+                            viewModel.dockerAction(it.name, action)
+                        }
                     }
                 }
 
                 1 -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
                     items(data.podman.containers, key = { it.id }) {
-                        SimpleRuntimeCard(it.name, it.image, it.status, enabled) { action ->
-                            viewModel.podmanAction(it.name, action)
-                        }
+                        SimpleRuntimeCard(
+                            it.name, it.image, it.status,
+                            containerHealth(it.state), enabled,
+                            viewModel.pendingKey == it.name,
+                        ) { action -> viewModel.podmanAction(it.name, action) }
                     }
                 }
 
@@ -81,7 +90,8 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
                             it.name,
                             "${it.type} · ${it.architecture}",
                             it.status + it.ipv4.joinToString("") { ip -> " · $ip" },
-                            enabled,
+                            instanceHealth(it.status), enabled,
+                            viewModel.pendingKey == it.name,
                         ) { action -> viewModel.lxdAction(it.name, action) }
                     }
                 }
@@ -92,7 +102,8 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
                             it.name,
                             "${it.vcpus} vCPU · ${it.memoryKb / 1024} МБ",
                             it.state,
-                            enabled,
+                            instanceHealth(it.state), enabled,
+                            viewModel.pendingKey == it.name,
                         ) { action -> viewModel.vmAction(it.name, action) }
                     }
                 }
@@ -102,20 +113,28 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
 }
 
 @Composable
-private fun DockerCard(container: Container, enabled: Boolean, onAction: (String) -> Unit) {
+private fun DockerCard(
+    container: Container,
+    enabled: Boolean,
+    busy: Boolean,
+    onAction: (String) -> Unit,
+) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Row(modifier = Modifier.fillMaxWidth()) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                StatusDot(containerHealth(container.state), busy = busy)
                 Text(
                     text = container.name,
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
                 Text(
-                    text = container.state,
+                    text = if (busy) "…" else container.state,
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (container.running) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = statusColor(containerHealth(container.state)),
                 )
             }
             Text(
@@ -154,19 +173,28 @@ private fun SimpleRuntimeCard(
     name: String,
     subtitle: String,
     status: String,
+    health: com.netknownsthat.app.status.HealthStatus,
     enabled: Boolean,
+    busy: Boolean,
     onAction: (String) -> Unit,
 ) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(name, style = MaterialTheme.typography.titleSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusDot(health, busy = busy)
+                Text(name, style = MaterialTheme.typography.titleSmall)
+            }
             Text(
                 text = subtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp),
             )
-            Text(status, style = MaterialTheme.typography.bodySmall)
+            Text(
+                text = if (busy) "…" else status,
+                style = MaterialTheme.typography.bodySmall,
+                color = statusColor(health),
+            )
             ActionRow(enabled, onAction)
         }
     }

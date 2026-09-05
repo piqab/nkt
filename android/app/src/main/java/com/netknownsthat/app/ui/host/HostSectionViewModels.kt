@@ -6,6 +6,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netknownsthat.app.net.HubClient
+import com.netknownsthat.app.status.HealthStatus
+import com.netknownsthat.app.status.containerHealth
+import com.netknownsthat.app.status.instanceHealth
+import com.netknownsthat.app.status.serviceHealth
 import com.netknownsthat.app.net.model.AuditResponse
 import com.netknownsthat.app.net.model.CertificatesResponse
 import com.netknownsthat.app.net.model.ConfigFileResponse
@@ -78,6 +82,11 @@ abstract class SectionViewModel<T>(protected val hubClient: HubClient) : ViewMod
         }
     }
 
+    /** Which item currently has an action in flight, so its row can show a
+     * spinner instead of a status dot. Null when nothing is pending. */
+    var pendingKey by mutableStateOf<String?>(null)
+        private set
+
     /**
      * Runs a mutating call and refetches afterwards, so the screen shows
      * what the host actually ended up in rather than what was asked for —
@@ -93,6 +102,69 @@ abstract class SectionViewModel<T>(protected val hubClient: HubClient) : ViewMod
             }
             actionInProgress = false
             load()
+        }
+    }
+
+    /**
+     * Like [act], but keeps [key]'s spinner running until the host actually
+     * reaches the state that was asked for.
+     *
+     * systemd (and Docker, and libvirt) answer the request immediately and
+     * then take their time doing the work, so a single refetch after the call
+     * usually still shows the old state — the operator presses "start", sees
+     * "inactive" a moment later, and reasonably concludes it failed. Polling
+     * until [settled] says otherwise is what makes the button honest.
+     *
+     * Gives up after [timeoutMs] and says so rather than spinning forever: a
+     * service that is genuinely stuck must not look like a hung app.
+     */
+    protected fun actAwaiting(
+        key: String,
+        okMessage: String,
+        timeoutMs: Long = 20_000,
+        pollMs: Long = 800,
+        settled: (T) -> Boolean,
+        call: suspend () -> HubClient.ApiResult<*>,
+    ) {
+        if (actionInProgress) return
+        viewModelScope.launch {
+            actionInProgress = true
+            pendingKey = key
+
+            when (val result = call()) {
+                is HubClient.ApiResult.Failure -> {
+                    actionMessage = "Не удалось: ${result.message}"
+                    actionInProgress = false
+                    pendingKey = null
+                    load()
+                    return@launch
+                }
+
+                is HubClient.ApiResult.Success -> Unit
+            }
+
+            val deadline = System.currentTimeMillis() + timeoutMs
+            var reached = false
+            while (System.currentTimeMillis() < deadline) {
+                delay(pollMs)
+                when (val fetched = fetch()) {
+                    is HubClient.ApiResult.Success -> {
+                        state = state.copy(loading = false, data = fetched.value, error = null)
+                        if (settled(fetched.value)) {
+                            reached = true
+                            break
+                        }
+                    }
+
+                    is HubClient.ApiResult.Failure ->
+                        state = state.copy(loading = false, error = fetched.message)
+                }
+            }
+
+            actionMessage = if (reached) okMessage
+            else "$okMessage — но состояние не изменилось за ${timeoutMs / 1000} с"
+            pendingKey = null
+            actionInProgress = false
         }
     }
 }
@@ -116,8 +188,32 @@ class AuditViewModel(hubClient: HubClient) : SectionViewModel<AuditResponse>(hub
 class ServicesViewModel(hubClient: HubClient) : SectionViewModel<ServicesResponse>(hubClient) {
     override suspend fun fetch() = hubClient.get<ServicesResponse>("/services")
 
-    fun action(name: String, action: String) = act("$name: $action выполнено") {
-        hubClient.post<JsonObject>("/services/$name/$action")
+    fun action(name: String, action: String) {
+        val call: suspend () -> HubClient.ApiResult<*> =
+            { hubClient.post<JsonObject>("/services/$name/$action") }
+
+        // enable/disable change whether a unit starts at boot, not whether it
+        // is running now — there is no runtime state to wait for.
+        val expectRunning = when (action) {
+            "start", "restart", "reload" -> true
+            "stop" -> false
+            else -> return act("$name: $action выполнено", call)
+        }
+
+        actAwaiting(
+            key = name,
+            okMessage = if (expectRunning) "$name запущен" else "$name остановлен",
+            settled = { response ->
+                val unit = response.services.find { it.name == name }
+                    ?: return@actAwaiting true
+                val running = serviceHealth(unit.activeState) == HealthStatus.OK
+                // A unit that lands in "failed" is settled too: it is done
+                // trying, and spinning until the timeout would only hide the
+                // answer the operator needs.
+                running == expectRunning || serviceHealth(unit.activeState) == HealthStatus.BAD
+            },
+            call = call,
+        )
     }
 }
 
@@ -146,20 +242,48 @@ class ContainersViewModel(hubClient: HubClient) : SectionViewModel<ContainerRunt
         )
     }
 
-    fun dockerAction(name: String, action: String) = act("$name: $action выполнено") {
-        hubClient.post<JsonObject>("/containers/$name/$action")
+    fun dockerAction(name: String, action: String) = runtimeAction(name, action, "/containers/$name/$action") { data ->
+        data.docker.containers.find { it.name == name }?.running
     }
 
-    fun podmanAction(name: String, action: String) = act("$name: $action выполнено") {
-        hubClient.post<JsonObject>("/podman/containers/$name/$action")
-    }
+    fun podmanAction(name: String, action: String) =
+        runtimeAction(name, action, "/podman/containers/$name/$action") { data ->
+            data.podman.containers.find { it.name == name }
+                ?.let { containerHealth(it.state) == HealthStatus.OK }
+        }
 
-    fun lxdAction(name: String, action: String) = act("$name: $action выполнено") {
-        hubClient.post<JsonObject>("/lxd/instances/$name/$action")
-    }
+    fun lxdAction(name: String, action: String) =
+        runtimeAction(name, action, "/lxd/instances/$name/$action") { data ->
+            data.lxd.instances.find { it.name == name }
+                ?.let { instanceHealth(it.status) == HealthStatus.OK }
+        }
 
-    fun vmAction(name: String, action: String) = act("$name: $action выполнено") {
-        hubClient.post<JsonObject>("/vms/$name/$action")
+    fun vmAction(name: String, action: String) =
+        runtimeAction(name, action, "/vms/$name/$action") { data ->
+            data.vms.vms.find { it.name == name }
+                ?.let { instanceHealth(it.state) == HealthStatus.OK }
+        }
+
+    /**
+     * All four runtimes behave the same way here: the request returns at
+     * once and the container takes a moment to actually start or stop, so
+     * the spinner waits for [isRunning] to report what was asked for. Null
+     * from it means the item is gone from the list, which for a stop is the
+     * answer too.
+     */
+    private fun runtimeAction(
+        name: String,
+        action: String,
+        path: String,
+        isRunning: (ContainerRuntimes) -> Boolean?,
+    ) {
+        val expectRunning = action != "stop"
+        actAwaiting(
+            key = name,
+            okMessage = if (expectRunning) "$name запущен" else "$name остановлен",
+            settled = { data -> (isRunning(data) ?: !expectRunning) == expectRunning },
+            call = { hubClient.post<JsonObject>(path) },
+        )
     }
 }
 

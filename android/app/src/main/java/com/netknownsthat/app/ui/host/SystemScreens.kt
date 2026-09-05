@@ -23,10 +23,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.Certificate
+import com.netknownsthat.app.status.certificateHealth
+import com.netknownsthat.app.status.firewallManagerHealth
+import com.netknownsthat.app.ui.theme.StatusDot
+import com.netknownsthat.app.ui.theme.statusColor
 import com.netknownsthat.app.net.model.Listener
 
 @Composable
@@ -178,7 +183,16 @@ fun FirewallScreen(viewModel: FirewallViewModel) {
                     items(data.state.managers) { manager ->
                         Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
                             Column(modifier = Modifier.padding(16.dp)) {
-                                Text(manager.name, style = MaterialTheme.typography.titleSmall)
+                                val health = firewallManagerHealth(
+                                    manager.installed, manager.active,
+                                )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    StatusDot(health)
+                                    Text(
+                                        manager.name,
+                                        style = MaterialTheme.typography.titleSmall,
+                                    )
+                                }
                                 Text(
                                     text = when {
                                         !manager.installed -> "не установлен"
@@ -186,8 +200,7 @@ fun FirewallScreen(viewModel: FirewallViewModel) {
                                         else -> "установлен, выключен"
                                     },
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = if (manager.active) MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    color = statusColor(health),
                                 )
                                 if (manager.policy.isNotBlank()) {
                                     Text(
@@ -317,19 +330,23 @@ fun CertificatesScreen(viewModel: CertificatesViewModel) {
 private fun CertificateCard(cert: Certificate) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = cert.names.joinToString(", ").ifBlank { cert.path },
-                style = MaterialTheme.typography.titleSmall,
+            val health = certificateHealth(
+                daysLeft = cert.daysLeft,
+                automaticRenewal = cert.renewal?.automatic ?: false,
+                unreadable = cert.error.isNotBlank(),
             )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                StatusDot(health)
+                Text(
+                    text = cert.names.joinToString(", ").ifBlank { cert.path },
+                    style = MaterialTheme.typography.titleSmall,
+                )
+            }
             Text(
                 text = if (cert.daysLeft < 0) "Просрочен ${-cert.daysLeft} дн. назад"
                 else "Осталось ${cert.daysLeft} дн. (до ${cert.notAfter})",
                 style = MaterialTheme.typography.bodyMedium,
-                color = when {
-                    cert.daysLeft < 0 -> MaterialTheme.colorScheme.error
-                    cert.daysLeft <= 30 -> MaterialTheme.colorScheme.tertiary
-                    else -> MaterialTheme.colorScheme.onSurface
-                },
+                color = statusColor(health),
                 modifier = Modifier.padding(top = 4.dp),
             )
             Text(
@@ -349,8 +366,10 @@ private fun CertificateCard(cert: Certificate) {
                     text = if (renewal.automatic) "Продлевается автоматически (${renewal.tool})"
                     else "Автопродления нет",
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (renewal.automatic) MaterialTheme.colorScheme.primary
-                    else MaterialTheme.colorScheme.tertiary,
+                    color = statusColor(
+                        if (renewal.automatic) com.netknownsthat.app.status.HealthStatus.OK
+                        else com.netknownsthat.app.status.HealthStatus.WARN
+                    ),
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }
