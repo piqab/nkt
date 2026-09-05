@@ -41,7 +41,12 @@ class HubClient(
     private val cookieJar = PersistentCookieJar(scope, settingsStore)
     private var baseUrl: HttpUrl? = null
 
-    private val json = Json {
+    // internal, not private: the reified `execute` below is inline, and an
+    // inline function may only touch declarations at least as visible as
+    // itself. Only the deserialization step is inlined; everything else
+    // (OkHttp, cookies, base URL) stays private behind executeRaw.
+    @PublishedApi
+    internal val json = Json {
         ignoreUnknownKeys = true
         explicitNulls = false
     }
@@ -96,12 +101,21 @@ class HubClient(
     @Serializable
     private data class ErrorBody(val error: String)
 
+    /** Raw outcome of a call — the response body is still undecoded here so
+     * that only the tiny reified [execute] wrapper needs to be inline. */
+    @PublishedApi
+    internal sealed class RawResult {
+        data class Ok(val text: String) : RawResult()
+        data class Err(val message: String, val httpCode: Int?) : RawResult()
+    }
+
     /** Every REST call funnels through here — GET/POST/PUT/PATCH/DELETE
      * differ only in method and whether a body is attached. */
-    suspend inline fun <reified T> execute(method: String, path: String, jsonBody: String?): ApiResult<T> =
+    @PublishedApi
+    internal suspend fun executeRaw(method: String, path: String, jsonBody: String?): RawResult =
         withContext(Dispatchers.IO) {
             val base = baseUrl
-                ?: return@withContext ApiResult.Failure("Хаб не настроен — укажите адрес на экране входа")
+                ?: return@withContext RawResult.Err("Хаб не настроен — укажите адрес на экране входа", null)
             try {
                 val scopedPath = hostScope.scoped(path)
                 val url = base.newBuilder().encodedPath("/api$scopedPath").build()
@@ -120,19 +134,29 @@ class HubClient(
                             .getOrNull()
                             ?.takeIf { it.isNotBlank() }
                             ?: "Ошибка ${response.code}"
-                        return@withContext ApiResult.Failure(message, response.code)
+                        return@withContext RawResult.Err(message, response.code)
                     }
-                    if (T::class == Unit::class) {
-                        @Suppress("UNCHECKED_CAST")
-                        return@withContext ApiResult.Success(Unit as T)
-                    }
-                    ApiResult.Success(json.decodeFromString(text))
+                    RawResult.Ok(text)
                 }
             } catch (e: IOException) {
-                ApiResult.Failure(e.message ?: "Сетевая ошибка")
-            } catch (e: kotlinx.serialization.SerializationException) {
-                ApiResult.Failure("Не удалось разобрать ответ сервера: ${e.message}")
+                RawResult.Err(e.message ?: "Сетевая ошибка", null)
             }
+        }
+
+    suspend inline fun <reified T> execute(method: String, path: String, jsonBody: String?): ApiResult<T> =
+        when (val raw = executeRaw(method, path, jsonBody)) {
+            is RawResult.Err -> ApiResult.Failure(raw.message, raw.httpCode)
+            is RawResult.Ok ->
+                if (T::class == Unit::class) {
+                    @Suppress("UNCHECKED_CAST")
+                    ApiResult.Success(Unit as T)
+                } else {
+                    try {
+                        ApiResult.Success(json.decodeFromString<T>(raw.text))
+                    } catch (e: kotlinx.serialization.SerializationException) {
+                        ApiResult.Failure("Не удалось разобрать ответ сервера: ${e.message}")
+                    }
+                }
         }
 
     /**
