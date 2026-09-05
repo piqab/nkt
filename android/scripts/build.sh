@@ -2,7 +2,7 @@
 # Builds the Android app from the command line — no Android Studio needed.
 #
 # Prerequisite (once per machine):
-#   android/scripts/setup-linux-toolchain.sh
+#   android/scripts/setup-toolchain.sh
 #
 # Usage:
 #   android/scripts/build.sh              # debug APK
@@ -17,7 +17,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANDROID_DIR="$(dirname "$SCRIPT_DIR")"
 
 if [ ! -f "$SCRIPT_DIR/env.sh" ]; then
-  echo "error: $SCRIPT_DIR/env.sh is missing — run setup-linux-toolchain.sh first" >&2
+  echo "error: $SCRIPT_DIR/env.sh is missing — run setup-toolchain.sh first" >&2
   exit 1
 fi
 
