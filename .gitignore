@@ -21,6 +21,15 @@ Thumbs.db
 # Local overrides
 .env
 
+# Android — build output and machine-specific paths. The Gradle wrapper
+# (android/gradlew, android/gradle/wrapper/) IS committed on purpose: it is
+# what lets a fresh clone build without a preinstalled Gradle.
+/android/.gradle/
+/android/build/
+/android/app/build/
+/android/local.properties
+/android/scripts/env.sh
+
 # Personal/promotional writing — not project documentation, not tracked.
 /articles/
 

@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
  * single-host install with no hub at all, the only meaning there is), and
  * [HubHost.LOCAL_HOST_ID] means the hub's own synthetic "localhost" row.
  *
- * `/auth/*` is deliberately never prefixed regardless of the current
+ * Anything under `/auth/` is deliberately never prefixed regardless of the current
  * selection — authentication always targets the hub's own session, never a
  * per-host one (the hub swaps in that host's own cached bootstrap-admin
  * cookie server-side, transparently — see internal/hub/proxy.go's

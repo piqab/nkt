@@ -2,6 +2,10 @@
 # Linux-хоста. Держим LF везде, независимо от того, на какой ОС идёт разработка.
 * text=auto eol=lf
 
+# Исключение из правила LF выше: батник Gradle запускается cmd.exe, которому
+# нужны CRLF; с LF он на Windows ломается.
+android/gradlew.bat text eol=crlf
+
 # Бинарные и сгенерированные файлы git не трогает.
 *.png binary
 *.jpg binary
