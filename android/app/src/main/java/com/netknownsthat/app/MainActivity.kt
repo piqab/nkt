@@ -6,18 +6,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +24,11 @@ import com.netknownsthat.app.net.HubClient
 import com.netknownsthat.app.ui.AppViewModelFactory
 import com.netknownsthat.app.ui.about.AboutScreen
 import com.netknownsthat.app.ui.about.AboutViewModel
+import com.netknownsthat.app.ui.host.AuditViewModel
+import com.netknownsthat.app.ui.host.FindingsViewModel
+import com.netknownsthat.app.ui.host.HostScreen
+import com.netknownsthat.app.ui.host.InterfacesViewModel
+import com.netknownsthat.app.ui.host.OverviewViewModel
 import com.netknownsthat.app.ui.hosts.HostListScreen
 import com.netknownsthat.app.ui.hosts.HostListViewModel
 import com.netknownsthat.app.ui.login.AuthViewModel
@@ -44,7 +39,7 @@ private object Routes {
     const val LOGIN = "login"
     const val HOSTS = "hosts"
     const val ABOUT = "about"
-    const val HOST_PLACEHOLDER = "host_placeholder"
+    const val HOST = "host"
 }
 
 class MainActivity : ComponentActivity() {
@@ -54,6 +49,10 @@ class MainActivity : ComponentActivity() {
     private val authViewModel: AuthViewModel by viewModels { factory }
     private val hostListViewModel: HostListViewModel by viewModels { factory }
     private val aboutViewModel: AboutViewModel by viewModels { factory }
+    private val overviewViewModel: OverviewViewModel by viewModels { factory }
+    private val findingsViewModel: FindingsViewModel by viewModels { factory }
+    private val interfacesViewModel: InterfacesViewModel by viewModels { factory }
+    private val auditViewModel: AuditViewModel by viewModels { factory }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -65,6 +64,10 @@ class MainActivity : ComponentActivity() {
                         authViewModel = authViewModel,
                         hostListViewModel = hostListViewModel,
                         aboutViewModel = aboutViewModel,
+                        overviewViewModel = overviewViewModel,
+                        findingsViewModel = findingsViewModel,
+                        interfacesViewModel = interfacesViewModel,
+                        auditViewModel = auditViewModel,
                     )
                 }
             }
@@ -84,6 +87,10 @@ private fun NktApp(
     authViewModel: AuthViewModel,
     hostListViewModel: HostListViewModel,
     aboutViewModel: AboutViewModel,
+    overviewViewModel: OverviewViewModel,
+    findingsViewModel: FindingsViewModel,
+    interfacesViewModel: InterfacesViewModel,
+    auditViewModel: AuditViewModel,
 ) {
     val navController = rememberNavController()
     var startDestination by remember { mutableStateOf<String?>(null) }
@@ -120,45 +127,24 @@ private fun NktApp(
             HostListScreen(
                 viewModel = hostListViewModel,
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
-                onOpenHost = { navController.navigate(Routes.HOST_PLACEHOLDER) },
+                onOpenHost = { navController.navigate(Routes.HOST) },
             )
         }
         composable(Routes.ABOUT) {
             AboutScreen(viewModel = aboutViewModel, onBack = { navController.popBackStack() })
         }
-        composable(Routes.HOST_PLACEHOLDER) {
-            HostPlaceholderScreen(onBack = { navController.popBackStack() })
+        composable(Routes.HOST) {
+            val host = hostListViewModel.selectedHost
+            HostScreen(
+                hostName = host?.name ?: "Хост",
+                hostId = host?.id,
+                overviewViewModel = overviewViewModel,
+                findingsViewModel = findingsViewModel,
+                interfacesViewModel = interfacesViewModel,
+                auditViewModel = auditViewModel,
+                onBack = { navController.popBackStack() },
+            )
         }
     }
 }
 
-/**
- * Stands in for the real per-host screens (Overview, Findings, ...) until
- * the plan's phase 2 builds them — proves the login → host-list →
- * host-scoped-call chain works end to end without pretending phase 2 is
- * already done.
- */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun HostPlaceholderScreen(onBack: () -> Unit) {
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Хост") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Назад")
-                    }
-                },
-            )
-        },
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp)) {
-            Text(
-                text = "Экраны хоста (Обзор, Проблемы, ...) появятся в фазе 2.",
-                style = MaterialTheme.typography.bodyLarge,
-                modifier = Modifier.align(Alignment.Center),
-            )
-        }
-    }
-}

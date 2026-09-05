@@ -41,10 +41,16 @@ class HostListViewModel(private val hubClient: HubClient) : ViewModel() {
         }
     }
 
+    /** The host whose sections are open, kept here so the host screen can
+     * title itself and refetch when the selection changes. */
+    var selectedHost by mutableStateOf<HubHost?>(null)
+        private set
+
     /** Selecting a host scopes every subsequent API call to it (see
      * HostScope) — screens from phase 2 onward read hubClient.hostScope to
      * know which host's overview/findings/etc. to show. */
     fun select(host: HubHost) {
+        selectedHost = host
         hubClient.hostScope.select(host.id)
     }
 }
