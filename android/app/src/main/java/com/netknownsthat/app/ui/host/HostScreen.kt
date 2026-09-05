@@ -42,6 +42,8 @@ import kotlinx.coroutines.launch
 enum class HostSection(val title: String) {
     OVERVIEW("Обзор"),
     FINDINGS("Проблемы"),
+    TERMINAL("Терминал"),
+    BTOP("Монитор (btop)"),
     SERVICES("Сервисы"),
     CONTAINERS("Контейнеры"),
     VULNERABILITIES("Уязвимости"),
@@ -76,8 +78,12 @@ class HostViewModels(
     val firewall: FirewallViewModel,
     val certificates: CertificatesViewModel,
     val topology: TopologyViewModel,
+    val terminal: TerminalViewModel,
 ) {
-    fun forSection(section: HostSection): SectionViewModel<*> = when (section) {
+    /** Null for the live sections: a terminal has nothing to load or
+     * refresh, so the generic fetch/refresh plumbing does not apply. */
+    fun forSection(section: HostSection): SectionViewModel<*>? = when (section) {
+        HostSection.TERMINAL, HostSection.BTOP -> null
         HostSection.OVERVIEW -> overview
         HostSection.FINDINGS -> findings
         HostSection.SERVICES -> services
@@ -113,12 +119,12 @@ fun HostScreen(
     // Keyed on the host too, not just the section: these ViewModels live as
     // long as the activity, so returning to the list and opening a different
     // host must refetch rather than show the previous host's data.
-    LaunchedEffect(section, hostId) { active.load() }
+    LaunchedEffect(section, hostId) { active?.load() }
 
     // Action results surface as a snackbar wherever they happen, so no
     // screen has to grow its own reporting.
-    LaunchedEffect(active.actionMessage) {
-        active.actionMessage?.let {
+    LaunchedEffect(active?.actionMessage) {
+        active?.actionMessage?.let {
             snackbarHostState.showSnackbar(it)
             active.actionMessage = null
         }
@@ -162,8 +168,10 @@ fun HostScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { active.load() }) {
-                            Icon(Icons.Default.Refresh, contentDescription = "Обновить")
+                        if (active != null) {
+                            IconButton(onClick = { active.load() }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Обновить")
+                            }
                         }
                         IconButton(onClick = onBack) {
                             Icon(
@@ -179,6 +187,8 @@ fun HostScreen(
                 when (section) {
                     HostSection.OVERVIEW -> OverviewScreen(viewModels.overview)
                     HostSection.FINDINGS -> FindingsScreen(viewModels.findings)
+                    HostSection.TERMINAL -> TerminalScreen(viewModels.terminal, btop = false)
+                    HostSection.BTOP -> TerminalScreen(viewModels.terminal, btop = true)
                     HostSection.SERVICES -> ServicesScreen(viewModels.services)
                     HostSection.CONTAINERS -> ContainersScreen(viewModels.containers)
                     HostSection.VULNERABILITIES -> VulnerabilitiesScreen(viewModels.vulnerabilities)

@@ -86,6 +86,24 @@ class HubClient(
 
     private fun HttpUrl.authority(): String = "$host:$port"
 
+    /**
+     * WebSocket URL for a host-scoped path, e.g. "/terminal/ws?tmux=1".
+     *
+     * Same `/api` prefix and same host-scoping rule as every REST call (see
+     * HostScope), and the same cookie too — OkHttp's CookieJar applies to
+     * the upgrade request like any other, which is what authenticates the
+     * socket. Only the scheme differs.
+     */
+    fun webSocketUrl(path: String): String? {
+        val base = baseUrl ?: return null
+        val separator = path.indexOf('?')
+        val bare = if (separator >= 0) path.substring(0, separator) else path
+        val query = if (separator >= 0) path.substring(separator) else ""
+        val scoped = hostScope.scoped(bare)
+        val scheme = if (base.isHttps) "wss" else "ws"
+        return "$scheme://${base.host}:${base.port}/api$scoped$query"
+    }
+
     /** SHA-256 of the certificate pinned for the configured hub, if it is
      * using a self-signed one — shown on the About screen so an operator can
      * compare it with what the hub itself reports. */

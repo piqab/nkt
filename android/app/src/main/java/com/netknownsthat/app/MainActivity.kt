@@ -37,6 +37,7 @@ import com.netknownsthat.app.ui.host.InterfacesViewModel
 import com.netknownsthat.app.ui.host.MiscViewModel
 import com.netknownsthat.app.ui.host.OverviewViewModel
 import com.netknownsthat.app.ui.host.ServicesViewModel
+import com.netknownsthat.app.ui.host.TerminalViewModel
 import com.netknownsthat.app.ui.host.TopologyViewModel
 import com.netknownsthat.app.ui.host.UsageViewModel
 import com.netknownsthat.app.ui.host.UsersViewModel
@@ -76,6 +77,7 @@ class MainActivity : ComponentActivity() {
     private val firewallViewModel: FirewallViewModel by viewModels { factory }
     private val certificatesViewModel: CertificatesViewModel by viewModels { factory }
     private val topologyViewModel: TopologyViewModel by viewModels { factory }
+    private val terminalViewModel: TerminalViewModel by viewModels { factory }
 
     private val hostViewModels by lazy {
         HostViewModels(
@@ -94,6 +96,7 @@ class MainActivity : ComponentActivity() {
             firewall = firewallViewModel,
             certificates = certificatesViewModel,
             topology = topologyViewModel,
+            terminal = terminalViewModel,
         )
     }
 
