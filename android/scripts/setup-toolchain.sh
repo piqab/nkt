@@ -18,6 +18,13 @@
 # Usage:
 #   android/scripts/setup-toolchain.sh
 #   source android/scripts/env.sh   # afterwards, in every new shell
+
+# This script needs bash (arrays); `sh setup-toolchain.sh` would fail on dash
+# in confusing ways, so re-exec instead of letting it break halfway through.
+if [ -z "${BASH_VERSION:-}" ]; then
+  exec bash "$0" "$@"
+fi
+
 set -euo pipefail
 
 LOCAL="$HOME/.local"
