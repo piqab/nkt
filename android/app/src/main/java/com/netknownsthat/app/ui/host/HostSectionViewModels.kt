@@ -13,6 +13,10 @@ import com.netknownsthat.app.status.serviceHealth
 import com.netknownsthat.app.net.model.AuditResponse
 import com.netknownsthat.app.net.model.CertificatesResponse
 import com.netknownsthat.app.net.model.ConfigFileResponse
+import com.netknownsthat.app.net.model.ConfigVersion
+import com.netknownsthat.app.net.model.ConfigVersionsResponse
+import com.netknownsthat.app.net.model.ConfigDiffResponse
+import com.netknownsthat.app.net.model.ConfigWriteResult
 import com.netknownsthat.app.net.model.ConfigsResponse
 import com.netknownsthat.app.net.model.ContainersResponse
 import com.netknownsthat.app.net.model.FindingsResponse
@@ -38,6 +42,8 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /** What every read-only section needs and nothing more. */
 data class SectionState<T>(
@@ -415,6 +421,110 @@ class ConfigsViewModel(hubClient: HubClient) : SectionViewModel<ConfigsResponse>
     fun closeFile() {
         openFile = null
         openFileError = null
+        versions = emptyList()
+        diff = null
+        writeResult = null
+    }
+
+    var versions by mutableStateOf<List<ConfigVersion>>(emptyList())
+        private set
+    var diff by mutableStateOf<String?>(null)
+        private set
+    var writeResult by mutableStateOf<ConfigWriteResult?>(null)
+        private set
+    var saving by mutableStateOf(false)
+        private set
+
+    fun dismissWriteResult() {
+        writeResult = null
+    }
+
+    fun loadVersions(path: String) {
+        viewModelScope.launch {
+            val result = hubClient.get<ConfigVersionsResponse>("/configs/versions?path=$path")
+            if (result is HubClient.ApiResult.Success) versions = result.value.versions
+        }
+    }
+
+    fun loadDiff(versionId: Long) {
+        viewModelScope.launch {
+            diff = null
+            when (val result = hubClient.get<ConfigDiffResponse>("/configs/versions/$versionId/diff")) {
+                is HubClient.ApiResult.Success ->
+                    // An empty diff is the honest answer for the version that
+                    // is already on disk, and saying so beats a blank screen.
+                    diff = result.value.diff.ifEmpty { "Эта версия совпадает с текущим файлом." }
+
+                is HubClient.ApiResult.Failure -> diff = "Не удалось получить diff: ${result.message}"
+            }
+        }
+    }
+
+    fun clearDiff() {
+        diff = null
+    }
+
+    /**
+     * Saves an edit. [expectedSha256] is always sent: the server refuses the
+     * write if the file changed on disk since it was read, which is the only
+     * thing standing between two people editing at once and one of them
+     * losing their work silently.
+     *
+     * [apply] asks the host to reload the owning service afterwards. Off by
+     * default — writing the file and restarting a service are different sizes
+     * of decision, especially from a phone.
+     */
+    fun save(path: String, content: String, expectedSha256: String, note: String, apply: Boolean) {
+        if (saving) return
+        viewModelScope.launch {
+            saving = true
+            val body = buildJsonObject {
+                put("path", path)
+                put("content", content)
+                put("note", note)
+                put("apply", apply)
+                put("expected_sha256", expectedSha256)
+            }.toString()
+
+            when (val result = hubClient.put<ConfigWriteResult>("/configs/file", body)) {
+                is HubClient.ApiResult.Success -> {
+                    writeResult = result.value
+                    open(path)
+                    loadVersions(path)
+                }
+
+                is HubClient.ApiResult.Failure -> {
+                    // 409 is the stale-content case specifically, and the
+                    // remedy is different from any other failure: reload and
+                    // redo the edit rather than retry the same write.
+                    openFileError = if (result.httpCode == 409)
+                        "Файл изменился на хосте после того, как был открыт. " +
+                            "Откройте его заново и повторите правку."
+                    else result.message
+                }
+            }
+            saving = false
+        }
+    }
+
+    fun rollback(versionId: Long, path: String, apply: Boolean) {
+        if (saving) return
+        viewModelScope.launch {
+            saving = true
+            val body = buildJsonObject { put("apply", apply) }.toString()
+            when (val result =
+                hubClient.post<ConfigWriteResult>("/configs/versions/$versionId/rollback", body)) {
+                is HubClient.ApiResult.Success -> {
+                    writeResult = result.value
+                    diff = null
+                    open(path)
+                    loadVersions(path)
+                }
+
+                is HubClient.ApiResult.Failure -> openFileError = result.message
+            }
+            saving = false
+        }
     }
 }
 

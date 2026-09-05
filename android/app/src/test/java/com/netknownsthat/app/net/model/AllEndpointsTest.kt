@@ -1,6 +1,7 @@
 package com.netknownsthat.app.net.model
 
 import kotlinx.serialization.json.Json
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -123,6 +124,35 @@ class AllEndpointsTest {
         assertTrue("no config files", files.isNotEmpty())
         assertTrue("paths missing", files.all { it.path.isNotBlank() })
         assertTrue("nothing marked editable", files.any { it.editable })
+    }
+
+    @Test
+    fun configVersionsWriteAndDiff() {
+        // All three captured from a real edit made over the API: write the
+        // file, list its versions, diff an older one.
+        val versions = decode<ConfigVersionsResponse>("config_versions").versions
+        assertTrue("no versions", versions.isNotEmpty())
+        assertTrue("version ids did not decode", versions.all { it.id > 0 })
+        // The very first entry a host records is the state before anyone
+        // edited anything, and it is not an edit.
+        assertTrue(
+            "the pre-edit 'observed' version is missing",
+            versions.any { it.action == "observed" },
+        )
+        assertTrue("an edit was not recorded", versions.any { it.action == "edit" })
+
+        val write = decode<ConfigWriteResult>("config_write")
+        assertTrue("version_id did not decode", write.versionId > 0)
+        // The safety net: the host validates with the owning service, and
+        // that outcome is what the screen reports.
+        assertTrue("validation result did not decode", write.validation != null)
+        assertTrue("validation command did not decode", write.validation!!.argv.isNotEmpty())
+        assertFalse("this write should not have been rolled back", write.rolledBack)
+
+        val diff = decode<ConfigDiffResponse>("config_diff").diff
+        assertTrue("diff is empty", diff.isNotBlank())
+        assertTrue("diff has no unified header", diff.contains("@@"))
+        assertTrue("diff shows no added line", diff.lines().any { it.startsWith("+") })
     }
 
     @Test

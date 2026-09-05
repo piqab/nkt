@@ -1,0 +1,1 @@
+{"path":"/etc/caddy/Caddyfile","version_id":2,"validated":true,"validation":{"argv":["caddy","validate","--config","/etc/caddy/Caddyfile","--adapter","caddyfile"],"exit_code":0,"stdout":"Valid configuration\n","stderr":"","simulated":true,"duration":"0s"},"rolled_back":false,"message":"Файл сохранён.","applied":false}
