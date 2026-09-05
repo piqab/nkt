@@ -4,6 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import com.netknownsthat.app.net.HubClient
 import com.netknownsthat.app.ui.about.AboutViewModel
+import com.netknownsthat.app.ui.host.AuditViewModel
+import com.netknownsthat.app.ui.host.FindingsViewModel
+import com.netknownsthat.app.ui.host.InterfacesViewModel
+import com.netknownsthat.app.ui.host.OverviewViewModel
 import com.netknownsthat.app.ui.hosts.HostListViewModel
 import com.netknownsthat.app.ui.login.AuthViewModel
 
@@ -19,6 +23,10 @@ class AppViewModelFactory(private val hubClient: HubClient) : ViewModelProvider.
         AuthViewModel::class.java -> AuthViewModel(hubClient) as T
         HostListViewModel::class.java -> HostListViewModel(hubClient) as T
         AboutViewModel::class.java -> AboutViewModel(hubClient) as T
+        OverviewViewModel::class.java -> OverviewViewModel(hubClient) as T
+        FindingsViewModel::class.java -> FindingsViewModel(hubClient) as T
+        InterfacesViewModel::class.java -> InterfacesViewModel(hubClient) as T
+        AuditViewModel::class.java -> AuditViewModel(hubClient) as T
         else -> throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
     }
 }
