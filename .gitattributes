@@ -11,6 +11,13 @@ android/gradlew.bat text eol=crlf
 *.jpg binary
 *.woff binary
 *.woff2 binary
+# jar/apk/keystore обязаны совпадать побайтно: под правилом eol=lf выше их
+# спасала только эвристика определения бинарников, а испорченный
+# gradle-wrapper.jar ломает сборку сообщением про GradleWrapperMain.
+*.jar binary
+*.apk binary
+*.aar binary
+*.keystore binary
 
 # Собранный фронтенд вшивается в бинарник — в diff его показывать бессмысленно.
 internal/webui/dist/** linguist-generated=true -diff
