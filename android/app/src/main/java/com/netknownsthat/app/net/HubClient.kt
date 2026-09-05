@@ -158,7 +158,11 @@ class HubClient(
         execute("PUT", path, jsonBody)
     suspend inline fun <reified T> patch(path: String, jsonBody: String): ApiResult<T> =
         execute("PATCH", path, jsonBody)
-    suspend inline fun <reified T> delete(path: String): ApiResult<T> = execute("DELETE", path, null)
+    /** [jsonBody] is genuinely used by some DELETE endpoints — the firewall
+     * ones carry the rule being removed, so the server can check it is still
+     * the rule the caller saw. */
+    suspend inline fun <reified T> delete(path: String, jsonBody: String? = null): ApiResult<T> =
+        execute("DELETE", path, jsonBody)
 
     @Serializable
     private data class ErrorBody(val error: String)

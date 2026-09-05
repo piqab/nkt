@@ -19,6 +19,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -35,132 +36,6 @@ import com.netknownsthat.app.ui.theme.statusColor
 import com.netknownsthat.app.net.model.Listener
 
 @Composable
-fun FirewallScreen(viewModel: FirewallViewModel) {
-    var tab by remember { mutableIntStateOf(0) }
-
-    SectionContent(state = viewModel.state, emptyText = "Данных о firewall нет") { data ->
-        Column {
-            TabRow(selectedTabIndex = tab) {
-                listOf("Правила", "Состояние", "Порты").forEachIndexed { index, title ->
-                    Tab(
-                        selected = tab == index,
-                        onClick = { tab = index },
-                        text = { Text(title) },
-                    )
-                }
-            }
-            when (tab) {
-                0 -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
-                    if (data.numbered.added.isNotEmpty()) {
-                        item {
-                            Text(
-                                text = "Правила ufw",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.padding(bottom = 8.dp),
-                            )
-                        }
-                        items(data.numbered.added) { rule ->
-                            Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                                Column(modifier = Modifier.padding(16.dp)) {
-                                    Text(rule.spec, fontFamily = FontFamily.Monospace)
-                                    Text(
-                                        text = "${rule.action} · ${rule.protocol} ${rule.port}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    item {
-                        Text(
-                            text = "Действующие правила",
-                            style = MaterialTheme.typography.titleMedium,
-                            modifier = Modifier.padding(vertical = 8.dp),
-                        )
-                    }
-                    items(data.state.rules, key = { it.id }) { rule ->
-                        Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(
-                                    text = "${rule.backend} ${rule.chain} · ${rule.action}",
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                                Text(
-                                    text = rule.raw,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontFamily = FontFamily.Monospace,
-                                    modifier = Modifier
-                                        .horizontalScroll(rememberScrollState())
-                                        .padding(top = 4.dp),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                1 -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
-                    items(data.state.managers) { manager ->
-                        Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                val health = firewallManagerHealth(
-                                    manager.installed, manager.active,
-                                )
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    StatusDot(health)
-                                    Text(
-                                        manager.name,
-                                        style = MaterialTheme.typography.titleSmall,
-                                    )
-                                }
-                                Text(
-                                    text = when {
-                                        !manager.installed -> "не установлен"
-                                        manager.active -> "включён"
-                                        else -> "установлен, выключен"
-                                    },
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = statusColor(health),
-                                )
-                                if (manager.policy.isNotBlank()) {
-                                    Text(
-                                        text = "Политика: ${manager.policy}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    items(data.state.policies) { policy ->
-                        Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text(
-                                    text = "${policy.backend} ${policy.table}/${policy.chain}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    fontFamily = FontFamily.Monospace,
-                                )
-                                Text(
-                                    text = policy.policy,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    color = if (policy.policy == "DROP")
-                                        MaterialTheme.colorScheme.primary
-                                    else MaterialTheme.colorScheme.tertiary,
-                                )
-                            }
-                        }
-                    }
-                }
-
-                else -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
-                    items(data.state.listeners) { ListenerCard(it) }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun MiscScreen(viewModel: MiscViewModel) {
     SectionContent(
         state = viewModel.state,
@@ -168,13 +43,13 @@ fun MiscScreen(viewModel: MiscViewModel) {
         isEmpty = { it.listeners.isEmpty() },
     ) { response ->
         LazyColumn(contentPadding = PaddingValues(16.dp)) {
-            items(response.listeners) { ListenerCard(it) }
+            items(response.listeners) { ListenerRow(it) }
         }
     }
 }
 
 @Composable
-private fun ListenerCard(listener: Listener) {
+fun ListenerRow(listener: Listener) {
     Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -209,6 +84,25 @@ private fun ListenerCard(listener: Listener) {
 
 @Composable
 fun CertificatesScreen(viewModel: CertificatesViewModel) {
+    var tab by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) { viewModel.loadForms() }
+
+    Column {
+        TabRow(selectedTabIndex = tab) {
+            listOf("Список", "Выпуск").forEachIndexed { index, title ->
+                Tab(selected = tab == index, onClick = { tab = index }, text = { Text(title) })
+            }
+        }
+        if (tab == 1) {
+            CertificateFormsTab(viewModel)
+            return@Column
+        }
+        CertificatesList(viewModel)
+    }
+}
+
+@Composable
+private fun CertificatesList(viewModel: CertificatesViewModel) {
     SectionContent(
         state = viewModel.state,
         emptyText = "Сертификаты не найдены",
