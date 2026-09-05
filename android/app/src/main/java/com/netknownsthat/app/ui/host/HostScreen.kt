@@ -3,6 +3,8 @@ package com.netknownsthat.app.ui.host
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
@@ -15,6 +17,8 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDrawerState
@@ -38,8 +42,58 @@ import kotlinx.coroutines.launch
 enum class HostSection(val title: String) {
     OVERVIEW("Обзор"),
     FINDINGS("Проблемы"),
+    SERVICES("Сервисы"),
+    CONTAINERS("Контейнеры"),
+    VULNERABILITIES("Уязвимости"),
+    AVAILABILITY("Доступность"),
+    USAGE("Нагрузка"),
+    CONFIGS("Конфигурация"),
+    FIREWALL("Firewall"),
+    CERTIFICATES("Сертификаты"),
     INTERFACES("Интерфейсы"),
+    MISC("Разное"),
+    TOPOLOGY("Карта"),
+    USERS("Пользователи"),
     AUDIT("Журнал"),
+}
+
+/** Every ViewModel the host screen's sections need, passed as one bundle so
+ * adding a section does not mean threading another parameter through the
+ * navigation graph. */
+class HostViewModels(
+    val overview: OverviewViewModel,
+    val findings: FindingsViewModel,
+    val interfaces: InterfacesViewModel,
+    val audit: AuditViewModel,
+    val services: ServicesViewModel,
+    val containers: ContainersViewModel,
+    val users: UsersViewModel,
+    val misc: MiscViewModel,
+    val vulnerabilities: VulnerabilitiesViewModel,
+    val availability: AvailabilityViewModel,
+    val usage: UsageViewModel,
+    val configs: ConfigsViewModel,
+    val firewall: FirewallViewModel,
+    val certificates: CertificatesViewModel,
+    val topology: TopologyViewModel,
+) {
+    fun forSection(section: HostSection): SectionViewModel<*> = when (section) {
+        HostSection.OVERVIEW -> overview
+        HostSection.FINDINGS -> findings
+        HostSection.SERVICES -> services
+        HostSection.CONTAINERS -> containers
+        HostSection.VULNERABILITIES -> vulnerabilities
+        HostSection.AVAILABILITY -> availability
+        HostSection.USAGE -> usage
+        HostSection.CONFIGS -> configs
+        HostSection.FIREWALL -> firewall
+        HostSection.CERTIFICATES -> certificates
+        HostSection.INTERFACES -> interfaces
+        HostSection.MISC -> misc
+        HostSection.TOPOLOGY -> topology
+        HostSection.USERS -> users
+        HostSection.AUDIT -> audit
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -47,27 +101,28 @@ enum class HostSection(val title: String) {
 fun HostScreen(
     hostName: String,
     hostId: Long?,
-    overviewViewModel: OverviewViewModel,
-    findingsViewModel: FindingsViewModel,
-    interfacesViewModel: InterfacesViewModel,
-    auditViewModel: AuditViewModel,
+    viewModels: HostViewModels,
     onBack: () -> Unit,
 ) {
     var section by remember { mutableStateOf(HostSection.OVERVIEW) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-
-    fun reload() = when (section) {
-        HostSection.OVERVIEW -> overviewViewModel.load()
-        HostSection.FINDINGS -> findingsViewModel.load()
-        HostSection.INTERFACES -> interfacesViewModel.load()
-        HostSection.AUDIT -> auditViewModel.load()
-    }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val active = viewModels.forSection(section)
 
     // Keyed on the host too, not just the section: these ViewModels live as
     // long as the activity, so returning to the list and opening a different
     // host must refetch rather than show the previous host's data.
-    LaunchedEffect(section, hostId) { reload() }
+    LaunchedEffect(section, hostId) { active.load() }
+
+    // Action results surface as a snackbar wherever they happen, so no
+    // screen has to grow its own reporting.
+    LaunchedEffect(active.actionMessage) {
+        active.actionMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            active.actionMessage = null
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -78,21 +133,26 @@ fun HostScreen(
                     style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(16.dp),
                 )
-                HostSection.entries.forEach { entry ->
-                    NavigationDrawerItem(
-                        label = { Text(entry.title) },
-                        selected = entry == section,
-                        onClick = {
-                            section = entry
-                            scope.launch { drawerState.close() }
-                        },
-                        modifier = Modifier.padding(horizontal = 12.dp),
-                    )
+                // Scrollable: fifteen sections do not fit on a phone, and a
+                // silently clipped list would hide the last few entirely.
+                LazyColumn {
+                    items(HostSection.entries) { entry ->
+                        NavigationDrawerItem(
+                            label = { Text(entry.title) },
+                            selected = entry == section,
+                            onClick = {
+                                section = entry
+                                scope.launch { drawerState.close() }
+                            },
+                            modifier = Modifier.padding(horizontal = 12.dp),
+                        )
+                    }
                 }
             }
         },
     ) {
         Scaffold(
+            snackbarHost = { SnackbarHost(snackbarHostState) },
             topBar = {
                 TopAppBar(
                     title = { Text(section.title) },
@@ -102,7 +162,7 @@ fun HostScreen(
                         }
                     },
                     actions = {
-                        IconButton(onClick = { reload() }) {
+                        IconButton(onClick = { active.load() }) {
                             Icon(Icons.Default.Refresh, contentDescription = "Обновить")
                         }
                         IconButton(onClick = onBack) {
@@ -117,10 +177,21 @@ fun HostScreen(
         ) { padding ->
             Box(modifier = Modifier.fillMaxSize().padding(padding)) {
                 when (section) {
-                    HostSection.OVERVIEW -> OverviewScreen(overviewViewModel)
-                    HostSection.FINDINGS -> FindingsScreen(findingsViewModel)
-                    HostSection.INTERFACES -> InterfacesScreen(interfacesViewModel)
-                    HostSection.AUDIT -> AuditScreen(auditViewModel)
+                    HostSection.OVERVIEW -> OverviewScreen(viewModels.overview)
+                    HostSection.FINDINGS -> FindingsScreen(viewModels.findings)
+                    HostSection.SERVICES -> ServicesScreen(viewModels.services)
+                    HostSection.CONTAINERS -> ContainersScreen(viewModels.containers)
+                    HostSection.VULNERABILITIES -> VulnerabilitiesScreen(viewModels.vulnerabilities)
+                    HostSection.AVAILABILITY -> AvailabilityScreen(viewModels.availability)
+                    HostSection.USAGE -> UsageScreen(viewModels.usage)
+                    HostSection.CONFIGS -> ConfigsScreen(viewModels.configs)
+                    HostSection.FIREWALL -> FirewallScreen(viewModels.firewall)
+                    HostSection.CERTIFICATES -> CertificatesScreen(viewModels.certificates)
+                    HostSection.INTERFACES -> InterfacesScreen(viewModels.interfaces)
+                    HostSection.MISC -> MiscScreen(viewModels.misc)
+                    HostSection.TOPOLOGY -> TopologyScreen(viewModels.topology)
+                    HostSection.USERS -> UsersScreen(viewModels.users)
+                    HostSection.AUDIT -> AuditScreen(viewModels.audit)
                 }
             }
         }

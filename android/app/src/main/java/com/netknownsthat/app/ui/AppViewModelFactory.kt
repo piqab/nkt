@@ -5,9 +5,20 @@ import androidx.lifecycle.ViewModelProvider
 import com.netknownsthat.app.net.HubClient
 import com.netknownsthat.app.ui.about.AboutViewModel
 import com.netknownsthat.app.ui.host.AuditViewModel
+import com.netknownsthat.app.ui.host.AvailabilityViewModel
+import com.netknownsthat.app.ui.host.CertificatesViewModel
+import com.netknownsthat.app.ui.host.ConfigsViewModel
+import com.netknownsthat.app.ui.host.ContainersViewModel
 import com.netknownsthat.app.ui.host.FindingsViewModel
+import com.netknownsthat.app.ui.host.FirewallViewModel
 import com.netknownsthat.app.ui.host.InterfacesViewModel
+import com.netknownsthat.app.ui.host.MiscViewModel
 import com.netknownsthat.app.ui.host.OverviewViewModel
+import com.netknownsthat.app.ui.host.ServicesViewModel
+import com.netknownsthat.app.ui.host.TopologyViewModel
+import com.netknownsthat.app.ui.host.UsageViewModel
+import com.netknownsthat.app.ui.host.UsersViewModel
+import com.netknownsthat.app.ui.host.VulnerabilitiesViewModel
 import com.netknownsthat.app.ui.hosts.HostListViewModel
 import com.netknownsthat.app.ui.login.AuthViewModel
 
@@ -27,6 +38,17 @@ class AppViewModelFactory(private val hubClient: HubClient) : ViewModelProvider.
         FindingsViewModel::class.java -> FindingsViewModel(hubClient) as T
         InterfacesViewModel::class.java -> InterfacesViewModel(hubClient) as T
         AuditViewModel::class.java -> AuditViewModel(hubClient) as T
+        ServicesViewModel::class.java -> ServicesViewModel(hubClient) as T
+        ContainersViewModel::class.java -> ContainersViewModel(hubClient) as T
+        UsersViewModel::class.java -> UsersViewModel(hubClient) as T
+        MiscViewModel::class.java -> MiscViewModel(hubClient) as T
+        VulnerabilitiesViewModel::class.java -> VulnerabilitiesViewModel(hubClient) as T
+        AvailabilityViewModel::class.java -> AvailabilityViewModel(hubClient) as T
+        UsageViewModel::class.java -> UsageViewModel(hubClient) as T
+        ConfigsViewModel::class.java -> ConfigsViewModel(hubClient) as T
+        FirewallViewModel::class.java -> FirewallViewModel(hubClient) as T
+        CertificatesViewModel::class.java -> CertificatesViewModel(hubClient) as T
+        TopologyViewModel::class.java -> TopologyViewModel(hubClient) as T
         else -> throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
     }
 }

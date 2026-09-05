@@ -1,0 +1,1 @@
+{"instances":[{"name":"build-runner","type":"container","status":"running","architecture":"x86_64","ipv4":["10.90.10.11"]},{"name":"dns-cache","type":"container","status":"running","architecture":"x86_64","ipv4":["10.90.10.15"]},{"name":"win-testbed","type":"virtual-machine","status":"stopped","architecture":"x86_64"}]}
