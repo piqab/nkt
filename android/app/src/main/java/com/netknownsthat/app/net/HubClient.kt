@@ -3,9 +3,11 @@ package com.netknownsthat.app.net
 import com.netknownsthat.app.data.SettingsStore
 import com.netknownsthat.app.net.model.LoginRequest
 import com.netknownsthat.app.net.model.Me
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -72,16 +74,32 @@ class HubClient(
 
     fun currentBaseUrl(): HttpUrl? = baseUrl
 
+    /**
+     * Completed once [bootstrap] has run, whatever it found. Requests wait on
+     * it so that a ViewModel firing early cannot beat the restore and report
+     * a configured hub as missing — which is exactly what happened when the
+     * host list fetched from its own `init`, during composition, before the
+     * bootstrap coroutine had a chance to run.
+     */
+    private val bootstrapped = CompletableDeferred<Unit>()
+
     /** Loads whatever hub URL + session cookie were persisted from a
      * previous run. Returns true if a hub URL was configured at all (not
      * whether the session is still valid — call [me] to find that out). */
     suspend fun bootstrap(): Boolean {
-        certPins.load()
-        val saved = settingsStore.hubBaseUrl()?.toHttpUrlOrNull() ?: return false
-        baseUrl = saved
-        certPins.currentAuthority = saved.authority()
-        cookieJar.restore(saved)
-        return true
+        try {
+            certPins.load()
+            val saved = settingsStore.hubBaseUrl()?.toHttpUrlOrNull() ?: return false
+            baseUrl = saved
+            certPins.currentAuthority = saved.authority()
+            cookieJar.restore(saved)
+            return true
+        } finally {
+            // In a finally so a failure to restore still releases callers:
+            // hanging every request forever is a far worse outcome than
+            // reporting that no hub is configured.
+            bootstrapped.complete(Unit)
+        }
     }
 
     private fun HttpUrl.authority(): String = "$host:$port"
@@ -158,6 +176,11 @@ class HubClient(
     @PublishedApi
     internal suspend fun executeRaw(method: String, path: String, jsonBody: String?): RawResult =
         withContext(Dispatchers.IO) {
+            // Bounded rather than an open-ended await: if bootstrap were
+            // somehow never called, failing with the usual message beats a
+            // request that never returns.
+            withTimeoutOrNull(5_000) { bootstrapped.await() }
+
             val base = baseUrl
                 ?: return@withContext RawResult.Err("Хаб не настроен — укажите адрес на экране входа", null)
             try {

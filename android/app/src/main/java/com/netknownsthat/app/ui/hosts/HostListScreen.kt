@@ -23,6 +23,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -41,6 +42,11 @@ fun HostListScreen(
     onOpenHost: (HubHost) -> Unit,
 ) {
     val state = viewModel.uiState
+
+    // Loaded here rather than from the ViewModel's init: the ViewModel is
+    // created during composition, before the hub URL has been restored, so an
+    // eager fetch reported a configured hub as missing.
+    LaunchedEffect(Unit) { viewModel.refresh() }
 
     Scaffold(
         topBar = {
