@@ -12,6 +12,16 @@ import com.netknownsthat.app.status.instanceHealth
 import com.netknownsthat.app.status.serviceHealth
 import com.netknownsthat.app.net.model.AuditResponse
 import com.netknownsthat.app.net.model.CertificatesResponse
+import com.netknownsthat.app.net.model.CommandStatus
+import com.netknownsthat.app.net.model.FirewalldPortSpec
+import com.netknownsthat.app.net.model.HAProxyPathsResponse
+import com.netknownsthat.app.net.model.JobStarted
+import com.netknownsthat.app.net.model.LineageInfo
+import com.netknownsthat.app.net.model.LineagesResponse
+import com.netknownsthat.app.net.model.RenewEvent
+import com.netknownsthat.app.net.model.RenewJobStatus
+import com.netknownsthat.app.net.model.RuleSpec
+import com.netknownsthat.app.net.model.SelfSignedResult
 import com.netknownsthat.app.net.model.ConfigFileResponse
 import com.netknownsthat.app.net.model.ConfigVersion
 import com.netknownsthat.app.net.model.ConfigVersionsResponse
@@ -39,6 +49,7 @@ import com.netknownsthat.app.net.model.VMsResponse
 import com.netknownsthat.app.net.model.VulnResponse
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -529,6 +540,55 @@ class ConfigsViewModel(hubClient: HubClient) : SectionViewModel<ConfigsResponse>
 }
 
 class FirewallViewModel(hubClient: HubClient) : SectionViewModel<FirewallData>(hubClient) {
+
+    fun addUfwRule(spec: RuleSpec) = act("Правило добавлено") {
+        hubClient.post<CommandStatus>("/firewall/rules", Json.encodeToString(RuleSpec.serializer(), spec))
+    }
+
+    /**
+     * Deletes by ufw's own rule number, sending the text that was on screen
+     * next to it. The server compares the two before touching anything:
+     * ufw renumbers after every change, so acting on a stale number is how
+     * the wrong rule — possibly the one keeping SSH open — gets deleted.
+     */
+    fun deleteUfwRule(number: Int, expectedText: String) = act("Правило удалено") {
+        hubClient.delete<CommandStatus>(
+            "/firewall/rules/$number",
+            buildJsonObject { put("expected", expectedText) }.toString(),
+        )
+    }
+
+    /** For rules ufw knows about but does not number — `ufw status numbered`
+     * lists nothing at all while ufw is inactive. */
+    fun deleteUfwRuleBySpec(spec: RuleSpec) = act("Правило удалено") {
+        hubClient.delete<CommandStatus>(
+            "/firewall/rules",
+            Json.encodeToString(RuleSpec.serializer(), spec),
+        )
+    }
+
+    fun deleteFirewalldRule(spec: FirewalldPortSpec) = act("Правило удалено") {
+        hubClient.delete<CommandStatus>(
+            "/firewall/firewalld/rules",
+            Json.encodeToString(FirewalldPortSpec.serializer(), spec),
+        )
+    }
+
+    fun reloadUfw() = act("ufw перечитан") {
+        hubClient.post<CommandStatus>("/firewall/reload")
+    }
+
+    fun addFirewalldRule(spec: FirewalldPortSpec) = act("Правило добавлено") {
+        hubClient.post<CommandStatus>(
+            "/firewall/firewalld/rules",
+            Json.encodeToString(FirewalldPortSpec.serializer(), spec),
+        )
+    }
+
+    fun reloadFirewalld() = act("firewalld перечитан") {
+        hubClient.post<CommandStatus>("/firewall/firewalld/reload")
+    }
+
     override suspend fun fetch(): HubClient.ApiResult<FirewallData> {
         val state = hubClient.get<FirewallResponse>("/firewall")
         if (state is HubClient.ApiResult.Failure) return state
@@ -548,9 +608,137 @@ data class FirewallData(
     val numbered: FirewallNumberedResponse,
 )
 
+/** Ports whose loss locks an operator out of the host entirely. */
+private val LOCKOUT_PORTS = setOf(22, 8077, 8078)
+
+/**
+ * True when a rule would block a port that the way in depends on.
+ *
+ * Only deny and reject qualify: ufw's `limit` rate-limits connections but
+ * still lets them through, so warning about it would cry wolf on a rule
+ * people add to SSH on purpose.
+ */
+fun ruleRisksLockout(spec: RuleSpec): Boolean =
+    spec.action in setOf("deny", "reject") && spec.port in LOCKOUT_PORTS
+
 class CertificatesViewModel(hubClient: HubClient) :
     SectionViewModel<CertificatesResponse>(hubClient) {
     override suspend fun fetch() = hubClient.get<CertificatesResponse>("/certificates")
+
+    var lineages by mutableStateOf<List<LineageInfo>>(emptyList())
+        private set
+    var haproxyPaths by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** Log of the running (or last) certbot job, newest last. */
+    var jobEvents by mutableStateOf<List<RenewEvent>>(emptyList())
+        private set
+    var jobRunning by mutableStateOf(false)
+        private set
+    var jobError by mutableStateOf<String?>(null)
+        private set
+
+    var selfSigned by mutableStateOf<SelfSignedResult?>(null)
+        private set
+
+    fun loadForms() {
+        viewModelScope.launch {
+            (hubClient.get<LineagesResponse>("/certificates/lineages")
+                as? HubClient.ApiResult.Success)?.let { lineages = it.value.lineages }
+            (hubClient.get<HAProxyPathsResponse>("/certificates/haproxy-paths")
+                as? HubClient.ApiResult.Success)?.let { haproxyPaths = it.value.paths }
+        }
+    }
+
+    fun dismissJob() {
+        jobEvents = emptyList()
+        jobError = null
+    }
+
+    fun dismissSelfSigned() {
+        selfSigned = null
+    }
+
+    fun generateSelfSigned(names: List<String>, service: String, bits: Int, days: Int) {
+        if (actionInProgress) return
+        viewModelScope.launch {
+            val body = buildJsonObject {
+                put("names", Json.encodeToJsonElement(ListSerializer(String.serializer()), names))
+                put("service", service)
+                put("bits", bits)
+                put("days", days)
+            }.toString()
+            when (val result = hubClient.post<SelfSignedResult>("/certificates/self-signed", body)) {
+                is HubClient.ApiResult.Success -> {
+                    selfSigned = result.value
+                    load()
+                }
+
+                is HubClient.ApiResult.Failure -> actionMessage = "Не удалось: ${result.message}"
+            }
+        }
+    }
+
+    fun issue(domains: List<String>) = startJob("/certificates/issue") {
+        put("domains", Json.encodeToJsonElement(ListSerializer(String.serializer()), domains))
+    }
+
+    fun renew(lineage: String) = startJob("/certificates/renew") { put("lineage", lineage) }
+
+    fun combine(lineage: String, targetPath: String) {
+        if (actionInProgress) return
+        viewModelScope.launch {
+            val body = buildJsonObject {
+                put("lineage", lineage)
+                put("target_path", targetPath)
+            }.toString()
+            actionMessage = when (val result = hubClient.post<JsonObject>("/certificates/combine", body)) {
+                is HubClient.ApiResult.Success -> "PEM собран"
+                is HubClient.ApiResult.Failure -> "Не удалось: ${result.message}"
+            }
+            load()
+        }
+    }
+
+    /**
+     * Issuing and renewing take minutes (stop services, run certbot, restart),
+     * so the server answers with a job id straight away and the progress log
+     * is polled — see handleRenewJobStatus.
+     */
+    private fun startJob(path: String, body: kotlinx.serialization.json.JsonObjectBuilder.() -> Unit) {
+        if (jobRunning) return
+        viewModelScope.launch {
+            jobEvents = emptyList()
+            jobError = null
+            val started = hubClient.post<JobStarted>(path, buildJsonObject(body).toString())
+            if (started is HubClient.ApiResult.Failure) {
+                jobError = started.message
+                return@launch
+            }
+            val id = (started as HubClient.ApiResult.Success).value.job
+            jobRunning = true
+            while (jobRunning) {
+                delay(1500)
+                when (val status = hubClient.get<RenewJobStatus>("/certificates/renew/$id")) {
+                    is HubClient.ApiResult.Success -> {
+                        jobEvents = status.value.events
+                        if (status.value.error.isNotBlank()) jobError = status.value.error
+                        if (status.value.done) jobRunning = false
+                    }
+
+                    is HubClient.ApiResult.Failure -> {
+                        // A 404 means the job is gone — finished and evicted,
+                        // or never existed. Either way there is nothing left
+                        // to poll for.
+                        jobError = status.message
+                        jobRunning = false
+                    }
+                }
+            }
+            load()
+            loadForms()
+        }
+    }
 }
 
 class TopologyViewModel(hubClient: HubClient) : SectionViewModel<TopologyResponse>(hubClient) {

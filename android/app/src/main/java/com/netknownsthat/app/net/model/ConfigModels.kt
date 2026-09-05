@@ -158,6 +158,92 @@ data class AddedRule(
     val protocol: String = "",
 )
 
+/**
+ * A ufw rule to add or remove (control.RuleSpec). [from] empty means
+ * "anywhere".
+ */
+@Serializable
+data class RuleSpec(
+    val action: String = "allow", // allow | deny | reject | limit
+    val port: Int = 0,
+    val protocol: String = "tcp", // tcp | udp
+    val from: String = "",
+    val comment: String = "",
+)
+
+/** A firewalld port or service, in one zone (control.FirewalldPortSpec). */
+@Serializable
+data class FirewalldPortSpec(
+    val zone: String = "",
+    val port: Int = 0,
+    val protocol: String = "tcp",
+    val service: String = "",
+    /** Permanent survives a reload; runtime takes effect now. The web UI
+     * sets both for an ordinary change, and so does this app. */
+    val permanent: Boolean = true,
+    val runtime: Boolean = true,
+)
+
+/** What every firewall mutation answers with. */
+@Serializable
+data class CommandStatus(
+    val status: String = "",
+    val output: String = "",
+    val simulated: Boolean = false,
+)
+
+/** A certbot lineage under /etc/letsencrypt/live. */
+@Serializable
+data class LineageInfo(
+    val name: String = "",
+    /** Readable form when certbot named the lineage in punycode. */
+    @SerialName("name_unicode") val nameUnicode: String = "",
+    /** False when fullchain.pem could not be read — still a valid target,
+     * just with no expiry to show. */
+    val known: Boolean = false,
+    @SerialName("not_after") val notAfter: String = "",
+    @SerialName("days_left") val daysLeft: Int = 0,
+)
+
+@Serializable
+data class LineagesResponse(val lineages: List<LineageInfo> = emptyList())
+
+@Serializable
+data class HAProxyPathsResponse(val paths: List<String> = emptyList())
+
+/** Certbot issue/renew return a job id; progress arrives by polling. */
+@Serializable
+data class JobStarted(val job: String = "")
+
+@Serializable
+data class RenewJobStatus(
+    val events: List<RenewEvent> = emptyList(),
+    val done: Boolean = false,
+    val error: String = "",
+)
+
+@Serializable
+data class RenewEvent(
+    val time: String = "",
+    val text: String = "",
+)
+
+/**
+ * A generated self-signed certificate. [snippet] is configuration to paste
+ * through the config editor — the host deliberately does not edit nginx or
+ * haproxy itself here.
+ */
+@Serializable
+data class SelfSignedResult(
+    val names: List<String> = emptyList(),
+    @SerialName("cert_path") val certPath: String = "",
+    @SerialName("key_path") val keyPath: String = "",
+    @SerialName("combined_path") val combinedPath: String = "",
+    val fingerprint: String = "",
+    @SerialName("not_after") val notAfter: String = "",
+    val snippet: String = "",
+)
+
 @Serializable
 data class CertificatesResponse(
     val certificates: List<Certificate> = emptyList(),
