@@ -15,6 +15,7 @@ import Findings from './pages/Findings'
 import Vulnerabilities from './pages/Vulnerabilities'
 import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
+import LogsPage from './pages/Logs'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
 import Packages from './pages/Packages'
@@ -92,6 +93,7 @@ const NAV = [
   // A viewer has nothing to look at here without connecting (unlike the
   // read-only pages above) — hidden rather than shown-but-disabled.
   { to: '/terminal', labelKey: 'nav.terminal', adminOnly: true },
+  { to: '/logs', labelKey: 'nav.logs' },
   { to: '/firewall', labelKey: 'nav.firewall' },
   { to: '/interfaces', labelKey: 'nav.interfaces' },
   { to: '/certificates', labelKey: 'nav.certificates', badge: 'certs' as const },
@@ -165,7 +167,8 @@ export default function App() {
   // The localStorage fallback only matters if this URL is ever opened by
   // hand without the param.
   const isPopoutTerminal = me?.is_admin && location.pathname === '/terminal/popout'
-  if (isPopoutTerminal && me) {
+  const isPopoutLogs = !!me && location.pathname === '/logs/popout'
+  if ((isPopoutTerminal || isPopoutLogs) && me) {
     if (me.mode !== 'hub') {
       hostScope.id = null
     } else {
@@ -185,6 +188,8 @@ export default function App() {
         </Routes>
       ) : isPopoutTerminal ? (
         <TerminalPage me={me} />
+      ) : isPopoutLogs ? (
+        <LogsPage />
       ) : (
         <Shell me={me} theme={theme} setTheme={setTheme} onLogout={() => setMe(null)} />
       )}
@@ -459,6 +464,7 @@ function Shell({
             <Route path="/availability" element={<Availability />} />
             <Route path="/usage" element={<Usage me={me} />} />
             <Route path="/configs" element={<Configs me={me} />} />
+            <Route path="/logs" element={<LogsPage />} />
             <Route path="/services" element={<Services me={me} />} />
             <Route path="/containers" element={<Containers me={me} />} />
             <Route path="/packages" element={<Packages me={me} />} />

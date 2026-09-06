@@ -44,6 +44,7 @@ enum class HostSection(val title: String) {
     FINDINGS("Проблемы"),
     TERMINAL("Терминал"),
     BTOP("Монитор (btop)"),
+    LOGS("Логи"),
     SERVICES("Сервисы"),
     CONTAINERS("Контейнеры"),
     VULNERABILITIES("Уязвимости"),
@@ -79,11 +80,12 @@ class HostViewModels(
     val certificates: CertificatesViewModel,
     val topology: TopologyViewModel,
     val terminal: TerminalViewModel,
+    val logs: LogsViewModel,
 ) {
     /** Null for the live sections: a terminal has nothing to load or
      * refresh, so the generic fetch/refresh plumbing does not apply. */
     fun forSection(section: HostSection): SectionViewModel<*>? = when (section) {
-        HostSection.TERMINAL, HostSection.BTOP -> null
+        HostSection.TERMINAL, HostSection.BTOP, HostSection.LOGS -> null
         HostSection.OVERVIEW -> overview
         HostSection.FINDINGS -> findings
         HostSection.SERVICES -> services
@@ -189,6 +191,7 @@ fun HostScreen(
                     HostSection.FINDINGS -> FindingsScreen(viewModels.findings)
                     HostSection.TERMINAL -> TerminalScreen(viewModels.terminal, btop = false)
                     HostSection.BTOP -> TerminalScreen(viewModels.terminal, btop = true)
+                    HostSection.LOGS -> LogsScreen(viewModels.logs)
                     HostSection.SERVICES -> ServicesScreen(viewModels.services)
                     HostSection.CONTAINERS -> ContainersScreen(viewModels.containers)
                     HostSection.VULNERABILITIES -> VulnerabilitiesScreen(viewModels.vulnerabilities)
