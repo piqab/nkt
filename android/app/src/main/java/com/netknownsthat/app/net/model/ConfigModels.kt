@@ -322,3 +322,21 @@ data class TopologyFinding(
     val title: String = "",
     val severity: String = "",
 )
+
+/** GET /api/logs/sources */
+@Serializable
+data class LogSourcesResponse(
+    val sources: List<LogSource> = emptyList(),
+    /** The only directory plain files may come from — shown in the hint for
+     * the custom-path field so it is not a guess. */
+    val root: String = "/var/log",
+)
+
+@Serializable
+data class LogSource(
+    /** "unit" (systemd journal) or "file". */
+    val kind: String = "",
+    val name: String = "",
+    val size: Long = 0,
+    val service: String = "",
+)
