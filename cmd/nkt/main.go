@@ -218,6 +218,7 @@ type runtime struct {
 	podman    *control.PodmanManager
 	lxd       *control.LXDManager
 	libvirt   *control.LibvirtManager
+	logs      *control.LogManager
 }
 
 func newRuntime() (*runtime, error) {
@@ -249,6 +250,7 @@ func newRuntime() (*runtime, error) {
 		podman:    control.NewPodmanManager(collector, db),
 		lxd:       control.NewLXDManager(collector, db),
 		libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
+		logs:      control.NewLogManager(collector, scanner),
 	}, nil
 }
 
@@ -374,7 +376,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	server := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
 		Services: r.services, Configs: r.configs, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, UI: ui, Log: log,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, UI: ui, Log: log,
 		Version: version,
 	})
 
@@ -524,6 +526,7 @@ type hubRuntime struct {
 	podman    *control.PodmanManager
 	lxd       *control.LXDManager
 	libvirt   *control.LibvirtManager
+	logs      *control.LogManager
 }
 
 func newHubRuntime() (*hubRuntime, error) {
@@ -564,6 +567,7 @@ func newHubRuntime() (*hubRuntime, error) {
 		podman:    control.NewPodmanManager(collector, db),
 		lxd:       control.NewLXDManager(collector, db),
 		libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
+		logs:      control.NewLogManager(collector, scanner),
 	}, nil
 }
 
@@ -622,7 +626,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	localAPI := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner,
 		Services: r.services, Configs: r.configs, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Log: log, Version: version,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Log: log, Version: version,
 	})
 
 	// Keeps the "localhost" entry's snapshot/findings/history/availability

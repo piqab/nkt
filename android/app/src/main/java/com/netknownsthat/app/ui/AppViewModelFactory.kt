@@ -12,6 +12,7 @@ import com.netknownsthat.app.ui.host.ContainersViewModel
 import com.netknownsthat.app.ui.host.FindingsViewModel
 import com.netknownsthat.app.ui.host.FirewallViewModel
 import com.netknownsthat.app.ui.host.InterfacesViewModel
+import com.netknownsthat.app.ui.host.LogsViewModel
 import com.netknownsthat.app.ui.host.MiscViewModel
 import com.netknownsthat.app.ui.host.OverviewViewModel
 import com.netknownsthat.app.ui.host.ServicesViewModel
@@ -51,6 +52,7 @@ class AppViewModelFactory(private val hubClient: HubClient) : ViewModelProvider.
         CertificatesViewModel::class.java -> CertificatesViewModel(hubClient) as T
         TopologyViewModel::class.java -> TopologyViewModel(hubClient) as T
         TerminalViewModel::class.java -> TerminalViewModel(hubClient) as T
+        LogsViewModel::class.java -> LogsViewModel(hubClient) as T
         else -> throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
     }
 }
