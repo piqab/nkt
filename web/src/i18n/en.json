@@ -1187,6 +1187,11 @@
     "detachTooltip": "Open in a separate browser window — survives navigating to other pages",
     "closeWindow": "Close window",
     "popoutTitle": "Logs — {{name}}",
-    "popoutTitleDefault": "Logs"
+    "popoutTitleDefault": "Logs",
+    "groupArchived": "Archives (rotated)",
+    "showArchived": "show archived",
+    "compressedTag": "(compressed)",
+    "archivedTag": "archive — read once",
+    "lastLines": "last {{n}}"
   }
 }

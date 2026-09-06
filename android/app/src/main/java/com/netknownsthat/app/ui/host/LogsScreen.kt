@@ -67,7 +67,9 @@ fun LogsScreen(viewModel: LogsViewModel) {
     }
 
     val stream = viewModel.stream
-    val all = stream?.lines ?: emptyList<String>()
+    // An archive has no stream behind it — it was read once into a snapshot.
+    val all: List<String> = if (viewModel.isArchived) viewModel.snapshot
+    else stream?.lines ?: emptyList()
     val shown = remember(all.size, filter, caseSensitive) {
         if (filter.isBlank()) all.toList()
         else all.filter {
@@ -90,11 +92,23 @@ fun LogsScreen(viewModel: LogsViewModel) {
                         modifier = Modifier.weight(1f),
                     )
                     Text(
-                        text = if (stream?.connected == true) "поток идёт" else "остановлен",
+                        text = when {
+                            viewModel.isArchived -> "архив"
+                            stream?.connected == true -> "поток идёт"
+                            else -> "остановлен"
+                        },
                         style = MaterialTheme.typography.labelMedium,
                         color = statusColor(
                             if (stream?.connected == true) HealthStatus.OK else HealthStatus.UNKNOWN
                         ),
+                    )
+                }
+                viewModel.snapshotError?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = statusColor(HealthStatus.BAD),
+                        modifier = Modifier.padding(top = 4.dp),
                     )
                 }
                 stream?.error?.let {
@@ -114,7 +128,26 @@ fun LogsScreen(viewModel: LogsViewModel) {
                     OutlinedButton(
                         onClick = { if (stream?.connected == true) viewModel.stop() else viewModel.restart() },
                         enabled = viewModel.currentLabel != null,
-                    ) { Text(if (stream?.connected == true) "Остановить" else "Смотреть") }
+                    ) {
+                        Text(
+                            when {
+                                viewModel.isArchived -> "Перечитать"
+                                stream?.connected == true -> "Остановить"
+                                else -> "Смотреть"
+                            }
+                        )
+                    }
+                }
+
+                Row(modifier = Modifier.padding(top = 8.dp)) {
+                    listOf(500, 1000, 5000).forEach { n ->
+                        FilterChip(
+                            selected = viewModel.lineCount == n,
+                            onClick = { viewModel.setLines(n) },
+                            label = { Text("последние $n") },
+                            modifier = Modifier.padding(end = 6.dp),
+                        )
+                    }
                 }
 
                 OutlinedTextField(
@@ -195,7 +228,10 @@ private fun SourcePickerDialog(
 ) {
     var custom by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
-    val visible = sources.filter { it.name.contains(search, ignoreCase = true) }
+    var showArchived by remember { mutableStateOf(false) }
+    val visible = sources.filter {
+        it.name.contains(search, ignoreCase = true) && (showArchived || !it.archived)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -216,6 +252,13 @@ private fun SourcePickerDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(checked = showArchived, onCheckedChange = { showArchived = it })
+                    // Rotated generations are hidden by default: the list is
+                    // roughly twice as long with them, and they are only
+                    // wanted when looking further back than today.
+                    Text("показывать архивные", style = MaterialTheme.typography.bodySmall)
+                }
                 if (custom.isNotBlank()) {
                     OutlinedButton(
                         onClick = { onPick(LogSource(kind = "file", name = custom.trim())) },
@@ -229,8 +272,12 @@ private fun SourcePickerDialog(
                             onClick = { onPick(source) },
                             label = {
                                 Text(
-                                    text = if (source.kind == "unit") "журнал: ${source.name}"
-                                    else source.name,
+                                    text = when {
+                                        source.kind == "unit" -> "журнал: ${source.name}"
+                                        source.compressed -> "${source.name} (сжат)"
+                                        source.archived -> "${source.name} (архив)"
+                                        else -> source.name
+                                    },
                                 )
                             },
                             modifier = Modifier.padding(bottom = 4.dp),

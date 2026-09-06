@@ -1187,6 +1187,11 @@
     "detachTooltip": "Открыть в отдельном окне браузера — переживёт переход по другим страницам",
     "closeWindow": "Закрыть окно",
     "popoutTitle": "Логи — {{name}}",
-    "popoutTitleDefault": "Логи"
+    "popoutTitleDefault": "Логи",
+    "groupArchived": "Архивы (ротированные)",
+    "showArchived": "показывать архивные",
+    "compressedTag": "(сжат)",
+    "archivedTag": "архив — прочитан целиком",
+    "lastLines": "последние {{n}}"
   }
 }

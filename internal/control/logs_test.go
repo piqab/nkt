@@ -1,8 +1,14 @@
 package control
 
 import (
+	"bytes"
+	"compress/gzip"
+	"context"
+	"fmt"
 	"strings"
 	"testing"
+
+	"github.com/piqab/nkt/internal/collect"
 )
 
 // The path check is what keeps "show me the logs" from becoming "read any
@@ -80,30 +86,90 @@ func TestStreamArgv(t *testing.T) {
 	}
 }
 
-func TestLooksLikeLog(t *testing.T) {
-	yes := []string{
-		"/var/log/syslog",
-		"/var/log/nginx/error.log",
-		"/var/log/auth.log",
-		"/var/log/dmesg",
-	}
-	for _, p := range yes {
-		if !looksLikeLog(p) {
-			t.Errorf("looksLikeLog(%q) = false, want true", p)
-		}
-	}
+func TestClassifyLog(t *testing.T) {
+	cases := []struct {
+		path                        string
+		isLog, archived, compressed bool
+	}{
+		{"/var/log/syslog", true, false, false},
+		{"/var/log/nginx/error.log", true, false, false},
+		{"/var/log/dmesg", true, false, false},
 
-	// Rotated copies cannot be followed and only bury the live file.
-	no := []string{
-		"/var/log/syslog.1",
-		"/var/log/nginx/error.log.2",
-		"/var/log/syslog.gz",
-		"/var/log/nginx/access.log.1.gz",
-		"/var/log/wtmp.old",
+		// logrotate leaves two different things behind, and they are read
+		// in two different ways.
+		{"/var/log/syslog.1", true, true, false},
+		{"/var/log/nginx/error.log.2", true, true, false},
+		{"/var/log/syslog.2.gz", true, true, true},
+		{"/var/log/apt/history.log.1.gz", true, true, true},
+		{"/var/log/journal.xz", true, true, true},
+		{"/var/log/wtmp.old", true, true, false},
 	}
-	for _, p := range no {
-		if looksLikeLog(p) {
-			t.Errorf("looksLikeLog(%q) = true, want false", p)
+	for _, c := range cases {
+		isLog, archived, compressed := classifyLog(c.path)
+		if isLog != c.isLog || archived != c.archived || compressed != c.compressed {
+			t.Errorf("classifyLog(%q) = (%v,%v,%v), want (%v,%v,%v)",
+				c.path, isLog, archived, compressed, c.isLog, c.archived, c.compressed)
 		}
 	}
 }
+
+func TestArchivedIsNotFollowable(t *testing.T) {
+	m := &LogManager{}
+	// Following a file that will never grow again would hold a process open
+	// printing nothing at all.
+	if _, err := m.StreamArgv(LogSource{Kind: LogKindFile, Name: "/var/log/syslog.1"}, 100); err == nil {
+		t.Error("a rotated file must not be followable")
+	}
+	if _, err := m.StreamArgv(LogSource{Kind: LogKindFile, Name: "/var/log/syslog.2.gz"}, 100); err == nil {
+		t.Error("a compressed archive must not be followable")
+	}
+	if _, err := m.StreamArgv(LogSource{Kind: LogKindFile, Name: "/var/log/syslog"}, 100); err != nil {
+		t.Errorf("an active file must still be followable: %v", err)
+	}
+}
+
+func TestLastLinesKeepsOnlyTheTail(t *testing.T) {
+	var sb strings.Builder
+	for i := 1; i <= 1000; i++ {
+		fmt.Fprintf(&sb, "line %d\n", i)
+	}
+	out, err := lastLines(strings.NewReader(sb.String()), 3)
+	if err != nil {
+		t.Fatalf("lastLines: %v", err)
+	}
+	if out != "line 998\nline 999\nline 1000" {
+		t.Errorf("lastLines = %q", out)
+	}
+}
+
+func TestSnapshotDecompressesGzip(t *testing.T) {
+	// The case that matters on a real host: after a rotation the active file
+	// is empty and everything worth reading is inside the .gz.
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	for i := 1; i <= 10; i++ {
+		fmt.Fprintf(zw, "archived line %d\n", i)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+
+	m := &LogManager{c: fakeCollector{data: buf.Bytes()}}
+	out, err := m.Snapshot(context.Background(),
+		LogSource{Kind: LogKindFile, Name: "/var/log/test.log.1.gz"}, 3)
+	if err != nil {
+		t.Fatalf("Snapshot: %v", err)
+	}
+	if out != "archived line 8\narchived line 9\narchived line 10" {
+		t.Errorf("Snapshot = %q", out)
+	}
+}
+
+// fakeCollector serves one canned file; nothing else is reached by these
+// tests.
+type fakeCollector struct {
+	collect.Collector
+	data []byte
+}
+
+func (f fakeCollector) ReadFile(string) ([]byte, error) { return f.data, nil }
