@@ -339,4 +339,14 @@ data class LogSource(
     val name: String = "",
     val size: Long = 0,
     val service: String = "",
+    /** A rotated generation: never grows again, so it is read once rather
+     * than followed — and often where the content actually is, since the
+     * active file can sit empty for days after a rotation. */
+    val archived: Boolean = false,
+    /** Has to be decoded on the host before it is text at all. */
+    val compressed: Boolean = false,
 )
+
+/** GET /api/logs/tail — a one-shot read, used for archives. */
+@Serializable
+data class LogTailResponse(val output: String = "")

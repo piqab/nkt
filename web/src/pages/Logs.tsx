@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Checkbox, Input, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
-import { hostScope, readSelectedHost, useApi } from '../api'
+import { api, hostScope, readSelectedHost, useApi } from '../api'
 import { wsURL } from '../hooks/usePty'
 import { Card, ErrorNote, InfoHint } from '../components/ui'
 
@@ -11,15 +11,19 @@ type LogSource = {
   name: string
   size?: number
   service?: string
+  /** A rotated generation: never grows again, so it is read once. */
+  archived?: boolean
+  compressed?: boolean
 }
+
+/** Line counts offered for the initial read. An archive can be enormous, and
+ * the whole of one is never what is wanted. */
+const LINE_CHOICES = [500, 1000, 5000]
 
 /** How many lines are kept in the browser. A followed log is unbounded; the
  * tab must not grow with it until it dies. */
 const MAX_LINES = 5000
 
-/** Requested from the server when a stream opens — enough to see what led up
- * to now without a wall of history. */
-const INITIAL_LINES = 500
 
 export default function Logs() {
   const { t } = useTranslation()
@@ -33,6 +37,8 @@ export default function Logs() {
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [showArchived, setShowArchived] = useState(false)
+  const [lineCount, setLineCount] = useState(500)
   const [filter, setFilter] = useState('')
   const [highlight, setHighlight] = useState('')
   const [caseSensitive, setCaseSensitive] = useState(false)
@@ -63,14 +69,33 @@ export default function Logs() {
     setConnected(false)
   }
 
-  function start(value: string) {
+  /** True for a value that names a rotated file. */
+  function isArchived(value: string): boolean {
+    if (!value.startsWith('file:')) return false
+    const name = value.slice(5)
+    return (sources.data?.sources ?? []).some((s) => s.name === name && s.archived)
+  }
+
+  async function start(value: string) {
     stop()
     const query = queryFor(value)
     if (!query) return
     setLines([])
     setError(null)
 
-    const ws = new WebSocket(wsURL(`/logs/ws?${query}&lines=${INITIAL_LINES}`))
+    // An archive does not grow, so there is nothing to follow — it is read
+    // once instead, decompressed on the host if it needs to be.
+    if (isArchived(value)) {
+      try {
+        const res = await api<{ output: string }>(`/logs/tail?${query}&lines=${lineCount}`)
+        setLines(res.output ? res.output.split('\n') : [])
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      }
+      return
+    }
+
+    const ws = new WebSocket(wsURL(`/logs/ws?${query}&lines=${lineCount}`))
     wsRef.current = ws
     ws.onopen = () => setConnected(true)
     ws.onmessage = (event) => {
@@ -141,11 +166,24 @@ export default function Logs() {
       {
         label: t('logs.groupFiles'),
         options: list
-          .filter((s) => s.kind === 'file')
+          .filter((s) => s.kind === 'file' && !s.archived)
           .map((s) => ({ value: `file:${s.name}`, label: s.name })),
       },
+      ...(showArchived
+        ? [
+            {
+              label: t('logs.groupArchived'),
+              options: list
+                .filter((s) => s.kind === 'file' && s.archived)
+                .map((s) => ({
+                  value: `file:${s.name}`,
+                  label: s.compressed ? `${s.name} ${t('logs.compressedTag')}` : s.name,
+                })),
+            },
+          ]
+        : []),
     ]
-  }, [sources.data, t])
+  }, [sources.data, showArchived, t])
 
   return (
     <>
@@ -176,6 +214,8 @@ export default function Logs() {
           <div className="row">
             {connected ? (
               <Tag color="green">{t('logs.streaming')}</Tag>
+            ) : selected && isArchived(selected) ? (
+              <Tag>{t('logs.archivedTag')}</Tag>
             ) : (
               <Tag>{t('logs.stopped')}</Tag>
             )}
@@ -228,6 +268,15 @@ export default function Logs() {
             placeholder={t('logs.highlightPlaceholder')}
             value={highlight}
             onChange={(e) => setHighlight(e.target.value)}
+          />
+          <Checkbox checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)}>
+            {t('logs.showArchived')}
+          </Checkbox>
+          <Select
+            style={{ width: 130 }}
+            value={lineCount}
+            onChange={setLineCount}
+            options={LINE_CHOICES.map((n) => ({ value: n, label: t('logs.lastLines', { n }) }))}
           />
           <Checkbox checked={caseSensitive} onChange={(e) => setCaseSensitive(e.target.checked)}>
             {t('logs.caseSensitive')}

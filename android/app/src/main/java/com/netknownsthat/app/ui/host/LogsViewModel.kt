@@ -9,6 +9,7 @@ import com.netknownsthat.app.net.HubClient
 import com.netknownsthat.app.net.LogStream
 import com.netknownsthat.app.net.model.LogSource
 import com.netknownsthat.app.net.model.LogSourcesResponse
+import com.netknownsthat.app.net.model.LogTailResponse
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 
@@ -27,6 +28,20 @@ class LogsViewModel(private val hubClient: HubClient) : ViewModel() {
         private set
 
     private var current: LogSource? = null
+
+    /** Lines held for an archive, which has no stream behind it. */
+    var snapshot by mutableStateOf<List<String>>(emptyList())
+        private set
+    var snapshotError by mutableStateOf<String?>(null)
+        private set
+    var lineCount by mutableStateOf(500)
+
+    val isArchived: Boolean get() = current?.archived == true
+
+    fun setLines(n: Int) {
+        lineCount = n
+        restart()
+    }
 
     fun loadSources() {
         viewModelScope.launch {
@@ -50,11 +65,30 @@ class LogsViewModel(private val hubClient: HubClient) : ViewModel() {
     fun restart() {
         val source = current ?: return
         stop()
+        snapshot = emptyList()
+        snapshotError = null
+
         val query = when (source.kind) {
             "unit" -> "unit=" + URLEncoder.encode(source.name, "UTF-8")
             else -> "path=" + URLEncoder.encode(source.name, "UTF-8")
         }
-        val url = hubClient.webSocketUrl("/logs/ws?$query&lines=500") ?: return
+
+        // An archive does not grow, so there is nothing to follow: it is read
+        // once instead, decompressed on the host if it needs to be.
+        if (source.archived) {
+            stream = null
+            viewModelScope.launch {
+                when (val result = hubClient.get<LogTailResponse>("/logs/tail?$query&lines=$lineCount")) {
+                    is HubClient.ApiResult.Success ->
+                        snapshot = result.value.output.lines()
+
+                    is HubClient.ApiResult.Failure -> snapshotError = result.message
+                }
+            }
+            return
+        }
+
+        val url = hubClient.webSocketUrl("/logs/ws?$query&lines=$lineCount") ?: return
         stream = LogStream(hubClient.okHttpClient(), url).also { it.connect() }
     }
 
