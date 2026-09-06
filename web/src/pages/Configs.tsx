@@ -16,6 +16,10 @@ function versionColumns(
   rollback: (id: number) => void,
   busy: boolean,
   me: Me,
+  // The newest version is the file as it is on disk right now, so diffing it
+  // against the current file is always empty — offering the button there
+  // reads as "the diff is broken" rather than "there is nothing to compare".
+  currentVersionId: number | undefined,
 ): TableColumnsType<ConfigVersion> {
   const t = i18n.t.bind(i18n)
   return [
@@ -30,9 +34,13 @@ function versionColumns(
       key: 'actions',
       render: (_, v) => (
         <div className="row">
-          <Button type="link" size="small" onClick={() => showDiff(v.id)}>
-            {diff?.id === v.id ? t('configs.hide') : t('configs.diff')}
-          </Button>
+          {v.id === currentVersionId ? (
+            <span className="small secondary nowrap">{t('configs.isCurrent')}</span>
+          ) : (
+            <Button type="link" size="small" onClick={() => showDiff(v.id)}>
+              {diff?.id === v.id ? t('configs.hide') : t('configs.diff')}
+            </Button>
+          )}
           {me.is_admin && me.allow_mutations && (
             <Button type="link" size="small" loading={busy} onClick={() => rollback(v.id)}>
               {t('configs.rollback')}
@@ -117,6 +125,18 @@ export default function Configs({ me }: { me: Me }) {
       setNote('')
       file.reload()
       versions.reload()
+      // Show what was just written. The endpoint compares a version against
+      // the *current* file, so the newest version — which now equals the file
+      // on disk — always diffs to nothing; the one before it is the pre-write
+      // state, and its diff is exactly this edit.
+      //
+      // Read back explicitly rather than reusing the list from before the
+      // write: on a file edited for the first time there was no history at
+      // all, and the pre-write state only comes into existence as part of
+      // this very save.
+      const fresh = await api<{ versions: ConfigVersion[] }>(`/configs/versions${qs({ path: file.data.path })}`)
+      const preWrite = fresh.versions[1]?.id
+      if (preWrite !== undefined) await showDiff(preWrite, { force: true })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -143,8 +163,8 @@ export default function Configs({ me }: { me: Me }) {
     }
   }
 
-  async function showDiff(id: number) {
-    if (diff?.id === id) {
+  async function showDiff(id: number, opts?: { force?: boolean }) {
+    if (diff?.id === id && !opts?.force) {
       setDiff(null)
       return
     }
@@ -362,14 +382,21 @@ export default function Configs({ me }: { me: Me }) {
                       rowKey="id"
                       pagination={false}
                       size="small"
-                      columns={versionColumns(diff, showDiff, rollback, busy, me)}
+                      columns={versionColumns(diff, showDiff, rollback, busy, me, versions.data.versions[0]?.id)}
                     />
                   </div>
                 ) : (
                   <div className="chart-empty">{t('configs.emptyHistory')}</div>
                 )}
 
-                {diff && <DiffView text={diff.text} />}
+                {diff && (
+                  <>
+                    <div className="small secondary" style={{ marginTop: '0.75rem' }}>
+                      {t('configs.diffCaption', { id: diff.id })}
+                    </div>
+                    <DiffView text={diff.text} />
+                  </>
+                )}
               </Card>
             </>
           ) : null}
