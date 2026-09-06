@@ -725,6 +725,8 @@
     "diff": "diff",
     "rollback": "roll back",
     "confirmRollback": "Restore version #{{id}}? The file's current content will be replaced.",
+    "isCurrent": "current",
+    "diffCaption": "Differences between version #{{id}} and the current file — what rolling back to it would restore.",
     "noDiff": "(no differences)",
     "title": "Configs",
     "hint": "Files found while parsing configs. Before writing, content is checked by the service itself (nginx -t, haproxy -c, caddy validate, docker compose config); if the check fails, the file is automatically reverted. Every edit is saved to history.",
