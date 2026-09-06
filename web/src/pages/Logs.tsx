@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, Input, Select, Tag } from 'antd'
+import { Button, Checkbox, Input, Segmented, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import { api, hostScope, readSelectedHost, useApi } from '../api'
@@ -37,7 +37,10 @@ export default function Logs() {
   const [connected, setConnected] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [showArchived, setShowArchived] = useState(false)
+  // Which kind of source the picker is showing. Units and files were one
+  // grouped dropdown before, and with a couple of dozen units the files sat
+  // below the fold — people reasonably concluded there were none.
+  const [kind, setKind] = useState<'unit' | 'file' | 'archived'>('unit')
   const [lineCount, setLineCount] = useState(500)
   const [filter, setFilter] = useState('')
   const [highlight, setHighlight] = useState('')
@@ -156,34 +159,28 @@ export default function Logs() {
 
   const options = useMemo(() => {
     const list = sources.data?.sources ?? []
-    return [
-      {
-        label: t('logs.groupUnits'),
-        options: list
-          .filter((s) => s.kind === 'unit')
-          .map((s) => ({ value: `unit:${s.name}`, label: s.service ? `${s.name} (${s.service})` : s.name })),
-      },
-      {
-        label: t('logs.groupFiles'),
-        options: list
-          .filter((s) => s.kind === 'file' && !s.archived)
-          .map((s) => ({ value: `file:${s.name}`, label: s.name })),
-      },
-      ...(showArchived
-        ? [
-            {
-              label: t('logs.groupArchived'),
-              options: list
-                .filter((s) => s.kind === 'file' && s.archived)
-                .map((s) => ({
-                  value: `file:${s.name}`,
-                  label: s.compressed ? `${s.name} ${t('logs.compressedTag')}` : s.name,
-                })),
-            },
-          ]
-        : []),
-    ]
-  }, [sources.data, showArchived, t])
+    if (kind === 'unit') {
+      return list
+        .filter((s) => s.kind === 'unit')
+        .map((s) => ({ value: `unit:${s.name}`, label: s.service ? `${s.name} (${s.service})` : s.name }))
+    }
+    const wantArchived = kind === 'archived'
+    return list
+      .filter((s) => s.kind === 'file' && !!s.archived === wantArchived)
+      .map((s) => ({
+        value: `file:${s.name}`,
+        label: s.compressed ? `${s.name} ${t('logs.compressedTag')}` : s.name,
+      }))
+  }, [sources.data, kind, t])
+
+  const counts = useMemo(() => {
+    const list = sources.data?.sources ?? []
+    return {
+      unit: list.filter((s) => s.kind === 'unit').length,
+      file: list.filter((s) => s.kind === 'file' && !s.archived).length,
+      archived: list.filter((s) => s.kind === 'file' && s.archived).length,
+    }
+  }, [sources.data])
 
   return (
     <>
@@ -225,12 +222,23 @@ export default function Logs() {
           </div>
         }
       >
+        <Segmented
+          value={kind}
+          onChange={(value) => setKind(value as 'unit' | 'file' | 'archived')}
+          options={[
+            { value: 'unit', label: `${t('logs.groupUnits')} (${counts.unit})` },
+            { value: 'file', label: `${t('logs.groupFiles')} (${counts.file})` },
+            { value: 'archived', label: `${t('logs.groupArchived')} (${counts.archived})` },
+          ]}
+          style={{ marginBottom: '0.75rem' }}
+        />
         <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
           <Select
             showSearch
             style={{ minWidth: 320 }}
             placeholder={t('logs.pickPlaceholder')}
             value={selected}
+            notFoundContent={t('logs.noneOfKind')}
             options={options}
             onChange={(value) => {
               setSelected(value)
@@ -269,9 +277,6 @@ export default function Logs() {
             value={highlight}
             onChange={(e) => setHighlight(e.target.value)}
           />
-          <Checkbox checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)}>
-            {t('logs.showArchived')}
-          </Checkbox>
           <Select
             style={{ width: 130 }}
             value={lineCount}

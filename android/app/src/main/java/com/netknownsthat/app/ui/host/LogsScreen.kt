@@ -228,10 +228,22 @@ private fun SourcePickerDialog(
 ) {
     var custom by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
-    var showArchived by remember { mutableStateOf(false) }
+    // Units and files shared one list before, and with a couple of dozen
+    // units the files were far enough down that they looked absent.
+    var kind by remember { mutableStateOf("unit") }
+
     val visible = sources.filter {
-        it.name.contains(search, ignoreCase = true) && (showArchived || !it.archived)
+        it.name.contains(search, ignoreCase = true) && when (kind) {
+            "unit" -> it.kind == "unit"
+            "file" -> it.kind == "file" && !it.archived
+            else -> it.kind == "file" && it.archived
+        }
     }
+    val counts = Triple(
+        sources.count { it.kind == "unit" },
+        sources.count { it.kind == "file" && !it.archived },
+        sources.count { it.kind == "file" && it.archived },
+    )
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -252,18 +264,37 @@ private fun SourcePickerDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Checkbox(checked = showArchived, onCheckedChange = { showArchived = it })
-                    // Rotated generations are hidden by default: the list is
-                    // roughly twice as long with them, and they are only
-                    // wanted when looking further back than today.
-                    Text("показывать архивные", style = MaterialTheme.typography.bodySmall)
+                Row(
+                    modifier = Modifier
+                        .horizontalScroll(rememberScrollState())
+                        .padding(top = 8.dp),
+                ) {
+                    listOf(
+                        "unit" to "Журналы служб (${counts.first})",
+                        "file" to "Файлы (${counts.second})",
+                        "archived" to "Архивы (${counts.third})",
+                    ).forEach { (value, label) ->
+                        FilterChip(
+                            selected = kind == value,
+                            onClick = { kind = value },
+                            label = { Text(label) },
+                            modifier = Modifier.padding(end = 6.dp),
+                        )
+                    }
                 }
                 if (custom.isNotBlank()) {
                     OutlinedButton(
                         onClick = { onPick(LogSource(kind = "file", name = custom.trim())) },
                         modifier = Modifier.padding(top = 8.dp),
                     ) { Text("Смотреть этот файл") }
+                }
+                if (visible.isEmpty()) {
+                    Text(
+                        text = "Здесь пусто — на хосте нет таких логов",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
                 }
                 LazyColumn(modifier = Modifier.padding(top = 8.dp)) {
                     items(visible) { source ->
