@@ -1189,9 +1189,9 @@
     "popoutTitle": "Логи — {{name}}",
     "popoutTitleDefault": "Логи",
     "groupArchived": "Архивы (ротированные)",
-    "showArchived": "показывать архивные",
     "compressedTag": "(сжат)",
     "archivedTag": "архив — прочитан целиком",
-    "lastLines": "последние {{n}}"
+    "lastLines": "последние {{n}}",
+    "noneOfKind": "Здесь пусто — на хосте нет таких логов"
   }
 }

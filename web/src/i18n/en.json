@@ -1189,9 +1189,9 @@
     "popoutTitle": "Logs — {{name}}",
     "popoutTitleDefault": "Logs",
     "groupArchived": "Archives (rotated)",
-    "showArchived": "show archived",
     "compressedTag": "(compressed)",
     "archivedTag": "archive — read once",
-    "lastLines": "last {{n}}"
+    "lastLines": "last {{n}}",
+    "noneOfKind": "Nothing here — the host has no such logs"
   }
 }
