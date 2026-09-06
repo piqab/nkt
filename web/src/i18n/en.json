@@ -35,7 +35,8 @@
     "certificates": "Certificates",
     "audit": "Audit log",
     "users": "Users",
-    "about": "About"
+    "about": "About",
+    "logs": "Logs"
   },
   "about": {
     "title": "About",
@@ -1161,5 +1162,31 @@
     "create": "Create",
     "cancel": "Cancel",
     "newComposeStackNote": "created a new compose stack"
+  },
+  "logs": {
+    "title": "Logs",
+    "hint": "Live view of systemd journals and files under {{root}}. Lines can be filtered and highlighted; the window can be detached.",
+    "pickerTitle": "Source",
+    "pickPlaceholder": "Pick a journal or a file",
+    "customPlaceholder": "A path of your own under {{root}}",
+    "groupUnits": "Service journals",
+    "groupFiles": "Files",
+    "filterPlaceholder": "Filter: only lines containing…",
+    "highlightPlaceholder": "Highlight…",
+    "caseSensitive": "match case",
+    "autoScroll": "scroll to the end",
+    "counter": "showing {{shown}} of {{total}}",
+    "outputTitle": "Output",
+    "streaming": "streaming",
+    "stopped": "stopped",
+    "start": "Watch",
+    "stop": "Stop",
+    "empty": "Pick a source and lines will appear here.",
+    "connectionFailed": "Could not connect to the log stream.",
+    "detach": "Detach into a separate window",
+    "detachTooltip": "Open in a separate browser window — survives navigating to other pages",
+    "closeWindow": "Close window",
+    "popoutTitle": "Logs — {{name}}",
+    "popoutTitleDefault": "Logs"
   }
 }

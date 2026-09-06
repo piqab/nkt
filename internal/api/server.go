@@ -40,6 +40,7 @@ type Server struct {
 	podman    *control.PodmanManager
 	lxd       *control.LXDManager
 	libvirt   *control.LibvirtManager
+	logs      *control.LogManager
 	ui        fs.FS
 	log       *slog.Logger
 	version   string
@@ -76,6 +77,7 @@ type Deps struct {
 	Podman    *control.PodmanManager
 	LXD       *control.LXDManager
 	Libvirt   *control.LibvirtManager
+	Logs      *control.LogManager
 	UI        fs.FS
 	Log       *slog.Logger
 	// Version is this binary's own version, reported by /api/health so
@@ -89,7 +91,7 @@ func New(d Deps) *Server {
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
-		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt,
+		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs,
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
 	}
@@ -123,6 +125,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/terminal/ws", s.handleTerminalWS)
 			r.Get("/terminal/btop/ws", s.handleBtopWS)
 			r.Get("/updates/ws", s.handleUpdatesWS)
+			r.Get("/logs/ws", s.handleLogStream)
 			r.Get("/firewall/ufw-install/ws", s.handleUFWInstallWS)
 			r.Get("/firewall/firewalld-install/ws", s.handleFirewalldInstallWS)
 			r.Get("/system/dbus-install/ws", s.handleDbusInstallWS)
@@ -208,6 +211,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/monitor/usage/heatmap", s.handleUsageHeatmap)
 			r.Get("/monitor/jobs", s.handleJobs)
 
+			r.Get("/logs/sources", s.handleLogSources)
+			r.Get("/logs/tail", s.handleLogSnapshot)
 			r.Get("/audit", s.handleAudit)
 			r.Get("/snapshots", s.handleSnapshots)
 

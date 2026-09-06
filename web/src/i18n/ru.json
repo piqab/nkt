@@ -35,7 +35,8 @@
     "certificates": "Сертификаты",
     "audit": "Журнал действий",
     "users": "Пользователи",
-    "about": "О системе"
+    "about": "О системе",
+    "logs": "Логи"
   },
   "about": {
     "title": "О системе",
@@ -1161,5 +1162,31 @@
     "create": "Создать",
     "cancel": "Отмена",
     "newComposeStackNote": "создан новый compose-стек"
+  },
+  "logs": {
+    "title": "Логи",
+    "hint": "Живой просмотр журналов systemd и файлов внутри {{root}}. Строки можно фильтровать и подсвечивать; окно открепляется в отдельное.",
+    "pickerTitle": "Источник",
+    "pickPlaceholder": "Выберите журнал или файл",
+    "customPlaceholder": "Свой путь внутри {{root}}",
+    "groupUnits": "Журналы служб",
+    "groupFiles": "Файлы",
+    "filterPlaceholder": "Фильтр: показывать только строки с…",
+    "highlightPlaceholder": "Подсветить…",
+    "caseSensitive": "учитывать регистр",
+    "autoScroll": "прокручивать к концу",
+    "counter": "показано {{shown}} из {{total}}",
+    "outputTitle": "Вывод",
+    "streaming": "поток идёт",
+    "stopped": "остановлен",
+    "start": "Смотреть",
+    "stop": "Остановить",
+    "empty": "Выберите источник — и строки появятся здесь.",
+    "connectionFailed": "Соединение с потоком логов не удалось.",
+    "detach": "Открепить в отдельное окно",
+    "detachTooltip": "Открыть в отдельном окне браузера — переживёт переход по другим страницам",
+    "closeWindow": "Закрыть окно",
+    "popoutTitle": "Логи — {{name}}",
+    "popoutTitleDefault": "Логи"
   }
 }
