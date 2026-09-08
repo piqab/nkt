@@ -822,7 +822,7 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
   const [form] = Form.useForm<SelfSignedFormValues>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [result, setResult] = useState<SelfSignedResult | null>(null)
+  const [results, setResults] = useState<SelfSignedResult[]>([])
 
   async function submit(values: SelfSignedFormValues) {
     const nameList = values.names
@@ -835,13 +835,19 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
     }
     setBusy(true)
     setError(null)
-    setResult(null)
+    setResults([])
     try {
-      const res = await api<SelfSignedResult>('/certificates/self-signed', {
-        method: 'POST',
-        body: { names: nameList, service: values.service, bits: values.bits, days: values.days } satisfies SelfSignedRequest,
-      })
-      setResult(res)
+      // One certificate per name. A host still running an older nkt answers
+      // with a single result object instead of a list — accepted here so a
+      // hub whose hosts are not all updated yet keeps working.
+      const res = await api<{ results?: SelfSignedResult[] } & Partial<SelfSignedResult>>(
+        '/certificates/self-signed',
+        {
+          method: 'POST',
+          body: { names: nameList, service: values.service, bits: values.bits, days: values.days } satisfies SelfSignedRequest,
+        },
+      )
+      setResults(res.results ?? (res.names ? [res as SelfSignedResult] : []))
       onIssued()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -887,19 +893,29 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
         </Form.Item>
       </Form>
 
-      {result && (
+      {results.length > 0 && (
         <div className="col" style={{ marginTop: '0.85rem' }}>
-          <Banner kind="info">
-            {t('certs.selfSignedResult', { names: result.names.join(', '), date: formatDateTime(result.not_after) })}
-          </Banner>
-          {result.unicode_names && (
-            <p className="small muted">
-              {Object.entries(result.unicode_names)
-                .map(([ascii, unicode]) => `${unicode} → ${ascii}`)
-                .join('; ')}
-            </p>
+          {results.length > 1 && (
+            <Banner kind="info">{t('certs.selfSignedCount', { count: results.length })}</Banner>
           )}
-          <pre className="diff">{result.snippet}</pre>
+          {results.map((result) => (
+            <div className="col" key={result.cert_path || result.combined_path || result.names.join(',')}>
+              <Banner kind="info">
+                {t('certs.selfSignedResult', {
+                  names: result.names.join(', '),
+                  date: formatDateTime(result.not_after),
+                })}
+              </Banner>
+              {result.unicode_names && (
+                <p className="small muted">
+                  {Object.entries(result.unicode_names)
+                    .map(([ascii, unicode]) => `${unicode} → ${ascii}`)
+                    .join('; ')}
+                </p>
+              )}
+              <pre className="diff">{result.snippet}</pre>
+            </div>
+          ))}
         </div>
       )}
     </Card>

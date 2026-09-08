@@ -10,30 +10,53 @@ import (
 	"github.com/piqab/nkt/internal/msgs"
 )
 
-// handleGenerateSelfSigned issues a self-signed certificate on the host. It
-// never edits nginx or haproxy configuration: the caller pastes the returned
-// snippet through the validated config editor, which already handles the
-// validate-or-roll-back path.
+// handleGenerateSelfSigned issues one self-signed certificate per name.
+//
+// Several names could go into a single certificate as SANs, and that used to
+// be what happened — but it made "a.local, b.local" produce one certificate
+// named after the first, which reads as the rest having been ignored. A
+// separate certificate per name is what the comma is taken to mean here;
+// pass one name to get one certificate.
+//
+// It never edits nginx or haproxy configuration: each result carries a
+// snippet the caller pastes through the validated config editor, which
+// already handles the validate-or-roll-back path.
 func (s *Server) handleGenerateSelfSigned(w http.ResponseWriter, r *http.Request) {
 	var req control.SelfSignedRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-
-	user := auth.Username(r.Context())
-	res, err := s.certs.GenerateSelfSigned(r.Context(), user, req)
-	if err != nil {
-		s.db.Audit(r.Context(), user, "cert.generate_selfsigned", "", "error", err.Error())
-		writeError(w, http.StatusBadRequest, err.Error())
+	if len(req.Names) == 0 {
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "certgen.nameRequired"))
 		return
 	}
 
-	// The new file does not appear in the certificate inventory until some
-	// configuration references it, but a rescan costs nothing and keeps the
+	user := auth.Username(r.Context())
+	results := make([]control.SelfSignedResult, 0, len(req.Names))
+
+	for _, name := range req.Names {
+		one := req
+		one.Names = []string{name}
+		res, err := s.certs.GenerateSelfSigned(r.Context(), user, one)
+		if err != nil {
+			s.db.Audit(r.Context(), user, "cert.generate_selfsigned", name, "error", err.Error())
+			// Report what was already created alongside the failure: some
+			// certificates now exist on the host, and saying only "failed"
+			// would leave the operator guessing which.
+			writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error": err.Error(), "results": results,
+			})
+			return
+		}
+		results = append(results, res)
+	}
+
+	// The new files do not appear in the certificate inventory until some
+	// configuration references them, but a rescan costs nothing and keeps the
 	// snapshot current for anything else that changed underneath it.
 	s.rescanLater()
-	writeJSON(w, http.StatusOK, res)
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
 type renewRequest struct {

@@ -20,6 +20,7 @@ var enCatalog = map[string]string{
 	"auth.createUserFailed":         "Couldn't create the user: %s",
 	"auth.loginRequired":            "Sign-in required",
 
+	"certgen.nameRequired": "At least one name is required",
 	"certgen.lineageRequired":       "specify a lineage",
 	"certgen.stoppingForStandalone": "Stopping nginx and haproxy for --standalone…",
 	"certgen.serviceStopped":        "%s: stopped",

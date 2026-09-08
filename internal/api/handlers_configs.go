@@ -83,6 +83,12 @@ func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 
+	// Whether this write creates the file decides how the response ends: a
+	// brand-new file is not in the cached snapshot the file list is built
+	// from, so answering before a rescan shows the operator a list without
+	// the file they just made.
+	isNew := !snapshotHasFile(s.scanner.Latest(), req.Path)
+
 	// Optimistic locking: refuse to silently overwrite a file that changed on
 	// disk after the editor loaded it.
 	if req.Expected != "" {
@@ -106,6 +112,15 @@ func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
 	s.db.Audit(r.Context(), user, "config.write", req.Path, "ok", map[string]any{
 		"version": res.VersionID, "applied": res.Applied, "note": req.Note,
 	})
+
+	if isNew {
+		// Synchronous on purpose. Creating a file is rare and the wait is
+		// the scan's own duration; editing an existing one — the common
+		// case — stays as fast as it was.
+		_, _ = s.scanner.Scan(r.Context())
+	} else {
+		s.rescanLater()
+	}
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -212,4 +227,17 @@ func (s *Server) handleConfigRollback(w http.ResponseWriter, r *http.Request) {
 	s.db.Audit(r.Context(), user, "config.rollback", res.Path, "ok",
 		map[string]any{"restored_from": id, "new_version": res.VersionID})
 	writeJSON(w, http.StatusOK, res)
+}
+
+// snapshotHasFile reports whether the last scan already knew this path.
+func snapshotHasFile(snap *model.Snapshot, path string) bool {
+	if snap == nil {
+		return false
+	}
+	for _, f := range snap.Files {
+		if f.Path == path {
+			return true
+		}
+	}
+	return false
 }
