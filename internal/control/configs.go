@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	gopath "path"
+	"sort"
 	"strings"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -82,6 +83,25 @@ func (m *ConfigManager) serviceForPath(path string) string {
 		return model.ServiceCaddy
 	case underRoot(path, m.cfg.Fail2banRoot):
 		return model.ServiceFail2ban
+	case underRoot(path, m.cfg.SystemdUnitRoot):
+		return model.ServiceSystemd
+	case underRoot(path, m.cfg.SSHRoot):
+		return model.ServiceSSH
+	case underRoot(path, m.cfg.NetplanRoot):
+		return model.ServiceNetwork
+	case underRoot(path, m.cfg.SysctlRoot):
+		return model.ServiceSysctl
+	case underRoot(path, m.cfg.CronRoot):
+		return model.ServiceCron
+	// Одиночные файлы вне каталогов — перечислены поимённо, потому что
+	// разрешать /etc целиком значило бы отдать в редактор ещё и passwd,
+	// shadow и всё остальное, чему в этом разделе не место.
+	case path == "/etc/hosts" || path == "/etc/resolv.conf":
+		return model.ServiceNetwork
+	case path == "/etc/sysctl.conf":
+		return model.ServiceSysctl
+	case path == "/etc/crontab":
+		return model.ServiceCron
 	case underRoot(path, parse.LibvirtQEMUDir):
 		// libvirt itself stores a defined domain's persistent XML here — this
 		// is not a config file some other service merely reads, it IS
@@ -166,6 +186,12 @@ func (m *ConfigManager) checkPath(path string) (service string, err error) {
 	return service, nil
 }
 
+// ServiceForPath сообщает, к какой категории относится путь — тем же
+// правилом, по которому редактор решает, можно ли его вообще править.
+func (m *ConfigManager) ServiceForPath(path string) (string, error) {
+	return m.checkPath(path)
+}
+
 // BrowseDir lists a directory under /home, for the "новый контейнер" path
 // picker — a directory being browsed is not itself a file this app manages
 // (checkPath would reject most of them), only the compose file the operator
@@ -206,6 +232,7 @@ func (m *ConfigManager) List(ctx context.Context) ([]model.ManagedFile, error) {
 		return nil, err
 	}
 	out := make([]model.ManagedFile, 0, len(snap.Files))
+	seen := make(map[string]bool, len(snap.Files))
 	for _, f := range snap.Files {
 		if svc, err := m.checkPath(f.Path); err == nil {
 			f.Service = svc
@@ -213,9 +240,126 @@ func (m *ConfigManager) List(ctx context.Context) ([]model.ManagedFile, error) {
 		} else {
 			f.Editable = false
 		}
+		f.InUse = true
+		seen[f.Path] = true
 		out = append(out, f)
 	}
+
+	// Разбор конфигурации видит только то, до чего дотягивается сама
+	// служба через include. Файл в sites-available, только что созданный
+	// через nkt, в эту картину не попадает никогда — и раньше просто
+	// исчезал из интерфейса сразу после сохранения, сколько ни
+	// пересканируй. Поэтому к разобранному добавляются ещё два источника:
+	// то, что nkt когда-либо правил (у файла есть история версий), и обход
+	// каталогов, которые редактор и так считает своими.
+	for _, path := range m.knownExtraPaths(ctx) {
+		if seen[path] {
+			continue
+		}
+		seen[path] = true
+		if f, ok := m.describeFile(path); ok {
+			out = append(out, f)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, nil
+}
+
+// configExtensions — расширения, по которым обход каталогов отличает
+// конфигурацию от всего остального, что там может лежать (бэкапы .bak,
+// архивы, ключи). Пустое расширение — для файлов вроде Caddyfile и
+// sshd_config, у которых его нет вовсе.
+var configExtensions = map[string]bool{
+	"":     true,
+	".conf": true, ".cfg": true, ".yaml": true, ".yml": true,
+	".xml": true, ".local": true, ".ini": true, ".service": true,
+	".timer": true, ".socket": true, ".types": true,
+}
+
+// knownExtraPaths собирает пути, которых нет в разобранной конфигурации:
+// из истории правок и из обхода каталогов служб.
+func (m *ConfigManager) knownExtraPaths(ctx context.Context) []string {
+	var paths []string
+	// История: файл, который nkt сохранял, обязан оставаться видимым — это
+	// ровно тот случай, ради которого всё и делается.
+	if versions, err := m.db.ListVersions(ctx, "", 500); err == nil {
+		for _, v := range versions {
+			paths = append(paths, v.Path)
+		}
+	}
+	for _, root := range m.editableRoots() {
+		paths = append(paths, m.walkConfigs(root, 0)...)
+	}
+	// Одиночные файлы вне каталогов — их обход не найдёт по определению.
+	paths = append(paths, "/etc/hosts", "/etc/resolv.conf", "/etc/sysctl.conf", "/etc/crontab")
+	return paths
+}
+
+// parsedServices — службы, конфигурацию которых nkt разбирает целиком,
+// проходя по include. Только для них «файла нет в разобранной картине»
+// действительно означает «не подключён»: sshd_config или юнит systemd
+// работают сами по себе, их никто ниоткуда не включает.
+var parsedServices = map[string]bool{
+	model.ServiceNginx:   true,
+	model.ServiceHAProxy: true,
+	model.ServiceCaddy:   true,
+}
+
+// editableRoots — каталоги, файлы в которых редактор и так признаёт
+// своими (см. serviceForPath). Обход ограничен ими: /etc целиком тут не
+// при чём.
+func (m *ConfigManager) editableRoots() []string {
+	return []string{
+		m.cfg.NginxRoot, m.cfg.HAProxyRoot, m.cfg.CaddyRoot, m.cfg.Fail2banRoot,
+		m.cfg.SystemdUnitRoot, m.cfg.SSHRoot, m.cfg.NetplanRoot,
+		m.cfg.SysctlRoot, m.cfg.CronRoot,
+	}
+}
+
+// walkConfigDepth ограничивает обход: sites-enabled/conf.d/sshd_config.d
+// лежат на первом-втором уровне, а глубже начинаются каталоги вроде
+// /etc/nginx/modules-available с сотнями файлов, которые правят не отсюда.
+const walkConfigDepth = 2
+
+func (m *ConfigManager) walkConfigs(root string, depth int) []string {
+	if root == "" || depth > walkConfigDepth {
+		return nil
+	}
+	entries, err := m.c.ListDir(root)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		// ListDir отдаёт полный путь, а не имя внутри каталога.
+		if e.IsDir {
+			out = append(out, m.walkConfigs(e.Path, depth+1)...)
+			continue
+		}
+		if !e.Readable || !configExtensions[gopath.Ext(e.Path)] {
+			continue
+		}
+		out = append(out, e.Path)
+	}
+	return out
+}
+
+// describeFile строит запись списка для файла, которого нет в разобранной
+// конфигурации. Недоступный или исчезнувший файл в список не попадает:
+// история могла остаться от файла, который с тех пор удалили.
+func (m *ConfigManager) describeFile(path string) (model.ManagedFile, bool) {
+	service, err := m.checkPath(path)
+	if err != nil {
+		return model.ManagedFile{}, false
+	}
+	st, err := m.c.Stat(path)
+	if err != nil || st.IsDir {
+		return model.ManagedFile{}, false
+	}
+	return model.ManagedFile{
+		Path: path, Service: service, Size: st.Size, ModTime: st.ModTime,
+		Readable: true, Editable: true, InUse: !parsedServices[service],
+	}, true
 }
 
 // Read loads one config file.
@@ -342,6 +486,13 @@ func (m *ConfigManager) Write(ctx context.Context, lang msgs.Lang, user, path, c
 	previous, hadPrevious := m.snapshotCurrent(ctx, path, service, user)
 	newBytes := []byte(normaliseNewlines(content))
 
+	// Состояние sshd ДО правки. Сравнивать есть смысл только с ним: если
+	// демон не отвечал и до этого, то отказ после правки её виной не был.
+	var sshBefore SSHProbe
+	if service == model.ServiceSSH {
+		sshBefore = m.ProbeSSHD(ctx)
+	}
+
 	if err := m.c.WriteFile(path, newBytes, 0o644); err != nil {
 		return WriteResult{}, fmt.Errorf("запись %s: %w", path, err)
 	}
@@ -400,6 +551,9 @@ func (m *ConfigManager) Write(ctx context.Context, lang msgs.Lang, user, path, c
 			// (or updates an already-defined one), covering both create
 			// and edit through the one write path.
 			out, applyErr = m.svc.DefineLibvirtDomain(ctx, user, path)
+		case model.ServiceSSH, model.ServiceSystemd, model.ServiceSysctl,
+			model.ServiceNetwork, model.ServiceCron:
+			out, applyErr = m.applyCategory(ctx, user, service, path)
 		default:
 			out, applyErr = m.svc.Action(ctx, user, service, "reload")
 		}
@@ -408,6 +562,25 @@ func (m *ConfigManager) Write(ctx context.Context, lang msgs.Lang, user, path, c
 			res.Apply = &out
 			if out.OK() {
 				res.Message = msgs.T(lang, "configs.fileSavedAndReloaded")
+			}
+			// Демон перезагружен — теперь проверяем, принимает ли он НОВЫЕ
+			// соединения. Уже открытая сессия пережила бы и падение sshd,
+			// поэтому доверять можно только свежему соединению.
+			if service == model.ServiceSSH && sshBefore.OK {
+				if after := m.ProbeSSHD(ctx); !after.OK {
+					res.Message = fmt.Sprintf(
+						"после правки sshd перестал принимать соединения (%s) — файл возвращён к прежнему виду",
+						after.Error)
+					if hadPrevious {
+						if rbErr := m.c.WriteFile(path, previous, 0o644); rbErr == nil {
+							res.RolledBack = true
+							_, _ = m.applyCategory(ctx, user, service, path)
+						} else {
+							res.Message += fmt.Sprintf("; откат не удался: %v", rbErr)
+						}
+					}
+					return res, fmt.Errorf("%s", res.Message)
+				}
 			}
 		} else {
 			// The write itself succeeded — only the follow-up apply step
@@ -423,6 +596,40 @@ func (m *ConfigManager) Write(ctx context.Context, lang msgs.Lang, user, path, c
 	// The host changed, so the cached inventory is stale.
 	go func() { _, _ = m.scanner.Scan(context.Background()) }()
 	return res, nil
+}
+
+// applyCategory применяет правку для категорий, у которых нет службы в
+// смысле раздела «Сервисы» — там нечего перезагружать через общий
+// ServiceManager.Action, у каждой свой способ (или его осознанное
+// отсутствие).
+func (m *ConfigManager) applyCategory(ctx context.Context, user, service, path string) (collect.CommandResult, error) {
+	switch service {
+	case model.ServiceSystemd:
+		// Юнит на диске systemd не перечитывает сам — до daemon-reload он
+		// живёт по старому файлу. Перезапуск самой службы сюда не входит
+		// намеренно: это отдельное решение оператора.
+		return m.c.Run(ctx, "systemctl", "daemon-reload")
+	case model.ServiceSSH:
+		// reload, а не restart: перезагрузка конфигурации не рвёт уже
+		// открытые сессии, а restart оборвал бы в том числе и туннель
+		// хаба, через который эта самая правка и пришла.
+		res, err := m.c.Run(ctx, "systemctl", "reload", "ssh")
+		if err == nil && res.OK() {
+			return res, nil
+		}
+		// Имя юнита разнится: ssh в Debian/Ubuntu, sshd в RHEL и Arch.
+		return m.c.Run(ctx, "systemctl", "reload", "sshd")
+	case model.ServiceSysctl:
+		return m.c.Run(ctx, "sysctl", "-p", path)
+	case model.ServiceCron:
+		// cron перечитывает /etc/cron.d сам, применять нечего.
+		return collect.CommandResult{}, fmt.Errorf("cron перечитывает файлы сам — применять отдельно ничего не нужно")
+	case model.ServiceNetwork:
+		// netplan apply способен оставить хост без сети — это делается
+		// осознанно из терминала, а не галочкой рядом с сохранением.
+		return collect.CommandResult{}, fmt.Errorf("применение сетевой конфигурации не делается автоматически: выполните netplan apply вручную, имея доступ к консоли")
+	}
+	return collect.CommandResult{}, fmt.Errorf("для %s нет шага применения", service)
 }
 
 // snapshotCurrent records the pre-edit content so a rollback target always exists.

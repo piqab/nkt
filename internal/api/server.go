@@ -206,6 +206,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/configs/browse", s.handleConfigBrowse)
 			r.Get("/configs/blocks", s.handleConfigBlocks)
 			r.Get("/configs/versions", s.handleConfigVersions)
+			r.Get("/configs/ssh/preflight", s.handleSSHPreflight)
 			r.Get("/configs/versions/{id}", s.handleConfigVersion)
 			r.Get("/configs/versions/{id}/diff", s.handleConfigDiff)
 

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Button, Checkbox, Input, Segmented, Table, type InputRef, type TableColumnsType } from 'antd'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Button, Checkbox, Input, Segmented, Select, Table, type InputRef, type TableColumnsType } from 'antd'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
@@ -52,6 +52,12 @@ function versionColumns(
   ]
 }
 
+/** GET /configs/ssh/preflight — internal/api/handlers_configs.go. */
+interface SSHPreflight {
+  probe: { ok: boolean; port: number; banner?: string; error?: string; simulated?: boolean }
+  reserve: { ok: boolean; via_hub_tunnel: boolean; nkt_addr: string; detail: string }
+}
+
 export default function Configs({ me }: { me: Me }) {
   const { t } = useTranslation()
   const [view, setView] = useState<'text' | 'blocks'>('text')
@@ -72,6 +78,14 @@ export default function Configs({ me }: { me: Me }) {
   const [creatingInitialContent, setCreatingInitialContent] = useState('')
   const [newFileModal, setNewFileModal] = useState<{ cloneFrom?: string; initialContent?: string } | null>(null)
   const [newFilePathInput, setNewFilePathInput] = useState('')
+  // Категория списка файлов. 'all' и 'unused' — псевдокатегории: первая
+  // ничего не фильтрует, вторая собирает файлы, до которых конфигурация
+  // службы не дотягивается (in_use=false) независимо от их службы.
+  const [category, setCategory] = useState<string>('all')
+  // Резервный канал для правки sshd_config: путь к хосту, не зависящий от
+  // самого sshd. Запрашивается только когда открыт файл этой категории —
+  // для остальных проверять нечего.
+  const [sshForce, setSSHForce] = useState(false)
   const newFilePathInputRef = useRef<InputRef>(null)
 
   const file = useApi<FileContent>(path ? `/configs/file${qs({ path })}` : null)
@@ -103,6 +117,43 @@ export default function Configs({ me }: { me: Me }) {
     }
   }, [newFileModal])
 
+  const allFiles = files.data?.files ?? []
+  const isSSHPath = file.data?.service === 'ssh'
+  const sshPreflight = useApi<SSHPreflight>(isSSHPath ? '/configs/ssh/preflight' : null)
+
+  // Категории строятся из самих данных, а не из фиксированного списка:
+  // какие службы окажутся на хосте, заранее неизвестно, и пустая категория
+  // в переключателе — это пункт, ведущий в пустой список.
+  const categories = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const f of allFiles) counts.set(f.service, (counts.get(f.service) ?? 0) + 1)
+    const unused = allFiles.filter((f) => !f.in_use).length
+    const out = [{ value: 'all', label: `${t('configs.categoryAll')} (${allFiles.length})` }]
+    for (const [service, count] of [...counts].sort((a, b) => a[0].localeCompare(b[0]))) {
+      out.push({ value: service, label: `${service} (${count})` })
+    }
+    if (unused > 0) out.push({ value: 'unused', label: `${t('configs.categoryUnused')} (${unused})` })
+    return out
+  }, [allFiles, t])
+
+  const visibleFiles = useMemo(() => {
+    if (category === 'all') return allFiles
+    if (category === 'unused') return allFiles.filter((f) => !f.in_use)
+    return allFiles.filter((f) => f.service === category)
+  }, [allFiles, category])
+
+  // Выбранная категория могла исчезнуть после перезагрузки списка — тогда
+  // фильтр показывал бы пустоту без всякого объяснения.
+  useEffect(() => {
+    if (category !== 'all' && !categories.some((c) => c.value === category)) setCategory('all')
+  }, [categories, category])
+
+  // Разрешение «у меня есть консоль» относится к одной конкретной правке,
+  // а не к сеансу: при переходе к другому файлу оно сбрасывается.
+  useEffect(() => setSSHForce(false), [path])
+
+  const sshBlocked = isSSHPath && sshPreflight.data?.reserve.ok === false && !sshForce
+
   const dirty = file.data !== null && draft !== file.data.content
 
   async function save() {
@@ -119,6 +170,9 @@ export default function Configs({ me }: { me: Me }) {
           note,
           apply,
           expected_sha256: file.data.sha256,
+          // Явное «у меня есть консоль» — единственный способ править
+          // sshd_config, когда обратного пути в обход sshd не видно.
+          force: sshForce,
         },
       })
       setResult(res)
@@ -188,7 +242,7 @@ export default function Configs({ me }: { me: Me }) {
       <div className="grid" style={{ gridTemplateColumns: 'minmax(240px, 320px) 1fr' }}>
         <Card
           title={t('configs.filesTitle')}
-          subtitle={t('configs.filesCount', { count: files.data?.files.length ?? 0 })}
+          subtitle={t('configs.filesCount', { count: visibleFiles.length })}
           actions={
             me.is_admin &&
             me.allow_mutations && (
@@ -202,7 +256,14 @@ export default function Configs({ me }: { me: Me }) {
             <Loading what={t('configs.loadingFileList')} />
           ) : (
             <div className="col" style={{ gap: '0.15rem' }}>
-              {files.data?.files.map((f) => (
+              <Select
+                value={category}
+                onChange={setCategory}
+                options={categories}
+                size="small"
+                style={{ width: '100%', marginBottom: '0.4rem' }}
+              />
+              {visibleFiles.map((f) => (
                 <Button
                   key={f.path}
                   type="text"
@@ -235,6 +296,7 @@ export default function Configs({ me }: { me: Me }) {
                   <div className="small muted">
                     {f.service} · {formatBytes(f.size)}
                     {!f.editable && t('configs.readOnlySuffix')}
+                    {!f.in_use && ` · ${t('configs.notInUse')}`}
                   </div>
                 </Button>
               ))}
@@ -306,7 +368,7 @@ export default function Configs({ me }: { me: Me }) {
                             >
                               {t('configs.clone')}
                             </Button>
-                            <Button type="primary" onClick={save} loading={busy} disabled={!dirty}>
+                            <Button type="primary" onClick={save} loading={busy} disabled={!dirty || sshBlocked}>
                               {busy ? t('configs.saving') : t('configs.validateAndSave')}
                             </Button>
                           </>
@@ -340,6 +402,47 @@ export default function Configs({ me }: { me: Me }) {
                         )}
                         {!result.validated && (
                           <div className="small muted">{t('configs.noValidation')}</div>
+                        )}
+                      </Banner>
+                    )}
+
+                    {/* Правка sshd_config — единственная, после которой хост
+                        можно потерять целиком: если демон не поднимется,
+                        чинить будет уже нечем. Поэтому здесь видно и то,
+                        отвечает ли sshd прямо сейчас, и то, останется ли
+                        путь к хосту в обход него. */}
+                    {isSSHPath && sshPreflight.data && (
+                      <Banner kind={sshPreflight.data.reserve.ok ? 'info' : 'warn'}>
+                        <strong>{t('configs.sshGuardTitle')}</strong>
+                        <div className="small" style={{ marginTop: '0.25rem' }}>
+                          {sshPreflight.data.reserve.ok
+                            ? t('configs.sshGuardOk', { detail: sshPreflight.data.reserve.detail })
+                            : t('configs.sshGuardBlocked', { detail: sshPreflight.data.reserve.detail })}
+                        </div>
+                        <div className="small" style={{ marginTop: '0.25rem' }}>
+                          {sshPreflight.data.probe.ok
+                            ? t('configs.sshGuardProbeOk', {
+                                port: sshPreflight.data.probe.port,
+                                banner: sshPreflight.data.probe.banner ?? '',
+                              })
+                            : t('configs.sshGuardProbeFail', {
+                                port: sshPreflight.data.probe.port,
+                                error: sshPreflight.data.probe.error ?? '',
+                              })}
+                        </div>
+                        {!sshPreflight.data.reserve.ok && me.is_admin && me.allow_mutations && (
+                          <label
+                            className="small"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              marginTop: '0.4rem',
+                            }}
+                          >
+                            <Checkbox checked={sshForce} onChange={(e) => setSSHForce(e.target.checked)} />
+                            {t('configs.sshGuardForce')}
+                          </label>
                         )}
                       </Banner>
                     )}

@@ -23,6 +23,14 @@ const (
 	ServiceFirewalld = "firewalld"
 	ServiceFail2ban  = "fail2ban"
 	ServiceHost      = "host"
+	// Категории, у которых нет «службы» в смысле раздела «Сервисы» — это
+	// просто наборы конфигурационных файлов, которые тоже нужно уметь
+	// править: юниты systemd, сеть и имена, sshd, параметры ядра и cron.
+	ServiceSystemd = "systemd"
+	ServiceNetwork = "network"
+	ServiceSSH     = "ssh"
+	ServiceSysctl  = "sysctl"
+	ServiceCron    = "cron"
 )
 
 // Severity levels for findings, ordered from worst to least important.
@@ -105,6 +113,12 @@ type ManagedFile struct {
 	// it, so this just re-groups that same data by file instead of
 	// re-deriving it.
 	Sites []SiteName `json:"sites,omitempty"`
+	// InUse — файл действительно участвует в конфигурации службы: до него
+	// дотягивается разбор через include. Файл в sites-available без ссылки
+	// в sites-enabled лежит на диске, имеет историю правок в nkt, но в
+	// работе не участвует — и это единственное, чем он отличается от
+	// остальных, поэтому признак, а не отдельный список.
+	InUse bool `json:"in_use"`
 }
 
 // SiteName is one server_name/host declared in a ManagedFile, with its

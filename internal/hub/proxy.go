@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/piqab/nkt/internal/api"
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/secretbox"
@@ -246,6 +247,14 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 				// before AddCookie puts the right one in its place.
 				req.Header.Del("Cookie")
 				req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
+				// Хост должен уметь отличить запрос, пришедший по
+				// SSH-туннелю, от прямого обращения к его собственному
+				// веб-интерфейсу: для правки sshd_config это разница между
+				// «управляющий канал зависит от sshd» и «не зависит» (см.
+				// control.SSHReserveChannel). Заголовок ставится здесь, где
+				// туннель и создаётся; браузерный заголовок с тем же именем
+				// затирается, а не дополняется.
+				req.Header.Set(api.HeaderVia, api.ViaHubTunnel)
 			},
 			Transport: &http.Transport{
 				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {

@@ -73,6 +73,34 @@ type configWriteRequest struct {
 	Note     string `json:"note"`
 	Apply    bool   `json:"apply"`
 	Expected string `json:"expected_sha256"`
+	// Force снимает запрет на правку sshd_config без резервного канала —
+	// осознанное «у меня есть консоль», а не значение по умолчанию.
+	Force bool `json:"force"`
+}
+
+// HeaderVia и ViaHubTunnel помечают запрос, прошедший через SSH-туннель
+// хаба; заголовок ставит прокси хаба (internal/hub/proxy.go), затирая
+// одноимённый заголовок браузера — подделать его снаружи нельзя. Константы
+// живут здесь, а не в internal/hub: хаб импортирует api, обратное
+// невозможно.
+const (
+	HeaderVia    = "X-NKT-Via"
+	ViaHubTunnel = "hub-tunnel"
+)
+
+// viaHubTunnel сообщает, пришёл ли запрос по SSH-туннелю хаба.
+func viaHubTunnel(r *http.Request) bool {
+	return r.Header.Get(HeaderVia) == ViaHubTunnel
+}
+
+// handleSSHPreflight отвечает на вопрос, можно ли сейчас безопасно править
+// конфигурацию sshd: отвечает ли демон на новое соединение и останется ли
+// путь к хосту, если после правки он не поднимется.
+func (s *Server) handleSSHPreflight(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{
+		"probe":   s.configs.ProbeSSHD(r.Context()),
+		"reserve": s.configs.SSHReserveChannel(viaHubTunnel(r)),
+	})
 }
 
 func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
@@ -82,6 +110,21 @@ func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := auth.Username(r.Context())
+
+	// Правка sshd_config — единственная, способная отрезать доступ к хосту
+	// навсегда, поэтому она требует пути в обход sshd (см.
+	// control.SSHReserveChannel). Обойти запрет можно только явным force —
+	// у оператора может быть консоль, о которой отсюда никак не узнать.
+	if svc, err := s.configs.ServiceForPath(req.Path); err == nil && svc == model.ServiceSSH && !req.Force {
+		if reserve := s.configs.SSHReserveChannel(viaHubTunnel(r)); !reserve.OK {
+			writeJSON(w, http.StatusPreconditionRequired, map[string]any{
+				"error":   "правка конфигурации sshd заблокирована: " + reserve.Detail,
+				"reserve": reserve,
+				"probe":   s.configs.ProbeSSHD(r.Context()),
+			})
+			return
+		}
+	}
 
 	// Whether this write creates the file decides how the response ends: a
 	// brand-new file is not in the cached snapshot the file list is built
