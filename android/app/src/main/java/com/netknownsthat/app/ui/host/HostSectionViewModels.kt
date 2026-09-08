@@ -21,6 +21,7 @@ import com.netknownsthat.app.net.model.LineagesResponse
 import com.netknownsthat.app.net.model.RenewEvent
 import com.netknownsthat.app.net.model.RenewJobStatus
 import com.netknownsthat.app.net.model.RuleSpec
+import com.netknownsthat.app.net.model.SelfSignedResponse
 import com.netknownsthat.app.net.model.SelfSignedResult
 import com.netknownsthat.app.net.model.ConfigFileResponse
 import com.netknownsthat.app.net.model.ConfigVersion
@@ -638,7 +639,7 @@ class CertificatesViewModel(hubClient: HubClient) :
     var jobError by mutableStateOf<String?>(null)
         private set
 
-    var selfSigned by mutableStateOf<SelfSignedResult?>(null)
+    var selfSigned by mutableStateOf<List<SelfSignedResult>>(emptyList())
         private set
 
     fun loadForms() {
@@ -656,7 +657,7 @@ class CertificatesViewModel(hubClient: HubClient) :
     }
 
     fun dismissSelfSigned() {
-        selfSigned = null
+        selfSigned = emptyList()
     }
 
     fun generateSelfSigned(names: List<String>, service: String, bits: Int, days: Int) {
@@ -668,9 +669,9 @@ class CertificatesViewModel(hubClient: HubClient) :
                 put("bits", bits)
                 put("days", days)
             }.toString()
-            when (val result = hubClient.post<SelfSignedResult>("/certificates/self-signed", body)) {
+            when (val result = hubClient.post<SelfSignedResponse>("/certificates/self-signed", body)) {
                 is HubClient.ApiResult.Success -> {
-                    selfSigned = result.value
+                    selfSigned = result.value.asList()
                     load()
                 }
 

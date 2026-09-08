@@ -233,6 +233,29 @@ data class RenewEvent(
  * through the config editor — the host deliberately does not edit nginx or
  * haproxy itself here.
  */
+/**
+ * POST /api/certificates/self-signed answers with one result per name.
+ * A host still running an older nkt answers with a bare result object
+ * instead, so [results] is optional and the flat fields are read as a
+ * fallback.
+ */
+@Serializable
+data class SelfSignedResponse(
+    val results: List<SelfSignedResult> = emptyList(),
+    val names: List<String> = emptyList(),
+    @SerialName("cert_path") val certPath: String = "",
+    val snippet: String = "",
+    @SerialName("not_after") val notAfter: String = "",
+) {
+    fun asList(): List<SelfSignedResult> = when {
+        results.isNotEmpty() -> results
+        names.isNotEmpty() -> listOf(
+            SelfSignedResult(names = names, certPath = certPath, snippet = snippet, notAfter = notAfter)
+        )
+        else -> emptyList()
+    }
+}
+
 @Serializable
 data class SelfSignedResult(
     val names: List<String> = emptyList(),

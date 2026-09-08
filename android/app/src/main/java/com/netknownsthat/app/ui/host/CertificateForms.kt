@@ -43,7 +43,9 @@ fun CertificateFormsTab(viewModel: CertificatesViewModel) {
     if (viewModel.jobRunning || viewModel.jobEvents.isNotEmpty() || viewModel.jobError != null) {
         JobLogDialog(viewModel)
     }
-    viewModel.selfSigned?.let { SelfSignedResultDialog(it) { viewModel.dismissSelfSigned() } }
+    if (viewModel.selfSigned.isNotEmpty()) {
+        SelfSignedResultDialog(viewModel.selfSigned) { viewModel.dismissSelfSigned() }
+    }
 
     Column(
         modifier = Modifier
@@ -278,14 +280,17 @@ private fun JobLogDialog(viewModel: CertificatesViewModel) {
 
 @Composable
 private fun SelfSignedResultDialog(
-    result: com.netknownsthat.app.net.model.SelfSignedResult,
+    results: List<com.netknownsthat.app.net.model.SelfSignedResult>,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Сертификат создан") },
+        title = {
+            Text(if (results.size > 1) "Создано сертификатов: ${results.size}" else "Сертификат создан")
+        },
         text = {
             Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                results.forEach { result ->
                 Text(result.names.joinToString(", "))
                 listOfNotNull(
                     result.certPath.takeIf { it.isNotBlank() }?.let { "Сертификат: $it" },
@@ -315,6 +320,7 @@ private fun SelfSignedResultDialog(
                             .horizontalScroll(rememberScrollState())
                             .padding(top = 4.dp),
                     )
+                }
                 }
             }
         },

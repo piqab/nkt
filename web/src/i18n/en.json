@@ -602,7 +602,8 @@
     "validityDays": "Validity, days",
     "generating": "Generating…",
     "create": "Create",
-    "selfSignedResult": "Certificate for {{names}} created, valid until {{date}}. It isn't wired into any service yet — paste the directives below into the right file via the \"Configs\" page."
+    "selfSignedResult": "Certificate for {{names}} created, valid until {{date}}. It isn't wired into any service yet — paste the directives below into the right file via the \"Configs\" page.",
+    "selfSignedCount": "Created {{count}} certificates — one per name."
   },
   "fw": {
     "ufwActionAllow": "allowed",

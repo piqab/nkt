@@ -19,6 +19,7 @@ var ruCatalog = map[string]string{
 	"auth.createUserFailed":         "Не удалось создать пользователя: %s",
 	"auth.loginRequired":            "Требуется вход в систему",
 
+	"certgen.nameRequired": "Нужно указать хотя бы одно имя",
 	"certgen.lineageRequired":       "укажите lineage",
 	"certgen.stoppingForStandalone": "Останавливаю nginx и haproxy для --standalone…",
 	"certgen.serviceStopped":        "%s: остановлен",
