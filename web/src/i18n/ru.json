@@ -59,7 +59,8 @@
     "vulnDBReady": "Готова",
     "vulnDBNotReady": "Ещё не загружена",
     "vulnDBRefreshing": "Обновляется…",
-    "vulnDBRefreshNow": "Обновить сейчас"
+    "vulnDBRefreshNow": "Обновить сейчас",
+    "whatsNew": "Что нового в версии {{version}}"
   },
   "login": {
     "subtitle": "Карта сетевых ресурсов, проверка конфигураций и управление сервисами хоста.",

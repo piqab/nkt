@@ -179,6 +179,36 @@ export default function About() {
                 {t('about.updatableFalse')}
               </div>
             )}
+
+            {/* Описание новой версии — то, что стоит прочитать до нажатия
+                «обновить». Показывается только когда обновление реально есть:
+                текст описывает не установленную версию, а ту, которой ещё
+                нет. Рендерится как обычный текст с переносами, не как
+                markdown: тело релиза правится на стороне GitHub, и
+                интерпретировать его разметку здесь незачем. */}
+            {info?.update_available && info.notes && (
+              <div style={{ marginTop: '1rem' }}>
+                <div className="small muted">
+                  {t('about.whatsNew', { version: info.latest })}
+                </div>
+                <pre
+                  style={{
+                    whiteSpace: 'pre-wrap',
+                    wordBreak: 'break-word',
+                    margin: '0.35rem 0 0',
+                    padding: '0.6rem 0.75rem',
+                    maxHeight: '18rem',
+                    overflowY: 'auto',
+                    background: 'var(--wash)',
+                    border: '1px solid var(--border)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontFamily: 'inherit',
+                  }}
+                >
+                  {info.notes}
+                </pre>
+              </div>
+            )}
           </>
         )}
       </Card>

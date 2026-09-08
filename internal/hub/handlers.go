@@ -164,6 +164,9 @@ func versionInfoJSON(v VersionInfo) map[string]any {
 	if v.CheckError != "" {
 		out["check_error"] = v.CheckError
 	}
+	if v.Notes != "" {
+		out["notes"] = v.Notes
+	}
 	return out
 }
 

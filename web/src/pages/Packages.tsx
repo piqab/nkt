@@ -91,7 +91,6 @@ export default function Packages({ me }: { me: Me }) {
   const searchPath = trimmedQuery.length >= 2 ? `/system/apt/search${qs({ q: trimmedQuery })}` : null
   const search = useApi<{ results: AptSearchResult[]; truncated: boolean }>(searchPath)
 
-  const [installTarget, setInstallTarget] = useState<string | null>(null)
   // Several search results can be picked and installed in one apt-get: the
   // package manager resolves the whole selection's dependencies together and
   // takes the dpkg lock once, which installing them one by one cannot.
@@ -105,16 +104,6 @@ export default function Packages({ me }: { me: Me }) {
     ).catch(() => null)
     setInstallOutcome(fresh?.succeeded ? { ok: true } : { ok: false, exitCode: fresh?.exit_code })
     setPicked([])
-    await search.reload()
-    await installed.reload()
-  }
-
-  async function handleInstallFinished() {
-    if (!installTarget) return
-    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>(
-      `/system/apt/packages/${installTarget}/install/status`,
-    ).catch(() => null)
-    setInstallOutcome(fresh?.succeeded ? { ok: true } : { ok: false, exitCode: fresh?.exit_code })
     await search.reload()
     await installed.reload()
   }
@@ -237,25 +226,30 @@ export default function Packages({ me }: { me: Me }) {
                 {t('packages.searchTruncated')}
               </p>
             )}
-            {picked.length > 0 && (
-              <div className="row" style={{ gap: '0.5rem', marginTop: '0.5rem', alignItems: 'center' }}>
-                <Button
-                  type="primary"
-                  size="small"
-                  disabled={!canUse}
-                  onClick={() => {
-                    setInstallOutcome(null)
-                    setBatchInstalling(true)
-                  }}
-                >
-                  {t('packages.installSelected', { count: picked.length })}
-                </Button>
-                <Button size="small" onClick={() => setPicked([])}>
-                  {t('packages.clearSelection')}
-                </Button>
-                <span className="small secondary mono">{picked.join(', ')}</span>
-              </div>
-            )}
+            {/* Always shown, disabled until something is picked: this is the
+                only way to install from a search now, so it has to be visible
+                before the first checkbox is ticked. */}
+            <div className="row" style={{ gap: '0.5rem', marginTop: '0.5rem', alignItems: 'center' }}>
+              <Button
+                type="primary"
+                size="small"
+                disabled={!canUse || picked.length === 0}
+                onClick={() => {
+                  setInstallOutcome(null)
+                  setBatchInstalling(true)
+                }}
+              >
+                {t('packages.installSelected', { count: picked.length })}
+              </Button>
+              {picked.length > 0 && (
+                <>
+                  <Button size="small" onClick={() => setPicked([])}>
+                    {t('packages.clearSelection')}
+                  </Button>
+                  <span className="small secondary mono">{picked.join(', ')}</span>
+                </>
+              )}
+            </div>
             <div className="row" style={{ gap: '0.4rem', marginTop: '0.5rem' }}>
               {search.data.results.length === 0 ? (
                 <p className="small muted">{t('common.noMatch')}</p>
@@ -264,43 +258,31 @@ export default function Packages({ me }: { me: Me }) {
                   <Tooltip key={p.name} title={p.description || undefined}>
                     <div
                       className="row"
+                      onClick={() => {
+                        if (p.installed || !canUse) return
+                        setPicked((prev) =>
+                          prev.includes(p.name)
+                            ? prev.filter((n) => n !== p.name)
+                            : [...prev, p.name],
+                        )
+                      }}
                       style={{
                         alignItems: 'center',
                         gap: '0.4rem',
                         padding: '0.15rem 0.5rem',
                         border: '1px solid var(--border-strong)',
                         borderRadius: 999,
+                        cursor: p.installed || !canUse ? 'default' : 'pointer',
                       }}
                     >
                       {!p.installed && (
-                        <Checkbox
-                          checked={picked.includes(p.name)}
-                          disabled={!canUse}
-                          onChange={(e) =>
-                            setPicked((prev) =>
-                              e.target.checked
-                                ? [...prev, p.name]
-                                : prev.filter((n) => n !== p.name),
-                            )
-                          }
-                        />
+                        <Checkbox checked={picked.includes(p.name)} disabled={!canUse} />
                       )}
                       <span className="mono">{p.name}</span>
-                      {p.installed ? (
+                      {p.installed && (
                         <Tag color="green" style={{ margin: 0 }}>
                           {t('commonPackages.installed')}
                         </Tag>
-                      ) : (
-                        <Button
-                          size="small"
-                          disabled={!canUse}
-                          onClick={() => {
-                            setInstallOutcome(null)
-                            setInstallTarget(p.name)
-                          }}
-                        >
-                          {t('packages.install')}
-                        </Button>
                       )}
                     </div>
                   </Tooltip>
@@ -347,16 +329,6 @@ export default function Packages({ me }: { me: Me }) {
         />
       )}
 
-      {installTarget && (
-        <PackageInstallModal
-          packageName={installTarget}
-          wsPath={`/system/apt/packages/${installTarget}/install/ws`}
-          onClose={() => setInstallTarget(null)}
-          onFinished={handleInstallFinished}
-          outcome={installOutcome}
-          action="install"
-        />
-      )}
       {removeTarget && (
         <PackageInstallModal
           packageName={removeTarget}

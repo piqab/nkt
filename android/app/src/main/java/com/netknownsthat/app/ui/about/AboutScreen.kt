@@ -2,8 +2,11 @@ package com.netknownsthat.app.ui.about
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -75,6 +78,27 @@ fun AboutScreen(
                                     text = "Доступно обновление",
                                     color = MaterialTheme.colorScheme.tertiary,
                                 )
+                                // Что именно несёт новая версия — читается до
+                                // обновления, а не после. Текст приходит из
+                                // описания релиза на GitHub (WHATSNEW.md):
+                                // заметки внутри установленного бинарника
+                                // описывали бы уже работающую версию.
+                                state.version.notes?.takeIf { it.isNotBlank() }?.let { notes ->
+                                    Text(
+                                        text = "Что нового в ${state.version.latest ?: ""}".trim(),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        modifier = Modifier.padding(top = 12.dp),
+                                    )
+                                    Text(
+                                        text = notes,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier
+                                            .padding(top = 4.dp)
+                                            .heightIn(max = 260.dp)
+                                            .verticalScroll(rememberScrollState()),
+                                    )
+                                }
                             }
                             state.version?.checkError?.let {
                                 Text(
