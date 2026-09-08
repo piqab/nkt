@@ -153,17 +153,70 @@ func (s *Server) ensureTmuxSession(ctx context.Context) error {
 		}
 		return err
 	}
-	// Mouse on, but only on the session this call just created: without it
-	// tmux ignores the wheel entirely, and since tmux runs on the alternate
-	// screen the terminal has no scrollback of its own to fall back on —
-	// the wheel does nothing at all, which is exactly what it looked like.
-	// Set here rather than on every attach so a later toggle (see
-	// handleTmuxMouse) is not silently undone on the next reconnect, and
-	// scoped with -t so nothing touches the operator's own tmux sessions or
-	// their ~/.tmux.conf. Failure is not fatal: an ancient tmux without the
-	// option should still give a working terminal, just without the wheel.
-	_, _ = s.runTmux(ctx, "set-option", "-t", tmuxSessionName, "mouse", "on")
+	s.configureTmuxSession(ctx)
 	return nil
+}
+
+// tmuxHistoryLimit is the scrollback kept per pane in the nkt session.
+// tmux's own default is 2000 lines — enough to lose the start of a build
+// log or an apt run, which is exactly what someone scrolls back for. Ten
+// thousand lines of a terminal's width is single-digit megabytes per pane,
+// paid only while the session is alive.
+const tmuxHistoryLimit = "10000"
+
+// configureTmuxSession applies nkt's own defaults to the session
+// ensureTmuxSession has just created. Every call is best-effort: a tmux too
+// old for one of these options must still yield a working terminal, just
+// without that comfort.
+//
+// Only ever called right after creating the session, never on attach, so an
+// operator's later change (the toolbar's mouse toggle, or anything typed
+// inside the session) is not silently reverted on the next reconnect.
+func (s *Server) configureTmuxSession(ctx context.Context) {
+	// Without this tmux ignores the wheel entirely, and since it runs on the
+	// alternate screen the terminal has no scrollback of its own to fall back
+	// on — the wheel does nothing at all, which is exactly what it looked
+	// like. Scoped with -t: the operator's own sessions keep their settings.
+	_, _ = s.runTmux(ctx, "set-option", "-t", tmuxSessionName, "mouse", "on")
+
+	// set-clipboard is a *server* option in tmux, so unlike the two beside it
+	// this one does reach the operator's other sessions on the same tmux
+	// server. It is set anyway because it is what makes copying inside tmux
+	// reach the real clipboard: with "external" (tmux's default) tmux only
+	// passes through OSC 52 written by programs running inside it and never
+	// emits its own, so a copy-mode selection went to a tmux buffer and no
+	// further. The terminal on the other end already turns OSC 52 into a
+	// clipboard write (see usePty's own handler); this is the half that was
+	// missing.
+	_, _ = s.runTmux(ctx, "set-option", "-s", "set-clipboard", "on")
+
+	// history-limit only applies to windows created *after* it is set — the
+	// session's own first window was already created with tmux's 2000-line
+	// default and no later set-option changes it (verified on tmux 3.5a).
+	// Since nothing has run in that window yet, the fix is to open a second
+	// one under the new limit and drop the original: identified by window id
+	// rather than index 0, because a ~/.tmux.conf with base-index 1 would
+	// make that index wrong.
+	if _, err := s.runTmux(ctx, "set-option", "-t", tmuxSessionName, "history-limit", tmuxHistoryLimit); err != nil {
+		return
+	}
+	firstWindow, err := s.runTmux(ctx, "list-windows", "-t", tmuxSessionName, "-F", "#{window_id}")
+	if err != nil || strings.Contains(firstWindow, "\n") {
+		// More than one window means this is not the fresh session this
+		// function is documented to run on — leave it alone.
+		return
+	}
+	if _, err := s.runTmux(ctx, "new-window", "-t", tmuxSessionName); err != nil {
+		return
+	}
+	// Only now that the replacement exists is killing the original safe:
+	// killing the last window would take the session with it.
+	if _, err := s.runTmux(ctx, "kill-window", "-t", firstWindow); err != nil {
+		return
+	}
+	// Renumber so the surviving window is 0 again rather than 1 — cosmetic,
+	// but the window index is what Ctrl+B 0…9 selects.
+	_, _ = s.runTmux(ctx, "move-window", "-r", "-t", tmuxSessionName)
 }
 
 // tmuxMouseState reports whether the nkt session currently has mouse mode
