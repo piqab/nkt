@@ -56,6 +56,11 @@ func (m *Manager) versionCheckLoop(ctx context.Context) {
 // automatically.
 type githubLatestRelease struct {
 	TagName string `json:"tag_name"`
+	// Body is the release description — built from WHATSNEW.md by
+	// .github/workflows/release.yml. It is the only way "О системе" can say
+	// what a version brings *before* it is installed: the notes shipped
+	// inside the running binary describe the version already running.
+	Body string `json:"body"`
 }
 
 // checkLatestVersion asks GitHub's public, unauthenticated Releases API for
@@ -71,7 +76,7 @@ func (m *Manager) checkLatestVersion(ctx context.Context) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/releases/latest", m.cfg.HubReleaseRepo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		m.recordVersionCheck("", err)
+		m.recordVersionCheck("", "", err)
 		return
 	}
 	// GitHub's REST API rejects requests with no Accept header on some
@@ -81,29 +86,50 @@ func (m *Manager) checkLatestVersion(ctx context.Context) {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		m.recordVersionCheck("", err)
+		m.recordVersionCheck("", "", err)
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		m.recordVersionCheck("", fmt.Errorf("GitHub API вернул код %d", resp.StatusCode))
+		m.recordVersionCheck("", "", fmt.Errorf("GitHub API вернул код %d", resp.StatusCode))
 		return
 	}
 
 	var rel githubLatestRelease
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
-		m.recordVersionCheck("", err)
+		m.recordVersionCheck("", "", err)
 		return
 	}
 	latest := strings.TrimPrefix(strings.TrimSpace(rel.TagName), "v")
 	if latest == "" {
-		m.recordVersionCheck("", fmt.Errorf("пустой tag_name в ответе GitHub"))
+		m.recordVersionCheck("", "", fmt.Errorf("пустой tag_name в ответе GitHub"))
 		return
 	}
-	m.recordVersionCheck(latest, nil)
+	m.recordVersionCheck(latest, cleanReleaseNotes(rel.Body), nil)
 }
 
-func (m *Manager) recordVersionCheck(latest string, err error) {
+// maxReleaseNotes caps what is kept from a release body. Nothing this
+// project publishes comes close, but the text is written on GitHub's side
+// and ends up in every /hub/version response — a runaway body should cost a
+// truncated panel, not the memory of every hub polling it.
+const maxReleaseNotes = 16 << 10
+
+// cleanReleaseNotes normalises a GitHub release body for display. The UI
+// renders it as plain text (no markdown renderer, no HTML), so the only
+// work here is line endings, trimming and the size cap.
+func cleanReleaseNotes(body string) string {
+	notes := strings.ReplaceAll(body, "\r\n", "\n")
+	notes = strings.TrimSpace(notes)
+	if len(notes) > maxReleaseNotes {
+		// Cut on a rune boundary: the text is Russian, and half a rune would
+		// reach the UI as a replacement character.
+		notes = strings.ToValidUTF8(notes[:maxReleaseNotes], "")
+		notes = strings.TrimSpace(notes) + "\n…"
+	}
+	return notes
+}
+
+func (m *Manager) recordVersionCheck(latest, notes string, err error) {
 	m.versionMu.Lock()
 	defer m.versionMu.Unlock()
 	m.versionCheckedAt = time.Now()
@@ -112,6 +138,7 @@ func (m *Manager) recordVersionCheck(latest string, err error) {
 		return
 	}
 	m.latestVersion = latest
+	m.latestNotes = notes
 	m.versionCheckErr = ""
 }
 
@@ -124,6 +151,11 @@ type VersionInfo struct {
 	UpdateAvailable bool
 	CheckedAt       time.Time
 	CheckError      string
+	// Notes is the latest release's description — shown by "О системе" when
+	// UpdateAvailable, so an operator reads what an update brings before
+	// deciding to apply it. Empty when the check has never succeeded, or
+	// when the release itself carries no description.
+	Notes string
 	// Updatable reports whether applyHubUpdate has any real way to install
 	// a downloaded binary back onto this machine at all — false for a
 	// Docker/Kubernetes-deployed hub (no writable, persistent binary path;
@@ -139,6 +171,7 @@ type VersionInfo struct {
 func (m *Manager) VersionStatus() VersionInfo {
 	m.versionMu.Lock()
 	latest, checkedAt, checkErr := m.latestVersion, m.versionCheckedAt, m.versionCheckErr
+	notes := m.latestNotes
 	m.versionMu.Unlock()
 
 	return VersionInfo{
@@ -147,6 +180,7 @@ func (m *Manager) VersionStatus() VersionInfo {
 		UpdateAvailable: latest != "" && isNewerVersion(latest, m.version),
 		CheckedAt:       checkedAt,
 		CheckError:      checkErr,
+		Notes:           notes,
 		Updatable:       hubSelfUpdateSupported(),
 	}
 }

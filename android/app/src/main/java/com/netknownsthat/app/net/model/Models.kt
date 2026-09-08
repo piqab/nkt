@@ -83,6 +83,10 @@ data class HubVersionInfo(
     val updatable: Boolean = false,
     @SerialName("checked_at") val checkedAt: String? = null,
     @SerialName("check_error") val checkError: String? = null,
+    /** Описание последнего релиза с GitHub — что несёт версия, которой
+     * здесь ещё нет. Present only when a check has succeeded and the
+     * release carries a body. */
+    val notes: String? = null,
 )
 
 /**

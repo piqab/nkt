@@ -23,6 +23,9 @@ export interface HubVersionInfo {
   updatable: boolean
   checked_at?: string
   check_error?: string
+  /** Описание последнего релиза с GitHub (WHATSNEW.md через release.yml) —
+   * единственный способ узнать, что несёт новая версия, до её установки. */
+  notes?: string
 }
 
 /** GET /hub/vulndb's shape (internal/hub/handlers.go's vulnDBInfoJSON). */

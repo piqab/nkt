@@ -59,7 +59,8 @@
     "vulnDBReady": "Ready",
     "vulnDBNotReady": "Not downloaded yet",
     "vulnDBRefreshing": "Refreshing…",
-    "vulnDBRefreshNow": "Refresh now"
+    "vulnDBRefreshNow": "Refresh now",
+    "whatsNew": "What's new in {{version}}"
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",

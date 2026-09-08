@@ -3,8 +3,10 @@ package hub
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestIsNewerVersion(t *testing.T) {
@@ -48,8 +50,11 @@ func TestVersionStatusReflectsRecordedCheck(t *testing.T) {
 		t.Errorf("Current = %q, want %q", status.Current, "1.8.41")
 	}
 
-	m.recordVersionCheck("1.8.42", nil)
+	m.recordVersionCheck("1.8.42", "## v1.8.42\n- новый раздел", nil)
 	status = m.VersionStatus()
+	if status.Notes != "## v1.8.42\n- новый раздел" {
+		t.Errorf("Notes = %q, want the recorded release description", status.Notes)
+	}
 	if !status.UpdateAvailable {
 		t.Error("UpdateAvailable = false after recording a newer latest version")
 	}
@@ -66,8 +71,11 @@ func TestVersionStatusReflectsRecordedCheck(t *testing.T) {
 	// A subsequent failed check must not throw away the last known-good
 	// latest version — only the error/timestamp should change, exactly
 	// like recordUnreachable's own doc comment for hostOverview.
-	m.recordVersionCheck("", errNetworkDown)
+	m.recordVersionCheck("", "", errNetworkDown)
 	status = m.VersionStatus()
+	if status.Notes == "" {
+		t.Error("Notes cleared by a failed check — the last known-good description must survive it, like Latest")
+	}
 	if status.Latest != "1.8.42" {
 		t.Errorf("Latest = %q after a failed check, want the last known-good %q preserved", status.Latest, "1.8.42")
 	}
@@ -94,7 +102,7 @@ func TestApplyUpdateRefusesWithoutAKnownNewerVersion(t *testing.T) {
 	// Even with a check recorded, refuse when it isn't actually newer —
 	// applying it would be a no-op at best, a downgrade at worst if the
 	// hub is ahead of GitHub's latest tag (a dev build).
-	m.recordVersionCheck("1.8.41", nil)
+	m.recordVersionCheck("1.8.41", "", nil)
 	if err := m.ApplyUpdate(context.Background()); err == nil {
 		t.Fatal("ApplyUpdate accepted when latest == current")
 	}
@@ -127,4 +135,36 @@ func TestCheckLatestVersionLive(t *testing.T) {
 		t.Errorf("UpdateAvailable = false with Current=0.0.0 and Latest=%q", status.Latest)
 	}
 	t.Logf("latest release: v%s", status.Latest)
+	// The "что нового" panel has nothing to show if GitHub's body never
+	// makes it through the decoder — the one thing only a live response can
+	// prove, since every release this project publishes carries one.
+	if status.Notes == "" {
+		t.Error("Notes empty — the release description did not survive decoding")
+	}
+	t.Logf("release notes: %.200s", status.Notes)
+}
+
+// cleanReleaseNotes runs on text written outside this repository (a release
+// body can be edited on GitHub), so the cap has to hold on multi-byte text:
+// the notes are Russian, and a cut mid-rune would surface as a replacement
+// character in the UI.
+func TestCleanReleaseNotes(t *testing.T) {
+	if got := cleanReleaseNotes("  ## v1.9.0\r\n- строка\r\n\n"); got != "## v1.9.0\n- строка" {
+		t.Errorf("cleanReleaseNotes = %q, want CRLF normalised and trimmed", got)
+	}
+	if got := cleanReleaseNotes(""); got != "" {
+		t.Errorf("cleanReleaseNotes(\"\") = %q, want empty", got)
+	}
+
+	long := strings.Repeat("я", maxReleaseNotes) // two bytes per rune: well over the cap
+	got := cleanReleaseNotes(long)
+	if len(got) > maxReleaseNotes+len("\n…") {
+		t.Errorf("len = %d, want at most the cap plus the ellipsis", len(got))
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Error("truncated notes must say so")
+	}
+	if !utf8.ValidString(got) {
+		t.Error("truncation left invalid UTF-8 — a cut mid-rune")
+	}
 }

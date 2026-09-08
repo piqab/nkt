@@ -133,7 +133,13 @@ jobs:
       # предыдущего тега для диапазона коммитов gh release create делает,
       # шеллясь в git — без .git в рабочей директории он падает с "not a
       # git repository", даже с валидным GH_TOKEN.
+      #
+      # fetch-depth: 0 — за тегами: описание релиза собирается из разделов
+      # WHATSNEW.md, накопившихся с предыдущего тега, а его надо чем-то
+      # определить. При depth 1 в клоне нет ни истории, ни тегов.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           pattern: nkt-linux-*
@@ -144,10 +150,39 @@ jobs:
         run: |
           chmod +x nkt-linux-*
           sha256sum nkt-linux-* > SHA256SUMS
+      # Описание релиза — то, что хаб показывает в «О системе», когда видит
+      # новую версию (internal/hub/versioncheck.go читает body этого релиза).
+      # Поэтому оно должно быть написанным текстом из WHATSNEW.md, а не
+      # автосписком коммитов; автосписок остаётся запасным вариантом, чтобы
+      # забытый раздел не обернулся релизом с пустым описанием.
+      - name: Описание релиза из WHATSNEW.md
+        id: notes
+        run: |
+          # Предыдущий тег — самый старший из тех, что строго младше
+          # выпускаемого. "|| true": без единого прошлого тега grep выходит с
+          # кодом 1, и под bash -e это уронило бы шаг вместо честного "нет".
+          prev="$(git tag --list 'v*.*.*' --sort=-v:refname \
+            | awk -v cur="$GITHUB_REF_NAME" 'cur != $0' \
+            | head -1 || true)"
+          echo "предыдущий тег: ${prev:-нет}"
+          if sh scripts/release-notes.sh "$GITHUB_REF_NAME" "$prev" > notes.md; then
+            echo "found=1" >> "$GITHUB_OUTPUT"
+            cat notes.md
+          else
+            echo "found=0" >> "$GITHUB_OUTPUT"
+            echo "::warning::в WHATSNEW.md нет раздела для $GITHUB_REF_NAME — описание соберётся из коммитов"
+          fi
       - name: Создать GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          NOTES_FOUND: ${{ steps.notes.outputs.found }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --title "$GITHUB_REF_NAME" \
-            --generate-notes
+          if [ "$NOTES_FOUND" = "1" ]; then
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "$GITHUB_REF_NAME" \
+              --notes-file notes.md
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi
