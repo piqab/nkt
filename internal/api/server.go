@@ -146,6 +146,8 @@ func (s *Server) Handler() http.Handler {
 			// to a hub user until fetched from whichever host's own /api
 			// this request actually reaches — see hostScope in api.ts).
 			r.Get("/terminal/config", s.handleTerminalConfig)
+			r.Get("/terminal/tmux/mouse", s.handleTmuxMouse)
+			r.Post("/terminal/tmux/mouse", s.handleTmuxMouse)
 		})
 
 		r.Group(func(r chi.Router) {

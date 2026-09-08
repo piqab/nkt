@@ -153,3 +153,23 @@ func TestEnsureTmuxSession(t *testing.T) {
 		t.Fatalf("ensureTmuxSession (already exists): %v", err)
 	}
 }
+
+// Output shapes captured from a real tmux 3.5a: `tmux show-options -t nkt
+// mouse` prints "mouse on"/"mouse off", and nothing at all when the option
+// was never set on that session.
+func TestParseTmuxMouseOption(t *testing.T) {
+	cases := map[string]bool{
+		"mouse on":  true,
+		"mouse off": false,
+		"":          false,
+		"mouse":     false,
+		// Guards the naive "ends with on" reading: a value that merely
+		// contains the word must not count as enabled.
+		"mouse off # on": false,
+	}
+	for out, want := range cases {
+		if got := parseTmuxMouseOption(out); got != want {
+			t.Errorf("parseTmuxMouseOption(%q) = %v, want %v", out, got, want)
+		}
+	}
+}

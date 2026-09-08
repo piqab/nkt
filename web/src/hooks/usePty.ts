@@ -258,15 +258,26 @@ export function usePty(wsUrl: string, idleTimeoutMs?: number) {
           term.open(container)
           fit.fit()
 
-          // A real terminal emulator owns right-click entirely — tmux mode
-          // (mouse reporting on) draws its own context menu right inside
-          // the buffer in response to the same click, so the browser's own
-          // native menu appearing over it read as two menus stacked on top
-          // of each other. Assigning .oncontextmenu (not addEventListener)
-          // is idempotent across repeated openAndConnect calls on the same
-          // long-lived container — reassigning just replaces the one
-          // handler slot rather than accumulating listeners.
-          container.oncontextmenu = (e) => e.preventDefault()
+          // Right-click follows the xterm convention: it belongs to the
+          // program running in the PTY whenever that program has asked for
+          // the mouse (nvim's own popup menu, tmux's pane menu — they draw
+          // it inside the buffer in response to this very click, and the
+          // browser's native menu on top of it read as two menus stacked),
+          // and holding Shift bypasses that to reach the browser's menu —
+          // the same escape hatch a real xterm gives, and the only way to
+          // get at Copy/Paste while an application holds the mouse. With no
+          // program capturing the mouse (a plain shell) nothing would
+          // consume the click, so the native menu is left alone.
+          //
+          // Assigning .oncontextmenu (not addEventListener) is idempotent
+          // across repeated openAndConnect calls on the same long-lived
+          // container — reassigning replaces the one handler slot rather
+          // than accumulating listeners.
+          container.oncontextmenu = (e) => {
+            if (e.shiftKey) return
+            if (term.modes.mouseTrackingMode === 'none') return
+            e.preventDefault()
+          }
 
           // OSC 52 ("set clipboard") is how a program running inside the
           // PTY — tmux copy-mode, vim/nvim's own "y"/its mouse-menu Copy,

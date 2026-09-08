@@ -14,6 +14,7 @@ export function PtyToolbar({
   onFontSize,
   onSearch,
   getIdleRemainingMs,
+  tmuxMouse,
 }: {
   onCopy: () => void
   onClear: () => void
@@ -23,6 +24,10 @@ export function PtyToolbar({
   // the countdown is not shown from the shorter-lived update/install
   // modals) — omitted entirely, IdleCountdown renders nothing.
   getIdleRemainingMs?: () => number | null
+  // Only Terminal.tsx in tmux mode passes this: mouse mode is a property of
+  // the tmux session on the host, so there is nothing to toggle for a plain
+  // shell or for the short-lived install dialogs.
+  tmuxMouse?: { on: boolean; busy: boolean; toggle: () => void }
 }) {
   const { t } = useTranslation()
   const [query, setQuery] = useState('')
@@ -53,6 +58,14 @@ export function PtyToolbar({
         onPressEnter={(e) => onSearch(query, e.shiftKey)}
         style={{ maxWidth: '14rem' }}
       />
+      {tmuxMouse && (
+        <Tooltip title={t('ptyToolbar.tmuxMouseHint')}>
+          <Button size="small" loading={tmuxMouse.busy} onClick={tmuxMouse.toggle}>
+            {tmuxMouse.on ? t('ptyToolbar.tmuxMouseOn') : t('ptyToolbar.tmuxMouseOff')}
+          </Button>
+        </Tooltip>
+      )}
+      <span className="small muted">{t('ptyToolbar.shiftHint')}</span>
       {getIdleRemainingMs && <IdleCountdown getIdleRemainingMs={getIdleRemainingMs} />}
     </div>
   )
