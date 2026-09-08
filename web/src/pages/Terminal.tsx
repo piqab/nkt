@@ -36,7 +36,15 @@ export default function TerminalPage({ me }: { me: Me }) {
   // mode opened it.
   const [tmuxMode, setTmuxMode] = useState(false)
   const [pendingStart, setPendingStart] = useState(false)
+  // Mouse mode lives on the tmux session on the host, not here — read back
+  // after connecting rather than assumed, since the session outlives this
+  // page (and this process) and the operator can change the option from
+  // inside it. null = not known yet / no session, and the toggle stays out
+  // of the toolbar entirely.
+  const [tmuxMouse, setTmuxMouse] = useState<boolean | null>(null)
+  const [tmuxMouseBusy, setTmuxMouseBusy] = useState(false)
   const wsUrl = wsURL(tmuxMode ? '/terminal/ws?tmux=1' : '/terminal/ws')
+
 
   // Static for the page's lifetime (host config, not something that
   // changes mid-session) — fetched once rather than polled, unlike the
@@ -54,6 +62,47 @@ export default function TerminalPage({ me }: { me: Me }) {
   // comment) while the user was on another page. ws.onopen's own term.focus()
   // only ever fires once, at initial connect, so nothing else does this for
   // a session that was already live before the page was hidden.
+  // tmux ignores the wheel unless mouse mode is on, and since it runs on the
+  // alternate screen there is no terminal scrollback to fall back on — so
+  // the session nkt creates turns it on (see ensureTmuxSession). The toggle
+  // exists because that trade is real: with mouse on, dragging selects
+  // inside tmux instead of selecting browser text (Shift still forces the
+  // browser's own selection).
+  useEffect(() => {
+    if (!tmuxMode) {
+      setTmuxMouse(null)
+      return
+    }
+    let cancelled = false
+    api<{ session: boolean; mouse: boolean }>('/terminal/tmux/mouse')
+      .then((res) => {
+        if (!cancelled) setTmuxMouse(res.session ? res.mouse : null)
+      })
+      .catch(() => {
+        if (!cancelled) setTmuxMouse(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tmuxMode, status])
+
+  async function toggleTmuxMouse() {
+    if (tmuxMouse === null) return
+    setTmuxMouseBusy(true)
+    try {
+      const res = await api<{ mouse: boolean }>('/terminal/tmux/mouse', {
+        method: 'POST',
+        body: { mouse: !tmuxMouse },
+      })
+      setTmuxMouse(res.mouse)
+    } catch {
+      // The session may have been killed from inside — the next read (on
+      // reconnect) settles it; nothing useful to say here.
+    } finally {
+      setTmuxMouseBusy(false)
+    }
+  }
+
   const isActive = isPopout || location.pathname === '/terminal'
   useEffect(() => {
     if (isActive && status === 'connected') focus()
@@ -308,6 +357,11 @@ export default function TerminalPage({ me }: { me: Me }) {
                 onFontSize={changeFontSize}
                 onSearch={search}
                 getIdleRemainingMs={getIdleRemainingMs}
+                tmuxMouse={
+                  tmuxMode && tmuxMouse !== null
+                    ? { on: tmuxMouse, busy: tmuxMouseBusy, toggle: toggleTmuxMouse }
+                    : undefined
+                }
               />
             )}
             {/* The xterm container stays mounted and laid out (never
@@ -412,6 +466,10 @@ const TMUX_HINTS: { titleKey: string; rows: [string, string][] }[] = [
       ['Ctrl+b d', 'terminal.detachSession'],
       ['Ctrl+b [', 'terminal.copyMode'],
       ['Ctrl+b ]', 'terminal.paste'],
+      // Прокрутка колесом работает только при включённой мыши (её ставит
+      // сама сессия nkt, см. ensureTmuxSession) — без неё историю листает
+      // copy-mode с клавиатуры, поэтому обе строки стоят рядом.
+      ['⇅', 'terminal.wheelScroll'],
     ],
   },
 ]

@@ -153,7 +153,74 @@ func (s *Server) ensureTmuxSession(ctx context.Context) error {
 		}
 		return err
 	}
+	// Mouse on, but only on the session this call just created: without it
+	// tmux ignores the wheel entirely, and since tmux runs on the alternate
+	// screen the terminal has no scrollback of its own to fall back on —
+	// the wheel does nothing at all, which is exactly what it looked like.
+	// Set here rather than on every attach so a later toggle (see
+	// handleTmuxMouse) is not silently undone on the next reconnect, and
+	// scoped with -t so nothing touches the operator's own tmux sessions or
+	// their ~/.tmux.conf. Failure is not fatal: an ancient tmux without the
+	// option should still give a working terminal, just without the wheel.
+	_, _ = s.runTmux(ctx, "set-option", "-t", tmuxSessionName, "mouse", "on")
 	return nil
+}
+
+// tmuxMouseState reports whether the nkt session currently has mouse mode
+// on. Read from tmux itself rather than remembered here: the session
+// outlives this process (that is the point of tmux mode), and the operator
+// can change the option from inside the session at any time.
+func (s *Server) tmuxMouseState(ctx context.Context) (bool, error) {
+	out, err := s.runTmux(ctx, "show-options", "-t", tmuxSessionName, "mouse")
+	if err != nil {
+		return false, err
+	}
+	return parseTmuxMouseOption(out), nil
+}
+
+// parseTmuxMouseOption reads tmux's `show-options mouse` output: "mouse on"
+// or "mouse off", and nothing at all when the option was never set. A plain
+// HasSuffix(out, "on") would be wrong the moment tmux prints anything else
+// after the value, so the value is taken as its own field.
+func parseTmuxMouseOption(out string) bool {
+	fields := strings.Fields(out)
+	return len(fields) >= 2 && fields[1] == "on"
+}
+
+// handleTmuxMouse reads or flips mouse mode on the nkt tmux session — the
+// toolbar's own toggle. With mouse on the wheel scrolls tmux's history; with
+// it off the mouse belongs to the browser again, so text selection works
+// without holding Shift. Both are legitimate preferences, hence a switch
+// rather than a hardcoded choice.
+func (s *Server) handleTmuxMouse(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		on, err := s.tmuxMouseState(r.Context())
+		if err != nil {
+			// No session yet is not an error worth failing on — the toggle
+			// simply has nothing to act on until one is opened.
+			writeJSON(w, http.StatusOK, map[string]any{"session": false, "mouse": false})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"session": true, "mouse": on})
+		return
+	}
+
+	var req struct {
+		Mouse bool `json:"mouse"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	value := "off"
+	if req.Mouse {
+		value = "on"
+	}
+	if _, err := s.runTmux(r.Context(), "set-option", "-t", tmuxSessionName, "mouse", value); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"session": true, "mouse": req.Mouse})
 }
 
 // loginShell picks the shell handleTerminalWS runs: bash if it exists —

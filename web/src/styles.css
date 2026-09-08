@@ -527,3 +527,26 @@ pre.diff .hunk { color: var(--text-muted); }
   .nav { flex-direction: row; flex-wrap: wrap; }
   .content { padding: 1rem; }
 }
+
+/* Полоса прокрутки терминала. xterm.js держит скроллбек в собственном
+   вьюпорте, и с оверлейными полосами прокрутки (по умолчанию в Chrome на
+   тёмном фоне) её попросту не видно — при том что прокручивать есть что.
+   Задаём явную полосу поверх тёмной темы терминала; в альтернативном
+   экране (tmux, nvim, btop) прокручивать нечего по определению, там
+   историю листает само приложение. */
+.xterm-viewport {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(232, 230, 225, 0.35) transparent;
+}
+
+.xterm-viewport::-webkit-scrollbar { width: 10px; }
+.xterm-viewport::-webkit-scrollbar-track { background: transparent; }
+
+.xterm-viewport::-webkit-scrollbar-thumb {
+  background: rgba(232, 230, 225, 0.28);
+  border-radius: 5px;
+}
+
+.xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: rgba(232, 230, 225, 0.45);
+}

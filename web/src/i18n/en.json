@@ -125,7 +125,11 @@
     "increaseFont": "increase font size",
     "searchPlaceholder": "search output… (Enter / Shift+Enter)",
     "idleCountdown": "session closes in {{time}}",
-    "idleCountdownTooltip": "Time until the session auto-closes from inactivity — resets on any input or output"
+    "idleCountdownTooltip": "Time until the session auto-closes from inactivity — resets on any input or output",
+    "tmuxMouseOn": "tmux mouse: on",
+    "tmuxMouseOff": "tmux mouse: off",
+    "tmuxMouseHint": "With the mouse on, the wheel scrolls tmux history and selection goes to tmux — hold Shift to select in the browser",
+    "shiftHint": "Shift — browser selection and menu"
   },
   "packageInstall": {
     "title": "Installing {{packageName}}",
@@ -899,7 +903,8 @@
     "closePane": "close current pane",
     "detachSession": "detach (session keeps running)",
     "copyMode": "scroll/copy mode (q to exit)",
-    "paste": "paste copied text"
+    "paste": "paste copied text",
+    "wheelScroll": "mouse wheel — scroll history (requires tmux mouse on)"
   },
   "commonPackages": {
     "title": "Quick install",
