@@ -773,7 +773,16 @@
     "validateAndCreate": "Проверить и создать",
     "notCreated": "Файл не был создан — исправьте содержимое и попробуйте снова.",
     "commentLabel": "Комментарий",
-    "commentPlaceholder": "зачем создаём"
+    "commentPlaceholder": "зачем создаём",
+    "categoryAll": "Все категории",
+    "categoryUnused": "не подключены",
+    "notInUse": "не подключён",
+    "sshGuardTitle": "Правка конфигурации sshd",
+    "sshGuardOk": "Резервный канал есть: {{detail}}",
+    "sshGuardBlocked": "Резервного канала нет: {{detail}}",
+    "sshGuardProbeOk": "sshd отвечает на новое соединение (порт {{port}}, {{banner}}). После сохранения проверка повторится, и если демон перестанет принимать соединения — правка откатится сама.",
+    "sshGuardProbeFail": "sshd сейчас не отвечает на новое соединение (порт {{port}}): {{error}}",
+    "sshGuardForce": "У меня есть доступ к консоли хоста — разрешить правку"
   },
   "charts": {
     "seconds": "{{value}} с",

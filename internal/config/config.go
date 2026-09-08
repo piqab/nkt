@@ -46,6 +46,14 @@ type Config struct {
 	// underRoot(path, ...) check ConfigManager.serviceForPath already does
 	// for the other services' own roots.
 	Fail2banRoot     string
+	// Корни новых категорий конфигураций. Отдельными полями, а не
+	// константами, по той же причине, что и корни nginx/haproxy: в
+	// fixtures-режиме и в тестах дерево лежит в другом месте.
+	SystemdUnitRoot string
+	NetplanRoot     string
+	SSHRoot         string
+	SysctlRoot      string
+	CronRoot        string
 	ComposeFiles     []string
 	NginxAccessLogs  []string
 	HAProxyAccessLog []string
@@ -301,6 +309,11 @@ func Load() (*Config, error) {
 		CaddyRoot:        envStr("NKT_CADDY_ROOT", "/etc/caddy"),
 		CaddyMainConfig:  envStr("NKT_CADDY_MAIN_CONFIG", "/etc/caddy/Caddyfile"),
 		Fail2banRoot:     envStr("NKT_FAIL2BAN_ROOT", "/etc/fail2ban"),
+		SystemdUnitRoot:  envStr("NKT_SYSTEMD_UNIT_ROOT", "/etc/systemd/system"),
+		NetplanRoot:      envStr("NKT_NETPLAN_ROOT", "/etc/netplan"),
+		SSHRoot:          envStr("NKT_SSH_ROOT", "/etc/ssh"),
+		SysctlRoot:       envStr("NKT_SYSCTL_ROOT", "/etc/sysctl.d"),
+		CronRoot:         envStr("NKT_CRON_ROOT", "/etc/cron.d"),
 		ComposeFiles:     envList("NKT_COMPOSE_FILES", "/srv/docker/docker-compose.yml,/opt/stacks/docker-compose.yml"),
 		NginxAccessLogs:  envList("NKT_NGINX_ACCESS_LOGS", "/var/log/nginx/access.log"),
 		HAProxyAccessLog: envList("NKT_HAPROXY_ACCESS_LOGS", "/var/log/haproxy.log"),

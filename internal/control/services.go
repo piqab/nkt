@@ -164,6 +164,35 @@ func (s *ServiceManager) Validate(ctx context.Context, service string, paths ...
 			return collect.CommandResult{}, false
 		}
 		res, err = s.c.Run(ctx, "virt-xml-validate", path, "domain")
+	case model.ServiceSSH:
+		// sshd -t читает основной конфиг целиком, включая sshd_config.d —
+		// то есть проверяет именно ту картину, которую увидит демон, а не
+		// один файл в отрыве от остальных. Для этой категории проверка
+		// обязательна: сломанный sshd_config стоит доступа к хосту.
+		res, err = s.c.Run(ctx, "sshd", "-t")
+	case model.ServiceSystemd:
+		path := ""
+		if len(paths) > 0 {
+			path = paths[0]
+		}
+		if path == "" {
+			return collect.CommandResult{}, false
+		}
+		res, err = s.c.Run(ctx, "systemd-analyze", "verify", path)
+	case model.ServiceNetwork:
+		path := ""
+		if len(paths) > 0 {
+			path = paths[0]
+		}
+		// netplan generate — единственная нераспространяющаяся проверка
+		// netplan: она разбирает YAML и пишет файлы бэкенда в /run, но сама
+		// по себе ничего не применяет (это делает netplan apply). Для
+		// /etc/hosts и resolv.conf проверять нечего — формата, который
+		// можно было бы сломать синтаксически, там нет.
+		if !strings.HasPrefix(path, s.cfg.NetplanRoot) {
+			return collect.CommandResult{}, false
+		}
+		res, err = s.c.Run(ctx, "netplan", "generate")
 	default:
 		return collect.CommandResult{}, false
 	}

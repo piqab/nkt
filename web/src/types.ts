@@ -397,6 +397,9 @@ export interface ManagedFile {
   readable: boolean
   note?: string
   sites?: SiteName[]
+  /** Файл участвует в конфигурации службы — до него дотягивается
+   * разбор через include. false у созданных, но не подключённых. */
+  in_use: boolean
 }
 
 export interface FileContent extends ManagedFile {
