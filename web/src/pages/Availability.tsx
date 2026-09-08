@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Button, Select, Table, type TableColumnsType } from 'antd'
+import { Button, Modal, Select, Table, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, tzOffsetMinutes, useApi } from '../api'
 import type { Bucket, HeatCell, Outage, TargetStatus } from '../types'
@@ -111,8 +111,17 @@ export default function Availability() {
   const history = useApi<{ target: TargetStatus; buckets: Bucket[] }>(
     selected ? `/monitor/targets/${selected}/history${qs({ since: range, granularity: 'hour', tz })}` : null,
   )
+  // Две отдельные карты: на странице — по всем ресурсам, в модальном окне —
+  // по выбранному. Раньше это была одна карта, которая перестраивалась при
+  // клике по строке; теперь клик открывает окно, и менять под ним общую
+  // картину значило бы терять то, на что человек смотрел до клика.
   const heatmap = useApi<{ cells: HeatCell[] }>(
-    `/monitor/heatmap${qs({ since: range === '24h' ? '7d' : range, tz, target: selected ?? undefined })}`,
+    `/monitor/heatmap${qs({ since: range === '24h' ? '7d' : range, tz })}`,
+  )
+  const targetHeatmap = useApi<{ cells: HeatCell[] }>(
+    selected
+      ? `/monitor/heatmap${qs({ since: range === '24h' ? '7d' : range, tz, target: selected })}`
+      : null,
   )
   const outages = useApi<{ outages: Outage[] }>(`/monitor/outages${qs({ since: range, limit: 40 })}`)
 
@@ -145,15 +154,18 @@ export default function Availability() {
 
   // The heatmap encodes downtime, not uptime: the eye is drawn to dark cells,
   // and the question being asked is "когда было недоступно".
-  const downtimeCells = useMemo(
-    () =>
-      (heatmap.data?.cells ?? []).map((c) => ({
-        dow: c.dow,
-        hour: c.hour,
-        value: Math.max(0, 100 - c.uptime),
-        total: c.total,
-      })),
-    [heatmap.data],
+  const toDowntimeCells = (cells: HeatCell[] | undefined) =>
+    (cells ?? []).map((c) => ({
+      dow: c.dow,
+      hour: c.hour,
+      value: Math.max(0, 100 - c.uptime),
+      total: c.total,
+    }))
+
+  const downtimeCells = useMemo(() => toDowntimeCells(heatmap.data?.cells), [heatmap.data])
+  const targetDowntimeCells = useMemo(
+    () => toDowntimeCells(targetHeatmap.data?.cells),
+    [targetHeatmap.data],
   )
 
   async function checkNow(id: number) {
@@ -212,18 +224,9 @@ export default function Availability() {
       <Card
         title={
           <>
-            {selectedTarget
-              ? t('availability.downtimeByHourFor', { label: selectedTarget.label })
-              : t('availability.downtimeByHourAll')}
+            {t('availability.downtimeByHourAll')}
             <InfoHint>{t('availability.heatmapHint')}</InfoHint>
           </>
-        }
-        actions={
-          selected ? (
-            <Button type="link" onClick={() => setSelected(null)}>
-              {t('availability.showAllTargets')}
-            </Button>
-          ) : null
         }
       >
         {heatmap.loading && !heatmap.data ? (
@@ -238,54 +241,123 @@ export default function Availability() {
         )}
       </Card>
 
-      {selectedTarget && (
-        <Card
-          title={t('availability.availabilityAndLatencyFor', { label: selectedTarget.label })}
-          subtitle={`${selectedTarget.kind}://${selectedTarget.host}:${selectedTarget.port}${selectedTarget.path ?? ''}`}
-        >
-          {history.loading && !history.data ? (
-            <Loading what={t('availability.history')} />
-          ) : (
-            <>
-              <LineChart
-                series={[
-                  {
-                    name: t('availability.uptimePercentSeries'),
-                    points: (history.data?.buckets ?? []).map((b) => ({ x: b.bucket, y: b.uptime })),
-                  },
-                ]}
-                yMax={101}
-                formatValue={(n) => `${n.toFixed(0)}%`}
-                formatX={shortTime}
-                area
-              />
-              <div style={{ marginTop: '0.75rem' }}>
-                <LineChart
-                  series={[
-                    {
-                      name: t('availability.avgLatencySeries'),
-                      points: (history.data?.buckets ?? []).map((b) => ({
-                        x: b.bucket,
-                        y: b.avg_latency_ms,
-                      })),
-                    },
-                    {
-                      name: t('availability.maxLatencySeries'),
-                      points: (history.data?.buckets ?? []).map((b) => ({
-                        x: b.bucket,
-                        y: b.max_latency_ms,
-                      })),
-                    },
-                  ]}
-                  formatValue={formatMs}
-                  formatX={shortTime}
-                  yUnit={t('availability.msUnit')}
-                />
+      {/* Клик по строке открывает окно с историей именно этого ресурса.
+          Раньше графики раскрывались карточкой НАД таблицей — то есть выше
+          того места, куда человек только что кликнул, и заметить их можно
+          было только прокрутив страницу обратно вверх. */}
+      <Modal
+        open={selectedTarget !== null}
+        onCancel={() => setSelected(null)}
+        footer={null}
+        width={920}
+        destroyOnClose
+        title={
+          selectedTarget && (
+            <div>
+              <div>{t('availability.availabilityAndLatencyFor', { label: selectedTarget.label })}</div>
+              <div className="small secondary mono">
+                {`${selectedTarget.kind}://${selectedTarget.host}:${selectedTarget.port}${selectedTarget.path ?? ''}`}
               </div>
-            </>
-          )}
-        </Card>
-      )}
+            </div>
+          )
+        }
+      >
+        {selectedTarget && (
+          <>
+            <div className="row" style={{ gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <label>
+                {t('common.period')}
+                <Select
+                  value={range}
+                  onChange={setRange}
+                  options={RANGES.map((r) => ({ value: r.value, label: t(r.labelKey) }))}
+                  style={{ minWidth: '8rem' }}
+                />
+              </label>
+              <Button
+                size="small"
+                disabled={checking === selectedTarget.id}
+                loading={checking === selectedTarget.id}
+                onClick={() => checkNow(selectedTarget.id)}
+              >
+                {t('availability.check')}
+              </Button>
+              <StateBadge
+                state={
+                  selectedTarget.last_ok === undefined
+                    ? t('availability.noData')
+                    : selectedTarget.last_ok
+                      ? 'active'
+                      : 'failed'
+                }
+              />
+              <span className="small secondary">
+                {t('availability.uptime24hShort', { value: selectedTarget.uptime_24h.toFixed(2) })}
+              </span>
+            </div>
+
+            {history.loading && !history.data ? (
+              <Loading what={t('availability.history')} />
+            ) : (
+              <>
+                <div style={{ marginTop: '0.75rem' }}>
+                  <LineChart
+                    series={[
+                      {
+                        name: t('availability.uptimePercentSeries'),
+                        points: (history.data?.buckets ?? []).map((b) => ({ x: b.bucket, y: b.uptime })),
+                      },
+                    ]}
+                    yMax={101}
+                    formatValue={(n) => `${n.toFixed(0)}%`}
+                    formatX={shortTime}
+                    area
+                  />
+                </div>
+                <div style={{ marginTop: '0.75rem' }}>
+                  <LineChart
+                    series={[
+                      {
+                        name: t('availability.avgLatencySeries'),
+                        points: (history.data?.buckets ?? []).map((b) => ({
+                          x: b.bucket,
+                          y: b.avg_latency_ms,
+                        })),
+                      },
+                      {
+                        name: t('availability.maxLatencySeries'),
+                        points: (history.data?.buckets ?? []).map((b) => ({
+                          x: b.bucket,
+                          y: b.max_latency_ms,
+                        })),
+                      },
+                    ]}
+                    formatValue={formatMs}
+                    formatX={shortTime}
+                    yUnit={t('availability.msUnit')}
+                  />
+                </div>
+              </>
+            )}
+
+            <div style={{ marginTop: '1rem' }}>
+              <div className="small muted" style={{ marginBottom: '0.35rem' }}>
+                {t('availability.downtimeByHourFor', { label: selectedTarget.label })}
+              </div>
+              {targetHeatmap.loading && !targetHeatmap.data ? (
+                <Loading what={t('common.schedule')} />
+              ) : (
+                <Heatmap
+                  cells={targetDowntimeCells}
+                  scaleLabel={t('availability.downtimeScale')}
+                  formatValue={(n) => `${n.toFixed(1)}%`}
+                  emptyLabel={t('availability.noChecksThisHour')}
+                />
+              )}
+            </div>
+          </>
+        )}
+      </Modal>
 
       <Card
         title={
@@ -302,7 +374,10 @@ export default function Availability() {
             pagination={false}
             size="small"
             onRow={(tgt) => ({
-              onClick: () => setSelected(tgt.id === selected ? null : tgt.id),
+              // Открыть окно ресурса. Не переключатель: окно закрывается
+              // своим крестиком или Esc, а повторный клик по строке под ним
+              // всё равно невозможен.
+              onClick: () => setSelected(tgt.id),
               style: { cursor: 'pointer', opacity: tgt.enabled ? 1 : 0.5 },
             })}
             columns={targetColumns(t, checking, checkNow, toggle)}
