@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Input, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { Me, PackageUpdate } from '../types'
@@ -92,7 +92,22 @@ export default function Packages({ me }: { me: Me }) {
   const search = useApi<{ results: AptSearchResult[]; truncated: boolean }>(searchPath)
 
   const [installTarget, setInstallTarget] = useState<string | null>(null)
+  // Several search results can be picked and installed in one apt-get: the
+  // package manager resolves the whole selection's dependencies together and
+  // takes the dpkg lock once, which installing them one by one cannot.
+  const [picked, setPicked] = useState<string[]>([])
+  const [batchInstalling, setBatchInstalling] = useState(false)
   const [installOutcome, setInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
+
+  async function handleBatchFinished() {
+    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>(
+      '/system/apt/install/status',
+    ).catch(() => null)
+    setInstallOutcome(fresh?.succeeded ? { ok: true } : { ok: false, exitCode: fresh?.exit_code })
+    setPicked([])
+    await search.reload()
+    await installed.reload()
+  }
 
   async function handleInstallFinished() {
     if (!installTarget) return
@@ -222,6 +237,25 @@ export default function Packages({ me }: { me: Me }) {
                 {t('packages.searchTruncated')}
               </p>
             )}
+            {picked.length > 0 && (
+              <div className="row" style={{ gap: '0.5rem', marginTop: '0.5rem', alignItems: 'center' }}>
+                <Button
+                  type="primary"
+                  size="small"
+                  disabled={!canUse}
+                  onClick={() => {
+                    setInstallOutcome(null)
+                    setBatchInstalling(true)
+                  }}
+                >
+                  {t('packages.installSelected', { count: picked.length })}
+                </Button>
+                <Button size="small" onClick={() => setPicked([])}>
+                  {t('packages.clearSelection')}
+                </Button>
+                <span className="small secondary mono">{picked.join(', ')}</span>
+              </div>
+            )}
             <div className="row" style={{ gap: '0.4rem', marginTop: '0.5rem' }}>
               {search.data.results.length === 0 ? (
                 <p className="small muted">{t('common.noMatch')}</p>
@@ -238,6 +272,19 @@ export default function Packages({ me }: { me: Me }) {
                         borderRadius: 999,
                       }}
                     >
+                      {!p.installed && (
+                        <Checkbox
+                          checked={picked.includes(p.name)}
+                          disabled={!canUse}
+                          onChange={(e) =>
+                            setPicked((prev) =>
+                              e.target.checked
+                                ? [...prev, p.name]
+                                : prev.filter((n) => n !== p.name),
+                            )
+                          }
+                        />
+                      )}
                       <span className="mono">{p.name}</span>
                       {p.installed ? (
                         <Tag color="green" style={{ margin: 0 }}>
@@ -288,6 +335,17 @@ export default function Packages({ me }: { me: Me }) {
           </div>
         )}
       </Card>
+
+      {batchInstalling && (
+        <PackageInstallModal
+          packageName={picked.join(', ')}
+          wsPath={`/system/apt/install/ws${qs({ pkgs: picked.join(',') })}`}
+          onClose={() => setBatchInstalling(false)}
+          onFinished={handleBatchFinished}
+          outcome={installOutcome}
+          action="install"
+        />
+      )}
 
       {installTarget && (
         <PackageInstallModal

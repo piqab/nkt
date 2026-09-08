@@ -41,6 +41,7 @@ type Server struct {
 	lxd       *control.LXDManager
 	libvirt   *control.LibvirtManager
 	logs      *control.LogManager
+	images    *control.ImageManager
 	ui        fs.FS
 	log       *slog.Logger
 	version   string
@@ -78,6 +79,7 @@ type Deps struct {
 	LXD       *control.LXDManager
 	Libvirt   *control.LibvirtManager
 	Logs      *control.LogManager
+	Images    *control.ImageManager
 	UI        fs.FS
 	Log       *slog.Logger
 	// Version is this binary's own version, reported by /api/health so
@@ -91,7 +93,7 @@ func New(d Deps) *Server {
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
-		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs,
+		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images,
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
 	}
@@ -134,6 +136,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/services/{name}/install/ws", s.handleServiceInstallWS)
 			r.Get("/system/packages/install/ws", s.handleCommonPackagesInstallWS)
 			r.Get("/system/packages/remove/ws", s.handleCommonPackagesRemoveWS)
+			r.Get("/system/apt/install/ws", s.handleAptBatchInstallWS)
 			r.Get("/system/apt/packages/{name}/install/ws", s.handleAptInstallWS)
 			r.Get("/system/apt/packages/{name}/remove/ws", s.handleAptRemoveWS)
 			// Ordinary REST, not itself long-lived — grouped here anyway
@@ -167,6 +170,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/services/{name}/logs", s.handleServiceLogs)
 			r.Get("/services/{name}/install/status", s.handleServiceInstallStatus)
 			r.Get("/containers", s.handleContainers)
+			r.Get("/images", s.handleImages)
 			r.Get("/podman/containers", s.handlePodmanContainers)
 			r.Get("/lxd/instances", s.handleLXDInstances)
 			r.Get("/vms", s.handleVMs)
@@ -188,6 +192,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/apt/search", s.handleAptSearch)
 			r.Get("/system/apt/installed", s.handleAptInstalled)
 			r.Get("/system/apt/updates", s.handleAptUpdates)
+			r.Get("/system/apt/install/status", s.handleAptBatchInstallStatus)
 			r.Get("/system/apt/packages/{name}/install/status", s.handleAptInstallStatus)
 			r.Get("/system/apt/packages/{name}/remove/status", s.handleAptRemoveStatus)
 			r.Get("/vulnerabilities", s.handleVulnerabilities)
@@ -228,6 +233,9 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/services/{name}/{action}", s.handleServiceAction)
 				r.Post("/misc/kill", s.handleKillProcess)
 				r.Post("/containers/{name}/{action}", s.handleContainerAction)
+				r.Post("/images/remove", s.handleImagesRemove)
+				r.Post("/images/save", s.handleImagesSave)
+				r.Post("/images/prune", s.handleImagesPrune)
 				r.Post("/podman/containers", s.handlePodmanContainerCreate)
 				r.Post("/podman/containers/{name}/{action}", s.handlePodmanContainerAction)
 				r.Delete("/podman/containers/{name}", s.handlePodmanContainerDelete)

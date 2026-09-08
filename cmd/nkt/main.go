@@ -219,6 +219,7 @@ type runtime struct {
 	lxd       *control.LXDManager
 	libvirt   *control.LibvirtManager
 	logs      *control.LogManager
+	images    *control.ImageManager
 }
 
 func newRuntime() (*runtime, error) {
@@ -251,6 +252,7 @@ func newRuntime() (*runtime, error) {
 		lxd:       control.NewLXDManager(collector, db),
 		libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
 		logs:      control.NewLogManager(collector, scanner),
+		images:    control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
 	}, nil
 }
 
@@ -376,7 +378,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	server := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
 		Services: r.services, Configs: r.configs, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, UI: ui, Log: log,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, UI: ui, Log: log,
 		Version: version,
 	})
 
@@ -527,6 +529,7 @@ type hubRuntime struct {
 	lxd       *control.LXDManager
 	libvirt   *control.LibvirtManager
 	logs      *control.LogManager
+	images    *control.ImageManager
 }
 
 func newHubRuntime() (*hubRuntime, error) {
@@ -568,6 +571,7 @@ func newHubRuntime() (*hubRuntime, error) {
 		lxd:       control.NewLXDManager(collector, db),
 		libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
 		logs:      control.NewLogManager(collector, scanner),
+		images:    control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
 	}, nil
 }
 
@@ -626,7 +630,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	localAPI := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner,
 		Services: r.services, Configs: r.configs, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Log: log, Version: version,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Log: log, Version: version,
 	})
 
 	// Keeps the "localhost" entry's snapshot/findings/history/availability
