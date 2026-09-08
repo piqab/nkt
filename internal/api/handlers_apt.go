@@ -246,3 +246,69 @@ func (s *Server) handleAptUpdates(w http.ResponseWriter, r *http.Request) {
 		"reboot_required": snap.Packages.RebootRequired,
 	})
 }
+
+// parseAptPackageNames validates a comma-separated selection of arbitrary
+// package names. Every name goes through aptPackageNameRe for the reason
+// stated at its declaration: these end up in a `bash -c` line, and a
+// "package" called "-o" or "--allow-downgrades" would be read by apt-get as
+// an option rather than a name.
+func parseAptPackageNames(raw string) (pkgs []string, invalid string, ok bool) {
+	for _, name := range strings.Split(raw, ",") {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if !aptPackageNameRe.MatchString(name) {
+			return nil, name, false
+		}
+		pkgs = append(pkgs, name)
+	}
+	return pkgs, "", true
+}
+
+// handleAptBatchInstallWS installs several arbitrary packages in one
+// apt-get invocation.
+//
+// One invocation rather than one per package on purpose: apt resolves the
+// whole selection's dependencies together, takes the dpkg lock once, and
+// produces a single progress log — running them in sequence would have each
+// wait on the previous one's lock and leave a half-finished selection if one
+// failed in the middle.
+func (s *Server) handleAptBatchInstallWS(w http.ResponseWriter, r *http.Request) {
+	pkgs, invalid, ok := parseAptPackageNames(r.URL.Query().Get("pkgs"))
+	if !ok {
+		writeError(w, http.StatusBadRequest,
+			msgs.T(msgs.LangFromRequest(r), "pkgInstall.invalidPackageName", invalid))
+		return
+	}
+	if len(pkgs) == 0 {
+		writeError(w, http.StatusBadRequest,
+			msgs.T(msgs.LangFromRequest(r), "pkgInstall.noPackagesSelected"))
+		return
+	}
+	if s.cfg.Mode == config.ModeFixtures {
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.fixturesDisabled"))
+		return
+	}
+	if !collect.Which(r.Context(), s.scanner.Collector(), "apt-get") {
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.aptGetMissing"))
+		return
+	}
+
+	buildCmd := func() *exec.Cmd {
+		env := map[string]string{"TERM": "xterm-256color", "DEBIAN_FRONTEND": "noninteractive"}
+		return unrestrictedCommand(env, "bash", "-c",
+			"apt-get update && apt-get install -y "+strings.Join(pkgs, " "))
+	}
+	s.runUpdateSession(w, r, aptBatchSessionKey, buildCmd, "packages.installApt",
+		strings.Join(pkgs, ", "), s.cfg.TerminalIdleTimeout)
+}
+
+// aptBatchSessionKey is a single shared slot: two batch installs at once
+// would fight over the dpkg lock anyway.
+const aptBatchSessionKey = "apt-install-batch"
+
+func (s *Server) handleAptBatchInstallStatus(w http.ResponseWriter, r *http.Request) {
+	active, finished, exitCode := s.sessionStatus(aptBatchSessionKey)
+	writeSessionStatus(w, active, finished, exitCode)
+}

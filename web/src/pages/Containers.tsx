@@ -1,4 +1,5 @@
 import { Tabs } from 'antd'
+import Images from './Images'
 import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
 import type { Container, LXDInstance, Me, PodmanContainer, VirtualMachine } from '../types'
@@ -32,6 +33,7 @@ export default function Containers({ me }: { me: Me }) {
   const podman = useApi<{ containers: PodmanContainer[] }>('/podman/containers', 30_000)
   const lxd = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
   const vms = useApi<{ vms: VirtualMachine[] }>('/vms', 30_000)
+  const images = useApi<{ images: unknown[] }>('/images', 60_000)
 
   return (
     <Tabs
@@ -51,6 +53,11 @@ export default function Containers({ me }: { me: Me }) {
           key: 'lxd',
           label: tabLabel('LXD', lxd.data?.instances.length),
           children: <LXD me={me} />,
+        },
+        {
+          key: 'images',
+          label: tabLabel(t('images.tab'), images.data?.images.length),
+          children: <Images me={me} />,
         },
         {
           key: 'vms',

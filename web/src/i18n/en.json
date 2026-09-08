@@ -945,7 +945,9 @@
     "confirmUpdate": "Run apt-get dist-upgrade on this host ({{count}} packages)? apt will add/remove dependent packages as needed — you'll need to confirm (Y/n) in the window that opens.",
     "updateCount": "update ({{count}})",
     "noUpdates": "no updates",
-    "updatedRescanned": "Packages updated, host rescanned."
+    "updatedRescanned": "Packages updated, host rescanned.",
+    "installSelected": "Install selected ({{count}})",
+    "clearSelection": "Clear selection"
   },
   "overview": {
     "what": "host overview",
@@ -1194,5 +1196,30 @@
     "archivedTag": "archive — read once",
     "lastLines": "last {{n}}",
     "noneOfKind": "Nothing here — the host has no such logs"
+  },
+  "images": {
+    "tab": "Images",
+    "title": "Docker images",
+    "count": "{{count}} total",
+    "colName": "Image",
+    "colSize": "Size",
+    "colCreated": "Created",
+    "colState": "State",
+    "untagged": "untagged",
+    "inUse": "in use: {{names}}",
+    "dangling": "dangling",
+    "unused": "unused",
+    "force": "force (-f)",
+    "save": "Save ({{count}})",
+    "remove": "Remove ({{count}})",
+    "removeConfirmTitle": "Remove the selected images?",
+    "removeConfirm": "{{count}} images will be removed. Layers nothing else references are freed.",
+    "removeConfirmInUse": "{{count}} of the selected are in use by running containers — Docker will refuse. Tick force if that is deliberate.",
+    "prune": "Prune dangling",
+    "pruneConfirmTitle": "Prune dangling images?",
+    "pruneConfirm": "Untagged images — leftovers of previous builds — will be removed. Running containers are untouched.",
+    "reclaimed": "Reclaimed: {{size}}",
+    "done": "done",
+    "backupDir": "Archives are saved to"
   }
 }

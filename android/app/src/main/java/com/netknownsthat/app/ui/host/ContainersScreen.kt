@@ -9,7 +9,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Tab
@@ -18,13 +22,16 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.Container
+import com.netknownsthat.app.net.model.DockerImage
 import com.netknownsthat.app.status.containerHealth
+import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.status.instanceHealth
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
@@ -43,6 +50,7 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
             if (data.podman.containers.isNotEmpty()) add("Podman" to 1)
             if (data.lxd.instances.isNotEmpty()) add("LXD" to 2)
             if (data.vms.vms.isNotEmpty()) add("ВМ" to 3)
+            if (data.images.images.isNotEmpty()) add("Образы" to 4)
         }
         if (tabs.isEmpty()) {
             Text(
@@ -95,6 +103,8 @@ fun ContainersScreen(viewModel: ContainersViewModel) {
                         ) { action -> viewModel.lxdAction(it.name, action) }
                     }
                 }
+
+                4 -> ImagesTab(viewModel, data)
 
                 3 -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
                     items(data.vms.vms, key = { it.name }) {
@@ -213,6 +223,129 @@ private fun ActionRow(enabled: Boolean, onAction: (String) -> Unit) {
                 enabled = enabled,
                 modifier = Modifier.padding(end = 8.dp),
             ) { Text(label) }
+        }
+    }
+}
+
+/**
+ * Docker images with a multi-select. The two things worth doing to several
+ * at once are removing them and saving them to a tar on the host; an image a
+ * container is running from is marked, because Docker refuses to remove one
+ * without force and saying so first beats offering an action that fails.
+ */
+@Composable
+private fun ImagesTab(viewModel: ContainersViewModel, data: ContainerRuntimes) {
+    var picked by remember { mutableStateOf(setOf<String>()) }
+    var force by remember { mutableStateOf(false) }
+    var confirmRemove by remember { mutableStateOf(false) }
+
+    // Docker takes a tag or an id; the tag is what an operator recognises.
+    fun refOf(image: DockerImage) = image.tags.firstOrNull() ?: image.id
+    val selected = data.images.images.filter { picked.contains(it.id) }
+    val inUseSelected = selected.count { it.inUse }
+
+    if (confirmRemove) {
+        AlertDialog(
+            onDismissRequest = { confirmRemove = false },
+            title = { Text("Удалить выбранные образы?") },
+            text = {
+                Text(
+                    if (inUseSelected > 0 && !force)
+                        "Из выбранных $inUseSelected используются запущенными контейнерами — " +
+                            "Docker откажется их удалять. Включите «принудительно», если это осознанно."
+                    else "Будет удалено образов: ${selected.size}."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.removeImages(selected.map(::refOf), force)
+                    picked = emptySet()
+                    confirmRemove = false
+                }) { Text("Удалить") }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = false }) { Text("Отмена") } },
+        )
+    }
+
+    Column {
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            FilterChip(
+                selected = force,
+                onClick = { force = !force },
+                label = { Text("принудительно") },
+                modifier = Modifier.padding(end = 8.dp),
+            )
+            OutlinedButton(
+                onClick = { viewModel.saveImages(selected.map(::refOf)) },
+                enabled = selected.isNotEmpty() && !viewModel.actionInProgress,
+                modifier = Modifier.padding(end = 8.dp),
+            ) { Text("Сохранить (${selected.size})") }
+            OutlinedButton(
+                onClick = { confirmRemove = true },
+                enabled = selected.isNotEmpty() && !viewModel.actionInProgress,
+                modifier = Modifier.padding(end = 8.dp),
+            ) { Text("Удалить (${selected.size})") }
+            OutlinedButton(
+                onClick = { viewModel.pruneImages() },
+                enabled = !viewModel.actionInProgress,
+            ) { Text("Убрать осиротевшие") }
+        }
+
+        if (data.images.backupDir.isNotBlank()) {
+            Text(
+                text = "Архивы сохраняются в ${data.images.backupDir}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 16.dp),
+            )
+        }
+
+        LazyColumn(contentPadding = PaddingValues(16.dp)) {
+            items(data.images.images, key = { it.id }) { image ->
+                Card(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Checkbox(
+                            checked = picked.contains(image.id),
+                            onCheckedChange = { on ->
+                                picked = if (on) picked + image.id else picked - image.id
+                            },
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = image.tags.firstOrNull() ?: "без тега",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            Text(
+                                text = "${image.size / 1024 / 1024} МБ · " +
+                                    image.id.removePrefix("sha256:").take(12),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            when {
+                                image.inUse -> Text(
+                                    text = "используется: ${image.usedBy.joinToString(", ")}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = statusColor(HealthStatus.OK),
+                                )
+
+                                image.dangling -> Text(
+                                    text = "осиротевший",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = statusColor(HealthStatus.WARN),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 }

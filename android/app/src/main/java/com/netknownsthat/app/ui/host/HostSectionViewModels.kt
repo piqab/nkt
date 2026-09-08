@@ -30,6 +30,8 @@ import com.netknownsthat.app.net.model.ConfigDiffResponse
 import com.netknownsthat.app.net.model.ConfigWriteResult
 import com.netknownsthat.app.net.model.ConfigsResponse
 import com.netknownsthat.app.net.model.ContainersResponse
+import com.netknownsthat.app.net.model.ImageActionResponse
+import com.netknownsthat.app.net.model.ImagesResponse
 import com.netknownsthat.app.net.model.FindingsResponse
 import com.netknownsthat.app.net.model.FirewallNumberedResponse
 import com.netknownsthat.app.net.model.FirewallResponse
@@ -250,12 +252,16 @@ class ContainersViewModel(hubClient: HubClient) : SectionViewModel<ContainerRunt
         val podman = hubClient.get<PodmanResponse>("/podman/containers")
         val lxd = hubClient.get<LXDResponse>("/lxd/instances")
         val vms = hubClient.get<VMsResponse>("/vms")
+        // Images fail on a host without Docker at all, which is not an error
+        // worth blanking the other runtimes over.
+        val images = hubClient.get<ImagesResponse>("/images")
         return HubClient.ApiResult.Success(
             ContainerRuntimes(
                 docker = (docker as HubClient.ApiResult.Success).value,
                 podman = (podman as? HubClient.ApiResult.Success)?.value ?: PodmanResponse(),
                 lxd = (lxd as? HubClient.ApiResult.Success)?.value ?: LXDResponse(),
                 vms = (vms as? HubClient.ApiResult.Success)?.value ?: VMsResponse(),
+                images = (images as? HubClient.ApiResult.Success)?.value ?: ImagesResponse(),
             )
         )
     }
@@ -281,6 +287,31 @@ class ContainersViewModel(hubClient: HubClient) : SectionViewModel<ContainerRunt
             data.vms.vms.find { it.name == name }
                 ?.let { instanceHealth(it.state) == HealthStatus.OK }
         }
+
+    /** Removes the selected images; force also drops ones a container holds. */
+    fun removeImages(refs: List<String>, force: Boolean) =
+        act("Удаление образов выполнено") {
+            hubClient.post<ImageActionResponse>(
+                "/images/remove",
+                buildJsonObject {
+                    put("refs", Json.encodeToJsonElement(ListSerializer(String.serializer()), refs))
+                    put("force", force)
+                }.toString(),
+            )
+        }
+
+    fun saveImages(refs: List<String>) = act("Образы сохранены на хосте") {
+        hubClient.post<ImageActionResponse>(
+            "/images/save",
+            buildJsonObject {
+                put("refs", Json.encodeToJsonElement(ListSerializer(String.serializer()), refs))
+            }.toString(),
+        )
+    }
+
+    fun pruneImages() = act("Осиротевшие образы убраны") {
+        hubClient.post<ImageActionResponse>("/images/prune", "{}")
+    }
 
     /**
      * All four runtimes behave the same way here: the request returns at
@@ -310,6 +341,7 @@ data class ContainerRuntimes(
     val podman: PodmanResponse,
     val lxd: LXDResponse,
     val vms: VMsResponse,
+    val images: ImagesResponse = ImagesResponse(),
 )
 
 class UsersViewModel(hubClient: HubClient) : SectionViewModel<UsersResponse>(hubClient) {

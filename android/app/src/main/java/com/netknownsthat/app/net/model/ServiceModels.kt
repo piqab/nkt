@@ -163,3 +163,39 @@ data class User(
     @SerialName("created_at") val createdAt: String = "",
     @SerialName("last_login_at") val lastLoginAt: String = "",
 )
+
+/** GET /api/images — Docker images on the host. */
+@Serializable
+data class ImagesResponse(
+    val images: List<DockerImage> = emptyList(),
+    @SerialName("backup_dir") val backupDir: String = "",
+)
+
+@Serializable
+data class DockerImage(
+    val id: String = "",
+    /** Empty for a dangling image — one whose tag moved to a newer build. */
+    val tags: List<String> = emptyList(),
+    val size: Long = 0,
+    val created: String = "",
+    /** A container is running from it, so Docker refuses to remove it
+     * without force. */
+    @SerialName("in_use") val inUse: Boolean = false,
+    @SerialName("used_by") val usedBy: List<String> = emptyList(),
+    val dangling: Boolean = false,
+)
+
+/** Per-reference outcome of a batch image action. */
+@Serializable
+data class ImageOutcome(
+    val ref: String = "",
+    val ok: Boolean = false,
+    val error: String = "",
+    val path: String = "",
+)
+
+@Serializable
+data class ImageActionResponse(
+    val results: List<ImageOutcome> = emptyList(),
+    val reclaimed: Long = 0,
+)
