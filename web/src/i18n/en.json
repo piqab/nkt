@@ -1054,7 +1054,6 @@
     "downtimeByHourFor": "Downtime by hour of week — {{label}}",
     "downtimeByHourAll": "Downtime by hour of week — all resources",
     "heatmapHint": "Each cell is one hour of the week. The darker it is, the more checks failed during that hour.",
-    "showAllTargets": "show all resources",
     "downtimeScale": "downtime",
     "noChecksThisHour": "no checks during this hour",
     "availabilityAndLatencyFor": "Availability and latency — {{label}}",
@@ -1082,7 +1081,8 @@
       "start": "Start",
       "end": "End",
       "error": "Error"
-    }
+    },
+    "uptime24hShort": "24h uptime: {{value}}%"
   },
   "usage": {
     "title": "Network resource usage",
