@@ -157,6 +157,10 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 		return res, fmt.Errorf("установка пакетов: %w: %s", err, lastLines(out, 5))
 	}
 
+	if err := ensureDbusRunning(client, sudo, opts.Packages, report); err != nil {
+		return res, err
+	}
+
 	targetUser := host.SSHUser
 	if opts.User != "" {
 		report("hub.bootstrapUser", opts.User)
@@ -228,6 +232,58 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 	}
 	return res, nil
 }
+
+// ensureDbusRunning доводит dbus до рабочего состояния, а не просто до
+// установленного пакета.
+//
+// Одной установки мало по двум причинам. Пакет может уже стоять в образе,
+// но со снятой или остановленной службой — тогда apt-get не делает
+// ничего, и всё выглядит успешно. И даже при свежей установке старт
+// службы делает postinst, которому в части образов мешает policy-rc.d.
+// А без работающей системной шины nkt на хосте не может выйти из
+// песочницы своего юнита через systemd-run — и «Терминал» снова
+// предлагает поставить dbus, хотя пакет уже на месте.
+//
+// Проверяется не код возврата systemctl, а наличие самого сокета шины:
+// именно к нему обращается systemd-run, и именно его отсутствие видит
+// хост, когда говорит «нужен dbus».
+func ensureDbusRunning(client *ssh.Client, sudo string, packages []string, report func(key string, args ...any)) error {
+	if !wantsDbus(packages) {
+		return nil
+	}
+
+	report("hub.bootstrapDbus")
+	// dbus.socket — то, что на самом деле создаёт сокет; в части систем
+	// служба называется dbus-broker. Обе попытки best-effort, приговор
+	// выносит проверка сокета ниже.
+	_, _ = runRemote(client, sudo+"systemctl enable --now dbus.socket dbus.service"+
+		" || "+sudo+"systemctl enable --now dbus"+
+		" || "+sudo+"systemctl enable --now dbus-broker")
+
+	if _, err := runRemote(client, "test -S "+dbusSocketPath); err != nil {
+		out, _ := runRemote(client, sudo+"systemctl is-active dbus dbus.socket dbus-broker 2>&1; true")
+		report("hub.bootstrapDbusNotRunning", lastLines(out, 3))
+		return nil
+	}
+	report("hub.bootstrapDbusOK")
+	return nil
+}
+
+// wantsDbus — ставится ли системная шина в этом наборе. Имя пакета
+// разнится: dbus в Debian/Ubuntu, dbus-broker там, где перешли на него.
+func wantsDbus(packages []string) bool {
+	for _, p := range packages {
+		if p == "dbus" || p == "dbus-broker" {
+			return true
+		}
+	}
+	return false
+}
+
+// dbusSocketPath — сокет системной шины. Именно к нему обращается
+// systemd-run, и именно его отсутствие хост видит как «нужен dbus»
+// (см. systemdControlSocket в internal/api/pty_session.go).
+const dbusSocketPath = "/run/dbus/system_bus_socket"
 
 // sudoPrefix — под root ничего не нужно, под остальными всё идёт через
 // sudo -n: пароль запрашивать некому, сессия неинтерактивная.

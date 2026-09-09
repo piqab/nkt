@@ -90,6 +90,10 @@ var enCatalog = map[string]string{
 	"hub.localScannerNotRunning": "the hub's local scanner isn't running",
 	"hub.hostUnreachable":        "host unreachable: %s",
 
+	"hub.dbusMissingAfterInstall":        "Warning: the host has no running dbus system bus — the terminal and in-app package installs stay unavailable until `systemctl enable --now dbus` is run",
+	"hub.bootstrapDbus":                  "Bootstrap: enabling and starting dbus…",
+	"hub.bootstrapDbusOK":                "Bootstrap: the dbus system bus is up",
+	"hub.bootstrapDbusNotRunning":        "Bootstrap: dbus is installed but /run/dbus/system_bus_socket never appeared (%s) — the host's terminal will keep offering to install dbus until the service starts",
 	"hub.bootstrapPackages":              "Bootstrap: installing packages (%s)…",
 	"hub.bootstrapUser":                  "Bootstrap: creating user %s with passwordless sudo…",
 	"hub.bootstrapKey":                   "Bootstrap: installing the hub's key for %s…",
