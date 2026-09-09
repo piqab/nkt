@@ -496,9 +496,9 @@
     "password": "Password",
     "decryptAndImport": "Decrypt and import",
     "startingLog": "Starting…",
-    "authGenerated": "hub generates a key (recommended)",
-    "authKey": "your own private key",
-    "authPassword": "password",
+    "authGenerated": "Hub's key — I'll add it by hand",
+    "authKey": "My own private key",
+    "authPassword": "root and password — the hub sets it up",
     "secretKeyEditing": "New private key (PEM) — leave empty to keep the current one",
     "secretKeyNew": "Private key (PEM)",
     "secretPasswordEditing": "New password — leave empty to keep the current one",
@@ -507,7 +507,6 @@
     "addr": "IP address or hostname",
     "sshPort": "SSH port",
     "sshUser": "SSH user",
-    "authMethod": "Auth method",
     "generatedKeyHint": "No need to paste a private key anywhere — the hub generates its own pair and shows the public half after saving, which needs to be added to <code>~/.ssh/authorized_keys</code> on the host.",
     "generatedKeyHintReplace": " This host's previous auth method will be replaced by the new key.",
     "terminalEnabled": "enable a web terminal on the host",
@@ -526,8 +525,7 @@
     "bootstrapPackages": "Packages (space separated)",
     "bootstrapDisablePassword": "Disable password login in sshd",
     "bootstrapDisablePasswordHint": "Done only after key login has been verified on a fresh connection; if the key stops working after sshd reloads, the change reverts itself.",
-    "bootstrapReset": "Restore the built-in set",
-    "bootstrapKeyAuthNote": "Login is already key-based — the password-to-key steps are skipped, packages and the user remain."
+    "bootstrapReset": "Restore the built-in set"
   },
   "certs": {
     "colSites": "Sites",
