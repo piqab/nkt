@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Checkbox, Input, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Input, Table, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { Me, PackageUpdate } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 import CommonPackagesCard from '../components/CommonPackagesCard'
 import PackageInstallModal from '../components/PackageInstallModal'
+import i18n from '../i18n'
 import UpdateModal from '../components/UpdateModal'
 
 interface AptSearchResult {
   name: string
   description: string
   installed: boolean
+  /** Чем пакет подошёл под запрос — см. classifyAptMatch на стороне Go. */
+  match?: 'exact' | 'prefix' | 'name' | 'description'
 }
 
 interface AptInstalledPackage {
@@ -32,6 +35,30 @@ const SEARCH_DEBOUNCE_MS = 400
  * curated quick-install card lives here too rather than on Overview — one
  * place for everything package-related.
  */
+/** Колонки результата поиска — вынесены из разметки, как в остальных
+ * таблицах проекта. */
+function searchResultColumns(t: typeof i18n.t): TableColumnsType<AptSearchResult> {
+  return [
+    {
+      title: t('packages.colName'),
+      key: 'name',
+      render: (_, p) => <code className="mono">{p.name}</code>,
+    },
+    {
+      title: t('packages.colDescription'),
+      key: 'description',
+      render: (_, p) => <span className="small">{p.description}</span>,
+    },
+    {
+      title: t('packages.colState'),
+      key: 'state',
+      width: '9rem',
+      render: (_, p) =>
+        p.installed ? <Tag color="green">{t('commonPackages.installed')}</Tag> : <span className="small muted">—</span>,
+    },
+  ]
+}
+
 export default function Packages({ me }: { me: Me }) {
   const { t } = useTranslation()
   const canUse = me.is_admin && me.allow_mutations
@@ -95,6 +122,7 @@ export default function Packages({ me }: { me: Me }) {
   // package manager resolves the whole selection's dependencies together and
   // takes the dpkg lock once, which installing them one by one cannot.
   const [picked, setPicked] = useState<string[]>([])
+  const searchColumns = searchResultColumns(t)
   const [batchInstalling, setBatchInstalling] = useState(false)
   const [installOutcome, setInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
 
@@ -250,45 +278,35 @@ export default function Packages({ me }: { me: Me }) {
                 </>
               )}
             </div>
-            <div className="row" style={{ gap: '0.4rem', marginTop: '0.5rem' }}>
-              {search.data.results.length === 0 ? (
-                <p className="small muted">{t('common.noMatch')}</p>
-              ) : (
-                search.data.results.map((p) => (
-                  <Tooltip key={p.name} title={p.description || undefined}>
-                    <div
-                      className="row"
-                      onClick={() => {
-                        if (p.installed || !canUse) return
-                        setPicked((prev) =>
-                          prev.includes(p.name)
-                            ? prev.filter((n) => n !== p.name)
-                            : [...prev, p.name],
-                        )
-                      }}
-                      style={{
-                        alignItems: 'center',
-                        gap: '0.4rem',
-                        padding: '0.15rem 0.5rem',
-                        border: '1px solid var(--border-strong)',
-                        borderRadius: 999,
-                        cursor: p.installed || !canUse ? 'default' : 'pointer',
-                      }}
-                    >
-                      {!p.installed && (
-                        <Checkbox checked={picked.includes(p.name)} disabled={!canUse} />
-                      )}
-                      <span className="mono">{p.name}</span>
-                      {p.installed && (
-                        <Tag color="green" style={{ margin: 0 }}>
-                          {t('commonPackages.installed')}
-                        </Tag>
-                      )}
-                    </div>
-                  </Tooltip>
-                ))
-              )}
-            </div>
+            {search.data.results.length === 0 ? (
+              <p className="small muted" style={{ marginTop: '0.5rem' }}>
+                {t('common.noMatch')}
+              </p>
+            ) : (
+              <>
+                <p className="small muted" style={{ marginTop: '0.5rem' }}>
+                  {t('packages.matchLegend')}
+                </p>
+                <div className="table-wrap">
+                  <Table<AptSearchResult>
+                    dataSource={search.data.results}
+                    rowKey="name"
+                    size="small"
+                    pagination={false}
+                    // Фон строки — граница между группами: сначала пакеты,
+                    // чьё имя совпало с запросом, потом те, где он нашёлся
+                    // только в описании. Порядок задаёт сервер (rankAptResults).
+                    rowClassName={(p) => `pkg-match pkg-match-${p.match ?? 'description'}`}
+                    columns={searchColumns}
+                    rowSelection={{
+                      selectedRowKeys: picked,
+                      onChange: (keys) => setPicked(keys as string[]),
+                      getCheckboxProps: (p) => ({ disabled: !canUse || p.installed }),
+                    }}
+                  />
+                </div>
+              </>
+            )}
           </>
         )}
       </Card>

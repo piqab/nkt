@@ -550,3 +550,20 @@ pre.diff .hunk { color: var(--text-muted); }
 .xterm-viewport::-webkit-scrollbar-thumb:hover {
   background: rgba(232, 230, 225, 0.45);
 }
+
+/* Группы результатов поиска пакетов различаются фоном строки: сначала те,
+   у которых совпало имя, потом те, где запрос нашёлся только в описании.
+   Цвета взяты низкой прозрачностью от токенов темы, чтобы одинаково
+   читаться и на светлой, и на тёмной. */
+.pkg-match-exact > td,
+.pkg-match-prefix > td {
+  background: color-mix(in srgb, var(--status-good) 12%, transparent);
+}
+
+.pkg-match-name > td {
+  background: var(--wash);
+}
+
+.pkg-match-description > td {
+  color: var(--text-secondary);
+}

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Checkbox, Tag, Tooltip } from 'antd'
+import { Button, Table, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { Banner, Card, Loading } from './ui'
@@ -52,15 +52,6 @@ export default function CommonPackagesCard({ canUse }: { canUse: boolean }) {
 
   const packages = data?.packages ?? []
 
-  function toggle(name: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(name)) next.delete(name)
-      else next.add(name)
-      return next
-    })
-  }
-
   function startAction(next: 'install' | 'remove') {
     if (selected.size === 0) return
     setOutcome(null)
@@ -84,28 +75,45 @@ export default function CommonPackagesCard({ canUse }: { canUse: boolean }) {
         <Loading what={t('commonPackages.title')} />
       ) : (
         <>
-          <div className="row" style={{ gap: '0.4rem' }}>
-            {packages.map((p) => (
-              <Tooltip key={p.name} title={t(PACKAGE_DESC_KEY[p.name])}>
-                <label
-                  className="row"
-                  style={{
-                    alignItems: 'center',
-                    gap: '0.35rem',
-                    padding: '0.15rem 0.5rem',
-                    border: '1px solid var(--border-strong)',
-                    borderRadius: 999,
-                    cursor: canUse ? 'pointer' : 'default',
-                  }}
-                >
-                  <Checkbox checked={selected.has(p.name)} disabled={!canUse} onChange={() => toggle(p.name)} />
-                  <span className="mono">{p.name}</span>
-                  <Tag color={p.installed ? 'green' : undefined} style={{ margin: 0 }}>
-                    {p.installed ? t('commonPackages.installed') : t('commonPackages.notInstalled')}
-                  </Tag>
-                </label>
-              </Tooltip>
-            ))}
+          {/* Обычная таблица, а не ряд овальных чипсов: в строках сразу
+              видно описание пакета и его состояние, а не только имя, и
+              взгляд идёт по столбцам вместо того, чтобы бежать по
+              переносам. */}
+          <div className="table-wrap">
+            <Table<{ name: string; installed: boolean }>
+              dataSource={packages}
+              rowKey="name"
+              size="small"
+              pagination={false}
+              columns={[
+                {
+                  title: t('packages.colName'),
+                  key: 'name',
+                  render: (_, p) => <code className="mono">{p.name}</code>,
+                },
+                {
+                  title: t('packages.colDescription'),
+                  key: 'description',
+                  render: (_, p) => <span className="small">{t(PACKAGE_DESC_KEY[p.name])}</span>,
+                },
+                {
+                  title: t('packages.colState'),
+                  key: 'state',
+                  width: '9rem',
+                  render: (_, p) =>
+                    p.installed ? (
+                      <Tag color="green">{t('commonPackages.installed')}</Tag>
+                    ) : (
+                      <span className="small muted">{t('commonPackages.notInstalled')}</span>
+                    ),
+                },
+              ]}
+              rowSelection={{
+                selectedRowKeys: [...selected],
+                onChange: (keys) => setSelected(new Set(keys as string[])),
+                getCheckboxProps: () => ({ disabled: !canUse }),
+              }}
+            />
           </div>
           <div className="row" style={{ gap: '0.5rem', marginTop: '0.75rem' }}>
             <Button type="primary" disabled={!canUse || selected.size === 0} onClick={() => startAction('install')}>
