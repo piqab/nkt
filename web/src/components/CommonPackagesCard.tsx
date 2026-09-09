@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Table, Tag } from 'antd'
+import { Button, Checkbox, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { Banner, Card, Loading } from './ui'
@@ -52,6 +52,15 @@ export default function CommonPackagesCard({ canUse }: { canUse: boolean }) {
 
   const packages = data?.packages ?? []
 
+  function toggle(name: string) {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+
   function startAction(next: 'install' | 'remove') {
     if (selected.size === 0) return
     setOutcome(null)
@@ -75,45 +84,47 @@ export default function CommonPackagesCard({ canUse }: { canUse: boolean }) {
         <Loading what={t('commonPackages.title')} />
       ) : (
         <>
-          {/* Обычная таблица, а не ряд овальных чипсов: в строках сразу
-              видно описание пакета и его состояние, а не только имя, и
-              взгляд идёт по столбцам вместо того, чтобы бежать по
-              переносам. */}
-          <div className="table-wrap">
-            <Table<{ name: string; installed: boolean }>
-              dataSource={packages}
-              rowKey="name"
-              size="small"
-              pagination={false}
-              columns={[
-                {
-                  title: t('packages.colName'),
-                  key: 'name',
-                  render: (_, p) => <code className="mono">{p.name}</code>,
-                },
-                {
-                  title: t('packages.colDescription'),
-                  key: 'description',
-                  render: (_, p) => <span className="small">{t(PACKAGE_DESC_KEY[p.name])}</span>,
-                },
-                {
-                  title: t('packages.colState'),
-                  key: 'state',
-                  width: '9rem',
-                  render: (_, p) =>
-                    p.installed ? (
-                      <Tag color="green">{t('commonPackages.installed')}</Tag>
-                    ) : (
-                      <span className="small muted">{t('commonPackages.notInstalled')}</span>
-                    ),
-                },
-              ]}
-              rowSelection={{
-                selectedRowKeys: [...selected],
-                onChange: (keys) => setSelected(new Set(keys as string[])),
-                getCheckboxProps: () => ({ disabled: !canUse }),
-              }}
-            />
+          {/* Плотная сетка, а не таблица: пакетов около двух десятков, все
+              строки одинаковой формы, и таблица на всю ширину растягивала
+              их в длинный столбец, который приходилось прокручивать.
+              Колонки набираются сами по ширине карточки; описание — во
+              всплывающей подсказке, чтобы строка оставалась в одну
+              высоту. */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(15rem, 1fr))',
+              columnGap: '1.2rem',
+              rowGap: '0.1rem',
+            }}
+          >
+            {packages.map((p) => (
+              <Tooltip key={p.name} title={t(PACKAGE_DESC_KEY[p.name])} placement="topLeft">
+                <label
+                  className="row"
+                  style={{
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.1rem 0',
+                    cursor: canUse ? 'pointer' : 'default',
+                  }}
+                >
+                  <Checkbox
+                    checked={selected.has(p.name)}
+                    disabled={!canUse}
+                    onChange={() => toggle(p.name)}
+                  />
+                  <code className="mono">{p.name}</code>
+                  {p.installed ? (
+                    <span className="small" style={{ color: 'var(--status-good)' }}>
+                      {t('commonPackages.installed')}
+                    </span>
+                  ) : (
+                    <span className="small muted">—</span>
+                  )}
+                </label>
+              </Tooltip>
+            ))}
           </div>
           <div className="row" style={{ gap: '0.5rem', marginTop: '0.75rem' }}>
             <Button type="primary" disabled={!canUse || selected.size === 0} onClick={() => startAction('install')}>
