@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from 'antd'
 import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -22,6 +22,16 @@ import PackageInstallModal from '../components/PackageInstallModal'
  * "Закрыть окно" there, since offering to detach a window that is already
  * its own separate window makes no sense.
  */
+/** GET /terminal/diagnose — internal/api/sandbox_diag.go. */
+interface SandboxDiagnosis {
+  ok: boolean
+  sandboxed: boolean
+  dbus_reachable: boolean
+  unit?: string
+  problems: { code: string; detail: string }[]
+  commands: string[]
+}
+
 export default function TerminalPage({ me }: { me: Me }) {
   const { t } = useTranslation()
   const canUse = me.is_admin && me.allow_mutations
@@ -103,6 +113,35 @@ export default function TerminalPage({ me }: { me: Me }) {
     }
   }
 
+  // Сеанс, закрывшийся сразу после подключения, не «завершён пользователем»
+  // — так выглядит команда, которая не смогла запуститься вовсе: например
+  // nsenter, которому песочница юнита отказала в setns. В этом случае у
+  // хоста спрашивается разбор причины, потому что сырое сообщение nsenter
+  // говорит, ЧТО отказало, но не говорит, что чинить.
+  const sessionOpenedAt = useRef<number | null>(null)
+  useEffect(() => {
+    if (status === 'connected') {
+      sessionOpenedAt.current = Date.now()
+      setDiagnosis(null)
+      return
+    }
+    if (status !== 'closed' && status !== 'error') return
+    const openedFor = sessionOpenedAt.current ? Date.now() - sessionOpenedAt.current : 0
+    sessionOpenedAt.current = null
+    // 5 секунд: столько не живёт ни один осмысленный сеанс, зато ровно
+    // столько занимает падение на запуске.
+    if (status === 'closed' && openedFor > 5000) return
+    let cancelled = false
+    api<SandboxDiagnosis>('/terminal/diagnose')
+      .then((res) => {
+        if (!cancelled && !res.ok) setDiagnosis(res)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [status])
+
   const isActive = isPopout || location.pathname === '/terminal'
   useEffect(() => {
     if (isActive && status === 'connected') focus()
@@ -156,6 +195,9 @@ export default function TerminalPage({ me }: { me: Me }) {
   }>('/system/dbus-install/status', 5_000)
   const [dbusInstallOpen, setDbusInstallOpen] = useState(false)
   const [dbusInstallOutcome, setDbusInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
+  // Разбор причины запрашивается только после неудачи — на исправном хосте
+  // страница остаётся чистой.
+  const [diagnosis, setDiagnosis] = useState<SandboxDiagnosis | null>(null)
 
   async function handleDbusInstallFinished() {
     const fresh = await api<{ succeeded?: boolean; exit_code?: number }>('/system/dbus-install/status').catch(
@@ -306,6 +348,37 @@ export default function TerminalPage({ me }: { me: Me }) {
       {!canUse && <Banner kind="info">{t('common.adminMutationsOnly')}</Banner>}
       {status === 'error' && <Banner kind="error">{t('terminal.connectError')}</Banner>}
       {status === 'closed' && <Banner kind="info">{t('terminal.sessionEnded')}</Banner>}
+
+      {diagnosis && (
+        <Banner kind="warn">
+          <strong>{t('terminal.diagnosisTitle')}</strong>
+          <ul style={{ margin: '0.35rem 0 0.35rem 1.1rem', padding: 0 }}>
+            {diagnosis.problems.map((p) => (
+              <li key={p.code} className="small">
+                {p.detail}
+              </li>
+            ))}
+          </ul>
+          <FixCommands commands={diagnosis.commands} hint={t('terminal.diagnosisHint')} />
+        </Banner>
+      )}
+
+      {dbusInstallOutcome?.ok === false && (
+        <Banner kind="warn">
+          <strong>{t('terminal.dbusInstallFailedTitle')}</strong>
+          <div className="small" style={{ marginTop: '0.25rem' }}>
+            {t('terminal.dbusInstallFailedHint')}
+          </div>
+          <FixCommands
+            commands={[
+              'sudo apt-get update && sudo apt-get install -y dbus',
+              'sudo systemctl start dbus',
+              'sudo systemctl restart netknownsthat',
+            ]}
+            hint={t('terminal.diagnosisHint')}
+          />
+        </Banner>
+      )}
 
       {status !== 'connected' &&
         (dbusStatus === null ? (
@@ -573,4 +646,68 @@ function TmuxHints() {
       </Card>
     </div>
   )
+}
+
+/**
+ * Команды для консоли или SSH — не для веб-терминала: он в этом состоянии
+ * как раз и не работает, предлагать выполнить их «здесь» было бы издёвкой.
+ * Копирование сделано тем же способом, что и в терминале (см. usePty):
+ * navigator.clipboard существует только в защищённом контексте, а установка
+ * по HTTP — обычное дело.
+ */
+function FixCommands({ commands, hint }: { commands: string[]; hint: string }) {
+  const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+  const text = commands.join('\n')
+
+  function copy() {
+    const done = () => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    }
+    if (navigator.clipboard?.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => legacyCopy(text, done))
+      return
+    }
+    legacyCopy(text, done)
+  }
+
+  return (
+    <div style={{ marginTop: '0.4rem' }}>
+      <div className="small muted">{hint}</div>
+      <pre
+        className="mono small"
+        style={{
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-all',
+          margin: '0.3rem 0',
+          padding: '0.5rem 0.6rem',
+          background: 'var(--wash)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius-sm)',
+        }}
+      >
+        {text}
+      </pre>
+      <Button size="small" onClick={copy}>
+        {copied ? t('common.copied') : t('common.copy')}
+      </Button>
+    </div>
+  )
+}
+
+function legacyCopy(text: string, done: () => void) {
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  try {
+    document.execCommand('copy')
+    done()
+  } catch {
+    // Оба способа недоступны — команды всё равно видны и их можно выделить.
+  }
+  document.body.removeChild(textarea)
 }
