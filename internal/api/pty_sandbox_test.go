@@ -301,14 +301,16 @@ func withFakeBinaryOnPath(t *testing.T, name string) string {
 	return dir
 }
 
-// TestNsenterArgs is a pure check of the flags — missing --mount or the
-// wrong --target would either fail outright or (worse) silently enter the
-// wrong namespace; the env-passing trick is exercised separately since
-// nsenter itself has no --setenv equivalent, unlike systemd-run.
+// TestNsenterArgs is a pure check of the flags — указывать пространство
+// имён файлом обязательно: с --target util-linux 2.41 (Debian 13) уходит в
+// pidfd-ветку setns, которую юнит не разрешает, и терминал падает с
+// «reassociate to namespaces failed: Operation not permitted». Передача
+// окружения проверяется отдельно: своего --setenv у nsenter нет, в отличие
+// от systemd-run.
 func TestNsenterArgs(t *testing.T) {
 	t.Run("no env", func(t *testing.T) {
 		args := nsenterArgs(nil, "bash", "-l")
-		want := []string{"--target", "1", "--mount", "--", "bash", "-l"}
+		want := []string{"--mount=/proc/1/ns/mnt", "--", "bash", "-l"}
 		if strings.Join(args, "|") != strings.Join(want, "|") {
 			t.Errorf("nsenterArgs(nil, ...) = %v, want %v", args, want)
 		}
@@ -317,7 +319,7 @@ func TestNsenterArgs(t *testing.T) {
 	t.Run("with env: wrapped in coreutils env", func(t *testing.T) {
 		args := nsenterArgs(map[string]string{"TERM": "xterm-256color"}, "bash", "-l")
 		joined := " " + strings.Join(args, " ") + " "
-		for _, want := range []string{" --target 1 ", " --mount ", " -- env ", " TERM=xterm-256color "} {
+		for _, want := range []string{" --mount=/proc/1/ns/mnt ", " -- env ", " TERM=xterm-256color "} {
 			if !strings.Contains(joined, want) {
 				t.Errorf("nsenterArgs() missing %q in %v", strings.TrimSpace(want), args)
 			}
@@ -389,7 +391,7 @@ func TestSystemdRunArgsAsUser(t *testing.T) {
 func TestNsenterArgsAsUser(t *testing.T) {
 	t.Run("no env", func(t *testing.T) {
 		args := nsenterArgsAsUser(nil, "deploy", "bash", "-l")
-		want := []string{"--target", "1", "--mount", "--", "runuser", "-u", "deploy", "--", "bash", "-l"}
+		want := []string{"--mount=/proc/1/ns/mnt", "--", "runuser", "-u", "deploy", "--", "bash", "-l"}
 		if strings.Join(args, "|") != strings.Join(want, "|") {
 			t.Errorf("nsenterArgsAsUser(nil, ...) = %v, want %v", args, want)
 		}
@@ -399,7 +401,7 @@ func TestNsenterArgsAsUser(t *testing.T) {
 		args := nsenterArgsAsUser(map[string]string{"TERM": "xterm-256color"}, "deploy", "bash", "-l")
 		joined := " " + strings.Join(args, " ") + " "
 		for _, want := range []string{
-			" --target 1 ", " --mount ", " -- runuser -u deploy -- env ", " TERM=xterm-256color ",
+			" --mount=/proc/1/ns/mnt ", " -- runuser -u deploy -- env ", " TERM=xterm-256color ",
 		} {
 			if !strings.Contains(joined, want) {
 				t.Errorf("nsenterArgsAsUser() missing %q in %v", strings.TrimSpace(want), args)
