@@ -1272,6 +1272,16 @@ function HostForm({
   const [bootstrapUser, setBootstrapUser] = useState('nkt')
   const [bootstrapPackages, setBootstrapPackages] = useState(BOOTSTRAP_PACKAGES_DEFAULT)
   const [bootstrapDisablePassword, setBootstrapDisablePassword] = useState(false)
+  // Набор хранится на хабе, а не в коде страницы: правка при добавлении
+  // одного хоста должна быть видна и при добавлении следующего.
+  const bootstrapDefaults = useApi<BootstrapOptions>(editing ? null : '/hub/bootstrap/defaults')
+  useEffect(() => {
+    const d = bootstrapDefaults.data
+    if (!d) return
+    setBootstrapUser(d.user)
+    setBootstrapPackages(d.packages.join(' '))
+    setBootstrapDisablePassword(d.disable_password_auth)
+  }, [bootstrapDefaults.data])
 
   async function submit(values: HostFormValues) {
     setBusy(true)
@@ -1289,6 +1299,20 @@ function HostForm({
         terminal_enabled: terminalEnabled,
         tunnel_enabled: tunnelEnabled,
       }
+      // Правка становится умолчанием для следующих хостов — ровно то, чего
+      // ждёшь от поля, которое каждый раз показывает прошлое значение.
+      // Ошибка сохранения не должна ронять добавление хоста: настройка
+      // вторична по отношению к тому, ради чего форму открыли.
+      const bootstrapValues: BootstrapOptions = {
+        enabled: bootstrapEnabled,
+        user: bootstrapUser.trim(),
+        packages: bootstrapPackages.split(/[\s,]+/).filter(Boolean),
+        disable_password_auth: bootstrapDisablePassword,
+      }
+      if (!editing && bootstrapEnabled) {
+        await api('/hub/bootstrap/defaults', { method: 'PUT', body: bootstrapValues }).catch(() => {})
+      }
+
       let authorizedKey: string | undefined
       let createdId: number | undefined
       if (editing) {
@@ -1318,14 +1342,7 @@ function HostForm({
           ? undefined
           : {
               id: createdId,
-              bootstrap: bootstrapEnabled
-                ? {
-                    enabled: true,
-                    user: bootstrapUser.trim(),
-                    packages: bootstrapPackages.split(/[\s,]+/).filter(Boolean),
-                    disable_password_auth: bootstrapDisablePassword,
-                  }
-                : undefined,
+              bootstrap: bootstrapEnabled ? bootstrapValues : undefined,
             },
       )
     } catch (err) {
@@ -1414,10 +1431,11 @@ function HostForm({
           )}
         </Form.Item>
       )}
-      {/* Подготовка предлагается только там, где она осмысленна: новый
-          хост, вход по паролю. Для ключа и для уже добавленного хоста всё
-          это либо уже сделано, либо делалось не нами. */}
-      {!editing && authKind === 'password' && (
+      {/* Показывается при добавлении любого хоста, независимо от способа
+          входа: пакеты и пользователь нужны и там, где вход уже по ключу —
+          в этом случае просто нечего менять с пароля на ключ. Для правки
+          существующего хоста блока нет: подготовка делается один раз. */}
+      {!editing && (
         <div
           style={{
             border: '1px solid var(--border)',
@@ -1432,6 +1450,11 @@ function HostForm({
           <div className="small muted" style={{ marginTop: '0.25rem' }}>
             {t('hosts.bootstrapHint')}
           </div>
+          {authKind !== 'password' && bootstrapEnabled && (
+            <div className="small muted" style={{ marginTop: '0.25rem' }}>
+              {t('hosts.bootstrapKeyAuthNote')}
+            </div>
+          )}
           {bootstrapEnabled && (
             <div style={{ marginTop: '0.5rem' }}>
               <label className="small">
@@ -1450,6 +1473,17 @@ function HostForm({
                   autoSize={{ minRows: 2, maxRows: 4 }}
                 />
               </label>
+              <Button
+                size="small"
+                style={{ marginTop: '0.4rem' }}
+                onClick={() => {
+                  setBootstrapUser('nkt')
+                  setBootstrapPackages(BOOTSTRAP_PACKAGES_DEFAULT)
+                }}
+              >
+                {t('hosts.bootstrapReset')}
+              </Button>
+              <br />
               <Checkbox
                 checked={bootstrapDisablePassword}
                 onChange={(e) => setBootstrapDisablePassword(e.target.checked)}

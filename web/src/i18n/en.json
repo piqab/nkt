@@ -525,7 +525,9 @@
     "bootstrapUser": "User instead of root (empty keeps the current one)",
     "bootstrapPackages": "Packages (space separated)",
     "bootstrapDisablePassword": "Disable password login in sshd",
-    "bootstrapDisablePasswordHint": "Done only after key login has been verified on a fresh connection; if the key stops working after sshd reloads, the change reverts itself."
+    "bootstrapDisablePasswordHint": "Done only after key login has been verified on a fresh connection; if the key stops working after sshd reloads, the change reverts itself.",
+    "bootstrapReset": "Restore the built-in set",
+    "bootstrapKeyAuthNote": "Login is already key-based — the password-to-key steps are skipped, packages and the user remain."
   },
   "certs": {
     "colSites": "Sites",
