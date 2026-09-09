@@ -98,7 +98,7 @@ NoNewPrivileges=yes
 # например Debian 11, не ставят его по умолчанию) systemd-run не может
 # достучаться до PID 1 вообще. С этой capability nkt вместо него сам
 # заходит в РЕАЛЬНОЕ (не песочное) mount-пространство имён PID 1 через
-# `nsenter --target 1 --mount` — тем самым можно поставить сам dbus (см.
+# `nsenter --mount=/proc/1/ns/mnt` — тем самым можно поставить сам dbus (см.
 # кнопку рядом с терминалом) и вообще починить основной путь. Не даёт
 # ничего практически нового по сравнению с уже имеющимся набором прав:
 # процесс и так root с CAP_SYS_PTRACE и уже умеет полностью выходить из
@@ -137,13 +137,17 @@ SystemCallFilter=@system-service
 # исключает @mount, куда его относит systemd) — RestrictNamespaces=mnt выше
 # разрешает ЧЕМ можно пользоваться (тип пространства имён), но не отменяет
 # то, что базовый SystemCallFilter вообще блокирует сам системный вызов.
-# Без этой строки nsenter --target 1 --mount падает с "reassociate to
+# Без этой строки nsenter --mount=/proc/1/ns/mnt падает с "reassociate to
 # namespaces failed: Operation not permitted" несмотря на CAP_SYS_ADMIN и
 # правильный RestrictNamespaces — сам setns() отфильтровывается раньше,
 # чем ядро успевает проверить capability. Добавлен только этот один вызов,
 # не вся группа @mount: mount/umount2/pivot_root и т.п. nsenter --mount не
 # использует и они по-прежнему запрещены.
 SystemCallFilter=setns
+# Пространство имён указывается nsenter'у файлом (--mount=/proc/1/ns/mnt), а
+# не через --target: util-linux 2.41 (Debian 13) при --target зовёт
+# setns(pidfd, ...), и этот вызов юнит отклоняет тем же EPERM. См.
+# nsenterNamespace в internal/api/pty_session.go.
 SystemCallErrorNumber=EPERM
 
 # Слушает только localhost по умолчанию (см. NKT_ADDR); наружу — через reverse

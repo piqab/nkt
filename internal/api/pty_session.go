@@ -303,7 +303,7 @@ func systemdRunArgsAsUser(env map[string]string, username string, argv ...string
 // nsenterArgs already uses, just placed after runuser's own "--" so they
 // apply to the user-dropped process, not to runuser itself.
 func nsenterArgsAsUser(env map[string]string, username string, argv ...string) []string {
-	args := []string{"--target", "1", "--mount", "--", "runuser", "-u", username, "--"}
+	args := []string{nsenterNamespace, "--", "runuser", "-u", username, "--"}
 	if len(env) > 0 {
 		args = append(args, "env")
 		for k, v := range env {
@@ -436,19 +436,38 @@ func needsNsenterFallback() bool {
 	return err == nil
 }
 
+// nsenterNamespace is PID 1's mount-namespace file, named explicitly
+// instead of via `--target 1`.
+//
+// Причина конкретная. util-linux 2.41 (Debian 13) переписал nsenter: при
+// --target он сначала берёт pidfd процесса (pidfd_open) и зовёт
+// setns(pidfd, CLONE_NEWNS). Под юнитом nkt этот вызов возвращается с
+// EPERM — «nsenter: reassociate to namespaces failed: Operation not
+// permitted», ровно та формулировка без имени пространства имён, которую
+// печатает именно pidfd-ветка. До 2.41 (Debian 12 и раньше — 2.38/2.40)
+// pidfd не использовался вовсе, поэтому на тех системах то же самое
+// работало, а сломалось только на свежей Debian 13.
+//
+// Явный путь к файлу пространства имён возвращает nsenter на прежнюю
+// ветку: открыть /proc/1/ns/mnt и вызвать setns(fd, CLONE_NEWNS) — ровно
+// тот вызов, который юнит и разрешает (RestrictNamespaces=mnt плюс
+// SystemCallFilter=setns, см. deploy/netknownsthat.service). Форма
+// работает на всех версиях util-linux, а не только на новых.
+const nsenterNamespace = "--mount=/proc/1/ns/mnt"
+
 // nsenterArgs builds the argv for entering PID 1's own mount namespace —
 // the fallback for when systemd-run can't reach the manager at all (no
-// D-Bus). Deliberately narrow: only --mount, matching RestrictNamespaces=mnt
-// on the unit itself (see deploy/netknownsthat.service) — ProtectSystem=
-// strict is implemented as a private mount namespace, the one and only
-// thing that actually needs escaping here; net/pid/uts/ipc/user stay
-// exactly as they already are. Unlike systemd-run, nsenter has no built-in
-// way to set environment variables for the command it runs, so env (when
-// non-empty) is applied via a leading `env KEY=value ...` — the same
-// coreutils trick used to pass environment through any exec that doesn't
-// support it natively.
+// D-Bus). Deliberately narrow: only the mount namespace, matching
+// RestrictNamespaces=mnt on the unit itself (see
+// deploy/netknownsthat.service) — ProtectSystem=strict is implemented as a
+// private mount namespace, the one and only thing that actually needs
+// escaping here; net/pid/uts/ipc/user stay exactly as they already are.
+// Unlike systemd-run, nsenter has no built-in way to set environment
+// variables for the command it runs, so env (when non-empty) is applied via
+// a leading `env KEY=value ...` — the same coreutils trick used to pass
+// environment through any exec that doesn't support it natively.
 func nsenterArgs(env map[string]string, argv ...string) []string {
-	args := []string{"--target", "1", "--mount", "--"}
+	args := []string{nsenterNamespace, "--"}
 	if len(env) > 0 {
 		args = append(args, "env")
 		for k, v := range env {

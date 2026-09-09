@@ -88,12 +88,16 @@ MemoryDenyWriteExecute=yes
 SystemCallArchitectures=native
 SystemCallFilter=@system-service
 # setns(2) не входит в @system-service (исключает @mount, куда systemd его
-# относит) — без явного разрешения nsenter --target 1 --mount падает с
+# относит) — без явного разрешения nsenter --mount=/proc/1/ns/mnt падает с
 # "reassociate to namespaces failed: Operation not permitted" несмотря на
 # CAP_SYS_ADMIN и RestrictNamespaces=mnt: см. netknownsthat.service, тот
 # же самый эскейп-хетч для localhost. Разрешён только сам setns, не вся
 # группа @mount.
 SystemCallFilter=setns
+# Пространство имён указывается nsenter'у файлом (--mount=/proc/1/ns/mnt), а
+# не через --target: util-linux 2.41 (Debian 13) при --target зовёт
+# setns(pidfd, ...), и этот вызов юнит отклоняет тем же EPERM. См.
+# nsenterNamespace в internal/api/pty_session.go.
 SystemCallErrorNumber=EPERM
 
 # Исходящий SSH к управляемым хостам, загрузка Go-модулей/самого Go, плюс
