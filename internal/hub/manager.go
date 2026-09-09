@@ -738,6 +738,13 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
 		return fail(err)
 	}
+	// Не меняем состояние хоста, только предупреждаем: без системной шины
+	// nkt не выйдет из песочницы своего юнита, и «Терминал» будет
+	// предлагать поставить dbus — лучше узнать это здесь, в логе
+	// установки, чем потом на пустом экране терминала.
+	if _, err := runRemote(client, "test -S "+dbusSocketPath); err != nil {
+		report("hub.dbusMissingAfterInstall")
+	}
 	// Both steps above needed sudo for a non-root SSHUser and neither
 	// failed on it — nopasswd sudo (or root, needing none at all) is
 	// confirmed working, right here, for free, with no separate probe.

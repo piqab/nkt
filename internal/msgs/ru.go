@@ -89,6 +89,10 @@ var ruCatalog = map[string]string{
 	"hub.localScannerNotRunning": "локальный сканер хаба не запущен",
 	"hub.hostUnreachable":        "хост недоступен: %s",
 
+	"hub.dbusMissingAfterInstall":        "Внимание: на хосте не работает системная шина dbus — «Терминал» и установка пакетов из интерфейса будут недоступны, пока не выполнить `systemctl enable --now dbus`",
+	"hub.bootstrapDbus":                  "Подготовка: включаю и запускаю dbus…",
+	"hub.bootstrapDbusOK":                "Подготовка: системная шина dbus работает",
+	"hub.bootstrapDbusNotRunning":        "Подготовка: dbus установлен, но сокет /run/dbus/system_bus_socket не появился (%s) — терминал на хосте будет предлагать поставить dbus, пока служба не запустится",
 	"hub.bootstrapPackages":              "Подготовка: ставлю пакеты (%s)…",
 	"hub.bootstrapUser":                  "Подготовка: завожу пользователя %s с sudo без пароля…",
 	"hub.bootstrapKey":                   "Подготовка: кладу ключ хаба для %s…",

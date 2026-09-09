@@ -201,3 +201,26 @@ func currentUsername(t *testing.T) string {
 	}
 	return strings.TrimSpace(string(out))
 }
+
+// Шина нужна не всегда: если оператор убрал dbus из набора, шаг с
+// enable --now должен молча пропускаться, а не пытаться поднять то, чего
+// не ставили.
+func TestWantsDbus(t *testing.T) {
+	cases := []struct {
+		packages []string
+		want     bool
+	}{
+		{BootstrapPackagesDefault, true},
+		{[]string{"dbus-broker", "curl"}, true},
+		{[]string{"tmux", "btop"}, false},
+		{nil, false},
+		// Имя должно совпадать целиком: dbus-x11 сам по себе шину не даёт.
+		{[]string{"dbus-x11"}, false},
+		{[]string{"libdbus-1-3"}, false},
+	}
+	for _, tc := range cases {
+		if got := wantsDbus(tc.packages); got != tc.want {
+			t.Errorf("wantsDbus(%v) = %v, want %v", tc.packages, got, tc.want)
+		}
+	}
+}
