@@ -308,13 +308,22 @@ export default function Hosts({
    * gets a chance to be seen before anything on the host is touched.
    * Returns whether a job actually started — openHost needs that to know
    * whether autoOpenHost has anything left to wait for. */
+  // Ключ — id хоста: форма добавления уже знает его из ответа, а установка
+  // запускается отдельным вызовом чуть позже.
+  const pendingBootstrap = useRef(new Map<number, BootstrapOptions>())
+
   async function startInstall(host: HubHost, force = false): Promise<boolean> {
     setNotice(null)
     try {
+      // Подготовка относится к одной конкретной установке — к той, что
+      // идёт сразу после добавления хоста. Повторная установка и
+      // обновление её не повторяют: хост уже подготовлен.
+      const bootstrap = pendingBootstrap.current.get(host.id)
       const res = await api<{ job: string }>(
         `/hub/hosts/${host.id}/install${force ? '?force=true' : ''}`,
-        { method: 'POST' },
+        { method: 'POST', body: bootstrap ?? {} },
       )
+      pendingBootstrap.current.delete(host.id)
       setInstallHostId(host.id)
       setJobStatus(null)
       setJob(res.job)
@@ -907,9 +916,10 @@ export default function Hosts({
       {creatingHost && (
         <Modal title={t('hosts.addHostTitle')} onClose={() => setCreatingHost(false)}>
           <HostForm
-            onDone={(name, authorizedKey) => {
+            onDone={(name, authorizedKey, _t, _tu, created) => {
               setCreatingHost(false)
               reload()
+              if (created?.bootstrap) pendingBootstrap.current.set(created.id, created.bootstrap)
               if (authorizedKey) setPubKeyInfo({ hostName: name, key: authorizedKey })
             }}
           />
@@ -1190,6 +1200,20 @@ function InstallLog({ events }: { events: RenewEvent[] }) {
   )
 }
 
+/** Разовая подготовка нового хоста — internal/hub/bootstrap.go. */
+export interface BootstrapOptions {
+  enabled: boolean
+  user: string
+  packages: string[]
+  disable_password_auth: boolean
+}
+
+/** Набор по умолчанию повторяет BootstrapPackagesDefault на стороне хаба:
+ * первые шесть нужны самому nkt, tmux и btop включают режим tmux в
+ * терминале и живой просмотр нагрузки. */
+export const BOOTSTRAP_PACKAGES_DEFAULT =
+  'dbus sudo iproute2 procps ca-certificates curl tmux btop'
+
 type AuthKind = 'generated' | 'password' | 'key'
 
 const AUTH_KIND_OPTIONS: { value: AuthKind; labelKey: string }[] = [
@@ -1229,6 +1253,7 @@ function HostForm({
     generatedAuthorizedKey?: string,
     terminalEnabledChanged?: boolean,
     tunnelEnabledChanged?: boolean,
+    created?: { id: number; bootstrap?: BootstrapOptions },
   ) => void
 }) {
   const { t } = useTranslation()
@@ -1241,6 +1266,12 @@ function HostForm({
   const [authKind, setAuthKind] = useState<AuthKind>(initial?.ssh_auth_kind ?? 'generated')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Подготовка имеет смысл ровно один раз — при добавлении нового хоста,
+  // на который пока есть только root с паролем.
+  const [bootstrapEnabled, setBootstrapEnabled] = useState(false)
+  const [bootstrapUser, setBootstrapUser] = useState('nkt')
+  const [bootstrapPackages, setBootstrapPackages] = useState(BOOTSTRAP_PACKAGES_DEFAULT)
+  const [bootstrapDisablePassword, setBootstrapDisablePassword] = useState(false)
 
   async function submit(values: HostFormValues) {
     setBusy(true)
@@ -1259,6 +1290,7 @@ function HostForm({
         tunnel_enabled: tunnelEnabled,
       }
       let authorizedKey: string | undefined
+      let createdId: number | undefined
       if (editing) {
         const res = await api<{ authorized_key?: string }>(`/hub/hosts/${initial.id}`, {
           method: 'PATCH',
@@ -1271,12 +1303,31 @@ function HostForm({
           body,
         })
         authorizedKey = res.authorized_key
+        createdId = res.id
         form.setFieldsValue({ name: '', addr: '' })
       }
       form.setFieldsValue({ secret: '' })
       const terminalEnabledChanged = editing && terminalEnabled !== (initial.terminal_enabled ?? false)
       const tunnelEnabledChanged = editing && tunnelEnabled !== (initial.tunnel_enabled ?? false)
-      onDone(values.name, authorizedKey, terminalEnabledChanged, tunnelEnabledChanged)
+      onDone(
+        values.name,
+        authorizedKey,
+        terminalEnabledChanged,
+        tunnelEnabledChanged,
+        createdId === undefined
+          ? undefined
+          : {
+              id: createdId,
+              bootstrap: bootstrapEnabled
+                ? {
+                    enabled: true,
+                    user: bootstrapUser.trim(),
+                    packages: bootstrapPackages.split(/[\s,]+/).filter(Boolean),
+                    disable_password_auth: bootstrapDisablePassword,
+                  }
+                : undefined,
+            },
+      )
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -1363,6 +1414,55 @@ function HostForm({
           )}
         </Form.Item>
       )}
+      {/* Подготовка предлагается только там, где она осмысленна: новый
+          хост, вход по паролю. Для ключа и для уже добавленного хоста всё
+          это либо уже сделано, либо делалось не нами. */}
+      {!editing && authKind === 'password' && (
+        <div
+          style={{
+            border: '1px solid var(--border)',
+            borderRadius: 'var(--radius-sm)',
+            padding: '0.6rem 0.75rem',
+            marginBottom: '0.6rem',
+          }}
+        >
+          <Checkbox checked={bootstrapEnabled} onChange={(e) => setBootstrapEnabled(e.target.checked)}>
+            {t('hosts.bootstrapEnable')}
+          </Checkbox>
+          <div className="small muted" style={{ marginTop: '0.25rem' }}>
+            {t('hosts.bootstrapHint')}
+          </div>
+          {bootstrapEnabled && (
+            <div style={{ marginTop: '0.5rem' }}>
+              <label className="small">
+                {t('hosts.bootstrapUser')}
+                <Input
+                  value={bootstrapUser}
+                  onChange={(e) => setBootstrapUser(e.target.value)}
+                  placeholder="nkt"
+                />
+              </label>
+              <label className="small" style={{ display: 'block', marginTop: '0.4rem' }}>
+                {t('hosts.bootstrapPackages')}
+                <Input.TextArea
+                  value={bootstrapPackages}
+                  onChange={(e) => setBootstrapPackages(e.target.value)}
+                  autoSize={{ minRows: 2, maxRows: 4 }}
+                />
+              </label>
+              <Checkbox
+                checked={bootstrapDisablePassword}
+                onChange={(e) => setBootstrapDisablePassword(e.target.checked)}
+                style={{ marginTop: '0.4rem' }}
+              >
+                {t('hosts.bootstrapDisablePassword')}
+              </Checkbox>
+              <div className="small muted">{t('hosts.bootstrapDisablePasswordHint')}</div>
+            </div>
+          )}
+        </div>
+      )}
+
       <Form.Item name="terminal_enabled" valuePropName="checked" style={{ marginBottom: '0.4rem' }}>
         <Checkbox>
           {t('hosts.terminalEnabled')}

@@ -519,7 +519,13 @@
     "save": "Save",
     "addHost": "Add host",
     "addHostTitle": "Add host",
-    "addHostHint": "The hub will connect over SSH, detect the architecture, build or reuse a cached nkt binary, and install it as a systemd service"
+    "addHostHint": "The hub will connect over SSH, detect the architecture, build or reuse a cached nkt binary, and install it as a systemd service",
+    "bootstrapEnable": "Prepare this new host",
+    "bootstrapHint": "A one-time bootstrap before install: add the missing packages, create a user with passwordless sudo, install the hub key and switch to key login. Debian/Ubuntu-like systems only.",
+    "bootstrapUser": "User instead of root (empty keeps the current one)",
+    "bootstrapPackages": "Packages (space separated)",
+    "bootstrapDisablePassword": "Disable password login in sshd",
+    "bootstrapDisablePasswordHint": "Done only after key login has been verified on a fresh connection; if the key stops working after sshd reloads, the change reverts itself."
   },
   "certs": {
     "colSites": "Sites",
