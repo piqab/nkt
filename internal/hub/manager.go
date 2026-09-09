@@ -551,6 +551,13 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, bo
 	}
 
 	if boot != nil && boot.Enabled {
+		// Пустые поля берутся из сохранённых умолчаний, а не из зашитого
+		// набора: оператор мог настроить свой, и запрос без списка означает
+		// «как обычно», а не «как в коде».
+		defaults := m.BootstrapDefaults(ctx)
+		if len(boot.Packages) == 0 {
+			boot.Packages = defaults.Packages
+		}
 		if err := boot.Validate(); err != nil {
 			return "", err
 		}
@@ -669,14 +676,17 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// пересоздаётся её же проверенными реквизитами — то, что ключ принят,
 	// доказано отдельным подключением внутри bootstrapHost.
 	if job.bootstrap != nil && job.bootstrap.Enabled {
-		res, err := m.bootstrapHost(ctx, client, host, *job.bootstrap, report)
+		res, err := m.bootstrapHost(ctx, client, host, *job.bootstrap, secret, report)
 		if err != nil {
 			return fail(err)
 		}
 		if err := m.applyBootstrapResult(ctx, hostID, host, res); err != nil {
 			return fail(err)
 		}
-		if res.PrivatePEM != "" {
+		// Переподключаться и переписывать запись хоста нужно только если
+		// реквизиты действительно поменялись: при входе по ключу под тем же
+		// пользователем подготовка ставит пакеты и ничего больше.
+		if res.PrivatePEM != "" && (res.SSHUser != host.SSHUser || res.PrivatePEM != string(secret)) {
 			keyClient, err := dialSSH(ctx, host.Addr, host.SSHPort, res.SSHUser, store.HostAuthKey, []byte(res.PrivatePEM))
 			if err != nil {
 				return fail(fmt.Errorf("переподключение по ключу под %s: %w", res.SSHUser, err))

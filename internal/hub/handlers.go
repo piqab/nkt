@@ -603,6 +603,26 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// handleBootstrapDefaults отдаёт и сохраняет набор по умолчанию для
+// подготовки хостов — форма добавления показывает именно его, а правка
+// становится умолчанием для следующих хостов.
+func (s *Server) handleBootstrapDefaults(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, s.hub.BootstrapDefaults(r.Context()))
+		return
+	}
+	var opts BootstrapOptions
+	if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.hub.SaveBootstrapDefaults(r.Context(), opts); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, s.hub.BootstrapDefaults(r.Context()))
+}
+
 func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {

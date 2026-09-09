@@ -170,6 +170,9 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/update", s.handleHubUpdate)
 					r.Post("/hub/vulndb/refresh", s.handleHubVulnDBRefresh)
 
+					r.Get("/hub/bootstrap/defaults", s.handleBootstrapDefaults)
+					r.Put("/hub/bootstrap/defaults", s.handleBootstrapDefaults)
+
 					r.Post("/hub/hosts", s.handleAddHost)
 					r.Patch("/hub/hosts/{id}", s.handleUpdateHost)
 					r.Delete("/hub/hosts/{id}", s.handleDeleteHost)

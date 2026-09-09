@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -33,6 +34,55 @@ import (
 // интерфейс и нажимать «установить».
 var BootstrapPackagesDefault = []string{
 	"dbus", "sudo", "iproute2", "procps", "ca-certificates", "curl", "tmux", "btop",
+}
+
+// bootstrapDefaultsKey — где в таблице kv лежит набор по умолчанию.
+// Настройка живёт на хабе, а не в коде: оператор правит список один раз
+// при добавлении хоста, и следующий хост должен получить уже его, а не
+// снова исходный набор.
+const bootstrapDefaultsKey = "hub.bootstrap.defaults"
+
+// BootstrapDefaults returns the saved defaults, falling back to the
+// built-in set for anything never configured.
+func (m *Manager) BootstrapDefaults(ctx context.Context) BootstrapOptions {
+	out := BootstrapOptions{
+		User:     "nkt",
+		Packages: append([]string(nil), BootstrapPackagesDefault...),
+	}
+	raw, ok, err := m.db.KVGet(ctx, bootstrapDefaultsKey)
+	if err != nil || !ok {
+		return out
+	}
+	var saved BootstrapOptions
+	if json.Unmarshal([]byte(raw), &saved) != nil {
+		return out
+	}
+	// Сохранённое значение проверяется на чтении так же, как на записи:
+	// база могла быть отредактирована мимо интерфейса, а список уходит в
+	// apt-get install на чужой машине.
+	if saved.Validate() != nil {
+		return out
+	}
+	if len(saved.Packages) > 0 {
+		out.Packages = saved.Packages
+	}
+	out.User = saved.User
+	out.DisablePasswordAuth = saved.DisablePasswordAuth
+	return out
+}
+
+// SaveBootstrapDefaults запоминает набор как умолчание для следующих хостов.
+func (m *Manager) SaveBootstrapDefaults(ctx context.Context, opts BootstrapOptions) error {
+	opts.Enabled = true // чтобы Validate проверил поля, а не пропустил их
+	if err := opts.Validate(); err != nil {
+		return err
+	}
+	opts.Enabled = false
+	raw, err := json.Marshal(opts)
+	if err != nil {
+		return err
+	}
+	return m.db.KVSet(ctx, bootstrapDefaultsKey, string(raw))
 }
 
 // BootstrapOptions описывает разовую подготовку хоста.
@@ -92,7 +142,7 @@ type bootstrapResult struct {
 // root с паролем). Возвращает новые реквизиты подключения, если они
 // поменялись.
 func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host store.Host,
-	opts BootstrapOptions, report func(key string, args ...any)) (bootstrapResult, error) {
+	opts BootstrapOptions, secret []byte, report func(key string, args ...any)) (bootstrapResult, error) {
 
 	var res bootstrapResult
 	if err := checkAptHost(client); err != nil {
@@ -116,13 +166,37 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 		targetUser = opts.User
 	}
 
-	report("hub.bootstrapKey", targetUser)
-	privatePEM, authorizedKey, err := generateHostKeyPair()
-	if err != nil {
-		return res, err
-	}
-	if err := installAuthorizedKey(client, sudo, targetUser, authorizedKey); err != nil {
-		return res, err
+	// Ключ. При входе по паролю генерируется новый — это и есть переход с
+	// пароля на ключ. При входе по ключу менять его незачем: он уже
+	// работает; но если заводится новый пользователь, тот же публичный
+	// ключ надо положить и ему, иначе после смены пользователя хаб просто
+	// потеряет доступ.
+	var privatePEM, authorizedKey string
+	switch {
+	case host.SSHAuthKind == store.HostAuthKey:
+		signer, err := ssh.ParsePrivateKey(secret)
+		if err != nil {
+			return res, diagnoseKeyError(string(secret), err)
+		}
+		privatePEM, authorizedKey = string(secret), formatAuthorizedKey(signer.PublicKey())
+		// Новому пользователю ключ положить надо; тому же самому — он уже
+		// там, где нужен, и трогать authorized_keys незачем.
+		if targetUser != host.SSHUser {
+			report("hub.bootstrapKey", targetUser)
+			if err := installAuthorizedKey(client, sudo, targetUser, authorizedKey); err != nil {
+				return res, err
+			}
+		}
+	default:
+		report("hub.bootstrapKey", targetUser)
+		var err error
+		privatePEM, authorizedKey, err = generateHostKeyPair()
+		if err != nil {
+			return res, err
+		}
+		if err := installAuthorizedKey(client, sudo, targetUser, authorizedKey); err != nil {
+			return res, err
+		}
 	}
 
 	// Проверка отдельным соединением: только новое подключение доказывает,
