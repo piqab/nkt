@@ -70,6 +70,10 @@ type installJob struct {
 	id      string
 	created time.Time
 	hostID  int64
+	// bootstrap — разовая подготовка хоста перед установкой (пакеты,
+	// пользователь, ключ вместо пароля). nil для обычной установки и для
+	// любой переустановки: готовить уже подготовленный хост незачем.
+	bootstrap *BootstrapOptions
 	// cancel stops every ctx-aware step still to come (exec.CommandContext
 	// cross-compiles, HTTP calls through the tunnel). It cannot by itself
 	// interrupt a step already blocked inside an SSH session — the
@@ -535,7 +539,7 @@ func orUnknown(s string) string {
 // finds an nkt on the target this hub didn't put there itself — set by the
 // operator explicitly confirming the overwrite after seeing
 // ForeignInstallError's detail.
-func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool) (string, error) {
+func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, boot *BootstrapOptions) (string, error) {
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
 		return "", fmt.Errorf("хост не найден: %w", err)
@@ -546,7 +550,13 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool) (s
 		}
 	}
 
-	job := &installJob{created: time.Now(), hostID: hostID}
+	if boot != nil && boot.Enabled {
+		if err := boot.Validate(); err != nil {
+			return "", err
+		}
+	}
+
+	job := &installJob{created: time.Now(), hostID: hostID, bootstrap: boot}
 	job.append("hub.startingInstall")
 
 	id, err := newJobID()
@@ -653,6 +663,32 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	}
 	defer client.Close()
 	job.setClient(client)
+
+	// Подготовка идёт до всего остального: она меняет способ входа, и
+	// дальнейшие шаги должны работать уже по новому. Соединение
+	// пересоздаётся её же проверенными реквизитами — то, что ключ принят,
+	// доказано отдельным подключением внутри bootstrapHost.
+	if job.bootstrap != nil && job.bootstrap.Enabled {
+		res, err := m.bootstrapHost(ctx, client, host, *job.bootstrap, report)
+		if err != nil {
+			return fail(err)
+		}
+		if err := m.applyBootstrapResult(ctx, hostID, host, res); err != nil {
+			return fail(err)
+		}
+		if res.PrivatePEM != "" {
+			keyClient, err := dialSSH(ctx, host.Addr, host.SSHPort, res.SSHUser, store.HostAuthKey, []byte(res.PrivatePEM))
+			if err != nil {
+				return fail(fmt.Errorf("переподключение по ключу под %s: %w", res.SSHUser, err))
+			}
+			client.Close()
+			client = keyClient
+			defer client.Close()
+			job.setClient(client)
+			host.SSHUser, host.SSHAuthKind = res.SSHUser, store.HostAuthKey
+			report("hub.bootstrapDone", res.SSHUser)
+		}
+	}
 
 	goos, goarch, err := detectTarget(client)
 	if err != nil {

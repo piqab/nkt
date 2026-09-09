@@ -614,7 +614,13 @@ func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	force := r.URL.Query().Get("force") == "true"
-	job, err := s.hub.StartInstall(r.Context(), id, force)
+	// Тело необязательно: обычная установка и переустановка приходят без
+	// него, подготовка нового хоста — с ним.
+	var boot BootstrapOptions
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&boot)
+	}
+	job, err := s.hub.StartInstall(r.Context(), id, force, &boot)
 	if err != nil {
 		var foreign *ForeignInstallError
 		if errors.As(err, &foreign) {
