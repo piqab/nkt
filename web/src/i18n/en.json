@@ -111,7 +111,9 @@
     "notPublished": "{{port}} (not published)",
     "httpError": "Error {{status}}",
     "period": "Period",
-    "schedule": "schedule"
+    "schedule": "schedule",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "containers": {
     "vms": "Virtual machines"
@@ -913,7 +915,11 @@
     "detachSession": "detach (session keeps running)",
     "copyMode": "scroll/copy mode (q to exit)",
     "paste": "paste copied text",
-    "wheelScroll": "mouse wheel — scroll history (requires tmux mouse on)"
+    "wheelScroll": "mouse wheel — scroll history (requires tmux mouse on)",
+    "diagnosisTitle": "The terminal did not open. What is in the way:",
+    "diagnosisHint": "Run these on the host from a console or over SSH — not from this terminal, which is the broken one:",
+    "dbusInstallFailedTitle": "Installing dbus automatically failed",
+    "dbusInstallFailedHint": "The automatic install goes through the very path that is broken, so install dbus by hand — from the host console or over SSH:"
   },
   "commonPackages": {
     "title": "Quick install",
