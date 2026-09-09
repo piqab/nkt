@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Badge, Button, Checkbox, Form, Input, InputNumber, Select, Switch, Table, Tooltip, type TableColumnsType } from 'antd'
+import { Badge, Button, Checkbox, Form, Input, InputNumber, Switch, Table, Tabs, Tooltip, type TableColumnsType } from 'antd'
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -1216,10 +1216,13 @@ export const BOOTSTRAP_PACKAGES_DEFAULT =
 
 type AuthKind = 'generated' | 'password' | 'key'
 
+// Порядок табов — порядок сценариев по частоте: свежий сервер с root и
+// паролем, затем ключ хаба, который ставится вручную, и лишь потом свой
+// ключ.
 const AUTH_KIND_OPTIONS: { value: AuthKind; labelKey: string }[] = [
+  { value: 'password', labelKey: 'hosts.authPassword' },
   { value: 'generated', labelKey: 'hosts.authGenerated' },
   { value: 'key', labelKey: 'hosts.authKey' },
-  { value: 'password', labelKey: 'hosts.authPassword' },
 ]
 
 type HostFormValues = {
@@ -1263,12 +1266,19 @@ function HostForm({
   // key never has to be pasted anywhere for the common case. Editing
   // defaults to whatever the host already uses, since switching it is an
   // explicit choice, not the default action of opening the form.
-  const [authKind, setAuthKind] = useState<AuthKind>(initial?.ssh_auth_kind ?? 'generated')
+  // Новый хост открывается на сценарии «root и пароль»: это состояние
+  // свежего сервера, и только в нём хаб способен подготовить хост сам.
+  // Правка существующего открывается на том способе, который у него уже
+  // есть — менять его при открытии формы никто не просил.
+  const [authKind, setAuthKind] = useState<AuthKind>(initial?.ssh_auth_kind ?? 'password')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Подготовка имеет смысл ровно один раз — при добавлении нового хоста,
   // на который пока есть только root с паролем.
-  const [bootstrapEnabled, setBootstrapEnabled] = useState(false)
+  // Включена сразу: в сценарии с паролем подготовка — это и есть то, ради
+  // чего сценарий выбран. Снять её осмысленно, только если хост уже
+  // подготовлен, а пароль просто удобнее.
+  const [bootstrapEnabled, setBootstrapEnabled] = useState(!initial)
   const [bootstrapUser, setBootstrapUser] = useState('nkt')
   const [bootstrapPackages, setBootstrapPackages] = useState(BOOTSTRAP_PACKAGES_DEFAULT)
   const [bootstrapDisablePassword, setBootstrapDisablePassword] = useState(false)
@@ -1401,14 +1411,21 @@ function HostForm({
         <Form.Item name="ssh_user" label={t('hosts.sshUser')} rules={[{ required: true }]} style={{ minWidth: '8rem' }}>
           <Input />
         </Form.Item>
-        <Form.Item label={t('hosts.authMethod')} style={{ minWidth: '14rem' }}>
-          <Select<AuthKind>
-            value={authKind}
-            onChange={setAuthKind}
-            options={AUTH_KIND_OPTIONS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
-          />
-        </Form.Item>
       </div>
+
+      {/* Режимы установки — табами, а не выпадающим списком: каждый таб
+          законченный сценарий, и внутри видно только то, что к нему
+          относится. Прежняя связка «список + галочка подготовки»
+          позволяла собрать заведомо нерабочее сочетание — подготовку при
+          входе по ключу, которого на свежем хосте ещё нет, из-за чего
+          установка падала на подключении, так и не дойдя до неё. */}
+      <Tabs
+        activeKey={authKind}
+        onChange={(key) => setAuthKind(key as AuthKind)}
+        items={AUTH_KIND_OPTIONS.map((o) => ({ key: o.value, label: t(o.labelKey) }))}
+        size="small"
+        style={{ marginBottom: '0.4rem' }}
+      />
       {authKind === 'generated' ? (
         <p className="small muted">
           <Trans i18nKey="hosts.generatedKeyHint" components={{ code: <code className="mono" /> }} />
@@ -1431,11 +1448,10 @@ function HostForm({
           )}
         </Form.Item>
       )}
-      {/* Показывается при добавлении любого хоста, независимо от способа
-          входа: пакеты и пользователь нужны и там, где вход уже по ключу —
-          в этом случае просто нечего менять с пароля на ключ. Для правки
+      {/* Только в сценарии с паролем: подготовке нужен рабочий доступ, а
+          на свежем сервере он ровно один — root с паролем. Для правки
           существующего хоста блока нет: подготовка делается один раз. */}
-      {!editing && (
+      {!editing && authKind === 'password' && (
         <div
           style={{
             border: '1px solid var(--border)',
@@ -1450,11 +1466,6 @@ function HostForm({
           <div className="small muted" style={{ marginTop: '0.25rem' }}>
             {t('hosts.bootstrapHint')}
           </div>
-          {authKind !== 'password' && bootstrapEnabled && (
-            <div className="small muted" style={{ marginTop: '0.25rem' }}>
-              {t('hosts.bootstrapKeyAuthNote')}
-            </div>
-          )}
           {bootstrapEnabled && (
             <div style={{ marginTop: '0.5rem' }}>
               <label className="small">
