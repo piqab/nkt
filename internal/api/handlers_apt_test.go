@@ -149,3 +149,74 @@ func TestHandleAptSearchRequiresMinQueryLength(t *testing.T) {
 		t.Errorf("results = %+v, want empty for a 1-char query", body.Results)
 	}
 }
+
+// Строки взяты из настоящего `apt-cache search htop` на Debian: он ищет и
+// по имени, и по описанию, и отдаёт всё вперемешку по алфавиту — из-за
+// чего сам htop оказывался в середине выдачи, а на длинном запросе мог
+// вообще не попасть в лимит.
+func TestRankAptResults(t *testing.T) {
+	raw := []aptSearchResult{
+		{Name: "aptitude", Description: "terminal-based package manager, like htop for packages"},
+		{Name: "glances", Description: "Curses-based monitoring tool, an htop alternative"},
+		{Name: "htop", Description: "interactive processes viewer"},
+		{Name: "htop-vim", Description: "interactive processes viewer with vim keybindings"},
+		{Name: "libhtop0", Description: "library used by htop"},
+		{Name: "pcp-htop", Description: "htop-like tool for Performance Co-Pilot"},
+	}
+
+	got := rankAptResults(raw, "htop")
+
+	wantOrder := []string{"htop", "htop-vim", "libhtop0", "pcp-htop", "aptitude", "glances"}
+	for i, want := range wantOrder {
+		if got[i].Name != want {
+			t.Errorf("позиция %d: %q, ожидалось %q (полный порядок: %v)", i, got[i].Name, want, names(got))
+		}
+	}
+
+	wantMatch := map[string]string{
+		"htop":     aptMatchExact,
+		"htop-vim": aptMatchPrefix,
+		"libhtop0": aptMatchName,
+		"pcp-htop": aptMatchName,
+		"aptitude": aptMatchDescription,
+		"glances":  aptMatchDescription,
+	}
+	for _, r := range got {
+		if r.Match != wantMatch[r.Name] {
+			t.Errorf("%s отнесён к группе %q, ожидалась %q", r.Name, r.Match, wantMatch[r.Name])
+		}
+	}
+}
+
+// Регистр в именах пакетов встречается редко, но запрос пользователь
+// набирает как придётся.
+func TestClassifyAptMatchIgnoresCase(t *testing.T) {
+	if got := classifyAptMatch("htop", "HTOP"); got != aptMatchExact {
+		t.Errorf("classifyAptMatch(htop, HTOP) = %q", got)
+	}
+	if got := classifyAptMatch("HTop-Vim", "htop"); got != aptMatchPrefix {
+		t.Errorf("classifyAptMatch(HTop-Vim, htop) = %q", got)
+	}
+}
+
+// Внутри группы порядок остаётся алфавитным — тем самым, в котором apt и
+// отдаёт результаты.
+func TestRankAptResultsKeepsAlphabeticalWithinGroup(t *testing.T) {
+	got := rankAptResults([]aptSearchResult{
+		{Name: "nginx-full"}, {Name: "nginx"}, {Name: "nginx-common"},
+	}, "nginx")
+	want := []string{"nginx", "nginx-common", "nginx-full"}
+	for i := range want {
+		if got[i].Name != want[i] {
+			t.Fatalf("порядок %v, ожидался %v", names(got), want)
+		}
+	}
+}
+
+func names(results []aptSearchResult) []string {
+	out := make([]string, len(results))
+	for i, r := range results {
+		out[i] = r.Name
+	}
+	return out
+}

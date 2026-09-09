@@ -976,7 +976,11 @@
     "noUpdates": "no updates",
     "updatedRescanned": "Packages updated, host rescanned.",
     "installSelected": "Install selected ({{count}})",
-    "clearSelection": "Clear selection"
+    "clearSelection": "Clear selection",
+    "colName": "Package",
+    "colDescription": "Description",
+    "colState": "State",
+    "matchLegend": "Packages whose name matched the query come first (highlighted); below are those where it only appears in the description."
   },
   "overview": {
     "what": "host overview",

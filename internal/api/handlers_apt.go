@@ -43,6 +43,70 @@ type aptSearchResult struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Installed   bool   `json:"installed"`
+	// Match говорит, ЧЕМ пакет подошёл под запрос: точным именем, началом
+	// имени, вхождением в имя или только описанием. apt-cache search ищет
+	// по имени И по описанию и отдаёт всё вперемешку по алфавиту — из-за
+	// чего пакет с искомым именем оказывался где-то в середине списка, а
+	// при обрезке до лимита мог и не попасть в него вовсе.
+	Match string `json:"match"`
+}
+
+// Порядок групп: чем точнее совпадение, тем выше.
+const (
+	aptMatchExact       = "exact"
+	aptMatchPrefix      = "prefix"
+	aptMatchName        = "name"
+	aptMatchDescription = "description"
+)
+
+// aptMatchRank — вес группы для сортировки; меньше значит выше.
+func aptMatchRank(match string) int {
+	switch match {
+	case aptMatchExact:
+		return 0
+	case aptMatchPrefix:
+		return 1
+	case aptMatchName:
+		return 2
+	default:
+		return 3
+	}
+}
+
+// classifyAptMatch решает, к какой группе отнести результат.
+func classifyAptMatch(name, query string) string {
+	name, query = strings.ToLower(name), strings.ToLower(query)
+	switch {
+	case name == query:
+		return aptMatchExact
+	case strings.HasPrefix(name, query):
+		return aptMatchPrefix
+	case strings.Contains(name, query):
+		return aptMatchName
+	default:
+		return aptMatchDescription
+	}
+}
+
+// rankAptResults расставляет результаты по группам и сортирует: сначала
+// точное совпадение, затем начинающиеся с запроса, затем содержащие его в
+// имени, и лишь потом те, где запрос встретился только в описании. Внутри
+// группы — по алфавиту, как их и отдал apt-cache.
+//
+// Сортировка обязана идти ДО обрезки по лимиту: иначе двести описаний,
+// алфавитно опередивших нужный пакет, вытесняли бы его из ответа.
+func rankAptResults(results []aptSearchResult, query string) []aptSearchResult {
+	for i := range results {
+		results[i].Match = classifyAptMatch(results[i].Name, query)
+	}
+	sort.SliceStable(results, func(i, j int) bool {
+		ri, rj := aptMatchRank(results[i].Match), aptMatchRank(results[j].Match)
+		if ri != rj {
+			return ri < rj
+		}
+		return results[i].Name < results[j].Name
+	})
+	return results
 }
 
 // aptSearchResultLimit bounds how many matches handleAptSearch returns to
@@ -69,7 +133,7 @@ func (s *Server) handleAptSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	c := s.scanner.Collector()
 	res, _ := c.Run(r.Context(), "apt-cache", "search", q)
-	results := parseAptCacheSearch(res.Stdout)
+	results := rankAptResults(parseAptCacheSearch(res.Stdout), q)
 
 	names := make([]string, len(results))
 	for i, p := range results {
