@@ -173,6 +173,11 @@ var ruCatalog = map[string]string{
 	"parse.renewalCronActive":        "автообновление включено: задание %s",
 	"parse.renewalNoAutomationFound": "certbot знает о сертификате, но ни таймер certbot.timer, ни задание cron не найдены — продление не запустится само",
 
+	"finding.profileDrift.title":      "Хост разошёлся с профилем «%s»: расхождений — %d",
+	"finding.profileDrift.detail":     "Проверка сравнила состояние хоста с описанием: расхождений — %d, из них помеченных опасными — %d; о %d ресурсах судить не удалось.",
+	"finding.profileDrift.suggestion": "Откройте «Профили», постройте план и примените то, что действительно нужно.",
+	"finding.profileBroken.title":      "Профиль «%s» не проверить",
+	"finding.profileBroken.suggestion": "Откройте раздел «Профили» и исправьте описание — пока оно не читается, расхождения не отслеживаются.",
 	"finding.portConflict.title":      "Конфликт порта %d между %s и %s",
 	"finding.portConflict.detail":     "%s (%s, %s:%d) и %s (%s, %s:%d) объявляют один и тот же порт. Второй сервис не сможет занять сокет и будет падать при старте.",
 	"finding.portConflict.suggestion": "Разведите сервисы по разным портам или адресам привязки.",

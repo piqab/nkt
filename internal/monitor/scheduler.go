@@ -34,6 +34,9 @@ type Scheduler struct {
 	logs        *LogCollector
 	certRenewer *CertRenewer
 	log         *slog.Logger
+	// drift — сверка хоста с сохранёнными профилями. nil, пока её не
+	// подключили: планировщик о профилях ничего не знает.
+	drift func(context.Context) (int, error)
 
 	mu     sync.RWMutex
 	status map[string]*JobStatus
@@ -41,6 +44,11 @@ type Scheduler struct {
 
 // NewScheduler wires the background jobs together. certs is used only by the
 // optional cert-renew job (config.AutoRenewCerts).
+// SetDriftCheck подключает сверку хоста с сохранёнными профилями.
+// Передаётся снаружи (cmd/nkt): планировщику незачем знать ни про
+// профили, ни про то, из чего собирается чтение состояния.
+func (s *Scheduler) SetDriftCheck(fn func(context.Context) (int, error)) { s.drift = fn }
+
 func NewScheduler(cfg *config.Config, db *store.DB, scanner *inventory.Scanner,
 	certs *control.CertManager, log *slog.Logger) *Scheduler {
 	return &Scheduler{
@@ -126,6 +134,14 @@ func (s *Scheduler) Start(ctx context.Context, wg *sync.WaitGroup) {
 		sources := DiscoverSources(s.scanner.Latest(), s.cfg.NginxAccessLogs, s.cfg.HAProxyAccessLog)
 		return s.logs.RunOnce(ctx, sources)
 	})
+	// Сверка с профилями: ничего не меняет, только считает расхождения и
+	// оставляет их в общем списке проблем (см. profile.DriftFindings).
+	// Поэтому она не спрашивает AllowMutations — читать состояние можно
+	// и на хосте, где менять запрещено.
+	if s.drift != nil {
+		s.every(ctx, wg, "profile-drift", s.cfg.DriftInterval, s.drift)
+	}
+
 	s.every(ctx, wg, "retention", 6*time.Hour, func(ctx context.Context) (int, error) {
 		res, err := s.db.Purge(ctx, s.cfg.Retention)
 		return int(res.Probes + res.Metrics + res.Sessions + res.Snapshots), err

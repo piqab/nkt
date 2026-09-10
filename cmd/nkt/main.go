@@ -353,6 +353,10 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	defer stop()
 
 	scheduler := monitor.NewScheduler(r.cfg, r.db, r.scanner, r.certs, log)
+	// Сверка с профилями по расписанию: результат ложится в общий список
+	// проблем, поэтому о расхождении узнают, не заходя в раздел профилей.
+	// Подключается до Start — там решается, какие задания вообще заводить.
+	scheduler.SetDriftCheck(driftCheck(r))
 	var jobs sync.WaitGroup
 	scheduler.Start(ctx, &jobs)
 
@@ -653,6 +657,22 @@ func enableUnrestrictedWrites(c collect.Collector) {
 	}
 }
 
+// driftCheck строит сверку хоста с сохранёнными профилями.
+func driftCheck(r *runtime) func(context.Context) (int, error) {
+	return func(ctx context.Context) (int, error) {
+		return profile.CheckDrift(ctx, r.db,
+			profile.NewHostReader(r.collector, r.scanner, r.osusers, r.sysconfig))
+	}
+}
+
+// hubDriftCheck — то же для машины, на которой работает хаб.
+func hubDriftCheck(r *hubRuntime) func(context.Context) (int, error) {
+	return func(ctx context.Context) (int, error) {
+		return profile.CheckDrift(ctx, r.db,
+			profile.NewHostReader(r.collector, r.scanner, r.osusers, r.sysconfig))
+	}
+}
+
 // registerJobRunners привязывает исполнителей фоновых заданий. Делается
 // здесь, а не в самих пакетах: только тут собраны разом и менеджеры, и
 // выход из песочницы, а зависеть друг от друга им незачем.
@@ -735,6 +755,8 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// local install — without this, nothing would ever call Scan() and
 	// the localhost dashboard would stay permanently empty.
 	scheduler := monitor.NewScheduler(r.cfg, r.db, r.scanner, r.certs, log)
+	// Та же сверка для машины самого хаба — она такой же хост в списке.
+	scheduler.SetDriftCheck(hubDriftCheck(r))
 	var jobs sync.WaitGroup
 	scheduler.Start(ctx, &jobs)
 
