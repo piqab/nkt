@@ -60,6 +60,18 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	token, expires, user, err := s.auth.Login(r.Context(), req.Username, req.Password, r.UserAgent())
+	if err != nil && s.cfg.SystemLogin {
+		// Второй способ: пароль системной учётной записи хоста. Порядок
+		// именно такой — учётка nkt с тем же именем побеждает, иначе
+		// смена системного пароля молча меняла бы вход в панель. Пробуем
+		// только после отказа: успешный обычный вход не должен зависеть
+		// от того, есть ли на хосте unix_chkpwd.
+		if sysToken, sysExpires, sysUser, sysErr := s.auth.LoginSystem(
+			r.Context(), req.Username, req.Password, r.UserAgent()); sysErr == nil {
+			token, expires, user, err = sysToken, sysExpires, sysUser, nil
+			s.db.Audit(r.Context(), user.Username, "auth.login.system", "", "ok", nil)
+		}
+	}
 	if err != nil {
 		status := http.StatusUnauthorized
 		if errors.Is(err, auth.ErrTooManyAttempts) {
