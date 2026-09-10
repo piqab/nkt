@@ -1577,6 +1577,14 @@
     "bridge": "Network bridge",
     "bridgeDefault": "empty — default libvirt network",
     "autostart": "Start together with the host",
-    "create": "Create"
+    "create": "Create",
+    "templatesTitle": "Templates",
+    "templatesHint": "A named hardware set: vCPUs, memory, disk, image and your key. The machine name is not part of a template — each machine has its own.",
+    "templatesEmpty": "No templates yet. Fill in the creation form and save it as a template.",
+    "useTemplate": "From template:",
+    "templateName": "template name",
+    "saveTemplate": "save as template",
+    "confirmDeleteTemplate": "Delete the template \"{{name}}\"? Machines already created are unaffected.",
+    "templateSummary": "{{image}} · {{vcpus}} vCPU · {{memory}} MB · {{disk}} GB"
   }
 }

@@ -233,6 +233,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/profiles/versions/{version}", s.handleProfileVersion)
 
 			r.Get("/vm/images", s.handleVMImages)
+			r.Get("/vm/templates", s.handleVMTemplates)
 
 			r.Get("/jobs", s.handleJobList)
 			r.Get("/jobs/{id}", s.handleJobGet)
@@ -300,6 +301,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/vm/images/download", s.handleVMImageDownload)
 				r.Post("/vm/images/delete", s.handleVMImageDelete)
 				r.Post("/vm/create", s.handleVMCreate)
+				r.Post("/vm/templates", s.handleVMTemplateSave)
+				r.Delete("/vm/templates/{id}", s.handleVMTemplateDelete)
 
 				r.Post("/jobs/{id}/cancel", s.handleJobCancel)
 				r.Post("/configs/mkdir", s.handleConfigMkdir)

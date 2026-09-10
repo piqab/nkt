@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Checkbox, Input, InputNumber, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import type { Job, Me, VMImage, VMImageLocal } from '../types'
+import type { Job, Me, VMImage, VMImageLocal, VMTemplate, VMSpec } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import { DataTable } from '../components/DataTable'
@@ -19,6 +19,7 @@ export default function VMImages({ me }: { me: Me }) {
   const images = useApi<{ catalog: VMImage[]; local: VMImageLocal[]; dir: string }>('/vm/images', POLL_MS)
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [creating, setCreating] = useState<VMImage | null>(null)
+  const templates = useApi<{ templates: VMTemplate[] }>('/vm/templates', 60_000)
   const [error, setError] = useState<string | null>(null)
 
   const local = new Map((images.data?.local ?? []).map((l) => [l.id, l]))
@@ -135,9 +136,53 @@ export default function VMImages({ me }: { me: Me }) {
         )}
       </Card>
 
+      <Card title={t('vmimages.templatesTitle')} subtitle={t('vmimages.templatesHint')}>
+        {(templates.data?.templates ?? []).length === 0 ? (
+          <p className="small muted">{t('vmimages.templatesEmpty')}</p>
+        ) : (
+          <div className="col" style={{ gap: '0.3rem' }}>
+            {(templates.data?.templates ?? []).map((tpl) => {
+              const spec = parseSpec(tpl.spec)
+              return (
+                <div key={tpl.id} className="row spread">
+                  <span className="small">
+                    <strong>{tpl.name}</strong>
+                    <span className="muted">
+                      {' '}
+                      {t('vmimages.templateSummary', {
+                        image: spec.image_id,
+                        vcpus: spec.vcpus,
+                        memory: spec.memory_mb,
+                        disk: spec.disk_gb,
+                      })}
+                    </span>
+                  </span>
+                  {canEdit && (
+                    <Button
+                      type="link"
+                      size="small"
+                      danger
+                      onClick={async () => {
+                        if (!(await confirmAction(t('vmimages.confirmDeleteTemplate', { name: tpl.name })))) return
+                        await api(`/vm/templates/${tpl.id}`, { method: 'DELETE' })
+                        templates.reload()
+                      }}
+                    >
+                      {t('common.delete')}
+                    </Button>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
+
       {creating && (
         <CreateVMModal
           image={creating}
+          templates={templates.data?.templates ?? []}
+          onSaved={() => templates.reload()}
           onClose={() => setCreating(null)}
           onStarted={(job) => {
             setCreating(null)
@@ -160,10 +205,14 @@ export default function VMImages({ me }: { me: Me }) {
  */
 function CreateVMModal({
   image,
+  templates,
+  onSaved,
   onClose,
   onStarted,
 }: {
   image: VMImage
+  templates: VMTemplate[]
+  onSaved: () => void
   onClose: () => void
   onStarted: (job: Job) => void
 }) {
@@ -178,6 +227,46 @@ function CreateVMModal({
   const [autostart, setAutostart] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [templateName, setTemplateName] = useState('')
+
+  // Шаблон подставляет железо и пользователя, но не имя машины: имя у
+  // каждой своё, и подставлять чужое было бы приглашением к опечатке.
+  function applyTemplate(tpl: VMTemplate) {
+    const spec = parseSpec(tpl.spec)
+    if (spec.disk_gb) setDiskGB(spec.disk_gb)
+    if (spec.memory_mb) setMemoryMB(spec.memory_mb)
+    if (spec.vcpus) setVCPUs(spec.vcpus)
+    if (spec.user) setUser(spec.user)
+    if (spec.ssh_key) setSSHKey(spec.ssh_key)
+    if (spec.bridge) setBridge(spec.bridge)
+  }
+
+  async function saveTemplate() {
+    const name = templateName.trim()
+    if (!name) return
+    setError(null)
+    try {
+      await api('/vm/templates', {
+        method: 'POST',
+        body: {
+          name,
+          spec: {
+            image_id: image.id,
+            disk_gb: diskGB,
+            memory_mb: memoryMB,
+            vcpus,
+            user,
+            ssh_key: sshKey.trim(),
+            bridge: bridge.trim(),
+          },
+        },
+      })
+      setTemplateName('')
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   async function create() {
     setBusy(true)
@@ -247,12 +336,44 @@ function CreateVMModal({
         {t('vmimages.autostart')}
       </label>
 
+      {templates.length > 0 && (
+        <div className="row" style={{ gap: '0.35rem', marginBottom: '0.6rem' }}>
+          <span className="small muted">{t('vmimages.useTemplate')}</span>
+          {templates.map((tpl) => (
+            <Button key={tpl.id} size="small" onClick={() => applyTemplate(tpl)}>
+              {tpl.name}
+            </Button>
+          ))}
+        </div>
+      )}
+
       <div className="row" style={{ gap: '0.5rem' }}>
         <Button type="primary" loading={busy} disabled={!name.trim() || !sshKey.trim()} onClick={() => void create()}>
           {t('vmimages.create')}
         </Button>
         <Button onClick={onClose}>{t('common.cancel')}</Button>
+        <span className="row" style={{ gap: '0.35rem', marginLeft: 'auto' }}>
+          <Input
+            value={templateName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            placeholder={t('vmimages.templateName')}
+            style={{ width: '11rem' }}
+          />
+          <Button size="small" disabled={!templateName.trim()} onClick={() => void saveTemplate()}>
+            {t('vmimages.saveTemplate')}
+          </Button>
+        </span>
       </div>
     </Modal>
   )
+}
+
+/** Описание шаблона хранится строкой JSON: набор полей меняется вместе с
+ * формой, и разбирать его строго типизированно здесь незачем. */
+function parseSpec(raw: string): Partial<VMSpec> {
+  try {
+    return JSON.parse(raw) as Partial<VMSpec>
+  } catch {
+    return {}
+  }
 }

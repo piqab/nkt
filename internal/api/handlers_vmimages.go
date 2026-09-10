@@ -1,10 +1,16 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/jobs"
+	"github.com/piqab/nkt/internal/store"
 	"github.com/piqab/nkt/internal/vmcreate"
 	"github.com/piqab/nkt/internal/vmimage"
 )
@@ -117,4 +123,76 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	s.db.Audit(r.Context(), user, "vm.create", spec.Name, "ok", spec.ImageID)
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
+}
+
+// Шаблон — тот же профиль, только про железо: «2 ядра, 4 ГБ, 20 ГБ,
+// Debian 13» под своим именем. Хранится описанием целиком, поэтому
+// новое поле формы не требует ни миграции, ни правки этих обработчиков.
+
+func (s *Server) handleVMTemplates(w http.ResponseWriter, r *http.Request) {
+	list, err := s.db.ListVMTemplates(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"templates": list})
+}
+
+func (s *Server) handleVMTemplateSave(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string        `json:"name"`
+		Spec vmcreate.Spec `json:"spec"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "у шаблона должно быть имя")
+		return
+	}
+	// Имя машины в шаблоне не хранится: шаблон описывает, какая машина, а
+	// не какая именно — имя вводят при создании.
+	req.Spec.Name = "template"
+	if err := req.Spec.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	req.Spec.Name = ""
+
+	raw, err := json.Marshal(req.Spec)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	user := auth.Username(r.Context())
+	id, err := s.db.SaveVMTemplate(r.Context(), store.VMTemplate{
+		Name: name, Spec: string(raw), Author: user,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), user, "vm.template.save", name, "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]any{"id": id})
+}
+
+func (s *Server) handleVMTemplateDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "неверный номер шаблона")
+		return
+	}
+	tpl, err := s.db.VMTemplateByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if err := s.db.DeleteVMTemplate(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "vm.template.delete", tpl.Name, "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

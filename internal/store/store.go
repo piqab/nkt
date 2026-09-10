@@ -178,6 +178,18 @@ CREATE TABLE IF NOT EXISTS profile_versions (
 );
 CREATE INDEX IF NOT EXISTS idx_profile_versions ON profile_versions(profile_id, id DESC);
 
+-- Шаблоны машин: «2 ядра, 4 ГБ, 20 ГБ, Debian 13» под своим именем.
+-- Тот же профиль, только про железо: описание хранится целиком, чтобы
+-- добавление поля не требовало миграции таблицы.
+CREATE TABLE IF NOT EXISTS vm_templates (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    spec       TEXT NOT NULL,
+    author     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 -- Журнал задания строками: так его можно дописывать по ходу и отдавать
 -- с любого места, не держа целиком в памяти.
 CREATE TABLE IF NOT EXISTS job_log (
