@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Switch, Tabs, Tooltip, type TableColumnsType } from 'antd'
+import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Select, Switch, Tabs, Tooltip, type TableColumnsType } from 'antd'
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -2156,8 +2156,13 @@ function ProvisionVMModal({
   const [diskGB, setDiskGB] = useState(20)
   const [memoryMB, setMemoryMB] = useState(2048)
   const [vcpus, setVCPUs] = useState(2)
+  const [installNKT, setInstallNKT] = useState(true)
+  const [profileID, setProfileID] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Профили хаба — те же, что правятся в разделе «Профили» его машины.
+  const profiles = useApi<{ profiles: { id: number; name: string }[] }>('/hosts/local/profiles')
 
   const downloaded = new Set((images.data?.local ?? []).filter((l) => l.downloaded).map((l) => l.id))
 
@@ -2169,6 +2174,8 @@ function ProvisionVMModal({
         method: 'POST',
         body: {
           host_id: host.id,
+          install_nkt: installNKT,
+          profile_id: profileID ?? 0,
           spec: {
             name,
             image_id: imageID,
@@ -2238,6 +2245,38 @@ function ProvisionVMModal({
         <Input.TextArea rows={3} value={sshKey} onChange={(e) => setSSHKey(e.target.value)} placeholder="ssh-ed25519 AAAA..." />
         <span className="small muted">{t('hosts.newVMKeyOptional')}</span>
       </label>
+
+      {/* Что делать с машиной после её появления. Профиль применяет сам
+          nkt на этой машине, поэтому без установки его выбрать нельзя —
+          обещать применение было бы нечестно. */}
+      <div className="col" style={{ gap: '0.3rem', marginBottom: '0.6rem' }}>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+          <Checkbox
+            checked={installNKT}
+            onChange={(e) => {
+              setInstallNKT(e.target.checked)
+              if (!e.target.checked) setProfileID(null)
+            }}
+          />
+          {t('hosts.newVMInstall')}
+        </label>
+        {(profiles.data?.profiles?.length ?? 0) > 0 && (
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+            {t('hosts.newVMProfile')}
+            <Select
+              size="small"
+              style={{ minWidth: '12rem' }}
+              disabled={!installNKT}
+              value={profileID ?? 0}
+              onChange={(v: number) => setProfileID(v || null)}
+              options={[
+                { value: 0, label: t('hosts.newVMProfileNone') },
+                ...(profiles.data?.profiles ?? []).map((p) => ({ value: p.id, label: p.name })),
+              ]}
+            />
+          </label>
+        )}
+      </div>
 
       <div className="row" style={{ gap: '0.5rem' }}>
         <Button type="primary" loading={busy} disabled={!name.trim() || !imageID} onClick={() => void start()}>

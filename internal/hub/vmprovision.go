@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/piqab/nkt/internal/jobs"
+	"github.com/piqab/nkt/internal/profile"
 	"github.com/piqab/nkt/internal/store"
 	"github.com/piqab/nkt/internal/vmcreate"
 )
@@ -32,6 +33,10 @@ const vmJobPoll = 3 * time.Second
 // медленном диске бывает долгим, но не бесконечным.
 const vmJobTimeout = 40 * time.Minute
 
+// installTimeout — сколько ждать установки nkt на новую машину. Первый
+// запуск ещё доделывает cloud-init, поэтому запас больше обычного.
+const installTimeout = 30 * time.Minute
+
 // addressRe достаёт адрес из строки журнала хоста.
 var addressRe = regexp.MustCompile(`Адрес машины: ([0-9.]+)`)
 
@@ -42,9 +47,22 @@ type VMProvisionParams struct {
 	// Spec — что за машину создаём. Ключ хаба сюда дописывается уже
 	// здесь, оператор его не вводит.
 	Spec vmcreate.Spec `json:"spec"`
+	// InstallNKT — поставить на новую машину nkt сразу после её
+	// появления. Без этого она остаётся обычным записанным хостом, на
+	// который установку запускают кнопкой.
+	InstallNKT bool `json:"install_nkt"`
+	// ProfileID — профиль, который применить к новой машине. Требует
+	// установленного nkt: применяет его сама машина.
+	ProfileID int64 `json:"profile_id,omitempty"`
 }
 
 type vmProvisionResume struct {
+	// Installed и ProfileDone — доведённые до конца поздние шаги. Как и
+	// раньше, повторять их вслепую нельзя: установка перезапишет уже
+	// работающий nkt, а применение профиля во второй раз хоть и
+	// безвредно, но занимает машину и путает журнал.
+	Installed   bool `json:"installed"`
+	ProfileDone bool `json:"profile_done"`
 	// NewHostID — запись хоста уже заведена: повторять её нельзя, иначе
 	// после перезапуска службы в списке окажется два одинаковых хоста.
 	NewHostID int64 `json:"new_host_id"`
@@ -85,9 +103,19 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil {
 		return fmt.Errorf("хост, на котором создаём машину: %w", err)
 	}
+	// Сколько всего шагов, известно сразу: без установки nkt их четыре,
+	// с ней пять, с профилем шесть. Считать это по ходу значило бы
+	// показывать «шаг 2 из 4», а потом вдруг «5 из 6».
+	steps := 4
+	if p.InstallNKT {
+		steps = 5
+	}
+	if p.ProfileID != 0 {
+		steps = 6
+	}
 
 	// 1. Запись нового хоста и ключ для него.
-	jc.Step(1, 4, "ключ")
+	jc.Step(1, steps, "ключ")
 	if done.NewHostID == 0 {
 		// Адрес пока неизвестен — машины ещё нет. Ставится заглушка, а
 		// настоящий адрес запишется на шаге 3: без записи негде взять
@@ -112,7 +140,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 2. Создание машины на хосте.
-	jc.Step(2, 4, "создание на "+host.Name)
+	jc.Step(2, steps, "создание на "+host.Name)
 	if done.RemoteJobID == 0 {
 		var started struct {
 			JobID int64 `json:"job_id"`
@@ -133,7 +161,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 3. Ожидание конца и адреса.
-	jc.Step(3, 4, "ожидание")
+	jc.Step(3, steps, "ожидание")
 	addr, err := r.waitVMJob(ctx, jc, host, done.RemoteJobID)
 	if err != nil {
 		return err
@@ -144,7 +172,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 4. Запись адреса.
-	jc.Step(4, 4, "адрес")
+	jc.Step(4, steps, "адрес")
 	if done.Address == "" {
 		jc.Logf("Машина создана, но её адрес не определился — впишите его в карточке хоста вручную.")
 		return nil
@@ -153,9 +181,116 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		store.HostAuthKey, "", false); err != nil {
 		return fmt.Errorf("запись адреса: %w", err)
 	}
-	jc.Logf("Готово: машина %s доступна по адресу %s, хост заведён в списке.", p.Spec.Name, done.Address)
-	jc.Logf("Установку nkt на неё запустите обычной кнопкой «установить» — как для любого другого хоста.")
+	jc.Logf("Машина %s доступна по адресу %s, хост заведён в списке.", p.Spec.Name, done.Address)
+
+	if !p.InstallNKT {
+		jc.Logf("Установку nkt на неё запустите обычной кнопкой «установить» — как для любого другого хоста.")
+		return nil
+	}
+
+	// 5. Установка nkt.
+	jc.Step(5, steps, "установка nkt")
+	if !done.Installed {
+		if err := r.installNKT(ctx, jc, done.NewHostID); err != nil {
+			return err
+		}
+		done.Installed = true
+		jc.SaveResume(done)
+	}
+
+	if p.ProfileID == 0 {
+		jc.Logf("Готово: машина создана, записана в список и управляется хабом.")
+		return nil
+	}
+
+	// 6. Применение профиля.
+	jc.Step(6, steps, "профиль")
+	if !done.ProfileDone {
+		if err := r.applyProfile(ctx, jc, done.NewHostID, p.ProfileID); err != nil {
+			return err
+		}
+		done.ProfileDone = true
+		jc.SaveResume(done)
+	}
+	jc.Logf("Готово: машина создана, управляется хабом и приведена к профилю.")
 	return nil
+}
+
+// installNKT ставит nkt на новую машину и ждёт конца установки.
+//
+// Тем же путём, что и обычная кнопка «установить»: у установки свой
+// механизм заданий, старше системы фоновых заданий, и заводить для неё
+// второй способ значило бы получить два разных поведения там, где нужно
+// одно.
+func (r *VMProvisionRunner) installNKT(ctx context.Context, jc *jobs.Context, hostID int64) error {
+	jobID, err := r.m.StartInstall(ctx, hostID, false, nil)
+	if err != nil {
+		return fmt.Errorf("запуск установки nkt: %w", err)
+	}
+	deadline := time.Now().Add(installTimeout)
+	seen := 0
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("установка nkt не завершилась за %s", installTimeout)
+		}
+		events, done, errMsg, ok := r.m.InstallJobStatus(jobID)
+		if !ok {
+			return fmt.Errorf("задание установки потерялось")
+		}
+		for _, e := range events[seen:] {
+			jc.Logf("      %s", e.Text)
+		}
+		seen = len(events)
+		if done {
+			if errMsg != "" {
+				return fmt.Errorf("установка nkt: %s", errMsg)
+			}
+			return nil
+		}
+		if !sleepCtx(ctx, vmJobPoll) {
+			return ctx.Err()
+		}
+	}
+}
+
+// applyProfile строит план на новой машине и применяет его целиком.
+//
+// Целиком — потому что машина только что создана: расхождение с профилем
+// здесь и есть весь смысл, отмечать в нём нечего.
+func (r *VMProvisionRunner) applyProfile(ctx context.Context, jc *jobs.Context,
+	hostID, profileID int64) error {
+
+	prof, err := r.m.db.ProfileByID(ctx, profileID)
+	if err != nil {
+		return fmt.Errorf("профиль: %w", err)
+	}
+	host, err := r.m.db.HostByID(ctx, hostID)
+	if err != nil {
+		return err
+	}
+	jc.Logf("Применяю профиль «%s».", prof.Name)
+
+	var plan profile.Plan
+	if _, err := r.m.HostAPI(ctx, hostID, "POST", "/api/profiles/plan",
+		map[string]string{"content": prof.Content}, &plan); err != nil {
+		return fmt.Errorf("построение плана: %w", err)
+	}
+	if len(plan.Changes) == 0 {
+		jc.Logf("      расхождений нет")
+		return nil
+	}
+	var started struct {
+		JobID int64 `json:"job_id"`
+	}
+	if _, err := r.m.HostAPI(ctx, hostID, "POST", "/api/profiles/apply",
+		map[string]any{"name": prof.Name, "changes": plan.Changes}, &started); err != nil {
+		return fmt.Errorf("запуск применения: %w", err)
+	}
+	_, err = r.waitVMJob(ctx, jc, host, started.JobID)
+	return err
 }
 
 // waitVMJob следит за заданием на хосте и вылавливает адрес машины.

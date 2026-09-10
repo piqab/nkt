@@ -91,8 +91,10 @@ func groupTitle(group string) string {
 
 // vmProvisionRequest — что и где создавать.
 type vmProvisionRequest struct {
-	HostID int64         `json:"host_id"`
-	Spec   vmcreate.Spec `json:"spec"`
+	HostID     int64         `json:"host_id"`
+	Spec       vmcreate.Spec `json:"spec"`
+	InstallNKT bool          `json:"install_nkt"`
+	ProfileID  int64         `json:"profile_id"`
 }
 
 // handleVMProvision ставит в очередь создание машины на управляемом
@@ -116,6 +118,28 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
+	// Профиль применяет сама машина, а для этого на ней должен стоять
+	// nkt: молча ставить его «заодно» нельзя, но и обещать применение
+	// без него — тоже.
+	if req.ProfileID != 0 {
+		if _, err := s.db.ProfileByID(r.Context(), req.ProfileID); err != nil {
+			fail(w, r, err)
+			return
+		}
+		if !req.InstallNKT {
+			writeError(w, http.StatusBadRequest,
+				"чтобы применить профиль, на новую машину нужно поставить nkt — он и применяет профиль")
+			return
+		}
+	}
+
+	steps := 4
+	if req.InstallNKT {
+		steps = 5
+	}
+	if req.ProfileID != 0 {
+		steps = 6
+	}
 
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
@@ -126,8 +150,11 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 		// незачем.
 		Queue:  fmt.Sprintf("vm:%d", host.ID),
 		Author: user,
-		Steps:  4,
-		Params: VMProvisionParams{HostID: host.ID, Spec: req.Spec},
+		Steps: steps,
+		Params: VMProvisionParams{
+			HostID: host.ID, Spec: req.Spec,
+			InstallNKT: req.InstallNKT, ProfileID: req.ProfileID,
+		},
 	})
 	if err != nil {
 		s.db.Audit(r.Context(), user, "vm.provision", req.Spec.Name, "error", err.Error())
