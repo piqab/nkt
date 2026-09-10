@@ -893,3 +893,24 @@ export interface VMImageLocal {
   partial_size?: number
   mod_time?: string
 }
+
+/** Шаблон машины: набор «железа» под своим именем. */
+export interface VMTemplate {
+  id: number
+  name: string
+  spec: string
+  author?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface VMSpec {
+  name: string
+  image_id: string
+  disk_gb: number
+  memory_mb: number
+  vcpus: number
+  user: string
+  ssh_key: string
+  bridge?: string
+}
