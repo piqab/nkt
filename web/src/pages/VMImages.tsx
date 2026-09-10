@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Checkbox, Input, InputNumber, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import type { Job, Me, VMImage, VMImageLocal, VMTemplate, VMSpec } from '../types'
+import type { Job, Me, VMImage, VMImageLocal, VMTemplate, VMSpec, VMTool } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import { DataTable } from '../components/DataTable'
@@ -16,9 +16,16 @@ const POLL_MS = 5_000
 export default function VMImages({ me }: { me: Me }) {
   const { t } = useTranslation()
   const canEdit = me.is_admin && me.allow_mutations
-  const images = useApi<{ catalog: VMImage[]; local: VMImageLocal[]; dir: string }>('/vm/images', POLL_MS)
+  const images = useApi<{
+    catalog: VMImage[]
+    local: VMImageLocal[]
+    dir: string
+    tools: VMTool[]
+    missing: VMTool[] | null
+  }>('/vm/images', POLL_MS)
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [creating, setCreating] = useState<VMImage | null>(null)
+  const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const templates = useApi<{ templates: VMTemplate[] }>('/vm/templates', 60_000)
   const [error, setError] = useState<string | null>(null)
 
@@ -121,6 +128,34 @@ export default function VMImages({ me }: { me: Me }) {
       <ErrorNote error={error} />
       <ErrorNote error={images.error} />
 
+      {/* Без qemu-img и virsh форма создания только обманывала бы
+          ожидания, поэтому нехватка видна до, а не после нажатия. */}
+      {(images.data?.missing?.length ?? 0) > 0 && (
+        <Banner kind="warn">
+          <div className="col" style={{ gap: '0.4rem' }}>
+            <span>{t('vmimages.toolsMissing')}</span>
+            <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+              {(images.data?.missing ?? []).map((tool) => (
+                <li key={tool.command} className="small">
+                  {/* Пояснение берётся из переводов по имени команды:
+                      с сервера оно пришло бы на одном языке. */}
+                  <span className="mono">{tool.command}</span> —{' '}
+                  {t(`vmimages.toolWhy.${tool.command}`, { defaultValue: tool.why })} ({t('vmimages.toolPackage')}{' '}
+                  <span className="mono">{tool.package}</span>)
+                </li>
+              ))}
+            </ul>
+            {canEdit && (
+              <span>
+                <Button size="small" onClick={() => void startJob('/vm/tools/install', {})}>
+                  {t('vmimages.installTools')}
+                </Button>
+              </span>
+            )}
+          </div>
+        </Banner>
+      )}
+
       <Card title={t('vmimages.catalogTitle')} subtitle={images.data?.dir}>
         {images.loading && !images.data ? (
           <Loading what={t('vmimages.loading')} />
@@ -183,12 +218,34 @@ export default function VMImages({ me }: { me: Me }) {
           image={creating}
           templates={templates.data?.templates ?? []}
           onSaved={() => templates.reload()}
+          onKey={setGeneratedKey}
           onClose={() => setCreating(null)}
           onStarted={(job) => {
             setCreating(null)
             setOpenJob(job)
           }}
         />
+      )}
+
+      {generatedKey && (
+        <Modal title={t('vmimages.keyTitle')} onClose={() => setGeneratedKey(null)} maskClosable={false} width={720}>
+          <Banner kind="warn">{t('vmimages.keyOnce')}</Banner>
+          <pre className="diff mono" style={{ maxHeight: '18rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+            {generatedKey}
+          </pre>
+          <div className="row" style={{ gap: '0.5rem' }}>
+            <Button
+              onClick={() => {
+                void navigator.clipboard?.writeText(generatedKey)
+              }}
+            >
+              {t('common.copy')}
+            </Button>
+            <Button type="primary" onClick={() => setGeneratedKey(null)}>
+              {t('vmimages.keySaved')}
+            </Button>
+          </div>
+        </Modal>
       )}
 
       {openJob && <JobLogModal job={openJob} onClose={() => setOpenJob(null)} />}
@@ -209,12 +266,14 @@ function CreateVMModal({
   onSaved,
   onClose,
   onStarted,
+  onKey,
 }: {
   image: VMImage
   templates: VMTemplate[]
   onSaved: () => void
   onClose: () => void
   onStarted: (job: Job) => void
+  onKey: (privateKey: string) => void
 }) {
   const { t } = useTranslation()
   const [name, setName] = useState('')
@@ -272,7 +331,7 @@ function CreateVMModal({
     setBusy(true)
     setError(null)
     try {
-      const res = await api<{ job_id: number }>('/vm/create', {
+      const res = await api<{ job_id: number; private_key?: string; public_key?: string }>('/vm/create', {
         method: 'POST',
         body: {
           name,
@@ -286,7 +345,13 @@ function CreateVMModal({
           autostart,
         },
       })
-      onStarted(await api<Job>(`/jobs/${res.job_id}`))
+      const job = await api<Job>(`/jobs/${res.job_id}`)
+      if (res.private_key) {
+        // Ключ показывается один раз: нигде больше он не хранится, и
+        // закрыть это окно, не сохранив его, — значит потерять доступ.
+        onKey(res.private_key)
+      }
+      onStarted(job)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -297,7 +362,7 @@ function CreateVMModal({
   return (
     <Modal title={t('vmimages.createTitle', { image: image.name })} onClose={onClose} width={720}>
       <ErrorNote error={error} />
-      {!sshKey.trim() && <Banner kind="warn">{t('vmimages.keyRequired')}</Banner>}
+      {!sshKey.trim() && <Banner kind="info">{t('vmimages.keyWillBeGenerated')}</Banner>}
 
       <div className="grid grid-2" style={{ marginBottom: '0.6rem' }}>
         <label>
@@ -348,7 +413,7 @@ function CreateVMModal({
       )}
 
       <div className="row" style={{ gap: '0.5rem' }}>
-        <Button type="primary" loading={busy} disabled={!name.trim() || !sshKey.trim()} onClick={() => void create()}>
+        <Button type="primary" loading={busy} disabled={!name.trim()} onClick={() => void create()}>
           {t('vmimages.create')}
         </Button>
         <Button onClick={onClose}>{t('common.cancel')}</Button>

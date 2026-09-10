@@ -27,6 +27,56 @@ var (
 	userRe = regexp.MustCompile(`^[a-z_][a-z0-9_-]*$`)
 )
 
+// Tool — программа, без которой машину не создать, и пакет, в котором
+// она лежит.
+type Tool struct {
+	Command string `json:"command"`
+	Package string `json:"package"`
+	// Why — зачем она нужна: список из четырёх незнакомых имён без
+	// объяснения ничего не говорит.
+	Why string `json:"why"`
+	// Alternative — команда, которая заменяет эту. Из пары нужна любая.
+	Alternative string `json:"alternative,omitempty"`
+	Present     bool   `json:"present"`
+}
+
+// Tools — что должно быть на хосте, чтобы создание машин работало.
+//
+// Пакеты названы по Debian и Ubuntu — на них рассчитано всё остальное в
+// nkt, и предлагать установку того, чего в их репозиториях нет, было бы
+// нечестно.
+func Tools() []Tool {
+	return []Tool{
+		{Command: "qemu-img", Package: "qemu-utils", Why: "делает диск машины из образа"},
+		{Command: "virsh", Package: "libvirt-clients", Why: "определяет и запускает машину"},
+		{Command: "cloud-localds", Package: "cloud-image-utils",
+			Why: "собирает настройки первого запуска", Alternative: "genisoimage"},
+		{Command: "genisoimage", Package: "genisoimage",
+			Why: "то же самое, если нет cloud-localds", Alternative: "cloud-localds"},
+	}
+}
+
+// MissingTools отвечает, чего не хватает. Пара с заменой считается
+// собранной, если есть хотя бы одна из двух — требовать обе значило бы
+// просить лишний пакет.
+func MissingTools(tools []Tool) []Tool {
+	present := map[string]bool{}
+	for _, t := range tools {
+		present[t.Command] = t.Present
+	}
+	var missing []Tool
+	for _, t := range tools {
+		if t.Present {
+			continue
+		}
+		if t.Alternative != "" && present[t.Alternative] {
+			continue
+		}
+		missing = append(missing, t)
+	}
+	return missing
+}
+
 // Spec — что за машину создаём.
 type Spec struct {
 	Name    string `json:"name"`

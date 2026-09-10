@@ -128,3 +128,35 @@ func TestUserDataIncludesExtraKeys(t *testing.T) {
 		t.Errorf("в настройках не оба ключа:\n%s", out)
 	}
 }
+
+// Из пары «cloud-localds или genisoimage» нужна любая: требовать обе —
+// значит просить лишний пакет.
+func TestMissingToolsHonoursAlternatives(t *testing.T) {
+	tools := Tools()
+	set := func(cmd string, present bool) {
+		for i := range tools {
+			if tools[i].Command == cmd {
+				tools[i].Present = present
+			}
+		}
+	}
+	set("qemu-img", true)
+	set("virsh", true)
+	set("cloud-localds", false)
+	set("genisoimage", true)
+
+	if missing := MissingTools(tools); len(missing) != 0 {
+		t.Errorf("не хватает %+v, хотя замена есть", missing)
+	}
+
+	set("genisoimage", false)
+	missing := MissingTools(tools)
+	if len(missing) != 2 {
+		t.Fatalf("без обеих должно не хватать двух: %+v", missing)
+	}
+
+	set("qemu-img", false)
+	if got := len(MissingTools(tools)); got != 3 {
+		t.Errorf("не хватает %d, ожидалось 3", got)
+	}
+}

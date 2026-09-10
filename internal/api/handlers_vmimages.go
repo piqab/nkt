@@ -24,11 +24,38 @@ func (s *Server) handleVMImages(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "работа с образами недоступна")
 		return
 	}
+	// Заодно отвечаем, чем на этом хосте машины вообще создавать: без
+	// qemu-img и virsh форма создания только обманывала бы ожидания.
+	tools := vmcreate.CheckTools(r.Context(), s.scanner.Collector())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"catalog": vmimage.Catalog,
 		"local":   s.vmimages.Status(),
 		"dir":     s.vmimages.Dir(),
+		"tools":   tools,
+		"missing": vmcreate.MissingTools(tools),
 	})
+}
+
+// handleVMToolsInstall доставляет пакеты, без которых машину не создать.
+func (s *Server) handleVMToolsInstall(w http.ResponseWriter, r *http.Request) {
+	if s.jobs == nil {
+		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
+		return
+	}
+	user := auth.Username(r.Context())
+	id, err := s.jobs.Start(r.Context(), jobs.Spec{
+		Kind:   vmcreate.KindTools,
+		Title:  "пакеты для создания машин",
+		Queue:  "host",
+		Author: user,
+		Steps:  2,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), user, "vm.tools.install", "", "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
 }
 
 func (s *Server) handleVMImageDownload(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +124,19 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Ключа нет — заводим свой. Облачный образ приходит без пароля, и
+	// машина без единого ключа осталась бы доступной только через
+	// консоль; приватная половина уйдёт в ответ и больше нигде не
+	// сохранится.
+	var generatedKey string
+	if strings.TrimSpace(spec.SSHKey) == "" {
+		priv, pub, err := vmcreate.GenerateKeyPair(spec.Name)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		spec.SSHKey, generatedKey = pub, priv
+	}
 	if err := spec.Validate(); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -122,7 +162,14 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.db.Audit(r.Context(), user, "vm.create", spec.Name, "ok", spec.ImageID)
-	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
+	// Приватный ключ отдаётся ровно здесь и больше нигде: хранить его в
+	// базе значило бы держать ключ от всех созданных машин рядом с ними.
+	out := map[string]any{"job_id": id}
+	if generatedKey != "" {
+		out["private_key"] = generatedKey
+		out["public_key"] = spec.SSHKey
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // Шаблон — тот же профиль, только про железо: «2 ядра, 4 ГБ, 20 ГБ,

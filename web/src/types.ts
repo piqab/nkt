@@ -918,3 +918,12 @@ export interface VMSpec {
   ssh_key: string
   bridge?: string
 }
+
+/** Программа, без которой машину не создать (см. internal/vmcreate). */
+export interface VMTool {
+  command: string
+  package: string
+  why: string
+  alternative?: string
+  present: boolean
+}
