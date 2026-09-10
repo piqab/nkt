@@ -51,8 +51,10 @@ const bootstrapDefaultsKey = "hub.bootstrap.defaults"
 // BootstrapDefaults returns the saved defaults, falling back to the
 // built-in set for anything never configured.
 func (m *Manager) BootstrapDefaults(ctx context.Context) BootstrapOptions {
+	// Пользователь по умолчанию не задан: подготовка остаётся под root,
+	// пока имя не введено осознанно. Заводить учётку на чужом сервере
+	// молча, просто потому что форма открылась, — не то умолчание.
 	out := BootstrapOptions{
-		User:     "nkt",
 		Packages: append([]string(nil), BootstrapPackagesDefault...),
 	}
 	raw, ok, err := m.db.KVGet(ctx, bootstrapDefaultsKey)
