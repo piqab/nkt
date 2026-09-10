@@ -15,6 +15,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, formatRe
 import { checkForNewProblems, notificationsEnabled, requestNotificationPermission, setNotificationsEnabled, type NotifyState } from '../notifications'
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 import i18n from '../i18n'
+import { confirmAction } from '../components/confirm'
 
 /** How often to poll a running install job for new progress lines — same
  * cadence Certificates.tsx uses for certbot jobs. */
@@ -341,7 +342,7 @@ export default function Hosts({
         (err.payload as { foreign_install?: boolean }).foreign_install
       ) {
         const detail = (err.payload as { detail?: string }).detail ?? ''
-        if (window.confirm(t('hosts.confirmForeignInstall', { detail }))) {
+        if (await confirmAction(t('hosts.confirmForeignInstall', { detail }))) {
           return startInstall(host, true)
         }
         return false
@@ -357,10 +358,10 @@ export default function Hosts({
    * several hosts' running nkt binary at once is riskier to watch/debug
    * than starting/stopping a service, so this walks the queue one host's
    * install-log modal at a time instead. */
-  function updateAllOutdated() {
+  async function updateAllOutdated() {
     const targets = (hosts ?? []).filter((h) => h.id !== LOCAL_HOST_ID && isOutdated(h, hubVersion))
     if (targets.length === 0) return
-    if (!window.confirm(t('hosts.confirmUpdateAll', { count: targets.length }))) return
+    if (!(await confirmAction(t('hosts.confirmUpdateAll', { count: targets.length })))) return
     setNotice(null)
     setUpdateAllResults([])
     setUpdateAllTotal(targets.length)
@@ -444,7 +445,7 @@ export default function Hosts({
   }
 
   async function removeSudoAccess(host: HubHost) {
-    if (!window.confirm(t('hosts.confirmRemoveSudo', { user: host.ssh_user, name: host.name }))) return
+    if (!(await confirmAction(t('hosts.confirmRemoveSudo', { user: host.ssh_user, name: host.name })))) return
     setNotice(null)
     try {
       await api(`/hub/hosts/${host.id}/sudo/remove`, { method: 'POST' })
@@ -476,7 +477,7 @@ export default function Hosts({
   }
 
   async function stopHost(host: HubHost) {
-    if (!window.confirm(t('hosts.confirmStopHost', { name: host.name }))) return
+    if (!(await confirmAction(t('hosts.confirmStopHost', { name: host.name })))) return
     setNotice(null)
     const err = await setServiceRunning(host, false)
     if (err) setNotice({ kind: 'error', text: err })
@@ -497,7 +498,7 @@ export default function Hosts({
   async function bulkSetServiceRunning(running: boolean) {
     const targets = (hosts ?? []).filter((h) => h.status !== 'new' && h.status !== 'installing')
     if (targets.length === 0) return
-    if (!window.confirm(t(running ? 'hosts.confirmBulkStart' : 'hosts.confirmBulkStop', { count: targets.length }))) {
+    if (!(await confirmAction(t(running ? 'hosts.confirmBulkStart' : 'hosts.confirmBulkStop', { count: targets.length })))) {
       return
     }
     setNotice(null)
@@ -599,7 +600,7 @@ export default function Hosts({
   }
 
   async function doImport(jsonText: string) {
-    if (!window.confirm(t('hosts.confirmImport'))) {
+    if (!(await confirmAction(t('hosts.confirmImport')))) {
       return
     }
     setImporting(true)
@@ -1128,9 +1129,9 @@ function ExportPasswordModal({
   const { t } = useTranslation()
   const [password, setPassword] = useState('')
 
-  function download() {
+  async function download() {
     if (!password) {
-      if (!window.confirm(t('hosts.confirmExportUnencrypted'))) {
+      if (!(await confirmAction(t('hosts.confirmExportUnencrypted')))) {
         return
       }
       onDownload(undefined)

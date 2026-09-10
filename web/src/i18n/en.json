@@ -118,7 +118,9 @@
     "schedule": "schedule",
     "copy": "Copy",
     "copied": "Copied",
-    "requestTimeout": "Request {{path}} did not answer within {{seconds}}s. That usually means a command on the host is stuck — df on an unresponsive network share, for instance."
+    "requestTimeout": "Request {{path}} did not answer within {{seconds}}s. That usually means a command on the host is stuck — df on an unresponsive network share, for instance.",
+    "confirmTitle": "Confirm the action",
+    "confirmOk": "Confirm"
   },
   "containers": {
     "vms": "Virtual machines"
@@ -1405,5 +1407,12 @@
     "hint": "This is a UI error, not a server one: other sections keep working. A report has been sent to the host's log — see the Logs section.",
     "retry": "Retry",
     "reload": "Reload the page"
+  },
+  "navGroup": {
+    "state": "State",
+    "watch": "Monitoring",
+    "host": "Host",
+    "network": "Network",
+    "access": "Access"
   }
 }

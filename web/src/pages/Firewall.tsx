@@ -7,6 +7,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../compo
 import { formatBytes, formatNumber } from '../components/charts'
 import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
+import { confirmAction } from '../components/confirm'
 
 interface FirewallResponse {
   managers: FirewallManagerState[]
@@ -93,9 +94,9 @@ const UFW_ACTION_COLOR: Record<string, string> = {
 // web port has no fixed number to check against the same way.
 const CRITICAL_PORTS = new Set([22])
 
-function confirmCriticalPort(port: number, action: string): boolean {
+async function confirmCriticalPort(port: number, action: string): Promise<boolean> {
   if (!CRITICAL_PORTS.has(port)) return true
-  return window.confirm(i18n.t('fw.confirmCriticalPort', { port, action }))
+  return confirmAction(i18n.t('fw.confirmCriticalPort', { port, action }))
 }
 
 type AddRuleValues = {
@@ -295,7 +296,7 @@ export default function Firewall({ me }: { me: Me }) {
     const isPort = (r.ports?.length ?? 0) > 0
     if (isPort && r.ports && !confirmCriticalPort(r.ports[0], t('fw.deletingFirewalldRule'))) return
     const label = isPort ? `${r.port_spec}/${r.protocol}` : r.port_spec
-    if (!window.confirm(t('fw.confirmDeleteFirewalldRule', { zone: r.zone, label }))) return
+    if (!(await confirmAction(t('fw.confirmDeleteFirewalldRule', { zone: r.zone, label })))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -319,7 +320,7 @@ export default function Firewall({ me }: { me: Me }) {
   async function deleteRule(rule: NumberedRule) {
     const parsed = parseNumberedRule(rule.text)
     if (parsed && !confirmCriticalPort(parsed.port, t('fw.deletingRule'))) return
-    if (!window.confirm(t('fw.confirmDeleteRule', { number: rule.number, text: rule.text }))) return
+    if (!(await confirmAction(t('fw.confirmDeleteRule', { number: rule.number, text: rule.text })))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -342,7 +343,7 @@ export default function Firewall({ me }: { me: Me }) {
    * row is undoing. */
   async function deleteAddedRule(added: AddedRule) {
     if (added.port && !confirmCriticalPort(added.port, t('fw.deletingRule'))) return
-    if (!window.confirm(t('fw.confirmDeleteAddedRule', { spec: added.spec }))) return
+    if (!(await confirmAction(t('fw.confirmDeleteAddedRule', { spec: added.spec })))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -364,7 +365,7 @@ export default function Firewall({ me }: { me: Me }) {
    * shape as the form above, just triggered straight from the socket's own
    * row instead of typing the port in by hand. */
   async function quickAllowListener(l: Listener) {
-    if (!window.confirm(t('fw.confirmQuickAllow', { port: l.port, protocol: l.protocol }))) return
+    if (!(await confirmAction(t('fw.confirmQuickAllow', { port: l.port, protocol: l.protocol })))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -634,12 +635,11 @@ export default function Firewall({ me }: { me: Me }) {
                         <Button
                           style={{ marginTop: '0.6rem' }}
                           type="primary"
-                          onClick={() => {
+                          onClick={async () => {
                             const label = MANAGER_META[m.name]?.label ?? m.name
-                            if (window.confirm(t('fw.confirmInstall', { label }))) {
-                              setInstallOutcome(null)
-                              setInstallTarget(m.name as 'ufw' | 'firewalld')
-                            }
+                            if (!(await confirmAction(t('fw.confirmInstall', { label }), { danger: false }))) return
+                            setInstallOutcome(null)
+                            setInstallTarget(m.name as 'ufw' | 'firewalld')
                           }}
                         >
                           {t('fw.install', { label: MANAGER_META[m.name]?.label ?? m.name })}

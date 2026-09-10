@@ -8,12 +8,13 @@ import { Banner, Card, InfoHint } from '../components/ui'
 import { PtyToolbar } from '../components/PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
 import PackageInstallModal from '../components/PackageInstallModal'
+import { confirmAction } from '../components/confirm'
 
 /**
  * A real login shell on the host, streamed over WebSocket into xterm.js.
  * Gated server-side behind admin + AllowMutations + an explicit
  * NKT_TERMINAL_ENABLED opt-in (off by default) — this page itself only
- * adds the same window.confirm the rest of the app uses before any
+ * adds the same confirmation dialog the rest of the app uses before any
  * destructive action, since "open a root shell" is the most consequential
  * thing here, not a lesser one.
  *
@@ -220,8 +221,8 @@ export default function TerminalPage({ me }: { me: Me }) {
   const [tmuxInstallOpen, setTmuxInstallOpen] = useState(false)
   const [tmuxInstallOutcome, setTmuxInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
 
-  function handleStart(tmux: boolean) {
-    if (!window.confirm(t(tmux ? 'terminal.confirmOpenTmux' : 'terminal.confirmOpen'))) {
+  async function handleStart(tmux: boolean) {
+    if (!(await confirmAction(t(tmux ? 'terminal.confirmOpenTmux' : 'terminal.confirmOpen')))) {
       return
     }
     // dbusStatus polls every 30s in the background — too stale to trust
@@ -237,7 +238,7 @@ export default function TerminalPage({ me }: { me: Me }) {
   // Direct connect when tmux is already there; otherwise offer to install
   // it first (PackageInstallModal below) and auto-connect once that
   // succeeds — see handleTmuxInstallFinished.
-  function handleTmuxButtonClick() {
+  async function handleTmuxButtonClick() {
     if (tmuxStatus?.available) {
       handleStart(true)
       return
@@ -247,7 +248,7 @@ export default function TerminalPage({ me }: { me: Me }) {
       setTmuxInstallOpen(true)
       return
     }
-    if (window.confirm(t('terminal.confirmInstallTmux'))) {
+    if (await confirmAction(t('terminal.confirmInstallTmux'), { danger: false })) {
       setTmuxInstallOutcome(null)
       setTmuxInstallOpen(true)
     }
@@ -403,10 +404,11 @@ export default function TerminalPage({ me }: { me: Me }) {
                   size="small"
                   type="primary"
                   onClick={() => {
-                    if (window.confirm(t('terminal.confirmInstallDbus'))) {
+                    void confirmAction(t('terminal.confirmInstallDbus'), { danger: false }).then((ok) => {
+                      if (!ok) return
                       setDbusInstallOutcome(null)
                       setDbusInstallOpen(true)
-                    }
+                    })
                   }}
                 >
                   {t('terminal.installDbus')}

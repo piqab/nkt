@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HubVersionInfo, HubVulnDBInfo } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, formatRelative } from '../components/ui'
+import { confirmAction } from '../components/confirm'
 
 /**
  * The hub's own "About" page — its running version, whatever
@@ -65,7 +66,7 @@ export default function About() {
   }
 
   async function applyUpdate() {
-    if (!window.confirm(t('about.confirmUpdate', { version: version.data?.latest }))) return
+    if (!(await confirmAction(t('about.confirmUpdate', { version: version.data?.latest })))) return
     setUpdating(true)
     setNotice(null)
     try {

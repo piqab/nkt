@@ -7,6 +7,7 @@ import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDa
 import { formatBytes } from '../components/charts'
 import BlockTree from '../components/BlockTree'
 import i18n from '../i18n'
+import { confirmAction } from '../components/confirm'
 
 const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker', 'caddy'])
 
@@ -199,7 +200,7 @@ export default function Configs({ me }: { me: Me }) {
   }
 
   async function rollback(id: number) {
-    if (!window.confirm(t('configs.confirmRollback', { id }))) return
+    if (!(await confirmAction(t('configs.confirmRollback', { id })))) return
     setBusy(true)
     setError(null)
     try {

@@ -7,6 +7,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge } from '.
 import { InactiveSummary } from '../components/InactiveSummary'
 import BlockTree from '../components/BlockTree'
 import PathPicker, { ownerFromPath } from '../components/PathPicker'
+import { confirmAction } from '../components/confirm'
 
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -157,7 +158,7 @@ export default function Docker({ me }: { me: Me }) {
   ]
 
   async function containerAct(name: string, action: string) {
-    if (!window.confirm(t('docker.confirmAction', { action, name }))) return
+    if (!(await confirmAction(t('docker.confirmAction', { action, name })))) return
     setBusy(`${name}:${action}`)
     setNotice(null)
     try {

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ConfigProvider, type ThemeConfig } from 'antd'
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { ConfigProvider, Menu, type MenuProps, type ThemeConfig } from 'antd'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, hostScope, onUnauthorized, readSelectedHost, useApi, writeSelectedHost, type SelectedHost } from './api'
 import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
@@ -84,36 +84,79 @@ function useTheme(): [Theme, (t: Theme) => void, ThemeConfig] {
 // the display text itself — NAV is a module-level constant built once, long
 // before i18next has necessarily finished initializing, and it must not go
 // stale when the language changes later.
-const NAV = [
-  { to: '/', labelKey: 'nav.overview', end: true },
-  { to: '/findings', labelKey: 'nav.findings', badge: 'findings' as const },
-  { to: '/vulnerabilities', labelKey: 'nav.vulnerabilities' },
-  { to: '/topology', labelKey: 'nav.topology' },
-  { to: '/availability', labelKey: 'nav.availability' },
-  { to: '/usage', labelKey: 'nav.usage' },
-  { to: '/configs', labelKey: 'nav.configs' },
-  { to: '/services', labelKey: 'nav.services' },
-  { to: '/containers', labelKey: 'nav.containers' },
-  { to: '/packages', labelKey: 'nav.packages' },
-  // A viewer has nothing to look at here without connecting (unlike the
-  // read-only pages above) — hidden rather than shown-but-disabled.
-  { to: '/terminal', labelKey: 'nav.terminal', adminOnly: true },
-  { to: '/logs', labelKey: 'nav.logs' },
-  { to: '/firewall', labelKey: 'nav.firewall' },
-  { to: '/interfaces', labelKey: 'nav.interfaces' },
-  { to: '/disks', labelKey: 'nav.disks' },
-  { to: '/hardware', labelKey: 'nav.hardware' },
-  { to: '/system', labelKey: 'nav.system', adminOnly: true },
-  { to: '/certificates', labelKey: 'nav.certificates', badge: 'certs' as const },
-  { to: '/audit', labelKey: 'nav.audit' },
-  // Managing who can sign in is itself an admin action — a viewer has no use
-  // for this screen and the API would refuse every request from it anyway.
-  { to: '/users', labelKey: 'nav.users', adminOnly: true },
-  // Учётки самой операционной системы — отдельный раздел рядом с учётками
-  // веб-интерфейса, потому что путать их нельзя: здесь выдаётся вход на
-  // сам сервер по SSH-ключу.
-  { to: '/os-users', labelKey: 'nav.osUsers', adminOnly: true },
+// Разделы сгруппированы по назначению: двадцать с лишним пунктов плоским
+// списком читаются как свалка, в которой нужное ищут глазами каждый раз.
+// Группы — по тому, чем человек занят: смотрит состояние, наблюдает за
+// изменениями во времени, правит сам хост, разбирается с сетью, выдаёт
+// доступ.
+//
+// Порядок групп — от «что происходит» к «кому что можно»: сверху то, ради
+// чего сюда заходят чаще всего.
+const NAV_GROUPS: {
+  key: string
+  labelKey: string
+  items: { to: string; labelKey: string; end?: boolean; adminOnly?: boolean; badge?: 'findings' | 'certs' }[]
+}[] = [
+  {
+    key: 'state',
+    labelKey: 'navGroup.state',
+    items: [
+      { to: '/', labelKey: 'nav.overview', end: true },
+      { to: '/findings', labelKey: 'nav.findings', badge: 'findings' },
+      { to: '/vulnerabilities', labelKey: 'nav.vulnerabilities' },
+      { to: '/topology', labelKey: 'nav.topology' },
+    ],
+  },
+  {
+    key: 'watch',
+    labelKey: 'navGroup.watch',
+    items: [
+      { to: '/availability', labelKey: 'nav.availability' },
+      { to: '/usage', labelKey: 'nav.usage' },
+      { to: '/logs', labelKey: 'nav.logs' },
+      { to: '/audit', labelKey: 'nav.audit' },
+    ],
+  },
+  {
+    key: 'host',
+    labelKey: 'navGroup.host',
+    items: [
+      { to: '/services', labelKey: 'nav.services' },
+      { to: '/containers', labelKey: 'nav.containers' },
+      { to: '/packages', labelKey: 'nav.packages' },
+      { to: '/configs', labelKey: 'nav.configs' },
+      { to: '/disks', labelKey: 'nav.disks' },
+      { to: '/hardware', labelKey: 'nav.hardware' },
+      { to: '/system', labelKey: 'nav.system', adminOnly: true },
+      // Терминал viewer'у бесполезен: подключиться он всё равно не сможет,
+      // а сервер откажет — поэтому скрыт, а не показан выключенным.
+      { to: '/terminal', labelKey: 'nav.terminal', adminOnly: true },
+    ],
+  },
+  {
+    key: 'network',
+    labelKey: 'navGroup.network',
+    items: [
+      { to: '/interfaces', labelKey: 'nav.interfaces' },
+      { to: '/firewall', labelKey: 'nav.firewall' },
+      { to: '/certificates', labelKey: 'nav.certificates', badge: 'certs' },
+    ],
+  },
+  {
+    key: 'access',
+    labelKey: 'navGroup.access',
+    items: [
+      // Учётки веб-интерфейса и учётки самой машины рядом, но по-прежнему
+      // раздельно: путать их нельзя, вторые дают вход на сам сервер.
+      { to: '/users', labelKey: 'nav.users', adminOnly: true },
+      { to: '/os-users', labelKey: 'nav.osUsers', adminOnly: true },
+    ],
+  },
 ]
+
+/** Ключ, под которым запоминается, какие группы меню развёрнуты. */
+const NAV_OPEN_KEY = 'nkt-nav-open'
+
 
 export default function App() {
   const { t } = useTranslation()
@@ -241,6 +284,26 @@ function Shell({
   // "/terminal" itself (element: null) — without it, <Routes>' own
   // catch-all would redirect away from that path entirely, since nothing
   // else in the switch claims it.
+  // Какая группа меню раскрыта — состояние человека, а не приложения:
+  // запоминается между заходами, чтобы каждый раз не раскрывать заново.
+  const [openGroups, setOpenGroups] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(NAV_OPEN_KEY)
+      if (saved) return JSON.parse(saved) as string[]
+    } catch {
+      // Недоступное хранилище — просто раскрываем всё.
+    }
+    return NAV_GROUPS.map((g) => g.key)
+  })
+
+  // Пункт меню — самый длинный подходящий путь: «/» иначе подсвечивался бы
+  // на каждой странице, потому что с него начинается любой адрес.
+  const navSelectedKey =
+    NAV_GROUPS.flatMap((g) => g.items)
+      .map((item) => item.to)
+      .filter((to) => (to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)))
+      .sort((a, b) => b.length - a.length)[0] ?? '/'
+
   const isTerminalRoute = location.pathname === '/terminal'
   const [terminalMounted, setTerminalMounted] = useState(isTerminalRoute)
   useEffect(() => {
@@ -380,19 +443,40 @@ function Shell({
           )}
         </div>
 
-        <nav className="nav">
-          {NAV.filter((item) => !item.adminOnly || me.is_admin).map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.end}>
-              <span>{t(item.labelKey)}</span>
-              {item.badge === 'findings' && criticalCount > 0 && (
-                <span className="nav-count">{criticalCount}</span>
-              )}
-              {item.badge === 'certs' && certAlerts > 0 && (
-                <span className="nav-count">{certAlerts}</span>
-              )}
-            </NavLink>
-          ))}
-        </nav>
+        <Menu
+          mode="inline"
+          className="nav-menu"
+          selectedKeys={[navSelectedKey]}
+          openKeys={openGroups}
+          onOpenChange={(keys: string[]) => {
+            const next = keys
+            setOpenGroups(next)
+            try {
+              localStorage.setItem(NAV_OPEN_KEY, JSON.stringify(next))
+            } catch {
+              // Приватный режим браузера — состояние просто не запомнится.
+            }
+          }}
+          onClick={({ key }: { key: string }) => navigate(key)}
+          items={(NAV_GROUPS.map((group) => ({
+            key: group.key,
+            label: t(group.labelKey),
+            children: group.items
+              .filter((item) => !item.adminOnly || me.is_admin)
+              .map((item) => ({
+                key: item.to,
+                label: (
+                  <span className="nav-item-label">
+                    {t(item.labelKey)}
+                    {item.badge === 'findings' && criticalCount > 0 && (
+                      <span className="nav-count">{criticalCount}</span>
+                    )}
+                    {item.badge === 'certs' && certAlerts > 0 && <span className="nav-count">{certAlerts}</span>}
+                  </span>
+                ),
+              })),
+          })).filter((group) => group.children.length > 0) as MenuProps['items'])}
+        />
 
         <div className="sidebar-foot">
           <div className="row" style={{ marginBottom: '0.4rem' }}>

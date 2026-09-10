@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Account, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
+import { confirmAction } from '../components/confirm'
 
 /** Matches the minimum the API enforces, counted in characters. */
 const MIN_LENGTH = 10
@@ -15,7 +16,7 @@ export default function Users({ me }: { me: Me }) {
   const [busy, setBusy] = useState<string | null>(null)
 
   async function toggleDisabled(u: Account) {
-    if (!window.confirm(t(u.disabled ? 'users.confirmEnable' : 'users.confirmDisable', { username: u.username }))) return
+    if (!(await confirmAction(t(u.disabled ? 'users.confirmEnable' : 'users.confirmDisable', { username: u.username })))) return
     setBusy(u.username)
     setNotice(null)
     try {
@@ -34,7 +35,7 @@ export default function Users({ me }: { me: Me }) {
 
   async function toggleRole(u: Account) {
     const nextRole = u.role === 'admin' ? 'viewer' : 'admin'
-    if (!window.confirm(t('users.confirmRoleChange', { username: u.username, role: nextRole }))) return
+    if (!(await confirmAction(t('users.confirmRoleChange', { username: u.username, role: nextRole })))) return
     setBusy(u.username)
     setNotice(null)
     try {
@@ -49,7 +50,7 @@ export default function Users({ me }: { me: Me }) {
   }
 
   async function remove(u: Account) {
-    if (!window.confirm(t('users.confirmDelete', { username: u.username }))) return
+    if (!(await confirmAction(t('users.confirmDelete', { username: u.username })))) return
     setBusy(u.username)
     setNotice(null)
     try {

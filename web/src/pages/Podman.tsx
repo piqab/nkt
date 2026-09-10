@@ -5,6 +5,7 @@ import { api, useApi } from '../api'
 import type { Me, PodmanContainer } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
+import { confirmAction } from '../components/confirm'
 
 export default function Podman({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -34,7 +35,7 @@ export default function Podman({ me }: { me: Me }) {
   }
 
   async function act(name: string, action: string) {
-    if (!window.confirm(t('podman.confirmAction', { action, name }))) return
+    if (!(await confirmAction(t('podman.confirmAction', { action, name })))) return
     setBusy(`${name}:${action}`)
     setNotice(null)
     try {
@@ -54,7 +55,7 @@ export default function Podman({ me }: { me: Me }) {
   }
 
   async function del(name: string) {
-    if (!window.confirm(t('common.confirmDelete', { what: t('podman.container'), name }))) return
+    if (!(await confirmAction(t('common.confirmDelete', { what: t('podman.container'), name })))) return
     setBusy(`${name}:delete`)
     setNotice(null)
     try {

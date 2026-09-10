@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { BlockKind, ConfigBlock, Me, WriteResult } from '../types'
 import { Banner, CodeEditor, Modal, Spinner } from './ui'
+import { confirmAction } from './confirm'
 
 const KIND_LABEL: Record<BlockKind, string> = {
   server: 'server',
@@ -147,7 +148,7 @@ export default function BlockTree({
 
   async function remove(block: ConfigBlock) {
     const label = `${KIND_LABEL[block.kind]}${block.name ? ' ' + block.name : ''}`
-    if (!window.confirm(t('blocks.confirmDelete', { label }))) return
+    if (!(await confirmAction(t('blocks.confirmDelete', { label })))) return
     const ok = await writeBlock({
       op: 'delete', kind: block.kind, start_line: block.start_line, end_line: block.end_line, apply: false,
     })

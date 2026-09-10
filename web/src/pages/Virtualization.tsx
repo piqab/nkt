@@ -6,6 +6,7 @@ import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
 import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, StateBadge, formatBytesShort } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 import i18n from '../i18n'
+import { confirmAction } from '../components/confirm'
 
 const LIFECYCLE_ACTIONS = ['start', 'shutdown', 'reboot', 'suspend', 'resume']
 
@@ -192,7 +193,7 @@ export default function Virtualization({ me }: { me: Me }) {
 
   async function act(name: string, action: string) {
     const label = action === 'destroy' ? t('virt.forceDestroy') : action
-    if (!window.confirm(t('virt.confirmAction', { action: label, name }))) return
+    if (!(await confirmAction(t('virt.confirmAction', { action: label, name })))) return
     setBusy(`${name}:${action}`)
     setNotice(null)
     try {
@@ -227,7 +228,7 @@ export default function Virtualization({ me }: { me: Me }) {
 
   async function del(name: string, removeStorage: boolean) {
     const warning = t(removeStorage ? 'virt.confirmDeleteWithDisks' : 'virt.confirmDeleteDefinition', { name })
-    if (!window.confirm(warning)) return
+    if (!(await confirmAction(warning))) return
     setBusy(`${name}:delete`)
     setNotice(null)
     try {
