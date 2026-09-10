@@ -75,7 +75,9 @@ export default function Disks() {
     setUsageBusy(true)
     setUsageError(null)
     try {
-      const res = await api<{ entries: DirEntry[] }>(`/disks/usage${qs({ path })}`)
+      // Обход каталогов заведомо долгий — на сервере у него свой потолок
+      // в минуту, и клиент должен ждать дольше него, а не обрывать раньше.
+      const res = await api<{ entries: DirEntry[] }>(`/disks/usage${qs({ path })}`, { timeoutMs: 90_000 })
       setUsagePath(path)
       setUsage(res.entries)
     } catch (err) {
@@ -274,7 +276,7 @@ export default function Disks() {
         </Card>
       )}
 
-      {(disks.data?.swap.length ?? 0) > 0 && (
+      {(disks.data?.swap?.length ?? 0) > 0 && (
         <Card title={t('disks.swap')} subtitle={t('disks.swapHint')}>
           <div className="table-wrap">
             <Table<Swap>

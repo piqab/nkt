@@ -381,6 +381,7 @@ export default function Services({ me }: { me: Me }) {
                 <>
                   <div>{s.description || s.unit}</div>
                   <div>{t('services.state', { state: s.active_state, sub: s.sub_state ? ` (${s.sub_state})` : '' })}</div>
+                  {s.active_state === 'unknown' && <div>{t('services.stateUnknown')}</div>}
                   {!canControl ? (
                     !s.installed && <div>{t('services.notInstalled')}</div>
                   ) : (
@@ -403,7 +404,11 @@ export default function Services({ me }: { me: Me }) {
                 void act(s.name, 'start')
               }}
               isClickable={() => canControl}
-              getColor={(s) => (s.installed ? undefined : 'gold')}
+              // Жёлтый — «не установлен», серый — «состояние неизвестно»
+              // (systemctl не ответил, обычно из-за недоступной шины).
+              // Раньше оба случая выглядели одинаково, и работающая служба
+              // с непрочитанным состоянием читалась как неустановленная.
+              getColor={(s) => (s.installed ? (s.active_state === 'unknown' ? 'default' : undefined) : 'gold')}
             />
             <div className="table-wrap">
               <Table<ServiceUnit>

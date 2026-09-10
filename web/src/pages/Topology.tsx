@@ -67,6 +67,11 @@ export default function TopologyPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
   const [hideHealthy, setHideHealthy] = useState(false)
+  // Остановленные службы включены в карту, но по умолчанию не показываются:
+  // на обычном хосте их больше, чем работающих (systemd держит десятки
+  // юнитов «на всякий случай»), и они забивают столбец, ради которого на
+  // карту и смотрят.
+  const [hideInactive, setHideInactive] = useState(true)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
@@ -76,6 +81,12 @@ export default function TopologyPage() {
     if (!data) return { placed: [], edges: [], width: 100, height: 100, columns: [] as typeof COLUMNS }
 
     let nodes = data.nodes
+    if (hideInactive) {
+      // Признак берётся из подписи узла: для службы туда кладётся её
+      // ActiveState (см. internal/topology). Всё, что не active, — не
+      // работает прямо сейчас.
+      nodes = nodes.filter((n) => !(n.kind === 'service' && n.sublabel && n.sublabel !== 'active'))
+    }
     if (hideHealthy) {
       const keep = new Set<string>()
       for (const n of nodes) {
@@ -125,7 +136,7 @@ export default function TopologyPage() {
       height: 70 + maxRows * (NODE_H + ROW_GAP),
       columns: usedColumns,
     }
-  }, [data, hideHealthy])
+  }, [data, hideHealthy, hideInactive])
 
   const positions = useMemo(() => new Map(placed.map((n) => [n.id, n])), [placed])
 
@@ -389,10 +400,16 @@ export default function TopologyPage() {
                 <span className="legend-swatch" style={{ background: STATUS_COLOR.unknown }} /> {t('topology.legendUnknown')}
               </span>
             </div>
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-              <Checkbox checked={hideHealthy} onChange={(e) => setHideHealthy(e.target.checked)} />
-              {t('topology.onlyProblems')}
-            </label>
+            {/* Обе галочки одной строкой и с одинаковыми отступами: они об
+                одном и том же — что показывать на карте. */}
+            <div className="row" style={{ alignItems: 'center', gap: '1rem' }}>
+              <Checkbox checked={hideInactive} onChange={(e) => setHideInactive(e.target.checked)}>
+                {t('topology.hideInactive')}
+              </Checkbox>
+              <Checkbox checked={hideHealthy} onChange={(e) => setHideHealthy(e.target.checked)}>
+                {t('topology.onlyProblems')}
+              </Checkbox>
+            </div>
             <span className="small muted">
               {t('topology.nodesEdgesCount', { nodes: data.nodes.length, edges: data.edges.length })}
             </span>

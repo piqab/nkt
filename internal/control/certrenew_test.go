@@ -271,7 +271,13 @@ func TestRenewCertbotStopsAndRestartsForStandalone(t *testing.T) {
 // able to renew a standalone certificate.
 func TestStopForStandaloneSkipsUninstalledServices(t *testing.T) {
 	root := copyFixturesRoot(t)
+	// Хост без caddy — это отсутствие И бинарника, И юнита. Раньше хватало
+	// убрать бинарник, потому что «установлен» сводилось к command -v; с
+	// тех пор признак учитывает и то, что systemd знает файл юнита, и
+	// заготовка systemctl show (ActiveState=active, UnitFileState=enabled)
+	// описывала бы машину, где caddy работает, но исполняемого файла нет.
 	removeFixtureCommand(t, root, []string{"sh", "-c", "command -v caddy"})
+	removeFixtureCommand(t, root, []string{"systemctl", "show", "caddy"})
 
 	cfg := &config.Config{
 		Mode:            config.ModeFixtures,

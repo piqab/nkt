@@ -28,6 +28,7 @@ import Usage from './pages/Usage'
 import Audit from './pages/Audit'
 import Users from './pages/Users'
 import Disks from './pages/Disks'
+import ErrorBoundary from './components/ErrorBoundary'
 import HardwarePage from './pages/Hardware'
 import SystemSettingsPage from './pages/SystemSettings'
 import OSUsers from './pages/OSUsers'
@@ -467,37 +468,43 @@ function Shell({
             </Banner>
           )}
 
-          <Routes>
-            <Route path="/" element={<OverviewPage me={me} />} />
-            <Route path="/findings" element={<Findings />} />
-            <Route path="/vulnerabilities" element={<Vulnerabilities me={me} />} />
-            <Route path="/topology" element={<TopologyPage />} />
-            <Route path="/availability" element={<Availability />} />
-            <Route path="/usage" element={<Usage me={me} />} />
-            <Route path="/configs" element={<Configs me={me} />} />
-            <Route path="/logs" element={<LogsPage />} />
-            <Route path="/services" element={<Services me={me} />} />
-            <Route path="/containers" element={<Containers me={me} />} />
-            <Route path="/packages" element={<Packages me={me} />} />
-            {/* Docker/Podman/LXD/ВМ were separate nav entries before —
-                redirect their old URLs to the merged page's default tab
-                rather than a bare 404 for anyone with these bookmarked. */}
-            <Route path="/podman" element={<Navigate to="/containers" replace />} />
-            <Route path="/lxd" element={<Navigate to="/containers" replace />} />
-            <Route path="/vms" element={<Navigate to="/containers" replace />} />
-            {me.is_admin && <Route path="/terminal" element={null} />}
-            <Route path="/firewall" element={<Firewall me={me} />} />
-            <Route path="/interfaces" element={<Interfaces />} />
-            <Route path="/certificates" element={<Certificates me={me} />} />
-            <Route path="/audit" element={<Audit />} />
-            <Route path="/disks" element={<Disks />} />
-            <Route path="/hardware" element={<HardwarePage />} />
-            {me.is_admin && <Route path="/system" element={<SystemSettingsPage me={me} />} />}
-            {me.is_admin && <Route path="/users" element={<Users me={me} />} />}
-            {me.is_admin && <Route path="/os-users" element={<OSUsers me={me} />} />}
-            <Route path="/login" element={<Navigate to="/" replace />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          {/* Граница вокруг всего блока разделов, но со сбросом при смене
+              адреса (key): сломавшийся раздел показывает карточку с
+              ошибкой вместо белой страницы, а переход в другой раздел
+              возвращает интерфейс к жизни сам, без перезагрузки. */}
+          <ErrorBoundary key={location.pathname} section={location.pathname}>
+            <Routes>
+              <Route path="/" element={<OverviewPage me={me} />} />
+              <Route path="/findings" element={<Findings />} />
+              <Route path="/vulnerabilities" element={<Vulnerabilities me={me} />} />
+              <Route path="/topology" element={<TopologyPage />} />
+              <Route path="/availability" element={<Availability />} />
+              <Route path="/usage" element={<Usage me={me} />} />
+              <Route path="/configs" element={<Configs me={me} />} />
+              <Route path="/logs" element={<LogsPage />} />
+              <Route path="/services" element={<Services me={me} />} />
+              <Route path="/containers" element={<Containers me={me} />} />
+              <Route path="/packages" element={<Packages me={me} />} />
+              {/* Docker/Podman/LXD/ВМ were separate nav entries before —
+                  redirect their old URLs to the merged page's default tab
+                  rather than a bare 404 for anyone with these bookmarked. */}
+              <Route path="/podman" element={<Navigate to="/containers" replace />} />
+              <Route path="/lxd" element={<Navigate to="/containers" replace />} />
+              <Route path="/vms" element={<Navigate to="/containers" replace />} />
+              {me.is_admin && <Route path="/terminal" element={null} />}
+              <Route path="/firewall" element={<Firewall me={me} />} />
+              <Route path="/interfaces" element={<Interfaces />} />
+              <Route path="/certificates" element={<Certificates me={me} />} />
+              <Route path="/audit" element={<Audit />} />
+              <Route path="/disks" element={<Disks />} />
+              <Route path="/hardware" element={<HardwarePage />} />
+              {me.is_admin && <Route path="/system" element={<SystemSettingsPage me={me} />} />}
+              {me.is_admin && <Route path="/users" element={<Users me={me} />} />}
+              {me.is_admin && <Route path="/os-users" element={<OSUsers me={me} />} />}
+              <Route path="/login" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </ErrorBoundary>
           {me.is_admin && terminalMounted && (
             <div style={{ display: isTerminalRoute ? 'contents' : 'none' }}>
               <TerminalPage me={me} />

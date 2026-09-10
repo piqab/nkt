@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, Card, Loading } from './ui'
+import PackageInstallModal from './PackageInstallModal'
 
 interface SandboxPackage {
   kind: 'snap' | 'flatpak'
@@ -32,6 +33,10 @@ export default function SandboxPackagesCard({ me }: { me: Me }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [output, setOutput] = useState<string | null>(null)
+  // Установка самой системы пакетов идёт обычным apt — тем же окном с
+  // живым логом, что и остальные установки: snapd и flatpak ставятся
+  // минуты и тянут зависимости, показывать это надо, а не крутить спиннер.
+  const [installing, setInstalling] = useState<string | null>(null)
 
   const canUse = me.is_admin && me.allow_mutations
 
@@ -40,7 +45,9 @@ export default function SandboxPackagesCard({ me }: { me: Me }) {
     setError(null)
     setOutput(null)
     try {
-      const res = await api<{ output?: string }>(path, { method: 'POST', body })
+      // snap refresh и flatpak update ходят в сеть и легко идут минуту:
+      // на сервере у них потолок 90 секунд, клиент ждёт с запасом.
+      const res = await api<{ output?: string }>(path, { method: 'POST', body, timeoutMs: 120_000 })
       if (res.output) setOutput(res.output)
       await data.reload()
     } catch (err) {
@@ -131,6 +138,32 @@ export default function SandboxPackagesCard({ me }: { me: Me }) {
           {n}
         </p>
       ))}
+
+      {canUse && (!snap_available || !flatpak_available) && (
+        <div className="row" style={{ gap: '0.5rem', marginTop: '0.4rem' }}>
+          {!snap_available && (
+            <Button size="small" onClick={() => setInstalling('snapd')}>
+              {t('sandboxPkg.installSnap')}
+            </Button>
+          )}
+          {!flatpak_available && (
+            <Button size="small" onClick={() => setInstalling('flatpak')}>
+              {t('sandboxPkg.installFlatpak')}
+            </Button>
+          )}
+        </div>
+      )}
+
+      {installing && (
+        <PackageInstallModal
+          packageName={installing}
+          wsPath={`/system/apt/install/ws?pkgs=${installing}`}
+          onClose={() => setInstalling(null)}
+          onFinished={() => void data.reload()}
+          outcome={null}
+          action="install"
+        />
+      )}
       {packages.length > 0 && (
         <div className="table-wrap">
           <Table<SandboxPackage>
