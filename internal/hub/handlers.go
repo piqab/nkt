@@ -348,11 +348,24 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	// Группа машины — это группа её хоста. Своё поле у неё может
+	// остаться от прежних версий или от правки мимо интерфейса; здесь
+	// оно не спорит с родителем, а подчиняется ему.
+	groupByID := make(map[int64]string, len(hosts))
+	for _, h := range hosts {
+		groupByID[h.ID] = h.Group
+	}
+
 	out := make([]hostWithOverview, 0, len(hosts)+1)
 	if local := s.localHostEntry(r.Context()); local != nil {
 		out = append(out, *local)
 	}
 	for _, h := range hosts {
+		if h.ParentID != 0 {
+			if group, ok := groupByID[h.ParentID]; ok {
+				h.Group = group
+			}
+		}
 		row := hostWithOverview{Host: h}
 		if ov, ok := s.hub.Overview(h.ID); ok {
 			row.Findings = ov.Findings

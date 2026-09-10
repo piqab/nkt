@@ -702,6 +702,16 @@ pre.diff .hunk { color: var(--text-muted); }
 .host-group-head:hover .host-group-actions,
 .host-group-actions:focus-within { opacity: 1; }
 
+/* Машины внутри хоста: отступ и полоска слева показывают вложенность —
+   это не соседний хост, а то, что на нём работает. */
+.host-vms {
+  gap: 0.4rem;
+  margin: 0.3rem 0 0.2rem 1.2rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--border);
+}
+.host-vm { padding: 0.15rem 0; }
+
 .host-group-empty {
   padding: 0.4rem 0.4rem 0.6rem 1.7rem;
 }

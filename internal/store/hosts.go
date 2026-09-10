@@ -64,7 +64,12 @@ type Host struct {
 	// Group — произвольная группа в списке хостов («прод», «клиент А»).
 	// Пустая строка означает «Без группы»: такой раздел показывается в
 	// конце списка, а не прячется — хост без группы не должен исчезать.
-	Group      string `json:"group"`
+	Group string `json:"group"`
+	// ParentID — хост, на котором работает эта машина; 0 у обычных
+	// хостов. Машина не живёт отдельно от своего сервера: она
+	// показывается под ним и переезжает между группами только вместе с
+	// ним.
+	ParentID int64 `json:"parent_id,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	LastSeenAt string `json:"last_seen_at,omitempty"`
 
@@ -108,7 +113,8 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
-	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, group_name`
+	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, group_name,
+	parent_id`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
@@ -116,7 +122,8 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var adminPasswordEnc, tunnelTokenEnc, tunnelCertSHA256 []byte
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
-		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen, &h.Group)
+		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen, &h.Group,
+		&h.ParentID)
 	if err != nil {
 		return Host{}, err
 	}
@@ -125,6 +132,12 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	h.TunnelCertSHA256 = tunnelCertSHA256
 	h.LastSeenAt = lastSeen.String
 	return h, nil
+}
+
+// SetHostParent привязывает хост к машине, на которой он работает.
+func (d *DB) SetHostParent(ctx context.Context, id, parentID int64) error {
+	_, err := d.ExecContext(ctx, `UPDATE hosts SET parent_id = ? WHERE id = ?`, parentID, id)
+	return err
 }
 
 // HostByID looks a host up by its id.

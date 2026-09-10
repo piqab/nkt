@@ -92,7 +92,6 @@ func groupTitle(group string) string {
 // vmProvisionRequest — что и где создавать.
 type vmProvisionRequest struct {
 	HostID int64         `json:"host_id"`
-	Group  string        `json:"group"`
 	Spec   vmcreate.Spec `json:"spec"`
 }
 
@@ -128,7 +127,7 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 		Queue:  fmt.Sprintf("vm:%d", host.ID),
 		Author: user,
 		Steps:  4,
-		Params: VMProvisionParams{HostID: host.ID, Spec: req.Spec, Group: req.Group},
+		Params: VMProvisionParams{HostID: host.ID, Spec: req.Spec},
 	})
 	if err != nil {
 		s.db.Audit(r.Context(), user, "vm.provision", req.Spec.Name, "error", err.Error())

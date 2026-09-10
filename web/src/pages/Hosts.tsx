@@ -323,6 +323,29 @@ export default function Hosts({
   const profiles = useApi<{ profiles: { id: number; name: string }[] }>('/hosts/local/profiles', 120_000)
   const [applyTo, setApplyTo] = useState<{ group: string; hosts: number } | null>(null)
   const [provisionOn, setProvisionOn] = useState<HubHost | null>(null)
+  // Раскрытые списки машин — по идентификатору хоста. По умолчанию
+  // свёрнуто: у хоста с десятком машин список иначе оттеснил бы сами
+  // хосты.
+  const [openVMs, setOpenVMs] = useState<Set<number>>(new Set())
+
+  // Машины по хосту, на котором они созданы.
+  const vmsByHost = useMemo(() => {
+    const out = new Map<number, HubHost[]>()
+    for (const h of hosts ?? []) {
+      if (!h.parent_id) continue
+      out.set(h.parent_id, [...(out.get(h.parent_id) ?? []), h])
+    }
+    return out
+  }, [hosts])
+
+  function toggleVMs(hostID: number) {
+    setOpenVMs((prev) => {
+      const next = new Set(prev)
+      if (next.has(hostID)) next.delete(hostID)
+      else next.add(hostID)
+      return next
+    })
+  }
   const [groupDialog, setGroupDialog] = useState<{ mode: 'create' | 'rename'; from?: string } | null>(null)
   const [groupName, setGroupName] = useState('')
 
@@ -336,6 +359,9 @@ export default function Hosts({
     // некуда.
     for (const name of groups.data?.groups ?? []) byGroup.set(name, [])
     for (const host of hosts ?? []) {
+      // Машины в разделах не показываются: они живут внутри своего
+      // хоста и раскрываются по «+».
+      if (host.parent_id) continue
       const key = (host.group ?? '').trim()
       byGroup.set(key, [...(byGroup.get(key) ?? []), host])
     }
@@ -868,8 +894,61 @@ export default function Hosts({
     )
   }
 
+  /**
+   * Строка хоста в раскрытом виде: его действия, а под ними — машины,
+   * если список раскрыт «плюсом».
+   *
+   * Машина показывается здесь, а не отдельной строкой в разделе: она
+   * привязана к своему хосту, переезжает между группами вместе с ним и
+   * сама по себе никуда не перетаскивается.
+   */
+  function renderRowBody(h: HubHost) {
+    const vms = vmsByHost.get(h.id) ?? []
+    return (
+      <>
+        {renderActions(h)}
+        {vms.length > 0 && openVMs.has(h.id) && (
+          <div className="col host-vms">
+            {vms.map((vm) => (
+              <div key={vm.id} className="host-vm">
+                <div className="row spread">
+                  <span className="small">
+                    <strong>{vm.name}</strong>{' '}
+                    <span className="mono muted">
+                      {vm.ssh_user}@{vm.addr}
+                    </span>
+                  </span>
+                  <HostStatusBadge status={vm.status} />
+                </div>
+                {renderActions(vm)}
+              </div>
+            ))}
+          </div>
+        )}
+      </>
+    )
+  }
+
   const columns: TableColumnsType<HubHost> = [
-    { title: t('hosts.colName'), dataIndex: 'name', key: 'name', render: (name: string) => <strong>{name}</strong> },
+    {
+      title: t('hosts.colName'),
+      key: 'name',
+      render: (_, h) => {
+        const vms = vmsByHost.get(h.id) ?? []
+        return (
+          <div style={{ minWidth: '10rem' }}>
+            <strong>{h.name}</strong>
+            {vms.length > 0 && (
+              <div>
+                <Button type="link" size="small" style={{ paddingLeft: 0 }} onClick={() => toggleVMs(h.id)}>
+                  {openVMs.has(h.id) ? '−' : '+'} {t('hosts.vmCount', { count: vms.length })}
+                </Button>
+              </div>
+            )}
+          </div>
+        )
+      },
+    },
     {
       title: t('hosts.colAddr'),
       key: 'addr',
@@ -1187,7 +1266,7 @@ export default function Hosts({
                           expandedRowKeys: items.map((h) => h.id),
                           expandIcon: () => null,
                           rowExpandable: () => true,
-                          expandedRowRender: renderActions,
+                          expandedRowRender: renderRowBody,
                         }}
                       />
                     </div>
@@ -2077,7 +2156,6 @@ function ProvisionVMModal({
   const [diskGB, setDiskGB] = useState(20)
   const [memoryMB, setMemoryMB] = useState(2048)
   const [vcpus, setVCPUs] = useState(2)
-  const [group, setGroup] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -2091,7 +2169,6 @@ function ProvisionVMModal({
         method: 'POST',
         body: {
           host_id: host.id,
-          group,
           spec: {
             name,
             image_id: imageID,
@@ -2150,10 +2227,6 @@ function ProvisionVMModal({
         <label>
           {t('hosts.newVMVcpus')}
           <InputNumber value={vcpus} min={1} max={256} onChange={(v) => setVCPUs(v ?? 2)} style={{ width: '100%' }} />
-        </label>
-        <label>
-          {t('hosts.group')}
-          <Input value={group} onChange={(e) => setGroup(e.target.value)} />
         </label>
       </div>
 

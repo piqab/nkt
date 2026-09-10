@@ -569,7 +569,7 @@
     "applyProfileStarted": "Rollout started: {{count}} hosts, job #{{job}}. Follow it in the Jobs section.",
     "newVM": "new VM",
     "newVMTitle": "New machine on host «{{host}}»",
-    "newVMBody": "The host itself creates the machine from a cloud image, and the hub puts its own key inside on first boot and adds the machine to the host list — otherwise the hub would have to be let in by hand. Installing nkt on it stays a separate step: it is an ordinary host, and that call is yours. The work runs in the background; follow it in this host's Jobs section.",
+    "newVMBody": "The host itself creates the machine from a cloud image, and the hub puts its own key inside on first boot and adds it to the list — inside that host. A machine has no group of its own: it moves between groups together with the host it runs on. Installing nkt on it stays a separate step. The work runs in the background; follow it in Jobs.",
     "newVMImage": "Image",
     "newVMWillDownload": "— will be downloaded",
     "newVMName": "Machine name",
@@ -580,7 +580,9 @@
     "newVMVcpus": "vCPUs",
     "newVMStart": "Create",
     "newVMStarted": "Creation of machine \"{{name}}\" started, job #{{job}}. Follow it in Jobs.",
-    "applyProfileNone": "Create a profile first in the Profiles section on the hub machine — there is nothing to roll out yet."
+    "applyProfileNone": "Create a profile first in the Profiles section on the hub machine — there is nothing to roll out yet.",
+    "vmCount_one": "{{count}} machine",
+    "vmCount_other": "{{count}} machines"
   },
   "certs": {
     "colSites": "Sites",

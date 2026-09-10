@@ -392,6 +392,17 @@ func (m *Manager) SetHostGroup(ctx context.Context, hostID int64, group string) 
 	if hostID == LocalHostID {
 		return m.SetLocalHostGroup(ctx, group)
 	}
+	// Машина, созданная на хосте, живёт в его группе и только в ней:
+	// «база данных в проде, а сервер, на котором она крутится, в
+	// резерве» — состояние, которое ничего не описывает и только
+	// путает.
+	host, err := m.db.HostByID(ctx, hostID)
+	if err != nil {
+		return err
+	}
+	if host.ParentID != 0 {
+		return fmt.Errorf("машина привязана к своему хосту — перенесите сам хост, она переедет вместе с ним")
+	}
 	return m.db.SetHostGroup(ctx, hostID, group)
 }
 
