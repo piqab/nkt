@@ -43,7 +43,7 @@ func CheckDrift(ctx context.Context, db *store.DB, r Reader) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	report := DriftReport{TS: store.FormatTime(time.Now())}
+	report := DriftReport{TS: store.FormatTime(time.Now()), Results: []DriftResult{}}
 	drifted := 0
 	for _, row := range profiles {
 		full, err := db.ProfileByID(ctx, row.ID)

@@ -579,7 +579,8 @@
     "newVMMemory": "Memory, MB",
     "newVMVcpus": "vCPUs",
     "newVMStart": "Create",
-    "newVMStarted": "Creation of machine \"{{name}}\" started, job #{{job}}. Follow it in Jobs."
+    "newVMStarted": "Creation of machine \"{{name}}\" started, job #{{job}}. Follow it in Jobs.",
+    "applyProfileNone": "Create a profile first in the Profiles section on the hub machine — there is nothing to roll out yet."
   },
   "certs": {
     "colSites": "Sites",

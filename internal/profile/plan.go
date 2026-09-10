@@ -119,7 +119,10 @@ type UserState struct {
 // когда нужнее всего.
 func Build(ctx context.Context, p Profile, r Reader) Plan {
 	p = p.Normalize()
-	plan := Plan{Profile: p.Name}
+	// Пустой срез, а не nil: nil уезжает в JSON как null, и на стороне
+	// браузера «changes.length» роняет отрисовку всей страницы. Ровно на
+	// этом уже спотыкались «Диски» — там был "swap": null.
+	plan := Plan{Profile: p.Name, Changes: []Change{}}
 
 	plan.addPackages(ctx, p, r)
 	plan.addServices(ctx, p, r)
