@@ -819,7 +819,10 @@
     "sshGuardProbeOk": "sshd accepts a new connection (port {{port}}, {{banner}}). The check repeats after saving, and the edit rolls back automatically if the daemon stops accepting connections.",
     "sshGuardProbeFail": "sshd is not accepting a new connection right now (port {{port}}): {{error}}",
     "sshGuardForce": "I have console access to this host — allow the edit",
-    "notWritable": "This file is read-only: the directory is not writable from the nkt unit. Update netknownsthat.service on the host (ReadWritePaths for that directory), then systemctl daemon-reload && systemctl restart netknownsthat."
+    "notWritable": "This file is read-only: the directory is not writable from the nkt unit. Update netknownsthat.service on the host (ReadWritePaths for that directory), then systemctl daemon-reload && systemctl restart netknownsthat.",
+    "pathMustBeAbsolute": "The path must start with \"/\"",
+    "pathNoDotDot": "\"..\" is not allowed in the path",
+    "pathSameAsSource": "That is the source file’s own path — pick another"
   },
   "charts": {
     "seconds": "{{value}} s",
@@ -1299,7 +1302,9 @@
     "colKeys": "Keys",
     "colSudo": "Rights",
     "colShell": "Shell",
-    "noKeys": "no keys"
+    "noKeys": "no keys",
+    "nameRule": "Lowercase letters, digits, dash and underscore; starts with a letter or underscore, up to 32 characters — the same rules useradd uses",
+    "keyRule": "An authorized_keys line is expected: \"ssh-ed25519 AAAA… comment\". Options such as command= are not accepted here"
   },
   "disks": {
     "title": "Disks",
@@ -1390,7 +1395,8 @@
     "colSecurity": "Security",
     "open": "open",
     "wifiPassword": "Password for {{ssid}}",
-    "saved": "{{what}} — saved"
+    "saved": "{{what}} — saved",
+    "hostnameRule": "Letters, digits and dashes; must not start or end with a dash, up to 63 characters (RFC 1123)"
   },
   "sandboxPkg": {
     "title": "snap and flatpak packages",

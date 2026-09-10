@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Input, Select, Switch, Tag, type TableColumnsType } from 'antd'
+import { Button, Form, Input, Select, Switch, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
@@ -63,8 +63,7 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
   const network = useApi<NetworkState>('/network/manager', 60_000)
   const timezones = useApi<{ timezones: string[] }>('/system/timezones')
 
-  const [hostname, setHostname] = useState('')
-  const [timezone, setTimezone] = useState<string | undefined>()
+  const [form] = Form.useForm<{ hostname: string; timezone: string }>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -78,9 +77,11 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
   // показывать, что стоит сейчас, а не требовать вспоминать.
   useEffect(() => {
     if (!settings.data) return
-    setHostname(settings.data.static_hostname || settings.data.hostname)
-    setTimezone(settings.data.timezone)
-  }, [settings.data])
+    form.setFieldsValue({
+      hostname: settings.data.static_hostname || settings.data.hostname,
+      timezone: settings.data.timezone,
+    })
+  }, [settings.data, form])
 
   async function save(body: Record<string, unknown>, what: string) {
     setBusy(true)
@@ -172,20 +173,34 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
       ))}
 
       <Card title={t('sysSettings.system')} subtitle={settings.data?.operating_system}>
-        <div className="filters">
-          <label style={{ flex: 1, minWidth: '14rem' }}>
-            {t('sysSettings.hostname')}
-            <Input value={hostname} onChange={(e) => setHostname(e.target.value)} disabled={!canUse} />
-          </label>
-          <Button
-            disabled={!canUse || busy || !hostname || hostname === settings.data?.static_hostname}
-            loading={busy}
-            onClick={() => save({ hostname }, t('sysSettings.hostname'))}
-            style={{ alignSelf: 'flex-end' }}
-          >
-            {t('common.save')}
-          </Button>
-        </div>
+        {/* Имя проверяется по RFC 1123 прямо здесь — теми же правилами, что
+            и на сервере: узнавать об одном лишнем символе после запроса к
+            хосту незачем. */}
+        <Form
+          form={form}
+          layout="vertical"
+          requiredMark={false}
+          onFinish={(values) => save({ hostname: values.hostname }, t('sysSettings.hostname'))}
+        >
+          <div className="filters">
+            <Form.Item
+              name="hostname"
+              label={t('sysSettings.hostname')}
+              rules={[
+                { required: true },
+                { pattern: /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/, message: t('sysSettings.hostnameRule') },
+              ]}
+              style={{ flex: 1, minWidth: '14rem' }}
+            >
+              <Input disabled={!canUse} />
+            </Form.Item>
+            <Form.Item label=" ">
+              <Button htmlType="submit" disabled={!canUse || busy} loading={busy}>
+                {t('common.save')}
+              </Button>
+            </Form.Item>
+          </div>
+        </Form>
         <p className="small muted">
           {t('sysSettings.kernel')}: <code className="mono">{settings.data?.kernel}</code>
           {settings.data?.locale && (
@@ -198,33 +213,32 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
       </Card>
 
       <Card title={t('sysSettings.time')} subtitle={settings.data?.local_time}>
-        <div className="filters">
-          <label style={{ flex: 1, minWidth: '16rem' }}>
-            {t('sysSettings.timezone')}
-            <Select
-              showSearch
-              value={timezone}
-              onChange={setTimezone}
-              disabled={!canUse}
-              options={(timezones.data?.timezones ?? []).map((z) => ({ value: z, label: z }))}
-              style={{ width: '100%' }}
-              // 485 поясов: без поиска выбирать невозможно, а грузить их
-              // все в разметку разом — тяжело для страницы.
-              filterOption={(input, option) =>
-                (option?.value ?? '').toString().toLowerCase().includes(input.toLowerCase())
-              }
-              virtual
-            />
-          </label>
-          <Button
-            disabled={!canUse || busy || !timezone || timezone === settings.data?.timezone}
-            loading={busy}
-            onClick={() => save({ timezone }, t('sysSettings.timezone'))}
-            style={{ alignSelf: 'flex-end' }}
-          >
-            {t('common.save')}
-          </Button>
-        </div>
+        <Form
+          form={form}
+          layout="vertical"
+          onFinish={(values) => save({ timezone: values.timezone }, t('sysSettings.timezone'))}
+        >
+          <div className="filters">
+            <Form.Item name="timezone" label={t('sysSettings.timezone')} style={{ flex: 1, minWidth: '16rem' }}>
+              <Select
+                showSearch
+                disabled={!canUse}
+                options={(timezones.data?.timezones ?? []).map((z) => ({ value: z, label: z }))}
+                // 485 поясов: без поиска выбирать невозможно, а рисовать их
+                // все разом — тяжело для страницы.
+                filterOption={(input, option) =>
+                  (option?.value ?? '').toString().toLowerCase().includes(input.toLowerCase())
+                }
+                virtual
+              />
+            </Form.Item>
+            <Form.Item label=" ">
+              <Button htmlType="submit" disabled={!canUse || busy} loading={busy}>
+                {t('common.save')}
+              </Button>
+            </Form.Item>
+          </div>
+        </Form>
         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem' }}>
           <Switch
             checked={settings.data?.ntp ?? false}

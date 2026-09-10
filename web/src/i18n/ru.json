@@ -819,7 +819,10 @@
     "sshGuardProbeOk": "sshd отвечает на новое соединение (порт {{port}}, {{banner}}). После сохранения проверка повторится, и если демон перестанет принимать соединения — правка откатится сама.",
     "sshGuardProbeFail": "sshd сейчас не отвечает на новое соединение (порт {{port}}): {{error}}",
     "sshGuardForce": "У меня есть доступ к консоли хоста — разрешить правку",
-    "notWritable": "Этот файл открыт только на чтение: каталог недоступен на запись из юнита nkt. Обновите netknownsthat.service на хосте (ReadWritePaths для этого каталога) и выполните systemctl daemon-reload && systemctl restart netknownsthat."
+    "notWritable": "Этот файл открыт только на чтение: каталог недоступен на запись из юнита nkt. Обновите netknownsthat.service на хосте (ReadWritePaths для этого каталога) и выполните systemctl daemon-reload && systemctl restart netknownsthat.",
+    "pathMustBeAbsolute": "Путь должен начинаться с «/»",
+    "pathNoDotDot": "«..» в пути не допускается",
+    "pathSameAsSource": "Это путь исходного файла — укажите другой"
   },
   "charts": {
     "seconds": "{{value}} с",
@@ -1299,7 +1302,9 @@
     "colKeys": "Ключи",
     "colSudo": "Права",
     "colShell": "Оболочка",
-    "noKeys": "ключей нет"
+    "noKeys": "ключей нет",
+    "nameRule": "Строчные латинские буквы, цифры, дефис и подчёркивание; начинается с буквы или подчёркивания, до 32 символов — те же правила, что у useradd",
+    "keyRule": "Ожидается строка authorized_keys: «ssh-ed25519 AAAA… комментарий». Опции вроде command= из формы не принимаются"
   },
   "disks": {
     "title": "Диски",
@@ -1390,7 +1395,8 @@
     "colSecurity": "Защита",
     "open": "открытая",
     "wifiPassword": "Пароль сети {{ssid}}",
-    "saved": "{{what}} — сохранено"
+    "saved": "{{what}} — сохранено",
+    "hostnameRule": "Буквы, цифры и дефис; не начинается и не заканчивается дефисом, до 63 символов (RFC 1123)"
   },
   "sandboxPkg": {
     "title": "Пакеты snap и flatpak",
