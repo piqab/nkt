@@ -237,6 +237,7 @@ func newRuntime() (*runtime, error) {
 	if err != nil {
 		return nil, err
 	}
+	enableUnrestrictedWrites(collector)
 	db, err := store.Open(cfg.DBPath())
 	if err != nil {
 		return nil, err
@@ -576,6 +577,7 @@ func newHubRuntime() (*hubRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
+	enableUnrestrictedWrites(collector)
 	scanner := inventory.New(cfg, collector, db)
 	services := control.NewServiceManager(cfg, collector, db)
 
@@ -607,6 +609,28 @@ func newHubRuntime() (*hubRuntime, error) {
 func (r *hubRuntime) close() {
 	if r.db != nil {
 		_ = r.db.Close()
+	}
+}
+
+// enableUnrestrictedWrites разрешает записывать файлы мимо песочницы
+// собственного юнита.
+//
+// Под ProtectSystem=strict всё, кроме перечисленного в ReadWritePaths,
+// смонтировано только для чтения, и правка любого конфига за пределами
+// списка упирается в «read-only file system». Перечислить заранее все
+// каталоги, которые оператору однажды понадобится править, нельзя — их
+// на хосте сотни; поэтому запись, которой песочница помешала, повторяется
+// снаружи, тем же способом, каким уже работают терминал и установка
+// пакетов.
+//
+// Только для собранного на месте Local: снапшот (fixtures) пишет в свой
+// каталог, и выход из песочницы ему не нужен и не должен быть доступен.
+// Проверяется именно тип сборщика, а не режим: хаб тоже показывает
+// собственную машину («Конфигурации» её локального дашборда), и там
+// песочница мешает ровно так же.
+func enableUnrestrictedWrites(c collect.Collector) {
+	if local, ok := c.(*collect.Local); ok {
+		local.SetEscape(api.RunUnrestrictedInput)
 	}
 }
 

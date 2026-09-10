@@ -391,10 +391,14 @@ func (m *ConfigManager) Read(path string) (FileContent, error) {
 	if err != nil {
 		return FileContent{}, err
 	}
+	// Editable проверяется здесь, а не подставляется true: список файлов
+	// помечает недоступные на запись верно, но открытое окно правки об
+	// этом раньше не знало — оператор набирал изменения и узнавал о
+	// невозможности сохранить только по ошибке в конце.
 	return FileContent{
 		ManagedFile: model.ManagedFile{
 			Path: path, Service: service, Size: st.Size, ModTime: st.ModTime,
-			SHA256: sha256Hex(raw), Editable: true, Readable: true,
+			SHA256: sha256Hex(raw), Editable: m.c.Writable(path), Readable: true,
 		},
 		Content: string(raw),
 	}, nil
@@ -656,9 +660,11 @@ func (m *ConfigManager) applyCategory(ctx context.Context, user, service, path s
 func describeWriteError(path string, err error) error {
 	text := strings.ToLower(err.Error())
 	if strings.Contains(text, "read-only file system") || strings.Contains(text, "permission denied") {
-		return fmt.Errorf("запись %s: %w — каталог недоступен на запись из юнита nkt;"+
-			" обновите netknownsthat.service на хосте (ReadWritePaths для этого каталога)"+
-			" и выполните systemctl daemon-reload && systemctl restart netknownsthat", path, err)
+		return fmt.Errorf("запись %s: %w — каталог недоступен на запись из юнита nkt,"+
+			" и обойти песочницу не удалось (недоступен systemd-run и запрещён nsenter)."+
+			" Кнопка «Разрешить запись» открывает каталог юниту и перезапускает службу;"+
+			" вручную то же делают systemctl daemon-reload && systemctl restart netknownsthat"+
+			" после добавления ReadWritePaths", path, err)
 	}
 	return fmt.Errorf("запись %s: %w", path, err)
 }

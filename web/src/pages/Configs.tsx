@@ -119,6 +119,41 @@ export default function Configs({ me }: { me: Me }) {
     }
   }, [newFileModal])
 
+  // Открытие каталога юниту — запасной путь: обычно запись, которой
+  // помешала песочница, повторяется мимо неё, и до этой кнопки дело не
+  // доходит.
+  const [allowingWrite, setAllowingWrite] = useState(false)
+  const [allowNotice, setAllowNotice] = useState<string | null>(null)
+
+  async function allowWrite() {
+    if (!path) return
+    if (!(await confirmAction(t('configs.allowWriteConfirm')))) return
+    setAllowingWrite(true)
+    setAllowNotice(null)
+    try {
+      const res = await api<{ status: string; restarting: boolean; message?: string; commands?: string[] }>(
+        '/configs/allow-write',
+        { method: 'POST', body: { path } },
+      )
+      if (res.restarting) {
+        setAllowNotice(t('configs.allowWriteRestarting'))
+        // Служба перезапускается — файл станет доступен на запись только
+        // после этого, поэтому список и сам файл перечитываются с
+        // задержкой, а не сразу.
+        setTimeout(() => {
+          file.reload()
+          files.reload()
+        }, 6000)
+      } else {
+        setAllowNotice([res.message, ...(res.commands ?? [])].filter(Boolean).join('\n'))
+      }
+    } catch (err) {
+      setAllowNotice(err instanceof Error ? err.message : String(err))
+    } finally {
+      setAllowingWrite(false)
+    }
+  }
+
   const allFiles = files.data?.files ?? []
   const isSSHPath = file.data?.service === 'ssh'
   const sshPreflight = useApi<SSHPreflight>(isSSHPath ? '/configs/ssh/preflight' : null)
@@ -481,7 +516,21 @@ export default function Configs({ me }: { me: Me }) {
                     )}
 
                     {file.data?.editable === false && (
-                      <Banner kind="warn">{t('configs.notWritable')}</Banner>
+                      <Banner kind="warn">
+                        <div className="col" style={{ gap: '0.4rem' }}>
+                          <span>{t('configs.notWritable')}</span>
+                          {me.is_admin && me.allow_mutations && (
+                            <span>
+                              <Button size="small" loading={allowingWrite} onClick={() => void allowWrite()}>
+                                {t('configs.allowWrite')}
+                              </Button>
+                            </span>
+                          )}
+                          {allowNotice && (
+                            <span className="small mono" style={{ whiteSpace: 'pre-wrap' }}>{allowNotice}</span>
+                          )}
+                        </div>
+                      </Banner>
                     )}
 
                     <CodeEditor

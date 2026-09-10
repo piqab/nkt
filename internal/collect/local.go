@@ -28,7 +28,19 @@ type Local struct {
 	commandTimeout time.Duration
 	docker         *http.Client
 	podman         *http.Client
+	escape         Escape
 }
+
+// Escape выполняет команду вне песочницы собственного юнита, передавая ей
+// stdin. Подставляется снаружи (cmd/nkt даёт api.RunUnrestrictedInput) —
+// весь код выхода из песочницы живёт в internal/api, а импортировать его
+// отсюда нельзя: api сам зависит от collect.
+type Escape func(ctx context.Context, stdin []byte, argv ...string) (CommandResult, error)
+
+// SetEscape включает запись мимо песочницы. Без неё Local ведёт себя как
+// раньше: пишет тем, что доступно изнутри юнита, и честно возвращает
+// отказ, если каталог смонтирован только для чтения.
+func (l *Local) SetEscape(e Escape) { l.escape = e }
 
 // NewLocal builds a collector bound to the running machine.
 func NewLocal(dockerSocket, podmanSocket string, commandTimeout time.Duration) *Local {
@@ -123,6 +135,11 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 	// directory, but a first-time write (a freshly generated certificate, for
 	// instance) may need its directory created.
 	if err := os.MkdirAll(dir, 0o755); err != nil {
+		// Каталога нет, а создать его изнутри песочницы нельзя. Снаружи —
+		// можно: скрипт ниже делает mkdir -p сам.
+		if escErr := l.writeUnrestricted(p, data, mode); escErr == nil {
+			return nil
+		}
 		return fmt.Errorf("создание каталога %s: %w", dir, err)
 	}
 	tmp, err := os.CreateTemp(dir, ".nkt-*")
@@ -139,6 +156,14 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 		// несопоставим с потерей возможности их править.
 		if writeInPlace(p, data, mode) == nil {
 			return nil
+		}
+		// Каталог закрыт целиком — ни временного файла, ни записи на
+		// месте. Это ровно тот случай, ради которого существует выход из
+		// песочницы: снаружи юнита каталог обычный и доступен на запись.
+		if escErr := l.writeUnrestricted(p, data, mode); escErr == nil {
+			return nil
+		} else if !errors.Is(escErr, errNoEscape) {
+			return escErr
 		}
 		return fmt.Errorf("create temp file in %s: %w", dir, err)
 	}
@@ -163,6 +188,67 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 	return os.Rename(tmpName, p)
 }
 
+// errNoEscape — выхода из песочницы нет (SetEscape не вызывали), значит
+// запасного пути тоже нет и звать его бессмысленно.
+var errNoEscape = errors.New("запись вне песочницы недоступна")
+
+// privilegedWriteScript пишет файл там, куда изнутри юнита не дотянуться.
+//
+// Выполняется вне песочницы, поэтому каталог виден обычным, доступным на
+// запись. Содержимое приходит на stdin: промежуточный файл не годится, у
+// юнита свой /tmp (PrivateTmp=yes), которого в пространстве монтирования
+// хоста нет.
+//
+// Запись атомарная — тот же приём, что и в основном пути: временный файл
+// рядом с целевым и переименование. Права и владелец существующего файла
+// сохраняются (chmod/chown --reference): иначе правка, скажем,
+// /etc/ssh/sshd_config или файла fail2ban незаметно расширила бы доступ к
+// нему до переданного режима по умолчанию.
+const privilegedWriteScript = `set -e
+d=$(dirname "$1")
+mkdir -p "$d"
+t="$d/.nkt-write.$$"
+cat > "$t"
+if [ -e "$1" ]; then
+	chmod --reference="$1" "$t"
+	chown --reference="$1" "$t"
+else
+	chmod "$2" "$t"
+fi
+mv -f "$t" "$1"
+`
+
+// writeUnrestricted — запасной путь записи через выход из песочницы.
+// Возвращает errNoEscape, если выхода нет: вызывающий тогда сообщает свою
+// исходную ошибку, а не подменяет её отсутствием механизма.
+func (l *Local) writeUnrestricted(p string, data []byte, mode fs.FileMode) error {
+	if l.escape == nil {
+		return errNoEscape
+	}
+	timeout := l.commandTimeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+
+	res, err := l.escape(ctx, data, "sh", "-c", privilegedWriteScript, "sh", p,
+		fmt.Sprintf("%04o", mode.Perm()))
+	// Путь в текст не добавляется: вызывающий (control.describeWriteError)
+	// уже назвал файл, и повтор превращал бы сообщение в кашу.
+	if err != nil {
+		return fmt.Errorf("запись вне песочницы: %w", err)
+	}
+	if res.ExitCode != 0 {
+		msg := strings.TrimSpace(res.Stderr)
+		if msg == "" {
+			msg = fmt.Sprintf("код %d", res.ExitCode)
+		}
+		return fmt.Errorf("запись вне песочницы: %s", msg)
+	}
+	return nil
+}
+
 // Writable реализует Collector. Проверяется и сам файл, и его каталог:
 // записать можно либо через временный файл рядом (нужен доступный на
 // запись каталог), либо на месте (нужен доступный на запись файл) — см.
@@ -175,7 +261,27 @@ func (l *Local) Writable(p string) bool {
 	if syscall.Access(p, wOK) == nil {
 		return true
 	}
-	return syscall.Access(filepath.Dir(p), wOK) == nil
+	if syscall.Access(filepath.Dir(p), wOK) == nil {
+		return true
+	}
+	// Отказ вида EROFS — это песочница собственного юнита, а не сама
+	// файловая система: снаружи каталог обычный, и запасной путь записи
+	// туда дотянется. Отличать важно, иначе редактор пометит «только
+	// чтение» файлы, которые на деле правятся (и наоборот — обещать
+	// правку там, где диск действительно только для чтения, тоже нельзя,
+	// поэтому проверяется именно EROFS, а не любой отказ).
+	return l.escape != nil && readOnlyBySandbox(p)
+}
+
+// readOnlyBySandbox отвечает, упирается ли запись именно в EROFS. Для
+// ещё не созданного файла смотрит на каталог: именно он в этот момент и
+// закрыт.
+func readOnlyBySandbox(p string) bool {
+	err := syscall.Access(p, wOK)
+	if errors.Is(err, syscall.ENOENT) {
+		err = syscall.Access(filepath.Dir(p), wOK)
+	}
+	return errors.Is(err, syscall.EROFS)
 }
 
 // wOK — константа access(2) «проверить право на запись».
