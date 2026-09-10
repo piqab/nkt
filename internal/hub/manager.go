@@ -384,11 +384,75 @@ const hostGroupMaxLen = 64
 // мешать ровно тому, ради чего это делается. Запрещены только переводы
 // строк — они превратили бы заголовок раздела в несколько.
 func (m *Manager) SetHostGroup(ctx context.Context, hostID int64, group string) error {
-	group = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(group, "\n", " "), "\r", " "))
-	if len([]rune(group)) > hostGroupMaxLen {
-		return fmt.Errorf("название группы длиннее %d символов", hostGroupMaxLen)
+	group, err := cleanGroupName(group)
+	if err != nil {
+		return err
 	}
 	return m.db.SetHostGroup(ctx, hostID, group)
+}
+
+// cleanGroupName приводит название к тому виду, в котором оно попадёт в
+// список: без хвостовых пробелов и без переводов строк, которые
+// превратили бы один заголовок раздела в несколько.
+func cleanGroupName(group string) (string, error) {
+	group = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(group, "\n", " "), "\r", " "))
+	if len([]rune(group)) > hostGroupMaxLen {
+		return "", fmt.Errorf("название группы длиннее %d символов", hostGroupMaxLen)
+	}
+	return group, nil
+}
+
+// HostGroups возвращает список групп.
+func (m *Manager) HostGroups(ctx context.Context) ([]string, error) {
+	return m.db.ListHostGroups(ctx)
+}
+
+// CreateHostGroup заводит пустую группу — ту, в которую потом перетаскивают
+// хосты.
+func (m *Manager) CreateHostGroup(ctx context.Context, name string) error {
+	name, err := cleanGroupName(name)
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		return fmt.Errorf("название группы не может быть пустым")
+	}
+	return m.db.CreateHostGroup(ctx, name)
+}
+
+// RenameHostGroup переименовывает группу вместе с её хостами.
+//
+// Переименование в уже существующее название сливает две группы. Это не
+// ошибка, а обычный способ навести порядок («прод» и «production» — одно и
+// то же), но интерфейс предупреждает об этом до нажатия.
+func (m *Manager) RenameHostGroup(ctx context.Context, from, to string) error {
+	from, err := cleanGroupName(from)
+	if err != nil {
+		return err
+	}
+	to, err = cleanGroupName(to)
+	if err != nil {
+		return err
+	}
+	if from == "" || to == "" {
+		return fmt.Errorf("название группы не может быть пустым")
+	}
+	if from == to {
+		return nil
+	}
+	return m.db.RenameHostGroup(ctx, from, to)
+}
+
+// DeleteHostGroup убирает группу; её хосты возвращаются в «Без группы».
+func (m *Manager) DeleteHostGroup(ctx context.Context, name string) error {
+	name, err := cleanGroupName(name)
+	if err != nil {
+		return err
+	}
+	if name == "" {
+		return fmt.Errorf("название группы не может быть пустым")
+	}
+	return m.db.DeleteHostGroup(ctx, name)
 }
 
 // UpdateHost changes a host's connection details. secret is optional — an

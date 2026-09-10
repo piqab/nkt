@@ -78,6 +78,8 @@
     "loading": "Loading {{what}}…",
     "loadingDefault": "data",
     "close": "Close",
+    "save": "Save",
+    "cancel": "Cancel",
     "requestFailed": "The request failed.",
     "justNow": "just now",
     "minutesAgo": "{{count}} min ago",
@@ -552,7 +554,11 @@
     "purgeRestorePasswordHint": "Removes the file the bootstrap used to disable passwords in sshd, checks the config with sshd -t and reloads it without dropping sessions. Otherwise, once the hub key is gone, the host has no way in at all.",
     "group": "Group",
     "groupNone": "Ungrouped",
-    "groupCount": "hosts: {{count}}"
+    "groupCount": "hosts: {{count}}",
+    "createGroup": "New group",
+    "renameGroup": "Rename",
+    "groupEmpty": "The group is empty — drag hosts here.",
+    "confirmDeleteGroup": "Delete the group \"{{name}}\"? Its hosts ({{count}} now) go back to Ungrouped."
   },
   "certs": {
     "colSites": "Sites",

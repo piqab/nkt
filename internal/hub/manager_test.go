@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -496,5 +497,72 @@ func TestStartInstallSupersedesRunningJob(t *testing.T) {
 	}
 	if host.Status != store.HostStatusOnline {
 		t.Errorf("host.Status = %q, want %q — jobA's belated write must not have landed", host.Status, store.HostStatusOnline)
+	}
+}
+
+// Группы живут отдельно от хостов: пустую заводят первой, потом
+// перетаскивают в неё хосты. Проверяем весь цикл целиком — именно на нём
+// ломалось поведение, о котором сообщал пользователь.
+func TestHostGroupLifecycle(t *testing.T) {
+	ctx := context.Background()
+	m, db := newTestManager(t)
+
+	id, err := m.AddHost(ctx, "web1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	if err != nil {
+		t.Fatalf("AddHost: %v", err)
+	}
+
+	// Пустая группа обязана появиться в списке: иначе её не показать и
+	// некуда перетаскивать хосты.
+	if err := m.CreateHostGroup(ctx, "  Резерв  "); err != nil {
+		t.Fatalf("CreateHostGroup: %v", err)
+	}
+	if err := m.SetHostGroup(ctx, id, "Прод"); err != nil {
+		t.Fatalf("SetHostGroup: %v", err)
+	}
+	groups, err := m.HostGroups(ctx)
+	if err != nil {
+		t.Fatalf("HostGroups: %v", err)
+	}
+	if want := []string{"Прод", "Резерв"}; !slices.Equal(groups, want) {
+		t.Fatalf("HostGroups = %q, want %q", groups, want)
+	}
+
+	// Переименование тянет за собой хосты.
+	if err := m.RenameHostGroup(ctx, "Прод", "Продакшен"); err != nil {
+		t.Fatalf("RenameHostGroup: %v", err)
+	}
+	host, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if host.Group != "Продакшен" {
+		t.Errorf("Group = %q, want %q", host.Group, "Продакшен")
+	}
+
+	// Переименование в существующее название сливает группы, а не плодит
+	// вторую с тем же именем.
+	if err := m.RenameHostGroup(ctx, "Продакшен", "Резерв"); err != nil {
+		t.Fatalf("RenameHostGroup (слияние): %v", err)
+	}
+	groups, _ = m.HostGroups(ctx)
+	if want := []string{"Резерв"}; !slices.Equal(groups, want) {
+		t.Fatalf("после слияния HostGroups = %q, want %q", groups, want)
+	}
+
+	// Удаление группы возвращает её хосты в «Без группы», а не удаляет их.
+	if err := m.DeleteHostGroup(ctx, "Резерв"); err != nil {
+		t.Fatalf("DeleteHostGroup: %v", err)
+	}
+	groups, _ = m.HostGroups(ctx)
+	if len(groups) != 0 {
+		t.Errorf("после удаления HostGroups = %q, want пусто", groups)
+	}
+	host, _ = db.HostByID(ctx, id)
+	if host.Group != "" {
+		t.Errorf("Group = %q, want пусто", host.Group)
+	}
+	if _, err := db.HostByID(ctx, id); err != nil {
+		t.Errorf("хост исчез вместе с группой: %v", err)
 	}
 }

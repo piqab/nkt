@@ -141,13 +141,20 @@ h3 { font-size: 0.95rem; }
      значение отсюда сломало бы свёртывание. */
   background: var(--surface-1);
   border-right: 1px solid var(--border);
-  padding: 0.85rem 0.6rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.7rem;
   position: sticky;
   top: 0;
   height: 100vh;
+}
+
+/* Содержимое Sider antd оборачивает в собственный div, поэтому колонкой
+   должен быть именно он: на самом .sidebar флекс до содержимого не
+   достаёт, и «margin-top: auto» подвалу не за что зацепиться — тема,
+   язык и выход всплывают вплотную под меню вместо низа. */
+.shell .sidebar > .ant-layout-sider-children {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  padding: 0.85rem 0.6rem;
   overflow-y: auto;
 }
 
@@ -620,11 +627,22 @@ pre.diff .hunk { color: var(--text-muted); }
   background: color-mix(in srgb, var(--status-good) 8%, transparent);
 }
 
+/* Заголовок раздела: слева кнопка сворачивания на всю ширину, справа
+   переименовать/удалить. Кнопки нельзя вкладывать друг в друга, поэтому
+   заголовок — контейнер, а не одна большая кнопка. */
 .host-group-head {
   display: flex;
   align-items: center;
+  gap: 0.25rem;
+  padding-right: 0.4rem;
+}
+
+.host-group-toggle {
+  display: flex;
+  align-items: center;
   gap: 0.5rem;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 0.3rem 0.4rem;
   background: none;
   border: 0;
@@ -634,5 +652,15 @@ pre.diff .hunk { color: var(--text-muted); }
 }
 
 .host-group-head:hover { background: var(--wash); }
+
+/* Кнопки раздела проявляются по наведению: в покое они шумели бы
+   наравне с названиями групп. */
+.host-group-actions { opacity: 0; transition: opacity 0.12s ease; }
+.host-group-head:hover .host-group-actions,
+.host-group-actions:focus-within { opacity: 1; }
+
+.host-group-empty {
+  padding: 0.4rem 0.4rem 0.6rem 1.7rem;
+}
 .host-group-caret { color: var(--text-muted); width: 0.8rem; }
 .host-group-name { font-weight: 600; }

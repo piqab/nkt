@@ -464,6 +464,68 @@ func (s *Server) handleSetHostGroup(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// handleHostGroups отдаёт список групп — и заведённых пустыми, и тех, что
+// упомянуты у хостов.
+func (s *Server) handleHostGroups(w http.ResponseWriter, r *http.Request) {
+	groups, err := s.hub.HostGroups(r.Context())
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
+}
+
+type groupRequest struct {
+	Name string `json:"name"`
+	To   string `json:"to"`
+}
+
+// handleCreateHostGroup заводит пустую группу.
+func (s *Server) handleCreateHostGroup(w http.ResponseWriter, r *http.Request) {
+	var req groupRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.hub.CreateHostGroup(r.Context(), req.Name); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "hostgroup.create", req.Name, "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleRenameHostGroup переименовывает группу вместе с её хостами.
+func (s *Server) handleRenameHostGroup(w http.ResponseWriter, r *http.Request) {
+	var req groupRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.hub.RenameHostGroup(r.Context(), req.Name, req.To); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "hostgroup.rename", req.Name+" → "+req.To, "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleDeleteHostGroup убирает группу; хосты из неё возвращаются в «Без
+// группы», а не удаляются.
+func (s *Server) handleDeleteHostGroup(w http.ResponseWriter, r *http.Request) {
+	var req groupRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.hub.DeleteHostGroup(r.Context(), req.Name); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "hostgroup.delete", req.Name, "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // setTunnelEnabled applies Manager.SetTunnelEnabled after the host it
 // targets has already been created/updated successfully — a failure here
 // (essentially only a DB error; the host id is always valid at this point)
@@ -525,6 +587,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
+	s.setHostGroup(r.Context(), id, req.Group)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

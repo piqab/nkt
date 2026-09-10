@@ -314,26 +314,76 @@ export default function Hosts({
   // запускается отдельным вызовом чуть позже.
   const pendingBootstrap = useRef(new Map<number, BootstrapOptions>())
   const [removingHost, setRemovingHost] = useState<HubHost | null>(null)
+  // Группы приходят с сервера, а не выводятся из хостов: пустую группу
+  // иначе неоткуда взять, а её и создают первой — чтобы потом перетащить
+  // в неё хосты.
+  const groups = useApi<{ groups: string[] }>('/hub/groups', 60_000)
+  const [groupDialog, setGroupDialog] = useState<{ mode: 'create' | 'rename'; from?: string } | null>(null)
+  const [groupName, setGroupName] = useState('')
 
   // Хосты по разделам. Порядок групп — алфавитный, «Без группы» всегда
   // последней: это не группа, а её отсутствие, и держать её среди
   // названных значило бы прятать хосты, до которых руки не дошли.
   const groupedHosts = useMemo<{ group: string; items: HubHost[] }[]>(() => {
     const byGroup = new Map<string, HubHost[]>()
+    // Сначала пустые заготовки для всех известных групп — иначе только что
+    // созданная группа не показалась бы вовсе, и перетаскивать было бы
+    // некуда.
+    for (const name of groups.data?.groups ?? []) byGroup.set(name, [])
     for (const host of hosts ?? []) {
       const key = (host.group ?? '').trim()
       byGroup.set(key, [...(byGroup.get(key) ?? []), host])
     }
     const named = [...byGroup.keys()].filter((g) => g !== '').sort((a, b) => a.localeCompare(b))
+    // «Без группы» показывается, только если такие хосты есть: пустой
+    // раздел без названия объяснить нечем.
     const order = byGroup.has('') ? [...named, ''] : named
     return order.map((group) => ({ group, items: byGroup.get(group) ?? [] }))
-  }, [hosts])
+  }, [hosts, groups.data])
 
   // Названия существующих групп — для автодополнения в форме хоста.
   const knownGroups = useMemo(
-    () => [...new Set((hosts ?? []).map((h) => (h.group ?? '').trim()).filter(Boolean))].sort(),
-    [hosts],
+    () =>
+      [
+        ...new Set([
+          ...(groups.data?.groups ?? []),
+          ...(hosts ?? []).map((h) => (h.group ?? '').trim()).filter(Boolean),
+        ]),
+      ].sort(),
+    [hosts, groups.data],
   )
+
+  // Действия над самой группой. Создание и переименование идут через одно
+  // окно: разница только в том, есть ли исходное название.
+  async function submitGroupDialog() {
+    if (!groupDialog) return
+    const name = groupName.trim()
+    if (!name) return
+    try {
+      if (groupDialog.mode === 'create') {
+        await api('/hub/groups', { method: 'POST', body: { name } })
+      } else {
+        await api('/hub/groups/rename', { method: 'POST', body: { name: groupDialog.from, to: name } })
+      }
+      setGroupDialog(null)
+      setGroupName('')
+      groups.reload()
+      reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
+
+  async function deleteGroup(name: string, hostCount: number) {
+    if (!(await confirmAction(t('hosts.confirmDeleteGroup', { name, count: hostCount })))) return
+    try {
+      await api('/hub/groups/delete', { method: 'POST', body: { name } })
+      groups.reload()
+      reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
   // Свёрнутые группы и перетаскиваемая строка. Свёрнутость — состояние
   // человека, а не данных: запоминается между заходами.
   const [collapsedGroups, setCollapsedGroups] = useState<string[]>(() => {
@@ -962,13 +1012,45 @@ export default function Hosts({
         </div>
       </div>
 
+      {groupDialog && (
+      <Modal
+        onClose={() => setGroupDialog(null)}
+        title={groupDialog.mode === 'rename' ? t('hosts.renameGroup') : t('hosts.createGroup')}
+      >
+        <Form layout="vertical" onFinish={() => void submitGroupDialog()}>
+          <Form.Item label={t('hosts.group')}>
+            <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} autoFocus maxLength={64} />
+          </Form.Item>
+          <div className="row" style={{ gap: '0.5rem' }}>
+            <Button type="primary" htmlType="submit" disabled={!groupName.trim()}>
+              {t('common.save')}
+            </Button>
+            <Button onClick={() => setGroupDialog(null)}>{t('common.cancel')}</Button>
+          </div>
+        </Form>
+      </Modal>
+      )}
+
       {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
       <ErrorNote error={error} />
 
-      <Card title={t('hosts.registeredHosts')}>
+      <Card
+        title={t('hosts.registeredHosts')}
+        actions={
+          <Button
+            size="small"
+            onClick={() => {
+              setGroupName('')
+              setGroupDialog({ mode: 'create' })
+            }}
+          >
+            {t('hosts.createGroup')}
+          </Button>
+        }
+      >
         {loading && !hosts ? (
           <Loading what={t('hosts.loading')} />
-        ) : !hosts?.length ? (
+        ) : !hosts?.length && !groupedHosts.length ? (
           <p className="small muted">{t('hosts.noHosts')}</p>
         ) : (
           <div className="col" style={{ gap: '0.6rem' }}>
@@ -993,12 +1075,36 @@ export default function Hosts({
                     setDropGroup(null)
                   }}
                 >
-                  <button className="host-group-head" onClick={() => toggleGroup(group)}>
-                    <span className="host-group-caret">{collapsed ? '▸' : '▾'}</span>
-                    <span className="host-group-name">{group || t('hosts.groupNone')}</span>
-                    <span className="small muted">{t('hosts.groupCount', { count: items.length })}</span>
-                  </button>
-                  {!collapsed && (
+                  <div className="host-group-head">
+                    <button className="host-group-toggle" onClick={() => toggleGroup(group)}>
+                      <span className="host-group-caret">{collapsed ? '▸' : '▾'}</span>
+                      <span className="host-group-name">{group || t('hosts.groupNone')}</span>
+                      <span className="small muted">{t('hosts.groupCount', { count: items.length })}</span>
+                    </button>
+                    {/* «Без группы» — не группа, а остаток: переименовать
+                        или удалить его нечего. */}
+                    {group && (
+                      <span className="row host-group-actions" style={{ gap: '0.25rem' }}>
+                        <Button
+                          size="small"
+                          type="text"
+                          onClick={() => {
+                            setGroupName(group)
+                            setGroupDialog({ mode: 'rename', from: group })
+                          }}
+                        >
+                          {t('hosts.renameGroup')}
+                        </Button>
+                        <Button size="small" type="text" danger onClick={() => void deleteGroup(group, items.length)}>
+                          {t('common.delete')}
+                        </Button>
+                      </span>
+                    )}
+                  </div>
+                  {!collapsed && !items.length && (
+                    <p className="small muted host-group-empty">{t('hosts.groupEmpty')}</p>
+                  )}
+                  {!collapsed && items.length > 0 && (
                     <div className="table-wrap">
                       <DataTable<HubHost>
                         dataSource={items}
