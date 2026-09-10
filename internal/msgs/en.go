@@ -97,6 +97,7 @@ var enCatalog = map[string]string{
 	"hub.bootstrapPackagesOneByOne":      "Bootstrap: the single transaction failed, installing packages one by one…",
 	"hub.bootstrapPackagesFailed":        "Bootstrap: not installed (missing from this release's repositories): %s",
 	"hub.bootstrapPackages":              "Bootstrap: installing packages (%s)…",
+	"hub.bootstrapUserKey":               "Bootstrap: installing your public key for %s…",
 	"hub.bootstrapUser":                  "Bootstrap: creating user %s with passwordless sudo…",
 	"hub.bootstrapKey":                   "Bootstrap: installing the hub's key for %s…",
 	"hub.bootstrapVerifyKey":             "Bootstrap: verifying key login as %s on a fresh connection…",

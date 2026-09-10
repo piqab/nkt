@@ -33,10 +33,17 @@ type PurgeOptions struct {
 	Access bool `json:"access"`
 	// User — учётная запись, заведённая автонастройкой.
 	User bool `json:"user"`
+	// RestorePassword возвращает вход по паролю, убирая drop-in, которым
+	// его выключила автонастройка. Включено по умолчанию: вместе с хабом
+	// с хоста уезжает и его ключ, и без пароля хост остался бы без
+	// единого способа входа — то есть потерянным.
+	RestorePassword bool `json:"restore_password"`
 }
 
 // Any сообщает, есть ли что делать на хосте вообще.
-func (o PurgeOptions) Any() bool { return o.Service || o.Data || o.Access || o.User }
+func (o PurgeOptions) Any() bool {
+	return o.Service || o.Data || o.Access || o.User || o.RestorePassword
+}
 
 // PurgeResult — что удалось сделать. Ошибка подключения не мешает убрать
 // хост из хаба: сервер может быть уже погашен, и тогда единственный
@@ -76,6 +83,12 @@ func (m *Manager) PurgeHost(ctx context.Context, hostID int64, opts PurgeOptions
 			return
 		}
 		res.Steps = append(res.Steps, name+" — готово")
+	}
+
+	// Первым шагом, до всего остального: если дальше что-то оборвётся,
+	// вход по паролю уже вернулся, и хост не останется недоступным.
+	if opts.RestorePassword {
+		step("вход по паролю возвращён", restorePasswordCmd(sudo))
 	}
 
 	if opts.Service {
@@ -141,4 +154,21 @@ func removeAuthorizedKeyCmd(sudo, user, keyLine string) string {
 		"test -f %[1]s && %[2]sgrep -vF %[3]s %[1]s > /tmp/nkt-ak && %[2]sinstall -m 0600 -o %[4]s -g %[4]s /tmp/nkt-ak %[1]s;"+
 			" rc=$?; rm -f /tmp/nkt-ak; exit $rc",
 		path, sudo, shellQuote(body), user)
+}
+
+// restorePasswordCmd убирает drop-in, которым автонастройка выключала
+// вход по паролю, и просит sshd перечитать конфигурацию.
+//
+// Убирается только свой файл: чужие настройки sshd не трогаются, даже
+// если пароль выключен где-то ещё. Перед перезагрузкой конфигурация
+// проверяется sshd -t — оставить демон с конфигурацией, которую он не
+// принимает, в момент удаления хаба означало бы отрезать хост совсем.
+// reload, а не restart: перезапуск оборвал бы то самое соединение, по
+// которому идёт удаление.
+func restorePasswordCmd(sudo string) string {
+	return fmt.Sprintf(
+		"if [ -f %[1]s ]; then %[2]srm -f %[1]s && %[2]ssshd -t"+
+			" && { %[2]ssystemctl reload ssh 2>/dev/null || %[2]ssystemctl reload sshd; };"+
+			" else echo 'файла нет — вход по паролю не выключался'; fi",
+		nktSSHDropIn, sudo)
 }

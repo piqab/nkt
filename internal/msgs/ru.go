@@ -96,6 +96,7 @@ var ruCatalog = map[string]string{
 	"hub.bootstrapPackagesOneByOne":      "Подготовка: одной транзакцией не вышло, ставлю пакеты по одному…",
 	"hub.bootstrapPackagesFailed":        "Подготовка: не установлены (в репозиториях этого выпуска их нет): %s",
 	"hub.bootstrapPackages":              "Подготовка: ставлю пакеты (%s)…",
+	"hub.bootstrapUserKey":               "Подготовка: кладу ваш публичный ключ пользователю %s…",
 	"hub.bootstrapUser":                  "Подготовка: завожу пользователя %s с sudo без пароля…",
 	"hub.bootstrapKey":                   "Подготовка: кладу ключ хаба для %s…",
 	"hub.bootstrapVerifyKey":             "Подготовка: проверяю вход по ключу под %s новым соединением…",

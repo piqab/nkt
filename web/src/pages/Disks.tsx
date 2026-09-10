@@ -111,7 +111,10 @@ export default function Disks() {
       render: (_, f) => (
         <div>
           <Progress
-            percent={Math.round(f.use_percent)}
+            // Значение приходит числом, но пришло бы NaN — antd рисует
+            // «NaN%» и полосу неопределённой длины; ограничение делает
+            // отрисовку предсказуемой при любом ответе.
+            percent={Math.min(100, Math.max(0, Math.round(f.use_percent || 0)))}
             size="small"
             strokeColor={usageColor(f.use_percent)}
             showInfo={false}
@@ -223,9 +226,13 @@ export default function Disks() {
         <div className="table-wrap">
           <Table<Filesystem>
             dataSource={filesystems}
-            rowKey="mount_point"
+            // Ключ из устройства и точки монтирования, а не из одной точки:
+            // в выводе df точка может повторяться (наложенные монтирования,
+            // squashfs от snap), а таблица с раскрытием и повторяющимися
+            // ключами уходит в бесконечную перерисовку и вешает вкладку.
+            rowKey={(f) => `${f.device}|${f.mount_point}`}
             size="small"
-            pagination={false}
+            pagination={filesystems.length > 30 ? { pageSize: 30 } : false}
             columns={fsColumns}
           />
         </div>
@@ -241,7 +248,7 @@ export default function Disks() {
                 dataSource={usage}
                 rowKey="path"
                 size="small"
-                pagination={false}
+                pagination={usage.length > 30 ? { pageSize: 30 } : false}
                 columns={[
                   {
                     title: t('disks.colDir'),
@@ -300,11 +307,14 @@ export default function Disks() {
         <div className="table-wrap">
           <Table<BlockDevice>
             dataSource={disks.data?.devices ?? []}
-            rowKey="path"
+            rowKey={(d) => d.path || d.name}
             size="small"
-            pagination={false}
+            pagination={(disks.data?.devices?.length ?? 0) > 30 ? { pageSize: 30 } : false}
             columns={deviceColumns}
-            expandable={{ childrenColumnName: 'children', defaultExpandAllRows: true }}
+            // Раскрытие по клику, а не сразу всё: на машине со snap'ами
+            // здесь под сотню loop-устройств, и раскрывать их все при
+            // каждой отрисовке незачем.
+            expandable={{ childrenColumnName: 'children' }}
           />
         </div>
       </Card>

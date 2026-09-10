@@ -541,7 +541,11 @@
     "purgeUserHint": "userdel -r together with the home directory. If people used the account, their files go too.",
     "purgeUserRoot": "The hub connects as root — that account cannot be removed.",
     "removeUnreachable": "If the server does not answer, the record is removed anyway and the response says nothing was touched on the host.",
-    "purgeFailed": "{{name}} was removed from the hub, but nothing was removed on the server itself: {{error}}"
+    "purgeFailed": "{{name}} was removed from the hub, but nothing was removed on the server itself: {{error}}",
+    "bootstrapUserKey": "Your public key for this user",
+    "bootstrapUserKeyHint": "Optional. The hub's key is always installed; this one lets you SSH in as the same user the terminal and tmux run as.",
+    "purgeRestorePassword": "Restore password login",
+    "purgeRestorePasswordHint": "Removes the file the bootstrap used to disable passwords in sshd, checks the config with sshd -t and reloads it without dropping sessions. Otherwise, once the hub key is gone, the host has no way in at all."
   },
   "certs": {
     "colSites": "Sites",

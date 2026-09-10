@@ -1246,6 +1246,7 @@ export interface PurgeOptions {
   data: boolean
   access: boolean
   user: boolean
+  restore_password: boolean
 }
 
 interface PurgeResult {
@@ -1259,6 +1260,8 @@ interface PurgeResult {
 export interface BootstrapOptions {
   enabled: boolean
   user: string
+  /** Публичный ключ оператора для создаваемой учётной записи. */
+  user_key: string
   packages: string[]
   disable_password_auth: boolean
 }
@@ -1336,6 +1339,7 @@ function HostForm({
   // подготовлен, а пароль просто удобнее.
   const [bootstrapEnabled, setBootstrapEnabled] = useState(!initial)
   const [bootstrapUser, setBootstrapUser] = useState('')
+  const [bootstrapUserKey, setBootstrapUserKey] = useState('')
   const [bootstrapPackages, setBootstrapPackages] = useState(BOOTSTRAP_PACKAGES_DEFAULT)
   const [bootstrapDisablePassword, setBootstrapDisablePassword] = useState(false)
   // Набор хранится на хабе, а не в коде страницы: правка при добавлении
@@ -1372,6 +1376,7 @@ function HostForm({
       const bootstrapValues: BootstrapOptions = {
         enabled: bootstrapEnabled,
         user: bootstrapUser.trim(),
+        user_key: bootstrapUserKey.trim(),
         packages: bootstrapPackages.split(/[\s,]+/).filter(Boolean),
         disable_password_auth: bootstrapDisablePassword,
       }
@@ -1532,6 +1537,23 @@ function HostForm({
                   placeholder="nkt"
                 />
               </label>
+              {/* Ключ оператора кладётся той же учётной записи, под которой
+                  дальше работают терминал, tmux и всё остальное: хаб ходит
+                  своим ключом, человек — своим, а пользователь один. */}
+              {bootstrapUser.trim() !== '' && (
+                <label className="small" style={{ display: 'block', marginTop: '0.4rem' }}>
+                  {t('hosts.bootstrapUserKey')}
+                  <Input.TextArea
+                    className="mono"
+                    value={bootstrapUserKey}
+                    onChange={(e) => setBootstrapUserKey(e.target.value)}
+                    autoSize={{ minRows: 2, maxRows: 4 }}
+                    placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5… user@laptop"
+                    spellCheck={false}
+                  />
+                  <span className="small muted">{t('hosts.bootstrapUserKeyHint')}</span>
+                </label>
+              )}
               <label className="small" style={{ display: 'block', marginTop: '0.4rem' }}>
                 {t('hosts.bootstrapPackages')}
                 <Input.TextArea
@@ -1545,6 +1567,7 @@ function HostForm({
                 style={{ marginTop: '0.4rem' }}
                 onClick={() => {
                   setBootstrapUser('')
+                  setBootstrapUserKey('')
                   setBootstrapPackages(BOOTSTRAP_PACKAGES_DEFAULT)
                 }}
               >
@@ -1608,7 +1631,15 @@ function RemoveHostModal({
   onConfirm: (purge: PurgeOptions) => void
 }) {
   const { t } = useTranslation()
-  const [purge, setPurge] = useState<PurgeOptions>({ service: false, data: false, access: false, user: false })
+  // Возврат пароля включён сразу: вместе с хабом с хоста уезжает и его
+  // ключ, и без пароля хост остался бы вообще без способа входа.
+  const [purge, setPurge] = useState<PurgeOptions>({
+    service: false,
+    data: false,
+    access: false,
+    user: false,
+    restore_password: true,
+  })
   const [busy, setBusy] = useState(false)
 
   const item = (key: keyof PurgeOptions, label: string, hint: string, disabled = false) => (
@@ -1629,6 +1660,7 @@ function RemoveHostModal({
   return (
     <Modal title={t('hosts.removeTitle', { name: host.name })} onClose={onCancel} width={620}>
       <p className="small">{t('hosts.removeIntro')}</p>
+      {item('restore_password', t('hosts.purgeRestorePassword'), t('hosts.purgeRestorePasswordHint'))}
       {item('service', t('hosts.purgeService'), t('hosts.purgeServiceHint'))}
       {item('data', t('hosts.purgeData'), t('hosts.purgeDataHint'))}
       {item('access', t('hosts.purgeAccess'), t('hosts.purgeAccessHint'))}
