@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Form, Input, InputNumber, Select, Table, type TableColumnsType } from 'antd'
+import { Button, Form, Input, InputNumber, Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type {
@@ -17,6 +17,7 @@ import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
+import { DataTable } from '../components/DataTable'
 
 /** How often to poll a running renew job for new progress lines. */
 const RENEW_POLL_MS = 800
@@ -454,11 +455,8 @@ export default function Certificates({ me }: { me: Me }) {
 
       <Card title={t('certs.detailsTitle')}>
         <div className="table-wrap">
-          <Table<Certificate>
-            dataSource={certs}
+          <DataTable<Certificate>             dataSource={certs}
             rowKey="id"
-            pagination={false}
-            size="small"
             columns={certColumns(canControl, busy, renew)}
           />
         </div>
@@ -567,7 +565,6 @@ function UnattachedCard({
       render: (_, info) => (
         <Button
           type="link"
-          size="small"
           loading={busy === `lineage:${info.name}`}
           onClick={() => onRenew(info.name)}
         >
@@ -587,7 +584,7 @@ function UnattachedCard({
       }
     >
       <div className="table-wrap">
-        <Table<LineageInfo> dataSource={lineages} rowKey="name" pagination={false} size="small" columns={columns} />
+        <DataTable<LineageInfo> dataSource={lineages} rowKey="name" columns={columns} />
       </div>
       <p className="small muted" style={{ marginBottom: 0, marginTop: '0.6rem' }}>
         {t('certs.unattachedFooter')}

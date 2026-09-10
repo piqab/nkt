@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Table, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
@@ -8,6 +8,7 @@ import { InactiveSummary } from '../components/InactiveSummary'
 import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
+import { DataTable } from '../components/DataTable'
 
 const ACTION_LABEL_KEY: Record<string, string> = {
   start: 'services.actionStart',
@@ -134,7 +135,6 @@ function buildMiscColumns(
           <Button
             type="link"
             danger
-            size="small"
             loading={killBusy === key}
             onClick={() => onKill(l, 'TERM')}
           >
@@ -314,7 +314,6 @@ export default function Services({ me }: { me: Me }) {
             <Button
               key={a}
               type="link"
-              size="small"
               disabled={!canControl}
               loading={busy === `${s.name}:${a}`}
               onClick={() => act(s.name, a)}
@@ -358,7 +357,6 @@ export default function Services({ me }: { me: Me }) {
         <Banner kind="warn">
           {t('services.notTerminatedInline', { pid: killEscalation.pid, process: killEscalation.process ? ` (${killEscalation.process})` : '' })}
           <Button
-            size="small"
             danger
             loading={killBusy === listenerKey(killEscalation)}
             onClick={() => kill(killEscalation, 'KILL')}
@@ -412,12 +410,9 @@ export default function Services({ me }: { me: Me }) {
               getColor={(s) => (s.installed ? (s.active_state === 'unknown' ? 'default' : undefined) : 'gold')}
             />
             <div className="table-wrap">
-              <Table<ServiceUnit>
-                dataSource={activeServices}
+              <DataTable<ServiceUnit>                 dataSource={activeServices}
                 columns={columns}
                 rowKey="name"
-                pagination={false}
-                size="small"
               />
             </div>
           </>
@@ -438,12 +433,9 @@ export default function Services({ me }: { me: Me }) {
           <div className="chart-empty">{t('services.allDescribed')}</div>
         ) : (
           <div className="table-wrap">
-            <Table<Listener>
-              dataSource={miscListeners}
+            <DataTable<Listener>               dataSource={miscListeners}
               columns={buildMiscColumns(canControl, killBusy, kill)}
               rowKey={(l) => `${l.address}:${l.port}`}
-              pagination={false}
-              size="small"
             />
           </div>
         )}

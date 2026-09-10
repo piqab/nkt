@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Select, Table, type TableColumnsType } from 'antd'
+import { Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { qs, useApi } from '../api'
 import type { AuditEntry, JobStatus } from '../types'
 import { Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
+import { DataTable } from '../components/DataTable'
 
 interface JobsResponse {
   jobs: JobStatus[] | null
@@ -95,7 +96,7 @@ export default function Audit() {
           <Loading what={t('audit.loadingJobStatus')} />
         ) : (
           <div className="table-wrap">
-            <Table<JobStatus> dataSource={jobs.data?.jobs ?? []} columns={jobColumns} rowKey="name" pagination={false} size="small" />
+            <DataTable<JobStatus> dataSource={jobs.data?.jobs ?? []} columns={jobColumns} rowKey="name" />
           </div>
         )}
       </Card>
@@ -125,12 +126,9 @@ export default function Audit() {
           <div className="chart-empty">{t('audit.noEntries')}</div>
         ) : (
           <div className="table-wrap">
-            <Table<AuditEntry>
-              dataSource={audit.data?.entries ?? []}
+            <DataTable<AuditEntry>               dataSource={audit.data?.entries ?? []}
               columns={auditColumns}
               rowKey="id"
-              pagination={false}
-              size="small"
             />
           </div>
         )}

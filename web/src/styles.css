@@ -126,11 +126,19 @@ h3 { font-size: 0.95rem; }
 
 /* ------------------------------------------------------------------ layout */
 
-.shell { display: flex; min-height: 100%; }
+.shell {
+  display: flex;
+  min-height: 100%;
+  /* antd Layout красит фон сам; здесь он должен остаться нашим — фон
+     страницы задаётся токеном темы. */
+  background: transparent;
+}
 
 .sidebar {
-  width: 208px;
-  flex: 0 0 208px;
+  /* Ширину задаёт сам antd Sider (width={208}); здесь остаётся только
+     оформление — цвет, рамка, отступы и липкость. Дублировать ширину в CSS
+     нельзя: свёрнутый сайдбар на узком экране меняет её сам, и жёсткое
+     значение отсюда сломало бы свёртывание. */
   background: var(--surface-1);
   border-right: 1px solid var(--border);
   padding: 0.85rem 0.6rem;
@@ -171,7 +179,13 @@ h3 { font-size: 0.95rem; }
 
 .sidebar-foot { margin-top: auto; font-size: 0.75rem; color: var(--text-muted); padding: 0 0.5rem; }
 
-.main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: transparent;
+}
 
 /* -------------------------------------------------------------- hub frame */
 /* Wraps a plain host dashboard (.shell, unmodified) under a hub-level bar
@@ -523,7 +537,9 @@ pre.diff .hunk { color: var(--text-muted); }
 
 @media (max-width: 860px) {
   .shell { flex-direction: column; }
-  .sidebar { width: 100%; flex: none; height: auto; position: static; flex-direction: column; }
+  /* На узком экране сайдбар сворачивается сам (Sider breakpoint), поэтому
+     раскладку в столбец здесь больше не навязываем. */
+  .sidebar { height: auto; position: static; }
   .nav { flex-direction: row; flex-wrap: wrap; }
   .content { padding: 1rem; }
 }

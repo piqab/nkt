@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Button, Input, Select, Switch, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Input, Select, Switch, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
+import { DataTable } from '../components/DataTable'
 
 interface SystemSettings {
   hostname: string
@@ -139,7 +140,6 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
       render: (_, c) =>
         canUse ? (
           <Button
-            size="small"
             disabled={busy}
             onClick={() => networkAction('/network/manager/connection', { uuid: c.uuid, up: !c.active })}
           >
@@ -252,11 +252,8 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
         ) : (
           <>
             <div className="table-wrap">
-              <Table<NMConnection>
-                dataSource={network.data.connections ?? []}
+              <DataTable<NMConnection>                 dataSource={network.data.connections ?? []}
                 rowKey="uuid"
-                size="small"
-                pagination={false}
                 columns={connectionColumns}
               />
             </div>
@@ -267,11 +264,8 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
                   {t('sysSettings.wifi')}
                 </h3>
                 <div className="table-wrap">
-                  <Table<WiFiNetwork>
-                    dataSource={network.data.wifi ?? []}
+                  <DataTable<WiFiNetwork>                     dataSource={network.data.wifi ?? []}
                     rowKey="ssid"
-                    size="small"
-                    pagination={false}
                     columns={[
                       {
                         title: t('sysSettings.colSSID'),

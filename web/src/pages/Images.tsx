@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { Button, Checkbox, Popconfirm, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Popconfirm, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, formatDateTime } from '../components/ui'
 import { formatBytes } from '../components/charts'
+import { DataTable } from '../components/DataTable'
 
 export interface DockerImage {
   id: string
@@ -147,7 +148,6 @@ export default function Images({ me }: { me: Me }) {
                 {t('images.force')}
               </Checkbox>
               <Button
-                size="small"
                 disabled={selected.length === 0 || busy}
                 loading={busy}
                 onClick={() => run('/images/save', { refs: selectedImages.map(refOf) })}
@@ -188,11 +188,8 @@ export default function Images({ me }: { me: Me }) {
           </p>
         )}
         <div className="table-wrap">
-          <Table<DockerImage>
-            dataSource={images.data?.images ?? []}
+          <DataTable<DockerImage>             dataSource={images.data?.images ?? []}
             rowKey="id"
-            size="small"
-            pagination={false}
             columns={columns}
             rowSelection={
               canAct

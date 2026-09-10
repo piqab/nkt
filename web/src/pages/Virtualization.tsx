@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Checkbox, Form, Input, InputNumber, Segmented, Table, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Form, Input, InputNumber, Segmented, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
@@ -7,6 +7,7 @@ import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, StateBadge, for
 import { InactiveSummary } from '../components/InactiveSummary'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
+import { DataTable } from '../components/DataTable'
 
 const LIFECYCLE_ACTIONS = ['start', 'shutdown', 'reboot', 'suspend', 'resume']
 
@@ -105,7 +106,6 @@ function vmColumns(
         vm.persistent ? (
           <Button
             type="link"
-            size="small"
             disabled={!canControl}
             loading={busy === `${vm.name}:autostart`}
             onClick={() => toggleAutostart(vm.name, !vm.autostart)}
@@ -127,7 +127,6 @@ function vmColumns(
             <Button
               key={a}
               type="link"
-              size="small"
               disabled={!canControl}
               loading={busy === `${vm.name}:${a}`}
               onClick={() => act(vm.name, a)}
@@ -139,7 +138,6 @@ function vmColumns(
             <Button
               danger
               type="link"
-              size="small"
               loading={busy === `${vm.name}:destroy`}
               onClick={() => act(vm.name, 'destroy')}
               title={t('virt.forceDestroyTooltip')}
@@ -295,11 +293,8 @@ export default function Virtualization({ me }: { me: Me }) {
               rescanning={rescanning}
             />
             <div className="table-wrap">
-              <Table<VirtualMachine>
-                dataSource={activeVMs}
+              <DataTable<VirtualMachine>                 dataSource={activeVMs}
                 rowKey="name"
-                pagination={false}
-                size="small"
                 columns={vmColumns(canControl, busy, act, toggleAutostart, del)}
               />
             </div>

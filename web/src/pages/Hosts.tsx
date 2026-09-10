@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Badge, Button, Checkbox, Form, Input, InputNumber, Switch, Table, Tabs, Tooltip, type TableColumnsType } from 'antd'
+import { Badge, Button, Checkbox, Form, Input, InputNumber, Switch, Tabs, Tooltip, type TableColumnsType } from 'antd'
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -16,6 +16,7 @@ import { checkForNewProblems, notificationsEnabled, requestNotificationPermissio
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
+import { DataTable } from '../components/DataTable'
 
 /** How often to poll a running install job for new progress lines — same
  * cadence Certificates.tsx uses for certbot jobs. */
@@ -915,12 +916,9 @@ export default function Hosts({
           <p className="small muted">{t('hosts.noHosts')}</p>
         ) : (
           <div className="table-wrap">
-            <Table<HubHost>
-              dataSource={hosts}
+            <DataTable<HubHost>               dataSource={hosts}
               columns={columns}
               rowKey="id"
-              pagination={false}
-              size="small"
               expandable={{
                 expandedRowKeys: hosts.map((h) => h.id),
                 expandIcon: () => null,
@@ -1485,7 +1483,6 @@ function HostForm({
         activeKey={authKind}
         onChange={(key) => setAuthKind(key as AuthKind)}
         items={AUTH_KIND_OPTIONS.map((o) => ({ key: o.value, label: t(o.labelKey) }))}
-        size="small"
         style={{ marginBottom: '0.4rem' }}
       />
       {authKind === 'generated' ? (
@@ -1564,7 +1561,6 @@ function HostForm({
                 />
               </label>
               <Button
-                size="small"
                 style={{ marginTop: '0.4rem' }}
                 onClick={() => {
                   setBootstrapUser('')

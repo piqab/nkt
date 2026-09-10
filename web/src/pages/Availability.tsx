@@ -1,11 +1,12 @@
 import { useMemo, useState } from 'react'
-import { Button, Modal, Select, Table, type TableColumnsType } from 'antd'
+import { Button, Modal, Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, tzOffsetMinutes, useApi } from '../api'
 import type { Bucket, HeatCell, Outage, TargetStatus } from '../types'
 import { Heatmap, LineChart, StatTile, formatMs, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime } from '../components/ui'
 import i18n from '../i18n'
+import { DataTable } from '../components/DataTable'
 
 interface TargetsResponse {
   targets: TargetStatus[]
@@ -275,7 +276,6 @@ export default function Availability() {
                 />
               </label>
               <Button
-                size="small"
                 disabled={checking === selectedTarget.id}
                 loading={checking === selectedTarget.id}
                 onClick={() => checkNow(selectedTarget.id)}
@@ -368,11 +368,8 @@ export default function Availability() {
         }
       >
         <div className="table-wrap">
-          <Table<TargetStatus>
-            dataSource={sorted}
+          <DataTable<TargetStatus>             dataSource={sorted}
             rowKey="id"
-            pagination={false}
-            size="small"
             onRow={(tgt) => ({
               // Открыть окно ресурса. Не переключатель: окно закрывается
               // своим крестиком или Esc, а повторный клик по строке под ним
@@ -395,11 +392,8 @@ export default function Availability() {
       >
         {outages.data?.outages.length ? (
           <div className="table-wrap">
-            <Table<Outage>
-              dataSource={outages.data.outages}
+            <DataTable<Outage>               dataSource={outages.data.outages}
               rowKey={(_, i) => i ?? 0}
-              pagination={false}
-              size="small"
               columns={outageColumns(t)}
             />
           </div>

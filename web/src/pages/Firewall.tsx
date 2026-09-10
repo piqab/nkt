@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Badge, Button, Checkbox, Form, Input, Radio, Select, Table, Tag, type TableColumnsType } from 'antd'
+import { Badge, Button, Checkbox, Form, Input, Radio, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { FirewallManagerState, FirewallPolicy, FirewallRule, Listener, Me } from '../types'
@@ -8,6 +8,7 @@ import { formatBytes, formatNumber } from '../components/charts'
 import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
+import { DataTable } from '../components/DataTable'
 
 interface FirewallResponse {
   managers: FirewallManagerState[]
@@ -653,12 +654,9 @@ export default function Firewall({ me }: { me: Me }) {
 
           <Card title={t('fw.policiesTitle')}>
             <div className="table-wrap">
-              <Table<FirewallPolicy>
-                dataSource={fw.data.policies.filter((p) => p.policy !== '-')}
+              <DataTable<FirewallPolicy>                 dataSource={fw.data.policies.filter((p) => p.policy !== '-')}
                 columns={policyColumns}
                 rowKey={(p) => `${p.backend}/${p.table}/${p.chain}`}
-                pagination={false}
-                size="small"
               />
             </div>
           </Card>
@@ -790,12 +788,9 @@ export default function Firewall({ me }: { me: Me }) {
           }
         >
           <div className="table-wrap">
-            <Table<NumberedRule>
-              dataSource={numbered.data.rules}
+            <DataTable<NumberedRule>               dataSource={numbered.data.rules}
               columns={numberedColumns}
               rowKey="number"
-              pagination={false}
-              size="small"
             />
           </div>
         </Card>
@@ -835,7 +830,7 @@ export default function Firewall({ me }: { me: Me }) {
           <Loading what={t('fw.loadingRules')} />
         ) : (
           <div className="table-wrap">
-            <Table<FirewallRule> dataSource={rules} columns={ruleColumns} rowKey="id" pagination={false} size="small" />
+            <DataTable<FirewallRule> dataSource={rules} columns={ruleColumns} rowKey="id" />
           </div>
         )}
       </Card>
@@ -849,12 +844,9 @@ export default function Firewall({ me }: { me: Me }) {
         }
       >
         <div className="table-wrap">
-          <Table<Listener>
-            dataSource={fw.data?.listeners ?? []}
+          <DataTable<Listener>             dataSource={fw.data?.listeners ?? []}
             columns={listenerColumns}
             rowKey={(_, i) => i ?? 0}
-            pagination={false}
-            size="small"
           />
         </div>
       </Card>

@@ -1,12 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Button, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative } from '../components/ui'
 import i18n from '../i18n'
+import { DataTable } from '../components/DataTable'
 
 // Module-level column builders take t() as an argument rather than calling
 // useTranslation() themselves — they're plain functions, not components, so
@@ -208,7 +209,7 @@ export default function OverviewPage({ me }: { me: Me }) {
         <div className="col">
           <Card title={t('overview.services')} actions={<Link to="/services">{t('overview.manage')}</Link>}>
             <div className="table-wrap">
-              <Table<ServiceUnit> dataSource={data.services} columns={serviceColumns(t)} rowKey="name" pagination={false} size="small" />
+              <DataTable<ServiceUnit> dataSource={data.services} columns={serviceColumns(t)} rowKey="name" />
             </div>
           </Card>
 
@@ -230,12 +231,9 @@ export default function OverviewPage({ me }: { me: Me }) {
               )}
             </div>
             <div className="table-wrap" style={{ marginTop: '0.6rem' }}>
-              <Table<FirewallPolicy>
-                dataSource={(data.firewall.policies ?? []).filter((p) => p.table === 'filter')}
+              <DataTable<FirewallPolicy>                 dataSource={(data.firewall.policies ?? []).filter((p) => p.table === 'filter')}
                 columns={firewallPolicyColumns(t)}
                 rowKey={(p) => `${p.backend}/${p.chain}`}
-                pagination={false}
-                size="small"
               />
             </div>
           </Card>
@@ -248,7 +246,7 @@ export default function OverviewPage({ me }: { me: Me }) {
             <div className="chart-empty">{t('overview.noOutages24h')}</div>
           ) : (
             <div className="table-wrap">
-              <Table<Outage> dataSource={av.outages} columns={outageColumns(t)} rowKey={(_, i) => i ?? 0} pagination={false} size="small" />
+              <DataTable<Outage> dataSource={av.outages} columns={outageColumns(t)} rowKey={(_, i) => i ?? 0} />
             </div>
           )}
         </Card>
@@ -262,7 +260,7 @@ export default function OverviewPage({ me }: { me: Me }) {
           }
         >
           <div className="table-wrap">
-            <Table<SourceStatus> dataSource={data.sources} columns={sourceColumns(t)} rowKey="name" pagination={false} size="small" />
+            <DataTable<SourceStatus> dataSource={data.sources} columns={sourceColumns(t)} rowKey="name" />
           </div>
         </Card>
       </div>

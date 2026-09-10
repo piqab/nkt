@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Button, Checkbox, Input, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
+import { DataTable } from '../components/DataTable'
 
 interface OSUserKey {
   type: string
@@ -155,11 +156,8 @@ export default function OSUsers({ me }: { me: Me }) {
           <Loading what={t('osUsers.title')} />
         ) : (
           <div className="table-wrap">
-            <Table<OSUser>
-              dataSource={users.data?.users ?? []}
+            <DataTable<OSUser>               dataSource={users.data?.users ?? []}
               rowKey="name"
-              size="small"
-              pagination={false}
               columns={columns}
             />
           </div>

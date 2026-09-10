@@ -1,8 +1,9 @@
-import { Table, Tag, type TableColumnsType } from 'antd'
+import { Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 import { formatBytes } from '../components/charts'
+import { DataTable } from '../components/DataTable'
 
 interface Battery {
   name: string
@@ -135,11 +136,8 @@ export default function HardwarePage() {
 
       <Card title={t('hardware.summary')}>
         <div className="table-wrap">
-          <Table<{ key: string; value: string }>
-            dataSource={rows}
+          <DataTable<{ key: string; value: string }>             dataSource={rows}
             rowKey="key"
-            size="small"
-            pagination={false}
             showHeader={false}
             columns={[
               { key: 'k', render: (_, r) => <span className="small muted">{r.key}</span>, width: '16rem' },
@@ -152,11 +150,8 @@ export default function HardwarePage() {
       {(data?.batteries?.length ?? 0) > 0 && (
         <Card title={t('hardware.batteries')}>
           <div className="table-wrap">
-            <Table<Battery>
-              dataSource={data?.batteries ?? []}
+            <DataTable<Battery>               dataSource={data?.batteries ?? []}
               rowKey="name"
-              size="small"
-              pagination={false}
               columns={[
                 { title: t('hardware.colName'), key: 'name', render: (_, b) => <code className="mono">{b.name}</code> },
                 {
@@ -179,11 +174,8 @@ export default function HardwarePage() {
       {(data?.sensors?.length ?? 0) > 0 && (
         <Card title={t('hardware.sensors')} subtitle={t('hardware.sensorsHint')}>
           <div className="table-wrap">
-            <Table<SensorValue>
-              dataSource={data?.sensors ?? []}
+            <DataTable<SensorValue>               dataSource={data?.sensors ?? []}
               rowKey={(v) => `${v.chip}/${v.label}`}
-              size="small"
-              pagination={false}
               columns={[
                 { title: t('hardware.colChip'), key: 'chip', render: (_, v) => <span className="small mono">{v.chip}</span> },
                 { title: t('hardware.colSensor'), key: 'label', render: (_, v) => <span className="small">{v.label}</span> },
@@ -213,10 +205,8 @@ export default function HardwarePage() {
       {(data?.pci?.length ?? 0) > 0 && (
         <Card title={t('hardware.pci')} subtitle={t('hardware.count', { count: data?.pci?.length ?? 0 })}>
           <div className="table-wrap">
-            <Table
-              dataSource={(data?.pci ?? []).map((line) => ({ line }))}
+            <DataTable               dataSource={(data?.pci ?? []).map((line) => ({ line }))}
               rowKey="line"
-              size="small"
               pagination={{ pageSize: 20 }}
               showHeader={false}
               columns={deviceColumns}
@@ -228,10 +218,8 @@ export default function HardwarePage() {
       {(data?.usb?.length ?? 0) > 0 && (
         <Card title={t('hardware.usb')} subtitle={t('hardware.count', { count: data?.usb?.length ?? 0 })}>
           <div className="table-wrap">
-            <Table
-              dataSource={(data?.usb ?? []).map((line) => ({ line }))}
+            <DataTable               dataSource={(data?.usb ?? []).map((line) => ({ line }))}
               rowKey="line"
-              size="small"
               pagination={{ pageSize: 20 }}
               showHeader={false}
               columns={deviceColumns}
