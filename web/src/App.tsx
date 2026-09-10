@@ -18,6 +18,7 @@ import Configs from './pages/Configs'
 import LogsPage from './pages/Logs'
 import JobsPage from './pages/Jobs'
 import ProfilesPage from './pages/Profiles'
+import VMImagesPage from './pages/VMImages'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
 import Packages from './pages/Packages'
@@ -128,6 +129,8 @@ const NAV_GROUPS: {
     items: [
       { to: '/services', labelKey: 'nav.services' },
       { to: '/containers', labelKey: 'nav.containers' },
+      // Образы машин рядом с контейнерами и ВМ: это заготовки для них.
+      { to: '/vm-images', labelKey: 'nav.vmImages', adminOnly: true },
       { to: '/packages', labelKey: 'nav.packages' },
       { to: '/configs', labelKey: 'nav.configs' },
       // Профиль описывает желаемое состояние — соседство с конфигурациями
@@ -583,6 +586,7 @@ function Shell({
               <Route path="/logs" element={<LogsPage />} />
               <Route path="/jobs" element={<JobsPage me={me} />} />
               <Route path="/profiles" element={<ProfilesPage me={me} />} />
+              <Route path="/vm-images" element={<VMImagesPage me={me} />} />
               <Route path="/services" element={<Services me={me} />} />
               <Route path="/containers" element={<Containers me={me} />} />
               <Route path="/packages" element={<Packages me={me} />} />

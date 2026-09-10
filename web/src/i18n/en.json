@@ -42,7 +42,8 @@
     "hardware": "Hardware",
     "system": "System settings",
     "jobs": "Jobs",
-    "profiles": "Profiles"
+    "profiles": "Profiles",
+    "vmImages": "VM images"
   },
   "about": {
     "title": "About",
@@ -1537,5 +1538,32 @@
       "sudo-grant": "the account gets full rights",
       "hostname": "the hostname shows up in certificates and logs"
     }
+  },
+  "vmimages": {
+    "title": "VM images",
+    "hint": "Debian and Ubuntu cloud images: the system is already installed, and cloud-init creates a user with your key on first boot and grows the filesystem to the disk size. Downloads run in the background, survive a closed tab and resume where they stopped.",
+    "catalogTitle": "Catalog",
+    "loading": "image catalog",
+    "colImage": "Image",
+    "colState": "State",
+    "downloaded": "downloaded",
+    "partial": "partly downloaded",
+    "absent": "missing",
+    "download": "download",
+    "resume": "resume",
+    "createVM": "create VM",
+    "confirmDelete": "Delete the downloaded image \"{{name}}\"? VMs already created from it are unaffected — each has its own disk.",
+    "createTitle": "New machine from image \"{{image}}\"",
+    "keyRequired": "Without a public key there is no way into the machine: cloud images ship without a password, and nkt will not invent one for you.",
+    "name": "Machine name",
+    "user": "User inside the machine",
+    "sshKey": "Your SSH public key",
+    "disk": "Disk, GB",
+    "memory": "Memory, MB",
+    "vcpus": "vCPUs",
+    "bridge": "Network bridge",
+    "bridgeDefault": "empty — default libvirt network",
+    "autostart": "Start together with the host",
+    "create": "Create"
   }
 }

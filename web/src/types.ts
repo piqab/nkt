@@ -874,3 +874,22 @@ export interface ProfilePlan {
   unknown?: string[]
   ts: string
 }
+
+/** Облачный образ из каталога (см. internal/vmimage). */
+export interface VMImage {
+  id: string
+  name: string
+  os: string
+  arch: string
+  file_name: string
+}
+
+export interface VMImageLocal {
+  id: string
+  path?: string
+  size?: number
+  downloaded: boolean
+  partial?: boolean
+  partial_size?: number
+  mod_time?: string
+}
