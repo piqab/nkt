@@ -567,3 +567,25 @@ pre.diff .hunk { color: var(--text-muted); }
 .pkg-match-description > td {
   color: var(--text-secondary);
 }
+
+/* Меню разделов — antd Menu внутри собственного сайдбара. Своих цветов не
+   задаём: их даёт тема antd, а здесь только плотность и то, чего у Menu
+   нет — счётчик находок справа от названия. */
+.nav-menu {
+  border-inline-end: none !important;
+  background: transparent !important;
+}
+
+.nav-menu .ant-menu-submenu-title,
+.nav-menu .ant-menu-item {
+  height: 1.8rem;
+  line-height: 1.8rem;
+  margin-block: 0;
+}
+
+.nav-item-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}

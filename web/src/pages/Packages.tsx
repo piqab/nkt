@@ -8,6 +8,7 @@ import SandboxPackagesCard from '../components/SandboxPackagesCard'
 import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 import UpdateModal from '../components/UpdateModal'
+import { confirmAction } from '../components/confirm'
 
 interface AptSearchResult {
   name: string
@@ -171,8 +172,8 @@ export default function Packages({ me }: { me: Me }) {
           size="small"
           danger
           disabled={!canUse}
-          onClick={() => {
-            if (!window.confirm(t('packages.confirmRemove', { name: p.name }))) return
+          onClick={async () => {
+            if (!(await confirmAction(t('packages.confirmRemove', { name: p.name })))) return
             setRemoveOutcome(null)
             setRemoveTarget(p.name)
           }}
@@ -213,8 +214,8 @@ export default function Packages({ me }: { me: Me }) {
             <Button
               type={pkgUpdates.length > 0 ? 'primary' : 'default'}
               disabled={!canUse || pkgUpdates.length === 0}
-              onClick={() => {
-                if (!window.confirm(t('packages.confirmUpdate', { count: pkgUpdates.length }))) return
+              onClick={async () => {
+                if (!(await confirmAction(t('packages.confirmUpdate', { count: pkgUpdates.length })))) return
                 setUpdateOutcome(null)
                 setUpdating(true)
               }}

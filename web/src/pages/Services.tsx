@@ -7,6 +7,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, formatBy
 import { InactiveSummary } from '../components/InactiveSummary'
 import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
+import { confirmAction } from '../components/confirm'
 
 const ACTION_LABEL_KEY: Record<string, string> = {
   start: 'services.actionStart',
@@ -197,7 +198,7 @@ export default function Services({ me }: { me: Me }) {
 
   async function act(service: string, action: string) {
     if (action !== 'validate' && action !== 'reload') {
-      if (!window.confirm(t('services.confirmAction', { action: t(ACTION_LABEL_KEY[action]), service }))) return
+      if (!(await confirmAction(t('services.confirmAction', { action: t(ACTION_LABEL_KEY[action]), service })))) return
     }
     setBusy(`${service}:${action}`)
     setNotice(null)
@@ -249,7 +250,7 @@ export default function Services({ me }: { me: Me }) {
   async function kill(l: Listener, signal: 'TERM' | 'KILL') {
     if (!l.pid || !l.command) return
     const verb = signal === 'TERM' ? t('services.confirmTerm') : t('services.confirmKill')
-    if (!window.confirm(t('services.confirmKillKind', { verb, pid: l.pid, process: l.process ? ` (${l.process})` : '' }))) return
+    if (!(await confirmAction(t('services.confirmKillKind', { verb, pid: l.pid, process: l.process ? ` (${l.process})` : '' })))) return
     const key = listenerKey(l)
     setKillBusy(key)
     setNotice(null)

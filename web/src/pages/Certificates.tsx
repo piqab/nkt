@@ -16,6 +16,7 @@ import type {
 import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
 import i18n from '../i18n'
+import { confirmAction } from '../components/confirm'
 
 /** How often to poll a running renew job for new progress lines. */
 const RENEW_POLL_MS = 800
@@ -286,7 +287,7 @@ export default function Certificates({ me }: { me: Me }) {
     const lineage = cert.renewal.lineage
     if (!lineage) return
     const caveat = cert.renewal.derived ? t('certs.confirmRenewDerived', { source: cert.renewal.source_path }) : ''
-    if (!window.confirm(t('certs.confirmRenew', { lineage, caveat }))) return
+    if (!(await confirmAction(t('certs.confirmRenew', { lineage, caveat })))) return
     setBusy(cert.id)
     setNotice(null)
     try {
@@ -308,7 +309,7 @@ export default function Certificates({ me }: { me: Me }) {
    * either way: `certbot renew --cert-name X` works on any lineage it
    * manages, attached or not. */
   async function renewLineage(lineageName: string) {
-    if (!window.confirm(t('certs.confirmRenew', { lineage: lineageName, caveat: '' }))) return
+    if (!(await confirmAction(t('certs.confirmRenew', { lineage: lineageName, caveat: '' })))) return
     setBusy(`lineage:${lineageName}`)
     setNotice(null)
     try {
@@ -647,7 +648,7 @@ function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) =>
       setError(t('certs.specifyDomain'))
       return
     }
-    if (!window.confirm(t('certs.confirmIssue', { domains: domainList.join(', ') }))) {
+    if (!(await confirmAction(t('certs.confirmIssue', { domains: domainList.join(', ') })))) {
       return
     }
     setBusy(true)

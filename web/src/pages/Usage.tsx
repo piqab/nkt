@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Select, Tabs } from 'antd'
+import { Button, Select, Tabs, Modal } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, tzOffsetMinutes, useApi } from '../api'
 import type { HeatCell, Me, MetricPoint, SubjectTotal } from '../types'
@@ -9,6 +9,7 @@ import { PtyToolbar } from '../components/PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
 import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
+import { confirmAction } from '../components/confirm'
 
 /**
  * Usage series the backend collects. Each entry fixes the unit and the
@@ -331,12 +332,12 @@ function UsageBtop({ me }: { me: Me }) {
         ? t('usage.btopDisabled')
         : null
 
-  function handleStart() {
-    if (!window.confirm(t('usage.confirmOpenBtop'))) return
+  async function handleStart() {
+    if (!(await confirmAction(t('usage.confirmOpenBtop')))) return
     start()
   }
 
-  function handleBtopButtonClick() {
+  async function handleBtopButtonClick() {
     if (btopStatus?.available) {
       handleStart()
       return
@@ -347,10 +348,10 @@ function UsageBtop({ me }: { me: Me }) {
       return
     }
     if (btopStatus && !btopStatus.apt_get_available) {
-      window.alert(t('usage.btopAptGetMissing'))
+      Modal.info({ content: t('usage.btopAptGetMissing'), okText: t('common.close') })
       return
     }
-    if (window.confirm(t('usage.confirmInstallBtop'))) {
+    if (await confirmAction(t('usage.confirmInstallBtop'), { danger: false })) {
       setBtopInstallOutcome(null)
       setBtopInstallOpen(true)
     }
