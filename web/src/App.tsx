@@ -27,6 +27,7 @@ import Availability from './pages/Availability'
 import Usage from './pages/Usage'
 import Audit from './pages/Audit'
 import Users from './pages/Users'
+import Disks from './pages/Disks'
 import OSUsers from './pages/OSUsers'
 import { Banner, Card } from './components/ui'
 import PasswordForm from './components/PasswordForm'
@@ -97,6 +98,7 @@ const NAV = [
   { to: '/logs', labelKey: 'nav.logs' },
   { to: '/firewall', labelKey: 'nav.firewall' },
   { to: '/interfaces', labelKey: 'nav.interfaces' },
+  { to: '/disks', labelKey: 'nav.disks' },
   { to: '/certificates', labelKey: 'nav.certificates', badge: 'certs' as const },
   { to: '/audit', labelKey: 'nav.audit' },
   // Managing who can sign in is itself an admin action — a viewer has no use
@@ -484,6 +486,7 @@ function Shell({
             <Route path="/interfaces" element={<Interfaces />} />
             <Route path="/certificates" element={<Certificates me={me} />} />
             <Route path="/audit" element={<Audit />} />
+            <Route path="/disks" element={<Disks />} />
             {me.is_admin && <Route path="/users" element={<Users me={me} />} />}
             {me.is_admin && <Route path="/os-users" element={<OSUsers me={me} />} />}
             <Route path="/login" element={<Navigate to="/" replace />} />

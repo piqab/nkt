@@ -35,6 +35,7 @@ type Server struct {
 	services  *control.ServiceManager
 	configs   *control.ConfigManager
 	osusers   *control.OSUserManager
+	disks     *control.DiskManager
 	firewall  *control.FirewallManager
 	firewalld *control.FirewalldManager
 	certs     *control.CertManager
@@ -74,6 +75,7 @@ type Deps struct {
 	Services  *control.ServiceManager
 	Configs   *control.ConfigManager
 	OSUsers   *control.OSUserManager
+	Disks     *control.DiskManager
 	Firewall  *control.FirewallManager
 	Firewalld *control.FirewalldManager
 	Certs     *control.CertManager
@@ -94,7 +96,7 @@ type Deps struct {
 func New(d Deps) *Server {
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
-		services: d.Services, configs: d.Configs, osusers: d.OSUsers, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
+		services: d.Services, configs: d.Configs, osusers: d.OSUsers, disks: d.Disks, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
 		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images,
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
@@ -277,6 +279,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/monitor/targets/{id}/check", s.handleTargetCheck)
 				r.Patch("/monitor/targets/{id}", s.handleTargetPatch)
 
+				r.Get("/disks", s.handleDisks)
+				r.Get("/disks/usage", s.handleDiskUsage)
 				r.Get("/os-users", s.handleOSUserList)
 				r.Post("/os-users", s.handleOSUserCreate)
 				r.Get("/users", s.handleUserList)
