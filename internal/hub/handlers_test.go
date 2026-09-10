@@ -1,12 +1,16 @@
 package hub
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/store"
 )
@@ -172,5 +176,42 @@ func TestExportImportHostsHandlersRoundTrip(t *testing.T) {
 	}
 	if len(hosts) != 1 || hosts[0].Name != "h1" || !hosts[0].TerminalEnabled {
 		t.Errorf("imported host = %+v, want h1 with TerminalEnabled=true", hosts)
+	}
+}
+
+// Правка хоста должна сохранять группу и тогда, когда пароль не меняли —
+// именно эта ветка обработчика её теряла: окно закрывалось, а группа
+// оставалась прежней.
+func TestHandleUpdateHostSavesGroup(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := t.Context()
+
+	id, err := m.AddHost(ctx, "web1", "10.0.0.1", 22, "root", store.HostAuthPassword, "pw", false)
+	if err != nil {
+		t.Fatalf("AddHost: %v", err)
+	}
+	srv := New(Deps{DB: db, Hub: m})
+
+	// secret пуст — форма правки не пересылает пароль, если его не трогали.
+	body := `{"name":"web1","addr":"10.0.0.1","ssh_port":22,"ssh_user":"root",` +
+		`"auth_kind":"password","secret":"","group":"Прод"}`
+	req := httptest.NewRequest(http.MethodPatch, "/api/hub/hosts/"+strconv.FormatInt(id, 10),
+		strings.NewReader(body))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("id", strconv.FormatInt(id, 10))
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	rec := httptest.NewRecorder()
+	srv.handleUpdateHost(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("handleUpdateHost: status %d, body %s", rec.Code, rec.Body.String())
+	}
+
+	host, err := db.HostByID(ctx, id)
+	if err != nil {
+		t.Fatalf("HostByID: %v", err)
+	}
+	if host.Group != "Прод" {
+		t.Errorf("Group = %q, want %q", host.Group, "Прод")
 	}
 }

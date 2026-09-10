@@ -158,6 +158,14 @@ CREATE TABLE IF NOT EXISTS hosts (
                                                  -- Пустая строка — «Без группы», отдельный раздел в конце списка
 );
 CREATE INDEX IF NOT EXISTS idx_hosts_name ON hosts(name);
+
+-- Группы хостов существуют сами по себе, а не выводятся из поля group_name
+-- у хостов: пустую группу иначе некуда записать, а её и создают первой —
+-- чтобы потом перетащить в неё хосты.
+CREATE TABLE IF NOT EXISTS host_groups (
+    name       TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL
+);
 `
 
 // columnMigrations lists every column the hosts table has picked up since

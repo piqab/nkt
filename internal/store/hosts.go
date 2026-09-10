@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"time"
 )
 
 // Host status values.
@@ -378,4 +379,86 @@ func (d *DB) SetHostAdmin(ctx context.Context, id int64, adminUser string, admin
 func (d *DB) TouchHostSeen(ctx context.Context, id int64) error {
 	_, err := d.ExecContext(ctx, `UPDATE hosts SET last_seen_at = ? WHERE id = ?`, Now(), id)
 	return err
+}
+
+// ListHostGroups возвращает названия групп: и заведённые явно, и те, что
+// упомянуты у хостов.
+//
+// Объединение, а не один источник: группу можно создать заранее пустой
+// (тогда она есть только в таблице), а можно вписать её название прямо в
+// форме хоста (тогда она есть только у хоста). Оба способа рабочие, и
+// список должен показывать результат обоих.
+func (d *DB) ListHostGroups(ctx context.Context) ([]string, error) {
+	rows, err := d.QueryContext(ctx, `
+		SELECT name FROM host_groups
+		UNION
+		SELECT group_name FROM hosts WHERE group_name <> ''
+		ORDER BY name`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := []string{}
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		out = append(out, name)
+	}
+	return out, rows.Err()
+}
+
+// CreateHostGroup заводит пустую группу. Повторное создание существующей —
+// не ошибка: результат тот же, что и просили.
+func (d *DB) CreateHostGroup(ctx context.Context, name string) error {
+	_, err := d.ExecContext(ctx,
+		`INSERT OR IGNORE INTO host_groups(name, created_at) VALUES(?, ?)`, name, FormatTime(time.Now()))
+	return err
+}
+
+// RenameHostGroup переименовывает группу вместе с хостами в ней.
+//
+// Одной транзакцией: если переименовать строку в таблице и не дойти до
+// хостов, группа с прежним названием тут же появится обратно — она ведь
+// выводится в том числе из поля у хостов.
+func (d *DB) RenameHostGroup(ctx context.Context, from, to string) error {
+	tx, err := d.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `UPDATE hosts SET group_name = ? WHERE group_name = ?`, to, from); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM host_groups WHERE name = ?`, from); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx,
+		`INSERT OR IGNORE INTO host_groups(name, created_at) VALUES(?, ?)`, to, FormatTime(time.Now())); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// DeleteHostGroup убирает группу, возвращая её хосты в «Без группы».
+//
+// Хосты не удаляются и не прячутся: группа — это метка на списке, а не
+// контейнер, и её исчезновение не должно уносить с собой сервера.
+func (d *DB) DeleteHostGroup(ctx context.Context, name string) error {
+	tx, err := d.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `UPDATE hosts SET group_name = '' WHERE group_name = ?`, name); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM host_groups WHERE name = ?`, name); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
