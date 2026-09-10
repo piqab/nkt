@@ -322,6 +322,7 @@ export default function Hosts({
   // собственной машины: раскатывать по группе можно любой из них.
   const profiles = useApi<{ profiles: { id: number; name: string }[] }>('/hosts/local/profiles', 120_000)
   const [applyTo, setApplyTo] = useState<{ group: string; hosts: number } | null>(null)
+  const [provisionOn, setProvisionOn] = useState<HubHost | null>(null)
   const [groupDialog, setGroupDialog] = useState<{ mode: 'create' | 'rename'; from?: string } | null>(null)
   const [groupName, setGroupName] = useState('')
 
@@ -840,6 +841,13 @@ export default function Hosts({
             </Button>
           </>
         )}
+        {/* Машину создаём только на хосте, где уже стоит nkt: команду
+            создания выполняет он сам, а хаб лишь просит и ждёт. */}
+        {h.status === 'online' && (
+          <Button type="link" onClick={() => setProvisionOn(h)}>
+            {t('hosts.newVM')}
+          </Button>
+        )}
         <Button type="link" disabled={h.status === 'installing'} onClick={() => setEditingHost(h)}>
           {t('hosts.edit')}
         </Button>
@@ -1015,6 +1023,18 @@ export default function Hosts({
           </Tooltip>
         </div>
       </div>
+
+      {provisionOn && (
+        <ProvisionVMModal
+          host={provisionOn}
+          onClose={() => setProvisionOn(null)}
+          onStarted={(text) => {
+            setProvisionOn(null)
+            setNotice({ kind: 'info', text })
+            reload()
+          }}
+        />
+      )}
 
       {applyTo && (
         <ApplyProfileModal
@@ -2013,6 +2033,129 @@ function ApplyProfileModal({
       <div className="row" style={{ gap: '0.5rem' }}>
         <Button type="primary" loading={busy} disabled={!profileID} onClick={() => void start()}>
           {t('hosts.applyProfileStart')}
+        </Button>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Создание виртуальной машины на управляемом хосте.
+ *
+ * Хаб заранее выдаёт себе ключ и просит хост положить его в машину при
+ * первом запуске — иначе новую машину пришлось бы открывать хабу руками.
+ * Установка nkt на неё остаётся отдельным шагом: это обычный хост, и
+ * решение «ставить ли» остаётся за оператором.
+ */
+function ProvisionVMModal({
+  host,
+  onClose,
+  onStarted,
+}: {
+  host: HubHost
+  onClose: () => void
+  onStarted: (text: string) => void
+}) {
+  const { t } = useTranslation()
+  const images = useApi<{ catalog: { id: string; name: string }[]; local: { id: string; downloaded: boolean }[] }>(
+    `/hosts/${host.id}/vm/images`,
+  )
+  const [name, setName] = useState('')
+  const [imageID, setImageID] = useState('')
+  const [user, setUser] = useState('deploy')
+  const [sshKey, setSSHKey] = useState('')
+  const [diskGB, setDiskGB] = useState(20)
+  const [memoryMB, setMemoryMB] = useState(2048)
+  const [vcpus, setVCPUs] = useState(2)
+  const [group, setGroup] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const downloaded = new Set((images.data?.local ?? []).filter((l) => l.downloaded).map((l) => l.id))
+
+  async function start() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ job_id: number }>('/hub/vm/provision', {
+        method: 'POST',
+        body: {
+          host_id: host.id,
+          group,
+          spec: {
+            name,
+            image_id: imageID,
+            disk_gb: diskGB,
+            memory_mb: memoryMB,
+            vcpus,
+            user,
+            ssh_key: sshKey.trim(),
+          },
+        },
+      })
+      onStarted(t('hosts.newVMStarted', { name, job: res.job_id }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title={t('hosts.newVMTitle', { host: host.name })} onClose={onClose} width={720}>
+      <p className="small muted">{t('hosts.newVMBody')}</p>
+      <ErrorNote error={error} />
+      <ErrorNote error={images.error} />
+
+      <label style={{ marginBottom: '0.6rem' }}>
+        {t('hosts.newVMImage')}
+        <div className="col" style={{ gap: '0.25rem', marginTop: '0.25rem' }}>
+          {(images.data?.catalog ?? []).map((img) => (
+            <label key={img.id} style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+              <input type="radio" name="image" checked={imageID === img.id} onChange={() => setImageID(img.id)} />
+              {img.name}
+              {!downloaded.has(img.id) && <span className="small muted">{t('hosts.newVMWillDownload')}</span>}
+            </label>
+          ))}
+        </div>
+      </label>
+
+      <div className="grid grid-2" style={{ marginBottom: '0.6rem' }}>
+        <label>
+          {t('hosts.newVMName')}
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="web-02" />
+        </label>
+        <label>
+          {t('hosts.newVMUser')}
+          <Input value={user} onChange={(e) => setUser(e.target.value)} />
+        </label>
+        <label>
+          {t('hosts.newVMDisk')}
+          <InputNumber value={diskGB} min={1} max={4096} onChange={(v) => setDiskGB(v ?? 20)} style={{ width: '100%' }} />
+        </label>
+        <label>
+          {t('hosts.newVMMemory')}
+          <InputNumber value={memoryMB} min={256} step={256} onChange={(v) => setMemoryMB(v ?? 2048)} style={{ width: '100%' }} />
+        </label>
+        <label>
+          {t('hosts.newVMVcpus')}
+          <InputNumber value={vcpus} min={1} max={256} onChange={(v) => setVCPUs(v ?? 2)} style={{ width: '100%' }} />
+        </label>
+        <label>
+          {t('hosts.group')}
+          <Input value={group} onChange={(e) => setGroup(e.target.value)} />
+        </label>
+      </div>
+
+      <label style={{ marginBottom: '0.6rem' }}>
+        {t('hosts.newVMKey')}
+        <Input.TextArea rows={3} value={sshKey} onChange={(e) => setSSHKey(e.target.value)} placeholder="ssh-ed25519 AAAA..." />
+      </label>
+
+      <div className="row" style={{ gap: '0.5rem' }}>
+        <Button type="primary" loading={busy} disabled={!name.trim() || !imageID || !sshKey.trim()} onClick={() => void start()}>
+          {t('hosts.newVMStart')}
         </Button>
         <Button onClick={onClose}>{t('common.cancel')}</Button>
       </div>

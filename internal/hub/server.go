@@ -187,6 +187,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/groups/rename", s.handleRenameHostGroup)
 					r.Post("/hub/groups/delete", s.handleDeleteHostGroup)
 					r.Post("/hub/groups/apply-profile", s.handleGroupApply)
+					r.Post("/hub/vm/provision", s.handleVMProvision)
 					r.Post("/hub/hosts/{id}/group", s.handleSetHostGroup)
 					r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 					r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/control"
@@ -42,12 +43,18 @@ type CreateRunner struct {
 	// escape — запуск команд вне песочницы юнита: qemu-img и virsh
 	// пишут в /var/lib/libvirt, куда изнутри юнита хода нет.
 	escape control.PrivilegedRunner
+	// addressWait — сколько ждать адреса от libvirt. Поле, а не
+	// константа: тестам ждать полторы минуты незачем.
+	addressWait time.Duration
 }
 
 // NewCreateRunner строит исполнителя.
 func NewCreateRunner(store *vmimage.Store, c collect.Collector, escape control.PrivilegedRunner) *CreateRunner {
-	return &CreateRunner{store: store, c: c, escape: escape}
+	return &CreateRunner{store: store, c: c, escape: escape, addressWait: defaultAddressWait}
 }
+
+// SetAddressWait меняет, сколько ждать адреса машины.
+func (r *CreateRunner) SetAddressWait(d time.Duration) { r.addressWait = d }
 
 // Resumable — да: каждый шаг проверяет, не сделан ли он уже, и не
 // повторяет сделанного.
@@ -144,7 +151,63 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	jc.Logf("Машина %s создана и запущена.", spec.Name)
 	jc.Logf("Первый запуск занимает до минуты: cloud-init заводит пользователя %s и растит файловую систему.", spec.User)
+
+	// Адрес нужен тому, кто будет к машине подключаться, — прежде всего
+	// хабу, если машину создают для него. Ждать до конца задания
+	// незачем: строка журнала с адресом видна сразу.
+	if addr := r.waitAddress(ctx, jc, spec.Name); addr != "" {
+		jc.Logf("Адрес машины: %s", addr)
+	} else {
+		jc.Logf("Адрес пока не известен — машина ещё поднимается или сеть без DHCP-аренды.")
+	}
 	return nil
+}
+
+// defaultAddressWait — сколько ждать адреса. Больше минуты ждать нет
+// смысла: либо DHCP выдал аренду, либо сеть устроена иначе, и адрес всё
+// равно придётся узнавать другим способом.
+const defaultAddressWait = 90 * time.Second
+
+// waitAddress спрашивает у libvirt адрес машины, пока тот не появится.
+func (r *CreateRunner) waitAddress(ctx context.Context, jc *jobs.Context, name string) string {
+	deadline := time.Now().Add(r.addressWait)
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return ""
+		}
+		res, err := r.run(ctx, "virsh", "domifaddr", name, "--source", "lease")
+		if err == nil && res.ExitCode == 0 {
+			if addr := parseDomifaddr(res.Output()); addr != "" {
+				return addr
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return ""
+		case <-time.After(3 * time.Second):
+		}
+	}
+	return ""
+}
+
+// parseDomifaddr достаёт адрес из вывода virsh domifaddr.
+//
+// Формат: имя интерфейса, MAC, протокол и адрес с маской в последней
+// колонке. Берётся первый IPv4: у машины с одним интерфейсом он и есть
+// ответ, а разбирать несколько сетей здесь незачем — это работа
+// оператора, а не догадка.
+func parseDomifaddr(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 4 || !strings.EqualFold(fields[2], "ipv4") {
+			continue
+		}
+		addr, _, _ := strings.Cut(fields[3], "/")
+		if addr != "" && addr != "0.0.0.0" {
+			return addr
+		}
+	}
+	return ""
 }
 
 // makeDisk делает диск машины из образа.

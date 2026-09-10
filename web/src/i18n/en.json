@@ -566,7 +566,20 @@
     "applyProfileTitle": "Profile for group «{{group}}» ({{count}} hosts)",
     "applyProfileBody": "Hosts are visited one at a time: each gets its own plan, and only what actually differs there is applied. A failure on the first host stops the rollout, so a wrong description does not reach the whole group. The work runs in the background — follow it in the Jobs section.",
     "applyProfileStart": "Start",
-    "applyProfileStarted": "Rollout started: {{count}} hosts, job #{{job}}. Follow it in the Jobs section."
+    "applyProfileStarted": "Rollout started: {{count}} hosts, job #{{job}}. Follow it in the Jobs section.",
+    "newVM": "new VM",
+    "newVMTitle": "New machine on host «{{host}}»",
+    "newVMBody": "The host itself creates the machine from a cloud image, and the hub puts its own key inside on first boot and adds the machine to the host list — otherwise the hub would have to be let in by hand. Installing nkt on it stays a separate step: it is an ordinary host, and that call is yours. The work runs in the background; follow it in this host's Jobs section.",
+    "newVMImage": "Image",
+    "newVMWillDownload": "— will be downloaded",
+    "newVMName": "Machine name",
+    "newVMUser": "User inside the machine",
+    "newVMKey": "Your SSH public key",
+    "newVMDisk": "Disk, GB",
+    "newVMMemory": "Memory, MB",
+    "newVMVcpus": "vCPUs",
+    "newVMStart": "Create",
+    "newVMStarted": "Creation of machine \"{{name}}\" started, job #{{job}}. Follow it in Jobs."
   },
   "certs": {
     "colSites": "Sites",
