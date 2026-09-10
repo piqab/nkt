@@ -357,7 +357,11 @@ export default function Services({ me }: { me: Me }) {
       </div>
 
       <ErrorNote error={services.error} />
-      {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
+      {notice && (
+        <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
+          {notice.text}
+        </Banner>
+      )}
       {killEscalation && (
         <Banner kind="warn">
           {t('services.notTerminatedInline', { pid: killEscalation.pid, process: killEscalation.process ? ` (${killEscalation.process})` : '' })}

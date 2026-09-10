@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { ConfigProvider, Layout, Menu, type MenuProps, type ThemeConfig } from 'antd'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
-import { api, hostScope, onUnauthorized, readSelectedHost, useApi, writeSelectedHost, type SelectedHost } from './api'
+import { LOCAL_HOST_ID, api, hostScope, onUnauthorized, readSelectedHost, type SelectedHost, useApi, writeSelectedHost } from './api'
 import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
 import type { Lang } from './i18n'
 import { useLang } from './hooks/useLang'
@@ -329,12 +329,16 @@ function Shell({
   // depends on the address bar staying whatever it was from a previous
   // host session — introducing routing here would have to interact with
   // that, for no real benefit (this is not something worth bookmarking).
-  const [hubView, setHubView] = useState<'hosts' | 'about'>('hosts')
+  const [hubView, setHubView] = useState<'hosts' | 'jobs' | 'about'>('hosts')
   // Polled independently of whichever section is actually showing, so the
   // sidebar's own "доступно обновление" badge stays current even while
   // looking at the host list — matches how criticalCount/certAlerts below
   // are always live regardless of which per-host page is open.
   const hubUpdate = useApi<HubVersionInfo>(isHub ? '/hub/version' : null, 5 * 60_000)
+  // Счётчик заданий самого хаба: он и подсказывает, что раздел «Задания»
+  // здесь есть. Путь указан явно — область запросов в списке хостов не
+  // выбрана, и обычный «/jobs» ушёл бы в API хаба, где их нет.
+  const hubJobs = useApi<{ active: number }>(isHub ? '/hosts/local/jobs?limit=1' : null, 10_000)
 
   // Every page below reads through api()/useApi() unmodified; this is the
   // one place that redirects their calls to the selected host's own API
@@ -348,6 +352,10 @@ function Shell({
   // own API instead of the host's ("Неизвестный метод API: /api/overview").
   // Render itself is always parent-before-children, so this is not.
   hostScope.id = isHub ? (selectedHost?.id ?? null) : null
+  // Задания самого хаба (создание машин, раскатка профилей) живут на его
+  // машине, поэтому этот раздел смотрит в её API. Без этого запросы ушли
+  // бы в API хаба, где раздела заданий нет вовсе.
+  if (isHub && !selectedHost && hubView === 'jobs') hostScope.id = LOCAL_HOST_ID
 
   function selectHost(host: SelectedHost | null) {
     setSelectedHost(host)
@@ -399,6 +407,10 @@ function Shell({
             <a href="#" className={hubView === 'hosts' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('hosts') }}>
               <span>{t('hosts.title')}</span>
             </a>
+            <a href="#" className={hubView === 'jobs' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('jobs') }}>
+              <span>{t('nav.jobs')}</span>
+              {hubJobs.data?.active ? <span className="nav-count nav-count-busy">{hubJobs.data.active}</span> : null}
+            </a>
             <a href="#" className={hubView === 'about' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('about') }}>
               <span>{t('nav.about')}</span>
               {hubUpdate.data?.update_available && <span className="nav-count">1</span>}
@@ -439,6 +451,8 @@ function Shell({
           <div className="content">
             {hubView === 'hosts' ? (
               <Hosts onSelect={selectHost} hubVersion={me.hub_version} />
+            ) : hubView === 'jobs' ? (
+              <JobsPage me={me} />
             ) : (
               <About />
             )}

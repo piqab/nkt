@@ -10,13 +10,14 @@ import {
 } from '@ant-design/icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
-import type { HubHost, RenewEvent, RenewJobStatus, Severity } from '../types'
+import type { HubHost, Job, RenewEvent, RenewJobStatus, Severity } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, formatRelative, severityLabel } from '../components/ui'
 import { checkForNewProblems, notificationsEnabled, requestNotificationPermission, setNotificationsEnabled, type NotifyState } from '../notifications'
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { JobLogModal } from './Jobs'
 
 /** How often to poll a running install job for new progress lines — same
  * cadence Certificates.tsx uses for certbot jobs. */
@@ -328,6 +329,20 @@ export default function Hosts({
   // хосты.
   const [openVMs, setOpenVMs] = useState<Set<number>>(new Set())
   const [detectingAddr, setDetectingAddr] = useState<number | null>(null)
+  // Журнал задания хаба (создание машины, раскатка профиля) — открывается
+  // прямо здесь: в списке хостов раздела «Задания» под рукой нет, и
+  // отсылать к нему значило бы отправлять оператора искать несуществующую
+  // кнопку.
+  const [hubJob, setHubJob] = useState<Job | null>(null)
+
+  async function openHubJob(jobID: number) {
+    try {
+      setHubJob(await api<Job>(`/hosts/local/jobs/${jobID}`))
+    } catch {
+      // Журнал не открылся — не повод считать задание неудачным: оно
+      // идёт своим ходом, и его всегда видно в разделе «Задания».
+    }
+  }
 
   // Адрес машина получает не сразу: сначала грузится, потом ждёт DHCP.
   // Кнопка спрашивает его у хоста, на котором машина работает.
@@ -335,15 +350,28 @@ export default function Hosts({
     setDetectingAddr(h.id)
     setNotice(null)
     try {
-      const res = await api<{ address: string; found: boolean }>(`/hub/hosts/${h.id}/detect-address`, {
-        method: 'POST',
-      })
+      const res = await api<{
+        address: string
+        found: boolean
+        state?: string
+        reason?: string
+        detail?: string
+      }>(`/hub/hosts/${h.id}/detect-address`, { method: 'POST' })
       if (res.found) {
         setNotice({ kind: 'info', text: t('hosts.detectAddressFound', { name: h.name, addr: res.address }) })
         reload()
-      } else {
-        setNotice({ kind: 'info', text: t('hosts.detectAddressNone', { name: h.name }) })
+        return
       }
+      // «Не знаю» без причины — тупик: оператору некуда идти дальше.
+      // Причина приходит кодом, а сырой ответ virsh идёт следом.
+      const reason = t(`hosts.detectAddressReason.${res.reason ?? 'no-lease'}`, {
+        defaultValue: t('hosts.detectAddressReason.no-lease'),
+        state: res.state ?? '—',
+      })
+      setNotice({
+        kind: 'info',
+        text: t('hosts.detectAddressNone', { name: h.name, reason }) + (res.detail ? ` (${res.detail})` : ''),
+      })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
@@ -1148,13 +1176,16 @@ export default function Hosts({
         <ProvisionVMModal
           host={provisionOn}
           onClose={() => setProvisionOn(null)}
-          onStarted={(text) => {
+          onStarted={(text, jobID) => {
             setProvisionOn(null)
             setNotice({ kind: 'info', text })
+            void openHubJob(jobID)
             reload()
           }}
         />
       )}
+
+      {hubJob && <JobLogModal job={hubJob} scope="/hosts/local" onClose={() => setHubJob(null)} />}
 
       {applyTo && (
         <ApplyProfileModal
@@ -1162,9 +1193,10 @@ export default function Hosts({
           hostCount={applyTo.hosts}
           profiles={profiles.data?.profiles ?? []}
           onClose={() => setApplyTo(null)}
-          onStarted={(text) => {
+          onStarted={(text, jobID) => {
             setApplyTo(null)
             setNotice({ kind: 'info', text })
+            void openHubJob(jobID)
           }}
         />
       )}
@@ -1188,7 +1220,11 @@ export default function Hosts({
       </Modal>
       )}
 
-      {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
+      {notice && (
+        <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
+          {notice.text}
+        </Banner>
+      )}
       <ErrorNote error={error} />
 
       <Card
@@ -1872,7 +1908,12 @@ function HostForm({
         </Form.Item>
         {/* Группа — свободный текст с подсказкой уже существующих: новые
             заводятся на ходу, а справочник, который надо заполнять заранее,
-            мешал бы ровно тому, ради чего группы и нужны. */}
+            мешал бы ровно тому, ради чего группы и нужны.
+
+            У машины поля нет вовсе: её группа — это группа её хоста, и
+            пустое поле в форме правки сбрасывало бы машину в «Без
+            группы» каждый раз, когда у неё правят адрес. */}
+        {!initial?.parent_id && (
         <Form.Item name="group" label={t('hosts.group')} style={{ flex: 1, minWidth: '9rem' }}>
           <AutoComplete
             options={knownGroups.map((g) => ({ value: g }))}
@@ -1882,6 +1923,7 @@ function HostForm({
             allowClear
           />
         </Form.Item>
+        )}
       </div>
 
       {/* Режимы установки — табами, а не выпадающим списком: каждый таб
@@ -2115,7 +2157,7 @@ function ApplyProfileModal({
   hostCount: number
   profiles: { id: number; name: string }[]
   onClose: () => void
-  onStarted: (text: string) => void
+  onStarted: (text: string, jobID: number) => void
 }) {
   const { t } = useTranslation()
   const [profileID, setProfileID] = useState<number | null>(profiles[0]?.id ?? null)
@@ -2131,7 +2173,7 @@ function ApplyProfileModal({
         method: 'POST',
         body: { profile_id: profileID, group },
       })
-      onStarted(t('hosts.applyProfileStarted', { count: res.hosts, job: res.job_id }))
+      onStarted(t('hosts.applyProfileStarted', { count: res.hosts, job: res.job_id }), res.job_id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -2184,7 +2226,7 @@ function ProvisionVMModal({
 }: {
   host: HubHost
   onClose: () => void
-  onStarted: (text: string) => void
+  onStarted: (text: string, jobID: number) => void
 }) {
   const { t } = useTranslation()
   const images = useApi<{ catalog: { id: string; name: string }[]; local: { id: string; downloaded: boolean }[] }>(
@@ -2228,7 +2270,7 @@ function ProvisionVMModal({
           },
         },
       })
-      onStarted(t('hosts.newVMStarted', { name, job: res.job_id }))
+      onStarted(t('hosts.newVMStarted', { name, job: res.job_id }), res.job_id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

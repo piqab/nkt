@@ -137,7 +137,11 @@ export default function Users({ me }: { me: Me }) {
       </div>
 
       <ErrorNote error={error} />
-      {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
+      {notice && (
+        <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
+          {notice.text}
+        </Banner>
+      )}
 
       <Card title={t('users.existingAccounts')}>
         {loading && !data ? (

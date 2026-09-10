@@ -134,9 +134,17 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	return h, nil
 }
 
-// SetHostParent привязывает хост к машине, на которой он работает.
+// SetHostParent привязывает хост к машине, на которой он работает, и
+// сразу переносит его в группу этой машины.
+//
+// Группа записывается, а не вычисляется на выдаче: иначе она зависела бы
+// от того, каким путём список читают, а разные части интерфейса
+// показывали бы машину то в одной группе, то в другой.
 func (d *DB) SetHostParent(ctx context.Context, id, parentID int64) error {
-	_, err := d.ExecContext(ctx, `UPDATE hosts SET parent_id = ? WHERE id = ?`, parentID, id)
+	_, err := d.ExecContext(ctx, `
+		UPDATE hosts SET parent_id = ?,
+		                 group_name = COALESCE((SELECT group_name FROM hosts WHERE id = ?), '')
+		WHERE id = ?`, parentID, parentID, id)
 	return err
 }
 
@@ -228,8 +236,22 @@ func (d *DB) SetHostSecret(ctx context.Context, id int64, authKind string, secre
 // заставлять его пересылать адрес, порт и пользователя было бы способом
 // однажды перезаписать их устаревшими значениями из открытой формы.
 func (d *DB) SetHostGroup(ctx context.Context, id int64, group string) error {
-	_, err := d.ExecContext(ctx, `UPDATE hosts SET group_name = ? WHERE id = ?`, group, id)
-	return err
+	tx, err := d.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if _, err := tx.ExecContext(ctx, `UPDATE hosts SET group_name = ? WHERE id = ?`, group, id); err != nil {
+		return err
+	}
+	// Машины переезжают вместе со своим хостом — в этом и смысл
+	// привязки. Одной транзакцией, чтобы список не успел показать хост в
+	// новой группе, а его машины в старой.
+	if _, err := tx.ExecContext(ctx, `UPDATE hosts SET group_name = ? WHERE parent_id = ?`, group, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // SetHostSudoStatus records what the last install/update actually observed

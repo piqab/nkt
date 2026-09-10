@@ -191,6 +191,9 @@ func (s *Server) handleDetectAddress(w http.ResponseWriter, r *http.Request) {
 
 	var res struct {
 		Address string `json:"address"`
+		State   string `json:"state"`
+		Reason  string `json:"reason"`
+		Detail  string `json:"detail"`
 	}
 	path := "/api/vm/address?name=" + url.QueryEscape(host.Name)
 	if _, err := s.hub.HostAPI(r.Context(), host.ParentID, "GET", path, nil, &res); err != nil {
@@ -198,7 +201,13 @@ func (s *Server) handleDetectAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if res.Address == "" {
-		writeJSON(w, http.StatusOK, map[string]any{"address": "", "found": false})
+		// Причина уходит кодом: её переводит интерфейс, а сырой ответ
+		// virsh идёт рядом — пересказывать его своими словами хуже, чем
+		// показать.
+		writeJSON(w, http.StatusOK, map[string]any{
+			"address": "", "found": false,
+			"state": res.State, "reason": res.Reason, "detail": res.Detail,
+		})
 		return
 	}
 	if err := s.hub.UpdateHost(r.Context(), host.ID, host.Name, res.Address, host.SSHPort,

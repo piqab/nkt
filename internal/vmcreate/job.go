@@ -204,19 +204,67 @@ func (r *CreateRunner) waitAddress(ctx context.Context, jc *jobs.Context, name s
 // спрашиваем все три, а не одну.
 var addressSources = []string{"lease", "agent", "arp"}
 
+// AddressReport — что удалось узнать об адресе машины.
+//
+// Пустой адрес сам по себе ничего не объясняет, а причины разные:
+// машина выключена, домена нет вовсе, libvirt не отвечает или аренды
+// просто ещё нет. Оператору нужна именно причина — иначе кнопка
+// «определить адрес» превращается в тупик.
+type AddressReport struct {
+	Address string `json:"address"`
+	// State — состояние домена по virsh domstate: running, shut off и
+	// прочее. Пусто, если состояние узнать не удалось.
+	State string `json:"state,omitempty"`
+	// Reason — код причины для перевода в интерфейсе.
+	Reason string `json:"reason,omitempty"`
+	// Detail — сырой ответ virsh, когда он что-то сказал: пересказывать
+	// его своими словами хуже, чем показать.
+	Detail string `json:"detail,omitempty"`
+}
+
+// Причины, по которым адрес неизвестен.
+const (
+	ReasonNoDomain   = "no-domain"   // машины с таким именем нет
+	ReasonNotRunning = "not-running" // машина не запущена
+	ReasonNoLease    = "no-lease"    // запущена, но адреса ещё нет
+	ReasonNoVirsh    = "no-virsh"    // virsh недоступен
+)
+
 // Address спрашивает у libvirt адрес машины. Пустая строка — «пока не
 // знаю», а не «нет».
 func (r *CreateRunner) Address(ctx context.Context, name string) string {
+	return r.AddressReport(ctx, name).Address
+}
+
+// AddressReport спрашивает адрес и, если его нет, объясняет почему.
+func (r *CreateRunner) AddressReport(ctx context.Context, name string) AddressReport {
+	state, err := r.run(ctx, "virsh", "domstate", name)
+	switch {
+	case err != nil:
+		return AddressReport{Reason: ReasonNoVirsh, Detail: err.Error()}
+	case state.ExitCode != 0:
+		out := firstLine(state.Output())
+		if strings.Contains(strings.ToLower(out), "not found") ||
+			strings.Contains(strings.ToLower(out), "no domain") {
+			return AddressReport{Reason: ReasonNoDomain, Detail: out}
+		}
+		return AddressReport{Reason: ReasonNoVirsh, Detail: out}
+	}
+	domState := strings.TrimSpace(firstLine(state.Stdout))
+	if domState != "" && domState != "running" {
+		return AddressReport{State: domState, Reason: ReasonNotRunning}
+	}
+
 	for _, source := range addressSources {
 		res, err := r.run(ctx, "virsh", "domifaddr", name, "--source", source)
 		if err != nil || res.ExitCode != 0 {
 			continue
 		}
 		if addr := parseDomifaddr(res.Output()); addr != "" {
-			return addr
+			return AddressReport{Address: addr, State: domState}
 		}
 	}
-	return ""
+	return AddressReport{State: domState, Reason: ReasonNoLease}
 }
 
 // parseDomifaddr достаёт адрес из вывода virsh domifaddr.

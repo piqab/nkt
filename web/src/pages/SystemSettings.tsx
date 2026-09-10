@@ -165,7 +165,11 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
 
       <ErrorNote error={settings.error} />
       {error && <Banner kind="error">{error}</Banner>}
-      {notice && <Banner kind="info">{notice}</Banner>}
+      {notice && (
+        <Banner kind="info" onClose={() => setNotice(null)}>
+          {notice}
+        </Banner>
+      )}
       {settings.data?.notes?.map((n) => (
         <Banner key={n} kind="warn">
           {n}
