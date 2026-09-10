@@ -1175,6 +1175,7 @@ export default function Hosts({
       {provisionOn && (
         <ProvisionVMModal
           host={provisionOn}
+          hubVersion={hubVersion}
           onClose={() => setProvisionOn(null)}
           onStarted={(text, jobID) => {
             setProvisionOn(null)
@@ -2221,17 +2222,46 @@ function ApplyProfileModal({
  */
 function ProvisionVMModal({
   host,
+  hubVersion,
   onClose,
   onStarted,
 }: {
   host: HubHost
+  // Версия хаба, с которой сравнивается версия на хосте. Может быть не
+  // известна (старый ответ /auth/me) — тогда сравнивать нечего и
+  // предупреждать не о чем.
+  hubVersion?: string
   onClose: () => void
   onStarted: (text: string, jobID: number) => void
 }) {
   const { t } = useTranslation()
-  const images = useApi<{ catalog: { id: string; name: string }[]; local: { id: string; downloaded: boolean }[] }>(
-    `/hosts/${host.id}/vm/images`,
-  )
+  // Тот же ответ, что и на странице образов самого хоста: заодно
+  // говорит, чем на нём машины вообще создавать. Проверять это здесь
+  // важнее, чем там: отсюда оператор не видит того хоста и узнал бы о
+  // нехватке только из провалившегося задания.
+  const images = useApi<{
+    catalog: { id: string; name: string }[]
+    local: { id: string; downloaded: boolean }[]
+    missing: { command: string; package: string; why: string }[] | null
+  }>(`/hosts/${host.id}/vm/images`, 5_000)
+  const [installingTools, setInstallingTools] = useState(false)
+
+  const missingTools = images.data?.missing ?? []
+
+  async function installTools() {
+    setInstallingTools(true)
+    setError(null)
+    try {
+      await api(`/hosts/${host.id}/vm/tools/install`, { method: 'POST' })
+      // Задание идёт своим ходом; список инструментов перечитается сам
+      // — опрос здесь для того и частый.
+      images.reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setInstallingTools(false)
+    }
+  }
   const [name, setName] = useState('')
   const [imageID, setImageID] = useState('')
   const [user, setUser] = useState('deploy')
@@ -2283,6 +2313,34 @@ function ProvisionVMModal({
       <p className="small muted">{t('hosts.newVMBody')}</p>
       <ErrorNote error={error} />
       <ErrorNote error={images.error} />
+
+      {/* Создание опирается на API самого хоста: на старой версии этих
+          запросов там просто нет. Задание обновит его само, но сказать
+          об этом заранее честнее, чем удивить лишними пятью минутами. */}
+      {hubVersion !== undefined && isOutdated(host, hubVersion) && (
+        <Banner kind="info">{t('hosts.newVMWillUpdate', { host: host.name })}</Banner>
+      )}
+
+      {missingTools.length > 0 && (
+        <Banner kind="warn">
+          <div className="col" style={{ gap: '0.4rem' }}>
+            <span>{t('hosts.newVMToolsMissing', { host: host.name })}</span>
+            <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+              {missingTools.map((tool) => (
+                <li key={tool.command} className="small">
+                  <span className="mono">{tool.command}</span> ({t('vmimages.toolPackage')}{' '}
+                  <span className="mono">{tool.package}</span>)
+                </li>
+              ))}
+            </ul>
+            <span>
+              <Button size="small" loading={installingTools} onClick={() => void installTools()}>
+                {t('vmimages.installTools')}
+              </Button>
+            </span>
+          </div>
+        </Banner>
+      )}
 
       <label style={{ marginBottom: '0.6rem' }}>
         {t('hosts.newVMImage')}
@@ -2362,7 +2420,12 @@ function ProvisionVMModal({
       </div>
 
       <div className="row" style={{ gap: '0.5rem' }}>
-        <Button type="primary" loading={busy} disabled={!name.trim() || !imageID} onClick={() => void start()}>
+        <Button
+          type="primary"
+          loading={busy}
+          disabled={!name.trim() || !imageID || missingTools.length > 0}
+          onClick={() => void start()}
+        >
           {t('hosts.newVMStart')}
         </Button>
         <Button onClick={onClose}>{t('common.cancel')}</Button>

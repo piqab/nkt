@@ -62,6 +62,11 @@ type VMProvisionParams struct {
 }
 
 type vmProvisionResume struct {
+	// HostUpdated — версия nkt на хосте уже приведена в порядок. Шаг
+	// нулевой, но пропускать его при продолжении надо так же, как
+	// остальные: повторная установка перезапишет работающий nkt без
+	// нужды.
+	HostUpdated bool `json:"host_updated"`
 	// Installed и ProfileDone — доведённые до конца поздние шаги. Как и
 	// раньше, повторять их вслепую нельзя: установка перезапишет уже
 	// работающий nkt, а применение профиля во второй раз хоть и
@@ -117,6 +122,24 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	if p.ProfileID != 0 {
 		steps = 6
+	}
+
+	// 0. Версия nkt на самом хосте.
+	//
+	// Создание машины опирается на его API: каталог образов, создание,
+	// адрес. На хосте со старой версией этих запросов просто нет, и
+	// задание провалилось бы посреди работы с невнятным «код 404».
+	// Поэтому сначала — обновление, и только потом всё остальное.
+	if !done.HostUpdated {
+		if err := r.ensureHostVersion(ctx, jc, host); err != nil {
+			return err
+		}
+		done.HostUpdated = true
+		jc.SaveResume(done)
+		// Хост мог перезапуститься при обновлении — перечитываем запись.
+		if fresh, err := r.m.db.HostByID(ctx, host.ID); err == nil {
+			host = fresh
+		}
 	}
 
 	// 1. Запись нового хоста и ключ для него.
@@ -228,6 +251,39 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	return nil
 }
 
+// ensureHostVersion сверяет версию nkt на хосте с версией хаба и
+// обновляет её, если хост отстал.
+//
+// Сравнение — та же функция, что решает «устарел ли хост» в списке:
+// два разных ответа на один вопрос в одной программе хуже, чем один
+// неточный. Хост новее хаба не трогается: понижать версию, потому что
+// хаб старее, — не то, чего от кнопки «создать машину» ждут.
+func (r *VMProvisionRunner) ensureHostVersion(ctx context.Context, jc *jobs.Context, host store.Host) error {
+	hubVersion := r.m.Version()
+	current := host.NktVersion
+
+	var health struct {
+		Version string `json:"version"`
+	}
+	if _, err := r.m.HostAPI(ctx, host.ID, "GET", "/api/health", nil, &health); err == nil && health.Version != "" {
+		// То, что действительно работает на хосте, вернее того, что
+		// записано при последней установке.
+		current = health.Version
+	}
+
+	if current != "" && !isNewerVersion(hubVersion, current) {
+		jc.Logf("Версия nkt на %s: %s — обновление не нужно.", host.Name, current)
+		return nil
+	}
+	jc.Logf("На %s стоит nkt %s, у хаба %s — обновляю перед созданием машины.",
+		host.Name, orUnknown(current), hubVersion)
+	if err := r.runInstall(ctx, jc, host.ID); err != nil {
+		return fmt.Errorf("обновление nkt на %s: %w", host.Name, err)
+	}
+	jc.Logf("nkt на %s обновлён.", host.Name)
+	return nil
+}
+
 // installNKT ставит nkt на новую машину и ждёт конца установки.
 //
 // Тем же путём, что и обычная кнопка «установить»: у установки свой
@@ -235,6 +291,12 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 // второй способ значило бы получить два разных поведения там, где нужно
 // одно.
 func (r *VMProvisionRunner) installNKT(ctx context.Context, jc *jobs.Context, hostID int64) error {
+	return r.runInstall(ctx, jc, hostID)
+}
+
+// runInstall запускает установку (или обновление) nkt на хосте и ждёт
+// её конца, пересказывая ход дела в свой журнал.
+func (r *VMProvisionRunner) runInstall(ctx context.Context, jc *jobs.Context, hostID int64) error {
 	jobID, err := r.m.StartInstall(ctx, hostID, false, nil)
 	if err != nil {
 		return fmt.Errorf("запуск установки nkt: %w", err)

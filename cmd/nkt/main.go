@@ -694,7 +694,7 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 	}))
 	m.Register(vmimage.KindDownload, vmimage.NewDownloadRunner(images))
 	m.Register(vmcreate.KindCreate, vmcreate.NewCreateRunner(images, collector, privilegedRunner(cfg)))
-	m.Register(vmcreate.KindTools, vmcreate.NewToolsRunner(collector, privilegedRunner(cfg)))
+	m.Register(vmcreate.KindTools, vmcreate.NewToolsRunner(vmcreate.Runner(privilegedRunner(cfg))))
 }
 
 // privilegedRunner отдаёт способ выполнять системные команды вне

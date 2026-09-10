@@ -27,6 +27,17 @@ type fakeEscape struct {
 func (f *fakeEscape) run(_ context.Context, argv ...string) (collect.CommandResult, error) {
 	f.calls = append(f.calls, strings.Join(argv, " "))
 	res := collect.CommandResult{Argv: argv}
+	// Проверка наличия программ идёт тем же путём, что и остальные
+	// команды: отвечаем на неё так же, как настоящая оболочка.
+	if len(argv) == 3 && argv[0] == "sh" && strings.HasPrefix(argv[2], "command -v ") {
+		cmd := strings.TrimPrefix(argv[2], "command -v ")
+		if f.missing[cmd] {
+			res.ExitCode = 1
+			return res, nil
+		}
+		res.Stdout = "/usr/bin/" + cmd + "\n"
+		return res, nil
+	}
 	switch {
 	case f.missing[argv[0]]:
 		res.ExitCode = 127
@@ -152,7 +163,9 @@ func TestCreateFallsBackToGenisoimage(t *testing.T) {
 }
 
 // Нет ни того, ни другого — честный отказ с понятной причиной, а не
-// машина, которая молча загрузится без настроек.
+// машина, которая молча загрузится без настроек. И отказ до всякой
+// работы: копирование диска занимает минуты и гигабайты, а узнавать
+// после него, что настройки собрать нечем, — впустую потраченное время.
 func TestCreateFailsWithoutSeedTool(t *testing.T) {
 	m, db := newManager(t)
 	esc := &fakeEscape{missing: map[string]bool{"cloud-localds": true, "genisoimage": true}}
@@ -164,6 +177,15 @@ func TestCreateFailsWithoutSeedTool(t *testing.T) {
 	job := waitJob(t, db, id, store2Failed)
 	if !strings.Contains(job.Error, "cloud-localds") {
 		t.Errorf("причина отказа = %q", job.Error)
+	}
+	// Названы и пакеты: одного имени команды мало, чтобы понять, что
+	// ставить.
+	if !strings.Contains(job.Error, "cloud-image-utils") {
+		t.Errorf("в отказе нет имени пакета: %q", job.Error)
+	}
+	joined := strings.Join(esc.calls, "\n")
+	if strings.Contains(joined, "qemu-img convert") {
+		t.Errorf("диск копировался, хотя собрать настройки всё равно нечем:\n%s", joined)
 	}
 }
 
@@ -198,7 +220,9 @@ func TestCreateResumesWithoutRedoing(t *testing.T) {
 	waitJob(t, db, id, store2Succeeded)
 
 	joined := strings.Join(esc.calls, "\n")
-	if strings.Contains(joined, "qemu-img") || strings.Contains(joined, "virsh define") {
+	// Именно работа, а не проверка наличия программ: «command -v
+	// qemu-img» тоже содержит это имя, но ничего не делает.
+	if strings.Contains(joined, "qemu-img convert") || strings.Contains(joined, "virsh define") {
 		t.Errorf("продолжение переделало уже сделанное:\n%s", joined)
 	}
 	if !strings.Contains(joined, "virsh start web-01") {

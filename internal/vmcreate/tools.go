@@ -12,18 +12,25 @@ import (
 // KindTools — вид задания «доставить недостающее для создания машин».
 const KindTools = "vm.tools.install"
 
-// CheckTools спрашивает у хоста, что из нужного уже стоит.
-func CheckTools(ctx context.Context, c collect.Collector) []Tool {
+// Runner выполняет команду там же, где потом будут выполняться qemu-img
+// и virsh, — вне песочницы юнита.
+type Runner func(ctx context.Context, argv ...string) (collect.CommandResult, error)
+
+// CheckTools спрашивает, что из нужного уже стоит.
+//
+// Спрашивает тем же способом, каким команды потом и выполняются: путь
+// внутри песочницы юнита и снаружи может отличаться, и проверять в одном
+// месте, а запускать в другом — верный способ получить «есть» там, где
+// на деле нет.
+func CheckTools(ctx context.Context, run Runner) []Tool {
 	tools := Tools()
+	if run == nil {
+		return tools
+	}
 	for i, t := range tools {
-		res, err := c.Run(ctx, "command", "-v", t.Command)
-		if err == nil && res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "" {
-			tools[i].Present = true
-			continue
-		}
-		// command -v встроен в оболочку, и отдельного исполняемого файла
-		// у него может не быть — тогда спрашиваем иначе.
-		res, err = c.Run(ctx, "sh", "-c", "command -v "+t.Command)
+		// command -v встроен в оболочку — отдельного исполняемого файла
+		// у него может не быть, поэтому спрашиваем через sh.
+		res, err := run(ctx, "sh", "-c", "command -v "+t.Command)
 		tools[i].Present = err == nil && res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != ""
 	}
 	return tools
@@ -31,14 +38,12 @@ func CheckTools(ctx context.Context, c collect.Collector) []Tool {
 
 // ToolsRunner доставляет недостающие пакеты.
 type ToolsRunner struct {
-	c      collect.Collector
-	escape func(ctx context.Context, argv ...string) (collect.CommandResult, error)
+	escape Runner
 }
 
 // NewToolsRunner строит исполнителя.
-func NewToolsRunner(c collect.Collector,
-	escape func(ctx context.Context, argv ...string) (collect.CommandResult, error)) *ToolsRunner {
-	return &ToolsRunner{c: c, escape: escape}
+func NewToolsRunner(escape Runner) *ToolsRunner {
+	return &ToolsRunner{escape: escape}
 }
 
 // Resumable — да: apt на середине не продолжить, но повторная установка
@@ -50,7 +55,7 @@ func (r *ToolsRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if r.escape == nil {
 		return fmt.Errorf("установка пакетов недоступна в этом режиме")
 	}
-	missing := MissingTools(CheckTools(ctx, r.c))
+	missing := MissingTools(CheckTools(ctx, r.escape))
 	if len(missing) == 0 {
 		jc.Logf("Всё нужное уже установлено.")
 		return nil
@@ -91,7 +96,7 @@ func (r *ToolsRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 	}
 
-	still := MissingTools(CheckTools(ctx, r.c))
+	still := MissingTools(CheckTools(ctx, r.escape))
 	if len(still) > 0 {
 		names := make([]string, 0, len(still))
 		for _, t := range still {
