@@ -20,6 +20,7 @@ import (
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/inventory"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/monitor"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
@@ -48,6 +49,10 @@ type Server struct {
 	libvirt    *control.LibvirtManager
 	logs       *control.LogManager
 	images     *control.ImageManager
+	// jobs — фоновые задания (профили, образы, машины). nil там, где их
+	// не подключали: обработчики тогда отвечают, что задания недоступны,
+	// а не падают.
+	jobs *jobs.Manager
 	ui         fs.FS
 	log        *slog.Logger
 	version    string
@@ -92,6 +97,7 @@ type Deps struct {
 	Libvirt    *control.LibvirtManager
 	Logs       *control.LogManager
 	Images     *control.ImageManager
+	Jobs       *jobs.Manager
 	UI         fs.FS
 	Log        *slog.Logger
 	// Version is this binary's own version, reported by /api/health so
@@ -106,7 +112,7 @@ func New(d Deps) *Server {
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, osusers: d.OSUsers, disks: d.Disks, hardware: d.Hardware, sysconfig: d.SysConfig,
 		netmanager: d.NetManager, sandboxpkg: d.SandboxPkg, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
-		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images,
+		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images, jobs: d.Jobs,
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
 	}
@@ -215,6 +221,11 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/vulnerabilities/manifest", s.handleVulnManifest)
 			r.Get("/certificates", s.handleCertificates)
 
+			r.Get("/jobs", s.handleJobList)
+			r.Get("/jobs/{id}", s.handleJobGet)
+			r.Get("/jobs/{id}/log", s.handleJobLog)
+			r.Get("/jobs/{id}/ws", s.handleJobWS)
+
 			r.Get("/configs", s.handleConfigList)
 			r.Get("/configs/file", s.handleConfigRead)
 			r.Get("/configs/browse", s.handleConfigBrowse)
@@ -264,6 +275,7 @@ func (s *Server) Handler() http.Handler {
 				r.Delete("/vms/{name}", s.handleVMDelete)
 
 				r.Put("/configs/file", s.handleConfigWrite)
+				r.Post("/jobs/{id}/cancel", s.handleJobCancel)
 				r.Post("/configs/mkdir", s.handleConfigMkdir)
 				r.Post("/configs/allow-write", s.handleConfigAllowWrite)
 				r.Post("/configs/blocks", s.handleConfigBlockWrite)

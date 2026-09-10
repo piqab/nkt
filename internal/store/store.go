@@ -124,6 +124,47 @@ CREATE TABLE IF NOT EXISTS kv (
     value TEXT NOT NULL
 );
 
+-- Фоновые задания: применение профиля, скачивание образа, создание ВМ.
+-- Живут в базе, а не только в памяти процесса: браузер закрывают,
+-- сеть рвётся, службу перезапускают — а оператор должен через час
+-- увидеть, чем всё кончилось, и продолжить с того же места.
+CREATE TABLE IF NOT EXISTS jobs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind        TEXT NOT NULL,
+    title       TEXT NOT NULL DEFAULT '',
+    -- queue — ключ очереди. Одновременно выполняется одно задание на
+    -- ключ: два apt-get или две правки одного конфига разом кончаются
+    -- беспорядком, который потом никто не разберёт.
+    queue       TEXT NOT NULL DEFAULT '',
+    status      TEXT NOT NULL CHECK (status IN
+                    ('queued','running','succeeded','failed','canceled','interrupted')),
+    params      TEXT NOT NULL DEFAULT '',
+    -- resume — состояние для продолжения после перезапуска службы: что
+    -- уже сделано и с чего начинать. Пусто для заданий, которые
+    -- продолжать нельзя.
+    resume      TEXT NOT NULL DEFAULT '',
+    step        INTEGER NOT NULL DEFAULT 0,
+    steps       INTEGER NOT NULL DEFAULT 0,
+    step_name   TEXT NOT NULL DEFAULT '',
+    error       TEXT NOT NULL DEFAULT '',
+    author      TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    started_at  TEXT NOT NULL DEFAULT '',
+    finished_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+
+-- Журнал задания строками: так его можно дописывать по ходу и отдавать
+-- с любого места, не держа целиком в памяти.
+CREATE TABLE IF NOT EXISTS job_log (
+    job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+    seq    INTEGER NOT NULL,
+    ts     TEXT NOT NULL,
+    text   TEXT NOT NULL,
+    PRIMARY KEY (job_id, seq)
+);
+
 -- Remote hosts a hub instance manages over SSH. Only present/used in
 -- NKT_MODE=hub; a plain single-host nkt never touches this table.
 CREATE TABLE IF NOT EXISTS hosts (

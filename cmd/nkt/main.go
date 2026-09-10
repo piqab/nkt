@@ -25,6 +25,7 @@ import (
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/hub"
 	"github.com/piqab/nkt/internal/inventory"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/monitor"
 	"github.com/piqab/nkt/internal/secretbox"
@@ -226,6 +227,7 @@ type runtime struct {
 	libvirt    *control.LibvirtManager
 	logs       *control.LogManager
 	images     *control.ImageManager
+	jobs       *jobs.Manager
 }
 
 func newRuntime() (*runtime, error) {
@@ -244,6 +246,10 @@ func newRuntime() (*runtime, error) {
 	}
 	scanner := inventory.New(cfg, collector, db)
 	services := control.NewServiceManager(cfg, collector, db)
+	// Логгер здесь ещё не собран (его строит команда), а менеджеру
+	// заданий он нужен только для собственных сбоев записи — до
+	// подключения исполнителей в нём ничего не происходит.
+	jobManager := jobs.New(db, slog.Default())
 
 	return &runtime{
 		cfg:       cfg,
@@ -268,6 +274,7 @@ func newRuntime() (*runtime, error) {
 		libvirt:    control.NewLibvirtManager(cfg, collector, db, scanner),
 		logs:       control.NewLogManager(collector, scanner),
 		images:     control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
+		jobs:       jobManager,
 	}, nil
 }
 
@@ -394,9 +401,18 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
 		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
 		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, UI: ui, Log: log,
-		Version: version,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs,
+		UI: ui, Log: log, Version: version,
 	})
+
+	// Задания, оставшиеся идущими от прошлого запуска, разбираются до
+	// приёма запросов: продолжаемые встают в очередь заново, остальные
+	// честно помечаются прерванными. Иначе список показывал бы вечно
+	// «идёт» то, чья горутина умерла вместе с прошлым процессом.
+	if err := r.jobs.Recover(ctx); err != nil {
+		log.Error("не удалось разобрать незавершённые задания", "err", err)
+	}
+	defer r.jobs.Close()
 
 	tlsCert, tlsKey, err := ensureTLS(r.cfg, log)
 	if err != nil {
@@ -552,6 +568,7 @@ type hubRuntime struct {
 	libvirt    *control.LibvirtManager
 	logs       *control.LogManager
 	images     *control.ImageManager
+	jobs       *jobs.Manager
 }
 
 func newHubRuntime() (*hubRuntime, error) {
@@ -582,7 +599,7 @@ func newHubRuntime() (*hubRuntime, error) {
 	services := control.NewServiceManager(cfg, collector, db)
 
 	return &hubRuntime{
-		cfg: cfg, db: db,
+		cfg: cfg, db: db, jobs: jobs.New(db, slog.Default()),
 		collector: collector,
 		scanner:   scanner,
 		services:  services,
@@ -693,7 +710,8 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner,
 		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
 		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Log: log, Version: version,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs,
+		Log: log, Version: version,
 	})
 
 	// Keeps the "localhost" entry's snapshot/findings/history/availability
@@ -713,6 +731,13 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Hub: manager,
 		Local: localAPI.Handler(), LocalScanner: r.scanner, UI: ui, Log: log,
 	})
+
+	// То же, что в runServer: незавершённые задания разбираются до
+	// приёма запросов.
+	if err := r.jobs.Recover(ctx); err != nil {
+		log.Error("не удалось разобрать незавершённые задания", "err", err)
+	}
+	defer r.jobs.Close()
 
 	tlsCert, tlsKey, err := ensureTLS(r.cfg, log)
 	if err != nil {

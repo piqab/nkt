@@ -40,7 +40,8 @@
     "osUsers": "Host accounts",
     "disks": "Disks",
     "hardware": "Hardware",
-    "system": "System settings"
+    "system": "System settings",
+    "jobs": "Jobs"
   },
   "about": {
     "title": "About",
@@ -1433,5 +1434,36 @@
     "host": "Host",
     "network": "Network",
     "access": "Access"
+  },
+  "jobs": {
+    "title": "Jobs",
+    "hint": "Long-running work happens in the background and does not depend on the browser: close the tab, lose the network — the job keeps going and its log is kept. Work interrupted by a service restart resumes from where it stopped wherever that is safe.",
+    "listTitle": "List",
+    "listSubtitle": "running now: {{count}}",
+    "loading": "jobs",
+    "empty": "No jobs yet.",
+    "colTitle": "Job",
+    "colStatus": "Status",
+    "colStep": "Step",
+    "colStarted": "Started",
+    "colDuration": "Duration",
+    "openLog": "log",
+    "cancel": "cancel",
+    "confirmCancel": "Cancel the job \"{{title}}\"? What is already done is not rolled back.",
+    "stepOf": "step {{step}} of {{steps}}",
+    "polling": "no live stream, polling",
+    "noOutput": "Nothing printed yet.",
+    "interruptedHint": "The job was interrupted by a service restart. What was already done is left as is — run it again when you are ready.",
+    "seconds": "{{count}}s",
+    "minutes": "{{count}} min",
+    "hours": "{{count}} h",
+    "status": {
+      "queued": "queued",
+      "running": "running",
+      "succeeded": "done",
+      "failed": "failed",
+      "canceled": "canceled",
+      "interrupted": "interrupted"
+    }
   }
 }

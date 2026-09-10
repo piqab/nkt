@@ -184,6 +184,10 @@ h3 { font-size: 0.95rem; }
   color: #fff;
 }
 
+/* Идущие задания — не проблема, а работа: тот же значок, но спокойным
+   цветом, иначе счётчик читался бы как авария. */
+.nav-count-busy { background: var(--series-1); }
+
 .sidebar-foot { margin-top: auto; font-size: 0.75rem; color: var(--text-muted); padding: 0 0.5rem; }
 
 .main {

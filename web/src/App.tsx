@@ -16,6 +16,7 @@ import Vulnerabilities from './pages/Vulnerabilities'
 import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
 import LogsPage from './pages/Logs'
+import JobsPage from './pages/Jobs'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
 import Packages from './pages/Packages'
@@ -95,7 +96,7 @@ function useTheme(): [Theme, (t: Theme) => void, ThemeConfig] {
 const NAV_GROUPS: {
   key: string
   labelKey: string
-  items: { to: string; labelKey: string; end?: boolean; adminOnly?: boolean; badge?: 'findings' | 'certs' }[]
+  items: { to: string; labelKey: string; end?: boolean; adminOnly?: boolean; badge?: 'findings' | 'certs' | 'jobs' }[]
 }[] = [
   {
     key: 'state',
@@ -114,6 +115,9 @@ const NAV_GROUPS: {
       { to: '/availability', labelKey: 'nav.availability' },
       { to: '/usage', labelKey: 'nav.usage' },
       { to: '/logs', labelKey: 'nav.logs' },
+      // Задания рядом с журналами: и то, и другое — «что происходило,
+      // пока я не смотрел».
+      { to: '/jobs', labelKey: 'nav.jobs', badge: 'jobs' },
       { to: '/audit', labelKey: 'nav.audit' },
     ],
   },
@@ -362,6 +366,12 @@ function Shell({
   // and it deserves to be visible without opening the findings list.
   const certAlerts =
     (overview.data?.certificates?.expired ?? 0) + (overview.data?.certificates?.expiring ?? 0)
+  // Счётчик идущих заданий: вернувшись в браузер, оператор должен сразу
+  // видеть, что работа ещё идёт, не заходя в раздел. Опрос частый —
+  // задание может закончиться в любой момент, а число в меню, которое
+  // врёт минуту, хуже отсутствующего.
+  const jobs = useApi<{ active: number }>(showingHostPicker ? null : '/jobs?limit=1', 10_000)
+  const activeJobs = jobs.data?.active ?? 0
 
   async function logout() {
     await api('/auth/logout', { method: 'POST' }).catch(() => undefined)
@@ -472,6 +482,7 @@ function Shell({
                       <span className="nav-count">{criticalCount}</span>
                     )}
                     {item.badge === 'certs' && certAlerts > 0 && <span className="nav-count">{certAlerts}</span>}
+                    {item.badge === 'jobs' && activeJobs > 0 && <span className="nav-count nav-count-busy">{activeJobs}</span>}
                   </span>
                 ),
               })),
@@ -566,6 +577,7 @@ function Shell({
               <Route path="/usage" element={<Usage me={me} />} />
               <Route path="/configs" element={<Configs me={me} />} />
               <Route path="/logs" element={<LogsPage />} />
+              <Route path="/jobs" element={<JobsPage me={me} />} />
               <Route path="/services" element={<Services me={me} />} />
               <Route path="/containers" element={<Containers me={me} />} />
               <Route path="/packages" element={<Packages me={me} />} />
