@@ -86,7 +86,7 @@ export default function Jobs({ me }: { me: Me }) {
           <Button type="link" size="small" onClick={() => setOpenJob(j)}>
             {t('jobs.openLog')}
           </Button>
-          {!isDone(j) && me.is_admin && me.allow_mutations && (
+          {!isJobDone(j) && me.is_admin && me.allow_mutations && (
             <Button
               type="link"
               size="small"
@@ -138,7 +138,7 @@ export default function Jobs({ me }: { me: Me }) {
   )
 }
 
-function isDone(j: Job): boolean {
+export function isJobDone(j: Job): boolean {
   return ['succeeded', 'failed', 'canceled', 'interrupted'].includes(j.status)
 }
 
@@ -153,14 +153,15 @@ function duration(j: Job, t: (k: string, o?: Record<string, unknown>) => string)
 }
 
 /**
- * Журнал одного задания.
+ * Журнал одного задания. Экспортируется: то же окно открывают разделы,
+ * которые задание запускают (профили, образы машин) — им незачем свой.
  *
  * Строки берутся из базы («после какой мы уже видели»), а сокет лишь
  * досылает новые. Поэтому вкладку можно закрыть и вернуться через час:
  * журнал соберётся целиком, а не с момента подключения. Если сокет не
  * открылся, включается опрос — раздел работает и без него.
  */
-function JobLogModal({ job, onClose }: { job: Job; onClose: () => void }) {
+export function JobLogModal({ job, onClose }: { job: Job; onClose: () => void }) {
   const { t } = useTranslation()
   const [lines, setLines] = useState<JobLogLine[]>([])
   const [current, setCurrent] = useState<Job>(job)
@@ -195,7 +196,7 @@ function JobLogModal({ job, onClose }: { job: Job; onClose: () => void }) {
   // он может пропустить событие под нагрузкой, поэтому по каждому сигналу
   // дочитывается хвост из базы — единственный источник правды.
   useEffect(() => {
-    if (isDone(job)) return
+    if (isJobDone(job)) return
     let closed = false
     let ws: WebSocket | null = null
     try {
@@ -219,7 +220,7 @@ function JobLogModal({ job, onClose }: { job: Job; onClose: () => void }) {
 
   // Запасной опрос: работает, пока задание идёт и живого потока нет.
   useEffect(() => {
-    if (live || isDone(current)) return
+    if (live || isJobDone(current)) return
     const timer = setInterval(() => void fetchTail(), LOG_POLL_MS)
     return () => clearInterval(timer)
   }, [live, current, fetchTail])
@@ -239,7 +240,7 @@ function JobLogModal({ job, onClose }: { job: Job; onClose: () => void }) {
             {current.step_name ? ` · ${current.step_name}` : ''}
           </span>
         )}
-        {!isDone(current) && !live && <span className="small muted">{t('jobs.polling')}</span>}
+        {!isJobDone(current) && !live && <span className="small muted">{t('jobs.polling')}</span>}
       </div>
 
       {current.status === 'interrupted' && <Banner kind="warn">{t('jobs.interruptedHint')}</Banner>}

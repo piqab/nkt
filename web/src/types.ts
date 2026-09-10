@@ -835,3 +835,42 @@ export interface JobLogLine {
   ts: string
   text: string
 }
+
+/** Профиль — описание желаемого состояния хоста (см. internal/profile). */
+export interface Profile {
+  id: number
+  name: string
+  content?: string
+  note?: string
+  author?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface ProfileVersion {
+  id: number
+  profile_id: number
+  ts: string
+  author?: string
+  note?: string
+  content?: string
+}
+
+/** Один пункт плана: чем действительность отличается от описания. */
+export interface PlanChange {
+  action: string
+  target: string
+  current: string
+  desired: string
+  detail?: string
+  risk?: string
+}
+
+export interface ProfilePlan {
+  profile: string
+  changes: PlanChange[]
+  /** То, о чём судить не удалось. Пустой план с непустым unknown значит
+   * «не знаю», а не «всё в порядке». */
+  unknown?: string[]
+  ts: string
+}

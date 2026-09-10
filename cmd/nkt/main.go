@@ -26,6 +26,7 @@ import (
 	"github.com/piqab/nkt/internal/hub"
 	"github.com/piqab/nkt/internal/inventory"
 	"github.com/piqab/nkt/internal/jobs"
+	"github.com/piqab/nkt/internal/profile"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/monitor"
 	"github.com/piqab/nkt/internal/secretbox"
@@ -405,6 +406,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		UI: ui, Log: log, Version: version,
 	})
 
+	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers, r.sysconfig)
 	// Задания, оставшиеся идущими от прошлого запуска, разбираются до
 	// приёма запросов: продолжаемые встают в очередь заново, остальные
 	// честно помечаются прерванными. Иначе список показывал бы вечно
@@ -651,6 +653,20 @@ func enableUnrestrictedWrites(c collect.Collector) {
 	}
 }
 
+// registerJobRunners привязывает исполнителей фоновых заданий. Делается
+// здесь, а не в самих пакетах: только тут собраны разом и менеджеры, и
+// выход из песочницы, а зависеть друг от друга им незачем.
+func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.ServiceManager,
+	configs *control.ConfigManager, firewall *control.FirewallManager,
+	firewalld *control.FirewalldManager, osusers *control.OSUserManager,
+	sysconf *control.SysConfigManager) {
+
+	m.Register(profile.KindApply, profile.NewApplyRunner(func(user string) profile.Applier {
+		return profile.NewHostApplier(user, services, configs, firewall, firewalld,
+			osusers, sysconf, privilegedRunner(cfg))
+	}))
+}
+
 // privilegedRunner отдаёт способ выполнять системные команды вне
 // песочницы юнита — или nil там, где этого делать нельзя.
 func privilegedRunner(cfg *config.Config) control.PrivilegedRunner {
@@ -732,6 +748,9 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 		Local: localAPI.Handler(), LocalScanner: r.scanner, UI: ui, Log: log,
 	})
 
+	// Хаб ведёт задания собственной машины — той самой строки
+	// «localhost» в списке хостов.
+	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers, r.sysconfig)
 	// То же, что в runServer: незавершённые задания разбираются до
 	// приёма запросов.
 	if err := r.jobs.Recover(ctx); err != nil {
