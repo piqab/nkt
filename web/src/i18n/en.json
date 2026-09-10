@@ -583,7 +583,10 @@
     "applyProfileNone": "Create a profile first in the Profiles section on the hub machine — there is nothing to roll out yet.",
     "vmCount_one": "{{count}} machine",
     "vmCount_other": "{{count}} machines",
-    "newVMKeyOptional": "Optional: the hub always installs its own key and logs in with it. This one is only needed if you want to reach the machine directly, bypassing the hub."
+    "newVMKeyOptional": "Optional: the hub always installs its own key and logs in with it. This one is only needed if you want to reach the machine directly, bypassing the hub.",
+    "newVMInstall": "Install nkt on the new machine right after creation",
+    "newVMProfile": "Bring to profile:",
+    "newVMProfileNone": "do not apply"
   },
   "certs": {
     "colSites": "Sites",
