@@ -810,3 +810,28 @@ export interface Snapshot {
   digest: string
   scan_ms: number
 }
+
+/** Фоновое задание: применение профиля, скачивание образа, создание
+ * машины. Живёт в базе, поэтому переживает и закрытую вкладку, и
+ * перезапуск службы — см. internal/jobs. */
+export interface Job {
+  id: number
+  kind: string
+  title: string
+  queue: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'interrupted'
+  step: number
+  steps: number
+  step_name?: string
+  error?: string
+  author?: string
+  created_at: string
+  started_at?: string
+  finished_at?: string
+}
+
+export interface JobLogLine {
+  seq: number
+  ts: string
+  text: string
+}
