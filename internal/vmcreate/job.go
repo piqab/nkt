@@ -30,6 +30,10 @@ type CreateParams struct {
 // продолжение должно понимать, чего именно не хватает, если между
 // запусками что-то удалили руками.
 type createResume struct {
+	// ToolsReady — нужные программы на месте (или доставлены). Отдельный
+	// шаг: apt на середине не продолжить, а повторять его при
+	// продолжении незачем.
+	ToolsReady bool `json:"tools_ready"`
 	ImageReady bool `json:"image_ready"`
 	DiskReady  bool `json:"disk_ready"`
 	SeedReady  bool `json:"seed_ready"`
@@ -82,20 +86,19 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return fmt.Errorf("разбор состояния продолжения: %w", err)
 	}
 
-	// Нехватка программ выясняется до всякой работы, а не на третьем
-	// шаге: копирование диска занимает минуты и гигабайты, и узнавать
-	// после него, что настройки первого запуска собрать нечем, — впустую
-	// потраченное время оператора и место на диске.
-	if missing := MissingTools(CheckTools(ctx, r.run)); len(missing) > 0 {
-		names := make([]string, 0, len(missing))
-		pkgs := make([]string, 0, len(missing))
-		for _, t := range missing {
-			names = append(names, t.Command)
-			pkgs = append(pkgs, t.Package)
+	// Недостающие программы доставляются нулевым шагом, до всякой
+	// работы. Раньше узнать, что настройки первого запуска собрать
+	// нечем, можно было только на третьем шаге — уже скопировав диск,
+	// то есть потратив минуты и гигабайты впустую.
+	if !done.ToolsReady {
+		if missing := MissingTools(CheckTools(ctx, r.run)); len(missing) > 0 {
+			jc.Step(0, 5, "недостающие программы")
+			if err := InstallTools(ctx, r.run, jc.Logf); err != nil {
+				return fmt.Errorf("на хосте не хватает программ для создания машин: %w", err)
+			}
 		}
-		return fmt.Errorf("на хосте не хватает: %s. Поставьте пакеты (%s) — "+
-			"в разделе «Образы машин» для этого есть кнопка «Установить недостающее»",
-			strings.Join(names, ", "), strings.Join(pkgs, " "))
+		done.ToolsReady = true
+		jc.SaveResume(done)
 	}
 
 	diskPath := filepath.Join(imagesRoot, spec.Name+".qcow2")

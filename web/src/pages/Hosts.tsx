@@ -2333,9 +2333,11 @@ function ProvisionVMModal({
                 </li>
               ))}
             </ul>
+            {/* Создание поставит их само нулевым шагом; кнопка — чтобы
+                сделать это заранее и не ждать потом. */}
             <span>
               <Button size="small" loading={installingTools} onClick={() => void installTools()}>
-                {t('vmimages.installTools')}
+                {t('vmimages.installToolsNow')}
               </Button>
             </span>
           </div>
@@ -2420,12 +2422,7 @@ function ProvisionVMModal({
       </div>
 
       <div className="row" style={{ gap: '0.5rem' }}>
-        <Button
-          type="primary"
-          loading={busy}
-          disabled={!name.trim() || !imageID || missingTools.length > 0}
-          onClick={() => void start()}
-        >
+        <Button type="primary" loading={busy} disabled={!name.trim() || !imageID} onClick={() => void start()}>
           {t('hosts.newVMStart')}
         </Button>
         <Button onClick={onClose}>{t('common.cancel')}</Button>

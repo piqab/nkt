@@ -598,7 +598,7 @@
       "no-lease": "the machine runs but has no address yet: it is either still booting, or sits on a network with no DHCP lease and no guest agent. Wait a minute or set the address yourself via «edit»",
       "no-virsh": "the host could not answer: libvirt is unavailable or virsh is not installed"
     },
-    "newVMToolsMissing": "Host «{{host}}» is missing the tools needed to create machines — the job would refuse anyway, so creation is blocked until they are there:",
+    "newVMToolsMissing": "Host «{{host}}» is missing the tools needed to create machines — the job installs them itself as its first step. That takes a minute; you can install them up front:",
     "newVMWillUpdate": "Host «{{host}}» runs an nkt older than the hub. Creating a machine relies on its API, so the job will update it first — that takes a few minutes."
   },
   "certs": {
@@ -1609,7 +1609,7 @@
     "keyTitle": "Private key of the new machine",
     "keyOnce": "This key is shown once and stored nowhere. Copy it now — otherwise there will be no way into the machine except the virsh console.",
     "keySaved": "Saved it",
-    "toolsMissing": "This host is missing the tools needed to create machines — without them the creation form would only raise false hopes:",
+    "toolsMissing": "This host is missing the tools needed to create machines. Creation installs them itself as its first step, but you can do it up front:",
     "toolPackage": "package",
     "installTools": "Install what is missing",
     "toolWhy": {
@@ -1617,6 +1617,7 @@
       "virsh": "defines and starts the machine",
       "cloud-localds": "builds the first-boot settings",
       "genisoimage": "the same, when cloud-localds is absent"
-    }
+    },
+    "installToolsNow": "Install now"
   }
 }

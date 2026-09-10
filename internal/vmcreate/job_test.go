@@ -22,6 +22,9 @@ type fakeEscape struct {
 	// кодом, как это делает shell.
 	missing map[string]bool
 	fail    map[string]bool
+	// installs — что происходит с хостом после apt-get install. nil
+	// означает «пакеты не помогли»: так проверяется и этот случай.
+	installs func()
 }
 
 func (f *fakeEscape) run(_ context.Context, argv ...string) (collect.CommandResult, error) {
@@ -37,6 +40,9 @@ func (f *fakeEscape) run(_ context.Context, argv ...string) (collect.CommandResu
 		}
 		res.Stdout = "/usr/bin/" + cmd + "\n"
 		return res, nil
+	}
+	if len(argv) > 2 && argv[0] == "apt-get" && argv[1] == "install" && f.installs != nil {
+		f.installs()
 	}
 	switch {
 	case f.missing[argv[0]]:
@@ -162,11 +168,40 @@ func TestCreateFallsBackToGenisoimage(t *testing.T) {
 	}
 }
 
-// Нет ни того, ни другого — честный отказ с понятной причиной, а не
-// машина, которая молча загрузится без настроек. И отказ до всякой
-// работы: копирование диска занимает минуты и гигабайты, а узнавать
-// после него, что настройки собрать нечем, — впустую потраченное время.
-func TestCreateFailsWithoutSeedTool(t *testing.T) {
+// Недостающие программы ставятся сами, нулевым шагом: отправлять
+// оператора делать руками то, что nkt умеет, — лишняя работа.
+func TestCreateInstallsMissingTools(t *testing.T) {
+	m, db := newManager(t)
+	// «Нет» только до установки: apt-get install делает их доступными,
+	// как и на настоящем хосте.
+	esc := &fakeEscape{missing: map[string]bool{"cloud-localds": true, "genisoimage": true}}
+	esc.installs = func() {
+		delete(esc.missing, "cloud-localds")
+		delete(esc.missing, "genisoimage")
+	}
+	m.Register(KindCreate, testRunner(t, esc))
+
+	id, _ := m.Start(context.Background(), jobs.Spec{
+		Kind: KindCreate, Queue: "host", Params: CreateParams{Spec: createSpec()},
+	})
+	waitJob(t, db, id, store2Succeeded)
+
+	joined := strings.Join(esc.calls, "\n")
+	if !strings.Contains(joined, "apt-get install -y cloud-image-utils") {
+		t.Errorf("недостающее не поставлено:\n%s", joined)
+	}
+	// Из пары взаимозаменяемых ставится одна.
+	if strings.Contains(joined, "genisoimage") && strings.Contains(joined, "install -y cloud-image-utils genisoimage") {
+		t.Errorf("поставлены обе замены разом:\n%s", joined)
+	}
+	if !strings.Contains(joined, "virsh define") {
+		t.Errorf("после установки создание не продолжилось:\n%s", joined)
+	}
+}
+
+// Если и после установки нужного нет, задание честно отказывает — и до
+// того, как скопирует диск: минуты и гигабайты впустую.
+func TestCreateFailsWhenToolsStillMissing(t *testing.T) {
 	m, db := newManager(t)
 	esc := &fakeEscape{missing: map[string]bool{"cloud-localds": true, "genisoimage": true}}
 	m.Register(KindCreate, testRunner(t, esc))
@@ -177,11 +212,6 @@ func TestCreateFailsWithoutSeedTool(t *testing.T) {
 	job := waitJob(t, db, id, store2Failed)
 	if !strings.Contains(job.Error, "cloud-localds") {
 		t.Errorf("причина отказа = %q", job.Error)
-	}
-	// Названы и пакеты: одного имени команды мало, чтобы понять, что
-	// ставить.
-	if !strings.Contains(job.Error, "cloud-image-utils") {
-		t.Errorf("в отказе нет имени пакета: %q", job.Error)
 	}
 	joined := strings.Join(esc.calls, "\n")
 	if strings.Contains(joined, "qemu-img convert") {
