@@ -82,6 +82,22 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return fmt.Errorf("разбор состояния продолжения: %w", err)
 	}
 
+	// Нехватка программ выясняется до всякой работы, а не на третьем
+	// шаге: копирование диска занимает минуты и гигабайты, и узнавать
+	// после него, что настройки первого запуска собрать нечем, — впустую
+	// потраченное время оператора и место на диске.
+	if missing := MissingTools(CheckTools(ctx, r.run)); len(missing) > 0 {
+		names := make([]string, 0, len(missing))
+		pkgs := make([]string, 0, len(missing))
+		for _, t := range missing {
+			names = append(names, t.Command)
+			pkgs = append(pkgs, t.Package)
+		}
+		return fmt.Errorf("на хосте не хватает: %s. Поставьте пакеты (%s) — "+
+			"в разделе «Образы машин» для этого есть кнопка «Установить недостающее»",
+			strings.Join(names, ", "), strings.Join(pkgs, " "))
+	}
+
 	diskPath := filepath.Join(imagesRoot, spec.Name+".qcow2")
 	seedPath := filepath.Join(imagesRoot, spec.Name+"-seed.iso")
 

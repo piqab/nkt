@@ -597,7 +597,9 @@
       "not-running": "the machine is not running (state: {{state}}) — start it and try again",
       "no-lease": "the machine runs but has no address yet: it is either still booting, or sits on a network with no DHCP lease and no guest agent. Wait a minute or set the address yourself via «edit»",
       "no-virsh": "the host could not answer: libvirt is unavailable or virsh is not installed"
-    }
+    },
+    "newVMToolsMissing": "Host «{{host}}» is missing the tools needed to create machines — the job would refuse anyway, so creation is blocked until they are there:",
+    "newVMWillUpdate": "Host «{{host}}» runs an nkt older than the hub. Creating a machine relies on its API, so the job will update it first — that takes a few minutes."
   },
   "certs": {
     "colSites": "Sites",
