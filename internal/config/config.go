@@ -52,6 +52,12 @@ type Config struct {
 	SystemdUnitRoot string
 	NetplanRoot     string
 	SSHRoot         string
+	// SystemLogin разрешает второй способ входа — паролем системной
+	// учётной записи хоста (см. internal/auth/systemlogin.go). Включён по
+	// умолчанию в local-режиме: на своей машине заводить отдельный пароль
+	// для панели незачем. В режиме хаба не имеет смысла — там учётки свои,
+	// а системных пользователей управляемых хостов хаб не знает.
+	SystemLogin bool
 	SysctlRoot      string
 	CronRoot        string
 	ComposeFiles     []string
@@ -312,6 +318,7 @@ func Load() (*Config, error) {
 		SystemdUnitRoot:  envStr("NKT_SYSTEMD_UNIT_ROOT", "/etc/systemd/system"),
 		NetplanRoot:      envStr("NKT_NETPLAN_ROOT", "/etc/netplan"),
 		SSHRoot:          envStr("NKT_SSH_ROOT", "/etc/ssh"),
+		SystemLogin:      envBool("NKT_SYSTEM_LOGIN", mode == ModeLocal),
 		SysctlRoot:       envStr("NKT_SYSCTL_ROOT", "/etc/sysctl.d"),
 		CronRoot:         envStr("NKT_CRON_ROOT", "/etc/cron.d"),
 		ComposeFiles:     envList("NKT_COMPOSE_FILES", "/srv/docker/docker-compose.yml,/opt/stacks/docker-compose.yml"),

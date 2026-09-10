@@ -5,6 +5,7 @@ import { api, qs, useApi } from '../api'
 import type { Me, PackageUpdate } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 import CommonPackagesCard from '../components/CommonPackagesCard'
+import SandboxPackagesCard from '../components/SandboxPackagesCard'
 import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 import UpdateModal from '../components/UpdateModal'
@@ -310,6 +311,8 @@ export default function Packages({ me }: { me: Me }) {
           </>
         )}
       </Card>
+
+      <SandboxPackagesCard me={me} />
 
       <Card title={t('packages.installedTitle')}>
         <Input

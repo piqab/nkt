@@ -27,26 +27,30 @@ import (
 
 // Server holds everything the handlers need.
 type Server struct {
-	cfg       *config.Config
-	db        *store.DB
-	auth      *auth.Service
-	scanner   *inventory.Scanner
-	scheduler *monitor.Scheduler
-	services  *control.ServiceManager
-	configs   *control.ConfigManager
-	osusers   *control.OSUserManager
-	disks     *control.DiskManager
-	firewall  *control.FirewallManager
-	firewalld *control.FirewalldManager
-	certs     *control.CertManager
-	podman    *control.PodmanManager
-	lxd       *control.LXDManager
-	libvirt   *control.LibvirtManager
-	logs      *control.LogManager
-	images    *control.ImageManager
-	ui        fs.FS
-	log       *slog.Logger
-	version   string
+	cfg        *config.Config
+	db         *store.DB
+	auth       *auth.Service
+	scanner    *inventory.Scanner
+	scheduler  *monitor.Scheduler
+	services   *control.ServiceManager
+	configs    *control.ConfigManager
+	osusers    *control.OSUserManager
+	disks      *control.DiskManager
+	hardware   *control.HardwareManager
+	sysconfig  *control.SysConfigManager
+	netmanager *control.NetworkManagerControl
+	sandboxpkg *control.SandboxPkgManager
+	firewall   *control.FirewallManager
+	firewalld  *control.FirewalldManager
+	certs      *control.CertManager
+	podman     *control.PodmanManager
+	lxd        *control.LXDManager
+	libvirt    *control.LibvirtManager
+	logs       *control.LogManager
+	images     *control.ImageManager
+	ui         fs.FS
+	log        *slog.Logger
+	version    string
 
 	// Keyed sessions ("packages", "ufw-install", ...) each outlive any one
 	// WebSocket connection to them — see runUpdateSession. A single shared
@@ -67,25 +71,29 @@ type Server struct {
 
 // Deps bundles the constructed subsystems.
 type Deps struct {
-	Cfg       *config.Config
-	DB        *store.DB
-	Auth      *auth.Service
-	Scanner   *inventory.Scanner
-	Scheduler *monitor.Scheduler
-	Services  *control.ServiceManager
-	Configs   *control.ConfigManager
-	OSUsers   *control.OSUserManager
-	Disks     *control.DiskManager
-	Firewall  *control.FirewallManager
-	Firewalld *control.FirewalldManager
-	Certs     *control.CertManager
-	Podman    *control.PodmanManager
-	LXD       *control.LXDManager
-	Libvirt   *control.LibvirtManager
-	Logs      *control.LogManager
-	Images    *control.ImageManager
-	UI        fs.FS
-	Log       *slog.Logger
+	Cfg        *config.Config
+	DB         *store.DB
+	Auth       *auth.Service
+	Scanner    *inventory.Scanner
+	Scheduler  *monitor.Scheduler
+	Services   *control.ServiceManager
+	Configs    *control.ConfigManager
+	OSUsers    *control.OSUserManager
+	Disks      *control.DiskManager
+	Hardware   *control.HardwareManager
+	SysConfig  *control.SysConfigManager
+	NetManager *control.NetworkManagerControl
+	SandboxPkg *control.SandboxPkgManager
+	Firewall   *control.FirewallManager
+	Firewalld  *control.FirewalldManager
+	Certs      *control.CertManager
+	Podman     *control.PodmanManager
+	LXD        *control.LXDManager
+	Libvirt    *control.LibvirtManager
+	Logs       *control.LogManager
+	Images     *control.ImageManager
+	UI         fs.FS
+	Log        *slog.Logger
 	// Version is this binary's own version, reported by /api/health so
 	// the hub can show what is actually running on a host rather than
 	// what it recorded having installed there.
@@ -96,7 +104,8 @@ type Deps struct {
 func New(d Deps) *Server {
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
-		services: d.Services, configs: d.Configs, osusers: d.OSUsers, disks: d.Disks, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
+		services: d.Services, configs: d.Configs, osusers: d.OSUsers, disks: d.Disks, hardware: d.Hardware, sysconfig: d.SysConfig,
+		netmanager: d.NetManager, sandboxpkg: d.SandboxPkg, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
 		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images,
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
@@ -279,10 +288,20 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/monitor/targets/{id}/check", s.handleTargetCheck)
 				r.Patch("/monitor/targets/{id}", s.handleTargetPatch)
 
+				r.Get("/hardware", s.handleHardware)
+				r.Get("/system/settings", s.handleSystemSettings)
+				r.Get("/system/timezones", s.handleTimezones)
+				r.Get("/network/manager", s.handleNetworkManager)
+				r.Get("/system/sandbox-packages", s.handleSandboxPackages)
 				r.Get("/disks", s.handleDisks)
 				r.Get("/disks/usage", s.handleDiskUsage)
 				r.Get("/os-users", s.handleOSUserList)
 				r.Post("/os-users", s.handleOSUserCreate)
+				r.Post("/system/settings", s.handleSystemSettingsUpdate)
+				r.Post("/network/manager/connection", s.handleNetworkConnection)
+				r.Post("/network/manager/wifi", s.handleWiFiConnect)
+				r.Post("/system/sandbox-packages/remove", s.handleSandboxPackageRemove)
+				r.Post("/system/sandbox-packages/update", s.handleSandboxPackageUpdate)
 				r.Get("/users", s.handleUserList)
 				r.Post("/users", s.handleUserCreate)
 				r.Patch("/users/{name}", s.handleUserPatch)

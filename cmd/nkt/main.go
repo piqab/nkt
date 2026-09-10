@@ -206,22 +206,26 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 
 // runtime holds the subsystems every command shares.
 type runtime struct {
-	cfg       *config.Config
-	db        *store.DB
-	collector collect.Collector
-	scanner   *inventory.Scanner
-	services  *control.ServiceManager
-	configs   *control.ConfigManager
-	osusers   *control.OSUserManager
-	disks     *control.DiskManager
-	firewall  *control.FirewallManager
-	firewalld *control.FirewalldManager
-	certs     *control.CertManager
-	podman    *control.PodmanManager
-	lxd       *control.LXDManager
-	libvirt   *control.LibvirtManager
-	logs      *control.LogManager
-	images    *control.ImageManager
+	cfg        *config.Config
+	db         *store.DB
+	collector  collect.Collector
+	scanner    *inventory.Scanner
+	services   *control.ServiceManager
+	configs    *control.ConfigManager
+	osusers    *control.OSUserManager
+	disks      *control.DiskManager
+	hardware   *control.HardwareManager
+	sysconfig  *control.SysConfigManager
+	netmanager *control.NetworkManagerControl
+	sandboxpkg *control.SandboxPkgManager
+	firewall   *control.FirewallManager
+	firewalld  *control.FirewalldManager
+	certs      *control.CertManager
+	podman     *control.PodmanManager
+	lxd        *control.LXDManager
+	libvirt    *control.LibvirtManager
+	logs       *control.LogManager
+	images     *control.ImageManager
 }
 
 func newRuntime() (*runtime, error) {
@@ -241,22 +245,26 @@ func newRuntime() (*runtime, error) {
 	services := control.NewServiceManager(cfg, collector, db)
 
 	return &runtime{
-		cfg:       cfg,
-		db:        db,
-		collector: collector,
-		scanner:   scanner,
-		services:  services,
-		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
-		osusers:   control.NewOSUserManager(collector),
-		disks:     control.NewDiskManager(collector),
-		firewall:  control.NewFirewallManager(cfg, collector, db),
-		firewalld: control.NewFirewalldManager(cfg, collector, db),
-		certs:     control.NewCertManager(cfg, collector, db, services, scanner),
-		podman:    control.NewPodmanManager(collector, db),
-		lxd:       control.NewLXDManager(collector, db),
-		libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
-		logs:      control.NewLogManager(collector, scanner),
-		images:    control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
+		cfg:        cfg,
+		db:         db,
+		collector:  collector,
+		scanner:    scanner,
+		services:   services,
+		configs:    control.NewConfigManager(cfg, collector, db, scanner, services),
+		osusers:    control.NewOSUserManager(collector),
+		disks:      control.NewDiskManager(collector),
+		hardware:   control.NewHardwareManager(collector),
+		sysconfig:  control.NewSysConfigManager(collector),
+		netmanager: control.NewNetworkManagerControl(collector),
+		sandboxpkg: control.NewSandboxPkgManager(collector),
+		firewall:   control.NewFirewallManager(cfg, collector, db),
+		firewalld:  control.NewFirewalldManager(cfg, collector, db),
+		certs:      control.NewCertManager(cfg, collector, db, services, scanner),
+		podman:     control.NewPodmanManager(collector, db),
+		lxd:        control.NewLXDManager(collector, db),
+		libvirt:    control.NewLibvirtManager(cfg, collector, db, scanner),
+		logs:       control.NewLogManager(collector, scanner),
+		images:     control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
 	}, nil
 }
 
@@ -381,7 +389,8 @@ func (r *runtime) runServer(log *slog.Logger) error {
 
 	server := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
-		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
+		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
+		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
 		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, UI: ui, Log: log,
 		Version: version,
 	})
@@ -522,20 +531,24 @@ type hubRuntime struct {
 	cfg *config.Config
 	db  *store.DB
 
-	collector collect.Collector
-	scanner   *inventory.Scanner
-	services  *control.ServiceManager
-	configs   *control.ConfigManager
-	osusers   *control.OSUserManager
-	disks     *control.DiskManager
-	firewall  *control.FirewallManager
-	firewalld *control.FirewalldManager
-	certs     *control.CertManager
-	podman    *control.PodmanManager
-	lxd       *control.LXDManager
-	libvirt   *control.LibvirtManager
-	logs      *control.LogManager
-	images    *control.ImageManager
+	collector  collect.Collector
+	scanner    *inventory.Scanner
+	services   *control.ServiceManager
+	configs    *control.ConfigManager
+	osusers    *control.OSUserManager
+	disks      *control.DiskManager
+	hardware   *control.HardwareManager
+	sysconfig  *control.SysConfigManager
+	netmanager *control.NetworkManagerControl
+	sandboxpkg *control.SandboxPkgManager
+	firewall   *control.FirewallManager
+	firewalld  *control.FirewalldManager
+	certs      *control.CertManager
+	podman     *control.PodmanManager
+	lxd        *control.LXDManager
+	libvirt    *control.LibvirtManager
+	logs       *control.LogManager
+	images     *control.ImageManager
 }
 
 func newHubRuntime() (*hubRuntime, error) {
@@ -566,20 +579,24 @@ func newHubRuntime() (*hubRuntime, error) {
 
 	return &hubRuntime{
 		cfg: cfg, db: db,
-		collector: collector,
-		scanner:   scanner,
-		services:  services,
-		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
-		osusers:   control.NewOSUserManager(collector),
-		disks:     control.NewDiskManager(collector),
-		firewall:  control.NewFirewallManager(cfg, collector, db),
-		firewalld: control.NewFirewalldManager(cfg, collector, db),
-		certs:     control.NewCertManager(cfg, collector, db, services, scanner),
-		podman:    control.NewPodmanManager(collector, db),
-		lxd:       control.NewLXDManager(collector, db),
-		libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
-		logs:      control.NewLogManager(collector, scanner),
-		images:    control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
+		collector:  collector,
+		scanner:    scanner,
+		services:   services,
+		configs:    control.NewConfigManager(cfg, collector, db, scanner, services),
+		osusers:    control.NewOSUserManager(collector),
+		disks:      control.NewDiskManager(collector),
+		hardware:   control.NewHardwareManager(collector),
+		sysconfig:  control.NewSysConfigManager(collector),
+		netmanager: control.NewNetworkManagerControl(collector),
+		sandboxpkg: control.NewSandboxPkgManager(collector),
+		firewall:   control.NewFirewallManager(cfg, collector, db),
+		firewalld:  control.NewFirewalldManager(cfg, collector, db),
+		certs:      control.NewCertManager(cfg, collector, db, services, scanner),
+		podman:     control.NewPodmanManager(collector, db),
+		lxd:        control.NewLXDManager(collector, db),
+		libvirt:    control.NewLibvirtManager(cfg, collector, db, scanner),
+		logs:       control.NewLogManager(collector, scanner),
+		images:     control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
 	}, nil
 }
 
@@ -637,7 +654,8 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// API routes.
 	localAPI := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner,
-		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
+		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
+		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
 		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Log: log, Version: version,
 	})
 
