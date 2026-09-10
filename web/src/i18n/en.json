@@ -36,7 +36,8 @@
     "audit": "Audit log",
     "users": "Users",
     "about": "About",
-    "logs": "Logs"
+    "logs": "Logs",
+    "osUsers": "Host accounts"
   },
   "about": {
     "title": "About",
@@ -496,9 +497,8 @@
     "password": "Password",
     "decryptAndImport": "Decrypt and import",
     "startingLog": "Starting…",
-    "authGenerated": "Hub's key — I'll add it by hand",
-    "authKey": "My own private key",
-    "authPassword": "root and password — the hub sets it up",
+    "authGenerated": "Manual",
+    "authPassword": "Automatic",
     "secretKeyEditing": "New private key (PEM) — leave empty to keep the current one",
     "secretKeyNew": "Private key (PEM)",
     "secretPasswordEditing": "New password — leave empty to keep the current one",
@@ -1252,5 +1252,23 @@
     "reclaimed": "Reclaimed: {{size}}",
     "done": "done",
     "backupDir": "Archives are saved to"
+  },
+  "osUsers": {
+    "title": "Host accounts",
+    "hint": "Operating-system users and their SSH keys. Not the web interface accounts from «Users» — this grants login to the server itself.",
+    "addTitle": "Add a user",
+    "addHint": "Creates the account if it does not exist and appends the key to its authorized_keys — existing keys are left alone.",
+    "fieldName": "Name",
+    "fieldKey": "SSH public key",
+    "fieldSudo": "passwordless sudo",
+    "add": "Add",
+    "created": "User {{name}} added",
+    "listTitle": "Users",
+    "count": "accounts: {{count}}",
+    "colName": "User",
+    "colKeys": "Keys",
+    "colSudo": "Rights",
+    "colShell": "Shell",
+    "noKeys": "no keys"
   }
 }

@@ -94,6 +94,8 @@ var enCatalog = map[string]string{
 	"hub.bootstrapDbus":                  "Bootstrap: enabling and starting dbus…",
 	"hub.bootstrapDbusOK":                "Bootstrap: the dbus system bus is up",
 	"hub.bootstrapDbusNotRunning":        "Bootstrap: dbus is installed but /run/dbus/system_bus_socket never appeared (%s) — the host's terminal will keep offering to install dbus until the service starts",
+	"hub.bootstrapPackagesOneByOne":      "Bootstrap: the single transaction failed, installing packages one by one…",
+	"hub.bootstrapPackagesFailed":        "Bootstrap: not installed (missing from this release's repositories): %s",
 	"hub.bootstrapPackages":              "Bootstrap: installing packages (%s)…",
 	"hub.bootstrapUser":                  "Bootstrap: creating user %s with passwordless sudo…",
 	"hub.bootstrapKey":                   "Bootstrap: installing the hub's key for %s…",

@@ -29,11 +29,17 @@ import (
 // ним способ входа.
 
 // BootstrapPackagesDefault — то, что ставится по умолчанию. Первые шесть
-// нужны самому nkt, последние два включают режим tmux в терминале и живой
-// просмотр нагрузки, за которыми иначе придётся отдельно ходить в
-// интерфейс и нажимать «установить».
+// нужны самому nkt; tmux и btop включают режим tmux в терминале и живой
+// просмотр нагрузки; neovim, git, gh и mc — то, чем всё равно пользуются
+// в терминале на сервере с первых минут.
+//
+// Имена именно такие, какие у пакетов: в Debian редактор ставится как
+// neovim (пакета nvim не существует, nvim — только имя бинарника). gh есть
+// в Debian 13, но не во всех выпусках Ubuntu — поэтому установка ниже
+// переживает недоступный пакет, а не падает целиком.
 var BootstrapPackagesDefault = []string{
-	"dbus", "sudo", "iproute2", "procps", "ca-certificates", "curl", "tmux", "btop",
+	"dbus", "sudo", "iproute2", "procps", "ca-certificates", "curl",
+	"tmux", "btop", "neovim", "git", "gh", "mc",
 }
 
 // bootstrapDefaultsKey — где в таблице kv лежит набор по умолчанию.
@@ -151,10 +157,8 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 
 	sudo := sudoPrefix(host.SSHUser)
 
-	report("hub.bootstrapPackages", strings.Join(opts.Packages, " "))
-	if out, err := runRemote(client, sudo+"env DEBIAN_FRONTEND=noninteractive apt-get update"+
-		" && "+sudo+"env DEBIAN_FRONTEND=noninteractive apt-get install -y "+strings.Join(opts.Packages, " ")); err != nil {
-		return res, fmt.Errorf("установка пакетов: %w: %s", err, lastLines(out, 5))
+	if err := installBootstrapPackages(client, sudo, opts.Packages, report); err != nil {
+		return res, err
 	}
 
 	if err := ensureDbusRunning(client, sudo, opts.Packages, report); err != nil {
@@ -231,6 +235,47 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 		}
 	}
 	return res, nil
+}
+
+// installBootstrapPackages ставит набор одной транзакцией apt, а при
+// неудаче — по одному.
+//
+// Одна транзакция быстрее и разрешает зависимости всего списка сразу, но
+// у неё есть свойство «всё или ничего»: один пакет, которого нет в
+// репозиториях этого выпуска (gh в части выпусков Ubuntu), отменяет
+// установку и остальных одиннадцати. Поэтому при отказе список ставится
+// поштучно, а перечень неустановленного попадает в лог — подготовка
+// продолжается, а не срывается из-за необязательной мелочи.
+func installBootstrapPackages(client *ssh.Client, sudo string, packages []string, report func(key string, args ...any)) error {
+	report("hub.bootstrapPackages", strings.Join(packages, " "))
+	apt := sudo + "env DEBIAN_FRONTEND=noninteractive apt-get "
+	if out, err := runRemote(client, apt+"update"); err != nil {
+		return fmt.Errorf("apt-get update: %w: %s", err, lastLines(out, 5))
+	}
+	if _, err := runRemote(client, apt+"install -y "+strings.Join(packages, " ")); err == nil {
+		return nil
+	}
+
+	report("hub.bootstrapPackagesOneByOne")
+	var failed []string
+	for _, p := range packages {
+		if _, err := runRemote(client, apt+"install -y "+p); err != nil {
+			failed = append(failed, p)
+		}
+	}
+	if len(failed) == 0 {
+		return nil
+	}
+	// Пакеты, нужные самому nkt, отличаются от удобств: без dbus не
+	// работает терминал, а без mc не работает только mc.
+	for _, p := range failed {
+		if p == "dbus" || p == "sudo" {
+			return fmt.Errorf("не удалось поставить %s — без него хост неработоспособен (не установлены: %s)",
+				p, strings.Join(failed, ", "))
+		}
+	}
+	report("hub.bootstrapPackagesFailed", strings.Join(failed, ", "))
+	return nil
 }
 
 // ensureDbusRunning доводит dbus до рабочего состояния, а не просто до

@@ -914,7 +914,7 @@ export default function Hosts({
       </Card>
 
       {creatingHost && (
-        <Modal title={t('hosts.addHostTitle')} onClose={() => setCreatingHost(false)}>
+        <Modal title={t('hosts.addHostTitle')} onClose={() => setCreatingHost(false)} width={860}>
           <HostForm
             onDone={(name, authorizedKey, _t, _tu, created) => {
               setCreatingHost(false)
@@ -927,7 +927,11 @@ export default function Hosts({
       )}
 
       {editingHost && (
-        <Modal title={t('hosts.editHostTitle', { name: editingHost.name })} onClose={() => setEditingHost(null)}>
+        <Modal
+          title={t('hosts.editHostTitle', { name: editingHost.name })}
+          onClose={() => setEditingHost(null)}
+          width={860}
+        >
           <HostForm
             initial={editingHost}
             onDone={(name, authorizedKey, terminalEnabledChanged, tunnelEnabledChanged) => {
@@ -1212,17 +1216,18 @@ export interface BootstrapOptions {
  * первые шесть нужны самому nkt, tmux и btop включают режим tmux в
  * терминале и живой просмотр нагрузки. */
 export const BOOTSTRAP_PACKAGES_DEFAULT =
-  'dbus sudo iproute2 procps ca-certificates curl tmux btop'
+  'dbus sudo iproute2 procps ca-certificates curl tmux btop neovim git gh mc'
 
 type AuthKind = 'generated' | 'password' | 'key'
 
-// Порядок табов — порядок сценариев по частоте: свежий сервер с root и
-// паролем, затем ключ хаба, который ставится вручную, и лишь потом свой
-// ключ.
+// Два сценария: «Автонастройка» — хаб заходит по паролю и настраивает
+// хост сам; «Ручная» — хаб генерирует ключ, оператор сам кладёт его в
+// authorized_keys. Вставка собственного приватного ключа убрана из
+// интерфейса: тип 'key' остаётся в модели ради уже добавленных так
+// хостов, но заводить новые этим способом больше нельзя.
 const AUTH_KIND_OPTIONS: { value: AuthKind; labelKey: string }[] = [
   { value: 'password', labelKey: 'hosts.authPassword' },
   { value: 'generated', labelKey: 'hosts.authGenerated' },
-  { value: 'key', labelKey: 'hosts.authKey' },
 ]
 
 type HostFormValues = {
@@ -1393,22 +1398,22 @@ function HostForm({
     >
       {!editing && <p className="small muted">{t('hosts.addHostHint')}</p>}
       {error && <Banner kind="error">{error}</Banner>}
-      <div className="filters">
-        <Form.Item name="name" label={t('hosts.name')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '10rem' }}>
+      <div className="filters" style={{ flexWrap: 'nowrap' }}>
+        <Form.Item name="name" label={t('hosts.name')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '9rem' }}>
           <Input />
         </Form.Item>
         <Form.Item
           name="addr"
           label={t('hosts.addr')}
           rules={[{ required: true }]}
-          style={{ flex: 1, minWidth: '10rem' }}
+          style={{ flex: 1, minWidth: '9rem' }}
         >
           <Input />
         </Form.Item>
-        <Form.Item name="ssh_port" label={t('hosts.sshPort')} rules={[{ required: true }]} style={{ minWidth: '6rem' }}>
+        <Form.Item name="ssh_port" label={t('hosts.sshPort')} rules={[{ required: true }]} style={{ width: '6rem' }}>
           <InputNumber min={1} max={65535} style={{ width: '100%' }} />
         </Form.Item>
-        <Form.Item name="ssh_user" label={t('hosts.sshUser')} rules={[{ required: true }]} style={{ minWidth: '8rem' }}>
+        <Form.Item name="ssh_user" label={t('hosts.sshUser')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '8rem' }}>
           <Input />
         </Form.Item>
       </div>

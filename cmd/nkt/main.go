@@ -212,6 +212,7 @@ type runtime struct {
 	scanner   *inventory.Scanner
 	services  *control.ServiceManager
 	configs   *control.ConfigManager
+	osusers   *control.OSUserManager
 	firewall  *control.FirewallManager
 	firewalld *control.FirewalldManager
 	certs     *control.CertManager
@@ -245,6 +246,7 @@ func newRuntime() (*runtime, error) {
 		scanner:   scanner,
 		services:  services,
 		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
+		osusers:   control.NewOSUserManager(collector),
 		firewall:  control.NewFirewallManager(cfg, collector, db),
 		firewalld: control.NewFirewalldManager(cfg, collector, db),
 		certs:     control.NewCertManager(cfg, collector, db, services, scanner),
@@ -377,7 +379,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 
 	server := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
-		Services: r.services, Configs: r.configs, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
+		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
 		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, UI: ui, Log: log,
 		Version: version,
 	})
@@ -522,6 +524,7 @@ type hubRuntime struct {
 	scanner   *inventory.Scanner
 	services  *control.ServiceManager
 	configs   *control.ConfigManager
+	osusers   *control.OSUserManager
 	firewall  *control.FirewallManager
 	firewalld *control.FirewalldManager
 	certs     *control.CertManager
@@ -564,6 +567,7 @@ func newHubRuntime() (*hubRuntime, error) {
 		scanner:   scanner,
 		services:  services,
 		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
+		osusers:   control.NewOSUserManager(collector),
 		firewall:  control.NewFirewallManager(cfg, collector, db),
 		firewalld: control.NewFirewalldManager(cfg, collector, db),
 		certs:     control.NewCertManager(cfg, collector, db, services, scanner),
@@ -629,7 +633,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// API routes.
 	localAPI := api.New(api.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner,
-		Services: r.services, Configs: r.configs, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
+		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
 		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Log: log, Version: version,
 	})
 

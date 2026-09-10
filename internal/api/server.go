@@ -34,6 +34,7 @@ type Server struct {
 	scheduler *monitor.Scheduler
 	services  *control.ServiceManager
 	configs   *control.ConfigManager
+	osusers   *control.OSUserManager
 	firewall  *control.FirewallManager
 	firewalld *control.FirewalldManager
 	certs     *control.CertManager
@@ -72,6 +73,7 @@ type Deps struct {
 	Scheduler *monitor.Scheduler
 	Services  *control.ServiceManager
 	Configs   *control.ConfigManager
+	OSUsers   *control.OSUserManager
 	Firewall  *control.FirewallManager
 	Firewalld *control.FirewalldManager
 	Certs     *control.CertManager
@@ -92,7 +94,7 @@ type Deps struct {
 func New(d Deps) *Server {
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
-		services: d.Services, configs: d.Configs, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
+		services: d.Services, configs: d.Configs, osusers: d.OSUsers, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
 		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images,
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
@@ -275,6 +277,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/monitor/targets/{id}/check", s.handleTargetCheck)
 				r.Patch("/monitor/targets/{id}", s.handleTargetPatch)
 
+				r.Get("/os-users", s.handleOSUserList)
+				r.Post("/os-users", s.handleOSUserCreate)
 				r.Get("/users", s.handleUserList)
 				r.Post("/users", s.handleUserCreate)
 				r.Patch("/users/{name}", s.handleUserPatch)

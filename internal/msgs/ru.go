@@ -93,6 +93,8 @@ var ruCatalog = map[string]string{
 	"hub.bootstrapDbus":                  "Подготовка: включаю и запускаю dbus…",
 	"hub.bootstrapDbusOK":                "Подготовка: системная шина dbus работает",
 	"hub.bootstrapDbusNotRunning":        "Подготовка: dbus установлен, но сокет /run/dbus/system_bus_socket не появился (%s) — терминал на хосте будет предлагать поставить dbus, пока служба не запустится",
+	"hub.bootstrapPackagesOneByOne":      "Подготовка: одной транзакцией не вышло, ставлю пакеты по одному…",
+	"hub.bootstrapPackagesFailed":        "Подготовка: не установлены (в репозиториях этого выпуска их нет): %s",
 	"hub.bootstrapPackages":              "Подготовка: ставлю пакеты (%s)…",
 	"hub.bootstrapUser":                  "Подготовка: завожу пользователя %s с sudo без пароля…",
 	"hub.bootstrapKey":                   "Подготовка: кладу ключ хаба для %s…",
