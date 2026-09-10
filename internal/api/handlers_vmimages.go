@@ -134,9 +134,13 @@ func (s *Server) handleVMAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	runner := vmcreate.NewCreateRunner(s.vmimages, s.scanner.Collector(), RunUnrestricted)
-	writeJSON(w, http.StatusOK, map[string]string{
+	report := runner.AddressReport(r.Context(), name)
+	writeJSON(w, http.StatusOK, map[string]any{
 		"name":    name,
-		"address": runner.Address(r.Context(), name),
+		"address": report.Address,
+		"state":   report.State,
+		"reason":  report.Reason,
+		"detail":  report.Detail,
 	})
 }
 

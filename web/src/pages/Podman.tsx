@@ -155,7 +155,11 @@ export default function Podman({ me }: { me: Me }) {
       </div>
 
       <ErrorNote error={containers.error} />
-      {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
+      {notice && (
+        <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
+          {notice.text}
+        </Banner>
+      )}
       {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}
 
       <Card

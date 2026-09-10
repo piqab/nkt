@@ -210,7 +210,11 @@ export default function Profiles({ me }: { me: Me }) {
         )}
       </div>
 
-      {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
+      {notice && (
+        <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
+          {notice.text}
+        </Banner>
+      )}
       <ErrorNote error={list.error} />
 
       {/* Список слева, редактор справа — как в «Конфигурациях»: раздел

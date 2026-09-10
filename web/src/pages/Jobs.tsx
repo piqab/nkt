@@ -161,7 +161,17 @@ function duration(j: Job, t: (k: string, o?: Record<string, unknown>) => string)
  * журнал соберётся целиком, а не с момента подключения. Если сокет не
  * открылся, включается опрос — раздел работает и без него.
  */
-export function JobLogModal({ job, onClose }: { job: Job; onClose: () => void }) {
+export function JobLogModal({
+  job,
+  onClose,
+  scope = '',
+}: {
+  job: Job
+  onClose: () => void
+  /** Приставка пути к API — например «/hosts/local» для заданий самого
+   * хаба, открытых из списка хостов, где область запросов не выбрана. */
+  scope?: string
+}) {
   const { t } = useTranslation()
   const [lines, setLines] = useState<JobLogLine[]>([])
   const [current, setCurrent] = useState<Job>(job)
@@ -172,7 +182,7 @@ export function JobLogModal({ job, onClose }: { job: Job; onClose: () => void })
   const fetchTail = useCallback(async () => {
     try {
       const res = await api<{ job: Job; lines: JobLogLine[] }>(
-        `/jobs/${job.id}/log${qs({ after: lastSeq.current })}`,
+        `${scope}/jobs/${job.id}/log${qs({ after: lastSeq.current })}`,
       )
       setCurrent(res.job)
       if (res.lines.length > 0) {
@@ -185,7 +195,7 @@ export function JobLogModal({ job, onClose }: { job: Job; onClose: () => void })
       // последней строки не сдвинулся.
       return null
     }
-  }, [job.id])
+  }, [job.id, scope])
 
   // Первый заход всегда через базу — до всякого сокета.
   useEffect(() => {
@@ -200,7 +210,7 @@ export function JobLogModal({ job, onClose }: { job: Job; onClose: () => void })
     let closed = false
     let ws: WebSocket | null = null
     try {
-      ws = new WebSocket(wsURL(`/jobs/${job.id}/ws`))
+      ws = new WebSocket(wsURL(`${scope}/jobs/${job.id}/ws`))
     } catch {
       return
     }

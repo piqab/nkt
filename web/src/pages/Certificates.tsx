@@ -375,7 +375,11 @@ export default function Certificates({ me }: { me: Me }) {
         </div>
       </div>
 
-      {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
+      {notice && (
+        <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
+          {notice.text}
+        </Banner>
+      )}
 
       <div className="grid grid-4">
         <StatTile label={t('certs.statTotal')} value={formatNumber(summary?.total ?? 0)} />

@@ -612,7 +612,11 @@ export default function Firewall({ me }: { me: Me }) {
       </div>
 
       <ErrorNote error={fw.error} />
-      {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
+      {notice && (
+        <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
+          {notice.text}
+        </Banner>
+      )}
 
       {fw.data && (
         <div className="grid grid-3">

@@ -131,7 +131,11 @@ export default function OverviewPage({ me }: { me: Me }) {
         </div>
       </div>
 
-      {notice && <Banner kind="info">{notice}</Banner>}
+      {notice && (
+        <Banner kind="info" onClose={() => setNotice(null)}>
+          {notice}
+        </Banner>
+      )}
       {data.host.notes?.map((note) => (
         <Banner key={note} kind="info">
           {note}

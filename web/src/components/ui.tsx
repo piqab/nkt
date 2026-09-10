@@ -118,10 +118,16 @@ export function Card({
 export function Banner({
   kind = 'info',
   icon,
+  onClose,
   children,
 }: {
   kind?: 'info' | 'warn' | 'error' | 'success'
   icon?: string
+  /** Сообщение об исходе действия («задание запущено», «адрес не
+   * определился») должно закрываться: иначе оно висит на странице до
+   * следующего действия и выглядит как незакрытая проблема. Постоянные
+   * пояснения закрывать нечем и незачем — им onClose не передают. */
+  onClose?: () => void
   children: ReactNode
 }) {
   return (
@@ -130,6 +136,8 @@ export function Banner({
       showIcon
       icon={icon ? <span aria-hidden="true">{icon}</span> : undefined}
       message={children}
+      closable={onClose !== undefined}
+      onClose={onClose}
     />
   )
 }

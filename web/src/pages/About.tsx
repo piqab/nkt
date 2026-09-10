@@ -126,7 +126,11 @@ export default function About() {
       </div>
 
       <ErrorNote error={version.error} />
-      {notice && <Banner kind={notice.kind}>{notice.text}</Banner>}
+      {notice && (
+        <Banner kind={notice.kind} onClose={() => setNotice(null)}>
+          {notice.text}
+        </Banner>
+      )}
 
       <Card title={t('about.hubVersionTitle')}>
         {version.loading && !info ? (
