@@ -211,6 +211,10 @@ func (s *Server) handleProfilePlanPreview(w http.ResponseWriter, r *http.Request
 // перестраивается здесь заново: между показом и нажатием состояние могло
 // измениться, а применить надо ровно то, что человек видел и одобрил.
 type applyRequest struct {
+	// Name — заголовок задания, когда применяют не сохранённый здесь
+	// профиль, а присланный извне (хаб применяет свой профиль к группе
+	// хостов; на самих хостах его копии нет).
+	Name    string           `json:"name"`
 	Changes []profile.Change `json:"changes"`
 }
 
@@ -218,10 +222,15 @@ type applyRequest struct {
 // отвечает его номером. Дальше браузер не нужен: задание живёт в базе,
 // а его журнал доступен и через час, и с другой машины.
 func (s *Server) handleProfileApply(w http.ResponseWriter, r *http.Request) {
-	p, err := s.profileByIDParam(r)
-	if err != nil {
-		fail(w, r, err)
-		return
+	// Идентификатор необязателен: без него применяется присланный план,
+	// а профиль остаётся там, где его хранят.
+	var p store.Profile
+	if chi.URLParam(r, "id") != "" {
+		var err error
+		if p, err = s.profileByIDParam(r); err != nil {
+			fail(w, r, err)
+			return
+		}
 	}
 	var req applyRequest
 	if err := decodeJSON(r, &req); err != nil {
@@ -236,23 +245,30 @@ func (s *Server) handleProfileApply(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
 		return
 	}
+	name := p.Name
+	if name == "" {
+		name = strings.TrimSpace(req.Name)
+	}
+	if name == "" {
+		name = "без имени"
+	}
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind:  profile.KindApply,
-		Title: "профиль " + p.Name,
+		Title: "профиль " + name,
 		// Ключ очереди один на весь хост: два применения разом (или
 		// применение вместе с установкой пакетов) кончаются беспорядком.
 		Queue:  "host",
 		Author: user,
 		Steps:  len(req.Changes),
-		Params: profile.ApplyParams{ProfileID: p.ID, Name: p.Name, Changes: req.Changes},
+		Params: profile.ApplyParams{ProfileID: p.ID, Name: name, Changes: req.Changes},
 	})
 	if err != nil {
-		s.db.Audit(r.Context(), user, "profile.apply", p.Name, "error", err.Error())
+		s.db.Audit(r.Context(), user, "profile.apply", name, "error", err.Error())
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.db.Audit(r.Context(), user, "profile.apply", p.Name, "ok",
+	s.db.Audit(r.Context(), user, "profile.apply", name, "ok",
 		fmt.Sprintf("пунктов: %d, задание %d", len(req.Changes), id))
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
 }

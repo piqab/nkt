@@ -18,6 +18,7 @@ import (
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/inventory"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
 )
@@ -34,6 +35,10 @@ type Server struct {
 	localScanner *inventory.Scanner
 	ui           fs.FS
 	log          *slog.Logger
+	// jobs — фоновые задания самого хаба: раскатка профиля по группе
+	// идёт здесь, а не на хостах. nil допустим (тесты, которым это
+	// незачем): обработчик тогда отвечает, что задания недоступны.
+	jobs *jobs.Manager
 }
 
 // Deps bundles the constructed subsystems, mirroring api.Deps.
@@ -57,13 +62,14 @@ type Deps struct {
 	LocalScanner *inventory.Scanner
 	UI           fs.FS
 	Log          *slog.Logger
+	Jobs         *jobs.Manager
 }
 
 // New builds the hub server.
 func New(d Deps) *Server {
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, hub: d.Hub,
-		local: d.Local, localScanner: d.LocalScanner, ui: d.UI, log: d.Log,
+		local: d.Local, localScanner: d.LocalScanner, ui: d.UI, log: d.Log, jobs: d.Jobs,
 	}
 }
 
@@ -180,6 +186,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/groups", s.handleCreateHostGroup)
 					r.Post("/hub/groups/rename", s.handleRenameHostGroup)
 					r.Post("/hub/groups/delete", s.handleDeleteHostGroup)
+					r.Post("/hub/groups/apply-profile", s.handleGroupApply)
 					r.Post("/hub/hosts/{id}/group", s.handleSetHostGroup)
 					r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 					r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)

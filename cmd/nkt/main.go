@@ -745,8 +745,12 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 
 	server := hub.New(hub.Deps{
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Hub: manager,
-		Local: localAPI.Handler(), LocalScanner: r.scanner, UI: ui, Log: log,
+		Local: localAPI.Handler(), LocalScanner: r.scanner, UI: ui, Log: log, Jobs: r.jobs,
 	})
+
+	// Раскатка профиля по группе — задание самого хаба: он обходит хосты
+	// и следит за заданиями, которые запускает на каждом.
+	r.jobs.Register(hub.KindGroupApply, hub.NewGroupApplyRunner(manager))
 
 	// Хаб ведёт задания собственной машины — той самой строки
 	// «localhost» в списке хостов.
