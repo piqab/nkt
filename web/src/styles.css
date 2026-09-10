@@ -605,3 +605,34 @@ pre.diff .hunk { color: var(--text-muted); }
   justify-content: space-between;
   gap: 0.5rem;
 }
+
+/* Разделы в списке хостов. Рамка появляется только под перетаскиванием:
+   в покое разделы разделяются заголовками и отступом, и лишние рамки
+   превращали бы список в решётку. */
+.host-group {
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.host-group-drop {
+  border-color: var(--status-good);
+  background: color-mix(in srgb, var(--status-good) 8%, transparent);
+}
+
+.host-group-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.3rem 0.4rem;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--text-primary);
+  text-align: left;
+}
+
+.host-group-head:hover { background: var(--wash); }
+.host-group-caret { color: var(--text-muted); width: 0.8rem; }
+.host-group-name { font-weight: 600; }

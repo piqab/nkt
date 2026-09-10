@@ -60,8 +60,12 @@ type Host struct {
 	// something every host should get just by being added.
 	TunnelEnabled bool   `json:"tunnel_enabled"`
 	ErrorMsg      string `json:"error_msg,omitempty"`
-	CreatedAt     string `json:"created_at"`
-	LastSeenAt    string `json:"last_seen_at,omitempty"`
+	// Group — произвольная группа в списке хостов («прод», «клиент А»).
+	// Пустая строка означает «Без группы»: такой раздел показывается в
+	// конце списка, а не прячется — хост без группы не должен исчезать.
+	Group      string `json:"group"`
+	CreatedAt  string `json:"created_at"`
+	LastSeenAt string `json:"last_seen_at,omitempty"`
 
 	// SecretEnc, AdminPasswordEnc and TunnelTokenEnc are secretbox-encrypted
 	// and never serialised to JSON — only the hub package that holds the
@@ -103,7 +107,7 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
-	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at`
+	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, group_name`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
@@ -111,7 +115,7 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var adminPasswordEnc, tunnelTokenEnc, tunnelCertSHA256 []byte
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
-		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen)
+		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen, &h.Group)
 	if err != nil {
 		return Host{}, err
 	}
@@ -203,6 +207,15 @@ func (d *DB) SetHostSecret(ctx context.Context, id int64, authKind string, secre
 		return ErrNotFound
 	}
 	return nil
+}
+
+// SetHostGroup меняет группу хоста. Отдельным методом, а не через
+// UpdateHost: перетаскивание строки в списке меняет ровно это, и
+// заставлять его пересылать адрес, порт и пользователя было бы способом
+// однажды перезаписать их устаревшими значениями из открытой формы.
+func (d *DB) SetHostGroup(ctx context.Context, id int64, group string) error {
+	_, err := d.ExecContext(ctx, `UPDATE hosts SET group_name = ? WHERE id = ?`, group, id)
+	return err
 }
 
 // SetHostSudoStatus records what the last install/update actually observed

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { Badge, Button, Checkbox, Form, Input, InputNumber, Switch, Tabs, Tooltip, type TableColumnsType } from 'antd'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Switch, Tabs, Tooltip, type TableColumnsType } from 'antd'
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -314,6 +314,62 @@ export default function Hosts({
   // запускается отдельным вызовом чуть позже.
   const pendingBootstrap = useRef(new Map<number, BootstrapOptions>())
   const [removingHost, setRemovingHost] = useState<HubHost | null>(null)
+
+  // Хосты по разделам. Порядок групп — алфавитный, «Без группы» всегда
+  // последней: это не группа, а её отсутствие, и держать её среди
+  // названных значило бы прятать хосты, до которых руки не дошли.
+  const groupedHosts = useMemo<{ group: string; items: HubHost[] }[]>(() => {
+    const byGroup = new Map<string, HubHost[]>()
+    for (const host of hosts ?? []) {
+      const key = (host.group ?? '').trim()
+      byGroup.set(key, [...(byGroup.get(key) ?? []), host])
+    }
+    const named = [...byGroup.keys()].filter((g) => g !== '').sort((a, b) => a.localeCompare(b))
+    const order = byGroup.has('') ? [...named, ''] : named
+    return order.map((group) => ({ group, items: byGroup.get(group) ?? [] }))
+  }, [hosts])
+
+  // Названия существующих групп — для автодополнения в форме хоста.
+  const knownGroups = useMemo(
+    () => [...new Set((hosts ?? []).map((h) => (h.group ?? '').trim()).filter(Boolean))].sort(),
+    [hosts],
+  )
+  // Свёрнутые группы и перетаскиваемая строка. Свёрнутость — состояние
+  // человека, а не данных: запоминается между заходами.
+  const [collapsedGroups, setCollapsedGroups] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(HOST_GROUPS_COLLAPSED_KEY) ?? '[]') as string[]
+    } catch {
+      return []
+    }
+  })
+  const [draggingHost, setDraggingHost] = useState<number | null>(null)
+  const [dropGroup, setDropGroup] = useState<string | null>(null)
+
+  function toggleGroup(group: string) {
+    setCollapsedGroups((prev) => {
+      const next = prev.includes(group) ? prev.filter((g) => g !== group) : [...prev, group]
+      try {
+        localStorage.setItem(HOST_GROUPS_COLLAPSED_KEY, JSON.stringify(next))
+      } catch {
+        // Приватный режим — состояние просто не запомнится.
+      }
+      return next
+    })
+  }
+
+  // Перенос хоста в другую группу. Отдельный запрос, а не общая правка
+  // хоста: перетаскивание меняет ровно группу, и пересылать вместе с ней
+  // адрес и пользователя значило бы однажды перезаписать их устаревшими
+  // значениями.
+  async function moveToGroup(hostID: number, group: string) {
+    try {
+      await api(`/hub/hosts/${hostID}/group`, { method: 'POST', body: { group } })
+      reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+  }
 
   // Принимает не весь хост, а только его идентификатор: сразу после
   // добавления полной записи ещё нет, а установке кроме id ничего и не
@@ -915,17 +971,59 @@ export default function Hosts({
         ) : !hosts?.length ? (
           <p className="small muted">{t('hosts.noHosts')}</p>
         ) : (
-          <div className="table-wrap">
-            <DataTable<HubHost>               dataSource={hosts}
-              columns={columns}
-              rowKey="id"
-              expandable={{
-                expandedRowKeys: hosts.map((h) => h.id),
-                expandIcon: () => null,
-                rowExpandable: () => true,
-                expandedRowRender: renderActions,
-              }}
-            />
+          <div className="col" style={{ gap: '0.6rem' }}>
+            {groupedHosts.map(({ group, items }) => {
+              const collapsed = collapsedGroups.includes(group)
+              return (
+                <div
+                  key={group || '\u0000none'}
+                  className={dropGroup === group ? 'host-group host-group-drop' : 'host-group'}
+                  // Бросить строку можно в любое место раздела, а не только
+                  // в его заголовок: попасть мышью в тонкую полоску
+                  // заголовка тяжело, особенно на большом списке.
+                  onDragOver={(e) => {
+                    if (draggingHost === null) return
+                    e.preventDefault()
+                    setDropGroup(group)
+                  }}
+                  onDragLeave={() => setDropGroup((cur) => (cur === group ? null : cur))}
+                  onDrop={() => {
+                    if (draggingHost !== null) void moveToGroup(draggingHost, group)
+                    setDraggingHost(null)
+                    setDropGroup(null)
+                  }}
+                >
+                  <button className="host-group-head" onClick={() => toggleGroup(group)}>
+                    <span className="host-group-caret">{collapsed ? '▸' : '▾'}</span>
+                    <span className="host-group-name">{group || t('hosts.groupNone')}</span>
+                    <span className="small muted">{t('hosts.groupCount', { count: items.length })}</span>
+                  </button>
+                  {!collapsed && (
+                    <div className="table-wrap">
+                      <DataTable<HubHost>
+                        dataSource={items}
+                        columns={columns}
+                        rowKey="id"
+                        onRow={(host) => ({
+                          draggable: true,
+                          onDragStart: () => setDraggingHost(host.id),
+                          onDragEnd: () => {
+                            setDraggingHost(null)
+                            setDropGroup(null)
+                          },
+                        })}
+                        expandable={{
+                          expandedRowKeys: items.map((h) => h.id),
+                          expandIcon: () => null,
+                          rowExpandable: () => true,
+                          expandedRowRender: renderActions,
+                        }}
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </Card>
@@ -933,6 +1031,7 @@ export default function Hosts({
       {creatingHost && (
         <Modal title={t('hosts.addHostTitle')} onClose={() => setCreatingHost(false)} width={860}>
           <HostForm
+            knownGroups={knownGroups}
             onDone={(name, authorizedKey, _t, _tu, created) => {
               setCreatingHost(false)
               reload()
@@ -961,6 +1060,7 @@ export default function Hosts({
         >
           <HostForm
             initial={editingHost}
+            knownGroups={knownGroups}
             onDone={(name, authorizedKey, terminalEnabledChanged, tunnelEnabledChanged) => {
               const host = editingHost
               setEditingHost(null)
@@ -1268,6 +1368,9 @@ export interface BootstrapOptions {
 /** Набор по умолчанию повторяет BootstrapPackagesDefault на стороне хаба:
  * первые шесть нужны самому nkt, tmux и btop включают режим tmux в
  * терминале и живой просмотр нагрузки. */
+/** Где запоминается, какие группы хостов свёрнуты. */
+const HOST_GROUPS_COLLAPSED_KEY = 'nkt-host-groups-collapsed'
+
 export const BOOTSTRAP_PACKAGES_DEFAULT =
   'dbus sudo iproute2 procps ca-certificates curl tmux btop neovim git gh mc'
 
@@ -1289,6 +1392,7 @@ type HostFormValues = {
   ssh_port: number
   ssh_user: string
   secret?: string
+  group?: string
   terminal_enabled: boolean
   tunnel_enabled: boolean
 }
@@ -1306,9 +1410,11 @@ type HostFormValues = {
  */
 function HostForm({
   initial,
+  knownGroups,
   onDone,
 }: {
   initial?: HubHost
+  knownGroups: string[]
   onDone: (
     name: string,
     generatedAuthorizedKey?: string,
@@ -1363,6 +1469,7 @@ function HostForm({
         addr: values.addr,
         ssh_port: values.ssh_port,
         ssh_user: values.ssh_user,
+        group: (values.group ?? '').trim(),
         auth_kind: authKind,
         secret: values.secret ?? '',
         terminal_enabled: terminalEnabled,
@@ -1442,6 +1549,7 @@ function HostForm({
         addr: initial?.addr ?? '',
         ssh_port: initial?.ssh_port ?? 22,
         ssh_user: initial?.ssh_user ?? 'root',
+        group: initial?.group ?? '',
         terminal_enabled: initial?.terminal_enabled ?? false,
         // On by default for a new host (unlike terminal_enabled): unlike a
         // root shell in the browser, the fallback channel only ever kicks
@@ -1470,6 +1578,18 @@ function HostForm({
         </Form.Item>
         <Form.Item name="ssh_user" label={t('hosts.sshUser')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '8rem' }}>
           <Input />
+        </Form.Item>
+        {/* Группа — свободный текст с подсказкой уже существующих: новые
+            заводятся на ходу, а справочник, который надо заполнять заранее,
+            мешал бы ровно тому, ради чего группы и нужны. */}
+        <Form.Item name="group" label={t('hosts.group')} style={{ flex: 1, minWidth: '9rem' }}>
+          <AutoComplete
+            options={knownGroups.map((g) => ({ value: g }))}
+            filterOption={(input, option) =>
+              (option?.value ?? '').toString().toLowerCase().includes(input.toLowerCase())
+            }
+            allowClear
+          />
         </Form.Item>
       </div>
 

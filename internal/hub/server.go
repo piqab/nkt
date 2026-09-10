@@ -176,6 +176,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts", s.handleAddHost)
 					r.Patch("/hub/hosts/{id}", s.handleUpdateHost)
 					r.Delete("/hub/hosts/{id}", s.handleDeleteHost)
+					r.Post("/hub/hosts/{id}/group", s.handleSetHostGroup)
 					r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 					r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)
 					r.Post("/hub/hosts/{id}/sudo/remove", s.handleRemoveSudoAccess)

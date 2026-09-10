@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -369,6 +370,25 @@ func (m *Manager) PublicKeyLine(ctx context.Context, hostID int64) (string, erro
 		return "", diagnoseKeyError(string(privatePEM), err)
 	}
 	return formatAuthorizedKey(signer.PublicKey()), nil
+}
+
+// hostGroupMaxLen ограничивает длину названия группы: это метка для
+// списка, а не текст, и разъехавшийся на пол-экрана заголовок раздела
+// ломает саму идею группировки.
+const hostGroupMaxLen = 64
+
+// SetHostGroup меняет группу хоста.
+//
+// Название чистится, но не проверяется по списку разрешённых: группы
+// заводятся на ходу, и требовать заранее объявленный справочник значило бы
+// мешать ровно тому, ради чего это делается. Запрещены только переводы
+// строк — они превратили бы заголовок раздела в несколько.
+func (m *Manager) SetHostGroup(ctx context.Context, hostID int64, group string) error {
+	group = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(group, "\n", " "), "\r", " "))
+	if len([]rune(group)) > hostGroupMaxLen {
+		return fmt.Errorf("название группы длиннее %d символов", hostGroupMaxLen)
+	}
+	return m.db.SetHostGroup(ctx, hostID, group)
 }
 
 // UpdateHost changes a host's connection details. secret is optional — an

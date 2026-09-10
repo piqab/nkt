@@ -293,6 +293,9 @@ type addHostRequest struct {
 	// install/update (see store.Host.TerminalEnabled) — off by default,
 	// same as the env var itself.
 	TerminalEnabled bool `json:"terminal_enabled"`
+	// Group — раздел, в котором хост показывается в списке. Пустая строка
+	// значит «Без группы».
+	Group string `json:"group"`
 	// TunnelEnabled turns on the reverse-tunnel fallback channel for this
 	// host's next install/update (see store.Host.TunnelEnabled) — off by
 	// default. Set separately from AddHost/AddHostGenerated below (see
@@ -411,6 +414,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
+		s.setHostGroup(r.Context(), id, req.Group)
 		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "authorized_key": authorizedKey})
 		return
 	}
@@ -421,7 +425,43 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
+	s.setHostGroup(r.Context(), id, req.Group)
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
+}
+
+// setHostGroup применяет группу после создания или правки хоста — тем же
+// приёмом, что и переключатель туннеля ниже: у AddHost и UpdateHost и без
+// того длинные списки параметров, а группа к подключению отношения не
+// имеет.
+//
+// Ошибка не срывает запрос: хост уже создан или изменён, и отменять это
+// из-за не сохранившейся метки было бы хуже, чем метку потерять.
+func (s *Server) setHostGroup(ctx context.Context, id int64, group string) {
+	if err := s.hub.SetHostGroup(ctx, id, group); err != nil {
+		s.log.Warn("не удалось сохранить группу хоста", "host", id, "err", err)
+	}
+}
+
+// handleSetHostGroup меняет только группу — это и делает перетаскивание
+// строки в списке.
+func (s *Server) handleSetHostGroup(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var req struct {
+		Group string `json:"group"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.hub.SetHostGroup(r.Context(), id, req.Group); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // setTunnelEnabled applies Manager.SetTunnelEnabled after the host it
@@ -449,6 +489,8 @@ type updateHostRequest struct {
 	Secret          string `json:"secret"`
 	TerminalEnabled bool   `json:"terminal_enabled"`
 	TunnelEnabled   bool   `json:"tunnel_enabled"`
+	// Group — раздел списка; пустая строка значит «Без группы».
+	Group string `json:"group"`
 }
 
 func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
@@ -473,6 +515,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
+		s.setHostGroup(r.Context(), id, req.Group)
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "authorized_key": authorizedKey})
 		return
 	}
