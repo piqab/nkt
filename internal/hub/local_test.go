@@ -57,7 +57,7 @@ func fixtureLocalScanner(t *testing.T) *inventory.Scanner {
 func TestLocalHostEntryNilWithoutLocal(t *testing.T) {
 	m, db := newTestManager(t)
 	srv := New(Deps{DB: db, Hub: m})
-	if entry := srv.localHostEntry(); entry != nil {
+	if entry := srv.localHostEntry(t.Context()); entry != nil {
 		t.Fatalf("localHostEntry() = %+v, want nil when Local is unset", entry)
 	}
 }
@@ -76,7 +76,7 @@ func TestLocalHostEntryPopulatesFromScanner(t *testing.T) {
 	}
 
 	srv := New(Deps{DB: db, Hub: m, Local: http.NotFoundHandler(), LocalScanner: scanner})
-	entry := srv.localHostEntry()
+	entry := srv.localHostEntry(t.Context())
 	if entry == nil {
 		t.Fatal("localHostEntry() = nil, want a populated row when Local is set")
 	}

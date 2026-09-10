@@ -566,3 +566,44 @@ func TestHostGroupLifecycle(t *testing.T) {
 		t.Errorf("хост исчез вместе с группой: %v", err)
 	}
 }
+
+// Строка «localhost» синтетическая, в таблице хостов её нет — но
+// раскладывать по разделам оператор хочет и её, поэтому группа хранится
+// настройкой хаба и должна вести себя как обычная.
+func TestLocalHostGroup(t *testing.T) {
+	ctx := context.Background()
+	m, _ := newTestManager(t)
+
+	if got := m.LocalHostGroup(ctx); got != "" {
+		t.Fatalf("LocalHostGroup = %q, want пусто до первой установки", got)
+	}
+	// Через общий SetHostGroup — тем же путём, каким группу меняет
+	// перетаскивание строки в интерфейсе.
+	if err := m.SetHostGroup(ctx, LocalHostID, "  Хаб  "); err != nil {
+		t.Fatalf("SetHostGroup(localhost): %v", err)
+	}
+	if got := m.LocalHostGroup(ctx); got != "Хаб" {
+		t.Errorf("LocalHostGroup = %q, want %q", got, "Хаб")
+	}
+
+	// Группа, в которой лежит только localhost, обязана быть в списке:
+	// иначе раздел не показался бы вовсе.
+	groups, err := m.HostGroups(ctx)
+	if err != nil {
+		t.Fatalf("HostGroups: %v", err)
+	}
+	if !slices.Contains(groups, "Хаб") {
+		t.Errorf("HostGroups = %q, want содержащий %q", groups, "Хаб")
+	}
+
+	// Возврат в «Без группы» — пустое имя, не ошибка.
+	if err := m.SetHostGroup(ctx, LocalHostID, ""); err != nil {
+		t.Fatalf("SetHostGroup(localhost, пусто): %v", err)
+	}
+	if got := m.LocalHostGroup(ctx); got != "" {
+		t.Errorf("LocalHostGroup = %q, want пусто", got)
+	}
+	if groups, _ = m.HostGroups(ctx); slices.Contains(groups, "Хаб") {
+		t.Errorf("HostGroups = %q, пустая группа осталась в списке", groups)
+	}
+}

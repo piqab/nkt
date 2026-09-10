@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -388,7 +389,42 @@ func (m *Manager) SetHostGroup(ctx context.Context, hostID int64, group string) 
 	if err != nil {
 		return err
 	}
+	if hostID == LocalHostID {
+		return m.SetLocalHostGroup(ctx, group)
+	}
 	return m.db.SetHostGroup(ctx, hostID, group)
+}
+
+// LocalHostID — идентификатор строки «localhost» в списке хостов. Она
+// синтетическая: машина, на которой работает сам хаб, в таблице хостов не
+// заведена (её не устанавливают по SSH и не удаляют), а строка собирается
+// при выдаче списка.
+const LocalHostID = -1
+
+// localGroupKey — где лежит группа этой строки. В таблице хостов ей места
+// нет, поэтому группа хранится настройкой хаба, как умолчания подготовки.
+const localGroupKey = "hub.localhost.group"
+
+// LocalHostGroup возвращает группу строки «localhost».
+func (m *Manager) LocalHostGroup(ctx context.Context) string {
+	raw, ok, err := m.db.KVGet(ctx, localGroupKey)
+	if err != nil || !ok {
+		return ""
+	}
+	group, err := cleanGroupName(raw)
+	if err != nil {
+		return ""
+	}
+	return group
+}
+
+// SetLocalHostGroup запоминает группу строки «localhost».
+func (m *Manager) SetLocalHostGroup(ctx context.Context, group string) error {
+	group, err := cleanGroupName(group)
+	if err != nil {
+		return err
+	}
+	return m.db.KVSet(ctx, localGroupKey, group)
 }
 
 // cleanGroupName приводит название к тому виду, в котором оно попадёт в
@@ -403,8 +439,20 @@ func cleanGroupName(group string) (string, error) {
 }
 
 // HostGroups возвращает список групп.
+//
+// Группа строки «localhost» добавляется отдельно: она хранится настройкой
+// хаба, и без этого раздел, в котором лежит только localhost, исчез бы из
+// списка — а значит, и из интерфейса.
 func (m *Manager) HostGroups(ctx context.Context) ([]string, error) {
-	return m.db.ListHostGroups(ctx)
+	groups, err := m.db.ListHostGroups(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if local := m.LocalHostGroup(ctx); local != "" && !slices.Contains(groups, local) {
+		groups = append(groups, local)
+		slices.Sort(groups)
+	}
+	return groups, nil
 }
 
 // CreateHostGroup заводит пустую группу — ту, в которую потом перетаскивают

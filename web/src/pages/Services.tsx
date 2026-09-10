@@ -89,14 +89,12 @@ function buildMiscColumns(
       key: 'process',
       render: (_, l) => {
         const uptime = formatUptime(l.uptime_s)
+        // Команда запуска здесь не показывается: она бывает в несколько
+        // экранов длиной и растягивала высоту строки. Её раскрывает плюс
+        // слева (expandable ниже), и по умолчанию она свёрнута.
         return (
           <>
             <strong>{l.process || '—'}</strong>
-            {l.command && (
-              <div className="small mono muted" style={{ wordBreak: 'break-all' }}>
-                {l.command}
-              </div>
-            )}
             <div className="small muted">
               {l.user ? t('services.fromUser', { user: l.user }) : ''}
               {l.user && (uptime || l.pid) ? ' · ' : ''}
@@ -279,11 +277,14 @@ export default function Services({ me }: { me: Me }) {
       title: t('services.colService'),
       key: 'name',
       render: (_, s) => (
-        <>
+        // Минимальная ширина задаётся содержимым клетки, а не колонки:
+        // при раскладке по содержимому браузер сжимает колонку до самого
+        // длинного слова, и описание службы вытягивалось в столбик.
+        <div style={{ minWidth: '15rem' }}>
           <strong>{s.name}</strong>
           <div className="small muted">{s.description || s.unit}</div>
           {!s.installed && <div className="small muted">{t('services.notInstalled')}</div>}
-        </>
+        </div>
       ),
     },
     {
@@ -308,8 +309,12 @@ export default function Services({ me }: { me: Me }) {
     {
       title: t('services.colActions'),
       key: 'actions',
+      // Действия — в одну строку: перенос на новую строку каждой кнопки
+      // задирал высоту всех строк таблицы ради того, что спокойно
+      // помещается по горизонтали.
+      className: 'nowrap',
       render: (_, s) => (
-        <div className="row">
+        <div className="row row-nowrap">
           {(s.actions ?? []).map((a) => (
             <Button
               key={a}
@@ -410,9 +415,13 @@ export default function Services({ me }: { me: Me }) {
               getColor={(s) => (s.installed ? (s.active_state === 'unknown' ? 'default' : undefined) : 'gold')}
             />
             <div className="table-wrap">
-              <DataTable<ServiceUnit>                 dataSource={activeServices}
+              <DataTable<ServiceUnit>
+                dataSource={activeServices}
                 columns={columns}
                 rowKey="name"
+                // Ширина по содержимому: при делении поровну колонке
+                // действий не хватало места и кнопки вставали столбиком.
+                tableLayout="auto"
               />
             </div>
           </>
@@ -433,9 +442,20 @@ export default function Services({ me }: { me: Me }) {
           <div className="chart-empty">{t('services.allDescribed')}</div>
         ) : (
           <div className="table-wrap">
-            <DataTable<Listener>               dataSource={miscListeners}
+            <DataTable<Listener>
+              dataSource={miscListeners}
               columns={buildMiscColumns(canControl, killBusy, kill)}
               rowKey={(l) => `${l.address}:${l.port}`}
+              expandable={{
+                // Раскрывается только та строка, которую попросили: все
+                // команды сразу — это и была прежняя высота таблицы.
+                rowExpandable: (l) => !!l.command,
+                expandedRowRender: (l) => (
+                  <div className="small mono" style={{ wordBreak: 'break-all' }}>
+                    {l.command}
+                  </div>
+                ),
+              }}
             />
           </div>
         )}
