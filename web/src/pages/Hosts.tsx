@@ -327,6 +327,29 @@ export default function Hosts({
   // свёрнуто: у хоста с десятком машин список иначе оттеснил бы сами
   // хосты.
   const [openVMs, setOpenVMs] = useState<Set<number>>(new Set())
+  const [detectingAddr, setDetectingAddr] = useState<number | null>(null)
+
+  // Адрес машина получает не сразу: сначала грузится, потом ждёт DHCP.
+  // Кнопка спрашивает его у хоста, на котором машина работает.
+  async function detectAddress(h: HubHost) {
+    setDetectingAddr(h.id)
+    setNotice(null)
+    try {
+      const res = await api<{ address: string; found: boolean }>(`/hub/hosts/${h.id}/detect-address`, {
+        method: 'POST',
+      })
+      if (res.found) {
+        setNotice({ kind: 'info', text: t('hosts.detectAddressFound', { name: h.name, addr: res.address }) })
+        reload()
+      } else {
+        setNotice({ kind: 'info', text: t('hosts.detectAddressNone', { name: h.name }) })
+      }
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setDetectingAddr(null)
+    }
+  }
 
   // Машины по хосту, на котором они созданы.
   const vmsByHost = useMemo(() => {
@@ -840,13 +863,23 @@ export default function Hosts({
             {autoOpenHost?.id === h.id ? t('hosts.updatingBeforeOpen') : t('hosts.open')}
           </Button>
         )}
-        <Button
-          type={outdated ? 'primary' : 'default'}
-          loading={h.status === 'installing'}
-          onClick={() => startInstall(h)}
-        >
-          {h.status === 'new' ? t('hosts.install') : outdated ? t('hosts.update') : t('hosts.reinstall')}
-        </Button>
+        {isAddrUnknown(h) ? (
+          // Установка по заглушке всё равно провалится рукопожатием с
+          // 0.0.0.0, поэтому вместо неё предлагается то, чего не хватает.
+          <Tooltip title={t('hosts.detectAddressHint')}>
+            <Button loading={detectingAddr === h.id} onClick={() => void detectAddress(h)}>
+              {t('hosts.detectAddress')}
+            </Button>
+          </Tooltip>
+        ) : (
+          <Button
+            type={outdated ? 'primary' : 'default'}
+            loading={h.status === 'installing'}
+            onClick={() => startInstall(h)}
+          >
+            {h.status === 'new' ? t('hosts.install') : outdated ? t('hosts.update') : t('hosts.reinstall')}
+          </Button>
+        )}
         {h.status === 'installing' && (
           <Button danger type="link" onClick={() => cancelInstall(h)}>
             {t('hosts.cancel')}
@@ -914,9 +947,13 @@ export default function Hosts({
                 <div className="row spread">
                   <span className="small">
                     <strong>{vm.name}</strong>{' '}
-                    <span className="mono muted">
-                      {vm.ssh_user}@{vm.addr}
-                    </span>
+                    {isAddrUnknown(vm) ? (
+                      <span className="muted">{t('hosts.addrUnknown')}</span>
+                    ) : (
+                      <span className="mono muted">
+                        {vm.ssh_user}@{vm.addr}
+                      </span>
+                    )}
                   </span>
                   <HostStatusBadge status={vm.status} />
                 </div>
@@ -955,6 +992,10 @@ export default function Hosts({
       render: (_, h) =>
         h.id === LOCAL_HOST_ID ? (
           <span className="small muted">{t('hosts.thisMachine')}</span>
+        ) : isAddrUnknown(h) ? (
+          // Машина ещё не получила адрес: показывать «0.0.0.0» значило бы
+          // выдавать заглушку за настоящий адрес.
+          <span className="small muted">{t('hosts.addrUnknown')}</span>
         ) : (
           <span className="mono small">
             {h.ssh_user}@{h.addr}:{h.ssh_port}
@@ -2286,4 +2327,10 @@ function ProvisionVMModal({
       </div>
     </Modal>
   )
+}
+
+/** Адрес ещё не известен: у только что созданной машины стоит заглушка,
+ * пока она не получит настоящий у DHCP. */
+function isAddrUnknown(h: HubHost): boolean {
+  return h.id !== LOCAL_HOST_ID && (!h.addr || h.addr === '0.0.0.0')
 }

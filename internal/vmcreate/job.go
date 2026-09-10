@@ -163,28 +163,57 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	return nil
 }
 
-// defaultAddressWait — сколько ждать адреса. Больше минуты ждать нет
-// смысла: либо DHCP выдал аренду, либо сеть устроена иначе, и адрес всё
-// равно придётся узнавать другим способом.
-const defaultAddressWait = 90 * time.Second
+// defaultAddressWait — сколько ждать адреса. Первый запуск облачного
+// образа занимает до минуты сам по себе, потом машина ещё берёт адрес у
+// DHCP, поэтому полутора минут не хватало: задание успевало закончиться
+// раньше, чем машина отвечала.
+const defaultAddressWait = 5 * time.Minute
 
 // waitAddress спрашивает у libvirt адрес машины, пока тот не появится.
 func (r *CreateRunner) waitAddress(ctx context.Context, jc *jobs.Context, name string) string {
 	deadline := time.Now().Add(r.addressWait)
+	// Молчащий журнал в этом месте выглядит как зависшее задание, хотя
+	// ожидание тут нормальное: машина грузится.
+	told := time.Now()
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
 			return ""
 		}
-		res, err := r.run(ctx, "virsh", "domifaddr", name, "--source", "lease")
-		if err == nil && res.ExitCode == 0 {
-			if addr := parseDomifaddr(res.Output()); addr != "" {
-				return addr
-			}
+		if addr := r.Address(ctx, name); addr != "" {
+			return addr
+		}
+		if time.Since(told) > 30*time.Second {
+			jc.Logf("      адрес пока не появился, жду (машина ещё поднимается)")
+			told = time.Now()
 		}
 		select {
 		case <-ctx.Done():
 			return ""
 		case <-time.After(3 * time.Second):
+		}
+	}
+	return ""
+}
+
+// addressSources — откуда libvirt берёт адрес машины, в порядке
+// надёжности.
+//
+// lease знает только про сети самого libvirt (NAT). Машина в мосту берёт
+// адрес у DHCP-сервера сети, и там его знает либо гостевой агент (канал
+// для него есть в описании домена), либо таблица ARP хоста — поэтому
+// спрашиваем все три, а не одну.
+var addressSources = []string{"lease", "agent", "arp"}
+
+// Address спрашивает у libvirt адрес машины. Пустая строка — «пока не
+// знаю», а не «нет».
+func (r *CreateRunner) Address(ctx context.Context, name string) string {
+	for _, source := range addressSources {
+		res, err := r.run(ctx, "virsh", "domifaddr", name, "--source", source)
+		if err != nil || res.ExitCode != 0 {
+			continue
+		}
+		if addr := parseDomifaddr(res.Output()); addr != "" {
+			return addr
 		}
 	}
 	return ""

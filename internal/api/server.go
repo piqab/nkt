@@ -234,6 +234,7 @@ func (s *Server) Handler() http.Handler {
 
 			r.Get("/vm/images", s.handleVMImages)
 			r.Get("/vm/templates", s.handleVMTemplates)
+			r.Get("/vm/address", s.handleVMAddress)
 
 			r.Get("/jobs", s.handleJobList)
 			r.Get("/jobs/{id}", s.handleJobGet)
