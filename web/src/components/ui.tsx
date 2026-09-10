@@ -92,7 +92,13 @@ export function Card({
       className={className}
       title={
         title || subtitle ? (
-          <div>
+          // .card-title — чтобы длинный заголовок (в «Конфигурациях» это
+          // полный путь к файлу) переносился. Само правило нельзя написать
+          // для .ant-card-head-title: antd подставляет свои стили в head
+          // позже нашей таблицы стилей и при равной специфичности
+          // выигрывает; собственный класс на дочернем элементе ни с чем не
+          // спорит.
+          <div className="card-title">
             {title && <span>{title}</span>}
             {subtitle && (
               <div style={{ fontWeight: 400, fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>

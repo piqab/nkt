@@ -310,6 +310,24 @@ h3 { font-size: 0.95rem; }
 
 .table-wrap { overflow-x: auto; }
 
+/* Клетка переносит длинное значение, а не наползает на соседнюю. Нужно
+   потому, что antd со sticky-заголовком раскладывает таблицу как
+   table-layout: fixed: колонки делят ширину поровну, и всё, что шире
+   своей доли, иначе просто выходит за границы клетки поверх соседей. */
+.ant-table-cell { overflow-wrap: anywhere; }
+
+/* Заголовком карточки бывает путь к файлу. antd обрезает его многоточием
+   (white-space: nowrap), но неразрывная строка всё равно участвует в
+   расчёте ширины — из-за одного длинного пути вбок разъезжалась вся
+   страница. Пусть лучше переносится на вторую строку: путь целиком нужнее
+   постоянной ширины заголовка. */
+.ant-card-head-title { min-width: 0; }
+.card-title {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
 /* ---------------------------------------------------------------- controls */
 
 button, .btn {
@@ -358,7 +376,27 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, button:focus-
   outline-offset: 1px;
 }
 textarea { font-family: var(--mono); font-size: 0.8rem; line-height: 1.5; width: 100%; }
-label { font-size: 0.8rem; color: var(--text-secondary); display: flex; flex-direction: column; gap: 0.2rem; }
+/* Собственные подписи полей — столбиком: подпись над полем. Метки antd
+   исключены: Checkbox и Radio — тоже <label>, и заданное здесь
+   flex-direction: column разводило галочку и её название по разным
+   строкам (antd своё направление не задаёт, поэтому переопределять было
+   нечего — правило просто применялось). */
+label:not([class*='ant-']) {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+/* Наш собственный приём «галочка плюс текст в одной подписи» встречается
+   в нескольких формах; чтобы каждая не выправляла направление своим
+   inline-стилем, это делается здесь один раз. */
+label:not([class*='ant-']):has(> .ant-checkbox-wrapper) {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.4rem;
+}
 
 .code-editor {
   display: flex;

@@ -124,6 +124,22 @@ type AddFirewalldValues = {
   permanent: boolean
 }
 
+/** Имя цепочки с точками переноса после каждой косой черты.
+ *
+ * «iptables/filter/PREROUTING» шире узкой колонки, и без подсказки браузер
+ * рвёт его посреди слова («…/I» и «NPUT» на следующей строке). <wbr/>
+ * разрешает перенос ровно там, где он читается — на границе части пути. */
+function chainName(parts: (string | undefined)[]) {
+  const shown = parts.filter(Boolean) as string[]
+  return shown.map((part, i) => (
+    <span key={i}>
+      {part}
+      {i < shown.length - 1 && '/'}
+      {i < shown.length - 1 && <wbr />}
+    </span>
+  ))
+}
+
 export default function Firewall({ me }: { me: Me }) {
   const { t } = useTranslation()
   const fw = useApi<FirewallResponse>('/firewall', 60_000)
@@ -419,13 +435,17 @@ export default function Firewall({ me }: { me: Me }) {
   }
 
   const policyColumns: TableColumnsType<FirewallPolicy> = [
-    { title: t('fw.colChain'), key: 'chain', render: (_, p) => <span className="mono small">{p.backend}/{p.table}/{p.chain}</span> },
+    {
+      title: t('fw.colChain'),
+      key: 'chain',
+      render: (_, p) => <span className="mono small">{chainName([p.backend, p.table, p.chain])}</span>,
+    },
     { title: t('fw.colPolicy'), dataIndex: 'policy', key: 'policy', className: 'mono small' },
     { title: t('fw.colPackets'), key: 'packets', align: 'right', render: (_, p) => <span className="num small">{formatNumber(p.packets)}</span> },
   ]
 
   const numberedColumns: TableColumnsType<NumberedRule> = [
-    { title: t('fw.colNumber'), dataIndex: 'number', key: 'number', align: 'right' },
+    { title: t('fw.colNumber'), dataIndex: 'number', key: 'number', align: 'right', width: 56 },
     { title: t('fw.colRule'), dataIndex: 'text', key: 'text', className: 'mono small' },
     {
       title: '',
@@ -443,10 +463,7 @@ export default function Firewall({ me }: { me: Me }) {
       title: t('fw.colChain'),
       key: 'chain',
       render: (_, r) => (
-        <span className="mono small nowrap">
-          {r.backend}/{r.table ? `${r.table}/` : ''}
-          {r.chain}
-        </span>
+        <span className="mono small">{chainName([r.backend, r.table, r.chain])}</span>
       ),
     },
     {
@@ -657,6 +674,11 @@ export default function Firewall({ me }: { me: Me }) {
               <DataTable<FirewallPolicy>                 dataSource={fw.data.policies.filter((p) => p.policy !== '-')}
                 columns={policyColumns}
                 rowKey={(p) => `${p.backend}/${p.table}/${p.chain}`}
+                // Карточка узкая (четыре в ряд), а имена цепочек длинные:
+                // при делении ширины поровну «POSTROUTING» ломалось посреди
+                // слова. С раскладкой по содержимому имя остаётся целым, а
+                // .table-wrap при нехватке места прокручивается.
+                tableLayout="auto"
               />
             </div>
           </Card>
@@ -791,6 +813,7 @@ export default function Firewall({ me }: { me: Me }) {
             <DataTable<NumberedRule>               dataSource={numbered.data.rules}
               columns={numberedColumns}
               rowKey="number"
+              tableLayout="auto"
             />
           </div>
         </Card>
@@ -830,7 +853,17 @@ export default function Firewall({ me }: { me: Me }) {
           <Loading what={t('fw.loadingRules')} />
         ) : (
           <div className="table-wrap">
-            <DataTable<FirewallRule> dataSource={rules} columns={ruleColumns} rowKey="id" />
+            {/* tableLayout="auto": со sticky-заголовком antd раскладывает
+                таблицу как fixed, деля ширину поровну между десятью
+                колонками, и длинное «iptables/filter/DOCKER-ISOLATION-STAGE-1»
+                наползало на соседнюю. Здесь колонки берут ширину по
+                содержимому, а .table-wrap прокручивается. */}
+            <DataTable<FirewallRule>
+              dataSource={rules}
+              columns={ruleColumns}
+              rowKey="id"
+              tableLayout="auto"
+            />
           </div>
         )}
       </Card>
