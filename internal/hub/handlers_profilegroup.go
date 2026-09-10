@@ -3,6 +3,7 @@ package hub
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/piqab/nkt/internal/auth"
@@ -163,4 +164,48 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 	}
 	s.db.Audit(r.Context(), user, "vm.provision", req.Spec.Name, "ok", host.Name)
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
+}
+
+// handleDetectAddress выясняет адрес машины у хоста, на котором она
+// работает, и записывает его.
+//
+// Нужно, когда адрес не успел появиться к концу создания: машина ещё
+// грузилась или ждала DHCP. Без этого запись хоста осталась бы с
+// заглушкой навсегда, а установка на неё — с невнятным отказом
+// рукопожатия.
+func (s *Server) handleDetectAddress(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	host, err := s.db.HostByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if host.ParentID == 0 {
+		writeError(w, http.StatusBadRequest, "адрес определяется только у машин, созданных на управляемом хосте")
+		return
+	}
+
+	var res struct {
+		Address string `json:"address"`
+	}
+	path := "/api/vm/address?name=" + url.QueryEscape(host.Name)
+	if _, err := s.hub.HostAPI(r.Context(), host.ParentID, "GET", path, nil, &res); err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if res.Address == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"address": "", "found": false})
+		return
+	}
+	if err := s.hub.UpdateHost(r.Context(), host.ID, host.Name, res.Address, host.SSHPort,
+		host.SSHUser, host.SSHAuthKind, "", host.TerminalEnabled); err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "vm.address", host.Name, "ok", res.Address)
+	writeJSON(w, http.StatusOK, map[string]any{"address": res.Address, "found": true})
 }

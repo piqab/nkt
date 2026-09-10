@@ -438,6 +438,17 @@ func (m *Manager) SetLocalHostGroup(ctx context.Context, group string) error {
 	return m.db.KVSet(ctx, localGroupKey, group)
 }
 
+// PlaceholderAddr — адрес, который получает машина, пока её настоящий
+// неизвестен. Не пустая строка: пустой адрес не прошёл бы проверку при
+// заведении хоста, а «нет адреса» и «не знаю адрес» здесь одно и то же.
+const PlaceholderAddr = "0.0.0.0"
+
+// isPlaceholderAddr отвечает, стоит ли в поле адреса заглушка.
+func isPlaceholderAddr(addr string) bool {
+	addr = strings.TrimSpace(addr)
+	return addr == "" || addr == PlaceholderAddr
+}
+
 // cleanGroupName приводит название к тому виду, в котором оно попадёт в
 // список: без хвостовых пробелов и без переводов строк, которые
 // превратили бы один заголовок раздела в несколько.
@@ -686,6 +697,14 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, bo
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
 		return "", fmt.Errorf("хост не найден: %w", err)
+	}
+	// Заглушка вместо адреса — это машина, которая ещё не получила его
+	// от DHCP. Стучаться туда по SSH бессмысленно: рукопожатие с
+	// 0.0.0.0 всё равно провалится, и сообщение про «unable to
+	// authenticate» ничего не объяснит.
+	if isPlaceholderAddr(host.Addr) {
+		return "", fmt.Errorf("адрес машины %q ещё не определён — дождитесь, пока она поднимется, "+
+			"и нажмите «определить адрес», либо впишите его сами", host.Name)
 	}
 	if !force {
 		if foreign, err := m.checkForeignInstall(ctx, host); err == nil && foreign != nil {

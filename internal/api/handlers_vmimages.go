@@ -118,6 +118,28 @@ func (s *Server) handleVMImageDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
+// handleVMAddress отвечает, какой адрес libvirt знает у машины.
+//
+// Отдельно от создания: адрес появляется не сразу — сначала машина
+// грузится, потом получает его у DHCP, — и спросить его позже нужно и
+// хабу, и оператору.
+func (s *Server) handleVMAddress(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "не указано имя машины")
+		return
+	}
+	if s.vmimages == nil {
+		writeError(w, http.StatusServiceUnavailable, "работа с машинами недоступна")
+		return
+	}
+	runner := vmcreate.NewCreateRunner(s.vmimages, s.scanner.Collector(), RunUnrestricted)
+	writeJSON(w, http.StatusOK, map[string]string{
+		"name":    name,
+		"address": runner.Address(r.Context(), name),
+	})
+}
+
 func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 	var spec vmcreate.Spec
 	if err := decodeJSON(r, &spec); err != nil {

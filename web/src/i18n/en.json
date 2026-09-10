@@ -586,7 +586,12 @@
     "newVMKeyOptional": "Optional: the hub always installs its own key and logs in with it. This one is only needed if you want to reach the machine directly, bypassing the hub.",
     "newVMInstall": "Install nkt on the new machine right after creation",
     "newVMProfile": "Bring to profile:",
-    "newVMProfileNone": "do not apply"
+    "newVMProfileNone": "do not apply",
+    "addrUnknown": "address not known yet",
+    "detectAddress": "detect address",
+    "detectAddressHint": "The machine has not got an address from DHCP yet. Installing before that is pointless — a handshake with 0.0.0.0 fails anyway.",
+    "detectAddressFound": "Address of \"{{name}}\" detected: {{addr}}. nkt can be installed now.",
+    "detectAddressNone": "The address of \"{{name}}\" is still unknown: it is either still booting or the network has no DHCP lease. Try again in a minute, or set the address yourself via \"edit\"."
   },
   "certs": {
     "colSites": "Sites",

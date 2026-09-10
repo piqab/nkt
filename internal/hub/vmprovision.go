@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
@@ -32,6 +33,10 @@ const vmJobPoll = 3 * time.Second
 // vmJobTimeout — сколько ждать создания машины. Копирование образа на
 // медленном диске бывает долгим, но не бесконечным.
 const vmJobTimeout = 40 * time.Minute
+
+// addressPoll — сколько хаб сам ждёт адреса после того, как задание на
+// хосте закончилось.
+const addressPoll = 5 * time.Minute
 
 // installTimeout — сколько ждать установки nkt на новую машину. Первый
 // запуск ещё доделывает cloud-init, поэтому запас больше обычного.
@@ -166,6 +171,13 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil {
 		return err
 	}
+	if addr == "" {
+		// Задание на хосте закончилось раньше, чем машина ответила.
+		// Спрашиваем сами: адрес появляется от одной до нескольких
+		// минут, и оставить запись с заглушкой значит обречь установку
+		// на невнятный отказ рукопожатия.
+		addr = r.pollAddress(ctx, jc, host, p.Spec.Name)
+	}
 	if addr != "" {
 		done.Address = addr
 		jc.SaveResume(done)
@@ -291,6 +303,30 @@ func (r *VMProvisionRunner) applyProfile(ctx context.Context, jc *jobs.Context,
 	}
 	_, err = r.waitVMJob(ctx, jc, host, started.JobID)
 	return err
+}
+
+// pollAddress доспрашивает адрес машины у хоста.
+func (r *VMProvisionRunner) pollAddress(ctx context.Context, jc *jobs.Context,
+	host store.Host, name string) string {
+
+	jc.Logf("Жду адрес машины (машина ещё поднимается)…")
+	deadline := time.Now().Add(addressPoll)
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return ""
+		}
+		var res struct {
+			Address string `json:"address"`
+		}
+		path := "/api/vm/address?name=" + url.QueryEscape(name)
+		if _, err := r.m.HostAPI(ctx, host.ID, "GET", path, nil, &res); err == nil && res.Address != "" {
+			return res.Address
+		}
+		if !sleepCtx(ctx, vmJobPoll) {
+			return ""
+		}
+	}
+	return ""
 }
 
 // waitVMJob следит за заданием на хосте и вылавливает адрес машины.
