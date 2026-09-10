@@ -128,3 +128,30 @@ func TestListIncludesFilesOutsideTheParsedConfig(t *testing.T) {
 		t.Error("sshd_config помечен как не подключённый")
 	}
 }
+
+// Приватные ключи хоста лежат в /etc/ssh рядом с sshd_config и без
+// расширения — то есть проходят общий фильтр обхода. В списке
+// конфигураций им не место: открытый в браузере приватный ключ это ровно
+// то, ради чего его крадут.
+func TestPrivateKeysAreNotListed(t *testing.T) {
+	hidden := []string{
+		"ssh_host_rsa_key", "ssh_host_ed25519_key", "ssh_host_ecdsa_key",
+		"id_rsa", "id_ed25519", "server.key", "cert.pem",
+	}
+	for _, name := range hidden {
+		if !privateKeyRe.MatchString(name) {
+			t.Errorf("%s не отсеивается — попадёт в список конфигураций", name)
+		}
+	}
+
+	shown := []string{
+		"sshd_config", "ssh_config", "moduli", "nginx.conf",
+		// Публичная половина ключа секретом не является.
+		"ssh_host_rsa_key.pub",
+	}
+	for _, name := range shown {
+		if privateKeyRe.MatchString(name) {
+			t.Errorf("%s отсеян, хотя это обычный файл конфигурации", name)
+		}
+	}
+}

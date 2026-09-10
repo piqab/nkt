@@ -16,6 +16,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"syscall"
 	"time"
 )
 
@@ -126,6 +127,19 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 	}
 	tmp, err := os.CreateTemp(dir, ".nkt-*")
 	if err != nil {
+		// Каталог недоступен на запись, а сам файл — возможно, да. Так
+		// выглядит /etc/hosts или /etc/resolv.conf под ProtectSystem=strict:
+		// ReadWritePaths может открыть на запись файл, но не каталог, в
+		// котором он лежит, а временный файл создаётся именно там.
+		//
+		// Тогда пишем на месте. Это не атомарно: обрыв на середине оставит
+		// файл обрезанным — но выбор здесь не между атомарностью и её
+		// отсутствием, а между записью на месте и невозможностью записать
+		// вовсе. Для целевых файлов (одна-две строки настроек) риск
+		// несопоставим с потерей возможности их править.
+		if writeInPlace(p, data, mode) == nil {
+			return nil
+		}
 		return fmt.Errorf("create temp file in %s: %w", dir, err)
 	}
 	tmpName := tmp.Name()
@@ -148,6 +162,24 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 	}
 	return os.Rename(tmpName, p)
 }
+
+// Writable реализует Collector. Проверяется и сам файл, и его каталог:
+// записать можно либо через временный файл рядом (нужен доступный на
+// запись каталог), либо на месте (нужен доступный на запись файл) — см.
+// WriteFile выше.
+//
+// syscall.Access, а не попытка открыть на запись: access(2) на файловой
+// системе, смонтированной только для чтения, честно отвечает EROFS, и при
+// этом ничего не создаёт и не меняет времена доступа.
+func (l *Local) Writable(p string) bool {
+	if syscall.Access(p, wOK) == nil {
+		return true
+	}
+	return syscall.Access(filepath.Dir(p), wOK) == nil
+}
+
+// wOK — константа access(2) «проверить право на запись».
+const wOK = 0x2
 
 func (l *Local) DeleteFile(p string) error {
 	return os.Remove(p)
@@ -257,4 +289,24 @@ func (l *Local) HostInfo(ctx context.Context) HostInfo {
 			"процесс запущен не от root: часть конфигов и правил firewall может быть недоступна")
 	}
 	return info
+}
+
+// writeInPlace перезаписывает существующий файл без временного: запасной
+// путь для случая, когда каталог только на чтение (см. WriteFile).
+// Именно существующий: если файла нет, создать его в закрытом на запись
+// каталоге всё равно нельзя, и молча делать вид, что получилось, нельзя
+// тем более.
+func writeInPlace(path string, data []byte, mode fs.FileMode) error {
+	if _, err := os.Stat(path); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.Write(data); err != nil {
+		return err
+	}
+	return f.Sync()
 }

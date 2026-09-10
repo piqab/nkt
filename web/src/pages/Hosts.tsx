@@ -313,7 +313,10 @@ export default function Hosts({
   const pendingBootstrap = useRef(new Map<number, BootstrapOptions>())
   const [removingHost, setRemovingHost] = useState<HubHost | null>(null)
 
-  async function startInstall(host: HubHost, force = false): Promise<boolean> {
+  // Принимает не весь хост, а только его идентификатор: сразу после
+  // добавления полной записи ещё нет, а установке кроме id ничего и не
+  // нужно.
+  async function startInstall(host: Pick<HubHost, 'id'>, force = false): Promise<boolean> {
     setNotice(null)
     try {
       // Подготовка относится к одной конкретной установке — к той, что
@@ -935,7 +938,17 @@ export default function Hosts({
               setCreatingHost(false)
               reload()
               if (created?.bootstrap) pendingBootstrap.current.set(created.id, created.bootstrap)
-              if (authorizedKey) setPubKeyInfo({ hostName: name, key: authorizedKey })
+              if (authorizedKey) {
+                // Ручной режим: пока ключ не окажется в authorized_keys на
+                // хосте, установке подключаться нечем — сначала показываем
+                // ключ, установку оператор запускает сам, скопировав его.
+                setPubKeyInfo({ hostName: name, key: authorizedKey })
+                return
+              }
+              // Автонастройка: реквизиты для подключения уже есть, ждать
+              // нечего — форма закрывается и сразу открывается журнал
+              // установки, вместо того чтобы искать кнопку в таблице.
+              if (created) void startInstall({ id: created.id })
             }}
           />
         </Modal>

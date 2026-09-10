@@ -806,7 +806,8 @@
     "sshGuardBlocked": "Резервного канала нет: {{detail}}",
     "sshGuardProbeOk": "sshd отвечает на новое соединение (порт {{port}}, {{banner}}). После сохранения проверка повторится, и если демон перестанет принимать соединения — правка откатится сама.",
     "sshGuardProbeFail": "sshd сейчас не отвечает на новое соединение (порт {{port}}): {{error}}",
-    "sshGuardForce": "У меня есть доступ к консоли хоста — разрешить правку"
+    "sshGuardForce": "У меня есть доступ к консоли хоста — разрешить правку",
+    "notWritable": "Этот файл открыт только на чтение: каталог недоступен на запись из юнита nkt. Обновите netknownsthat.service на хосте (ReadWritePaths для этого каталога) и выполните systemctl daemon-reload && systemctl restart netknownsthat."
   },
   "charts": {
     "seconds": "{{value}} с",

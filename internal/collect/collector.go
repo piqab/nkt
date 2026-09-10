@@ -76,6 +76,12 @@ type Collector interface {
 	Glob(pattern string) ([]string, error)
 
 	WriteFile(path string, data []byte, mode fs.FileMode) error
+	// Writable сообщает, получится ли записать этот путь. Проверяется
+	// заранее, чтобы редактор не предлагал сохранить то, что сохранить
+	// нельзя: под ProtectSystem=strict половина /etc открыта только на
+	// чтение, и узнавать об этом в момент нажатия «сохранить» — худший
+	// момент из возможных.
+	Writable(path string) bool
 	// DeleteFile removes a file. Used only to undo a just-created file that
 	// failed validation — there is no previous version to restore for a file
 	// that did not exist before this write, so the rollback is removal

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	gopath "path"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -236,7 +237,10 @@ func (m *ConfigManager) List(ctx context.Context) ([]model.ManagedFile, error) {
 	for _, f := range snap.Files {
 		if svc, err := m.checkPath(f.Path); err == nil {
 			f.Service = svc
-			f.Editable = f.Readable
+			// Редактируемость — не «разрешено правилами», а «получится
+			// записать»: путь может быть разрешён, но лежать в каталоге,
+			// который песочница юнита открыла только на чтение.
+			f.Editable = f.Readable && m.c.Writable(f.Path)
 		} else {
 			f.Editable = false
 		}
@@ -316,6 +320,13 @@ func (m *ConfigManager) editableRoots() []string {
 	}
 }
 
+// privateKeyRe — файлы, которых в списке конфигураций быть не должно
+// вовсе: приватные ключи хоста лежат в /etc/ssh рядом с sshd_config и без
+// расширения, то есть проходят общий фильтр. Показывать их в редакторе
+// нельзя — открытый в браузере приватный ключ хоста это ровно то, ради
+// чего его и крадут.
+var privateKeyRe = regexp.MustCompile(`^(ssh_host_[a-z0-9]+_key|id_(rsa|dsa|ecdsa|ed25519)|.*\.(key|pem))$`)
+
 // walkConfigDepth ограничивает обход: sites-enabled/conf.d/sshd_config.d
 // лежат на первом-втором уровне, а глубже начинаются каталоги вроде
 // /etc/nginx/modules-available с сотнями файлов, которые правят не отсюда.
@@ -336,7 +347,8 @@ func (m *ConfigManager) walkConfigs(root string, depth int) []string {
 			out = append(out, m.walkConfigs(e.Path, depth+1)...)
 			continue
 		}
-		if !e.Readable || !configExtensions[gopath.Ext(e.Path)] {
+		name := e.Path[strings.LastIndex(e.Path, "/")+1:]
+		if !e.Readable || privateKeyRe.MatchString(name) || !configExtensions[gopath.Ext(e.Path)] {
 			continue
 		}
 		out = append(out, e.Path)
@@ -358,7 +370,7 @@ func (m *ConfigManager) describeFile(path string) (model.ManagedFile, bool) {
 	}
 	return model.ManagedFile{
 		Path: path, Service: service, Size: st.Size, ModTime: st.ModTime,
-		Readable: true, Editable: true, InUse: !parsedServices[service],
+		Readable: true, Editable: m.c.Writable(path), InUse: !parsedServices[service],
 	}, true
 }
 
