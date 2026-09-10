@@ -1,0 +1,87 @@
+package control
+
+import (
+	"fmt"
+	gopath "path"
+	"sort"
+	"strings"
+)
+
+// Запись в /etc упирается не в права (nkt работает от root), а в
+// собственную песочницу юнита: под ProtectSystem=strict всё, кроме путей
+// из ReadWritePaths, смонтировано только для чтения.
+//
+// Обычно этого никто не замечает — запись, которой помешала песочница,
+// повторяется снаружи, через systemd-run или nsenter (см.
+// collect.Local.SetEscape). Но когда выхода нет — старый юнит на хосте,
+// недоступный D-Bus и запрет setns одновременно, — остаётся единственный
+// путь: открыть каталог самому юниту. Здесь готовится drop-in, который это
+// делает, не трогая упакованный файл юнита.
+
+// WritablePathsDropIn — файл, в который дописываются открытые каталоги.
+// Отдельный drop-in, а не правка netknownsthat.service: обновление nkt
+// перезаписывает сам юнит, а каталог .d переживает его нетронутым.
+const WritablePathsDropIn = "/etc/systemd/system/netknownsthat.service.d/nkt-writable-paths.conf"
+
+// mergeWritablePaths добавляет каталог в drop-in, сохраняя уже открытые.
+// Второе значение — было ли что менять: повторное нажатие на уже открытый
+// каталог не должно приводить к перезапуску службы.
+func mergeWritablePaths(existing, dir string) (string, bool) {
+	paths := map[string]bool{}
+	for _, line := range strings.Split(existing, "\n") {
+		line = strings.TrimSpace(line)
+		value, ok := strings.CutPrefix(line, "ReadWritePaths=")
+		if !ok {
+			continue
+		}
+		// Ведущий «-» — «не считать ошибкой отсутствие каталога»; в
+		// сравнении он не участвует, иначе один и тот же путь попал бы в
+		// файл дважды.
+		paths[strings.TrimPrefix(strings.TrimSpace(value), "-")] = true
+	}
+	if paths[dir] {
+		return existing, false
+	}
+	paths[dir] = true
+
+	names := make([]string, 0, len(paths))
+	for p := range paths {
+		names = append(names, p)
+	}
+	sort.Strings(names)
+
+	var b strings.Builder
+	b.WriteString("# Создано nkt: каталоги, открытые на запись из интерфейса.\n")
+	b.WriteString("# Файл переживает обновление nkt — сам юнит при обновлении перезаписывается.\n")
+	b.WriteString("[Service]\n")
+	for _, p := range names {
+		fmt.Fprintf(&b, "ReadWritePaths=-%s\n", p)
+	}
+	return b.String(), true
+}
+
+// AllowWrite открывает каталог файла на запись для собственного юнита.
+//
+// Возвращает изменённый drop-in и признак того, что он действительно
+// изменился. Перезагрузка конфигурации systemd и перезапуск службы — не
+// здесь: этим занимается вызывающий (internal/api), у которого есть и
+// выход из песочницы, и умение пережить собственный перезапуск.
+func (m *ConfigManager) AllowWrite(path string) (dropIn string, changed bool, err error) {
+	if _, err := m.checkPath(path); err != nil {
+		return "", false, err
+	}
+	dir := gopath.Dir(path)
+
+	var current string
+	if raw, err := m.c.ReadFile(WritablePathsDropIn); err == nil {
+		current = string(raw)
+	}
+	next, changed := mergeWritablePaths(current, dir)
+	if !changed {
+		return WritablePathsDropIn, false, nil
+	}
+	if err := m.c.WriteFile(WritablePathsDropIn, []byte(next), 0o644); err != nil {
+		return "", false, fmt.Errorf("запись %s: %w", WritablePathsDropIn, err)
+	}
+	return WritablePathsDropIn, true, nil
+}

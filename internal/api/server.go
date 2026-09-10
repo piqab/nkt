@@ -265,6 +265,7 @@ func (s *Server) Handler() http.Handler {
 
 				r.Put("/configs/file", s.handleConfigWrite)
 				r.Post("/configs/mkdir", s.handleConfigMkdir)
+				r.Post("/configs/allow-write", s.handleConfigAllowWrite)
 				r.Post("/configs/blocks", s.handleConfigBlockWrite)
 				r.Post("/configs/versions/{id}/rollback", s.handleConfigRollback)
 

@@ -740,10 +740,26 @@ func (s *Server) runPTYSession(w http.ResponseWriter, r *http.Request, cmd *exec
 // песочницы (см. соседние функции) лежит в этом пакете; control получает
 // её функцией через cmd/nkt, не импортируя api.
 func RunUnrestricted(ctx context.Context, argv ...string) (collect.CommandResult, error) {
+	return RunUnrestrictedInput(ctx, nil, argv...)
+}
+
+// RunUnrestrictedInput — RunUnrestricted с данными на входе команды.
+//
+// Нужна записи файлов конфигурации (collect.Local.WriteFile): содержимое
+// уходит команде на stdin, а не через промежуточный файл. Промежуточный
+// файл здесь и не годится — под PrivateTmp=yes у юнита свой /tmp, которого
+// в пространстве монтирования хоста просто нет, так что команда по ту
+// сторону песочницы его бы не нашла.
+func RunUnrestrictedInput(ctx context.Context, stdin []byte, argv ...string) (collect.CommandResult, error) {
 	if len(argv) == 0 {
 		return collect.CommandResult{}, fmt.Errorf("пустая команда")
 	}
 	cmd := unrestrictedQuietCommand(ctx, nil, argv...)
+	if stdin != nil {
+		// systemd-run --pipe проксирует stdin так же, как stdout/stderr,
+		// а nsenter и обычный запуск получают его напрямую.
+		cmd.Stdin = bytes.NewReader(stdin)
+	}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

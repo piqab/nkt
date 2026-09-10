@@ -825,7 +825,10 @@
     "sshGuardProbeOk": "sshd accepts a new connection (port {{port}}, {{banner}}). The check repeats after saving, and the edit rolls back automatically if the daemon stops accepting connections.",
     "sshGuardProbeFail": "sshd is not accepting a new connection right now (port {{port}}): {{error}}",
     "sshGuardForce": "I have console access to this host — allow the edit",
-    "notWritable": "This file is read-only: the directory is not writable from the nkt unit. Update netknownsthat.service on the host (ReadWritePaths for that directory), then systemctl daemon-reload && systemctl restart netknownsthat.",
+    "notWritable": "This file is read-only: its directory is not writable from the nkt unit, and the sandbox could not be bypassed. Changes cannot be saved until the directory is opened up for the unit.",
+    "allowWrite": "Allow writing",
+    "allowWriteConfirm": "Open this file's directory for writing by the nkt service? The setting goes into a separate unit file, after which the service restarts — open terminals and log streams will drop.",
+    "allowWriteRestarting": "The directory is open and the service is restarting. The file becomes writable in a few seconds; reload the page if it does not respond right away.",
     "pathMustBeAbsolute": "The path must start with \"/\"",
     "pathNoDotDot": "\"..\" is not allowed in the path",
     "pathSameAsSource": "That is the source file’s own path — pick another"
