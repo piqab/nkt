@@ -221,6 +221,13 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/vulnerabilities/manifest", s.handleVulnManifest)
 			r.Get("/certificates", s.handleCertificates)
 
+			r.Get("/profiles", s.handleProfileList)
+			r.Get("/profiles/{id}", s.handleProfileGet)
+			r.Get("/profiles/{id}/export", s.handleProfileExport)
+			r.Get("/profiles/{id}/plan", s.handleProfilePlan)
+			r.Get("/profiles/{id}/versions", s.handleProfileVersions)
+			r.Get("/profiles/versions/{version}", s.handleProfileVersion)
+
 			r.Get("/jobs", s.handleJobList)
 			r.Get("/jobs/{id}", s.handleJobGet)
 			r.Get("/jobs/{id}/log", s.handleJobLog)
@@ -275,6 +282,12 @@ func (s *Server) Handler() http.Handler {
 				r.Delete("/vms/{name}", s.handleVMDelete)
 
 				r.Put("/configs/file", s.handleConfigWrite)
+				r.Post("/profiles", s.handleProfileCreate)
+				r.Post("/profiles/plan", s.handleProfilePlanPreview)
+				r.Post("/profiles/{id}/apply", s.handleProfileApply)
+				r.Put("/profiles/{id}", s.handleProfileUpdate)
+				r.Delete("/profiles/{id}", s.handleProfileDelete)
+
 				r.Post("/jobs/{id}/cancel", s.handleJobCancel)
 				r.Post("/configs/mkdir", s.handleConfigMkdir)
 				r.Post("/configs/allow-write", s.handleConfigAllowWrite)

@@ -155,6 +155,29 @@ CREATE TABLE IF NOT EXISTS jobs (
 CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 
+-- Описания желаемого состояния хоста. Содержимое — YAML целиком: профиль
+-- правят, выгружают в git и возвращают оттуда целиком, а разбирает его
+-- internal/profile.
+CREATE TABLE IF NOT EXISTS profiles (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    content    TEXT NOT NULL,
+    note       TEXT NOT NULL DEFAULT '',
+    author     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS profile_versions (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    profile_id INTEGER NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+    ts         TEXT NOT NULL,
+    author     TEXT NOT NULL DEFAULT '',
+    note       TEXT NOT NULL DEFAULT '',
+    content    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_profile_versions ON profile_versions(profile_id, id DESC);
+
 -- Журнал задания строками: так его можно дописывать по ходу и отдавать
 -- с любого места, не держа целиком в памяти.
 CREATE TABLE IF NOT EXISTS job_log (

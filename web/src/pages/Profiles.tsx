@@ -1,0 +1,400 @@
+import { useEffect, useMemo, useState } from 'react'
+import { Button, Checkbox, Input, Tag, type TableColumnsType } from 'antd'
+import { useTranslation } from 'react-i18next'
+import { api, useApi } from '../api'
+import type { Job, Me, Profile, ProfilePlan, PlanChange, ProfileVersion } from '../types'
+import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDateTime } from '../components/ui'
+import { DataTable } from '../components/DataTable'
+import { confirmAction } from '../components/confirm'
+import { JobLogModal } from './Jobs'
+
+/** Заготовка для нового профиля: показывает форму, а не пустой экран. */
+const TEMPLATE = `version: 1
+name: новый-профиль
+packages:
+  - btop
+services:
+  ssh:
+    enabled: true
+    active: true
+# files:
+#   - path: /etc/motd
+#     content: |
+#       Привет
+# firewall:
+#   allow:
+#     - port: 443
+# users:
+#   - name: deploy
+#     sudo: true
+#     keys: ["ssh-ed25519 AAAA... deploy@laptop"]
+# system:
+#   timezone: Europe/Moscow
+`
+
+export default function Profiles({ me }: { me: Me }) {
+  const { t } = useTranslation()
+  const canEdit = me.is_admin && me.allow_mutations
+  const list = useApi<{ profiles: Profile[] }>('/profiles', 60_000)
+  const [selected, setSelected] = useState<number | null>(null)
+  const [draft, setDraft] = useState('')
+  const [note, setNote] = useState('')
+  const [plan, setPlan] = useState<ProfilePlan | null>(null)
+  const [chosen, setChosen] = useState<Set<number>>(new Set())
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [openJob, setOpenJob] = useState<Job | null>(null)
+  const [detail, setDetail] = useState<PlanChange | null>(null)
+  const [showVersions, setShowVersions] = useState(false)
+
+  const current = useApi<Profile>(selected ? `/profiles/${selected}` : null)
+
+  useEffect(() => {
+    if (current.data) {
+      setDraft(current.data.content ?? '')
+      setNote('')
+      setPlan(null)
+    }
+  }, [current.data])
+
+  const profiles = list.data?.profiles ?? []
+
+  async function save() {
+    setBusy(true)
+    setNotice(null)
+    try {
+      if (selected) {
+        await api(`/profiles/${selected}`, { method: 'PUT', body: { content: draft, note } })
+      } else {
+        const res = await api<{ id: number }>('/profiles', { method: 'POST', body: { content: draft, note } })
+        setSelected(res.id)
+      }
+      await list.reload()
+      setNotice({ kind: 'info', text: t('profiles.saved') })
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // План строится по тому, что сейчас в редакторе, а не по сохранённому:
+  // так видно последствия правки до её записи.
+  async function buildPlan() {
+    setBusy(true)
+    setNotice(null)
+    try {
+      const res = await api<ProfilePlan>('/profiles/plan', { method: 'POST', body: { content: draft } })
+      setPlan(res)
+      setChosen(new Set(res.changes.map((_, i) => i)))
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function apply() {
+    if (!plan || !selected) return
+    const changes = plan.changes.filter((_, i) => chosen.has(i))
+    if (changes.length === 0) return
+    const risky = changes.filter((c) => c.risk)
+    const question = risky.length
+      ? t('profiles.confirmApplyRisky', {
+          count: changes.length,
+          risks: risky.map((c) => t(`profiles.risk.${c.risk}`, { defaultValue: c.risk })).join('; '),
+        })
+      : t('profiles.confirmApply', { count: changes.length })
+    if (!(await confirmAction(question, { danger: risky.length > 0 }))) return
+
+    setBusy(true)
+    try {
+      const res = await api<{ job_id: number }>(`/profiles/${selected}/apply`, {
+        method: 'POST',
+        body: { changes },
+      })
+      const job = await api<Job>(`/jobs/${res.job_id}`)
+      setOpenJob(job)
+      setPlan(null)
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const planColumns: TableColumnsType<PlanChange> = useMemo(
+    () => [
+      {
+        title: '',
+        key: 'pick',
+        width: 40,
+        render: (_, __, index) => (
+          <Checkbox
+            checked={chosen.has(index)}
+            disabled={!canEdit}
+            onChange={(e) =>
+              setChosen((prev) => {
+                const next = new Set(prev)
+                if (e.target.checked) next.add(index)
+                else next.delete(index)
+                return next
+              })
+            }
+          />
+        ),
+      },
+      {
+        title: t('profiles.colAction'),
+        key: 'action',
+        render: (_, c) => (
+          <div style={{ minWidth: '12rem' }}>
+            <span className="mono small">{t(`profiles.action.${c.action}`, { defaultValue: c.action })}</span>
+            <div className="small muted mono">{c.target}</div>
+          </div>
+        ),
+      },
+      {
+        title: t('profiles.colCurrent'),
+        key: 'current',
+        // Состояния приходят кодами; всё, что кодом не оказалось (имя
+        // машины, например), показывается как есть — это само значение.
+        render: (_, c) => <span className="small">{t(`profiles.state.${c.current}`, { defaultValue: c.current })}</span>,
+      },
+      {
+        title: t('profiles.colDesired'),
+        key: 'desired',
+        render: (_, c) => (
+          <span className="small">
+            {t(`profiles.state.${c.desired}`, { defaultValue: c.desired })}
+            {c.detail && (
+              <Button type="link" size="small" onClick={() => setDetail(c)}>
+                {t('profiles.showDetail')}
+              </Button>
+            )}
+          </span>
+        ),
+      },
+      {
+        title: '',
+        key: 'risk',
+        render: (_, c) =>
+          c.risk ? <Tag color="warning">{t(`profiles.risk.${c.risk}`, { defaultValue: c.risk })}</Tag> : null,
+      },
+    ],
+    [chosen, canEdit, t],
+  )
+
+  return (
+    <>
+      <div className="page-head spread">
+        <h1>
+          {t('profiles.title')}
+          <InfoHint>{t('profiles.hint')}</InfoHint>
+        </h1>
+        {canEdit && (
+          <Button
+            onClick={() => {
+              setSelected(null)
+              setDraft(TEMPLATE)
+              setPlan(null)
+              setNote('')
+            }}
+          >
+            {t('profiles.newProfile')}
+          </Button>
+        )}
+      </div>
+
+      {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
+      <ErrorNote error={list.error} />
+
+      {/* Список слева, редактор справа — как в «Конфигурациях»: раздел
+          устроен так же, и разная раскладка сбивала бы с толку. */}
+      <div className="grid" style={{ gridTemplateColumns: 'minmax(240px, 320px) 1fr' }}>
+        <Card title={t('profiles.listTitle')} subtitle={t('profiles.listSubtitle', { count: profiles.length })}>
+          {list.loading && !list.data ? (
+            <Loading what={t('profiles.loading')} />
+          ) : profiles.length === 0 ? (
+            <p className="small muted">{t('profiles.empty')}</p>
+          ) : (
+            <div className="col" style={{ gap: '0.25rem' }}>
+              {profiles.map((p) => (
+                <Button
+                  key={p.id}
+                  type={p.id === selected ? 'default' : 'text'}
+                  style={{ textAlign: 'left', height: 'auto', padding: '0.35rem 0.5rem' }}
+                  onClick={() => setSelected(p.id)}
+                >
+                  <span>
+                    <strong>{p.name}</strong>
+                    <div className="small muted">{t('profiles.updated', { when: formatDateTime(p.updated_at) })}</div>
+                  </span>
+                </Button>
+              ))}
+            </div>
+          )}
+        </Card>
+
+        <div className="col">
+          <Card
+            title={current.data?.name ?? t('profiles.newProfile')}
+            actions={
+              <>
+                {selected && (
+                  <Button size="small" onClick={() => setShowVersions(true)}>
+                    {t('profiles.history')}
+                  </Button>
+                )}
+                {selected && (
+                  <Button size="small" href={`/api/profiles/${selected}/export`} target="_blank">
+                    {t('profiles.export')}
+                  </Button>
+                )}
+                {canEdit && (
+                  <Button size="small" loading={busy} onClick={() => void save()}>
+                    {t('common.save')}
+                  </Button>
+                )}
+                <Button size="small" type="primary" loading={busy} onClick={() => void buildPlan()}>
+                  {t('profiles.buildPlan')}
+                </Button>
+                {selected && canEdit && (
+                  <Button
+                    size="small"
+                    danger
+                    onClick={async () => {
+                      if (!(await confirmAction(t('profiles.confirmDelete', { name: current.data?.name })))) return
+                      await api(`/profiles/${selected}`, { method: 'DELETE' })
+                      setSelected(null)
+                      setDraft('')
+                      await list.reload()
+                    }}
+                  >
+                    {t('common.delete')}
+                  </Button>
+                )}
+              </>
+            }
+          >
+            {canEdit && (
+              <div className="filters" style={{ marginBottom: '0.5rem' }}>
+                <label style={{ flex: 1, minWidth: '14rem' }}>
+                  {t('profiles.note')}
+                  <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('profiles.notePlaceholder')} />
+                </label>
+              </div>
+            )}
+            <CodeEditor value={draft} onChange={(e) => setDraft(e.target.value)} rows={18} readOnly={!canEdit} />
+          </Card>
+
+          {plan && (
+            <Card
+              title={t('profiles.planTitle')}
+              subtitle={
+                plan.changes.length === 0
+                  ? t('profiles.planClean')
+                  : t('profiles.planCount', { count: plan.changes.length })
+              }
+              actions={
+                plan.changes.length > 0 &&
+                canEdit && (
+                  <Button type="primary" size="small" loading={busy} disabled={chosen.size === 0 || !selected} onClick={() => void apply()}>
+                    {t('profiles.apply', { count: chosen.size })}
+                  </Button>
+                )
+              }
+            >
+              {plan.unknown && plan.unknown.length > 0 && (
+                <Banner kind="warn">
+                  {t('profiles.unknownIntro')}
+                  <ul style={{ margin: '0.3rem 0 0 1rem' }}>
+                    {plan.unknown.map((u, i) => (
+                      <li key={i} className="small">
+                        {u}
+                      </li>
+                    ))}
+                  </ul>
+                </Banner>
+              )}
+              {plan.changes.length === 0 ? (
+                <p className="small muted">{t('profiles.planClean')}</p>
+              ) : (
+                <>
+                  {!selected && <Banner kind="warn">{t('profiles.saveBeforeApply')}</Banner>}
+                  <div className="table-wrap">
+                    <DataTable<PlanChange>
+                      dataSource={plan.changes}
+                      columns={planColumns}
+                      rowKey={(_, i) => i ?? 0}
+                      tableLayout="auto"
+                    />
+                  </div>
+                </>
+              )}
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {detail && (
+        <Modal title={detail.target} onClose={() => setDetail(null)} width={760}>
+          <pre className="diff mono" style={{ maxHeight: '24rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+            {detail.detail}
+          </pre>
+        </Modal>
+      )}
+
+      {showVersions && selected && (
+        <VersionsModal profileID={selected} onClose={() => setShowVersions(false)} onRestore={(content) => {
+          setDraft(content)
+          setShowVersions(false)
+        }} />
+      )}
+
+      {openJob && <JobLogModal job={openJob} onClose={() => setOpenJob(null)} />}
+    </>
+  )
+}
+
+/** История правок профиля: посмотреть и вернуть прошлую редакцию. */
+function VersionsModal({
+  profileID,
+  onClose,
+  onRestore,
+}: {
+  profileID: number
+  onClose: () => void
+  onRestore: (content: string) => void
+}) {
+  const { t } = useTranslation()
+  const versions = useApi<{ versions: ProfileVersion[] }>(`/profiles/${profileID}/versions`)
+
+  return (
+    <Modal title={t('profiles.history')} onClose={onClose} width={720}>
+      {versions.loading && !versions.data ? (
+        <Loading what={t('profiles.history')} />
+      ) : (
+        <div className="col" style={{ gap: '0.35rem' }}>
+          {(versions.data?.versions ?? []).map((v) => (
+            <div key={v.id} className="row spread">
+              <span className="small">
+                {formatDateTime(v.ts)} · {v.author || '—'}
+                {v.note ? ` · ${v.note}` : ''}
+              </span>
+              <Button
+                size="small"
+                onClick={async () => {
+                  const full = await api<ProfileVersion>(`/profiles/versions/${v.id}`)
+                  onRestore(full.content ?? '')
+                }}
+              >
+                {t('profiles.restoreVersion')}
+              </Button>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
+  )
+}

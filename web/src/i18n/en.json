@@ -41,7 +41,8 @@
     "disks": "Disks",
     "hardware": "Hardware",
     "system": "System settings",
-    "jobs": "Jobs"
+    "jobs": "Jobs",
+    "profiles": "Profiles"
   },
   "about": {
     "title": "About",
@@ -1464,6 +1465,72 @@
       "failed": "failed",
       "canceled": "canceled",
       "interrupted": "interrupted"
+    }
+  },
+  "profiles": {
+    "title": "Profiles",
+    "hint": "A profile describes what the host should be: packages, services, config files, open ports, accounts. The Plan button shows how reality differs and changes nothing; only ticked items are applied. A profile is additive — whatever it does not mention is left alone, never removed.",
+    "listTitle": "Profiles",
+    "listSubtitle": "total: {{count}}",
+    "loading": "profiles",
+    "empty": "No profiles yet.",
+    "newProfile": "New profile",
+    "updated": "edited {{when}}",
+    "note": "Edit comment",
+    "notePlaceholder": "why the change",
+    "saved": "Profile saved.",
+    "buildPlan": "Plan",
+    "history": "History",
+    "export": "Export",
+    "restoreVersion": "restore",
+    "confirmDelete": "Delete the profile \"{{name}}\"? Its edit history goes with it.",
+    "planTitle": "Plan",
+    "planClean": "No drift — the host already matches the profile.",
+    "planCount": "differences: {{count}}",
+    "apply": "Apply ({{count}})",
+    "confirmApply": "Apply the ticked items ({{count}})? The work runs in the background and does not depend on the browser.",
+    "confirmApplyRisky": "Apply the ticked items ({{count}})? Some are risky: {{risks}}",
+    "saveBeforeApply": "Save the profile first — what gets applied is the saved description, not the draft.",
+    "unknownIntro": "Some resources could not be judged — this means «unknown», not «all good»:",
+    "colAction": "Action",
+    "colCurrent": "Now",
+    "colDesired": "Should be",
+    "showDetail": "show",
+    "action": {
+      "package.install": "install package",
+      "service.enable": "enable at boot",
+      "service.disable": "disable at boot",
+      "service.start": "start service",
+      "service.stop": "stop service",
+      "file.write": "write file",
+      "firewall.allow": "open port",
+      "user.create": "create account",
+      "user.sudo": "grant sudo",
+      "user.key": "add key",
+      "system.hostname": "hostname",
+      "system.timezone": "timezone"
+    },
+    "state": {
+      "missing": "missing",
+      "installed": "installed",
+      "enabled": "enabled",
+      "disabled": "disabled",
+      "running": "running",
+      "stopped": "stopped",
+      "differs": "differs",
+      "as-profile": "as in profile",
+      "allowed": "allowed",
+      "blocked": "not allowed",
+      "no-sudo": "no sudo",
+      "sudo": "passwordless sudo",
+      "no-key": "key missing",
+      "key-added": "key added",
+      "created": "created"
+    },
+    "risk": {
+      "ssh-access": "may cut off SSH access to the host",
+      "sudo-grant": "the account gets full rights",
+      "hostname": "the hostname shows up in certificates and logs"
     }
   }
 }
