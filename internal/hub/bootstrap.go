@@ -9,6 +9,7 @@ import (
 
 	"golang.org/x/crypto/ssh"
 
+	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
 )
@@ -98,7 +99,12 @@ type BootstrapOptions struct {
 	Enabled bool `json:"enabled"`
 	// User — кого завести вместо работы от root. Пустая строка оставляет
 	// подключение под тем пользователем, что уже указан.
-	User     string   `json:"user"`
+	User string `json:"user"`
+	// UserKey — публичный ключ оператора для этой учётной записи. Ключ
+	// хаба кладётся всегда (иначе хабу нечем подключаться), этот — чтобы
+	// человек мог зайти на хост под тем же пользователем, из-под которого
+	// потом работают терминал и tmux.
+	UserKey  string   `json:"user_key"`
 	Packages []string `json:"packages"`
 	// DisablePasswordAuth выключает вход по паролю в sshd — только после
 	// того, как вход по ключу проверен новым соединением.
@@ -122,6 +128,12 @@ func (o *BootstrapOptions) Validate() error {
 	}
 	if o.User != "" && !bootstrapUserRe.MatchString(o.User) {
 		return fmt.Errorf("недопустимое имя пользователя: %q", o.User)
+	}
+	if key := strings.TrimSpace(o.UserKey); key != "" {
+		if _, err := control.ParseAuthorizedKey(key); err != nil {
+			return err
+		}
+		o.UserKey = key
 	}
 	if len(o.Packages) == 0 {
 		o.Packages = append([]string(nil), BootstrapPackagesDefault...)
@@ -174,6 +186,16 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 			return res, err
 		}
 		targetUser = opts.User
+
+		// Ключ оператора — отдельно от ключа хаба и до него: если что-то
+		// пойдёт не так дальше, у человека уже есть свой вход под этой
+		// учётной записью, а не только у хаба.
+		if opts.UserKey != "" {
+			report("hub.bootstrapUserKey", opts.User)
+			if err := installAuthorizedKey(client, sudo, targetUser, opts.UserKey); err != nil {
+				return res, err
+			}
+		}
 	}
 
 	// Ключ. При входе по паролю генерируется новый — это и есть переход с
