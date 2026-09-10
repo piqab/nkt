@@ -2,6 +2,7 @@ package profile
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -244,5 +245,28 @@ func TestPlanUsesStateCodes(t *testing.T) {
 	c := plan.Changes[0]
 	if c.Current != StateMissing || c.Desired != StateInstalled {
 		t.Errorf("состояния = %q → %q, ожидались коды", c.Current, c.Desired)
+	}
+}
+
+// План без расхождений обязан отдавать пустой список, а не null: nil-срез
+// уезжает в JSON как null, и «changes.length» на стороне браузера роняет
+// страницу целиком. На этом уже спотыкались «Диски».
+func TestPlanNeverEmitsNullArrays(t *testing.T) {
+	plan := Build(context.Background(), Profile{Name: "пусто"}, fakeReader{})
+	raw, err := json.Marshal(plan)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(raw), `"changes":null`) {
+		t.Errorf("в JSON есть null вместо пустого списка:\n%s", raw)
+	}
+	var back struct {
+		Changes []Change `json:"changes"`
+	}
+	if err := json.Unmarshal(raw, &back); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if back.Changes == nil {
+		t.Error("после разбора changes = nil")
 	}
 }

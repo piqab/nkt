@@ -1124,17 +1124,26 @@ export default function Hosts({
                     {/* Считаются только настоящие хосты: localhost — своя
                         машина хаба, к ней профиль применяют в её же
                         разделе «Профили», а не через SSH. */}
-                    {items.some((h) => h.id !== LOCAL_HOST_ID) && (profiles.data?.profiles?.length ?? 0) > 0 && (
-                      <span className="row host-group-actions" style={{ gap: '0.25rem' }}>
-                        <Button
-                          size="small"
-                          type="text"
-                          onClick={() =>
-                            setApplyTo({ group, hosts: items.filter((h) => h.id !== LOCAL_HOST_ID).length })
-                          }
-                        >
-                          {t('hosts.applyProfile')}
-                        </Button>
+                    {items.some((h) => h.id !== LOCAL_HOST_ID) && (
+                      // Видна всегда, а не по наведению, как переименование
+                      // с удалением: раскатка профиля — то, ради чего в
+                      // этот заголовок и смотрят, и прятать её незачем.
+                      // Без единого профиля кнопка выключена и говорит,
+                      // где его завести, — иначе её отсутствие выглядело
+                      // бы поломкой.
+                      <span className="row" style={{ gap: '0.25rem' }}>
+                        <Tooltip title={(profiles.data?.profiles?.length ?? 0) === 0 ? t('hosts.applyProfileNone') : ''}>
+                          <Button
+                            size="small"
+                            type="text"
+                            disabled={(profiles.data?.profiles?.length ?? 0) === 0}
+                            onClick={() =>
+                              setApplyTo({ group, hosts: items.filter((h) => h.id !== LOCAL_HOST_ID).length })
+                            }
+                          >
+                            {t('hosts.applyProfile')}
+                          </Button>
+                        </Tooltip>
                       </span>
                     )}
                     {/* «Без группы» — не группа, а остаток: переименовать

@@ -85,8 +85,12 @@ export default function Profiles({ me }: { me: Me }) {
     setNotice(null)
     try {
       const res = await api<ProfilePlan>('/profiles/plan', { method: 'POST', body: { content: draft } })
-      setPlan(res)
-      setChosen(new Set(res.changes.map((_, i) => i)))
+      // changes может прийти null от хоста со старой версией: пустой
+      // Go-срез уезжает в JSON именно так, и «.length» тогда роняет всю
+      // страницу. Своя сторона это уже не присылает, но верить чужой
+      // версии на слово незачем.
+      setPlan({ ...res, changes: res.changes ?? [], unknown: res.unknown ?? [] })
+      setChosen(new Set((res.changes ?? []).map((_, i) => i)))
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     } finally {
