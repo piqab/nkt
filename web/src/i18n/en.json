@@ -549,7 +549,10 @@
     "bootstrapUserKey": "Your public key for this user",
     "bootstrapUserKeyHint": "Optional. The hub's key is always installed; this one lets you SSH in as the same user the terminal and tmux run as.",
     "purgeRestorePassword": "Restore password login",
-    "purgeRestorePasswordHint": "Removes the file the bootstrap used to disable passwords in sshd, checks the config with sshd -t and reloads it without dropping sessions. Otherwise, once the hub key is gone, the host has no way in at all."
+    "purgeRestorePasswordHint": "Removes the file the bootstrap used to disable passwords in sshd, checks the config with sshd -t and reloads it without dropping sessions. Otherwise, once the hub key is gone, the host has no way in at all.",
+    "group": "Group",
+    "groupNone": "Ungrouped",
+    "groupCount": "hosts: {{count}}"
   },
   "certs": {
     "colSites": "Sites",

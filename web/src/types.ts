@@ -55,6 +55,8 @@ export interface HubHost {
    * working, just without whatever the newer version added. Absent until
    * the first successful poll. */
   running_version?: string
+  /** Раздел списка хостов; пустая строка — «Без группы». */
+  group?: string
   admin_user?: string
   /** What the last install/update actually observed about sudo for a
    * non-root ssh_user — '' means never observed (or invalidated by an
