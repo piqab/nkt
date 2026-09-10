@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Button, Form, Input, Select, Table, type TableColumnsType } from 'antd'
+import { Button, Form, Input, Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Account, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
+import { DataTable } from '../components/DataTable'
 
 /** Matches the minimum the API enforces, counted in characters. */
 const MIN_LENGTH = 10
@@ -92,7 +93,6 @@ export default function Users({ me }: { me: Me }) {
           <div className="row">
             <Button
               type="link"
-              size="small"
               loading={busy === u.username}
               disabled={self}
               title={self ? t('users.cannotChangeOwnRole') : undefined}
@@ -102,7 +102,6 @@ export default function Users({ me }: { me: Me }) {
             </Button>
             <Button
               type="link"
-              size="small"
               loading={busy === u.username}
               disabled={self && !u.disabled}
               title={self && !u.disabled ? t('users.cannotDisableSelf') : undefined}
@@ -113,7 +112,6 @@ export default function Users({ me }: { me: Me }) {
             <Button
               danger
               type="link"
-              size="small"
               loading={busy === u.username}
               disabled={self}
               title={self ? t('users.cannotDeleteSelf') : undefined}
@@ -146,7 +144,7 @@ export default function Users({ me }: { me: Me }) {
           <Loading what={t('users.loadingAccounts')} />
         ) : (
           <div className="table-wrap">
-            <Table<Account> dataSource={data?.users ?? []} columns={columns} rowKey="id" pagination={false} size="small" />
+            <DataTable<Account> dataSource={data?.users ?? []} columns={columns} rowKey="id" />
           </div>
         )}
       </Card>

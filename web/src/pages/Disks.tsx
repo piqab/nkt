@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Button, Progress, Segmented, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Progress, Segmented, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 import { formatBytes } from '../components/charts'
+import { DataTable } from '../components/DataTable'
 
 interface Filesystem {
   device: string
@@ -117,7 +118,6 @@ export default function Disks() {
             // «NaN%» и полосу неопределённой длины; ограничение делает
             // отрисовку предсказуемой при любом ответе.
             percent={Math.min(100, Math.max(0, Math.round(f.use_percent || 0)))}
-            size="small"
             strokeColor={usageColor(f.use_percent)}
             showInfo={false}
           />
@@ -215,7 +215,6 @@ export default function Disks() {
         title={t('disks.filesystems')}
         actions={
           <Segmented
-            size="small"
             value={kind}
             onChange={(v) => setKind(v as 'real' | 'all')}
             options={[
@@ -226,14 +225,12 @@ export default function Disks() {
         }
       >
         <div className="table-wrap">
-          <Table<Filesystem>
-            dataSource={filesystems}
+          <DataTable<Filesystem>             dataSource={filesystems}
             // Ключ из устройства и точки монтирования, а не из одной точки:
             // в выводе df точка может повторяться (наложенные монтирования,
             // squashfs от snap), а таблица с раскрытием и повторяющимися
             // ключами уходит в бесконечную перерисовку и вешает вкладку.
             rowKey={(f) => `${f.device}|${f.mount_point}`}
-            size="small"
             pagination={filesystems.length > 30 ? { pageSize: 30 } : false}
             columns={fsColumns}
           />
@@ -246,10 +243,8 @@ export default function Disks() {
           {usageBusy && <Loading what={t('disks.scanning')} />}
           {usage && !usageBusy && (
             <div className="table-wrap">
-              <Table<DirEntry>
-                dataSource={usage}
+              <DataTable<DirEntry>                 dataSource={usage}
                 rowKey="path"
-                size="small"
                 pagination={usage.length > 30 ? { pageSize: 30 } : false}
                 columns={[
                   {
@@ -279,11 +274,8 @@ export default function Disks() {
       {(disks.data?.swap?.length ?? 0) > 0 && (
         <Card title={t('disks.swap')} subtitle={t('disks.swapHint')}>
           <div className="table-wrap">
-            <Table<Swap>
-              dataSource={disks.data?.swap ?? []}
+            <DataTable<Swap>               dataSource={disks.data?.swap ?? []}
               rowKey="name"
-              size="small"
-              pagination={false}
               columns={[
                 { title: t('disks.colDevice'), key: 'name', render: (_, s) => <code className="mono">{s.name}</code> },
                 { title: t('disks.colFs'), key: 'type', render: (_, s) => <Tag>{s.type}</Tag> },
@@ -307,10 +299,8 @@ export default function Disks() {
 
       <Card title={t('disks.devices')} subtitle={t('disks.devicesHint')}>
         <div className="table-wrap">
-          <Table<BlockDevice>
-            dataSource={disks.data?.devices ?? []}
+          <DataTable<BlockDevice>             dataSource={disks.data?.devices ?? []}
             rowKey={(d) => d.path || d.name}
-            size="small"
             pagination={(disks.data?.devices?.length ?? 0) > 30 ? { pageSize: 30 } : false}
             columns={deviceColumns}
             // Раскрытие по клику, а не сразу всё: на машине со snap'ами

@@ -1,10 +1,11 @@
 import { useState } from 'react'
-import { Button, Popconfirm, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Popconfirm, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, Card, Loading } from './ui'
 import PackageInstallModal from './PackageInstallModal'
+import { DataTable } from './DataTable'
 
 interface SandboxPackage {
   kind: 'snap' | 'flatpak'
@@ -119,7 +120,6 @@ export default function SandboxPackagesCard({ me }: { me: Me }) {
             )}
             {flatpak_available && (
               <Button
-                size="small"
                 loading={busy}
                 onClick={() => run('/system/sandbox-packages/update', { kind: 'flatpak' })}
               >
@@ -166,11 +166,8 @@ export default function SandboxPackagesCard({ me }: { me: Me }) {
       )}
       {packages.length > 0 && (
         <div className="table-wrap">
-          <Table<SandboxPackage>
-            dataSource={packages}
+          <DataTable<SandboxPackage>             dataSource={packages}
             rowKey={(p) => `${p.kind}/${p.id || p.name}`}
-            size="small"
-            pagination={false}
             columns={columns}
           />
         </div>

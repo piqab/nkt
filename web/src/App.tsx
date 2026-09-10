@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ConfigProvider, Menu, type MenuProps, type ThemeConfig } from 'antd'
+import { ConfigProvider, Layout, Menu, type MenuProps, type ThemeConfig } from 'antd'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, hostScope, onUnauthorized, readSelectedHost, useApi, writeSelectedHost, type SelectedHost } from './api'
@@ -371,8 +371,8 @@ function Shell({
 
   if (showingHostPicker) {
     return (
-      <div className="shell">
-        <aside className="sidebar">
+      <Layout className="shell">
+        <Layout.Sider className="sidebar" width={208} theme="light" breakpoint="lg" collapsedWidth={0}>
           <div className="brand">
             <div className="brand-name">NetKnownsThat</div>
             <div className="brand-sub">{t('app.brandSub')}</div>
@@ -417,8 +417,8 @@ function Shell({
               </button>
             </div>
           </div>
-        </aside>
-        <main className="main">
+        </Layout.Sider>
+        <Layout.Content className="main">
           <div className="content">
             {hubView === 'hosts' ? (
               <Hosts onSelect={selectHost} hubVersion={me.hub_version} />
@@ -426,14 +426,14 @@ function Shell({
               <About />
             )}
           </div>
-        </main>
-      </div>
+        </Layout.Content>
+      </Layout>
     )
   }
 
   const shell = (
-    <div className="shell">
-      <aside className="sidebar">
+    <Layout className="shell">
+      <Layout.Sider className="sidebar" width={208} theme="light" breakpoint="lg" collapsedWidth={0}>
         <div className="brand">
           <div className="brand-name">NetKnownsThat</div>
           {!isHub && (
@@ -514,9 +514,9 @@ function Shell({
             </>
           )}
         </div>
-      </aside>
+      </Layout.Sider>
 
-      <main className="main">
+      <Layout.Content className="main">
         {/* key remounts every page below on host switch, so their useApi()
             calls re-fetch scoped to the newly selected host instead of
             showing stale data from the previous one. */}
@@ -595,8 +595,8 @@ function Shell({
             </div>
           )}
         </div>
-      </main>
-    </div>
+      </Layout.Content>
+    </Layout>
   )
 
   if (!isHub) return shell

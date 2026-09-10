@@ -120,7 +120,8 @@
     "copied": "Copied",
     "requestTimeout": "Request {{path}} did not answer within {{seconds}}s. That usually means a command on the host is stuck — df on an unresponsive network share, for instance.",
     "confirmTitle": "Confirm the action",
-    "confirmOk": "Confirm"
+    "confirmOk": "Confirm",
+    "noData": "Nothing found"
   },
   "containers": {
     "vms": "Virtual machines"

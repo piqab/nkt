@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { Button, Form, Input, Table, type TableColumnsType } from 'antd'
+import { Button, Form, Input, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { LXDInstance, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 import { confirmAction } from '../components/confirm'
+import { DataTable } from '../components/DataTable'
 
 export default function LXD({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -85,7 +86,6 @@ export default function LXD({ me }: { me: Me }) {
             <Button
               key={a}
               type="link"
-              size="small"
               disabled={!canControl}
               loading={busy === `${i.name}:${a}`}
               onClick={() => act(i.name, a)}
@@ -155,12 +155,9 @@ export default function LXD({ me }: { me: Me }) {
               rescanning={rescanning}
             />
             <div className="table-wrap">
-              <Table<LXDInstance>
-                dataSource={activeInstances}
+              <DataTable<LXDInstance>                 dataSource={activeInstances}
                 columns={columns}
                 rowKey="name"
-                pagination={false}
-                size="small"
               />
             </div>
           </>

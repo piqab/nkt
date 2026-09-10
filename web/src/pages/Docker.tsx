@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Table, type TableColumnsType } from 'antd'
+import { Button, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { Container, DockerNetwork, FileContent, Me } from '../types'
@@ -8,6 +8,7 @@ import { InactiveSummary } from '../components/InactiveSummary'
 import BlockTree from '../components/BlockTree'
 import PathPicker, { ownerFromPath } from '../components/PathPicker'
 import { confirmAction } from '../components/confirm'
+import { DataTable } from '../components/DataTable'
 
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -122,7 +123,6 @@ export default function Docker({ me }: { me: Me }) {
             <Button
               key={a}
               type="link"
-              size="small"
               disabled={!canControl}
               loading={busy === `${c.name}:${a}`}
               onClick={() => containerAct(c.name, a)}
@@ -235,12 +235,9 @@ export default function Docker({ me }: { me: Me }) {
               rescanning={rescanning}
             />
             <div className="table-wrap">
-              <Table<Container>
-                dataSource={activeContainers}
+              <DataTable<Container>                 dataSource={activeContainers}
                 columns={containerColumns}
                 rowKey="name"
-                pagination={false}
-                size="small"
               />
             </div>
           </>
@@ -249,12 +246,9 @@ export default function Docker({ me }: { me: Me }) {
 
       <Card title={t('docker.networks')}>
         <div className="table-wrap">
-          <Table<DockerNetwork>
-            dataSource={docker.data?.networks ?? []}
+          <DataTable<DockerNetwork>             dataSource={docker.data?.networks ?? []}
             columns={networkColumns}
             rowKey="id"
-            pagination={false}
-            size="small"
           />
         </div>
       </Card>

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Input, Select, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Input, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SeverityBadge, Spinner, formatRelative } from '../components/ui'
+import { DataTable } from '../components/DataTable'
 
 // Trivy's own severity scale, mapped onto the app's lowercase Severity
 // union so this page can reuse SeverityBadge instead of inventing its own
@@ -319,8 +320,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
           ) : (
             <Card>
               <div className="table-wrap">
-                <Table<VulnFinding>
-                  // Forces a full remount whenever what's being filtered
+                <DataTable<VulnFinding>                   // Forces a full remount whenever what's being filtered
                   // changes, rather than letting antd's Table reconcile the
                   // new dataSource in place — filtering by "Источник" could
                   // show rows from an entirely different target still stuck
@@ -335,7 +335,6 @@ export default function Vulnerabilities({ me }: { me: Me }) {
                   dataSource={visible}
                   columns={columns}
                   rowKey={(f) => `${f.target ?? ''}-${f.id}-${f.package}`}
-                  size="small"
                   pagination={{
                     current: page,
                     pageSize,

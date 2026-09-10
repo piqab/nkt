@@ -1,10 +1,11 @@
 import { useMemo } from 'react'
-import { Table, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
 import type { NetworkInterface } from '../types'
 import { Card, ErrorNote, InfoHint, Loading, formatBytesShort } from '../components/ui'
 import i18n from '../i18n'
+import { DataTable } from '../components/DataTable'
 
 /**
  * up alone can't tell a genuinely working interface apart from one that's
@@ -204,12 +205,9 @@ export default function Interfaces() {
           <div className="chart-empty">{t('interfaces.none')}</div>
         ) : (
           <div className="table-wrap">
-            <Table<NetworkInterface>
-              dataSource={interfaces}
+            <DataTable<NetworkInterface>               dataSource={interfaces}
               columns={columns}
               rowKey="name"
-              pagination={false}
-              size="small"
             />
           </div>
         )}

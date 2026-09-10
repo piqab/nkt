@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Input, Table, Tag, type TableColumnsType } from 'antd'
+import { Button, Input, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { Me, PackageUpdate } from '../types'
@@ -9,6 +9,7 @@ import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 import UpdateModal from '../components/UpdateModal'
 import { confirmAction } from '../components/confirm'
+import { DataTable } from '../components/DataTable'
 
 interface AptSearchResult {
   name: string
@@ -169,7 +170,6 @@ export default function Packages({ me }: { me: Me }) {
       align: 'right',
       render: (_, p) => (
         <Button
-          size="small"
           danger
           disabled={!canUse}
           onClick={async () => {
@@ -260,7 +260,6 @@ export default function Packages({ me }: { me: Me }) {
             <div className="row" style={{ gap: '0.5rem', marginTop: '0.5rem', alignItems: 'center' }}>
               <Button
                 type="primary"
-                size="small"
                 disabled={!canUse || picked.length === 0}
                 onClick={() => {
                   setInstallOutcome(null)
@@ -288,11 +287,8 @@ export default function Packages({ me }: { me: Me }) {
                   {t('packages.matchLegend')}
                 </p>
                 <div className="table-wrap">
-                  <Table<AptSearchResult>
-                    dataSource={search.data.results}
+                  <DataTable<AptSearchResult>                     dataSource={search.data.results}
                     rowKey="name"
-                    size="small"
-                    pagination={false}
                     // Фон строки — граница между группами: сначала пакеты,
                     // чьё имя совпало с запросом, потом те, где он нашёлся
                     // только в описании. Порядок задаёт сервер (rankAptResults).
@@ -326,12 +322,10 @@ export default function Packages({ me }: { me: Me }) {
           <Loading what={t('packages.installedTitle')} />
         ) : (
           <div className="table-wrap">
-            <Table<AptInstalledPackage>
-              key={installedQuery}
+            <DataTable<AptInstalledPackage>               key={installedQuery}
               dataSource={visibleInstalled}
               columns={installedColumns}
               rowKey="name"
-              size="small"
               pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100] }}
             />
           </div>

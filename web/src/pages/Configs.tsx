@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, Input, Segmented, Select, Table, type InputRef, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, Segmented, Select, type InputRef, type TableColumnsType } from 'antd'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
@@ -8,6 +8,7 @@ import { formatBytes } from '../components/charts'
 import BlockTree from '../components/BlockTree'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
+import { DataTable } from '../components/DataTable'
 
 const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker', 'caddy'])
 
@@ -261,7 +262,6 @@ export default function Configs({ me }: { me: Me }) {
                 value={category}
                 onChange={setCategory}
                 options={categories}
-                size="small"
                 style={{ width: '100%', marginBottom: '0.4rem' }}
               />
               {visibleFiles.map((f) => (
@@ -490,11 +490,8 @@ export default function Configs({ me }: { me: Me }) {
               >
                 {versions.data?.versions.length ? (
                   <div className="table-wrap">
-                    <Table<ConfigVersion>
-                      dataSource={versions.data.versions}
+                    <DataTable<ConfigVersion>                       dataSource={versions.data.versions}
                       rowKey="id"
-                      pagination={false}
-                      size="small"
                       columns={versionColumns(diff, showDiff, rollback, busy, me, versions.data.versions[0]?.id)}
                     />
                   </div>
