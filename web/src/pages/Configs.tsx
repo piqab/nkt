@@ -368,7 +368,12 @@ export default function Configs({ me }: { me: Me }) {
                             >
                               {t('configs.clone')}
                             </Button>
-                            <Button type="primary" onClick={save} loading={busy} disabled={!dirty || sshBlocked}>
+                            <Button
+                              type="primary"
+                              onClick={save}
+                              loading={busy}
+                              disabled={!dirty || sshBlocked || file.data?.editable === false}
+                            >
                               {busy ? t('configs.saving') : t('configs.validateAndSave')}
                             </Button>
                           </>
@@ -460,11 +465,15 @@ export default function Configs({ me }: { me: Me }) {
                       </div>
                     )}
 
+                    {file.data?.editable === false && (
+                      <Banner kind="warn">{t('configs.notWritable')}</Banner>
+                    )}
+
                     <CodeEditor
                       value={draft}
                       onChange={(e) => setDraft(e.target.value)}
                       rows={22}
-                      readOnly={!me.is_admin || !me.allow_mutations}
+                      readOnly={!me.is_admin || !me.allow_mutations || file.data?.editable === false}
                     />
                   </>
                 )}

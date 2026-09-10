@@ -49,12 +49,38 @@ type OSUserKey struct {
 	Fingerprint string `json:"fingerprint"`
 }
 
+// PrivilegedRunner выполняет команду вне песочницы собственного юнита.
+// Передаётся снаружи (cmd/nkt подставляет api.RunUnrestricted): весь код
+// выхода из песочницы живёт в internal/api, а импортировать его отсюда
+// нельзя — зависимость идёт в другую сторону.
+type PrivilegedRunner func(ctx context.Context, argv ...string) (collect.CommandResult, error)
+
 // OSUserManager читает и заводит учётные записи хоста.
 type OSUserManager struct {
-	c collect.Collector
+	c      collect.Collector
+	escape PrivilegedRunner
 }
 
-func NewOSUserManager(c collect.Collector) *OSUserManager { return &OSUserManager{c: c} }
+// NewOSUserManager строит менеджер. escape может быть nil — тогда команды
+// идут обычным путём (fixtures-режим, тесты), и на настоящем хосте под
+// systemd они упрутся в read-only /etc.
+func NewOSUserManager(c collect.Collector, escape PrivilegedRunner) *OSUserManager {
+	return &OSUserManager{c: c, escape: escape}
+}
+
+// run выполняет команду, меняющую систему: через выход из песочницы, если
+// он доступен.
+//
+// Без него useradd отвечает «cannot lock /etc/passwd; try again later» —
+// сообщение про занятый файл, хотя на самом деле каталог /etc открыт
+// только на чтение (ProtectSystem=strict), и создать /etc/passwd.lock
+// невозможно в принципе.
+func (m *OSUserManager) run(ctx context.Context, argv ...string) (collect.CommandResult, error) {
+	if m.escape != nil {
+		return m.escape(ctx, argv...)
+	}
+	return m.c.Run(ctx, argv[0], argv[1:]...)
+}
 
 // osUserNameRe — те же правила, что принимает useradd. Имя уходит в
 // команды и в путь домашнего каталога, поэтому проверяется здесь.
@@ -253,7 +279,7 @@ func (m *OSUserManager) Create(ctx context.Context, opts CreateOptions) error {
 			fmt.Sprintf("chown %[1]s:%[1]s %[2]s/.ssh/authorized_keys && chmod 0600 %[2]s/.ssh/authorized_keys", opts.Name, home)}},
 	}
 	for _, step := range steps {
-		res, err := m.c.Run(ctx, step.argv[0], step.argv[1:]...)
+		res, err := m.run(ctx, step.argv...)
 		if err != nil {
 			return fmt.Errorf("%s: %w", step.what, err)
 		}
@@ -280,7 +306,7 @@ func (m *OSUserManager) grantSudo(ctx context.Context, user string) error {
 		"printf '%%s\\n' %s > /tmp/nkt-osuser && visudo -cf /tmp/nkt-osuser"+
 			" && install -m 0440 -o root -g root /tmp/nkt-osuser %s; rc=$?; rm -f /tmp/nkt-osuser; exit $rc",
 		shellSingleQuote(rule), target)
-	res, err := m.c.Run(ctx, "sh", "-c", cmd)
+	res, err := m.run(ctx, "sh", "-c", cmd)
 	if err != nil {
 		return fmt.Errorf("настройка sudo: %w", err)
 	}

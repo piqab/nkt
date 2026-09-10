@@ -188,6 +188,10 @@ func (f *Fixtures) WriteFile(p string, data []byte, mode fs.FileMode) error {
 	return os.WriteFile(local, data, mode)
 }
 
+// Writable реализует Collector: дерево фикстур всегда доступно на запись —
+// это обычный каталог, а не системные пути с их ограничениями.
+func (f *Fixtures) Writable(string) bool { return true }
+
 func (f *Fixtures) DeleteFile(p string) error {
 	local, err := f.resolve(p)
 	if err != nil {

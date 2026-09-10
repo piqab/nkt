@@ -245,13 +245,15 @@ func newRuntime() (*runtime, error) {
 	services := control.NewServiceManager(cfg, collector, db)
 
 	return &runtime{
-		cfg:        cfg,
-		db:         db,
-		collector:  collector,
-		scanner:    scanner,
-		services:   services,
-		configs:    control.NewConfigManager(cfg, collector, db, scanner, services),
-		osusers:    control.NewOSUserManager(collector),
+		cfg:       cfg,
+		db:        db,
+		collector: collector,
+		scanner:   scanner,
+		services:  services,
+		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
+		// В fixtures-режиме выхода из песочницы не даём: команды там должны
+		// оставаться поддельными, а не править настоящую систему.
+		osusers:    control.NewOSUserManager(collector, privilegedRunner(cfg)),
 		disks:      control.NewDiskManager(collector),
 		hardware:   control.NewHardwareManager(collector),
 		sysconfig:  control.NewSysConfigManager(collector),
@@ -579,11 +581,13 @@ func newHubRuntime() (*hubRuntime, error) {
 
 	return &hubRuntime{
 		cfg: cfg, db: db,
-		collector:  collector,
-		scanner:    scanner,
-		services:   services,
-		configs:    control.NewConfigManager(cfg, collector, db, scanner, services),
-		osusers:    control.NewOSUserManager(collector),
+		collector: collector,
+		scanner:   scanner,
+		services:  services,
+		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
+		// В fixtures-режиме выхода из песочницы не даём: команды там должны
+		// оставаться поддельными, а не править настоящую систему.
+		osusers:    control.NewOSUserManager(collector, privilegedRunner(cfg)),
 		disks:      control.NewDiskManager(collector),
 		hardware:   control.NewHardwareManager(collector),
 		sysconfig:  control.NewSysConfigManager(collector),
@@ -604,6 +608,15 @@ func (r *hubRuntime) close() {
 	if r.db != nil {
 		_ = r.db.Close()
 	}
+}
+
+// privilegedRunner отдаёт способ выполнять системные команды вне
+// песочницы юнита — или nil там, где этого делать нельзя.
+func privilegedRunner(cfg *config.Config) control.PrivilegedRunner {
+	if cfg.Mode != config.ModeLocal {
+		return nil
+	}
+	return api.RunUnrestricted
 }
 
 func (r *hubRuntime) runHub(log *slog.Logger) error {

@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -17,6 +19,7 @@ import (
 	"github.com/creack/pty"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/collect"
 )
 
 // unrestrictedCommand builds argv the way a caller who wants to run it
@@ -718,4 +721,46 @@ func (s *Server) runPTYSession(w http.ResponseWriter, r *http.Request, cmd *exec
 			}
 		}
 	}
+}
+
+// RunUnrestricted выполняет команду вне песочницы собственного юнита и
+// возвращает её результат.
+//
+// Нужна тем частям, которые правят систему в обход собственных файлов
+// nkt: useradd и visudo пишут в /etc, а под ProtectSystem=strict каталог
+// только для чтения — useradd в такой ситуации не может даже создать
+// /etc/passwd.lock и отвечает «cannot lock /etc/passwd; try again later»,
+// что выглядит как занятый файл, хотя дело в файловой системе.
+//
+// Отдавать /etc в ReadWritePaths ради этого нельзя: тогда песочница
+// перестаёт что-либо ограничивать. Правильный путь — тот же, которым уже
+// ходят терминал и установка пакетов: systemd-run или nsenter.
+//
+// Живёт здесь, а не в internal/control, потому что весь код выхода из
+// песочницы (см. соседние функции) лежит в этом пакете; control получает
+// её функцией через cmd/nkt, не импортируя api.
+func RunUnrestricted(ctx context.Context, argv ...string) (collect.CommandResult, error) {
+	if len(argv) == 0 {
+		return collect.CommandResult{}, fmt.Errorf("пустая команда")
+	}
+	cmd := unrestrictedQuietCommand(ctx, nil, argv...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	err := cmd.Run()
+
+	res := collect.CommandResult{
+		Argv:   argv,
+		Stdout: stdout.String(),
+		Stderr: stderr.String(),
+	}
+	var exitErr *exec.ExitError
+	switch {
+	case err == nil:
+		res.ExitCode = 0
+	case errors.As(err, &exitErr):
+		res.ExitCode = exitErr.ExitCode()
+	default:
+		return res, err
+	}
+	return res, nil
 }

@@ -806,7 +806,8 @@
     "sshGuardBlocked": "No reserve channel: {{detail}}",
     "sshGuardProbeOk": "sshd accepts a new connection (port {{port}}, {{banner}}). The check repeats after saving, and the edit rolls back automatically if the daemon stops accepting connections.",
     "sshGuardProbeFail": "sshd is not accepting a new connection right now (port {{port}}): {{error}}",
-    "sshGuardForce": "I have console access to this host — allow the edit"
+    "sshGuardForce": "I have console access to this host — allow the edit",
+    "notWritable": "This file is read-only: the directory is not writable from the nkt unit. Update netknownsthat.service on the host (ReadWritePaths for that directory), then systemctl daemon-reload && systemctl restart netknownsthat."
   },
   "charts": {
     "seconds": "{{value}} s",
