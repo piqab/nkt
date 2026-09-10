@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { Me, PackageUpdate } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
-import CommonPackagesCard from '../components/CommonPackagesCard'
 import SandboxPackagesCard from '../components/SandboxPackagesCard'
 import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
@@ -231,7 +230,6 @@ export default function Packages({ me }: { me: Me }) {
         </Card>
       )}
 
-      <CommonPackagesCard canUse={canUse} />
 
       <Card title={t('packages.searchTitle')}>
         <Input.Search

@@ -102,12 +102,22 @@ type Overview struct {
 // команды: на урезанном образе может не быть lsblk, но df там есть, и
 // показать хотя бы место — уже польза.
 func (m *DiskManager) Overview(ctx context.Context) Overview {
-	var out Overview
+	// Пустые списки, а не nil: nil-срез уходит в JSON как null, а на той
+	// стороне `data.swap.length` на null роняет весь интерфейс — не
+	// раздел, а страницу целиком, потому что исключение в отрисовке
+	// размонтирует дерево React. Ровно на этом уже спотыкались (коммит
+	// 57ccad4), и повторять незачем: списки инициализируются здесь, а не
+	// проверяются в каждом месте показа.
+	out := Overview{
+		Filesystems: []Filesystem{},
+		Devices:     []BlockDevice{},
+		Swap:        []Swap{},
+	}
 
 	if res, err := m.c.Run(ctx, "df", "-P", "-B1", "-T"); err != nil || res.ExitCode != 0 {
 		out.Errors = append(out.Errors, "df: "+commandError(res, err))
-	} else {
-		out.Filesystems = parseDF(res.Stdout)
+	} else if list := parseDF(res.Stdout); list != nil {
+		out.Filesystems = list
 	}
 
 	if res, err := m.c.Run(ctx, "lsblk", "-J", "-b", "-o",
@@ -118,12 +128,16 @@ func (m *DiskManager) Overview(ctx context.Context) Overview {
 		if err != nil {
 			out.Errors = append(out.Errors, "lsblk: "+err.Error())
 		}
-		out.Devices = devices
+		if devices != nil {
+			out.Devices = devices
+		}
 	}
 
 	// Подкачки может не быть вовсе — это не ошибка, а обычное состояние.
 	if res, err := m.c.Run(ctx, "swapon", "--show=NAME,TYPE,SIZE,USED", "--bytes", "--noheadings"); err == nil && res.ExitCode == 0 {
-		out.Swap = parseSwapon(res.Stdout)
+		if list := parseSwapon(res.Stdout); list != nil {
+			out.Swap = list
+		}
 	}
 	return out
 }
@@ -280,8 +294,12 @@ func (m *DiskManager) DirUsage(ctx context.Context, path string) ([]DirEntry, er
 	// прочитался, но остальное при этом посчитано — результат отбрасывать
 	// из-за этого не за что.
 	entries := parseDU(res.Stdout, path)
-	if len(entries) == 0 && res.ExitCode != 0 {
-		return nil, fmt.Errorf("du: %s", strings.TrimSpace(res.Output()))
+	if len(entries) == 0 {
+		if res.ExitCode != 0 {
+			return nil, fmt.Errorf("du: %s", strings.TrimSpace(res.Output()))
+		}
+		// Пустой, но существующий каталог: список пустой, а не null.
+		return []DirEntry{}, nil
 	}
 	return entries, nil
 }

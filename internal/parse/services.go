@@ -189,7 +189,22 @@ func applyUnitProperties(unit *model.ServiceUnit, stdout string) {
 			unit.Restarts, _ = strconv.Atoi(value)
 		}
 	}
-	if unit.Enabled == "not-found" {
+	// «Установлен» — это не только «бинарник нашёлся в PATH». Юнит бывает
+	// установлен пакетом, чей исполняемый файл лежит в /usr/sbin (а туда
+	// PATH не-root процесса не заглядывает) или вообще называется иначе,
+	// чем служба. Признаков три, и любого достаточно:
+	//
+	//   - systemd знает файл юнита (UnitFileState — что угодно, кроме
+	//     not-found и пустого значения);
+	//   - служба прямо сейчас работает: активной не бывает то, чего нет;
+	//   - бинарник нашёлся (проверено раньше, в вызывающем коде).
+	//
+	// Ровно этого не хватало: после установки чип оставался жёлтым, то
+	// есть «не установлен», при работающей службе.
+	switch {
+	case unit.Enabled == "not-found":
 		unit.Installed = false
+	case unit.Enabled != "" || unit.ActiveState == "active":
+		unit.Installed = true
 	}
 }

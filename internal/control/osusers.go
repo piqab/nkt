@@ -115,7 +115,9 @@ func (m *OSUserManager) List(ctx context.Context) ([]OSUser, error) {
 	}
 	sudoers := m.sudoGroupMembers(ctx)
 
-	var out []OSUser
+	// Пустой список, а не nil: см. DiskManager.Overview — null вместо
+	// массива роняет интерфейс на первом же .length.
+	out := []OSUser{}
 	for _, line := range strings.Split(string(raw), "\n") {
 		u, ok := parsePasswdLine(line)
 		if !ok {

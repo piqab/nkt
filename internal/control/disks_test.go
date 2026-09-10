@@ -1,6 +1,13 @@
 package control
 
-import "testing"
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/piqab/nkt/internal/collect"
+)
 
 // Вывод снят с настоящей машины: именно на нём разбор и должен работать,
 // а не на придуманном ровном примере.
@@ -151,5 +158,40 @@ func TestParseDU(t *testing.T) {
 	// По убыванию — иначе «что съело место» приходится искать глазами.
 	if list[0].Path != "/var/lib" || list[1].Path != "/var/log" || list[2].Path != "/var/tmp" {
 		t.Errorf("порядок: %+v", list)
+	}
+}
+
+// nil-срез уходит в JSON как null, а на той стороне обращение к .length у
+// null роняет не раздел, а весь интерфейс: исключение в отрисовке
+// размонтирует дерево React. Раздел «Диски» именно так и «падал» на
+// машине без подкачки. Тест держит границу: в ответе не должно быть
+// null-массивов ни при каких обстоятельствах.
+func TestOverviewNeverEmitsNullArrays(t *testing.T) {
+	// Пустой Overview — то, что получится, если ни одна команда не
+	// отработала: ни df, ни lsblk, ни swapon.
+	raw, err := json.Marshal(Overview{
+		Filesystems: []Filesystem{},
+		Devices:     []BlockDevice{},
+		Swap:        []Swap{},
+	})
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	for _, field := range []string{`"filesystems":null`, `"devices":null`, `"swap":null`} {
+		if strings.Contains(string(raw), field) {
+			t.Errorf("в ответе есть %s — интерфейс упадёт на .length", field)
+		}
+	}
+
+	// И то же самое для настоящего сборщика на хосте без единой нужной
+	// команды: коллектор фикстур ничего из df/lsblk/swapon не знает.
+	m := NewDiskManager(collect.NewFixtures(t.TempDir()))
+	out := m.Overview(context.Background())
+	raw, err = json.Marshal(out)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(raw), ":null") {
+		t.Errorf("сборщик отдал null-массив: %s", raw)
 	}
 }

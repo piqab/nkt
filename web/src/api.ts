@@ -16,7 +16,19 @@ type Options = {
   method?: string
   body?: unknown
   signal?: AbortSignal
+  /** Своё ограничение времени для заведомо долгих вызовов (обновление
+   * snap/flatpak, обход каталогов du). По умолчанию — DEFAULT_TIMEOUT_MS. */
+  timeoutMs?: number
 }
+
+/** Сколько ждать ответ, прежде чем считать запрос зависшим.
+ *
+ * Дело не в медленной сети: команда на хосте может повиснуть навсегда —
+ * классический пример df на неотвечающей сетевой шаре. Без ограничения
+ * это выглядит как вечный спиннер, по которому невозможно понять, идёт
+ * работа или всё уже сломалось. С ограничением получается внятная ошибка
+ * с названием раздела. */
+const DEFAULT_TIMEOUT_MS = 30_000
 
 /** Fires when a request comes back 401, so the shell can send the user to /login. */
 export const onUnauthorized: { handler: (() => void) | null } = { handler: null }
@@ -72,20 +84,49 @@ export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   // logs in once, never per host (see internal/hub's design notes).
   const scoped = hostScope.id !== null && !path.startsWith('/auth/')
   const prefix = scoped ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
-  const res = await fetch(`/api${prefix}${path}`, {
-    method: opts.method ?? 'GET',
-    credentials: 'same-origin',
+
+  // Свой контроллер поверх переданного сигнала: отменить запрос может и
+  // вызывающая сторона (уход со страницы), и таймер.
+  const controller = new AbortController()
+  const timedOut = { value: false }
+  const timer = setTimeout(() => {
+    timedOut.value = true
+    controller.abort()
+  }, opts.timeoutMs ?? DEFAULT_TIMEOUT_MS)
+  const abortFromCaller = () => controller.abort()
+  opts.signal?.addEventListener('abort', abortFromCaller)
+
+  let res: Response
+  try {
+    res = await fetch(`/api${prefix}${path}`, {
+      method: opts.method ?? 'GET',
+      credentials: 'same-origin',
     // X-NKT-Lang lets the Go backend localize its own generated text
     // (internal/msgs) against the same language the UI is already in —
     // the hub's reverse proxy forwards this header unmodified to a managed
     // host's own api.Server, so it works identically scoped or not.
-    headers: {
-      'X-NKT-Lang': i18n.language,
-      ...(opts.body === undefined ? undefined : { 'Content-Type': 'application/json' }),
-    },
-    body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
-    signal: opts.signal,
-  })
+      headers: {
+        'X-NKT-Lang': i18n.language,
+        ...(opts.body === undefined ? undefined : { 'Content-Type': 'application/json' }),
+      },
+      body: opts.body === undefined ? undefined : JSON.stringify(opts.body),
+      signal: controller.signal,
+    })
+  } catch (err) {
+    if (timedOut.value) {
+      throw new ApiError(
+        0,
+        i18n.t('common.requestTimeout', {
+          path,
+          seconds: Math.round((opts.timeoutMs ?? DEFAULT_TIMEOUT_MS) / 1000),
+        }),
+      )
+    }
+    throw err
+  } finally {
+    clearTimeout(timer)
+    opts.signal?.removeEventListener('abort', abortFromCaller)
+  }
 
   const text = await res.text()
   let payload: unknown = null
