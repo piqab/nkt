@@ -2230,13 +2230,17 @@ function ProvisionVMModal({
         </label>
       </div>
 
+      {/* Ключ хаба кладётся в машину всегда — им хаб и заходит. Этот
+          нужен только тому, кто хочет подключаться к машине напрямую,
+          мимо хаба. */}
       <label style={{ marginBottom: '0.6rem' }}>
         {t('hosts.newVMKey')}
         <Input.TextArea rows={3} value={sshKey} onChange={(e) => setSSHKey(e.target.value)} placeholder="ssh-ed25519 AAAA..." />
+        <span className="small muted">{t('hosts.newVMKeyOptional')}</span>
       </label>
 
       <div className="row" style={{ gap: '0.5rem' }}>
-        <Button type="primary" loading={busy} disabled={!name.trim() || !imageID || !sshKey.trim()} onClick={() => void start()}>
+        <Button type="primary" loading={busy} disabled={!name.trim() || !imageID} onClick={() => void start()}>
           {t('hosts.newVMStart')}
         </Button>
         <Button onClick={onClose}>{t('common.cancel')}</Button>

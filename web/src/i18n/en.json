@@ -582,7 +582,8 @@
     "newVMStarted": "Creation of machine \"{{name}}\" started, job #{{job}}. Follow it in Jobs.",
     "applyProfileNone": "Create a profile first in the Profiles section on the hub machine — there is nothing to roll out yet.",
     "vmCount_one": "{{count}} machine",
-    "vmCount_other": "{{count}} machines"
+    "vmCount_other": "{{count}} machines",
+    "newVMKeyOptional": "Optional: the hub always installs its own key and logs in with it. This one is only needed if you want to reach the machine directly, bypassing the hub."
   },
   "certs": {
     "colSites": "Sites",
@@ -1570,7 +1571,6 @@
     "createVM": "create VM",
     "confirmDelete": "Delete the downloaded image \"{{name}}\"? VMs already created from it are unaffected — each has its own disk.",
     "createTitle": "New machine from image \"{{image}}\"",
-    "keyRequired": "Without a public key there is no way into the machine: cloud images ship without a password, and nkt will not invent one for you.",
     "name": "Machine name",
     "user": "User inside the machine",
     "sshKey": "Your SSH public key",
@@ -1588,6 +1588,19 @@
     "templateName": "template name",
     "saveTemplate": "save as template",
     "confirmDeleteTemplate": "Delete the template \"{{name}}\"? Machines already created are unaffected.",
-    "templateSummary": "{{image}} · {{vcpus}} vCPU · {{memory}} MB · {{disk}} GB"
+    "templateSummary": "{{image}} · {{vcpus}} vCPU · {{memory}} MB · {{disk}} GB",
+    "keyWillBeGenerated": "No key given — nkt will create one: the public half goes into the machine, the private half is shown once after the start. Paste your own key below to use it instead.",
+    "keyTitle": "Private key of the new machine",
+    "keyOnce": "This key is shown once and stored nowhere. Copy it now — otherwise there will be no way into the machine except the virsh console.",
+    "keySaved": "Saved it",
+    "toolsMissing": "This host is missing the tools needed to create machines — without them the creation form would only raise false hopes:",
+    "toolPackage": "package",
+    "installTools": "Install what is missing",
+    "toolWhy": {
+      "qemu-img": "builds the machine disk from the image",
+      "virsh": "defines and starts the machine",
+      "cloud-localds": "builds the first-boot settings",
+      "genisoimage": "the same, when cloud-localds is absent"
+    }
   }
 }
