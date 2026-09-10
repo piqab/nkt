@@ -270,7 +270,7 @@ func (m *ConfigManager) List(ctx context.Context) ([]model.ManagedFile, error) {
 // архивы, ключи). Пустое расширение — для файлов вроде Caddyfile и
 // sshd_config, у которых его нет вовсе.
 var configExtensions = map[string]bool{
-	"":     true,
+	"":      true,
 	".conf": true, ".cfg": true, ".yaml": true, ".yml": true,
 	".xml": true, ".local": true, ".ini": true, ".service": true,
 	".timer": true, ".socket": true, ".types": true,
@@ -494,7 +494,7 @@ func (m *ConfigManager) Write(ctx context.Context, lang msgs.Lang, user, path, c
 	}
 
 	if err := m.c.WriteFile(path, newBytes, 0o644); err != nil {
-		return WriteResult{}, fmt.Errorf("запись %s: %w", path, err)
+		return WriteResult{}, describeWriteError(path, err)
 	}
 
 	res := WriteResult{Path: path}
@@ -630,6 +630,25 @@ func (m *ConfigManager) applyCategory(ctx context.Context, user, service, path s
 		return collect.CommandResult{}, fmt.Errorf("применение сетевой конфигурации не делается автоматически: выполните netplan apply вручную, имея доступ к консоли")
 	}
 	return collect.CommandResult{}, fmt.Errorf("для %s нет шага применения", service)
+}
+
+// describeWriteError объясняет отказ записи, когда причина не в правах
+// пользователя, а в песочнице собственного юнита.
+//
+// Запись атомарная: файл создаётся рядом с целевым под именем .nkt-* и
+// переименовывается (collect.Local.WriteFile), поэтому каталог должен быть
+// доступен на запись. Под ProtectSystem=strict вся /etc только для чтения,
+// кроме путей из ReadWritePaths, и сообщение ядра «read-only file system»
+// про временный файл выглядит как проблема с правами, хотя процесс и так
+// работает от root. Настоящее лекарство — обновлённый юнит на хосте.
+func describeWriteError(path string, err error) error {
+	text := strings.ToLower(err.Error())
+	if strings.Contains(text, "read-only file system") || strings.Contains(text, "permission denied") {
+		return fmt.Errorf("запись %s: %w — каталог недоступен на запись из юнита nkt;"+
+			" обновите netknownsthat.service на хосте (ReadWritePaths для этого каталога)"+
+			" и выполните systemctl daemon-reload && systemctl restart netknownsthat", path, err)
+	}
+	return fmt.Errorf("запись %s: %w", path, err)
 }
 
 // snapshotCurrent records the pre-edit content so a rollback target always exists.

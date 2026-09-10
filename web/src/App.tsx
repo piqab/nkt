@@ -27,6 +27,7 @@ import Availability from './pages/Availability'
 import Usage from './pages/Usage'
 import Audit from './pages/Audit'
 import Users from './pages/Users'
+import OSUsers from './pages/OSUsers'
 import { Banner, Card } from './components/ui'
 import PasswordForm from './components/PasswordForm'
 
@@ -101,6 +102,10 @@ const NAV = [
   // Managing who can sign in is itself an admin action — a viewer has no use
   // for this screen and the API would refuse every request from it anyway.
   { to: '/users', labelKey: 'nav.users', adminOnly: true },
+  // Учётки самой операционной системы — отдельный раздел рядом с учётками
+  // веб-интерфейса, потому что путать их нельзя: здесь выдаётся вход на
+  // сам сервер по SSH-ключу.
+  { to: '/os-users', labelKey: 'nav.osUsers', adminOnly: true },
 ]
 
 export default function App() {
@@ -480,6 +485,7 @@ function Shell({
             <Route path="/certificates" element={<Certificates me={me} />} />
             <Route path="/audit" element={<Audit />} />
             {me.is_admin && <Route path="/users" element={<Users me={me} />} />}
+            {me.is_admin && <Route path="/os-users" element={<OSUsers me={me} />} />}
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>

@@ -68,6 +68,25 @@ ReadWritePaths=-/var/log/nginx
 ReadWritePaths=-/var/log/haproxy
 ReadWritePaths=-/var/log/caddy
 ReadWritePaths=-/etc/letsencrypt
+# Категории конфигураций, добавленные вслед за nginx/haproxy/caddy:
+# юниты systemd, сеть, sshd, параметры ядра и cron. Без них правка через
+# раздел «Конфигурации» падает не на правах пользователя, а на самой
+# файловой системе: запись атомарная (временный файл рядом с целевым и
+# переименование, см. collect.Local.WriteFile), а под ProtectSystem=strict
+# каталог только для чтения — и создание временного файла отказывает
+# ещё до того, как дело дойдёт до самого конфига.
+ReadWritePaths=-/etc/ssh
+ReadWritePaths=-/etc/systemd/system
+ReadWritePaths=-/etc/netplan
+ReadWritePaths=-/etc/sysctl.d
+ReadWritePaths=-/etc/sysctl.conf
+ReadWritePaths=-/etc/cron.d
+ReadWritePaths=-/etc/crontab
+ReadWritePaths=-/etc/hosts
+# /etc/resolv.conf на системах с systemd-resolved — симлинк в /run, и
+# писать надо именно туда; на остальных это обычный файл в /etc.
+ReadWritePaths=-/etc/resolv.conf
+ReadWritePaths=-/run/systemd/resolve
 ProtectHome=yes
 PrivateTmp=yes
 NoNewPrivileges=yes

@@ -155,6 +155,7 @@ export function Modal({
   onClose,
   closeLabel,
   maskClosable,
+  width,
   children,
 }: {
   title: string
@@ -166,6 +167,9 @@ export function Modal({
   // stray click on the mask otherwise dismisses it silently, with nothing
   // on screen afterwards to show the job is still going.
   maskClosable?: boolean
+  // Ширина окна. По умолчанию антовская (520px) — её хватает почти
+  // везде; форма с несколькими полями в строке просит больше.
+  width?: number | string
   children: ReactNode
 }) {
   const { t } = useTranslation()
@@ -176,6 +180,7 @@ export function Modal({
       closable={false}
       maskClosable={maskClosable ?? !!onClose}
       onCancel={onClose}
+      width={width}
       footer={onClose ? <Button onClick={onClose}>{closeLabel ?? t('common.close')}</Button> : null}
       destroyOnHidden
     >
