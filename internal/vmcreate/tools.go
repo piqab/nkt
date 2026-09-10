@@ -52,58 +52,70 @@ func (r *ToolsRunner) Resumable() bool { return true }
 
 // Run ставит то, чего не хватает.
 func (r *ToolsRunner) Run(ctx context.Context, jc *jobs.Context) error {
-	if r.escape == nil {
+	jc.Step(1, 1, "установка")
+	return InstallTools(ctx, r.escape, jc.Logf)
+}
+
+// InstallTools доставляет недостающие программы.
+//
+// Общая для отдельного задания и для создания машины: машину без них всё
+// равно не создать, и отказывать вместо установки значило бы отправлять
+// оператора делать руками ровно то, что nkt умеет сам.
+func InstallTools(ctx context.Context, run Runner, logf func(string, ...any)) error {
+	if run == nil {
 		return fmt.Errorf("установка пакетов недоступна в этом режиме")
 	}
-	missing := MissingTools(CheckTools(ctx, r.escape))
+	missing := MissingTools(CheckTools(ctx, run))
 	if len(missing) == 0 {
-		jc.Logf("Всё нужное уже установлено.")
+		logf("Всё нужное уже установлено.")
 		return nil
 	}
 	// Из пары взаимозаменяемых ставится одна: вторая ничего не добавит.
-	seen := map[string]bool{}
+	altTaken := false
 	var pkgs []string
 	for _, t := range missing {
-		if t.Alternative != "" && seen["alt"] {
-			continue
-		}
 		if t.Alternative != "" {
-			seen["alt"] = true
+			if altTaken {
+				continue
+			}
+			altTaken = true
 		}
 		pkgs = append(pkgs, t.Package)
 	}
 
-	jc.Step(1, 2, "обновление списка пакетов")
-	jc.Logf("Ставлю: %s", strings.Join(pkgs, ", "))
-	if res, err := r.escape(ctx, "apt-get", "update"); err != nil {
+	logf("Не хватает: %s. Ставлю пакеты: %s", toolNames(missing), strings.Join(pkgs, ", "))
+	if res, err := run(ctx, "apt-get", "update"); err != nil {
 		return err
 	} else if res.ExitCode != 0 {
-		jc.Logf("apt-get update ответил кодом %d, продолжаю", res.ExitCode)
+		logf("apt-get update ответил кодом %d, продолжаю", res.ExitCode)
 	}
 
-	jc.Step(2, 2, "установка")
 	argv := append([]string{"apt-get", "install", "-y"}, pkgs...)
-	res, err := r.escape(ctx, argv...)
+	res, err := run(ctx, argv...)
 	if err != nil {
 		return err
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("apt-get install: %s", firstLine(res.Output()))
+		return fmt.Errorf("apt-get install %s: %s", strings.Join(pkgs, " "), firstLine(res.Output()))
 	}
 	for _, line := range strings.Split(strings.TrimSpace(res.Stdout), "\n") {
 		if line != "" {
-			jc.Logf("%s", line)
+			logf("%s", line)
 		}
 	}
 
-	still := MissingTools(CheckTools(ctx, r.escape))
-	if len(still) > 0 {
-		names := make([]string, 0, len(still))
-		for _, t := range still {
-			names = append(names, t.Command)
-		}
-		return fmt.Errorf("после установки всё ещё нет: %s", strings.Join(names, ", "))
+	if still := MissingTools(CheckTools(ctx, run)); len(still) > 0 {
+		return fmt.Errorf("после установки всё ещё нет: %s", toolNames(still))
 	}
-	jc.Logf("Готово: всё нужное на месте.")
+	logf("Готово: всё нужное на месте.")
 	return nil
+}
+
+// toolNames перечисляет команды через запятую.
+func toolNames(tools []Tool) string {
+	names := make([]string, 0, len(tools))
+	for _, t := range tools {
+		names = append(names, t.Command)
+	}
+	return strings.Join(names, ", ")
 }
