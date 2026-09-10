@@ -26,14 +26,16 @@ import (
 	"github.com/piqab/nkt/internal/hub"
 	"github.com/piqab/nkt/internal/inventory"
 	"github.com/piqab/nkt/internal/jobs"
-	"github.com/piqab/nkt/internal/profile"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/monitor"
+	"github.com/piqab/nkt/internal/profile"
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
 	"github.com/piqab/nkt/internal/tlscert"
 	"github.com/piqab/nkt/internal/tui"
 	"github.com/piqab/nkt/internal/tunnel"
+	"github.com/piqab/nkt/internal/vmcreate"
+	"github.com/piqab/nkt/internal/vmimage"
 	"github.com/piqab/nkt/internal/webui"
 )
 
@@ -229,6 +231,7 @@ type runtime struct {
 	logs       *control.LogManager
 	images     *control.ImageManager
 	jobs       *jobs.Manager
+	vmimages   *vmimage.Store
 }
 
 func newRuntime() (*runtime, error) {
@@ -276,6 +279,7 @@ func newRuntime() (*runtime, error) {
 		logs:       control.NewLogManager(collector, scanner),
 		images:     control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
 		jobs:       jobManager,
+		vmimages:   vmimage.NewStore(filepath.Join(cfg.DataDir, "vm-images")),
 	}, nil
 }
 
@@ -406,11 +410,12 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
 		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
 		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages,
 		UI: ui, Log: log, Version: version,
 	})
 
-	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers, r.sysconfig)
+	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
+		r.sysconfig, r.collector, r.vmimages)
 	// Задания, оставшиеся идущими от прошлого запуска, разбираются до
 	// приёма запросов: продолжаемые встают в очередь заново, остальные
 	// честно помечаются прерванными. Иначе список показывал бы вечно
@@ -575,6 +580,7 @@ type hubRuntime struct {
 	logs       *control.LogManager
 	images     *control.ImageManager
 	jobs       *jobs.Manager
+	vmimages   *vmimage.Store
 }
 
 func newHubRuntime() (*hubRuntime, error) {
@@ -606,6 +612,7 @@ func newHubRuntime() (*hubRuntime, error) {
 
 	return &hubRuntime{
 		cfg: cfg, db: db, jobs: jobs.New(db, slog.Default()),
+		vmimages:  vmimage.NewStore(filepath.Join(cfg.DataDir, "vm-images")),
 		collector: collector,
 		scanner:   scanner,
 		services:  services,
@@ -679,12 +686,14 @@ func hubDriftCheck(r *hubRuntime) func(context.Context) (int, error) {
 func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.ServiceManager,
 	configs *control.ConfigManager, firewall *control.FirewallManager,
 	firewalld *control.FirewalldManager, osusers *control.OSUserManager,
-	sysconf *control.SysConfigManager) {
+	sysconf *control.SysConfigManager, collector collect.Collector, images *vmimage.Store) {
 
 	m.Register(profile.KindApply, profile.NewApplyRunner(func(user string) profile.Applier {
 		return profile.NewHostApplier(user, services, configs, firewall, firewalld,
 			osusers, sysconf, privilegedRunner(cfg))
 	}))
+	m.Register(vmimage.KindDownload, vmimage.NewDownloadRunner(images))
+	m.Register(vmcreate.KindCreate, vmcreate.NewCreateRunner(images, collector, privilegedRunner(cfg)))
 }
 
 // privilegedRunner отдаёт способ выполнять системные команды вне
@@ -746,7 +755,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner,
 		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
 		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages,
 		Log: log, Version: version,
 	})
 
@@ -776,7 +785,8 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 
 	// Хаб ведёт задания собственной машины — той самой строки
 	// «localhost» в списке хостов.
-	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers, r.sysconfig)
+	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
+		r.sysconfig, r.collector, r.vmimages)
 	// То же, что в runServer: незавершённые задания разбираются до
 	// приёма запросов.
 	if err := r.jobs.Recover(ctx); err != nil {

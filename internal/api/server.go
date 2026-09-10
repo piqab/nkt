@@ -24,6 +24,7 @@ import (
 	"github.com/piqab/nkt/internal/monitor"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
+	"github.com/piqab/nkt/internal/vmimage"
 )
 
 // Server holds everything the handlers need.
@@ -53,6 +54,8 @@ type Server struct {
 	// не подключали: обработчики тогда отвечают, что задания недоступны,
 	// а не падают.
 	jobs *jobs.Manager
+	// vmimages — кэш облачных образов для создания машин.
+	vmimages *vmimage.Store
 	ui         fs.FS
 	log        *slog.Logger
 	version    string
@@ -98,6 +101,7 @@ type Deps struct {
 	Logs       *control.LogManager
 	Images     *control.ImageManager
 	Jobs       *jobs.Manager
+	VMImages   *vmimage.Store
 	UI         fs.FS
 	Log        *slog.Logger
 	// Version is this binary's own version, reported by /api/health so
@@ -112,7 +116,7 @@ func New(d Deps) *Server {
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, osusers: d.OSUsers, disks: d.Disks, hardware: d.Hardware, sysconfig: d.SysConfig,
 		netmanager: d.NetManager, sandboxpkg: d.SandboxPkg, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
-		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images, jobs: d.Jobs,
+		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images, jobs: d.Jobs, vmimages: d.VMImages,
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
 	}
@@ -228,6 +232,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/profiles/{id}/versions", s.handleProfileVersions)
 			r.Get("/profiles/versions/{version}", s.handleProfileVersion)
 
+			r.Get("/vm/images", s.handleVMImages)
+
 			r.Get("/jobs", s.handleJobList)
 			r.Get("/jobs/{id}", s.handleJobGet)
 			r.Get("/jobs/{id}/log", s.handleJobLog)
@@ -290,6 +296,10 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/profiles/apply", s.handleProfileApply)
 				r.Put("/profiles/{id}", s.handleProfileUpdate)
 				r.Delete("/profiles/{id}", s.handleProfileDelete)
+
+				r.Post("/vm/images/download", s.handleVMImageDownload)
+				r.Post("/vm/images/delete", s.handleVMImageDelete)
+				r.Post("/vm/create", s.handleVMCreate)
 
 				r.Post("/jobs/{id}/cancel", s.handleJobCancel)
 				r.Post("/configs/mkdir", s.handleConfigMkdir)
