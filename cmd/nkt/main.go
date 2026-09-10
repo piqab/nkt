@@ -782,6 +782,9 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// Раскатка профиля по группе — задание самого хаба: он обходит хосты
 	// и следит за заданиями, которые запускает на каждом.
 	r.jobs.Register(hub.KindGroupApply, hub.NewGroupApplyRunner(manager))
+	// Создание машины на управляемом хосте с записью её в список — тоже
+	// задание хаба: одну половину делает хост, вторую он сам.
+	r.jobs.Register(hub.KindVMProvision, hub.NewVMProvisionRunner(manager))
 
 	// Хаб ведёт задания собственной машины — той самой строки
 	// «localhost» в списке хостов.

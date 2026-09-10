@@ -100,3 +100,31 @@ func TestDomainXMLShape(t *testing.T) {
 		t.Errorf("мост не подставлен:\n%s", xml)
 	}
 }
+
+// Адрес машины берётся из вывода virsh domifaddr — по нему хаб потом и
+// подключается.
+func TestParseDomifaddr(t *testing.T) {
+	out := ` Name       MAC address          Protocol     Address
+-------------------------------------------------------------------------------
+ vnet0      52:54:00:ab:cd:ef    ipv4         192.168.122.67/24
+`
+	if got := parseDomifaddr(out); got != "192.168.122.67" {
+		t.Errorf("parseDomifaddr = %q", got)
+	}
+	// Аренды ещё нет — это не адрес «0.0.0.0», а «пока не знаю».
+	empty := " Name       MAC address          Protocol     Address\n-----\n"
+	if got := parseDomifaddr(empty); got != "" {
+		t.Errorf("на пустом выводе получено %q", got)
+	}
+}
+
+// Ключ хаба кладётся в ту же учётную запись, что и ключ оператора:
+// иначе машину пришлось бы открывать хабу вручную.
+func TestUserDataIncludesExtraKeys(t *testing.T) {
+	s := validSpec()
+	s.ExtraKeys = []string{"ssh-rsa AAAAHUB hub@nkt"}
+	out := UserData(s)
+	if !strings.Contains(out, "AAAAKEY") || !strings.Contains(out, "AAAAHUB") {
+		t.Errorf("в настройках не оба ключа:\n%s", out)
+	}
+}

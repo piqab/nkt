@@ -80,6 +80,16 @@ func waitJob(t *testing.T, db *store.DB, id int64, want string) store.Job {
 	return store.Job{}
 }
 
+// testRunner — исполнитель, который не ждёт адреса машины: в тесте его
+// всё равно неоткуда взять, а полторы минуты ожидания превратили бы
+// проверку в таймаут.
+func testRunner(t *testing.T, esc *fakeEscape) *CreateRunner {
+	t.Helper()
+	r := NewCreateRunner(readyStore(t), nil, esc.run)
+	r.SetAddressWait(0)
+	return r
+}
+
 func createSpec() Spec {
 	return Spec{
 		Name: "web-01", ImageID: "ubuntu-22.04", DiskGB: 20, MemoryMB: 2048, VCPUs: 2,
@@ -90,7 +100,7 @@ func createSpec() Spec {
 func TestCreateRunsExpectedCommands(t *testing.T) {
 	m, db := newManager(t)
 	esc := &fakeEscape{}
-	m.Register(KindCreate, NewCreateRunner(readyStore(t), nil, esc.run))
+	m.Register(KindCreate, testRunner(t, esc))
 
 	id, err := m.Start(context.Background(), jobs.Spec{
 		Kind: KindCreate, Queue: "host", Steps: 5,
@@ -128,7 +138,7 @@ func TestCreateRunsExpectedCommands(t *testing.T) {
 func TestCreateFallsBackToGenisoimage(t *testing.T) {
 	m, db := newManager(t)
 	esc := &fakeEscape{missing: map[string]bool{"cloud-localds": true}}
-	m.Register(KindCreate, NewCreateRunner(readyStore(t), nil, esc.run))
+	m.Register(KindCreate, testRunner(t, esc))
 
 	id, _ := m.Start(context.Background(), jobs.Spec{
 		Kind: KindCreate, Queue: "host", Params: CreateParams{Spec: createSpec()},
@@ -146,7 +156,7 @@ func TestCreateFallsBackToGenisoimage(t *testing.T) {
 func TestCreateFailsWithoutSeedTool(t *testing.T) {
 	m, db := newManager(t)
 	esc := &fakeEscape{missing: map[string]bool{"cloud-localds": true, "genisoimage": true}}
-	m.Register(KindCreate, NewCreateRunner(readyStore(t), nil, esc.run))
+	m.Register(KindCreate, testRunner(t, esc))
 
 	id, _ := m.Start(context.Background(), jobs.Spec{
 		Kind: KindCreate, Queue: "host", Params: CreateParams{Spec: createSpec()},
@@ -181,7 +191,7 @@ func TestCreateResumesWithoutRedoing(t *testing.T) {
 	m := jobs.New(db, slog.New(slog.DiscardHandler))
 	t.Cleanup(m.Close)
 	esc := &fakeEscape{}
-	m.Register(KindCreate, NewCreateRunner(readyStore(t), nil, esc.run))
+	m.Register(KindCreate, testRunner(t, esc))
 	if err := m.Recover(ctx); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}
@@ -209,6 +219,7 @@ func TestCreateRefusesExistingDisk(t *testing.T) {
 		}
 		return esc.run(ctx, argv...)
 	})
+	runner.SetAddressWait(0)
 	m.Register(KindCreate, runner)
 
 	id, _ := m.Start(context.Background(), jobs.Spec{

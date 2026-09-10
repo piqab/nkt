@@ -44,6 +44,11 @@ type Spec struct {
 	// облачные образы не заводят вовсе.
 	User   string `json:"user"`
 	SSHKey string `json:"ssh_key"`
+	// ExtraKeys — дополнительные публичные ключи в ту же учётную запись.
+	// Через них в машину входит хаб: свой ключ он выдаёт заранее, и
+	// класть его надо в тот же первый запуск, иначе машину придётся
+	// открывать руками.
+	ExtraKeys []string `json:"extra_keys,omitempty"`
 	// Packages — что доставить при первом запуске.
 	Packages []string `json:"packages,omitempty"`
 	// Autostart — поднимать машину вместе с хостом.
@@ -66,7 +71,11 @@ func (s Spec) Validate() error {
 	case !userRe.MatchString(s.User):
 		return fmt.Errorf("имя пользователя внутри машины некорректно: %q", s.User)
 	}
-	if key := strings.TrimSpace(s.SSHKey); key != "" {
+	for _, key := range append([]string{s.SSHKey}, s.ExtraKeys...) {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
 		if !strings.HasPrefix(key, "ssh-") && !strings.HasPrefix(key, "ecdsa-") && !strings.HasPrefix(key, "sk-") {
 			return fmt.Errorf("ключ не похож на публичный ключ SSH")
 		}
@@ -112,9 +121,17 @@ func UserData(s Spec) string {
 	b.WriteString("    sudo: 'ALL=(ALL) NOPASSWD:ALL'\n")
 	b.WriteString("    shell: /bin/bash\n")
 	b.WriteString("    lock_passwd: true\n")
-	if key := strings.TrimSpace(s.SSHKey); key != "" {
+	keys := make([]string, 0, 1+len(s.ExtraKeys))
+	for _, key := range append([]string{s.SSHKey}, s.ExtraKeys...) {
+		if key = strings.TrimSpace(key); key != "" {
+			keys = append(keys, key)
+		}
+	}
+	if len(keys) > 0 {
 		b.WriteString("    ssh_authorized_keys:\n")
-		fmt.Fprintf(&b, "      - %q\n", key)
+		for _, key := range keys {
+			fmt.Fprintf(&b, "      - %q\n", key)
+		}
 	}
 	if len(s.Packages) > 0 {
 		b.WriteString("package_update: true\n")
