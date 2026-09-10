@@ -285,6 +285,9 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/profiles", s.handleProfileCreate)
 				r.Post("/profiles/plan", s.handleProfilePlanPreview)
 				r.Post("/profiles/{id}/apply", s.handleProfileApply)
+				// Без идентификатора — применить присланный план: так хаб
+				// раскатывает свой профиль на хосты группы.
+				r.Post("/profiles/apply", s.handleProfileApply)
 				r.Put("/profiles/{id}", s.handleProfileUpdate)
 				r.Delete("/profiles/{id}", s.handleProfileDelete)
 

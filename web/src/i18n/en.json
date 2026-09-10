@@ -560,7 +560,12 @@
     "createGroup": "New group",
     "renameGroup": "Rename",
     "groupEmpty": "The group is empty — drag hosts here.",
-    "confirmDeleteGroup": "Delete the group \"{{name}}\"? Its hosts ({{count}} now) go back to Ungrouped."
+    "confirmDeleteGroup": "Delete the group \"{{name}}\"? Its hosts ({{count}} now) go back to Ungrouped.",
+    "applyProfile": "profile",
+    "applyProfileTitle": "Profile for group «{{group}}» ({{count}} hosts)",
+    "applyProfileBody": "Hosts are visited one at a time: each gets its own plan, and only what actually differs there is applied. A failure on the first host stops the rollout, so a wrong description does not reach the whole group. The work runs in the background — follow it in the Jobs section.",
+    "applyProfileStart": "Start",
+    "applyProfileStarted": "Rollout started: {{count}} hosts, job #{{job}}. Follow it in the Jobs section."
   },
   "certs": {
     "colSites": "Sites",

@@ -318,6 +318,10 @@ export default function Hosts({
   // иначе неоткуда взять, а её и создают первой — чтобы потом перетащить
   // в неё хосты.
   const groups = useApi<{ groups: string[] }>('/hub/groups', 60_000)
+  // Профили хаба — те же, что правятся в разделе «Профили» его
+  // собственной машины: раскатывать по группе можно любой из них.
+  const profiles = useApi<{ profiles: { id: number; name: string }[] }>('/hosts/local/profiles', 120_000)
+  const [applyTo, setApplyTo] = useState<{ group: string; hosts: number } | null>(null)
   const [groupDialog, setGroupDialog] = useState<{ mode: 'create' | 'rename'; from?: string } | null>(null)
   const [groupName, setGroupName] = useState('')
 
@@ -1012,6 +1016,19 @@ export default function Hosts({
         </div>
       </div>
 
+      {applyTo && (
+        <ApplyProfileModal
+          group={applyTo.group}
+          hostCount={applyTo.hosts}
+          profiles={profiles.data?.profiles ?? []}
+          onClose={() => setApplyTo(null)}
+          onStarted={(text) => {
+            setApplyTo(null)
+            setNotice({ kind: 'info', text })
+          }}
+        />
+      )}
+
       {groupDialog && (
       <Modal
         onClose={() => setGroupDialog(null)}
@@ -1081,6 +1098,25 @@ export default function Hosts({
                       <span className="host-group-name">{group || t('hosts.groupNone')}</span>
                       <span className="small muted">{t('hosts.groupCount', { count: items.length })}</span>
                     </button>
+                    {/* Профиль раскатывается по группе целиком — хосты
+                        обходятся по одному, чтобы ошибка в описании не
+                        досталась сразу всем. */}
+                    {/* Считаются только настоящие хосты: localhost — своя
+                        машина хаба, к ней профиль применяют в её же
+                        разделе «Профили», а не через SSH. */}
+                    {items.some((h) => h.id !== LOCAL_HOST_ID) && (profiles.data?.profiles?.length ?? 0) > 0 && (
+                      <span className="row host-group-actions" style={{ gap: '0.25rem' }}>
+                        <Button
+                          size="small"
+                          type="text"
+                          onClick={() =>
+                            setApplyTo({ group, hosts: items.filter((h) => h.id !== LOCAL_HOST_ID).length })
+                          }
+                        >
+                          {t('hosts.applyProfile')}
+                        </Button>
+                      </span>
+                    )}
                     {/* «Без группы» — не группа, а остаток: переименовать
                         или удалить его нечего. */}
                     {group && (
@@ -1907,6 +1943,78 @@ function RemoveHostModal({
           {t('hosts.delete')}
         </Button>
         <Button onClick={onCancel}>{t('common.cancel')}</Button>
+      </div>
+    </Modal>
+  )
+}
+
+/**
+ * Выбор профиля для раскатки по группе.
+ *
+ * Запуск отвечает номером задания, а не ждёт конца работы: обход группы
+ * идёт минутами и переживает закрытую вкладку — смотреть за ним нужно в
+ * «Заданиях», а не здесь.
+ */
+function ApplyProfileModal({
+  group,
+  hostCount,
+  profiles,
+  onClose,
+  onStarted,
+}: {
+  group: string
+  hostCount: number
+  profiles: { id: number; name: string }[]
+  onClose: () => void
+  onStarted: (text: string) => void
+}) {
+  const { t } = useTranslation()
+  const [profileID, setProfileID] = useState<number | null>(profiles[0]?.id ?? null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  async function start() {
+    if (!profileID) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ job_id: number; hosts: number }>('/hub/groups/apply-profile', {
+        method: 'POST',
+        body: { profile_id: profileID, group },
+      })
+      onStarted(t('hosts.applyProfileStarted', { count: res.hosts, job: res.job_id }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal
+      title={t('hosts.applyProfileTitle', { group: group || t('hosts.groupNone'), count: hostCount })}
+      onClose={onClose}
+    >
+      <p className="small muted">{t('hosts.applyProfileBody')}</p>
+      <ErrorNote error={error} />
+      <div className="col" style={{ gap: '0.4rem', marginBottom: '0.6rem' }}>
+        {profiles.map((p) => (
+          <label key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+            <input
+              type="radio"
+              name="profile"
+              checked={profileID === p.id}
+              onChange={() => setProfileID(p.id)}
+            />
+            {p.name}
+          </label>
+        ))}
+      </div>
+      <div className="row" style={{ gap: '0.5rem' }}>
+        <Button type="primary" loading={busy} disabled={!profileID} onClick={() => void start()}>
+          {t('hosts.applyProfileStart')}
+        </Button>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
       </div>
     </Modal>
   )
