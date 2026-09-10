@@ -37,7 +37,8 @@
     "users": "Users",
     "about": "About",
     "logs": "Logs",
-    "osUsers": "Host accounts"
+    "osUsers": "Host accounts",
+    "disks": "Disks"
   },
   "about": {
     "title": "About",
@@ -1283,5 +1284,31 @@
     "colSudo": "Rights",
     "colShell": "Shell",
     "noKeys": "no keys"
+  },
+  "disks": {
+    "title": "Disks",
+    "hint": "Space by filesystem, devices and partitions, swap. \"What takes space\" measures one level of subdirectories on demand — walking a large tree is slow.",
+    "filesystems": "Filesystems",
+    "realOnly": "Real ({{count}})",
+    "allFs": "All ({{count}})",
+    "pseudo": "in memory",
+    "colMount": "Mount point",
+    "colUsage": "Used",
+    "colFree": "Free",
+    "colDevice": "Device",
+    "colSize": "Size",
+    "colFs": "Filesystem",
+    "colMountPoints": "Mounted at",
+    "colDir": "Directory",
+    "colUsed": "Used",
+    "usedOf": "{{used}} of {{size}}",
+    "whatTakesSpace": "What takes space",
+    "usageTitle": "What takes space: {{path}}",
+    "usageHint": "Sizes of one level of subdirectories, largest first. Clicking a directory goes one level deeper.",
+    "scanning": "measuring",
+    "swap": "Swap",
+    "swapHint": "Forgotten or full swap explains both missing space and sudden slowness.",
+    "devices": "Devices and partitions",
+    "devicesHint": "Physical disks with their partitions — what the kernel sees, mounted or not."
   }
 }
