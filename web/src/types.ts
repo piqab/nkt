@@ -39,6 +39,10 @@ export interface HubVulnDBInfo {
 
 /** A remote VPS registered with the hub (internal/store.Host). */
 export interface HubHost {
+  /** Хост, на котором работает эта машина; отсутствует у обычных
+   * хостов. Машина показывается внутри своего хоста и переезжает между
+   * группами только вместе с ним. */
+  parent_id?: number
   id: number
   name: string
   addr: string

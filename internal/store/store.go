@@ -264,6 +264,10 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"hosts", "tunnel_cert_sha256", `ALTER TABLE hosts ADD COLUMN tunnel_cert_sha256 BLOB`},
 	{"hosts", "vnc_user", `ALTER TABLE hosts ADD COLUMN vnc_user TEXT NOT NULL DEFAULT ''`},
 	{"hosts", "group_name", `ALTER TABLE hosts ADD COLUMN group_name TEXT NOT NULL DEFAULT ''`},
+	// parent_id — хост, на котором эта машина работает. Ноль у обычных
+	// хостов. Машина не живёт отдельно от своего сервера: переносить её
+	// в другую группу бессмысленно, а переезжает она вместе с ним.
+	{"hosts", "parent_id", `ALTER TABLE hosts ADD COLUMN parent_id INTEGER NOT NULL DEFAULT 0`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

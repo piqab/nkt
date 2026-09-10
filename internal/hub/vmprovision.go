@@ -42,8 +42,6 @@ type VMProvisionParams struct {
 	// Spec — что за машину создаём. Ключ хаба сюда дописывается уже
 	// здесь, оператор его не вводит.
 	Spec vmcreate.Spec `json:"spec"`
-	// Group — в какую группу положить новый хост.
-	Group string `json:"group"`
 }
 
 type vmProvisionResume struct {
@@ -101,12 +99,14 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		done.NewHostID = id
 		jc.SaveResume(done)
 		p.Spec.ExtraKeys = append(p.Spec.ExtraKeys, key)
-		jc.Logf("Хост %s заведён в списке, ключ для входа выдан.", p.Spec.Name)
-		if p.Group != "" {
-			if err := r.m.SetHostGroup(ctx, id, p.Group); err != nil {
-				jc.Logf("Группу назначить не удалось: %v", err)
-			}
+		// Машина привязывается к хосту, на котором создана: в списке она
+		// показывается внутри него и переезжает между группами только
+		// вместе с ним. Своей группы у неё нет — «база в проде, а сервер
+		// под ней в резерве» ничего не описывает.
+		if err := r.m.db.SetHostParent(ctx, id, host.ID); err != nil {
+			return fmt.Errorf("привязка машины к хосту: %w", err)
 		}
+		jc.Logf("Хост %s заведён в списке под %s, ключ для входа выдан.", p.Spec.Name, host.Name)
 	} else {
 		jc.Logf("Хост уже заведён (продолжение), пропускаю.")
 	}
