@@ -311,6 +311,7 @@ export default function Hosts({
   // Ключ — id хоста: форма добавления уже знает его из ответа, а установка
   // запускается отдельным вызовом чуть позже.
   const pendingBootstrap = useRef(new Map<number, BootstrapOptions>())
+  const [removingHost, setRemovingHost] = useState<HubHost | null>(null)
 
   async function startInstall(host: HubHost, force = false): Promise<boolean> {
     setNotice(null)
@@ -624,11 +625,25 @@ export default function Hosts({
     }
   }
 
-  async function remove(host: HubHost) {
-    if (!window.confirm(t('hosts.confirmRemoveHost', { name: host.name }))) return
+  // Удаление открывает окно с выбором того, что убрать с самого хоста:
+  // цена у пунктов разная, и решать за оператора нельзя ни в ту, ни в
+  // другую сторону.
+  async function remove(host: HubHost, purge: PurgeOptions) {
     try {
-      await api(`/hub/hosts/${host.id}`, { method: 'DELETE' })
+      const res = await api<{ purge?: PurgeResult }>(`/hub/hosts/${host.id}`, {
+        method: 'DELETE',
+        body: purge,
+      })
+      setRemovingHost(null)
       reload()
+      const p = res.purge
+      if (p?.attempted && !p.ok) {
+        // Запись всё равно удалена: хост мог быть уже погашен. Молчать об
+        // этом нельзя — на сервере остался работающий nkt.
+        setNotice({ kind: 'error', text: t('hosts.purgeFailed', { name: host.name, error: p.error ?? '' }) })
+      } else if (p?.attempted && p.steps?.length) {
+        setNotice({ kind: 'info', text: `${host.name}: ${p.steps.join('; ')}` })
+      }
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
@@ -723,7 +738,7 @@ export default function Hosts({
             {t('hosts.removeNopasswd')}
           </Button>
         )}
-        <Button danger type="link" onClick={() => remove(h)}>
+        <Button danger type="link" onClick={() => setRemovingHost(h)}>
           {t('hosts.delete')}
         </Button>
       </div>
@@ -957,6 +972,14 @@ export default function Hosts({
             }}
           />
         </Modal>
+      )}
+
+      {removingHost && (
+        <RemoveHostModal
+          host={removingHost}
+          onCancel={() => setRemovingHost(null)}
+          onConfirm={(purge) => remove(removingHost, purge)}
+        />
       )}
 
       {pubKeyInfo && (
@@ -1204,6 +1227,21 @@ function InstallLog({ events }: { events: RenewEvent[] }) {
   )
 }
 
+/** Что убрать с самого хоста при удалении — internal/hub/purge.go. */
+export interface PurgeOptions {
+  service: boolean
+  data: boolean
+  access: boolean
+  user: boolean
+}
+
+interface PurgeResult {
+  attempted: boolean
+  ok: boolean
+  steps?: string[]
+  error?: string
+}
+
 /** Разовая подготовка нового хоста — internal/hub/bootstrap.go. */
 export interface BootstrapOptions {
   enabled: boolean
@@ -1284,7 +1322,7 @@ function HostForm({
   // чего сценарий выбран. Снять её осмысленно, только если хост уже
   // подготовлен, а пароль просто удобнее.
   const [bootstrapEnabled, setBootstrapEnabled] = useState(!initial)
-  const [bootstrapUser, setBootstrapUser] = useState('nkt')
+  const [bootstrapUser, setBootstrapUser] = useState('')
   const [bootstrapPackages, setBootstrapPackages] = useState(BOOTSTRAP_PACKAGES_DEFAULT)
   const [bootstrapDisablePassword, setBootstrapDisablePassword] = useState(false)
   // Набор хранится на хабе, а не в коде страницы: правка при добавлении
@@ -1493,7 +1531,7 @@ function HostForm({
                 size="small"
                 style={{ marginTop: '0.4rem' }}
                 onClick={() => {
-                  setBootstrapUser('nkt')
+                  setBootstrapUser('')
                   setBootstrapPackages(BOOTSTRAP_PACKAGES_DEFAULT)
                 }}
               >
@@ -1540,4 +1578,68 @@ function HostForm({
   )
 
   return formEl
+}
+
+/**
+ * Окно удаления хоста. Галочки выключены по умолчанию: удаление из хаба и
+ * очистка сервера — разные действия, и второе делается только по прямому
+ * указанию. Порядок пунктов — по возрастанию необратимости.
+ */
+function RemoveHostModal({
+  host,
+  onCancel,
+  onConfirm,
+}: {
+  host: HubHost
+  onCancel: () => void
+  onConfirm: (purge: PurgeOptions) => void
+}) {
+  const { t } = useTranslation()
+  const [purge, setPurge] = useState<PurgeOptions>({ service: false, data: false, access: false, user: false })
+  const [busy, setBusy] = useState(false)
+
+  const item = (key: keyof PurgeOptions, label: string, hint: string, disabled = false) => (
+    <label style={{ display: 'block', marginBottom: '0.5rem', opacity: disabled ? 0.5 : 1 }}>
+      <Checkbox
+        checked={purge[key]}
+        disabled={disabled}
+        onChange={(e) => setPurge((prev) => ({ ...prev, [key]: e.target.checked }))}
+      >
+        {label}
+      </Checkbox>
+      <div className="small muted" style={{ marginLeft: '1.5rem' }}>
+        {hint}
+      </div>
+    </label>
+  )
+
+  return (
+    <Modal title={t('hosts.removeTitle', { name: host.name })} onClose={onCancel} width={620}>
+      <p className="small">{t('hosts.removeIntro')}</p>
+      {item('service', t('hosts.purgeService'), t('hosts.purgeServiceHint'))}
+      {item('data', t('hosts.purgeData'), t('hosts.purgeDataHint'))}
+      {item('access', t('hosts.purgeAccess'), t('hosts.purgeAccessHint'))}
+      {item(
+        'user',
+        t('hosts.purgeUser', { user: host.ssh_user }),
+        host.ssh_user === 'root' ? t('hosts.purgeUserRoot') : t('hosts.purgeUserHint'),
+        host.ssh_user === 'root',
+      )}
+      <p className="small muted">{t('hosts.removeUnreachable')}</p>
+      <div className="row" style={{ gap: '0.5rem', marginTop: '0.75rem' }}>
+        <Button
+          danger
+          type="primary"
+          loading={busy}
+          onClick={() => {
+            setBusy(true)
+            onConfirm(purge)
+          }}
+        >
+          {t('hosts.delete')}
+        </Button>
+        <Button onClick={onCancel}>{t('common.cancel')}</Button>
+      </div>
+    </Modal>
+  )
 }

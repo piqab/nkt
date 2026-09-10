@@ -525,7 +525,20 @@
     "bootstrapPackages": "Packages (space separated)",
     "bootstrapDisablePassword": "Disable password login in sshd",
     "bootstrapDisablePasswordHint": "Done only after key login has been verified on a fresh connection; if the key stops working after sshd reloads, the change reverts itself.",
-    "bootstrapReset": "Restore the built-in set"
+    "bootstrapReset": "Restore the built-in set",
+    "removeTitle": "Remove host {{name}}",
+    "removeIntro": "The host is removed from the hub. Optionally, what nkt left on the server can be removed too — nothing is removed by default.",
+    "purgeService": "Service, binary and configuration",
+    "purgeServiceHint": "systemctl disable --now, then removing the unit, /usr/local/bin/nkt and /etc/netknownsthat. The server returns to its pre-install state.",
+    "purgeData": "Data and logs",
+    "purgeDataHint": "/var/lib/netknownsthat (database, config version history, image archives) and /var/log/netknownsthat. The edit history cannot be recovered afterwards.",
+    "purgeAccess": "The hub's access",
+    "purgeAccessHint": "The /etc/sudoers.d rule and the hub's key line in authorized_keys — other keys are left alone.",
+    "purgeUser": "Account {{user}}",
+    "purgeUserHint": "userdel -r together with the home directory. If people used the account, their files go too.",
+    "purgeUserRoot": "The hub connects as root — that account cannot be removed.",
+    "removeUnreachable": "If the server does not answer, the record is removed anyway and the response says nothing was touched on the host.",
+    "purgeFailed": "{{name}} was removed from the hub, but nothing was removed on the server itself: {{error}}"
   },
   "certs": {
     "colSites": "Sites",

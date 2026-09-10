@@ -595,12 +595,29 @@ func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	// Тело необязательно: удаление без очистки приходит без него.
+	var opts PurgeOptions
+	if r.Body != nil {
+		_ = json.NewDecoder(r.Body).Decode(&opts)
+	}
+
+	var purge PurgeResult
+	if opts.Any() {
+		// Сначала хост, потом запись: после удаления записи ни адреса, ни
+		// ключа для подключения уже не будет.
+		purge = s.hub.PurgeHost(r.Context(), id, opts)
+	}
+
 	s.hub.CloseHost(id)
 	if err := s.db.DeleteHost(r.Context(), id); err != nil {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	// Запись удаляется в любом случае, даже если хост не отозвался:
+	// сервер мог быть уже погашен, и оставлять его в списке навсегда —
+	// худший исход, чем не убранный с него бинарник. Что именно осталось,
+	// сказано в ответе.
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "purge": purge})
 }
 
 // handleBootstrapDefaults отдаёт и сохраняет набор по умолчанию для
