@@ -10,6 +10,7 @@ import (
 	"github.com/piqab/nkt/internal/analyze"
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/profile"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
 	"github.com/piqab/nkt/internal/topology"
@@ -216,8 +217,18 @@ func (s *Server) handleFindings(w http.ResponseWriter, r *http.Request) {
 	service := r.URL.Query().Get("service")
 	rule := r.URL.Query().Get("rule")
 
-	out := make([]model.Finding, 0, len(snap.Findings))
-	for _, f := range snap.Findings {
+	// Расхождение с профилем — такая же находка, как открытый наружу
+	// порт, и место ей в том же списке: заводить профилям собственный
+	// механизм оповещений значило бы просить оператора смотреть в два
+	// места вместо одного.
+	findings := snap.Findings
+	if report, ok := profile.LastDrift(r.Context(), s.db); ok {
+		drift := model.LocalizeFindings(msgs.LangFromRequest(r), profile.DriftFindings(report))
+		findings = append(append([]model.Finding(nil), findings...), drift...)
+	}
+
+	out := make([]model.Finding, 0, len(findings))
+	for _, f := range findings {
 		if severity != "" && f.Severity != severity {
 			continue
 		}

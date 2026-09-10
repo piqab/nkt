@@ -174,6 +174,11 @@ var enCatalog = map[string]string{
 	"parse.renewalCronActive":        "auto-renewal enabled: cron job %s",
 	"parse.renewalNoAutomationFound": "certbot knows about the certificate, but neither certbot.timer nor a cron job was found — renewal won't run on its own",
 
+	"finding.profileDrift.title":      "The host has drifted from profile «%s»: %d differences",
+	"finding.profileDrift.detail":     "The check compared the host against the description: %d differences, %d of them marked risky; %d resources could not be judged.",
+	"finding.profileDrift.suggestion": "Open Profiles, build a plan and apply what is actually needed.",
+	"finding.profileBroken.title":      "Profile «%s» cannot be checked",
+	"finding.profileBroken.suggestion": "Open the Profiles section and fix the description — while it does not parse, drift is not tracked.",
 	"finding.portConflict.title":      "Port %d conflict between %s and %s",
 	"finding.portConflict.detail":     "%s (%s, %s:%d) and %s (%s, %s:%d) declare the same port. The second service won't be able to bind the socket and will fail to start.",
 	"finding.portConflict.suggestion": "Split the services across different ports or bind addresses.",

@@ -62,6 +62,13 @@ func localizeCerts(lang msgs.Lang, certs []Certificate) []Certificate {
 	return out
 }
 
+// LocalizeFindings переводит находки, собранные не сканированием, а
+// отдельно (сверка с профилями). Снапшот они не проходят, поэтому и
+// перевод им нужен свой.
+func LocalizeFindings(lang msgs.Lang, findings []Finding) []Finding {
+	return localizeFindings(lang, findings)
+}
+
 func localizeFindings(lang msgs.Lang, findings []Finding) []Finding {
 	out := make([]Finding, len(findings))
 	for i, f := range findings {

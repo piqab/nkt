@@ -73,6 +73,9 @@ type Config struct {
 	MetricsInterval   time.Duration
 	LogScanInterval   time.Duration
 	InventoryInterval time.Duration
+	// DriftInterval — как часто сверять хост с сохранёнными профилями.
+	// Ноль выключает проверку.
+	DriftInterval time.Duration
 	Retention         time.Duration
 	SchedulerEnabled  bool
 	// DemoBackfill seeds synthetic history in fixtures mode so the availability
@@ -333,6 +336,7 @@ func Load() (*Config, error) {
 		MetricsInterval:   envDur("NKT_METRICS_INTERVAL", time.Minute),
 		LogScanInterval:   envDur("NKT_LOG_SCAN_INTERVAL", 5*time.Minute),
 		InventoryInterval: envDur("NKT_INVENTORY_INTERVAL", 5*time.Minute),
+		DriftInterval:     envDur("NKT_DRIFT_INTERVAL", time.Hour),
 		Retention:         envDur("NKT_RETENTION", 30*24*time.Hour),
 		SchedulerEnabled:  envBool("NKT_SCHEDULER_ENABLED", true),
 		DemoBackfill:      envBool("NKT_DEMO_BACKFILL", true),
