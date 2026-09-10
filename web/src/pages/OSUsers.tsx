@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Checkbox, Input, Tag, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Form, Input, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
@@ -34,25 +34,24 @@ interface OSUser {
 export default function OSUsers({ me }: { me: Me }) {
   const { t } = useTranslation()
   const users = useApi<{ users: OSUser[] }>('/os-users', 60_000)
-  const [name, setName] = useState('')
-  const [key, setKey] = useState('')
-  const [sudo, setSudo] = useState(false)
+  const [form] = Form.useForm<{ name: string; key: string; sudo: boolean }>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
   const canUse = me.is_admin && me.allow_mutations
 
-  async function submit() {
+  async function submit(values: { name: string; key: string; sudo?: boolean }) {
     setBusy(true)
     setError(null)
     setDone(null)
     try {
-      await api('/os-users', { method: 'POST', body: { name: name.trim(), key: key.trim(), sudo } })
-      setDone(t('osUsers.created', { name: name.trim() }))
-      setName('')
-      setKey('')
-      setSudo(false)
+      await api('/os-users', {
+        method: 'POST',
+        body: { name: values.name.trim(), key: values.key.trim(), sudo: values.sudo ?? false },
+      })
+      setDone(t('osUsers.created', { name: values.name.trim() }))
+      form.resetFields()
       await users.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -118,36 +117,52 @@ export default function OSUsers({ me }: { me: Me }) {
 
       {canUse && (
         <Card title={t('osUsers.addTitle')} subtitle={t('osUsers.addHint')}>
-          <div className="filters">
-            <label style={{ flex: 1, minWidth: '12rem' }}>
-              {t('osUsers.fieldName')}
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="deploy" />
-            </label>
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-              <Checkbox checked={sudo} onChange={(e) => setSudo(e.target.checked)} />
-              {t('osUsers.fieldSudo')}
-            </label>
-          </div>
-          <label className="small">
-            {t('osUsers.fieldKey')}
-            <Input.TextArea
-              className="mono"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-              autoSize={{ minRows: 2, maxRows: 5 }}
-              placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5… user@laptop"
-              spellCheck={false}
-            />
-          </label>
-          <Button
-            type="primary"
-            style={{ marginTop: '0.6rem' }}
-            loading={busy}
-            disabled={!name.trim() || !key.trim()}
-            onClick={submit}
-          >
-            {t('osUsers.add')}
-          </Button>
+          {/* Проверки повторяют серверные (internal/control/osusers.go):
+              имя по правилам useradd, ключ — строка authorized_keys. Смысл
+              не в замене серверной проверки, а в том, чтобы не узнавать об
+              опечатке после круговой поездки на хост. */}
+          <Form form={form} layout="vertical" onFinish={submit} requiredMark={false}>
+            <div className="filters">
+              <Form.Item
+                name="name"
+                label={t('osUsers.fieldName')}
+                rules={[
+                  { required: true },
+                  {
+                    pattern: /^[a-z_][a-z0-9_-]{0,31}$/,
+                    message: t('osUsers.nameRule'),
+                  },
+                ]}
+                style={{ flex: 1, minWidth: '12rem' }}
+              >
+                <Input placeholder="deploy" />
+              </Form.Item>
+              <Form.Item name="sudo" valuePropName="checked" label=" ">
+                <Checkbox>{t('osUsers.fieldSudo')}</Checkbox>
+              </Form.Item>
+            </div>
+            <Form.Item
+              name="key"
+              label={t('osUsers.fieldKey')}
+              rules={[
+                { required: true },
+                {
+                  pattern: /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-[a-z0-9@.-]+)\s+[A-Za-z0-9+/=]+(\s+.*)?$/,
+                  message: t('osUsers.keyRule'),
+                },
+              ]}
+            >
+              <Input.TextArea
+                className="mono"
+                autoSize={{ minRows: 2, maxRows: 5 }}
+                placeholder="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5… user@laptop"
+                spellCheck={false}
+              />
+            </Form.Item>
+            <Button type="primary" htmlType="submit" loading={busy}>
+              {t('osUsers.add')}
+            </Button>
+          </Form>
         </Card>
       )}
 

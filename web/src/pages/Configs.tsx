@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, Input, Segmented, Select, type InputRef, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Form, Input, Segmented, Select, type InputRef, type TableColumnsType } from 'antd'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
@@ -153,6 +153,20 @@ export default function Configs({ me }: { me: Me }) {
   // Разрешение «у меня есть консоль» относится к одной конкретной правке,
   // а не к сеансу: при переходе к другому файлу оно сбрасывается.
   useEffect(() => setSSHForce(false), [path])
+
+  // Что не так с введённым путём — одна строка на все места, где это
+  // нужно: подпись под полем и состояние кнопки.
+  const trimmedNewPath = newFilePathInput.trim()
+  const pathProblem =
+    trimmedNewPath === ''
+      ? null
+      : !trimmedNewPath.startsWith('/')
+        ? t('configs.pathMustBeAbsolute')
+        : trimmedNewPath.includes('..')
+          ? t('configs.pathNoDotDot')
+          : newFileModal?.cloneFrom && trimmedNewPath === newFileModal.cloneFrom
+            ? t('configs.pathSameAsSource')
+            : null
 
   const sshBlocked = isSSHPath && sshPreflight.data?.reserve.ok === false && !sshForce
 
@@ -521,22 +535,31 @@ export default function Configs({ me }: { me: Me }) {
                 <Trans i18nKey="configs.cloneBody" values={{ path: newFileModal.cloneFrom }} components={{ code: <code className="mono" /> }} />
               </p>
             )}
-            <label>
-              {t('configs.pathLabel')}
-              <Input
-                ref={newFilePathInputRef}
-                value={newFilePathInput}
-                onChange={(e) => setNewFilePathInput(e.target.value)}
-                placeholder="/etc/nginx/sites-enabled/newsite.conf"
-              />
-            </label>
+            {/* Путь проверяется здесь же: абсолютный, без «..» и не тот
+                самый файл, который клонируем. Сервер отвергнет то же самое,
+                но узнавать об опечатке после запроса на хост незачем. */}
+            <Form layout="vertical" requiredMark={false}>
+              <Form.Item
+                label={t('configs.pathLabel')}
+                validateStatus={pathProblem ? 'error' : undefined}
+                help={pathProblem ?? undefined}
+                style={{ marginBottom: '0.4rem' }}
+              >
+                <Input
+                  ref={newFilePathInputRef}
+                  value={newFilePathInput}
+                  onChange={(e) => setNewFilePathInput(e.target.value)}
+                  placeholder="/etc/nginx/sites-enabled/newsite.conf"
+                />
+              </Form.Item>
+            </Form>
             <p className="small muted">
               <Trans i18nKey="configs.pathHint" components={{ code: <code className="mono" /> }} />
             </p>
             <div className="row" style={{ marginTop: '0.4rem' }}>
               <Button
                 type="primary"
-                disabled={!newFilePathInput.trim().startsWith('/') || newFilePathInput.trim() === newFileModal.cloneFrom}
+                disabled={pathProblem !== null || newFilePathInput.trim() === ''}
                 onClick={() => {
                   const p = newFilePathInput.trim()
                   setCreatingPath(p)
