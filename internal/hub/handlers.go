@@ -340,7 +340,7 @@ type hostWithOverview struct {
 
 // localHostID is the sentinel Host.ID for the synthetic "localhost" row —
 // real hosts autoincrement from 1, so this never collides with one.
-const localHostID = -1
+const localHostID = LocalHostID
 
 func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 	hosts, err := s.db.ListHosts(r.Context())
@@ -349,7 +349,7 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := make([]hostWithOverview, 0, len(hosts)+1)
-	if local := s.localHostEntry(); local != nil {
+	if local := s.localHostEntry(r.Context()); local != nil {
 		out = append(out, *local)
 	}
 	for _, h := range hosts {
@@ -375,7 +375,7 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 // nil when the hub wasn't built with an embedded scanner at all (Local ==
 // nil): a hub that genuinely has nothing local to show shouldn't pin an
 // empty, permanently-broken row at the top of every operator's host list.
-func (s *Server) localHostEntry() *hostWithOverview {
+func (s *Server) localHostEntry(ctx context.Context) *hostWithOverview {
 	if s.local == nil {
 		return nil
 	}
@@ -384,6 +384,10 @@ func (s *Server) localHostEntry() *hostWithOverview {
 		Name:   "localhost",
 		Addr:   "127.0.0.1",
 		Status: store.HostStatusOnline,
+		// Группа этой строки живёт в настройках хаба (см.
+		// Manager.LocalHostGroup): в таблице хостов её не существует, а
+		// раскладывать по разделам оператор хочет и её тоже.
+		Group: s.hub.LocalHostGroup(ctx),
 	}}
 	reachable := true
 	row.Reachable = &reachable

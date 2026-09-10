@@ -477,6 +477,7 @@ label:not([class*='ant-']):has(> .ant-checkbox-wrapper) {
 .muted { color: var(--text-muted); }
 .secondary { color: var(--text-secondary); }
 .row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.row-nowrap { flex-wrap: nowrap; }
 .col { display: flex; flex-direction: column; gap: 0.5rem; }
 .spread { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
 .small { font-size: 0.78rem; }

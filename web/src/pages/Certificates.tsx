@@ -115,7 +115,10 @@ function certColumns(
       title: t('certs.colSites'),
       key: 'name',
       render: (_, cert) => (
-        <>
+        // Минимальная ширина задаётся содержимым клетки: иначе колонке
+        // достаётся самое длинное слово, и имя домена ломается посреди
+        // себя («api.example.co» и «m» на следующей строке).
+        <div style={{ minWidth: '10rem' }}>
           <strong>{certName(cert)}</strong>
           {cert.self_signed && <div className="small muted">{t('certs.selfSigned')}</div>}
           {cert.error && (
@@ -123,14 +126,16 @@ function certColumns(
               {cert.error}
             </div>
           )}
-        </>
+        </div>
       ),
     },
     {
       title: t('certs.colFile'),
       key: 'path',
       render: (_, cert) => (
-        <span className="small mono" style={{ wordBreak: 'break-all' }}>
+        // Минимальная ширина — чтобы путь не рвался после каждых
+        // двух-трёх символов, когда колонке достаётся мало места.
+        <span className="small mono" style={{ display: 'block', minWidth: '11rem', wordBreak: 'break-all' }}>
           {cert.path}
         </span>
       ),
@@ -166,12 +171,15 @@ function certColumns(
       render: (_, cert) => {
         const rTone = renewalTone(cert)
         return (
-          <>
+          <span className="nowrap">
             <span style={{ color: rTone === 'muted' ? 'var(--text-muted)' : TONE_COLOR[rTone] }}>
               ● {renewalWord(cert)}
             </span>
-            {cert.renewal.detail && <div className="small muted">{cert.renewal.detail}</div>}
-          </>
+            {/* Подробности — сноской, а не второй строкой: объяснение
+                бывает длиной в предложение и растягивало высоту всех
+                строк таблицы ради текста, который читают редко. */}
+            {cert.renewal.detail && <InfoHint>{cert.renewal.detail}</InfoHint>}
+          </span>
         )
       },
     },
@@ -455,9 +463,14 @@ export default function Certificates({ me }: { me: Me }) {
 
       <Card title={t('certs.detailsTitle')}>
         <div className="table-wrap">
-          <DataTable<Certificate>             dataSource={certs}
+          <DataTable<Certificate>
+            dataSource={certs}
             rowKey="id"
             columns={certColumns(canControl, busy, renew)}
+            // Ширина по содержимому: при делении поровну колонки со
+            // статусами («certbot record lost», «not checked») не влезали
+            // в свою долю и наползали на соседние.
+            tableLayout="auto"
           />
         </div>
       </Card>
