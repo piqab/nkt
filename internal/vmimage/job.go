@@ -3,6 +3,7 @@ package vmimage
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/piqab/nkt/internal/jobs"
 )
@@ -11,8 +12,18 @@ import (
 const KindDownload = "vmimage.download"
 
 // DownloadParams — вход задания.
+//
+// Либо образ каталога по идентификатору, либо свой по ссылке: второе
+// нужно тем, у кого свой подготовленный образ или зеркало внутри сети.
 type DownloadParams struct {
 	ImageID string `json:"image_id"`
+	// URL, FileName и Checksum описывают свой образ. Имя файла — то, под
+	// которым он ляжет в кэш и будет виден в списке.
+	URL      string `json:"url,omitempty"`
+	FileName string `json:"file_name,omitempty"`
+	Checksum string `json:"checksum,omitempty"`
+	// ChecksumKind — sha256 (по умолчанию) или sha512.
+	ChecksumKind string `json:"checksum_kind,omitempty"`
 }
 
 // DownloadRunner качает образ в фоне.
@@ -34,14 +45,20 @@ func (r *DownloadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err := jc.Params(&p); err != nil {
 		return fmt.Errorf("разбор задания: %w", err)
 	}
-	img, ok := ByID(p.ImageID)
-	if !ok {
-		return fmt.Errorf("нет такого образа в каталоге: %q", p.ImageID)
+	img, err := resolveDownload(p)
+	if err != nil {
+		return err
 	}
 
 	jc.Step(1, 3, "контрольная сумма")
 	jc.Logf("Образ: %s", img.Name)
 	jc.Logf("Источник: %s", img.URL)
+	if img.Custom && img.Checksum == "" {
+		// Сказать вслух: образ из каталога проверяется всегда, а свой по
+		// ссылке — только если сумму дали. Молчаливая разница в том,
+		// чему можно доверять, хуже отсутствия проверки.
+		jc.Logf("Контрольная сумма не задана — образ будет взят как есть, без проверки.")
+	}
 
 	jc.Step(2, 3, "скачивание")
 	path, err := r.store.Download(ctx, img, func(pr Progress) {
@@ -59,6 +76,33 @@ func (r *DownloadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	jc.Step(3, 3, "проверка")
 	jc.Logf("Готово: %s (сумма %s сошлась)", path, img.ChecksumKind)
 	return nil
+}
+
+// resolveDownload превращает вход задания в запись образа.
+func resolveDownload(p DownloadParams) (Image, error) {
+	if p.URL == "" {
+		img, ok := ByID(p.ImageID)
+		if !ok {
+			return Image{}, fmt.Errorf("нет такого образа в каталоге: %q", p.ImageID)
+		}
+		return img, nil
+	}
+	name := strings.TrimSpace(p.FileName)
+	if name == "" {
+		return Image{}, fmt.Errorf("не задано имя файла для образа")
+	}
+	if !validFileName(name) {
+		return Image{}, fmt.Errorf("недопустимое имя файла: %q", name)
+	}
+	kind := strings.ToLower(strings.TrimSpace(p.ChecksumKind))
+	if kind == "" {
+		kind = SHA256
+	}
+	img := CustomImage(name)
+	img.URL = p.URL
+	img.Checksum = strings.TrimSpace(p.Checksum)
+	img.ChecksumKind = kind
+	return img, nil
 }
 
 // humanBytes показывает размер так, как его читают, а не в байтах.

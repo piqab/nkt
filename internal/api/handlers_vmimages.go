@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"path"
 	"strconv"
 	"strings"
 
@@ -30,10 +31,44 @@ func (s *Server) handleVMImages(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"catalog": vmimage.Catalog,
 		"local":   s.vmimages.Status(),
-		"dir":     s.vmimages.Dir(),
-		"tools":   tools,
-		"missing": vmcreate.MissingTools(tools),
+		"custom":  s.vmimages.Custom(),
+		// Своим образам своё состояние: в каталоге их нет, а размер и
+		// дата нужны так же.
+		"custom_local": s.vmimages.CustomStatus(),
+		"dir":          s.vmimages.Dir(),
+		"tools":        tools,
+		"missing":      vmcreate.MissingTools(tools),
 	})
+}
+
+// maxUploadBytes — потолок загружаемого образа. Облачные образы весят
+// сотни мегабайт; десять гигабайт — это уже не образ, а чья-то ошибка.
+const maxUploadBytes = 10 << 30
+
+// handleVMImageUpload принимает образ файлом из браузера.
+//
+// Тело запроса — сам файл, без multipart: образ весит сотни мегабайт, и
+// разбирать такую форму в памяти незачем, когда нужно просто записать
+// поток на диск.
+func (s *Server) handleVMImageUpload(w http.ResponseWriter, r *http.Request) {
+	if s.vmimages == nil {
+		writeError(w, http.StatusServiceUnavailable, "работа с образами недоступна")
+		return
+	}
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" {
+		writeError(w, http.StatusBadRequest, "не указано имя файла")
+		return
+	}
+	user := auth.Username(r.Context())
+	path, written, err := s.vmimages.Save(name, http.MaxBytesReader(w, r.Body, maxUploadBytes))
+	if err != nil {
+		s.db.Audit(r.Context(), user, "vmimage.upload", name, "error", err.Error())
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), user, "vmimage.upload", name, "ok", written)
+	writeJSON(w, http.StatusOK, map[string]any{"path": path, "size": written})
 }
 
 // handleVMToolsInstall доставляет пакеты, без которых машину не создать.
@@ -61,37 +96,66 @@ func (s *Server) handleVMToolsInstall(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVMImageDownload(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ImageID string `json:"image_id"`
+		// Свой образ по ссылке: URL и имя файла, под которым он ляжет в
+		// кэш. Сумма необязательна — если её нет, образ берётся как
+		// есть, о чём задание говорит вслух.
+		URL          string `json:"url"`
+		FileName     string `json:"file_name"`
+		Checksum     string `json:"checksum"`
+		ChecksumKind string `json:"checksum_kind"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	img, ok := vmimage.ByID(req.ImageID)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "нет такого образа в каталоге")
 		return
 	}
 	if s.jobs == nil || s.vmimages == nil {
 		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
 		return
 	}
+
+	title := ""
+	params := vmimage.DownloadParams{
+		ImageID: req.ImageID, URL: strings.TrimSpace(req.URL),
+		FileName: strings.TrimSpace(req.FileName),
+		Checksum: strings.TrimSpace(req.Checksum), ChecksumKind: req.ChecksumKind,
+	}
+	if params.URL != "" {
+		if !strings.HasPrefix(params.URL, "http://") && !strings.HasPrefix(params.URL, "https://") {
+			writeError(w, http.StatusBadRequest, "ссылка должна начинаться с http:// или https://")
+			return
+		}
+		if params.FileName == "" {
+			// Имя можно взять из самой ссылки — это то, чего оператор и
+			// ожидает, вводя URL на .qcow2.
+			params.FileName = path.Base(params.URL)
+		}
+		title = "образ " + params.FileName
+	} else {
+		img, ok := vmimage.ByID(req.ImageID)
+		if !ok {
+			writeError(w, http.StatusBadRequest, "нет такого образа в каталоге")
+			return
+		}
+		title = "образ " + img.Name
+	}
+
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind:  vmimage.KindDownload,
-		Title: "образ " + img.Name,
+		Title: title,
 		// Свой ключ очереди: качать образ можно параллельно с работой на
 		// хосте — сеть и диск это выдержат, а ждать полчаса, пока
 		// освободится общая очередь, незачем.
 		Queue:  "vmimage",
 		Author: user,
 		Steps:  3,
-		Params: vmimage.DownloadParams{ImageID: img.ID},
+		Params: params,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.db.Audit(r.Context(), user, "vmimage.download", img.ID, "ok", nil)
+	s.db.Audit(r.Context(), user, "vmimage.download", title, "ok", params.URL)
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
 }
 
@@ -103,12 +167,27 @@ func (s *Server) handleVMImageDelete(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	img, ok := vmimage.ByID(req.ImageID)
-	if !ok || s.vmimages == nil {
-		writeError(w, http.StatusBadRequest, "нет такого образа в каталоге")
+	if s.vmimages == nil {
+		writeError(w, http.StatusServiceUnavailable, "работа с образами недоступна")
 		return
 	}
 	user := auth.Username(r.Context())
+	// Свой образ удаляется по имени файла: в каталоге его нет.
+	if name, ok := strings.CutPrefix(req.ImageID, vmimage.CustomPrefix); ok {
+		if err := s.vmimages.DeleteCustom(name); err != nil {
+			s.db.Audit(r.Context(), user, "vmimage.delete", name, "error", err.Error())
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.db.Audit(r.Context(), user, "vmimage.delete", name, "ok", nil)
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	}
+	img, ok := vmimage.ByID(req.ImageID)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "нет такого образа в каталоге")
+		return
+	}
 	if err := s.vmimages.Delete(img); err != nil {
 		s.db.Audit(r.Context(), user, "vmimage.delete", img.ID, "error", err.Error())
 		writeError(w, http.StatusInternalServerError, err.Error())

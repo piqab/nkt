@@ -42,8 +42,7 @@
     "hardware": "Hardware",
     "system": "System settings",
     "jobs": "Jobs",
-    "profiles": "Profiles",
-    "vmImages": "VM images"
+    "profiles": "Profiles"
   },
   "about": {
     "title": "About",
@@ -1618,6 +1617,20 @@
       "cloud-localds": "builds the first-boot settings",
       "genisoimage": "the same, when cloud-localds is absent"
     },
-    "installToolsNow": "Install now"
+    "installToolsNow": "Install now",
+    "addOwn": "Add your own",
+    "addOwnTitle": "Your own image",
+    "byURL": "By link",
+    "byURLHint": "Fetched by the same job as catalog images, resuming after a break. The checksum is optional — without it the image is taken as is, unverified.",
+    "url": "Link",
+    "fileName": "File name",
+    "fileNameAuto": "take from the link",
+    "checksum": "Checksum (optional)",
+    "fetch": "Download",
+    "byFile": "File from your computer",
+    "byFileHint": "Accepts .qcow2, .img and .raw. The file travels through the browser and the hub, so for a several-hundred-megabyte image a link is usually faster.",
+    "uploading": "Uploaded {{percent}}%",
+    "uploadFailed": "The upload broke off",
+    "customBadge": "custom"
   }
 }

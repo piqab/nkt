@@ -9,6 +9,7 @@ package vmimage
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -34,6 +35,13 @@ type Image struct {
 	// FileName — имя внутри файла сумм и имя, под которым образ ложится
 	// в кэш.
 	FileName string `json:"file_name"`
+	// Checksum — сумма, заданная прямо здесь. Для каталога пусто (её
+	// берут из ChecksumURL), для своего образа по ссылке — то, что ввёл
+	// оператор. Пустая и то, и другое означает, что проверять нечем:
+	// образ возьмётся как есть, о чём задание скажет вслух.
+	Checksum string `json:"-"`
+	// Custom — образ добавлен оператором, а не из каталога.
+	Custom bool `json:"custom,omitempty"`
 }
 
 // Catalog — образы, которые nkt умеет качать.
@@ -72,6 +80,21 @@ var Catalog = []Image{
 	},
 }
 
+// CustomPrefix — приставка идентификатора своего образа. Отличать его от
+// каталожного надо: у каталожного есть ссылка и файл сумм, а у своего —
+// только файл в кэше.
+const CustomPrefix = "custom:"
+
+// CustomImage строит запись по файлу, лежащему в кэше.
+func CustomImage(fileName string) Image {
+	return Image{
+		ID:       CustomPrefix + fileName,
+		Name:     fileName,
+		FileName: fileName,
+		Custom:   true,
+	}
+}
+
 // ByID находит образ каталога.
 func ByID(id string) (Image, bool) {
 	for _, img := range Catalog {
@@ -80,6 +103,16 @@ func ByID(id string) (Image, bool) {
 		}
 	}
 	return Image{}, false
+}
+
+// fileNameRe — что годится в имя файла образа. Имя приходит от
+// оператора и становится путём в каталоге кэша, поэтому ни косых черт,
+// ни «..», ни пустоты.
+var fileNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+
+// validFileName проверяет имя файла образа.
+func validFileName(name string) bool {
+	return fileNameRe.MatchString(name) && !strings.Contains(name, "..")
 }
 
 // parseChecksums достаёт сумму нужного файла из файла сумм.

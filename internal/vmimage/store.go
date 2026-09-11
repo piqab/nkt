@@ -63,6 +63,53 @@ type Local struct {
 	ModTime     string `json:"mod_time,omitempty"`
 }
 
+// imageExts — расширения, по которым файл в кэше считается образом.
+var imageExts = map[string]bool{".qcow2": true, ".img": true, ".raw": true}
+
+// Custom перечисляет образы, добавленные оператором: всё, что лежит в
+// кэше и не пришло из каталога.
+//
+// Список строится по каталогу на диске, а не по записи в базе: файл
+// могли принести и мимо nkt (scp), и он такой же годный образ, как
+// скачанный. База же рассинхронизировалась бы при первом удалении файла
+// руками.
+func (s *Store) Custom() []Image {
+	entries, err := os.ReadDir(s.dir)
+	if err != nil {
+		return nil
+	}
+	known := map[string]bool{}
+	for _, img := range Catalog {
+		known[img.FileName] = true
+	}
+	var out []Image
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || known[name] || !imageExts[strings.ToLower(filepath.Ext(name))] {
+			continue
+		}
+		out = append(out, CustomImage(name))
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].FileName < out[j].FileName })
+	return out
+}
+
+// CustomStatus отвечает то же, что Status, но про свои образы.
+func (s *Store) CustomStatus() []Local {
+	custom := s.Custom()
+	out := make([]Local, 0, len(custom))
+	for _, img := range custom {
+		l := Local{ID: img.ID}
+		full := s.Path(img)
+		if st, err := os.Stat(full); err == nil {
+			l.Downloaded, l.Path, l.Size = true, full, st.Size()
+			l.ModTime = st.ModTime().UTC().Format(time.RFC3339)
+		}
+		out = append(out, l)
+	}
+	return out
+}
+
 // Status отвечает, что из каталога уже скачано.
 func (s *Store) Status() []Local {
 	out := make([]Local, 0, len(Catalog))
@@ -88,6 +135,65 @@ func (s *Store) Path(img Image) string { return filepath.Join(s.dir, img.FileNam
 func (s *Store) Have(img Image) bool {
 	st, err := os.Stat(s.Path(img))
 	return err == nil && st.Size() > 0
+}
+
+// Save кладёт в кэш образ, пришедший потоком (загрузка файла из
+// браузера).
+//
+// Пишется во временный файл рядом и переименовывается в конце: обрыв
+// посреди загрузки оставил бы под настоящим именем половину образа, и
+// однажды она ушла бы в машину как целая.
+func (s *Store) Save(name string, src io.Reader) (string, int64, error) {
+	if !validFileName(name) {
+		return "", 0, fmt.Errorf("недопустимое имя файла: %q", name)
+	}
+	if !imageExts[strings.ToLower(filepath.Ext(name))] {
+		return "", 0, fmt.Errorf("образ должен быть .qcow2, .img или .raw")
+	}
+	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+		return "", 0, err
+	}
+	full := filepath.Join(s.dir, name)
+	if _, err := os.Stat(full); err == nil {
+		return "", 0, fmt.Errorf("образ %s уже есть — удалите старый или выберите другое имя", name)
+	}
+
+	part := full + partSuffix
+	f, err := os.OpenFile(part, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return "", 0, err
+	}
+	written, err := io.Copy(f, src)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = os.Remove(part)
+		return "", 0, err
+	}
+	if written == 0 {
+		_ = os.Remove(part)
+		return "", 0, fmt.Errorf("пустой файл")
+	}
+	if err := os.Rename(part, full); err != nil {
+		return "", 0, err
+	}
+	return full, written, nil
+}
+
+// DeleteCustom убирает свой образ по имени файла.
+func (s *Store) DeleteCustom(name string) error {
+	if !validFileName(name) {
+		return fmt.Errorf("недопустимое имя файла: %q", name)
+	}
+	full := filepath.Join(s.dir, name)
+	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.Remove(full + partSuffix); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
 }
 
 // Delete убирает скачанный образ и недокачанный кусок.
@@ -130,8 +236,13 @@ func (s *Store) Download(ctx context.Context, img Image, report func(Progress)) 
 	}
 
 	// Готовый файл проверяется заново: он мог остаться от прошлой
-	// сборки образа, за которой стоит та же ссылка «latest».
+	// сборки образа, за которой стоит та же ссылка «latest». Проверять
+	// нечем — берём как есть: у своего образа по ссылке суммы может не
+	// быть вовсе.
 	if _, err := os.Stat(full); err == nil {
+		if want == "" {
+			return full, nil
+		}
 		sum, err := checksumFile(full, img.ChecksumKind)
 		if err == nil && sum == want {
 			return full, nil
@@ -147,6 +258,14 @@ func (s *Store) Download(ctx context.Context, img Image, report func(Progress)) 
 		return "", err
 	}
 
+	if want == "" {
+		// Проверять нечем — но недокачанный кусок под своим именем
+		// оставлять нельзя: он однажды уйдёт в машину как настоящий.
+		if err := os.Rename(part, full); err != nil {
+			return "", err
+		}
+		return full, nil
+	}
 	sum, err := checksumFile(part, img.ChecksumKind)
 	if err != nil {
 		return "", err
@@ -163,8 +282,16 @@ func (s *Store) Download(ctx context.Context, img Image, report func(Progress)) 
 	return full, nil
 }
 
-// expectedChecksum читает сумму из файла сумм рядом с образом.
+// expectedChecksum отдаёт сумму, с которой сверяется скачанное: либо
+// заданную прямо в записи, либо прочитанную из файла сумм рядом с
+// образом. Пустая строка — проверять нечем.
 func (s *Store) expectedChecksum(ctx context.Context, img Image) (string, error) {
+	if img.Checksum != "" {
+		return strings.ToLower(strings.TrimSpace(img.Checksum)), nil
+	}
+	if img.ChecksumURL == "" {
+		return "", nil
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, img.ChecksumURL, nil)
 	if err != nil {
 		return "", err

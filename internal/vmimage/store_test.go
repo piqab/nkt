@@ -199,3 +199,66 @@ func logRange(next http.Handler, out *[]string) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// Свой образ — это просто файл в кэше: положенный загрузкой, скачанный
+// по ссылке или принесённый через scp. Список строится по каталогу на
+// диске, поэтому все три случая выглядят одинаково.
+func TestCustomImages(t *testing.T) {
+	dir := t.TempDir()
+	store := NewStore(dir)
+
+	// Файл каталога своим не считается.
+	catalog, _ := ByID("debian-13")
+	if err := os.WriteFile(filepath.Join(dir, catalog.FileName), []byte("x"), 0o644); err != nil {
+		t.Fatalf("подготовка: %v", err)
+	}
+	// Постороннее в каталоге кэша игнорируется: недокачанный кусок и
+	// чужой файл — не образы.
+	for _, name := range []string{"notes.txt", "image.qcow2" + partSuffix} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("x"), 0o644); err != nil {
+			t.Fatalf("подготовка: %v", err)
+		}
+	}
+
+	path, n, err := store.Save("my-image.qcow2", strings.NewReader("содержимое образа"))
+	if err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if n == 0 || path == "" {
+		t.Errorf("Save вернул %q, %d байт", path, n)
+	}
+
+	custom := store.Custom()
+	if len(custom) != 1 || custom[0].FileName != "my-image.qcow2" {
+		t.Fatalf("свои образы = %+v", custom)
+	}
+	if !custom[0].Custom || custom[0].ID != CustomPrefix+"my-image.qcow2" {
+		t.Errorf("образ не помечен своим: %+v", custom[0])
+	}
+	if st := store.CustomStatus(); len(st) != 1 || !st[0].Downloaded {
+		t.Errorf("состояние своего образа = %+v", st)
+	}
+
+	// Повторная загрузка под тем же именем не затирает молча.
+	if _, _, err := store.Save("my-image.qcow2", strings.NewReader("другое")); err == nil {
+		t.Error("повторная загрузка перезаписала существующий образ")
+	}
+
+	if err := store.DeleteCustom("my-image.qcow2"); err != nil {
+		t.Fatalf("DeleteCustom: %v", err)
+	}
+	if len(store.Custom()) != 0 {
+		t.Error("образ не удалён")
+	}
+}
+
+// Имя файла приходит от оператора и становится путём в каталоге кэша:
+// ни косых черт, ни «..», ни чужих расширений.
+func TestSaveRejectsBadNames(t *testing.T) {
+	store := NewStore(t.TempDir())
+	for _, name := range []string{"../evil.qcow2", "sub/dir.qcow2", "script.sh", "", ".qcow2"} {
+		if _, _, err := store.Save(name, strings.NewReader("x")); err == nil {
+			t.Errorf("имя %q принято", name)
+		}
+	}
+}
