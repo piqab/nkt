@@ -626,6 +626,33 @@
       "job-failed": "job failed"
     }
   },
+  "changes": {
+    "title": "What changed",
+    "subtitle": "since you last looked ({{when}}) — changes: {{count}}",
+    "subtitleNoBase": "since the previous state snapshot — changes: {{count}}",
+    "ack": "mark as seen",
+    "truncated": "Not every change is shown — there are too many. Press “mark as seen” to see only new ones from now on.",
+    "colWhat": "What",
+    "colKey": "Where",
+    "colWas": "Was",
+    "colNow": "Now",
+    "action": {
+      "appeared": "appeared",
+      "disappeared": "gone",
+      "changed": "changed"
+    },
+    "kind": {
+      "service": "service",
+      "port": "port",
+      "firewall": "firewall rule",
+      "container": "container",
+      "vm": "machine",
+      "file": "config file",
+      "cert": "certificate",
+      "interface": "interface",
+      "package": "package update"
+    }
+  },
   "certs": {
     "colSites": "Sites",
     "selfSigned": "self-signed",

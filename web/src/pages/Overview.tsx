@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { Button, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
+import ChangesCard from '../components/ChangesCard'
 import { useApi } from '../api'
 import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
@@ -138,6 +139,10 @@ export default function OverviewPage({ me }: { me: Me }) {
         </Banner>
       ))}
       {data.package_updates?.reboot_required && <Banner kind="warn">{t('overview.rebootRequired')}</Banner>}
+
+      {/* Первым делом — что изменилось с прошлого захода: ради этого
+          вопроса снимки состояния и хранятся. */}
+      <ChangesCard />
 
       <div className="grid grid-4">
         <StatTile

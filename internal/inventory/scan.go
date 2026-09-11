@@ -20,6 +20,10 @@ import (
 	"github.com/piqab/nkt/internal/store"
 )
 
+// snapshotsKept — сколько снимков хранится. Их читают ради вопроса «что
+// изменилось с прошлого захода», а не ради архива за год.
+const snapshotsKept = 200
+
 // Scanner produces host snapshots.
 type Scanner struct {
 	cfg *config.Config
@@ -305,6 +309,12 @@ func (s *Scanner) persist(ctx context.Context, snap *model.Snapshot) error {
 		return err
 	}
 	if _, _, err := s.db.SaveSnapshot(ctx, snap.Digest, string(raw)); err != nil {
+		return err
+	}
+	// Снимок пишется при каждом изменении состояния, а на живом сервере
+	// оно меняется часто: без чистки таблица однажды станет больше всего
+	// остального в базе.
+	if err := s.db.PruneSnapshots(ctx, snapshotsKept); err != nil {
 		return err
 	}
 	return s.syncTargets(ctx, snap)

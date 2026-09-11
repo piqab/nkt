@@ -82,3 +82,46 @@ func (d *DB) SnapshotByID(ctx context.Context, id int64) (SnapshotMeta, string, 
 	}
 	return m, payload, err
 }
+
+// LatestSnapshotMeta отдаёт номер и время самого свежего снимка.
+func (d *DB) LatestSnapshotMeta(ctx context.Context) (SnapshotMeta, error) {
+	var m SnapshotMeta
+	err := d.QueryRowContext(ctx,
+		`SELECT id, ts, digest, LENGTH(payload) FROM snapshots ORDER BY id DESC LIMIT 1`).
+		Scan(&m.ID, &m.TS, &m.Digest, &m.Size)
+	if errors.Is(err, sql.ErrNoRows) {
+		return m, ErrNotFound
+	}
+	return m, err
+}
+
+// SnapshotBefore отдаёт последний снимок, сделанный раньше данного, —
+// «то, как было до этого». Нужен, когда отметки «я это видел» ещё нет:
+// сравнивать с самим собой бессмысленно, а с предыдущим — уже осмысленно.
+func (d *DB) SnapshotBefore(ctx context.Context, id int64) (SnapshotMeta, string, error) {
+	var m SnapshotMeta
+	var payload string
+	err := d.QueryRowContext(ctx,
+		`SELECT id, ts, digest, LENGTH(payload), payload FROM snapshots WHERE id < ? ORDER BY id DESC LIMIT 1`, id).
+		Scan(&m.ID, &m.TS, &m.Digest, &m.Size, &payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return m, "", ErrNotFound
+	}
+	return m, payload, err
+}
+
+// PruneSnapshots оставляет последние keep снимков.
+//
+// Снимок пишется при каждом изменении состояния, а состояние на живом
+// сервере меняется часто: без чистки таблица растёт, пока не станет
+// больше всего остального в базе.
+func (d *DB) PruneSnapshots(ctx context.Context, keep int) error {
+	if keep <= 0 {
+		keep = 200
+	}
+	_, err := d.ExecContext(ctx, `
+		DELETE FROM snapshots WHERE id NOT IN (
+			SELECT id FROM snapshots ORDER BY id DESC LIMIT ?
+		)`, keep)
+	return err
+}
