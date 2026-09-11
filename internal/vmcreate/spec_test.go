@@ -160,3 +160,36 @@ func TestMissingToolsHonoursAlternatives(t *testing.T) {
 		t.Errorf("не хватает %d, ожидалось 3", got)
 	}
 }
+
+// virsh пишет «Failed to start domain» первой строкой, а причину —
+// следующей. Показывать только первую значит каждый раз выбрасывать ту
+// часть, ради которой сообщение и читают.
+func TestCommandErrorKeepsReason(t *testing.T) {
+	out := "error: Failed to start domain 'w1'\nerror: Network not found: no network with matching name 'default'\n"
+	got := commandError(out, "")
+	for _, want := range []string{"Failed to start domain 'w1'", "no network with matching name"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("в сообщении нет %q: %q", want, got)
+		}
+	}
+	if strings.Contains(got, "error: ") {
+		t.Errorf("повторяющееся «error:» не убрано: %q", got)
+	}
+	if got := commandError("", ""); got == "" {
+		t.Error("пустой вывод должен давать хоть какое-то объяснение")
+	}
+}
+
+// Состояние сети берётся из virsh net-info: «Active: yes» и «Active: no»
+// различаются одним словом, и спутать их значит либо не поднять сеть,
+// либо поднимать уже поднятую.
+func TestActiveYes(t *testing.T) {
+	active := "Name:           default\nUUID:           abc\nActive:         yes\nPersistent:     yes\n"
+	inactive := "Name:           default\nActive:         no\n"
+	if !activeYes(active) {
+		t.Error("поднятая сеть определена как неподнятая")
+	}
+	if activeYes(inactive) {
+		t.Error("неподнятая сеть определена как поднятая")
+	}
+}

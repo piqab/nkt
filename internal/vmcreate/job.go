@@ -158,10 +158,19 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 
 	// 5. Запуск.
 	jc.Step(5, 5, "запуск")
+	// Сеть — самая частая причина, по которой машина не стартует на
+	// свежем libvirt: сама сеть «default» заведена, но не поднята, и
+	// virsh отвечает «Failed to start domain» с причиной на следующей
+	// строке. Поднять её — обычное дело, а не правка чужой настройки.
+	if spec.Bridge == "" {
+		if err := r.ensureDefaultNetwork(ctx, jc); err != nil {
+			return err
+		}
+	}
 	if res, err := r.run(ctx, "virsh", "start", spec.Name); err != nil {
 		return err
 	} else if res.ExitCode != 0 && !strings.Contains(res.Output(), "already active") {
-		return fmt.Errorf("virsh start: %s", firstLine(res.Output()))
+		return fmt.Errorf("virsh start: %s", commandError(res.Stderr, res.Stdout))
 	}
 	if spec.Autostart {
 		if _, err := r.run(ctx, "virsh", "autostart", spec.Name); err != nil {
@@ -306,6 +315,51 @@ func parseDomifaddr(out string) string {
 	return ""
 }
 
+// ensureDefaultNetwork поднимает сеть libvirt «default», если она
+// заведена, но не запущена.
+//
+// Если её нет вовсе — не заводим: своя сеть на чужом хосте меняет
+// маршрутизацию и правила фильтра, и делать это молча, «чтобы машина
+// стартовала», нельзя. Говорим, что делать.
+func (r *CreateRunner) ensureDefaultNetwork(ctx context.Context, jc *jobs.Context) error {
+	res, err := r.run(ctx, "virsh", "net-info", "default")
+	if err != nil {
+		return fmt.Errorf("проверка сети libvirt: %w", err)
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("на хосте нет сети libvirt «default» (%s). Заведите её "+
+			"(virsh net-define /usr/share/libvirt/networks/default.xml && virsh net-start default) "+
+			"или укажите в форме сетевой мост",
+			commandError(res.Stderr, res.Stdout))
+	}
+	if strings.Contains(res.Stdout, "Active:") && !activeYes(res.Stdout) {
+		jc.Logf("сеть libvirt «default» не запущена — поднимаю")
+		if start, err := r.run(ctx, "virsh", "net-start", "default"); err != nil {
+			return err
+		} else if start.ExitCode != 0 {
+			return fmt.Errorf("virsh net-start default: %s", commandError(start.Stderr, start.Stdout))
+		}
+		// Чтобы после перезагрузки хоста машина поднялась сама, а не
+		// упёрлась в ту же неподнятую сеть.
+		if _, err := r.run(ctx, "virsh", "net-autostart", "default"); err != nil {
+			jc.Logf("автозапуск сети включить не удалось: %v", err)
+		}
+	}
+	return nil
+}
+
+// activeYes разбирает строку «Active:         yes» из virsh net-info.
+func activeYes(out string) bool {
+	for _, line := range strings.Split(out, "\n") {
+		key, value, ok := strings.Cut(line, ":")
+		if !ok || strings.TrimSpace(key) != "Active" {
+			continue
+		}
+		return strings.EqualFold(strings.TrimSpace(value), "yes")
+	}
+	return false
+}
+
 // makeDisk делает диск машины из образа.
 //
 // Полная копия, а не ссылка на образ (backing file): ссылка экономит
@@ -313,7 +367,13 @@ func parseDomifaddr(out string) string {
 // смотрят, — цена молчаливая и слишком высокая.
 func (r *CreateRunner) makeDisk(ctx context.Context, jc *jobs.Context, base, disk string, sizeGB int) error {
 	if res, err := r.run(ctx, "test", "-e", disk); err == nil && res.ExitCode == 0 {
-		return fmt.Errorf("файл диска %s уже существует — выберите другое имя машины", disk)
+		// Чаще всего это остатки прошлой неудачной попытки с тем же
+		// именем, и оператору нужно не «выберите другое имя», а команда,
+		// которой это убрать.
+		name := strings.TrimSuffix(filepath.Base(disk), ".qcow2")
+		return fmt.Errorf("файл диска %s уже существует. Если это остатки прошлой попытки, "+
+			"уберите машину целиком: virsh destroy %s; virsh undefine %s --remove-all-storage — "+
+			"либо выберите другое имя", disk, name, name)
 	}
 	jc.Logf("готовлю диск %s (%d ГБ)", disk, sizeGB)
 	res, err := r.run(ctx, "qemu-img", "convert", "-f", "qcow2", "-O", "qcow2", base, disk)
@@ -321,14 +381,14 @@ func (r *CreateRunner) makeDisk(ctx context.Context, jc *jobs.Context, base, dis
 		return err
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("qemu-img convert: %s", firstLine(res.Output()))
+		return fmt.Errorf("qemu-img convert: %s", commandError(res.Stderr, res.Stdout))
 	}
 	res, err = r.run(ctx, "qemu-img", "resize", disk, fmt.Sprintf("%dG", sizeGB))
 	if err != nil {
 		return err
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("qemu-img resize: %s", firstLine(res.Output()))
+		return fmt.Errorf("qemu-img resize: %s", commandError(res.Stderr, res.Stdout))
 	}
 	return nil
 }
@@ -366,7 +426,7 @@ func (r *CreateRunner) makeSeed(ctx context.Context, jc *jobs.Context, spec Spec
 		return fmt.Errorf("сборка настроек первого запуска: %w", err)
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("на хосте нет ни cloud-localds, ни genisoimage: %s", firstLine(res.Output()))
+		return fmt.Errorf("на хосте нет ни cloud-localds, ни genisoimage: %s", commandError(res.Stderr, res.Stdout))
 	}
 	jc.Logf("настройки первого запуска: %s (genisoimage)", seedPath)
 	return nil
@@ -385,7 +445,7 @@ func (r *CreateRunner) defineDomain(ctx context.Context, jc *jobs.Context, spec 
 		return err
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("virsh define: %s", firstLine(res.Output()))
+		return fmt.Errorf("virsh define: %s", commandError(res.Stderr, res.Stdout))
 	}
 	jc.Logf("домен %s определён", spec.Name)
 	return nil
@@ -393,6 +453,38 @@ func (r *CreateRunner) defineDomain(ctx context.Context, jc *jobs.Context, spec 
 
 func (r *CreateRunner) run(ctx context.Context, argv ...string) (collect.CommandResult, error) {
 	return r.escape(ctx, argv...)
+}
+
+// commandError достаёт из вывода команды то, что стоит показать.
+//
+// Не первая строка: virsh пишет «Failed to start domain 'w1'» первой, а
+// настоящую причину — «network 'default' is not active», «Could not
+// access KVM kernel module» — следующей. Показывать только первую значит
+// каждый раз выбрасывать ровно ту часть, ради которой сообщение и
+// читают.
+func commandError(streams ...string) string {
+	var lines []string
+	for _, stream := range streams {
+		for _, line := range strings.Split(strings.TrimSpace(stream), "\n") {
+			line = strings.TrimSpace(line)
+			// «error:» повторяется перед каждой строкой virsh и ничего
+			// не добавляет.
+			line = strings.TrimPrefix(line, "error: ")
+			line = strings.TrimPrefix(line, "ошибка: ")
+			if line != "" {
+				lines = append(lines, line)
+			}
+		}
+	}
+	if len(lines) == 0 {
+		return "команда завершилась с ошибкой"
+	}
+	// Три строки — потолок: дальше начинаются подсказки вида «see
+	// /var/log/...», которые в одну строку сообщения всё равно не влезут.
+	if len(lines) > 3 {
+		lines = lines[:3]
+	}
+	return strings.Join(lines, "; ")
 }
 
 func firstLine(s string) string {

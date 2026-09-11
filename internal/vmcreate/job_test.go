@@ -25,6 +25,16 @@ type fakeEscape struct {
 	// installs — что происходит с хостом после apt-get install. nil
 	// означает «пакеты не помогли»: так проверяется и этот случай.
 	installs func()
+	// netDown — сеть libvirt «default» заведена, но не запущена.
+	netDown bool
+}
+
+// networkActive отвечает так же, как virsh net-info.
+func (f *fakeEscape) networkActive() string {
+	if f.netDown {
+		return "no"
+	}
+	return "yes"
 }
 
 func (f *fakeEscape) run(_ context.Context, argv ...string) (collect.CommandResult, error) {
@@ -43,6 +53,10 @@ func (f *fakeEscape) run(_ context.Context, argv ...string) (collect.CommandResu
 	}
 	if len(argv) > 2 && argv[0] == "apt-get" && argv[1] == "install" && f.installs != nil {
 		f.installs()
+	}
+	if len(argv) == 3 && argv[0] == "virsh" && argv[1] == "net-info" {
+		res.Stdout = "Name:           default\nActive:         " + f.networkActive() + "\n"
+		return res, nil
 	}
 	switch {
 	case f.missing[argv[0]]:
@@ -290,3 +304,45 @@ const (
 	store2Succeeded = store.JobSucceeded
 	store2Failed    = store.JobFailed
 )
+
+// Неподнятая сеть libvirt — самая частая причина, по которой машина не
+// стартует на свежем хосте. Её поднимают, а не отказывают: это обычное
+// действие, а не правка чужой настройки.
+func TestCreateStartsDefaultNetwork(t *testing.T) {
+	m, db := newManager(t)
+	esc := &fakeEscape{netDown: true}
+	m.Register(KindCreate, testRunner(t, esc))
+
+	id, _ := m.Start(context.Background(), jobs.Spec{
+		Kind: KindCreate, Queue: "host", Params: CreateParams{Spec: createSpec()},
+	})
+	waitJob(t, db, id, store2Succeeded)
+
+	joined := strings.Join(esc.calls, "\n")
+	if !strings.Contains(joined, "virsh net-start default") {
+		t.Errorf("сеть не поднята:\n%s", joined)
+	}
+	// И включён автозапуск: иначе после перезагрузки хоста машина
+	// упрётся в ту же неподнятую сеть.
+	if !strings.Contains(joined, "virsh net-autostart default") {
+		t.Errorf("автозапуск сети не включён:\n%s", joined)
+	}
+}
+
+// С указанным мостом сеть libvirt ни при чём — трогать её незачем.
+func TestCreateSkipsNetworkWithBridge(t *testing.T) {
+	m, db := newManager(t)
+	esc := &fakeEscape{netDown: true}
+	m.Register(KindCreate, testRunner(t, esc))
+
+	spec := createSpec()
+	spec.Bridge = "br0"
+	id, _ := m.Start(context.Background(), jobs.Spec{
+		Kind: KindCreate, Queue: "host", Params: CreateParams{Spec: spec},
+	})
+	waitJob(t, db, id, store2Succeeded)
+
+	if joined := strings.Join(esc.calls, "\n"); strings.Contains(joined, "net-start") {
+		t.Errorf("сеть libvirt тронута, хотя машина в мосту:\n%s", joined)
+	}
+}
