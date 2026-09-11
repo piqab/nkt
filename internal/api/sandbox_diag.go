@@ -212,6 +212,11 @@ func diagnoseSandbox() SandboxDiagnosis {
 	diag := SandboxDiagnosis{
 		Sandbox: os.Getenv("INVOCATION_ID") != "",
 		DBus:    systemdRunReachable(),
+		// Пустые срезы, а не nil: nil уезжает в JSON как null, и
+		// «problems.length» в браузере роняет отрисовку целиком — на
+		// здоровом хосте, где ровно оба списка и пусты.
+		Problems: []SandboxProblem{},
+		Commands: []string{},
 	}
 	if !diag.Sandbox {
 		// Вне юнита никакой песочницы нет — падение терминала объясняется

@@ -2,6 +2,8 @@ package control
 
 import (
 	"context"
+	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -92,5 +94,30 @@ func TestImageListParsesDockerOutput(t *testing.T) {
 	}
 	if images[0].Created == "" {
 		t.Error("created timestamp did not decode")
+	}
+}
+
+// Образ без тега уходил в браузер как "tags": null, и первый же такой
+// образ ронял страницу целиком: «Cannot read properties of null (reading
+// 'length')». Проверяется не длина среза (у nil она тоже 0), а именно
+// то, что попадает в JSON.
+func TestImageListNeverEmitsNullTags(t *testing.T) {
+	body := []byte(`[{"Id":"sha256:bbb","RepoTags":null,"Size":900000,"Created":1700000100}]`)
+	scanner := inventory.New(&config.Config{}, dockerFake{body: body}, nil)
+	m := NewImageManager(dockerFake{body: body}, scanner, "/tmp/backups")
+
+	images, err := m.List(context.Background())
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	raw, err := json.Marshal(images)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"tags":[]`) {
+		t.Errorf("в JSON нет пустого массива тегов: %s", raw)
+	}
+	if strings.Contains(string(raw), "null") {
+		t.Errorf("в списке образов есть null: %s", raw)
 	}
 }

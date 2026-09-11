@@ -87,8 +87,14 @@ func (m *ImageManager) List(ctx context.Context) ([]DockerImage, error) {
 	out := make([]DockerImage, 0, len(entries))
 	for _, e := range entries {
 		img := DockerImage{
-			ID:      e.ID,
-			Size:    e.Size,
+			ID:   e.ID,
+			Size: e.Size,
+			// Пустой срез, а не nil: nil уезжает в JSON как null, и
+			// «tags.length» в браузере роняет отрисовку всей страницы.
+			// У образа без тега (dangling) ровно этот случай и есть —
+			// а такие образы копятся на любом хосте, где что-то
+			// пересобирали.
+			Tags:    []string{},
 			Created: time.Unix(e.Created, 0).UTC().Format(time.RFC3339),
 		}
 		for _, tag := range e.RepoTags {
