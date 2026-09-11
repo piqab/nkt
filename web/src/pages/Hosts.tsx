@@ -933,13 +933,19 @@ export default function Hosts({
           // Установка по заглушке всё равно провалится рукопожатием с
           // 0.0.0.0, поэтому вместо неё предлагается то, чего не хватает.
           <Tooltip title={t('hosts.detectAddressHint')}>
-            <Button loading={detectingAddr === h.id || busy} disabled={busy} onClick={() => void detectAddress(h)}>
+            <Button type="link" loading={detectingAddr === h.id || busy} disabled={busy} onClick={() => void detectAddress(h)}>
               {t('hosts.detectAddress')}
             </Button>
           </Tooltip>
         ) : (
+          // Ссылкой, как и остальные действия строки: рамка выделяла её
+          // из ряда сильнее, чем она того стоит, — установка здесь такое
+          // же действие, как «открыть» или «изменить». Устаревшая версия
+          // и без того помечена в колонке версии, поэтому «обновить»
+          // достаточно выделить начертанием.
           <Button
-            type={outdated ? 'primary' : 'default'}
+            type="link"
+            style={outdated ? { fontWeight: 600 } : undefined}
             loading={busy}
             disabled={busy}
             onClick={() => startInstall(h)}
