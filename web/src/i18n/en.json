@@ -353,7 +353,9 @@
     "loading": "containers",
     "networks": "Docker networks",
     "newContainerLocation": "New container — pick a location",
-    "loadingFile": "file"
+    "loadingFile": "file",
+    "container": "container",
+    "confirmDeleteRunning": "Container {{name}} is running. Stop and remove it? This cannot be undone."
   },
   "virt": {
     "colName": "Name",

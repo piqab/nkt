@@ -29,6 +29,14 @@ function readPageSize(): number {
  */
 export function DataTable<T extends object>({
   paginateFrom = 100,
+  // Ширины по содержимому, а не поровну. Липкий заголовок (ниже)
+  // заставляет antd раскладывать таблицу как table-layout: fixed, а fixed
+  // без заданных ширин делит место между колонками поровну: колонка с
+  // одним словом растягивается, а колонка с путём, командой или списком
+  // портов переносится и лезет на соседнюю. Страницы приписывали "auto"
+  // по одной, натыкаясь на это каждый раз заново, — значит верное
+  // умолчание другое.
+  tableLayout = "auto",
   ...props
 }: TableProps<T> & { paginateFrom?: number }) {
   const { t } = useTranslation();
@@ -40,6 +48,7 @@ export function DataTable<T extends object>({
     // прокручиваться иначе.
     <Table<T>
       size="small"
+      tableLayout={tableLayout}
       // Липкий заголовок: в длинной таблице колонки иначе теряются
       // ровно тогда, когда становятся нужны.
       sticky

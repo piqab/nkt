@@ -497,6 +497,21 @@ func (s *Server) handleServiceLogs(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"output": out})
 }
 
+// handleContainerDelete убирает контейнер docker. force удаляет и
+// запущенный — без него docker отвечает отказом, и это ровно то
+// поведение, которое здесь и нужно: остановка остаётся отдельным шагом.
+func (s *Server) handleContainerDelete(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	force := r.URL.Query().Get("force") == "true"
+	user := auth.Username(r.Context())
+	if err := s.services.DeleteContainer(r.Context(), user, name, force); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleContainerAction(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	action := chi.URLParam(r, "action")

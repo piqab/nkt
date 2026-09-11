@@ -17,7 +17,6 @@ import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
 import LogsPage from './pages/Logs'
 import JobsPage from './pages/Jobs'
-import ProfilesPage from './pages/Profiles'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
 import Packages from './pages/Packages'
@@ -130,9 +129,8 @@ const NAV_GROUPS: {
       { to: '/containers', labelKey: 'nav.containers' },
       { to: '/packages', labelKey: 'nav.packages' },
       { to: '/configs', labelKey: 'nav.configs' },
-      // Профиль описывает желаемое состояние — соседство с конфигурациями
-      // не случайно: это следующий уровень той же работы.
-      { to: '/profiles', labelKey: 'nav.profiles', adminOnly: true },
+      // Профили живут вкладкой в «Контейнеры и ВМ»: там же, где стеки
+      // compose и заготовки машин, которыми профиль и распоряжается.
       { to: '/disks', labelKey: 'nav.disks' },
       { to: '/hardware', labelKey: 'nav.hardware' },
       { to: '/system', labelKey: 'nav.system', adminOnly: true },
@@ -596,7 +594,9 @@ function Shell({
               <Route path="/configs" element={<Configs me={me} />} />
               <Route path="/logs" element={<LogsPage />} />
               <Route path="/jobs" element={<JobsPage me={me} />} />
-              <Route path="/profiles" element={<ProfilesPage me={me} />} />
+              {/* Профили переехали вкладкой в «Контейнеры и ВМ»; старый
+                  адрес остаётся рабочим — на него есть ссылки и закладки. */}
+              <Route path="/profiles" element={<Navigate to="/containers" replace />} />
               <Route path="/services" element={<Services me={me} />} />
               <Route path="/containers" element={<Containers me={me} />} />
               <Route path="/packages" element={<Packages me={me} />} />
