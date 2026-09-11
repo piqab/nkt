@@ -304,6 +304,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/vm/images/download", s.handleVMImageDownload)
 				r.Post("/vm/images/delete", s.handleVMImageDelete)
 				r.Post("/vm/images/upload", s.handleVMImageUpload)
+				r.Post("/vm/images/host-delete", s.handleVMHostImageDelete)
 				r.Post("/vm/networks", s.handleVMNetworkCreate)
 				r.Post("/vm/networks/{name}/{action}", s.handleVMNetworkAction)
 				r.Post("/vm/create", s.handleVMCreate)

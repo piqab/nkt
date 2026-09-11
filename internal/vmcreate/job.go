@@ -12,6 +12,7 @@ import (
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/vmimage"
+	"github.com/piqab/nkt/internal/vmnet"
 )
 
 // KindCreate — вид задания «создать машину».
@@ -374,27 +375,19 @@ func (r *CreateRunner) ensureNetwork(ctx context.Context, jc *jobs.Context, name
 	if name == "" {
 		name = "default"
 	}
-	res, err := r.run(ctx, "virsh", "net-info", name)
+	// Сеть заводится, а не требуется готовой: на минимальной установке
+	// libvirt «default» отсутствует, и отправлять оператора создавать её
+	// руками ради того, что nkt умеет сам, — лишняя работа. Уже
+	// существующая просто поднимается.
+	mgr := vmnet.NewManager(vmnet.Runner(r.run), r.store.Dir())
+	created, err := mgr.EnsureNAT(ctx, name)
 	if err != nil {
-		return fmt.Errorf("проверка сети libvirt: %w", err)
+		return fmt.Errorf("сеть libvirt «%s»: %w", name, err)
 	}
-	if res.ExitCode != 0 {
-		return fmt.Errorf("на хосте нет сети libvirt «%s» (%s). Заведите её в разделе "+
-			"«Профили» → «Сети машин» или укажите в форме сетевой мост",
-			name, commandError(res.Stderr, res.Stdout))
-	}
-	if strings.Contains(res.Stdout, "Active:") && !activeYes(res.Stdout) {
-		jc.Logf("сеть libvirt «%s» не запущена — поднимаю", name)
-		if start, err := r.run(ctx, "virsh", "net-start", name); err != nil {
-			return err
-		} else if start.ExitCode != 0 {
-			return fmt.Errorf("virsh net-start %s: %s", name, commandError(start.Stderr, start.Stdout))
-		}
-		// Чтобы после перезагрузки хоста машина поднялась сама, а не
-		// упёрлась в ту же неподнятую сеть.
-		if _, err := r.run(ctx, "virsh", "net-autostart", name); err != nil {
-			jc.Logf("автозапуск сети включить не удалось: %v", err)
-		}
+	if created {
+		jc.Logf("сеть libvirt «%s» не существовала — завёл её (NAT с DHCP, автозапуск включён)", name)
+	} else {
+		jc.Logf("сеть libvirt «%s» на месте", name)
 	}
 	return nil
 }

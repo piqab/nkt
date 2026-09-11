@@ -2,7 +2,9 @@ package vmcreate
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -107,3 +109,74 @@ func parseDomblklist(out string) []string {
 	}
 	return paths
 }
+
+// ImagesRoot отдаёт каталог дисков libvirt — туда кладут свои образы и
+// оттуда их удаляют.
+func ImagesRoot() string { return imagesRoot }
+
+// PutHostImage переносит готовый файл в каталог дисков libvirt.
+//
+// Именно переносит, а не копирует: файл уже лежит во временном месте
+// каталога данных nkt, и вторая копия образа на сотни мегабайт никому
+// не нужна. Перенос идёт вне песочницы — писать в /var/lib/libvirt
+// изнутри юнита нельзя.
+func PutHostImage(ctx context.Context, run Runner, tmpPath, name string) (string, error) {
+	if run == nil {
+		return "", errNoRunner
+	}
+	if !validHostImageName(name) {
+		return "", fmt.Errorf("недопустимое имя файла: %q", name)
+	}
+	target := filepath.Join(imagesRoot, name)
+	if res, err := run(ctx, "test", "-e", target); err == nil && res.ExitCode == 0 {
+		return "", fmt.Errorf("файл %s уже есть — удалите старый или выберите другое имя", name)
+	}
+	// install, а не mv: он же выставит права, с которыми qemu сможет
+	// прочитать файл.
+	res, err := run(ctx, "install", "-m", "0644", tmpPath, target)
+	if err != nil {
+		return "", err
+	}
+	if res.ExitCode != 0 {
+		return "", fmt.Errorf("перенос образа: %s", strings.TrimSpace(res.Output()))
+	}
+	if rm, err := run(ctx, "rm", "-f", tmpPath); err == nil && rm.ExitCode != 0 {
+		// Временный файл не убрался — это не повод считать перенос
+		// неудачным, но место он займёт, и молчать не стоит.
+		return target, nil
+	}
+	return target, nil
+}
+
+// DeleteHostImage убирает файл из каталога дисков libvirt.
+//
+// Занятость машиной проверяет вызывающий: удаление диска работающей
+// машины — не то, что стоит делать молча, но и запрещать его
+// окончательно нельзя (машину могли уже удалить, а диск остаться).
+func DeleteHostImage(ctx context.Context, run Runner, name string) error {
+	if run == nil {
+		return errNoRunner
+	}
+	if !validHostImageName(name) {
+		return fmt.Errorf("недопустимое имя файла: %q", name)
+	}
+	res, err := run(ctx, "rm", "-f", filepath.Join(imagesRoot, name))
+	if err != nil {
+		return err
+	}
+	if res.ExitCode != 0 {
+		return fmt.Errorf("удаление %s: %s", name, strings.TrimSpace(res.Output()))
+	}
+	return nil
+}
+
+// validHostImageName — имя приходит от оператора и становится путём в
+// каталоге дисков: ни косых черт, ни «..», ни пустоты.
+func validHostImageName(name string) bool {
+	return hostImageNameRe.MatchString(name) && !strings.Contains(name, "..")
+}
+
+var (
+	hostImageNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
+	errNoRunner     = fmt.Errorf("работа с файлами хоста недоступна в этом режиме")
+)

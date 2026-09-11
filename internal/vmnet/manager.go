@@ -25,29 +25,78 @@ func NewManager(run Runner, tmpDir string) *Manager {
 }
 
 // List отдаёт сети хоста вместе с их устройством.
+//
+// Имена берутся через --name, а не из таблицы: virsh переводит и
+// заголовки, и состояния, и разбор по колонкам на русской машине даёт
+// пустой список. Список имён — это просто строки, и он одинаков везде.
 func (m *Manager) List(ctx context.Context) ([]Network, error) {
 	if m.run == nil {
 		return nil, fmt.Errorf("управление сетями недоступно в этом режиме")
 	}
-	res, err := m.run(ctx, "virsh", "net-list", "--all")
+	all, err := m.names(ctx, "--all")
+	if err != nil {
+		return nil, err
+	}
+	active, _ := m.names(ctx)
+	autostart, _ := m.names(ctx, "--autostart")
+
+	activeSet := toSet(active)
+	autoSet := toSet(autostart)
+
+	nets := make([]Network, 0, len(all))
+	for _, name := range all {
+		n := Network{
+			Name:      name,
+			Active:    activeSet[name],
+			Autostart: autoSet[name],
+			// Непостоянную сеть virsh забудет при перезагрузке; здесь
+			// все заводятся через net-define, то есть постоянными.
+			Persistent: true,
+		}
+		// Устройство — из описания: это XML, он от языка не зависит.
+		if dump, err := m.run(ctx, "virsh", "net-dumpxml", name); err == nil && dump.ExitCode == 0 {
+			fillFromXML(&n, dump.Stdout)
+		}
+		nets = append(nets, n)
+	}
+	sort.Slice(nets, func(i, j int) bool { return nets[i].Name < nets[j].Name })
+	return nets, nil
+}
+
+// names отдаёт имена сетей, подходящих под условия.
+func (m *Manager) names(ctx context.Context, filters ...string) ([]string, error) {
+	argv := append([]string{"virsh", "net-list", "--name"}, filters...)
+	res, err := m.run(ctx, argv...)
 	if err != nil {
 		return nil, describeRunError(err)
 	}
 	if res.ExitCode != 0 {
 		return nil, fmt.Errorf("virsh net-list: %s", firstMeaningful(res.Stderr, res.Stdout))
 	}
-	nets := parseNetList(res.Stdout)
-	for i := range nets {
-		// Подробности — отдельным запросом: net-list не показывает ни
-		// моста, ни подсети, а без них список ничего не объясняет.
-		dump, err := m.run(ctx, "virsh", "net-dumpxml", nets[i].Name)
-		if err != nil || dump.ExitCode != 0 {
-			continue
+	var out []string
+	for _, line := range strings.Split(res.Stdout, "\n") {
+		if name := strings.TrimSpace(line); name != "" {
+			out = append(out, name)
 		}
-		fillFromXML(&nets[i], dump.Stdout)
 	}
-	sort.Slice(nets, func(i, j int) bool { return nets[i].Name < nets[j].Name })
-	return nets, nil
+	return out, nil
+}
+
+// Exists отвечает, заведена ли сеть с таким именем.
+func (m *Manager) Exists(ctx context.Context, name string) (bool, error) {
+	all, err := m.names(ctx, "--all")
+	if err != nil {
+		return false, err
+	}
+	return toSet(all)[name], nil
+}
+
+func toSet(names []string) map[string]bool {
+	out := make(map[string]bool, len(names))
+	for _, n := range names {
+		out[n] = true
+	}
+	return out
 }
 
 // Create заводит сеть и, если просили, поднимает её.
@@ -82,6 +131,71 @@ func (m *Manager) Create(ctx context.Context, s Spec) error {
 		return m.SetAutostart(ctx, s.Name, true)
 	}
 	return nil
+}
+
+// EnsureNAT заводит NAT-сеть с таким именем, если её ещё нет, и
+// поднимает.
+//
+// Создаётся, а не отвергается: сеть «default» на минимальной установке
+// libvirt отсутствует, и требовать от оператора сходить создать её
+// руками ради того, что nkt умеет сам, — лишняя работа. Подсеть
+// подбирается свободная: занятая чужой сетью не поднимется.
+func (m *Manager) EnsureNAT(ctx context.Context, name string) (created bool, err error) {
+	exists, err := m.Exists(ctx, name)
+	if err != nil {
+		return false, err
+	}
+	if exists {
+		return false, m.Start(ctx, name)
+	}
+
+	nets, err := m.List(ctx)
+	if err != nil {
+		return false, err
+	}
+	subnet, bridge, err := freeSubnet(nets)
+	if err != nil {
+		return false, err
+	}
+	spec := Spec{Name: name, Mode: ModeNAT, Bridge: bridge, Subnet: subnet, DHCP: true, Autostart: true}
+	if err := m.Create(ctx, spec); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// freeSubnet подбирает подсеть и имя моста, не занятые другими сетями.
+//
+// Перебираются 192.168.<N>.0/24 начиная с libvirt'овской 122: на чужую
+// подсеть сеть просто не поднимется, а совпадение с домашней сетью
+// оператора сломает ему маршрутизацию.
+func freeSubnet(existing []Network) (subnet, bridge string, err error) {
+	taken := map[string]bool{}
+	bridges := map[string]bool{}
+	for _, n := range existing {
+		if n.Address != "" {
+			// Адрес хоста в сети — это .1 её подсети.
+			if idx := strings.LastIndex(n.Address, "."); idx > 0 {
+				taken[n.Address[:idx]] = true
+			}
+		}
+		if n.Bridge != "" {
+			bridges[n.Bridge] = true
+		}
+	}
+	for i := 122; i < 255; i++ {
+		prefix := fmt.Sprintf("192.168.%d", i)
+		if taken[prefix] {
+			continue
+		}
+		for b := 0; b < 100; b++ {
+			name := fmt.Sprintf("virbr%d", b)
+			if !bridges[name] {
+				return prefix + ".0/24", name, nil
+			}
+		}
+	}
+	return "", "", fmt.Errorf("не нашлось свободной подсети — задайте сеть вручную")
 }
 
 // Start поднимает сеть.
@@ -147,35 +261,6 @@ func (m *Manager) simple(ctx context.Context, verb, name, benign string) error {
 		return fmt.Errorf("virsh %s: %s", verb, out)
 	}
 	return nil
-}
-
-// parseNetList разбирает таблицу virsh net-list --all.
-//
-// Заголовок и линейка пропускаются по признаку «нет четырёх колонок» —
-// разбирать их отдельно незачем, а переводы virsh на другом языке
-// сдвинули бы любой счёт строк.
-func parseNetList(out string) []Network {
-	var nets []Network
-	for _, line := range strings.Split(out, "\n") {
-		fields := strings.Fields(line)
-		if len(fields) < 4 || strings.HasPrefix(strings.TrimSpace(line), "---") {
-			continue
-		}
-		if !nameRe.MatchString(fields[0]) {
-			continue
-		}
-		state := strings.ToLower(fields[1])
-		if state != "active" && state != "inactive" {
-			continue // строка заголовка
-		}
-		nets = append(nets, Network{
-			Name:       fields[0],
-			Active:     state == "active",
-			Autostart:  strings.EqualFold(fields[2], "yes"),
-			Persistent: strings.EqualFold(fields[3], "yes"),
-		})
-	}
-	return nets
 }
 
 // netXML — то, что нужно из описания сети.

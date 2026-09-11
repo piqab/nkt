@@ -79,26 +79,6 @@ func TestSpecValidate(t *testing.T) {
 	}
 }
 
-// Разбор таблицы virsh: заголовок и линейка не должны превращаться в
-// сети, а перевод virsh на другой язык не должен ломать счёт строк.
-func TestParseNetList(t *testing.T) {
-	out := ` Name      State      Autostart   Persistent
-----------------------------------------------
- default   active     yes         yes
- lab       inactive   no          yes
-`
-	nets := parseNetList(out)
-	if len(nets) != 2 {
-		t.Fatalf("разобрано %d сетей: %+v", len(nets), nets)
-	}
-	if nets[0].Name != "default" || !nets[0].Active || !nets[0].Autostart {
-		t.Errorf("первая сеть = %+v", nets[0])
-	}
-	if nets[1].Active || nets[1].Autostart || !nets[1].Persistent {
-		t.Errorf("вторая сеть = %+v", nets[1])
-	}
-}
-
 func TestFillFromXML(t *testing.T) {
 	doc := `<network>
   <name>default</name>
@@ -112,5 +92,31 @@ func TestFillFromXML(t *testing.T) {
 	fillFromXML(&n, doc)
 	if n.Mode != "nat" || n.Bridge != "virbr0" || n.Address != "192.168.122.1" || !n.DHCP {
 		t.Errorf("разобрано = %+v", n)
+	}
+}
+
+// Подсеть подбирается свободная: занятая чужой сетью просто не
+// поднимется, а совпадение с домашней сетью оператора сломает ему
+// маршрутизацию.
+func TestFreeSubnetAvoidsTaken(t *testing.T) {
+	existing := []Network{
+		{Name: "default", Address: "192.168.122.1", Bridge: "virbr0"},
+		{Name: "lab", Address: "192.168.123.1", Bridge: "virbr1"},
+	}
+	subnet, bridge, err := freeSubnet(existing)
+	if err != nil {
+		t.Fatalf("freeSubnet: %v", err)
+	}
+	if subnet != "192.168.124.0/24" {
+		t.Errorf("подсеть = %q, занятые пропущены неверно", subnet)
+	}
+	if bridge != "virbr2" {
+		t.Errorf("мост = %q, занятые пропущены неверно", bridge)
+	}
+
+	// На пустом хосте берётся первая же — та, что привычна по libvirt.
+	subnet, bridge, err = freeSubnet(nil)
+	if err != nil || subnet != "192.168.122.0/24" || bridge != "virbr0" {
+		t.Errorf("на пустом хосте = %q, %q, %v", subnet, bridge, err)
 	}
 }

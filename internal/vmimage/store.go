@@ -137,6 +137,52 @@ func (s *Store) Have(img Image) bool {
 	return err == nil && st.Size() > 0
 }
 
+// SaveTemp принимает поток во временный файл кэша и отдаёт путь к нему.
+//
+// Нужен загрузке: образ сначала ложится туда, куда юниту писать можно, и
+// только потом переносится в каталог дисков libvirt. Имя проверяется по
+// тем же правилам, что и обычное, — оно приходит от оператора, — но сам
+// временный файл получает приставку, чтобы не выглядеть готовым
+// образом.
+func (s *Store) SaveTemp(name string, src io.Reader) (string, error) {
+	if !validFileName(name) {
+		return "", fmt.Errorf("недопустимое имя файла: %q", name)
+	}
+	if !imageExts[strings.ToLower(filepath.Ext(name))] {
+		return "", fmt.Errorf("образ должен быть .qcow2, .img или .raw")
+	}
+	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+		return "", err
+	}
+	tmp, err := os.CreateTemp(s.dir, "upload-*")
+	if err != nil {
+		return "", err
+	}
+	path := tmp.Name()
+	written, err := io.Copy(tmp, src)
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		_ = os.Remove(path)
+		return "", err
+	}
+	if written == 0 {
+		_ = os.Remove(path)
+		return "", fmt.Errorf("пустой файл")
+	}
+	return path, nil
+}
+
+// RemoveTemp убирает временный файл загрузки.
+func (s *Store) RemoveTemp(path string) {
+	// Только внутри своего каталога: путь приходит из собственного
+	// SaveTemp, но проверить дешевле, чем однажды удалить чужое.
+	if filepath.Dir(path) == s.dir {
+		_ = os.Remove(path)
+	}
+}
+
 // Save кладёт в кэш образ, пришедший потоком (загрузка файла из
 // браузера).
 //

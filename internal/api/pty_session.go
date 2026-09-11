@@ -751,10 +751,22 @@ func RunUnrestricted(ctx context.Context, argv ...string) (collect.CommandResult
 // в пространстве монтирования хоста просто нет, так что команда по ту
 // сторону песочницы его бы не нашла.
 func RunUnrestrictedInput(ctx context.Context, stdin []byte, argv ...string) (collect.CommandResult, error) {
+	return RunUnrestrictedEnv(ctx, nil, stdin, argv...)
+}
+
+// RunUnrestrictedEnv — RunUnrestricted с заданным окружением.
+//
+// Нужна там, где вывод команды разбирается: virsh переводит и таблицы, и
+// состояния, и сообщения об ошибках на язык системы, а разбор по словам
+// «active» или «running» на русской машине молча перестаёт работать.
+// LC_ALL=C делает вывод одинаковым везде.
+func RunUnrestrictedEnv(ctx context.Context, env map[string]string, stdin []byte,
+	argv ...string) (collect.CommandResult, error) {
+
 	if len(argv) == 0 {
 		return collect.CommandResult{}, fmt.Errorf("пустая команда")
 	}
-	cmd := unrestrictedQuietCommand(ctx, nil, argv...)
+	cmd := unrestrictedQuietCommand(ctx, env, argv...)
 	if stdin != nil {
 		// systemd-run --pipe проксирует stdin так же, как stdout/stderr,
 		// а nsenter и обычный запуск получают его напрямую.
