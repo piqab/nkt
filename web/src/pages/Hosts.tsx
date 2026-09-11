@@ -2267,7 +2267,10 @@ function ProvisionVMModal({
   const [diskGB, setDiskGB] = useState(20)
   const [memoryMB, setMemoryMB] = useState(2048)
   const [vcpus, setVCPUs] = useState(2)
+  const [network, setNetwork] = useState('default')
   const [installNKT, setInstallNKT] = useState(true)
+  // Сети того хоста, где создаётся машина: их список виден только ему.
+  const nets = useApi<{ networks: { name: string; active: boolean }[] }>(`/hosts/${host.id}/vm/networks`, 60_000)
   const [profileID, setProfileID] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -2290,6 +2293,7 @@ function ProvisionVMModal({
           spec: {
             name,
             image_id: imageID,
+            network,
             disk_gb: diskGB,
             memory_mb: memoryMB,
             vcpus,
@@ -2375,6 +2379,17 @@ function ProvisionVMModal({
         <label>
           {t('hosts.newVMVcpus')}
           <InputNumber value={vcpus} min={1} max={256} onChange={(v) => setVCPUs(v ?? 2)} style={{ width: '100%' }} />
+        </label>
+        <label>
+          {t('hosts.newVMNetwork')}
+          <Select
+            value={network}
+            onChange={(v: string) => setNetwork(v)}
+            options={(nets.data?.networks ?? [{ name: 'default', active: true }]).map((n) => ({
+              value: n.name,
+              label: n.active ? n.name : `${n.name} (${t('vmnet.inactive')})`,
+            }))}
+          />
         </label>
       </div>
 

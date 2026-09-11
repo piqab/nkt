@@ -598,7 +598,8 @@
       "no-virsh": "the host could not answer: libvirt is unavailable or virsh is not installed"
     },
     "newVMToolsMissing": "Host «{{host}}» is missing the tools needed to create machines — the job installs them itself as its first step. That takes a minute; you can install them up front:",
-    "newVMWillUpdate": "Host «{{host}}» runs an nkt older than the hub. Creating a machine relies on its API, so the job will update it first — that takes a few minutes."
+    "newVMWillUpdate": "Host «{{host}}» runs an nkt older than the hub. Creating a machine relies on its API, so the job will update it first — that takes a few minutes.",
+    "newVMNetwork": "Network"
   },
   "certs": {
     "colSites": "Sites",
@@ -1631,6 +1632,55 @@
     "byFileHint": "Accepts .qcow2, .img and .raw. The file travels through the browser and the hub, so for a several-hundred-megabyte image a link is usually faster.",
     "uploading": "Uploaded {{percent}}%",
     "uploadFailed": "The upload broke off",
-    "customBadge": "custom"
+    "customBadge": "custom",
+    "hostTitle": "Files on the host",
+    "hostHint": "The libvirt disk directory (/var/lib/libvirt/images): both images placed there by hand and disks of existing machines.",
+    "colFile": "File",
+    "colUsedBy": "Used by",
+    "hostFree": "unused",
+    "hostRunning": "machine is running",
+    "hostBusy": "This is the disk of machine \"{{vm}}\". A copy will be made; the disk itself is untouched.",
+    "hostBusyRunning": "This is the disk of the running machine \"{{vm}}\". The copy is taken on the fly: the filesystem inside may end up inconsistent, as after a sudden power-off.",
+    "network": "Network",
+    "bridgeOption": "specify a host bridge…"
+  },
+  "vmnet": {
+    "title": "VM networks",
+    "hint": "libvirt networks the virtual machines attach to. Not the server's own interfaces: this is where its machines look. Without such a network a machine does not start at all.",
+    "colName": "Network",
+    "colState": "State",
+    "colBridge": "Bridge",
+    "colSubnet": "Subnet",
+    "active": "up",
+    "inactive": "down",
+    "autostart": "autostart",
+    "withDHCP": "hands out addresses",
+    "noDHCP": "no DHCP",
+    "start": "bring up",
+    "stop": "stop",
+    "autostartOn": "enable autostart",
+    "autostartOff": "disable autostart",
+    "confirmStop": "Stop network \"{{name}}\"? Machines attached to it lose connectivity.",
+    "confirmDelete": "Delete network \"{{name}}\"? Machines attached to it will not start until another one is chosen.",
+    "empty": "This host has no libvirt networks — a machine would have nowhere to attach. Create one with the button on the right.",
+    "create": "Create network",
+    "createTitle": "New network for machines",
+    "name": "Network name",
+    "subnet": "Subnet",
+    "subnetHint": "The host takes the first address, the rest go to the machines.",
+    "dhcp": "Hand out addresses over DHCP",
+    "autostartLabel": "Bring up together with the host",
+    "bridgeExisting": "Existing host bridge",
+    "mode": {
+      "label": "Kind",
+      "nat": "NAT: own subnet with outside access",
+      "bridge": "Bridge: machine on the host's network",
+      "isolated": "Isolated: no outside access"
+    },
+    "modeHint": {
+      "nat": "This is how «default» works: machines get addresses from libvirt and reach out through the host. They are not visible from outside.",
+      "bridge": "The machine joins an already configured bridge and lives on the same network as the host: its own address from the shared DHCP, visible to neighbours.",
+      "isolated": "Machines see each other and the host, with no way out. Good for a test bench."
+    }
   }
 }
