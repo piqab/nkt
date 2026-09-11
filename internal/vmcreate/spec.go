@@ -86,8 +86,12 @@ type Spec struct {
 	DiskGB   int    `json:"disk_gb"`
 	MemoryMB int    `json:"memory_mb"`
 	VCPUs    int    `json:"vcpus"`
-	// Bridge — сетевой мост хоста. Пусто — сеть libvirt по умолчанию
-	// («default»), которая есть почти везде и работает через NAT.
+	// Network — сеть libvirt, в которую включается машина. Пусто и без
+	// моста — «default»: она есть почти везде и работает через NAT.
+	Network string `json:"network,omitempty"`
+	// Bridge — сетевой мост хоста напрямую, мимо сетей libvirt. Нужен
+	// там, где мост уже настроен руками и заводить под него сеть
+	// libvirt незачем.
 	Bridge string `json:"bridge,omitempty"`
 	// User и SSHKey — учётная запись, под которой в машину заходят.
 	// Без ключа машина будет создана, но войти в неё будет нечем: пароля
@@ -143,6 +147,9 @@ func (s Spec) Validate() error {
 	}
 	if s.Bridge != "" && !regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`).MatchString(s.Bridge) {
 		return fmt.Errorf("некорректное имя моста %q", s.Bridge)
+	}
+	if s.Network != "" && !regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`).MatchString(s.Network) {
+		return fmt.Errorf("некорректное имя сети %q", s.Network)
 	}
 	return nil
 }
@@ -207,7 +214,14 @@ func MetaData(s Spec) string {
 // подключается как cdrom, откуда cloud-init его и читает при первом
 // запуске.
 func DomainXML(s Spec, diskPath, seedPath string) string {
-	network := "    <interface type='network'>\n      <source network='default'/>\n      <model type='virtio'/>\n    </interface>"
+	// Мост указывают, когда он уже настроен руками; иначе машина
+	// включается в сеть libvirt — названную или «default».
+	name := s.Network
+	if name == "" {
+		name = "default"
+	}
+	network := fmt.Sprintf("    <interface type='network'>\n      <source network='%s'/>\n      <model type='virtio'/>\n    </interface>",
+		html.EscapeString(name))
 	if s.Bridge != "" {
 		network = fmt.Sprintf("    <interface type='bridge'>\n      <source bridge='%s'/>\n      <model type='virtio'/>\n    </interface>",
 			html.EscapeString(s.Bridge))

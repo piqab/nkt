@@ -235,6 +235,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/vm/images", s.handleVMImages)
 			r.Get("/vm/templates", s.handleVMTemplates)
 			r.Get("/vm/address", s.handleVMAddress)
+			r.Get("/vm/networks", s.handleVMNetworks)
 
 			r.Get("/jobs", s.handleJobList)
 			r.Get("/jobs/{id}", s.handleJobGet)
@@ -303,6 +304,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/vm/images/download", s.handleVMImageDownload)
 				r.Post("/vm/images/delete", s.handleVMImageDelete)
 				r.Post("/vm/images/upload", s.handleVMImageUpload)
+				r.Post("/vm/networks", s.handleVMNetworkCreate)
+				r.Post("/vm/networks/{name}/{action}", s.handleVMNetworkAction)
 				r.Post("/vm/create", s.handleVMCreate)
 				r.Post("/vm/templates", s.handleVMTemplateSave)
 				r.Delete("/vm/templates/{id}", s.handleVMTemplateDelete)

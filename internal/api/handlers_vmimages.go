@@ -36,8 +36,11 @@ func (s *Server) handleVMImages(w http.ResponseWriter, r *http.Request) {
 		// дата нужны так же.
 		"custom_local": s.vmimages.CustomStatus(),
 		"dir":          s.vmimages.Dir(),
-		"tools":        tools,
-		"missing":      vmcreate.MissingTools(tools),
+		// Файлы каталога дисков libvirt: и образы, положенные туда
+		// руками, и диски существующих машин — с пометкой, чьи они.
+		"host_images": vmcreate.HostImages(r.Context(), RunUnrestricted),
+		"tools":       tools,
+		"missing":     vmcreate.MissingTools(tools),
 	})
 }
 

@@ -193,3 +193,22 @@ func TestActiveYes(t *testing.T) {
 		t.Error("неподнятая сеть определена как поднятая")
 	}
 }
+
+// Диски машин и свободные образы лежат в одном каталоге, и различать их
+// приходится по тому, кто их занимает.
+func TestParseDomblklist(t *testing.T) {
+	out := `Type       Device    Target   Source
+------------------------------------------------
+file       disk      vda      /var/lib/libvirt/images/w1.qcow2
+file       cdrom     sda      /var/lib/libvirt/images/w1-seed.iso
+network    disk      vdb      rbd:pool/image
+block      disk      vdc      /dev/sdb
+`
+	paths := parseDomblklist(out)
+	if len(paths) != 2 {
+		t.Fatalf("разобрано %d путей: %q", len(paths), paths)
+	}
+	if paths[0] != "/var/lib/libvirt/images/w1.qcow2" || paths[1] != "/var/lib/libvirt/images/w1-seed.iso" {
+		t.Errorf("пути = %q", paths)
+	}
+}

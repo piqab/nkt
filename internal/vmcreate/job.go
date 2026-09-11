@@ -106,10 +106,11 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 
 	// 1. Образ.
 	jc.Step(1, 5, "образ")
-	// Образ, уже лежащий в кэше, берётся как есть: заново спрашивать у
-	// зеркала контрольную сумму значило бы ставить создание машины в
-	// зависимость от сети, которой здесь не нужно.
-	if r.store.Have(img) {
+	// Образ, уже лежащий в кэше (или прямо в каталоге дисков libvirt),
+	// берётся как есть: заново спрашивать у зеркала контрольную сумму
+	// значило бы ставить создание машины в зависимость от сети, которой
+	// здесь не нужно.
+	if strings.HasPrefix(spec.ImageID, HostPrefix) || r.store.Have(img) {
 		done.ImageReady = true
 	}
 	if !done.ImageReady {
@@ -129,7 +130,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// 2. Диск машины: копия образа нужного размера.
 	jc.Step(2, 5, "диск")
 	if !done.DiskReady {
-		if err := r.makeDisk(ctx, jc, r.store.Path(img), diskPath, spec.DiskGB); err != nil {
+		if err := r.makeDisk(ctx, jc, r.imagePath(img), diskPath, spec.DiskGB); err != nil {
 			return err
 		}
 		done.DiskReady = true
@@ -163,7 +164,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// virsh отвечает «Failed to start domain» с причиной на следующей
 	// строке. Поднять её — обычное дело, а не правка чужой настройки.
 	if spec.Bridge == "" {
-		if err := r.ensureDefaultNetwork(ctx, jc); err != nil {
+		if err := r.ensureNetwork(ctx, jc, spec.Network); err != nil {
 			return err
 		}
 	}
@@ -315,6 +316,25 @@ func parseDomifaddr(out string) string {
 	return ""
 }
 
+// HostPrefix — приставка идентификатора файла из каталога дисков
+// libvirt. Такой файл уже лежит там, где нужно, и качать его неоткуда.
+const HostPrefix = "host:"
+
+// imagePath отвечает, откуда брать образ: из кэша или прямо из каталога
+// дисков libvirt.
+func (r *CreateRunner) imagePath(img vmimage.Image) string {
+	if strings.HasPrefix(img.ID, HostPrefix) {
+		return filepath.Join(imagesRoot, img.FileName)
+	}
+	return r.store.Path(img)
+}
+
+// validImageName — то же требование к имени файла, что и у своих
+// образов: имя приходит от оператора и становится путём.
+func validImageName(name string) bool {
+	return name != "" && !strings.ContainsAny(name, "/\\") && !strings.Contains(name, "..")
+}
+
 // resolveImage находит образ по идентификатору: каталожный или свой,
 // добавленный оператором.
 //
@@ -322,6 +342,14 @@ func parseDomifaddr(out string) string {
 // или принесли. Если файла нет, честно говорим об этом, а не пытаемся
 // качать неизвестно откуда.
 func resolveImage(store *vmimage.Store, id string) (vmimage.Image, error) {
+	// Файл из каталога дисков libvirt берётся оттуда же: копировать его
+	// сперва в кэш значило бы занять место дважды.
+	if name, ok := strings.CutPrefix(id, HostPrefix); ok {
+		if !validImageName(name) {
+			return vmimage.Image{}, fmt.Errorf("недопустимое имя файла: %q", name)
+		}
+		return vmimage.Image{ID: id, Name: name, FileName: name, Custom: true}, nil
+	}
 	if name, ok := strings.CutPrefix(id, vmimage.CustomPrefix); ok {
 		img := vmimage.CustomImage(name)
 		if !store.Have(img) {
@@ -342,27 +370,29 @@ func resolveImage(store *vmimage.Store, id string) (vmimage.Image, error) {
 // Если её нет вовсе — не заводим: своя сеть на чужом хосте меняет
 // маршрутизацию и правила фильтра, и делать это молча, «чтобы машина
 // стартовала», нельзя. Говорим, что делать.
-func (r *CreateRunner) ensureDefaultNetwork(ctx context.Context, jc *jobs.Context) error {
-	res, err := r.run(ctx, "virsh", "net-info", "default")
+func (r *CreateRunner) ensureNetwork(ctx context.Context, jc *jobs.Context, name string) error {
+	if name == "" {
+		name = "default"
+	}
+	res, err := r.run(ctx, "virsh", "net-info", name)
 	if err != nil {
 		return fmt.Errorf("проверка сети libvirt: %w", err)
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("на хосте нет сети libvirt «default» (%s). Заведите её "+
-			"(virsh net-define /usr/share/libvirt/networks/default.xml && virsh net-start default) "+
-			"или укажите в форме сетевой мост",
-			commandError(res.Stderr, res.Stdout))
+		return fmt.Errorf("на хосте нет сети libvirt «%s» (%s). Заведите её в разделе "+
+			"«Профили» → «Сети машин» или укажите в форме сетевой мост",
+			name, commandError(res.Stderr, res.Stdout))
 	}
 	if strings.Contains(res.Stdout, "Active:") && !activeYes(res.Stdout) {
-		jc.Logf("сеть libvirt «default» не запущена — поднимаю")
-		if start, err := r.run(ctx, "virsh", "net-start", "default"); err != nil {
+		jc.Logf("сеть libvirt «%s» не запущена — поднимаю", name)
+		if start, err := r.run(ctx, "virsh", "net-start", name); err != nil {
 			return err
 		} else if start.ExitCode != 0 {
-			return fmt.Errorf("virsh net-start default: %s", commandError(start.Stderr, start.Stdout))
+			return fmt.Errorf("virsh net-start %s: %s", name, commandError(start.Stderr, start.Stdout))
 		}
 		// Чтобы после перезагрузки хоста машина поднялась сама, а не
 		// упёрлась в ту же неподнятую сеть.
-		if _, err := r.run(ctx, "virsh", "net-autostart", "default"); err != nil {
+		if _, err := r.run(ctx, "virsh", "net-autostart", name); err != nil {
 			jc.Logf("автозапуск сети включить не удалось: %v", err)
 		}
 	}

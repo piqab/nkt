@@ -1,13 +1,14 @@
 import { useState } from 'react'
-import { Button, Checkbox, Input, InputNumber, Tag, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, InputNumber, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import type { Job, Me, VMImage, VMImageLocal, VMTemplate, VMSpec, VMTool } from '../types'
+import type { Job, Me, VMImage, VMImageLocal, VMTemplate, VMSpec, VMTool, VMHostImage, VMNetwork } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from './ui'
 import { formatBytes } from './charts'
 import { DataTable } from './DataTable'
 import { confirmAction } from './confirm'
 import { JobLogModal } from '../pages/Jobs'
+import VMNetworksCard from './VMNetworksCard'
 
 /** Пока идёт скачивание, список надо перечитывать: недокачанный кусок
  * растёт, и оператор должен видеть, что дело движется. */
@@ -29,11 +30,13 @@ export default function VMImagesSection({ me }: { me: Me }) {
     local: VMImageLocal[]
     custom: VMImage[] | null
     custom_local: VMImageLocal[] | null
+    host_images: VMHostImage[] | null
     dir: string
     tools: VMTool[]
     missing: VMTool[] | null
   }>('/vm/images', POLL_MS)
   const [adding, setAdding] = useState(false)
+  const [creatingHost, setCreatingHost] = useState<VMHostImage | null>(null)
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [creating, setCreating] = useState<VMImage | null>(null)
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
@@ -198,6 +201,26 @@ export default function VMImagesSection({ me }: { me: Me }) {
         )}
       </Card>
 
+      {/* Каталог дисков libvirt: и образы, положенные туда руками, и
+          диски существующих машин. Показываем всё — место занято именно
+          ими, — но помечаем, чьё что. */}
+      {(images.data?.host_images?.length ?? 0) > 0 && (
+        <Card title={t('vmimages.hostTitle')} subtitle={t('vmimages.hostHint')}>
+          <div className="table-wrap">
+            <DataTable<VMHostImage>
+              dataSource={images.data?.host_images ?? []}
+              columns={hostColumns(t, canEdit, (img) => setCreatingHost(img))}
+              rowKey="path"
+              tableLayout="auto"
+            />
+          </div>
+        </Card>
+      )}
+
+      {/* Сети — рядом с образами: и то, и другое нужно, чтобы машина
+          поднялась, и искать их в разных местах незачем. */}
+      <VMNetworksCard me={me} />
+
       <Card title={t('vmimages.templatesTitle')} subtitle={t('vmimages.templatesHint')}>
         {(templates.data?.templates ?? []).length === 0 ? (
           <p className="small muted">{t('vmimages.templatesEmpty')}</p>
@@ -255,6 +278,34 @@ export default function VMImagesSection({ me }: { me: Me }) {
         />
       )}
 
+      {creatingHost && (
+        <CreateVMModal
+          image={{
+            id: 'host:' + creatingHost.name,
+            name: creatingHost.name,
+            os: '',
+            arch: '',
+            file_name: creatingHost.name,
+            custom: true,
+          }}
+          warning={
+            creatingHost.used_by
+              ? t(creatingHost.running ? 'vmimages.hostBusyRunning' : 'vmimages.hostBusy', {
+                  vm: creatingHost.used_by,
+                })
+              : undefined
+          }
+          templates={templates.data?.templates ?? []}
+          onSaved={() => templates.reload()}
+          onKey={setGeneratedKey}
+          onClose={() => setCreatingHost(null)}
+          onStarted={(job) => {
+            setCreatingHost(null)
+            setOpenJob(job)
+          }}
+        />
+      )}
+
       {creating && (
         <CreateVMModal
           image={creating}
@@ -304,6 +355,7 @@ export default function VMImagesSection({ me }: { me: Me }) {
  */
 function CreateVMModal({
   image,
+  warning,
   templates,
   onSaved,
   onClose,
@@ -311,6 +363,9 @@ function CreateVMModal({
   onKey,
 }: {
   image: VMImage
+  /** Предупреждение о самом образе: например, что это диск работающей
+   * машины и копия получится снятой на ходу. */
+  warning?: string
   templates: VMTemplate[]
   onSaved: () => void
   onClose: () => void
@@ -324,7 +379,11 @@ function CreateVMModal({
   const [diskGB, setDiskGB] = useState(20)
   const [memoryMB, setMemoryMB] = useState(2048)
   const [vcpus, setVCPUs] = useState(2)
+  const [network, setNetwork] = useState('default')
   const [bridge, setBridge] = useState('')
+  // Сети хоста: выбирать из списка вернее, чем вписывать имя наугад —
+  // ошибка в нём выясняется только при запуске машины.
+  const nets = useApi<{ networks: VMNetwork[] }>('/vm/networks', 60_000)
   const [autostart, setAutostart] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -340,6 +399,7 @@ function CreateVMModal({
     if (spec.user) setUser(spec.user)
     if (spec.ssh_key) setSSHKey(spec.ssh_key)
     if (spec.bridge) setBridge(spec.bridge)
+    if (spec.network) setNetwork(spec.network)
   }
 
   async function saveTemplate() {
@@ -358,6 +418,7 @@ function CreateVMModal({
             vcpus,
             user,
             ssh_key: sshKey.trim(),
+            network: bridge.trim() ? '' : network,
             bridge: bridge.trim(),
           },
         },
@@ -381,6 +442,7 @@ function CreateVMModal({
           disk_gb: diskGB,
           memory_mb: memoryMB,
           vcpus,
+          network: bridge.trim() ? '' : network,
           bridge: bridge.trim(),
           user,
           ssh_key: sshKey.trim(),
@@ -404,6 +466,7 @@ function CreateVMModal({
   return (
     <Modal title={t('vmimages.createTitle', { image: image.name })} onClose={onClose} width={720}>
       <ErrorNote error={error} />
+      {warning && <Banner kind="warn">{warning}</Banner>}
       {!sshKey.trim() && <Banner kind="info">{t('vmimages.keyWillBeGenerated')}</Banner>}
 
       <div className="grid grid-2" style={{ marginBottom: '0.6rem' }}>
@@ -428,8 +491,33 @@ function CreateVMModal({
           <InputNumber value={vcpus} min={1} max={256} onChange={(v) => setVCPUs(v ?? 2)} style={{ width: '100%' }} />
         </label>
         <label>
-          {t('vmimages.bridge')}
-          <Input value={bridge} onChange={(e) => setBridge(e.target.value)} placeholder={t('vmimages.bridgeDefault')} />
+          {t('vmimages.network')}
+          <Select
+            value={bridge ? '__bridge__' : network}
+            onChange={(v: string) => {
+              if (v === '__bridge__') {
+                setBridge('br0')
+                return
+              }
+              setBridge('')
+              setNetwork(v)
+            }}
+            options={[
+              ...(nets.data?.networks ?? []).map((n) => ({
+                value: n.name,
+                label: n.active ? n.name : `${n.name} (${t('vmnet.inactive')})`,
+              })),
+              { value: '__bridge__', label: t('vmimages.bridgeOption') },
+            ]}
+          />
+          {bridge !== '' && (
+            <Input
+              value={bridge}
+              onChange={(e) => setBridge(e.target.value)}
+              placeholder="br0"
+              style={{ marginTop: '0.25rem' }}
+            />
+          )}
         </label>
       </div>
 
@@ -602,4 +690,48 @@ function AddImageModal({
       </Card>
     </Modal>
   )
+}
+
+/** Колонки списка файлов каталога дисков libvirt. */
+function hostColumns(
+  t: (key: string, opts?: Record<string, unknown>) => string,
+  canEdit: boolean,
+  onCreate: (img: VMHostImage) => void,
+): TableColumnsType<VMHostImage> {
+  return [
+    {
+      title: t('vmimages.colFile'),
+      key: 'name',
+      render: (_, img) => (
+        <div style={{ minWidth: '14rem' }}>
+          <strong className="mono">{img.name}</strong>
+          <div className="small muted">{formatBytes(img.size)}</div>
+        </div>
+      ),
+    },
+    {
+      title: t('vmimages.colUsedBy'),
+      key: 'used_by',
+      render: (_, img) =>
+        img.used_by ? (
+          <span className="nowrap">
+            <Tag color={img.running ? 'processing' : 'default'}>{img.used_by}</Tag>
+            {img.running && <span className="small muted">{t('vmimages.hostRunning')}</span>}
+          </span>
+        ) : (
+          <span className="small muted">{t('vmimages.hostFree')}</span>
+        ),
+    },
+    {
+      title: '',
+      key: 'actions',
+      className: 'nowrap',
+      render: (_, img) =>
+        canEdit && (
+          <Button type="link" size="small" onClick={() => onCreate(img)}>
+            {t('vmimages.createVM')}
+          </Button>
+        ),
+    },
+  ]
 }

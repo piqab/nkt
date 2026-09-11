@@ -919,6 +919,7 @@ export interface VMSpec {
   vcpus: number
   user: string
   ssh_key: string
+  network?: string
   bridge?: string
 }
 
@@ -929,4 +930,26 @@ export interface VMTool {
   why: string
   alternative?: string
   present: boolean
+}
+
+/** Сеть libvirt, в которую включаются машины (см. internal/vmnet). */
+export interface VMNetwork {
+  name: string
+  active: boolean
+  autostart: boolean
+  persistent: boolean
+  mode?: string
+  bridge?: string
+  address?: string
+  netmask?: string
+  dhcp: boolean
+}
+
+/** Файл из каталога дисков libvirt на хосте. */
+export interface VMHostImage {
+  name: string
+  path: string
+  size: number
+  used_by?: string
+  running?: boolean
 }
