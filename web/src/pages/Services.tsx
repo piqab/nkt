@@ -10,6 +10,7 @@ import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 const ACTION_LABEL_KEY: Record<string, string> = {
   start: 'services.actionStart',
@@ -131,14 +132,13 @@ function buildMiscColumns(
         if (!l.pid || !l.command) return null
         const key = listenerKey(l)
         return (
-          <Button
-            type="link"
+          <RowAction
+            action="kill"
+            label={t('services.kill')}
             danger
             loading={killBusy === key}
             onClick={() => onKill(l, 'TERM')}
-          >
-            {t('services.kill')}
-          </Button>
+          />
         )
       },
     })
@@ -310,19 +310,17 @@ export default function Services({ me }: { me: Me }) {
       render: (_, s) => (
         <div className="row row-nowrap">
           {(s.actions ?? []).map((a) => (
-            <Button
+            <RowAction
               key={a}
-              type="link"
+              action={a}
+              label={ACTION_LABEL_KEY[a] ? t(ACTION_LABEL_KEY[a]) : a}
+              danger={a === 'stop' || a === 'disable'}
               disabled={!canControl}
               loading={busy === `${s.name}:${a}`}
               onClick={() => act(s.name, a)}
-            >
-              {ACTION_LABEL_KEY[a] ? t(ACTION_LABEL_KEY[a]) : a}
-            </Button>
+            />
           ))}
-          <Button type="link" size="small" onClick={() => setLogsFor(s)}>
-            {t('services.logs')}
-          </Button>
+          <RowAction action="logs" label={t('services.logs')} onClick={() => setLogsFor(s)} />
         </div>
       ),
     },

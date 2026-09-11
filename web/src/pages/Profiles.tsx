@@ -6,6 +6,7 @@ import { api, useApi } from '../api'
 import type { Job, Me, Profile, ProfilePlan, PlanChange, ProfileVersion } from '../types'
 import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDateTime } from '../components/ui'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
 
@@ -259,9 +260,7 @@ export default function Profiles({ me }: { me: Me }) {
           <span className="small">
             {t(`profiles.state.${c.desired}`, { defaultValue: c.desired })}
             {c.detail && (
-              <Button type="link" size="small" onClick={() => setDetail(c)}>
-                {t('profiles.showDetail')}
-              </Button>
+              <RowAction action="details" label={t('profiles.showDetail')} onClick={() => setDetail(c)} />
             )}
           </span>
         ),

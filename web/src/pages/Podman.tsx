@@ -8,6 +8,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../compo
 import { InactiveSummary } from '../components/InactiveSummary'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 export default function Podman({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -110,20 +111,24 @@ export default function Podman({ me }: { me: Me }) {
       render: (_, c) => (
         <div className="row">
           {['start', 'restart', 'stop'].map((a) => (
-            <Button
+            <RowAction
               key={a}
-              type="link"
+              action={a}
+              label={t(`docker.action.${a}`, { defaultValue: a })}
+              danger={a === 'stop'}
               disabled={!canControl}
               loading={busy === `${c.name}:${a}`}
               onClick={() => act(c.name, a)}
-            >
-              {a}
-            </Button>
+            />
           ))}
           {canControl && (
-            <Button danger type="link" size="small" loading={busy === `${c.name}:delete`} onClick={() => del(c.name)}>
-              {t('common.delete')}
-            </Button>
+            <RowAction
+              action="delete"
+              label={t('common.delete')}
+              danger
+              loading={busy === `${c.name}:delete`}
+              onClick={() => del(c.name)}
+            />
           )}
         </div>
       ),

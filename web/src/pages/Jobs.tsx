@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button, Tag, type TableColumnsType } from 'antd'
+import { Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import { wsURL } from '../hooks/usePty'
 import type { Job, JobLogLine, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, formatDateTime } from '../components/ui'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 import { confirmAction } from '../components/confirm'
 
 /** Как часто перечитывать список. Задание может закончиться в любой
@@ -83,22 +84,18 @@ export default function Jobs({ me }: { me: Me }) {
       className: 'nowrap',
       render: (_, j) => (
         <div className="row row-nowrap">
-          <Button type="link" size="small" onClick={() => setOpenJob(j)}>
-            {t('jobs.openLog')}
-          </Button>
+          <RowAction action="logs" label={t('jobs.openLog')} onClick={() => setOpenJob(j)} />
           {!isJobDone(j) && me.is_admin && me.allow_mutations && (
-            <Button
-              type="link"
-              size="small"
+            <RowAction
+              action="destroy"
+              label={t('jobs.cancel')}
               danger
               onClick={async () => {
                 if (!(await confirmAction(t('jobs.confirmCancel', { title: j.title || j.kind })))) return
                 await api(`/jobs/${j.id}/cancel`, { method: 'POST' }).catch(() => undefined)
                 jobs.reload()
               }}
-            >
-              {t('jobs.cancel')}
-            </Button>
+            />
           )}
         </div>
       ),

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Button, Checkbox, Form, Input, InputNumber, Segmented, type TableColumnsType } from 'antd'
+import { DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
@@ -8,6 +9,7 @@ import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, StateBadge, for
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 import VMImagesSection from '../components/VMImagesSection'
 
 const LIFECYCLE_ACTIONS = ['start', 'shutdown', 'reboot', 'suspend', 'resume']
@@ -125,35 +127,41 @@ function vmColumns(
       render: (_, vm) => (
         <div className="row">
           {LIFECYCLE_ACTIONS.map((a) => (
-            <Button
+            <RowAction
               key={a}
-              type="link"
+              action={a}
+              label={t(`virt.action.${a}`, { defaultValue: a })}
+              danger={a === 'shutdown'}
               disabled={!canControl}
               loading={busy === `${vm.name}:${a}`}
               onClick={() => act(vm.name, a)}
-            >
-              {a}
-            </Button>
+            />
           ))}
           {canControl && (
-            <Button
+            <RowAction
+              action="destroy"
+              label={`${t('virt.forceDestroy')} — ${t('virt.forceDestroyTooltip')}`}
               danger
-              type="link"
               loading={busy === `${vm.name}:destroy`}
               onClick={() => act(vm.name, 'destroy')}
-              title={t('virt.forceDestroyTooltip')}
-            >
-              {t('virt.forceDestroy')}
-            </Button>
+            />
           )}
           {canControl && vm.persistent && (
             <>
-              <Button danger type="link" size="small" loading={busy === `${vm.name}:delete`} onClick={() => del(vm.name, false)}>
-                {t('common.delete')}
-              </Button>
-              <Button danger type="link" size="small" loading={busy === `${vm.name}:delete`} onClick={() => del(vm.name, true)}>
-                {t('virt.deleteWithDisks')}
-              </Button>
+              <RowAction
+                action="delete"
+                label={t('common.delete')}
+                danger
+                loading={busy === `${vm.name}:delete`}
+                onClick={() => del(vm.name, false)}
+              />
+              <RowAction
+                icon={<DeleteOutlined />}
+                label={t('virt.deleteWithDisks')}
+                danger
+                loading={busy === `${vm.name}:delete`}
+                onClick={() => del(vm.name, true)}
+              />
             </>
           )}
         </div>

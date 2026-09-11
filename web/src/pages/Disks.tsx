@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { Button, Progress, Segmented, Tag, type TableColumnsType } from 'antd'
+import { PieChartOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 interface Filesystem {
   device: string
@@ -140,9 +142,13 @@ export default function Disks() {
       key: 'actions',
       width: '10rem',
       render: (_, f) => (
-        <Button size="small" onClick={() => scanUsage(f.mount_point)} disabled={usageBusy}>
-          {t('disks.whatTakesSpace')}
-        </Button>
+        <RowAction
+          icon={<PieChartOutlined />}
+          label={t('disks.whatTakesSpace')}
+          loading={usageBusy}
+          disabled={usageBusy}
+          onClick={() => scanUsage(f.mount_point)}
+        />
       ),
     },
   ]

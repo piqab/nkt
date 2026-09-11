@@ -6,6 +6,7 @@ import type { Job, Me, VMImage, VMImageLocal, VMTemplate, VMSpec, VMTool, VMHost
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from './ui'
 import { formatBytes } from './charts'
 import { DataTable } from './DataTable'
+import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
 import { JobLogModal } from '../pages/Jobs'
 import VMNetworksCard from './VMNetworksCard'
@@ -123,28 +124,26 @@ export default function VMImagesSection({ me }: { me: Me }) {
         return (
           <div className="row row-nowrap">
             {canEdit && !l?.downloaded && !img.custom && (
-              <Button type="link" size="small" onClick={() => void startJob('/vm/images/download', { image_id: img.id })}>
-                {l?.partial ? t('vmimages.resume') : t('vmimages.download')}
-              </Button>
+              <RowAction
+                action="download"
+                label={l?.partial ? t('vmimages.resume') : t('vmimages.download')}
+                onClick={() => void startJob('/vm/images/download', { image_id: img.id })}
+              />
             )}
             {canEdit && l?.downloaded && (
-              <Button type="link" size="small" onClick={() => setCreating(img)}>
-                {t('vmimages.createVM')}
-              </Button>
+              <RowAction action="create" label={t('vmimages.createVM')} onClick={() => setCreating(img)} />
             )}
             {canEdit && (l?.downloaded || l?.partial) && (
-              <Button
-                type="link"
-                size="small"
+              <RowAction
+                action="delete"
+                label={t('common.delete')}
                 danger
                 onClick={async () => {
                   if (!(await confirmAction(t('vmimages.confirmDelete', { name: img.name })))) return
                   await api('/vm/images/delete', { method: 'POST', body: { image_id: img.id } })
                   images.reload()
                 }}
-              >
-                {t('common.delete')}
-              </Button>
+              />
             )}
           </div>
         )
@@ -261,18 +260,16 @@ export default function VMImagesSection({ me }: { me: Me }) {
                     </span>
                   </span>
                   {canEdit && (
-                    <Button
-                      type="link"
-                      size="small"
+                    <RowAction
+                      action="delete"
+                      label={t('common.delete')}
                       danger
                       onClick={async () => {
                         if (!(await confirmAction(t('vmimages.confirmDeleteTemplate', { name: tpl.name })))) return
                         await api(`/vm/templates/${tpl.id}`, { method: 'DELETE' })
                         templates.reload()
                       }}
-                    >
-                      {t('common.delete')}
-                    </Button>
+                    />
                   )}
                 </div>
               )
@@ -758,12 +755,8 @@ function hostColumns(
       render: (_, img) =>
         canEdit && (
           <div className="row row-nowrap">
-            <Button type="link" size="small" onClick={() => onCreate(img)}>
-              {t('vmimages.createVM')}
-            </Button>
-            <Button type="link" size="small" danger onClick={() => onDelete(img)}>
-              {t('common.delete')}
-            </Button>
+            <RowAction action="create" label={t('vmimages.createVM')} onClick={() => onCreate(img)} />
+            <RowAction action="delete" label={t('common.delete')} danger onClick={() => onDelete(img)} />
           </div>
         ),
     },

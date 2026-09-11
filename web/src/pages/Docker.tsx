@@ -10,6 +10,7 @@ import BlockTree from '../components/BlockTree'
 import PathPicker, { ownerFromPath } from '../components/PathPicker'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -127,30 +128,31 @@ export default function Docker({ me }: { me: Me }) {
       render: (_, c) => (
         <div className="row row-nowrap">
           {['start', 'restart', 'stop'].map((a) => (
-            <Button
+            <RowAction
               key={a}
-              type="link"
+              action={a}
+              label={t(`docker.action.${a}`, { defaultValue: a })}
+              danger={a === 'stop'}
               disabled={!canControl}
               loading={busy === `${c.name}:${a}`}
               onClick={() => containerAct(c.name, a)}
-            >
-              {a}
-            </Button>
+            />
           ))}
           {canControl && c.compose_file && c.service_name && (
-            <Button type="link" size="small" onClick={() => setConfigModal({ path: c.compose_file!, focusName: c.service_name })}>
-              {t('docker.editConfig')}
-            </Button>
+            <RowAction
+              action="edit"
+              label={t('docker.editConfig')}
+              onClick={() => setConfigModal({ path: c.compose_file!, focusName: c.service_name })}
+            />
           )}
-          <Button
+          <RowAction
+            action="delete"
+            label={t('common.delete')}
             danger
-            type="link"
             disabled={!canControl}
             loading={busy === `${c.name}:delete`}
             onClick={() => void del(c)}
-          >
-            {t('common.delete')}
-          </Button>
+          />
         </div>
       ),
     },

@@ -17,6 +17,7 @@ import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '.
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 import { JobLogModal } from './Jobs'
 
 /** How often to poll a running install job for new progress lines — same
@@ -911,10 +912,8 @@ export default function Hosts({
     // its own dashboard, same as any other online host's "открыть".
     if (h.id === LOCAL_HOST_ID) {
       return (
-        <div className="row">
-          <Button type="link" onClick={() => onSelect({ id: h.id, name: h.name })}>
-            {t('hosts.open')}
-          </Button>
+        <div className="row row-nowrap">
+          <RowAction action="open" label={t('hosts.open')} onClick={() => onSelect({ id: h.id, name: h.name })} />
         </div>
       )
     }
@@ -924,72 +923,81 @@ export default function Hosts({
     // прерывать её было бы нечем.
     const busy = busyVMs.has(h.id) || h.status === 'installing'
     return (
-      <div className="row">
+      <div className="row row-nowrap">
         {h.status === 'online' && (
-          <Button type="link" loading={autoOpenHost?.id === h.id} disabled={busy} onClick={() => openHost(h)}>
-            {autoOpenHost?.id === h.id ? t('hosts.updatingBeforeOpen') : t('hosts.open')}
-          </Button>
+          <RowAction
+            action="open"
+            label={autoOpenHost?.id === h.id ? t('hosts.updatingBeforeOpen') : t('hosts.open')}
+            loading={autoOpenHost?.id === h.id}
+            disabled={busy}
+            onClick={() => openHost(h)}
+          />
         )}
         {isAddrUnknown(h) ? (
           // Установка по заглушке всё равно провалится рукопожатием с
           // 0.0.0.0, поэтому вместо неё предлагается то, чего не хватает.
-          <Tooltip title={t('hosts.detectAddressHint')}>
-            <Button type="link" loading={detectingAddr === h.id || busy} disabled={busy} onClick={() => void detectAddress(h)}>
-              {t('hosts.detectAddress')}
-            </Button>
-          </Tooltip>
+          <RowAction
+            action="address"
+            label={`${t('hosts.detectAddress')} — ${t('hosts.detectAddressHint')}`}
+            loading={detectingAddr === h.id || busy}
+            disabled={busy}
+            onClick={() => void detectAddress(h)}
+          />
         ) : (
-          // Ссылкой, как и остальные действия строки: рамка выделяла её
-          // из ряда сильнее, чем она того стоит, — установка здесь такое
-          // же действие, как «открыть» или «изменить». Устаревшая версия
-          // и без того помечена в колонке версии, поэтому «обновить»
-          // достаточно выделить начертанием.
-          <Button
-            type="link"
-            style={outdated ? { fontWeight: 600 } : undefined}
+          <RowAction
+            action={h.status === 'new' ? 'install' : outdated ? 'update' : 'install'}
+            label={h.status === 'new' ? t('hosts.install') : outdated ? t('hosts.update') : t('hosts.reinstall')}
             loading={busy}
             disabled={busy}
             onClick={() => startInstall(h)}
-          >
-            {h.status === 'new' ? t('hosts.install') : outdated ? t('hosts.update') : t('hosts.reinstall')}
-          </Button>
+          />
         )}
         {h.status === 'installing' && (
-          <Button danger type="link" onClick={() => cancelInstall(h)}>
-            {t('hosts.cancel')}
-          </Button>
+          <RowAction action="destroy" label={t('hosts.cancel')} danger onClick={() => cancelInstall(h)} />
         )}
         {h.status !== 'new' && (
-          <Button type="link" onClick={() => openInstallLog(h)}>
-            {t('hosts.installLog')}
-          </Button>
+          <RowAction action="logs" label={t('hosts.installLog')} onClick={() => openInstallLog(h)} />
         )}
         {h.status !== 'new' && h.status !== 'installing' && (
           <>
-            <Button type="link" loading={busyServiceIds.has(h.id) || busy} disabled={busy} onClick={() => startHost(h)}>
-              {t('hosts.start')}
-            </Button>
-            <Button danger type="link" loading={busyServiceIds.has(h.id) || busy} disabled={busy} onClick={() => stopHost(h)}>
-              {t('hosts.stop')}
-            </Button>
+            <RowAction
+              action="start"
+              label={t('hosts.start')}
+              loading={busyServiceIds.has(h.id) || busy}
+              disabled={busy}
+              onClick={() => startHost(h)}
+            />
+            <RowAction
+              action="stop"
+              label={t('hosts.stop')}
+              danger
+              loading={busyServiceIds.has(h.id) || busy}
+              disabled={busy}
+              onClick={() => stopHost(h)}
+            />
           </>
         )}
-        <Button type="link" disabled={busy} onClick={() => setEditingHost(h)}>
-          {t('hosts.edit')}
-        </Button>
+        <RowAction action="edit" label={t('hosts.edit')} disabled={busy} onClick={() => setEditingHost(h)} />
         {h.ssh_auth_kind === 'key' && (
-          <Button type="link" disabled={busy} onClick={() => showPubKey(h)}>
-            {t('hosts.publicKey')}
-          </Button>
+          <RowAction action="key" label={t('hosts.publicKey')} disabled={busy} onClick={() => showPubKey(h)} />
         )}
         {h.sudo_status === 'nopasswd' && (
-          <Button danger type="link" disabled={busy} onClick={() => removeSudoAccess(h)}>
-            {t('hosts.removeNopasswd')}
-          </Button>
+          <RowAction
+            action="disable"
+            label={t('hosts.removeNopasswd')}
+            danger
+            disabled={busy}
+            onClick={() => removeSudoAccess(h)}
+          />
         )}
-        <Button danger type="link" loading={busy} disabled={busy} onClick={() => setRemovingHost(h)}>
-          {t('hosts.delete')}
-        </Button>
+        <RowAction
+          action="delete"
+          label={t('hosts.delete')}
+          danger
+          loading={busy}
+          disabled={busy}
+          onClick={() => setRemovingHost(h)}
+        />
       </div>
     )
   }
@@ -1022,9 +1030,7 @@ export default function Hosts({
           </Button>
         )}
         {canCreate && (
-          <Button type="link" disabled={busy} onClick={() => setProvisionOn(h)}>
-            {t('hosts.newVM')}
-          </Button>
+          <RowAction action="create" label={t('hosts.newVM')} disabled={busy} onClick={() => setProvisionOn(h)} />
         )}
       </div>
     )

@@ -355,7 +355,13 @@
     "newContainerLocation": "New container — pick a location",
     "loadingFile": "file",
     "container": "container",
-    "confirmDeleteRunning": "Container {{name}} is running. Stop and remove it? This cannot be undone."
+    "confirmDeleteRunning": "Container {{name}} is running. Stop and remove it? This cannot be undone.",
+    "action": {
+      "start": "start",
+      "restart": "restart",
+      "stop": "stop",
+      "pause": "pause"
+    }
   },
   "virt": {
     "colName": "Name",
@@ -406,7 +412,14 @@
     "saving": "Saving…",
     "save": "Save",
     "createNote": "created VM",
-    "editNote": "edited VM definition"
+    "editNote": "edited VM definition",
+    "action": {
+      "start": "start",
+      "shutdown": "shut down",
+      "reboot": "reboot",
+      "suspend": "suspend",
+      "resume": "resume"
+    }
   },
   "hosts": {
     "notPasswordEncrypted": "This file doesn't look like a password-encrypted export",
