@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Button, Form, Input, Select, type TableColumnsType } from 'antd'
+import { UserSwitchOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Account, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 /** Matches the minimum the API enforces, counted in characters. */
 const MIN_LENGTH = 10
@@ -90,35 +92,38 @@ export default function Users({ me }: { me: Me }) {
       render: (_, u) => {
         const self = u.username === me.username
         return (
-          <div className="row">
-            <Button
-              type="link"
+          <div className="row row-nowrap">
+            {/* Смена роли — не «включить/выключить»: своя иконка, и
+                название целиком в подсказке, вместе с причиной запрета. */}
+            <RowAction
+              icon={<UserSwitchOutlined />}
+              label={
+                (u.role === 'admin' ? t('users.makeViewer') : t('users.makeAdmin')) +
+                (self ? ` — ${t('users.cannotChangeOwnRole')}` : '')
+              }
               loading={busy === u.username}
               disabled={self}
-              title={self ? t('users.cannotChangeOwnRole') : undefined}
               onClick={() => toggleRole(u)}
-            >
-              {u.role === 'admin' ? t('users.makeViewer') : t('users.makeAdmin')}
-            </Button>
-            <Button
-              type="link"
+            />
+            <RowAction
+              action={u.disabled ? 'enable' : 'disable'}
+              label={
+                (u.disabled ? t('users.enable') : t('users.disable')) +
+                (self && !u.disabled ? ` — ${t('users.cannotDisableSelf')}` : '')
+              }
+              danger={!u.disabled}
               loading={busy === u.username}
               disabled={self && !u.disabled}
-              title={self && !u.disabled ? t('users.cannotDisableSelf') : undefined}
               onClick={() => toggleDisabled(u)}
-            >
-              {u.disabled ? t('users.enable') : t('users.disable')}
-            </Button>
-            <Button
+            />
+            <RowAction
+              action="delete"
+              label={t('users.delete') + (self ? ` — ${t('users.cannotDeleteSelf')}` : '')}
               danger
-              type="link"
               loading={busy === u.username}
               disabled={self}
-              title={self ? t('users.cannotDeleteSelf') : undefined}
               onClick={() => remove(u)}
-            >
-              {t('users.delete')}
-            </Button>
+            />
           </div>
         )
       },

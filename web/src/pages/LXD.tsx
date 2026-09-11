@@ -8,6 +8,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../compo
 import { InactiveSummary } from '../components/InactiveSummary'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 export default function LXD({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -77,20 +78,24 @@ export default function LXD({ me }: { me: Me }) {
       render: (_, i) => (
         <div className="row">
           {['start', 'restart', 'stop', 'pause'].map((a) => (
-            <Button
+            <RowAction
               key={a}
-              type="link"
+              action={a === 'pause' ? 'suspend' : a}
+              label={t(`docker.action.${a}`, { defaultValue: a })}
+              danger={a === 'stop'}
               disabled={!canControl}
               loading={busy === `${i.name}:${a}`}
               onClick={() => act(i.name, a)}
-            >
-              {a}
-            </Button>
+            />
           ))}
           {canControl && (
-            <Button danger type="link" size="small" loading={busy === `${i.name}:delete`} onClick={() => del(i.name)}>
-              {t('common.delete')}
-            </Button>
+            <RowAction
+              action="delete"
+              label={t('common.delete')}
+              danger
+              loading={busy === `${i.name}:delete`}
+              onClick={() => del(i.name)}
+            />
           )}
         </div>
       ),

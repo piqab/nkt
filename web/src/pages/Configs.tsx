@@ -9,6 +9,7 @@ import BlockTree from '../components/BlockTree'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker', 'caddy'])
 
@@ -35,18 +36,18 @@ function versionColumns(
       title: '',
       key: 'actions',
       render: (_, v) => (
-        <div className="row">
+        <div className="row row-nowrap">
           {v.id === currentVersionId ? (
             <span className="small secondary nowrap">{t('configs.isCurrent')}</span>
           ) : (
-            <Button type="link" size="small" onClick={() => showDiff(v.id)}>
-              {diff?.id === v.id ? t('configs.hide') : t('configs.diff')}
-            </Button>
+            <RowAction
+              action="details"
+              label={diff?.id === v.id ? t('configs.hide') : t('configs.diff')}
+              onClick={() => showDiff(v.id)}
+            />
           )}
           {me.is_admin && me.allow_mutations && (
-            <Button type="link" size="small" loading={busy} onClick={() => rollback(v.id)}>
-              {t('configs.rollback')}
-            </Button>
+            <RowAction action="history" label={t('configs.rollback')} loading={busy} onClick={() => rollback(v.id)} />
           )}
         </div>
       ),

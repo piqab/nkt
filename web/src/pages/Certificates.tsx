@@ -18,6 +18,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, Spinner, formatDateT
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 /** How often to poll a running renew job for new progress lines. */
 const RENEW_POLL_MS = 800
@@ -210,9 +211,12 @@ function certColumns(
       key: 'actions',
       render: (_, cert) =>
         canRenew(cert) && (
-          <Button type="link" size="small" loading={busy === cert.id} onClick={() => renew(cert)}>
-            {busy === cert.id ? t('certs.renewing') : t('certs.renew')}
-          </Button>
+          <RowAction
+            action="update"
+            label={busy === cert.id ? t('certs.renewing') : t('certs.renew')}
+            loading={busy === cert.id}
+            onClick={() => renew(cert)}
+          />
         ),
     })
   }
@@ -580,13 +584,12 @@ function UnattachedCard({
       title: '',
       key: 'actions',
       render: (_, info) => (
-        <Button
-          type="link"
+        <RowAction
+          action="update"
+          label={t('certs.renew')}
           loading={busy === `lineage:${info.name}`}
           onClick={() => onRenew(info.name)}
-        >
-          {t('certs.renew')}
-        </Button>
+        />
       ),
     })
   }

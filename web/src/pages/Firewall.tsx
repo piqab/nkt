@@ -9,6 +9,7 @@ import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 interface FirewallResponse {
   managers: FirewallManagerState[]
@@ -451,9 +452,7 @@ export default function Firewall({ me }: { me: Me }) {
       title: '',
       key: 'actions',
       render: (_, r) => (
-        <Button danger type="link" size="small" loading={busy} onClick={() => deleteRule(r)}>
-          {t('fw.delete')}
-        </Button>
+        <RowAction action="delete" label={t('fw.delete')} danger loading={busy} onClick={() => deleteRule(r)} />
       ),
     },
   ]
@@ -523,9 +522,13 @@ export default function Firewall({ me }: { me: Me }) {
               // here yet — see deleteFirewalldRule's own doc comment.
               if (r.backend !== 'firewalld' || r.raw) return null
               return (
-                <Button danger type="link" size="small" loading={busy} onClick={() => deleteFirewalldRule(r)}>
-                  {t('fw.delete')}
-                </Button>
+                <RowAction
+                  action="delete"
+                  label={t('fw.delete')}
+                  danger
+                  loading={busy}
+                  onClick={() => deleteFirewalldRule(r)}
+                />
               )
             },
           } satisfies TableColumnsType<FirewallRule>[number],
@@ -583,16 +586,12 @@ export default function Firewall({ me }: { me: Me }) {
               const found = ufwRuleForListener(l)
               if (!found) {
                 return (
-                  <Button type="link" size="small" loading={busy} onClick={() => quickAllowListener(l)}>
-                    {t('fw.allow')}
-                  </Button>
+                  <RowAction action="enable" label={t('fw.allow')} loading={busy} onClick={() => quickAllowListener(l)} />
                 )
               }
               const onDelete = found.source === 'numbered' ? () => deleteRule(found.rule) : () => deleteAddedRule(found.added)
               return (
-                <Button danger type="link" size="small" loading={busy} onClick={onDelete}>
-                  {t('fw.delete')}
-                </Button>
+                <RowAction action="delete" label={t('fw.delete')} danger loading={busy} onClick={onDelete} />
               )
             },
           } satisfies TableColumnsType<Listener>[number],

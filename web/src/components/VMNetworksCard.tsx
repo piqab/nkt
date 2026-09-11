@@ -5,6 +5,7 @@ import { ApiError, api, useApi } from '../api'
 import type { Me, VMNetwork } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from './ui'
 import { DataTable } from './DataTable'
+import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
 
 /**
@@ -81,37 +82,34 @@ export default function VMNetworksCard({ me }: { me: Me }) {
         canEdit && (
           <div className="row row-nowrap">
             {n.active ? (
-              <Button
-                type="link"
-                size="small"
+              <RowAction
+                action="stop"
+                label={t('vmnet.stop')}
                 danger
                 loading={busy === n.name}
                 onClick={() => void act(n.name, 'stop', t('vmnet.confirmStop', { name: n.name }))}
-              >
-                {t('vmnet.stop')}
-              </Button>
+              />
             ) : (
-              <Button type="link" size="small" loading={busy === n.name} onClick={() => void act(n.name, 'start')}>
-                {t('vmnet.start')}
-              </Button>
+              <RowAction
+                action="start"
+                label={t('vmnet.start')}
+                loading={busy === n.name}
+                onClick={() => void act(n.name, 'start')}
+              />
             )}
-            <Button
-              type="link"
-              size="small"
+            <RowAction
+              action={n.autostart ? 'disable' : 'autostart'}
+              label={n.autostart ? t('vmnet.autostartOff') : t('vmnet.autostartOn')}
               loading={busy === n.name}
               onClick={() => void act(n.name, n.autostart ? 'autostart-off' : 'autostart-on')}
-            >
-              {n.autostart ? t('vmnet.autostartOff') : t('vmnet.autostartOn')}
-            </Button>
-            <Button
-              type="link"
-              size="small"
+            />
+            <RowAction
+              action="delete"
+              label={t('vmnet.delete', { defaultValue: t('vmnet.confirmDelete', { name: n.name }) })}
               danger
               loading={busy === n.name}
               onClick={() => void act(n.name, 'delete', t('vmnet.confirmDelete', { name: n.name }))}
-            >
-              {t('common.delete')}
-            </Button>
+            />
           </div>
         ),
     },

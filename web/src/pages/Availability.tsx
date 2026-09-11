@@ -7,6 +7,7 @@ import { Heatmap, LineChart, StatTile, formatMs, formatNumber } from '../compone
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime } from '../components/ui'
 import i18n from '../i18n'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 interface TargetsResponse {
   targets: TargetStatus[]
@@ -78,13 +79,19 @@ function targetColumns(
       title: '',
       key: 'actions',
       render: (_, tgt) => (
-        <div className="row" onClick={(e) => e.stopPropagation()}>
-          <Button type="link" size="small" disabled={checking === tgt.id} onClick={() => checkNow(tgt.id)}>
-            {checking === tgt.id ? '…' : t('availability.check')}
-          </Button>
-          <Button type="link" size="small" onClick={() => toggle(tgt.id, !tgt.enabled)}>
-            {tgt.enabled ? t('availability.pause') : t('availability.enable')}
-          </Button>
+        <div className="row row-nowrap" onClick={(e) => e.stopPropagation()}>
+          <RowAction
+            action="reload"
+            label={t('availability.check')}
+            loading={checking === tgt.id}
+            disabled={checking === tgt.id}
+            onClick={() => checkNow(tgt.id)}
+          />
+          <RowAction
+            action={tgt.enabled ? 'suspend' : 'enable'}
+            label={tgt.enabled ? t('availability.pause') : t('availability.enable')}
+            onClick={() => toggle(tgt.id, !tgt.enabled)}
+          />
         </div>
       ),
     },
