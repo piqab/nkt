@@ -265,6 +265,11 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/logs/tail", s.handleLogSnapshot)
 			r.Get("/audit", s.handleAudit)
 			r.Get("/snapshots", s.handleSnapshots)
+			// «Что изменилось с прошлого захода»: сравнение снимков и
+			// отметка «видел». Отметка своя у каждого оператора, поэтому
+			// не под RequireAdmin — смотреть может любой.
+			r.Get("/changes", s.handleChanges)
+			r.Post("/changes/ack", s.handleChangesAck)
 
 			// --- mutations, admin only ------------------------------------------
 			r.Group(func(r chi.Router) {

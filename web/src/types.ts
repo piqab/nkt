@@ -818,6 +818,15 @@ export interface Snapshot {
 /** Фоновое задание: применение профиля, скачивание образа, создание
  * машины. Живёт в базе, поэтому переживает и закрытую вкладку, и
  * перезапуск службы — см. internal/jobs. */
+/** Расхождение между снимками состояния — internal/statediff. */
+export interface StateChange {
+  kind: 'service' | 'port' | 'firewall' | 'container' | 'vm' | 'file' | 'cert' | 'interface' | 'package'
+  key: string
+  action: 'appeared' | 'disappeared' | 'changed'
+  was?: string
+  now?: string
+}
+
 /** Оповещение хаба — internal/store/events.go. */
 export interface HostEvent {
   id: number
