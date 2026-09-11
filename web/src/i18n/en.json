@@ -1642,7 +1642,12 @@
     "hostBusy": "This is the disk of machine \"{{vm}}\". A copy will be made; the disk itself is untouched.",
     "hostBusyRunning": "This is the disk of the running machine \"{{vm}}\". The copy is taken on the fly: the filesystem inside may end up inconsistent, as after a sudden power-off.",
     "network": "Network",
-    "bridgeOption": "specify a host bridge…"
+    "bridgeOption": "specify a host bridge…",
+    "hostEmpty": "The libvirt disk directory is empty. Add your own image with the button on the right — by link or as a file from your computer.",
+    "addOwnBody": "The image goes into the libvirt disk directory (/var/lib/libvirt/images) — the same place machine disks live, and it shows up in the list below.",
+    "confirmDeleteHost": "Delete the file \"{{name}}\" from the libvirt disk directory? This cannot be undone.",
+    "confirmDeleteHostBusy": "The file \"{{name}}\" is the disk of machine \"{{vm}}\". Delete it? The machine will be left without a disk and stop starting.",
+    "networkWillCreate": "default — will be created on start"
   },
   "vmnet": {
     "title": "VM networks",

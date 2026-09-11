@@ -20,7 +20,7 @@ func (s *Server) vmnets() *vmnet.Manager {
 	// Описание сети пишется в каталог кэша образов: он точно доступен на
 	// запись из юнита, а /tmp у юнита свой (PrivateTmp) и virsh по ту
 	// сторону песочницы его не увидит.
-	return vmnet.NewManager(vmnet.Runner(RunUnrestricted), s.vmimages.Dir())
+	return vmnet.NewManager(vmnet.Runner(RunTooling), s.vmimages.Dir())
 }
 
 func (s *Server) handleVMNetworks(w http.ResponseWriter, r *http.Request) {

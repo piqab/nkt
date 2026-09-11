@@ -2267,10 +2267,15 @@ function ProvisionVMModal({
   const [diskGB, setDiskGB] = useState(20)
   const [memoryMB, setMemoryMB] = useState(2048)
   const [vcpus, setVCPUs] = useState(2)
-  const [network, setNetwork] = useState('default')
+  // Пусто, пока не выбрали: по умолчанию берётся первая существующая
+  // сеть хоста, а «default» вслепую ставить нельзя — на минимальной
+  // установке libvirt её нет.
+  const [network, setNetwork] = useState('')
   const [installNKT, setInstallNKT] = useState(true)
   // Сети того хоста, где создаётся машина: их список виден только ему.
   const nets = useApi<{ networks: { name: string; active: boolean }[] }>(`/hosts/${host.id}/vm/networks`, 60_000)
+  const knownNets = nets.data?.networks ?? []
+  const chosenNetwork = network || knownNets[0]?.name || 'default' 
   const [profileID, setProfileID] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -2293,7 +2298,7 @@ function ProvisionVMModal({
           spec: {
             name,
             image_id: imageID,
-            network,
+            network: chosenNetwork,
             disk_gb: diskGB,
             memory_mb: memoryMB,
             vcpus,
@@ -2383,12 +2388,16 @@ function ProvisionVMModal({
         <label>
           {t('hosts.newVMNetwork')}
           <Select
-            value={network}
+            value={chosenNetwork}
             onChange={(v: string) => setNetwork(v)}
-            options={(nets.data?.networks ?? [{ name: 'default', active: true }]).map((n) => ({
-              value: n.name,
-              label: n.active ? n.name : `${n.name} (${t('vmnet.inactive')})`,
-            }))}
+            options={
+              knownNets.length > 0
+                ? knownNets.map((n) => ({
+                    value: n.name,
+                    label: n.active ? n.name : `${n.name} (${t('vmnet.inactive')})`,
+                  }))
+                : [{ value: 'default', label: t('vmimages.networkWillCreate') }]
+            }
           />
         </label>
       </div>

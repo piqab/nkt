@@ -24,15 +24,25 @@ type DownloadParams struct {
 	Checksum string `json:"checksum,omitempty"`
 	// ChecksumKind — sha256 (по умолчанию) или sha512.
 	ChecksumKind string `json:"checksum_kind,omitempty"`
+	// ToHost — положить скачанное в каталог дисков libvirt, а не в кэш
+	// nkt. Так добавляют свои образы: там их ждут и qemu, и оператор.
+	ToHost bool `json:"to_host,omitempty"`
 }
 
 // DownloadRunner качает образ в фоне.
 type DownloadRunner struct {
 	store *Store
+	// move переносит скачанное в каталог дисков libvirt. Отдельно от
+	// хранилища: писать туда можно только вне песочницы юнита.
+	move func(ctx context.Context, tmpPath, name string) (string, error)
 }
 
-// NewDownloadRunner строит исполнителя.
-func NewDownloadRunner(store *Store) *DownloadRunner { return &DownloadRunner{store: store} }
+// NewDownloadRunner строит исполнителя. move может быть nil — тогда всё
+// остаётся в кэше nkt.
+func NewDownloadRunner(store *Store,
+	move func(ctx context.Context, tmpPath, name string) (string, error)) *DownloadRunner {
+	return &DownloadRunner{store: store, move: move}
+}
 
 // Resumable — да, и это здесь не формальность: образ весит сотни
 // мегабайт, недокачанный кусок остаётся на диске, а докачка запрашивает
@@ -74,6 +84,17 @@ func (r *DownloadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	jc.Step(3, 3, "проверка")
+	if p.ToHost {
+		if r.move == nil {
+			return fmt.Errorf("перенос в каталог дисков недоступен в этом режиме")
+		}
+		target, err := r.move(ctx, path, img.FileName)
+		if err != nil {
+			return err
+		}
+		jc.Logf("Готово: %s", target)
+		return nil
+	}
 	jc.Logf("Готово: %s (сумма %s сошлась)", path, img.ChecksumKind)
 	return nil
 }

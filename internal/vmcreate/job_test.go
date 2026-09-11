@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -25,16 +26,35 @@ type fakeEscape struct {
 	// installs — что происходит с хостом после apt-get install. nil
 	// означает «пакеты не помогли»: так проверяется и этот случай.
 	installs func()
-	// netDown — сеть libvirt «default» заведена, но не запущена.
-	netDown bool
+	// networks — сети хоста: имя → поднята ли. nil означает «сетей нет
+	// вовсе», как на минимальной установке libvirt.
+	networks map[string]bool
+	// defined — какие сети задание завело само.
+	defined []string
 }
 
-// networkActive отвечает так же, как virsh net-info.
-func (f *fakeEscape) networkActive() string {
-	if f.netDown {
-		return "no"
+// contains отвечает, есть ли слово среди аргументов.
+func contains(argv []string, want string) bool {
+	for _, a := range argv {
+		if a == want {
+			return true
+		}
 	}
-	return "yes"
+	return false
+}
+
+// betweenTags достаёт содержимое простого XML-тега.
+func betweenTags(doc, open, close string) string {
+	i := strings.Index(doc, open)
+	if i < 0 {
+		return ""
+	}
+	rest := doc[i+len(open):]
+	j := strings.Index(rest, close)
+	if j < 0 {
+		return ""
+	}
+	return rest[:j]
 }
 
 func (f *fakeEscape) run(_ context.Context, argv ...string) (collect.CommandResult, error) {
@@ -54,8 +74,43 @@ func (f *fakeEscape) run(_ context.Context, argv ...string) (collect.CommandResu
 	if len(argv) > 2 && argv[0] == "apt-get" && argv[1] == "install" && f.installs != nil {
 		f.installs()
 	}
-	if len(argv) == 3 && argv[0] == "virsh" && argv[1] == "net-info" {
-		res.Stdout = "Name:           default\nActive:         " + f.networkActive() + "\n"
+	// Сети: список отдаётся именами (как virsh --name), define заводит
+	// новую, start поднимает — ровно то, на что опирается EnsureNAT.
+	if len(argv) >= 3 && argv[0] == "virsh" && argv[1] == "net-list" {
+		var names []string
+		for name, active := range f.networks {
+			if contains(argv, "--all") || active {
+				names = append(names, name)
+			}
+		}
+		sort.Strings(names)
+		res.Stdout = strings.Join(names, "\n")
+		return res, nil
+	}
+	if len(argv) == 3 && argv[0] == "virsh" && argv[1] == "net-define" {
+		// Имя сети берётся из описания, которое задание только что
+		// записало на диск, — так же, как это делает virsh.
+		if raw, err := os.ReadFile(argv[2]); err == nil {
+			if name := betweenTags(string(raw), "<name>", "</name>"); name != "" {
+				f.defined = append(f.defined, name)
+				if f.networks == nil {
+					f.networks = map[string]bool{}
+				}
+				f.networks[name] = false
+			}
+		}
+		return res, nil
+	}
+	if len(argv) == 3 && argv[0] == "virsh" && argv[1] == "net-start" {
+		if f.networks[argv[2]] || f.networks == nil {
+			return res, nil
+		}
+		f.networks[argv[2]] = true
+		return res, nil
+	}
+	if len(argv) == 3 && argv[0] == "virsh" && argv[1] == "net-dumpxml" {
+		res.Stdout = "<network><name>" + argv[2] + "</name><bridge name='virbr0'/>" +
+			"<ip address='192.168.122.1' netmask='255.255.255.0'/></network>"
 		return res, nil
 	}
 	switch {
@@ -305,12 +360,11 @@ const (
 	store2Failed    = store.JobFailed
 )
 
-// Неподнятая сеть libvirt — самая частая причина, по которой машина не
-// стартует на свежем хосте. Её поднимают, а не отказывают: это обычное
-// действие, а не правка чужой настройки.
-func TestCreateStartsDefaultNetwork(t *testing.T) {
+// Сети «default» на хосте может не быть вовсе — тогда её заводит само
+// задание, а не отправляет оператора делать это руками.
+func TestCreateCreatesMissingNetwork(t *testing.T) {
 	m, db := newManager(t)
-	esc := &fakeEscape{netDown: true}
+	esc := &fakeEscape{} // сетей нет
 	m.Register(KindCreate, testRunner(t, esc))
 
 	id, _ := m.Start(context.Background(), jobs.Spec{
@@ -318,21 +372,38 @@ func TestCreateStartsDefaultNetwork(t *testing.T) {
 	})
 	waitJob(t, db, id, store2Succeeded)
 
-	joined := strings.Join(esc.calls, "\n")
-	if !strings.Contains(joined, "virsh net-start default") {
-		t.Errorf("сеть не поднята:\n%s", joined)
+	if len(esc.defined) != 1 || esc.defined[0] != "default" {
+		t.Errorf("сеть не заведена: %q\n%s", esc.defined, strings.Join(esc.calls, "\n"))
 	}
-	// И включён автозапуск: иначе после перезагрузки хоста машина
-	// упрётся в ту же неподнятую сеть.
-	if !strings.Contains(joined, "virsh net-autostart default") {
-		t.Errorf("автозапуск сети не включён:\n%s", joined)
+	if joined := strings.Join(esc.calls, "\n"); !strings.Contains(joined, "virsh net-start default") {
+		t.Errorf("заведённая сеть не поднята:\n%s", joined)
+	}
+}
+
+// Неподнятая существующая сеть просто поднимается — заводить вторую с
+// тем же именем нельзя.
+func TestCreateStartsExistingNetwork(t *testing.T) {
+	m, db := newManager(t)
+	esc := &fakeEscape{networks: map[string]bool{"default": false}}
+	m.Register(KindCreate, testRunner(t, esc))
+
+	id, _ := m.Start(context.Background(), jobs.Spec{
+		Kind: KindCreate, Queue: "host", Params: CreateParams{Spec: createSpec()},
+	})
+	waitJob(t, db, id, store2Succeeded)
+
+	if len(esc.defined) != 0 {
+		t.Errorf("существующая сеть заведена заново: %q", esc.defined)
+	}
+	if joined := strings.Join(esc.calls, "\n"); !strings.Contains(joined, "virsh net-start default") {
+		t.Errorf("сеть не поднята:\n%s", joined)
 	}
 }
 
 // С указанным мостом сеть libvirt ни при чём — трогать её незачем.
 func TestCreateSkipsNetworkWithBridge(t *testing.T) {
 	m, db := newManager(t)
-	esc := &fakeEscape{netDown: true}
+	esc := &fakeEscape{}
 	m.Register(KindCreate, testRunner(t, esc))
 
 	spec := createSpec()
@@ -342,7 +413,7 @@ func TestCreateSkipsNetworkWithBridge(t *testing.T) {
 	})
 	waitJob(t, db, id, store2Succeeded)
 
-	if joined := strings.Join(esc.calls, "\n"); strings.Contains(joined, "net-start") {
+	if joined := strings.Join(esc.calls, "\n"); strings.Contains(joined, "net-") {
 		t.Errorf("сеть libvirt тронута, хотя машина в мосту:\n%s", joined)
 	}
 }

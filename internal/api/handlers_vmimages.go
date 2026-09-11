@@ -27,7 +27,7 @@ func (s *Server) handleVMImages(w http.ResponseWriter, r *http.Request) {
 	}
 	// Заодно отвечаем, чем на этом хосте машины вообще создавать: без
 	// qemu-img и virsh форма создания только обманывала бы ожидания.
-	tools := vmcreate.CheckTools(r.Context(), RunUnrestricted)
+	tools := vmcreate.CheckTools(r.Context(), RunTooling)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"catalog": vmimage.Catalog,
 		"local":   s.vmimages.Status(),
@@ -38,7 +38,7 @@ func (s *Server) handleVMImages(w http.ResponseWriter, r *http.Request) {
 		"dir":          s.vmimages.Dir(),
 		// Файлы каталога дисков libvirt: и образы, положенные туда
 		// руками, и диски существующих машин — с пометкой, чьи они.
-		"host_images": vmcreate.HostImages(r.Context(), RunUnrestricted),
+		"host_images": vmcreate.HostImages(r.Context(), RunTooling),
 		"tools":       tools,
 		"missing":     vmcreate.MissingTools(tools),
 	})
@@ -64,17 +64,46 @@ func (s *Server) handleVMImageUpload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := auth.Username(r.Context())
-	path, written, err := s.vmimages.Save(name, http.MaxBytesReader(w, r.Body, maxUploadBytes))
+	// Сначала во временный файл каталога данных (туда писать можно
+	// изнутри юнита), потом переносом в каталог дисков libvirt — там
+	// его и ждут qemu и оператор.
+	tmpPath, err := s.vmimages.SaveTemp(name, http.MaxBytesReader(w, r.Body, maxUploadBytes))
 	if err != nil {
 		s.db.Audit(r.Context(), user, "vmimage.upload", name, "error", err.Error())
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.db.Audit(r.Context(), user, "vmimage.upload", name, "ok", written)
-	writeJSON(w, http.StatusOK, map[string]any{"path": path, "size": written})
+	target, err := vmcreate.PutHostImage(r.Context(), RunTooling, tmpPath, name)
+	if err != nil {
+		s.vmimages.RemoveTemp(tmpPath)
+		s.db.Audit(r.Context(), user, "vmimage.upload", name, "error", err.Error())
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), user, "vmimage.upload", name, "ok", target)
+	writeJSON(w, http.StatusOK, map[string]any{"path": target})
 }
 
 // handleVMToolsInstall доставляет пакеты, без которых машину не создать.
+// handleVMHostImageDelete убирает файл из каталога дисков libvirt.
+func (s *Server) handleVMHostImageDelete(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user := auth.Username(r.Context())
+	if err := vmcreate.DeleteHostImage(r.Context(), RunTooling, strings.TrimSpace(req.Name)); err != nil {
+		s.db.Audit(r.Context(), user, "vmimage.hostDelete", req.Name, "error", err.Error())
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), user, "vmimage.hostDelete", req.Name, "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleVMToolsInstall(w http.ResponseWriter, r *http.Request) {
 	if s.jobs == nil {
 		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
@@ -121,6 +150,10 @@ func (s *Server) handleVMImageDownload(w http.ResponseWriter, r *http.Request) {
 		ImageID: req.ImageID, URL: strings.TrimSpace(req.URL),
 		FileName: strings.TrimSpace(req.FileName),
 		Checksum: strings.TrimSpace(req.Checksum), ChecksumKind: req.ChecksumKind,
+		// Свой образ по ссылке кладётся туда же, куда и загруженный
+		// файлом, — в каталог дисков libvirt. Каталожные остаются в
+		// кэше nkt: он сам их скачал, сам и чистит.
+		ToHost: strings.TrimSpace(req.URL) != "",
 	}
 	if params.URL != "" {
 		if !strings.HasPrefix(params.URL, "http://") && !strings.HasPrefix(params.URL, "https://") {
@@ -215,7 +248,7 @@ func (s *Server) handleVMAddress(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "работа с машинами недоступна")
 		return
 	}
-	runner := vmcreate.NewCreateRunner(s.vmimages, s.scanner.Collector(), RunUnrestricted)
+	runner := vmcreate.NewCreateRunner(s.vmimages, s.scanner.Collector(), RunTooling)
 	report := runner.AddressReport(r.Context(), name)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"name":    name,

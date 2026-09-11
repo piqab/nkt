@@ -692,9 +692,12 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 		return profile.NewHostApplier(user, services, configs, firewall, firewalld,
 			osusers, sysconf, privilegedRunner(cfg))
 	}))
-	m.Register(vmimage.KindDownload, vmimage.NewDownloadRunner(images))
-	m.Register(vmcreate.KindCreate, vmcreate.NewCreateRunner(images, collector, privilegedRunner(cfg)))
-	m.Register(vmcreate.KindTools, vmcreate.NewToolsRunner(vmcreate.Runner(privilegedRunner(cfg))))
+	m.Register(vmimage.KindDownload, vmimage.NewDownloadRunner(images,
+		func(ctx context.Context, tmpPath, name string) (string, error) {
+			return vmcreate.PutHostImage(ctx, api.RunTooling, tmpPath, name)
+		}))
+	m.Register(vmcreate.KindCreate, vmcreate.NewCreateRunner(images, collector, api.RunTooling))
+	m.Register(vmcreate.KindTools, vmcreate.NewToolsRunner(api.RunTooling))
 }
 
 // privilegedRunner отдаёт способ выполнять системные команды вне

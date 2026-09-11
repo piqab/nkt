@@ -37,6 +37,22 @@ export default function VMImagesSection({ me }: { me: Me }) {
   }>('/vm/images', POLL_MS)
   const [adding, setAdding] = useState(false)
   const [creatingHost, setCreatingHost] = useState<VMHostImage | null>(null)
+
+  // Файл из каталога дисков libvirt удаляется насовсем: если это диск
+  // машины, она останется без него — об этом и спрашиваем отдельно.
+  async function deleteHostImage(img: VMHostImage) {
+    const question = img.used_by
+      ? t('vmimages.confirmDeleteHostBusy', { name: img.name, vm: img.used_by })
+      : t('vmimages.confirmDeleteHost', { name: img.name })
+    if (!(await confirmAction(question, { danger: true }))) return
+    setError(null)
+    try {
+      await api('/vm/images/host-delete', { method: 'POST', body: { name: img.name } })
+      images.reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [creating, setCreating] = useState<VMImage | null>(null)
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
@@ -176,17 +192,7 @@ export default function VMImagesSection({ me }: { me: Me }) {
         </Banner>
       )}
 
-      <Card
-        title={t('vmimages.catalogTitle')}
-        subtitle={images.data?.dir}
-        actions={
-          canEdit && (
-            <Button size="small" onClick={() => setAdding(true)}>
-              {t('vmimages.addOwn')}
-            </Button>
-          )
-        }
-      >
+      <Card title={t('vmimages.catalogTitle')} subtitle={images.data?.dir}>
         {images.loading && !images.data ? (
           <Loading what={t('vmimages.loading')} />
         ) : (
@@ -204,18 +210,30 @@ export default function VMImagesSection({ me }: { me: Me }) {
       {/* Каталог дисков libvirt: и образы, положенные туда руками, и
           диски существующих машин. Показываем всё — место занято именно
           ими, — но помечаем, чьё что. */}
-      {(images.data?.host_images?.length ?? 0) > 0 && (
-        <Card title={t('vmimages.hostTitle')} subtitle={t('vmimages.hostHint')}>
+      <Card
+        title={t('vmimages.hostTitle')}
+        subtitle={t('vmimages.hostHint')}
+        actions={
+          canEdit && (
+            <Button size="small" onClick={() => setAdding(true)}>
+              {t('vmimages.addOwn')}
+            </Button>
+          )
+        }
+      >
+        {(images.data?.host_images?.length ?? 0) === 0 ? (
+          <p className="small muted">{t('vmimages.hostEmpty')}</p>
+        ) : (
           <div className="table-wrap">
             <DataTable<VMHostImage>
               dataSource={images.data?.host_images ?? []}
-              columns={hostColumns(t, canEdit, (img) => setCreatingHost(img))}
+              columns={hostColumns(t, canEdit, (img) => setCreatingHost(img), deleteHostImage)}
               rowKey="path"
               tableLayout="auto"
             />
           </div>
-        </Card>
-      )}
+        )}
+      </Card>
 
       {/* Сети — рядом с образами: и то, и другое нужно, чтобы машина
           поднялась, и искать их в разных местах незачем. */}
@@ -379,11 +397,17 @@ function CreateVMModal({
   const [diskGB, setDiskGB] = useState(20)
   const [memoryMB, setMemoryMB] = useState(2048)
   const [vcpus, setVCPUs] = useState(2)
-  const [network, setNetwork] = useState('default')
+  // Сеть по умолчанию — первая существующая. Ставить «default» вслепую
+  // нельзя: на минимальной установке libvirt её нет, и машина падала бы
+  // на запуске. Если сетей нет вовсе, имя можно ввести — задание заведёт
+  // её само.
+  const [network, setNetwork] = useState('')
   const [bridge, setBridge] = useState('')
   // Сети хоста: выбирать из списка вернее, чем вписывать имя наугад —
   // ошибка в нём выясняется только при запуске машины.
   const nets = useApi<{ networks: VMNetwork[] }>('/vm/networks', 60_000)
+  const known = nets.data?.networks ?? []
+  const chosenNetwork = network || known[0]?.name || 'default' 
   const [autostart, setAutostart] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -418,7 +442,7 @@ function CreateVMModal({
             vcpus,
             user,
             ssh_key: sshKey.trim(),
-            network: bridge.trim() ? '' : network,
+            network: bridge.trim() ? '' : chosenNetwork,
             bridge: bridge.trim(),
           },
         },
@@ -493,7 +517,7 @@ function CreateVMModal({
         <label>
           {t('vmimages.network')}
           <Select
-            value={bridge ? '__bridge__' : network}
+            value={bridge ? '__bridge__' : chosenNetwork}
             onChange={(v: string) => {
               if (v === '__bridge__') {
                 setBridge('br0')
@@ -503,10 +527,13 @@ function CreateVMModal({
               setNetwork(v)
             }}
             options={[
-              ...(nets.data?.networks ?? []).map((n) => ({
+              ...known.map((n) => ({
                 value: n.name,
                 label: n.active ? n.name : `${n.name} (${t('vmnet.inactive')})`,
               })),
+              // Сетей нет вовсе — предлагаем завести «default»: задание
+              // создаст её само при первом же запуске машины.
+              ...(known.length === 0 ? [{ value: 'default', label: t('vmimages.networkWillCreate') }] : []),
               { value: '__bridge__', label: t('vmimages.bridgeOption') },
             ]}
           />
@@ -644,6 +671,7 @@ function AddImageModal({
 
   return (
     <Modal title={t('vmimages.addOwnTitle')} onClose={onClose} width={720}>
+      <p className="small muted">{t('vmimages.addOwnBody')}</p>
       <ErrorNote error={error} />
 
       <Card title={t('vmimages.byURL')} subtitle={t('vmimages.byURLHint')}>
@@ -697,6 +725,7 @@ function hostColumns(
   t: (key: string, opts?: Record<string, unknown>) => string,
   canEdit: boolean,
   onCreate: (img: VMHostImage) => void,
+  onDelete: (img: VMHostImage) => void,
 ): TableColumnsType<VMHostImage> {
   return [
     {
@@ -728,9 +757,14 @@ function hostColumns(
       className: 'nowrap',
       render: (_, img) =>
         canEdit && (
-          <Button type="link" size="small" onClick={() => onCreate(img)}>
-            {t('vmimages.createVM')}
-          </Button>
+          <div className="row row-nowrap">
+            <Button type="link" size="small" onClick={() => onCreate(img)}>
+              {t('vmimages.createVM')}
+            </Button>
+            <Button type="link" size="small" danger onClick={() => onDelete(img)}>
+              {t('common.delete')}
+            </Button>
+          </div>
         ),
     },
   ]
