@@ -165,24 +165,21 @@ jobs:
             | awk -v cur="$GITHUB_REF_NAME" 'cur != $0' \
             | head -1 || true)"
           echo "предыдущий тег: ${prev:-нет}"
-          if sh scripts/release-notes.sh "$GITHUB_REF_NAME" "$prev" > notes.md; then
-            echo "found=1" >> "$GITHUB_OUTPUT"
-            cat notes.md
-          else
-            echo "found=0" >> "$GITHUB_OUTPUT"
-            echo "::warning::в WHATSNEW.md нет раздела для $GITHUB_REF_NAME — описание соберётся из коммитов"
+          # Без раздела релиз не выпускается. Раньше здесь был запасной
+          # путь на --generate-notes, и он делал ровно то, чего от
+          # заметок не ждут: тело релиза превращалось в ссылку «Full
+          # Changelog», которую хаб честно показывал вместо текста
+          # изменений. Лучше громко упасть на выпуске, чем тихо выдать
+          # пользователю ссылку.
+          if ! sh scripts/release-notes.sh "$GITHUB_REF_NAME" "$prev" > notes.md; then
+            echo "::error::в WHATSNEW.md нет раздела для $GITHUB_REF_NAME — добавьте его и повторите выпуск"
+            exit 1
           fi
+          cat notes.md
       - name: Создать GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-          NOTES_FOUND: ${{ steps.notes.outputs.found }}
         run: |
-          if [ "$NOTES_FOUND" = "1" ]; then
-            gh release create "$GITHUB_REF_NAME" dist/* \
-              --title "$GITHUB_REF_NAME" \
-              --notes-file notes.md
-          else
-            gh release create "$GITHUB_REF_NAME" dist/* \
-              --title "$GITHUB_REF_NAME" \
-              --generate-notes
-          fi
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --title "$GITHUB_REF_NAME" \
+            --notes-file notes.md
