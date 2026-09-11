@@ -353,7 +353,9 @@
     "loading": "контейнеры",
     "networks": "Сети docker",
     "newContainerLocation": "Новый контейнер — выберите расположение",
-    "loadingFile": "файл"
+    "loadingFile": "файл",
+    "container": "контейнер",
+    "confirmDeleteRunning": "Контейнер {{name}} запущен. Удалить его вместе с остановкой? Это необратимо."
   },
   "virt": {
     "colName": "Имя",

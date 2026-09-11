@@ -278,6 +278,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/services/{name}/{action}", s.handleServiceAction)
 				r.Post("/misc/kill", s.handleKillProcess)
 				r.Post("/containers/{name}/{action}", s.handleContainerAction)
+				r.Delete("/containers/{name}", s.handleContainerDelete)
 				r.Post("/images/remove", s.handleImagesRemove)
 				r.Post("/images/save", s.handleImagesSave)
 				r.Post("/images/prune", s.handleImagesPrune)

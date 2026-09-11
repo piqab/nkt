@@ -270,6 +270,35 @@ func (s *ServiceManager) ContainerAction(ctx context.Context, user, name, action
 	return nil
 }
 
+// DeleteContainer убирает контейнер docker.
+//
+// Запущенный по умолчанию не удаляется: docker отвечает отказом, и это
+// правильно — остановка должна быть отдельным видимым шагом оператора,
+// как и у доменов libvirt. force снимает запрет, когда решение принято
+// осознанно.
+func (s *ServiceManager) DeleteContainer(ctx context.Context, user, name string, force bool) error {
+	if name == "" || strings.ContainsAny(name, "/?&#") {
+		return fmt.Errorf("недопустимое имя контейнера: %q", name)
+	}
+	path := "/containers/" + name
+	if force {
+		path += "?force=true"
+	}
+	raw, code, err := s.c.DockerAPI(ctx, "DELETE", path, nil)
+	outcome := "ok"
+	if err != nil || (code != 204 && code != 200) {
+		outcome = "error"
+	}
+	s.db.Audit(ctx, user, "container.delete", name, outcome, map[string]any{"force": force, "http_status": code})
+	if err != nil {
+		return fmt.Errorf("docker rm %s: %w", name, err)
+	}
+	if code != 204 && code != 200 {
+		return fmt.Errorf("docker rm %s: %s", name, dockerMessage(raw, code))
+	}
+	return nil
+}
+
 // defaultLogLines/maxLogLines bound the journalctl snapshot the "Логи"
 // modal fetches — a static request-response fetch (see handlers_inventory.
 // go's handleServiceLogs), not a live tail, so this is "enough to see what

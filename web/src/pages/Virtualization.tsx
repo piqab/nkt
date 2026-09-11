@@ -5,7 +5,6 @@ import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
 import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, StateBadge, formatBytesShort } from '../components/ui'
-import { InactiveSummary } from '../components/InactiveSummary'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
@@ -180,8 +179,6 @@ export default function Virtualization({ me }: { me: Me }) {
     onNotice: (kind, text) => setNotice({ kind, text }),
   })
   const allVMs = vms.data?.vms ?? []
-  const activeVMs = allVMs.filter((vm) => vm.state === 'running')
-  const inactiveVMs = allVMs.filter((vm) => vm.state !== 'running')
 
 
   async function act(name: string, action: string) {
@@ -277,27 +274,17 @@ export default function Virtualization({ me }: { me: Me }) {
         ) : allVMs.length === 0 ? (
           <p className="small muted">{t('virt.none')}</p>
         ) : (
-          <>
-            <InactiveSummary
-              items={inactiveVMs}
-              getKey={(vm) => vm.name}
-              getLabel={(vm) => vm.name}
-              getTooltip={(vm) => (
-                <>
-                  <div>{t('virt.state', { state: vm.state })}</div>
-                  {vm.vcpus ? <div>vCPU: {vm.vcpus}</div> : null}
-                </>
-              )}
-              onRescan={rescan}
-              rescanning={rescanning}
+          // Все домены одним списком: остановленная машина — это не шум
+          // вроде неустановленной службы, а та же машина, которую сейчас
+          // и надо запустить, переименовать или удалить. Чипсами она
+          // теряла и состояние, и все действия над собой.
+          <div className="table-wrap">
+            <DataTable<VirtualMachine>
+              dataSource={allVMs}
+              rowKey="name"
+              columns={vmColumns(canControl, busy, act, toggleAutostart, del)}
             />
-            <div className="table-wrap">
-              <DataTable<VirtualMachine>                 dataSource={activeVMs}
-                rowKey="name"
-                columns={vmColumns(canControl, busy, act, toggleAutostart, del)}
-              />
-            </div>
-          </>
+          </div>
         )}
       </Card>
 

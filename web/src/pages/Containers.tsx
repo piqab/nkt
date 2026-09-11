@@ -7,6 +7,7 @@ import Docker from './Docker'
 import Podman from './Podman'
 import LXD from './LXD'
 import Virtualization from './Virtualization'
+import Profiles from './Profiles'
 
 function tabLabel(text: string, count: number | undefined): string {
   return count === undefined ? text : `${text} (${count})`
@@ -67,6 +68,15 @@ export default function Containers({ me }: { me: Me }) {
           key: 'vms',
           label: tabLabel(t('containers.vms'), vms.data?.vms.length),
           children: <Virtualization me={me} />,
+        },
+        // Профиль описывает желаемое состояние хоста целиком, но на этом
+        // экране он про то же, что и вкладки рядом: стеки compose и
+        // заготовки машин. Последней — она не про то, что работает
+        // сейчас, а про то, что должно быть.
+        {
+          key: 'profiles',
+          label: t('nav.profiles'),
+          children: <Profiles me={me} />,
         },
       ]}
     />

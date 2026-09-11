@@ -129,6 +129,15 @@ export default function Docker({ me }: { me: Me }) {
               {t('docker.editConfig')}
             </Button>
           )}
+          <Button
+            danger
+            type="link"
+            disabled={!canControl}
+            loading={busy === `${c.name}:delete`}
+            onClick={() => void del(c)}
+          >
+            {t('common.delete')}
+          </Button>
         </div>
       ),
     },
@@ -150,6 +159,34 @@ export default function Docker({ me }: { me: Me }) {
     { title: t('docker.colGateway'), key: 'gateway', render: (_, n) => <span className="small mono">{n.gateway || '—'}</span> },
     { title: t('docker.colInterface'), key: 'bridge', render: (_, n) => <span className="small mono">{n.bridge || '—'}</span> },
   ]
+
+  /**
+   * Удаление контейнера.
+   *
+   * Запущенный docker удалять отказывается, и это правильно — остановка
+   * должна быть видимым шагом. Но заставлять нажимать «stop», а потом
+   * «удалить» того, кто уже сказал «удалить», незачем: спрашиваем прямо,
+   * что контейнер будет остановлен, и просим docker сделать это самому.
+   */
+  async function del(c: Container) {
+    const running = c.running
+    const question = running
+      ? t('docker.confirmDeleteRunning', { name: c.name })
+      : t('common.confirmDelete', { what: t('docker.container'), name: c.name })
+    if (!(await confirmAction(question))) return
+    setBusy(`${c.name}:delete`)
+    setNotice(null)
+    try {
+      await api(`/containers/${encodeURIComponent(c.name)}${qs({ force: running ? 'true' : '' })}`, { method: 'DELETE' })
+      setNotice({ kind: 'info', text: t('common.deleted', { name: c.name }) })
+      await api('/inventory/refresh', { method: 'POST' })
+      await docker.reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(null)
+    }
+  }
 
   async function containerAct(name: string, action: string) {
     if (!(await confirmAction(t('docker.confirmAction', { action, name })))) return
