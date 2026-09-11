@@ -1005,14 +1005,18 @@ export default function Hosts({
     const busy = busyVMs.has(h.id) || h.status === 'installing'
     return (
       <div className="row">
-        {canCreate && (
-          <Button type="link" disabled={busy} onClick={() => setProvisionOn(h)}>
-            {t('hosts.newVM')}
-          </Button>
-        )}
+        {/* Сначала то, что уже есть, потом создание нового: список машин
+            относится к кнопке «открыть» над ним, а «новая машина» —
+            действие, и ему место с краю. Машин нет — нет и кнопки:
+            «+ 0 машин» открывает пустоту. */}
         {count > 0 && (
           <Button type="link" onClick={() => toggleVMs(h.id)}>
             {openVMs.has(h.id) ? '−' : '+'} {t('hosts.vmCount', { count })}
+          </Button>
+        )}
+        {canCreate && (
+          <Button type="link" disabled={busy} onClick={() => setProvisionOn(h)}>
+            {t('hosts.newVM')}
           </Button>
         )}
       </div>

@@ -143,6 +143,12 @@ func (m *ConfigManager) serviceForPath(path string) string {
 	if underRoot(path, "/home") && isComposeFileName(path) {
 		return model.ServiceDocker
 	}
+	// Каталог стеков из профилей: файла там может ещё не быть — его как
+	// раз и создаёт применение профиля, — а поручиться за путь, кроме
+	// имени файла, нечему, как и для /home выше.
+	if underRoot(path, parse.ComposeStacksDir) && isComposeFileName(path) {
+		return model.ServiceDocker
+	}
 	return ""
 }
 

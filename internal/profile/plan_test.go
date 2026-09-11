@@ -20,7 +20,9 @@ type fakeReader struct {
 	users    map[string]UserState
 	hostname string
 	timezone string
-	fail     map[string]error
+	// running — сколько контейнеров стека работает, по пути файла.
+	running map[string]int
+	fail    map[string]error
 }
 
 func (f fakeReader) InstalledPackages(_ context.Context, names []string) (map[string]bool, error) {
@@ -63,6 +65,23 @@ func (f fakeReader) Users(context.Context) (map[string]UserState, error) {
 
 func (f fakeReader) System(context.Context) (string, string, error) {
 	return f.hostname, f.timezone, f.fail["system"]
+}
+
+// composeActions — только виды действий, без целей: путь у всех стеков
+// один и тот же, и сравнивать его в каждой проверке незачем.
+func composeActions(p Plan) []string {
+	out := make([]string, 0, len(p.Changes))
+	for _, c := range p.Changes {
+		out = append(out, c.Action)
+	}
+	return out
+}
+
+func (f fakeReader) ComposeRunning(_ context.Context, path string) (int, error) {
+	if err := f.fail["compose"]; err != nil {
+		return 0, err
+	}
+	return f.running[path], nil
 }
 
 func actions(p Plan) []string {
@@ -268,5 +287,100 @@ func TestPlanNeverEmitsNullArrays(t *testing.T) {
 	}
 	if back.Changes == nil {
 		t.Error("после разбора changes = nil")
+	}
+}
+
+// Стек compose — два разных дела: положить описание и поднять по нему
+// контейнеры. Оператор должен видеть оба, а не одно «применить».
+func TestPlanCompose(t *testing.T) {
+	stack := "services:\n  web:\n    image: nginx:1.27\n"
+	prof := Profile{Name: "srv", Compose: []Compose{{Name: "shop", Content: stack}}}
+	path := "/srv/compose/shop/docker-compose.yml"
+
+	// Ничего нет: записать и поднять.
+	plan := Build(context.Background(), prof, fakeReader{})
+	if got := composeActions(plan); len(got) != 2 || got[0] != ActionWriteCompose || got[1] != ActionComposeUp {
+		t.Fatalf("на пустом хосте = %v", got)
+	}
+	if plan.Changes[0].Detail != stack {
+		t.Errorf("описание стека не попало в план: %q", plan.Changes[0].Detail)
+	}
+
+	// Файл тот же, контейнеры работают: расхождений нет.
+	same := fakeReader{files: map[string]string{path: stack}, running: map[string]int{path: 2}}
+	if plan := Build(context.Background(), prof, same); !plan.Empty() {
+		t.Errorf("совпадающий стек дал расхождения: %v", composeActions(plan))
+	}
+
+	// Файл тот же, но стек опущен — поднять.
+	stopped := fakeReader{files: map[string]string{path: stack}}
+	if got := composeActions(Build(context.Background(), prof, stopped)); len(got) != 1 || got[0] != ActionComposeUp {
+		t.Errorf("остановленный стек = %v", got)
+	}
+
+	// Описание изменилось — переписать и поднять заново, даже если
+	// контейнеры работают: сам по себе файл их не трогает.
+	old := fakeReader{
+		files:   map[string]string{path: "services:\n  web:\n    image: nginx:1.25\n"},
+		running: map[string]int{path: 1},
+	}
+	if got := composeActions(Build(context.Background(), prof, old)); len(got) != 2 ||
+		got[0] != ActionWriteCompose || got[1] != ActionComposeUp {
+		t.Errorf("устаревшее описание = %v", got)
+	}
+
+	// up: false — стек должен быть опущен.
+	no := false
+	down := Profile{Name: "srv", Compose: []Compose{{Name: "shop", Content: stack, Up: &no}}}
+	running := fakeReader{files: map[string]string{path: stack}, running: map[string]int{path: 1}}
+	if got := composeActions(Build(context.Background(), down, running)); len(got) != 1 || got[0] != ActionComposeDown {
+		t.Errorf("«должен быть опущен» = %v", got)
+	}
+
+	// Docker молчит — это «не знаю», а не «ни одного контейнера»: иначе
+	// применение полезло бы поднимать работающий стек.
+	broken := fakeReader{
+		files: map[string]string{path: stack},
+		fail:  map[string]error{"compose": errors.New("docker не отвечает")},
+	}
+	plan = Build(context.Background(), prof, broken)
+	for _, c := range plan.Changes {
+		if c.Action == ActionComposeUp {
+			t.Errorf("молчащий docker понят как «стек не поднят»: %v", composeActions(plan))
+		}
+	}
+	if len(plan.Unknown) == 0 {
+		t.Errorf("отказ docker не попал в «не знаю»")
+	}
+}
+
+// Путь стека берётся из имени, если не задан явно: имя каталога — это имя
+// проекта docker, и у каждого стека оно должно быть своим.
+func TestComposeFilePath(t *testing.T) {
+	if got := (Compose{Name: "shop"}).FilePath(); got != "/srv/compose/shop/docker-compose.yml" {
+		t.Errorf("путь по умолчанию = %q", got)
+	}
+	if got := (Compose{Name: "shop", Path: "/home/op/shop/compose.yml"}).FilePath(); got != "/home/op/shop/compose.yml" {
+		t.Errorf("заданный путь потерян: %q", got)
+	}
+}
+
+func TestComposeValidate(t *testing.T) {
+	bad := map[string]Profile{
+		"имя с пробелом":   {Name: "p", Compose: []Compose{{Name: "мой стек", Content: "services: {}"}}},
+		"пустое описание":  {Name: "p", Compose: []Compose{{Name: "shop", Content: "  "}}},
+		"чужое имя файла":  {Name: "p", Compose: []Compose{{Name: "shop", Content: "services: {}", Path: "/srv/compose/shop/stack.yml"}}},
+		"путь не абсолютный": {Name: "p", Compose: []Compose{{Name: "shop", Content: "services: {}", Path: "shop/compose.yml"}}},
+		"дважды один стек": {Name: "p", Compose: []Compose{
+			{Name: "shop", Content: "services: {}"}, {Name: "shop", Content: "services: {}"}}},
+	}
+	for name, p := range bad {
+		if err := p.Validate(); err == nil {
+			t.Errorf("%s: принято без ошибки", name)
+		}
+	}
+	ok := Profile{Name: "p", Compose: []Compose{{Name: "shop-1", Content: "services:\n  web:\n    image: nginx\n"}}}
+	if err := ok.Validate(); err != nil {
+		t.Errorf("верный стек отклонён: %v", err)
 	}
 }

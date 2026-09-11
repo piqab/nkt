@@ -73,6 +73,12 @@ func (a *HostApplier) Apply(ctx context.Context, c Change) (string, error) {
 		return a.createUser(ctx, c.Target, c.Detail, false)
 	case ActionSetHostname:
 		return a.setHostname(ctx, c.Target)
+	case ActionWriteCompose:
+		return a.writeCompose(ctx, c)
+	case ActionComposeUp:
+		return a.composeUp(ctx, c.Target)
+	case ActionComposeDown:
+		return a.composeDown(ctx, c.Target)
 	case ActionSetTimezone:
 		return a.setTimezone(ctx, c.Target)
 	}
@@ -124,6 +130,49 @@ func (a *HostApplier) writeFile(ctx context.Context, c Change) (string, error) {
 		return "", fmt.Errorf("%s: %s", c.Target, res.Message)
 	}
 	return fmt.Sprintf("файл %s записан", c.Target), nil
+}
+
+// writeCompose кладёт описание стека на хост.
+//
+// Без apply: подъём стека — отдельный пункт плана, и оператор, снявший с
+// него галочку, не должен получить перезапуск контейнеров как побочный
+// эффект записи файла. Проверка самим docker compose при этом остаётся —
+// её делает Write, как и для любого другого файла.
+func (a *HostApplier) writeCompose(ctx context.Context, c Change) (string, error) {
+	if a.configs == nil {
+		return "", fmt.Errorf("редактор конфигураций недоступен")
+	}
+	res, err := a.configs.Write(ctx, msgs.RU, a.user, c.Target, c.Detail, "применение профиля (стек)", false)
+	if err != nil {
+		return "", err
+	}
+	if res.RolledBack {
+		return "", fmt.Errorf("%s: %s", c.Target, res.Message)
+	}
+	return fmt.Sprintf("описание стека %s записано", c.Target), nil
+}
+
+// composeUp поднимает стек — тем же вызовом, что и правка compose-файла
+// в редакторе конфигураций.
+func (a *HostApplier) composeUp(ctx context.Context, path string) (string, error) {
+	if a.services == nil {
+		return "", fmt.Errorf("управление службами недоступно")
+	}
+	if _, err := a.services.ApplyCompose(ctx, a.user, path); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("стек %s поднят", path), nil
+}
+
+// composeDown останавливает стек и убирает его контейнеры.
+func (a *HostApplier) composeDown(ctx context.Context, path string) (string, error) {
+	if a.services == nil {
+		return "", fmt.Errorf("управление службами недоступно")
+	}
+	if _, err := a.services.ComposeDown(ctx, a.user, path); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("стек %s остановлен", path), nil
 }
 
 // allowPort открывает порт тем менеджером, который на хосте есть.

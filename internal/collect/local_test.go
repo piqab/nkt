@@ -137,3 +137,18 @@ func TestLocalWriteFileWithoutEscapeStillFails(t *testing.T) {
 		t.Fatal("WriteFile: ошибки нет, хотя записать было некуда")
 	}
 }
+
+// Разборщики этого приложения читают английский вывод: «State: running»,
+// «active (running)», «Persistent: yes». На хосте с русской локалью те же
+// команды отвечают по-русски, и разбор молча даёт пустоту — список машин
+// приходил без состояний, и все они выглядели неактивными.
+func TestLocalRunForcesCLocale(t *testing.T) {
+	l := NewLocal("", "", 5*time.Second)
+	res, err := l.Run(context.Background(), "sh", "-c", `printf '%s|%s' "$LC_ALL" "$LANG"`)
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if res.Stdout != "C|C" {
+		t.Errorf("окружение команды = %q, а разбор рассчитан на английский вывод", res.Stdout)
+	}
+}
