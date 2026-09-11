@@ -967,13 +967,6 @@ export default function Hosts({
             </Button>
           </>
         )}
-        {/* Машину создаём только на хосте, где уже стоит nkt: команду
-            создания выполняет он сам, а хаб лишь просит и ждёт. */}
-        {h.status === 'online' && (
-          <Button type="link" disabled={busy} onClick={() => setProvisionOn(h)}>
-            {t('hosts.newVM')}
-          </Button>
-        )}
         <Button type="link" disabled={busy} onClick={() => setEditingHost(h)}>
           {t('hosts.edit')}
         </Button>
@@ -990,12 +983,36 @@ export default function Hosts({
         <Button danger type="link" loading={busy} disabled={busy} onClick={() => setRemovingHost(h)}>
           {t('hosts.delete')}
         </Button>
-        {/* Список машин — такое же действие над хостом, как остальные, и
-            место ему здесь, а не в колонке с именем: там он раздваивал
-            строку и растил высоту всей таблицы. */}
-        {(vmsByHost.get(h.id)?.length ?? 0) > 0 && (
+      </div>
+    )
+  }
+
+  /**
+   * Машины хоста: создать новую и раскрыть список.
+   *
+   * Отдельной строкой под «открыть», а не среди остальных действий: это
+   * не действие над самим хостом, а вход в то, что внутри него. В общем
+   * ряду обе кнопки терялись в хвосте, и «+ 1 машина» оказывалась дальше
+   * всего от машин, которые она показывает.
+   */
+  function renderVMActions(h: HubHost) {
+    if (h.id === LOCAL_HOST_ID) return null
+    const count = vmsByHost.get(h.id)?.length ?? 0
+    // Машину создаём только на хосте, где уже стоит nkt: команду создания
+    // выполняет он сам, а хаб лишь просит и ждёт.
+    const canCreate = h.status === 'online' && !h.parent_id
+    if (!canCreate && count === 0) return null
+    const busy = busyVMs.has(h.id) || h.status === 'installing'
+    return (
+      <div className="row">
+        {canCreate && (
+          <Button type="link" disabled={busy} onClick={() => setProvisionOn(h)}>
+            {t('hosts.newVM')}
+          </Button>
+        )}
+        {count > 0 && (
           <Button type="link" onClick={() => toggleVMs(h.id)}>
-            {openVMs.has(h.id) ? '−' : '+'} {t('hosts.vmCount', { count: vmsByHost.get(h.id)?.length ?? 0 })}
+            {openVMs.has(h.id) ? '−' : '+'} {t('hosts.vmCount', { count })}
           </Button>
         )}
       </div>
@@ -1015,6 +1032,7 @@ export default function Hosts({
     return (
       <>
         {renderActions(h)}
+        {renderVMActions(h)}
         {vms.length > 0 && openVMs.has(h.id) && (
           <div className="col host-vms">
             {vms.map((vm) => (
