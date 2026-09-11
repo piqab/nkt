@@ -1673,6 +1673,8 @@
     "name": "Network name",
     "subnet": "Subnet",
     "subnetHint": "The host takes the first address, the rest go to the machines.",
+    "subnetPicking": "picking a free one…",
+    "force": "Create anyway — overlapping the host's own network is intended",
     "dhcp": "Hand out addresses over DHCP",
     "autostartLabel": "Bring up together with the host",
     "bridgeExisting": "Existing host bridge",

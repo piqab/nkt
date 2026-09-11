@@ -236,6 +236,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/vm/templates", s.handleVMTemplates)
 			r.Get("/vm/address", s.handleVMAddress)
 			r.Get("/vm/networks", s.handleVMNetworks)
+			r.Get("/vm/networks/free-subnet", s.handleVMFreeSubnet)
 
 			r.Get("/jobs", s.handleJobList)
 			r.Get("/jobs/{id}", s.handleJobGet)

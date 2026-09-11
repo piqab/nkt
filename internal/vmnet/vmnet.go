@@ -74,6 +74,10 @@ type Spec struct {
 	DHCP bool `json:"dhcp"`
 	// Autostart — поднимать сеть вместе с хостом.
 	Autostart bool `json:"autostart"`
+	// Force — создавать, даже если подсеть пересекается с сетью самого
+	// хоста. Пересечение с другой сетью libvirt не снимается: такая сеть
+	// всё равно не поднимется.
+	Force bool `json:"force,omitempty"`
 }
 
 // Validate проверяет то, что уйдёт в описание сети и в virsh.
@@ -190,4 +194,110 @@ func escape(s string) string {
 	var buf strings.Builder
 	_ = xml.EscapeText(&buf, []byte(s))
 	return buf.String()
+}
+
+// Occupied — занятый диапазон адресов и то, кем он занят.
+//
+// Подсеть сети libvirt нельзя пересекать с другой её сетью (libvirt
+// такую сеть просто не поднимет) и не стоит пересекать с сетью самого
+// хоста: адреса машин совпадут с адресами соседей, и маршрутизация
+// сломается ровно в тот момент, когда понадобится.
+type Occupied struct {
+	// CIDR — занятый диапазон.
+	CIDR string
+	// Where — чем занят: «сеть libvirt «default»» или «интерфейс eth0».
+	Where string
+	// Host — диапазон принадлежит интерфейсу самого хоста, а не сети
+	// libvirt. Такое пересечение оператор может сознательно разрешить,
+	// пересечение двух сетей libvirt — нет.
+	Host bool
+}
+
+// SubnetInUse — просимая подсеть пересекается с уже занятой.
+type SubnetInUse struct {
+	Subnet string
+	With   Occupied
+}
+
+func (e *SubnetInUse) Error() string {
+	return fmt.Sprintf("подсеть %s пересекается с %s (%s)", e.Subnet, e.With.Where, e.With.CIDR)
+}
+
+// Overridable отвечает, можно ли создать сеть вопреки этому пересечению.
+func (e *SubnetInUse) Overridable() bool { return e.With.Host }
+
+// NetworkRanges отдаёт подсети уже заведённых сетей libvirt.
+func NetworkRanges(nets []Network) []Occupied {
+	var out []Occupied
+	for _, n := range nets {
+		cidr := networkCIDR(n)
+		if cidr == "" {
+			continue
+		}
+		out = append(out, Occupied{CIDR: cidr, Where: fmt.Sprintf("сетью libvirt «%s»", n.Name)})
+	}
+	return out
+}
+
+// networkCIDR собирает подсеть сети из адреса хоста и маски.
+func networkCIDR(n Network) string {
+	if n.Address == "" {
+		return ""
+	}
+	ip := net.ParseIP(strings.TrimSpace(n.Address)).To4()
+	if ip == nil {
+		return ""
+	}
+	mask := net.IPv4Mask(255, 255, 255, 0)
+	if n.Netmask != "" {
+		m := net.ParseIP(strings.TrimSpace(n.Netmask)).To4()
+		if m == nil {
+			return ""
+		}
+		mask = net.IPMask(m)
+	}
+	ones, bits := mask.Size()
+	if bits != 32 {
+		return ""
+	}
+	return fmt.Sprintf("%s/%d", ip.Mask(mask).String(), ones)
+}
+
+// CheckSubnet отвечает, свободна ли подсеть.
+//
+// Проверка до создания, а не после: сеть с пересекающейся подсетью
+// заводится молча и отказывается подниматься уже потом — отказ прилетает
+// при создании машины, за несколько экранов от места ошибки.
+func CheckSubnet(subnet string, taken []Occupied) error {
+	want, err := parseCIDR4(subnet)
+	if err != nil {
+		return err
+	}
+	for _, t := range taken {
+		have, err := parseCIDR4(t.CIDR)
+		if err != nil {
+			continue
+		}
+		if netsOverlap(want, have) {
+			return &SubnetInUse{Subnet: subnet, With: t}
+		}
+	}
+	return nil
+}
+
+func parseCIDR4(cidr string) (*net.IPNet, error) {
+	_, ipNet, err := net.ParseCIDR(strings.TrimSpace(cidr))
+	if err != nil {
+		return nil, fmt.Errorf("подсеть должна быть вида 192.168.100.0/24: %w", err)
+	}
+	if ipNet.IP.To4() == nil {
+		return nil, fmt.Errorf("поддерживается только IPv4")
+	}
+	return ipNet, nil
+}
+
+// netsOverlap — пересекаются ли два диапазона. Достаточно проверить,
+// лежит ли начало одного внутри другого: подсети выровнены по границе.
+func netsOverlap(a, b *net.IPNet) bool {
+	return a.Contains(b.IP) || b.Contains(a.IP)
 }

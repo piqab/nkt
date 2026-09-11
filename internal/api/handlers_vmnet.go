@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -37,6 +38,25 @@ func (s *Server) handleVMNetworks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"networks": nets})
 }
 
+// handleVMFreeSubnet подсказывает форме создания свободную подсеть.
+//
+// Подставлять в форму постоянную «192.168.100.0/24» было хуже, чем не
+// подставлять ничего: значение выглядит проверенным, а на деле может
+// пересекаться с уже существующей сетью — и такая сеть не поднимется.
+func (s *Server) handleVMFreeSubnet(w http.ResponseWriter, r *http.Request) {
+	mgr := s.vmnets()
+	if mgr == nil {
+		writeError(w, http.StatusServiceUnavailable, "управление машинами недоступно")
+		return
+	}
+	subnet, bridge, err := mgr.Suggest(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"subnet": subnet, "bridge": bridge})
+}
+
 func (s *Server) handleVMNetworkCreate(w http.ResponseWriter, r *http.Request) {
 	var spec vmnet.Spec
 	if err := decodeJSON(r, &spec); err != nil {
@@ -55,6 +75,17 @@ func (s *Server) handleVMNetworkCreate(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	if err := mgr.Create(r.Context(), spec); err != nil {
 		s.db.Audit(r.Context(), user, "vmnet.create", spec.Name, "error", err.Error())
+		// Пересечение с сетью самого хоста оператор может снять
+		// осознанно — форма покажет галочку «создать всё равно» только
+		// по этому признаку, а не по разбору текста ошибки.
+		var inUse *vmnet.SubnetInUse
+		if errors.As(err, &inUse) {
+			writeJSON(w, http.StatusBadRequest, map[string]any{
+				"error":       err.Error(),
+				"overridable": inUse.Overridable(),
+			})
+			return
+		}
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
