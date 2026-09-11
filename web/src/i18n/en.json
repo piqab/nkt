@@ -1516,6 +1516,54 @@
   "profiles": {
     "title": "Profiles",
     "hint": "A profile describes what the host should be: packages, services, config files, open ports, accounts. The Plan button shows how reality differs and changes nothing; only ticked items are applied. A profile is additive — whatever it does not mention is left alone, never removed.",
+    "guide": {
+      "open": "how to write a profile",
+      "title": "How a profile works",
+      "intro": "A profile is a YAML description of a host's desired state: which packages must be installed, which services must run, what belongs in config files, which ports are open, who has access, and which compose stacks are up. It is not a programming language — no execution order, no conditions, no variables: just a flat list of what must be true.",
+      "additive": "A profile is additive and never turns off what it does not mention: a package missing from the list is not removed, an unmentioned service is not stopped. So \"not specified\" and \"must be off\" are different things — for services that is the difference between leaving the key out and writing \"active: false\".",
+      "flow": "The flow is: edit the description and save it, press \"plan\" — the host compares the description with reality and lists the differences one by one; untick anything you do not want applied and press \"apply\" — each item runs as a background job with its own log. A saved profile is then checked on its own, and drifted state shows up among the host's findings.",
+      "section": {
+        "head": {
+          "title": "Header: version and name",
+          "body": "version is the format version (1 today); name is the profile's name, shown in the list and in the job log."
+        },
+        "packages": {
+          "title": "packages — packages",
+          "body": "Packages that must be installed; installed with apt. Extra ones are never removed — a profile only adds."
+        },
+        "services": {
+          "title": "services — systemd units",
+          "body": "Each unit has two independent flags: enabled (starts at boot) and active (running right now). Specify only what matters to you: a missing key means \"none of my business\", false means \"must be off\"."
+        },
+        "files": {
+          "title": "files — config files",
+          "body": "The full content, not a hash: a hash shows a difference but gives nothing to fix it with. Writing goes through the same path as a manual edit: the content is validated by the service itself (nginx -t, docker compose config, …), recorded in the version history, and rolled back if validation fails. mode is octal; without it a new file is created 0644 and an existing file keeps its permissions."
+        },
+        "firewall": {
+          "title": "firewall — open ports",
+          "body": "Lists the ports that must be reachable. The profile does not decide whether the host uses ufw or firewalld — the host does. proto defaults to tcp; from narrows the source to an address or subnet. A rule for port 22 is flagged as risky: it can cut off your own access."
+        },
+        "users": {
+          "title": "users — accounts",
+          "body": "The account is created if missing; sudo: true grants passwordless sudo; keys are added to authorized_keys. Other keys are never removed — a person may have put them there, not a forgotten profile. Granting sudo and touching keys are flagged as risky."
+        },
+        "system": {
+          "title": "system — hostname and timezone",
+          "body": "The hostname shows up in certificates, logs and the shell prompt, so changing it is flagged as risky. timezone is a tzdata zone name."
+        },
+        "compose": {
+          "title": "compose — services from docker compose",
+          "body": "A stack is described in full: name is the stack name (also the directory name and the docker project name), content is the compose file itself, up says whether the stack must be running (yes by default). Without an explicit path the file goes to /srv/compose/<name>/docker-compose.yml — its own directory, so applying a profile never overwrites what you maintain by hand. The plan shows two separate items — write the file and bring the stack up — so it is visible when running containers get recreated. up: false runs docker compose down; volumes are left alone."
+        }
+      },
+      "limits": {
+        "title": "What a profile does not do",
+        "packages": "It never removes packages, services, files or accounts that the description does not mention.",
+        "files": "It does not watch a file after applying: the next check simply reports the difference.",
+        "order": "It expresses no ordering or dependencies — plan items run top to bottom, as shown.",
+        "volumes": "It never deletes data: docker compose down keeps volumes, and removing a disk or a directory stays a separate, manual step."
+      }
+    },
     "listTitle": "Profiles",
     "listSubtitle": "total: {{count}}",
     "loading": "profiles",

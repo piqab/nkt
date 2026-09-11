@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Checkbox, Input, Tag, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { QuestionCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Job, Me, Profile, ProfilePlan, PlanChange, ProfileVersion } from '../types'
@@ -32,13 +33,90 @@ services:
 #   timezone: Europe/Moscow
 # compose:
 #   - name: shop
-#     # up: false — стек должен быть опущен
+#     up: true
 #     content: |
 #       services:
 #         web:
 #           image: nginx:1.27
 #           ports: ["8080:80"]
 `
+
+/**
+ * Справка по формату профиля — всё, что нужно знать, чтобы написать его
+ * самому.
+ *
+ * Отдельным окном, а не подсказкой у заголовка: подсказка отвечает
+ * «что это за раздел», а здесь нужен справочник с примерами — их не
+ * уместить в всплывающую строку, но и уводить за ними в репозиторий
+ * незачем, писать профиль человек будет прямо на этом экране.
+ *
+ * Примеры YAML живут здесь, а не в переводах: это код, он одинаков на
+ * любом языке, и держать две его копии значило бы однажды поправить
+ * одну. Поэтому и комментариев внутри них нет — комментарий это проза,
+ * и в английском интерфейсе он остался бы русским; всё, что нужно
+ * сказать, сказано текстом раздела.
+ */
+const GUIDE: { key: string; example: string }[] = [
+  { key: 'head', example: 'version: 1\nname: web-server' },
+  { key: 'packages', example: 'packages:\n  - nginx\n  - btop' },
+  {
+    key: 'services',
+    example: 'services:\n  nginx:\n    enabled: true\n    active: true\n  apache2:\n    active: false',
+  },
+  {
+    key: 'files',
+    example: 'files:\n  - path: /etc/motd\n    mode: "0644"\n    content: |\n      Этот сервер под управлением nkt',
+  },
+  {
+    key: 'firewall',
+    example: 'firewall:\n  allow:\n    - port: 443\n    - port: 5432\n      proto: tcp\n      from: 10.0.0.0/24',
+  },
+  {
+    key: 'users',
+    example: 'users:\n  - name: deploy\n    sudo: true\n    keys:\n      - "ssh-ed25519 AAAA... deploy@laptop"',
+  },
+  { key: 'system', example: 'system:\n  hostname: web-1\n  timezone: Europe/Moscow' },
+  {
+    key: 'compose',
+    example:
+      'compose:\n  - name: shop\n    up: true\n    content: |\n      services:\n        web:\n          image: nginx:1.27\n          ports: ["8080:80"]',
+  },
+]
+
+function ProfileGuide({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <Modal title={t('profiles.guide.title')} onClose={onClose} width={860}>
+      <div className="col" style={{ gap: '1rem', maxHeight: '70vh', overflowY: 'auto' }}>
+        <div className="col" style={{ gap: '0.4rem' }}>
+          <p style={{ margin: 0 }}>{t('profiles.guide.intro')}</p>
+          <p style={{ margin: 0 }}>{t('profiles.guide.additive')}</p>
+          <p style={{ margin: 0 }}>{t('profiles.guide.flow')}</p>
+        </div>
+
+        {GUIDE.map((s) => (
+          <div key={s.key} className="col" style={{ gap: '0.3rem' }}>
+            <strong>{t(`profiles.guide.section.${s.key}.title`)}</strong>
+            <span className="small">{t(`profiles.guide.section.${s.key}.body`)}</span>
+            <pre className="diff" style={{ margin: 0 }}>
+              {s.example}
+            </pre>
+          </div>
+        ))}
+
+        <div className="col" style={{ gap: '0.3rem' }}>
+          <strong>{t('profiles.guide.limits.title')}</strong>
+          <ul className="small" style={{ margin: 0, paddingLeft: '1.1rem' }}>
+            <li>{t('profiles.guide.limits.packages')}</li>
+            <li>{t('profiles.guide.limits.files')}</li>
+            <li>{t('profiles.guide.limits.order')}</li>
+            <li>{t('profiles.guide.limits.volumes')}</li>
+          </ul>
+        </div>
+      </div>
+    </Modal>
+  )
+}
 
 export default function Profiles({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -51,6 +129,7 @@ export default function Profiles({ me }: { me: Me }) {
   const [chosen, setChosen] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [detail, setDetail] = useState<PlanChange | null>(null)
   const [showVersions, setShowVersions] = useState(false)
@@ -203,6 +282,18 @@ export default function Profiles({ me }: { me: Me }) {
         <h1>
           {t('profiles.title')}
           <InfoHint>{t('profiles.hint')}</InfoHint>
+          {/* Подсказка у заголовка отвечает «что это за раздел», а писать
+              профиль приходится здесь же — за справочником с примерами
+              уходить в репозиторий незачем. */}
+          <Tooltip title={t('profiles.guide.open')}>
+            <Button
+              type="text"
+              size="small"
+              aria-label={t('profiles.guide.open')}
+              icon={<QuestionCircleOutlined />}
+              onClick={() => setGuideOpen(true)}
+            />
+          </Tooltip>
         </h1>
         {canEdit && (
           <Button
@@ -217,6 +308,8 @@ export default function Profiles({ me }: { me: Me }) {
           </Button>
         )}
       </div>
+
+      {guideOpen && <ProfileGuide onClose={() => setGuideOpen(false)} />}
 
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
