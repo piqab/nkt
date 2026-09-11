@@ -951,6 +951,14 @@ export default function Hosts({
         <Button danger type="link" onClick={() => setRemovingHost(h)}>
           {t('hosts.delete')}
         </Button>
+        {/* Список машин — такое же действие над хостом, как остальные, и
+            место ему здесь, а не в колонке с именем: там он раздваивал
+            строку и растил высоту всей таблицы. */}
+        {(vmsByHost.get(h.id)?.length ?? 0) > 0 && (
+          <Button type="link" onClick={() => toggleVMs(h.id)}>
+            {openVMs.has(h.id) ? '−' : '+'} {t('hosts.vmCount', { count: vmsByHost.get(h.id)?.length ?? 0 })}
+          </Button>
+        )}
       </div>
     )
   }
@@ -998,21 +1006,11 @@ export default function Hosts({
     {
       title: t('hosts.colName'),
       key: 'name',
-      render: (_, h) => {
-        const vms = vmsByHost.get(h.id) ?? []
-        return (
-          <div style={{ minWidth: '10rem' }}>
-            <strong>{h.name}</strong>
-            {vms.length > 0 && (
-              <div>
-                <Button type="link" size="small" style={{ paddingLeft: 0 }} onClick={() => toggleVMs(h.id)}>
-                  {openVMs.has(h.id) ? '−' : '+'} {t('hosts.vmCount', { count: vms.length })}
-                </Button>
-              </div>
-            )}
-          </div>
-        )
-      },
+      render: (_, h) => (
+        <div style={{ minWidth: '10rem' }}>
+          <strong>{h.name}</strong>
+        </div>
+      ),
     },
     {
       title: t('hosts.colAddr'),
