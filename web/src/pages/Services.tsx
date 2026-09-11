@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { useHostRescan } from '../rescan'
 import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
@@ -157,7 +158,6 @@ export default function Services({ me }: { me: Me }) {
   const services = useApi<{ services: ServiceUnit[]; allow_mutations: boolean }>('/services', 30_000)
   const misc = useApi<{ listeners: Listener[] }>('/misc', 60_000)
   const [busy, setBusy] = useState<string | null>(null)
-  const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [killBusy, setKillBusy] = useState<string | null>(null)
   // Set when a SIGTERM'd process is still listed after a rescan — offers
@@ -174,25 +174,19 @@ export default function Services({ me }: { me: Me }) {
   const [installOutcome, setInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
+  // Раздел показывает снимок инвентаря: при входе он пересобирается сам,
+  // иначе только что запущенная служба выглядела бы незапущенной.
+  const { rescanning, rescan } = useHostRescan({
+    reload: () => Promise.all([services.reload(), misc.reload()]),
+    canScan: canControl,
+    onNotice: (kind, text) => setNotice({ kind, text }),
+  })
   const allServices = services.data?.services ?? []
   const activeServices = allServices.filter((s) => s.active_state === 'active')
   const inactiveServices = allServices.filter((s) => s.active_state !== 'active')
   const miscListeners = misc.data?.listeners ?? []
   const manual = miscListeners.filter((l) => l.origin === 'manual').length
 
-  async function rescan() {
-    setRescanning(true)
-    setNotice(null)
-    try {
-      await api('/inventory/refresh', { method: 'POST' })
-      await Promise.all([services.reload(), misc.reload()])
-      setNotice({ kind: 'info', text: t('common.hostRescanned') })
-    } catch (err) {
-      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setRescanning(false)
-    }
-  }
 
   async function act(service: string, action: string) {
     if (action !== 'validate' && action !== 'reload') {
@@ -346,7 +340,7 @@ export default function Services({ me }: { me: Me }) {
         <div className="row">
           {me.is_admin && (
             <Button
-              onClick={rescan}
+              onClick={() => void rescan(t('common.hostRescanned'))}
               loading={rescanning}
               title={t('services.rescanTooltip')}
             >

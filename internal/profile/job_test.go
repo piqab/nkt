@@ -58,7 +58,7 @@ func waitStatus(t *testing.T, db *store.DB, id int64, want string) store.Job {
 func TestApplyJobRunsEveryChange(t *testing.T) {
 	m, db := newJobManager(t)
 	applier := &fakeApplier{}
-	m.Register(KindApply, NewApplyRunner(func(string) Applier { return applier }))
+	m.Register(KindApply, NewApplyRunner(func(string) Applier { return applier }, nil))
 
 	id, err := m.Start(context.Background(), jobs.Spec{
 		Kind: KindApply, Title: "профиль web", Queue: "host",
@@ -84,7 +84,7 @@ func TestApplyJobRunsEveryChange(t *testing.T) {
 func TestApplyJobStopsAtFirstError(t *testing.T) {
 	m, db := newJobManager(t)
 	applier := &fakeApplier{failAt: 2}
-	m.Register(KindApply, NewApplyRunner(func(string) Applier { return applier }))
+	m.Register(KindApply, NewApplyRunner(func(string) Applier { return applier }, nil))
 
 	id, _ := m.Start(context.Background(), jobs.Spec{
 		Kind: KindApply, Queue: "host",
@@ -129,7 +129,7 @@ func TestApplyJobResumesFromSavedPoint(t *testing.T) {
 	m := jobs.New(db, slog.New(slog.DiscardHandler))
 	t.Cleanup(m.Close)
 	applier := &fakeApplier{}
-	m.Register(KindApply, NewApplyRunner(func(string) Applier { return applier }))
+	m.Register(KindApply, NewApplyRunner(func(string) Applier { return applier }, nil))
 	if err := m.Recover(ctx); err != nil {
 		t.Fatalf("Recover: %v", err)
 	}

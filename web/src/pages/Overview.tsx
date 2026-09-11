@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { api, useApi } from '../api'
+import { useHostRescan } from '../rescan'
+import { useApi } from '../api'
 import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative } from '../components/ui'
@@ -80,22 +81,17 @@ function sourceColumns(t: typeof i18n.t): TableColumnsType<SourceStatus> {
 export default function OverviewPage({ me }: { me: Me }) {
   const { t } = useTranslation()
   const { data, error, loading, reload } = useApi<Overview>('/overview', 60_000)
-  const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
 
-  async function rescan(successNotice = t('common.hostRescanned')) {
-    setBusy(true)
-    setNotice(null)
-    try {
-      await api('/inventory/refresh', { method: 'POST' })
-      reload()
-      setNotice(successNotice)
-    } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
+  // Обзор — тот же снимок инвентаря, что и остальные разделы: при входе
+  // он пересобирается сам, кнопка остаётся для правок, сделанных руками.
+  const { rescanning: busy, rescan } = useHostRescan({
+    reload,
+    // Сканирование меняет состояние на сервере и требует прав: у
+    // наблюдателя оно отвечало бы отказом при каждом заходе.
+    canScan: me.is_admin && me.allow_mutations,
+    onNotice: (_kind, text) => setNotice(text),
+  })
 
   if (loading && !data) return <Loading what={t('overview.what')} />
   if (error && !data) return <ErrorNote error={error} />
@@ -124,7 +120,7 @@ export default function OverviewPage({ me }: { me: Me }) {
         </div>
         <div className="row">
           {me.is_admin && (
-            <Button onClick={() => rescan()} loading={busy}>
+            <Button onClick={() => void rescan(t('common.hostRescanned'))} loading={busy}>
               {busy ? t('common.scanning') : t('common.rescan')}
             </Button>
           )}

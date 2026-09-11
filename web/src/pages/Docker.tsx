@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { Container, DockerNetwork, FileContent, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
@@ -14,29 +15,22 @@ export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
   const docker = useApi<{ containers: Container[]; networks: DockerNetwork[] }>('/containers', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
-  const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [configModal, setConfigModal] = useState<{ path: string; focusName?: string; autoCreate?: boolean } | null>(null)
   const [pickingPath, setPickingPath] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
+  // Раздел показывает снимок инвентаря: при входе он пересобирается сам,
+  // иначе только что поднятого контейнера в списке не окажется.
+  const { rescanning, rescan } = useHostRescan({
+    reload: () => docker.reload(),
+    canScan: canControl,
+    onNotice: (kind, text) => setNotice({ kind, text }),
+  })
   const allContainers = docker.data?.containers ?? []
   const activeContainers = allContainers.filter((c) => c.running)
   const inactiveContainers = allContainers.filter((c) => !c.running)
 
-  async function rescan() {
-    setRescanning(true)
-    setNotice(null)
-    try {
-      await api('/inventory/refresh', { method: 'POST' })
-      await docker.reload()
-      setNotice({ kind: 'info', text: t('common.hostRescanned') })
-    } catch (err) {
-      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setRescanning(false)
-    }
-  }
 
   const containerColumns: TableColumnsType<Container> = [
     {
@@ -193,7 +187,7 @@ export default function Docker({ me }: { me: Me }) {
         </div>
         <div className="row">
           {me.is_admin && (
-            <Button onClick={rescan} loading={rescanning}>
+            <Button onClick={() => void rescan(t('common.hostRescanned'))} loading={rescanning}>
               {rescanning ? t('common.scanning') : t('common.rescan')}
             </Button>
           )}

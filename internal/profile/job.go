@@ -32,11 +32,18 @@ type ApplyRunner struct {
 	// applier строится на каждое задание: он помнит, от чьего имени
 	// пишется история, а это у каждого запуска своё.
 	applier func(user string) Applier
+	// rescan пересобирает снимок инвентаря после применения. Профиль
+	// меняет ровно то, что в этом снимке и показывается — поднятый
+	// стек compose, включённую службу, установленный пакет, — и без
+	// пересборки раздел показывает состояние до применения, пока не
+	// сработает очередное плановое сканирование.
+	rescan func(ctx context.Context) error
 }
 
-// NewApplyRunner строит исполнителя.
-func NewApplyRunner(applier func(user string) Applier) *ApplyRunner {
-	return &ApplyRunner{applier: applier}
+// NewApplyRunner строит исполнителя. rescan может быть nil — тогда снимок
+// обновится сам по расписанию.
+func NewApplyRunner(applier func(user string) Applier, rescan func(ctx context.Context) error) *ApplyRunner {
+	return &ApplyRunner{applier: applier, rescan: rescan}
 }
 
 // Resumable — да. Каждый пункт плана идемпотентен: установка уже
@@ -82,6 +89,13 @@ func (r *ApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		jc.Logf("      %s", msg)
 		done.Done = i + 1
 		jc.SaveResume(done)
+	}
+	if r.rescan != nil {
+		// Не ошибка задания: пункты применены, а несобравшийся снимок
+		// соберётся по расписанию.
+		if err := r.rescan(ctx); err != nil {
+			jc.Logf("Снимок состояния пересобрать не удалось (%v) — раздел обновится позже.", err)
+		}
 	}
 	jc.Logf("Готово: применено пунктов — %d.", len(p.Changes))
 	return nil

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Form, Input, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { useHostRescan } from '../rescan'
 import { api, useApi } from '../api'
 import type { LXDInstance, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
@@ -12,28 +13,21 @@ export default function LXD({ me }: { me: Me }) {
   const { t } = useTranslation()
   const instances = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
-  const [rescanning, setRescanning] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [creating, setCreating] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
+  // Раздел показывает снимок инвентаря: при входе он пересобирается сам,
+  // иначе только что поднятого контейнера в списке не окажется.
+  const { rescanning, rescan } = useHostRescan({
+    reload: () => instances.reload(),
+    canScan: canControl,
+    onNotice: (kind, text) => setNotice({ kind, text }),
+  })
   const allInstances = instances.data?.instances ?? []
   const activeInstances = allInstances.filter((i) => i.status.toLowerCase() === 'running')
   const inactiveInstances = allInstances.filter((i) => i.status.toLowerCase() !== 'running')
 
-  async function rescan() {
-    setRescanning(true)
-    setNotice(null)
-    try {
-      await api('/inventory/refresh', { method: 'POST' })
-      await instances.reload()
-      setNotice({ kind: 'info', text: t('common.hostRescanned') })
-    } catch (err) {
-      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setRescanning(false)
-    }
-  }
 
   async function act(name: string, action: string) {
     if (!(await confirmAction(t('lxd.confirmAction', { action, name })))) return
@@ -114,7 +108,7 @@ export default function LXD({ me }: { me: Me }) {
         </div>
         <div className="row">
           {me.is_admin && (
-            <Button onClick={rescan} loading={rescanning}>
+            <Button onClick={() => void rescan(t('common.hostRescanned'))} loading={rescanning}>
               {rescanning ? t('common.scanning') : t('common.rescan')}
             </Button>
           )}
