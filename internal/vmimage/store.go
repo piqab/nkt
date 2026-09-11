@@ -74,15 +74,17 @@ var imageExts = map[string]bool{".qcow2": true, ".img": true, ".raw": true}
 // скачанный. База же рассинхронизировалась бы при первом удалении файла
 // руками.
 func (s *Store) Custom() []Image {
+	// Пустой срез, а не nil: nil уезжает в JSON как null, а «null.length»
+	// в браузере роняет отрисовку всей страницы.
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
-		return nil
+		return []Image{}
 	}
 	known := map[string]bool{}
 	for _, img := range Catalog {
 		known[img.FileName] = true
 	}
-	var out []Image
+	out := []Image{}
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || known[name] || !imageExts[strings.ToLower(filepath.Ext(name))] {

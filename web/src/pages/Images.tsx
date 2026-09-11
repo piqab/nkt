@@ -9,7 +9,10 @@ import { DataTable } from '../components/DataTable'
 
 export interface DockerImage {
   id: string
-  tags: string[]
+  /** Пусто у образа без тега. Сервер присылает массив всегда, но
+   * подстраховка стоит дешевле, чем упавшая страница: ровно на «tags:
+   * null» она однажды и падала. */
+  tags?: string[]
   size: number
   created: string
   in_use: boolean
@@ -42,7 +45,7 @@ export default function Images({ me }: { me: Me }) {
   /** Prefer a tag over the bare id: it is what the operator recognises, and
    * Docker accepts either. */
   function refOf(image: DockerImage): string {
-    return image.tags[0] ?? image.id
+    return image.tags?.[0] ?? image.id
   }
 
   async function run(path: string, body: Record<string, unknown>) {
@@ -80,8 +83,8 @@ export default function Images({ me }: { me: Me }) {
       key: 'name',
       render: (_, image) => (
         <div className="col">
-          {image.tags.length > 0 ? (
-            image.tags.map((tag) => (
+          {(image.tags ?? []).length > 0 ? (
+            (image.tags ?? []).map((tag) => (
               <code className="mono" key={tag}>
                 {tag}
               </code>

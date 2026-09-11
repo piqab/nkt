@@ -34,18 +34,20 @@ type HostImage struct {
 // HostImages перечисляет файлы каталога дисков и сопоставляет их с
 // машинами.
 func HostImages(ctx context.Context, run Runner) []HostImage {
+	// Пустой срез, а не nil: nil становится null в JSON, и страница,
+	// считающая длину списка, падает целиком.
 	if run == nil {
-		return nil
+		return []HostImage{}
 	}
 	// find, а не ls: его вывод разбирается однозначно, без разбора
 	// колонок и локалей.
 	res, err := run(ctx, "find", imagesRoot, "-maxdepth", "1", "-type", "f", "-printf", "%f\\t%s\\n")
 	if err != nil || res.ExitCode != 0 {
-		return nil
+		return []HostImage{}
 	}
 
 	owners, running := domainDisks(ctx, run)
-	var out []HostImage
+	out := []HostImage{}
 	for _, line := range strings.Split(res.Stdout, "\n") {
 		name, sizeStr, ok := strings.Cut(strings.TrimSpace(line), "\t")
 		if !ok || name == "" {
