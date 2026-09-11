@@ -99,6 +99,30 @@ func (s *ServiceManager) ApplyCompose(ctx context.Context, user, path string) (c
 	return res, nil
 }
 
+// ComposeDown останавливает стек и убирает его контейнеры.
+//
+// Именно down, а не stop: профиль говорит «этого стека здесь быть не
+// должно», и оставлять остановленные контейнеры значило бы держать
+// половину стека в списке навсегда. Тома не трогаются — данные удаляются
+// только по отдельной просьбе, а не применением профиля.
+func (s *ServiceManager) ComposeDown(ctx context.Context, user, path string) (collect.CommandResult, error) {
+	res, err := s.c.Run(ctx, "docker", "compose", "-f", path, "down")
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	s.db.Audit(ctx, user, "docker.compose.down", path, outcome, map[string]any{
+		"exit_code": res.ExitCode, "output": strings.TrimSpace(res.Output()), "simulated": res.Simulated,
+	})
+	if err != nil {
+		return res, err
+	}
+	if !res.OK() {
+		return res, fmt.Errorf("docker compose down: код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+	}
+	return res, nil
+}
+
 // DefineLibvirtDomain registers a domain's on-disk XML with libvirtd —
 // writing the file to LibvirtQEMUDir alone does not do this, libvirtd does
 // not watch that directory, so this is libvirt's equivalent of ApplyCompose:

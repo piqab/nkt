@@ -34,6 +34,7 @@ export default function Containers({ me }: { me: Me }) {
   const lxd = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
   const vms = useApi<{ vms: VirtualMachine[] }>('/vms', 30_000)
   const images = useApi<{ images: unknown[] }>('/images', 60_000)
+  void images // счётчик образов теперь внутри вкладки Docker, отдельной метки у них нет
 
   return (
     <Tabs
@@ -42,7 +43,15 @@ export default function Containers({ me }: { me: Me }) {
         {
           key: 'docker',
           label: tabLabel('Docker', docker.data?.containers.length),
-          children: <Docker me={me} />,
+          // Образы — докерские: и берутся docker images, и удаляются им
+          // же. Отдельной вкладкой они стояли рядом с контейнерами, к
+          // которым относятся, но как будто сами по себе.
+          children: (
+            <>
+              <Docker me={me} />
+              <Images me={me} />
+            </>
+          ),
         },
         {
           key: 'podman',
@@ -53,11 +62,6 @@ export default function Containers({ me }: { me: Me }) {
           key: 'lxd',
           label: tabLabel('LXD', lxd.data?.instances.length),
           children: <LXD me={me} />,
-        },
-        {
-          key: 'images',
-          label: tabLabel(t('images.tab'), images.data?.images.length),
-          children: <Images me={me} />,
         },
         {
           key: 'vms',

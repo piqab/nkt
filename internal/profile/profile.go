@@ -18,11 +18,14 @@ package profile
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/piqab/nkt/internal/parse"
 )
 
 // Version — версия формата. Растёт, только если старый профиль перестанет
@@ -51,7 +54,36 @@ type Profile struct {
 	Users []User `json:"users,omitempty" yaml:"users,omitempty"`
 	// System — имя машины и часовой пояс.
 	System *System `json:"system,omitempty" yaml:"system,omitempty"`
+	// Compose — стеки docker compose, которые должны быть развёрнуты.
+	Compose []Compose `json:"compose,omitempty" yaml:"compose,omitempty"`
 }
+
+// Compose — стек docker compose: сам файл и то, поднят ли он.
+//
+// Содержимое целиком, как и у File, и по той же причине: по хешу видно
+// расхождение, но нечем его закрыть. Файл кладётся в свой каталог на
+// хосте (ComposeStacksDir/<имя>), потому что docker compose берёт имя
+// проекта из имени каталога — два стека в одной папке слились бы в один.
+type Compose struct {
+	Name    string `json:"name" yaml:"name"`
+	Content string `json:"content" yaml:"content"`
+	// Path — куда положить файл. Пусто — путь по умолчанию (см. FilePath).
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
+	// Up — стек должен быть поднят. Не указано — поднят: иначе описать
+	// сервис и не запустить его было бы поведением по умолчанию.
+	Up *bool `json:"up,omitempty" yaml:"up,omitempty"`
+}
+
+// FilePath отдаёт путь файла стека — заданный или тот, что по умолчанию.
+func (c Compose) FilePath() string {
+	if c.Path != "" {
+		return c.Path
+	}
+	return parse.ComposeStacksDir + "/" + c.Name + "/docker-compose.yml"
+}
+
+// Wanted отвечает, должен ли стек быть поднят.
+func (c Compose) Wanted() bool { return c.Up == nil || *c.Up }
 
 // Service — желаемое состояние службы. Указатели, а не bool: «не указано»
 // и «должно быть выключено» — разные требования, и путать их нельзя.
@@ -104,6 +136,9 @@ var (
 	packageRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
 	serviceRe  = regexp.MustCompile(`^[A-Za-z0-9@._-]+$`)
 	userRe     = regexp.MustCompile(`^[a-z_][a-z0-9_-]*\$?$`)
+	// composeNameRe — имя стека: оно же имя каталога и имя проекта
+	// docker, который сам приводит имя проекта к этому виду.
+	composeNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
 	hostnameRe = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`)
 )
 
@@ -181,7 +216,41 @@ func (p Profile) Validate() error {
 	if p.System != nil && p.System.Hostname != "" && !hostnameRe.MatchString(p.System.Hostname) {
 		return fmt.Errorf("некорректное имя машины %q", p.System.Hostname)
 	}
+	seenStack := map[string]bool{}
+	for _, c := range p.Compose {
+		switch {
+		case !composeNameRe.MatchString(c.Name):
+			// Имя становится именем каталога и именем проекта docker:
+			// то, что нельзя положить в путь, здесь не годится.
+			return fmt.Errorf("некорректное имя стека %q: строчные буквы, цифры, дефис и подчёркивание", c.Name)
+		case seenStack[c.Name]:
+			return fmt.Errorf("стек %q указан дважды", c.Name)
+		case strings.TrimSpace(c.Content) == "":
+			return fmt.Errorf("у стека %q пустое описание compose", c.Name)
+		case len(c.Content) > maxFileBytes:
+			return fmt.Errorf("описание стека %q длиннее %d КиБ", c.Name, maxFileBytes>>10)
+		}
+		if c.Path != "" {
+			switch {
+			case !strings.HasPrefix(c.Path, "/"):
+				return fmt.Errorf("путь стека %q должен быть абсолютным", c.Name)
+			case strings.Contains(c.Path, ".."):
+				return fmt.Errorf("путь стека %q не может содержать «..»", c.Name)
+			case !composeFileNames[path.Base(c.Path)]:
+				// docker compose сам узнаёт свой файл по имени, и хост
+				// тоже: файл с другим именем никто не подхватит.
+				return fmt.Errorf("файл стека %q должен называться docker-compose.yml или compose.yml", c.Name)
+			}
+		}
+		seenStack[c.Name] = true
+	}
 	return nil
+}
+
+// composeFileNames — имена, которые docker compose узнаёт сам, без -f.
+var composeFileNames = map[string]bool{
+	"docker-compose.yml": true, "docker-compose.yaml": true,
+	"compose.yml": true, "compose.yaml": true,
 }
 
 // Normalize приводит профиль к виду, в котором его сравнивают и хранят:
@@ -221,6 +290,11 @@ func (p Profile) Normalize() Profile {
 	sort.Slice(out.Users, func(i, j int) bool { return out.Users[i].Name < out.Users[j].Name })
 	if len(out.Users) == 0 {
 		out.Users = nil
+	}
+	out.Compose = append([]Compose(nil), p.Compose...)
+	sort.Slice(out.Compose, func(i, j int) bool { return out.Compose[i].Name < out.Compose[j].Name })
+	if len(out.Compose) == 0 {
+		out.Compose = nil
 	}
 	return out
 }

@@ -295,6 +295,19 @@ func (l *Local) Mkdir(p string) error {
 	return os.MkdirAll(p, 0o755)
 }
 
+// cEnv — окружение для команд, вывод которых разбирается.
+//
+// Каждый разборщик в этом приложении читает английский вывод: «State:
+// running», «Persistent: yes», «active (running)». На хосте с русской
+// локалью те же команды отвечают по-русски, и разбор молча даёт пустоту:
+// список машин приходил без состояний, и в интерфейсе все машины
+// выглядели неактивными. Локаль задаётся здесь одним местом, а не
+// вспоминается в каждом вызове; ровно так же поступает хаб с командами
+// по SSH (см. runRemote).
+func cEnv() []string {
+	return append(os.Environ(), "LC_ALL=C", "LANG=C", "LANGUAGE=C")
+}
+
 func (l *Local) Run(ctx context.Context, name string, args ...string) (CommandResult, error) {
 	return l.RunTimeout(ctx, l.commandTimeout, name, args...)
 }
@@ -308,6 +321,7 @@ func (l *Local) RunTimeout(ctx context.Context, timeout time.Duration, name stri
 
 	started := time.Now()
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = cEnv()
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

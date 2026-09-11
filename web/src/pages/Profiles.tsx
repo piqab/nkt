@@ -7,7 +7,6 @@ import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDa
 import { DataTable } from '../components/DataTable'
 import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
-import VMImagesSection from '../components/VMImagesSection'
 
 /** Заготовка для нового профиля: показывает форму, а не пустой экран. */
 const TEMPLATE = `version: 1
@@ -31,6 +30,14 @@ services:
 #     keys: ["ssh-ed25519 AAAA... deploy@laptop"]
 # system:
 #   timezone: Europe/Moscow
+# compose:
+#   - name: shop
+#     # up: false — стек должен быть опущен
+#     content: |
+#       services:
+#         web:
+#           image: nginx:1.27
+#           ports: ["8080:80"]
 `
 
 export default function Profiles({ me }: { me: Me }) {
@@ -363,7 +370,6 @@ export default function Profiles({ me }: { me: Me }) {
 
       {/* Образы и шаблоны машин — такие же заготовки, как профиль, и
           живут здесь же. */}
-      <VMImagesSection me={me} />
 
       {openJob && <JobLogModal job={openJob} onClose={() => setOpenJob(null)} />}
     </>

@@ -24,6 +24,10 @@ const (
 	ActionAddKey         = "user.key"
 	ActionSetHostname    = "system.hostname"
 	ActionSetTimezone    = "system.timezone"
+	// Стеки docker compose: файл описания и состояние стека.
+	ActionWriteCompose = "compose.write"
+	ActionComposeUp    = "compose.up"
+	ActionComposeDown  = "compose.down"
 )
 
 // Состояния ресурса в плане. Коды, а не готовые слова: план читают и
@@ -101,6 +105,9 @@ type Reader interface {
 	Users(ctx context.Context) (map[string]UserState, error)
 	// System отдаёт имя машины и часовой пояс.
 	System(ctx context.Context) (hostname, timezone string, err error)
+	// ComposeRunning отвечает, сколько контейнеров стека сейчас работает.
+	// Ошибка — «не знаю» (docker не отвечает), а не «ни одного».
+	ComposeRunning(ctx context.Context, path string) (int, error)
 }
 
 // UserState — то, что известно об учётной записи на хосте.
@@ -130,6 +137,7 @@ func Build(ctx context.Context, p Profile, r Reader) Plan {
 	plan.addFirewall(ctx, p, r)
 	plan.addUsers(ctx, p, r)
 	plan.addSystem(ctx, p, r)
+	plan.addCompose(ctx, p, r)
 	return plan
 }
 
@@ -321,6 +329,56 @@ func (plan *Plan) addSystem(ctx context.Context, p Profile, r Reader) {
 // (интерфейсы, источники, зоны) дало бы «расхождение» на каждом хосте,
 // где то же самое записано чуть иначе, — а план, который всегда красный,
 // перестают читать.
+// addCompose сравнивает стеки docker compose: сначала описание, потом то,
+// работает ли стек.
+//
+// Два отдельных пункта, а не один: записать файл и поднять по нему
+// контейнеры — разные по цене действия, и оператор должен видеть, что
+// именно сейчас произойдёт с работающими сервисами.
+func (plan *Plan) addCompose(ctx context.Context, p Profile, r Reader) {
+	for _, c := range p.Compose {
+		path := c.FilePath()
+		needWrite := false
+		content, ok, err := r.FileContent(ctx, path)
+		switch {
+		case err != nil:
+			plan.unknown("стек %s: %v", c.Name, err)
+			continue
+		case !ok:
+			needWrite = true
+			plan.add(Change{Action: ActionWriteCompose, Target: path,
+				Current: StateMissing, Desired: StateAsProfile, Detail: c.Content})
+		case content != c.Content:
+			needWrite = true
+			plan.add(Change{Action: ActionWriteCompose, Target: path,
+				Current: StateDiffers, Desired: StateAsProfile, Detail: c.Content})
+		}
+
+		running, err := r.ComposeRunning(ctx, path)
+		if err != nil {
+			plan.unknown("стек %s: %v", c.Name, err)
+			continue
+		}
+		switch {
+		case c.Wanted() && (needWrite || running == 0):
+			// Изменённое описание тоже требует подъёма: сам по себе файл
+			// работающие контейнеры не трогает.
+			plan.add(Change{Action: ActionComposeUp, Target: path,
+				Current: composeState(running), Desired: StateRunning})
+		case !c.Wanted() && running > 0:
+			plan.add(Change{Action: ActionComposeDown, Target: path,
+				Current: StateRunning, Desired: StateStopped})
+		}
+	}
+}
+
+func composeState(running int) string {
+	if running > 0 {
+		return StateRunning
+	}
+	return StateStopped
+}
+
 func portAllowed(state model.FirewallState, want Port) bool {
 	proto := want.Proto
 	if proto == "" {

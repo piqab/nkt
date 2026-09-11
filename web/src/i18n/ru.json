@@ -1556,7 +1556,10 @@
       "user.sudo": "выдать sudo",
       "user.key": "добавить ключ",
       "system.hostname": "имя машины",
-      "system.timezone": "часовой пояс"
+      "system.timezone": "часовой пояс",
+      "compose.write": "записать описание стека",
+      "compose.up": "поднять стек",
+      "compose.down": "остановить стек"
     },
     "state": {
       "missing": "нет",

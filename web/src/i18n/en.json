@@ -1554,7 +1554,10 @@
       "user.sudo": "grant sudo",
       "user.key": "add key",
       "system.hostname": "hostname",
-      "system.timezone": "timezone"
+      "system.timezone": "timezone",
+      "compose.write": "write the stack file",
+      "compose.up": "bring the stack up",
+      "compose.down": "take the stack down"
     },
     "state": {
       "missing": "missing",

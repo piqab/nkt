@@ -98,6 +98,32 @@ func (h *HostReader) FileContent(_ context.Context, path string) (string, bool, 
 	return string(raw), true, nil
 }
 
+// ComposeRunning считает работающие контейнеры стека.
+//
+// «docker compose ps -q» отдаёт по строке на контейнер и ничего не
+// печатает, когда стека нет вовсе; отсутствие файла — не ошибка (его ещё
+// только предстоит записать), а вот молчащий docker — ошибка, и попасть
+// она должна в «не знаю», а не в «ни одного контейнера».
+func (h *HostReader) ComposeRunning(ctx context.Context, path string) (int, error) {
+	if !h.c.Exists(path) {
+		return 0, nil
+	}
+	res, err := h.c.Run(ctx, "docker", "compose", "-f", path, "ps", "-q")
+	if err != nil {
+		return 0, err
+	}
+	if !res.OK() {
+		return 0, fmt.Errorf("docker compose ps: %s", lastMeaningfulLine(res.Stderr, res.Stdout))
+	}
+	n := 0
+	for _, line := range strings.Split(res.Stdout, "\n") {
+		if strings.TrimSpace(line) != "" {
+			n++
+		}
+	}
+	return n, nil
+}
+
 // FirewallState берёт то, что уже собрало сканирование: гонять
 // iptables-save ради плана незачем.
 func (h *HostReader) FirewallState(ctx context.Context) (model.FirewallState, error) {

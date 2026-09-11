@@ -8,6 +8,7 @@ import { InactiveSummary } from '../components/InactiveSummary'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import VMImagesSection from '../components/VMImagesSection'
 
 const LIFECYCLE_ACTIONS = ['start', 'shutdown', 'reboot', 'suspend', 'resume']
 
@@ -315,6 +316,12 @@ export default function Virtualization({ me }: { me: Me }) {
           }}
         />
       )}
+
+      {/* Заготовки, из которых машины и появляются: образы, шаблоны,
+          файлы дисков хоста и его сети. Раньше они жили в «Профилях» —
+          рядом с описаниями желаемого состояния, к которым отношения не
+          имеют. */}
+      <VMImagesSection me={me} />
 
       {creating && (
         <VMEditor

@@ -15,6 +15,15 @@ import (
 	"github.com/piqab/nkt/internal/model"
 )
 
+// ComposeStacksDir — каталог, в котором nkt держит стеки, развёрнутые по
+// профилю.
+//
+// Свой каталог, а не чужой: файл из профиля переписывается применением, и
+// класть его рядом с тем, что оператор ведёт руками, значило бы однажды
+// затереть чужое. Имя каталога стека становится именем проекта docker —
+// поэтому у каждого стека своя папка.
+const ComposeStacksDir = "/srv/compose"
+
 // DockerResult is everything the docker parser produces.
 type DockerResult struct {
 	Status     model.SourceStatus
