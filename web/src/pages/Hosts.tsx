@@ -89,7 +89,21 @@ const SUDO_COLOR: Record<NonNullable<HubHost['sudo_status']>, string> = {
 function SudoBadge({ status }: { status: HubHost['sudo_status'] }) {
   const { t } = useTranslation()
   const s = status ?? ''
-  return <Badge color={SUDO_COLOR[s]} text={t(SUDO_LABEL_KEY[s])} />
+  // Галочка или крестик, слово — в подсказке: колонка отвечает на один
+  // вопрос «есть ли sudo без пароля», и двух знаков ей достаточно.
+  const icon =
+    s === 'nopasswd' ? (
+      <CheckCircleFilled style={{ color: SUDO_COLOR[s] }} />
+    ) : s === 'password_required' ? (
+      <CloseCircleFilled style={{ color: SUDO_COLOR[s] }} />
+    ) : (
+      <QuestionCircleOutlined style={{ color: SUDO_COLOR[s] }} />
+    )
+  return (
+    <Tooltip title={t(SUDO_LABEL_KEY[s])}>
+      <span aria-label={t(SUDO_LABEL_KEY[s])}>{icon}</span>
+    </Tooltip>
+  )
 }
 
 function HostStatusBadge({ status }: { status: HubHost['status'] }) {
@@ -112,23 +126,32 @@ function HostStatusBadge({ status }: { status: HubHost['status'] }) {
 function TunnelChannelBadge({ host }: { host: HubHost }) {
   const { t } = useTranslation()
   if (!host.tunnel_enabled) return <span className="small muted">—</span>
+  // Галочка или крестик, слова — в подсказке. Канал, по которому прямо
+  // сейчас идёт трафик вместо сломанного SSH, — тоже галочка, но
+  // тревожного цвета: он работает, но подменяет собой основной путь.
   if (host.channel === 'tunnel') {
     return (
-      <Tooltip title={t('hosts.tunnelActiveTooltip')}>
-        <Badge color="var(--status-warning)" text={t('hosts.tunnelActive')} />
+      <Tooltip title={`${t('hosts.tunnelActive')} — ${t('hosts.tunnelActiveTooltip')}`}>
+        <span aria-label={t('hosts.tunnelActive')}>
+          <CheckCircleFilled style={{ color: 'var(--status-warning)' }} />
+        </span>
       </Tooltip>
     )
   }
   if (host.tunnel_connected) {
     return (
-      <Tooltip title={t('hosts.tunnelConnectedTooltip')}>
-        <Badge color="var(--status-good)" text={t('hosts.tunnelConnected')} />
+      <Tooltip title={`${t('hosts.tunnelConnected')} — ${t('hosts.tunnelConnectedTooltip')}`}>
+        <span aria-label={t('hosts.tunnelConnected')}>
+          <CheckCircleFilled style={{ color: 'var(--status-good)' }} />
+        </span>
       </Tooltip>
     )
   }
   return (
-    <Tooltip title={t('hosts.tunnelDisconnectedTooltip')}>
-      <Badge color="var(--text-muted)" text={t('hosts.tunnelDisconnected')} />
+    <Tooltip title={`${t('hosts.tunnelDisconnected')} — ${t('hosts.tunnelDisconnectedTooltip')}`}>
+      <span aria-label={t('hosts.tunnelDisconnected')}>
+        <CloseCircleFilled style={{ color: 'var(--text-muted)' }} />
+      </span>
     </Tooltip>
   )
 }
@@ -977,6 +1000,11 @@ export default function Hosts({
             />
           </>
         )}
+        {/* Машину создаём только на хосте, где уже стоит nkt: команду
+            создания выполняет он сам, а хаб лишь просит и ждёт. */}
+        {h.status === 'online' && !h.parent_id && (
+          <RowAction action="create" label={t('hosts.newVM')} disabled={busy} onClick={() => setProvisionOn(h)} />
+        )}
         <RowAction action="edit" label={t('hosts.edit')} disabled={busy} onClick={() => setEditingHost(h)} />
         {h.ssh_auth_kind === 'key' && (
           <RowAction action="key" label={t('hosts.publicKey')} disabled={busy} onClick={() => showPubKey(h)} />
@@ -1015,9 +1043,7 @@ export default function Hosts({
     const count = vmsByHost.get(h.id)?.length ?? 0
     // Машину создаём только на хосте, где уже стоит nkt: команду создания
     // выполняет он сам, а хаб лишь просит и ждёт.
-    const canCreate = h.status === 'online' && !h.parent_id
-    if (!canCreate && count === 0) return null
-    const busy = busyVMs.has(h.id) || h.status === 'installing'
+    if (count === 0) return null
     return (
       <div className="row">
         {/* Сначала то, что уже есть, потом создание нового: список машин
@@ -1025,12 +1051,11 @@ export default function Hosts({
             действие, и ему место с краю. Машин нет — нет и кнопки:
             «+ 0 машин» открывает пустоту. */}
         {count > 0 && (
-          <Button type="link" onClick={() => toggleVMs(h.id)}>
-            {openVMs.has(h.id) ? '−' : '+'} {t('hosts.vmCount', { count })}
-          </Button>
-        )}
-        {canCreate && (
-          <RowAction action="create" label={t('hosts.newVM')} disabled={busy} onClick={() => setProvisionOn(h)} />
+          <Tooltip title={t('hosts.vmCount', { count })}>
+            <Button type="link" size="small" aria-label={t('hosts.vmCount', { count })} onClick={() => toggleVMs(h.id)}>
+              {openVMs.has(h.id) ? '−' : '+'} {count}
+            </Button>
+          </Tooltip>
         )}
       </div>
     )
@@ -1048,7 +1073,6 @@ export default function Hosts({
     const vms = vmsByHost.get(h.id) ?? []
     return (
       <>
-        {renderActions(h)}
         {renderVMActions(h)}
         {vms.length > 0 && openVMs.has(h.id) && (
           <div className="col host-vms">
@@ -1080,9 +1104,12 @@ export default function Hosts({
     {
       title: t('hosts.colName'),
       key: 'name',
+      // Действия — сразу за именем, в той же строке: отдельная строка
+      // под каждым хостом удваивала высоту списка ради семи иконок.
       render: (_, h) => (
-        <div style={{ minWidth: '10rem' }}>
+        <div className="row row-nowrap" style={{ minWidth: '10rem', gap: '0.5rem' }}>
           <strong>{h.name}</strong>
+          {renderActions(h)}
         </div>
       ),
     },
@@ -1415,7 +1442,7 @@ export default function Hosts({
                         expandable={{
                           expandedRowKeys: items.map((h) => h.id),
                           expandIcon: () => null,
-                          rowExpandable: () => true,
+                          rowExpandable: (h) => (vmsByHost.get(h.id)?.length ?? 0) > 0,
                           expandedRowRender: renderRowBody,
                         }}
                       />
