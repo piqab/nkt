@@ -22,6 +22,8 @@ type fakeReader struct {
 	timezone string
 	// running — сколько контейнеров стека работает, по пути файла.
 	running map[string]int
+	// noDocker — на хосте нет docker вовсе.
+	noDocker bool
 	fail    map[string]error
 }
 
@@ -75,6 +77,13 @@ func composeActions(p Plan) []string {
 		out = append(out, c.Action)
 	}
 	return out
+}
+
+func (f fakeReader) DockerPresent(context.Context) (bool, error) {
+	if err := f.fail["docker"]; err != nil {
+		return false, err
+	}
+	return !f.noDocker, nil
 }
 
 func (f fakeReader) ComposeRunning(_ context.Context, path string) (int, error) {
@@ -382,5 +391,36 @@ func TestComposeValidate(t *testing.T) {
 	ok := Profile{Name: "p", Compose: []Compose{{Name: "shop-1", Content: "services:\n  web:\n    image: nginx\n"}}}
 	if err := ok.Validate(); err != nil {
 		t.Errorf("верный стек отклонён: %v", err)
+	}
+}
+
+// Без docker стек неисполним, и узнать об этом надо до применения, а не
+// из «executable file not found in $PATH» посреди задания.
+func TestPlanOffersDockerWhenMissing(t *testing.T) {
+	stack := "services:\n  web:\n    image: nginx:1.27\n"
+	prof := Profile{Name: "srv", Compose: []Compose{{Name: "shop", Content: stack}}}
+	path := "/srv/compose/shop/docker-compose.yml"
+
+	plan := Build(context.Background(), prof, fakeReader{noDocker: true, files: map[string]string{path: stack}})
+	got := composeActions(plan)
+	if len(got) != 2 || got[0] != ActionInstallDocker || got[1] != ActionComposeUp {
+		t.Fatalf("на хосте без docker = %v, а нужно сначала поставить docker", got)
+	}
+	if plan.Changes[0].Risk != RiskExternalRepo {
+		t.Errorf("установка docker не помечена как тянущая сторонний репозиторий: %+v", plan.Changes[0])
+	}
+
+	// Docker есть, описание на месте, стек работает — расхождений нет и
+	// ставить нечего.
+	ok := fakeReader{files: map[string]string{path: stack}, running: map[string]int{path: 1}}
+	if plan := Build(context.Background(), prof, ok); !plan.Empty() {
+		t.Errorf("на готовом хосте = %v", composeActions(plan))
+	}
+
+	// Профиль без стеков про docker не спрашивает вовсе: он там ни при чём.
+	bare := Profile{Name: "srv", Packages: []string{"btop"}}
+	if plan := Build(context.Background(), bare, fakeReader{noDocker: true}); len(plan.Changes) != 1 ||
+		plan.Changes[0].Action != ActionInstallPackage {
+		t.Errorf("профиль без стеков = %v", composeActions(plan))
 	}
 }

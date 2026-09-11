@@ -24,8 +24,9 @@ const (
 	ActionAddKey         = "user.key"
 	ActionSetHostname    = "system.hostname"
 	ActionSetTimezone    = "system.timezone"
-	// Стеки docker compose: файл описания и состояние стека.
-	ActionWriteCompose = "compose.write"
+	// Стеки docker compose: сам docker, файл описания и состояние стека.
+	ActionInstallDocker = "docker.install"
+	ActionWriteCompose  = "compose.write"
 	ActionComposeUp    = "compose.up"
 	ActionComposeDown  = "compose.down"
 )
@@ -56,6 +57,8 @@ const (
 	RiskSSHAccess = "ssh-access"
 	RiskSudoGrant = "sudo-grant"
 	RiskHostname  = "hostname"
+	// RiskExternalRepo — в систему добавляется сторонний репозиторий.
+	RiskExternalRepo = "external-repo"
 )
 
 // Change — одно расхождение и то, чем его закрыть.
@@ -108,6 +111,8 @@ type Reader interface {
 	// ComposeRunning отвечает, сколько контейнеров стека сейчас работает.
 	// Ошибка — «не знаю» (docker не отвечает), а не «ни одного».
 	ComposeRunning(ctx context.Context, path string) (int, error)
+	// DockerPresent отвечает, есть ли на хосте сам docker.
+	DockerPresent(ctx context.Context) (bool, error)
 }
 
 // UserState — то, что известно об учётной записи на хосте.
@@ -336,6 +341,24 @@ func (plan *Plan) addSystem(ctx context.Context, p Profile, r Reader) {
 // контейнеры — разные по цене действия, и оператор должен видеть, что
 // именно сейчас произойдёт с работающими сервисами.
 func (plan *Plan) addCompose(ctx context.Context, p Profile, r Reader) {
+	if len(p.Compose) == 0 {
+		return
+	}
+	// Без docker стек неисполним, и узнать об этом надо до применения, а
+	// не из «executable file not found in $PATH» посреди задания.
+	// Отдельным пунктом: установка тянет сторонний репозиторий, и решать
+	// это за оператора нельзя — галочку он снимет, если ставил docker
+	// иначе или не хочет вовсе.
+	dockerOK := true
+	switch present, err := r.DockerPresent(ctx); {
+	case err != nil:
+		plan.unknown("docker: %v", err)
+	case !present:
+		dockerOK = false
+		plan.add(Change{Action: ActionInstallDocker, Target: "docker",
+			Current: StateMissing, Desired: StateInstalled, Risk: RiskExternalRepo})
+	}
+
 	for _, c := range p.Compose {
 		path := c.FilePath()
 		needWrite := false
@@ -352,6 +375,17 @@ func (plan *Plan) addCompose(ctx context.Context, p Profile, r Reader) {
 			needWrite = true
 			plan.add(Change{Action: ActionWriteCompose, Target: path,
 				Current: StateDiffers, Desired: StateAsProfile, Detail: c.Content})
+		}
+
+		if !dockerOK {
+			// docker ещё предстоит поставить — про работающие
+			// контейнеры спрашивать нечего и некого, а поднять стек
+			// после установки нужно в любом случае.
+			if c.Wanted() {
+				plan.add(Change{Action: ActionComposeUp, Target: path,
+					Current: StateStopped, Desired: StateRunning})
+			}
+			continue
 		}
 
 		running, err := r.ComposeRunning(ctx, path)
