@@ -17,6 +17,7 @@ import TopologyPage from './pages/Topology'
 import Configs from './pages/Configs'
 import LogsPage from './pages/Logs'
 import JobsPage from './pages/Jobs'
+import HostEvents from './pages/HostEvents'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
 import Packages from './pages/Packages'
@@ -324,7 +325,7 @@ function Shell({
   // depends on the address bar staying whatever it was from a previous
   // host session — introducing routing here would have to interact with
   // that, for no real benefit (this is not something worth bookmarking).
-  const [hubView, setHubView] = useState<'hosts' | 'jobs' | 'about'>('hosts')
+  const [hubView, setHubView] = useState<'hosts' | 'events' | 'jobs' | 'about'>('hosts')
   // Polled independently of whichever section is actually showing, so the
   // sidebar's own "доступно обновление" badge stays current even while
   // looking at the host list — matches how criticalCount/certAlerts below
@@ -334,6 +335,9 @@ function Shell({
   // здесь есть. Путь указан явно — область запросов в списке хостов не
   // выбрана, и обычный «/jobs» ушёл бы в API хаба, где их нет.
   const hubJobs = useApi<{ active: number }>(isHub ? '/hosts/local/jobs?limit=1' : null, 10_000)
+  // Непоказанные оповещения: счётчик у раздела — единственное, что видно,
+  // когда браузер закрыт и всплывающие уведомления никто не получил.
+  const hubEvents = useApi<{ unread: number }>(isHub ? '/hub/events?limit=1' : null, 30_000)
 
   // Every page below reads through api()/useApi() unmodified; this is the
   // one place that redirects their calls to the selected host's own API
@@ -402,6 +406,10 @@ function Shell({
             <a href="#" className={hubView === 'hosts' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('hosts') }}>
               <span>{t('hosts.title')}</span>
             </a>
+            <a href="#" className={hubView === 'events' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('events') }}>
+              <span>{t('events.title')}</span>
+              {hubEvents.data?.unread ? <span className="nav-count nav-count-busy">{hubEvents.data.unread}</span> : null}
+            </a>
             <a href="#" className={hubView === 'jobs' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('jobs') }}>
               <span>{t('nav.jobs')}</span>
               {hubJobs.data?.active ? <span className="nav-count nav-count-busy">{hubJobs.data.active}</span> : null}
@@ -446,6 +454,8 @@ function Shell({
           <div className="content">
             {hubView === 'hosts' ? (
               <Hosts onSelect={selectHost} hubVersion={me.hub_version} />
+            ) : hubView === 'events' ? (
+              <HostEvents />
             ) : hubView === 'jobs' ? (
               <JobsPage me={me} />
             ) : (

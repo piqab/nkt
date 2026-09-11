@@ -179,21 +179,37 @@ export function JobLogModal({
   const lastSeq = useRef(0)
   const bodyRef = useRef<HTMLPreElement | null>(null)
 
+  // Дочитываний может идти несколько разом: сообщение из сокета, запасной
+  // опрос и переоткрытие окна. Пока предыдущее не вернулось, номер
+  // последней строки не сдвинут — и второй запрос приносит тот же хвост.
+  // Отсюда и брались повторы вроде трёх «Готово» подряд.
+  const fetching = useRef(false)
+
   const fetchTail = useCallback(async () => {
+    if (fetching.current) return null
+    fetching.current = true
     try {
       const res = await api<{ job: Job; lines: JobLogLine[] }>(
         `${scope}/jobs/${job.id}/log${qs({ after: lastSeq.current })}`,
       )
       setCurrent(res.job)
-      if (res.lines.length > 0) {
-        lastSeq.current = res.lines[res.lines.length - 1].seq
-        setLines((prev) => [...prev, ...res.lines])
-      }
+      // Отбор по номеру строки, а не по «пришло что-то»: сверяемся с тем,
+      // что уже показано, — это единственное, что знает правду о
+      // показанном, даже если запросов было несколько.
+      setLines((prev) => {
+        const seen = prev.length > 0 ? prev[prev.length - 1].seq : 0
+        const fresh = res.lines.filter((l) => l.seq > seen)
+        if (fresh.length === 0) return prev
+        lastSeq.current = fresh[fresh.length - 1].seq
+        return [...prev, ...fresh]
+      })
       return res.job
     } catch {
       // Сеть моргнула — следующий заход дочитает то же самое: номер
       // последней строки не сдвинулся.
       return null
+    } finally {
+      fetching.current = false
     }
   }, [job.id, scope])
 

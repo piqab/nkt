@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Button, type TableColumnsType } from 'antd'
+import { Button, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { Container, DockerNetwork, FileContent, Me } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, shortImageRef } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 import BlockTree from '../components/BlockTree'
 import PathPicker, { ownerFromPath } from '../components/PathPicker'
@@ -39,7 +39,7 @@ export default function Docker({ me }: { me: Me }) {
       render: (_, c) => (
         <>
           <strong>{c.name}</strong>
-          <div className="small muted">
+          <div className="small muted nowrap">
             {c.project ? `${c.project}/${c.service_name}` : t('docker.outsideCompose')}
             {c.restart ? t('docker.restart', { policy: c.restart }) : ''}
           </div>
@@ -55,22 +55,32 @@ export default function Docker({ me }: { me: Me }) {
       title: t('docker.colImage'),
       key: 'image',
       render: (_, c) => (
-        <span className="small mono" style={{ wordBreak: 'break-all' }}>
-          {c.image}
-        </span>
+        <Tooltip title={c.image !== shortImageRef(c.image) ? c.image : undefined}>
+          <span className="small mono nowrap">{shortImageRef(c.image)}</span>
+        </Tooltip>
       ),
     },
     {
       title: t('docker.colState'),
       key: 'state',
-      render: (_, c) => (
-        <>
-          <StateBadge state={c.state} />
-          <div className="small muted">{c.status}</div>
-          {c.declared && !c.running && <div className="small muted">{t('docker.declaredNotRunning')}</div>}
-          {!c.declared && c.running && <div className="small muted">{t('docker.runningOutsideCompose')}</div>}
-        </>
-      ),
+      // Одной строкой: «Up 8 days (healthy)» и пометки про compose
+      // растили строку втрое, а читают их редко — подробности уезжают в
+      // подсказку, на виду остаётся само состояние и с какого времени.
+      render: (_, c) => {
+        const notes = [
+          c.status,
+          c.declared && !c.running ? t('docker.declaredNotRunning') : '',
+          !c.declared && c.running ? t('docker.runningOutsideCompose') : '',
+        ].filter(Boolean)
+        return (
+          <Tooltip title={notes.join(' · ')}>
+            <span className="nowrap">
+              <StateBadge state={c.state} />
+              {c.status && <span className="small muted"> · {c.status}</span>}
+            </span>
+          </Tooltip>
+        )
+      },
     },
     {
       title: t('docker.colPorts'),
@@ -111,8 +121,11 @@ export default function Docker({ me }: { me: Me }) {
     {
       title: t('common.actions'),
       key: 'actions',
+      // Одной строкой: пять кнопок столбиком растили строку впятеро, а
+      // места им нужно немного. Не влезли — таблица прокручивается вбок,
+      // это дешевле высоких строк.
       render: (_, c) => (
-        <div className="row">
+        <div className="row row-nowrap">
           {['start', 'restart', 'stop'].map((a) => (
             <Button
               key={a}

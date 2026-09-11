@@ -10,9 +10,9 @@ import {
 } from '@ant-design/icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
-import type { HubHost, Job, RenewEvent, RenewJobStatus, Severity } from '../types'
+import type { HostEvent, HubHost, Job, RenewEvent, RenewJobStatus, Severity } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, formatRelative, severityLabel } from '../components/ui'
-import { checkForNewProblems, notificationsEnabled, requestNotificationPermission, setNotificationsEnabled, type NotifyState } from '../notifications'
+import { notificationsEnabled, notifyNewEvents, requestNotificationPermission, setNotificationsEnabled } from '../notifications'
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
@@ -237,13 +237,14 @@ export default function Hosts({
   // once the matching job settles, whether or not that navigation happens.
   const [autoOpenHost, setAutoOpenHost] = useState<{ id: number; name: string } | null>(null)
 
-  // The previous poll tick's per-host snapshot — comparing against it is
-  // the dedup mechanism itself (see notifications.ts): a ref, not state,
-  // since updating it must never itself trigger a render.
-  const notifyStateRef = useRef<NotifyState>(new Map())
+  // Уведомления берутся из журнала оповещений хаба: переходы находит он
+  // сам в фоновом опросе, а вкладка только показывает то, чего оператор
+  // ещё не видел. Так во всплывающем есть и адрес, и подробности, а
+  // закрытая вкладка не значит «событие потеряно».
+  const events = useApi<{ events: HostEvent[] }>('/hub/events?limit=50', 30_000)
   useEffect(() => {
-    if (hosts) checkForNewProblems(hosts, notifyStateRef.current)
-  }, [hosts])
+    if (events.data?.events) notifyNewEvents(events.data.events)
+  }, [events.data])
 
   async function toggleNotify(checked: boolean) {
     if (checked) {

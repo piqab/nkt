@@ -1,16 +1,23 @@
-// Browser Notification integration for the hub's host list (Hosts.tsx) —
-// fires when a host picks up a new critical/high finding, or loses
-// reachability. Deliberately tab-scoped: this only fires while Hosts.tsx is
-// mounted and polling, not a true closed-tab push notification (that would
-// need a Service Worker + the Push API, which nothing here calls for). The
-// underlying data itself stays fresh regardless of any open tab — see
-// internal/hub's pollOverviews — only the notification's *delivery* is
-// tied to the tab.
+// Всплывающие уведомления браузера для списка хостов.
+//
+// Текст берётся из журнала оповещений хаба (internal/store/events.go), а
+// не собирается здесь заново: раньше вкладка сама сравнивала два опроса и
+// писала «имя: новые проблемы» — без адреса, без подробностей и без следа
+// в истории. Теперь переходы находит сам хаб в фоновом опросе, а вкладка
+// только показывает то, чего оператор ещё не видел; всплывающее и журнал
+// поэтому не могут разойтись, и закрытая вкладка больше не значит
+// «событие потеряно» — оно останется в разделе «Оповещения».
+//
+// Доставка по-прежнему привязана к открытой вкладке: настоящий push при
+// закрытом браузере потребовал бы service worker и Push API, а это
+// отдельная история.
 
-import type { HubHost } from './types'
+import type { HostEvent } from './types'
 import i18n from './i18n'
 
 const STORAGE_KEY = 'nkt-hub-notify'
+/** Докуда события уже показаны этим браузером. */
+const SEEN_KEY = 'nkt-hub-notify-seen'
 
 export function notificationsEnabled(): boolean {
   return localStorage.getItem(STORAGE_KEY) === '1'
@@ -31,53 +38,37 @@ export async function requestNotificationPermission(): Promise<boolean> {
   return result === 'granted'
 }
 
-type HostSnapshot = { criticalHigh: number; reachable: boolean | undefined }
-
-/** Per-host previous-tick snapshot — the dedup mechanism itself. Comparing
- * the latest poll against this (and updating it every tick) is what stops
- * the same standing problem from re-notifying on every 30s poll; a plain
- * "is it nonzero" check would re-fire constantly for anything not fixed
- * between polls. Owned by the caller (a useRef in Hosts.tsx), not module
- * state, so it doesn't leak across mounts/tests. */
-export type NotifyState = Map<number, HostSnapshot>
-
-function criticalHigh(h: HubHost): number {
-  return (h.findings?.critical ?? 0) + (h.findings?.high ?? 0)
+function seenEventID(): number {
+  const raw = Number(localStorage.getItem(SEEN_KEY))
+  return Number.isFinite(raw) ? raw : 0
 }
 
 /**
- * Diffs the latest /hub/hosts poll against `state` (mutated in place) and
- * fires a browser Notification for real transitions only:
- *  - critical+high count going up (not any nonzero reading)
- *  - reachable flipping to false (not every tick a host stays down)
- * A host's first-ever sighting only seeds its snapshot — nothing fires on
- * initial page load, and nothing fires for a host that's never been polled
- * (reachable stays undefined throughout, never satisfying either check).
+ * Показывает уведомления о событиях, которых этот браузер ещё не видел.
+ *
+ * Первый заход ничего не показывает, а только запоминает границу: иначе
+ * открытие списка хостов после выходных высыпало бы десяток уведомлений
+ * обо всём, что и так видно в журнале.
  */
-export function checkForNewProblems(hosts: HubHost[], state: NotifyState): void {
+export function notifyNewEvents(events: HostEvent[]): void {
+  if (events.length === 0) return
+  const newest = events[0].id
+  const seen = seenEventID()
+  localStorage.setItem(SEEN_KEY, String(newest))
+  if (seen === 0) return
   if (!notificationsEnabled()) return
   if (!('Notification' in window) || Notification.permission !== 'granted') return
 
-  for (const h of hosts) {
-    const now: HostSnapshot = { criticalHigh: criticalHigh(h), reachable: h.reachable }
-    const prev = state.get(h.id)
-    state.set(h.id, now)
-    if (!prev) continue
-
-    if (now.criticalHigh > prev.criticalHigh) {
-      notify(
-        i18n.t('hosts.notifyNewProblems', { name: h.name }),
-        `critical+high: ${prev.criticalHigh} → ${now.criticalHigh}`,
-        `nkt-host-${h.id}-problems`,
-      )
-    }
-    if (prev.reachable !== false && now.reachable === false) {
-      notify(
-        i18n.t('hosts.notifyUnreachable', { name: h.name }),
-        i18n.t('hosts.notifyUnreachableBody'),
-        `nkt-host-${h.id}-unreachable`,
-      )
-    }
+  // От старых к новым: порядок уведомлений должен совпадать с порядком
+  // событий, а журнал отдаёт новые первыми.
+  for (const e of [...events].reverse()) {
+    if (e.id <= seen) continue
+    if (e.kind === 'recovered' || e.kind === 'resolved') continue
+    notify(
+      `${e.host_name} · ${e.host_addr}`,
+      `${i18n.t(`events.kind.${e.kind}`, { defaultValue: e.kind })}${e.detail ? `: ${e.detail}` : ''}`,
+      `nkt-event-${e.id}`,
+    )
   }
 }
 

@@ -151,6 +151,10 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/vulndb", s.handleHubVulnDBStatus)
 
 				r.Get("/hub/hosts", s.handleListHosts)
+				// Журнал оповещений читают все, кто видит список хостов:
+				// это то же состояние, только во времени.
+				r.Get("/hub/events", s.handleEvents)
+				r.Post("/hub/events/seen", s.handleEventsSeen)
 				r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
 				r.Get("/hub/hosts/{id}/install/latest", s.handleLatestInstallJob)
 				r.Get("/hub/hosts/{id}/install/{job}", s.handleInstallJobStatus)

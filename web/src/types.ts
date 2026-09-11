@@ -818,6 +818,19 @@ export interface Snapshot {
 /** Фоновое задание: применение профиля, скачивание образа, создание
  * машины. Живёт в базе, поэтому переживает и закрытую вкладку, и
  * перезапуск службы — см. internal/jobs. */
+/** Оповещение хаба — internal/store/events.go. */
+export interface HostEvent {
+  id: number
+  ts: string
+  host_id?: number
+  /** Имя и адрес на момент события: хост могли переименовать или удалить. */
+  host_name: string
+  host_addr: string
+  kind: 'unreachable' | 'recovered' | 'problems' | 'resolved' | 'job-failed'
+  severity?: string
+  detail?: string
+}
+
 export interface Job {
   id: number
   kind: string
