@@ -415,7 +415,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	})
 
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
-		r.sysconfig, r.collector, r.vmimages)
+		r.sysconfig, r.collector, r.vmimages, r.scanner)
 	// Задания, оставшиеся идущими от прошлого запуска, разбираются до
 	// приёма запросов: продолжаемые встают в очередь заново, остальные
 	// честно помечаются прерванными. Иначе список показывал бы вечно
@@ -686,11 +686,17 @@ func hubDriftCheck(r *hubRuntime) func(context.Context) (int, error) {
 func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.ServiceManager,
 	configs *control.ConfigManager, firewall *control.FirewallManager,
 	firewalld *control.FirewalldManager, osusers *control.OSUserManager,
-	sysconf *control.SysConfigManager, collector collect.Collector, images *vmimage.Store) {
+	sysconf *control.SysConfigManager, collector collect.Collector, images *vmimage.Store,
+	scanner *inventory.Scanner) {
 
 	m.Register(profile.KindApply, profile.NewApplyRunner(func(user string) profile.Applier {
 		return profile.NewHostApplier(user, services, configs, firewall, firewalld,
 			osusers, sysconf, privilegedRunner(cfg))
+	}, func(ctx context.Context) error {
+		// Снимок инвентаря после применения: профиль меняет ровно то, что
+		// в разделах и показывается.
+		_, err := scanner.Scan(ctx)
+		return err
 	}))
 	m.Register(vmimage.KindDownload, vmimage.NewDownloadRunner(images,
 		func(ctx context.Context, tmpPath, name string) (string, error) {
@@ -803,7 +809,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// Хаб ведёт задания собственной машины — той самой строки
 	// «localhost» в списке хостов.
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
-		r.sysconfig, r.collector, r.vmimages)
+		r.sysconfig, r.collector, r.vmimages, r.scanner)
 	// То же, что в runServer: незавершённые задания разбираются до
 	// приёма запросов.
 	if err := r.jobs.Recover(ctx); err != nil {
