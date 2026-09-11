@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button, Checkbox, Form, Input, InputNumber, Segmented, type TableColumnsType } from 'antd'
-import { DeleteOutlined } from '@ant-design/icons'
+import { CheckCircleFilled, CloseCircleOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
@@ -107,14 +107,25 @@ function vmColumns(
       key: 'autostart',
       render: (_, vm) =>
         vm.persistent ? (
-          <Button
-            type="link"
+          // Состояние — иконкой, как галочка/крестик в списке хостов;
+          // слово «включён/выключен» занимало столбец ради двух состояний.
+          // Клик по ней переключает, а подсказка говорит и что сейчас, и
+          // что будет.
+          <RowAction
+            icon={
+              vm.autostart ? (
+                <CheckCircleFilled style={{ color: 'var(--status-good)' }} />
+              ) : (
+                <CloseCircleOutlined style={{ color: 'var(--text-muted)' }} />
+              )
+            }
+            label={`${t('virt.colAutostart')}: ${vm.autostart ? t('virt.autostartOn') : t('virt.autostartOff')} — ${
+              vm.autostart ? t('vmnet.autostartOff') : t('vmnet.autostartOn')
+            }`}
             disabled={!canControl}
             loading={busy === `${vm.name}:autostart`}
             onClick={() => toggleAutostart(vm.name, !vm.autostart)}
-          >
-            {vm.autostart ? t('virt.autostartOn') : t('virt.autostartOff')}
-          </Button>
+          />
         ) : (
           <span className="small muted" title={t('virt.transientTooltip')}>
             {t('virt.transientUnavailable')}
