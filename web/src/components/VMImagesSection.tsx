@@ -3,33 +3,49 @@ import { Button, Checkbox, Input, InputNumber, Tag, type TableColumnsType } from
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Job, Me, VMImage, VMImageLocal, VMTemplate, VMSpec, VMTool } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from '../components/ui'
-import { formatBytes } from '../components/charts'
-import { DataTable } from '../components/DataTable'
-import { confirmAction } from '../components/confirm'
-import { JobLogModal } from './Jobs'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from './ui'
+import { formatBytes } from './charts'
+import { DataTable } from './DataTable'
+import { confirmAction } from './confirm'
+import { JobLogModal } from '../pages/Jobs'
 
 /** Пока идёт скачивание, список надо перечитывать: недокачанный кусок
  * растёт, и оператор должен видеть, что дело движется. */
 const POLL_MS = 5_000
 
-export default function VMImages({ me }: { me: Me }) {
+/**
+ * Образы машин и шаблоны — часть раздела «Профили».
+ *
+ * Место не случайно: профиль описывает, каким должен быть хост, образ и
+ * шаблон — каким должна быть машина. Это заготовки одного рода, и
+ * держать их в разных разделах значило бы разводить по углам то, чем
+ * пользуются вместе.
+ */
+export default function VMImagesSection({ me }: { me: Me }) {
   const { t } = useTranslation()
   const canEdit = me.is_admin && me.allow_mutations
   const images = useApi<{
     catalog: VMImage[]
     local: VMImageLocal[]
+    custom: VMImage[] | null
+    custom_local: VMImageLocal[] | null
     dir: string
     tools: VMTool[]
     missing: VMTool[] | null
   }>('/vm/images', POLL_MS)
+  const [adding, setAdding] = useState(false)
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [creating, setCreating] = useState<VMImage | null>(null)
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const templates = useApi<{ templates: VMTemplate[] }>('/vm/templates', 60_000)
   const [error, setError] = useState<string | null>(null)
 
-  const local = new Map((images.data?.local ?? []).map((l) => [l.id, l]))
+  // Свои образы идут тем же списком и теми же кнопками: для создания
+  // машины разницы между ними и каталожными нет.
+  const local = new Map(
+    [...(images.data?.local ?? []), ...(images.data?.custom_local ?? [])].map((l) => [l.id, l]),
+  )
+  const allImages = [...(images.data?.catalog ?? []), ...(images.data?.custom ?? [])]
 
   async function startJob(path: string, body: Record<string, unknown>) {
     setError(null)
@@ -50,6 +66,7 @@ export default function VMImages({ me }: { me: Me }) {
       render: (_, img) => (
         <div style={{ minWidth: '14rem' }}>
           <strong>{img.name}</strong>
+          {img.custom && <Tag style={{ marginLeft: '0.4rem' }}>{t('vmimages.customBadge')}</Tag>}
           <div className="small muted mono">{img.file_name}</div>
         </div>
       ),
@@ -86,7 +103,7 @@ export default function VMImages({ me }: { me: Me }) {
         const l = local.get(img.id)
         return (
           <div className="row row-nowrap">
-            {canEdit && !l?.downloaded && (
+            {canEdit && !l?.downloaded && !img.custom && (
               <Button type="link" size="small" onClick={() => void startJob('/vm/images/download', { image_id: img.id })}>
                 {l?.partial ? t('vmimages.resume') : t('vmimages.download')}
               </Button>
@@ -119,10 +136,10 @@ export default function VMImages({ me }: { me: Me }) {
   return (
     <>
       <div className="page-head spread">
-        <h1>
+        <h2 style={{ margin: 0 }}>
           {t('vmimages.title')}
           <InfoHint>{t('vmimages.hint')}</InfoHint>
-        </h1>
+        </h2>
       </div>
 
       <ErrorNote error={error} />
@@ -156,13 +173,23 @@ export default function VMImages({ me }: { me: Me }) {
         </Banner>
       )}
 
-      <Card title={t('vmimages.catalogTitle')} subtitle={images.data?.dir}>
+      <Card
+        title={t('vmimages.catalogTitle')}
+        subtitle={images.data?.dir}
+        actions={
+          canEdit && (
+            <Button size="small" onClick={() => setAdding(true)}>
+              {t('vmimages.addOwn')}
+            </Button>
+          )
+        }
+      >
         {images.loading && !images.data ? (
           <Loading what={t('vmimages.loading')} />
         ) : (
           <div className="table-wrap">
             <DataTable<VMImage>
-              dataSource={images.data?.catalog ?? []}
+              dataSource={allImages}
               columns={columns}
               rowKey="id"
               tableLayout="auto"
@@ -212,6 +239,21 @@ export default function VMImages({ me }: { me: Me }) {
           </div>
         )}
       </Card>
+
+      {adding && (
+        <AddImageModal
+          onClose={() => setAdding(false)}
+          onStarted={(job) => {
+            setAdding(false)
+            setOpenJob(job)
+            images.reload()
+          }}
+          onUploaded={() => {
+            setAdding(false)
+            images.reload()
+          }}
+        />
+      )}
 
       {creating && (
         <CreateVMModal
@@ -441,4 +483,123 @@ function parseSpec(raw: string): Partial<VMSpec> {
   } catch {
     return {}
   }
+}
+
+/**
+ * Свой образ: по ссылке или файлом с компьютера.
+ *
+ * По ссылке качает то же задание, что и каталожные образы — с докачкой и
+ * проверкой суммы, если её задали. Файл идёт прямо в тело запроса: образ
+ * весит сотни мегабайт, и разбирать такую форму в памяти незачем.
+ */
+function AddImageModal({
+  onClose,
+  onStarted,
+  onUploaded,
+}: {
+  onClose: () => void
+  onStarted: (job: Job) => void
+  onUploaded: () => void
+}) {
+  const { t } = useTranslation()
+  const [url, setURL] = useState('')
+  const [fileName, setFileName] = useState('')
+  const [checksum, setChecksum] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [uploading, setUploading] = useState<number | null>(null)
+
+  async function fetchByURL() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ job_id: number }>('/vm/images/download', {
+        method: 'POST',
+        body: { url: url.trim(), file_name: fileName.trim(), checksum: checksum.trim() },
+      })
+      onStarted(await api<Job>(`/jobs/${res.job_id}`))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Загрузка идёт XMLHttpRequest, а не fetch: только он показывает, сколько
+  // отправлено, а на семистах мегабайтах полоса — не украшение.
+  function upload(file: File) {
+    setError(null)
+    setUploading(0)
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `/api/vm/images/upload?name=${encodeURIComponent(file.name)}`)
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) setUploading(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () => {
+      setUploading(null)
+      if (xhr.status === 200) {
+        onUploaded()
+        return
+      }
+      try {
+        setError((JSON.parse(xhr.responseText) as { error?: string }).error ?? `код ${xhr.status}`)
+      } catch {
+        setError(`код ${xhr.status}`)
+      }
+    }
+    xhr.onerror = () => {
+      setUploading(null)
+      setError(t('vmimages.uploadFailed'))
+    }
+    xhr.send(file)
+  }
+
+  return (
+    <Modal title={t('vmimages.addOwnTitle')} onClose={onClose} width={720}>
+      <ErrorNote error={error} />
+
+      <Card title={t('vmimages.byURL')} subtitle={t('vmimages.byURLHint')}>
+        <div className="col" style={{ gap: '0.5rem' }}>
+          <label>
+            {t('vmimages.url')}
+            <Input value={url} onChange={(e) => setURL(e.target.value)} placeholder="https://…/image.qcow2" />
+          </label>
+          <div className="grid grid-2">
+            <label>
+              {t('vmimages.fileName')}
+              <Input
+                value={fileName}
+                onChange={(e) => setFileName(e.target.value)}
+                placeholder={t('vmimages.fileNameAuto')}
+              />
+            </label>
+            <label>
+              {t('vmimages.checksum')}
+              <Input value={checksum} onChange={(e) => setChecksum(e.target.value)} placeholder="sha256" />
+            </label>
+          </div>
+          <span>
+            <Button type="primary" loading={busy} disabled={!url.trim()} onClick={() => void fetchByURL()}>
+              {t('vmimages.fetch')}
+            </Button>
+          </span>
+        </div>
+      </Card>
+
+      <Card title={t('vmimages.byFile')} subtitle={t('vmimages.byFileHint')}>
+        {uploading !== null ? (
+          <p className="small">{t('vmimages.uploading', { percent: uploading })}</p>
+        ) : (
+          <input
+            type="file"
+            accept=".qcow2,.img,.raw"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) upload(file)
+            }}
+          />
+        )}
+      </Card>
+    </Modal>
+  )
 }

@@ -886,6 +886,9 @@ export interface VMImage {
   os: string
   arch: string
   file_name: string
+  /** Образ добавлен оператором (загружен или скачан по ссылке), а не
+   * взят из каталога. */
+  custom?: boolean
 }
 
 export interface VMImageLocal {

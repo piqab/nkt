@@ -302,6 +302,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/vm/tools/install", s.handleVMToolsInstall)
 				r.Post("/vm/images/download", s.handleVMImageDownload)
 				r.Post("/vm/images/delete", s.handleVMImageDelete)
+				r.Post("/vm/images/upload", s.handleVMImageUpload)
 				r.Post("/vm/create", s.handleVMCreate)
 				r.Post("/vm/templates", s.handleVMTemplateSave)
 				r.Delete("/vm/templates/{id}", s.handleVMTemplateDelete)

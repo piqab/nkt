@@ -77,9 +77,9 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if r.escape == nil {
 		return fmt.Errorf("создание машин недоступно в этом режиме")
 	}
-	img, ok := vmimage.ByID(spec.ImageID)
-	if !ok {
-		return fmt.Errorf("нет такого образа в каталоге: %q", spec.ImageID)
+	img, err := resolveImage(r.store, spec.ImageID)
+	if err != nil {
+		return err
 	}
 	var done createResume
 	if err := jc.LoadResume(&done); err != nil {
@@ -313,6 +313,27 @@ func parseDomifaddr(out string) string {
 		}
 	}
 	return ""
+}
+
+// resolveImage находит образ по идентификатору: каталожный или свой,
+// добавленный оператором.
+//
+// Свой образ не скачивается: он уже лежит в кэше — его туда загрузили
+// или принесли. Если файла нет, честно говорим об этом, а не пытаемся
+// качать неизвестно откуда.
+func resolveImage(store *vmimage.Store, id string) (vmimage.Image, error) {
+	if name, ok := strings.CutPrefix(id, vmimage.CustomPrefix); ok {
+		img := vmimage.CustomImage(name)
+		if !store.Have(img) {
+			return vmimage.Image{}, fmt.Errorf("образа %s нет в кэше — загрузите его заново", name)
+		}
+		return img, nil
+	}
+	img, ok := vmimage.ByID(id)
+	if !ok {
+		return vmimage.Image{}, fmt.Errorf("нет такого образа: %q", id)
+	}
+	return img, nil
 }
 
 // ensureDefaultNetwork поднимает сеть libvirt «default», если она
