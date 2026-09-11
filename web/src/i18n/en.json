@@ -1553,7 +1553,7 @@
         },
         "compose": {
           "title": "compose — services from docker compose",
-          "body": "A stack is described in full: name is the stack name (also the directory name and the docker project name), content is the compose file itself, up says whether the stack must be running (yes by default). Without an explicit path the file goes to /srv/compose/<name>/docker-compose.yml — its own directory, so applying a profile never overwrites what you maintain by hand. The plan shows two separate items — write the file and bring the stack up — so it is visible when running containers get recreated. up: false runs docker compose down; volumes are left alone."
+          "body": "A stack is described in full: name is the stack name (also the directory name and the docker project name), content is the compose file itself, up says whether the stack must be running (yes by default). Without an explicit path the file goes to /srv/compose/<name>/docker-compose.yml — its own directory, so applying a profile never overwrites what you maintain by hand. The plan shows two separate items — write the file and bring the stack up — so it is visible when running containers get recreated. up: false runs docker compose down; volumes are left alone. If the host has no docker, the plan offers to install it as its first item — the official way, from docker.com's repository: the distro package lags behind and may ship no compose plugin at all. It is a separate item and can be unticked."
         }
       },
       "limits": {
@@ -1591,6 +1591,7 @@
     "colDesired": "Should be",
     "showDetail": "show",
     "action": {
+      "docker.install": "install docker",
       "package.install": "install package",
       "service.enable": "enable at boot",
       "service.disable": "disable at boot",
@@ -1627,7 +1628,8 @@
     "risk": {
       "ssh-access": "may cut off SSH access to the host",
       "sudo-grant": "the account gets full rights",
-      "hostname": "the hostname shows up in certificates and logs"
+      "hostname": "the hostname shows up in certificates and logs",
+      "external-repo": "docker.com's own repository is added to the system"
     }
   },
   "vmimages": {

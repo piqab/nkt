@@ -98,6 +98,20 @@ func (h *HostReader) FileContent(_ context.Context, path string) (string, bool, 
 	return string(raw), true, nil
 }
 
+// DockerPresent отвечает, есть ли на хосте docker.
+//
+// Спрашивается тем же способом, каким команды потом и выполняются:
+// «command -v» встроен в оболочку, отдельного файла у него может не
+// быть, поэтому через sh. Отсутствие docker — не ошибка чтения: это
+// ответ «нет», и план должен уметь его закрыть установкой.
+func (h *HostReader) DockerPresent(ctx context.Context) (bool, error) {
+	res, err := h.c.Run(ctx, "sh", "-c", "command -v docker")
+	if err != nil {
+		return false, nil
+	}
+	return res.ExitCode == 0 && strings.TrimSpace(res.Stdout) != "", nil
+}
+
 // ComposeRunning считает работающие контейнеры стека.
 //
 // «docker compose ps -q» отдаёт по строке на контейнер и ничего не

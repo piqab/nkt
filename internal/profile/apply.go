@@ -73,6 +73,8 @@ func (a *HostApplier) Apply(ctx context.Context, c Change) (string, error) {
 		return a.createUser(ctx, c.Target, c.Detail, false)
 	case ActionSetHostname:
 		return a.setHostname(ctx, c.Target)
+	case ActionInstallDocker:
+		return a.installDocker(ctx)
 	case ActionWriteCompose:
 		return a.writeCompose(ctx, c)
 	case ActionComposeUp:
@@ -130,6 +132,25 @@ func (a *HostApplier) writeFile(ctx context.Context, c Change) (string, error) {
 		return "", fmt.Errorf("%s: %s", c.Target, res.Message)
 	}
 	return fmt.Sprintf("файл %s записан", c.Target), nil
+}
+
+// installDocker ставит docker по официальной инструкции.
+//
+// Не из репозитория дистрибутива: там пакет отстаёт на версии, а
+// compose-плагина может не быть вовсе — без него «docker compose» просто
+// не существует, и стек из профиля не поднять.
+func (a *HostApplier) installDocker(ctx context.Context) (string, error) {
+	var lines []string
+	err := control.InstallDocker(ctx, a.escape, func(format string, args ...any) {
+		lines = append(lines, strings.TrimSpace(fmt.Sprintf(format, args...)))
+	})
+	if err != nil {
+		if len(lines) > 0 {
+			return "", fmt.Errorf("%w (%s)", err, lines[len(lines)-1])
+		}
+		return "", err
+	}
+	return strings.Join(lines, "; "), nil
 }
 
 // writeCompose кладёт описание стека на хост.
