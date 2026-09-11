@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Checkbox, Input, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { api, useApi } from '../api'
+import { ApiError, api, useApi } from '../api'
 import type { Me, VMNetwork } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from './ui'
 import { DataTable } from './DataTable'
@@ -168,12 +168,36 @@ function CreateNetworkModal({ onClose, onDone }: { onClose: () => void; onDone: 
   const { t } = useTranslation()
   const [name, setName] = useState('')
   const [mode, setMode] = useState<'nat' | 'bridge' | 'isolated'>('nat')
-  const [subnet, setSubnet] = useState('192.168.100.0/24')
+  const [subnet, setSubnet] = useState('')
   const [bridge, setBridge] = useState('')
   const [dhcp, setDHCP] = useState(true)
   const [autostart, setAutostart] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Показывается только после отказа из-за пересечения с сетью самого
+  // хоста: такое оператор может разрешить осознанно. Пересечение двух
+  // сетей libvirt не снимается ничем — такая сеть не поднимется.
+  const [overridable, setOverridable] = useState(false)
+  const [force, setForce] = useState(false)
+
+  // Подсеть подставляется не «правдоподобная», а заведомо свободная:
+  // хост знает свои сети и интерфейсы, а форма — нет. Пока ответ не
+  // пришёл, поле пустое: показать значение, которое может оказаться
+  // занятым, хуже, чем показать подсказку «подбираем».
+  useEffect(() => {
+    let cancelled = false
+    api<{ subnet: string; bridge: string }>('/vm/networks/free-subnet')
+      .then((res) => {
+        if (!cancelled && res.subnet) setSubnet(res.subnet)
+      })
+      .catch(() => {
+        // Не смогли спросить хост — пусть оператор впишет сам.
+        if (!cancelled) setSubnet('192.168.100.0/24')
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   async function create() {
     setBusy(true)
@@ -188,11 +212,14 @@ function CreateNetworkModal({ onClose, onDone }: { onClose: () => void; onDone: 
           bridge: bridge.trim(),
           dhcp: mode === 'bridge' ? false : dhcp,
           autostart,
+          force,
         },
       })
       onDone()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      const payload = err instanceof ApiError ? (err.payload as { overridable?: boolean } | null) : null
+      setOverridable(!!payload?.overridable)
     } finally {
       setBusy(false)
     }
@@ -229,9 +256,19 @@ function CreateNetworkModal({ onClose, onDone }: { onClose: () => void; onDone: 
           <>
             <label>
               {t('vmnet.subnet')}
-              <Input value={subnet} onChange={(e) => setSubnet(e.target.value)} placeholder="192.168.100.0/24" />
+              <Input
+                value={subnet}
+                onChange={(e) => setSubnet(e.target.value)}
+                placeholder={subnet ? '192.168.100.0/24' : t('vmnet.subnetPicking')}
+              />
               <span className="small muted">{t('vmnet.subnetHint')}</span>
             </label>
+            {overridable && (
+              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+                <Checkbox checked={force} onChange={(e) => setForce(e.target.checked)} />
+                {t('vmnet.force')}
+              </label>
+            )}
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
               <Checkbox checked={dhcp} onChange={(e) => setDHCP(e.target.checked)} />
               {t('vmnet.dhcp')}

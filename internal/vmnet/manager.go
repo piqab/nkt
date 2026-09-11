@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -108,6 +109,9 @@ func (m *Manager) Create(ctx context.Context, s Spec) error {
 	if m.run == nil {
 		return fmt.Errorf("управление сетями недоступно в этом режиме")
 	}
+	if err := m.checkSubnetFree(ctx, s); err != nil {
+		return err
+	}
 	if err := os.MkdirAll(m.tmpDir, 0o755); err != nil {
 		return err
 	}
@@ -133,6 +137,33 @@ func (m *Manager) Create(ctx context.Context, s Spec) error {
 	return nil
 }
 
+// checkSubnetFree отвергает создание сети с уже занятой подсетью.
+//
+// Force снимает только запрет на пересечение с сетью самого хоста: там
+// бывают осознанные случаи (машины в той же сети, что хост). Пересечение
+// двух сетей libvirt не снимается ничем — такая сеть не поднимется.
+func (m *Manager) checkSubnetFree(ctx context.Context, s Spec) error {
+	if s.Mode == ModeBridge || s.Subnet == "" {
+		return nil
+	}
+	taken, _, err := m.Occupied(ctx)
+	if err != nil {
+		// Не смогли осмотреться — не мешаем создавать: отказ по
+		// неизвестной причине хуже, чем пропущенная проверка.
+		return nil
+	}
+	if s.Force {
+		kept := taken[:0]
+		for _, t := range taken {
+			if !t.Host {
+				kept = append(kept, t)
+			}
+		}
+		taken = kept
+	}
+	return CheckSubnet(s.Subnet, taken)
+}
+
 // EnsureNAT заводит NAT-сеть с таким именем, если её ещё нет, и
 // поднимает.
 //
@@ -141,19 +172,25 @@ func (m *Manager) Create(ctx context.Context, s Spec) error {
 // руками ради того, что nkt умеет сам, — лишняя работа. Подсеть
 // подбирается свободная: занятая чужой сетью не поднимется.
 func (m *Manager) EnsureNAT(ctx context.Context, name string) (created bool, err error) {
-	exists, err := m.Exists(ctx, name)
+	all, err := m.names(ctx, "--all")
 	if err != nil {
 		return false, err
 	}
-	if exists {
+	if toSet(all)[name] {
+		// Поднятую сеть не трогаем: «virsh net-start» на уже работающей
+		// отвечает отказом, и он выглядел бы как невозможность создать
+		// машину, хотя всё в порядке.
+		active, err := m.names(ctx)
+		if err != nil {
+			return false, err
+		}
+		if toSet(active)[name] {
+			return false, nil
+		}
 		return false, m.Start(ctx, name)
 	}
 
-	nets, err := m.List(ctx)
-	if err != nil {
-		return false, err
-	}
-	subnet, bridge, err := freeSubnet(nets)
+	subnet, bridge, err := m.Suggest(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -164,38 +201,91 @@ func (m *Manager) EnsureNAT(ctx context.Context, name string) (created bool, err
 	return true, nil
 }
 
-// freeSubnet подбирает подсеть и имя моста, не занятые другими сетями.
+// freeSubnet подбирает подсеть и имя моста, не занятые ничем на хосте.
 //
-// Перебираются 192.168.<N>.0/24 начиная с libvirt'овской 122: на чужую
-// подсеть сеть просто не поднимется, а совпадение с домашней сетью
-// оператора сломает ему маршрутизацию.
-func freeSubnet(existing []Network) (subnet, bridge string, err error) {
-	taken := map[string]bool{}
+// Перебираются 192.168.<N>.0/24 начиная с libvirt'овской 122: занятая
+// подсеть не поднимется, а совпадение с домашней сетью оператора сломает
+// ему маршрутизацию. taken — всё занятое: и сети libvirt, и интерфейсы
+// самого хоста.
+func freeSubnet(existing []Network, taken []Occupied) (subnet, bridge string, err error) {
 	bridges := map[string]bool{}
 	for _, n := range existing {
-		if n.Address != "" {
-			// Адрес хоста в сети — это .1 её подсети.
-			if idx := strings.LastIndex(n.Address, "."); idx > 0 {
-				taken[n.Address[:idx]] = true
-			}
-		}
 		if n.Bridge != "" {
 			bridges[n.Bridge] = true
 		}
 	}
 	for i := 122; i < 255; i++ {
-		prefix := fmt.Sprintf("192.168.%d", i)
-		if taken[prefix] {
+		candidate := fmt.Sprintf("192.168.%d.0/24", i)
+		if CheckSubnet(candidate, taken) != nil {
 			continue
 		}
 		for b := 0; b < 100; b++ {
 			name := fmt.Sprintf("virbr%d", b)
 			if !bridges[name] {
-				return prefix + ".0/24", name, nil
+				return candidate, name, nil
 			}
 		}
 	}
 	return "", "", fmt.Errorf("не нашлось свободной подсети — задайте сеть вручную")
+}
+
+// Occupied собирает всё занятое на хосте: подсети сетей libvirt и
+// адреса его собственных интерфейсов.
+func (m *Manager) Occupied(ctx context.Context) ([]Occupied, []Network, error) {
+	nets, err := m.List(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	taken := NetworkRanges(nets)
+	taken = append(taken, m.hostRanges(ctx)...)
+	return taken, nets, nil
+}
+
+// Suggest подбирает свободную подсеть и мост — тем и заполняется форма
+// создания сети, чтобы предложенное значение было заведомо свободным, а
+// не просто правдоподобным.
+func (m *Manager) Suggest(ctx context.Context) (subnet, bridge string, err error) {
+	taken, nets, err := m.Occupied(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	return freeSubnet(nets, taken)
+}
+
+// hostRanges — подсети интерфейсов самого хоста.
+//
+// Ошибка здесь не фатальна: без списка интерфейсов проверка просто
+// становится менее строгой, а сети libvirt всё равно проверяются.
+func (m *Manager) hostRanges(ctx context.Context) []Occupied {
+	if m.run == nil {
+		return nil
+	}
+	res, err := m.run(ctx, "ip", "-o", "-4", "addr", "show")
+	if err != nil || res.ExitCode != 0 {
+		return nil
+	}
+	var out []Occupied
+	for _, line := range strings.Split(res.Stdout, "\n") {
+		// «2: eth0    inet 192.168.1.5/24 brd 192.168.1.255 scope global eth0»
+		fields := strings.Fields(line)
+		if len(fields) < 4 || fields[2] != "inet" {
+			continue
+		}
+		iface := strings.TrimSuffix(fields[1], ":")
+		if iface == "lo" {
+			continue
+		}
+		ip, ipNet, err := net.ParseCIDR(fields[3])
+		if err != nil || ip.To4() == nil || ip.IsLoopback() {
+			continue
+		}
+		out = append(out, Occupied{
+			CIDR:  ipNet.String(),
+			Where: fmt.Sprintf("интерфейсом хоста %s", iface),
+			Host:  true,
+		})
+	}
+	return out
 }
 
 // Start поднимает сеть.
@@ -254,7 +344,7 @@ func (m *Manager) simple(ctx context.Context, verb, name, benign string) error {
 		return err
 	}
 	if res.ExitCode != 0 {
-		out := firstMeaningful(res.Stderr, res.Stdout)
+		out := meaningfulLines(res.Stderr, res.Stdout)
 		if benign != "" && strings.Contains(strings.ToLower(out), benign) {
 			return nil
 		}
@@ -309,18 +399,39 @@ func describeRunError(err error) error {
 	return err
 }
 
-// firstMeaningful отдаёт первую непустую строку без повторяющегося
-// «error:», которым virsh начинает каждую свою.
-func firstMeaningful(streams ...string) string {
+// meaningfulLines собирает из вывода команды то, что стоит показать.
+//
+// Не первая строка: virsh пишет заголовок («Failed to start network
+// iivirt») первым, а причину — следующей. Показывать только первую
+// значит каждый раз выбрасывать ровно ту часть, ради которой сообщение
+// и читают.
+func meaningfulLines(streams ...string) string {
+	var lines []string
 	for _, s := range streams {
 		for _, line := range strings.Split(s, "\n") {
 			line = strings.TrimSpace(line)
 			line = strings.TrimPrefix(line, "error: ")
 			line = strings.TrimPrefix(line, "ошибка: ")
 			if line != "" {
-				return line
+				lines = append(lines, line)
 			}
 		}
 	}
-	return "команда завершилась с ошибкой"
+	if len(lines) == 0 {
+		return "команда завершилась с ошибкой"
+	}
+	if len(lines) > 3 {
+		lines = lines[:3]
+	}
+	return strings.Join(lines, "; ")
+}
+
+// firstMeaningful отдаёт первую строку из meaningfulLines — для мест,
+// где нужен короткий заголовок.
+func firstMeaningful(streams ...string) string {
+	out := meaningfulLines(streams...)
+	if head, _, ok := strings.Cut(out, "; "); ok {
+		return head
+	}
+	return out
 }
