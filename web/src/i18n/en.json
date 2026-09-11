@@ -412,9 +412,6 @@
     "notPasswordEncrypted": "This file doesn't look like a password-encrypted export",
     "corruptedFileTooShort": "The file is corrupted (too short)",
     "wrongPasswordOrCorrupted": "Wrong password or corrupted file",
-    "notifyNewProblems": "{{name}}: new problems",
-    "notifyUnreachable": "{{name}}: unreachable",
-    "notifyUnreachableBody": "The hub couldn't reach the host on the last attempt",
     "statusNew": "new",
     "statusInstalling": "installing…",
     "statusOnline": "online",
@@ -609,6 +606,25 @@
     "newVMToolsMissing": "Host «{{host}}» is missing the tools needed to create machines — the job installs them itself as its first step. That takes a minute; you can install them up front:",
     "newVMWillUpdate": "Host «{{host}}» runs an nkt older than the hub. Creating a machine relies on its API, so the job will update it first — that takes a few minutes.",
     "newVMNetwork": "Network"
+  },
+  "events": {
+    "title": "Alerts",
+    "hint": "What happened to the hosts while nobody was watching: a host stopped answering, answered again, picked up serious findings. The hub records these during its background poll, so the log does not depend on an open tab, and the host name and address in it are the ones from the moment of the event.",
+    "listTitle": "Log",
+    "listSubtitle": "entries: {{count}}",
+    "empty": "Nothing has happened yet.",
+    "refresh": "refresh",
+    "colWhen": "When",
+    "colHost": "Host",
+    "colWhat": "What happened",
+    "colDetail": "Details",
+    "kind": {
+      "unreachable": "not answering",
+      "recovered": "answering again",
+      "problems": "new problems",
+      "resolved": "problems cleared",
+      "job-failed": "job failed"
+    }
   },
   "certs": {
     "colSites": "Sites",

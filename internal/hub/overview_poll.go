@@ -127,20 +127,20 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 
 	dial, channel, onFail, err := m.dialerFor(ctx, hostID)
 	if err != nil {
-		m.recordUnreachable(hostID, err)
+		m.recordUnreachable(ctx, hostID, err)
 		return
 	}
 	m.recordChannel(hostID, channel)
 	cookie, err := m.cookieFor(ctx, hostID, dial)
 	if err != nil {
 		onFail()
-		m.recordUnreachable(hostID, err)
+		m.recordUnreachable(ctx, hostID, err)
 		return
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+remoteAPIAddr+"/api/overview", nil)
 	if err != nil {
-		m.recordUnreachable(hostID, err)
+		m.recordUnreachable(ctx, hostID, err)
 		return
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
@@ -148,13 +148,13 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	resp, err := tunnelHTTPClient(dial).Do(req)
 	if err != nil {
 		onFail()
-		m.recordUnreachable(hostID, err)
+		m.recordUnreachable(ctx, hostID, err)
 		return
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		m.recordUnreachable(hostID, fmt.Errorf("код %d", resp.StatusCode))
+		m.recordUnreachable(ctx, hostID, fmt.Errorf("код %d", resp.StatusCode))
 		return
 	}
 
@@ -163,9 +163,14 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		Version  string         `json:"version"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		m.recordUnreachable(hostID, err)
+		m.recordUnreachable(ctx, hostID, err)
 		return
 	}
+
+	// Оповещения — до обновления кэша, по той же причине: переход виден
+	// только в сравнении с прошлым опросом.
+	m.noteReachability(ctx, hostID, true, "")
+	m.noteFindings(ctx, hostID, body.Findings)
 
 	now := time.Now()
 	m.overviewMu.Lock()
@@ -196,7 +201,10 @@ func (m *Manager) recordChannel(hostID int64, channel string) {
 // recordUnreachable marks a host unreachable without touching whatever
 // findings counts were last successfully polled — see pollHost's doc
 // comment for why.
-func (m *Manager) recordUnreachable(hostID int64, err error) {
+func (m *Manager) recordUnreachable(ctx context.Context, hostID int64, err error) {
+	// Событие — до изменения кэша: переход виден только по сравнению с
+	// прошлым состоянием, а после записи сравнивать уже не с чем.
+	m.noteReachability(ctx, hostID, false, err.Error())
 	m.overviewMu.Lock()
 	defer m.overviewMu.Unlock()
 	cur := m.overview[hostID]

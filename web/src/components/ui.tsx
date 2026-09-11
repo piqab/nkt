@@ -38,6 +38,23 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
   return <Badge color={TONE_COLOR_VAR[severity]} text={severityLabel(severity)} />
 }
 
+/**
+ * Короткая запись ссылки на образ.
+ *
+ * Образ без тега docker называет полной суммой: «sha256:» и шестьдесят
+ * четыре знака, которые не читает никто, но которые растягивают колонку
+ * и переносятся на три строки. Узнают такой образ по началу и концу —
+ * ровно это и остаётся. Обычное имя («nginx:1.27», «ghcr.io/acme/api»)
+ * не трогается: его и читают целиком.
+ */
+export function shortImageRef(ref: string): string {
+  const short = (digest: string) => `${digest.slice(0, 8)}…${digest.slice(-6)}`
+  const m = /^(.*@)?(sha256:)?([0-9a-f]{32,})$/i.exec(ref.trim())
+  if (!m) return ref
+  const [, name = '', algo = '', digest] = m
+  return `${name}${algo}${short(digest)}`
+}
+
 export function StateBadge({ state }: { state: string }) {
   const tone =
     state === 'active' || state === 'running'

@@ -242,6 +242,25 @@ CREATE TABLE IF NOT EXISTS host_groups (
     name       TEXT PRIMARY KEY,
     created_at TEXT NOT NULL
 );
+
+-- Оповещения хаба: хост перестал отвечать, снова отвечает, появились
+-- проблемы. Рождаются в фоновом опросе, а не в браузере, поэтому
+-- переживают закрытую вкладку — иначе история событий была бы у каждого
+-- своя и терялась при перезагрузке страницы.
+--
+-- Имя и адрес хоста записываются в само событие: хост переименуют,
+-- переедут или удалят, а журнал должен остаться читаемым.
+CREATE TABLE IF NOT EXISTS host_events (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts        TEXT NOT NULL,
+    host_id   INTEGER NOT NULL,
+    host_name TEXT NOT NULL,
+    host_addr TEXT NOT NULL,
+    kind      TEXT NOT NULL,
+    severity  TEXT NOT NULL DEFAULT '',
+    detail    TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_host_events_ts ON host_events(id DESC);
 `
 
 // columnMigrations lists every column the hosts table has picked up since

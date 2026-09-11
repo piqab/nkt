@@ -712,6 +712,26 @@ func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"imported": imported, "errors": errs})
 }
 
+// handleEvents отдаёт журнал оповещений и число непоказанных.
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	events, unread, err := s.hub.Events(r.Context(), limit)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"events": events, "unread": unread})
+}
+
+// handleEventsSeen помечает журнал прочитанным.
+func (s *Server) handleEventsSeen(w http.ResponseWriter, r *http.Request) {
+	if err := s.hub.MarkEventsSeen(r.Context()); err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
