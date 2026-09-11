@@ -823,6 +823,8 @@ export interface Job {
   kind: string
   title: string
   queue: string
+  /** Вход задания как JSON-строка: разбирает его тот, кто знает вид. */
+  params?: string
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'interrupted'
   step: number
   steps: number

@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
@@ -38,10 +39,27 @@ type PurgeOptions struct {
 	// с хоста уезжает и его ключ, и без пароля хост остался бы без
 	// единого способа входа — то есть потерянным.
 	RestorePassword bool `json:"restore_password"`
+	// VM удаляет саму машину на хосте, где она создана: домен и его
+	// диски. Только для машин — у обычного хоста нет хозяина, который мог
+	// бы его выключить.
+	//
+	// Делается не по SSH в саму машину, а через её хост: он ею и
+	// управляет, а её собственный доступ для этого не нужен и может быть
+	// уже недоступен (адрес не определился, машина не поднялась).
+	VM bool `json:"vm"`
+	// VMDisks удаляет вместе с машиной и её диски. Отдельный вопрос:
+	// описание домена заводится заново за минуту, а диск с данными — нет,
+	// и молча стирать его вместе с записью нельзя.
+	VMDisks bool `json:"vm_disks"`
 }
 
 // Any сообщает, есть ли что делать на хосте вообще.
 func (o PurgeOptions) Any() bool {
+	return o.Service || o.Data || o.Access || o.User || o.RestorePassword || o.VM
+}
+
+// onHost сообщает, нужно ли заходить в сам хост по SSH.
+func (o PurgeOptions) onHost() bool {
 	return o.Service || o.Data || o.Access || o.User || o.RestorePassword
 }
 
@@ -64,17 +82,39 @@ func (m *Manager) PurgeHost(ctx context.Context, hostID int64, opts PurgeOptions
 		res.Error = err.Error()
 		return res
 	}
+	// Машина удаляется целиком — тогда чистить внутри неё уже нечего, и
+	// её собственный SSH не нужен вовсе.
+	if opts.VM {
+		if host.ParentID == 0 {
+			res.Error = "это не машина, а хост: удалить его «вместе с дисками» не у кого"
+			return res
+		}
+		steps, err := m.deleteHostVM(ctx, host, opts.VMDisks)
+		res.Steps = append(res.Steps, steps...)
+		if err != nil {
+			res.Error = err.Error()
+			return res
+		}
+		res.OK = true
+		return res
+	}
+	if !opts.onHost() {
+		res.OK = true
+		return res
+	}
+
 	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
 	if err != nil {
 		res.Error = fmt.Sprintf("расшифровка SSH-секрета: %v", err)
 		return res
 	}
-	client, err := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
+	link, err := m.dialHost(ctx, host)
 	if err != nil {
 		res.Error = err.Error()
 		return res
 	}
-	defer client.Close()
+	defer link.Close()
+	client := link.client
 
 	sudo := sudoPrefix(host.SSHUser)
 	step := func(name, cmd string) {
@@ -171,4 +211,58 @@ func restorePasswordCmd(sudo string) string {
 			" && { %[2]ssystemctl reload ssh 2>/dev/null || %[2]ssystemctl reload sshd; };"+
 			" else echo 'файла нет — вход по паролю не выключался'; fi",
 		nktSSHDropIn, sudo)
+}
+
+// deleteHostVM убирает машину на хосте, где она создана: гасит домен и
+// удаляет его вместе с дисками.
+//
+// Через API хоста, а не по SSH в саму машину: удалять машину изнутри
+// неё — то же, что пилить сук; да и доступа туда может не быть вовсе.
+// Имя домена — имя записи: под ним машина и заводилась.
+func (m *Manager) deleteHostVM(ctx context.Context, host store.Host, removeDisks bool) ([]string, error) {
+	parent, err := m.db.HostByID(ctx, host.ParentID)
+	if err != nil {
+		return nil, fmt.Errorf("хост машины не найден: %w", err)
+	}
+	var steps []string
+
+	// Сверяемся со списком: если домена там нет, всё остальное только
+	// запутает — «machine not found» вместо «его уже нет».
+	var list struct {
+		VMs []struct {
+			Name  string `json:"name"`
+			State string `json:"state"`
+		} `json:"vms"`
+	}
+	if _, err := m.HostAPI(ctx, parent.ID, "GET", "/api/vms", nil, &list); err != nil {
+		return steps, fmt.Errorf("список машин на хосте %s: %w", parent.Name, err)
+	}
+	found := false
+	for _, vm := range list.VMs {
+		if vm.Name == host.Name {
+			found = true
+			break
+		}
+	}
+	if !found {
+		steps = append(steps, fmt.Sprintf("машины «%s» на хосте %s уже нет", host.Name, parent.Name))
+		return steps, nil
+	}
+
+	// force: запущенную машину хост гасит сам, перед удалением. Просить
+	// об этом отдельным вызовом нельзя — состояние доменов хост держит в
+	// снимке инвентаря, и сразу после выключения там всё ещё «running».
+	path := "/api/vms/" + url.PathEscape(host.Name) + "?force=true"
+	if removeDisks {
+		path += "&remove_storage=true"
+	}
+	if _, err := m.HostAPI(ctx, parent.ID, "DELETE", path, nil, nil); err != nil {
+		return steps, fmt.Errorf("удаление машины «%s» на хосте %s: %w", host.Name, parent.Name, err)
+	}
+	if removeDisks {
+		steps = append(steps, fmt.Sprintf("машина «%s» выключена, она и её диски удалены на хосте %s", host.Name, parent.Name))
+	} else {
+		steps = append(steps, fmt.Sprintf("машина «%s» выключена и удалена на хосте %s, диски оставлены", host.Name, parent.Name))
+	}
+	return steps, nil
 }

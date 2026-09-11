@@ -417,7 +417,7 @@ func TestHostsLocalRouteWithRealEmbeddedAPIServer(t *testing.T) {
 		Certs:     control.NewCertManager(cfg, collector, db, services, scanner),
 		Podman:    control.NewPodmanManager(collector, db),
 		LXD:       control.NewLXDManager(collector, db),
-		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
+		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner, nil),
 		Log:       slog.Default(), Version: "test",
 	})
 

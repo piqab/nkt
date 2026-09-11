@@ -26,6 +26,42 @@ const sshDialTimeout = 15 * time.Second
 // verify it on every later one — not done here to keep the first
 // installable version simple.
 func dialSSH(ctx context.Context, addr string, port int, user, authKind string, secret []byte) (*ssh.Client, error) {
+	cfg, err := sshClientConfig(user, authKind, secret)
+	if err != nil {
+		return nil, err
+	}
+	target := net.JoinHostPort(addr, fmt.Sprintf("%d", port))
+	dialer := net.Dialer{Timeout: sshDialTimeout}
+	conn, err := dialer.DialContext(ctx, "tcp", target)
+	if err != nil {
+		return nil, fmt.Errorf("подключение к %s: %w", target, err)
+	}
+	return handshake(conn, target, cfg)
+}
+
+// dialSSHOver делает рукопожатие поверх уже открытого соединения —
+// канала, пробитого через другой хост (см. dialHost). Сам канал закрывать
+// здесь не нужно: он закроется вместе с клиентом.
+func dialSSHOver(conn net.Conn, target, user, authKind string, secret []byte) (*ssh.Client, error) {
+	cfg, err := sshClientConfig(user, authKind, secret)
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return handshake(conn, target, cfg)
+}
+
+func handshake(conn net.Conn, target string, cfg *ssh.ClientConfig) (*ssh.Client, error) {
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, target, cfg)
+	if err != nil {
+		_ = conn.Close()
+		return nil, fmt.Errorf("SSH-рукопожатие с %s: %w", target, err)
+	}
+	return ssh.NewClient(sshConn, chans, reqs), nil
+}
+
+// sshClientConfig собирает способ входа и общие настройки клиента.
+func sshClientConfig(user, authKind string, secret []byte) (*ssh.ClientConfig, error) {
 	var auth ssh.AuthMethod
 	switch authKind {
 	case store.HostAuthPassword:
@@ -39,26 +75,12 @@ func dialSSH(ctx context.Context, addr string, port int, user, authKind string, 
 	default:
 		return nil, fmt.Errorf("неизвестный способ входа по SSH: %q", authKind)
 	}
-
-	cfg := &ssh.ClientConfig{
+	return &ssh.ClientConfig{
 		User:            user,
 		Auth:            []ssh.AuthMethod{auth},
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec // see doc comment above
 		Timeout:         sshDialTimeout,
-	}
-
-	target := net.JoinHostPort(addr, fmt.Sprintf("%d", port))
-	dialer := net.Dialer{Timeout: sshDialTimeout}
-	conn, err := dialer.DialContext(ctx, "tcp", target)
-	if err != nil {
-		return nil, fmt.Errorf("подключение к %s: %w", target, err)
-	}
-	sshConn, chans, reqs, err := ssh.NewClientConn(conn, target, cfg)
-	if err != nil {
-		_ = conn.Close()
-		return nil, fmt.Errorf("SSH-рукопожатие с %s: %w", target, err)
-	}
-	return ssh.NewClient(sshConn, chans, reqs), nil
+	}, nil
 }
 
 // runRemote executes one command over a fresh SSH session and returns its

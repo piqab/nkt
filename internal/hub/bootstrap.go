@@ -235,14 +235,14 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 	// что ключ принят — текущая сессия открыта по паролю и переживёт любую
 	// ошибку в authorized_keys.
 	report("hub.bootstrapVerifyKey", targetUser)
-	verify, err := dialSSH(ctx, host.Addr, host.SSHPort, targetUser, store.HostAuthKey, []byte(privatePEM))
+	verify, err := m.dialHostAs(ctx, host, targetUser, store.HostAuthKey, []byte(privatePEM))
 	if err != nil {
 		return res, fmt.Errorf("вход по ключу под %s не работает, пароль оставлен как есть: %w", targetUser, err)
 	}
 	defer verify.Close()
 
 	if targetUser != "root" {
-		if out, err := runRemote(verify, "sudo -n true"); err != nil {
+		if out, err := runRemote(verify.client, "sudo -n true"); err != nil {
 			return res, fmt.Errorf("sudo без пароля для %s не работает: %w: %s", targetUser, err, lastLines(out, 3))
 		}
 	}
@@ -251,7 +251,7 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 
 	if opts.DisablePasswordAuth {
 		report("hub.bootstrapDisablePassword")
-		if err := disablePasswordAuth(ctx, verify, host, targetUser, privatePEM); err != nil {
+		if err := m.disablePasswordAuth(ctx, verify.client, host, targetUser, privatePEM); err != nil {
 			// Не срываем подготовку целиком: ключ уже работает, а вход по
 			// паролю просто остался включённым — это ровно то состояние, в
 			// котором хост был до сих пор.
@@ -434,7 +434,7 @@ const nktSSHDropIn = "/etc/ssh/sshd_config.d/99-nkt-no-password.conf"
 // disablePasswordAuth выключает парольный вход и проверяет, что после
 // перезагрузки sshd вход по ключу всё ещё работает. Если нет — drop-in
 // удаляется и sshd перезагружается обратно.
-func disablePasswordAuth(ctx context.Context, client *ssh.Client, host store.Host, user, privatePEM string) error {
+func (m *Manager) disablePasswordAuth(ctx context.Context, client *ssh.Client, host store.Host, user, privatePEM string) error {
 	sudo := sudoPrefix(user)
 	// Include в основном конфиге есть не всегда: в старых образах
 	// sshd_config.d просто не подключён, и файл там был бы бесполезен.
@@ -464,7 +464,7 @@ func disablePasswordAuth(ctx context.Context, client *ssh.Client, host store.Hos
 	// Ещё одно новое соединение: reload прошёл, но принимает ли демон
 	// подключения — вопрос отдельный, и уже открытая сессия на него не
 	// отвечает.
-	check, err := dialSSH(ctx, host.Addr, host.SSHPort, user, store.HostAuthKey, []byte(privatePEM))
+	check, err := m.dialHostAs(ctx, host, user, store.HostAuthKey, []byte(privatePEM))
 	if err != nil {
 		rollback()
 		return fmt.Errorf("после выключения пароля вход по ключу перестал работать, изменение отменено: %w", err)

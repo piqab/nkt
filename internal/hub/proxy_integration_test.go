@@ -239,7 +239,7 @@ func TestManagerProxyRetriesAfterStalePooledConnection(t *testing.T) {
 	if !ok {
 		t.Fatal("expected a pooled connection after the warm-up request")
 	}
-	if err := hc.client.Close(); err != nil {
+	if err := hc.link.Close(); err != nil {
 		t.Fatalf("closing the pooled client to simulate a dead connection: %v", err)
 	}
 

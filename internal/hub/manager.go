@@ -658,19 +658,15 @@ func (m *Manager) checkForeignInstall(ctx context.Context, host store.Host) (*Fo
 	if host.NktVersion != "" {
 		return nil, nil
 	}
-	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
-	if err != nil {
-		return nil, nil
-	}
 	dialCtx, cancel := context.WithTimeout(ctx, sshDialTimeout)
 	defer cancel()
-	client, err := dialSSH(dialCtx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
+	link, err := m.dialHost(dialCtx, host)
 	if err != nil {
 		return nil, nil
 	}
-	defer client.Close()
+	defer link.Close()
 
-	version, active, err := probeExistingInstall(client, remoteBinPath, "netknownsthat")
+	version, active, err := probeExistingInstall(link.client, remoteBinPath, "netknownsthat")
 	if err != nil || (version == "" && active != "active") {
 		return nil, nil
 	}
@@ -823,14 +819,17 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	}
 
 	report("hub.connectingSSH", host.Addr)
-	client, sshErr := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
+	// Машина внутри хоста доступна только с него: dialHost проложит путь
+	// через хост, обычный хост — как прежде, напрямую.
+	link, sshErr := m.dialHost(ctx, host)
 	if sshErr != nil {
 		if m.awaitTunnelReinstallFallback(ctx, host) {
 			return m.installOverTunnel(ctx, hostID, host, job)
 		}
 		return fail(sshErr)
 	}
-	defer client.Close()
+	defer func() { _ = link.Close() }()
+	client := link.client
 	job.setClient(client)
 
 	// Подготовка идёт до всего остального: она меняет способ входа, и
@@ -849,13 +848,13 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		// реквизиты действительно поменялись: при входе по ключу под тем же
 		// пользователем подготовка ставит пакеты и ничего больше.
 		if res.PrivatePEM != "" && (res.SSHUser != host.SSHUser || res.PrivatePEM != string(secret)) {
-			keyClient, err := dialSSH(ctx, host.Addr, host.SSHPort, res.SSHUser, store.HostAuthKey, []byte(res.PrivatePEM))
+			keyLink, err := m.dialHostAs(ctx, host, res.SSHUser, store.HostAuthKey, []byte(res.PrivatePEM))
 			if err != nil {
 				return fail(fmt.Errorf("переподключение по ключу под %s: %w", res.SSHUser, err))
 			}
-			client.Close()
-			client = keyClient
-			defer client.Close()
+			_ = link.Close()
+			link = keyLink
+			client = link.client
 			job.setClient(client)
 			host.SSHUser, host.SSHAuthKind = res.SSHUser, store.HostAuthKey
 			report("hub.bootstrapDone", res.SSHUser)
@@ -1094,15 +1093,11 @@ func (m *Manager) SetServiceRunning(ctx context.Context, hostID int64, running b
 		return fmt.Errorf("хост ещё не установлен — нечего останавливать/запускать")
 	}
 
-	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
-	if err != nil {
-		return fmt.Errorf("расшифровка SSH-секрета: %w", err)
-	}
-	client, err := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
+	link, err := m.dialHost(ctx, host)
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer link.Close()
 
 	action := "stop"
 	if running {
@@ -1112,7 +1107,7 @@ func (m *Manager) SetServiceRunning(ctx context.Context, hostID int64, running b
 	if host.SSHUser != "root" {
 		cmd = "sudo -n " + cmd
 	}
-	out, err := runRemote(client, cmd)
+	out, err := runRemote(link.client, cmd)
 	if err != nil {
 		return diagnoseInstallError(host.SSHUser, "netknownsthat.service", err, out)
 	}
@@ -1138,17 +1133,13 @@ func (m *Manager) RemoveSudoAccess(ctx context.Context, hostID int64) error {
 		return fmt.Errorf("для хоста не подтверждён доступ sudo без пароля — нечего убирать")
 	}
 
-	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
-	if err != nil {
-		return fmt.Errorf("расшифровка SSH-секрета: %w", err)
-	}
-	client, err := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
+	link, err := m.dialHost(ctx, host)
 	if err != nil {
 		return err
 	}
-	defer client.Close()
+	defer link.Close()
 
-	out, err := runRemote(client, "sudo -n rm -f "+sudoersDropIn)
+	out, err := runRemote(link.client, "sudo -n rm -f "+sudoersDropIn)
 	if err != nil {
 		return diagnoseInstallError(host.SSHUser, sudoersDropIn, err, out)
 	}

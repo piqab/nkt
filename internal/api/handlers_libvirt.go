@@ -46,8 +46,12 @@ func (s *Server) handleVMAction(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVMDelete(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	removeStorage := r.URL.Query().Get("remove_storage") == "true"
+	// force гасит запущенный домен перед удалением. Так удаляет хаб,
+	// когда машину убирают целиком; из веб-интерфейса хоста остановка
+	// по-прежнему отдельный видимый шаг оператора.
+	force := r.URL.Query().Get("force") == "true"
 	user := auth.Username(r.Context())
-	if err := s.libvirt.UndefineVM(r.Context(), user, name, removeStorage); err != nil {
+	if err := s.libvirt.UndefineVM(r.Context(), user, name, removeStorage, force); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}

@@ -275,7 +275,7 @@ func newRuntime() (*runtime, error) {
 		certs:      control.NewCertManager(cfg, collector, db, services, scanner),
 		podman:     control.NewPodmanManager(collector, db),
 		lxd:        control.NewLXDManager(collector, db),
-		libvirt:    control.NewLibvirtManager(cfg, collector, db, scanner),
+		libvirt:    control.NewLibvirtManager(cfg, collector, db, scanner, toolingRunner(cfg)),
 		logs:       control.NewLogManager(collector, scanner),
 		images:     control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
 		jobs:       jobManager,
@@ -630,7 +630,7 @@ func newHubRuntime() (*hubRuntime, error) {
 		certs:      control.NewCertManager(cfg, collector, db, services, scanner),
 		podman:     control.NewPodmanManager(collector, db),
 		lxd:        control.NewLXDManager(collector, db),
-		libvirt:    control.NewLibvirtManager(cfg, collector, db, scanner),
+		libvirt:    control.NewLibvirtManager(cfg, collector, db, scanner, toolingRunner(cfg)),
 		logs:       control.NewLogManager(collector, scanner),
 		images:     control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
 	}, nil
@@ -707,6 +707,16 @@ func privilegedRunner(cfg *config.Config) control.PrivilegedRunner {
 		return nil
 	}
 	return api.RunUnrestricted
+}
+
+// toolingRunner — то же, но с предсказуемым языком вывода: virsh и
+// qemu-img переводят и таблицы, и ошибки, а разбирать их приходится по
+// английским словам.
+func toolingRunner(cfg *config.Config) control.PrivilegedRunner {
+	if cfg.Mode != config.ModeLocal {
+		return nil
+	}
+	return api.RunTooling
 }
 
 func (r *hubRuntime) runHub(log *slog.Logger) error {

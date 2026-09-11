@@ -115,7 +115,7 @@ func depsAgainstRoot(t *testing.T, screen tcell.Screen, root string) Deps {
 		Certs:     control.NewCertManager(cfg, collector, db, services, scanner),
 		Podman:    control.NewPodmanManager(collector, db),
 		LXD:       control.NewLXDManager(collector, db),
-		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner),
+		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner, nil),
 		Prober:    monitor.NewProber(db, cfg),
 		Screen:    screen,
 		// Fixes the language so these fixture-text assertions never race

@@ -379,6 +379,11 @@ export default function Hosts({
     }
   }
 
+  // Задания самого хаба: создание машины идёт заданием, а не установкой,
+  // и по статусу записи этого не видно. Список тот же, что в разделе
+  // «Задания» (он живёт на встроенной машине хаба).
+  const hubJobs = useApi<{ jobs: Job[] }>('/hosts/local/jobs?limit=50', 10_000)
+
   // Машины по хосту, на котором они созданы.
   const vmsByHost = useMemo(() => {
     const out = new Map<number, HubHost[]>()
@@ -388,6 +393,35 @@ export default function Hosts({
     }
     return out
   }, [hosts])
+
+  /**
+   * Машины, по которым прямо сейчас идёт задание хаба.
+   *
+   * Пока машину создают или доводят до готовности, её кнопки нажимать
+   * нечего: установка уже идёт заданием, адрес ещё определяется, а
+   * удаление посреди создания оставит на хосте половину машины. Статуса
+   * записи для этого мало — он меняется только на шаге установки.
+   */
+  const busyVMs = useMemo(() => {
+    const out = new Set<number>()
+    for (const j of hubJobs.data?.jobs ?? []) {
+      if (j.status !== 'running' && j.status !== 'queued') continue
+      const queued = /^vm:(\d+)$/.exec(j.queue ?? '')
+      if (!queued) continue
+      let name = ''
+      try {
+        name = (JSON.parse(j.params || '{}') as { spec?: { name?: string } }).spec?.name ?? ''
+      } catch {
+        // Параметры задания — не то, ради чего стоит ронять список.
+      }
+      for (const vm of vmsByHost.get(Number(queued[1])) ?? []) {
+        // Без имени в параметрах отметить можно только все машины хоста —
+        // это вернее, чем не отметить ту, которую действительно строят.
+        if (!name || vm.name === name) out.add(vm.id)
+      }
+    }
+    return out
+  }, [hubJobs.data, vmsByHost])
 
   function toggleVMs(hostID: number) {
     setOpenVMs((prev) => {
@@ -884,10 +918,14 @@ export default function Hosts({
       )
     }
     const outdated = isOutdated(h, hubVersion)
+    // Занята: по машине идёт задание хаба или на хост ставится nkt.
+    // Журнал и отмена остаются живыми — иначе следить за работой и
+    // прерывать её было бы нечем.
+    const busy = busyVMs.has(h.id) || h.status === 'installing'
     return (
       <div className="row">
         {h.status === 'online' && (
-          <Button type="link" loading={autoOpenHost?.id === h.id} onClick={() => openHost(h)}>
+          <Button type="link" loading={autoOpenHost?.id === h.id} disabled={busy} onClick={() => openHost(h)}>
             {autoOpenHost?.id === h.id ? t('hosts.updatingBeforeOpen') : t('hosts.open')}
           </Button>
         )}
@@ -895,14 +933,15 @@ export default function Hosts({
           // Установка по заглушке всё равно провалится рукопожатием с
           // 0.0.0.0, поэтому вместо неё предлагается то, чего не хватает.
           <Tooltip title={t('hosts.detectAddressHint')}>
-            <Button loading={detectingAddr === h.id} onClick={() => void detectAddress(h)}>
+            <Button loading={detectingAddr === h.id || busy} disabled={busy} onClick={() => void detectAddress(h)}>
               {t('hosts.detectAddress')}
             </Button>
           </Tooltip>
         ) : (
           <Button
             type={outdated ? 'primary' : 'default'}
-            loading={h.status === 'installing'}
+            loading={busy}
+            disabled={busy}
             onClick={() => startInstall(h)}
           >
             {h.status === 'new' ? t('hosts.install') : outdated ? t('hosts.update') : t('hosts.reinstall')}
@@ -920,10 +959,10 @@ export default function Hosts({
         )}
         {h.status !== 'new' && h.status !== 'installing' && (
           <>
-            <Button type="link" loading={busyServiceIds.has(h.id)} onClick={() => startHost(h)}>
+            <Button type="link" loading={busyServiceIds.has(h.id) || busy} disabled={busy} onClick={() => startHost(h)}>
               {t('hosts.start')}
             </Button>
-            <Button danger type="link" loading={busyServiceIds.has(h.id)} onClick={() => stopHost(h)}>
+            <Button danger type="link" loading={busyServiceIds.has(h.id) || busy} disabled={busy} onClick={() => stopHost(h)}>
               {t('hosts.stop')}
             </Button>
           </>
@@ -931,24 +970,24 @@ export default function Hosts({
         {/* Машину создаём только на хосте, где уже стоит nkt: команду
             создания выполняет он сам, а хаб лишь просит и ждёт. */}
         {h.status === 'online' && (
-          <Button type="link" onClick={() => setProvisionOn(h)}>
+          <Button type="link" disabled={busy} onClick={() => setProvisionOn(h)}>
             {t('hosts.newVM')}
           </Button>
         )}
-        <Button type="link" disabled={h.status === 'installing'} onClick={() => setEditingHost(h)}>
+        <Button type="link" disabled={busy} onClick={() => setEditingHost(h)}>
           {t('hosts.edit')}
         </Button>
         {h.ssh_auth_kind === 'key' && (
-          <Button type="link" onClick={() => showPubKey(h)}>
+          <Button type="link" disabled={busy} onClick={() => showPubKey(h)}>
             {t('hosts.publicKey')}
           </Button>
         )}
         {h.sudo_status === 'nopasswd' && (
-          <Button danger type="link" onClick={() => removeSudoAccess(h)}>
+          <Button danger type="link" disabled={busy} onClick={() => removeSudoAccess(h)}>
             {t('hosts.removeNopasswd')}
           </Button>
         )}
-        <Button danger type="link" onClick={() => setRemovingHost(h)}>
+        <Button danger type="link" loading={busy} disabled={busy} onClick={() => setRemovingHost(h)}>
           {t('hosts.delete')}
         </Button>
         {/* Список машин — такое же действие над хостом, как остальные, и
@@ -1672,6 +1711,10 @@ export interface PurgeOptions {
   access: boolean
   user: boolean
   restore_password: boolean
+  /** Удалить саму машину на хосте. Только для машин. */
+  vm: boolean
+  /** Вместе с дисками этой машины. */
+  vm_disks: boolean
 }
 
 interface PurgeResult {
@@ -2082,12 +2125,20 @@ function RemoveHostModal({
   const { t } = useTranslation()
   // Возврат пароля включён сразу: вместе с хабом с хоста уезжает и его
   // ключ, и без пароля хост остался бы вообще без способа входа.
+  // Машина — это не сервер, с которого убирают следы nkt: удаляя её
+  // запись, обычно хотят удалить и саму машину. Оставить её работать без
+  // хаба можно, но это отдельное решение, поэтому пункт виден и снимается.
+  const isVM = !!host.parent_id
   const [purge, setPurge] = useState<PurgeOptions>({
     service: false,
     data: false,
     access: false,
     user: false,
-    restore_password: true,
+    restore_password: !isVM,
+    vm: isVM,
+    // Диски — отдельный вопрос и отдельная галочка: описание машины
+    // заводится заново за минуту, а диск с её данными — нет.
+    vm_disks: false,
   })
   const [busy, setBusy] = useState(false)
 
@@ -2107,18 +2158,21 @@ function RemoveHostModal({
   )
 
   return (
-    <Modal title={t('hosts.removeTitle', { name: host.name })} onClose={onCancel} width={620}>
-      <p className="small">{t('hosts.removeIntro')}</p>
-      {item('restore_password', t('hosts.purgeRestorePassword'), t('hosts.purgeRestorePasswordHint'))}
-      {item('service', t('hosts.purgeService'), t('hosts.purgeServiceHint'))}
-      {item('data', t('hosts.purgeData'), t('hosts.purgeDataHint'))}
-      {item('access', t('hosts.purgeAccess'), t('hosts.purgeAccessHint'))}
+    <Modal title={t(isVM ? 'hosts.removeTitleVM' : 'hosts.removeTitle', { name: host.name })} onClose={onCancel} width={620}>
+      <p className="small">{t(isVM ? 'hosts.removeIntroVM' : 'hosts.removeIntro')}</p>
+      {isVM && item('vm', t('hosts.purgeVM'), t('hosts.purgeVMHint'))}
+      {isVM && item('vm_disks', t('hosts.purgeVMDisks'), t('hosts.purgeVMDisksHint'), !purge.vm)}
+      {item('restore_password', t('hosts.purgeRestorePassword'), t('hosts.purgeRestorePasswordHint'), isVM && purge.vm)}
+      {item('service', t('hosts.purgeService'), t('hosts.purgeServiceHint'), isVM && purge.vm)}
+      {item('data', t('hosts.purgeData'), t('hosts.purgeDataHint'), isVM && purge.vm)}
+      {item('access', t('hosts.purgeAccess'), t('hosts.purgeAccessHint'), isVM && purge.vm)}
       {item(
         'user',
         t('hosts.purgeUser', { user: host.ssh_user }),
         host.ssh_user === 'root' ? t('hosts.purgeUserRoot') : t('hosts.purgeUserHint'),
-        host.ssh_user === 'root',
+        host.ssh_user === 'root' || (isVM && purge.vm),
       )}
+      {isVM && purge.vm && <p className="small muted">{t('hosts.purgeVMOnly')}</p>}
       <p className="small muted">{t('hosts.removeUnreachable')}</p>
       <div className="row" style={{ gap: '0.5rem', marginTop: '0.75rem' }}>
         <Button

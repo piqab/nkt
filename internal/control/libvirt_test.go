@@ -43,7 +43,7 @@ func libvirtSetup(t *testing.T) (*LibvirtManager, *store.DB) {
 	if _, err := scanner.Scan(context.Background()); err != nil {
 		t.Fatalf("скан: %v", err)
 	}
-	return NewLibvirtManager(cfg, c, db, scanner), db
+	return NewLibvirtManager(cfg, c, db, scanner, nil), db
 }
 
 func TestLibvirtVMActionRejectsBadAction(t *testing.T) {
@@ -107,14 +107,14 @@ func TestLibvirtSetAutostart(t *testing.T) {
 // shut it down first as a separate, visible step.
 func TestLibvirtUndefineRejectsRunningVM(t *testing.T) {
 	m, _ := libvirtSetup(t)
-	if err := m.UndefineVM(context.Background(), "test", "web-vm", false); err == nil {
+	if err := m.UndefineVM(context.Background(), "test", "web-vm", false, false); err == nil {
 		t.Error("ожидалась ошибка: web-vm запущен")
 	}
 }
 
 func TestLibvirtUndefineStoppedVM(t *testing.T) {
 	m, db := libvirtSetup(t)
-	if err := m.UndefineVM(context.Background(), "test", "db-vm", false); err != nil {
+	if err := m.UndefineVM(context.Background(), "test", "db-vm", false, false); err != nil {
 		t.Fatalf("undefine: %v", err)
 	}
 	entries, err := db.ListAudit(context.Background(), store.AuditFilter{Action: "vm.undefine", Limit: 10})
@@ -128,7 +128,7 @@ func TestLibvirtUndefineStoppedVM(t *testing.T) {
 
 func TestLibvirtUndefineRejectsBadName(t *testing.T) {
 	m, _ := libvirtSetup(t)
-	if err := m.UndefineVM(context.Background(), "test", "foo/bar", false); err == nil {
+	if err := m.UndefineVM(context.Background(), "test", "foo/bar", false, false); err == nil {
 		t.Error("ожидалась ошибка валидации имени")
 	}
 }
@@ -170,5 +170,16 @@ func TestLibvirtCreateDiskRejectsBadSize(t *testing.T) {
 		if err := m.CreateDisk(context.Background(), "test", "/var/lib/libvirt/images/x.qcow2", size); err == nil {
 			t.Errorf("размер %d: ожидалась ошибка валидации", size)
 		}
+	}
+}
+
+// Запущенный домен удаляется, когда об этом просят прямо: хаб убирает
+// машину целиком, и выключение там не отдельный шаг оператора, а часть
+// уже принятого решения. Без force отказ остаётся — это проверяет
+// TestLibvirtUndefineRefusesRunning выше.
+func TestLibvirtUndefineForceRemovesRunningDomain(t *testing.T) {
+	m, _ := libvirtSetup(t)
+	if err := m.UndefineVM(context.Background(), "test", "web-vm", true, true); err != nil {
+		t.Fatalf("удаление запущенного домена с force: %v", err)
 	}
 }

@@ -29,7 +29,8 @@ const connIdleTTL = 10 * time.Minute
 const sessionTTL = 2 * time.Hour
 
 type hostConn struct {
-	client   *ssh.Client
+	// link — соединение и, для машины внутри хоста, переход под ним.
+	link     *sshLink
 	lastUsed time.Time
 }
 
@@ -45,7 +46,7 @@ func (m *Manager) clientFor(ctx context.Context, hostID int64) (*ssh.Client, err
 	if hc, ok := m.conns[hostID]; ok {
 		hc.lastUsed = time.Now()
 		m.connsMu.Unlock()
-		return hc.client, nil
+		return hc.link.client, nil
 	}
 	m.connsMu.Unlock()
 
@@ -56,21 +57,19 @@ func (m *Manager) clientFor(ctx context.Context, hostID int64) (*ssh.Client, err
 	if host.Status != store.HostStatusOnline {
 		return nil, fmt.Errorf("хост %q ещё не готов (статус: %s)", host.Name, host.Status)
 	}
-	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
-	if err != nil {
-		return nil, fmt.Errorf("расшифровка SSH-секрета: %w", err)
-	}
-	client, err := dialSSH(ctx, host.Addr, host.SSHPort, host.SSHUser, host.SSHAuthKind, secret)
+	// Машина внутри хоста недостижима с хаба напрямую: dialHost сам
+	// проложит путь через её хост.
+	link, err := m.dialHost(ctx, host)
 	if err != nil {
 		return nil, err
 	}
 
 	m.connsMu.Lock()
-	m.conns[hostID] = &hostConn{client: client, lastUsed: time.Now()}
+	m.conns[hostID] = &hostConn{link: link, lastUsed: time.Now()}
 	m.connsMu.Unlock()
 
 	_ = m.db.TouchHostSeen(ctx, hostID)
-	return client, nil
+	return link.client, nil
 }
 
 // dropClient closes and forgets a pooled connection — called whenever a
@@ -82,7 +81,7 @@ func (m *Manager) dropClient(hostID int64) {
 	delete(m.conns, hostID)
 	m.connsMu.Unlock()
 	if ok {
-		_ = hc.client.Close()
+		_ = hc.link.Close()
 	}
 }
 
@@ -101,7 +100,7 @@ func (m *Manager) evictIdleConns(ctx context.Context) {
 			for id, hc := range m.conns {
 				if time.Since(hc.lastUsed) > connIdleTTL {
 					delete(m.conns, id)
-					_ = hc.client.Close()
+					_ = hc.link.Close()
 				}
 			}
 			m.connsMu.Unlock()
