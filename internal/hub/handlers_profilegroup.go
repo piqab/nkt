@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"net/url"
 	"strings"
@@ -26,11 +27,11 @@ type groupApplyRequest struct {
 func (s *Server) handleGroupApply(w http.ResponseWriter, r *http.Request) {
 	var req groupApplyRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if s.jobs == nil {
-		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
 	prof, err := s.db.ProfileByID(r.Context(), req.ProfileID)
@@ -41,14 +42,14 @@ func (s *Server) handleGroupApply(w http.ResponseWriter, r *http.Request) {
 	// Профиль разбирается здесь, до запуска: сломанное описание должно
 	// отказать сразу, а не на первом хосте посреди раскатки.
 	if _, err := profile.Parse([]byte(prof.Content)); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 
 	group := strings.TrimSpace(req.Group)
 	hosts, err := s.db.ListHosts(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	var ids []int64
@@ -58,14 +59,14 @@ func (s *Server) handleGroupApply(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if len(ids) == 0 {
-		writeError(w, http.StatusBadRequest, "в группе нет хостов")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.groupHasHosts"))
 		return
 	}
 
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind:  KindGroupApply,
-		Title: "профиль " + prof.Name + " → группа " + groupTitle(group),
+		Title: msgs.Tc(r.Context(), "hub.profileGroupJobTitle", prof.Name, groupTitle(r.Context(), group)),
 		// Ключ очереди — сама группа: две раскатки по одной группе разом
 		// мешали бы друг другу, а по разным группам идут параллельно.
 		Queue:  "group:" + group,
@@ -78,16 +79,16 @@ func (s *Server) handleGroupApply(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		s.db.Audit(r.Context(), user, "profile.groupApply", group, "error", err.Error())
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "profile.groupApply", group, "ok", prof.Name)
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id, "hosts": len(ids)})
 }
 
-func groupTitle(group string) string {
+func groupTitle(ctx context.Context, group string) string {
 	if group == "" {
-		return "без группы"
+		return msgs.Tc(ctx, "hub.noGroup")
 	}
 	return group
 }
@@ -105,15 +106,15 @@ type vmProvisionRequest struct {
 func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 	var req vmProvisionRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := req.Spec.Validate(); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if s.jobs == nil {
-		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
 	host, err := s.db.HostByID(r.Context(), req.HostID)
@@ -130,8 +131,7 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if !req.InstallNKT {
-			writeError(w, http.StatusBadRequest,
-				"чтобы применить профиль, на новую машину нужно поставить nkt — он и применяет профиль")
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.applyProfileNktMustInstalled"))
 			return
 		}
 	}
@@ -147,7 +147,7 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind:  KindVMProvision,
-		Title: "машина " + req.Spec.Name + " на " + host.Name,
+		Title: msgs.Tc(r.Context(), "hub.machineOnHostJobTitle", req.Spec.Name, host.Name),
 		// Ключ очереди — хост, на котором создаётся машина: копирование
 		// образа занимает его диск, и делать это двумя заданиями разом
 		// незачем.
@@ -161,7 +161,7 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		s.db.Audit(r.Context(), user, "vm.provision", req.Spec.Name, "error", err.Error())
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vm.provision", req.Spec.Name, "ok", host.Name)
@@ -178,7 +178,7 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDetectAddress(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	host, err := s.db.HostByID(r.Context(), id)
@@ -187,7 +187,7 @@ func (s *Server) handleDetectAddress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if host.ParentID == 0 {
-		writeError(w, http.StatusBadRequest, "адрес определяется только у машин, созданных на управляемом хосте")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.addressCanDetectedOnlyMachines"))
 		return
 	}
 
@@ -199,7 +199,7 @@ func (s *Server) handleDetectAddress(w http.ResponseWriter, r *http.Request) {
 	}
 	path := "/api/vm/address?name=" + url.QueryEscape(host.Name)
 	if _, err := s.hub.HostAPI(r.Context(), host.ParentID, "GET", path, nil, &res); err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
 	if res.Address == "" {
@@ -214,7 +214,7 @@ func (s *Server) handleDetectAddress(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.hub.UpdateHost(r.Context(), host.ID, host.Name, res.Address, host.SSHPort,
 		host.SSHUser, host.SSHAuthKind, "", host.TerminalEnabled); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "vm.address", host.Name, "ok", res.Address)
@@ -280,12 +280,12 @@ func (s *Server) discoverVMs(ctx context.Context, hostID int64) ([]discoveredVM,
 func (s *Server) handleVMDiscover(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	vms, err := s.discoverVMs(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"vms": vms})
@@ -304,16 +304,16 @@ type vmImportRequest struct {
 func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	var req vmImportRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if len(req.Names) == 0 {
-		writeError(w, http.StatusBadRequest, "выберите хотя бы одну машину")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.pickLeastOneMachine"))
 		return
 	}
 	if req.SSHPort <= 0 {
@@ -330,7 +330,7 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 	// Адреса и состояния — свежие, тем же способом, что и при поиске.
 	discovered, err := s.discoverVMs(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
 	found := map[string]discoveredVM{}
@@ -351,7 +351,7 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 	for _, name := range req.Names {
 		vm, ok := found[name]
 		if !ok {
-			errs = append(errs, name+": такой машины на хосте нет или она уже в списке")
+			errs = append(errs, msgs.Tc(r.Context(), "hub.vmNotOnHostOrListed", name))
 			continue
 		}
 		addr := vm.Address
@@ -370,7 +370,7 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		if err := s.db.SetHostParent(r.Context(), newID, parent.ID); err != nil {
-			errs = append(errs, name+": привязка к хосту: "+err.Error())
+			errs = append(errs, msgs.Tc(r.Context(), "hub.vmBindFailed", name, err))
 			continue
 		}
 		s.db.Audit(r.Context(), user, "vm.import", name, "ok", parent.Name)

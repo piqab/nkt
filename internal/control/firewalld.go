@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strings"
 
@@ -54,27 +55,27 @@ type FirewalldPortSpec struct {
 // firewall-cmd.
 func (s FirewalldPortSpec) Validate() error {
 	if !firewalldNameRe.MatchString(s.Zone) {
-		return fmt.Errorf("недопустимое имя зоны: %q", s.Zone)
+		return msgs.Errorf("control.invalidZoneName", s.Zone)
 	}
 	if s.Service != "" {
 		if s.Port != 0 || s.Protocol != "" {
-			return fmt.Errorf("укажите либо service, либо port+protocol, не оба сразу")
+			return msgs.Errorf("control.firewalldServiceOrPort")
 		}
 		if !firewalldNameRe.MatchString(s.Service) {
-			return fmt.Errorf("недопустимое имя сервиса: %q", s.Service)
+			return msgs.Errorf("control.invalidServiceName", s.Service)
 		}
 	} else {
 		if s.Port < 1 || s.Port > 65535 {
-			return fmt.Errorf("порт вне диапазона 1..65535: %d", s.Port)
+			return msgs.Errorf("control.portOutside165535Range", s.Port)
 		}
 		switch s.Protocol {
 		case "tcp", "udp":
 		default:
-			return fmt.Errorf("протокол должен быть tcp или udp, получено %q", s.Protocol)
+			return msgs.Errorf("control.protocolMustTcpUdpGot", s.Protocol)
 		}
 	}
 	if !s.Permanent && !s.Runtime {
-		return fmt.Errorf("нужно выбрать хотя бы одно: применить сейчас или сохранить постоянно")
+		return msgs.Errorf("control.pickLeastOneApplyNow")
 	}
 	return nil
 }
@@ -128,7 +129,7 @@ func (f *FirewalldManager) apply(ctx context.Context, user, auditAction string, 
 		res, err = f.c.Run(ctx, "firewall-cmd", args...)
 		outputs = append(outputs, strings.TrimSpace(res.Output()))
 		if err == nil && !res.OK() {
-			err = fmt.Errorf("firewall-cmd вернул код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+			err = msgs.Errorf("control.firewallCmdReturnedCode", res.ExitCode, strings.TrimSpace(res.Output()))
 		}
 	}
 
@@ -179,7 +180,7 @@ func (f *FirewalldManager) Reload(ctx context.Context, user string) (collect.Com
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("firewall-cmd --reload: код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+		return res, msgs.Errorf("control.firewallCmdReloadCode", res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return res, nil
 }

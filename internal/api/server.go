@@ -139,6 +139,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(s.cors)
 	r.Use(securityHeaders)
+	r.Use(msgs.LangMiddleware)
 
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", s.handleHealth)
@@ -510,6 +511,12 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+// writeErr — writeError for an error value: rendered in the request's
+// language when it (or something it wraps) came from the msgs catalog.
+func writeErr(w http.ResponseWriter, r *http.Request, status int, err error) {
+	writeError(w, status, msgs.Localize(msgs.FromContext(r.Context()), err))
+}
+
 // fail maps a domain error onto an HTTP status. The four sentinel branches
 // below are identity-compared via errors.Is — their own Go text
 // (store.ErrNotFound, control.ErrNotFound, ...) is never shown to a user
@@ -531,7 +538,7 @@ func fail(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, control.ErrTooLarge):
 		writeError(w, http.StatusRequestEntityTooLarge, msgs.T(lang, "err.tooLarge"))
 	default:
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeError(w, http.StatusBadRequest, msgs.Localize(lang, err))
 	}
 }
 
@@ -539,7 +546,7 @@ func decodeJSON(r *http.Request, dst any) error {
 	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 4<<20))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
-		return errors.New("некорректное тело запроса: " + err.Error())
+		return msgs.Errorf("api.badRequestBody", err)
 	}
 	return nil
 }

@@ -4,7 +4,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/pem"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strings"
 
 	"golang.org/x/crypto/ssh"
@@ -18,15 +18,15 @@ import (
 func generateHostKeyPair() (privatePEM string, authorizedKeyLine string, err error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
-		return "", "", fmt.Errorf("генерация ключа: %w", err)
+		return "", "", msgs.Errorf("control.generatingKey", err)
 	}
 	block, err := ssh.MarshalPrivateKey(priv, "nkt-hub")
 	if err != nil {
-		return "", "", fmt.Errorf("сериализация приватного ключа: %w", err)
+		return "", "", msgs.Errorf("hub.serializingPrivateKey", err)
 	}
 	sshPub, err := ssh.NewPublicKey(pub)
 	if err != nil {
-		return "", "", fmt.Errorf("сериализация публичного ключа: %w", err)
+		return "", "", msgs.Errorf("hub.serializingPublicKey", err)
 	}
 	return string(pem.EncodeToMemory(block)), formatAuthorizedKey(sshPub), nil
 }

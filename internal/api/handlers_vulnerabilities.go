@@ -173,14 +173,14 @@ func (s *Server) handleVulnScanStart(w http.ResponseWriter, r *http.Request) {
 	}
 	s.vuln.scanning = true
 	s.vuln.lastErr = ""
-	s.vuln.progress = "Запуск..."
+	s.vuln.progress = msgs.Tc(r.Context(), "api.vulnStarting")
 	s.vuln.mu.Unlock()
 
 	// context.Background(), not r.Context(): a scan that can legitimately
 	// take minutes must not be cancelled just because the request that
 	// started it (a fire-and-forget POST the frontend doesn't hold open)
 	// has already returned.
-	go s.runVulnScan(context.Background())
+	go s.runVulnScan(msgs.WithLang(context.Background(), msgs.FromContext(r.Context())))
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
 }
@@ -198,7 +198,7 @@ func (s *Server) runVulnScan(ctx context.Context) {
 		s.vuln.mu.Unlock()
 	}
 
-	report("Собираю список установленных пакетов...")
+	report(msgs.Tc(ctx, "api.vulnCollectingPackages"))
 	manifest := parse.Manifest(s.scanner.Collector())
 	images := s.runningImages(ctx)
 
@@ -229,7 +229,7 @@ func (s *Server) runVulnScan(ctx context.Context) {
 
 	var findings []model.VulnFinding
 	if manifest.Available {
-		report("Сканирую пакеты ОС на уязвимости...")
+		report(msgs.Tc(ctx, "api.vulnScanningOS"))
 		osFindings, err := vuln.Scan(ctx, trivyBin, dbDir, manifest)
 		if err != nil {
 			fail(err)
@@ -240,7 +240,7 @@ func (s *Server) runVulnScan(ctx context.Context) {
 
 	var warnings []string
 	for _, image := range images {
-		report(fmt.Sprintf("Сканирую образ %s...", image))
+		report(msgs.Tc(ctx, "api.scanningImage", image))
 		imageFindings, err := vuln.ScanImage(ctx, trivyBin, dbDir, image, s.cfg.DockerSocket, s.cfg.PodmanSocket)
 		if err != nil {
 			// One image gone missing (removed between the container list
@@ -338,12 +338,12 @@ func (s *Server) handleVulnScanImages(w http.ResponseWriter, r *http.Request) {
 	dir := s.vulnDir()
 	trivyBin, err := vuln.EnsureTrivy(ctx, filepath.Join(dir, "bin"), func(string) {})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	dbDir := filepath.Join(dir, "db")
 	if err := vuln.EnsureDB(ctx, trivyBin, dbDir, func(string) {}); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 

@@ -1,7 +1,7 @@
 package collect
 
 import (
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"os"
 	"runtime"
 	"time"
@@ -18,10 +18,10 @@ func New(mode, fixturesRoot, dockerSocket, podmanSocket string, commandTimeout t
 				hint = "если это боевой хост, нужен режим NKT_MODE=local; " +
 					"для снапшота — запуск из корня репозитория или NKT_FIXTURES_ROOT"
 			}
-			return nil, fmt.Errorf("каталог снапшота %s не найден. %s", fixturesRoot, hint)
+			return nil, msgs.Errorf("collect.snapshotDirectoryFound", fixturesRoot, hint)
 		}
 		if !st.IsDir() {
-			return nil, fmt.Errorf("снапшот %s не является каталогом", fixturesRoot)
+			return nil, msgs.Errorf("collect.snapshotDirectory", fixturesRoot)
 		}
 		return NewFixtures(fixturesRoot), nil
 	case "local":
@@ -30,12 +30,10 @@ func New(mode, fixturesRoot, dockerSocket, podmanSocket string, commandTimeout t
 		// refusing here gives a clear message instead of a pile of empty
 		// sources and a dashboard that looks broken.
 		if runtime.GOOS != "linux" {
-			return nil, fmt.Errorf(
-				"режим local работает только на Linux, а система — %s. "+
-					"Для разработки используйте NKT_MODE=fixtures", runtime.GOOS)
+			return nil, msgs.Errorf("collect.localModeWorksOnlyLinux", runtime.GOOS)
 		}
 		return NewLocal(dockerSocket, podmanSocket, commandTimeout), nil
 	default:
-		return nil, fmt.Errorf("неизвестный режим сбора данных: %q", mode)
+		return nil, msgs.Errorf("collect.unknownDataCollectionMode", mode)
 	}
 }

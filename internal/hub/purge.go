@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/url"
 	"strings"
 
@@ -86,7 +87,7 @@ func (m *Manager) PurgeHost(ctx context.Context, hostID int64, opts PurgeOptions
 	// её собственный SSH не нужен вовсе.
 	if opts.VM {
 		if host.ParentID == 0 {
-			res.Error = "это не машина, а хост: удалить его «вместе с дисками» не у кого"
+			res.Error = msgs.Tc(ctx, "hub.purgeNotMachine")
 			return res
 		}
 		steps, err := m.deleteHostVM(ctx, host, opts.VMDisks)
@@ -105,7 +106,7 @@ func (m *Manager) PurgeHost(ctx context.Context, hostID int64, opts PurgeOptions
 
 	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
 	if err != nil {
-		res.Error = fmt.Sprintf("расшифровка SSH-секрета: %v", err)
+		res.Error = msgs.Tc(ctx, "hub.decryptingSSHSecret2", err)
 		return res
 	}
 	link, err := m.dialHost(ctx, host)
@@ -119,41 +120,41 @@ func (m *Manager) PurgeHost(ctx context.Context, hostID int64, opts PurgeOptions
 	sudo := sudoPrefix(host.SSHUser)
 	step := func(name, cmd string) {
 		if out, err := runRemote(client, cmd); err != nil {
-			res.Steps = append(res.Steps, fmt.Sprintf("%s — не удалось: %s", name, lastLines(out, 2)))
+			res.Steps = append(res.Steps, msgs.Tc(ctx, "hub.failed", name, lastLines(out, 2)))
 			return
 		}
-		res.Steps = append(res.Steps, name+" — готово")
+		res.Steps = append(res.Steps, msgs.Tc(ctx, "hub.stepDone", name))
 	}
 
 	// Первым шагом, до всего остального: если дальше что-то оборвётся,
 	// вход по паролю уже вернулся, и хост не останется недоступным.
 	if opts.RestorePassword {
-		step("вход по паролю возвращён", restorePasswordCmd(sudo))
+		step(msgs.Tc(ctx, "hub.purgePasswordRestored"), restorePasswordCmd(sudo))
 	}
 
 	if opts.Service {
 		// disable --now до удаления файла юнита: после удаления systemd уже
 		// не знает, что останавливать, и процесс продолжит работать до
 		// перезагрузки.
-		step("служба остановлена и выключена",
+		step(msgs.Tc(ctx, "hub.purgeServiceStopped"),
 			sudo+"systemctl disable --now netknownsthat 2>/dev/null; true")
-		step("юнит и бинарник удалены",
+		step(msgs.Tc(ctx, "hub.purgeUnitRemoved"),
 			sudo+"rm -f "+remoteServicePath+" "+remoteBinPath+" && "+sudo+"systemctl daemon-reload")
-		step("конфигурация удалена", sudo+"rm -rf /etc/netknownsthat")
+		step(msgs.Tc(ctx, "hub.purgeConfigRemoved"), sudo+"rm -rf /etc/netknownsthat")
 	}
 	if opts.Data {
-		step("данные и логи удалены", sudo+"rm -rf /var/lib/netknownsthat /var/log/netknownsthat")
+		step(msgs.Tc(ctx, "hub.purgeDataRemoved"), sudo+"rm -rf /var/lib/netknownsthat /var/log/netknownsthat")
 	}
 	if opts.Access {
-		step("правило sudo удалено", sudo+"rm -f "+sudoersDropIn)
+		step(msgs.Tc(ctx, "hub.purgeSudoRemoved"), sudo+"rm -f "+sudoersDropIn)
 		if line := hubPublicKeyLine(host, secret); line != "" {
-			step("ключ хаба убран из authorized_keys", removeAuthorizedKeyCmd(sudo, host.SSHUser, line))
+			step(msgs.Tc(ctx, "hub.purgeKeyRemoved"), removeAuthorizedKeyCmd(sudo, host.SSHUser, line))
 		}
 	}
 	if opts.User && host.SSHUser != "root" {
 		// Последним шагом: под этим пользователем открыто текущее
 		// соединение, и всё, что делается после, работать уже не обязано.
-		step("учётная запись "+host.SSHUser+" удалена",
+		step(msgs.Tc(ctx, "hub.purgeAccountRemoved", host.SSHUser),
 			sudo+"userdel -r "+host.SSHUser+" 2>&1; true")
 	}
 
@@ -209,7 +210,7 @@ func restorePasswordCmd(sudo string) string {
 	return fmt.Sprintf(
 		"if [ -f %[1]s ]; then %[2]srm -f %[1]s && %[2]ssshd -t"+
 			" && { %[2]ssystemctl reload ssh 2>/dev/null || %[2]ssystemctl reload sshd; };"+
-			" else echo 'файла нет — вход по паролю не выключался'; fi",
+			" else echo 'drop-in absent - password login was never disabled'; fi",
 		nktSSHDropIn, sudo)
 }
 
@@ -222,7 +223,7 @@ func restorePasswordCmd(sudo string) string {
 func (m *Manager) deleteHostVM(ctx context.Context, host store.Host, removeDisks bool) ([]string, error) {
 	parent, err := m.db.HostByID(ctx, host.ParentID)
 	if err != nil {
-		return nil, fmt.Errorf("хост машины не найден: %w", err)
+		return nil, msgs.Errorf("hub.machineSHostFound", err)
 	}
 	var steps []string
 
@@ -235,7 +236,7 @@ func (m *Manager) deleteHostVM(ctx context.Context, host store.Host, removeDisks
 		} `json:"vms"`
 	}
 	if _, err := m.HostAPI(ctx, parent.ID, "GET", "/api/vms", nil, &list); err != nil {
-		return steps, fmt.Errorf("список машин на хосте %s: %w", parent.Name, err)
+		return steps, msgs.Errorf("hub.listingMachinesHost", parent.Name, err)
 	}
 	found := false
 	for _, vm := range list.VMs {
@@ -245,7 +246,7 @@ func (m *Manager) deleteHostVM(ctx context.Context, host store.Host, removeDisks
 		}
 	}
 	if !found {
-		steps = append(steps, fmt.Sprintf("машины «%s» на хосте %s уже нет", host.Name, parent.Name))
+		steps = append(steps, msgs.Tc(ctx, "hub.machineLongerExistsHost", host.Name, parent.Name))
 		return steps, nil
 	}
 
@@ -257,12 +258,12 @@ func (m *Manager) deleteHostVM(ctx context.Context, host store.Host, removeDisks
 		path += "&remove_storage=true"
 	}
 	if _, err := m.HostAPI(ctx, parent.ID, "DELETE", path, nil, nil); err != nil {
-		return steps, fmt.Errorf("удаление машины «%s» на хосте %s: %w", host.Name, parent.Name, err)
+		return steps, msgs.Errorf("hub.removingMachineHost", host.Name, parent.Name, err)
 	}
 	if removeDisks {
-		steps = append(steps, fmt.Sprintf("машина «%s» выключена, она и её диски удалены на хосте %s", host.Name, parent.Name))
+		steps = append(steps, msgs.Tc(ctx, "hub.machinePoweredOffDisksRemoved", host.Name, parent.Name))
 	} else {
-		steps = append(steps, fmt.Sprintf("машина «%s» выключена и удалена на хосте %s, диски оставлены", host.Name, parent.Name))
+		steps = append(steps, msgs.Tc(ctx, "hub.machinePoweredOffRemovedHost", host.Name, parent.Name))
 	}
 	return steps, nil
 }

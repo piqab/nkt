@@ -1,7 +1,7 @@
 package api
 
 import (
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"strconv"
 	"strings"
@@ -34,7 +34,7 @@ type profileRequest struct {
 func (s *Server) handleProfileList(w http.ResponseWriter, r *http.Request) {
 	list, err := s.db.ListProfiles(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"profiles": list})
@@ -66,12 +66,12 @@ func (s *Server) handleProfileExport(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleProfileCreate(w http.ResponseWriter, r *http.Request) {
 	var req profileRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	parsed, err := parseProfileRequest(req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -80,7 +80,7 @@ func (s *Server) handleProfileCreate(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		s.db.Audit(r.Context(), user, "profile.create", parsed.Name, "error", err.Error())
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "profile.create", parsed.Name, "ok", nil)
@@ -95,12 +95,12 @@ func (s *Server) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	var req profileRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	parsed, err := parseProfileRequest(req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -124,7 +124,7 @@ func (s *Server) handleProfileDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 	if err := s.db.DeleteProfile(r.Context(), p.ID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "profile.delete", p.Name, "ok", nil)
@@ -140,7 +140,7 @@ func (s *Server) handleProfileVersions(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	list, err := s.db.ProfileVersions(r.Context(), p.ID, limit)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"versions": list})
@@ -149,7 +149,7 @@ func (s *Server) handleProfileVersions(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleProfileVersion(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "version"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "неверный номер редакции")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.invalidRevisionNumber"))
 		return
 	}
 	v, err := s.db.ProfileVersion(r.Context(), id)
@@ -170,12 +170,12 @@ func (s *Server) handleProfilePlan(w http.ResponseWriter, r *http.Request) {
 	}
 	parsed, err := profile.Parse([]byte(p.Content))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	reader := s.profileReader()
 	if reader == nil {
-		writeError(w, http.StatusServiceUnavailable, "чтение состояния хоста недоступно")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.hostStateReadingUnavailable"))
 		return
 	}
 	plan := profile.Build(r.Context(), parsed, reader)
@@ -189,17 +189,17 @@ func (s *Server) handleProfilePlan(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleProfilePlanPreview(w http.ResponseWriter, r *http.Request) {
 	var req profileRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	parsed, err := parseProfileRequest(req)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	reader := s.profileReader()
 	if reader == nil {
-		writeError(w, http.StatusServiceUnavailable, "чтение состояния хоста недоступно")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.hostStateReadingUnavailable"))
 		return
 	}
 	plan := profile.Build(r.Context(), parsed, reader)
@@ -234,15 +234,15 @@ func (s *Server) handleProfileApply(w http.ResponseWriter, r *http.Request) {
 	}
 	var req applyRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if len(req.Changes) == 0 {
-		writeError(w, http.StatusBadRequest, "не отмечено ни одного пункта плана")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.planItemsSelected"))
 		return
 	}
 	if s.jobs == nil {
-		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
 	name := p.Name
@@ -250,12 +250,12 @@ func (s *Server) handleProfileApply(w http.ResponseWriter, r *http.Request) {
 		name = strings.TrimSpace(req.Name)
 	}
 	if name == "" {
-		name = "без имени"
+		name = msgs.Tc(r.Context(), "api.profileUntitled")
 	}
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind:  profile.KindApply,
-		Title: "профиль " + name,
+		Title: msgs.Tc(r.Context(), "api.profileJobTitle", name),
 		// Ключ очереди один на весь хост: два применения разом (или
 		// применение вместе с установкой пакетов) кончаются беспорядком.
 		Queue:  "host",
@@ -265,11 +265,11 @@ func (s *Server) handleProfileApply(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		s.db.Audit(r.Context(), user, "profile.apply", name, "error", err.Error())
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "profile.apply", name, "ok",
-		fmt.Sprintf("пунктов: %d, задание %d", len(req.Changes), id))
+		msgs.Tc(r.Context(), "api.itemsJob", len(req.Changes), id))
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
 }
 
@@ -328,10 +328,14 @@ func safeFileName(name string) string {
 }
 
 var (
-	errTooBigProfile = errProfile("описание длиннее допустимого")
-	errNoProfileName = errProfile("у профиля должно быть имя")
+	errTooBigProfile = errProfile("api.profileTooBig")
+	errNoProfileName = errProfile("api.profileNoName")
 )
 
 type errProfile string
 
-func (e errProfile) Error() string { return string(e) }
+// errProfile — ключ каталога msgs: текст берётся по нему.
+func (e errProfile) Error() string { return msgs.T(msgs.DefaultLang, string(e)) }
+
+// Unwrap отдаёт каталожную ошибку, чтобы writeErr показал её на языке запроса.
+func (e errProfile) Unwrap() error { return msgs.Errorf(string(e)) }

@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net"
 	"regexp"
 	"strings"
@@ -83,22 +84,22 @@ type Spec struct {
 // Validate проверяет то, что уйдёт в описание сети и в virsh.
 func (s Spec) Validate() error {
 	if !nameRe.MatchString(s.Name) {
-		return fmt.Errorf("имя сети: латинские буквы, цифры, точка, дефис и подчёркивание, до 32 символов")
+		return msgs.Errorf("vmnet.networkNameLatinLettersDigits")
 	}
 	switch s.Mode {
 	case ModeNAT, ModeIsolated:
 		if s.Bridge != "" && !bridgeRe.MatchString(s.Bridge) {
-			return fmt.Errorf("некорректное имя моста: %q", s.Bridge)
+			return msgs.Errorf("vmnet.invalidBridgeName", s.Bridge)
 		}
 		if _, _, err := subnetParts(s.Subnet); err != nil {
 			return err
 		}
 	case ModeBridge:
 		if !bridgeRe.MatchString(s.Bridge) {
-			return fmt.Errorf("укажите существующий мост хоста")
+			return msgs.Errorf("vmnet.specifyExistingHostBridge")
 		}
 	default:
-		return fmt.Errorf("вид сети должен быть %q, %q или %q", ModeNAT, ModeBridge, ModeIsolated)
+		return msgs.Errorf("vmnet.networkKindMust", ModeNAT, ModeBridge, ModeIsolated)
 	}
 	return nil
 }
@@ -110,14 +111,14 @@ func (s Spec) Validate() error {
 func subnetParts(cidr string) (host, mask string, err error) {
 	ip, ipNet, err := net.ParseCIDR(strings.TrimSpace(cidr))
 	if err != nil {
-		return "", "", fmt.Errorf("подсеть должна быть вида 192.168.100.0/24: %w", err)
+		return "", "", msgs.Errorf("vmnet.subnetMustLookLike192", err)
 	}
 	if ip.To4() == nil {
-		return "", "", fmt.Errorf("поддерживается только IPv4")
+		return "", "", msgs.Errorf("vmnet.onlyIPv4Supported")
 	}
 	ones, bits := ipNet.Mask.Size()
 	if bits != 32 || ones < 8 || ones > 30 {
-		return "", "", fmt.Errorf("маска подсети должна быть от /8 до /30")
+		return "", "", msgs.Errorf("vmnet.subnetMaskMustBetween8")
 	}
 	base := ipNet.IP.To4()
 	hostIP := make(net.IP, len(base))
@@ -220,21 +221,26 @@ type SubnetInUse struct {
 }
 
 func (e *SubnetInUse) Error() string {
-	return fmt.Sprintf("подсеть %s пересекается с %s (%s)", e.Subnet, e.With.Where, e.With.CIDR)
+	return msgs.T(msgs.DefaultLang, "vmnet.subnetOverlaps", e.Subnet, e.With.Where, e.With.CIDR)
+}
+
+// Unwrap отдаёт каталожную ошибку — на языке запроса её покажет writeErr.
+func (e *SubnetInUse) Unwrap() error {
+	return msgs.Errorf("vmnet.subnetOverlaps", e.Subnet, e.With.Where, e.With.CIDR)
 }
 
 // Overridable отвечает, можно ли создать сеть вопреки этому пересечению.
 func (e *SubnetInUse) Overridable() bool { return e.With.Host }
 
 // NetworkRanges отдаёт подсети уже заведённых сетей libvirt.
-func NetworkRanges(nets []Network) []Occupied {
+func NetworkRanges(ctx context.Context, nets []Network) []Occupied {
 	var out []Occupied
 	for _, n := range nets {
 		cidr := networkCIDR(n)
 		if cidr == "" {
 			continue
 		}
-		out = append(out, Occupied{CIDR: cidr, Where: fmt.Sprintf("сетью libvirt «%s»", n.Name)})
+		out = append(out, Occupied{CIDR: cidr, Where: msgs.Tc(ctx, "vmnet.libvirtNetwork", n.Name)})
 	}
 	return out
 }
@@ -288,10 +294,10 @@ func CheckSubnet(subnet string, taken []Occupied) error {
 func parseCIDR4(cidr string) (*net.IPNet, error) {
 	_, ipNet, err := net.ParseCIDR(strings.TrimSpace(cidr))
 	if err != nil {
-		return nil, fmt.Errorf("подсеть должна быть вида 192.168.100.0/24: %w", err)
+		return nil, msgs.Errorf("vmnet.subnetMustLookLike192", err)
 	}
 	if ipNet.IP.To4() == nil {
-		return nil, fmt.Errorf("поддерживается только IPv4")
+		return nil, msgs.Errorf("vmnet.onlyIPv4Supported")
 	}
 	return ipNet, nil
 }

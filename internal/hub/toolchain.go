@@ -6,6 +6,7 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"net/http"
 	"os"
@@ -56,8 +57,7 @@ func (m *Manager) resolveGoBin(ctx context.Context, report func(key string, args
 	report("hub.goNotWorkingInstalling", m.cfg.HubGoBin)
 	path, err := installGoToolchain(ctx, m.cfg.HubGoToolchainDir(), report)
 	if err != nil {
-		return "", fmt.Errorf(
-			"go (%s) не запускается, а автоустановка своего Go не удалась: %w", m.cfg.HubGoBin, err)
+		return "", msgs.Errorf("hub.goDoesRunAutoInstalling", m.cfg.HubGoBin, err)
 	}
 	m.resolvedGoBin = path
 	return path, nil
@@ -74,18 +74,17 @@ func installGoToolchain(ctx context.Context, dir string, report func(key string,
 	}
 
 	if runtime.GOOS != "linux" {
-		return "", fmt.Errorf("автоустановка Go поддерживается только на Linux (хаб работает на %s) — "+
-			"задайте NKT_HUB_GO_BIN вручную", runtime.GOOS)
+		return "", msgs.Errorf("hub.goAutoInstallSupportedOnly", runtime.GOOS)
 	}
 	arch := goArchForRuntime()
 	if arch == "" {
-		return "", fmt.Errorf("автоустановка Go не поддерживает архитектуру хаба %s — задайте NKT_HUB_GO_BIN вручную",
+		return "", msgs.Errorf("hub.goAutoInstallDoesSupport",
 			runtime.GOARCH)
 	}
 
 	version, err := fetchLatestGoVersion(ctx)
 	if err != nil {
-		return "", fmt.Errorf("определение последней версии Go: %w", err)
+		return "", msgs.Errorf("hub.detectingLatestGoVersion", err)
 	}
 	report("hub.downloadingGo", version, arch)
 
@@ -97,11 +96,11 @@ func installGoToolchain(ctx context.Context, dir string, report func(key string,
 	defer body.Close()
 
 	if err := extractTarGz(body, dir); err != nil {
-		return "", fmt.Errorf("распаковка %s: %w", url, err)
+		return "", msgs.Errorf("hub.extracting", url, err)
 	}
 
 	if !goWorks(ctx, binPath) {
-		return "", fmt.Errorf("установленный по %s Go не запускается", binPath)
+		return "", msgs.Errorf("hub.goInstalledDoesRun", binPath)
 	}
 	report("hub.goInstalled", binPath)
 	return binPath, nil
@@ -137,15 +136,15 @@ func fetchLatestGoVersion(ctx context.Context) (string, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("go.dev/VERSION вернул код %d", resp.StatusCode)
+		return "", msgs.Errorf("hub.goDevVERSIONReturnedCode", resp.StatusCode)
 	}
 	scanner := bufio.NewScanner(resp.Body)
 	if !scanner.Scan() {
-		return "", fmt.Errorf("пустой ответ от go.dev/VERSION")
+		return "", msgs.Errorf("hub.emptyResponseGoDevVERSION")
 	}
 	version := strings.TrimSpace(scanner.Text())
 	if version == "" {
-		return "", fmt.Errorf("не удалось разобрать версию Go из ответа go.dev")
+		return "", msgs.Errorf("hub.couldParseGoVersionGo")
 	}
 	return version, nil
 }
@@ -160,11 +159,11 @@ func fetchTarGz(ctx context.Context, url string) (io.ReadCloser, error) {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("загрузка %s: %w", url, err)
+		return nil, msgs.Errorf("hub.downloading", url, err)
 	}
 	if resp.StatusCode != http.StatusOK {
 		resp.Body.Close()
-		return nil, fmt.Errorf("%s: код %d", url, resp.StatusCode)
+		return nil, msgs.Errorf("hub.code2", url, resp.StatusCode)
 	}
 	return resp.Body, nil
 }
@@ -199,7 +198,7 @@ func extractTarGz(r io.Reader, destDir string) error {
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("чтение архива: %w", err)
+			return msgs.Errorf("hub.readingArchive", err)
 		}
 
 		target, err := safeJoin(tmpDir, hdr.Name)
@@ -259,7 +258,7 @@ func writeExtractedFile(target string, r io.Reader, mode os.FileMode) error {
 func safeJoin(root, name string) (string, error) {
 	cleaned := filepath.Clean(name)
 	if filepath.IsAbs(cleaned) || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("архив содержит путь вне каталога установки: %q", name)
+		return "", msgs.Errorf("hub.archiveContainsPathOutsideInstall", name)
 	}
 	return filepath.Join(root, cleaned), nil
 }

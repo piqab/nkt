@@ -30,7 +30,7 @@ const uiErrorFieldLimit = 4000
 func (s *Server) handleUIError(w http.ResponseWriter, r *http.Request) {
 	var req uiErrorReport
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	trim := func(s string) string {

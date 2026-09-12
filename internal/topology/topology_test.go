@@ -1,6 +1,7 @@
 package topology
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -13,7 +14,7 @@ import (
 // neither has `omitempty`, encoding/json marshals nil as `null`, and the
 // resource map crashes calling .filter/.map on `null`.
 func TestBuildNeverReturnsNilEdgesOrFindings(t *testing.T) {
-	g := Build(&model.Snapshot{})
+	g := Build(context.Background(), &model.Snapshot{})
 	if g.Edges == nil {
 		t.Error("Edges = nil, ожидался непустой (даже если пустой) срез")
 	}
@@ -47,7 +48,7 @@ func TestEndpointCarriesUnicodeHintForIDNName(t *testing.T) {
 		}},
 	}
 
-	g := Build(snap)
+	g := Build(context.Background(), snap)
 	node := nodeByID(g, "ep:nginx:1")
 	if node == nil {
 		t.Fatal("узел слушателя не построен")
@@ -75,7 +76,7 @@ func TestFindingsSummaryListsNodeAndSeverity(t *testing.T) {
 		},
 	}
 
-	g := Build(snap)
+	g := Build(context.Background(), snap)
 	if len(g.Findings) != 1 {
 		t.Fatalf("Findings = %d, ожидалась 1", len(g.Findings))
 	}
@@ -100,7 +101,7 @@ func TestFindingsSummarySortsWorstFirst(t *testing.T) {
 		},
 	}
 
-	g := Build(snap)
+	g := Build(context.Background(), snap)
 	if len(g.Findings) != 2 || g.Findings[0].Severity != model.SeverityCritical {
 		t.Fatalf("Findings = %+v, ожидался critical первым", g.Findings)
 	}
@@ -126,7 +127,7 @@ func TestReferencedUpstreamKeepsItsRealLabel(t *testing.T) {
 		}},
 	}
 
-	g := Build(snap)
+	g := Build(context.Background(), snap)
 	node := nodeByID(g, "up:haproxy:be_app")
 	if node == nil {
 		t.Fatal("узел пула be_app не построен")
@@ -153,7 +154,7 @@ func TestUndefinedUpstreamIsStillMarked(t *testing.T) {
 		}},
 	}
 
-	node := nodeByID(Build(snap), "up:nginx:ghost_pool")
+	node := nodeByID(Build(context.Background(), snap), "up:nginx:ghost_pool")
 	if node == nil {
 		t.Fatal("узел для несуществующего пула не построен")
 	}
@@ -180,7 +181,7 @@ func TestServiceHasNoDirectRunsEdgeFromHost(t *testing.T) {
 		}},
 	}
 
-	g := Build(snap)
+	g := Build(context.Background(), snap)
 	if nodeByID(g, "svc:haproxy") == nil {
 		t.Fatal("узел сервиса haproxy не построен")
 	}
@@ -218,7 +219,7 @@ func TestLoopbackBackendsDisplayAsLocalhost(t *testing.T) {
 		}},
 	}
 
-	g := Build(snap)
+	g := Build(context.Background(), snap)
 
 	direct := nodeByID(g, "be:127.0.0.1:9000")
 	if direct == nil {
@@ -255,7 +256,7 @@ func TestUndeclaredListenerAppearsOnTheMap(t *testing.T) {
 		}},
 	}
 
-	g := Build(snap)
+	g := Build(context.Background(), snap)
 	node := nodeByID(g, "misc:tcp:127.0.0.1:11211")
 	if node == nil {
 		t.Fatal("узел для необъявленного слушателя не построен")
@@ -296,7 +297,7 @@ func TestPublicUndeclaredListenerGetsIngressEdgeAndWarning(t *testing.T) {
 		}},
 	}
 
-	g := Build(snap)
+	g := Build(context.Background(), snap)
 	node := nodeByID(g, "misc:tcp:0.0.0.0:5380")
 	if node == nil {
 		t.Fatal("узел не построен")
@@ -330,7 +331,7 @@ func TestDeclaredPortIsNotAlsoShownAsUndeclared(t *testing.T) {
 		Listeners: []model.Listener{{Protocol: "tcp", Address: "0.0.0.0", Port: 80, Process: "nginx", PID: 1}},
 	}
 
-	g := Build(snap)
+	g := Build(context.Background(), snap)
 	for _, n := range g.Nodes {
 		if n.Kind == KindUndeclared {
 			t.Errorf("порт, описанный в конфиге, не должен также попадать в необъявленные: %+v", n)
@@ -346,7 +347,7 @@ func TestDockerProxyIsExcludedFromUndeclared(t *testing.T) {
 		Listeners: []model.Listener{{Protocol: "tcp", Address: "127.0.0.1", Port: 8080, Process: "docker-proxy", PID: 1201}},
 	}
 
-	g := Build(snap)
+	g := Build(context.Background(), snap)
 	for _, n := range g.Nodes {
 		if n.Kind == KindUndeclared {
 			t.Errorf("docker-proxy не должен становиться узлом Разного: %+v", n)
@@ -362,7 +363,7 @@ func TestServerlessBackendIsNotAnError(t *testing.T) {
 			Service: model.ServiceHAProxy, Algorithm: "roundrobin",
 		}},
 	}
-	node := nodeByID(Build(snap), "up:haproxy:be_health")
+	node := nodeByID(Build(context.Background(), snap), "up:haproxy:be_health")
 	if node == nil {
 		t.Fatal("узел пула be_health не построен")
 	}

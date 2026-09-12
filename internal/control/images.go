@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/url"
 	"path/filepath"
 	"regexp"
@@ -65,11 +66,11 @@ func (m *ImageManager) List(ctx context.Context) ([]DockerImage, error) {
 		return nil, err
 	}
 	if status != 200 {
-		return nil, fmt.Errorf("Docker ответил %d: %s", status, strings.TrimSpace(string(raw)))
+		return nil, msgs.Errorf("control.dockerReplied", status, strings.TrimSpace(string(raw)))
 	}
 	var entries []dockerImageJSON
 	if err := json.Unmarshal(raw, &entries); err != nil {
-		return nil, fmt.Errorf("не удалось разобрать ответ Docker: %w", err)
+		return nil, msgs.Errorf("control.couldParseDockerResponse", err)
 	}
 
 	// Which images containers are actually running from. Taken from the last
@@ -122,7 +123,7 @@ var imageRefRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.:/@-]*$`)
 
 func checkImageRef(ref string) error {
 	if ref == "" || !imageRefRe.MatchString(ref) || strings.Contains(ref, "..") {
-		return fmt.Errorf("некорректная ссылка на образ: %q", ref)
+		return msgs.Errorf("control.invalidImageReference", ref)
 	}
 	return nil
 }
@@ -178,10 +179,10 @@ func (m *ImageManager) Save(ctx context.Context, ref string) (string, error) {
 		return "", err
 	}
 	if !collect.Which(ctx, m.c, "docker") {
-		return "", fmt.Errorf("для сохранения образа нужен docker в PATH — через Docker API это выгрузило бы гигабайты в память")
+		return "", msgs.Errorf("control.savingImageNeedsDockerPATH")
 	}
 	if err := m.c.Mkdir(m.backupTo); err != nil {
-		return "", fmt.Errorf("создать %s: %w", m.backupTo, err)
+		return "", msgs.Errorf("control.creating", m.backupTo, err)
 	}
 
 	name := strings.NewReplacer("/", "_", ":", "_").Replace(ref)
@@ -205,5 +206,5 @@ func dockerMessage(raw []byte, status int) string {
 	if json.Unmarshal(raw, &body) == nil && body.Message != "" {
 		return body.Message
 	}
-	return fmt.Sprintf("Docker ответил %d: %s", status, strings.TrimSpace(string(raw)))
+	return msgs.T(msgs.DefaultLang, "control.dockerReplied", status, strings.TrimSpace(string(raw)))
 }

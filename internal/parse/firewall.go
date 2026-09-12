@@ -3,6 +3,7 @@ package parse
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"sort"
 	"strconv"
@@ -44,7 +45,7 @@ func Firewall(ctx context.Context, c collect.Collector) FirewallResult {
 		if !out.OK() {
 			stderr := strings.TrimSpace(out.Stderr)
 			res.Status.Warnings = append(res.Status.Warnings,
-				fmt.Sprintf("%s завершился с кодом %d: %s", backend.cmd, out.ExitCode, stderr))
+				msgs.Tc(ctx, "parse.exitedCode", backend.cmd, out.ExitCode, stderr))
 			res.Status.WarningRefs = append(res.Status.WarningRefs,
 				model.TextRef{Key: "parse.commandFailed", Args: []any{backend.cmd, out.ExitCode, stderr}})
 			continue
@@ -364,7 +365,7 @@ func Listeners(ctx context.Context, c collect.Collector) ([]model.Listener, mode
 	}
 	if !out.OK() {
 		stderr := strings.TrimSpace(out.Stderr)
-		status.Error = fmt.Sprintf("ss завершился с кодом %d: %s", out.ExitCode, stderr)
+		status.Error = msgs.Tc(ctx, "parse.ssExitedCode", out.ExitCode, stderr)
 		status.ErrorKey = "parse.commandFailed"
 		status.ErrorArgs = []any{"ss", out.ExitCode, stderr}
 		return listeners, status

@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"encoding/json"
+	"github.com/piqab/nkt/internal/msgs"
 	"strconv"
 	"strings"
 
@@ -105,17 +106,17 @@ func (m *HardwareManager) Collect(ctx context.Context) Hardware {
 	if res, err := m.c.Run(ctx, "sensors", "-j"); err == nil && res.ExitCode == 0 {
 		hw.Sensors = parseSensors(res.Stdout)
 	} else {
-		hw.Notes = append(hw.Notes, "нет lm-sensors — температуры недоступны")
+		hw.Notes = append(hw.Notes, msgs.Tc(ctx, "control.noLmSensors"))
 	}
 	if res, err := m.c.Run(ctx, "lspci"); err == nil && res.ExitCode == 0 {
 		hw.PCI = nonEmptyLines(res.Stdout)
 	} else {
-		hw.Notes = append(hw.Notes, "нет lspci — список PCI-устройств недоступен")
+		hw.Notes = append(hw.Notes, msgs.Tc(ctx, "control.noLspci"))
 	}
 	if res, err := m.c.Run(ctx, "lsusb"); err == nil && res.ExitCode == 0 {
 		hw.USB = nonEmptyLines(res.Stdout)
 	} else {
-		hw.Notes = append(hw.Notes, "нет lsusb — список USB-устройств недоступен")
+		hw.Notes = append(hw.Notes, msgs.Tc(ctx, "control.noLsusb"))
 	}
 	return hw
 }

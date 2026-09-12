@@ -66,7 +66,7 @@ const GUIDE: { key: string; example: string }[] = [
   },
   {
     key: 'files',
-    example: 'files:\n  - path: /etc/motd\n    mode: "0644"\n    content: |\n      Этот сервер под управлением nkt',
+    example: 'files:\n  - path: /etc/motd\n    mode: "0644"\n    content: |\n      Managed by nkt',
   },
   {
     key: 'firewall',

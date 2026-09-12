@@ -405,7 +405,7 @@ func (s *mapScreen) refresh(ctx context.Context) {
 	if err != nil || snap == nil {
 		return
 	}
-	graph := topology.Build(snap)
+	graph := topology.Build(ctx, snap)
 
 	byID := map[string]*topology.Node{}
 	for i := range graph.Nodes {

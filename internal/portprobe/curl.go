@@ -3,6 +3,7 @@ package portprobe
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strings"
 	"time"
 
@@ -26,7 +27,7 @@ func RunCurl(ctx context.Context, run Runner, r Request) Result {
 		return res
 	}
 	if run == nil {
-		res.Error = "запуск curl недоступен в этом режиме"
+		res.Error = msgs.Tc(ctx, "portprobe.curlUnavailableMode")
 		return res
 	}
 	args, err := SplitArgs(r.Args)
@@ -58,7 +59,7 @@ func RunCurl(ctx context.Context, run Runner, r Request) Result {
 		res.Status = strings.TrimSpace(lastLine(out.Stderr))
 	}
 	if !res.OK && res.Error == "" {
-		res.Error = fmt.Sprintf("curl завершился кодом %d", out.ExitCode)
+		res.Error = msgs.Tc(ctx, "portprobe.curlExitedCode", out.ExitCode)
 		if msg := strings.TrimSpace(out.Stderr); msg != "" {
 			res.Error += ": " + lastLine(msg)
 		}
@@ -130,16 +131,16 @@ func SplitArgs(s string) ([]string, error) {
 		}
 	}
 	if quote != 0 {
-		return nil, fmt.Errorf("незакрытая кавычка в аргументах")
+		return nil, msgs.Errorf("portprobe.unclosedQuoteArguments")
 	}
 	if escaped {
-		return nil, fmt.Errorf("обратная косая в конце строки")
+		return nil, msgs.Errorf("portprobe.trailingBackslashEndLine")
 	}
 	if inArg {
 		args = append(args, cur.String())
 	}
 	if len(args) == 0 {
-		return nil, fmt.Errorf("укажите аргументы curl")
+		return nil, msgs.Errorf("portprobe.specifyCurlArguments")
 	}
 	return args, nil
 }

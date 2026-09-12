@@ -20,7 +20,7 @@ func (s *Server) handleDiskUsage(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := s.disks.DirUsage(r.Context(), path)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"path": path, "entries": entries})

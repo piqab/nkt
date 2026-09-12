@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"sort"
 	"strconv"
 	"strings"
@@ -276,11 +277,11 @@ func dockerFromEngine(ctx context.Context, c collect.Collector) ([]model.Contain
 		return nil, version, fmt.Errorf("docker: %w", err)
 	}
 	if code != 200 {
-		return nil, version, fmt.Errorf("docker: список контейнеров вернул HTTP %d", code)
+		return nil, version, msgs.Errorf("parse.dockerContainerListReturnedHTTP", code)
 	}
 	var list []engineContainer
 	if err := json.Unmarshal(raw, &list); err != nil {
-		return nil, version, fmt.Errorf("docker: разбор списка контейнеров: %w", err)
+		return nil, version, msgs.Errorf("parse.dockerParsingContainerList", err)
 	}
 
 	out := make([]model.Container, 0, len(list))
@@ -360,7 +361,7 @@ func dockerNetworks(ctx context.Context, c collect.Collector) ([]model.DockerNet
 		Labels  map[string]string `json:"Labels"`
 	}
 	if err := json.Unmarshal(raw, &list); err != nil {
-		return nil, fmt.Errorf("docker networks: разбор ответа: %w", err)
+		return nil, msgs.Errorf("parse.dockerNetworksParsingResponse", err)
 	}
 
 	out := make([]model.DockerNetwork, 0, len(list))

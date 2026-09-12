@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"sort"
 	"strconv"
 	"strings"
@@ -27,8 +28,8 @@ const (
 	// Стеки docker compose: сам docker, файл описания и состояние стека.
 	ActionInstallDocker = "docker.install"
 	ActionWriteCompose  = "compose.write"
-	ActionComposeUp    = "compose.up"
-	ActionComposeDown  = "compose.down"
+	ActionComposeUp     = "compose.up"
+	ActionComposeDown   = "compose.down"
 )
 
 // Состояния ресурса в плане. Коды, а не готовые слова: план читают и
@@ -146,8 +147,10 @@ func Build(ctx context.Context, p Profile, r Reader) Plan {
 	return plan
 }
 
-func (plan *Plan) unknown(format string, args ...any) {
-	plan.Unknown = append(plan.Unknown, fmt.Sprintf(format, args...))
+// unknown записывает, о чём судить не удалось, — на языке того, кто
+// строит план.
+func (plan *Plan) unknown(ctx context.Context, key string, args ...any) {
+	plan.Unknown = append(plan.Unknown, msgs.Tc(ctx, key, args...))
 }
 
 func (plan *Plan) add(c Change) { plan.Changes = append(plan.Changes, c) }
@@ -158,7 +161,7 @@ func (plan *Plan) addPackages(ctx context.Context, p Profile, r Reader) {
 	}
 	installed, err := r.InstalledPackages(ctx, p.Packages)
 	if err != nil {
-		plan.unknown("список установленных пакетов: %v", err)
+		plan.unknown(ctx, "profile.unknownPackages", err)
 		return
 	}
 	for _, pkg := range p.Packages {
@@ -183,14 +186,14 @@ func (plan *Plan) addServices(ctx context.Context, p Profile, r Reader) {
 		want := p.Services[name]
 		installed, enabled, active, err := r.ServiceState(ctx, name)
 		if err != nil {
-			plan.unknown("состояние службы %s: %v", name, err)
+			plan.unknown(ctx, "profile.unknownServiceState", name, err)
 			continue
 		}
 		if !installed {
 			// Профиль просит состояние службы, которой на хосте нет.
 			// Ставить пакет наугад по имени юнита нельзя — имя пакета и
 			// имя службы совпадают далеко не всегда.
-			plan.unknown("служба %s не найдена на хосте", name)
+			plan.unknown(ctx, "profile.unknownServiceMissing", name)
 			continue
 		}
 		if want.Enabled != nil && *want.Enabled != enabled {
@@ -224,7 +227,7 @@ func (plan *Plan) addFiles(ctx context.Context, p Profile, r Reader) {
 	for _, f := range p.Files {
 		current, ok, err := r.FileContent(ctx, f.Path)
 		if err != nil {
-			plan.unknown("чтение %s: %v", f.Path, err)
+			plan.unknown(ctx, "profile.unknownRead", f.Path, err)
 			continue
 		}
 		if ok && current == f.Content {
@@ -248,7 +251,7 @@ func (plan *Plan) addFirewall(ctx context.Context, p Profile, r Reader) {
 	}
 	state, err := r.FirewallState(ctx)
 	if err != nil {
-		plan.unknown("состояние пакетного фильтра: %v", err)
+		plan.unknown(ctx, "profile.unknownFirewall", err)
 		return
 	}
 	for _, port := range p.Firewall.Allow {
@@ -268,7 +271,7 @@ func (plan *Plan) addUsers(ctx context.Context, p Profile, r Reader) {
 	}
 	users, err := r.Users(ctx)
 	if err != nil {
-		plan.unknown("системные учётные записи: %v", err)
+		plan.unknown(ctx, "profile.unknownAccounts", err)
 		return
 	}
 	for _, want := range p.Users {
@@ -288,7 +291,7 @@ func (plan *Plan) addUsers(ctx context.Context, p Profile, r Reader) {
 		// Отзыв sudo профилем не делается: это разрыв доступа, который
 		// легко получить опечаткой и трудно заметить.
 		if want.Sudo != nil && !*want.Sudo && exists && have.Sudo {
-			plan.unknown("у %s есть sudo, а профиль просит без него — отзывать права профилем нельзя, снимите вручную", want.Name)
+			plan.unknown(ctx, "profile.unknownSudoRevoke", want.Name)
 		}
 		for _, key := range want.Keys {
 			if exists && hasKey(have.Keys, key) {
@@ -308,7 +311,7 @@ func (plan *Plan) addSystem(ctx context.Context, p Profile, r Reader) {
 	}
 	hostname, timezone, err := r.System(ctx)
 	if err != nil {
-		plan.unknown("системные настройки: %v", err)
+		plan.unknown(ctx, "profile.unknownSystem", err)
 		return
 	}
 	if p.System.Hostname != "" && p.System.Hostname != hostname {
@@ -352,7 +355,7 @@ func (plan *Plan) addCompose(ctx context.Context, p Profile, r Reader) {
 	dockerOK := true
 	switch present, err := r.DockerPresent(ctx); {
 	case err != nil:
-		plan.unknown("docker: %v", err)
+		plan.unknown(ctx, "profile.unknownDocker", err)
 	case !present:
 		dockerOK = false
 		plan.add(Change{Action: ActionInstallDocker, Target: "docker",
@@ -365,7 +368,7 @@ func (plan *Plan) addCompose(ctx context.Context, p Profile, r Reader) {
 		content, ok, err := r.FileContent(ctx, path)
 		switch {
 		case err != nil:
-			plan.unknown("стек %s: %v", c.Name, err)
+			plan.unknown(ctx, "profile.unknownStack", c.Name, err)
 			continue
 		case !ok:
 			needWrite = true
@@ -390,7 +393,7 @@ func (plan *Plan) addCompose(ctx context.Context, p Profile, r Reader) {
 
 		running, err := r.ComposeRunning(ctx, path)
 		if err != nil {
-			plan.unknown("стек %s: %v", c.Name, err)
+			plan.unknown(ctx, "profile.unknownStack", c.Name, err)
 			continue
 		}
 		switch {
@@ -451,7 +454,7 @@ func portTarget(p Port) string {
 		proto = "tcp"
 	}
 	if p.From != "" {
-		return fmt.Sprintf("%d/%s от %s", p.Port, proto, p.From)
+		return fmt.Sprintf("%d/%s from %s", p.Port, proto, p.From)
 	}
 	return fmt.Sprintf("%d/%s", p.Port, proto)
 }

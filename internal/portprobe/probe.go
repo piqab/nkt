@@ -15,6 +15,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"net"
 	"net/http"
@@ -113,8 +114,8 @@ type Result struct {
 	Truncated   bool   `json:"truncated,omitempty"`
 	// Received — что пришло по сырому соединению (баннер и ответ на
 	// посланное); Printable — оно же, если это текст.
-	Received  []byte `json:"received,omitempty"`
-	Printable bool   `json:"printable,omitempty"`
+	Received  []byte   `json:"received,omitempty"`
+	Printable bool     `json:"printable,omitempty"`
 	TLS       *TLSInfo `json:"tls,omitempty"`
 	// Command — то же самое для терминала: curl, nc или openssl.
 	Command string `json:"command"`
@@ -136,7 +137,7 @@ func (r *Request) Validate() error {
 	case "":
 		r.Kind = KindTCP
 	default:
-		return fmt.Errorf("неизвестный вид проверки %q", r.Kind)
+		return msgs.Errorf("portprobe.unknownProbeKind", r.Kind)
 	}
 	if r.TimeoutS <= 0 {
 		r.TimeoutS = 5
@@ -146,35 +147,35 @@ func (r *Request) Validate() error {
 	}
 	if r.Kind == KindCurl {
 		if strings.TrimSpace(r.Args) == "" {
-			return fmt.Errorf("укажите аргументы curl")
+			return msgs.Errorf("portprobe.specifyCurlArguments")
 		}
 		return nil
 	}
 
 	r.Address = strings.Trim(strings.TrimSpace(r.Address), "[]")
 	if net.ParseIP(r.Address) == nil {
-		return fmt.Errorf("адрес должен быть IP-адресом, получено %q", r.Address)
+		return msgs.Errorf("portprobe.addressMustIPAddressGot", r.Address)
 	}
 	if r.Port < 1 || r.Port > 65535 {
-		return fmt.Errorf("порт вне диапазона: %d", r.Port)
+		return msgs.Errorf("portprobe.portOutRange", r.Port)
 	}
 	r.Method = strings.ToUpper(strings.TrimSpace(r.Method))
 	if r.Method == "" {
 		r.Method = http.MethodGet
 	}
 	if !methodRe.MatchString(r.Method) {
-		return fmt.Errorf("метод %q не похож на HTTP-метод", r.Method)
+		return msgs.Errorf("portprobe.methodDoesLookLikeHTTP", r.Method)
 	}
 	r.Path = strings.TrimSpace(r.Path)
 	if r.Path == "" {
 		r.Path = "/"
 	}
 	if !strings.HasPrefix(r.Path, "/") || strings.ContainsAny(r.Path, " \r\n") {
-		return fmt.Errorf("путь должен начинаться с «/» и не содержать пробелов")
+		return msgs.Errorf("portprobe.pathMustStartContainSpaces")
 	}
 	r.Host = strings.TrimSpace(r.Host)
 	if strings.ContainsAny(r.Host, " \r\n/") {
-		return fmt.Errorf("некорректный заголовок Host")
+		return msgs.Errorf("portprobe.invalidHostHeader")
 	}
 	var headers []string
 	for _, h := range r.Headers {
@@ -183,22 +184,22 @@ func (r *Request) Validate() error {
 			continue
 		}
 		if !headerRe.MatchString(h) {
-			return fmt.Errorf("заголовок должен быть вида «Имя: значение», получено %q", h)
+			return msgs.Errorf("portprobe.headerMustLookLikeName", h)
 		}
 		headers = append(headers, h)
 	}
 	r.Headers = headers
 	if len(r.Body) > maxRequestBody {
-		return fmt.Errorf("тело запроса длиннее %d КиБ", maxRequestBody>>10)
+		return msgs.Errorf("portprobe.requestBodyLongerThanKiB", maxRequestBody>>10)
 	}
 	if strings.ContainsAny(r.ContentType, "\r\n") {
-		return fmt.Errorf("некорректный Content-Type")
+		return msgs.Errorf("portprobe.invalidContentType")
 	}
 	if r.ContentType == "application/json" && strings.TrimSpace(r.Body) != "" && !json.Valid([]byte(r.Body)) {
-		return fmt.Errorf("тело объявлено как JSON, но JSON в нём не разбирается")
+		return msgs.Errorf("portprobe.bodyDeclaredAsJSONBut")
 	}
 	if len(r.Send) > maxRequestBody {
-		return fmt.Errorf("отправляемые данные длиннее %d КиБ", maxRequestBody>>10)
+		return msgs.Errorf("portprobe.dataSendLongerThanKiB", maxRequestBody>>10)
 	}
 	return nil
 }
@@ -292,13 +293,13 @@ func Probe(ctx context.Context, r Request) Result {
 
 	switch r.Kind {
 	case KindCurl:
-		res.Error = "curl выполняется на хосте, а не здесь"
+		res.Error = msgs.Tc(ctx, "portprobe.curlRunsOnHost")
 		return res
 
 	case KindTCP:
 		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", r.hostPort())
 		if err != nil {
-			res.Error = dialError(err)
+			res.Error = dialError(ctx, err)
 			return res
 		}
 		defer conn.Close()
@@ -309,7 +310,7 @@ func Probe(ctx context.Context, r Request) Result {
 	case KindTLS:
 		conn, err := (&net.Dialer{}).DialContext(ctx, "tcp", r.hostPort())
 		if err != nil {
-			res.Error = dialError(err)
+			res.Error = dialError(ctx, err)
 			return res
 		}
 		defer conn.Close()
@@ -323,7 +324,7 @@ func Probe(ctx context.Context, r Request) Result {
 		}
 		tconn := tls.Client(conn, cfg)
 		if err := tconn.HandshakeContext(ctx); err != nil {
-			res.Error = "TLS-рукопожатие: " + err.Error()
+			res.Error = msgs.Tc(ctx, "portprobe.tlsHandshake", err)
 			return res
 		}
 		res.TLS = tlsInfo(tconn.ConnectionState(), !cfg.InsecureSkipVerify)
@@ -366,7 +367,7 @@ func Probe(ctx context.Context, r Request) Result {
 		}
 		resp, err := client.Do(req)
 		if err != nil {
-			res.Error = dialError(err)
+			res.Error = dialError(ctx, err)
 			return res
 		}
 		defer resp.Body.Close()
@@ -405,7 +406,7 @@ func exchange(ctx context.Context, conn net.Conn, payload []byte, res *Result) {
 			_ = conn.SetWriteDeadline(deadline)
 		}
 		if _, err := conn.Write(payload); err != nil {
-			res.Error = "отправка: " + err.Error()
+			res.Error = msgs.Tc(ctx, "portprobe.send", err)
 			return
 		}
 		readUntilQuiet(ctx, conn, &buf)
@@ -464,15 +465,15 @@ func tlsInfo(st tls.ConnectionState, verified bool) *TLSInfo {
 // dialError переводит самые частые исходы на язык, по которому понятно,
 // что делать: «отказано» — порт никто не слушает, «таймаут» — пакеты
 // теряются (обычно фаервол).
-func dialError(err error) string {
+func dialError(ctx context.Context, err error) string {
 	msg := err.Error()
 	switch {
 	case strings.Contains(msg, "connection refused"):
-		return "соединение отклонено — на этом адресе и порту никто не слушает"
+		return msgs.Tc(ctx, "portprobe.connectionRefused")
 	case strings.Contains(msg, "deadline exceeded") || strings.Contains(msg, "timeout"):
-		return "таймаут — ответа нет; так ведёт себя порт, закрытый фаерволом"
+		return msgs.Tc(ctx, "portprobe.timeout")
 	case strings.Contains(msg, "no route to host"):
-		return "нет маршрута к адресу"
+		return msgs.Tc(ctx, "portprobe.noRoute")
 	}
 	return msg
 }

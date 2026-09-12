@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strings"
 
@@ -63,7 +64,7 @@ func virshFailure(res collect.CommandResult) string {
 		}
 	}
 	if len(lines) == 0 {
-		return fmt.Sprintf("код %d", res.ExitCode)
+		return msgs.T(msgs.DefaultLang, "collect.exitCode", res.ExitCode)
 	}
 	if len(lines) > 3 {
 		lines = lines[:3]
@@ -90,10 +91,10 @@ const libvirtImagesRoot = "/var/lib/libvirt/images"
 // under libvirtImagesRoot are accepted.
 func (m *LibvirtManager) CreateDisk(ctx context.Context, user, path string, sizeGB int) error {
 	if !strings.HasPrefix(path, libvirtImagesRoot+"/") || strings.Contains(path, "..") {
-		return fmt.Errorf("путь диска должен быть внутри %s", libvirtImagesRoot)
+		return msgs.Errorf("control.diskPathMustInside", libvirtImagesRoot)
 	}
 	if sizeGB <= 0 || sizeGB > 65536 {
-		return fmt.Errorf("недопустимый размер диска: %d ГБ", sizeGB)
+		return msgs.Errorf("control.invalidDiskSizeGB", sizeGB)
 	}
 
 	res, err := m.run(ctx, "qemu-img", "create", "-f", "qcow2", path, fmt.Sprintf("%dG", sizeGB))
@@ -123,10 +124,10 @@ func (m *LibvirtManager) VMAction(ctx context.Context, user, name, action string
 	switch action {
 	case "start", "shutdown", "destroy", "reboot", "suspend", "resume":
 	default:
-		return fmt.Errorf("недопустимое действие для VM: %q", action)
+		return msgs.Errorf("control.invalidActionVM", action)
 	}
 	if !libvirtDomainRe.MatchString(name) {
-		return fmt.Errorf("недопустимое имя домена: %q", name)
+		return msgs.Errorf("control.invalidDomainName2", name)
 	}
 
 	res, err := m.run(ctx, "virsh", "-c", m.cfg.LibvirtURI, action, name)
@@ -150,7 +151,7 @@ func (m *LibvirtManager) VMAction(ctx context.Context, user, name, action string
 // host boot.
 func (m *LibvirtManager) SetAutostart(ctx context.Context, user, name string, on bool) error {
 	if !libvirtDomainRe.MatchString(name) {
-		return fmt.Errorf("недопустимое имя домена: %q", name)
+		return msgs.Errorf("control.invalidDomainName2", name)
 	}
 
 	args := []string{"-c", m.cfg.LibvirtURI, "autostart", name}
@@ -190,7 +191,7 @@ func (m *LibvirtManager) SetAutostart(ctx context.Context, user, name string, on
 // бы на давно погашенный домен.
 func (m *LibvirtManager) UndefineVM(ctx context.Context, user, name string, removeStorage, force bool) error {
 	if !libvirtDomainRe.MatchString(name) {
-		return fmt.Errorf("недопустимое имя домена: %q", name)
+		return msgs.Errorf("control.invalidDomainName2", name)
 	}
 	if force {
 		// Отказ гасить незапущенный домен — не ошибка: он уже в нужном
@@ -204,7 +205,7 @@ func (m *LibvirtManager) UndefineVM(ctx context.Context, user, name string, remo
 	} else if snap := m.scanner.Latest(); snap != nil {
 		for _, vm := range snap.VMs {
 			if vm.Name == name && vm.State == "running" {
-				return fmt.Errorf("домен %s запущен — сначала остановите его (shutdown/destroy)", name)
+				return msgs.Errorf("control.domainRunningStopFirstShutdown", name)
 			}
 		}
 	}

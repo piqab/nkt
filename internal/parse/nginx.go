@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	gopath "path"
 	"sort"
@@ -40,7 +41,7 @@ func Nginx(ctx context.Context, c collect.Collector, mainConfig string) NginxRes
 	defer func() { res.Status.DurationMS = time.Since(started).Milliseconds() }()
 
 	if !c.Exists(mainConfig) {
-		res.Status.Error = fmt.Sprintf("основной конфиг %s не найден", mainConfig)
+		res.Status.Error = msgs.Tc(ctx, "parse.mainConfigFound", mainConfig)
 		res.Status.ErrorKey = "parse.nginxMainConfigNotFound"
 		res.Status.ErrorArgs = []any{mainConfig}
 		return res

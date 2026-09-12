@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strings"
 
@@ -127,7 +128,7 @@ func (o *BootstrapOptions) Validate() error {
 		return nil
 	}
 	if o.User != "" && !bootstrapUserRe.MatchString(o.User) {
-		return fmt.Errorf("недопустимое имя пользователя: %q", o.User)
+		return msgs.Errorf("control.invalidUserName", o.User)
 	}
 	if key := strings.TrimSpace(o.UserKey); key != "" {
 		if _, err := control.ParseAuthorizedKey(key); err != nil {
@@ -140,7 +141,7 @@ func (o *BootstrapOptions) Validate() error {
 	}
 	for _, p := range o.Packages {
 		if !bootstrapPackageRe.MatchString(p) {
-			return fmt.Errorf("недопустимое имя пакета: %q", p)
+			return msgs.Errorf("control.invalidPackageName", p)
 		}
 	}
 	if o.DisablePasswordAuth && o.User == "" {
@@ -237,13 +238,13 @@ func (m *Manager) bootstrapHost(ctx context.Context, client *ssh.Client, host st
 	report("hub.bootstrapVerifyKey", targetUser)
 	verify, err := m.dialHostAs(ctx, host, targetUser, store.HostAuthKey, []byte(privatePEM))
 	if err != nil {
-		return res, fmt.Errorf("вход по ключу под %s не работает, пароль оставлен как есть: %w", targetUser, err)
+		return res, msgs.Errorf("hub.keyLoginAsDoesWork", targetUser, err)
 	}
 	defer verify.Close()
 
 	if targetUser != "root" {
 		if out, err := runRemote(verify.client, "sudo -n true"); err != nil {
-			return res, fmt.Errorf("sudo без пароля для %s не работает: %w: %s", targetUser, err, lastLines(out, 3))
+			return res, msgs.Errorf("hub.passwordlessSudoDoesWork", targetUser, err, lastLines(out, 3))
 		}
 	}
 
@@ -294,7 +295,7 @@ func installBootstrapPackages(client *ssh.Client, sudo string, packages []string
 	// работает терминал, а без mc не работает только mc.
 	for _, p := range failed {
 		if p == "dbus" || p == "sudo" {
-			return fmt.Errorf("не удалось поставить %s — без него хост неработоспособен (не установлены: %s)",
+			return msgs.Errorf("hub.couldInstallHostUnusableWithout",
 				p, strings.Join(failed, ", "))
 		}
 	}
@@ -368,10 +369,10 @@ func sudoPrefix(user string) string {
 // чем сказать об этом сразу.
 func checkAptHost(client *ssh.Client) error {
 	if _, err := runRemote(client, "command -v apt-get"); err != nil {
-		return fmt.Errorf("подготовка хоста поддерживает только Debian/Ubuntu-подобные системы: apt-get на хосте не найден")
+		return msgs.Errorf("hub.hostPreparationSupportsOnlyDebian")
 	}
 	if _, err := runRemote(client, "test -d /run/systemd/system"); err != nil {
-		return fmt.Errorf("на хосте не запущен systemd — nkt устанавливается как systemd-юнит")
+		return msgs.Errorf("hub.systemdRunningHostNktInstalls")
 	}
 	return nil
 }
@@ -381,12 +382,12 @@ func checkAptHost(client *ssh.Client) error {
 func createBootstrapUser(client *ssh.Client, sudo, user string) error {
 	if out, err := runRemote(client, fmt.Sprintf(
 		"id -u %[1]s >/dev/null 2>&1 || %[2]suseradd --create-home --shell /bin/bash %[1]s", user, sudo)); err != nil {
-		return fmt.Errorf("создание пользователя %s: %w: %s", user, err, lastLines(out, 3))
+		return msgs.Errorf("hub.creatingUser", user, err, lastLines(out, 3))
 	}
 	// visudo -cf проверяет файл ДО того, как он попадёт в /etc/sudoers.d:
 	// синтаксически неверный файл там ломает sudo для всех сразу.
 	if out, err := runRemote(client, sudoersInstallCmd(sudo, user)); err != nil {
-		return fmt.Errorf("настройка sudo для %s: %w: %s", user, err, lastLines(out, 3))
+		return msgs.Errorf("hub.sudoSetup", user, err, lastLines(out, 3))
 	}
 	return nil
 }
@@ -395,7 +396,7 @@ func createBootstrapUser(client *ssh.Client, sudo, user string) error {
 // то, что там уже есть: на хосте может быть чужой рабочий доступ.
 func installAuthorizedKey(client *ssh.Client, sudo, user, authorizedKey string) error {
 	if out, err := runRemote(client, authorizedKeyCmd(sudo, user, authorizedKey)); err != nil {
-		return fmt.Errorf("установка ключа для %s: %w: %s", user, err, lastLines(out, 3))
+		return msgs.Errorf("hub.installingKey", user, err, lastLines(out, 3))
 	}
 	return nil
 }
@@ -439,7 +440,7 @@ func (m *Manager) disablePasswordAuth(ctx context.Context, client *ssh.Client, h
 	// Include в основном конфиге есть не всегда: в старых образах
 	// sshd_config.d просто не подключён, и файл там был бы бесполезен.
 	if _, err := runRemote(client, "grep -qs '^Include /etc/ssh/sshd_config.d/' /etc/ssh/sshd_config"); err != nil {
-		return fmt.Errorf("в sshd_config нет Include для sshd_config.d — вход по паролю оставлен включённым")
+		return msgs.Errorf("hub.sshdConfigHasIncludeSshd")
 	}
 	write := fmt.Sprintf(
 		"%[1]sinstall -d -m 0755 /etc/ssh/sshd_config.d"+
@@ -447,7 +448,7 @@ func (m *Manager) disablePasswordAuth(ctx context.Context, client *ssh.Client, h
 			" | %[1]stee %[2]s >/dev/null",
 		sudo, nktSSHDropIn)
 	if out, err := runRemote(client, write); err != nil {
-		return fmt.Errorf("запись %s: %w: %s", nktSSHDropIn, err, lastLines(out, 3))
+		return msgs.Errorf("hub.writing", nktSSHDropIn, err, lastLines(out, 3))
 	}
 
 	rollback := func() {
@@ -455,11 +456,11 @@ func (m *Manager) disablePasswordAuth(ctx context.Context, client *ssh.Client, h
 	}
 	if out, err := runRemote(client, sudo+"sshd -t"); err != nil {
 		rollback()
-		return fmt.Errorf("sshd отклонил конфигурацию: %w: %s", err, lastLines(out, 3))
+		return msgs.Errorf("hub.sshdRejectedConfiguration", err, lastLines(out, 3))
 	}
 	if out, err := runRemote(client, sudo+"systemctl reload ssh 2>/dev/null || "+sudo+"systemctl reload sshd"); err != nil {
 		rollback()
-		return fmt.Errorf("перезагрузка sshd: %w: %s", err, lastLines(out, 3))
+		return msgs.Errorf("hub.reloadingSshd", err, lastLines(out, 3))
 	}
 	// Ещё одно новое соединение: reload прошёл, но принимает ли демон
 	// подключения — вопрос отдельный, и уже открытая сессия на него не
@@ -467,7 +468,7 @@ func (m *Manager) disablePasswordAuth(ctx context.Context, client *ssh.Client, h
 	check, err := m.dialHostAs(ctx, host, user, store.HostAuthKey, []byte(privatePEM))
 	if err != nil {
 		rollback()
-		return fmt.Errorf("после выключения пароля вход по ключу перестал работать, изменение отменено: %w", err)
+		return msgs.Errorf("hub.afterDisablingPasswordLoginKey", err)
 	}
 	_ = check.Close()
 	return nil
@@ -481,7 +482,7 @@ func (m *Manager) applyBootstrapResult(ctx context.Context, hostID int64, host s
 	}
 	secretEnc, err := secretbox.Encrypt(m.key, []byte(res.PrivatePEM))
 	if err != nil {
-		return fmt.Errorf("шифрование ключа: %w", err)
+		return msgs.Errorf("hub.encryptingKey", err)
 	}
 	if err := m.db.SetHostSecret(ctx, hostID, store.HostAuthKey, secretEnc); err != nil {
 		return err

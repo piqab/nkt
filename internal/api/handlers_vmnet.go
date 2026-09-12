@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -27,12 +28,12 @@ func (s *Server) vmnets() *vmnet.Manager {
 func (s *Server) handleVMNetworks(w http.ResponseWriter, r *http.Request) {
 	mgr := s.vmnets()
 	if mgr == nil {
-		writeError(w, http.StatusServiceUnavailable, "управление машинами недоступно")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.machineControlUnavailable"))
 		return
 	}
 	nets, err := mgr.List(r.Context())
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"networks": nets})
@@ -46,12 +47,12 @@ func (s *Server) handleVMNetworks(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVMFreeSubnet(w http.ResponseWriter, r *http.Request) {
 	mgr := s.vmnets()
 	if mgr == nil {
-		writeError(w, http.StatusServiceUnavailable, "управление машинами недоступно")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.machineControlUnavailable"))
 		return
 	}
 	subnet, bridge, err := mgr.Suggest(r.Context())
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"subnet": subnet, "bridge": bridge})
@@ -60,16 +61,16 @@ func (s *Server) handleVMFreeSubnet(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVMNetworkCreate(w http.ResponseWriter, r *http.Request) {
 	var spec vmnet.Spec
 	if err := decodeJSON(r, &spec); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := spec.Validate(); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	mgr := s.vmnets()
 	if mgr == nil {
-		writeError(w, http.StatusServiceUnavailable, "управление машинами недоступно")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.machineControlUnavailable"))
 		return
 	}
 	user := auth.Username(r.Context())
@@ -86,7 +87,7 @@ func (s *Server) handleVMNetworkCreate(w http.ResponseWriter, r *http.Request) {
 			})
 			return
 		}
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vmnet.create", spec.Name, "ok", spec.Mode)
@@ -100,7 +101,7 @@ func (s *Server) handleVMNetworkAction(w http.ResponseWriter, r *http.Request) {
 	action := chi.URLParam(r, "action")
 	mgr := s.vmnets()
 	if mgr == nil {
-		writeError(w, http.StatusServiceUnavailable, "управление машинами недоступно")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.machineControlUnavailable"))
 		return
 	}
 
@@ -117,14 +118,14 @@ func (s *Server) handleVMNetworkAction(w http.ResponseWriter, r *http.Request) {
 	case "delete":
 		err = mgr.Delete(r.Context(), name)
 	default:
-		writeError(w, http.StatusBadRequest, "неизвестное действие над сетью")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.unknownNetworkAction"))
 		return
 	}
 
 	user := auth.Username(r.Context())
 	if err != nil {
 		s.db.Audit(r.Context(), user, "vmnet."+action, name, "error", err.Error())
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vmnet."+action, name, "ok", nil)

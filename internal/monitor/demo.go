@@ -2,7 +2,7 @@ package monitor
 
 import (
 	"context"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"math"
 	"math/rand"
 	"time"
@@ -111,10 +111,10 @@ func BackfillDemoHistory(ctx context.Context, db *store.DB, days int) (int, erro
 	}
 
 	if err := db.InsertProbeResults(ctx, probes); err != nil {
-		return 0, fmt.Errorf("демо-история проб: %w", err)
+		return 0, msgs.Errorf("monitor.demoProbeHistory", err)
 	}
 	if err := db.InsertMetrics(ctx, samples); err != nil {
-		return 0, fmt.Errorf("демо-история метрик: %w", err)
+		return 0, msgs.Errorf("monitor.demoMetricsHistory", err)
 	}
 	if err := db.KVSet(ctx, demoBackfillKey, store.Now()); err != nil {
 		return 0, err

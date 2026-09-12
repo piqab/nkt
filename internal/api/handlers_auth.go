@@ -50,7 +50,7 @@ type loginRequest struct {
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
@@ -78,7 +78,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 			status = http.StatusTooManyRequests
 		}
 		s.db.Audit(r.Context(), req.Username, "auth.login", "", "error", err.Error())
-		writeError(w, status, err.Error())
+		writeErr(w, r, status, err)
 		return
 	}
 
@@ -117,7 +117,7 @@ type passwordRequest struct {
 func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	var req passwordRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if !passwordLongEnough(req.NewPassword) {
@@ -127,12 +127,12 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	user, _ := auth.UserFromContext(r.Context())
 	if err := s.auth.ChangePassword(r.Context(), user.Username, req.OldPassword, req.NewPassword); err != nil {
 		s.db.Audit(r.Context(), user.Username, "auth.password", "", "error", err.Error())
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.auth.ClearSessionCookie(w)
 	s.db.Audit(r.Context(), user.Username, "auth.password", "", "ok", "все сессии завершены")
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Пароль изменён, войдите заново."})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": msgs.Tc(r.Context(), "api.passwordChangedLoginAgain")})
 }
 
 // ----------------------------------------------------------------- user admin
@@ -155,7 +155,7 @@ type userCreateRequest struct {
 func (s *Server) handleUserCreate(w http.ResponseWriter, r *http.Request) {
 	var req userCreateRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
@@ -191,7 +191,7 @@ func (s *Server) handleUserPatch(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	var req userPatchRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	actor, _ := auth.UserFromContext(r.Context())

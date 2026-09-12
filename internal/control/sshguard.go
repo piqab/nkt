@@ -3,7 +3,7 @@ package control
 import (
 	"bufio"
 	"context"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net"
 	"strconv"
 	"strings"
@@ -35,8 +35,8 @@ const sshProbeTimeout = 3 * time.Second
 
 // SSHProbe — результат попытки установить с sshd НОВОЕ соединение.
 type SSHProbe struct {
-	OK   bool   `json:"ok"`
-	Port int    `json:"port"`
+	OK   bool `json:"ok"`
+	Port int  `json:"port"`
 	// Banner — первая строка, которую шлёт sshd ("SSH-2.0-OpenSSH_9.6").
 	// Она и доказывает, что ответил именно sshd, а не что-то другое,
 	// занявшее порт.
@@ -104,12 +104,12 @@ func probeSSHPort(ctx context.Context, port int) SSHProbe {
 	_ = conn.SetReadDeadline(time.Now().Add(sshProbeTimeout))
 	line, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil && line == "" {
-		probe.Error = fmt.Sprintf("соединение открылось, но баннер не пришёл: %v", err)
+		probe.Error = msgs.Tc(ctx, "control.connectionOpenedButBannerArrived", err)
 		return probe
 	}
 	probe.Banner = strings.TrimSpace(line)
 	if !strings.HasPrefix(probe.Banner, "SSH-") {
-		probe.Error = fmt.Sprintf("порт %d занят не sshd: %q", port, probe.Banner)
+		probe.Error = msgs.Tc(ctx, "control.portHeldSomethingOtherThan", port, probe.Banner)
 		return probe
 	}
 	probe.OK = true
@@ -118,21 +118,21 @@ func probeSSHPort(ctx context.Context, port int) SSHProbe {
 
 // SSHReserveChannel отвечает на вопрос «если sshd не поднимется, останется
 // ли способ сюда попасть».
-func (m *ConfigManager) SSHReserveChannel(viaHubTunnel bool) SSHReserve {
+func (m *ConfigManager) SSHReserveChannel(ctx context.Context, viaHubTunnel bool) SSHReserve {
 	res := SSHReserve{ViaHubTunnel: viaHubTunnel, NktAddr: m.cfg.Addr}
 	if !viaHubTunnel {
 		res.OK = true
-		res.Detail = "запрос идёт прямо к nkt на хосте, а не через SSH-туннель хаба — этот канал от sshd не зависит"
+		res.Detail = msgs.Tc(ctx, "control.sshReserveDirect")
 		return res
 	}
 	// Через туннель управляющий канал сам держится на sshd. Спасает только
 	// то, что веб-интерфейс nkt слушает адрес, доступный снаружи.
 	if listensPublicly(m.cfg.Addr) {
 		res.OK = true
-		res.Detail = fmt.Sprintf("запрос идёт через SSH-туннель хаба, но nkt слушает %s — до него можно достучаться и без sshd", m.cfg.Addr)
+		res.Detail = msgs.Tc(ctx, "control.sshReservePublic", m.cfg.Addr)
 		return res
 	}
-	res.Detail = fmt.Sprintf("запрос идёт через SSH-туннель хаба, а nkt слушает только %s — если sshd не поднимется, обратного пути не останется", m.cfg.Addr)
+	res.Detail = msgs.Tc(ctx, "control.sshReserveNone", m.cfg.Addr)
 	return res
 }
 

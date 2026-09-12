@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net"
 
 	"golang.org/x/crypto/ssh"
@@ -60,7 +61,7 @@ func (l *sshLink) Close() error {
 func (m *Manager) dialHost(ctx context.Context, host store.Host) (*sshLink, error) {
 	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
 	if err != nil {
-		return nil, fmt.Errorf("расшифровка SSH-секрета: %w", err)
+		return nil, msgs.Errorf("hub.decryptingSSHSecret", err)
 	}
 	return m.dialHostAs(ctx, host, host.SSHUser, host.SSHAuthKind, secret)
 }
@@ -75,8 +76,7 @@ func (m *Manager) dialHostAs(ctx context.Context, host store.Host, user, authKin
 func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 	user, authKind string, secret []byte, depth int) (*sshLink, error) {
 	if isPlaceholderAddr(host.Addr) {
-		return nil, fmt.Errorf("адрес машины %q ещё не определён — дождитесь, пока она поднимется, "+
-			"и нажмите «определить адрес», либо впишите его сами", host.Name)
+		return nil, msgs.Errorf("hub.addressMachineKnownYetWait", host.Name)
 	}
 	target := net.JoinHostPort(host.Addr, fmt.Sprintf("%d", host.SSHPort))
 
@@ -102,17 +102,17 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 
 	parentSecret, err := secretbox.Decrypt(m.key, parent.SecretEnc)
 	if err != nil {
-		return nil, fmt.Errorf("расшифровка SSH-секрета хоста %q: %w", parent.Name, err)
+		return nil, msgs.Errorf("hub.decryptingSSHSecretHost", parent.Name, err)
 	}
 	jump, err := m.dialHostDepth(ctx, parent, parent.SSHUser, parent.SSHAuthKind, parentSecret, depth+1)
 	if err != nil {
-		return nil, fmt.Errorf("переход через хост %q: %w", parent.Name, err)
+		return nil, msgs.Errorf("hub.jumpingThroughHost", parent.Name, err)
 	}
 
 	conn, err := jump.client.DialContext(ctx, "tcp", target)
 	if err != nil {
 		_ = jump.Close()
-		return nil, fmt.Errorf("с хоста %q нет доступа к %s: %w", parent.Name, target, err)
+		return nil, msgs.Errorf("hub.accessHost", parent.Name, target, err)
 	}
 	client, err := dialSSHOver(conn, target, user, authKind, secret)
 	if err != nil {

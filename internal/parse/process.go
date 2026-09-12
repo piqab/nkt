@@ -3,6 +3,7 @@ package parse
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"sort"
 	"strconv"
@@ -101,7 +102,7 @@ func ProcessDetails(ctx context.Context, c collect.Collector, pids []int) (map[i
 		status.Error = fmt.Sprintf("ps: %v", err)
 	case !out.OK():
 		stderr := strings.TrimSpace(out.Stderr)
-		status.Error = fmt.Sprintf("ps завершился с кодом %d: %s", out.ExitCode, stderr)
+		status.Error = msgs.Tc(ctx, "parse.psExitedCode", out.ExitCode, stderr)
 		status.ErrorKey = "parse.commandFailed"
 		status.ErrorArgs = []any{"ps", out.ExitCode, stderr}
 	default:

@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strings"
 )
@@ -41,7 +42,7 @@ type OSRelease struct {
 // ReadOSRelease читает /etc/os-release на хосте.
 func ReadOSRelease(ctx context.Context, run PrivilegedRunner) (OSRelease, error) {
 	if run == nil {
-		return OSRelease{}, fmt.Errorf("установка недоступна в этом режиме")
+		return OSRelease{}, msgs.Errorf("control.installationUnavailableMode")
 	}
 	// Через оболочку: os-release — это набор присваиваний, и разбирать
 	// его руками незачем, когда его умеет читать сама оболочка.
@@ -53,7 +54,7 @@ func ReadOSRelease(ctx context.Context, run PrivilegedRunner) (OSRelease, error)
 		return OSRelease{}, err
 	}
 	if res.ExitCode != 0 {
-		return OSRelease{}, fmt.Errorf("не удалось прочитать /etc/os-release: %s", strings.TrimSpace(res.Output()))
+		return OSRelease{}, msgs.Errorf("control.couldReadEtcOsRelease", strings.TrimSpace(res.Output()))
 	}
 	lines := strings.Split(strings.ReplaceAll(res.Stdout, "\r", ""), "\n")
 	get := func(i int) string {
@@ -143,7 +144,7 @@ func InstallDocker(ctx context.Context, run PrivilegedRunner, logf func(string, 
 		logf = func(string, ...any) {}
 	}
 	if run == nil {
-		return fmt.Errorf("установка недоступна в этом режиме")
+		return msgs.Errorf("control.installationUnavailableMode")
 	}
 
 	osr, err := ReadOSRelease(ctx, run)
@@ -152,33 +153,33 @@ func InstallDocker(ctx context.Context, run PrivilegedRunner, logf func(string, 
 	}
 	plan := PlanDockerInstall(osr)
 	if plan.Official {
-		logf("Ставлю docker из репозитория docker.com для %s %s (официальная инструкция).", plan.Distro, plan.Codename)
+		logf(msgs.Tc(ctx, "control.dockerInstallOfficial", plan.Distro, plan.Codename))
 	} else {
-		logf("Система %q не из тех, у кого есть своя ветка репозитория Docker — ставлю официальным скриптом get.docker.com.", osr.ID)
+		logf(msgs.Tc(ctx, "control.dockerInstallScript", osr.ID))
 	}
 
 	res, err := run(ctx, "sh", "-c", plan.Script)
 	if err != nil {
-		return fmt.Errorf("установка docker: %w", err)
+		return msgs.Errorf("control.installingDocker", err)
 	}
 	for _, line := range tailLines(res.Output(), 5) {
 		logf("      %s", line)
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("установка docker завершилась кодом %d: %s", res.ExitCode, firstProblem(res.Output()))
+		return msgs.Errorf("control.dockerInstallationExitedCode", res.ExitCode, firstProblem(res.Output()))
 	}
 
 	// Служба: пакет её включает сам, но на хосте, где apt настроен
 	// policy-rc.d (контейнеры, образы для сборки), автозапуск не
 	// срабатывает, и docker остаётся установленным, но не работающим.
 	if res, err := run(ctx, "systemctl", "enable", "--now", "docker"); err == nil && res.ExitCode != 0 {
-		logf("      systemctl enable --now docker: код %d", res.ExitCode)
+		logf(msgs.Tc(ctx, "control.dockerEnableCode", res.ExitCode))
 	}
 
 	if res, err := run(ctx, "sh", "-c", "command -v docker"); err != nil || res.ExitCode != 0 {
-		return fmt.Errorf("docker не появился в PATH после установки")
+		return msgs.Errorf("control.dockerDidAppearPATHAfter")
 	}
-	logf("Docker установлен.")
+	logf(msgs.Tc(ctx, "control.dockerInstalled"))
 	return nil
 }
 
@@ -212,7 +213,7 @@ func firstProblem(out string) string {
 		last = line
 	}
 	if last == "" {
-		return "вывода нет"
+		return msgs.T(msgs.DefaultLang, "control.noOutput")
 	}
 	return last
 }

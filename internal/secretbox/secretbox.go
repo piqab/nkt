@@ -10,8 +10,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"encoding/base64"
-	"errors"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"os"
 )
 
@@ -22,7 +21,7 @@ const KeySize = 32
 func GenerateKey() ([]byte, error) {
 	key := make([]byte, KeySize)
 	if _, err := rand.Read(key); err != nil {
-		return nil, fmt.Errorf("генерация ключа: %w", err)
+		return nil, msgs.Errorf("control.generatingKey", err)
 	}
 	return key, nil
 }
@@ -35,7 +34,7 @@ func Encrypt(key, plaintext []byte) ([]byte, error) {
 	}
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		return nil, fmt.Errorf("генерация nonce: %w", err)
+		return nil, msgs.Errorf("secretbox.generatingNonce", err)
 	}
 	return gcm.Seal(nonce, nonce, plaintext, nil), nil
 }
@@ -47,7 +46,7 @@ func Decrypt(key, data []byte) ([]byte, error) {
 		return nil, err
 	}
 	if len(data) < gcm.NonceSize() {
-		return nil, errors.New("secretbox: слишком короткий шифротекст")
+		return nil, msgs.Errorf("secretbox.secretboxCiphertextTooShort")
 	}
 	nonce, ciphertext := data[:gcm.NonceSize()], data[gcm.NonceSize():]
 	return gcm.Open(nil, nonce, ciphertext, nil)
@@ -55,7 +54,7 @@ func Decrypt(key, data []byte) ([]byte, error) {
 
 func newGCM(key []byte) (cipher.AEAD, error) {
 	if len(key) != KeySize {
-		return nil, fmt.Errorf("secretbox: ключ должен быть %d байт, получено %d", KeySize, len(key))
+		return nil, msgs.Errorf("secretbox.secretboxKeyMustBytesGot", KeySize, len(key))
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -73,10 +72,10 @@ func ResolveKey(envValue, keyFilePath string) ([]byte, error) {
 	if envValue != "" {
 		key, err := base64.StdEncoding.DecodeString(envValue)
 		if err != nil {
-			return nil, fmt.Errorf("NKT_HUB_MASTER_KEY: не удалось разобрать base64: %w", err)
+			return nil, msgs.Errorf("secretbox.nktHUBMASTERKEYCould", err)
 		}
 		if len(key) != KeySize {
-			return nil, fmt.Errorf("NKT_HUB_MASTER_KEY: ожидается %d байт, получено %d", KeySize, len(key))
+			return nil, msgs.Errorf("secretbox.nktHUBMASTERKEYExpected", KeySize, len(key))
 		}
 		return key, nil
 	}
@@ -84,11 +83,11 @@ func ResolveKey(envValue, keyFilePath string) ([]byte, error) {
 	if raw, err := os.ReadFile(keyFilePath); err == nil {
 		key, err := base64.StdEncoding.DecodeString(string(raw))
 		if err != nil || len(key) != KeySize {
-			return nil, fmt.Errorf("%s: повреждённый файл ключа", keyFilePath)
+			return nil, msgs.Errorf("secretbox.corruptedKeyFile", keyFilePath)
 		}
 		return key, nil
 	} else if !os.IsNotExist(err) {
-		return nil, fmt.Errorf("чтение %s: %w", keyFilePath, err)
+		return nil, msgs.Errorf("collect.reading", keyFilePath, err)
 	}
 
 	key, err := GenerateKey()
@@ -96,7 +95,7 @@ func ResolveKey(envValue, keyFilePath string) ([]byte, error) {
 		return nil, err
 	}
 	if err := os.WriteFile(keyFilePath, []byte(base64.StdEncoding.EncodeToString(key)), 0o600); err != nil {
-		return nil, fmt.Errorf("запись %s: %w", keyFilePath, err)
+		return nil, msgs.Errorf("control.writing", keyFilePath, err)
 	}
 	return key, nil
 }

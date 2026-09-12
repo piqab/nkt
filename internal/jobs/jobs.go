@@ -22,6 +22,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
 )
 
@@ -53,6 +54,14 @@ type Context struct {
 func (jc *Context) Logf(format string, args ...any) {
 	jc.m.appendLog(jc.Job.ID, fmt.Sprintf(format, args...))
 }
+
+// Log — строка журнала из каталога сообщений на языке автора задания.
+func (jc *Context) Log(key string, args ...any) {
+	jc.m.appendLog(jc.Job.ID, msgs.T(jc.Lang(), key, args...))
+}
+
+// Lang — язык автора задания (см. Spec.Lang).
+func (jc *Context) Lang() msgs.Lang { return msgs.ParseLang(jc.Job.Lang) }
 
 // Step отмечает переход к следующему шагу: n из total.
 func (jc *Context) Step(n, total int, name string) {
@@ -142,6 +151,9 @@ type Spec struct {
 	Title  string
 	Queue  string
 	Author string
+	// Lang — язык, на котором писать журнал и ошибку: язык интерфейса
+	// автора в момент запуска (msgs.FromContext у запроса).
+	Lang   msgs.Lang
 	Params any
 	Steps  int
 }
@@ -152,7 +164,7 @@ func (m *Manager) Start(ctx context.Context, spec Spec) (int64, error) {
 	_, known := m.runners[spec.Kind]
 	m.mu.Unlock()
 	if !known {
-		return 0, fmt.Errorf("неизвестный вид задания %q", spec.Kind)
+		return 0, msgs.Errorf("jobs.unknownJobKind", spec.Kind)
 	}
 
 	params := ""
@@ -163,9 +175,13 @@ func (m *Manager) Start(ctx context.Context, spec Spec) (int64, error) {
 		}
 		params = string(raw)
 	}
+	lang := spec.Lang
+	if lang == "" {
+		lang = msgs.FromContext(ctx)
+	}
 	id, err := m.db.CreateJob(ctx, store.Job{
 		Kind: spec.Kind, Title: spec.Title, Queue: spec.Queue, Status: store.JobQueued,
-		Params: params, Steps: spec.Steps, Author: spec.Author,
+		Params: params, Steps: spec.Steps, Author: spec.Author, Lang: string(lang),
 	})
 	if err != nil {
 		return 0, err
@@ -207,7 +223,7 @@ func (m *Manager) run(ctx context.Context, id int64, queue string) {
 	m.mu.Unlock()
 	if runner == nil {
 		_ = m.db.FinishJob(context.Background(), id, store.JobFailed,
-			fmt.Sprintf("неизвестный вид задания %q", job.Kind))
+			msgs.Tc(ctx, "jobs.unknownJobKind", job.Kind))
 		m.notifyJob(id)
 		return
 	}
@@ -219,7 +235,7 @@ func (m *Manager) run(ctx context.Context, id int64, queue string) {
 
 	job, _ = m.db.JobByID(context.Background(), id)
 	jc := &Context{Job: job, m: m}
-	runErr := runner.Run(ctx, jc)
+	runErr := runner.Run(msgs.WithLang(ctx, jc.Lang()), jc)
 
 	m.mu.Lock()
 	byUser := m.userCanceled[id]
@@ -233,7 +249,7 @@ func (m *Manager) run(ctx context.Context, id int64, queue string) {
 	// Записать здесь «отменено» значило бы навсегда потерять возможность
 	// продолжить — и соврать, потому что никто ничего не отменял.
 	if stopping {
-		m.appendLog(id, "Служба останавливается — задание прервано на середине.")
+		m.appendLog(id, msgs.T(jc.Lang(), "jobs.interruptedByShutdown"))
 		m.closeWatchers(id)
 		return
 	}
@@ -241,12 +257,12 @@ func (m *Manager) run(ctx context.Context, id int64, queue string) {
 	status, msg := store.JobSucceeded, ""
 	switch {
 	case byUser:
-		status, msg = store.JobCanceled, "отменено оператором"
+		status, msg = store.JobCanceled, msgs.T(jc.Lang(), "jobs.canceledByOperator")
 	case runErr != nil:
-		status, msg = store.JobFailed, runErr.Error()
+		status, msg = store.JobFailed, msgs.Localize(jc.Lang(), runErr)
 	}
 	if runErr != nil {
-		m.appendLog(id, "— "+runErr.Error())
+		m.appendLog(id, "— "+msg)
 	}
 	if err := m.db.FinishJob(context.Background(), id, status, msg); err != nil {
 		m.log.Error("исход задания не записан", "id", id, "err", err)
@@ -281,7 +297,7 @@ func (m *Manager) Cancel(ctx context.Context, id int64) error {
 		return err
 	}
 	if job.Done() {
-		return fmt.Errorf("задание уже завершено")
+		return msgs.Errorf("jobs.jobAlreadyFinished")
 	}
 
 	m.mu.Lock()
@@ -292,7 +308,7 @@ func (m *Manager) Cancel(ctx context.Context, id int64) error {
 		if pid == id {
 			m.pending[job.Queue] = append(list[:i:i], list[i+1:]...)
 			m.mu.Unlock()
-			_ = m.db.FinishJob(ctx, id, store.JobCanceled, "отменено до запуска")
+			_ = m.db.FinishJob(ctx, id, store.JobCanceled, msgs.T(msgs.ParseLang(job.Lang), "jobs.canceledBeforeStart"))
 			m.notifyJob(id)
 			m.closeWatchers(id)
 			return nil
@@ -305,7 +321,7 @@ func (m *Manager) Cancel(ctx context.Context, id int64) error {
 	m.mu.Unlock()
 
 	if cancel == nil {
-		return fmt.Errorf("задание не выполняется в этом процессе")
+		return msgs.Errorf("jobs.jobRunningProcess")
 	}
 	cancel()
 	return nil
@@ -328,11 +344,11 @@ func (m *Manager) Recover(ctx context.Context) error {
 			resumable = r.Resumable()
 		}
 		if runner == nil || !resumable {
-			m.appendLog(job.ID, "Служба перезапустилась — задание прервано.")
-			_ = m.db.FinishJob(ctx, job.ID, store.JobInterrupted, "прервано перезапуском службы")
+			m.appendLog(job.ID, msgs.T(msgs.ParseLang(job.Lang), "jobs.interruptedByRestart"))
+			_ = m.db.FinishJob(ctx, job.ID, store.JobInterrupted, msgs.T(msgs.ParseLang(job.Lang), "jobs.interruptedByRestartShort"))
 			continue
 		}
-		m.appendLog(job.ID, "Служба перезапустилась — продолжаю с сохранённого места.")
+		m.appendLog(job.ID, msgs.T(msgs.ParseLang(job.Lang), "jobs.resumedAfterRestart"))
 		m.enqueue(job.ID, job.Queue)
 	}
 	return nil

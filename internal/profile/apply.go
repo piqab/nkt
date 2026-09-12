@@ -84,15 +84,15 @@ func (a *HostApplier) Apply(ctx context.Context, c Change) (string, error) {
 	case ActionSetTimezone:
 		return a.setTimezone(ctx, c.Target)
 	}
-	return "", fmt.Errorf("неизвестное действие %q", c.Action)
+	return "", msgs.Errorf("profile.unknownAction", c.Action)
 }
 
 func (a *HostApplier) installPackage(ctx context.Context, name string) (string, error) {
 	if !packageRe.MatchString(name) {
-		return "", fmt.Errorf("некорректное имя пакета %q", name)
+		return "", msgs.Errorf("profile.invalidPackageName", name)
 	}
 	if a.escape == nil {
-		return "", fmt.Errorf("установка пакетов недоступна в этом режиме")
+		return "", msgs.Errorf("profile.packageInstallationUnavailableMode")
 	}
 	res, err := a.escape(ctx, "apt-get", "install", "-y", name)
 	if err != nil {
@@ -101,12 +101,12 @@ func (a *HostApplier) installPackage(ctx context.Context, name string) (string, 
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("apt-get install %s: %s", name, lastMeaningfulLine(res.Stderr, res.Stdout))
 	}
-	return fmt.Sprintf("пакет %s установлен", name), nil
+	return msgs.Tc(ctx, "profile.packageInstalled", name), nil
 }
 
 func (a *HostApplier) serviceAction(ctx context.Context, name, action string) (string, error) {
 	if a.services == nil {
-		return "", fmt.Errorf("управление службами недоступно")
+		return "", msgs.Errorf("profile.serviceManagementUnavailable")
 	}
 	res, err := a.services.Action(ctx, a.user, name, action)
 	if err != nil {
@@ -115,23 +115,23 @@ func (a *HostApplier) serviceAction(ctx context.Context, name, action string) (s
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("systemctl %s %s: %s", action, name, lastMeaningfulLine(res.Stderr, res.Stdout))
 	}
-	return fmt.Sprintf("служба %s: %s", name, action), nil
+	return msgs.Tc(ctx, "profile.service", name, action), nil
 }
 
 func (a *HostApplier) writeFile(ctx context.Context, c Change) (string, error) {
 	if a.configs == nil {
-		return "", fmt.Errorf("редактор конфигураций недоступен")
+		return "", msgs.Errorf("profile.configurationEditorUnavailable")
 	}
 	// Через тот же Write, что и ручная правка: с проверкой конфигурации
 	// службы, записью в историю версий и откатом при неудачной проверке.
-	res, err := a.configs.Write(ctx, msgs.RU, a.user, c.Target, c.Detail, "применение профиля", false)
+	res, err := a.configs.Write(ctx, msgs.FromContext(ctx), a.user, c.Target, c.Detail, msgs.Tc(ctx, "profile.applyNote"), false)
 	if err != nil {
 		return "", err
 	}
 	if res.RolledBack {
 		return "", fmt.Errorf("%s: %s", c.Target, res.Message)
 	}
-	return fmt.Sprintf("файл %s записан", c.Target), nil
+	return msgs.Tc(ctx, "profile.fileWritten", c.Target), nil
 }
 
 // installDocker ставит docker по официальной инструкции.
@@ -161,39 +161,39 @@ func (a *HostApplier) installDocker(ctx context.Context) (string, error) {
 // её делает Write, как и для любого другого файла.
 func (a *HostApplier) writeCompose(ctx context.Context, c Change) (string, error) {
 	if a.configs == nil {
-		return "", fmt.Errorf("редактор конфигураций недоступен")
+		return "", msgs.Errorf("profile.configurationEditorUnavailable")
 	}
-	res, err := a.configs.Write(ctx, msgs.RU, a.user, c.Target, c.Detail, "применение профиля (стек)", false)
+	res, err := a.configs.Write(ctx, msgs.FromContext(ctx), a.user, c.Target, c.Detail, msgs.Tc(ctx, "profile.applyStackNote"), false)
 	if err != nil {
 		return "", err
 	}
 	if res.RolledBack {
 		return "", fmt.Errorf("%s: %s", c.Target, res.Message)
 	}
-	return fmt.Sprintf("описание стека %s записано", c.Target), nil
+	return msgs.Tc(ctx, "profile.stackDescriptionWritten", c.Target), nil
 }
 
 // composeUp поднимает стек — тем же вызовом, что и правка compose-файла
 // в редакторе конфигураций.
 func (a *HostApplier) composeUp(ctx context.Context, path string) (string, error) {
 	if a.services == nil {
-		return "", fmt.Errorf("управление службами недоступно")
+		return "", msgs.Errorf("profile.serviceManagementUnavailable")
 	}
 	if _, err := a.services.ApplyCompose(ctx, a.user, path); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("стек %s поднят", path), nil
+	return msgs.Tc(ctx, "profile.stackUp", path), nil
 }
 
 // composeDown останавливает стек и убирает его контейнеры.
 func (a *HostApplier) composeDown(ctx context.Context, path string) (string, error) {
 	if a.services == nil {
-		return "", fmt.Errorf("управление службами недоступно")
+		return "", msgs.Errorf("profile.serviceManagementUnavailable")
 	}
 	if _, err := a.services.ComposeDown(ctx, a.user, path); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("стек %s остановлен", path), nil
+	return msgs.Tc(ctx, "profile.stackStopped", path), nil
 }
 
 // allowPort открывает порт тем менеджером, который на хосте есть.
@@ -204,10 +204,10 @@ func (a *HostApplier) allowPort(ctx context.Context, target string) (string, err
 	}
 	if a.firewall != nil {
 		res, err := a.firewall.AddRule(ctx, a.user, control.RuleSpec{
-			Action: "allow", Port: port, Protocol: proto, From: from, Comment: "профиль",
+			Action: "allow", Port: port, Protocol: proto, From: from, Comment: "nkt profile",
 		})
 		if err == nil && res.ExitCode == 0 {
-			return fmt.Sprintf("порт %s разрешён (ufw)", target), nil
+			return msgs.Tc(ctx, "profile.portAllowedUfw", target), nil
 		}
 		if err == nil {
 			err = fmt.Errorf("%s", lastMeaningfulLine(res.Stderr, res.Stdout))
@@ -217,7 +217,7 @@ func (a *HostApplier) allowPort(ctx context.Context, target string) (string, err
 		}
 	}
 	if a.firewalld == nil {
-		return "", fmt.Errorf("на хосте нет ни ufw, ни firewalld")
+		return "", msgs.Errorf("profile.hostHasNeitherUfwFirewalld")
 	}
 	res, err := a.firewalld.AddRule(ctx, a.user, control.FirewalldPortSpec{
 		Zone: "public", Port: port, Protocol: proto, Permanent: true, Runtime: true,
@@ -228,7 +228,7 @@ func (a *HostApplier) allowPort(ctx context.Context, target string) (string, err
 	if res.ExitCode != 0 {
 		return "", fmt.Errorf("firewall-cmd: %s", lastMeaningfulLine(res.Stderr, res.Stdout))
 	}
-	return fmt.Sprintf("порт %s разрешён (firewalld)", target), nil
+	return msgs.Tc(ctx, "profile.portAllowedFirewalld", target), nil
 }
 
 // createUser заводит учётку, выдаёт sudo или дописывает ключ — Create
@@ -236,45 +236,45 @@ func (a *HostApplier) allowPort(ctx context.Context, target string) (string, err
 // добавляет недостающее.
 func (a *HostApplier) createUser(ctx context.Context, name, key string, sudo bool) (string, error) {
 	if a.osusers == nil {
-		return "", fmt.Errorf("управление учётными записями недоступно")
+		return "", msgs.Errorf("profile.accountManagementUnavailable")
 	}
 	if err := a.osusers.Create(ctx, control.CreateOptions{Name: name, Key: key, Sudo: sudo}); err != nil {
 		return "", err
 	}
 	switch {
 	case key != "":
-		return fmt.Sprintf("учётной записи %s добавлен ключ", name), nil
+		return msgs.Tc(ctx, "profile.keyAddedAccount", name), nil
 	case sudo:
-		return fmt.Sprintf("учётной записи %s выдан sudo без пароля", name), nil
+		return msgs.Tc(ctx, "profile.accountGrantedPasswordlessSudo", name), nil
 	}
-	return fmt.Sprintf("учётная запись %s заведена", name), nil
+	return msgs.Tc(ctx, "profile.accountCreated", name), nil
 }
 
 func (a *HostApplier) setHostname(ctx context.Context, name string) (string, error) {
 	if a.sysconf == nil {
-		return "", fmt.Errorf("системные настройки недоступны")
+		return "", msgs.Errorf("profile.systemSettingsAreUnavailable")
 	}
 	if err := a.sysconf.SetHostname(ctx, name); err != nil {
 		return "", err
 	}
-	return "имя машины: " + name, nil
+	return msgs.Tc(ctx, "profile.hostnameSet", name), nil
 }
 
 func (a *HostApplier) setTimezone(ctx context.Context, zone string) (string, error) {
 	if a.sysconf == nil {
-		return "", fmt.Errorf("системные настройки недоступны")
+		return "", msgs.Errorf("profile.systemSettingsAreUnavailable")
 	}
 	if err := a.sysconf.SetTimezone(ctx, zone); err != nil {
 		return "", err
 	}
-	return "часовой пояс: " + zone, nil
+	return msgs.Tc(ctx, "profile.timezoneSet", zone), nil
 }
 
 // parsePortTarget разбирает то, что собрал portTarget.
 func parsePortTarget(target string) (port int, proto, from string, err error) {
 	rest := target
-	if idx := strings.Index(rest, " от "); idx >= 0 {
-		from = strings.TrimSpace(rest[idx+len(" от "):])
+	if idx := strings.Index(rest, " from "); idx >= 0 {
+		from = strings.TrimSpace(rest[idx+len(" from "):])
 		rest = rest[:idx]
 	}
 	portStr, proto, ok := strings.Cut(rest, "/")
@@ -284,7 +284,7 @@ func parsePortTarget(target string) (port int, proto, from string, err error) {
 	}
 	port, err = strconv.Atoi(strings.TrimSpace(portStr))
 	if err != nil || port < 1 || port > 65535 {
-		return 0, "", "", fmt.Errorf("не разобран порт в %q", target)
+		return 0, "", "", msgs.Errorf("profile.couldParsePort", target)
 	}
 	return port, proto, from, nil
 }
@@ -300,5 +300,5 @@ func lastMeaningfulLine(streams ...string) string {
 			}
 		}
 	}
-	return "команда завершилась с ошибкой"
+	return msgs.T(msgs.DefaultLang, "profile.commandFailed")
 }

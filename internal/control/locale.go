@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"sort"
 	"strings"
@@ -102,7 +103,7 @@ func (m *SysConfigManager) Locales(ctx context.Context) Locales {
 		}
 		out.CanGenerate = m.c.Exists("/usr/sbin/locale-gen") || m.c.Exists("/usr/bin/locale-gen")
 	} else {
-		out.Note = "пакет locales не установлен: список известных локалей недоступен, показаны только сгенерированные"
+		out.Note = msgs.Tc(ctx, "control.localesPackageMissingNote")
 	}
 	// То, что есть в locale -a, но не в SUPPORTED: C.UTF-8 и ему подобные.
 	// Их тоже можно назначить основной.
@@ -161,7 +162,7 @@ func (m *SysConfigManager) GenerateLocales(ctx context.Context, names []string) 
 	}
 	raw, err := m.c.ReadFile(localeSupported)
 	if err != nil {
-		return fmt.Errorf("пакет locales не установлен — сгенерировать локаль нечем")
+		return msgs.Errorf("control.localesPackageInstalledNothingGenerate")
 	}
 	known := map[string]LocaleInfo{}
 	for _, l := range parseSupported(string(raw)) {
@@ -171,7 +172,7 @@ func (m *SysConfigManager) GenerateLocales(ctx context.Context, names []string) 
 	for _, n := range names {
 		l, ok := known[n]
 		if !ok || !localeNameRe.MatchString(n) {
-			return fmt.Errorf("неизвестная локаль %q", n)
+			return msgs.Errorf("control.unknownLocale", n)
 		}
 		picked = append(picked, l)
 	}
@@ -214,7 +215,7 @@ func (m *SysConfigManager) GenerateLocales(ctx context.Context, names []string) 
 // сгенерирована.
 func (m *SysConfigManager) SetLocale(ctx context.Context, name string) error {
 	if !localeNameRe.MatchString(name) {
-		return fmt.Errorf("недопустимое имя локали %q", name)
+		return msgs.Errorf("control.invalidLocaleName", name)
 	}
 	if res, err := m.c.Run(ctx, "locale", "-a"); err == nil && res.ExitCode == 0 {
 		found := false
@@ -225,7 +226,7 @@ func (m *SysConfigManager) SetLocale(ctx context.Context, name string) error {
 			}
 		}
 		if !found {
-			return fmt.Errorf("локаль %s не сгенерирована — сначала сгенерируйте её", name)
+			return msgs.Errorf("control.localeGeneratedGenerateFirst", name)
 		}
 	}
 	var res collect.CommandResult

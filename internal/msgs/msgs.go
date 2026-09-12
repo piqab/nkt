@@ -11,8 +11,11 @@
 package msgs
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 )
 
 type Lang string
@@ -62,7 +65,81 @@ type Err struct {
 }
 
 func (e *Err) Error() string {
-	return T(DefaultLang, e.Key, e.Args...)
+	return e.In(DefaultLang)
+}
+
+// In renders the error in lang. Args that are themselves errors are
+// localized first, so a chain of *Err values (an outer "запуск git: %v"
+// around an inner catalog error) renders wholly in one language.
+func (e *Err) In(lang Lang) string {
+	if len(e.Args) == 0 {
+		return T(lang, e.Key)
+	}
+	args := make([]any, len(e.Args))
+	for i, a := range e.Args {
+		if err, ok := a.(error); ok {
+			args[i] = Localize(lang, err)
+		} else {
+			args[i] = a
+		}
+	}
+	return T(lang, e.Key, args...)
+}
+
+// Unwrap exposes the first error argument, so errors.Is/As keep working
+// through msgs.Errorf("...: %v", err) the way they did through %w.
+func (e *Err) Unwrap() error {
+	for _, a := range e.Args {
+		if err, ok := a.(error); ok {
+			return err
+		}
+	}
+	return nil
+}
+
+// Localize renders err in lang: a *Err (or one wrapped by fmt.Errorf
+// somewhere up the chain) gets its catalog text; anything else is shown
+// as is. For a wrapped one only the *Err part is re-rendered — the Russian
+// prefix around it is replaced in place, so a not-yet-converted wrapper
+// degrades to mixed text rather than hiding the localized core.
+func Localize(lang Lang, err error) string {
+	if err == nil {
+		return ""
+	}
+	var e *Err
+	if !errors.As(err, &e) {
+		return err.Error()
+	}
+	if e == err {
+		return e.In(lang)
+	}
+	return strings.Replace(err.Error(), e.Error(), e.In(lang), 1)
+}
+
+type ctxKey struct{}
+
+// WithLang stores the request's language in ctx, so code deep below the
+// handler (managers building notes and labels, job runners writing their
+// log) can render text in it without threading a lang parameter through
+// every signature.
+func WithLang(ctx context.Context, lang Lang) context.Context {
+	return context.WithValue(ctx, ctxKey{}, lang)
+}
+
+// FromContext reads the language put there by WithLang; DefaultLang when
+// there is none (background work, tests).
+func FromContext(ctx context.Context) Lang {
+	if ctx != nil {
+		if l, ok := ctx.Value(ctxKey{}).(Lang); ok {
+			return l
+		}
+	}
+	return DefaultLang
+}
+
+// Tc is T against the language carried by ctx.
+func Tc(ctx context.Context, key string, args ...any) string {
+	return T(FromContext(ctx), key, args...)
 }
 
 // Errorf builds an *Err — the msgs-catalog equivalent of fmt.Errorf, for a
@@ -108,4 +185,13 @@ func LangFromRequest(r *http.Request) Lang {
 		return ParseLang(h)
 	}
 	return ParseLang(r.URL.Query().Get(langQueryParam))
+}
+
+// LangMiddleware puts the request's language (see LangFromRequest) into
+// the request context, so handlers and everything they call can use
+// Tc/FromContext instead of re-reading the header.
+func LangMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(WithLang(r.Context(), LangFromRequest(r))))
+	})
 }

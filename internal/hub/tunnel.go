@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"net"
 	"net/http"
@@ -53,7 +53,7 @@ func waitForHealth(ctx context.Context, dial dialFunc) error {
 		select {
 		case <-ctx.Done():
 			if lastErr != nil {
-				return fmt.Errorf("сервис не ответил на /health: %w (последняя ошибка: %v)", ctx.Err(), lastErr)
+				return msgs.Errorf("hub.serviceDidAnswerHealthLast", ctx.Err(), lastErr)
 			}
 			return ctx.Err()
 		default:
@@ -79,7 +79,7 @@ func probeHealth(ctx context.Context, httpClient *http.Client) error {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("код %d", resp.StatusCode)
+		return msgs.Errorf("hub.code", resp.StatusCode)
 	}
 	return nil
 }
@@ -102,18 +102,18 @@ func bootstrapLogin(ctx context.Context, dial dialFunc, username, password strin
 
 	resp, err := tunnelHTTPClient(dial).Do(req)
 	if err != nil {
-		return "", fmt.Errorf("запрос входа: %w", err)
+		return "", msgs.Errorf("hub.loginRequest", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("вход не удался (код %d): %s", resp.StatusCode, string(b))
+		return "", msgs.Errorf("hub.loginFailedCode", resp.StatusCode, string(b))
 	}
 	for _, c := range resp.Cookies() {
 		if c.Name == auth.SessionCookie {
 			return c.Value, nil
 		}
 	}
-	return "", fmt.Errorf("ответ на вход не содержит cookie %s", auth.SessionCookie)
+	return "", msgs.Errorf("hub.loginResponseHasCookie", auth.SessionCookie)
 }

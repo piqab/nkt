@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,13 +35,13 @@ func (h *history) put(path string, content []byte) (name, sum string, err error)
 
 	full := filepath.Join(h.root, filepath.FromSlash(name))
 	if err := os.MkdirAll(filepath.Dir(full), 0o750); err != nil {
-		return "", "", fmt.Errorf("создание каталога истории: %w", err)
+		return "", "", msgs.Errorf("control.creatingHistoryDirectory", err)
 	}
 	if _, err := os.Stat(full); err == nil {
 		return name, sum, nil
 	}
 	if err := os.WriteFile(full, content, 0o640); err != nil {
-		return "", "", fmt.Errorf("запись версии конфига: %w", err)
+		return "", "", msgs.Errorf("control.writingConfigVersion", err)
 	}
 	return name, sum, nil
 }
@@ -48,7 +49,7 @@ func (h *history) put(path string, content []byte) (name, sum string, err error)
 // get reads a stored revision.
 func (h *history) get(name string) ([]byte, error) {
 	if strings.Contains(name, "..") {
-		return nil, fmt.Errorf("недопустимое имя версии: %s", name)
+		return nil, msgs.Errorf("control.invalidVersionName", name)
 	}
 	return os.ReadFile(filepath.Join(h.root, filepath.FromSlash(name)))
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 )
 
@@ -126,10 +127,10 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 
 func (d *DB) importOneHost(ctx context.Context, h HostExport) error {
 	if h.Name == "" || h.Addr == "" {
-		return fmt.Errorf("пустое имя или адрес")
+		return msgs.Errorf("store.emptyNameAddress")
 	}
 	if h.AdminUser != "" && !validAdminUser.MatchString(h.AdminUser) {
-		return fmt.Errorf("недопустимое имя администратора %q", h.AdminUser)
+		return msgs.Errorf("store.invalidAdminName", h.AdminUser)
 	}
 	_, err := d.ExecContext(ctx,
 		`INSERT INTO hosts(
@@ -151,10 +152,10 @@ func (d *DB) importOneHost(ctx context.Context, h HostExport) error {
 func DecodeHubExport(data []byte) (HubExport, error) {
 	var export HubExport
 	if err := json.Unmarshal(data, &export); err != nil {
-		return HubExport{}, fmt.Errorf("файл не похож на экспорт хаба: %w", err)
+		return HubExport{}, msgs.Errorf("store.fileDoesLookLikeHub", err)
 	}
 	if export.Version != ExportFormatVersion {
-		return HubExport{}, fmt.Errorf("версия формата экспорта %d не поддерживается (ожидается %d)",
+		return HubExport{}, msgs.Errorf("store.exportFormatVersionSupportedExpected",
 			export.Version, ExportFormatVersion)
 	}
 	return export, nil

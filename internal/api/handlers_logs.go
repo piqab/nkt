@@ -3,7 +3,7 @@ package api
 import (
 	"bufio"
 	"context"
-	"errors"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -30,13 +30,13 @@ func logSourceFromQuery(r *http.Request) (control.LogSource, error) {
 	path := strings.TrimSpace(r.URL.Query().Get("path"))
 	switch {
 	case unit != "" && path != "":
-		return control.LogSource{}, errors.New("укажите либо unit, либо path, но не оба")
+		return control.LogSource{}, msgs.Errorf("api.specifyEitherUnitPathBoth")
 	case unit != "":
 		return control.LogSource{Kind: control.LogKindUnit, Name: unit}, nil
 	case path != "":
 		return control.LogSource{Kind: control.LogKindFile, Name: path}, nil
 	default:
-		return control.LogSource{}, errors.New("не указан ни unit, ни path")
+		return control.LogSource{}, msgs.Errorf("api.neitherUnitPathSpecified")
 	}
 }
 
@@ -46,12 +46,12 @@ func logSourceFromQuery(r *http.Request) (control.LogSource, error) {
 func (s *Server) handleLogSnapshot(w http.ResponseWriter, r *http.Request) {
 	source, err := logSourceFromQuery(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	out, err := s.logs.Snapshot(r.Context(), source, intParam(r, "lines", 500))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"output": out})
@@ -77,12 +77,12 @@ const logBatchInterval = 100 * time.Millisecond
 func (s *Server) handleLogStream(w http.ResponseWriter, r *http.Request) {
 	source, err := logSourceFromQuery(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	argv, err := s.logs.StreamArgv(source, intParam(r, "lines", 500))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 
@@ -111,7 +111,7 @@ func (s *Server) handleLogStream(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := cmd.Start(); err != nil {
-		conn.Close(websocket.StatusInternalError, "не удалось запустить: "+err.Error())
+		conn.Close(websocket.StatusInternalError, msgs.Tc(r.Context(), "api.startFailed", err))
 		return
 	}
 	defer func() {

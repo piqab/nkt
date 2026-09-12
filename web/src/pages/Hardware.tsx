@@ -104,7 +104,7 @@ export default function HardwarePage() {
         : '',
     )
     add(t('hardware.arch'), data.cpu.arch)
-    add(t('hardware.maxMhz'), data.cpu.max_mhz ? `${Math.round(data.cpu.max_mhz)} МГц` : '')
+    add(t('hardware.maxMhz'), data.cpu.max_mhz ? `${Math.round(data.cpu.max_mhz)} ${t('hardware.mhz')}` : '')
     add(
       t('hardware.memory'),
       data.memory.total_bytes

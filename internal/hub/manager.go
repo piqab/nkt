@@ -288,10 +288,10 @@ func (m *Manager) Run(ctx context.Context) {
 // connect to the host — that happens in StartInstall.
 func (m *Manager) AddHost(ctx context.Context, name, addr string, sshPort int, sshUser, authKind, secret string, terminalEnabled bool) (int64, error) {
 	if name == "" || addr == "" || sshUser == "" || secret == "" {
-		return 0, fmt.Errorf("укажите имя, адрес, пользователя SSH и секрет (пароль или приватный ключ)")
+		return 0, msgs.Errorf("hub.specifyNameAddressSSHUser")
 	}
 	if authKind != store.HostAuthPassword && authKind != store.HostAuthKey {
-		return 0, fmt.Errorf("способ входа должен быть %q или %q, получено %q",
+		return 0, msgs.Errorf("hub.accessMethodMustGot",
 			store.HostAuthPassword, store.HostAuthKey, authKind)
 	}
 	if sshPort == 0 {
@@ -305,7 +305,7 @@ func (m *Manager) AddHost(ctx context.Context, name, addr string, sshPort int, s
 
 	secretEnc, err := secretbox.Encrypt(m.key, []byte(secret))
 	if err != nil {
-		return 0, fmt.Errorf("шифрование секрета: %w", err)
+		return 0, msgs.Errorf("hub.encryptingSecret", err)
 	}
 	id, err := m.db.CreateHost(ctx, name, addr, sshPort, sshUser, authKind, secretEnc)
 	if err != nil {
@@ -325,7 +325,7 @@ func (m *Manager) AddHost(ctx context.Context, name, addr string, sshPort int, s
 // StartInstall can connect.
 func (m *Manager) AddHostGenerated(ctx context.Context, name, addr string, sshPort int, sshUser string, terminalEnabled bool) (hostID int64, authorizedKeyLine string, err error) {
 	if name == "" || addr == "" || sshUser == "" {
-		return 0, "", fmt.Errorf("укажите имя, адрес и пользователя SSH")
+		return 0, "", msgs.Errorf("hub.specifyNameAddressSSHUser2")
 	}
 	if sshPort == 0 {
 		sshPort = 22
@@ -337,7 +337,7 @@ func (m *Manager) AddHostGenerated(ctx context.Context, name, addr string, sshPo
 	}
 	secretEnc, err := secretbox.Encrypt(m.key, []byte(privatePEM))
 	if err != nil {
-		return 0, "", fmt.Errorf("шифрование сгенерированного ключа: %w", err)
+		return 0, "", msgs.Errorf("hub.encryptingGeneratedKey", err)
 	}
 	id, err := m.db.CreateHost(ctx, name, addr, sshPort, sshUser, store.HostAuthKey, secretEnc)
 	if err != nil {
@@ -360,11 +360,11 @@ func (m *Manager) PublicKeyLine(ctx context.Context, hostID int64) (string, erro
 		return "", err
 	}
 	if host.SSHAuthKind != store.HostAuthKey {
-		return "", fmt.Errorf("у хоста способ входа %q, приватного ключа нет", host.SSHAuthKind)
+		return "", msgs.Errorf("hub.hostSAccessMethodThere", host.SSHAuthKind)
 	}
 	privatePEM, err := secretbox.Decrypt(m.key, host.SecretEnc)
 	if err != nil {
-		return "", fmt.Errorf("расшифровка ключа: %w", err)
+		return "", msgs.Errorf("hub.decryptingKey", err)
 	}
 	signer, err := ssh.ParsePrivateKey(privatePEM)
 	if err != nil {
@@ -401,7 +401,7 @@ func (m *Manager) SetHostGroup(ctx context.Context, hostID int64, group string) 
 		return err
 	}
 	if host.ParentID != 0 {
-		return fmt.Errorf("машина привязана к своему хосту — перенесите сам хост, она переедет вместе с ним")
+		return msgs.Errorf("hub.machineBoundHostMoveHost")
 	}
 	return m.db.SetHostGroup(ctx, hostID, group)
 }
@@ -455,7 +455,7 @@ func isPlaceholderAddr(addr string) bool {
 func cleanGroupName(group string) (string, error) {
 	group = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(group, "\n", " "), "\r", " "))
 	if len([]rune(group)) > hostGroupMaxLen {
-		return "", fmt.Errorf("название группы длиннее %d символов", hostGroupMaxLen)
+		return "", msgs.Errorf("hub.groupNameLongerThanCharacters", hostGroupMaxLen)
 	}
 	return group, nil
 }
@@ -485,7 +485,7 @@ func (m *Manager) CreateHostGroup(ctx context.Context, name string) error {
 		return err
 	}
 	if name == "" {
-		return fmt.Errorf("название группы не может быть пустым")
+		return msgs.Errorf("hub.groupNameCannotEmpty")
 	}
 	return m.db.CreateHostGroup(ctx, name)
 }
@@ -505,7 +505,7 @@ func (m *Manager) RenameHostGroup(ctx context.Context, from, to string) error {
 		return err
 	}
 	if from == "" || to == "" {
-		return fmt.Errorf("название группы не может быть пустым")
+		return msgs.Errorf("hub.groupNameCannotEmpty")
 	}
 	if from == to {
 		return nil
@@ -520,7 +520,7 @@ func (m *Manager) DeleteHostGroup(ctx context.Context, name string) error {
 		return err
 	}
 	if name == "" {
-		return fmt.Errorf("название группы не может быть пустым")
+		return msgs.Errorf("hub.groupNameCannotEmpty")
 	}
 	return m.db.DeleteHostGroup(ctx, name)
 }
@@ -530,10 +530,10 @@ func (m *Manager) DeleteHostGroup(ctx context.Context, name string) error {
 // a host or fixing a typo'd address does not force re-entering it.
 func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr string, sshPort int, sshUser, authKind, secret string, terminalEnabled bool) error {
 	if name == "" || addr == "" || sshUser == "" {
-		return fmt.Errorf("укажите имя, адрес и пользователя SSH")
+		return msgs.Errorf("hub.specifyNameAddressSSHUser2")
 	}
 	if authKind != store.HostAuthPassword && authKind != store.HostAuthKey {
-		return fmt.Errorf("способ входа должен быть %q или %q, получено %q",
+		return msgs.Errorf("hub.accessMethodMustGot",
 			store.HostAuthPassword, store.HostAuthKey, authKind)
 	}
 	if sshPort == 0 {
@@ -555,7 +555,7 @@ func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr strin
 		}
 		secretEnc, err := secretbox.Encrypt(m.key, []byte(secret))
 		if err != nil {
-			return fmt.Errorf("шифрование секрета: %w", err)
+			return msgs.Errorf("hub.encryptingSecret", err)
 		}
 		if err := m.db.SetHostSecret(ctx, hostID, authKind, secretEnc); err != nil {
 			return err
@@ -577,7 +577,7 @@ func (m *Manager) UpdateHost(ctx context.Context, hostID int64, name, addr strin
 // password-authenticated host over to a key, or to rotate a compromised one.
 func (m *Manager) UpdateHostGenerated(ctx context.Context, hostID int64, name, addr string, sshPort int, sshUser string, terminalEnabled bool) (authorizedKeyLine string, err error) {
 	if name == "" || addr == "" || sshUser == "" {
-		return "", fmt.Errorf("укажите имя, адрес и пользователя SSH")
+		return "", msgs.Errorf("hub.specifyNameAddressSSHUser2")
 	}
 	if sshPort == 0 {
 		sshPort = 22
@@ -596,7 +596,7 @@ func (m *Manager) UpdateHostGenerated(ctx context.Context, hostID int64, name, a
 	}
 	secretEnc, err := secretbox.Encrypt(m.key, []byte(privatePEM))
 	if err != nil {
-		return "", fmt.Errorf("шифрование сгенерированного ключа: %w", err)
+		return "", msgs.Errorf("hub.encryptingGeneratedKey", err)
 	}
 	if err := m.db.SetHostSecret(ctx, hostID, store.HostAuthKey, secretEnc); err != nil {
 		return "", err
@@ -635,8 +635,12 @@ type ForeignInstallError struct {
 }
 
 func (e *ForeignInstallError) Error() string {
-	return "на хосте уже есть nkt, установленный не через этот хаб: " + e.Detail
+	return msgs.T(msgs.DefaultLang, "hub.foreignInstall", e.Detail)
 }
+
+// Unwrap отдаёт каталожную ошибку — так writeErr показывает её на языке
+// запроса.
+func (e *ForeignInstallError) Unwrap() error { return msgs.Errorf("hub.foreignInstall", e.Detail) }
 
 // checkForeignInstall connects briefly and reports whether the target
 // already has an nkt on it that this hub never itself installed — judged
@@ -670,16 +674,16 @@ func (m *Manager) checkForeignInstall(ctx context.Context, host store.Host) (*Fo
 	if err != nil || (version == "" && active != "active") {
 		return nil, nil
 	}
-	detail := "статус сервиса: " + orUnknown(active)
+	detail := msgs.Tc(ctx, "hub.serviceStatus", orUnknown(ctx, active))
 	if version != "" {
 		detail = version + ", " + detail
 	}
 	return &ForeignInstallError{Detail: detail}, nil
 }
 
-func orUnknown(s string) string {
+func orUnknown(ctx context.Context, s string) string {
 	if s == "" {
-		return "неизвестен"
+		return msgs.Tc(ctx, "hub.unknown")
 	}
 	return s
 }
@@ -692,15 +696,14 @@ func orUnknown(s string) string {
 func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, boot *BootstrapOptions) (string, error) {
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
-		return "", fmt.Errorf("хост не найден: %w", err)
+		return "", msgs.Errorf("hub.hostFound", err)
 	}
 	// Заглушка вместо адреса — это машина, которая ещё не получила его
 	// от DHCP. Стучаться туда по SSH бессмысленно: рукопожатие с
 	// 0.0.0.0 всё равно провалится, и сообщение про «unable to
 	// authenticate» ничего не объяснит.
 	if isPlaceholderAddr(host.Addr) {
-		return "", fmt.Errorf("адрес машины %q ещё не определён — дождитесь, пока она поднимется, "+
-			"и нажмите «определить адрес», либо впишите его сами", host.Name)
+		return "", msgs.Errorf("hub.addressMachineKnownYetWait", host.Name)
 	}
 	if !force {
 		if foreign, err := m.checkForeignInstall(ctx, host); err == nil && foreign != nil {
@@ -726,7 +729,7 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, bo
 
 	id, err := newJobID()
 	if err != nil {
-		return "", fmt.Errorf("генерация id задачи: %w", err)
+		return "", msgs.Errorf("control.generatingTaskId", err)
 	}
 	job.id = id
 
@@ -775,7 +778,7 @@ func (m *Manager) CancelInstall(ctx context.Context, hostID int64) error {
 	job := m.jobByHost[hostID]
 	m.jobsMu.Unlock()
 
-	const message = "установка отменена пользователем"
+	message := msgs.Tc(ctx, "hub.installCanceledByUser")
 	if job == nil || job.isDone() {
 		return m.db.SetHostStatus(ctx, hostID, store.HostStatusError, message)
 	}
@@ -797,7 +800,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	report := job.append
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
-		return fmt.Errorf("хост не найден: %w", err)
+		return msgs.Errorf("hub.hostFound", err)
 	}
 
 	fail := func(err error) error {
@@ -815,7 +818,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 
 	secret, err := secretbox.Decrypt(m.key, host.SecretEnc)
 	if err != nil {
-		return fail(fmt.Errorf("расшифровка SSH-секрета: %w", err))
+		return fail(msgs.Errorf("hub.decryptingSSHSecret", err))
 	}
 
 	report("hub.connectingSSH", host.Addr)
@@ -850,7 +853,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		if res.PrivatePEM != "" && (res.SSHUser != host.SSHUser || res.PrivatePEM != string(secret)) {
 			keyLink, err := m.dialHostAs(ctx, host, res.SSHUser, store.HostAuthKey, []byte(res.PrivatePEM))
 			if err != nil {
-				return fail(fmt.Errorf("переподключение по ключу под %s: %w", res.SSHUser, err))
+				return fail(msgs.Errorf("hub.reconnectingKeyAs", res.SSHUser, err))
 			}
 			_ = link.Close()
 			link = keyLink
@@ -922,10 +925,10 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	if _, err := bootstrapLogin(ctx, client.Dial, adminUser, adminPassword); err != nil {
 		report("hub.loginFailedResetting")
 		if resetErr := resetRemoteAdminPassword(client, host.SSHUser, adminUser, adminPassword, remoteDataDir, remoteBinPath); resetErr != nil {
-			return fail(fmt.Errorf("вход администратора не удался (%v), и сбросить пароль на хосте тоже не получилось: %w", err, resetErr))
+			return fail(msgs.Errorf("hub.adminLoginFailedResettingPassword", err, resetErr))
 		}
 		if _, err := bootstrapLogin(ctx, client.Dial, adminUser, adminPassword); err != nil {
-			return fail(fmt.Errorf("вход администратора всё ещё не удаётся после сброса пароля на хосте: %w", err))
+			return fail(msgs.Errorf("hub.adminLoginStillFailsAfter", err))
 		}
 		report("hub.adminPasswordSynced")
 	}
@@ -968,14 +971,14 @@ func (m *Manager) prepareTunnelEnv(ctx context.Context, hostID int64, host store
 	}
 	token, err := generatePassword() // 24 random bytes, base64 — plenty of entropy for a machine token too
 	if err != nil {
-		return tunnelEnvParams{}, fmt.Errorf("генерация токена резервного канала: %w", err)
+		return tunnelEnvParams{}, msgs.Errorf("hub.generatingFallbackChannelToken", err)
 	}
 	tokenEnc, err := secretbox.Encrypt(m.key, []byte(token))
 	if err != nil {
-		return tunnelEnvParams{}, fmt.Errorf("шифрование токена резервного канала: %w", err)
+		return tunnelEnvParams{}, msgs.Errorf("hub.encryptingFallbackChannelToken", err)
 	}
 	if err := m.db.SetHostTunnelToken(ctx, hostID, tokenEnc); err != nil {
-		return tunnelEnvParams{}, fmt.Errorf("сохранение токена резервного канала: %w", err)
+		return tunnelEnvParams{}, msgs.Errorf("hub.savingFallbackChannelToken", err)
 	}
 	// A fresh token means a fresh trust bootstrap: clear whatever
 	// certificate fingerprint was pinned from a previous install (see
@@ -1035,13 +1038,12 @@ func (m *Manager) resolveAdminCredential(ctx context.Context, hostID int64, host
 	// through, closes both regardless of how an untrusted value got into
 	// the hosts table.
 	if !validAdminUser.MatchString(user) {
-		return "", "", fmt.Errorf(
-			"недопустимое имя администратора хоста %q (вероятно, повреждённый или подделанный импорт реестра хостов)", user)
+		return "", "", msgs.Errorf("hub.invalidHostAdminNameProbably", user)
 	}
 	if len(host.AdminPasswordEnc) > 0 {
 		decrypted, err := secretbox.Decrypt(m.key, host.AdminPasswordEnc)
 		if err != nil {
-			return "", "", fmt.Errorf("расшифровка сохранённого пароля администратора: %w", err)
+			return "", "", msgs.Errorf("hub.decryptingSavedAdminPassword", err)
 		}
 		return user, string(decrypted), nil
 	}
@@ -1052,7 +1054,7 @@ func (m *Manager) resolveAdminCredential(ctx context.Context, hostID int64, host
 	}
 	passwordEnc, err := secretbox.Encrypt(m.key, []byte(password))
 	if err != nil {
-		return "", "", fmt.Errorf("шифрование пароля администратора: %w", err)
+		return "", "", msgs.Errorf("hub.encryptingAdminPassword", err)
 	}
 	if err := m.db.SetHostAdmin(ctx, hostID, user, passwordEnc); err != nil {
 		return "", "", err
@@ -1090,7 +1092,7 @@ func (m *Manager) SetServiceRunning(ctx context.Context, hostID int64, running b
 		return err
 	}
 	if host.Status == store.HostStatusNew {
-		return fmt.Errorf("хост ещё не установлен — нечего останавливать/запускать")
+		return msgs.Errorf("hub.hostInstalledYetNothingStop")
 	}
 
 	link, err := m.dialHost(ctx, host)
@@ -1127,10 +1129,10 @@ func (m *Manager) RemoveSudoAccess(ctx context.Context, hostID int64) error {
 		return err
 	}
 	if host.SSHUser == "root" {
-		return fmt.Errorf("хост подключён под root — sudo не используется, нечего убирать")
+		return msgs.Errorf("hub.hostConnectedAsRootSudo")
 	}
 	if host.SudoStatus != store.SudoStatusNopasswd {
-		return fmt.Errorf("для хоста не подтверждён доступ sudo без пароля — нечего убирать")
+		return msgs.Errorf("hub.passwordlessSudoConfirmedHostNothing")
 	}
 
 	link, err := m.dialHost(ctx, host)
@@ -1171,7 +1173,7 @@ func (m *Manager) loadUnitTemplate(ctx context.Context, report func(key string, 
 	report("hub.unitTemplateFallback")
 	content, dlErr := m.downloadUnitTemplate(ctx, m.version, "netknownsthat.service")
 	if dlErr != nil {
-		return "", fmt.Errorf("чтение шаблона systemd-юнита %s: %w; скачать его с GitHub тоже не удалось: %v", path, err, dlErr)
+		return "", msgs.Errorf("hub.readingSystemdUnitTemplateDownloading", path, err, dlErr)
 	}
 	return content, nil
 }

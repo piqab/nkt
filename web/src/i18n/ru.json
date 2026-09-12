@@ -1579,7 +1579,8 @@
     "count": "{{count}} шт.",
     "uptimeDays": "{{days}} д {{hours}} ч",
     "uptimeHours": "{{hours}} ч {{minutes}} мин",
-    "uptimeMinutes": "{{minutes}} мин"
+    "uptimeMinutes": "{{minutes}} мин",
+    "mhz": "МГц"
   },
   "sysSettings": {
     "title": "Системные настройки",

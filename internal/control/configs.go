@@ -20,14 +20,14 @@ import (
 
 // Errors returned by the config manager.
 var (
-	ErrPathNotAllowed = errors.New("файл вне разрешённых каталогов")
-	ErrNotFound       = errors.New("файл не найден")
-	ErrTooLarge       = errors.New("файл слишком большой для редактора")
+	ErrPathNotAllowed = msgs.Errorf("control.fileOutsideAllowedDirectories")
+	ErrNotFound       = msgs.Errorf("control.fileFound")
+	ErrTooLarge       = msgs.Errorf("control.fileTooLargeEditor")
 	// ErrStaleContent is returned when a BlockWriteRequest's expected_sha256
 	// no longer matches the file — the same optimistic-lock contract Write's
 	// callers already implement at the handler layer, enforced once here so
 	// every block-write caller gets it for free.
-	ErrStaleContent = errors.New("файл изменился с момента загрузки страницы, обновите список блоков и повторите")
+	ErrStaleContent = msgs.Errorf("control.fileHasChangedSincePage")
 )
 
 // maxEditableBytes caps what the editor will load. Config files are small; a
@@ -502,10 +502,10 @@ var singletonHAProxySections = map[parse.BlockKind]bool{
 // there, so none of that safety logic is duplicated here.
 func (m *ConfigManager) WriteBlock(ctx context.Context, lang msgs.Lang, user, path string, req BlockWriteRequest) (WriteResult, error) {
 	if (req.Op == "create" || req.Op == "delete") && singletonHAProxySections[req.Kind] {
-		return WriteResult{}, fmt.Errorf("%s: создание и удаление недоступны для этого раздела, доступна только правка", req.Kind)
+		return WriteResult{}, msgs.Errorf("control.creatingDeletingAreUnavailableSection", req.Kind)
 	}
 	if (req.Op == "create" || req.Op == "update") && strings.TrimSpace(req.Content) == "" {
-		return WriteResult{}, fmt.Errorf("текст блока не может быть пустым")
+		return WriteResult{}, msgs.Errorf("control.blockTextCannotEmpty")
 	}
 
 	current, err := m.Read(path)
@@ -525,7 +525,7 @@ func (m *ConfigManager) WriteBlock(ctx context.Context, lang msgs.Lang, user, pa
 	case "delete":
 		newText, err = parse.SpliceBlock(current.Content, req.Start, req.End, "")
 	default:
-		return WriteResult{}, fmt.Errorf("неизвестная операция %q", req.Op)
+		return WriteResult{}, msgs.Errorf("control.unknownOperation", req.Op)
 	}
 	if err != nil {
 		return WriteResult{}, err
@@ -533,7 +533,7 @@ func (m *ConfigManager) WriteBlock(ctx context.Context, lang msgs.Lang, user, pa
 
 	note := req.Note
 	if note == "" {
-		note = fmt.Sprintf("блок %s: %s", req.Kind, req.Op)
+		note = msgs.Tc(ctx, "control.block", req.Kind, req.Op)
 	}
 	return m.Write(ctx, lang, user, path, newText, note, req.Apply)
 }
@@ -573,7 +573,7 @@ func (m *ConfigManager) Write(ctx context.Context, lang msgs.Lang, user, path, c
 			if hadPrevious {
 				// Put the file back exactly as it was before returning the error.
 				if rbErr := m.c.WriteFile(path, previous, 0o644); rbErr != nil {
-					return res, fmt.Errorf("конфиг не прошёл проверку, и откат не удался: %v (проверка: %s)",
+					return res, msgs.Errorf("control.configFailedValidationRollbackFailed",
 						rbErr, strings.TrimSpace(validation.Output()))
 				}
 				res.RolledBack = true
@@ -582,13 +582,13 @@ func (m *ConfigManager) Write(ctx context.Context, lang msgs.Lang, user, path, c
 				// exist before this call, so "roll back" means remove it,
 				// not leave a broken config the host never had on disk.
 				if rbErr := m.c.DeleteFile(path); rbErr != nil {
-					return res, fmt.Errorf("конфиг не прошёл проверку, и удалить новый файл не удалось: %v (проверка: %s)",
+					return res, msgs.Errorf("control.configFailedValidationNewFile",
 						rbErr, strings.TrimSpace(validation.Output()))
 				}
 				res.RolledBack = true
 			}
 			res.Message = msgs.T(lang, "configs.validationFailed")
-			return res, fmt.Errorf("%s отклонил конфигурацию: %s",
+			return res, msgs.Errorf("control.rejectedConfiguration",
 				service, strings.TrimSpace(validation.Output()))
 		}
 	}
@@ -635,15 +635,14 @@ func (m *ConfigManager) Write(ctx context.Context, lang msgs.Lang, user, path, c
 			// поэтому доверять можно только свежему соединению.
 			if service == model.ServiceSSH && sshBefore.OK {
 				if after := m.ProbeSSHD(ctx); !after.OK {
-					res.Message = fmt.Sprintf(
-						"после правки sshd перестал принимать соединения (%s) — файл возвращён к прежнему виду",
+					res.Message = msgs.Tc(ctx, "control.afterEditSshdStoppedAccepting",
 						after.Error)
 					if hadPrevious {
 						if rbErr := m.c.WriteFile(path, previous, 0o644); rbErr == nil {
 							res.RolledBack = true
 							_, _ = m.applyCategory(ctx, user, service, path)
 						} else {
-							res.Message += fmt.Sprintf("; откат не удался: %v", rbErr)
+							res.Message += msgs.Tc(ctx, "control.rollbackFailed", rbErr)
 						}
 					}
 					return res, fmt.Errorf("%s", res.Message)
@@ -690,13 +689,13 @@ func (m *ConfigManager) applyCategory(ctx context.Context, user, service, path s
 		return m.c.Run(ctx, "sysctl", "-p", path)
 	case model.ServiceCron:
 		// cron перечитывает /etc/cron.d сам, применять нечего.
-		return collect.CommandResult{}, fmt.Errorf("cron перечитывает файлы сам — применять отдельно ничего не нужно")
+		return collect.CommandResult{}, msgs.Errorf("control.cronReReadsFilesItself")
 	case model.ServiceNetwork:
 		// netplan apply способен оставить хост без сети — это делается
 		// осознанно из терминала, а не галочкой рядом с сохранением.
-		return collect.CommandResult{}, fmt.Errorf("применение сетевой конфигурации не делается автоматически: выполните netplan apply вручную, имея доступ к консоли")
+		return collect.CommandResult{}, msgs.Errorf("control.networkConfigurationAppliedAutomaticallyRun")
 	}
-	return collect.CommandResult{}, fmt.Errorf("для %s нет шага применения", service)
+	return collect.CommandResult{}, msgs.Errorf("control.hasApplyStep", service)
 }
 
 // describeWriteError объясняет отказ записи, когда причина не в правах
@@ -711,13 +710,9 @@ func (m *ConfigManager) applyCategory(ctx context.Context, user, service, path s
 func describeWriteError(path string, err error) error {
 	text := strings.ToLower(err.Error())
 	if strings.Contains(text, "read-only file system") || strings.Contains(text, "permission denied") {
-		return fmt.Errorf("запись %s: %w — каталог недоступен на запись из юнита nkt,"+
-			" и обойти песочницу не удалось (недоступен systemd-run и запрещён nsenter)."+
-			" Кнопка «Разрешить запись» открывает каталог юниту и перезапускает службу;"+
-			" вручную то же делают systemctl daemon-reload && systemctl restart netknownsthat"+
-			" после добавления ReadWritePaths", path, err)
+		return msgs.Errorf("control.writingDirectoryWritableNktUnit", path, err)
 	}
-	return fmt.Errorf("запись %s: %w", path, err)
+	return msgs.Errorf("control.writing", path, err)
 }
 
 // snapshotCurrent records the pre-edit content so a rollback target always exists.
@@ -729,7 +724,7 @@ func (m *ConfigManager) snapshotCurrent(ctx context.Context, path, service, user
 	if _, err := m.db.LatestVersion(ctx, path); errors.Is(err, store.ErrNotFound) {
 		// First time we touch this file: keep the original as the baseline.
 		_, _ = m.recordVersion(ctx, path, service, user, store.ActionObserved,
-			"состояние до первой правки", raw)
+			msgs.Tc(ctx, "control.stateBeforeFirstEdit"), raw)
 	}
 	return raw, true
 }
@@ -765,7 +760,7 @@ func (m *ConfigManager) VersionContent(ctx context.Context, id int64) (store.Con
 	}
 	raw, err := m.hist.get(v.BlobName)
 	if err != nil {
-		return v, "", fmt.Errorf("версия %d недоступна: %w", id, err)
+		return v, "", msgs.Errorf("control.versionUnavailable", id, err)
 	}
 	return v, string(raw), nil
 }
@@ -777,7 +772,7 @@ func (m *ConfigManager) Rollback(ctx context.Context, lang msgs.Lang, user strin
 	if err != nil {
 		return WriteResult{}, err
 	}
-	note := fmt.Sprintf("откат к версии #%d от %s", v.ID, v.TS)
+	note := msgs.Tc(ctx, "control.rollbackVersion", v.ID, v.TS)
 	res, err := m.Write(ctx, lang, user, v.Path, content, note, apply)
 	if err != nil {
 		return res, err
@@ -801,7 +796,7 @@ func (m *ConfigManager) Diff(ctx context.Context, id int64) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return UnifiedDiff(fmt.Sprintf("версия #%d (%s)", v.ID, v.TS), "текущий файл",
+	return UnifiedDiff(ctx, msgs.Tc(ctx, "control.version", v.ID, v.TS), msgs.Tc(ctx, "control.currentFile"),
 		old, current.Content), nil
 }
 

@@ -9,7 +9,7 @@ package collect
 
 import (
 	"context"
-	"errors"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"io/fs"
 	"strings"
@@ -17,7 +17,7 @@ import (
 )
 
 // ErrNotSupported is returned by operations a collector cannot perform.
-var ErrNotSupported = errors.New("операция не поддерживается в текущем режиме")
+var ErrNotSupported = msgs.Errorf("collect.operationSupportedCurrentMode")
 
 // FileInfo describes a file on the inspected host.
 type FileInfo struct {

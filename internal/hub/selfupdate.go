@@ -5,7 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"mime/multipart"
 	"net"
@@ -95,7 +95,7 @@ func (m *Manager) dynamicRelayDial(hostID int64) dialFunc {
 	return func(network, addr string) (net.Conn, error) {
 		dial, ok := m.relayDial(hostID)
 		if !ok {
-			return nil, fmt.Errorf("резервный канал для хоста сейчас не подключён")
+			return nil, msgs.Errorf("hub.fallbackChannelHostConnectedRight")
 		}
 		return dial(network, addr)
 	}
@@ -119,7 +119,7 @@ func (m *Manager) dynamicRelayDial(hostID int64) dialFunc {
 func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial dialFunc, binPath, unitContent, envContent string, report func(key string, args ...any)) error {
 	binBytes, err := os.ReadFile(binPath)
 	if err != nil {
-		return fmt.Errorf("чтение собранного бинарника: %w", err)
+		return msgs.Errorf("hub.readingBuiltBinary", err)
 	}
 	sum := sha256.Sum256(binBytes)
 
@@ -147,7 +147,7 @@ func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial d
 
 	cookie, err := m.cookieFor(ctx, hostID, dial)
 	if err != nil {
-		return fmt.Errorf("вход на хост через резервный канал: %w", err)
+		return msgs.Errorf("hub.loggingHostOverFallbackChannel", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+remoteAPIAddr+"/api/self-update", &body)
@@ -167,12 +167,12 @@ func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial d
 	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("запрос обновления через резервный канал: %w", err)
+		return msgs.Errorf("hub.updateRequestOverFallbackChannel", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("обновление через резервный канал не удалось (код %d): %s", resp.StatusCode, strings.TrimSpace(string(b)))
+		return msgs.Errorf("hub.updateOverFallbackChannelFailed", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 	report("hub.hostAcceptedRestarting")
 	return nil
@@ -201,7 +201,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 
 	parts := strings.SplitN(host.Arch, "/", 2)
 	if len(parts) != 2 {
-		return fail(fmt.Errorf("SSH недоступен, и для хоста ещё не известна архитектура для обновления через резервный канал"))
+		return fail(msgs.Errorf("hub.sshUnavailableHostSArchitecture"))
 	}
 	goos, goarch := parts[0], parts[1]
 	report("hub.sshUnavailableUsingTunnel", goos, goarch)
@@ -238,7 +238,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 		if i > 0 {
 			select {
 			case <-ctx.Done():
-				return fail(fmt.Errorf("обновление через резервный канал не удалось: %w", updateErr))
+				return fail(msgs.Errorf("hub.updateOverFallbackChannelFailed2", updateErr))
 			case <-time.After(2 * time.Second):
 			}
 			report("hub.retryingTunnelUpdate")
@@ -278,7 +278,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 		if i > 0 {
 			select {
 			case <-ctx.Done():
-				return fail(fmt.Errorf("вход администратора через резервный канал не удался: %w", loginErr))
+				return fail(msgs.Errorf("hub.adminLoginOverFallbackChannel", loginErr))
 			case <-time.After(time.Second):
 			}
 		}
@@ -290,7 +290,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 		break
 	}
 	if loginErr != nil {
-		return fail(fmt.Errorf("вход администратора через резервный канал не удался: %w", loginErr))
+		return fail(msgs.Errorf("hub.adminLoginOverFallbackChannel", loginErr))
 	}
 
 	if err := m.db.SetHostVersion(ctx, hostID, m.version); err != nil {

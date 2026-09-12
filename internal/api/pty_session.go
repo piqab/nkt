@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net"
 	"net/http"
 	"os"
@@ -127,15 +127,15 @@ func unrestrictedCommandAsUser(env map[string]string, username string, argv ...s
 func resolveUserEnv(env map[string]string, username string) (uid, gid uint32, userEnv map[string]string, err error) {
 	u, err := user.Lookup(username)
 	if err != nil {
-		return 0, 0, nil, fmt.Errorf("пользователь %q не найден на хосте: %w", username, err)
+		return 0, 0, nil, msgs.Errorf("api.userFoundHost", username, err)
 	}
 	uid64, err := strconv.ParseUint(u.Uid, 10, 32)
 	if err != nil {
-		return 0, 0, nil, fmt.Errorf("некорректный uid пользователя %q: %w", username, err)
+		return 0, 0, nil, msgs.Errorf("api.invalidUidUser", username, err)
 	}
 	gid64, err := strconv.ParseUint(u.Gid, 10, 32)
 	if err != nil {
-		return 0, 0, nil, fmt.Errorf("некорректный gid пользователя %q: %w", username, err)
+		return 0, 0, nil, msgs.Errorf("api.invalidGidUser", username, err)
 	}
 
 	// HOME/USER/LOGNAME travel alongside whatever the caller already
@@ -643,7 +643,7 @@ func (s *Server) runPTYSession(w http.ResponseWriter, r *http.Request, cmd *exec
 
 	ptmx, err := pty.Start(cmd)
 	if err != nil {
-		conn.Close(websocket.StatusInternalError, "не удалось запустить команду: "+err.Error())
+		conn.Close(websocket.StatusInternalError, msgs.Tc(r.Context(), "api.startCommandFailed", err))
 		return
 	}
 	defer func() {
@@ -764,7 +764,7 @@ func RunUnrestrictedEnv(ctx context.Context, env map[string]string, stdin []byte
 	argv ...string) (collect.CommandResult, error) {
 
 	if len(argv) == 0 {
-		return collect.CommandResult{}, fmt.Errorf("пустая команда")
+		return collect.CommandResult{}, msgs.Errorf("api.emptyCommand")
 	}
 	cmd := unrestrictedQuietCommand(ctx, env, argv...)
 	if stdin != nil {

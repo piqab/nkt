@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 
 	"github.com/piqab/nkt/internal/jobs"
 )
@@ -12,7 +13,7 @@ const KindApply = "profile.apply"
 
 // ApplyParams — вход задания.
 type ApplyParams struct {
-	ProfileID int64 `json:"profile_id"`
+	ProfileID int64  `json:"profile_id"`
 	Name      string `json:"name"`
 	// Changes — отмеченные оператором пункты плана, целиком. План
 	// сохраняется в задании, а не перестраивается при запуске: между
@@ -56,18 +57,18 @@ func (r *ApplyRunner) Resumable() bool { return true }
 func (r *ApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var p ApplyParams
 	if err := jc.Params(&p); err != nil {
-		return fmt.Errorf("разбор задания: %w", err)
+		return msgs.Errorf("hub.parsingJob", err)
 	}
 	if len(p.Changes) == 0 {
-		jc.Logf("Применять нечего: пунктов не отмечено.")
+		jc.Log("profile.nothingApplyItemsSelected")
 		return nil
 	}
 	var done applyResume
 	if err := jc.LoadResume(&done); err != nil {
-		return fmt.Errorf("разбор состояния продолжения: %w", err)
+		return msgs.Errorf("hub.parsingResumeState", err)
 	}
 	if done.Done > 0 {
-		jc.Logf("Продолжаю с пункта %d из %d.", done.Done+1, len(p.Changes))
+		jc.Log("profile.continuingItem", done.Done+1, len(p.Changes))
 	}
 
 	applier := r.applier(jc.Job.Author)
@@ -94,9 +95,9 @@ func (r *ApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		// Не ошибка задания: пункты применены, а несобравшийся снимок
 		// соберётся по расписанию.
 		if err := r.rescan(ctx); err != nil {
-			jc.Logf("Снимок состояния пересобрать не удалось (%v) — раздел обновится позже.", err)
+			jc.Log("profile.couldRebuildStateSnapshotSection", err)
 		}
 	}
-	jc.Logf("Готово: применено пунктов — %d.", len(p.Changes))
+	jc.Log("profile.doneItemsApplied", len(p.Changes))
 	return nil
 }

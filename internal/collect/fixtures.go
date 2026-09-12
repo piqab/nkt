@@ -3,7 +3,7 @@ package collect
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"io/fs"
 	"os"
@@ -74,7 +74,7 @@ func (f *Fixtures) resolve(hostPath string) (string, error) {
 		return "", err
 	}
 	if localAbs != rootAbs && !strings.HasPrefix(localAbs, rootAbs+string(os.PathSeparator)) {
-		return "", fmt.Errorf("путь %s выходит за пределы снапшота", hostPath)
+		return "", msgs.Errorf("collect.pathOutsideSnapshot", hostPath)
 	}
 	return localAbs, nil
 }
@@ -106,7 +106,7 @@ func (f *Fixtures) ReadFile(p string) ([]byte, error) {
 	data, err := os.ReadFile(local)
 	if err != nil {
 		// Report the host path, not the snapshot path, so errors read naturally.
-		return nil, fmt.Errorf("чтение %s: %w", p, err)
+		return nil, msgs.Errorf("collect.reading", p, err)
 	}
 	return data, nil
 }
@@ -221,7 +221,7 @@ func (f *Fixtures) loadCommands() {
 		}
 		var idx fixtureIndex
 		if err := json.Unmarshal(raw, &idx); err != nil {
-			f.loadErr = fmt.Errorf("разбор .commands/index.json: %w", err)
+			f.loadErr = msgs.Errorf("collect.parsingCommandsIndexJson", err)
 			return
 		}
 		f.commands = idx.Commands
@@ -276,7 +276,7 @@ func (f *Fixtures) Run(ctx context.Context, name string, args ...string) (Comman
 		if c.StdoutFile != "" {
 			raw, err := os.ReadFile(filepath.Join(f.root, ".commands", c.StdoutFile))
 			if err != nil {
-				return res, fmt.Errorf("чтение вывода фикстуры %s: %w", c.StdoutFile, err)
+				return res, msgs.Errorf("collect.readingFixtureOutput", c.StdoutFile, err)
 			}
 			res.Stdout = string(raw)
 			res.Simulated = false
@@ -286,7 +286,7 @@ func (f *Fixtures) Run(ctx context.Context, name string, args ...string) (Comman
 	}
 
 	res.ExitCode = 127
-	res.Stderr = fmt.Sprintf("в снапшоте нет заготовленного вывода для команды: %s", strings.Join(argv, " "))
+	res.Stderr = msgs.Tc(ctx, "collect.snapshotHasCannedOutputCommand", strings.Join(argv, " "))
 	return res, nil
 }
 
@@ -419,15 +419,15 @@ func (f *Fixtures) PodmanAPI(_ context.Context, method, apiPath string, _ []byte
 	return []byte(`{"message":"no such fixture"}`), 404, nil
 }
 
-func (f *Fixtures) HostInfo(_ context.Context) HostInfo {
+func (f *Fixtures) HostInfo(ctx context.Context) HostInfo {
 	info := HostInfo{
 		Mode:     f.Mode(),
 		Hostname: "fixture-host",
 		Kernel:   "Linux 6.8.0-generic",
 		OS:       "Debian GNU/Linux 12 (bookworm)",
 		Notes: []string{
-			"Режим снапшота: данные читаются из " + filepath.ToSlash(f.root) + ", а не с реального хоста.",
-			"Команды управления выполняются в симуляции и ничего не меняют.",
+			msgs.Tc(ctx, "collect.snapshotMode", filepath.ToSlash(f.root)),
+			msgs.Tc(ctx, "collect.snapshotSimulated"),
 		},
 	}
 	if raw, err := os.ReadFile(filepath.Join(f.root, "etc", "hostname")); err == nil {
@@ -436,7 +436,7 @@ func (f *Fixtures) HostInfo(_ context.Context) HostInfo {
 		}
 	}
 	if runtime.GOOS == "windows" {
-		info.Notes = append(info.Notes, "Приложение запущено на Windows — это нормально для режима fixtures.")
+		info.Notes = append(info.Notes, msgs.Tc(ctx, "collect.snapshotWindows"))
 	}
 	return info
 }

@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -40,18 +41,13 @@ const (
 func (m *Manager) ApplyUpdate(ctx context.Context) error {
 	status := m.VersionStatus()
 	if !status.Updatable {
-		return fmt.Errorf(
-			"самообновление недоступно: хаб сейчас не запущен как systemd-юнит (нет INVOCATION_ID в " +
-				"окружении) — либо это Docker/Kubernetes-развёртывание (обновите образ и пересоздайте " +
-				"контейнер: docker compose pull && docker compose up -d), либо бинарник запущен вручную, " +
-				"не через systemd (установите и запустите как сервис: sudo make hub-install && " +
-				"sudo systemctl enable --now netknownsthat-hub)")
+		return msgs.Errorf("hub.selfUpdateUnavailableHubRunning")
 	}
 	if status.Latest == "" {
-		return fmt.Errorf("версия ещё не проверялась — сначала выполните проверку обновлений")
+		return msgs.Errorf("hub.versionHasBeenCheckedYet")
 	}
 	if !status.UpdateAvailable {
-		return fmt.Errorf("уже установлена последняя версия (%s)", status.Current)
+		return msgs.Errorf("hub.latestVersionAlreadyInstalled", status.Current)
 	}
 	version := status.Latest
 
@@ -63,18 +59,18 @@ func (m *Manager) ApplyUpdate(ctx context.Context) error {
 	binPath := filepath.Join(m.cfg.HubBinCacheDir(), name)
 	if _, err := os.Stat(binPath); err != nil {
 		if err := m.downloadReleaseBinary(ctx, runtime.GOOS, runtime.GOARCH, version, binPath, report); err != nil {
-			return fmt.Errorf("скачивание бинарника v%s: %w", version, err)
+			return msgs.Errorf("hub.downloadingBinaryV", version, err)
 		}
 	}
 
 	unitContent, err := m.downloadUnitTemplate(ctx, version, "netknownsthat-hub.service")
 	if err != nil {
-		return fmt.Errorf("скачивание systemd-юнита v%s: %w", version, err)
+		return msgs.Errorf("hub.downloadingSystemdUnitV", version, err)
 	}
 
 	stageDir, err := os.MkdirTemp(m.cfg.DataDir, "hub-selfupdate-")
 	if err != nil {
-		return fmt.Errorf("временный каталог: %w", err)
+		return msgs.Errorf("hub.temporaryDirectory", err)
 	}
 	removeStage := true
 	defer func() {
@@ -85,7 +81,7 @@ func (m *Manager) ApplyUpdate(ctx context.Context) error {
 
 	stageUnit := filepath.Join(stageDir, "netknownsthat-hub.service")
 	if err := os.WriteFile(stageUnit, []byte(unitContent), 0o644); err != nil {
-		return fmt.Errorf("запись %s: %w", stageUnit, err)
+		return msgs.Errorf("control.writing", stageUnit, err)
 	}
 
 	// Same escape-the-sandbox reasoning as handleSelfUpdate: this process's
@@ -109,7 +105,7 @@ systemctl restart netknownsthat-hub
 
 	cmd := api.UnrestrictedBackgroundCommand("bash", "-c", script)
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("запуск фонового скрипта обновления: %w", err)
+		return msgs.Errorf("hub.startingBackgroundUpdateScript", err)
 	}
 	// Not Wait()'d — see the doc comment above. The stage dir's unit file is
 	// cleaned up by the script itself (rm -rf, after install has already

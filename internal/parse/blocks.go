@@ -2,6 +2,7 @@ package parse
 
 import (
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"regexp"
 	"strings"
@@ -72,7 +73,7 @@ func Blocks(c collect.Collector, path, service string) ([]Block, error) {
 	case model.ServiceCaddy:
 		return caddyBlocks(c, path)
 	default:
-		return nil, fmt.Errorf("для сервиса %q дерево блоков не поддерживается", service)
+		return nil, msgs.Errorf("parse.blockTreeSupportedService", service)
 	}
 }
 
@@ -81,7 +82,7 @@ func Blocks(c collect.Collector, path, service string) ([]Block, error) {
 func nginxBlocks(c collect.Collector, path string) ([]Block, error) {
 	raw, err := c.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("чтение файла: %w", err)
+		return nil, msgs.Errorf("parse.readingFile", err)
 	}
 	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
 
@@ -92,7 +93,7 @@ func nginxBlocks(c collect.Collector, path string) ([]Block, error) {
 		SkipDirectiveContextCheck: true,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("разбор %s: %w", path, err)
+		return nil, msgs.Errorf("parse.parsing", path, err)
 	}
 
 	var out []Block
@@ -182,7 +183,7 @@ func nginxServerName(d *crossplane.Directive) string {
 func newNginxBlock(kind BlockKind, name string, startLine int, lines []string) (Block, error) {
 	end, err := nginxBlockEnd(lines, startLine)
 	if err != nil {
-		return Block{}, fmt.Errorf("%s %q (строка %d): %w", kind, name, startLine, err)
+		return Block{}, msgs.Errorf("parse.line", kind, name, startLine, err)
 	}
 	return Block{
 		ID:        fmt.Sprintf("%s:%d", kind, startLine),
@@ -203,7 +204,7 @@ func newNginxBlock(kind BlockKind, name string, startLine int, lines []string) (
 // don't throw the depth count off.
 func nginxBlockEnd(lines []string, startLine int) (int, error) {
 	if startLine < 1 || startLine > len(lines) {
-		return 0, fmt.Errorf("строка %d вне диапазона файла (%d строк)", startLine, len(lines))
+		return 0, msgs.Errorf("parse.lineOutsideFileRangeLines", startLine, len(lines))
 	}
 	depth := 0
 	var quote byte // 0 when not inside a quoted string
@@ -236,7 +237,7 @@ func nginxBlockEnd(lines []string, startLine int) (int, error) {
 			}
 		}
 	}
-	return 0, fmt.Errorf("не удалось определить конец блока, начатого в строке %d", startLine)
+	return 0, msgs.Errorf("parse.couldFindEndBlockStarted", startLine)
 }
 
 // --------------------------------------------------------------------- caddy
@@ -282,7 +283,7 @@ func scanCaddySites(lines []string) ([]caddySection, error) {
 		startLine := i + 1
 		end, err := nginxBlockEnd(lines, startLine)
 		if err != nil {
-			return nil, fmt.Errorf("сайт %q (строка %d): %w", addr, startLine, err)
+			return nil, msgs.Errorf("parse.siteLine", addr, startLine, err)
 		}
 		var body []string
 		if end > startLine+1 {
@@ -296,7 +297,7 @@ func scanCaddySites(lines []string) ([]caddySection, error) {
 func caddyBlocks(c collect.Collector, path string) ([]Block, error) {
 	raw, err := c.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("чтение файла: %w", err)
+		return nil, msgs.Errorf("parse.readingFile", err)
 	}
 	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
 	sections, err := scanCaddySites(lines)
@@ -334,7 +335,7 @@ var haproxyBlockKinds = map[string]BlockKind{
 func haproxyBlocks(c collect.Collector, path string) ([]Block, error) {
 	raw, err := c.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("чтение файла: %w", err)
+		return nil, msgs.Errorf("parse.readingFile", err)
 	}
 	text := strings.ReplaceAll(string(raw), "\r\n", "\n")
 	lines := strings.Split(text, "\n")
@@ -376,7 +377,7 @@ func haproxyBlocks(c collect.Collector, path string) ([]Block, error) {
 func dockerBlocks(c collect.Collector, path string) ([]Block, error) {
 	raw, err := c.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("чтение файла: %w", err)
+		return nil, msgs.Errorf("parse.readingFile", err)
 	}
 	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
 	return composeServiceBlocks(lines), nil
@@ -494,7 +495,7 @@ func composeServiceBlocks(lines []string) []Block {
 func composeInsertLine(lines []string) (line int, gapBefore bool, err error) {
 	servicesIdx := composeServicesLine(lines)
 	if servicesIdx < 0 {
-		return 0, false, fmt.Errorf("в файле нет ключа services:")
+		return 0, false, msgs.Errorf("parse.fileHasServicesKey")
 	}
 	if existing := composeServiceBlocks(lines); len(existing) > 0 {
 		return existing[len(existing)-1].EndLine + 1, true, nil
@@ -512,7 +513,7 @@ func composeInsertLine(lines []string) (line int, gapBefore bool, err error) {
 func SpliceBlock(fileText string, startLine, endLine int, newText string) (string, error) {
 	lines := strings.Split(fileText, "\n")
 	if startLine < 1 || endLine < startLine || endLine > len(lines) {
-		return "", fmt.Errorf("диапазон строк %d..%d вне файла (%d строк)", startLine, endLine, len(lines))
+		return "", msgs.Errorf("parse.lineRangeOutsideFileLines", startLine, endLine, len(lines))
 	}
 	out := make([]string, 0, len(lines))
 	out = append(out, lines[:startLine-1]...)
@@ -538,7 +539,7 @@ func InsertBlockAtEnd(fileText string, kind BlockKind, newText string, parentEnd
 	switch kind {
 	case BlockLocation:
 		if parentEndLine < 1 || parentEndLine > len(lines) {
-			return "", fmt.Errorf("родительский блок вне диапазона файла")
+			return "", msgs.Errorf("parse.parentBlockOutsideFileRange")
 		}
 		return insertBefore(lines, parentEndLine, block), nil
 

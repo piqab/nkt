@@ -3,6 +3,7 @@ package vmcreate
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strings"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -52,7 +53,7 @@ func (r *ToolsRunner) Resumable() bool { return true }
 
 // Run ставит то, чего не хватает.
 func (r *ToolsRunner) Run(ctx context.Context, jc *jobs.Context) error {
-	jc.Step(1, 1, "установка")
+	jc.Step(1, 1, msgs.Tc(ctx, "vmcreate.stepInstall"))
 	return InstallTools(ctx, r.escape, jc.Logf)
 }
 
@@ -63,11 +64,11 @@ func (r *ToolsRunner) Run(ctx context.Context, jc *jobs.Context) error {
 // оператора делать руками ровно то, что nkt умеет сам.
 func InstallTools(ctx context.Context, run Runner, logf func(string, ...any)) error {
 	if run == nil {
-		return fmt.Errorf("установка пакетов недоступна в этом режиме")
+		return msgs.Errorf("profile.packageInstallationUnavailableMode")
 	}
 	missing := MissingTools(CheckTools(ctx, run))
 	if len(missing) == 0 {
-		logf("Всё нужное уже установлено.")
+		logf(msgs.Tc(ctx, "vmcreate.toolsAllInstalled"))
 		return nil
 	}
 	// Из пары взаимозаменяемых ставится одна: вторая ничего не добавит.
@@ -83,11 +84,11 @@ func InstallTools(ctx context.Context, run Runner, logf func(string, ...any)) er
 		pkgs = append(pkgs, t.Package)
 	}
 
-	logf("Не хватает: %s. Ставлю пакеты: %s", toolNames(missing), strings.Join(pkgs, ", "))
+	logf(msgs.Tc(ctx, "vmcreate.toolsMissing", toolNames(missing), strings.Join(pkgs, ", ")))
 	if res, err := run(ctx, "apt-get", "update"); err != nil {
 		return err
 	} else if res.ExitCode != 0 {
-		logf("apt-get update ответил кодом %d, продолжаю", res.ExitCode)
+		logf(msgs.Tc(ctx, "vmcreate.aptUpdateCode", res.ExitCode))
 	}
 
 	argv := append([]string{"apt-get", "install", "-y"}, pkgs...)
@@ -105,9 +106,9 @@ func InstallTools(ctx context.Context, run Runner, logf func(string, ...any)) er
 	}
 
 	if still := MissingTools(CheckTools(ctx, run)); len(still) > 0 {
-		return fmt.Errorf("после установки всё ещё нет: %s", toolNames(still))
+		return msgs.Errorf("vmcreate.stillMissingAfterInstallation", toolNames(still))
 	}
-	logf("Готово: всё нужное на месте.")
+	logf(msgs.Tc(ctx, "vmcreate.toolsDone"))
 	return nil
 }
 

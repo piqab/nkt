@@ -11,12 +11,12 @@ import (
 func (s *Server) handleFirewalldAdd(w http.ResponseWriter, r *http.Request) {
 	var spec control.FirewalldPortSpec
 	if err := decodeJSON(r, &spec); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	res, err := s.firewalld.AddRule(r.Context(), auth.Username(r.Context()), spec)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -33,12 +33,12 @@ func (s *Server) handleFirewalldAdd(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFirewalldDelete(w http.ResponseWriter, r *http.Request) {
 	var spec control.FirewalldPortSpec
 	if err := decodeJSON(r, &spec); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	res, err := s.firewalld.DeleteRule(r.Context(), auth.Username(r.Context()), spec)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -50,7 +50,7 @@ func (s *Server) handleFirewalldDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFirewalldReload(w http.ResponseWriter, r *http.Request) {
 	res, err := s.firewalld.Reload(r.Context(), auth.Username(r.Context()))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()

@@ -65,7 +65,9 @@ func TestRecordSudoOutcome(t *testing.T) {
 		if err != nil {
 			t.Fatalf("AddHost: %v", err)
 		}
-		m.recordSudoOutcome(ctx, id, "deploy", errors.New("установка x: deploy нужен sudo без пароля (NOPASSWD): boom"))
+		// Та же ошибка, что строит diagnoseInstallError: распознаётся по ключу
+		// каталога, а не по русскому тексту.
+		m.recordSudoOutcome(ctx, id, "deploy", diagnoseInstallError("deploy", "x", errors.New("boom"), "sudo: a password is required"))
 		host, _ := db.HostByID(ctx, id)
 		if host.SudoStatus != store.SudoStatusPasswordRequired {
 			t.Errorf("SudoStatus = %q, want %q", host.SudoStatus, store.SudoStatusPasswordRequired)

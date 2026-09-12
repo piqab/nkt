@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/url"
 	"regexp"
 	"strings"
@@ -99,19 +100,19 @@ func (r *VMProvisionRunner) Resumable() bool { return true }
 func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var p VMProvisionParams
 	if err := jc.Params(&p); err != nil {
-		return fmt.Errorf("разбор задания: %w", err)
+		return msgs.Errorf("hub.parsingJob", err)
 	}
 	if err := p.Spec.Validate(); err != nil {
 		return err
 	}
 	var done vmProvisionResume
 	if err := jc.LoadResume(&done); err != nil {
-		return fmt.Errorf("разбор состояния продолжения: %w", err)
+		return msgs.Errorf("hub.parsingResumeState", err)
 	}
 
 	host, err := r.m.db.HostByID(ctx, p.HostID)
 	if err != nil {
-		return fmt.Errorf("хост, на котором создаём машину: %w", err)
+		return msgs.Errorf("hub.hostCreateMachine", err)
 	}
 	// Сколько всего шагов, известно сразу: без установки nkt их четыре,
 	// с ней пять, с профилем шесть. Считать это по ходу значило бы
@@ -143,14 +144,14 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 1. Запись нового хоста и ключ для него.
-	jc.Step(1, steps, "ключ")
+	jc.Step(1, steps, msgs.T(jc.Lang(), "hub.vmStepKey"))
 	if done.NewHostID == 0 {
 		// Адрес пока неизвестен — машины ещё нет. Ставится заглушка, а
 		// настоящий адрес запишется на шаге 3: без записи негде взять
 		// ключ, который должен попасть в машину при первом запуске.
 		id, key, err := r.m.AddHostGenerated(ctx, p.Spec.Name, "0.0.0.0", 22, p.Spec.User, false)
 		if err != nil {
-			return fmt.Errorf("запись нового хоста: %w", err)
+			return msgs.Errorf("hub.savingNewHost", err)
 		}
 		done.NewHostID = id
 		jc.SaveResume(done)
@@ -160,15 +161,15 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		// вместе с ним. Своей группы у неё нет — «база в проде, а сервер
 		// под ней в резерве» ничего не описывает.
 		if err := r.m.db.SetHostParent(ctx, id, host.ID); err != nil {
-			return fmt.Errorf("привязка машины к хосту: %w", err)
+			return msgs.Errorf("hub.bindingMachineHost", err)
 		}
-		jc.Logf("Хост %s заведён в списке под %s, ключ для входа выдан.", p.Spec.Name, host.Name)
+		jc.Log("hub.hostListedAsLoginKey", p.Spec.Name, host.Name)
 	} else {
-		jc.Logf("Хост уже заведён (продолжение), пропускаю.")
+		jc.Log("hub.hostAlreadyListedResumeSkipping")
 	}
 
 	// 2. Создание машины на хосте.
-	jc.Step(2, steps, "создание на "+host.Name)
+	jc.Step(2, steps, msgs.T(jc.Lang(), "hub.vmStepCreateOn", host.Name))
 	if done.RemoteJobID == 0 {
 		var started struct {
 			JobID int64 `json:"job_id"`
@@ -178,18 +179,18 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			// и останется в списке пустышкой с адресом-заглушкой. Она
 			// там ни к чему: ключ не пригодился, машины нет.
 			if delErr := r.m.db.DeleteHost(ctx, done.NewHostID); delErr != nil {
-				jc.Logf("Заготовку хоста убрать не удалось: %v", delErr)
+				jc.Log("hub.couldRemovePlaceholderHost", delErr)
 			} else {
-				jc.Logf("Заготовка хоста %s убрана из списка — создавать было нечего.", p.Spec.Name)
+				jc.Log("hub.placeholderHostRemovedListThere", p.Spec.Name)
 			}
-			return fmt.Errorf("запуск создания на %s: %w", host.Name, err)
+			return msgs.Errorf("hub.startingCreation", host.Name, err)
 		}
 		done.RemoteJobID = started.JobID
 		jc.SaveResume(done)
 	}
 
 	// 3. Ожидание конца и адреса.
-	jc.Step(3, steps, "ожидание")
+	jc.Step(3, steps, msgs.T(jc.Lang(), "hub.vmStepWait"))
 	addr, err := r.waitVMJob(ctx, jc, host, done.RemoteJobID)
 	if err != nil {
 		return err
@@ -207,24 +208,24 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 4. Запись адреса.
-	jc.Step(4, steps, "адрес")
+	jc.Step(4, steps, msgs.T(jc.Lang(), "hub.vmStepAddress"))
 	if done.Address == "" {
-		jc.Logf("Машина создана, но её адрес не определился — впишите его в карточке хоста вручную.")
+		jc.Log("hub.machineCreatedButAddressDetected")
 		return nil
 	}
 	if err := r.m.UpdateHost(ctx, done.NewHostID, p.Spec.Name, done.Address, 22, p.Spec.User,
 		store.HostAuthKey, "", false); err != nil {
-		return fmt.Errorf("запись адреса: %w", err)
+		return msgs.Errorf("hub.savingAddress", err)
 	}
-	jc.Logf("Машина %s доступна по адресу %s, хост заведён в списке.", p.Spec.Name, done.Address)
+	jc.Log("hub.machineReachableHostListed", p.Spec.Name, done.Address)
 
 	if !p.InstallNKT {
-		jc.Logf("Установку nkt на неё запустите обычной кнопкой «установить» — как для любого другого хоста.")
+		jc.Log("hub.startNktInstallationUsualInstall")
 		return nil
 	}
 
 	// 5. Установка nkt.
-	jc.Step(5, steps, "установка nkt")
+	jc.Step(5, steps, msgs.T(jc.Lang(), "hub.vmStepInstall"))
 	if !done.Installed {
 		if err := r.installNKT(ctx, jc, done.NewHostID); err != nil {
 			return err
@@ -234,12 +235,12 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	if p.ProfileID == 0 {
-		jc.Logf("Готово: машина создана, записана в список и управляется хабом.")
+		jc.Log("hub.doneMachineCreatedListedManaged")
 		return nil
 	}
 
 	// 6. Применение профиля.
-	jc.Step(6, steps, "профиль")
+	jc.Step(6, steps, msgs.T(jc.Lang(), "hub.vmStepProfile"))
 	if !done.ProfileDone {
 		if err := r.applyProfile(ctx, jc, done.NewHostID, p.ProfileID); err != nil {
 			return err
@@ -247,7 +248,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		done.ProfileDone = true
 		jc.SaveResume(done)
 	}
-	jc.Logf("Готово: машина создана, управляется хабом и приведена к профилю.")
+	jc.Log("hub.doneMachineCreatedManagedHub")
 	return nil
 }
 
@@ -272,15 +273,15 @@ func (r *VMProvisionRunner) ensureHostVersion(ctx context.Context, jc *jobs.Cont
 	}
 
 	if current != "" && !isNewerVersion(hubVersion, current) {
-		jc.Logf("Версия nkt на %s: %s — обновление не нужно.", host.Name, current)
+		jc.Log("hub.nktVersionUpdateNeeded", host.Name, current)
 		return nil
 	}
-	jc.Logf("На %s стоит nkt %s, у хаба %s — обновляю перед созданием машины.",
-		host.Name, orUnknown(current), hubVersion)
+	jc.Log("hub.runsNktHubHasUpdating",
+		host.Name, orUnknown(ctx, current), hubVersion)
 	if err := r.runInstall(ctx, jc, host.ID); err != nil {
-		return fmt.Errorf("обновление nkt на %s: %w", host.Name, err)
+		return msgs.Errorf("hub.updatingNkt", host.Name, err)
 	}
-	jc.Logf("nkt на %s обновлён.", host.Name)
+	jc.Log("hub.nktUpdated", host.Name)
 	return nil
 }
 
@@ -299,7 +300,7 @@ func (r *VMProvisionRunner) installNKT(ctx context.Context, jc *jobs.Context, ho
 func (r *VMProvisionRunner) runInstall(ctx context.Context, jc *jobs.Context, hostID int64) error {
 	jobID, err := r.m.StartInstall(ctx, hostID, false, nil)
 	if err != nil {
-		return fmt.Errorf("запуск установки nkt: %w", err)
+		return msgs.Errorf("hub.startingNktInstallation", err)
 	}
 	deadline := time.Now().Add(installTimeout)
 	seen := 0
@@ -308,11 +309,11 @@ func (r *VMProvisionRunner) runInstall(ctx context.Context, jc *jobs.Context, ho
 			return err
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("установка nkt не завершилась за %s", installTimeout)
+			return msgs.Errorf("hub.nktInstallationDidFinishWithin", installTimeout)
 		}
 		events, done, errMsg, ok := r.m.InstallJobStatus(jobID)
 		if !ok {
-			return fmt.Errorf("задание установки потерялось")
+			return msgs.Errorf("hub.installationJobLost")
 		}
 		for _, e := range events[seen:] {
 			jc.Logf("      %s", e.Text)
@@ -320,7 +321,7 @@ func (r *VMProvisionRunner) runInstall(ctx context.Context, jc *jobs.Context, ho
 		seen = len(events)
 		if done {
 			if errMsg != "" {
-				return fmt.Errorf("установка nkt: %s", errMsg)
+				return msgs.Errorf("hub.installingNkt", errMsg)
 			}
 			return nil
 		}
@@ -339,21 +340,21 @@ func (r *VMProvisionRunner) applyProfile(ctx context.Context, jc *jobs.Context,
 
 	prof, err := r.m.db.ProfileByID(ctx, profileID)
 	if err != nil {
-		return fmt.Errorf("профиль: %w", err)
+		return msgs.Errorf("hub.profile", err)
 	}
 	host, err := r.m.db.HostByID(ctx, hostID)
 	if err != nil {
 		return err
 	}
-	jc.Logf("Применяю профиль «%s».", prof.Name)
+	jc.Log("hub.applyingProfile", prof.Name)
 
 	var plan profile.Plan
 	if _, err := r.m.HostAPI(ctx, hostID, "POST", "/api/profiles/plan",
 		map[string]string{"content": prof.Content}, &plan); err != nil {
-		return fmt.Errorf("построение плана: %w", err)
+		return msgs.Errorf("hub.buildingPlan", err)
 	}
 	if len(plan.Changes) == 0 {
-		jc.Logf("      расхождений нет")
+		jc.Log("hub.drift")
 		return nil
 	}
 	var started struct {
@@ -361,7 +362,7 @@ func (r *VMProvisionRunner) applyProfile(ctx context.Context, jc *jobs.Context,
 	}
 	if _, err := r.m.HostAPI(ctx, hostID, "POST", "/api/profiles/apply",
 		map[string]any{"name": prof.Name, "changes": plan.Changes}, &started); err != nil {
-		return fmt.Errorf("запуск применения: %w", err)
+		return msgs.Errorf("hub.startingApply", err)
 	}
 	_, err = r.waitVMJob(ctx, jc, host, started.JobID)
 	return err
@@ -371,7 +372,7 @@ func (r *VMProvisionRunner) applyProfile(ctx context.Context, jc *jobs.Context,
 func (r *VMProvisionRunner) pollAddress(ctx context.Context, jc *jobs.Context,
 	host store.Host, name string) string {
 
-	jc.Logf("Жду адрес машины (машина ещё поднимается)…")
+	jc.Log("hub.waitingMachineSAddressStill")
 	deadline := time.Now().Add(addressPoll)
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
@@ -403,7 +404,7 @@ func (r *VMProvisionRunner) waitVMJob(ctx context.Context, jc *jobs.Context,
 			return addr, err
 		}
 		if time.Now().After(deadline) {
-			return addr, fmt.Errorf("создание машины не завершилось за %s", vmJobTimeout)
+			return addr, msgs.Errorf("hub.machineCreationDidFinishWithin", vmJobTimeout)
 		}
 
 		var res struct {
@@ -412,7 +413,7 @@ func (r *VMProvisionRunner) waitVMJob(ctx context.Context, jc *jobs.Context,
 		}
 		path := fmt.Sprintf("/api/jobs/%d/log?after=%d", jobID, after)
 		if _, err := r.m.HostAPI(ctx, host.ID, "GET", path, nil, &res); err != nil {
-			jc.Logf("      связь с %s прервалась (%v), пробую снова", host.Name, err)
+			jc.Log("hub.connectionLostRetrying2", host.Name, err)
 			if !sleepCtx(ctx, vmJobPoll) {
 				return addr, ctx.Err()
 			}
@@ -429,7 +430,7 @@ func (r *VMProvisionRunner) waitVMJob(ctx context.Context, jc *jobs.Context,
 		case store.JobSucceeded:
 			return addr, nil
 		case store.JobFailed, store.JobCanceled, store.JobInterrupted:
-			return addr, fmt.Errorf("создание машины на %s: %s (%s)",
+			return addr, msgs.Errorf("hub.creatingMachine",
 				host.Name, res.Job.Status, strings.TrimSpace(res.Job.Error))
 		}
 		if !sleepCtx(ctx, vmJobPoll) {

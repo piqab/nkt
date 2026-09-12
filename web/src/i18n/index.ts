@@ -29,7 +29,10 @@ void i18n.use(initReactI18next).init({
     en: { translation: en },
   },
   lng: getStoredLang(),
-  fallbackLng: 'ru',
+  // Запасной язык для ключа, которого нет в текущем переводе, — английский:
+  // интерфейс по умолчанию английский, и пробел в переводе не должен
+  // подсовывать русскую строку тому, кто русского не выбирал.
+  fallbackLng: 'en',
   // React already escapes interpolated values when rendering — i18next's
   // own HTML-escaping on top would double-escape anything with special
   // characters (e.g. a hostname containing "&").

@@ -25,12 +25,12 @@ type podmanCreateRequest struct {
 func (s *Server) handlePodmanContainerCreate(w http.ResponseWriter, r *http.Request) {
 	var req podmanCreateRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
 	if err := s.podman.CreateContainer(r.Context(), user, req.Image, req.Name); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -42,7 +42,7 @@ func (s *Server) handlePodmanContainerAction(w http.ResponseWriter, r *http.Requ
 	action := chi.URLParam(r, "action")
 	user := auth.Username(r.Context())
 	if err := s.podman.ContainerAction(r.Context(), user, name, action); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -54,7 +54,7 @@ func (s *Server) handlePodmanContainerDelete(w http.ResponseWriter, r *http.Requ
 	force := r.URL.Query().Get("force") == "true"
 	user := auth.Username(r.Context())
 	if err := s.podman.DeleteContainer(r.Context(), user, name, force); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()

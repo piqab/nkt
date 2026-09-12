@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strings"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -26,10 +27,10 @@ func (m *LXDManager) InstanceAction(ctx context.Context, user, name, action stri
 	switch action {
 	case "start", "stop", "restart", "pause":
 	default:
-		return fmt.Errorf("недопустимое действие для инстанса: %q", action)
+		return msgs.Errorf("control.invalidActionInstance", action)
 	}
 	if name == "" || strings.ContainsAny(name, "/?&# ") {
-		return fmt.Errorf("недопустимое имя инстанса: %q", name)
+		return msgs.Errorf("control.invalidInstanceName", name)
 	}
 
 	res, err := m.c.Run(ctx, "lxc", action, name)
@@ -44,7 +45,7 @@ func (m *LXDManager) InstanceAction(ctx context.Context, user, name, action stri
 		return fmt.Errorf("lxc %s %s: %w", action, name, err)
 	}
 	if !res.OK() {
-		return fmt.Errorf("lxc %s %s: код %d: %s", action, name, res.ExitCode, strings.TrimSpace(res.Output()))
+		return msgs.Errorf("control.lxcCode", action, name, res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return nil
 }
@@ -54,10 +55,10 @@ func (m *LXDManager) InstanceAction(ctx context.Context, user, name, action stri
 // separate create-then-start round trip needed here.
 func (m *LXDManager) CreateInstance(ctx context.Context, user, image, name string) error {
 	if strings.TrimSpace(image) == "" {
-		return fmt.Errorf("укажите образ")
+		return msgs.Errorf("control.specifyImage")
 	}
 	if name == "" || strings.ContainsAny(name, "/?&# ") {
-		return fmt.Errorf("недопустимое имя инстанса: %q", name)
+		return msgs.Errorf("control.invalidInstanceName", name)
 	}
 
 	res, err := m.c.Run(ctx, "lxc", "launch", image, name)
@@ -73,7 +74,7 @@ func (m *LXDManager) CreateInstance(ctx context.Context, user, image, name strin
 		return fmt.Errorf("lxc launch %s %s: %w", image, name, err)
 	}
 	if !res.OK() {
-		return fmt.Errorf("lxc launch %s %s: код %d: %s", image, name, res.ExitCode, strings.TrimSpace(res.Output()))
+		return msgs.Errorf("control.lxcLaunchCode", image, name, res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return nil
 }
@@ -83,7 +84,7 @@ func (m *LXDManager) CreateInstance(ctx context.Context, user, image, name strin
 // explicit rather than silently escalating.
 func (m *LXDManager) DeleteInstance(ctx context.Context, user, name string, force bool) error {
 	if name == "" || strings.ContainsAny(name, "/?&#") {
-		return fmt.Errorf("недопустимое имя инстанса: %q", name)
+		return msgs.Errorf("control.invalidInstanceName", name)
 	}
 
 	args := []string{"delete", name}
@@ -103,7 +104,7 @@ func (m *LXDManager) DeleteInstance(ctx context.Context, user, name string, forc
 		return fmt.Errorf("lxc delete %s: %w", name, err)
 	}
 	if !res.OK() {
-		return fmt.Errorf("lxc delete %s: код %d: %s", name, res.ExitCode, strings.TrimSpace(res.Output()))
+		return msgs.Errorf("control.lxcDeleteCode", name, res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return nil
 }

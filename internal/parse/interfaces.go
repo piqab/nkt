@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strconv"
 	"strings"
 	"time"
@@ -49,7 +50,7 @@ func Interfaces(ctx context.Context, c collect.Collector) ([]model.NetworkInterf
 		return ifaces, status
 	}
 	if !out.OK() {
-		status.Error = fmt.Sprintf("ip addr завершился с кодом %d: %s", out.ExitCode, strings.TrimSpace(out.Stderr))
+		status.Error = msgs.Tc(ctx, "parse.ipAddrExitedCode", out.ExitCode, strings.TrimSpace(out.Stderr))
 		status.ErrorKey = "parse.commandFailed"
 		status.ErrorArgs = []any{"ip addr", out.ExitCode, strings.TrimSpace(out.Stderr)}
 		return ifaces, status
@@ -57,7 +58,7 @@ func Interfaces(ctx context.Context, c collect.Collector) ([]model.NetworkInterf
 
 	var entries []ipAddrEntry
 	if err := json.Unmarshal([]byte(out.Stdout), &entries); err != nil {
-		status.Error = fmt.Sprintf("разбор вывода ip addr: %v", err)
+		status.Error = msgs.Tc(ctx, "parse.parsingIpAddrOutput", err)
 		status.ErrorKey = "parse.ipAddrParseFailed"
 		status.ErrorArgs = []any{err}
 		return ifaces, status

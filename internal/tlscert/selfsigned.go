@@ -10,7 +10,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"math/big"
 	"net"
 	"os"
@@ -42,7 +42,7 @@ const (
 // overwrites both files.
 func EnsureSelfSigned(certPath, keyPath string, hosts []string) error {
 	if len(hosts) == 0 {
-		return fmt.Errorf("tlscert: не задан ни один адрес/имя для сертификата")
+		return msgs.Errorf("tlscert.tlscertAddressNameGivenCertificate")
 	}
 	if reusable(certPath, hosts) {
 		return nil
@@ -95,11 +95,11 @@ func sameSANs(cert *x509.Certificate, hosts []string) bool {
 func generate(certPath, keyPath string, hosts []string) error {
 	key, err := rsa.GenerateKey(rand.Reader, bits)
 	if err != nil {
-		return fmt.Errorf("генерация ключа: %w", err)
+		return msgs.Errorf("control.generatingKey", err)
 	}
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
-		return fmt.Errorf("генерация серийного номера: %w", err)
+		return msgs.Errorf("control.generatingSerialNumber", err)
 	}
 
 	now := time.Now()
@@ -125,26 +125,26 @@ func generate(certPath, keyPath string, hosts []string) error {
 
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {
-		return fmt.Errorf("создание сертификата: %w", err)
+		return msgs.Errorf("control.creatingCertificate", err)
 	}
 	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
-		return fmt.Errorf("сериализация ключа: %w", err)
+		return msgs.Errorf("control.serializingKey", err)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(certPath), 0o750); err != nil {
-		return fmt.Errorf("создание каталога для сертификата: %w", err)
+		return msgs.Errorf("tlscert.creatingCertificateDirectory", err)
 	}
 	if err := os.MkdirAll(filepath.Dir(keyPath), 0o750); err != nil {
-		return fmt.Errorf("создание каталога для ключа: %w", err)
+		return msgs.Errorf("tlscert.creatingKeyDirectory", err)
 	}
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	if err := os.WriteFile(certPath, certPEM, 0o644); err != nil {
-		return fmt.Errorf("запись сертификата: %w", err)
+		return msgs.Errorf("control.writingCertificate", err)
 	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 	if err := os.WriteFile(keyPath, keyPEM, 0o600); err != nil {
-		return fmt.Errorf("запись ключа: %w", err)
+		return msgs.Errorf("control.writingKey", err)
 	}
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"crypto/sha512"
 	"encoding/hex"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"hash"
 	"io"
 	"net/http"
@@ -58,8 +59,8 @@ type Local struct {
 	Size       int64  `json:"size,omitempty"`
 	Downloaded bool   `json:"downloaded"`
 	// Partial — есть недокачанный кусок: скачивание можно продолжить.
-	Partial     bool  `json:"partial,omitempty"`
-	PartialSize int64 `json:"partial_size,omitempty"`
+	Partial     bool   `json:"partial,omitempty"`
+	PartialSize int64  `json:"partial_size,omitempty"`
 	ModTime     string `json:"mod_time,omitempty"`
 }
 
@@ -148,10 +149,10 @@ func (s *Store) Have(img Image) bool {
 // образом.
 func (s *Store) SaveTemp(name string, src io.Reader) (string, error) {
 	if !validFileName(name) {
-		return "", fmt.Errorf("недопустимое имя файла: %q", name)
+		return "", msgs.Errorf("vmcreate.invalidFileName", name)
 	}
 	if !imageExts[strings.ToLower(filepath.Ext(name))] {
-		return "", fmt.Errorf("образ должен быть .qcow2, .img или .raw")
+		return "", msgs.Errorf("vmimage.imageMustQcow2ImgRaw")
 	}
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return "", err
@@ -171,7 +172,7 @@ func (s *Store) SaveTemp(name string, src io.Reader) (string, error) {
 	}
 	if written == 0 {
 		_ = os.Remove(path)
-		return "", fmt.Errorf("пустой файл")
+		return "", msgs.Errorf("vmimage.emptyFile")
 	}
 	return path, nil
 }
@@ -193,17 +194,17 @@ func (s *Store) RemoveTemp(path string) {
 // однажды она ушла бы в машину как целая.
 func (s *Store) Save(name string, src io.Reader) (string, int64, error) {
 	if !validFileName(name) {
-		return "", 0, fmt.Errorf("недопустимое имя файла: %q", name)
+		return "", 0, msgs.Errorf("vmcreate.invalidFileName", name)
 	}
 	if !imageExts[strings.ToLower(filepath.Ext(name))] {
-		return "", 0, fmt.Errorf("образ должен быть .qcow2, .img или .raw")
+		return "", 0, msgs.Errorf("vmimage.imageMustQcow2ImgRaw")
 	}
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
 		return "", 0, err
 	}
 	full := filepath.Join(s.dir, name)
 	if _, err := os.Stat(full); err == nil {
-		return "", 0, fmt.Errorf("образ %s уже есть — удалите старый или выберите другое имя", name)
+		return "", 0, msgs.Errorf("vmimage.imageAlreadyExistsRemoveOld", name)
 	}
 
 	part := full + partSuffix
@@ -221,7 +222,7 @@ func (s *Store) Save(name string, src io.Reader) (string, int64, error) {
 	}
 	if written == 0 {
 		_ = os.Remove(part)
-		return "", 0, fmt.Errorf("пустой файл")
+		return "", 0, msgs.Errorf("vmimage.emptyFile")
 	}
 	if err := os.Rename(part, full); err != nil {
 		return "", 0, err
@@ -232,7 +233,7 @@ func (s *Store) Save(name string, src io.Reader) (string, int64, error) {
 // DeleteCustom убирает свой образ по имени файла.
 func (s *Store) DeleteCustom(name string) error {
 	if !validFileName(name) {
-		return fmt.Errorf("недопустимое имя файла: %q", name)
+		return msgs.Errorf("vmcreate.invalidFileName", name)
 	}
 	full := filepath.Join(s.dir, name)
 	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
@@ -273,7 +274,7 @@ type Progress struct {
 // которому нельзя доверять, опаснее ещё одного прохода по диску.
 func (s *Store) Download(ctx context.Context, img Image, report func(Progress)) (string, error) {
 	if err := os.MkdirAll(s.dir, 0o755); err != nil {
-		return "", fmt.Errorf("создание каталога образов: %w", err)
+		return "", msgs.Errorf("vmimage.creatingImageDirectory", err)
 	}
 	full := s.Path(img)
 	part := full + partSuffix
@@ -322,7 +323,7 @@ func (s *Store) Download(ctx context.Context, img Image, report func(Progress)) 
 		// Битый кусок не оставляем: иначе следующая попытка «докачает»
 		// его с середины и получит ту же несходящуюся сумму.
 		_ = os.Remove(part)
-		return "", fmt.Errorf("контрольная сумма не сошлась: получено %s, ожидалось %s", sum, want)
+		return "", msgs.Errorf("vmimage.checksumMismatchGotExpected", sum, want)
 	}
 	if err := os.Rename(part, full); err != nil {
 		return "", err
@@ -346,11 +347,11 @@ func (s *Store) expectedChecksum(ctx context.Context, img Image) (string, error)
 	}
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("файл сумм: %w", err)
+		return "", msgs.Errorf("vmimage.checksumFile", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("файл сумм: код %d", resp.StatusCode)
+		return "", msgs.Errorf("vmimage.checksumFileCode", resp.StatusCode)
 	}
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
@@ -389,7 +390,7 @@ func (s *Store) fetch(ctx context.Context, img Image, part string, report func(P
 		flags |= os.O_TRUNC
 		have = 0
 	default:
-		return fmt.Errorf("скачивание: код %d", resp.StatusCode)
+		return msgs.Errorf("vmimage.downloadCode", resp.StatusCode)
 	}
 
 	f, err := os.OpenFile(part, flags, 0o644)
@@ -407,7 +408,7 @@ func (s *Store) fetch(ctx context.Context, img Image, part string, report func(P
 		return err
 	}
 	if total > 0 && written != total {
-		return fmt.Errorf("скачано %d байт из %d", written, total)
+		return msgs.Errorf("vmimage.downloadedBytes", written, total)
 	}
 	return f.Sync()
 }

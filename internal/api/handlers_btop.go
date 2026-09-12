@@ -36,7 +36,7 @@ func (s *Server) handleBtopWS(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.TerminalUser != "" {
 		cmd, err := unrestrictedCommandAsUser(env, s.cfg.TerminalUser, argv...)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeErr(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		s.runPTYSession(w, r, cmd, "btop", "btop", s.cfg.TerminalIdleTimeout)

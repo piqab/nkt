@@ -1,8 +1,9 @@
 package api
 
 import (
+	"context"
 	"encoding/hex"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -208,7 +209,7 @@ func processStarted() (time.Time, bool) {
 
 // diagnoseSandbox собирает причины, по которым выход из песочницы через
 // nsenter не работает.
-func diagnoseSandbox() SandboxDiagnosis {
+func diagnoseSandbox(ctx context.Context) SandboxDiagnosis {
 	diag := SandboxDiagnosis{
 		Sandbox: os.Getenv("INVOCATION_ID") != "",
 		DBus:    systemdRunReachable(),
@@ -236,8 +237,7 @@ func diagnoseSandbox() SandboxDiagnosis {
 
 	if status, err := os.ReadFile("/proc/self/status"); err == nil {
 		if has, found := parseCapEff(string(status)); found && !has {
-			add("no_cap_sys_admin",
-				"у процесса нет CAP_SYS_ADMIN — без неё ядро отклоняет вход в пространство имён PID 1")
+			add("no_cap_sys_admin", msgs.Tc(ctx, "api.diagNoCapSysAdmin"))
 		}
 	}
 
@@ -251,24 +251,20 @@ func diagnoseSandbox() SandboxDiagnosis {
 	d := readUnit(unit)
 	switch {
 	case !d.Found:
-		add("unit_not_found", fmt.Sprintf("файл юнита %s не найден — проверить его содержимое отсюда невозможно", unit))
+		add("unit_not_found", msgs.Tc(ctx, "api.diagUnitNotFound", unit))
 	default:
 		if !d.HasSetnsFilter {
-			add("unit_missing_setns",
-				fmt.Sprintf("в %s нет строки SystemCallFilter=setns — сам вызов setns отфильтровывается раньше, чем ядро проверит права", d.Path))
+			add("unit_missing_setns", msgs.Tc(ctx, "api.diagUnitMissingSetns", d.Path))
 		}
 		if !d.HasSysAdminCap {
-			add("unit_missing_cap",
-				fmt.Sprintf("в %s нет CAP_SYS_ADMIN в AmbientCapabilities/CapabilityBoundingSet", d.Path))
+			add("unit_missing_cap", msgs.Tc(ctx, "api.diagUnitMissingCap", d.Path))
 		}
 		if !d.AllowsMountNS {
-			add("unit_restricts_namespaces",
-				fmt.Sprintf("в %s директива RestrictNamespaces не разрешает mnt", d.Path))
+			add("unit_restricts_namespaces", msgs.Tc(ctx, "api.diagUnitRestrictsNS", d.Path))
 		}
 		if started, ok := processStarted(); ok && !d.ModTime.IsZero() && d.ModTime.After(started) {
-			add("unit_newer_than_process",
-				fmt.Sprintf("%s изменён после запуска процесса (%s против %s) — systemd применяет юнит только при перезапуске",
-					d.Path, d.ModTime.Format(time.RFC3339), started.Format(time.RFC3339)))
+			add("unit_newer_than_process", msgs.Tc(ctx, "api.diagUnitNewer",
+				d.Path, d.ModTime.Format(time.RFC3339), started.Format(time.RFC3339)))
 		}
 	}
 
@@ -302,5 +298,5 @@ func sandboxFixCommands(diag SandboxDiagnosis) []string {
 
 // handleTerminalDiagnose отвечает на вопрос «почему не открылся терминал».
 func (s *Server) handleTerminalDiagnose(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, diagnoseSandbox())
+	writeJSON(w, http.StatusOK, diagnoseSandbox(r.Context()))
 }

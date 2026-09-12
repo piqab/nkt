@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"os"
 	"os/exec"
@@ -169,7 +170,7 @@ func (s *Server) runUpdateSession(w http.ResponseWriter, r *http.Request, key st
 		newSess, err := newUpdateSession(buildCmd())
 		if err != nil {
 			s.sessionsMu.Unlock()
-			conn.Close(websocket.StatusInternalError, "не удалось запустить команду: "+err.Error())
+			conn.Close(websocket.StatusInternalError, msgs.Tc(r.Context(), "api.startCommandFailed", err))
 			return
 		}
 		s.sessions[key] = newSess
@@ -201,7 +202,7 @@ func (s *Server) runUpdateSession(w http.ResponseWriter, r *http.Request, key st
 		// The session had already finished before this connection ever
 		// attached — the replay above is the whole story, nothing more
 		// will ever arrive.
-		conn.Close(websocket.StatusNormalClosure, "сессия завершена")
+		conn.Close(websocket.StatusNormalClosure, msgs.Tc(r.Context(), "api.sessionEnded"))
 		return
 	}
 

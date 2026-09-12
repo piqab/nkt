@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -47,21 +48,21 @@ func (r RuleSpec) Validate() error {
 	switch r.Action {
 	case "allow", "deny", "reject", "limit":
 	default:
-		return fmt.Errorf("недопустимое действие: %q", r.Action)
+		return msgs.Errorf("control.invalidAction", r.Action)
 	}
 	if r.Port < 1 || r.Port > 65535 {
-		return fmt.Errorf("порт вне диапазона 1..65535: %d", r.Port)
+		return msgs.Errorf("control.portOutside165535Range", r.Port)
 	}
 	switch r.Protocol {
 	case "tcp", "udp":
 	default:
-		return fmt.Errorf("протокол должен быть tcp или udp, получено %q", r.Protocol)
+		return msgs.Errorf("control.protocolMustTcpUdpGot", r.Protocol)
 	}
 	if r.From != "" && !cidrRe.MatchString(r.From) && !ipv6Re.MatchString(r.From) {
-		return fmt.Errorf("источник должен быть IP или CIDR, получено %q", r.From)
+		return msgs.Errorf("control.sourceMustIPCIDRGot", r.From)
 	}
 	if !commentRe.MatchString(r.Comment) {
-		return fmt.Errorf("комментарий содержит недопустимые символы или слишком длинный")
+		return msgs.Errorf("control.commentContainsInvalidCharactersToo")
 	}
 	return nil
 }
@@ -99,7 +100,7 @@ func (f *FirewallManager) AddRule(ctx context.Context, user string, spec RuleSpe
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("ufw вернул код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+		return res, msgs.Errorf("control.ufwReturnedCode", res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return res, nil
 }
@@ -119,7 +120,7 @@ func (f *FirewallManager) NumberedRules(ctx context.Context) ([]NumberedRule, er
 		return nil, err
 	}
 	if !res.OK() {
-		return nil, fmt.Errorf("ufw status numbered: код %d", res.ExitCode)
+		return nil, msgs.Errorf("control.ufwStatusNumberedCode", res.ExitCode)
 	}
 	// Zero custom ufw rules is a common, entirely valid state (ufw inactive,
 	// or active with only its own default policy) — out must stay a real
@@ -165,7 +166,7 @@ func (f *FirewallManager) AddedRules(ctx context.Context) ([]AddedRule, error) {
 		return nil, err
 	}
 	if !res.OK() {
-		return nil, fmt.Errorf("ufw show added: код %d", res.ExitCode)
+		return nil, msgs.Errorf("control.ufwShowAddedCode", res.ExitCode)
 	}
 	// Same nil-vs-empty concern as NumberedRules above.
 	out := []AddedRule{}
@@ -197,7 +198,7 @@ func (f *FirewallManager) AddedRules(ctx context.Context) ([]AddedRule, error) {
 // numbers shift after every change, and deleting the wrong one can cut off SSH.
 func (f *FirewallManager) DeleteRule(ctx context.Context, user string, number int, expected string) (collect.CommandResult, error) {
 	if number < 1 {
-		return collect.CommandResult{}, fmt.Errorf("номер правила должен быть положительным")
+		return collect.CommandResult{}, msgs.Errorf("control.ruleNumberMustPositive")
 	}
 	rules, err := f.NumberedRules(ctx)
 	if err != nil {
@@ -211,12 +212,11 @@ func (f *FirewallManager) DeleteRule(ctx context.Context, user string, number in
 		}
 	}
 	if found == nil {
-		return collect.CommandResult{}, fmt.Errorf("правила с номером %d нет", number)
+		return collect.CommandResult{}, msgs.Errorf("control.thereRuleNumber", number)
 	}
 	if expected != "" && !strings.EqualFold(strings.Join(strings.Fields(found.Text), " "),
 		strings.Join(strings.Fields(expected), " ")) {
-		return collect.CommandResult{}, fmt.Errorf(
-			"правило №%d изменилось с момента загрузки страницы (сейчас: %q), удаление отменено",
+		return collect.CommandResult{}, msgs.Errorf("control.ruleHasChangedSincePage",
 			number, found.Text)
 	}
 
@@ -232,7 +232,7 @@ func (f *FirewallManager) DeleteRule(ctx context.Context, user string, number in
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("ufw вернул код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+		return res, msgs.Errorf("control.ufwReturnedCode", res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return res, nil
 }
@@ -262,7 +262,7 @@ func (f *FirewallManager) DeleteRuleBySpec(ctx context.Context, user string, spe
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("ufw вернул код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+		return res, msgs.Errorf("control.ufwReturnedCode", res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return res, nil
 }
@@ -279,7 +279,7 @@ func (f *FirewallManager) Reload(ctx context.Context, user string) (collect.Comm
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("ufw reload: код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+		return res, msgs.Errorf("control.ufwReloadCode", res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return res, nil
 }

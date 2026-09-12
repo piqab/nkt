@@ -9,6 +9,7 @@ package vmcreate
 
 import (
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"html"
 	"regexp"
 	"strings"
@@ -113,17 +114,17 @@ type Spec struct {
 func (s Spec) Validate() error {
 	switch {
 	case !nameRe.MatchString(s.Name):
-		return fmt.Errorf("имя машины: строчные латинские буквы, цифры и дефис, до 63 символов")
+		return msgs.Errorf("vmcreate.machineNameLowercaseLatinLetters")
 	case s.ImageID == "":
-		return fmt.Errorf("не выбран образ")
+		return msgs.Errorf("vmcreate.imageSelected")
 	case s.DiskGB < 1 || s.DiskGB > maxDiskGB:
-		return fmt.Errorf("размер диска должен быть от 1 до %d ГБ", maxDiskGB)
+		return msgs.Errorf("vmcreate.diskSizeMustBetween1", maxDiskGB)
 	case s.MemoryMB < 256 || s.MemoryMB > maxMemoryMB:
-		return fmt.Errorf("память должна быть от 256 МБ до %d МБ", maxMemoryMB)
+		return msgs.Errorf("vmcreate.memoryMustBetween256MB", maxMemoryMB)
 	case s.VCPUs < 1 || s.VCPUs > maxVCPUs:
-		return fmt.Errorf("ядер должно быть от 1 до %d", maxVCPUs)
+		return msgs.Errorf("vmcreate.coresMustBetween1", maxVCPUs)
 	case !userRe.MatchString(s.User):
-		return fmt.Errorf("имя пользователя внутри машины некорректно: %q", s.User)
+		return msgs.Errorf("vmcreate.userNameInsideMachineInvalid", s.User)
 	}
 	for _, key := range append([]string{s.SSHKey}, s.ExtraKeys...) {
 		key = strings.TrimSpace(key)
@@ -131,25 +132,25 @@ func (s Spec) Validate() error {
 			continue
 		}
 		if !strings.HasPrefix(key, "ssh-") && !strings.HasPrefix(key, "ecdsa-") && !strings.HasPrefix(key, "sk-") {
-			return fmt.Errorf("ключ не похож на публичный ключ SSH")
+			return msgs.Errorf("vmcreate.keyDoesLookLikeSSH")
 		}
 		if strings.ContainsAny(key, "\n\r") {
-			return fmt.Errorf("ключ должен быть одной строкой")
+			return msgs.Errorf("vmcreate.keyMustSingleLine")
 		}
 	}
 	if s.Hostname != "" && !nameRe.MatchString(s.Hostname) {
-		return fmt.Errorf("имя внутри машины некорректно: %q", s.Hostname)
+		return msgs.Errorf("vmcreate.nameInsideMachineInvalid", s.Hostname)
 	}
 	for _, p := range s.Packages {
 		if !regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`).MatchString(p) {
-			return fmt.Errorf("некорректное имя пакета %q", p)
+			return msgs.Errorf("profile.invalidPackageName", p)
 		}
 	}
 	if s.Bridge != "" && !regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`).MatchString(s.Bridge) {
-		return fmt.Errorf("некорректное имя моста %q", s.Bridge)
+		return msgs.Errorf("vmcreate.invalidBridgeName", s.Bridge)
 	}
 	if s.Network != "" && !regexp.MustCompile(`^[A-Za-z0-9._-]{1,32}$`).MatchString(s.Network) {
-		return fmt.Errorf("некорректное имя сети %q", s.Network)
+		return msgs.Errorf("vmcreate.invalidNetworkName", s.Network)
 	}
 	return nil
 }

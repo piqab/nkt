@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"time"
 
 	"github.com/piqab/nkt/internal/store"
@@ -33,7 +34,7 @@ func (m *Manager) recordEvent(ctx context.Context, host store.Host, kind, severi
 		return
 	}
 	_, err := m.db.AddHostEvent(ctx, store.HostEvent{
-		HostID: host.ID, HostName: host.Name, HostAddr: hostAddrLabel(host),
+		HostID: host.ID, HostName: host.Name, HostAddr: hostAddrLabel(ctx, host),
 		Kind: kind, Severity: severity, Detail: detail,
 	})
 	if err != nil {
@@ -62,9 +63,9 @@ func (m *Manager) collapseOutage(ctx context.Context, host store.Host, limit int
 		return false
 	}
 	minutes := int(down.Round(time.Minute) / time.Minute)
-	detail := fmt.Sprintf("был недоступен %d мин", minutes)
+	detail := msgs.Tc(ctx, "hub.unreachableMin", minutes)
 	if minutes == 0 {
-		detail = "был недоступен меньше минуты"
+		detail = msgs.Tc(ctx, "hub.unreachableUnderMinute")
 	}
 	return m.db.RewriteHostEvent(ctx, last.ID, store.EventRecovered, detail) == nil
 }
@@ -72,9 +73,9 @@ func (m *Manager) collapseOutage(ctx context.Context, host store.Host, limit int
 // hostAddrLabel — адрес в том виде, в каком его узнают: пользователь и
 // порт вместе с адресом. У машины, ещё не получившей адрес, — понятная
 // замена вместо заглушки 0.0.0.0.
-func hostAddrLabel(host store.Host) string {
+func hostAddrLabel(ctx context.Context, host store.Host) string {
 	if isPlaceholderAddr(host.Addr) {
-		return "адрес не определён"
+		return msgs.Tc(ctx, "hub.addrUndetected")
 	}
 	if host.SSHUser == "" {
 		return fmt.Sprintf("%s:%d", host.Addr, host.SSHPort)
@@ -105,7 +106,7 @@ func (m *Manager) noteReachability(ctx context.Context, hostID int64, reachable 
 		return
 	}
 	if reachable {
-		m.recordEvent(ctx, host, store.EventRecovered, "", "хост снова отвечает на опрос")
+		m.recordEvent(ctx, host, store.EventRecovered, "", msgs.Tc(ctx, "hub.hostRespondsAgain"))
 		return
 	}
 	m.recordEvent(ctx, host, store.EventUnreachable, "", reason)
@@ -135,10 +136,10 @@ func (m *Manager) noteFindings(ctx context.Context, hostID int64, findings map[s
 	switch {
 	case now > was:
 		m.recordEvent(ctx, host, store.EventProblems, "critical+high",
-			fmt.Sprintf("серьёзных находок стало %d (было %d)", now, was))
+			msgs.Tc(ctx, "hub.seriousFindingsNow", now, was))
 	case now == 0:
 		m.recordEvent(ctx, host, store.EventResolved, "critical+high",
-			fmt.Sprintf("серьёзных находок не осталось (было %d)", was))
+			msgs.Tc(ctx, "hub.seriousFindingsLeft", was))
 	}
 }
 
@@ -265,7 +266,7 @@ func (m *Manager) EventSettings(ctx context.Context) EventSettings {
 // SaveEventSettings записывает настройки.
 func (m *Manager) SaveEventSettings(ctx context.Context, s EventSettings) error {
 	if s.CollapseMinutes < 0 || s.CollapseMinutes > 1440 {
-		return fmt.Errorf("сворачивание — от 0 до 1440 минут")
+		return msgs.Errorf("hub.collapse01440Minutes")
 	}
 	raw, err := json.Marshal(s)
 	if err != nil {

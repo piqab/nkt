@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"time"
 
@@ -15,9 +16,9 @@ const SessionCookie = "nkt_session"
 
 // Errors returned by Login.
 var (
-	ErrInvalidCredentials = errors.New("неверный логин или пароль")
-	ErrTooManyAttempts    = errors.New("слишком много неудачных попыток входа, попробуйте позже")
-	ErrMutationsDisabled  = errors.New("изменения запрещены настройкой NKT_ALLOW_MUTATIONS=false")
+	ErrInvalidCredentials = msgs.Errorf("auth.invalidUsernamePassword")
+	ErrTooManyAttempts    = msgs.Errorf("auth.tooManyFailedLoginAttempts")
+	ErrMutationsDisabled  = msgs.Errorf("auth.changesAreDisabledNKTALLOW")
 )
 
 type ctxKey int
@@ -174,12 +175,12 @@ func (s *Service) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := TokenFromRequest(r)
 		if token == "" {
-			writeAuthError(w, http.StatusUnauthorized, "Требуется вход в систему")
+			writeAuthError(w, http.StatusUnauthorized, msgs.T(msgs.LangFromRequest(r), "auth.loginRequired"))
 			return
 		}
 		user, err := s.db.ResolveSession(r.Context(), token)
 		if err != nil {
-			writeAuthError(w, http.StatusUnauthorized, "Сессия истекла или недействительна")
+			writeAuthError(w, http.StatusUnauthorized, msgs.T(msgs.LangFromRequest(r), "auth.sessionExpired"))
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(WithUser(r.Context(), user)))
@@ -191,11 +192,11 @@ func (s *Service) RequireAdmin(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, ok := UserFromContext(r.Context())
 		if !ok {
-			writeAuthError(w, http.StatusUnauthorized, "Требуется вход в систему")
+			writeAuthError(w, http.StatusUnauthorized, msgs.T(msgs.LangFromRequest(r), "auth.loginRequired"))
 			return
 		}
 		if !user.IsAdmin() {
-			writeAuthError(w, http.StatusForbidden, "Действие доступно только роли admin")
+			writeAuthError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "auth.adminOnly"))
 			return
 		}
 		if !s.cfg.AllowMutations {
