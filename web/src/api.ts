@@ -79,6 +79,14 @@ export function writeSelectedHost(host: SelectedHost | null): void {
   else localStorage.removeItem(SELECTED_HOST_KEY)
 }
 
+/** Путь к API с областью выбранного хоста — для того, что уходит мимо
+ * api(): загрузка файла через XHR с прогрессом, ссылка на скачивание. */
+export function apiURL(path: string): string {
+  const scoped = hostScope.id !== null && !path.startsWith('/auth/')
+  const prefix = scoped ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
+  return `/api${prefix}${path}`
+}
+
 export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   // Authentication always targets the hub itself — the operator only ever
   // logs in once, never per host (see internal/hub's design notes).

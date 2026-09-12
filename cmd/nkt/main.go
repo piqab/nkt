@@ -23,6 +23,7 @@ import (
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/files"
 	"github.com/piqab/nkt/internal/hub"
 	"github.com/piqab/nkt/internal/inventory"
 	"github.com/piqab/nkt/internal/jobs"
@@ -232,6 +233,8 @@ type runtime struct {
 	images     *control.ImageManager
 	jobs       *jobs.Manager
 	vmimages   *vmimage.Store
+	files      *files.Manager
+	cloneRun   *files.CloneRunner
 }
 
 func newRuntime() (*runtime, error) {
@@ -255,6 +258,8 @@ func newRuntime() (*runtime, error) {
 	// подключения исполнителей в нём ничего не происходит.
 	jobManager := jobs.New(db, slog.Default())
 
+	filesManager := files.NewManager(cfg.FilesRoots, collector, filesRunner(cfg), filesRunnerEnv(cfg),
+		filepath.Join(cfg.DataDir, "files"))
 	return &runtime{
 		cfg:       cfg,
 		db:        db,
@@ -280,6 +285,8 @@ func newRuntime() (*runtime, error) {
 		images:     control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
 		jobs:       jobManager,
 		vmimages:   vmimage.NewStore(filepath.Join(cfg.DataDir, "vm-images")),
+		files:      filesManager,
+		cloneRun:   files.NewCloneRunner(filesManager),
 	}, nil
 }
 
@@ -410,12 +417,13 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
 		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
 		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages, Files: r.files, CloneRunner: r.cloneRun,
 		UI: ui, Log: log, Version: version,
 	})
 
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
 		r.sysconfig, r.collector, r.vmimages, r.scanner)
+	r.jobs.Register(files.KindClone, r.cloneRun)
 	// Задания, оставшиеся идущими от прошлого запуска, разбираются до
 	// приёма запросов: продолжаемые встают в очередь заново, остальные
 	// честно помечаются прерванными. Иначе список показывал бы вечно
@@ -581,6 +589,8 @@ type hubRuntime struct {
 	images     *control.ImageManager
 	jobs       *jobs.Manager
 	vmimages   *vmimage.Store
+	files      *files.Manager
+	cloneRun   *files.CloneRunner
 }
 
 func newHubRuntime() (*hubRuntime, error) {
@@ -610,9 +620,13 @@ func newHubRuntime() (*hubRuntime, error) {
 	scanner := inventory.New(cfg, collector, db)
 	services := control.NewServiceManager(cfg, collector, db).WithEscape(privilegedRunner(cfg))
 
+	filesManager := files.NewManager(cfg.FilesRoots, collector, filesRunner(cfg), filesRunnerEnv(cfg),
+		filepath.Join(cfg.DataDir, "files"))
 	return &hubRuntime{
 		cfg: cfg, db: db, jobs: jobs.New(db, slog.Default()),
 		vmimages:  vmimage.NewStore(filepath.Join(cfg.DataDir, "vm-images")),
+		files:     filesManager,
+		cloneRun:  files.NewCloneRunner(filesManager),
 		collector: collector,
 		scanner:   scanner,
 		services:  services,
@@ -706,6 +720,24 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 	m.Register(vmcreate.KindTools, vmcreate.NewToolsRunner(api.RunTooling))
 }
 
+// filesRunner — команды проводника (mkdir, mv, rm, tar, install) вне
+// песочницы; filesRunnerEnv — то же с окружением для git.
+func filesRunner(cfg *config.Config) files.Runner {
+	if cfg.Mode != config.ModeLocal {
+		return nil
+	}
+	return api.RunUnrestricted
+}
+
+func filesRunnerEnv(cfg *config.Config) files.RunnerEnv {
+	if cfg.Mode != config.ModeLocal {
+		return nil
+	}
+	return func(ctx context.Context, env map[string]string, argv ...string) (collect.CommandResult, error) {
+		return api.RunUnrestrictedEnv(ctx, env, nil, argv...)
+	}
+}
+
 // privilegedRunner отдаёт способ выполнять системные команды вне
 // песочницы юнита — или nil там, где этого делать нельзя.
 func privilegedRunner(cfg *config.Config) control.PrivilegedRunner {
@@ -775,7 +807,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner,
 		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
 		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages, Files: r.files, CloneRunner: r.cloneRun,
 		Log: log, Version: version,
 	})
 
@@ -810,6 +842,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// «localhost» в списке хостов.
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
 		r.sysconfig, r.collector, r.vmimages, r.scanner)
+	r.jobs.Register(files.KindClone, r.cloneRun)
 	// То же, что в runServer: незавершённые задания разбираются до
 	// приёма запросов.
 	if err := r.jobs.Recover(ctx); err != nil {
