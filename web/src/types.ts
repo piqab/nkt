@@ -21,6 +21,8 @@ export interface HubVersionInfo {
   latest?: string
   update_available: boolean
   updatable: boolean
+  /** Релиз сразу перед текущим — цель «откатить». */
+  previous?: string
   checked_at?: string
   check_error?: string
   /** Описание последнего релиза с GitHub (WHATSNEW.md через release.yml) —

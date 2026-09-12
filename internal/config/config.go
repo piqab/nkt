@@ -221,6 +221,9 @@ type Config struct {
 	// binary (no `git clone`) rather than built from a checkout. Only ever
 	// needs changing on a fork with its own Releases page.
 	HubReleaseRepo string
+	// HubGitHubAPI is the GitHub REST API base the version check talks to
+	// — only ever changed for a GitHub Enterprise fork or a test stand.
+	HubGitHubAPI string
 	// HubFindingsPollInterval is how often the hub polls every online
 	// managed host's own /api/overview in the background to cache its
 	// findings counts and reachability (see Manager.pollOverviews) — this
@@ -380,6 +383,7 @@ func Load() (*Config, error) {
 		HubSourceRoot:            envStr("NKT_HUB_SOURCE_ROOT", wd),
 		HubGoBin:                 envStr("NKT_HUB_GO_BIN", "go"),
 		HubReleaseRepo:           envStr("NKT_HUB_RELEASE_REPO", "piqab/nkt"),
+		HubGitHubAPI:             envStr("NKT_HUB_GITHUB_API", "https://api.github.com"),
 		HubFindingsPollInterval:  envDur("NKT_HUB_FINDINGS_POLL_INTERVAL", 60*time.Second),
 		HubUpdateCheckInterval:   envDur("NKT_HUB_UPDATE_CHECK_INTERVAL", 6*time.Hour),
 		HubVulnDBRefreshInterval: envDur("NKT_HUB_VULNDB_REFRESH_INTERVAL", 12*time.Hour),

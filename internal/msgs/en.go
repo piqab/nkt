@@ -1133,4 +1133,5 @@ var enCatalog = map[string]string{
 	"vmnet.subnetOverlaps":                          "subnet %s overlaps with %s (%s)",
 	"vmnet.libvirtNetwork":                          "libvirt network “%s”",
 	"api.fileBrowserUnavailable":                    "the file browser is unavailable in this mode",
+	"hub.noPreviousRelease": "no release older than %s found — nothing to roll back to",
 }

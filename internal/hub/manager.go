@@ -244,6 +244,7 @@ type Manager struct {
 	// reads — see versioncheck.go.
 	versionMu        sync.Mutex
 	latestVersion    string
+	previousVersion  string
 	latestNotes      string
 	versionCheckedAt time.Time
 	versionCheckErr  string

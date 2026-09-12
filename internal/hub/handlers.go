@@ -167,6 +167,9 @@ func versionInfoJSON(v VersionInfo) map[string]any {
 		"update_available": v.UpdateAvailable,
 		"updatable":        v.Updatable,
 	}
+	if v.Previous != "" {
+		out["previous"] = v.Previous
+	}
 	if !v.CheckedAt.IsZero() {
 		out["checked_at"] = v.CheckedAt
 	}
@@ -186,6 +189,16 @@ func versionInfoJSON(v VersionInfo) map[string]any {
 // before triggering this.
 func (s *Server) handleHubUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := s.hub.ApplyUpdate(r.Context()); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleHubRollback installs the release right below the running one —
+// admin-only, same shape as handleHubUpdate.
+func (s *Server) handleHubRollback(w http.ResponseWriter, r *http.Request) {
+	if err := s.hub.Rollback(r.Context()); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}

@@ -1132,4 +1132,5 @@ var ruCatalog = map[string]string{
 	"vmnet.subnetOverlaps":                          "подсеть %s пересекается с %s (%s)",
 	"vmnet.libvirtNetwork":                          "сетью libvirt «%s»",
 	"api.fileBrowserUnavailable":                    "проводник недоступен в этом режиме",
+	"hub.noPreviousRelease": "релиза старше %s не найдено — откатывать не на что",
 }
