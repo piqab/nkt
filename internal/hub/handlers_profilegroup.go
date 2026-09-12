@@ -344,8 +344,10 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 		Name      string `json:"name"`
 		PublicKey string `json:"public_key,omitempty"`
 	}
-	var done []imported
-	var errs []string
+	// Пустые срезы, а не nil: nil уезжает в JSON как null, и «errors.length»
+	// в браузере роняло окно ровно после удачного импорта.
+	done := []imported{}
+	errs := []string{}
 	for _, name := range req.Names {
 		vm, ok := found[name]
 		if !ok {

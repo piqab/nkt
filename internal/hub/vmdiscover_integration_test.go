@@ -79,6 +79,17 @@ func TestVMDiscoverAndImport(t *testing.T) {
 		t.Errorf("запись = %+v, ожидался родитель %d и адрес-заглушка (машина выключена)", imported, hostID)
 	}
 
+	// Ничего не подошло — всё равно массивы, а не null: «errors.length» в
+	// браузере ронял окно ровно после удачного импорта.
+	rec = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodPost, "/hub/hosts/1/vm-import", strings.NewReader(`{"names":["db-vm"]}`)).
+		WithContext(auth.WithUser(ctx, store.User{Username: "test"}))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(rec, req)
+	if strings.Contains(rec.Body.String(), "null") || !strings.Contains(rec.Body.String(), `"imported":[]`) {
+		t.Errorf("повторный импорт: %s", rec.Body.String())
+	}
+
 	// Повторный поиск её уже не показывает.
 	rec = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodGet, "/hub/hosts/1/vm-discover", nil).WithContext(ctx)

@@ -14,7 +14,7 @@ import {
 import { Trans, useTranslation } from 'react-i18next'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
 import type { HostEvent, HubHost, Job, RenewEvent, RenewJobStatus, Severity } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, formatRelative, severityLabel } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, Spinner, formatRelative, severityLabel } from '../components/ui'
 import { notificationsEnabled, notifyNewEvents, requestNotificationPermission, setNotificationsEnabled } from '../notifications'
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 import i18n from '../i18n'
@@ -990,7 +990,10 @@ export default function Hosts({
     const busy = busyVMs.has(h.id) || h.status === 'installing'
     // Машина с выключенным доменом: внутри неё ничего не ответит, и все
     // действия по SSH бессмысленны — только запустить саму машину.
-    const vmOff = !!h.parent_id && !!h.vm_state && h.vm_state !== 'running'
+    // Состояние домена — из опроса хоста, ему может быть до минуты; если
+    // сам хаб только что достучался до nkt внутри машины, она точно
+    // работает, что бы ни говорил кэш.
+    const vmOff = !!h.parent_id && !!h.vm_state && h.vm_state !== 'running' && h.reachable !== true
     if (vmOff) {
       return (
         <div className="row row-nowrap">
@@ -1358,11 +1361,7 @@ export default function Hosts({
         <DiscoverVMsModal
           host={discoverOn}
           onClose={() => setDiscoverOn(null)}
-          onImported={(text) => {
-            setDiscoverOn(null)
-            setNotice({ kind: 'info', text })
-            reload()
-          }}
+          onImported={() => reload()}
         />
       )}
 
@@ -2683,7 +2682,7 @@ interface DiscoveredVM {
  * чужой машины положить сам не может: либо пароль, либо ключ хаба, который
  * кладут руками (он в строке машины — «публичный ключ»).
  */
-function DiscoverVMsModal({ host, onClose, onImported }: { host: HubHost; onClose: () => void; onImported: (text: string) => void }) {
+function DiscoverVMsModal({ host, onClose, onImported }: { host: HubHost; onClose: () => void; onImported: () => void }) {
   const { t } = useTranslation()
   const found = useApi<{ vms: DiscoveredVM[] }>(`/hub/hosts/${host.id}/vm-discover`)
   const [picked, setPicked] = useState<string[]>([])
@@ -2694,18 +2693,27 @@ function DiscoverVMsModal({ host, onClose, onImported }: { host: HubHost; onClos
   const [error, setError] = useState<string | null>(null)
   const vms = found.data?.vms ?? []
 
+  const [done, setDone] = useState<string | null>(null)
+
   async function importPicked() {
     setBusy(true)
     setError(null)
     try {
-      const res = await api<{ imported: { name: string; public_key?: string }[]; errors: string[] }>(
+      const res = await api<{ imported?: { name: string; public_key?: string }[] | null; errors?: string[] | null }>(
         `/hub/hosts/${host.id}/vm-import`,
         { method: 'POST', body: { names: picked, ssh_user: sshUser, ssh_port: sshPort, password } },
       )
-      const parts = [t('hosts.discoverImported', { count: res.imported.length })]
-      if (res.errors.length) parts.push(res.errors.join('; '))
-      if (!password && res.imported.length) parts.push(t('hosts.discoverKeyHint'))
-      onImported(parts.join(' '))
+      const imported = res.imported ?? []
+      const errors = res.errors ?? []
+      const parts = [t('hosts.discoverImported', { count: imported.length })]
+      if (errors.length) parts.push(errors.join('; '))
+      if (!password && imported.length) parts.push(t('hosts.discoverKeyHint'))
+      // Окно остаётся: добавленные уходят из списка (повторный поиск их
+      // уже не показывает), остальное можно добавить следующим заходом.
+      setDone(parts.join(' '))
+      setPicked([])
+      await found.reload()
+      onImported()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -2721,8 +2729,12 @@ function DiscoverVMsModal({ host, onClose, onImported }: { host: HubHost; onClos
         </p>
         <ErrorNote error={found.error} />
         {error && <Banner kind="error">{error}</Banner>}
+        {done && <Banner kind="info" onClose={() => setDone(null)}>{done}</Banner>}
         {found.loading && !found.data ? (
-          <Loading what={t('hosts.discoverTitle', { name: host.name })} />
+          <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+            <Spinner />
+            <span className="small muted">{t('hosts.discoverSearching', { name: host.name })}</span>
+          </div>
         ) : vms.length === 0 ? (
           <Banner kind="info">{t('hosts.discoverNone')}</Banner>
         ) : (
