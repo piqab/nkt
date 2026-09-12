@@ -65,7 +65,6 @@ type githubRelease struct {
 	Prerelease bool   `json:"prerelease"`
 }
 
-
 // pickReleases picks, out of a release list, the newest published version
 // and the one right below current — what "обновить" and "откатить" would
 // install. Drafts and pre-releases never count.
