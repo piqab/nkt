@@ -17,6 +17,7 @@ import (
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/files"
 	"github.com/piqab/nkt/internal/inventory"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
@@ -131,6 +132,23 @@ func (s *Server) Handler() http.Handler {
 				for _, p := range hubWSPaths {
 					r.Get("/hosts/{id}"+p, s.proxyHost)
 				}
+			})
+		})
+
+		// Передача файлов (проводник «Диски → Файлы») — тоже мимо
+		// двухминутного потолка: у неё свой, длиннее, и сроки соединения
+		// продлеваются на то же время, иначе http.Server оборвёт чтение
+		// тела через 30 секунд.
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(files.TransferTimeout))
+			r.Use(extendTransferDeadlines)
+			r.Use(s.auth.RequireAuth)
+			r.Get("/hosts/local/files/download", s.proxyLocal)
+			r.Group(func(r chi.Router) {
+				r.Use(s.auth.RequireAdmin)
+				r.Put("/hosts/local/files/upload", s.proxyLocal)
+				r.Get("/hosts/{id}/files/download", s.proxyHost)
+				r.Put("/hosts/{id}/files/upload", s.proxyHost)
 			})
 		})
 
@@ -299,6 +317,18 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "same-origin")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// extendTransferDeadlines продлевает сроки чтения и записи соединения на
+// время передачи файла — см. files.TransferTimeout.
+func extendTransferDeadlines(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rc := http.NewResponseController(w)
+		deadline := time.Now().Add(files.TransferTimeout)
+		_ = rc.SetReadDeadline(deadline)
+		_ = rc.SetWriteDeadline(deadline)
 		next.ServeHTTP(w, r)
 	})
 }
