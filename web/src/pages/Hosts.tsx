@@ -7,6 +7,7 @@ import {
   InfoCircleFilled,
   MinusCircleOutlined,
   QuestionCircleOutlined,
+  SearchOutlined,
   SyncOutlined,
   WarningFilled,
 } from '@ant-design/icons'
@@ -372,6 +373,7 @@ export default function Hosts({
   const profiles = useApi<{ profiles: { id: number; name: string }[] }>('/hosts/local/profiles', 120_000)
   const [applyTo, setApplyTo] = useState<{ group: string; hosts: number } | null>(null)
   const [provisionOn, setProvisionOn] = useState<HubHost | null>(null)
+  const [discoverOn, setDiscoverOn] = useState<HubHost | null>(null)
   // Раскрытые списки машин — по идентификатору хоста. По умолчанию
   // свёрнуто: у хоста с десятком машин список иначе оттеснил бы сами
   // хосты.
@@ -1062,7 +1064,10 @@ export default function Hosts({
         {/* Машину создаём только на хосте, где уже стоит nkt: команду
             создания выполняет он сам, а хаб лишь просит и ждёт. */}
         {h.status === 'online' && !h.parent_id && (
-          <RowAction action="create" label={t('hosts.newVM')} disabled={busy} onClick={() => setProvisionOn(h)} />
+          <>
+            <RowAction action="create" label={t('hosts.newVM')} disabled={busy} onClick={() => setProvisionOn(h)} />
+            <RowAction icon={<SearchOutlined />} label={t('hosts.discoverVMs')} disabled={busy} onClick={() => setDiscoverOn(h)} />
+          </>
         )}
         <RowAction action="edit" label={t('hosts.edit')} disabled={busy} onClick={() => setEditingHost(h)} />
         {h.ssh_auth_kind === 'key' && (
@@ -1348,6 +1353,18 @@ export default function Hosts({
           </Tooltip>
         </div>
       </div>
+
+      {discoverOn && (
+        <DiscoverVMsModal
+          host={discoverOn}
+          onClose={() => setDiscoverOn(null)}
+          onImported={(text) => {
+            setDiscoverOn(null)
+            setNotice({ kind: 'info', text })
+            reload()
+          }}
+        />
+      )}
 
       {provisionOn && (
         <ProvisionVMModal
@@ -2651,4 +2668,106 @@ function ProvisionVMModal({
  * пока она не получит настоящий у DHCP. */
 function isAddrUnknown(h: HubHost): boolean {
   return h.id !== LOCAL_HOST_ID && (!h.addr || h.addr === '0.0.0.0')
+}
+
+interface DiscoveredVM {
+  name: string
+  state: string
+  address?: string
+}
+
+/**
+ * Машины, которые уже есть на хосте, но не в списке хаба: домены libvirt,
+ * созданные не через nkt. Хаб видит их тем же вызовом, что и состояние,
+ * и заводит записями с родителем — как созданные им, только ключ внутрь
+ * чужой машины положить сам не может: либо пароль, либо ключ хаба, который
+ * кладут руками (он в строке машины — «публичный ключ»).
+ */
+function DiscoverVMsModal({ host, onClose, onImported }: { host: HubHost; onClose: () => void; onImported: (text: string) => void }) {
+  const { t } = useTranslation()
+  const found = useApi<{ vms: DiscoveredVM[] }>(`/hub/hosts/${host.id}/vm-discover`)
+  const [picked, setPicked] = useState<string[]>([])
+  const [sshUser, setSSHUser] = useState('root')
+  const [sshPort, setSSHPort] = useState(22)
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const vms = found.data?.vms ?? []
+
+  async function importPicked() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ imported: { name: string; public_key?: string }[]; errors: string[] }>(
+        `/hub/hosts/${host.id}/vm-import`,
+        { method: 'POST', body: { names: picked, ssh_user: sshUser, ssh_port: sshPort, password } },
+      )
+      const parts = [t('hosts.discoverImported', { count: res.imported.length })]
+      if (res.errors.length) parts.push(res.errors.join('; '))
+      if (!password && res.imported.length) parts.push(t('hosts.discoverKeyHint'))
+      onImported(parts.join(' '))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title={t('hosts.discoverTitle', { name: host.name })} onClose={onClose} width={680}>
+      <div className="col" style={{ gap: '0.6rem' }}>
+        <p className="small muted" style={{ margin: 0 }}>
+          {t('hosts.discoverHint')}
+        </p>
+        <ErrorNote error={found.error} />
+        {error && <Banner kind="error">{error}</Banner>}
+        {found.loading && !found.data ? (
+          <Loading what={t('hosts.discoverTitle', { name: host.name })} />
+        ) : vms.length === 0 ? (
+          <Banner kind="info">{t('hosts.discoverNone')}</Banner>
+        ) : (
+          <div className="col" style={{ gap: '0.3rem' }}>
+            {vms.map((vm) => (
+              <label key={vm.name} style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem' }}>
+                <Checkbox
+                  checked={picked.includes(vm.name)}
+                  onChange={(e) => setPicked(e.target.checked ? [...picked, vm.name] : picked.filter((n) => n !== vm.name))}
+                />
+                <strong>{vm.name}</strong>
+                <Tag color={vm.state === 'running' ? 'success' : 'default'}>
+                  {vm.state === 'running' ? t('hosts.vmRunning') : t('hosts.vmOff', { state: vm.state })}
+                </Tag>
+                <span className="small muted mono">{vm.address || t('hosts.addrUnknown')}</span>
+              </label>
+            ))}
+          </div>
+        )}
+        {vms.length > 0 && (
+          <>
+            <div className="filters">
+              <label>
+                {t('hosts.sshUser')}
+                <Input value={sshUser} onChange={(e) => setSSHUser(e.target.value)} style={{ width: '9rem' }} />
+              </label>
+              <label>
+                {t('hosts.sshPort')}
+                <InputNumber min={1} max={65535} value={sshPort} onChange={(v) => setSSHPort(v ?? 22)} />
+              </label>
+              <label style={{ flex: 1, minWidth: '12rem' }}>
+                {t('hosts.discoverPassword')}
+                <Input.Password value={password} onChange={(e) => setPassword(e.target.value)} />
+              </label>
+            </div>
+            <span className="small muted">{t('hosts.discoverAuthHint')}</span>
+            <div className="row" style={{ gap: '0.5rem' }}>
+              <Button type="primary" loading={busy} disabled={picked.length === 0} onClick={() => void importPicked()}>
+                {t('hosts.discoverImport', { count: picked.length })}
+              </Button>
+              <Button onClick={onClose}>{t('common.cancel')}</Button>
+            </div>
+          </>
+        )}
+      </div>
+    </Modal>
+  )
 }

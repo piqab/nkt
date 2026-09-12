@@ -628,7 +628,16 @@
       "destroy": "Power off “{{name}}” forcibly? This is like pulling the plug: unsaved data inside is lost."
     },
     "vmRunning": "machine running",
-    "vmOff": "machine: {{state}}"
+    "vmOff": "machine: {{state}}",
+    "discoverVMs": "find machines on the host",
+    "discoverTitle": "Machines on host {{name}}",
+    "discoverHint": "libvirt domains not yet in the hub's list. Selected ones are registered as this host's machines; a powered-off one gets its address after it starts.",
+    "discoverNone": "Every machine on this host is already listed.",
+    "discoverPassword": "SSH password (optional)",
+    "discoverAuthHint": "With a password the hub can log in and install nkt right away. Without one a hub key is generated — put it into the machine by hand; it is shown in the machine row (“public key”).",
+    "discoverImport": "Add selected ({{count}})",
+    "discoverImported": "Machines added: {{count}}.",
+    "discoverKeyHint": "The hub key is not in the machines yet — open “public key” in the machine row and add it to authorized_keys."
   },
   "events": {
     "title": "Alerts",
