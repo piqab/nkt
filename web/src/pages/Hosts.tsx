@@ -1009,15 +1009,6 @@ export default function Hosts({
         {h.ssh_auth_kind === 'key' && (
           <RowAction action="key" label={t('hosts.publicKey')} disabled={busy} onClick={() => showPubKey(h)} />
         )}
-        {h.sudo_status === 'nopasswd' && (
-          <RowAction
-            action="disable"
-            label={t('hosts.removeNopasswd')}
-            danger
-            disabled={busy}
-            onClick={() => removeSudoAccess(h)}
-          />
-        )}
         <RowAction
           action="delete"
           label={t('hosts.delete')}
@@ -1152,11 +1143,24 @@ export default function Hosts({
     {
       title: t('hosts.colSudo'),
       key: 'sudo',
+      // «Снять NOPASSWD» — здесь, рядом с галочкой, а не среди общих
+      // действий: кнопка относится ровно к тому, что показывает колонка.
       render: (_, h) =>
         h.ssh_user === 'root' || h.id === LOCAL_HOST_ID ? (
           <span className="small muted">—</span>
         ) : (
-          <SudoBadge status={h.sudo_status} />
+          <span className="row row-nowrap" style={{ gap: '0.15rem', alignItems: 'center' }}>
+            <SudoBadge status={h.sudo_status} />
+            {h.sudo_status === 'nopasswd' && (
+              <RowAction
+                action="disable"
+                label={t('hosts.removeNopasswd')}
+                danger
+                disabled={h.status === 'installing'}
+                onClick={() => removeSudoAccess(h)}
+              />
+            )}
+          </span>
         ),
     },
     {
