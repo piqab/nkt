@@ -10,6 +10,7 @@ import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { ProbeLink } from '../components/PortProbe'
 
 interface FirewallResponse {
   managers: FirewallManagerState[]
@@ -539,7 +540,17 @@ export default function Firewall({ me }: { me: Me }) {
   const listenerColumns: TableColumnsType<Listener> = [
     { title: t('fw.colProtocol'), key: 'protocol', render: (_, l) => <span className="small mono">{l.protocol}</span> },
     { title: t('fw.colAddress'), key: 'address', render: (_, l) => <span className="small mono">{l.address}</span> },
-    { title: t('fw.colPort'), key: 'port', align: 'right', render: (_, l) => <span className="num small">{l.port}</span> },
+    {
+      title: t('fw.colPort'),
+      key: 'port',
+      align: 'right',
+      render: (_, l) => (
+        <span className="num small nowrap">
+          {l.port}
+          <ProbeLink address={l.address} port={l.port} protocol={l.protocol} />
+        </span>
+      ),
+    },
     {
       title: t('fw.colProcess'),
       key: 'process',
