@@ -807,3 +807,24 @@ pre.diff .hunk { color: var(--text-muted); }
 span.vm-toggle {
   cursor: default;
 }
+
+/* Зона перетаскивания проводника: подсветка появляется только когда над
+ * таблицей что-то тащат, иначе рамка ничего не значит. */
+.file-drop {
+  position: relative;
+}
+.file-drop-active {
+  outline: 2px dashed var(--accent, #1677ff);
+  outline-offset: -2px;
+}
+.file-drop-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--accent, #1677ff) 8%, transparent);
+  font-weight: 600;
+  pointer-events: none;
+}

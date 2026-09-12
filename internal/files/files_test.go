@@ -61,7 +61,24 @@ func TestUpload(t *testing.T) {
 		t.Errorf("перенос ушёл как %v", last)
 	}
 	if _, err := m.Upload(context.Background(), root, "../evil", strings.NewReader("x")); err == nil {
-		t.Error("имя с «/» принято")
+		t.Error("имя с «..» принято")
+	}
+	// Относительный путь — загрузка папки: родитель создаётся по дороге.
+	target, err = m.Upload(context.Background(), root+"/www", "proj/src/app.py", strings.NewReader("x"))
+	if err != nil {
+		t.Fatalf("Upload с путём: %v", err)
+	}
+	if target != root+"/www/proj/src/app.py" {
+		t.Errorf("target = %q", target)
+	}
+	mk := (*calls)[len(*calls)-2]
+	if mk[0] != "mkdir" || mk[len(mk)-1] != root+"/www/proj/src" {
+		t.Errorf("родитель не создан: %v", mk)
+	}
+	for _, bad := range []string{"a/../b", "/etc/x", "a//b", "a/./b"} {
+		if _, err := m.Upload(context.Background(), root, bad, strings.NewReader("x")); err == nil {
+			t.Errorf("путь %q принят", bad)
+		}
 	}
 }
 

@@ -198,6 +198,11 @@ func (m *Manager) Delete(ctx context.Context, p string) error {
 
 // Upload принимает файл: сначала во временный файл каталога данных (туда
 // писать можно изнутри юнита), потом переносом на место.
+//
+// name — имя или относительный путь (src/app.py): так грузится целая
+// папка, файл за файлом, и промежуточные каталоги создаются по дороге.
+// Путь проверяется целиком: «..» и абсолютный — отказ, итог обязан
+// остаться внутри корня.
 func (m *Manager) Upload(ctx context.Context, dir, name string, r io.Reader) (string, error) {
 	if err := m.mutable(); err != nil {
 		return "", err
@@ -206,10 +211,11 @@ func (m *Manager) Upload(ctx context.Context, dir, name string, r io.Reader) (st
 	if err != nil {
 		return "", err
 	}
-	if name == "" || name == "." || name == ".." || strings.ContainsAny(name, "/\x00") {
-		return "", fmt.Errorf("некорректное имя файла: %q", name)
+	target, err := m.uploadTarget(dir, name)
+	if err != nil {
+		return "", err
 	}
-	target := gopath.Join(dir, name)
+	dir = gopath.Dir(target)
 	if err := os.MkdirAll(m.tmpDir, 0o755); err != nil {
 		return "", err
 	}
@@ -236,6 +242,25 @@ func (m *Manager) Upload(ctx context.Context, dir, name string, r io.Reader) (st
 	// install, а не mv: временный файл лежит на другой файловой системе
 	// или с правами юнита — копия с нормальными правами надёжнее.
 	if err := m.exec(ctx, "install", "-m", "0644", "--", tmpPath, target); err != nil {
+		return "", err
+	}
+	return target, nil
+}
+
+// uploadTarget — куда положить загруженный файл по имени или
+// относительному пути.
+func (m *Manager) uploadTarget(dir, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.HasPrefix(name, "/") || strings.ContainsRune(name, '\x00') {
+		return "", fmt.Errorf("некорректное имя файла: %q", name)
+	}
+	for _, part := range strings.Split(name, "/") {
+		if part == "" || part == "." || part == ".." {
+			return "", fmt.Errorf("некорректное имя файла: %q", name)
+		}
+	}
+	target := gopath.Join(dir, name)
+	if _, err := m.Check(target); err != nil {
 		return "", err
 	}
 	return target, nil
