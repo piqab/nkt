@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/collect"
 )
@@ -33,8 +34,14 @@ type RunnerEnv func(ctx context.Context, env map[string]string, argv ...string) 
 // DefaultRoots — где проводнику можно.
 var DefaultRoots = []string{"/home", "/srv", "/opt", "/var/www", "/tmp"}
 
-// MaxUploadBytes — потолок одной загрузки.
-const MaxUploadBytes = 2 << 30
+// MaxUploadBytes — потолок одной загрузки. int64 явно: на 32-битных
+// сборках 2 ГиБ в int не помещается.
+const MaxUploadBytes int64 = 2 << 30
+
+// TransferTimeout — сколько даётся одной загрузке или скачиванию. Обычный
+// запрос укладывается в секунды, а файл в сотни мегабайт по медленному
+// каналу — нет; и хост, и прокси хаба продлевают сроки до этого.
+const TransferTimeout = 5 * time.Minute
 
 // Manager — операции над файлами в пределах корней.
 type Manager struct {

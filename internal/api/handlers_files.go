@@ -8,6 +8,7 @@ import (
 	gopath "path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/files"
@@ -102,12 +103,23 @@ func (s *Server) handleFilesExtract(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// extendTransfer продлевает сроки соединения на время передачи файла:
+// умолчания http.Server (30 с на чтение, 2 мин на запись) рассчитаны на
+// обычные запросы, а не на файл в сотни мегабайт.
+func extendTransfer(w http.ResponseWriter) {
+	rc := http.NewResponseController(w)
+	deadline := time.Now().Add(files.TransferTimeout)
+	_ = rc.SetReadDeadline(deadline)
+	_ = rc.SetWriteDeadline(deadline)
+}
+
 // handleFilesUpload принимает тело запроса как файл: ?dir=…&name=…
 func (s *Server) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
 	m := s.filesOrFail(w)
 	if m == nil {
 		return
 	}
+	extendTransfer(w)
 	dir := r.URL.Query().Get("dir")
 	name := strings.TrimSpace(r.URL.Query().Get("name"))
 	user := auth.Username(r.Context())
@@ -134,6 +146,7 @@ func (s *Server) handleFilesDownload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer rc.Close()
+	extendTransfer(w)
 	name := gopath.Base(p)
 	ctype := mime.TypeByExtension(gopath.Ext(name))
 	if ctype == "" {
