@@ -298,7 +298,11 @@ export default function Certificates({ me }: { me: Me }) {
         setJobStatus(status)
         if (status.done) {
           window.clearInterval(timer)
+          // Новый сертификат — это новая lineage, а она живёт в своём
+          // списке: без его перечитывания выпущенное появлялось только
+          // после повторного входа в раздел.
           reload()
+          lineages.reload()
         }
       } catch (err) {
         if (cancelled) return
@@ -313,6 +317,7 @@ export default function Certificates({ me }: { me: Me }) {
       cancelled = true
       window.clearInterval(timer)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lineages.reload стабилен, как и reload
   }, [job, reload])
 
   function startJob(id: string, label: string) {
