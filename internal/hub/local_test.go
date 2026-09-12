@@ -414,7 +414,7 @@ func TestHostsLocalRouteWithRealEmbeddedAPIServer(t *testing.T) {
 		Configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
 		Firewall:  control.NewFirewallManager(cfg, collector, db),
 		Firewalld: control.NewFirewalldManager(cfg, collector, db),
-		Certs:     control.NewCertManager(cfg, collector, db, services, scanner),
+		Certs:     control.NewCertManager(cfg, collector, db, services, scanner, nil),
 		Podman:    control.NewPodmanManager(collector, db),
 		LXD:       control.NewLXDManager(collector, db),
 		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner, nil),

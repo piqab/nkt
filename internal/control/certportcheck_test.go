@@ -78,7 +78,7 @@ func TestCheckPortFreeForStandaloneBlocksOutsideFixtures(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 	scanner := inventory.New(cfg, c, db)
 	services := NewServiceManager(cfg, c, db)
-	m := NewCertManager(cfg, c, db, services, scanner)
+	m := NewCertManager(cfg, c, db, services, scanner, nil)
 
 	var reported []string
 	err = m.checkPortFreeForStandalone(context.Background(), &certProgress{msg: func(key string, args ...any) { reported = append(reported, key) }})

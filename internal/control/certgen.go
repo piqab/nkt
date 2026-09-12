@@ -10,7 +10,9 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
+	"io/fs"
 	"math/big"
 	gopath "path"
 	"regexp"
@@ -53,6 +55,10 @@ type CertManager struct {
 	// show progress instead of blocking on the whole multi-minute operation.
 	jobsMu sync.Mutex
 	jobs   map[string]*renewJob
+	// escape — запуск вне песочницы юнита: так поднимаются заново ручные
+	// процессы, остановленные ради --standalone (см. standalone.go). Может
+	// быть nil — тогда запуск в фоне обычным путём.
+	escape PrivilegedRunner
 }
 
 // NewCertManager builds the certificate issuer. services and scanner are
@@ -60,10 +66,10 @@ type CertManager struct {
 // around a --standalone renewal, scanner to find haproxy combined-PEM copies
 // that need recombining afterward.
 func NewCertManager(cfg *config.Config, c collect.Collector, db *store.DB,
-	services *ServiceManager, scanner *inventory.Scanner) *CertManager {
+	services *ServiceManager, scanner *inventory.Scanner, escape PrivilegedRunner) *CertManager {
 	return &CertManager{
 		cfg: cfg, c: c, db: db, services: services, scanner: scanner,
-		jobs: map[string]*renewJob{},
+		jobs: map[string]*renewJob{}, escape: escape,
 	}
 }
 
@@ -276,13 +282,6 @@ func safeDirName(name string) string {
 // certbot had to disambiguate a repeat request.
 var lineageRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9.-]{0,253}[A-Za-z0-9])?$`)
 
-// standaloneServices is what certbot's --standalone authenticator needs off
-// port 80/443 for the duration of a renewal — a fixed list rather than
-// something derived from what happens to be running, since guessing wrong
-// about which service holds the port is worse than stopping one that was
-// never listening.
-var standaloneServices = []string{model.ServiceNginx, model.ServiceHAProxy, model.ServiceCaddy}
-
 // RenewCertbot re-issues a certbot-managed lineage in place. It blocks until
 // the whole operation finishes — used by the unattended auto-renew job,
 // which has no one to show progress to. StartRenewCertbot is the
@@ -290,7 +289,7 @@ var standaloneServices = []string{model.ServiceNginx, model.ServiceHAProxy, mode
 //
 // See renewCertbot for what actually happens.
 func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (collect.CommandResult, error) {
-	return m.renewCertbot(ctx, user, lineage, nil)
+	return m.renewCertbot(ctx, user, lineage, nil, nil)
 }
 
 // renewCertbot does the real work behind both RenewCertbot and
@@ -322,36 +321,17 @@ func (m *CertManager) RenewCertbot(ctx context.Context, user, lineage string) (c
 // reports the final outcome only afterward — "Готово" must mean the site is
 // actually back, not just that certbot finished.
 func (m *CertManager) renewCertbot(
-	ctx context.Context, user, lineage string, report *certProgress,
+	ctx context.Context, user, lineage string, restart map[int]bool, report *certProgress,
 ) (collect.CommandResult, error) {
 	if !lineageRe.MatchString(lineage) {
 		return collect.CommandResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
 	}
 
-	report.Msg("certgen.stoppingForStandalone")
-	stopped, stopErr := m.stopForStandalone(ctx, user)
-	for _, svc := range stopped {
-		report.Msg("certgen.serviceStopped", svc)
+	st, finish, err := m.beginStandalone(ctx, user, restart, report)
+	if err != nil {
+		return finish(collect.CommandResult{}, err)
 	}
-
-	finish := func(res collect.CommandResult, err error) (collect.CommandResult, error) {
-		if len(stopped) > 0 {
-			m.restartAfterStandalone(user, stopped)
-			for _, svc := range stopped {
-				report.Msg("certgen.serviceStarted", svc)
-			}
-		}
-		if err != nil {
-			report.Msg("certgen.errorPrefix", err.Error())
-		} else {
-			report.Msg("hub.done")
-		}
-		return res, err
-	}
-	if stopErr != nil {
-		return finish(collect.CommandResult{}, fmt.Errorf(
-			"продление %s требует остановки nginx/haproxy для --standalone: %w", lineage, stopErr))
-	}
+	_ = st
 
 	if err := m.checkPortFreeForStandalone(ctx, report); err != nil {
 		return finish(collect.CommandResult{}, err)
@@ -477,7 +457,7 @@ func (j *renewJob) snapshot() (events []RenewEvent, done bool, errMsg string) {
 // output, recombining any haproxy copy, restarting services — as it
 // actually happens, instead of staring at a spinner for however long the
 // whole operation takes.
-func (m *CertManager) StartRenewCertbot(user, lineage string) (string, error) {
+func (m *CertManager) StartRenewCertbot(user, lineage string, restart map[int]bool) (string, error) {
 	if !lineageRe.MatchString(lineage) {
 		return "", fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
 	}
@@ -503,7 +483,7 @@ func (m *CertManager) StartRenewCertbot(user, lineage string) (string, error) {
 		// headroom here covers the stop/start/recombine steps around it.
 		ctx, cancel := context.WithTimeout(context.Background(), m.cfg.CertbotTimeout+2*time.Minute)
 		defer cancel()
-		_, err := m.renewCertbot(ctx, user, lineage, &certProgress{msg: job.append, raw: job.appendRaw})
+		_, err := m.renewCertbot(ctx, user, lineage, restart, &certProgress{msg: job.append, raw: job.appendRaw})
 		// The cached snapshot still has the pre-renewal expiry (and the
 		// pre-recombine haproxy file contents) until the next scan; run one
 		// now that there's actually something new to pick up, and do it
@@ -634,6 +614,12 @@ type LineageInfo struct {
 func (m *CertManager) ListLetsEncryptLineages() ([]LineageInfo, error) {
 	entries, err := m.c.ListDir(strings.TrimSuffix(parse.LetsEncryptLive, "/"))
 	if err != nil {
+		// Каталога нет — certbot ещё не ставился или ничего не выпускал.
+		// Это «сертификатов нет», а не ошибка запроса: иначе раздел
+		// встречал бы красной плашкой каждый хост без certbot.
+		if errors.Is(err, fs.ErrNotExist) {
+			return []LineageInfo{}, nil
+		}
 		return nil, err
 	}
 	out := make([]LineageInfo, 0, len(entries))
@@ -887,51 +873,38 @@ func (m *CertManager) checkPortFree(ctx context.Context, port int) (holder strin
 	return "", true
 }
 
-// stopForStandalone stops every installed service in standaloneServices, in
-// order, returning exactly the ones it actually managed to stop even when
-// it returns an error — the caller must only restart what this function
-// actually took down. A host very rarely runs all three reverse proxies at
-// once; skipping whichever ones aren't installed (systemctl's own "Unit
-// not loaded") rather than treating that as a failure is what lets this
-// list keep growing (ufw/firewalld's own equivalent list would have the
-// same shape) without every host that lacks the newest addition suddenly
-// failing every certificate renewal.
-func (m *CertManager) stopForStandalone(ctx context.Context, user string) ([]string, error) {
-	// No snapshot yet, or a service missing from the catalogue entirely
-	// (neither should happen in practice) — attempt the stop rather than
-	// silently skipping, so a genuine failure still surfaces.
-	installed := map[string]bool{}
-	if snap := m.scanner.Latest(); snap != nil {
-		for _, svc := range snap.Services {
-			installed[svc.Name] = svc.Installed
+// beginStandalone освобождает 80/443 по опрошенному плану и отдаёт
+// finish, который вернёт всё на место и допишет исход в журнал.
+//
+// План опрашивается здесь ещё раз, а не берётся из окна подтверждения:
+// между «показать» и «выпустить» проходит время, и держатель мог
+// смениться. Разрешение на перезапуск — по pid, и если pid уже другой,
+// процесс не тронут: это отказ с именем, а не убитый чужой сервис.
+func (m *CertManager) beginStandalone(ctx context.Context, user string, restart map[int]bool,
+	report *certProgress) (standaloneState, func(collect.CommandResult, error) (collect.CommandResult, error), error) {
+	var st standaloneState
+	finish := func(res collect.CommandResult, err error) (collect.CommandResult, error) {
+		if len(st.units) > 0 || len(st.procs) > 0 {
+			m.restoreStandalone(user, st, report)
 		}
+		if err != nil {
+			report.Msg("certgen.errorPrefix", err.Error())
+		} else {
+			report.Msg("hub.done")
+		}
+		return res, err
 	}
-
-	stopped := make([]string, 0, len(standaloneServices))
-	for _, svc := range standaloneServices {
-		if known, ok := installed[svc]; ok && !known {
-			continue
-		}
-		if _, err := m.services.Action(ctx, user, svc, "stop"); err != nil {
-			return stopped, fmt.Errorf("остановка %s: %w", svc, err)
-		}
-		stopped = append(stopped, svc)
+	report.Msg("certgen.checkingHolders")
+	plan, err := m.StandalonePlan(ctx)
+	if err != nil {
+		return st, finish, err
 	}
-	return stopped, nil
-}
-
-// restartAfterStandalone starts every service stopForStandalone stopped. It
-// runs on its own timeout independent of the request context: a client
-// disconnecting or an HTTP timeout must never be the reason nginx/haproxy
-// stay down.
-func (m *CertManager) restartAfterStandalone(user string, stopped []string) {
-	ctx, cancel := context.WithTimeout(context.Background(), m.cfg.CommandTimeout)
-	defer cancel()
-	for _, svc := range stopped {
-		if _, err := m.services.Action(ctx, user, svc, "start"); err != nil {
-			m.db.Audit(ctx, user, "cert.renew_restart_failed", svc, "error", err.Error())
-		}
+	if len(plan.Holders) == 0 {
+		report.Msg("certgen.portsFree")
+		return st, finish, nil
 	}
+	st, err = m.freeStandalonePorts(ctx, user, plan, restart, report)
+	return st, finish, err
 }
 
 // runCertbotRenew is the actual `certbot renew` invocation. --standalone is
@@ -1007,37 +980,18 @@ func normaliseCertbotDomains(names []string) ([]string, error) {
 // on every exit path via the same finish-closure pattern renewCertbot uses —
 // "Готово" must mean the site is back up, not just that certbot returned.
 func (m *CertManager) issueCertbot(
-	ctx context.Context, user string, domains []string, report *certProgress,
+	ctx context.Context, user string, domains []string, restart map[int]bool, report *certProgress,
 ) (collect.CommandResult, error) {
 	domains, err := normaliseCertbotDomains(domains)
 	if err != nil {
 		return collect.CommandResult{}, err
 	}
 
-	report.Msg("certgen.stoppingForStandalone")
-	stopped, stopErr := m.stopForStandalone(ctx, user)
-	for _, svc := range stopped {
-		report.Msg("certgen.serviceStopped", svc)
+	st, finish, err := m.beginStandalone(ctx, user, restart, report)
+	if err != nil {
+		return finish(collect.CommandResult{}, err)
 	}
-
-	finish := func(res collect.CommandResult, err error) (collect.CommandResult, error) {
-		if len(stopped) > 0 {
-			m.restartAfterStandalone(user, stopped)
-			for _, svc := range stopped {
-				report.Msg("certgen.serviceStarted", svc)
-			}
-		}
-		if err != nil {
-			report.Msg("certgen.errorPrefix", err.Error())
-		} else {
-			report.Msg("hub.done")
-		}
-		return res, err
-	}
-	if stopErr != nil {
-		return finish(collect.CommandResult{}, fmt.Errorf(
-			"выпуск нового сертификата требует остановки nginx/haproxy для --standalone: %w", stopErr))
-	}
+	_ = st
 
 	if err := m.checkPortFreeForStandalone(ctx, report); err != nil {
 		return finish(collect.CommandResult{}, err)
@@ -1097,7 +1051,7 @@ func (m *CertManager) runCertbotCertonly(ctx context.Context, user string, domai
 // immediately — same progress-polling pattern as StartRenewCertbot, and the
 // two share one job registry, so a caller polls RenewJobStatus for either
 // kind of job with the same code.
-func (m *CertManager) StartIssueCertbot(user string, domains []string) (string, error) {
+func (m *CertManager) StartIssueCertbot(user string, domains []string, restart map[int]bool) (string, error) {
 	domains, err := normaliseCertbotDomains(domains)
 	if err != nil {
 		return "", err
@@ -1122,7 +1076,7 @@ func (m *CertManager) StartIssueCertbot(user string, domains []string) (string, 
 		// before certbot finishes.
 		ctx, cancel := context.WithTimeout(context.Background(), m.cfg.CertbotTimeout+2*time.Minute)
 		defer cancel()
-		_, err := m.issueCertbot(ctx, user, domains, &certProgress{msg: job.append, raw: job.appendRaw})
+		_, err := m.issueCertbot(ctx, user, domains, restart, &certProgress{msg: job.append, raw: job.appendRaw})
 		// Rescan before marking done, same reasoning as StartRenewCertbot —
 		// a caller reacting to "done" should already see the new lineage.
 		_, _ = m.scanner.Scan(context.Background())

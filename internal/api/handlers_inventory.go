@@ -10,8 +10,8 @@ import (
 	"github.com/piqab/nkt/internal/analyze"
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/model"
-	"github.com/piqab/nkt/internal/profile"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/profile"
 	"github.com/piqab/nkt/internal/store"
 	"github.com/piqab/nkt/internal/topology"
 )

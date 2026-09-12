@@ -83,7 +83,7 @@ func renewSetup(t *testing.T) (*CertManager, *store.DB) {
 		t.Fatalf("скан: %v", err)
 	}
 	services := NewServiceManager(cfg, c, db)
-	return NewCertManager(cfg, c, db, services, scanner), db
+	return NewCertManager(cfg, c, db, services, scanner, nil), db
 }
 
 func TestRenewCertbotRejectsBadLineage(t *testing.T) {
@@ -191,7 +191,7 @@ func TestRenewCertbotRecombinesDerivedHAProxyCert(t *testing.T) {
 		if e.Action == "cert.recombine" && e.Target == derivedPath && e.Result == "ok" {
 			sawRecombine = true
 		}
-		if e.Action == "service.start" && e.Target == "haproxy" && e.Result == "ok" {
+		if e.Action == "cert.standalone_start" && e.Target == "nginx.service" && e.Result == "ok" {
 			sawRestart = true
 		}
 	}
@@ -199,7 +199,7 @@ func TestRenewCertbotRecombinesDerivedHAProxyCert(t *testing.T) {
 		t.Error("в журнале нет записи cert.recombine для " + derivedPath)
 	}
 	if !sawRestart {
-		t.Error("в журнале нет записи service.start для haproxy")
+		t.Error("в журнале нет записи cert.standalone_start для nginx.service — держателя 80/443 в снимке")
 	}
 }
 
@@ -235,11 +235,15 @@ func TestRenewCertbotStopsAndRestartsForStandalone(t *testing.T) {
 		entries[i], entries[j] = entries[j], entries[i]
 	}
 
+	// Останавливается тот, кто держит 80/443, а не список по памяти: в
+	// снимке это nginx (pid 812, юнит nginx.service) на обоих портах —
+	// один держатель, одна остановка, один запуск. haproxy и caddy на этих
+	// портах не сидят, и трогать их незачем.
 	type step struct{ action, target string }
 	var got []step
 	for _, e := range entries {
 		switch e.Action {
-		case "service.stop", "service.start", "cert.renew":
+		case "cert.standalone_stop", "cert.standalone_start", "cert.renew":
 			if e.Result != "ok" {
 				t.Errorf("%s %s: результат %q, ожидался ok", e.Action, e.Target, e.Result)
 			}
@@ -247,9 +251,9 @@ func TestRenewCertbotStopsAndRestartsForStandalone(t *testing.T) {
 		}
 	}
 	want := []step{
-		{"service.stop", "nginx"}, {"service.stop", "haproxy"}, {"service.stop", "caddy"},
+		{"cert.standalone_stop", "nginx.service"},
 		{"cert.renew", "standalone.example.com"},
-		{"service.start", "nginx"}, {"service.start", "haproxy"}, {"service.start", "caddy"},
+		{"cert.standalone_start", "nginx.service"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("последовательность действий: %v, ожидалось %v", got, want)
@@ -258,66 +262,6 @@ func TestRenewCertbotStopsAndRestartsForStandalone(t *testing.T) {
 		if got[i] != want[i] {
 			t.Errorf("шаг %d: %+v, ожидалось %+v (вся последовательность: %v)", i, got[i], want[i], got)
 		}
-	}
-}
-
-// TestStopForStandaloneSkipsUninstalledServices is the regression test for
-// a bug shipped in a709f33: adding caddy to standaloneServices made
-// stopForStandalone unconditionally try to stop it, on every host —
-// including ones that never installed caddy at all, where "systemctl stop
-// caddy" fails outright ("Unit caddy.service not loaded") and used to abort
-// the entire certificate renewal before certbot ever ran. A host running
-// nginx or haproxy alone (the overwhelmingly common case) must still be
-// able to renew a standalone certificate.
-func TestStopForStandaloneSkipsUninstalledServices(t *testing.T) {
-	root := copyFixturesRoot(t)
-	// Хост без caddy — это отсутствие И бинарника, И юнита. Раньше хватало
-	// убрать бинарник, потому что «установлен» сводилось к command -v; с
-	// тех пор признак учитывает и то, что systemd знает файл юнита, и
-	// заготовка systemctl show (ActiveState=active, UnitFileState=enabled)
-	// описывала бы машину, где caddy работает, но исполняемого файла нет.
-	removeFixtureCommand(t, root, []string{"sh", "-c", "command -v caddy"})
-	removeFixtureCommand(t, root, []string{"systemctl", "show", "caddy"})
-
-	cfg := &config.Config{
-		Mode:            config.ModeFixtures,
-		FixturesRoot:    root,
-		NginxMainConfig: "/etc/nginx/nginx.conf",
-		HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
-		ComposeFiles:    []string{"/srv/docker/docker-compose.yml"},
-		CommandTimeout:  5 * time.Second,
-		CertbotTimeout:  20 * time.Second,
-	}
-	c := collect.NewFixtures(root)
-	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
-	if err != nil {
-		t.Fatalf("открыть базу: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	scanner := inventory.New(cfg, c, db)
-	if _, err := scanner.Scan(context.Background()); err != nil {
-		t.Fatalf("скан: %v", err)
-	}
-	if snap := scanner.Latest(); snap != nil {
-		for _, svc := range snap.Services {
-			if svc.Name == "caddy" && svc.Installed {
-				t.Fatal("тестовая подготовка не удалась: caddy всё ещё выглядит установленным")
-			}
-		}
-	}
-
-	m := NewCertManager(cfg, c, db, NewServiceManager(cfg, c, db), scanner)
-	stopped, err := m.stopForStandalone(context.Background(), "test")
-	if err != nil {
-		t.Fatalf("stopForStandalone: %v", err)
-	}
-	for _, svc := range stopped {
-		if svc == "caddy" {
-			t.Errorf("stopped = %v, не должен включать caddy — он не установлен", stopped)
-		}
-	}
-	if len(stopped) != 2 {
-		t.Errorf("stopped = %v, want ровно nginx и haproxy", stopped)
 	}
 }
 
@@ -409,7 +353,7 @@ func TestRenewCertbotUsesCertbotTimeout(t *testing.T) {
 		t.Fatalf("скан: %v", err)
 	}
 	services := NewServiceManager(cfg, rec, db)
-	m := NewCertManager(cfg, rec, db, services, scanner)
+	m := NewCertManager(cfg, rec, db, services, scanner, nil)
 
 	if _, err := m.RenewCertbot(context.Background(), "test", "app.example.com"); err != nil {
 		t.Fatalf("renew: %v", err)
@@ -462,7 +406,7 @@ func eventTexts(events []RenewEvent) []string {
 func TestStartRenewCertbotReportsStandaloneStepsInOrder(t *testing.T) {
 	m, _ := renewSetup(t)
 
-	id, err := m.StartRenewCertbot("test", "standalone.example.com")
+	id, err := m.StartRenewCertbot("test", "standalone.example.com", nil)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -474,13 +418,12 @@ func TestStartRenewCertbotReportsStandaloneStepsInOrder(t *testing.T) {
 	texts := eventTexts(events)
 	wantInOrder := []string{
 		"Начинаю продление standalone.example.com",
-		"Останавливаю nginx и haproxy для --standalone",
-		"nginx: остановлен",
-		"haproxy: остановлен",
+		"Смотрю, кто держит порты 80/443",
+		"Останавливаю службу nginx.service",
+		"nginx.service: остановлен",
 		"Запускаю: certbot renew --cert-name standalone.example.com --non-interactive --standalone",
 		"certbot: сертификат продлён",
-		"nginx: запущен",
-		"haproxy: запущен",
+		"nginx.service: запущен",
 		"Готово",
 	}
 	pos := -1
@@ -499,7 +442,7 @@ func TestStartRenewCertbotReportsStandaloneStepsInOrder(t *testing.T) {
 func TestStartRenewCertbotReportsRecombinedHAProxyFile(t *testing.T) {
 	m, _ := renewSetup(t)
 
-	id, err := m.StartRenewCertbot("test", "app.example.com")
+	id, err := m.StartRenewCertbot("test", "app.example.com", nil)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}

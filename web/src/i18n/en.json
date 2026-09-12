@@ -755,7 +755,11 @@
     "generating": "Generating…",
     "create": "Create",
     "selfSignedResult": "Certificate for {{names}} created, valid until {{date}}. It isn't wired into any service yet — paste the directives below into the right file via the \"Configs\" page.",
-    "selfSignedCount": "Created {{count}} certificates — one per name."
+    "selfSignedCount": "Created {{count}} certificates — one per name.",
+    "certbotMissing": "Issuing and renewing certificates needs certbot, and the host does not have it. Self-signed certificates and combining for haproxy work without it.",
+    "installCertbot": "Install certbot",
+    "confirmIssueTitle": "Issue a certificate for {{domains}}",
+    "confirmRenewTitle": "Renew {{lineage}}"
   },
   "fw": {
     "ufwActionAllow": "allowed",
@@ -1855,5 +1859,20 @@
     "truncated": "truncated",
     "received": "Received over the connection: {{bytes}} B",
     "silent": "The connection opened but the server sent nothing — it waits for you to speak first."
+  },
+  "standalone": {
+    "intro": "certbot --standalone runs its own server on ports 80/443, so they must be free for the check. This is what holds them now and what will happen to it:",
+    "checking": "what holds ports 80/443",
+    "free": "Ports 80/443 are free — nothing needs stopping.",
+    "unknownProcess": "unknown process",
+    "uptime": "up {{hours}} h",
+    "serviceFate": "Service {{unit}} will be stopped while certbot runs and started back right after.",
+    "processFate": "stop while certbot runs and relaunch with the same command",
+    "processDetail": "directory {{cwd}}, user {{user}}; the environment is carried over. Started from a terminal — after relaunch it runs in the background, output goes to the systemd journal.",
+    "processLeft": "Without a relaunch the port stays taken and certbot cannot validate the domain: stop the process yourself before issuing.",
+    "containerFate": "Container {{id}}: nkt does not stop it. Free the port yourself and retry.",
+    "unknownFate": "Could not read what this process is — nkt leaves it alone. Free the port yourself and retry.",
+    "processCaveat": "Stopping is SIGTERM, then SIGKILL after 10 s. After certbot, nkt waits up to 15 s for the process to take the port again; if it does not, the log says so and names the command to start it by hand.",
+    "go": "Continue"
   }
 }

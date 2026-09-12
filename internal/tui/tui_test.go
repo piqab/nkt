@@ -112,7 +112,7 @@ func depsAgainstRoot(t *testing.T, screen tcell.Screen, root string) Deps {
 		Services:  services,
 		Configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
 		Firewall:  control.NewFirewallManager(cfg, collector, db),
-		Certs:     control.NewCertManager(cfg, collector, db, services, scanner),
+		Certs:     control.NewCertManager(cfg, collector, db, services, scanner, nil),
 		Podman:    control.NewPodmanManager(collector, db),
 		LXD:       control.NewLXDManager(collector, db),
 		Libvirt:   control.NewLibvirtManager(cfg, collector, db, scanner, nil),
