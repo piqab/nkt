@@ -662,6 +662,24 @@ function UnattachedCard({
       },
     },
   ]
+  const [snippet, setSnippet] = useState<{ lineage: string; service: string } | null>(null)
+  columns.push({
+    title: t('certs.colSnippets'),
+    key: 'snippets',
+    className: 'nowrap',
+    // Заготовка конфигурации под этот сертификат — для каждого сервиса
+    // своя кнопка; показать и скопировать, а не записать: живой конфиг
+    // правится через редактор, где есть проверка и откат.
+    render: (_, info) => (
+      <span className="row row-nowrap" style={{ gap: '0.25rem' }}>
+        {(['nginx', 'haproxy', 'caddy'] as const).map((svc) => (
+          <Button key={svc} size="small" onClick={() => setSnippet({ lineage: info.name, service: svc })}>
+            {svc}
+          </Button>
+        ))}
+      </span>
+    ),
+  })
   if (canControl) {
     columns.push({
       title: '',
@@ -689,10 +707,72 @@ function UnattachedCard({
       <div className="table-wrap">
         <DataTable<LineageInfo> dataSource={lineages} rowKey="name" columns={columns} />
       </div>
+      {snippet && <SnippetModal lineage={snippet.lineage} service={snippet.service} onClose={() => setSnippet(null)} />}
       <p className="small muted" style={{ marginBottom: 0, marginTop: '0.6rem' }}>
         {t('certs.unattachedFooter')}
       </p>
     </Card>
+  )
+}
+
+interface CertSnippet {
+  service: string
+  file: string
+  content: string
+  combined_path?: string
+}
+
+/** Заготовка конфигурации под сертификат: путь файла, текст, одна кнопка
+ * «скопировать». */
+function SnippetModal({ lineage, service, onClose }: { lineage: string; service: string; onClose: () => void }) {
+  const { t } = useTranslation()
+  const snippets = useApi<{ snippets: CertSnippet[] }>(`/certificates/lineages/${encodeURIComponent(lineage)}/snippets`)
+  const [copied, setCopied] = useState(false)
+  const snip = snippets.data?.snippets.find((s) => s.service === service)
+
+  async function copy() {
+    if (!snip) return
+    try {
+      await navigator.clipboard.writeText(snip.content)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // Буфер недоступен (http без TLS) — текст остаётся на экране,
+      // его можно выделить руками.
+    }
+  }
+
+  return (
+    <Modal title={t('certs.snippetTitle', { service, lineage })} onClose={onClose} width={760}>
+      <ErrorNote error={snippets.error} />
+      {!snippets.data ? (
+        <Loading what={t('certs.snippetTitle', { service, lineage })} />
+      ) : !snip ? null : (
+        <div className="col" style={{ gap: '0.5rem' }}>
+          <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span className="small muted">{t('certs.snippetFile')}</span>
+            <code className="mono small">{snip.file}</code>
+            <span style={{ flex: 1 }} />
+            <Button type="primary" size="small" onClick={() => void copy()}>
+              {copied ? t('certs.copied') : t('certs.copy')}
+            </Button>
+          </div>
+          <pre className="diff mono" style={{ margin: 0, whiteSpace: 'pre', overflow: 'auto', maxHeight: '26rem' }}>
+            {snip.content}
+          </pre>
+          {snip.service === 'haproxy' && (
+            <p className="small muted" style={{ margin: 0 }}>
+              {t('certs.snippetNoteHaproxy', { path: snip.combined_path })}
+            </p>
+          )}
+          {snip.service === 'caddy' && (
+            <p className="small muted" style={{ margin: 0 }}>
+              {t('certs.snippetNoteCaddy')}
+            </p>
+          )}
+        </div>
+      )}
+    </Modal>
   )
 }
 

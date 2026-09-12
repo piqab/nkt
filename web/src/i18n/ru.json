@@ -761,7 +761,14 @@
     "certbotMissing": "Для выпуска и продления сертификатов нужен certbot — на хосте его нет. Самоподписанные сертификаты и объединение для haproxy работают и без него.",
     "installCertbot": "Установить certbot",
     "confirmIssueTitle": "Выпустить сертификат для {{domains}}",
-    "confirmRenewTitle": "Продлить {{lineage}}"
+    "confirmRenewTitle": "Продлить {{lineage}}",
+    "colSnippets": "Конфигурация для",
+    "snippetTitle": "{{service}}: конфигурация с сертификатом {{lineage}}",
+    "snippetFile": "Файл:",
+    "copy": "Скопировать",
+    "copied": "Скопировано",
+    "snippetNoteHaproxy": "haproxy читает сертификат и ключ из одного файла — {{path}}. Его собирает «Собрать PEM для haproxy» ниже; без этого файла bind не поднимется.",
+    "snippetNoteCaddy": "caddy умеет получать сертификаты сам; внешний нужен, когда один сертификат делят несколько сервисов."
   },
   "fw": {
     "ufwActionAllow": "разрешено",

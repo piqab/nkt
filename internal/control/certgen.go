@@ -604,6 +604,10 @@ type LineageInfo struct {
 	Known    bool      `json:"known"`
 	NotAfter time.Time `json:"not_after,omitzero"`
 	DaysLeft int       `json:"days_left"`
+	// Names — имена из сертификата (SAN): ими и заполняются заготовки
+	// конфигураций, а не именем lineage, которое у certbot лишь первое из
+	// них.
+	Names []string `json:"names,omitempty"`
 }
 
 // ListLetsEncryptLineages lists the certbot lineages found directly under
@@ -635,6 +639,7 @@ func (m *CertManager) ListLetsEncryptLineages() ([]LineageInfo, error) {
 					info.Known = true
 					info.NotAfter = leaf.NotAfter.UTC()
 					info.DaysLeft = int(time.Until(leaf.NotAfter).Hours() / 24)
+					info.Names = leaf.DNSNames
 				}
 			}
 		}

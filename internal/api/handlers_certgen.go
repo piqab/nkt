@@ -227,3 +227,29 @@ func (s *Server) handleCertTools(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"tools": tools})
 }
+
+// handleCertSnippets отдаёт заготовки конфигураций nginx/haproxy/caddy
+// под одну lineage — с путями этого хоста и именами из сертификата.
+func (s *Server) handleCertSnippets(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	lineages, err := s.certs.ListLetsEncryptLineages()
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	var names []string
+	found := false
+	for _, l := range lineages {
+		if l.Name == name {
+			names, found = l.Names, true
+			break
+		}
+	}
+	if !found {
+		writeError(w, http.StatusNotFound, "такой lineage нет в /etc/letsencrypt/live")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"snippets": control.CertSnippets(name, names, s.cfg.NginxMainConfig, s.cfg.HAProxyMainConf, s.cfg.CaddyMainConfig),
+	})
+}
