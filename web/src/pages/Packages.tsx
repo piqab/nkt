@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, Input, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, Pagination, Tag, Tooltip } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
@@ -7,10 +7,8 @@ import type { Me, PackageUpdate } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 import SandboxPackagesCard from '../components/SandboxPackagesCard'
 import PackageInstallModal from '../components/PackageInstallModal'
-import i18n from '../i18n'
 import UpdateModal from '../components/UpdateModal'
 import { confirmAction } from '../components/confirm'
-import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 
 interface AptSearchResult {
@@ -49,58 +47,93 @@ interface PackageRow {
   match?: AptSearchResult['match']
 }
 
+const MATCH_RANK: Record<NonNullable<PackageRow['match']>, number> = { exact: 0, prefix: 1, name: 2, description: 3 }
+
 /**
- * Колонки таблицы пакетов — одни и те же для поиска и для установленных.
- *
- * Две таблицы одного раздела с разной раскладкой и разными кнопками
- * читались как два разных инструмента. Теперь у обеих: галочки для
- * пакетного действия, имя со значком ⓘ (описание по наведению вместо
- * широкого столбца, который растил строки в три этажа), версия, где она
- * известна, и одно действие над строкой иконкой.
+ * Чем пакет подошёл под запрос — тот же порядок, что у поиска на сервере
+ * (classifyAptMatch): точное имя, начало имени, имя, только описание.
+ * Установленные фильтруются здесь, в браузере, и должны выстраиваться и
+ * раскрашиваться так же, как результаты поиска, — иначе один раздел
+ * читался бы двумя разными способами.
  */
-function packageColumns(
-  t: typeof i18n.t,
-  opts: { version: boolean; state: boolean; action?: (p: PackageRow) => ReactNode },
-): TableColumnsType<PackageRow> {
-  const cols: TableColumnsType<PackageRow> = [
-    {
-      title: t('packages.colName'),
-      key: 'name',
-      render: (_, p) => (
-        <span className="nowrap">
-          <code className="mono">{p.name}</code>
-          {p.description && (
-            <Tooltip title={p.description}>
-              <InfoCircleOutlined
-                aria-label={t('packages.colDescription')}
-                style={{ marginLeft: '0.35rem', color: 'var(--text-muted)' }}
-              />
-            </Tooltip>
-          )}
-        </span>
-      ),
-    },
-  ]
-  if (opts.version) {
-    cols.push({
-      title: t('packages.col.version'),
-      key: 'version',
-      render: (_, p) => <span className="small muted mono">{p.version || '—'}</span>,
-    })
+function rankPackages(rows: PackageRow[], query: string): PackageRow[] {
+  const q = query.trim().toLowerCase()
+  if (!q) return rows
+  const out: PackageRow[] = []
+  for (const p of rows) {
+    const name = p.name.toLowerCase()
+    const match: PackageRow['match'] =
+      name === q ? 'exact' : name.startsWith(q) ? 'prefix' : name.includes(q) ? 'name' : (p.description ?? '').toLowerCase().includes(q) ? 'description' : undefined
+    if (match) out.push({ ...p, match })
   }
-  if (opts.state) {
-    cols.push({
-      title: t('packages.colState'),
-      key: 'state',
-      width: '9rem',
-      render: (_, p) =>
-        p.installed ? <Tag color="green">{t('commonPackages.installed')}</Tag> : <span className="small muted">—</span>,
-    })
-  }
-  if (opts.action) {
-    cols.push({ title: '', key: 'actions', align: 'right', className: 'nowrap', render: (_, p) => opts.action!(p) })
-  }
-  return cols
+  return out.sort((a, b) => MATCH_RANK[a.match!] - MATCH_RANK[b.match!] || a.name.localeCompare(b.name))
+}
+
+/** Сколько ячеек показывать за раз: установленных на хосте — тысячи. */
+const GRID_PAGE = 120
+
+/**
+ * Пакеты — ячейками в несколько колонок, а не таблицей по одному в
+ * строку: имя короткое, и строка на весь экран ради него — пустое место.
+ * В ячейке всё то же, что было в строке: галочка, имя со значком ⓘ
+ * (описание по наведению), версия, действие иконкой. Фон ячейки —
+ * группа совпадения, как у строк поиска.
+ */
+function PackageGrid({
+  rows,
+  picked,
+  onPick,
+  canPick,
+  action,
+  showVersion,
+  showState,
+}: {
+  rows: PackageRow[]
+  picked: string[]
+  onPick: (names: string[]) => void
+  canPick: (p: PackageRow) => boolean
+  action: (p: PackageRow) => ReactNode
+  showVersion: boolean
+  showState: boolean
+}) {
+  const { t } = useTranslation()
+  const [page, setPage] = useState(1)
+  useEffect(() => setPage(1), [rows])
+  const visible = rows.slice((page - 1) * GRID_PAGE, page * GRID_PAGE)
+  const toggle = (name: string, on: boolean) => onPick(on ? [...picked, name] : picked.filter((n) => n !== name))
+  return (
+    <>
+      <div className="pkg-grid">
+        {visible.map((p) => (
+          <div key={p.name} className={`pkg-cell${p.match ? ` pkg-match-${p.match}` : ''}`}>
+            <Checkbox checked={picked.includes(p.name)} disabled={!canPick(p)} onChange={(e) => toggle(p.name, e.target.checked)} />
+            <code className="mono" title={p.name}>
+              {p.name}
+            </code>
+            {p.description && (
+              <Tooltip title={p.description}>
+                <InfoCircleOutlined aria-label={t('packages.colDescription')} style={{ color: 'var(--text-muted)' }} />
+              </Tooltip>
+            )}
+            {showVersion && p.version && <span className="small muted mono pkg-version">{p.version}</span>}
+            {showState && p.installed && <Tag color="green">{t('commonPackages.installed')}</Tag>}
+            <span className="pkg-action">{action(p)}</span>
+          </div>
+        ))}
+      </div>
+      {rows.length > GRID_PAGE && (
+        <Pagination
+          size="small"
+          style={{ marginTop: '0.5rem' }}
+          current={page}
+          pageSize={GRID_PAGE}
+          total={rows.length}
+          showSizeChanger={false}
+          onChange={setPage}
+        />
+      )}
+    </>
+  )
 }
 
 export default function Packages({ me }: { me: Me }) {
@@ -216,27 +249,17 @@ export default function Packages({ me }: { me: Me }) {
   }
 
   const installedList = installed.data?.packages ?? []
-  const visibleInstalled = useMemo(() => {
-    const q = installedQuery.trim().toLowerCase()
-    if (!q) return installedList
-    return installedList.filter((p) => p.name.toLowerCase().includes(q))
-  }, [installedList, installedQuery])
+  // Тот же порядок и те же группы, что у поиска: точное имя, начало,
+  // имя, только описание.
+  const visibleInstalled = useMemo(() => rankPackages(installedList, installedQuery), [installedList, installedQuery])
 
-  const searchColumns = packageColumns(t, {
-    version: false,
-    state: true,
-    action: (p) =>
-      p.installed ? null : (
-        <RowAction action="install" label={t('packages.install')} disabled={!canUse} onClick={() => void startInstall([p.name])} />
-      ),
-  })
-  const installedColumns = packageColumns(t, {
-    version: true,
-    state: false,
-    action: (p) => (
-      <RowAction action="delete" label={t('packages.remove')} danger disabled={!canUse} onClick={() => void startRemove([p.name])} />
-    ),
-  })
+  const searchAction = (p: PackageRow) =>
+    p.installed ? null : (
+      <RowAction action="install" label={t('packages.install')} disabled={!canUse} onClick={() => void startInstall([p.name])} />
+    )
+  const installedAction = (p: PackageRow) => (
+    <RowAction action="delete" label={t('packages.remove')} danger disabled={!canUse} onClick={() => void startRemove([p.name])} />
+  )
 
   return (
     <>
@@ -340,22 +363,17 @@ export default function Packages({ me }: { me: Me }) {
                 <p className="small muted" style={{ marginTop: '0.5rem' }}>
                   {t('packages.matchLegend')}
                 </p>
-                <div className="table-wrap">
-                  <DataTable<PackageRow>
-                    dataSource={search.data.results}
-                    rowKey="name"
-                    // Фон строки — граница между группами: сначала пакеты,
-                    // чьё имя совпало с запросом, потом те, где он нашёлся
-                    // только в описании. Порядок задаёт сервер (rankAptResults).
-                    rowClassName={(p) => `pkg-match pkg-match-${p.match ?? 'description'}`}
-                    columns={searchColumns}
-                    rowSelection={{
-                      selectedRowKeys: picked,
-                      onChange: (keys) => setPicked(keys as string[]),
-                      getCheckboxProps: (p) => ({ disabled: !canUse || p.installed }),
-                    }}
-                  />
-                </div>
+                {/* Порядок и группы задаёт сервер (rankAptResults); здесь
+                    только раскладка ячейками. */}
+                <PackageGrid
+                  rows={search.data.results.map((p) => ({ ...p, match: p.match ?? 'description' }))}
+                  picked={picked}
+                  onPick={setPicked}
+                  canPick={(p) => canUse && !p.installed}
+                  action={searchAction}
+                  showVersion={false}
+                  showState
+                />
               </>
             )}
           </>
@@ -391,20 +409,20 @@ export default function Packages({ me }: { me: Me }) {
                 </>
               )}
             </div>
-            <div className="table-wrap">
-              <DataTable<PackageRow>
-                key={installedQuery}
-                dataSource={visibleInstalled}
-                columns={installedColumns}
-                rowKey="name"
-                rowSelection={{
-                  selectedRowKeys: pickedInstalled,
-                  onChange: (keys) => setPickedInstalled(keys as string[]),
-                  getCheckboxProps: () => ({ disabled: !canUse }),
-                }}
-                pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100] }}
-              />
-            </div>
+            {installedQuery.trim() && (
+              <p className="small muted" style={{ marginTop: 0 }}>
+                {t('packages.matchLegend')}
+              </p>
+            )}
+            <PackageGrid
+              rows={visibleInstalled}
+              picked={pickedInstalled}
+              onPick={setPickedInstalled}
+              canPick={() => canUse}
+              action={installedAction}
+              showVersion
+              showState={false}
+            />
           </>
         )}
       </Card>

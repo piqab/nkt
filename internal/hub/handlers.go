@@ -751,6 +751,10 @@ func (s *Server) handleHostProbe(w http.ResponseWriter, r *http.Request) {
 		addr = ips[0].IP.String()
 	}
 	req.Address = addr
+	if req.Kind == portprobe.KindCurl {
+		writeError(w, http.StatusBadRequest, "curl со своими параметрами выполняется только на хосте")
+		return
+	}
 	if err := req.Validate(); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return

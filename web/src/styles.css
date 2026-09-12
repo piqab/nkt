@@ -634,6 +634,54 @@ pre.diff .hunk { color: var(--text-muted); }
   color: var(--text-secondary);
 }
 
+/* Пакеты ячейками в несколько колонок: имя короткое, и строка на весь
+   экран ради него — пустое место. Фон ячейки — та же группа совпадения,
+   что у строк. */
+.pkg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 0.3rem;
+}
+
+.pkg-cell {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-width: 0;
+  padding: 0.15rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.pkg-cell code {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pkg-cell .pkg-version {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pkg-cell .pkg-action {
+  margin-left: auto;
+}
+
+.pkg-cell.pkg-match-exact,
+.pkg-cell.pkg-match-prefix {
+  background: color-mix(in srgb, var(--status-good) 12%, transparent);
+}
+
+.pkg-cell.pkg-match-name {
+  background: var(--wash);
+}
+
+.pkg-cell.pkg-match-description {
+  color: var(--text-secondary);
+}
+
 /* Меню разделов — antd Menu внутри собственного сайдбара. Своих цветов не
    задаём: их даёт тема antd, а здесь только плотность и то, чего у Menu
    нет — счётчик находок справа от названия. */

@@ -1835,6 +1835,25 @@
     "certUnverified": "certificate not verified",
     "certIssuer": "issued by",
     "certValid": "valid",
-    "command": "The same in a terminal:"
+    "command": "The same in a terminal:",
+    "kindCurl": "curl with your own arguments",
+    "curlArgs": "curl arguments",
+    "curlHint": "The line is split into arguments shell-style, but without a shell: quotes work, no substitutions or pipes. A -m timeout is added if you do not set one. Runs on the host.",
+    "methodCustom": "custom…",
+    "methodName": "Method",
+    "headers": "Headers, one per line",
+    "contentType": "Body type",
+    "body": "Request body",
+    "badJSON": "The body is declared as JSON but does not parse as JSON.",
+    "send": "Send after connecting",
+    "sendPlaceholder": "EHLO probe · PING · GET / HTTP/1.0",
+    "sendCRLF": "append \\r\\n",
+    "bannerHint": "The banner — what the server sends on its own right after connecting (SSH, SMTP, FTP, Redis) — is always read; the reply to what you send is read until it goes quiet.",
+    "viewText": "text",
+    "viewRender": "render",
+    "download": "download",
+    "truncated": "truncated",
+    "received": "Received over the connection: {{bytes}} B",
+    "silent": "The connection opened but the server sent nothing — it waits for you to speak first."
   }
 }
