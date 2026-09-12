@@ -2,6 +2,8 @@ package hub
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -50,7 +52,7 @@ func TestVersionStatusReflectsRecordedCheck(t *testing.T) {
 		t.Errorf("Current = %q, want %q", status.Current, "1.8.41")
 	}
 
-	m.recordVersionCheck("1.8.42", "## v1.8.42\n- новый раздел", nil)
+	m.recordVersionCheck("1.8.42", "1.8.40", "## v1.8.42\n- новый раздел", nil)
 	status = m.VersionStatus()
 	if status.Notes != "## v1.8.42\n- новый раздел" {
 		t.Errorf("Notes = %q, want the recorded release description", status.Notes)
@@ -71,7 +73,7 @@ func TestVersionStatusReflectsRecordedCheck(t *testing.T) {
 	// A subsequent failed check must not throw away the last known-good
 	// latest version — only the error/timestamp should change, exactly
 	// like recordUnreachable's own doc comment for hostOverview.
-	m.recordVersionCheck("", "", errNetworkDown)
+	m.recordVersionCheck("", "", "", errNetworkDown)
 	status = m.VersionStatus()
 	if status.Notes == "" {
 		t.Error("Notes cleared by a failed check — the last known-good description must survive it, like Latest")
@@ -102,7 +104,7 @@ func TestApplyUpdateRefusesWithoutAKnownNewerVersion(t *testing.T) {
 	// Even with a check recorded, refuse when it isn't actually newer —
 	// applying it would be a no-op at best, a downgrade at worst if the
 	// hub is ahead of GitHub's latest tag (a dev build).
-	m.recordVersionCheck("1.8.41", "", nil)
+	m.recordVersionCheck("1.8.41", "", "", nil)
 	if err := m.ApplyUpdate(context.Background()); err == nil {
 		t.Fatal("ApplyUpdate accepted when latest == current")
 	}
@@ -166,5 +168,63 @@ func TestCleanReleaseNotes(t *testing.T) {
 	}
 	if !utf8.ValidString(got) {
 		t.Error("truncation left invalid UTF-8 — a cut mid-rune")
+	}
+}
+
+// Из списка релизов берётся самый новый опубликованный (черновики и
+// пре-релизы не считаются) и ближайший ниже текущего — цель отката.
+func TestPickReleases(t *testing.T) {
+	rels := []githubRelease{
+		{TagName: "v1.9.64", Draft: true},
+		{TagName: "v1.9.65", Prerelease: true},
+		{TagName: "v1.9.63", Body: "latest"},
+		{TagName: "v1.9.61"},
+		{TagName: "v1.9.62"},
+		{TagName: "v1.9.60"},
+		{TagName: "garbage"},
+	}
+	latest, prev := pickReleases(rels, "1.9.63")
+	if latest.TagName != "v1.9.63" || prev != "1.9.62" {
+		t.Errorf("current 1.9.63: latest=%s prev=%s", latest.TagName, prev)
+	}
+	_, prev = pickReleases(rels, "1.9.62")
+	if prev != "1.9.61" {
+		t.Errorf("current 1.9.62: prev=%s", prev)
+	}
+	_, prev = pickReleases(rels, "1.9.60")
+	if prev != "" {
+		t.Errorf("самая старая версия: prev=%s, ожидалось пусто", prev)
+	}
+}
+
+// Проверка версии ходит за списком релизов; предыдущая версия попадает
+// в статус и в ответ API, откат без неё отказывает.
+func TestCheckLatestVersionListsReleases(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/repos/piqab/nkt/releases" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write([]byte(`[{"tag_name":"v1.9.63","body":"## v1.9.63\n- x"},{"tag_name":"v1.9.62","body":""},{"tag_name":"v1.9.61"}]`))
+	}))
+	defer srv.Close()
+	m, _ := newTestManager(t)
+	m.cfg.HubReleaseRepo = "piqab/nkt"
+	m.cfg.HubGitHubAPI = srv.URL
+	m.version = "1.9.62"
+	st := m.CheckNow(context.Background())
+	if st.CheckError != "" || st.Latest != "1.9.63" || !st.UpdateAvailable || st.Previous != "1.9.61" {
+		t.Fatalf("статус: %+v", st)
+	}
+	if got := versionInfoJSON(st)["previous"]; got != "1.9.61" {
+		t.Errorf("previous в JSON = %v", got)
+	}
+	m.version = "1.9.61"
+	st = m.CheckNow(context.Background())
+	if st.Previous != "" {
+		t.Errorf("у самой старой версии prev = %q", st.Previous)
+	}
+	if err := m.Rollback(context.Background()); err == nil {
+		t.Error("откат без предыдущей версии прошёл")
 	}
 }

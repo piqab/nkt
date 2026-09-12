@@ -23,6 +23,7 @@ export default function About() {
   const version = useApi<HubVersionInfo>('/hub/version', 5 * 60_000)
   const [checking, setChecking] = useState(false)
   const [updating, setUpdating] = useState(false)
+  const [rollingBack, setRollingBack] = useState(false)
   const [restarting, setRestarting] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
 
@@ -79,6 +80,19 @@ export default function About() {
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
       setUpdating(false)
+    }
+  }
+
+  async function rollback() {
+    if (!(await confirmAction(t('about.confirmRollback', { current: version.data?.current, version: version.data?.previous })))) return
+    setRollingBack(true)
+    setNotice(null)
+    try {
+      await api('/hub/rollback', { method: 'POST' })
+      setRestarting(true)
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      setRollingBack(false)
     }
   }
 
@@ -154,6 +168,14 @@ export default function About() {
                   </div>
                 </div>
               )}
+              {info?.previous && (
+                <div>
+                  <div className="small muted">{t('about.previousVersion')}</div>
+                  <div className="mono" style={{ fontSize: '1.1rem' }}>
+                    {info.previous}
+                  </div>
+                </div>
+              )}
               {info?.checked_at && (
                 <div>
                   <div className="small muted">{t('about.checkedAt')}</div>
@@ -177,7 +199,17 @@ export default function About() {
                   {t('about.updateTo', { version: info.latest })}
                 </Button>
               )}
+              {info?.previous && info.updatable && (
+                <Button danger onClick={rollback} loading={rollingBack} disabled={updating}>
+                  {t('about.rollbackTo', { version: info.previous })}
+                </Button>
+              )}
             </div>
+            {info?.previous && info.updatable && (
+              <div className="small muted" style={{ marginTop: '0.5rem' }}>
+                {t('about.rollbackHint')}
+              </div>
+            )}
 
             {info?.update_available && !info.updatable && (
               <div className="small muted" style={{ marginTop: '0.75rem' }}>

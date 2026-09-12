@@ -52,7 +52,7 @@
     "currentVersion": "Current version",
     "latestVersion": "Latest available",
     "checkedAt": "Checked",
-    "checkNow": "Check again",
+    "checkNow": "Check",
     "checkFailed": "Check failed: {{error}}",
     "updateTo": "Update to {{version}}",
     "updatableFalse": "Self-update isn't available: the hub isn't currently running as a systemd unit. If this is Docker/Kubernetes — pull the new image and recreate the container: docker compose pull && docker compose up -d. If the binary was just launched by hand (e.g. right after downloading it with curl) — install and start it as a systemd service instead: sudo make hub-install && sudo systemctl enable --now netknownsthat-hub.",
@@ -66,7 +66,11 @@
     "vulnDBNotReady": "Not downloaded yet",
     "vulnDBRefreshing": "Refreshing…",
     "vulnDBRefreshNow": "Refresh now",
-    "whatsNew": "What's new in {{version}}"
+    "whatsNew": "What's new in {{version}}",
+    "previousVersion": "Previous",
+    "rollbackTo": "Roll back to {{version}}",
+    "confirmRollback": "Roll the hub back from {{current}} to {{version}}? The hub downloads the release binary, verifies its checksum and restarts — it will be unavailable for a few seconds. Hosts with a different version are brought to {{version}} when opened or via “update all”.",
+    "rollbackHint": "Rollback installs the release right before the current one. The hub always brings hosts to its own version — after a rollback they roll back too when opened."
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",
@@ -451,7 +455,7 @@
     "confirmBulkStart": "Start nkt on every host at once ({{count}})?",
     "confirmBulkStop": "Stop nkt on every host at once ({{count}})? They'll all become unreachable through the hub until you start them again.",
     "bulkFailed": "Failed on {{failed}} of {{total}} hosts.",
-    "confirmUpdateAll": "Update nkt on {{count}} hosts that are behind the hub's version? This runs sequentially, one host at a time.",
+    "confirmUpdateAll": "Bring nkt to the hub's version on {{count}} hosts with a different version? This runs sequentially, one host at a time.",
     "bulkUpdateFinished": "Update finished: {{total}} hosts, {{failed}} failed.",
     "confirmImport": "Import hosts from this file? Hosts are added alongside existing ones (the file doesn't replace or dedupe by name/address). Secrets in the file only decrypt if it was exported with this same hub's NKT_HUB_MASTER_KEY.",
     "imported": "Imported hosts: {{count}}.{{errors}}",
@@ -638,7 +642,8 @@
     "discoverImport": "Add selected ({{count}})",
     "discoverImported": "Machines added: {{count}}.",
     "discoverKeyHint": "The hub key is not in the machines yet — open “public key” in the machine row and add it to authorized_keys.",
-    "discoverSearching": "looking for machines on {{name}}…"
+    "discoverSearching": "looking for machines on {{name}}…",
+    "syncVersion": "bring to the hub's version"
   },
   "events": {
     "title": "Alerts",

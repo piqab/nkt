@@ -49,8 +49,31 @@ func (m *Manager) ApplyUpdate(ctx context.Context) error {
 	if !status.UpdateAvailable {
 		return msgs.Errorf("hub.latestVersionAlreadyInstalled", status.Current)
 	}
-	version := status.Latest
+	return m.applyVersion(ctx, status.Latest)
+}
 
+// Rollback installs the release right below the running one — the same
+// download-verify-stage-restart path as ApplyUpdate, just aimed one
+// version back. Hosts follow the hub down the same way they follow it
+// up: the hub always installs its own version, and the UI treats any
+// version mismatch as "bring the host to the hub's version".
+func (m *Manager) Rollback(ctx context.Context) error {
+	status := m.VersionStatus()
+	if !status.Updatable {
+		return msgs.Errorf("hub.selfUpdateUnavailableHubRunning")
+	}
+	if status.Latest == "" {
+		return msgs.Errorf("hub.versionHasBeenCheckedYet")
+	}
+	if status.Previous == "" {
+		return msgs.Errorf("hub.noPreviousRelease", status.Current)
+	}
+	return m.applyVersion(ctx, status.Previous)
+}
+
+// applyVersion downloads and verifies release `version`, then replaces
+// this hub's own binary and systemd unit and restarts itself.
+func (m *Manager) applyVersion(ctx context.Context, version string) error {
 	report := func(key string, args ...any) {
 		m.log.Info("hub self-update", "step", key, "args", args)
 	}

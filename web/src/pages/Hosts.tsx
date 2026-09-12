@@ -40,10 +40,7 @@ function parseSemver(v: string): [number, number, number] | null {
 /** True when `current` is an older release than `latest`. Falls back to a
  * plain "not equal" when either side doesn't parse as semver — the best
  * that can be said about an opaque string like "dev" — rather than
- * guessing which of two incomparable strings is "newer". Never reports a
- * host as outdated when it is actually newer than the hub (e.g. the hub
- * itself hasn't been rebuilt yet) — "переустановить" would only downgrade
- * it in that case, not update it. */
+ * guessing which of two incomparable strings is "newer". */
 function isOlderVersion(current: string, latest: string): boolean {
   const a = parseSemver(current)
   const b = parseSemver(latest)
@@ -54,8 +51,18 @@ function isOlderVersion(current: string, latest: string): boolean {
   return false
 }
 
+/** Версия nkt на хосте не совпадает с версией хаба — в любую сторону.
+ * Хаб всегда ставит на хосты ровно свою версию, поэтому и хост старее
+ * (после обновления хаба), и хост новее (после отката хаба) приводятся
+ * к ней одинаково: «открыть» сначала переустанавливает, «обновить всё»
+ * считает и тех, и других. */
 function isOutdated(h: HubHost, hubVersion?: string): boolean {
-  return h.status !== 'new' && !!hubVersion && !!h.nkt_version && isOlderVersion(h.nkt_version, hubVersion)
+  return h.status !== 'new' && !!hubVersion && !!h.nkt_version && h.nkt_version !== hubVersion
+}
+
+/** Хост новее хаба: словами это не «обновить», а «привести к версии хаба». */
+function isAhead(h: HubHost, hubVersion?: string): boolean {
+  return isOutdated(h, hubVersion) && !isOlderVersion(h.nkt_version ?? '', hubVersion ?? '')
 }
 
 const STATUS_LABEL_KEY: Record<HubHost['status'], string> = {
@@ -1033,7 +1040,13 @@ export default function Hosts({
         ) : (
           <RowAction
             action={h.status === 'new' ? 'install' : outdated ? 'update' : 'install'}
-            label={h.status === 'new' ? t('hosts.install') : outdated ? t('hosts.update') : t('hosts.reinstall')}
+            label={
+              h.status === 'new'
+                ? t('hosts.install')
+                : outdated
+                  ? t(isAhead(h, hubVersion) ? 'hosts.syncVersion' : 'hosts.update')
+                  : t('hosts.reinstall')
+            }
             loading={busy}
             disabled={busy}
             onClick={() => startInstall(h)}
