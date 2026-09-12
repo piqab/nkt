@@ -424,3 +424,4 @@ func TestPlanOffersDockerWhenMissing(t *testing.T) {
 		t.Errorf("профиль без стеков = %v", composeActions(plan))
 	}
 }
+

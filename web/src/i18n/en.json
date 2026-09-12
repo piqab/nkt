@@ -948,7 +948,9 @@
     "allowWriteRestarting": "The directory is open and the service is restarting. The file becomes writable in a few seconds; reload the page if it does not respond right away.",
     "pathMustBeAbsolute": "The path must start with \"/\"",
     "pathNoDotDot": "\"..\" is not allowed in the path",
-    "pathSameAsSource": "That is the source file’s own path — pick another"
+    "pathSameAsSource": "That is the source file’s own path — pick another",
+    "newFileCategory": "Category",
+    "newFileRoot": "Root"
   },
   "charts": {
     "seconds": "{{value}} s",
@@ -1356,7 +1358,9 @@
     "newFileLabel": "Or create a new file in this directory",
     "create": "Create",
     "cancel": "Cancel",
-    "newComposeStackNote": "created a new compose stack"
+    "newComposeStackNote": "created a new compose stack",
+    "fileNameLabel": "File name in this directory",
+    "missingDir": "The directory does not exist yet — it is created together with the file."
   },
   "logs": {
     "title": "Logs",

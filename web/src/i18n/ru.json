@@ -950,7 +950,9 @@
     "allowWriteRestarting": "Каталог открыт, служба перезапускается. Через несколько секунд файл станет доступен на запись; если страница не ответит сразу — обновите её.",
     "pathMustBeAbsolute": "Путь должен начинаться с «/»",
     "pathNoDotDot": "«..» в пути не допускается",
-    "pathSameAsSource": "Это путь исходного файла — укажите другой"
+    "pathSameAsSource": "Это путь исходного файла — укажите другой",
+    "newFileCategory": "Категория",
+    "newFileRoot": "Корень"
   },
   "charts": {
     "seconds": "{{value}} с",
@@ -1358,7 +1360,9 @@
     "newFileLabel": "Или создать новый файл в этом каталоге",
     "create": "Создать",
     "cancel": "Отмена",
-    "newComposeStackNote": "создан новый compose-стек"
+    "newComposeStackNote": "создан новый compose-стек",
+    "fileNameLabel": "Имя файла в этом каталоге",
+    "missingDir": "Каталога ещё нет — он появится вместе с файлом."
   },
   "logs": {
     "title": "Логи",
