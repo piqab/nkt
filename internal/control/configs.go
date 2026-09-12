@@ -199,37 +199,82 @@ func (m *ConfigManager) ServiceForPath(path string) (string, error) {
 	return m.checkPath(path)
 }
 
-// BrowseDir lists a directory under /home, for the "новый контейнер" path
-// picker — a directory being browsed is not itself a file this app manages
-// (checkPath would reject most of them), only the compose file the operator
-// eventually picks or creates inside it goes through the normal write path.
-// /home is a deliberately narrow root: shared hosts conventionally give each
-// operator their own home directory to keep their compose stacks in, and
-// nothing else on the host needs browsing this way.
+// CategoryRoots — каталоги, в которых новый файл каждой категории может
+// появиться. Те же корни, по которым serviceForPath решает, чей путь:
+// «новый файл» ведёт оператора вглубь корня, а не даёт набрать что
+// угодно, и отказ «путь не разрешён» узнаётся до нажатия, а не после.
+//
+// У docker два корня: /home, где стеки держат сами операторы, и каталог
+// стеков из профилей.
+func (m *ConfigManager) CategoryRoots() map[string][]string {
+	roots := map[string][]string{
+		model.ServiceNginx:    {m.cfg.NginxRoot},
+		model.ServiceHAProxy:  {m.cfg.HAProxyRoot},
+		model.ServiceCaddy:    {m.cfg.CaddyRoot},
+		model.ServiceFail2ban: {m.cfg.Fail2banRoot},
+		model.ServiceSystemd:  {m.cfg.SystemdUnitRoot},
+		model.ServiceSSH:      {m.cfg.SSHRoot},
+		model.ServiceNetwork:  {m.cfg.NetplanRoot},
+		model.ServiceSysctl:   {m.cfg.SysctlRoot},
+		model.ServiceCron:     {m.cfg.CronRoot},
+		model.ServiceLibvirt:  {parse.LibvirtQEMUDir},
+		model.ServiceDocker:   {"/home", parse.ComposeStacksDir},
+	}
+	for k, list := range roots {
+		clean := list[:0]
+		for _, r := range list {
+			if strings.TrimSpace(r) != "" {
+				clean = append(clean, strings.TrimSuffix(r, "/"))
+			}
+		}
+		if len(clean) == 0 {
+			delete(roots, k)
+		} else {
+			roots[k] = clean
+		}
+	}
+	return roots
+}
+
+// browseAllowed отвечает, лежит ли путь под одним из корней категорий —
+// только там и можно ходить и создавать каталоги.
+func (m *ConfigManager) browseAllowed(path string) bool {
+	if path == "" || !strings.HasPrefix(path, "/") || strings.Contains(path, "..") || gopath.Clean(path) != path {
+		return false
+	}
+	for _, list := range m.CategoryRoots() {
+		for _, root := range list {
+			if underRoot(path, root) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// BrowseDir lists a directory under one of the category roots — for the
+// "новый файл" and "новый контейнер" pickers. A directory being browsed is
+// not itself a file this app manages (checkPath would reject most of them),
+// only the file the operator eventually picks or creates inside it goes
+// through the normal write path.
 func (m *ConfigManager) BrowseDir(path string) ([]collect.FileInfo, error) {
 	if path == "" {
 		path = "/home"
 	}
-	if err := checkHomePath(path); err != nil {
-		return nil, err
+	if !m.browseAllowed(path) {
+		return nil, ErrPathNotAllowed
 	}
 	return m.c.ListDir(path)
 }
 
-// Mkdir creates a new directory under /home — laying out a fresh compose
-// stack's folder before any file exists in it, same sandboxing as BrowseDir.
+// Mkdir creates a new directory under one of the category roots — laying
+// out a fresh compose stack's folder, or a sites-available subdirectory,
+// before any file exists in it; same sandboxing as BrowseDir.
 func (m *ConfigManager) Mkdir(path string) error {
-	if err := checkHomePath(path); err != nil {
-		return err
-	}
-	return m.c.Mkdir(path)
-}
-
-func checkHomePath(path string) error {
-	if path == "" || !underRoot(path, "/home") || strings.Contains(path, "..") || gopath.Clean(path) != path {
+	if !m.browseAllowed(path) {
 		return ErrPathNotAllowed
 	}
-	return nil
+	return m.c.Mkdir(path)
 }
 
 // List returns every config file the dashboard knows about.

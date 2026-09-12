@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox, Form, Input, Segmented, Select, type InputRef, type TableColumnsType } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
+import { Button, Checkbox, Input, Segmented, Select, type TableColumnsType } from 'antd'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
@@ -9,6 +9,7 @@ import BlockTree from '../components/BlockTree'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import PathPicker from '../components/PathPicker'
 import { RowAction } from '../components/RowAction'
 
 const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker', 'caddy'])
@@ -79,8 +80,12 @@ export default function Configs({ me }: { me: Me }) {
   // cloneFrom (the source path) just labels the form so it's clear where
   // the content came from.
   const [creatingInitialContent, setCreatingInitialContent] = useState('')
-  const [newFileModal, setNewFileModal] = useState<{ cloneFrom?: string; initialContent?: string } | null>(null)
-  const [newFilePathInput, setNewFilePathInput] = useState('')
+  const [newFileModal, setNewFileModal] = useState<{ cloneFrom?: string; cloneService?: string; initialContent?: string } | null>(null)
+  // Корни категорий — откуда начинается путь нового файла и куда ему не
+  // выйти: /etc/nginx у nginx, /home и каталог стеков у docker.
+  const roots = useApi<{ roots: Record<string, string[]> }>('/configs/roots', 300_000)
+  const [newFileCategory, setNewFileCategory] = useState<string>('')
+  const [newFileRoot, setNewFileRoot] = useState<string>('')
   // Категория списка файлов. 'all' и 'unused' — псевдокатегории: первая
   // ничего не фильтрует, вторая собирает файлы, до которых конфигурация
   // службы не дотягивается (in_use=false) независимо от их службы.
@@ -89,7 +94,6 @@ export default function Configs({ me }: { me: Me }) {
   // самого sshd. Запрашивается только когда открыт файл этой категории —
   // для остальных проверять нечего.
   const [sshForce, setSSHForce] = useState(false)
-  const newFilePathInputRef = useRef<InputRef>(null)
 
   const file = useApi<FileContent>(path ? `/configs/file${qs({ path })}` : null)
   const versions = useApi<{ versions: ConfigVersion[] }>(path ? `/configs/versions${qs({ path })}` : null)
@@ -103,22 +107,21 @@ export default function Configs({ me }: { me: Me }) {
     }
   }, [file.data])
 
-  // Cloning starts the path field pre-filled with the source's full path
-  // (see the "Клонировать" button below) — select just the filename
-  // portion so typing a new name is a plain overwrite, the directory
-  // stays untouched unless the operator deliberately edits that part too.
-  // Keyed on newFileModal itself (a fresh object each time it opens), not
-  // on newFilePathInput, so this doesn't re-select on every keystroke.
+  // Категория нового файла: клонируемого файла, иначе выбранная в списке,
+  // иначе первая известная. Корень — первый у категории, пока не выбран
+  // другой (у docker их два).
   useEffect(() => {
     if (!newFileModal) return
-    const input = newFilePathInputRef.current
-    if (!input) return
-    input.focus()
-    if (newFileModal.cloneFrom) {
-      const slash = newFileModal.cloneFrom.lastIndexOf('/')
-      if (slash >= 0) input.setSelectionRange(slash + 1, newFileModal.cloneFrom.length)
-    }
-  }, [newFileModal])
+    const known = Object.keys(roots.data?.roots ?? {}).sort()
+    // Предпочтение: категория клонируемого файла → выбранная в списке →
+    // первая, у которой на хосте есть файлы → первая по алфавиту.
+    const withFiles = categories.map((c) => c.value).find((c) => known.includes(c)) ?? ''
+    const preferred = newFileModal.cloneService ?? (category !== 'all' && category !== 'unused' ? category : withFiles)
+    const cat = known.includes(preferred) ? preferred : known[0] ?? ''
+    setNewFileCategory(cat)
+    setNewFileRoot(roots.data?.roots[cat]?.[0] ?? '')
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- пересчёт только при открытии окна и приходе корней
+  }, [newFileModal, roots.data])
 
   // Открытие каталога юниту — запасной путь: обычно запись, которой
   // помешала песочница, повторяется мимо неё, и до этой кнопки дело не
@@ -192,18 +195,6 @@ export default function Configs({ me }: { me: Me }) {
 
   // Что не так с введённым путём — одна строка на все места, где это
   // нужно: подпись под полем и состояние кнопки.
-  const trimmedNewPath = newFilePathInput.trim()
-  const pathProblem =
-    trimmedNewPath === ''
-      ? null
-      : !trimmedNewPath.startsWith('/')
-        ? t('configs.pathMustBeAbsolute')
-        : trimmedNewPath.includes('..')
-          ? t('configs.pathNoDotDot')
-          : newFileModal?.cloneFrom && trimmedNewPath === newFileModal.cloneFrom
-            ? t('configs.pathSameAsSource')
-            : null
-
   const sshBlocked = isSSHPath && sshPreflight.data?.reserve.ok === false && !sshForce
 
   const dirty = file.data !== null && draft !== file.data.content
@@ -413,8 +404,7 @@ export default function Configs({ me }: { me: Me }) {
                           <>
                             <Button
                               onClick={() => {
-                                setNewFileModal({ cloneFrom: file.data!.path, initialContent: draft })
-                                setNewFilePathInput(file.data!.path)
+                                setNewFileModal({ cloneFrom: file.data!.path, cloneService: file.data!.service, initialContent: draft })
                               }}
                             >
                               {t('configs.clone')}
@@ -578,53 +568,66 @@ export default function Configs({ me }: { me: Me }) {
       </div>
 
       {newFileModal && (
-        <Modal title={t(newFileModal.cloneFrom ? 'configs.cloneTitle' : 'configs.newFileTitle')} onClose={() => setNewFileModal(null)}>
+        <Modal title={t(newFileModal.cloneFrom ? 'configs.cloneTitle' : 'configs.newFileTitle')} onClose={() => setNewFileModal(null)} width={680}>
           <div className="col">
             {newFileModal.cloneFrom && (
               <p className="small muted" style={{ marginTop: 0 }}>
                 <Trans i18nKey="configs.cloneBody" values={{ path: newFileModal.cloneFrom }} components={{ code: <code className="mono" /> }} />
               </p>
             )}
-            {/* Путь проверяется здесь же: абсолютный, без «..» и не тот
-                самый файл, который клонируем. Сервер отвергнет то же самое,
-                но узнавать об опечатке после запроса на хост незачем. */}
-            <Form layout="vertical" requiredMark={false}>
-              <Form.Item
-                label={t('configs.pathLabel')}
-                validateStatus={pathProblem ? 'error' : undefined}
-                help={pathProblem ?? undefined}
-                style={{ marginBottom: '0.4rem' }}
-              >
-                <Input
-                  ref={newFilePathInputRef}
-                  value={newFilePathInput}
-                  onChange={(e) => setNewFilePathInput(e.target.value)}
-                  placeholder="/etc/nginx/sites-enabled/newsite.conf"
+            {/* Путь начинается с корня категории и не выходит из него:
+                сервер отвергнет чужой путь всё равно, но узнавать об этом
+                после нажатия незачем. */}
+            <div className="filters">
+              <label>
+                {t('configs.newFileCategory')}
+                <Select
+                  value={newFileCategory}
+                  style={{ minWidth: '10rem' }}
+                  onChange={(v) => {
+                    setNewFileCategory(v)
+                    setNewFileRoot(roots.data?.roots[v]?.[0] ?? '')
+                  }}
+                  options={Object.keys(roots.data?.roots ?? {})
+                    .sort()
+                    .map((c) => ({ value: c, label: c }))}
                 />
-              </Form.Item>
-            </Form>
-            <p className="small muted">
-              <Trans i18nKey="configs.pathHint" components={{ code: <code className="mono" /> }} />
-            </p>
-            <div className="row" style={{ marginTop: '0.4rem' }}>
-              <Button
-                type="primary"
-                disabled={pathProblem !== null || newFilePathInput.trim() === ''}
-                onClick={() => {
-                  const p = newFilePathInput.trim()
+              </label>
+              {(roots.data?.roots[newFileCategory]?.length ?? 0) > 1 && (
+                <label>
+                  {t('configs.newFileRoot')}
+                  <Select
+                    value={newFileRoot}
+                    style={{ minWidth: '12rem' }}
+                    onChange={setNewFileRoot}
+                    options={(roots.data?.roots[newFileCategory] ?? []).map((r) => ({ value: r, label: r }))}
+                  />
+                </label>
+              )}
+            </div>
+            {newFileRoot ? (
+              <PathPicker
+                key={newFileRoot}
+                root={newFileRoot}
+                mode="file"
+                initialDir={
+                  newFileModal.cloneFrom && newFileModal.cloneFrom.startsWith(newFileRoot + '/')
+                    ? newFileModal.cloneFrom.slice(0, newFileModal.cloneFrom.lastIndexOf('/'))
+                    : undefined
+                }
+                defaultName={newFileModal.cloneFrom ? newFileModal.cloneFrom.slice(newFileModal.cloneFrom.lastIndexOf('/') + 1) : ''}
+                onPick={(p) => {
+                  if (newFileModal.cloneFrom && p === newFileModal.cloneFrom) return
                   setCreatingPath(p)
                   setCreatingInitialContent(newFileModal.initialContent ?? '')
                   setPath(null)
                   setNewFileModal(null)
-                  setNewFilePathInput('')
                 }}
-              >
-                {t(newFileModal.cloneFrom ? 'configs.clone' : 'configs.create')}
-              </Button>
-              <Button type="link" onClick={() => setNewFileModal(null)}>
-                {t('configs.cancel')}
-              </Button>
-            </div>
+                onCancel={() => setNewFileModal(null)}
+              />
+            ) : (
+              <Loading what={t('configs.newFileRoot')} />
+            )}
           </div>
         </Modal>
       )}

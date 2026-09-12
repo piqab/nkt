@@ -28,6 +28,12 @@ func (s *Server) handleConfigList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"files": files})
 }
 
+// handleConfigRoots отдаёт корни категорий — «новый файл» начинает путь с
+// корня выбранной категории и не выпускает наружу.
+func (s *Server) handleConfigRoots(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"roots": s.configs.CategoryRoots()})
+}
+
 func (s *Server) handleConfigBrowse(w http.ResponseWriter, r *http.Request) {
 	entries, err := s.configs.BrowseDir(r.URL.Query().Get("path"))
 	if err != nil {

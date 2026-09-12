@@ -312,6 +312,7 @@ export default function Docker({ me }: { me: Me }) {
       {pickingPath && (
         <Modal title={t('docker.newContainerLocation')} onClose={() => setPickingPath(false)}>
           <PathPicker
+            root="/home"
             onPick={(path) => {
               setPickingPath(false)
               setConfigModal({ path, autoCreate: true })

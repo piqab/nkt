@@ -54,12 +54,23 @@ func TestBrowseDirListsUserDirectory(t *testing.T) {
 	}
 }
 
-func TestBrowseDirRejectsOutsideHome(t *testing.T) {
+// Ходить можно только по корням категорий: /home и каталог стеков у
+// docker, /etc/nginx у nginx и так далее. /etc целиком, корень и похожие
+// на корень имена — нет.
+func TestBrowseDirRejectsOutsideRoots(t *testing.T) {
 	m := configsSetup(t)
-	for _, path := range []string{"/etc", "/etc/nginx", "/", "/homeless"} {
+	for _, path := range []string{"/etc", "/", "/homeless", "/etc/nginxx", "/etc/passwd"} {
 		if _, err := m.BrowseDir(path); err == nil {
-			t.Errorf("BrowseDir(%q): ожидалась ошибка вне /home", path)
+			t.Errorf("BrowseDir(%q): ожидалась ошибка вне корней категорий", path)
 		}
+	}
+	// А корень категории — можно: сюда и ведёт «новый файл».
+	if _, err := m.BrowseDir("/etc/nginx"); err != nil {
+		t.Errorf("BrowseDir(/etc/nginx): %v, а это корень категории nginx", err)
+	}
+	roots := m.CategoryRoots()
+	if len(roots["docker"]) != 2 || roots["nginx"][0] != "/etc/nginx" {
+		t.Errorf("корни категорий = %v", roots)
 	}
 }
 
