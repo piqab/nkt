@@ -1494,7 +1494,7 @@
   },
   "files": {
     "title": "Files",
-    "hint": "Browse host directories: folders, uploads, archives, git clone. Only inside the allowed roots — you can't go above them; system directories are edited through Configs with validation and history.",
+    "hint": "Browse host directories: folders, uploads (whole folders too — by button or by dropping onto the table), archives, git clone. Only inside the allowed roots — you can't go above them; system directories are edited through Configs with validation and history.",
     "loading": "Reading directory…",
     "empty": "Directory is empty",
     "colName": "Name",
@@ -1534,7 +1534,11 @@
     "tokenHint": "The token is sent to the host once and lives only in the job's memory — it is never stored or logged. GitHub and GitLab don't need a username.",
     "keyHint": "The host's public key. Add it to the repository as a deploy key (GitHub: Settings → Deploy keys; GitLab: Settings → Repository → Deploy keys) and clone via the SSH URL.",
     "keyLoading": "Preparing key…",
-    "cloneStart": "Clone"
+    "cloneStart": "Clone",
+    "uploadFolder": "Folder",
+    "uploadProgress": "Uploaded {{done}} of {{total}} files ({{size}})",
+    "uploadDone": "Uploaded {{done}} of {{total}} files ({{size}})",
+    "dropHint": "Drop to upload files and folders here"
   },
   "hardware": {
     "title": "Hardware",

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type React from 'react'
 import { Button, Input, Progress, Select, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { FolderOutlined, FolderAddOutlined, FileOutlined, FileZipOutlined, BranchesOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -56,11 +57,58 @@ function badName(name: string): boolean {
   return !name || name === '.' || name === '..' || name.includes('/')
 }
 
-interface UploadState {
-  name: string
-  percent: number
-  done: boolean
-  error?: string
+/** Один файл в очереди загрузки: имя с путём внутри папки, если грузится
+ * папка (webkitRelativePath или обход перетащенного дерева). */
+interface Pending {
+  rel: string
+  file: File
+}
+
+/** Сводка по всей очереди: один счётчик и одна полоса, а не строка на
+ * каждый из пятисот файлов папки. Ошибки — отдельным списком, они редкие. */
+interface UploadSummary {
+  total: number
+  done: number
+  bytesTotal: number
+  bytesDone: number
+  current: string
+  errors: { rel: string; error: string }[]
+  finished: boolean
+}
+
+/** Сколько файлов грузить разом: через SSH-туннель хаба каждый запрос —
+ * свой канал, и сотня параллельных только мешала бы друг другу. */
+const UPLOAD_PARALLEL = 3
+
+/** Обход перетащенной папки: FileSystemEntry — единственный способ
+ * получить дерево из drop, обычный DataTransfer.files папок не отдаёт. */
+async function collectEntries(items: DataTransferItemList): Promise<Pending[]> {
+  const out: Pending[] = []
+  const walk = async (entry: FileSystemEntry, prefix: string): Promise<void> => {
+    if (entry.isFile) {
+      const file = await new Promise<File>((resolve, reject) => (entry as FileSystemFileEntry).file(resolve, reject))
+      out.push({ rel: prefix + entry.name, file })
+      return
+    }
+    if (entry.isDirectory) {
+      const reader = (entry as FileSystemDirectoryEntry).createReader()
+      // readEntries отдаёт порциями и пустым массивом сигналит конец.
+      for (;;) {
+        const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => reader.readEntries(resolve, reject))
+        if (batch.length === 0) break
+        for (const e of batch) await walk(e, prefix + entry.name + '/')
+      }
+    }
+  }
+  const entries = Array.from(items)
+    .map((it) => (typeof it.webkitGetAsEntry === 'function' ? it.webkitGetAsEntry() : null))
+    .filter((e): e is FileSystemEntry => e !== null)
+  for (const e of entries) await walk(e, '')
+  return out
+}
+
+function fromFileList(files: FileList): Pending[] {
+  return Array.from(files).map((file) => ({ rel: file.webkitRelativePath || file.name, file }))
 }
 
 export default function FileBrowser() {
@@ -84,8 +132,10 @@ export default function FileBrowser() {
   const [renameTarget, setRenameTarget] = useState<Entry | null>(null)
   const [cloneModal, setCloneModal] = useState(false)
   const [openJob, setOpenJob] = useState<Job | null>(null)
-  const [uploads, setUploads] = useState<UploadState[]>([])
+  const [upload, setUpload] = useState<UploadSummary | null>(null)
+  const [dragging, setDragging] = useState(false)
   const fileInput = useRef<HTMLInputElement | null>(null)
+  const dirInput = useRef<HTMLInputElement | null>(null)
 
   const reload = useCallback(() => listing.reload(), [listing])
 
@@ -119,42 +169,80 @@ export default function FileBrowser() {
   }
 
   // Загрузка идёт по одному файлу за запрос: серверу так проще — тело и
-  // есть файл, без разбора multipart, — а прогресс всё равно виден по
-  // каждому отдельно.
-  function uploadFiles(files: FileList | null) {
-    if (!files || !dir) return
-    const list = Array.from(files)
+  // есть файл, без разбора multipart, — а папка отличается от файлов
+  // только тем, что в имени есть путь: каталоги хост создаёт по дороге.
+  function uploadPending(list: Pending[]) {
+    if (!dir || list.length === 0) return
     const max = info.data?.max_upload ?? 0
-    for (const f of list) {
-      if (max > 0 && f.size > max) {
-        setUploads((u) => [...u, { name: f.name, percent: 0, done: true, error: t('files.tooBig', { max: formatBytes(max) }) }])
-        continue
-      }
-      setUploads((u) => [...u, { name: f.name, percent: 0, done: false }])
-      const xhr = new XMLHttpRequest()
-      xhr.open('PUT', apiURL(`/files/upload${qs({ dir, name: f.name })}`))
-      xhr.upload.onprogress = (ev) => {
-        if (!ev.lengthComputable) return
-        const percent = Math.round((ev.loaded / ev.total) * 100)
-        setUploads((u) => u.map((x) => (x.name === f.name && !x.done ? { ...x, percent } : x)))
-      }
-      xhr.onload = () => {
-        let err: string | undefined
-        if (xhr.status >= 300) {
-          try {
-            err = (JSON.parse(xhr.responseText) as { error?: string }).error ?? `HTTP ${xhr.status}`
-          } catch {
-            err = `HTTP ${xhr.status}`
-          }
-        }
-        setUploads((u) => u.map((x) => (x.name === f.name && !x.done ? { ...x, percent: 100, done: true, error: err } : x)))
-        reload()
-      }
-      xhr.onerror = () => {
-        setUploads((u) => u.map((x) => (x.name === f.name && !x.done ? { ...x, done: true, error: t('files.uploadFailed') } : x)))
-      }
-      xhr.send(f)
+    const summary: UploadSummary = {
+      total: list.length, done: 0, bytesTotal: list.reduce((n, p) => n + p.file.size, 0), bytesDone: 0,
+      current: '', errors: [], finished: false,
     }
+    const publish = () => setUpload({ ...summary, errors: [...summary.errors] })
+    publish()
+    const queue = [...list]
+    const one = (p: Pending) =>
+      new Promise<void>((resolve) => {
+        if (max > 0 && p.file.size > max) {
+          summary.errors.push({ rel: p.rel, error: t('files.tooBig', { max: formatBytes(max) }) })
+          resolve()
+          return
+        }
+        summary.current = p.rel
+        let sent = 0
+        const xhr = new XMLHttpRequest()
+        xhr.open('PUT', apiURL(`/files/upload${qs({ dir, name: p.rel })}`))
+        xhr.upload.onprogress = (ev) => {
+          if (!ev.lengthComputable) return
+          summary.bytesDone += ev.loaded - sent
+          sent = ev.loaded
+          publish()
+        }
+        xhr.onload = () => {
+          if (xhr.status >= 300) {
+            let err: string
+            try {
+              err = (JSON.parse(xhr.responseText) as { error?: string }).error ?? `HTTP ${xhr.status}`
+            } catch {
+              err = `HTTP ${xhr.status}`
+            }
+            summary.errors.push({ rel: p.rel, error: err })
+          }
+          summary.bytesDone += p.file.size - sent
+          resolve()
+        }
+        xhr.onerror = () => {
+          summary.errors.push({ rel: p.rel, error: t('files.uploadFailed') })
+          summary.bytesDone += p.file.size - sent
+          resolve()
+        }
+        xhr.send(p.file)
+      })
+    const worker = async () => {
+      for (let p = queue.shift(); p; p = queue.shift()) {
+        await one(p)
+        summary.done += 1
+        publish()
+      }
+    }
+    void Promise.all(Array.from({ length: Math.min(UPLOAD_PARALLEL, list.length) }, worker)).then(() => {
+      summary.finished = true
+      summary.current = ''
+      publish()
+      reload()
+    })
+  }
+
+  async function onDrop(ev: React.DragEvent) {
+    ev.preventDefault()
+    setDragging(false)
+    if (!dir) return
+    // Дерево — через entries; если браузер их не дал (или это не файлы
+    // из проводника ОС), остаётся плоский список.
+    const items = ev.dataTransfer.items
+    let list = items && items.length > 0 ? await collectEntries(items) : []
+    if (list.length === 0) list = fromFileList(ev.dataTransfer.files)
+    uploadPending(list)
   }
 
   const rootSegments = root.split('/').filter(Boolean)
@@ -265,28 +353,65 @@ export default function FileBrowser() {
         <Button size="small" icon={<UploadOutlined />} disabled={!dir} onClick={() => fileInput.current?.click()}>
           {t('files.upload')}
         </Button>
-        <input ref={fileInput} type="file" multiple hidden onChange={(e) => { uploadFiles(e.target.files); e.target.value = '' }} />
+        <Button size="small" icon={<FolderOutlined />} disabled={!dir} onClick={() => dirInput.current?.click()}>
+          {t('files.uploadFolder')}
+        </Button>
+        <input
+          ref={fileInput}
+          type="file"
+          multiple
+          hidden
+          onChange={(e) => {
+            if (e.target.files) uploadPending(fromFileList(e.target.files))
+            e.target.value = ''
+          }}
+        />
+        {/* webkitdirectory — единственный способ выбрать папку в диалоге
+            браузера; пустые папки он не отдаёт, только файлы с путями. */}
+        <input
+          ref={dirInput}
+          type="file"
+          hidden
+          // @ts-expect-error нестандартный, но поддержан всеми браузерами
+          webkitdirectory=""
+          onChange={(e) => {
+            if (e.target.files) uploadPending(fromFileList(e.target.files))
+            e.target.value = ''
+          }}
+        />
         <Button size="small" icon={<BranchesOutlined />} disabled={!dir} onClick={() => setCloneModal(true)}>
           {t('files.clone')}
         </Button>
         <RowAction action="restart" label={t('common.refresh')} loading={listing.loading && !!listing.data} onClick={reload} />
       </div>
 
-      {uploads.length > 0 && (
+      {upload && (
         <div className="col" style={{ gap: '0.2rem', margin: '0.4rem 0' }}>
-          {uploads.map((u, i) => (
-            <div key={`${u.name}-${i}`} className="row small" style={{ gap: '0.5rem', alignItems: 'center' }}>
-              <span className="mono" style={{ minWidth: '12rem' }}>{u.name}</span>
-              {u.error ? (
-                <Tag color="error">{u.error}</Tag>
-              ) : (
-                <Progress percent={u.percent} size="small" style={{ flex: 1, margin: 0 }} status={u.done ? 'success' : 'active'} />
-              )}
+          <div className="row small" style={{ gap: '0.5rem', alignItems: 'center' }}>
+            <span style={{ minWidth: '14rem' }}>
+              {t(upload.finished ? 'files.uploadDone' : 'files.uploadProgress', {
+                done: upload.done, total: upload.total, size: formatBytes(upload.bytesTotal),
+              })}
+            </span>
+            <Progress
+              percent={upload.bytesTotal > 0 ? Math.round((upload.bytesDone / upload.bytesTotal) * 100) : 100}
+              size="small"
+              style={{ flex: 1, margin: 0 }}
+              status={upload.finished ? (upload.errors.length > 0 ? 'exception' : 'success') : 'active'}
+            />
+          </div>
+          {upload.current && <div className="small muted mono">{upload.current}</div>}
+          {upload.errors.map((e) => (
+            <div key={e.rel} className="row small" style={{ gap: '0.5rem', alignItems: 'center' }}>
+              <span className="mono">{e.rel}</span>
+              <Tag color="error">{e.error}</Tag>
             </div>
           ))}
-          <Button type="link" size="small" style={{ alignSelf: 'flex-start', padding: 0 }} onClick={() => setUploads([])}>
-            {t('files.clearUploads')}
-          </Button>
+          {upload.finished && (
+            <Button type="link" size="small" style={{ alignSelf: 'flex-start', padding: 0 }} onClick={() => setUpload(null)}>
+              {t('files.clearUploads')}
+            </Button>
+          )}
         </div>
       )}
 
@@ -295,7 +420,18 @@ export default function FileBrowser() {
       ) : !listing.data && dir ? (
         <div className="small muted"><Spinner /> {t('files.loading')}</div>
       ) : (
-        <div className="table-wrap">
+        <div
+          className={`table-wrap file-drop${dragging ? ' file-drop-active' : ''}`}
+          onDragOver={(ev) => {
+            ev.preventDefault()
+            if (!dragging) setDragging(true)
+          }}
+          onDragLeave={(ev) => {
+            if (!ev.currentTarget.contains(ev.relatedTarget as Node | null)) setDragging(false)
+          }}
+          onDrop={onDrop}
+        >
+          {dragging && <div className="file-drop-hint">{t('files.dropHint')}</div>}
           <DataTable<Entry>
             dataSource={entries}
             rowKey="path"
