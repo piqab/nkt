@@ -160,3 +160,48 @@ func TestScrubHidesUserAndSecret(t *testing.T) {
 		t.Fatalf("scrub оставил секрет: %q", got)
 	}
 }
+
+// Редактор: текст читается с хешем, запись сохраняет права, отклоняет
+// устаревший хеш и переносит при новом имени; двоичный файл не открывается.
+func TestReadWrite(t *testing.T) {
+	m, root, calls := testManager(t)
+	path := root + "/app.conf"
+	if err := os.WriteFile(path, []byte("a=1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	txt, err := m.Read(path)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if txt.Content != "a=1\n" || txt.SHA256 == "" {
+		t.Errorf("Read = %+v", txt)
+	}
+	target, err := m.Write(context.Background(), path, "a=2\n", txt.SHA256, "")
+	if err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	last := (*calls)[len(*calls)-1]
+	if target != path || last[0] != "install" || last[2] != "0600" {
+		t.Errorf("запись ушла как %v → %s", last, target)
+	}
+	if _, err := m.Write(context.Background(), path, "x", "deadbeef", ""); err == nil {
+		t.Error("устаревший хеш принят")
+	}
+	target, err = m.Write(context.Background(), path, "a=3\n", txt.SHA256, "renamed.conf")
+	if err != nil {
+		t.Fatalf("Write с именем: %v", err)
+	}
+	last = (*calls)[len(*calls)-1]
+	if target != root+"/renamed.conf" || last[0] != "rm" || last[len(last)-1] != path {
+		t.Errorf("перенос: %v → %s", last, target)
+	}
+	if err := os.WriteFile(root+"/bin.dat", []byte{0, 1, 2}, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Read(root + "/bin.dat"); err == nil {
+		t.Error("двоичный файл открыт как текст")
+	}
+	if got := permOctal("-rwxr-x---"); got != "0750" {
+		t.Errorf("permOctal = %s", got)
+	}
+}

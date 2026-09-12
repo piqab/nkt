@@ -12,7 +12,10 @@
 package files
 
 import (
+	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -21,6 +24,7 @@ import (
 	"sort"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/piqab/nkt/internal/collect"
 )
@@ -368,4 +372,130 @@ func UnsafeArchivePath(listing string) string {
 func lastLine(s string) string {
 	lines := strings.Split(strings.TrimSpace(s), "\n")
 	return strings.TrimSpace(lines[len(lines)-1])
+}
+
+// MaxEditBytes — потолок файла для редактора: textarea с мегабайтами
+// текста не работает, а такие файлы — не конфиги, а данные.
+const MaxEditBytes int64 = 2 << 20
+
+// Text — содержимое файла для редактора.
+type Text struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+	Size    int64  `json:"size"`
+	SHA256  string `json:"sha256"`
+	Mode    string `json:"mode"`
+}
+
+// Read отдаёт текст файла. Двоичный (с NUL) и слишком большой — отказ:
+// редактор такой только испортит.
+func (m *Manager) Read(p string) (*Text, error) {
+	p, err := m.Check(p)
+	if err != nil {
+		return nil, err
+	}
+	st, err := m.c.Stat(p)
+	if err != nil {
+		return nil, err
+	}
+	if st.IsDir {
+		return nil, fmt.Errorf("%s — каталог", p)
+	}
+	if st.Size > MaxEditBytes {
+		return nil, fmt.Errorf("файл %s больше %d МиБ — в редакторе не открыть, только скачать", gopath.Base(p), MaxEditBytes>>20)
+	}
+	raw, err := m.c.ReadFile(p)
+	if err != nil {
+		return nil, err
+	}
+	if bytes.IndexByte(raw, 0) >= 0 || !utf8.Valid(raw) {
+		return nil, fmt.Errorf("%s — не текстовый файл", gopath.Base(p))
+	}
+	return &Text{Path: p, Content: string(raw), Size: st.Size, SHA256: hashOf(raw), Mode: st.Mode}, nil
+}
+
+// Write записывает текст на место файла, сохраняя его права, и при
+// другом имени переносит. expected — sha256 прочитанного: если файл с
+// тех пор изменился (кем-то ещё), запись отклоняется, чтобы не затереть
+// чужую правку. Пустой expected — новый файл.
+func (m *Manager) Write(ctx context.Context, p, content, expected, newName string) (string, error) {
+	if err := m.mutable(); err != nil {
+		return "", err
+	}
+	p, err := m.Check(p)
+	if err != nil {
+		return "", err
+	}
+	mode := "0644"
+	if st, err := m.c.Stat(p); err == nil {
+		if st.IsDir {
+			return "", fmt.Errorf("%s — каталог", p)
+		}
+		raw, err := m.c.ReadFile(p)
+		if err != nil {
+			return "", err
+		}
+		if expected != "" && hashOf(raw) != expected {
+			return "", fmt.Errorf("файл %s изменился с момента открытия — перечитайте его и повторите правку", gopath.Base(p))
+		}
+		if perm := permOctal(st.Mode); perm != "" {
+			mode = perm
+		}
+	}
+	target := p
+	if newName != "" && newName != gopath.Base(p) {
+		target, err = m.uploadTarget(gopath.Dir(p), newName)
+		if err != nil {
+			return "", err
+		}
+		if m.c.Exists(target) {
+			return "", fmt.Errorf("%s уже существует", target)
+		}
+	}
+	if err := os.MkdirAll(m.tmpDir, 0o755); err != nil {
+		return "", err
+	}
+	tmp, err := os.CreateTemp(m.tmpDir, "edit-*")
+	if err != nil {
+		return "", err
+	}
+	tmpPath := tmp.Name()
+	defer os.Remove(tmpPath)
+	if _, err := tmp.WriteString(content); err != nil {
+		_ = tmp.Close()
+		return "", err
+	}
+	if err := tmp.Close(); err != nil {
+		return "", err
+	}
+	if err := m.exec(ctx, "install", "-m", mode, "--", tmpPath, target); err != nil {
+		return "", err
+	}
+	if target != p {
+		if err := m.exec(ctx, "rm", "-f", "--", p); err != nil {
+			return "", err
+		}
+	}
+	return target, nil
+}
+
+func hashOf(raw []byte) string {
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
+// permOctal переводит «-rw-r--r--» в «0644». Пусто — строка не похожа
+// на права, и вызывающий берёт умолчание.
+func permOctal(mode string) string {
+	if len(mode) < 10 {
+		return ""
+	}
+	bits := mode[len(mode)-9:]
+	var perm int
+	for i, ch := range bits {
+		if ch != '-' {
+			perm |= 1 << (8 - i)
+		}
+	}
+	return fmt.Sprintf("%04o", perm)
 }

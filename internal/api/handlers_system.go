@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/piqab/nkt/internal/auth"
 )
@@ -165,4 +166,79 @@ func (s *Server) handleSandboxPackageUpdate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"output": out, "packages": s.sandboxpkg.List(r.Context())})
+}
+
+// handleLocales — все известные системе локали с отметками.
+func (s *Server) handleLocales(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.sysconfig.Locales(r.Context()))
+}
+
+type localesRequest struct {
+	Generate []string `json:"generate"`
+	Default  string   `json:"default"`
+}
+
+// handleLocalesUpdate генерирует выбранные локали и/или назначает
+// основную.
+func (s *Server) handleLocalesUpdate(w http.ResponseWriter, r *http.Request) {
+	var req localesRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user := auth.Username(r.Context())
+	if len(req.Generate) > 0 {
+		err := s.sysconfig.GenerateLocales(r.Context(), req.Generate)
+		s.db.Audit(r.Context(), user, "system.locale.generate", strings.Join(req.Generate, " "), auditResult(err), errText(err))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if req.Default != "" {
+		err := s.sysconfig.SetLocale(r.Context(), req.Default)
+		s.db.Audit(r.Context(), user, "system.locale", req.Default, auditResult(err), errText(err))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, s.sysconfig.Locales(r.Context()))
+}
+
+// handleTimeSync — служба времени, серверы и состояние сверки.
+func (s *Server) handleTimeSync(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.sysconfig.TimeSync(r.Context()))
+}
+
+type timeSyncRequest struct {
+	Servers *[]string `json:"servers"`
+	SyncNow bool      `json:"sync_now"`
+}
+
+// handleTimeSyncUpdate меняет серверы и/или запускает сверку.
+func (s *Server) handleTimeSyncUpdate(w http.ResponseWriter, r *http.Request) {
+	var req timeSyncRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user := auth.Username(r.Context())
+	if req.Servers != nil {
+		err := s.sysconfig.SetTimeSyncServers(r.Context(), *req.Servers)
+		s.db.Audit(r.Context(), user, "system.timesync.servers", strings.Join(*req.Servers, " "), auditResult(err), errText(err))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	if req.SyncNow {
+		err := s.sysconfig.SyncNow(r.Context())
+		s.db.Audit(r.Context(), user, "system.timesync.now", "", auditResult(err), errText(err))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, s.sysconfig.TimeSync(r.Context()))
 }
