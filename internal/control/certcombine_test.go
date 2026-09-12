@@ -59,7 +59,7 @@ func noCertDirSetup(t *testing.T) (*CertManager, *store.DB) {
 		t.Fatalf("скан: %v", err)
 	}
 	services := NewServiceManager(cfg, c, db)
-	return NewCertManager(cfg, c, db, services, scanner), db
+	return NewCertManager(cfg, c, db, services, scanner, nil), db
 }
 
 func TestListLetsEncryptLineages(t *testing.T) {

@@ -263,7 +263,7 @@ func (s *certsScreen) renewSelected() {
 // any haproxy copy, restarting services — instead of a single status-line
 // spinner for however long the whole thing takes.
 func (s *certsScreen) startRenewProgress(lineage string) {
-	id, err := s.app.Certs.StartRenewCertbot(s.app.actor, lineage)
+	id, err := s.app.Certs.StartRenewCertbot(s.app.actor, lineage, nil)
 	if err != nil {
 		s.app.setStatus(hexCritical, "✖ "+err.Error())
 		return

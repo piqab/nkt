@@ -27,7 +27,7 @@ func certgenSetup(t *testing.T) (*CertManager, collect.Collector) {
 	}
 	t.Cleanup(func() { _ = db.Close() })
 	scanner := inventory.New(cfg, c, db)
-	return NewCertManager(cfg, c, db, NewServiceManager(cfg, c, db), scanner), c
+	return NewCertManager(cfg, c, db, NewServiceManager(cfg, c, db), scanner, nil), c
 }
 
 func TestGenerateSelfSignedNginx(t *testing.T) {

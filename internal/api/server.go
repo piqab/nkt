@@ -56,9 +56,9 @@ type Server struct {
 	jobs *jobs.Manager
 	// vmimages — кэш облачных образов для создания машин.
 	vmimages *vmimage.Store
-	ui         fs.FS
-	log        *slog.Logger
-	version    string
+	ui       fs.FS
+	log      *slog.Logger
+	version  string
 
 	// Keyed sessions ("packages", "ufw-install", ...) each outlive any one
 	// WebSocket connection to them — see runUpdateSession. A single shared
@@ -226,6 +226,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/vulnerabilities", s.handleVulnerabilities)
 			r.Get("/vulnerabilities/manifest", s.handleVulnManifest)
 			r.Get("/certificates", s.handleCertificates)
+			r.Get("/certificates/tools", s.handleCertTools)
+			r.Get("/certificates/standalone-plan", s.handleStandalonePlan)
 
 			r.Get("/profiles", s.handleProfileList)
 			r.Get("/profiles/{id}", s.handleProfileGet)
@@ -349,9 +351,9 @@ func (s *Server) Handler() http.Handler {
 				r.Patch("/monitor/targets/{id}", s.handleTargetPatch)
 
 				// Отчёт об ошибке интерфейса: принимается от любого вошедшего,
-			// а не только от администратора — упасть может у кого угодно.
-			r.Post("/ui-error", s.handleUIError)
-			r.Get("/hardware", s.handleHardware)
+				// а не только от администратора — упасть может у кого угодно.
+				r.Post("/ui-error", s.handleUIError)
+				r.Get("/hardware", s.handleHardware)
 				r.Get("/system/settings", s.handleSystemSettings)
 				r.Get("/system/timezones", s.handleTimezones)
 				r.Get("/network/manager", s.handleNetworkManager)

@@ -76,7 +76,7 @@ func certRenewFixtures(t *testing.T, within time.Duration) *CertRenewer {
 		t.Fatalf("скан: %v", err)
 	}
 	services := control.NewServiceManager(cfg, c, db)
-	return NewCertRenewer(cfg, scanner, control.NewCertManager(cfg, c, db, services, scanner))
+	return NewCertRenewer(cfg, scanner, control.NewCertManager(cfg, c, db, services, scanner, nil))
 }
 
 // app.example.com's fixture certificate is valid until 2035 — nowhere near

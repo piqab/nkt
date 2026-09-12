@@ -16,9 +16,10 @@ import type {
 import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, Spinner, formatDateTime } from '../components/ui'
 import i18n from '../i18n'
-import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { StandaloneConfirm } from '../components/StandaloneConfirm'
+import PackageInstallModal from '../components/PackageInstallModal'
 
 /** How often to poll a running renew job for new progress lines. */
 const RENEW_POLL_MS = 800
@@ -240,6 +241,29 @@ export default function Certificates({ me }: { me: Me }) {
   const summary = data?.summary
   const canControl = me.is_admin && me.allow_mutations
 
+  // Есть ли certbot — проверяется при входе, а не отказом на нажатие:
+  // без него «выпустить» и «продлить» бессмысленны, и раздел говорит об
+  // этом плашкой с кнопкой установки.
+  const tools = useApi<{ tools: Record<string, { present: boolean; version: string }> }>('/certificates/tools', 120_000)
+  const certbotPresent = tools.data ? !!tools.data.tools.certbot?.present : true
+  const [installingCertbot, setInstallingCertbot] = useState(false)
+  const [installOutcome, setInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
+
+  async function handleCertbotInstalled() {
+    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>('/system/apt/install/status').catch(() => null)
+    setInstallOutcome(fresh?.succeeded ? { ok: true } : { ok: false, exitCode: fresh?.exit_code })
+    if (fresh?.succeeded) {
+      // После установки хост пересканируется: появившийся certbot и его
+      // каталоги должны быть видны сразу, а не через полчаса.
+      await api('/inventory/refresh', { method: 'POST' }).catch(() => undefined)
+      await Promise.all([tools.reload(), reload(), lineages.reload()])
+    }
+  }
+
+  // Подтверждение перед certbot --standalone: кто держит 80/443 и что
+  // с ним будет. Одно окно на выпуск и продление.
+  const [standalone, setStandalone] = useState<{ title: string; run: (restartPIDs: number[]) => Promise<void> } | null>(null)
+
   // Shared with both the "неподключённые сертификаты" card and CombineForm's
   // own dropdown, rather than each fetching it separately — a lineage on
   // disk doesn't change when something gets wired to it or reloaded, only
@@ -300,20 +324,24 @@ export default function Certificates({ me }: { me: Me }) {
     const lineage = cert.renewal.lineage
     if (!lineage) return
     const caveat = cert.renewal.derived ? t('certs.confirmRenewDerived', { source: cert.renewal.source_path }) : ''
-    if (!(await confirmAction(t('certs.confirmRenew', { lineage, caveat })))) return
-    setBusy(cert.id)
-    setNotice(null)
-    try {
-      const res = await api<{ job: string }>('/certificates/renew', {
-        method: 'POST',
-        body: { lineage },
-      })
-      startJob(res.job, t('certs.renewLabel', { lineage }))
-    } catch (err) {
-      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setBusy(null)
-    }
+    setStandalone({
+      title: t('certs.confirmRenewTitle', { lineage }) + (caveat ? ` — ${caveat}` : ''),
+      run: async (restartPIDs) => {
+        setBusy(cert.id)
+        setNotice(null)
+        try {
+          const res = await api<{ job: string }>('/certificates/renew', {
+            method: 'POST',
+            body: { lineage, restart_pids: restartPIDs },
+          })
+          startJob(res.job, t('certs.renewLabel', { lineage }))
+        } catch (err) {
+          setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+        } finally {
+          setBusy(null)
+        }
+      },
+    })
   }
 
   /** Same endpoint "продлить" uses, just keyed by a bare lineage name
@@ -322,20 +350,24 @@ export default function Certificates({ me }: { me: Me }) {
    * either way: `certbot renew --cert-name X` works on any lineage it
    * manages, attached or not. */
   async function renewLineage(lineageName: string) {
-    if (!(await confirmAction(t('certs.confirmRenew', { lineage: lineageName, caveat: '' })))) return
-    setBusy(`lineage:${lineageName}`)
-    setNotice(null)
-    try {
-      const res = await api<{ job: string }>('/certificates/renew', {
-        method: 'POST',
-        body: { lineage: lineageName },
-      })
-      startJob(res.job, t('certs.renewLabel', { lineage: lineageName }))
-    } catch (err) {
-      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setBusy(null)
-    }
+    setStandalone({
+      title: t('certs.confirmRenewTitle', { lineage: lineageName }),
+      run: async (restartPIDs) => {
+        setBusy(`lineage:${lineageName}`)
+        setNotice(null)
+        try {
+          const res = await api<{ job: string }>('/certificates/renew', {
+            method: 'POST',
+            body: { lineage: lineageName, restart_pids: restartPIDs },
+          })
+          startJob(res.job, t('certs.renewLabel', { lineage: lineageName }))
+        } catch (err) {
+          setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+        } finally {
+          setBusy(null)
+        }
+      },
+    })
   }
 
   function closeJobModal() {
@@ -382,6 +414,25 @@ export default function Certificates({ me }: { me: Me }) {
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
           {notice.text}
+        </Banner>
+      )}
+
+      {tools.data && !certbotPresent && (
+        <Banner kind="warn">
+          <div className="row" style={{ gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span>{t('certs.certbotMissing')}</span>
+            {canControl && (
+              <Button
+                size="small"
+                onClick={() => {
+                  setInstallOutcome(null)
+                  setInstallingCertbot(true)
+                }}
+              >
+                {t('certs.installCertbot')}
+              </Button>
+            )}
+          </div>
         </Banner>
       )}
 
@@ -489,7 +540,11 @@ export default function Certificates({ me }: { me: Me }) {
 
       {me.is_admin && me.allow_mutations && (
         <>
-          <IssueForm onStarted={startJob} />
+          <IssueForm
+            onStarted={startJob}
+            disabled={!certbotPresent}
+            confirm={(title, run) => setStandalone({ title, run })}
+          />
           <CombineForm
             onCombined={refreshAfterCombine}
             rescanning={rescanning}
@@ -499,6 +554,29 @@ export default function Certificates({ me }: { me: Me }) {
           />
           <SelfSignedForm onIssued={reload} />
         </>
+      )}
+
+      {standalone && (
+        <StandaloneConfirm
+          title={standalone.title}
+          onCancel={() => setStandalone(null)}
+          onConfirm={(pids) => {
+            const run = standalone.run
+            setStandalone(null)
+            void run(pids)
+          }}
+        />
+      )}
+
+      {installingCertbot && (
+        <PackageInstallModal
+          packageName="certbot, python3-certbot-nginx"
+          wsPath="/system/apt/install/ws?pkgs=certbot,python3-certbot-nginx"
+          onClose={() => setInstallingCertbot(false)}
+          onFinished={handleCertbotInstalled}
+          outcome={installOutcome}
+          action="install"
+        />
       )}
 
       {job && (
@@ -650,7 +728,17 @@ function lineageLabel(info: LineageInfo): string {
  * doesn't manage yet — unlike "продлить" (an existing lineage) and unlike
  * the self-signed form below (no real CA involved at all). Runs in the
  * background through the same job/progress Modal "продлить" already uses. */
-function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) => void }) {
+function IssueForm({
+  onStarted,
+  disabled,
+  confirm,
+}: {
+  onStarted: (jobId: string, label: string) => void
+  /** Нет certbot — форма видна, но выпуск не запустить. */
+  disabled?: boolean
+  /** Подтверждение с держателями 80/443 живёт снаружи: оно общее с продлением. */
+  confirm: (title: string, run: (restartPIDs: number[]) => Promise<void>) => void
+}) {
   const { t } = useTranslation()
   const [form] = Form.useForm<{ domains: string }>()
   const [busy, setBusy] = useState(false)
@@ -665,23 +753,22 @@ function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) =>
       setError(t('certs.specifyDomain'))
       return
     }
-    if (!(await confirmAction(t('certs.confirmIssue', { domains: domainList.join(', ') })))) {
-      return
-    }
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await api<{ job: string }>('/certificates/issue', {
-        method: 'POST',
-        body: { domains: domainList },
-      })
-      form.resetFields()
-      onStarted(res.job, t('certs.issuingLabel', { domains: domainList.join(', ') }))
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
+    confirm(t('certs.confirmIssueTitle', { domains: domainList.join(', ') }), async (restartPIDs) => {
+      setBusy(true)
+      setError(null)
+      try {
+        const res = await api<{ job: string }>('/certificates/issue', {
+          method: 'POST',
+          body: { domains: domainList, restart_pids: restartPIDs },
+        })
+        form.resetFields()
+        onStarted(res.job, t('certs.issuingLabel', { domains: domainList.join(', ') }))
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setBusy(false)
+      }
+    })
   }
 
   return (
@@ -701,7 +788,7 @@ function IssueForm({ onStarted }: { onStarted: (jobId: string, label: string) =>
           </Form.Item>
         </div>
         <Form.Item style={{ marginBottom: 0 }}>
-          <Button type="primary" htmlType="submit" loading={busy}>
+          <Button type="primary" htmlType="submit" loading={busy} disabled={disabled} title={disabled ? t('certs.certbotMissing') : undefined}>
             {busy ? t('certs.issuing') : t('certs.issue')}
           </Button>
         </Form.Item>

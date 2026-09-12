@@ -2,10 +2,12 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/msgs"
 )
@@ -60,7 +62,8 @@ func (s *Server) handleGenerateSelfSigned(w http.ResponseWriter, r *http.Request
 }
 
 type renewRequest struct {
-	Lineage string `json:"lineage"`
+	Lineage     string `json:"lineage"`
+	RestartPIDs []int  `json:"restart_pids,omitempty"`
 }
 
 // handleRenewCertbot starts a certbot-managed certificate lineage renewal in
@@ -80,7 +83,7 @@ func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := auth.Username(r.Context())
-	id, err := s.certs.StartRenewCertbot(user, req.Lineage)
+	id, err := s.certs.StartRenewCertbot(user, req.Lineage, restartSet(req.RestartPIDs))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -90,6 +93,17 @@ func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
 
 type issueRequest struct {
 	Domains []string `json:"domains"`
+	// RestartPIDs — ручные процессы на 80/443, которые оператор разрешил
+	// остановить и поднять заново (см. control.StandalonePlan).
+	RestartPIDs []int `json:"restart_pids,omitempty"`
+}
+
+func restartSet(pids []int) map[int]bool {
+	out := map[int]bool{}
+	for _, p := range pids {
+		out[p] = true
+	}
+	return out
 }
 
 // handleIssueCertbot starts issuing a brand-new Let's Encrypt certificate
@@ -104,7 +118,7 @@ func (s *Server) handleIssueCertbot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := auth.Username(r.Context())
-	id, err := s.certs.StartIssueCertbot(user, req.Domains)
+	id, err := s.certs.StartIssueCertbot(user, req.Domains, restartSet(req.RestartPIDs))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
@@ -182,4 +196,34 @@ func (s *Server) handleCombineForHAProxy(w http.ResponseWriter, r *http.Request)
 	// with its new expiry until the next scan, but a rescan costs nothing.
 	s.rescanLater()
 	writeJSON(w, http.StatusOK, res)
+}
+
+// handleStandalonePlan показывает, кто держит 80/443, — до подтверждения
+// выпуска или продления, чтобы оператор видел, что будет остановлено.
+func (s *Server) handleStandalonePlan(w http.ResponseWriter, r *http.Request) {
+	plan, err := s.certs.StandalonePlan(r.Context())
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, plan)
+}
+
+// handleCertTools отвечает, есть ли на хосте certbot и openssl: без
+// certbot «выпустить» и «продлить» бессмысленны, и раздел говорит об этом
+// при входе, а не отказом на нажатие.
+func (s *Server) handleCertTools(w http.ResponseWriter, r *http.Request) {
+	c := s.scanner.Collector()
+	tools := map[string]any{}
+	for _, name := range []string{"certbot", "openssl"} {
+		present := collect.Which(r.Context(), c, name)
+		version := ""
+		if present {
+			if res, err := c.Run(r.Context(), name, "--version"); err == nil {
+				version = strings.TrimSpace(strings.SplitN(res.Output(), "\n", 2)[0])
+			}
+		}
+		tools[name] = map[string]any{"present": present, "version": version}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tools": tools})
 }

@@ -44,7 +44,7 @@ func TestNormaliseCertbotDomainsConvertsUnicode(t *testing.T) {
 func TestStartIssueCertbotSuccess(t *testing.T) {
 	m, _ := renewSetup(t)
 
-	id, err := m.StartIssueCertbot("test", []string{"newsite.example.com"})
+	id, err := m.StartIssueCertbot("test", []string{"newsite.example.com"}, nil)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -56,12 +56,10 @@ func TestStartIssueCertbotSuccess(t *testing.T) {
 	texts := eventTexts(events)
 	wantInOrder := []string{
 		"Начинаю выпуск сертификата для newsite.example.com",
-		"nginx: остановлен",
-		"haproxy: остановлен",
+		"nginx.service: остановлен",
 		"certbot",
 		"сертификат выпущен для newsite.example.com",
-		"nginx: запущен",
-		"haproxy: запущен",
+		"nginx.service: запущен",
 		"Готово",
 	}
 	pos := 0
@@ -76,7 +74,7 @@ func TestStartIssueCertbotSuccess(t *testing.T) {
 
 func TestStartIssueCertbotRejectsWildcard(t *testing.T) {
 	m, _ := renewSetup(t)
-	if _, err := m.StartIssueCertbot("test", []string{"*.example.com"}); err == nil {
+	if _, err := m.StartIssueCertbot("test", []string{"*.example.com"}, nil); err == nil {
 		t.Error("ожидалась ошибка валидации до запуска задачи")
 	}
 }
