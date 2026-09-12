@@ -5,7 +5,9 @@ import {
   CloseCircleFilled,
   ExclamationCircleFilled,
   InfoCircleFilled,
+  MinusCircleOutlined,
   QuestionCircleOutlined,
+  SyncOutlined,
   WarningFilled,
 } from '@ant-design/icons'
 import { Trans, useTranslation } from 'react-i18next'
@@ -91,17 +93,38 @@ function SudoBadge({ status }: { status: HubHost['sudo_status'] }) {
   const s = status ?? ''
   // Галочка или крестик, слово — в подсказке: колонка отвечает на один
   // вопрос «есть ли sudo без пароля», и двух знаков ей достаточно.
+  // Всё, что не NOPASSWD, — красный крестик: колонка отвечает на один
+  // вопрос, и «ещё не проверялось» для него — тоже «нет».
   const icon =
     s === 'nopasswd' ? (
       <CheckCircleFilled style={{ color: SUDO_COLOR[s] }} />
-    ) : s === 'password_required' ? (
-      <CloseCircleFilled style={{ color: SUDO_COLOR[s] }} />
     ) : (
-      <QuestionCircleOutlined style={{ color: SUDO_COLOR[s] }} />
+      <CloseCircleFilled style={{ color: 'var(--status-critical)' }} />
     )
   return (
     <Tooltip title={t(SUDO_LABEL_KEY[s])}>
       <span aria-label={t(SUDO_LABEL_KEY[s])}>{icon}</span>
+    </Tooltip>
+  )
+}
+
+/** Состояние хоста одной иконкой; слово и текст ошибки — в подсказке. */
+function HostStatusIcon({ host }: { host: HubHost }) {
+  const { t } = useTranslation()
+  const label = t(STATUS_LABEL_KEY[host.status]) + (host.status === 'error' && host.error_msg ? `: ${host.error_msg}` : '')
+  const icon =
+    host.status === 'online' ? (
+      <CheckCircleFilled style={{ color: STATUS_COLOR.online }} />
+    ) : host.status === 'installing' ? (
+      <SyncOutlined spin style={{ color: 'var(--seq-300)' }} />
+    ) : host.status === 'error' ? (
+      <CloseCircleFilled style={{ color: STATUS_COLOR.error }} />
+    ) : (
+      <MinusCircleOutlined style={{ color: STATUS_COLOR.new }} />
+    )
+  return (
+    <Tooltip title={label}>
+      <span aria-label={label}>{icon}</span>
     </Tooltip>
   )
 }
@@ -1093,13 +1116,27 @@ export default function Hosts({
 
   const columns: TableColumnsType<HubHost> = [
     {
+      // Состояние — первой колонкой и одной иконкой: слово в заголовке и
+      // в ячейке занимало место, а сказать ему нечего сверх цвета. Текст
+      // ошибки остаётся в подсказке.
+      title: '',
+      key: 'status',
+      width: '2rem',
+      className: 'nowrap',
+      render: (_, h) => <HostStatusIcon host={h} />,
+    },
+    {
       title: t('hosts.colName'),
       key: 'name',
       // Действия — сразу за именем, в той же строке: отдельная строка
       // под каждым хостом удваивала высоту списка ради семи иконок.
+      // Имя — не длиннее десяти знаков: длинное растягивало колонку и
+      // сдвигало остальные; целиком оно в подсказке.
       render: (_, h) => (
-        <div className="row row-nowrap" style={{ minWidth: '10rem', gap: '0.5rem' }}>
-          <strong>{h.name}</strong>
+        <div className="row row-nowrap" style={{ gap: '0.5rem' }}>
+          <strong className="host-name" title={h.name}>
+            {h.name}
+          </strong>
           {renderActions(h)}
         </div>
       ),
@@ -1109,7 +1146,7 @@ export default function Hosts({
       key: 'addr',
       render: (_, h) =>
         h.id === LOCAL_HOST_ID ? (
-          <span className="small muted">{t('hosts.thisMachine')}</span>
+          <span className="small muted">—</span>
         ) : isAddrUnknown(h) ? (
           // Машина ещё не получила адрес: показывать «0.0.0.0» значило бы
           // выдавать заглушку за настоящий адрес.
@@ -1127,20 +1164,6 @@ export default function Hosts({
       render: (_, h) => <span className="small">{h.id === LOCAL_HOST_ID ? '—' : h.arch || '—'}</span>,
     },
     {
-      title: t('hosts.colStatus'),
-      key: 'status',
-      render: (_, h) => (
-        <>
-          <HostStatusBadge status={h.status} />
-          {h.status === 'error' && h.error_msg && (
-            <div className="small" style={{ color: 'var(--status-critical)' }}>
-              {h.error_msg}
-            </div>
-          )}
-        </>
-      ),
-    },
-    {
       title: t('hosts.colSudo'),
       key: 'sudo',
       // «Снять NOPASSWD» — здесь, рядом с галочкой, а не среди общих
@@ -1151,7 +1174,7 @@ export default function Hosts({
         ) : (
           <span className="row row-nowrap" style={{ gap: '0.15rem', alignItems: 'center' }}>
             <SudoBadge status={h.sudo_status} />
-            {h.sudo_status === 'nopasswd' && (
+            {h.sudo_status === 'nopasswd' ? (
               <RowAction
                 action="disable"
                 label={t('hosts.removeNopasswd')}
@@ -1159,6 +1182,14 @@ export default function Hosts({
                 disabled={h.status === 'installing'}
                 onClick={() => removeSudoAccess(h)}
               />
+            ) : (
+              // Второй знак той же ширины, что кнопка «снять»: без него
+              // строки без NOPASSWD были бы короче, и колонка прыгала.
+              <Tooltip title={t(SUDO_LABEL_KEY[h.sudo_status ?? ''])}>
+                <span className="sudo-placeholder" aria-hidden="true">
+                  <CloseCircleFilled style={{ color: 'var(--status-critical)' }} />
+                </span>
+              </Tooltip>
             )}
           </span>
         ),

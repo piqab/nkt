@@ -765,3 +765,24 @@ pre.diff .hunk { color: var(--text-muted); }
 }
 .host-group-caret { color: var(--text-muted); width: 0.8rem; }
 .host-group-name { font-weight: 600; }
+
+/* Имя хоста в списке хаба — не длиннее десяти знаков: длинное растягивало
+   колонку и сдвигало остальные; целиком оно в подсказке. */
+.host-name {
+  display: inline-block;
+  max-width: 10ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* Заглушка под кнопку «снять NOPASSWD»: той же ширины, что кнопка, чтобы
+   колонка не прыгала между строками с NOPASSWD и без. */
+.sudo-placeholder {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+}
