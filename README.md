@@ -28,6 +28,8 @@ nkt hub      control center for multiple hosts
 No Python, no Node, no separate static files needed on the host: the web UI
 is embedded in the binary.
 
+The full feature list by section is in [FEATURES.md](FEATURES.md).
+
 ---
 
 ## Launch on a host
