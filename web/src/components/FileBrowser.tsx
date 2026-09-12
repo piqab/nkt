@@ -5,7 +5,7 @@ import { FolderOutlined, FolderAddOutlined, FileOutlined, FileZipOutlined, Branc
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, qs, useApi } from '../api'
 import type { Job } from '../types'
-import { Banner, Card, Modal, Spinner } from './ui'
+import { Banner, Card, CodeEditor, Modal, Spinner } from './ui'
 import { formatBytes } from './charts'
 import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
@@ -130,6 +130,7 @@ export default function FileBrowser() {
   const [busy, setBusy] = useState<string | null>(null)
   const [folderModal, setFolderModal] = useState(false)
   const [renameTarget, setRenameTarget] = useState<Entry | null>(null)
+  const [editTarget, setEditTarget] = useState<Entry | null>(null)
   const [cloneModal, setCloneModal] = useState(false)
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [upload, setUpload] = useState<UploadSummary | null>(null)
@@ -307,7 +308,9 @@ export default function FileBrowser() {
           {e.archive && (
             <RowAction icon={<FileZipOutlined />} label={t('files.extract')} loading={busy === `x:${e.path}`} onClick={() => extract(e)} />
           )}
-          <RowAction action="edit" label={t('files.rename')} onClick={() => setRenameTarget(e)} />
+          {/* У файла «изменить» — редактор с именем наверху; у папки менять
+              нечего, кроме имени. */}
+          <RowAction action="edit" label={t('files.edit')} onClick={() => (e.is_dir ? setRenameTarget(e) : setEditTarget(e))} />
           <RowAction action="delete" label={t('files.delete')} danger loading={busy === `rm:${e.path}`} onClick={() => remove(e)} />
         </span>
       ),
@@ -473,6 +476,16 @@ export default function FileBrowser() {
           }}
         />
       )}
+      {editTarget && (
+        <FileEditorModal
+          entry={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => {
+            setEditTarget(null)
+            reload()
+          }}
+        />
+      )}
       {cloneModal && dir && (
         <CloneModal
           dir={dir}
@@ -534,6 +547,85 @@ function NameModal({
         <Button type="primary" loading={busy} disabled={badName(trimmed) || trimmed === initial} onClick={submit}>
           {okText}
         </Button>
+      </div>
+    </Modal>
+  )
+}
+
+interface FileText {
+  path: string
+  content: string
+  size: number
+  sha256: string
+  mode: string
+}
+
+/**
+ * Редактор файла: имя наверху (его можно поменять — файл переедет),
+ * текст с номерами строк. Запись сверяется с хешем прочитанного: если
+ * файл за это время поменял кто-то ещё, сервер откажет, а не затрёт.
+ */
+function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation()
+  const text = useApi<FileText>(`/files/read${qs({ path: entry.path })}`)
+  const [name, setName] = useState(entry.name)
+  const [content, setContent] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    if (text.data && content === null) setContent(text.data.content)
+  }, [text.data, content])
+
+  const trimmed = name.trim()
+  const dirty = content !== null && text.data !== null && (content !== text.data.content || trimmed !== entry.name)
+  const canSave = dirty && !badName(trimmed) && !busy
+
+  async function save() {
+    if (!canSave || content === null || !text.data) return
+    setBusy(true)
+    setError(null)
+    try {
+      await api('/files/write', {
+        method: 'POST',
+        body: { path: entry.path, content, expected_sha256: text.data.sha256, name: trimmed },
+      })
+      onSaved()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title={t('files.editTitle')} onClose={onClose} closeLabel={t('common.cancel')} width="min(96vw, 1100px)">
+      <div className="col" style={{ gap: '0.6rem' }}>
+        {error && <Banner kind="error">{error}</Banner>}
+        {text.error && <Banner kind="error">{text.error}</Banner>}
+        <div className="filters" style={{ alignItems: 'flex-end' }}>
+          <label className="col" style={{ gap: '0.2rem', flex: 1 }}>
+            {t('files.fileName')}
+            <Input value={name} onChange={(e) => setName(e.target.value)} className="mono" />
+          </label>
+          <span className="small muted mono">{parentOf(entry.path)}/</span>
+          {text.data && (
+            <span className="small muted">
+              {formatBytes(text.data.size)} · {text.data.mode}
+            </span>
+          )}
+          <Button type="primary" disabled={!canSave} loading={busy} onClick={save}>
+            {t('common.save')}
+          </Button>
+        </div>
+        {content === null ? (
+          !text.error && (
+            <div className="small muted">
+              <Spinner /> {t('files.loadingFile')}
+            </div>
+          )
+        ) : (
+          <CodeEditor value={content} onChange={(e) => setContent(e.target.value)} rows={26} autoFocus />
+        )}
       </div>
     </Modal>
   )

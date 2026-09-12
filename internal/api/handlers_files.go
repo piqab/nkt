@@ -219,3 +219,52 @@ func (s *Server) handleFilesClone(w http.ResponseWriter, r *http.Request) {
 	s.db.Audit(r.Context(), user, "files.clone", dest, "ok", req.URL)
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id, "dest": dest})
 }
+
+// handleFilesRead отдаёт текст файла для редактора.
+func (s *Server) handleFilesRead(w http.ResponseWriter, r *http.Request) {
+	m := s.filesOrFail(w)
+	if m == nil {
+		return
+	}
+	txt, err := m.Read(r.URL.Query().Get("path"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, txt)
+}
+
+type filesWriteRequest struct {
+	Path           string `json:"path"`
+	Content        string `json:"content"`
+	ExpectedSHA256 string `json:"expected_sha256"`
+	Name           string `json:"name,omitempty"`
+}
+
+// handleFilesWrite записывает правку редактора (и переносит при новом
+// имени).
+func (s *Server) handleFilesWrite(w http.ResponseWriter, r *http.Request) {
+	m := s.filesOrFail(w)
+	if m == nil {
+		return
+	}
+	var req filesWriteRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	user := auth.Username(r.Context())
+	target, err := m.Write(r.Context(), req.Path, req.Content, req.ExpectedSHA256, strings.TrimSpace(req.Name))
+	if err != nil {
+		s.db.Audit(r.Context(), user, "files.write", req.Path, "error", err.Error())
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), user, "files.write", target, "ok", nil)
+	txt, err := m.Read(target)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, txt)
+}

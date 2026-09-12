@@ -5,6 +5,7 @@ import { api, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 import { DataTable } from '../components/DataTable'
+import { LocaleCard, TimeSyncCard } from '../components/LocaleTimeCards'
 
 interface SystemSettings {
   hostname: string
@@ -263,6 +264,10 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
             : t('sysSettings.autoUpgradesMissing')}
         </p>
       </Card>
+
+      <TimeSyncCard canUse={canUse} />
+
+      <LocaleCard canUse={canUse} />
 
       <Card title={t('sysSettings.network')} subtitle={network.data?.note}>
         {!network.data?.available ? (

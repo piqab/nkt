@@ -42,6 +42,9 @@ type SystemSettings struct {
 // SysConfigManager читает и меняет системные настройки.
 type SysConfigManager struct {
 	c collect.Collector
+	// escape — выход из песочницы для команд, пишущих в /etc и /usr
+	// (locale-gen, update-locale, перезапуск службы времени); nil — их нет.
+	escape PrivilegedRunner
 }
 
 func NewSysConfigManager(c collect.Collector) *SysConfigManager { return &SysConfigManager{c: c} }
