@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/portprobe"
 	"github.com/piqab/nkt/internal/store"
 )
 
@@ -710,6 +712,50 @@ func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
 	}
 	imported, errs := s.hub.ImportHosts(r.Context(), export)
 	writeJSON(w, http.StatusOK, map[string]any{"imported": imported, "errors": errs})
+}
+
+// handleHostProbe проверяет порт хоста с хаба — то есть снаружи.
+//
+// Изнутри хоста порт может отвечать, а снаружи быть закрыт фаерволом;
+// узнать это можно только соединением извне, и хаб — как раз «извне».
+// Адрес не выбирается: только тот, по которому хаб и сам ходит к хосту.
+func (s *Server) handleHostProbe(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	host, err := s.db.HostByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if isPlaceholderAddr(host.Addr) {
+		writeError(w, http.StatusBadRequest, "адрес машины ещё не определён")
+		return
+	}
+	var req portprobe.Request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	// Имя хоста в записи — не обязательно IP; проверка требует IP, и
+	// разрешаем его здесь, а не в браузере.
+	addr := host.Addr
+	if net.ParseIP(addr) == nil {
+		ips, err := net.DefaultResolver.LookupIPAddr(r.Context(), addr)
+		if err != nil || len(ips) == 0 {
+			writeError(w, http.StatusBadGateway, fmt.Sprintf("адрес хоста %q не разрешается: %v", addr, err))
+			return
+		}
+		addr = ips[0].IP.String()
+	}
+	req.Address = addr
+	if err := req.Validate(); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, portprobe.Probe(r.Context(), req))
 }
 
 // handleEvents отдаёт журнал оповещений и число непоказанных.

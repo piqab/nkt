@@ -184,6 +184,9 @@ func parseAptCacheSearch(stdout string) []aptSearchResult {
 type aptInstalledPackage struct {
 	Name    string `json:"name"`
 	Version string `json:"version"`
+	// Description — короткое описание из самого пакета: по одному имени
+	// вроде «libxkbcommon0» не понять, что это и можно ли его снести.
+	Description string `json:"description,omitempty"`
 }
 
 // handleAptInstalled lists every package dpkg currently considers
@@ -194,7 +197,7 @@ type aptInstalledPackage struct {
 // needs name/version to let an operator find and remove something.
 func (s *Server) handleAptInstalled(w http.ResponseWriter, r *http.Request) {
 	c := s.scanner.Collector()
-	res, _ := c.Run(r.Context(), "dpkg-query", "-W", "-f=${Package}\t${Version}\t${Status}\n")
+	res, _ := c.Run(r.Context(), "dpkg-query", "-W", "-f=${Package}\t${Version}\t${Status}\t${binary:Summary}\n")
 	writeJSON(w, http.StatusOK, map[string]any{"packages": parseDpkgQueryVersions(res.Stdout)})
 }
 
@@ -205,14 +208,20 @@ func parseDpkgQueryVersions(stdout string) []aptInstalledPackage {
 			continue
 		}
 		fields := strings.Split(line, "\t")
-		if len(fields) != 3 {
+		// Четвёртое поле — описание — появилось позже; заготовленный
+		// вывод в фикстурах и старые снимки обходятся тремя.
+		if len(fields) < 3 {
 			continue
 		}
 		status := strings.Fields(fields[2])
 		if len(status) == 0 || status[len(status)-1] != "installed" {
 			continue
 		}
-		out = append(out, aptInstalledPackage{Name: fields[0], Version: fields[1]})
+		pkg := aptInstalledPackage{Name: fields[0], Version: fields[1]}
+		if len(fields) > 3 {
+			pkg.Description = strings.TrimSpace(fields[3])
+		}
+		out = append(out, pkg)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out
@@ -371,6 +380,48 @@ func (s *Server) handleAptBatchInstallWS(w http.ResponseWriter, r *http.Request)
 // aptBatchSessionKey is a single shared slot: two batch installs at once
 // would fight over the dpkg lock anyway.
 const aptBatchSessionKey = "apt-install-batch"
+
+// aptRemoveBatchSessionKey — то же для удаления: dpkg один, и очередь
+// из двух apt-get всё равно упёрлась бы в его замок.
+const aptRemoveBatchSessionKey = "apt-remove-batch"
+
+// handleAptBatchRemoveWS удаляет несколько пакетов одним apt-get — как
+// установка, только наоборот. Один вызов вместо цикла по именам: apt
+// разрешает зависимости всего набора разом и не оставляет половину
+// удалённой, если на середине что-то пошло не так.
+func (s *Server) handleAptBatchRemoveWS(w http.ResponseWriter, r *http.Request) {
+	pkgs, invalid, ok := parseAptPackageNames(r.URL.Query().Get("pkgs"))
+	if !ok {
+		writeError(w, http.StatusBadRequest,
+			msgs.T(msgs.LangFromRequest(r), "pkgInstall.invalidPackageName", invalid))
+		return
+	}
+	if len(pkgs) == 0 {
+		writeError(w, http.StatusBadRequest,
+			msgs.T(msgs.LangFromRequest(r), "pkgInstall.noPackagesSelected"))
+		return
+	}
+	if s.cfg.Mode == config.ModeFixtures {
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.fixturesDisabled"))
+		return
+	}
+	if !collect.Which(r.Context(), s.scanner.Collector(), "apt-get") {
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.aptGetMissing"))
+		return
+	}
+
+	buildCmd := func() *exec.Cmd {
+		env := map[string]string{"TERM": "xterm-256color", "DEBIAN_FRONTEND": "noninteractive"}
+		return unrestrictedCommand(env, "bash", "-c", "apt-get remove -y "+strings.Join(pkgs, " "))
+	}
+	s.runUpdateSession(w, r, aptRemoveBatchSessionKey, buildCmd, "packages.removeApt",
+		strings.Join(pkgs, ", "), s.cfg.TerminalIdleTimeout)
+}
+
+func (s *Server) handleAptBatchRemoveStatus(w http.ResponseWriter, r *http.Request) {
+	active, finished, exitCode := s.sessionStatus(aptRemoveBatchSessionKey)
+	writeSessionStatus(w, active, finished, exitCode)
+}
 
 func (s *Server) handleAptBatchInstallStatus(w http.ResponseWriter, r *http.Request) {
 	active, finished, exitCode := s.sessionStatus(aptBatchSessionKey)

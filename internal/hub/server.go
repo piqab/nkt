@@ -118,6 +118,8 @@ func (s *Server) Handler() http.Handler {
 			"/system/packages/remove/ws",
 			"/system/apt/packages/{name}/install/ws",
 			"/system/apt/packages/{name}/remove/ws",
+			"/system/apt/install/ws",
+			"/system/apt/remove/ws",
 		}
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.RequireAuth)
@@ -193,6 +195,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/groups/apply-profile", s.handleGroupApply)
 					r.Post("/hub/vm/provision", s.handleVMProvision)
 					r.Post("/hub/hosts/{id}/detect-address", s.handleDetectAddress)
+					r.Post("/hub/hosts/{id}/probe", s.handleHostProbe)
 					r.Post("/hub/hosts/{id}/group", s.handleSetHostGroup)
 					r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 					r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)

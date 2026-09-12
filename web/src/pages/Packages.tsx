@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Button, Input, Tag, type TableColumnsType } from 'antd'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Button, Input, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { InfoCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { Me, PackageUpdate } from '../types'
@@ -10,6 +11,7 @@ import i18n from '../i18n'
 import UpdateModal from '../components/UpdateModal'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { RowAction } from '../components/RowAction'
 
 interface AptSearchResult {
   name: string
@@ -22,6 +24,7 @@ interface AptSearchResult {
 interface AptInstalledPackage {
   name: string
   version: string
+  description?: string
 }
 
 // How long to wait after the last keystroke before actually asking the
@@ -37,28 +40,67 @@ const SEARCH_DEBOUNCE_MS = 400
  * curated quick-install card lives here too rather than on Overview — one
  * place for everything package-related.
  */
-/** Колонки результата поиска — вынесены из разметки, как в остальных
- * таблицах проекта. */
-function searchResultColumns(t: typeof i18n.t): TableColumnsType<AptSearchResult> {
-  return [
+/** Общая строка пакета — для поиска и для установленных одна и та же. */
+interface PackageRow {
+  name: string
+  version?: string
+  description?: string
+  installed?: boolean
+  match?: AptSearchResult['match']
+}
+
+/**
+ * Колонки таблицы пакетов — одни и те же для поиска и для установленных.
+ *
+ * Две таблицы одного раздела с разной раскладкой и разными кнопками
+ * читались как два разных инструмента. Теперь у обеих: галочки для
+ * пакетного действия, имя со значком ⓘ (описание по наведению вместо
+ * широкого столбца, который растил строки в три этажа), версия, где она
+ * известна, и одно действие над строкой иконкой.
+ */
+function packageColumns(
+  t: typeof i18n.t,
+  opts: { version: boolean; state: boolean; action?: (p: PackageRow) => ReactNode },
+): TableColumnsType<PackageRow> {
+  const cols: TableColumnsType<PackageRow> = [
     {
       title: t('packages.colName'),
       key: 'name',
-      render: (_, p) => <code className="mono">{p.name}</code>,
+      render: (_, p) => (
+        <span className="nowrap">
+          <code className="mono">{p.name}</code>
+          {p.description && (
+            <Tooltip title={p.description}>
+              <InfoCircleOutlined
+                aria-label={t('packages.colDescription')}
+                style={{ marginLeft: '0.35rem', color: 'var(--text-muted)' }}
+              />
+            </Tooltip>
+          )}
+        </span>
+      ),
     },
-    {
-      title: t('packages.colDescription'),
-      key: 'description',
-      render: (_, p) => <span className="small">{p.description}</span>,
-    },
-    {
+  ]
+  if (opts.version) {
+    cols.push({
+      title: t('packages.col.version'),
+      key: 'version',
+      render: (_, p) => <span className="small muted mono">{p.version || '—'}</span>,
+    })
+  }
+  if (opts.state) {
+    cols.push({
       title: t('packages.colState'),
       key: 'state',
       width: '9rem',
       render: (_, p) =>
         p.installed ? <Tag color="green">{t('commonPackages.installed')}</Tag> : <span className="small muted">—</span>,
-    },
-  ]
+    })
+  }
+  if (opts.action) {
+    cols.push({ title: '', key: 'actions', align: 'right', className: 'nowrap', render: (_, p) => opts.action!(p) })
+  }
+  return cols
 }
 
 export default function Packages({ me }: { me: Me }) {
@@ -124,7 +166,6 @@ export default function Packages({ me }: { me: Me }) {
   // package manager resolves the whole selection's dependencies together and
   // takes the dpkg lock once, which installing them one by one cannot.
   const [picked, setPicked] = useState<string[]>([])
-  const searchColumns = searchResultColumns(t)
   const [batchInstalling, setBatchInstalling] = useState(false)
   const [installOutcome, setInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
 
@@ -141,17 +182,37 @@ export default function Packages({ me }: { me: Me }) {
   // --- everything currently installed ---
   const installed = useApi<{ packages: AptInstalledPackage[] }>('/system/apt/installed', 60_000)
   const [installedQuery, setInstalledQuery] = useState('')
-  const [removeTarget, setRemoveTarget] = useState<string | null>(null)
+  // Удаление — набором, тем же путём, что установка: одним apt-get,
+  // который разрешает зависимости всего набора разом. Одиночное удаление
+  // — тот же набор из одного имени.
+  const [pickedInstalled, setPickedInstalled] = useState<string[]>([])
+  const [removeTargets, setRemoveTargets] = useState<string[] | null>(null)
   const [removeOutcome, setRemoveOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
 
   async function handleRemoveFinished() {
-    if (!removeTarget) return
-    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>(
-      `/system/apt/packages/${removeTarget}/remove/status`,
-    ).catch(() => null)
+    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>('/system/apt/remove/status').catch(() => null)
     setRemoveOutcome(fresh?.succeeded ? { ok: true } : { ok: false, exitCode: fresh?.exit_code })
+    setPickedInstalled([])
     await installed.reload()
     await search.reload()
+  }
+
+  async function startRemove(names: string[]) {
+    if (names.length === 0) return
+    const question =
+      names.length === 1
+        ? t('packages.confirmRemove', { name: names[0] })
+        : t('packages.confirmRemoveMany', { count: names.length, names: names.join(', ') })
+    if (!(await confirmAction(question))) return
+    setRemoveOutcome(null)
+    setRemoveTargets(names)
+  }
+
+  async function startInstall(names: string[]) {
+    if (names.length === 0) return
+    setPicked(names)
+    setInstallOutcome(null)
+    setBatchInstalling(true)
   }
 
   const installedList = installed.data?.packages ?? []
@@ -161,28 +222,21 @@ export default function Packages({ me }: { me: Me }) {
     return installedList.filter((p) => p.name.toLowerCase().includes(q))
   }, [installedList, installedQuery])
 
-  const installedColumns: TableColumnsType<AptInstalledPackage> = [
-    { title: t('packages.col.name'), dataIndex: 'name', key: 'name', render: (v: string) => <span className="mono">{v}</span> },
-    { title: t('packages.col.version'), dataIndex: 'version', key: 'version', render: (v: string) => <span className="small muted">{v}</span> },
-    {
-      title: '',
-      key: 'actions',
-      align: 'right',
-      render: (_, p) => (
-        <Button
-          danger
-          disabled={!canUse}
-          onClick={async () => {
-            if (!(await confirmAction(t('packages.confirmRemove', { name: p.name })))) return
-            setRemoveOutcome(null)
-            setRemoveTarget(p.name)
-          }}
-        >
-          {t('packages.remove')}
-        </Button>
+  const searchColumns = packageColumns(t, {
+    version: false,
+    state: true,
+    action: (p) =>
+      p.installed ? null : (
+        <RowAction action="install" label={t('packages.install')} disabled={!canUse} onClick={() => void startInstall([p.name])} />
       ),
-    },
-  ]
+  })
+  const installedColumns = packageColumns(t, {
+    version: true,
+    state: false,
+    action: (p) => (
+      <RowAction action="delete" label={t('packages.remove')} danger disabled={!canUse} onClick={() => void startRemove([p.name])} />
+    ),
+  })
 
   return (
     <>
@@ -287,7 +341,8 @@ export default function Packages({ me }: { me: Me }) {
                   {t('packages.matchLegend')}
                 </p>
                 <div className="table-wrap">
-                  <DataTable<AptSearchResult>                     dataSource={search.data.results}
+                  <DataTable<PackageRow>
+                    dataSource={search.data.results}
                     rowKey="name"
                     // Фон строки — граница между группами: сначала пакеты,
                     // чьё имя совпало с запросом, потом те, где он нашёлся
@@ -321,14 +376,36 @@ export default function Packages({ me }: { me: Me }) {
         {!installed.data ? (
           <Loading what={t('packages.installedTitle')} />
         ) : (
-          <div className="table-wrap">
-            <DataTable<AptInstalledPackage>               key={installedQuery}
-              dataSource={visibleInstalled}
-              columns={installedColumns}
-              rowKey="name"
-              pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100] }}
-            />
-          </div>
+          <>
+            {/* Та же строка кнопок, что у поиска: выбранные — одним действием. */}
+            <div className="row" style={{ gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+              <Button danger disabled={!canUse || pickedInstalled.length === 0} onClick={() => void startRemove(pickedInstalled)}>
+                {t('packages.removeSelected', { count: pickedInstalled.length })}
+              </Button>
+              {pickedInstalled.length > 0 && (
+                <>
+                  <Button size="small" onClick={() => setPickedInstalled([])}>
+                    {t('packages.clearSelection')}
+                  </Button>
+                  <span className="small secondary mono">{pickedInstalled.join(', ')}</span>
+                </>
+              )}
+            </div>
+            <div className="table-wrap">
+              <DataTable<PackageRow>
+                key={installedQuery}
+                dataSource={visibleInstalled}
+                columns={installedColumns}
+                rowKey="name"
+                rowSelection={{
+                  selectedRowKeys: pickedInstalled,
+                  onChange: (keys) => setPickedInstalled(keys as string[]),
+                  getCheckboxProps: () => ({ disabled: !canUse }),
+                }}
+                pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: [20, 50, 100] }}
+              />
+            </div>
+          </>
         )}
       </Card>
 
@@ -343,11 +420,11 @@ export default function Packages({ me }: { me: Me }) {
         />
       )}
 
-      {removeTarget && (
+      {removeTargets && (
         <PackageInstallModal
-          packageName={removeTarget}
-          wsPath={`/system/apt/packages/${removeTarget}/remove/ws`}
-          onClose={() => setRemoveTarget(null)}
+          packageName={removeTargets.join(', ')}
+          wsPath={`/system/apt/remove/ws${qs({ pkgs: removeTargets.join(',') })}`}
+          onClose={() => setRemoveTargets(null)}
           onFinished={handleRemoveFinished}
           outcome={removeOutcome}
           action="remove"

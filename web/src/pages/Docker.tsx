@@ -11,6 +11,7 @@ import PathPicker, { ownerFromPath } from '../components/PathPicker'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { ProbeLink } from '../components/PortProbe'
 
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -97,9 +98,14 @@ export default function Docker({ me }: { me: Me }) {
                     color: p.host_port && (!p.host_ip || p.host_ip === '0.0.0.0') ? 'var(--status-critical)' : undefined,
                   }}
                 >
-                  {p.host_port
-                    ? `${p.host_ip || '0.0.0.0'}:${p.host_port} → ${p.container_port}/${p.protocol}`
-                    : t('common.notPublished', { port: `${p.container_port}/${p.protocol}` })}
+                  {p.host_port ? (
+                    <>
+                      {`${p.host_ip || '0.0.0.0'}:${p.host_port} → ${p.container_port}/${p.protocol}`}
+                      <ProbeLink address={p.host_ip || '0.0.0.0'} port={p.host_port} protocol={p.protocol} />
+                    </>
+                  ) : (
+                    t('common.notPublished', { port: `${p.container_port}/${p.protocol}` })
+                  )}
                 </div>
               ))}
         </span>

@@ -1126,7 +1126,9 @@
     "colName": "Package",
     "colDescription": "Description",
     "colState": "State",
-    "matchLegend": "Packages whose name matched the query come first (highlighted); below are those where it only appears in the description."
+    "matchLegend": "Packages whose name matched the query come first (highlighted); below are those where it only appears in the description.",
+    "removeSelected": "Remove selected ({{count}})",
+    "confirmRemoveMany": "Remove {{count}} packages: {{names}}? Configuration files stay (no --purge)."
   },
   "overview": {
     "what": "host overview",
@@ -1807,5 +1809,32 @@
       "bridge": "The machine joins an already configured bridge and lives on the same network as the host: its own address from the shared DHCP, visible to neighbours.",
       "isolated": "Machines see each other and the host, with no way out. Good for a test bench."
     }
+  },
+  "probe": {
+    "open": "probe port {{port}}",
+    "title": "Probe port {{port}}",
+    "address": "Address",
+    "kind": "How to probe",
+    "kindTcp": "TCP: just connect",
+    "kindHttp": "HTTP: request and response",
+    "kindHttps": "HTTPS: request and response",
+    "kindTls": "TLS: handshake and certificate",
+    "timeout": "Timeout, s",
+    "method": "Method",
+    "path": "Path",
+    "host": "Host header / SNI",
+    "insecure": "do not verify the certificate",
+    "runHost": "Probe from the host",
+    "runHub": "Probe from the hub",
+    "runHubHint": "A connection from the hub itself, i.e. from outside: it shows whether the port is reachable through the firewall, not just whether the service answers inside the host",
+    "ok": "answers",
+    "fail": "no answer",
+    "fromHost": "from the host",
+    "fromHub": "from the hub",
+    "certVerified": "certificate verified",
+    "certUnverified": "certificate not verified",
+    "certIssuer": "issued by",
+    "certValid": "valid",
+    "command": "The same in a terminal:"
   }
 }

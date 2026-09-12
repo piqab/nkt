@@ -160,6 +160,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/packages/install/ws", s.handleCommonPackagesInstallWS)
 			r.Get("/system/packages/remove/ws", s.handleCommonPackagesRemoveWS)
 			r.Get("/system/apt/install/ws", s.handleAptBatchInstallWS)
+			r.Get("/system/apt/remove/ws", s.handleAptBatchRemoveWS)
 			r.Get("/system/apt/packages/{name}/install/ws", s.handleAptInstallWS)
 			r.Get("/system/apt/packages/{name}/remove/ws", s.handleAptRemoveWS)
 			// Ordinary REST, not itself long-lived — grouped here anyway
@@ -219,6 +220,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/apt/installed", s.handleAptInstalled)
 			r.Get("/system/apt/updates", s.handleAptUpdates)
 			r.Get("/system/apt/install/status", s.handleAptBatchInstallStatus)
+			r.Get("/system/apt/remove/status", s.handleAptBatchRemoveStatus)
 			r.Get("/system/apt/packages/{name}/install/status", s.handleAptInstallStatus)
 			r.Get("/system/apt/packages/{name}/remove/status", s.handleAptRemoveStatus)
 			r.Get("/vulnerabilities", s.handleVulnerabilities)
@@ -279,6 +281,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/vulnerabilities/scan-images", s.handleVulnScanImages)
 
 				r.Post("/inventory/refresh", s.handleRefresh)
+				// Проверка порта делает соединение от имени хоста — админам.
+				r.Post("/ports/probe", s.handlePortProbe)
 				r.Post("/services/{name}/validate", s.handleServiceValidate)
 				r.Post("/services/{name}/{action}", s.handleServiceAction)
 				r.Post("/misc/kill", s.handleKillProcess)

@@ -11,6 +11,7 @@ import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { ProbeLink } from '../components/PortProbe'
 
 const ACTION_LABEL_KEY: Record<string, string> = {
   start: 'services.actionStart',
@@ -113,8 +114,9 @@ function buildMiscColumns(
       title: t('services.colSocket'),
       key: 'socket',
       render: (_, l) => (
-        <span className="small mono">
+        <span className="small mono nowrap">
           {l.protocol} {l.address}:{l.port}
+          <ProbeLink address={l.address} port={l.port} protocol={l.protocol} />
         </span>
       ),
     },

@@ -85,6 +85,24 @@ func TestParseDpkgQueryVersionsSkipsNonInstalled(t *testing.T) {
 	}
 }
 
+// Описание — четвёртым полем, и по одному имени вроде «libxkbcommon0»
+// иначе не понять, что это; старый трёхполевой вывод (фикстуры, снимки)
+// читается по-прежнему.
+func TestParseDpkgQueryVersionsReadsDescription(t *testing.T) {
+	stdout := "htop\t3.2.2-2\tinstall ok installed\tinteractive processes viewer\n" +
+		"jq\t1.6\tinstall ok installed\n"
+	got := parseDpkgQueryVersions(stdout)
+	if len(got) != 2 {
+		t.Fatalf("got %d packages, want 2: %+v", len(got), got)
+	}
+	if got[0].Description != "interactive processes viewer" {
+		t.Errorf("описание htop = %q", got[0].Description)
+	}
+	if got[1].Name != "jq" || got[1].Description != "" {
+		t.Errorf("трёхполевая строка разобрана неверно: %+v", got[1])
+	}
+}
+
 func TestHandleAptInstallWSGates(t *testing.T) {
 	t.Run("refused for an invalid package name", func(t *testing.T) {
 		s := newTestServer(t, &config.Config{Mode: config.ModeLocal})
