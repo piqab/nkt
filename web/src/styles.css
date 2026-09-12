@@ -788,3 +788,22 @@ pre.diff .hunk { color: var(--text-muted); }
   width: 24px;
   height: 24px;
 }
+
+/* «+ N» у хоста: три знакоместа всегда, и у хоста без машин тоже — иначе
+   иконки действий прыгали бы между строками. */
+.vm-toggle {
+  display: inline-block;
+  width: 3ch;
+  min-width: 3ch;
+  padding: 0;
+  text-align: left;
+  font-variant-numeric: tabular-nums;
+  color: var(--accent, #1677ff);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+span.vm-toggle {
+  cursor: default;
+}

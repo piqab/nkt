@@ -1096,28 +1096,26 @@ export default function Hosts({
    * ряду обе кнопки терялись в хвосте, и «+ 1 машина» оказывалась дальше
    * всего от машин, которые она показывает.
    */
-  function renderVMActions(h: HubHost) {
-    if (h.id === LOCAL_HOST_ID) return null
-    const count = vmsByHost.get(h.id)?.length ?? 0
-    // Машину создаём только на хосте, где уже стоит nkt: команду создания
-    // выполняет он сам, а хаб лишь просит и ждёт.
-    if (count === 0) return null
+  /**
+   * «+ N» — раскрыть машины хоста. В строке хоста перед «открыть», всегда
+   * одной ширины (три знакоместа): у хоста без машин — пустое место, чтобы
+   * иконки действий во всех строках начинались в одном месте.
+   */
+  function renderVMToggle(h: HubHost) {
+    const count = h.parent_id || h.id === LOCAL_HOST_ID ? 0 : (vmsByHost.get(h.id)?.length ?? 0)
+    if (count === 0) return <span className="vm-toggle" aria-hidden="true" />
+    const label = t('hosts.vmCount', { count })
     return (
-      <div className="row">
-        {/* Сначала то, что уже есть, потом создание нового: список машин
-            относится к кнопке «открыть» над ним, а «новая машина» —
-            действие, и ему место с краю. Машин нет — нет и кнопки:
-            «+ 0 машин» открывает пустоту. */}
-        {count > 0 && (
-          <Tooltip title={t('hosts.vmCount', { count })}>
-            <Button type="link" size="small" aria-label={t('hosts.vmCount', { count })} onClick={() => toggleVMs(h.id)}>
-              {openVMs.has(h.id) ? '−' : '+'} {count}
-            </Button>
-          </Tooltip>
-        )}
-      </div>
+      <Tooltip title={label}>
+        <button type="button" className="ghost vm-toggle" aria-label={label} onClick={() => toggleVMs(h.id)}>
+          {openVMs.has(h.id) ? '−' : '+'}
+          {Math.min(count, 99)}
+        </button>
+      </Tooltip>
     )
   }
+
+
 
   /**
    * Строка хоста в раскрытом виде: его действия, а под ними — машины,
@@ -1131,7 +1129,6 @@ export default function Hosts({
     const vms = vmsByHost.get(h.id) ?? []
     return (
       <>
-        {renderVMActions(h)}
         {vms.length > 0 && openVMs.has(h.id) && (
           <div className="col host-vms">
             {vms.map((vm) => (
@@ -1188,6 +1185,7 @@ export default function Hosts({
           <strong className="host-name" title={h.name}>
             {h.name}
           </strong>
+          {renderVMToggle(h)}
           {renderActions(h)}
         </div>
       ),
@@ -1534,9 +1532,9 @@ export default function Hosts({
                           },
                         })}
                         expandable={{
-                          expandedRowKeys: items.map((h) => h.id),
+                          expandedRowKeys: items.filter((h) => openVMs.has(h.id)).map((h) => h.id),
                           expandIcon: () => null,
-                          rowExpandable: (h) => (vmsByHost.get(h.id)?.length ?? 0) > 0,
+                          rowExpandable: (h) => (vmsByHost.get(h.id)?.length ?? 0) > 0 && openVMs.has(h.id),
                           expandedRowRender: renderRowBody,
                         }}
                       />
