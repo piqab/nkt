@@ -759,7 +759,14 @@
     "certbotMissing": "Issuing and renewing certificates needs certbot, and the host does not have it. Self-signed certificates and combining for haproxy work without it.",
     "installCertbot": "Install certbot",
     "confirmIssueTitle": "Issue a certificate for {{domains}}",
-    "confirmRenewTitle": "Renew {{lineage}}"
+    "confirmRenewTitle": "Renew {{lineage}}",
+    "colSnippets": "Config for",
+    "snippetTitle": "{{service}}: configuration with certificate {{lineage}}",
+    "snippetFile": "File:",
+    "copy": "Copy",
+    "copied": "Copied",
+    "snippetNoteHaproxy": "haproxy reads the certificate and key from one file — {{path}}. “Assemble a haproxy PEM” below builds it; without that file the bind will not come up.",
+    "snippetNoteCaddy": "caddy can obtain certificates itself; an external one is for when several services share one certificate."
   },
   "fw": {
     "ufwActionAllow": "allowed",
