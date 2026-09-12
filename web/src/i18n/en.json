@@ -618,7 +618,17 @@
     },
     "newVMToolsMissing": "Host «{{host}}» is missing the tools needed to create machines — the job installs them itself as its first step. That takes a minute; you can install them up front:",
     "newVMWillUpdate": "Host «{{host}}» runs an nkt older than the hub. Creating a machine relies on its API, so the job will update it first — that takes a few minutes.",
-    "newVMNetwork": "Network"
+    "newVMNetwork": "Network",
+    "vmStart": "start the machine",
+    "vmShutdown": "shut the machine down",
+    "vmDestroy": "power off (like pulling the plug)",
+    "vmStarted": "Machine “{{name}}” is starting; the address is detected on its own once it is up.",
+    "confirmVM": {
+      "shutdown": "Shut down “{{name}}”? The guest gets a power-button signal.",
+      "destroy": "Power off “{{name}}” forcibly? This is like pulling the plug: unsaved data inside is lost."
+    },
+    "vmRunning": "machine running",
+    "vmOff": "machine: {{state}}"
   },
   "events": {
     "title": "Alerts",
@@ -637,7 +647,15 @@
       "problems": "new problems",
       "resolved": "problems cleared",
       "job-failed": "job failed"
-    }
+    },
+    "settingsTitle": "What to record and what to notify about",
+    "settingsHint": "A hub-wide setting, not per browser. “Record” puts the event in the log; “notify” pops it up in the host-list tab when notifications are enabled there.",
+    "settingRecord": "record",
+    "settingNotify": "notify",
+    "collapseLabel": "Collapse short outages, min",
+    "collapseHint": "An “answering again” no later than this many minutes after “not answering” is folded into one line, “was down for N min”. 0 — never collapse.",
+    "save": "Save",
+    "savedNote": "saved"
   },
   "changes": {
     "title": "What changed",

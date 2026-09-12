@@ -50,7 +50,7 @@ function seenEventID(): number {
  * открытие списка хостов после выходных высыпало бы десяток уведомлений
  * обо всём, что и так видно в журнале.
  */
-export function notifyNewEvents(events: HostEvent[]): void {
+export function notifyNewEvents(events: HostEvent[], wanted?: Record<string, boolean>): void {
   if (events.length === 0) return
   const newest = events[0].id
   const seen = seenEventID()
@@ -63,7 +63,10 @@ export function notifyNewEvents(events: HostEvent[]): void {
   // событий, а журнал отдаёт новые первыми.
   for (const e of [...events].reverse()) {
     if (e.id <= seen) continue
-    if (e.kind === 'recovered' || e.kind === 'resolved') continue
+    // Что всплывает — решают настройки хаба (раздел «Оповещения»); без
+    // них — только то, что требует действия.
+    const show = wanted ? !!wanted[e.kind] : e.kind !== 'recovered' && e.kind !== 'resolved'
+    if (!show) continue
     notify(
       `${e.host_name} · ${e.host_addr}`,
       `${i18n.t(`events.kind.${e.kind}`, { defaultValue: e.kind })}${e.detail ? `: ${e.detail}` : ''}`,

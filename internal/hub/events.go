@@ -2,7 +2,9 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/piqab/nkt/internal/store"
 )
@@ -23,6 +25,13 @@ const eventKeep = 2000
 // Ошибка записи не должна ронять опрос: журнал — дополнение к состоянию,
 // а не само состояние.
 func (m *Manager) recordEvent(ctx context.Context, host store.Host, kind, severity, detail string) {
+	settings := m.EventSettings(ctx)
+	if !settings.Record[kind] {
+		return
+	}
+	if kind == store.EventRecovered && settings.CollapseMinutes > 0 && m.collapseOutage(ctx, host, settings.CollapseMinutes) {
+		return
+	}
 	_, err := m.db.AddHostEvent(ctx, store.HostEvent{
 		HostID: host.ID, HostName: host.Name, HostAddr: hostAddrLabel(host),
 		Kind: kind, Severity: severity, Detail: detail,
@@ -34,6 +43,30 @@ func (m *Manager) recordEvent(ctx context.Context, host store.Host, kind, severi
 	if err := m.db.PruneHostEvents(ctx, eventKeep); err != nil {
 		m.log.Warn("не удалось подчистить журнал оповещений", "err", err)
 	}
+}
+
+// collapseOutage сворачивает короткий эпизод: если последнее событие
+// этого хоста — «не отвечает» не старше limit минут, оно переписывается в
+// «снова отвечает: был недоступен N мин», и отдельной строки не будет.
+func (m *Manager) collapseOutage(ctx context.Context, host store.Host, limit int) bool {
+	last, ok, err := m.db.LastHostEventFor(ctx, host.ID)
+	if err != nil || !ok || last.Kind != store.EventUnreachable {
+		return false
+	}
+	started, err := time.Parse(time.RFC3339, last.TS)
+	if err != nil {
+		return false
+	}
+	down := time.Since(started)
+	if down > time.Duration(limit)*time.Minute {
+		return false
+	}
+	minutes := int(down.Round(time.Minute) / time.Minute)
+	detail := fmt.Sprintf("был недоступен %d мин", minutes)
+	if minutes == 0 {
+		detail = "был недоступен меньше минуты"
+	}
+	return m.db.RewriteHostEvent(ctx, last.ID, store.EventRecovered, detail) == nil
 }
 
 // hostAddrLabel — адрес в том виде, в каком его узнают: пользователь и
@@ -169,4 +202,74 @@ func (m *Manager) seenEventID(ctx context.Context) (int64, error) {
 		return 0, nil
 	}
 	return id, nil
+}
+
+// EventSettings — какие оповещения записывать и о каких уведомлять.
+//
+// Одни на хаб, не на браузер: журнал общий, и «не записывать возвраты»
+// должно действовать для всех, кто его смотрит. Всплывающие уведомления
+// вкладка показывает по тем же настройкам.
+type EventSettings struct {
+	// Record — записывать событие в журнал; Notify — показывать
+	// всплывающим. Отсутствующий вид считается включённым для записи и
+	// выключенным для уведомления — так по умолчанию не теряется ничего,
+	// а будят только тем, что требует действия.
+	Record map[string]bool `json:"record"`
+	Notify map[string]bool `json:"notify"`
+	// CollapseMinutes — «снова отвечает» не позже чем через столько минут
+	// после «не отвечает» сворачивается с ним в одну строку «был
+	// недоступен N мин»: моргнувшая сеть не должна оставлять две записи.
+	// 0 — не сворачивать.
+	CollapseMinutes int `json:"collapse_minutes"`
+}
+
+// EventKinds — все виды в порядке показа.
+var EventKinds = []string{store.EventUnreachable, store.EventRecovered, store.EventProblems, store.EventResolved, store.EventJobFailed}
+
+// defaultEventSettings — всё записывается; будят недоступностью,
+// проблемами и провалом задания, но не возвратами.
+func defaultEventSettings() EventSettings {
+	s := EventSettings{Record: map[string]bool{}, Notify: map[string]bool{}}
+	for _, k := range EventKinds {
+		s.Record[k] = true
+	}
+	s.Notify[store.EventUnreachable] = true
+	s.Notify[store.EventProblems] = true
+	s.Notify[store.EventJobFailed] = true
+	return s
+}
+
+const eventSettingsKey = "hub.events.settings"
+
+// EventSettings читает настройки; чего нет в базе — берётся по умолчанию.
+func (m *Manager) EventSettings(ctx context.Context) EventSettings {
+	s := defaultEventSettings()
+	raw, ok, err := m.db.KVGet(ctx, eventSettingsKey)
+	if err != nil || !ok {
+		return s
+	}
+	var saved EventSettings
+	if err := json.Unmarshal([]byte(raw), &saved); err != nil {
+		return s
+	}
+	for k, v := range saved.Record {
+		s.Record[k] = v
+	}
+	for k, v := range saved.Notify {
+		s.Notify[k] = v
+	}
+	s.CollapseMinutes = saved.CollapseMinutes
+	return s
+}
+
+// SaveEventSettings записывает настройки.
+func (m *Manager) SaveEventSettings(ctx context.Context, s EventSettings) error {
+	if s.CollapseMinutes < 0 || s.CollapseMinutes > 1440 {
+		return fmt.Errorf("сворачивание — от 0 до 1440 минут")
+	}
+	raw, err := json.Marshal(s)
+	if err != nil {
+		return err
+	}
+	return m.db.KVSet(ctx, eventSettingsKey, string(raw))
 }

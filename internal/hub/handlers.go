@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -338,6 +339,11 @@ type hostWithOverview struct {
 	// also working right now — a host can have a healthy standby channel
 	// (Channel still "ssh") long before it's ever actually needed.
 	TunnelConnected bool `json:"tunnel_connected,omitempty"`
+	// VMState — состояние домена libvirt у машины (по данным опроса её
+	// хоста): «running», «shut off»… Пусто у обычных хостов и пока хост
+	// не опрошен. Выключенной машине «старт» службы nkt по SSH ни к
+	// чему — стучаться некуда; здесь по этому полю кнопки и выбираются.
+	VMState string `json:"vm_state,omitempty"`
 }
 
 // localHostID is the sentinel Host.ID for the synthetic "localhost" row —
@@ -380,6 +386,11 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		row.TunnelConnected = s.hub.TunnelConnected(h.ID)
+		if h.ParentID != 0 {
+			if state, ok := s.hub.VMState(h.ParentID, h.Name); ok {
+				row.VMState = state
+			}
+		}
 		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -762,6 +773,54 @@ func (s *Server) handleHostProbe(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, portprobe.Probe(r.Context(), req))
 }
 
+// handleVMDomainAction запускает или выключает саму машину — через хост,
+// на котором она создана, тем же путём, что и создание и удаление.
+//
+// Кнопка «старт» у выключенной машины раньше была стартом службы nkt по
+// SSH внутрь неё — стучаться было некуда. Домен включает и выключает
+// libvirt на хосте; после старта хаб сам дожидается адреса и записывает
+// его, чтобы машина стала доступна одной кнопкой.
+func (s *Server) handleVMDomainAction(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	action := chi.URLParam(r, "action")
+	switch action {
+	case "start", "shutdown", "destroy":
+	default:
+		writeError(w, http.StatusBadRequest, "неизвестное действие над машиной")
+		return
+	}
+	host, err := s.db.HostByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if host.ParentID == 0 {
+		writeError(w, http.StatusBadRequest, "это не машина, а хост: у него нет того, кто мог бы его включить")
+		return
+	}
+	user := auth.Username(r.Context())
+	path := "/api/vms/" + url.PathEscape(host.Name) + "/" + action
+	if _, err := s.hub.HostAPI(r.Context(), host.ParentID, "POST", path, nil, nil); err != nil {
+		s.db.Audit(r.Context(), user, "vm."+action, host.Name, "error", err.Error())
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), user, "vm."+action, host.Name, "ok", nil)
+	if action == "start" {
+		// Адрес появится не сразу: гость грузится, DHCP отвечает. Ждём в
+		// фоне, чтобы запись обновилась сама, а не по кнопке.
+		go s.hub.awaitVMAddress(host)
+	}
+	// Состояние в кэше — сразу, не дожидаясь следующего опроса: кнопки в
+	// строке должны переключиться на нажатие, а не через полминуты.
+	s.hub.setVMState(host.ParentID, host.Name, map[string]string{"start": "running", "shutdown": "shut off", "destroy": "shut off"}[action])
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // handleEvents отдаёт журнал оповещений и число непоказанных.
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -770,7 +829,29 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"events": events, "unread": unread})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"events": events, "unread": unread,
+		"notify": s.hub.EventSettings(r.Context()).Notify,
+	})
+}
+
+// handleEventSettings отдаёт и сохраняет настройки оповещений.
+func (s *Server) handleEventSettings(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		writeJSON(w, http.StatusOK, map[string]any{"settings": s.hub.EventSettings(r.Context()), "kinds": EventKinds})
+		return
+	}
+	var settings EventSettings
+	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := s.hub.SaveEventSettings(r.Context(), settings); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "events.settings", "", "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]any{"settings": s.hub.EventSettings(r.Context()), "kinds": EventKinds})
 }
 
 // handleEventsSeen помечает журнал прочитанным.

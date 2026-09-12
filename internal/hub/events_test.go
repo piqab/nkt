@@ -155,3 +155,54 @@ func TestEventsUnreadCount(t *testing.T) {
 		t.Errorf("после прочтения непоказанных = %d", unread)
 	}
 }
+
+// Настройки: выключенный вид не записывается, а короткий эпизод
+// «не отвечает → снова отвечает» сворачивается в одну строку.
+func TestEventSettingsRecordAndCollapse(t *testing.T) {
+	m, id := eventTestManager(t)
+	ctx := context.Background()
+
+	// Возвраты не записывать.
+	if err := m.SaveEventSettings(ctx, EventSettings{Record: map[string]bool{store.EventRecovered: false}}); err != nil {
+		t.Fatalf("SaveEventSettings: %v", err)
+	}
+	m.overviewMu.Lock()
+	m.overview[id] = hostOverview{reachable: true}
+	m.overviewMu.Unlock()
+	m.noteReachability(ctx, id, false, "таймаут")
+	m.overviewMu.Lock()
+	m.overview[id] = hostOverview{reachable: false}
+	m.overviewMu.Unlock()
+	m.noteReachability(ctx, id, true, "")
+	events, _, _ := m.Events(ctx, 10)
+	if len(events) != 1 || events[0].Kind != store.EventUnreachable {
+		t.Fatalf("с выключенной записью возвратов = %+v, ожидалась одна «не отвечает»", events)
+	}
+
+	// Сворачивание: возврат в пределах 10 минут переписывает «не
+	// отвечает» в «снова отвечает: был недоступен …».
+	if err := m.SaveEventSettings(ctx, EventSettings{Record: map[string]bool{store.EventRecovered: true}, CollapseMinutes: 10}); err != nil {
+		t.Fatalf("SaveEventSettings: %v", err)
+	}
+	m.overviewMu.Lock()
+	m.overview[id] = hostOverview{reachable: true}
+	m.overviewMu.Unlock()
+	m.noteReachability(ctx, id, false, "таймаут")
+	m.overviewMu.Lock()
+	m.overview[id] = hostOverview{reachable: false}
+	m.overviewMu.Unlock()
+	m.noteReachability(ctx, id, true, "")
+	events, _, _ = m.Events(ctx, 10)
+	if len(events) != 2 {
+		t.Fatalf("после сворачивания событий %d, ожидалось 2 (старое «не отвечает» и свёрнутое): %+v", len(events), events)
+	}
+	if events[0].Kind != store.EventRecovered || !strings.Contains(events[0].Detail, "был недоступен") {
+		t.Errorf("свёрнутое событие = %+v", events[0])
+	}
+	// Всплывать по умолчанию должны недоступность, проблемы и провал
+	// задания, а возвраты — нет.
+	s := m.EventSettings(ctx)
+	if !s.Notify[store.EventUnreachable] || s.Notify[store.EventRecovered] {
+		t.Errorf("уведомления по умолчанию = %v", s.Notify)
+	}
+}

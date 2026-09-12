@@ -157,6 +157,7 @@ func (s *Server) Handler() http.Handler {
 				// это то же состояние, только во времени.
 				r.Get("/hub/events", s.handleEvents)
 				r.Post("/hub/events/seen", s.handleEventsSeen)
+				r.Get("/hub/events/settings", s.handleEventSettings)
 				r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
 				r.Get("/hub/hosts/{id}/install/latest", s.handleLatestInstallJob)
 				r.Get("/hub/hosts/{id}/install/{job}", s.handleInstallJobStatus)
@@ -196,6 +197,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/vm/provision", s.handleVMProvision)
 					r.Post("/hub/hosts/{id}/detect-address", s.handleDetectAddress)
 					r.Post("/hub/hosts/{id}/probe", s.handleHostProbe)
+					r.Post("/hub/hosts/{id}/vm/{action}", s.handleVMDomainAction)
+					r.Post("/hub/events/settings", s.handleEventSettings)
 					r.Post("/hub/hosts/{id}/group", s.handleSetHostGroup)
 					r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 					r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)

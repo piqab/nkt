@@ -1,5 +1,5 @@
-import { useEffect } from 'react'
-import { Button, Tag, type TableColumnsType } from 'antd'
+import { useEffect, useState } from 'react'
+import { Button, Checkbox, InputNumber, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HostEvent } from '../types'
@@ -7,6 +7,110 @@ import { Card, ErrorNote, InfoHint, Loading, formatDateTime, formatRelative } fr
 import { DataTable } from '../components/DataTable'
 
 const POLL_MS = 30_000
+
+interface EventSettings {
+  record: Record<string, boolean>
+  notify: Record<string, boolean>
+  collapse_minutes: number
+}
+
+/**
+ * Какие события записывать и о каких уведомлять — настройка общая на
+ * хаб, не на браузер: журнал один на всех, и «не записывать возвраты»
+ * должно действовать для каждого, кто его смотрит. Сворачивание —
+ * ответ на «зачем нужно „снова отвечает“»: без пары событий не узнать,
+ * сколько хост лежал; а чтобы моргнувшая сеть не оставляла две строки,
+ * короткий эпизод сворачивается в одну — «был недоступен N мин».
+ */
+function EventSettingsCard() {
+  const { t } = useTranslation()
+  const data = useApi<{ settings: EventSettings; kinds: string[] }>('/hub/events/settings')
+  const [draft, setDraft] = useState<EventSettings | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const settings = draft ?? data.data?.settings ?? null
+  const kinds = data.data?.kinds ?? []
+
+  function update(patch: (s: EventSettings) => EventSettings) {
+    if (!settings) return
+    setSaved(false)
+    setDraft(patch({ ...settings, record: { ...settings.record }, notify: { ...settings.notify } }))
+  }
+
+  async function save() {
+    if (!draft) return
+    setSaving(true)
+    try {
+      await api('/hub/events/settings', { method: 'POST', body: draft })
+      setDraft(null)
+      setSaved(true)
+      await data.reload()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Card title={t('events.settingsTitle')} subtitle={t('events.settingsHint')}>
+      <ErrorNote error={data.error} />
+      {!settings ? (
+        <Loading what={t('events.settingsTitle')} />
+      ) : (
+        <div className="col" style={{ gap: '0.6rem' }}>
+          <div className="table-wrap">
+            <table className="ant-table" style={{ width: 'auto', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: 'left', padding: '0.25rem 0.75rem 0.25rem 0' }}>{t('events.colWhat')}</th>
+                  <th style={{ padding: '0.25rem 0.75rem' }}>{t('events.settingRecord')}</th>
+                  <th style={{ padding: '0.25rem 0.75rem' }}>{t('events.settingNotify')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kinds.map((k) => (
+                  <tr key={k}>
+                    <td style={{ padding: '0.2rem 0.75rem 0.2rem 0' }}>
+                      <Tag color={KIND_COLOR[k] ?? 'default'}>{t(`events.kind.${k}`, { defaultValue: k })}</Tag>
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <Checkbox
+                        checked={settings.record[k] !== false}
+                        onChange={(e) => update((s) => ({ ...s, record: { ...s.record, [k]: e.target.checked } }))}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <Checkbox
+                        checked={!!settings.notify[k]}
+                        disabled={settings.record[k] === false}
+                        onChange={(e) => update((s) => ({ ...s, notify: { ...s.notify, [k]: e.target.checked } }))}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {t('events.collapseLabel')}
+            <InputNumber
+              min={0}
+              max={1440}
+              value={settings.collapse_minutes}
+              onChange={(v) => update((s) => ({ ...s, collapse_minutes: v ?? 0 }))}
+            />
+            <span className="small muted">{t('events.collapseHint')}</span>
+          </label>
+          <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+            <Button type="primary" disabled={!draft} loading={saving} onClick={() => void save()}>
+              {t('events.save')}
+            </Button>
+            {saved && <span className="small muted">{t('events.savedNote')}</span>}
+          </div>
+        </div>
+      )}
+    </Card>
+  )
+}
 
 const KIND_COLOR: Record<string, string> = {
   unreachable: 'error',
@@ -88,6 +192,8 @@ export default function HostEvents() {
       </div>
 
       <ErrorNote error={events.error} />
+
+      <EventSettingsCard />
 
       <Card title={t('events.listTitle')} subtitle={t('events.listSubtitle', { count: list.length })}>
         {events.loading && !events.data ? (

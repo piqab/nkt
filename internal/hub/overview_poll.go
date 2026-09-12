@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sync"
 	"time"
 
@@ -49,6 +50,11 @@ type hostOverview struct {
 	// tick after SSH breaks, not only once something else about the poll
 	// also happens to fail.
 	channel string
+	// vmStates — состояние доменов libvirt на этом хосте по имени:
+	// «running», «shut off»… Собирается тем же опросом, но только у
+	// хостов, под которыми в списке есть машины: по нему в строке машины
+	// видно, работает ли она вообще, а не только отвечает ли nkt внутри.
+	vmStates map[string]string
 }
 
 // pollOverviews periodically refreshes every online host's findings/
@@ -172,6 +178,11 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	m.noteReachability(ctx, hostID, true, "")
 	m.noteFindings(ctx, hostID, body.Findings)
 
+	// Машины внутри хоста: их состояние знает только он. Спрашиваем
+	// вторым запросом и только когда есть кого спрашивать — у хоста без
+	// машин лишний вызов ни к чему.
+	vmStates := m.pollVMStates(ctx, hostID, dial, cookie)
+
 	now := time.Now()
 	m.overviewMu.Lock()
 	m.overview[hostID] = hostOverview{
@@ -180,8 +191,73 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		version:       body.Version,
 		lastPolledAt:  now,
 		lastCheckedAt: now,
+		vmStates:      vmStates,
 	}
 	m.overviewMu.Unlock()
+}
+
+// pollVMStates забирает состояния доменов у хоста, под которым в списке
+// есть машины. Ошибка — nil: строка машины покажет «неизвестно», а не
+// уронит опрос хоста.
+func (m *Manager) pollVMStates(ctx context.Context, hostID int64, dial dialFunc, cookie string) map[string]string {
+	if !m.hasMachines(ctx, hostID) {
+		return nil
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+remoteAPIAddr+"/api/vms", nil)
+	if err != nil {
+		return nil
+	}
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
+	resp, err := tunnelHTTPClient(dial).Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var body struct {
+		VMs []struct {
+			Name  string `json:"name"`
+			State string `json:"state"`
+		} `json:"vms"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil
+	}
+	out := make(map[string]string, len(body.VMs))
+	for _, vm := range body.VMs {
+		out[vm.Name] = vm.State
+	}
+	return out
+}
+
+// hasMachines отвечает, есть ли в списке машины с этим хостом-родителем.
+func (m *Manager) hasMachines(ctx context.Context, hostID int64) bool {
+	hosts, err := m.db.ListHosts(ctx)
+	if err != nil {
+		return false
+	}
+	for _, h := range hosts {
+		if h.ParentID == hostID {
+			return true
+		}
+	}
+	return false
+}
+
+// VMState отдаёт состояние домена машины по данным последнего опроса её
+// хоста; ok=false — хост ещё не опрашивался или домена с таким именем у
+// него нет.
+func (m *Manager) VMState(parentID int64, name string) (string, bool) {
+	m.overviewMu.Lock()
+	defer m.overviewMu.Unlock()
+	ov, ok := m.overview[parentID]
+	if !ok || ov.vmStates == nil {
+		return "", false
+	}
+	state, ok := ov.vmStates[name]
+	return state, ok
 }
 
 // recordChannel updates which path dialerFor most recently resolved for a
@@ -275,4 +351,44 @@ type HostOverview struct {
 	// successful (or attempted) dial. Surfaced to the UI as the
 	// "работает через резервный канал" badge when it's channelTunnel.
 	Channel string
+}
+
+// setVMState правит состояние домена в кэше сразу после действия — до
+// следующего опроса хоста, чтобы кнопки в строке переключились сразу.
+func (m *Manager) setVMState(parentID int64, name, state string) {
+	m.overviewMu.Lock()
+	defer m.overviewMu.Unlock()
+	ov := m.overview[parentID]
+	if ov.vmStates == nil {
+		ov.vmStates = map[string]string{}
+	}
+	ov.vmStates[name] = state
+	m.overview[parentID] = ov
+}
+
+// awaitVMAddress ждёт, пока запущенная машина получит адрес, и записывает
+// его — до двух минут, по опросу хоста раз в пять секунд. Заглушка
+// 0.0.0.0 у записи после старта — ровно то, из-за чего «старт» раньше и
+// не имел смысла.
+func (m *Manager) awaitVMAddress(host store.Host) {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	for {
+		var res struct {
+			Address string `json:"address"`
+		}
+		path := "/api/vm/address?name=" + url.QueryEscape(host.Name)
+		if _, err := m.HostAPI(ctx, host.ParentID, "GET", path, nil, &res); err == nil && res.Address != "" {
+			if res.Address != host.Addr {
+				_ = m.UpdateHost(ctx, host.ID, host.Name, res.Address, host.SSHPort,
+					host.SSHUser, host.SSHAuthKind, "", host.TerminalEnabled)
+			}
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(5 * time.Second):
+		}
+	}
 }
