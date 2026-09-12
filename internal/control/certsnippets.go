@@ -59,12 +59,20 @@ server {
     ssl_certificate_key %[3]s;
     ssl_protocols       TLSv1.2 TLSv1.3;
 
+    root /var/www/html;
+
+    # Add index.php to the list if you are using PHP
+    index index.html index.htm index.nginx-debian.html;
+
     location / {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header Host              $host;
-        proxy_set_header X-Real-IP         $remote_addr;
-        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
+        try_files $uri $uri/ =404;
+
+        # Proxy to an application instead of serving files:
+        #proxy_pass http://127.0.0.1:8080;
+        #proxy_set_header Host              $host;
+        #proxy_set_header X-Real-IP         $remote_addr;
+        #proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        #proxy_set_header X-Forwarded-Proto $scheme;
     }
 }
 `, serverNames, fullchain, privkey)
@@ -74,15 +82,25 @@ server {
     bind *:443 ssl crt %[1]s
     bind *:80
     http-request redirect scheme https unless { ssl_fc }
-    default_backend app
+    default_backend web
 
-backend app
-    server app1 127.0.0.1:8080 check
+# haproxy does not serve files itself: static content comes from a local
+# web server (nginx or apache on 8080, document root /var/www/html).
+backend web
+    server web1 127.0.0.1:8080 check
+
+    # An application instead of the web server:
+    #server app1 127.0.0.1:3000 check
 `, combined)
 
 	caddy := fmt.Sprintf(`%[1]s {
     tls %[2]s %[3]s
-    reverse_proxy 127.0.0.1:8080
+
+    root * /var/www/html
+    file_server
+
+    # Proxy to an application instead of serving files:
+    #reverse_proxy 127.0.0.1:8080
 }
 `, serverNames, fullchain, privkey)
 
