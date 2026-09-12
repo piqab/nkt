@@ -104,6 +104,10 @@ export interface HubHost {
    * from an earlier successful poll are kept even while this is false. */
   reachable?: boolean
   last_polled_at?: string
+  /** У машины — состояние её домена libvirt по данным опроса хоста:
+   * «running», «shut off»… Пусто у обычных хостов и пока хост не
+   * опрошен. */
+  vm_state?: string
 }
 
 export interface HostInfo {

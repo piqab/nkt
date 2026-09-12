@@ -2,6 +2,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"time"
 )
 
@@ -113,5 +115,28 @@ func (d *DB) PruneHostEvents(ctx context.Context, keep int) error {
 				SELECT id FROM host_events ORDER BY id DESC LIMIT ?
 			)
 		) - 1`, keep)
+	return err
+}
+
+// LastHostEventFor — последнее событие хоста; ok=false, если их нет.
+func (d *DB) LastHostEventFor(ctx context.Context, hostID int64) (HostEvent, bool, error) {
+	var e HostEvent
+	err := d.QueryRowContext(ctx, `
+		SELECT id, ts, host_id, host_name, host_addr, kind, severity, detail
+		FROM host_events WHERE host_id = ? ORDER BY id DESC LIMIT 1`, hostID).
+		Scan(&e.ID, &e.TS, &e.HostID, &e.HostName, &e.HostAddr, &e.Kind, &e.Severity, &e.Detail)
+	if errors.Is(err, sql.ErrNoRows) {
+		return HostEvent{}, false, nil
+	}
+	return e, err == nil, err
+}
+
+// RewriteHostEvent меняет вид и подробности события на месте — так
+// короткий эпизод «не отвечает → снова отвечает» становится одной
+// строкой, а не двумя. Время события сдвигается на момент переписывания:
+// это уже итог эпизода, а не его начало.
+func (d *DB) RewriteHostEvent(ctx context.Context, id int64, kind, detail string) error {
+	_, err := d.ExecContext(ctx, `UPDATE host_events SET kind = ?, detail = ?, ts = ? WHERE id = ?`,
+		kind, detail, FormatTime(time.Now()), id)
 	return err
 }

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Select, Switch, Tabs, Tooltip, type TableColumnsType } from 'antd'
+import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Select, Switch, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import {
   CheckCircleFilled,
   CloseCircleFilled,
@@ -288,9 +288,9 @@ export default function Hosts({
   // сам в фоновом опросе, а вкладка только показывает то, чего оператор
   // ещё не видел. Так во всплывающем есть и адрес, и подробности, а
   // закрытая вкладка не значит «событие потеряно».
-  const events = useApi<{ events: HostEvent[] }>('/hub/events?limit=50', 30_000)
+  const events = useApi<{ events: HostEvent[]; notify?: Record<string, boolean> }>('/hub/events?limit=50', 30_000)
   useEffect(() => {
-    if (events.data?.events) notifyNewEvents(events.data.events)
+    if (events.data?.events) notifyNewEvents(events.data.events, events.data.notify)
   }, [events.data])
 
   async function toggleNotify(checked: boolean) {
@@ -762,6 +762,24 @@ export default function Hosts({
     else reload()
   }
 
+  // Сама машина — через хост, на котором она создана: старт службы nkt по
+  // SSH внутрь выключенной машины упирался бы в отсутствующий адрес.
+  const [vmActing, setVmActing] = useState<number | null>(null)
+  async function vmDomainAction(host: HubHost, action: 'start' | 'shutdown' | 'destroy') {
+    if (action !== 'start' && !(await confirmAction(t(`hosts.confirmVM.${action}`, { name: host.name })))) return
+    setVmActing(host.id)
+    setNotice(null)
+    try {
+      await api(`/hub/hosts/${host.id}/vm/${action}`, { method: 'POST' })
+      if (action === 'start') setNotice({ kind: 'info', text: t('hosts.vmStarted', { name: host.name }) })
+      reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setVmActing(null)
+    }
+  }
+
   /** Runs setServiceRunning across every installed host in parallel and
    * reports one combined summary — a host mid-install ('new'/'installing')
    * has nothing to stop/start yet and is silently skipped rather than
@@ -968,8 +986,26 @@ export default function Hosts({
     // Журнал и отмена остаются живыми — иначе следить за работой и
     // прерывать её было бы нечем.
     const busy = busyVMs.has(h.id) || h.status === 'installing'
+    // Машина с выключенным доменом: внутри неё ничего не ответит, и все
+    // действия по SSH бессмысленны — только запустить саму машину.
+    const vmOff = !!h.parent_id && !!h.vm_state && h.vm_state !== 'running'
+    if (vmOff) {
+      return (
+        <div className="row row-nowrap">
+          <RowAction action="start" label={t('hosts.vmStart')} loading={vmActing === h.id} disabled={busy} onClick={() => void vmDomainAction(h, 'start')} />
+          <RowAction action="edit" label={t('hosts.edit')} disabled={busy} onClick={() => setEditingHost(h)} />
+          <RowAction action="delete" label={t('hosts.delete')} danger loading={busy} disabled={busy} onClick={() => setRemovingHost(h)} />
+        </div>
+      )
+    }
     return (
       <div className="row row-nowrap">
+        {h.parent_id && h.vm_state === 'running' ? (
+          <>
+            <RowAction action="shutdown" label={t('hosts.vmShutdown')} danger loading={vmActing === h.id} disabled={busy} onClick={() => void vmDomainAction(h, 'shutdown')} />
+            <RowAction action="destroy" label={t('hosts.vmDestroy')} danger disabled={busy} onClick={() => void vmDomainAction(h, 'destroy')} />
+          </>
+        ) : null}
         {h.status === 'online' && (
           <RowAction
             action="open"
@@ -1103,7 +1139,14 @@ export default function Hosts({
                       </span>
                     )}
                   </span>
-                  <HostStatusBadge status={vm.status} />
+                  <span className="row" style={{ gap: '0.5rem' }}>
+                    {vm.vm_state && (
+                      <Tag color={vm.vm_state === 'running' ? 'success' : 'default'}>
+                        {vm.vm_state === 'running' ? t('hosts.vmRunning') : t('hosts.vmOff', { state: vm.vm_state })}
+                      </Tag>
+                    )}
+                    <HostStatusBadge status={vm.status} />
+                  </span>
                 </div>
                 {renderActions(vm)}
               </div>
