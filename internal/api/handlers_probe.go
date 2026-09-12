@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"strings"
 
+	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/portprobe"
 )
 
@@ -22,6 +24,19 @@ func (s *Server) handlePortProbe(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := req.Validate(); err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.Kind == portprobe.KindCurl {
+		// Настоящий curl с аргументами оператора — через ту же
+		// песочницу, что и остальные команды хоста; без оболочки.
+		if !collect.Which(r.Context(), s.scanner.Collector(), "curl") {
+			writeError(w, http.StatusBadRequest, "на хосте нет curl")
+			return
+		}
+		run := func(ctx context.Context, argv ...string) (collect.CommandResult, error) {
+			return s.scanner.Collector().Run(ctx, argv[0], argv[1:]...)
+		}
+		writeJSON(w, http.StatusOK, portprobe.RunCurl(r.Context(), run, req))
 		return
 	}
 	if !s.isOwnAddress(r, req.Address) {
