@@ -20,7 +20,7 @@ const driftKey = "profile.drift"
 
 // DriftResult — итог проверки одного профиля.
 type DriftResult struct {
-	ProfileID int64 `json:"profile_id"`
+	ProfileID int64  `json:"profile_id"`
 	Name      string `json:"name"`
 	Changes   int    `json:"changes"`
 	// Risky — сколько из расхождений помечены опасными.

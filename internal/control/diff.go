@@ -1,9 +1,11 @@
 package control
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strings"
 )
 
@@ -17,13 +19,12 @@ func sha256Hex(data []byte) string {
 }
 
 // UnifiedDiff renders a standard unified diff with three lines of context.
-func UnifiedDiff(fromName, toName, from, to string) string {
+func UnifiedDiff(ctx context.Context, fromName, toName, from, to string) string {
 	a := splitLines(from)
 	b := splitLines(to)
 
 	if len(a) > diffLineLimit || len(b) > diffLineLimit {
-		return fmt.Sprintf("--- %s (%d строк)\n+++ %s (%d строк)\n"+
-			"Файлы слишком велики для построчного сравнения.\n", fromName, len(a), toName, len(b))
+		return msgs.Tc(ctx, "control.diffTooBig", fromName, len(a), toName, len(b))
 	}
 
 	ops := diffOps(a, b)

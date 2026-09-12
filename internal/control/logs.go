@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"errors"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	gopath "path"
 	"sort"
@@ -27,11 +27,11 @@ import (
 const LogRoot = "/var/log"
 
 // ErrLogPathNotAllowed is returned for anything outside [LogRoot].
-var ErrLogPathNotAllowed = errors.New("читать можно только файлы внутри " + LogRoot)
+var ErrLogPathNotAllowed = msgs.Errorf("control.logPathNotAllowed", LogRoot)
 
 // ErrArchivedNotFollowable is returned when something asks to follow a
 // rotated file. Reading it once is the only thing that makes sense.
-var ErrArchivedNotFollowable = errors.New("архивный файл не растёт — его можно только прочитать целиком")
+var ErrArchivedNotFollowable = msgs.Errorf("control.archivedFileDoesGrowCan")
 
 // LogSourceKind distinguishes the two things worth calling a log here.
 const (
@@ -212,7 +212,7 @@ func (m *LogManager) StreamArgv(source LogSource, lines int) ([]string, error) {
 	switch source.Kind {
 	case LogKindUnit:
 		if source.Name == "" || strings.ContainsAny(source.Name, " \t\n") {
-			return nil, fmt.Errorf("некорректное имя юнита")
+			return nil, msgs.Errorf("control.invalidUnitName")
 		}
 		return []string{
 			"journalctl", "--no-pager", "--output=short-iso",
@@ -229,7 +229,7 @@ func (m *LogManager) StreamArgv(source LogSource, lines int) ([]string, error) {
 		}
 		return []string{"tail", "-n", fmt.Sprint(lines), "-F", source.Name}, nil
 	default:
-		return nil, fmt.Errorf("неизвестный вид источника %q", source.Kind)
+		return nil, msgs.Errorf("control.unknownSourceKind", source.Kind)
 	}
 }
 
@@ -305,7 +305,7 @@ func (m *LogManager) readCompressed(ctx context.Context, path string, lines int)
 	}
 	zr, err := gzip.NewReader(bytes.NewReader(raw))
 	if err != nil {
-		return "", fmt.Errorf("не удалось распаковать %s: %w", path, err)
+		return "", msgs.Errorf("control.couldExtract", path, err)
 	}
 	defer zr.Close()
 	return lastLines(zr, lines)

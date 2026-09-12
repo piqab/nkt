@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"strings"
 
@@ -46,11 +47,11 @@ type imageOutcome struct {
 func (s *Server) handleImagesRemove(w http.ResponseWriter, r *http.Request) {
 	var req imagesActionRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if len(req.Refs) == 0 {
-		writeError(w, http.StatusBadRequest, "не выбрано ни одного образа")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.imageSelected"))
 		return
 	}
 	user := auth.Username(r.Context())
@@ -69,11 +70,11 @@ func (s *Server) handleImagesRemove(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleImagesSave(w http.ResponseWriter, r *http.Request) {
 	var req imagesActionRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if len(req.Refs) == 0 {
-		writeError(w, http.StatusBadRequest, "не выбрано ни одного образа")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.imageSelected"))
 		return
 	}
 	user := auth.Username(r.Context())
@@ -99,7 +100,7 @@ func (s *Server) handleImagesPrune(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	s.db.Audit(r.Context(), user, "image.prune", "", auditResult(err), errText(err))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()

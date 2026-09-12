@@ -23,7 +23,7 @@ func (s *Server) handleSystemSettings(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTimezones(w http.ResponseWriter, r *http.Request) {
 	zones, err := s.sysconfig.Timezones(r.Context())
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"timezones": zones})
@@ -40,7 +40,7 @@ type systemSettingsRequest struct {
 func (s *Server) handleSystemSettingsUpdate(w http.ResponseWriter, r *http.Request) {
 	var req systemSettingsRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -49,7 +49,7 @@ func (s *Server) handleSystemSettingsUpdate(w http.ResponseWriter, r *http.Reque
 		err := s.sysconfig.SetHostname(r.Context(), req.Hostname)
 		s.db.Audit(r.Context(), user, "system.hostname", req.Hostname, auditResult(err), errText(err))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 	}
@@ -57,7 +57,7 @@ func (s *Server) handleSystemSettingsUpdate(w http.ResponseWriter, r *http.Reque
 		err := s.sysconfig.SetTimezone(r.Context(), req.Timezone)
 		s.db.Audit(r.Context(), user, "system.timezone", req.Timezone, auditResult(err), errText(err))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 	}
@@ -65,7 +65,7 @@ func (s *Server) handleSystemSettingsUpdate(w http.ResponseWriter, r *http.Reque
 		err := s.sysconfig.SetNTP(r.Context(), *req.NTP)
 		s.db.Audit(r.Context(), user, "system.ntp", "", auditResult(err), errText(err))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 	}
@@ -86,14 +86,14 @@ type nmConnectionRequest struct {
 func (s *Server) handleNetworkConnection(w http.ResponseWriter, r *http.Request) {
 	var req nmConnectionRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
 	err := s.netmanager.Connection(r.Context(), req.UUID, req.Up)
 	s.db.Audit(r.Context(), user, "network.connection", req.UUID, auditResult(err), errText(err))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, s.netmanager.State(r.Context()))
@@ -108,7 +108,7 @@ type wifiConnectRequest struct {
 func (s *Server) handleWiFiConnect(w http.ResponseWriter, r *http.Request) {
 	var req wifiConnectRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -117,7 +117,7 @@ func (s *Server) handleWiFiConnect(w http.ResponseWriter, r *http.Request) {
 	// ни в сообщение об ошибке.
 	s.db.Audit(r.Context(), user, "network.wifi", req.SSID, auditResult(err), errText(err))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, s.netmanager.State(r.Context()))
@@ -137,14 +137,14 @@ type sandboxPackageRequest struct {
 func (s *Server) handleSandboxPackageRemove(w http.ResponseWriter, r *http.Request) {
 	var req sandboxPackageRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
 	err := s.sandboxpkg.Remove(r.Context(), req.Kind, req.Name)
 	s.db.Audit(r.Context(), user, "package."+req.Kind+".remove", req.Name, auditResult(err), errText(err))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, s.sandboxpkg.List(r.Context()))
@@ -155,14 +155,14 @@ func (s *Server) handleSandboxPackageRemove(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleSandboxPackageUpdate(w http.ResponseWriter, r *http.Request) {
 	var req sandboxPackageRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
 	out, err := s.sandboxpkg.Update(r.Context(), req.Kind)
 	s.db.Audit(r.Context(), user, "package."+req.Kind+".update", "", auditResult(err), errText(err))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"output": out, "packages": s.sandboxpkg.List(r.Context())})
@@ -183,7 +183,7 @@ type localesRequest struct {
 func (s *Server) handleLocalesUpdate(w http.ResponseWriter, r *http.Request) {
 	var req localesRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -191,7 +191,7 @@ func (s *Server) handleLocalesUpdate(w http.ResponseWriter, r *http.Request) {
 		err := s.sysconfig.GenerateLocales(r.Context(), req.Generate)
 		s.db.Audit(r.Context(), user, "system.locale.generate", strings.Join(req.Generate, " "), auditResult(err), errText(err))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 	}
@@ -199,7 +199,7 @@ func (s *Server) handleLocalesUpdate(w http.ResponseWriter, r *http.Request) {
 		err := s.sysconfig.SetLocale(r.Context(), req.Default)
 		s.db.Audit(r.Context(), user, "system.locale", req.Default, auditResult(err), errText(err))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 	}
@@ -220,7 +220,7 @@ type timeSyncRequest struct {
 func (s *Server) handleTimeSyncUpdate(w http.ResponseWriter, r *http.Request) {
 	var req timeSyncRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -228,7 +228,7 @@ func (s *Server) handleTimeSyncUpdate(w http.ResponseWriter, r *http.Request) {
 		err := s.sysconfig.SetTimeSyncServers(r.Context(), *req.Servers)
 		s.db.Audit(r.Context(), user, "system.timesync.servers", strings.Join(*req.Servers, " "), auditResult(err), errText(err))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 	}
@@ -236,7 +236,7 @@ func (s *Server) handleTimeSyncUpdate(w http.ResponseWriter, r *http.Request) {
 		err := s.sysconfig.SyncNow(r.Context())
 		s.db.Audit(r.Context(), user, "system.timesync.now", "", auditResult(err), errText(err))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 	}

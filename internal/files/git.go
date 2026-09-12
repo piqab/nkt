@@ -3,6 +3,7 @@ package files
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/url"
 	"os"
 	gopath "path"
@@ -64,28 +65,28 @@ func (p *CloneParams) Validate() error {
 	case strings.HasPrefix(p.URL, "https://"), strings.HasPrefix(p.URL, "http://"):
 		u, err := url.Parse(p.URL)
 		if err != nil || u.Host == "" {
-			return fmt.Errorf("некорректный адрес репозитория")
+			return msgs.Errorf("files.invalidRepositoryAddress")
 		}
 		if u.User != nil {
 			// Секрет в адресе попал бы в журнал и в список процессов.
-			return fmt.Errorf("не вписывайте пароль или токен в адрес — есть отдельное поле")
+			return msgs.Errorf("files.doPutPasswordTokenInto")
 		}
 	case strings.HasPrefix(p.URL, "ssh://"), sshURLRe.MatchString(p.URL):
 	default:
-		return fmt.Errorf("адрес должен быть https://… или git@host:path")
+		return msgs.Errorf("files.addressMustHttpsGitHost")
 	}
 	if p.Branch != "" && !branchRe.MatchString(p.Branch) {
-		return fmt.Errorf("некорректное имя ветки %q", p.Branch)
+		return msgs.Errorf("files.invalidBranchName", p.Branch)
 	}
 	switch p.Auth {
 	case "", AuthNone:
 		p.Auth = AuthNone
 	case AuthToken, AuthKey:
 	default:
-		return fmt.Errorf("неизвестный способ входа %q", p.Auth)
+		return msgs.Errorf("files.unknownAccessMethod", p.Auth)
 	}
 	if strings.ContainsAny(p.Username, "/:@ \r\n") {
-		return fmt.Errorf("некорректное имя пользователя")
+		return msgs.Errorf("files.invalidUserName")
 	}
 	return nil
 }
@@ -148,7 +149,7 @@ func (r *CloneRunner) Prepare(p *CloneParams, secret string) error {
 	}
 	if p.Auth == AuthToken {
 		if strings.TrimSpace(secret) == "" {
-			return fmt.Errorf("укажите токен или пароль")
+			return msgs.Errorf("files.specifyTokenPassword")
 		}
 		p.Ticket = fmt.Sprintf("%d-%s", time.Now().UnixNano(), RepoDirName(p.URL))
 		r.secrets.put(p.Ticket, secret)
@@ -170,15 +171,15 @@ func (r *CloneRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return err
 	}
 	if r.m.runEnv == nil {
-		return fmt.Errorf("клонирование недоступно в этом режиме")
+		return msgs.Errorf("files.cloningUnavailableMode")
 	}
 	if r.m.c.Exists(dest) {
 		if entries, err := r.m.c.ListDir(dest); err == nil && len(entries) > 0 {
-			return fmt.Errorf("каталог %s уже есть и не пуст", dest)
+			return msgs.Errorf("files.directoryAlreadyExistsEmpty", dest)
 		}
 	}
 
-	jc.Step(1, 2, "подготовка")
+	jc.Step(1, 2, msgs.T(jc.Lang(), "files.stepPrepare"))
 	env := map[string]string{"GIT_TERMINAL_PROMPT": "0"}
 	cloneURL := p.URL
 	var secret string
@@ -187,7 +188,7 @@ func (r *CloneRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		var ok bool
 		secret, ok = r.secrets.take(p.Ticket)
 		if !ok {
-			return fmt.Errorf("токен для этого задания уже недоступен — запустите клонирование заново")
+			return msgs.Errorf("files.tokenJobLongerAvailableStart")
 		}
 		helper, err := r.m.askpassHelper()
 		if err != nil {
@@ -204,14 +205,14 @@ func (r *CloneRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		u, _ := url.Parse(cloneURL)
 		u.User = url.User(user)
 		cloneURL = u.String()
-		jc.Logf("Вход по токену от имени %s; сам токен в журнал не попадает.", user)
+		jc.Log("files.signingTokenAsTokenItself", user)
 	case AuthKey:
 		keyPath, _, err := r.m.DeployKey()
 		if err != nil {
 			return err
 		}
 		env["GIT_SSH_COMMAND"] = fmt.Sprintf("ssh -i %s -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new", keyPath)
-		jc.Logf("Вход deploy-ключом хоста (%s).", keyPath)
+		jc.Log("files.signingHostSDeployKey", keyPath)
 	}
 
 	argv := []string{"git", "clone", "--progress"}
@@ -223,15 +224,15 @@ func (r *CloneRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	jc.Logf("git clone %s → %s", p.URL, dest)
 	res, err := r.m.runEnv(ctx, env, argv...)
 	if err != nil {
-		return fmt.Errorf("запуск git: %w", err)
+		return msgs.Errorf("files.runningGit", err)
 	}
 	for _, line := range tail(res.Output(), 12) {
 		jc.Logf("      %s", scrub(line, cloneURL, p.URL, secret))
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("git clone завершился кодом %d: %s", res.ExitCode, scrub(lastLine(res.Output()), cloneURL, p.URL, secret))
+		return msgs.Errorf("files.gitCloneExitedCode", res.ExitCode, scrub(lastLine(res.Output()), cloneURL, p.URL, secret))
 	}
-	jc.Logf("Готово: репозиторий в %s.", dest)
+	jc.Log("files.doneRepository", dest)
 	return nil
 }
 
@@ -309,7 +310,7 @@ func DestFor(dir, rawURL, name string) (string, error) {
 		name = RepoDirName(rawURL)
 	}
 	if !dirNameRe.MatchString(name) {
-		return "", fmt.Errorf("укажите имя каталога: латиница, цифры, точка, дефис и подчёркивание")
+		return "", msgs.Errorf("files.specifyDirectoryNameLatinLetters")
 	}
 	return gopath.Join(dir, name), nil
 }

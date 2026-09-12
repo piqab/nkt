@@ -3,7 +3,7 @@ package parse
 import (
 	"context"
 	"encoding/xml"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strconv"
 	"strings"
 	"time"
@@ -91,7 +91,7 @@ func Libvirt(ctx context.Context, c collect.Collector, uri string) LibvirtResult
 		return res
 	}
 	if !out.OK() {
-		msg := fmt.Sprintf("libvirt: virsh list вернул код %d: %s", out.ExitCode, strings.TrimSpace(out.Output()))
+		msg := msgs.Tc(ctx, "parse.libvirtVirshListReturnedCode", out.ExitCode, strings.TrimSpace(out.Output()))
 		res.Status.Warnings = append(res.Status.Warnings, msg)
 		ref := model.TextRef{Key: "parse.libvirtListFailed", Args: []any{out.ExitCode, strings.TrimSpace(out.Output())}}
 		res.Status.WarningRefs = append(res.Status.WarningRefs, ref)
@@ -130,18 +130,18 @@ func readDomain(ctx context.Context, c collect.Collector, uri, name string) (mod
 	if info, err := c.Run(ctx, "virsh", "-c", uri, "dominfo", name); err == nil && info.OK() {
 		applyDominfo(&vm, info.Stdout)
 	} else {
-		return vm, fmt.Sprintf("libvirt: dominfo %s недоступен", name),
+		return vm, msgs.Tc(ctx, "parse.libvirtDominfoUnavailable2", name),
 			model.TextRef{Key: "parse.libvirtDominfoUnavailable", Args: []any{name}}
 	}
 
 	xmlOut, err := c.Run(ctx, "virsh", "-c", uri, "dumpxml", name)
 	if err != nil || !xmlOut.OK() {
-		return vm, fmt.Sprintf("libvirt: dumpxml %s недоступен", name),
+		return vm, msgs.Tc(ctx, "parse.libvirtDumpxmlUnavailable2", name),
 			model.TextRef{Key: "parse.libvirtDumpxmlUnavailable", Args: []any{name}}
 	}
 	var dom domainXML
 	if err := xml.Unmarshal([]byte(xmlOut.Stdout), &dom); err != nil {
-		return vm, fmt.Sprintf("libvirt: разбор XML домена %s: %v", name, err),
+		return vm, msgs.Tc(ctx, "parse.libvirtParsingDomainXML", name, err),
 			model.TextRef{Key: "parse.libvirtXMLParseFailed", Args: []any{name, err}}
 	}
 	if dom.UUID != "" {

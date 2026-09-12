@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strings"
 
@@ -74,7 +75,7 @@ func (m *SysConfigManager) Read(ctx context.Context) SystemSettings {
 			out.Kernel = strings.TrimSpace(doc.KernelName + " " + doc.KernelRelease)
 		}
 	} else {
-		out.Notes = append(out.Notes, "hostnamectl недоступен — имя машины показано по /etc/hostname")
+		out.Notes = append(out.Notes, msgs.Tc(ctx, "control.hostnamectlUnavailable"))
 		if raw, err := m.c.ReadFile("/etc/hostname"); err == nil {
 			out.Hostname = strings.TrimSpace(string(raw))
 			out.StaticHostname = out.Hostname
@@ -89,7 +90,7 @@ func (m *SysConfigManager) Read(ctx context.Context) SystemSettings {
 		out.CanNTP = kv["CanNTP"] == "yes"
 		out.LocalTime = kv["TimeUSec"]
 	} else {
-		out.Notes = append(out.Notes, "timedatectl недоступен — часовой пояс изменить нельзя")
+		out.Notes = append(out.Notes, msgs.Tc(ctx, "control.timedatectlUnavailable"))
 	}
 
 	// Локаль: /etc/default/locale в Debian/Ubuntu, /etc/locale.conf в
@@ -158,7 +159,7 @@ var timezoneRe = regexp.MustCompile(`^[A-Za-z]+(/[A-Za-z0-9_+-]+){0,2}$`)
 // SetHostname меняет имя машины.
 func (m *SysConfigManager) SetHostname(ctx context.Context, name string) error {
 	if !machineNameRe.MatchString(name) {
-		return fmt.Errorf("недопустимое имя машины: %q", name)
+		return msgs.Errorf("control.invalidMachineName", name)
 	}
 	res, err := m.c.Run(ctx, "hostnamectl", "set-hostname", name)
 	if err != nil {
@@ -173,7 +174,7 @@ func (m *SysConfigManager) SetHostname(ctx context.Context, name string) error {
 // SetTimezone меняет часовой пояс.
 func (m *SysConfigManager) SetTimezone(ctx context.Context, zone string) error {
 	if !timezoneRe.MatchString(zone) {
-		return fmt.Errorf("недопустимый часовой пояс: %q", zone)
+		return msgs.Errorf("control.invalidTimeZone", zone)
 	}
 	res, err := m.c.Run(ctx, "timedatectl", "set-timezone", zone)
 	if err != nil {

@@ -5,8 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/binary"
-	"errors"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 
 	"golang.org/x/crypto/pbkdf2"
 )
@@ -47,11 +46,11 @@ const (
 // its own enough to decrypt every managed host's secrets.
 func EncryptWithPassword(password string, plaintext []byte) ([]byte, error) {
 	if password == "" {
-		return nil, errors.New("secretbox: пароль не должен быть пустым")
+		return nil, msgs.Errorf("secretbox.secretboxPasswordMustEmpty")
 	}
 	salt := make([]byte, saltSize)
 	if _, err := rand.Read(salt); err != nil {
-		return nil, fmt.Errorf("генерация соли: %w", err)
+		return nil, msgs.Errorf("secretbox.generatingSalt", err)
 	}
 	key := pbkdf2.Key([]byte(password), salt, defaultIterations, pbkdf2KeyLen, sha256.New)
 
@@ -61,7 +60,7 @@ func EncryptWithPassword(password string, plaintext []byte) ([]byte, error) {
 	}
 	nonce := make([]byte, gcm.NonceSize())
 	if _, err := rand.Read(nonce); err != nil {
-		return nil, fmt.Errorf("генерация nonce: %w", err)
+		return nil, msgs.Errorf("secretbox.generatingNonce", err)
 	}
 	sealed := gcm.Seal(nil, nonce, plaintext, nil)
 
@@ -86,10 +85,10 @@ func IsPasswordEncrypted(data []byte) bool {
 // DecryptWithPassword reverses EncryptWithPassword.
 func DecryptWithPassword(password string, envelope []byte) ([]byte, error) {
 	if !IsPasswordEncrypted(envelope) {
-		return nil, errors.New("secretbox: не похоже на файл, зашифрованный паролем")
+		return nil, msgs.Errorf("secretbox.secretboxDoesLookLikePassword")
 	}
 	if len(envelope) < envelopeHeaderSize {
-		return nil, errors.New("secretbox: повреждён (слишком короткий) зашифрованный файл")
+		return nil, msgs.Errorf("secretbox.secretboxCorruptedTooShortEncrypted")
 	}
 	rest := envelope[len(passwordMagic):]
 	salt, rest := rest[:saltSize], rest[saltSize:]
@@ -101,12 +100,12 @@ func DecryptWithPassword(password string, envelope []byte) ([]byte, error) {
 		return nil, err
 	}
 	if len(rest) < gcm.NonceSize() {
-		return nil, errors.New("secretbox: повреждён (слишком короткий) зашифрованный файл")
+		return nil, msgs.Errorf("secretbox.secretboxCorruptedTooShortEncrypted")
 	}
 	nonce, sealed := rest[:gcm.NonceSize()], rest[gcm.NonceSize():]
 	plaintext, err := gcm.Open(nil, nonce, sealed, nil)
 	if err != nil {
-		return nil, errors.New("secretbox: неверный пароль или повреждённый файл")
+		return nil, msgs.Errorf("secretbox.secretboxWrongPasswordCorruptedFile")
 	}
 	return plaintext, nil
 }

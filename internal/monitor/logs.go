@@ -2,7 +2,7 @@ package monitor
 
 import (
 	"context"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	gopath "path"
 	"regexp"
 	"strconv"
@@ -161,7 +161,7 @@ func (l *LogCollector) RunOnce(ctx context.Context, sources []LogSource) (int, e
 	}
 
 	if err := l.db.InsertMetrics(ctx, samples); err != nil {
-		return 0, fmt.Errorf("сохранение метрик логов: %w", err)
+		return 0, msgs.Errorf("monitor.savingLogMetrics", err)
 	}
 	return len(samples), nil
 }

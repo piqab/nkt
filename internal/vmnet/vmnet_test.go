@@ -107,7 +107,7 @@ func TestFreeSubnetAvoidsTaken(t *testing.T) {
 		{Name: "default", Address: "192.168.122.1", Bridge: "virbr0"},
 		{Name: "lab", Address: "192.168.123.1", Bridge: "virbr1"},
 	}
-	subnet, bridge, err := freeSubnet(existing, NetworkRanges(existing))
+	subnet, bridge, err := freeSubnet(existing, NetworkRanges(context.Background(), existing))
 	if err != nil {
 		t.Fatalf("freeSubnet: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestFreeSubnetAvoidsTaken(t *testing.T) {
 // создании машины, за несколько экранов от места ошибки.
 func TestCheckSubnetRejectsOverlap(t *testing.T) {
 	taken := append(
-		NetworkRanges([]Network{{Name: "default", Address: "192.168.122.1", Netmask: "255.255.255.0"}}),
+		NetworkRanges(context.Background(), []Network{{Name: "default", Address: "192.168.122.1", Netmask: "255.255.255.0"}}),
 		Occupied{CIDR: "10.0.0.0/8", Where: "интерфейсом хоста eth0", Host: true},
 	)
 
@@ -172,7 +172,7 @@ func TestCheckSubnetRejectsOverlap(t *testing.T) {
 // худший из возможных подсказок.
 func TestFreeSubnetAvoidsHostRanges(t *testing.T) {
 	existing := []Network{{Name: "default", Address: "192.168.122.1", Bridge: "virbr0"}}
-	taken := append(NetworkRanges(existing), Occupied{CIDR: "192.168.123.0/24", Where: "интерфейсом хоста eth0", Host: true})
+	taken := append(NetworkRanges(context.Background(), existing), Occupied{CIDR: "192.168.123.0/24", Where: "интерфейсом хоста eth0", Host: true})
 	subnet, _, err := freeSubnet(existing, taken)
 	if err != nil {
 		t.Fatalf("freeSubnet: %v", err)

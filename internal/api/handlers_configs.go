@@ -50,7 +50,7 @@ type mkdirRequest struct {
 func (s *Server) handleConfigMkdir(w http.ResponseWriter, r *http.Request) {
 	var req mkdirRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -105,14 +105,14 @@ func viaHubTunnel(r *http.Request) bool {
 func (s *Server) handleSSHPreflight(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"probe":   s.configs.ProbeSSHD(r.Context()),
-		"reserve": s.configs.SSHReserveChannel(viaHubTunnel(r)),
+		"reserve": s.configs.SSHReserveChannel(r.Context(), viaHubTunnel(r)),
 	})
 }
 
 func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
 	var req configWriteRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -122,9 +122,9 @@ func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
 	// control.SSHReserveChannel). Обойти запрет можно только явным force —
 	// у оператора может быть консоль, о которой отсюда никак не узнать.
 	if svc, err := s.configs.ServiceForPath(req.Path); err == nil && svc == model.ServiceSSH && !req.Force {
-		if reserve := s.configs.SSHReserveChannel(viaHubTunnel(r)); !reserve.OK {
+		if reserve := s.configs.SSHReserveChannel(r.Context(), viaHubTunnel(r)); !reserve.OK {
 			writeJSON(w, http.StatusPreconditionRequired, map[string]any{
-				"error":   "правка конфигурации sshd заблокирована: " + reserve.Detail,
+				"error":   msgs.Tc(r.Context(), "api.sshdEditBlocked", reserve.Detail),
 				"reserve": reserve,
 				"probe":   s.configs.ProbeSSHD(r.Context()),
 			})
@@ -190,7 +190,7 @@ type blockWriteRequest struct {
 func (s *Server) handleConfigBlockWrite(w http.ResponseWriter, r *http.Request) {
 	var req blockWriteRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -261,7 +261,7 @@ func (s *Server) handleConfigRollback(w http.ResponseWriter, r *http.Request) {
 	var req rollbackRequest
 	if r.ContentLength > 0 {
 		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 	}

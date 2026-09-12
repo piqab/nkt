@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -91,7 +92,7 @@ func (m *Manager) checkLatestVersion(ctx context.Context) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		m.recordVersionCheck("", "", fmt.Errorf("GitHub API вернул код %d", resp.StatusCode))
+		m.recordVersionCheck("", "", msgs.Errorf("hub.githubAPIReturnedCode", resp.StatusCode))
 		return
 	}
 
@@ -102,7 +103,7 @@ func (m *Manager) checkLatestVersion(ctx context.Context) {
 	}
 	latest := strings.TrimPrefix(strings.TrimSpace(rel.TagName), "v")
 	if latest == "" {
-		m.recordVersionCheck("", "", fmt.Errorf("пустой tag_name в ответе GitHub"))
+		m.recordVersionCheck("", "", msgs.Errorf("hub.emptyTagNameGitHubResponse"))
 		return
 	}
 	m.recordVersionCheck(latest, cleanReleaseNotes(rel.Body), nil)

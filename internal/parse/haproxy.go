@@ -3,6 +3,7 @@ package parse
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"sort"
 	"strconv"
@@ -37,7 +38,7 @@ func HAProxy(ctx context.Context, c collect.Collector, mainConfig string) HAProx
 
 	raw, err := c.ReadFile(mainConfig)
 	if err != nil {
-		res.Status.Error = fmt.Sprintf("конфиг %s недоступен: %v", mainConfig, err)
+		res.Status.Error = msgs.Tc(ctx, "parse.configUnavailable2", mainConfig, err)
 		res.Status.ErrorKey = "parse.configUnavailable"
 		res.Status.ErrorArgs = []any{mainConfig, err}
 		return res
@@ -54,7 +55,7 @@ func HAProxy(ctx context.Context, c collect.Collector, mainConfig string) HAProx
 	// backend keywords, which is how haproxy itself treats that section.
 	p, err := parser.New(options.String(text), options.UseListenSectionParsers)
 	if err != nil {
-		res.Status.Error = fmt.Sprintf("разбор %s: %v", mainConfig, err)
+		res.Status.Error = msgs.Tc(ctx, "parse.parsing2", mainConfig, err)
 		res.Status.ErrorKey = "parse.configParseFailed"
 		res.Status.ErrorArgs = []any{mainConfig, err}
 		return res

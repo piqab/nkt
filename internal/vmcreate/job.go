@@ -3,6 +3,7 @@ package vmcreate
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -69,14 +70,14 @@ func (r *CreateRunner) Resumable() bool { return true }
 func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var p CreateParams
 	if err := jc.Params(&p); err != nil {
-		return fmt.Errorf("разбор задания: %w", err)
+		return msgs.Errorf("hub.parsingJob", err)
 	}
 	spec := p.Spec
 	if err := spec.Validate(); err != nil {
 		return err
 	}
 	if r.escape == nil {
-		return fmt.Errorf("создание машин недоступно в этом режиме")
+		return msgs.Errorf("vmcreate.machineCreationUnavailableMode")
 	}
 	img, err := resolveImage(r.store, spec.ImageID)
 	if err != nil {
@@ -84,7 +85,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	var done createResume
 	if err := jc.LoadResume(&done); err != nil {
-		return fmt.Errorf("разбор состояния продолжения: %w", err)
+		return msgs.Errorf("hub.parsingResumeState", err)
 	}
 
 	// Недостающие программы доставляются нулевым шагом, до всякой
@@ -93,9 +94,9 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// то есть потратив минуты и гигабайты впустую.
 	if !done.ToolsReady {
 		if missing := MissingTools(CheckTools(ctx, r.run)); len(missing) > 0 {
-			jc.Step(0, 5, "недостающие программы")
+			jc.Step(0, 5, msgs.T(jc.Lang(), "vmcreate.stepMissingTools"))
 			if err := InstallTools(ctx, r.run, jc.Logf); err != nil {
-				return fmt.Errorf("на хосте не хватает программ для создания машин: %w", err)
+				return msgs.Errorf("vmcreate.hostLacksProgramsNeededCreate", err)
 			}
 		}
 		done.ToolsReady = true
@@ -106,7 +107,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	seedPath := filepath.Join(imagesRoot, spec.Name+"-seed.iso")
 
 	// 1. Образ.
-	jc.Step(1, 5, "образ")
+	jc.Step(1, 5, msgs.T(jc.Lang(), "vmcreate.stepImage"))
 	// Образ, уже лежащий в кэше (или прямо в каталоге дисков libvirt),
 	// берётся как есть: заново спрашивать у зеркала контрольную сумму
 	// значило бы ставить создание машины в зависимость от сети, которой
@@ -117,19 +118,19 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if !done.ImageReady {
 		base, err := r.store.Download(ctx, img, func(pr vmimage.Progress) {
 			if pr.Total > 0 {
-				jc.Logf("скачивание образа: %d%%", pr.Done*100/pr.Total)
+				jc.Log("vmcreate.downloadingImage", pr.Done*100/pr.Total)
 			}
 		})
 		if err != nil {
-			return fmt.Errorf("образ: %w", err)
+			return msgs.Errorf("vmcreate.image", err)
 		}
-		jc.Logf("образ на месте: %s", base)
+		jc.Log("vmcreate.imagePlace", base)
 		done.ImageReady = true
 		jc.SaveResume(done)
 	}
 
 	// 2. Диск машины: копия образа нужного размера.
-	jc.Step(2, 5, "диск")
+	jc.Step(2, 5, msgs.T(jc.Lang(), "vmcreate.stepDisk"))
 	if !done.DiskReady {
 		if err := r.makeDisk(ctx, jc, r.imagePath(img), diskPath, spec.DiskGB); err != nil {
 			return err
@@ -149,7 +150,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 4. Определение домена.
-	jc.Step(4, 5, "домен")
+	jc.Step(4, 5, msgs.T(jc.Lang(), "vmcreate.stepDomain"))
 	if !done.Defined {
 		if err := r.defineDomain(ctx, jc, spec, diskPath, seedPath); err != nil {
 			return err
@@ -159,7 +160,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 5. Запуск.
-	jc.Step(5, 5, "запуск")
+	jc.Step(5, 5, msgs.T(jc.Lang(), "vmcreate.stepStart"))
 	// Сеть — самая частая причина, по которой машина не стартует на
 	// свежем libvirt: сама сеть «default» заведена, но не поднята, и
 	// virsh отвечает «Failed to start domain» с причиной на следующей
@@ -176,19 +177,19 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	if spec.Autostart {
 		if _, err := r.run(ctx, "virsh", "autostart", spec.Name); err != nil {
-			jc.Logf("автозапуск включить не удалось: %v", err)
+			jc.Log("vmcreate.couldEnableAutostart", err)
 		}
 	}
-	jc.Logf("Машина %s создана и запущена.", spec.Name)
-	jc.Logf("Первый запуск занимает до минуты: cloud-init заводит пользователя %s и растит файловую систему.", spec.User)
+	jc.Log("vmcreate.machineCreatedStarted", spec.Name)
+	jc.Log("vmcreate.firstBootTakesUpMinute", spec.User)
 
 	// Адрес нужен тому, кто будет к машине подключаться, — прежде всего
 	// хабу, если машину создают для него. Ждать до конца задания
 	// незачем: строка журнала с адресом видна сразу.
 	if addr := r.waitAddress(ctx, jc, spec.Name); addr != "" {
-		jc.Logf("Адрес машины: %s", addr)
+		jc.Log("vmcreate.machineAddress", addr)
 	} else {
-		jc.Logf("Адрес пока не известен — машина ещё поднимается или сеть без DHCP-аренды.")
+		jc.Log("vmcreate.addressKnownYetMachineStill")
 	}
 	return nil
 }
@@ -213,7 +214,7 @@ func (r *CreateRunner) waitAddress(ctx context.Context, jc *jobs.Context, name s
 			return addr
 		}
 		if time.Since(told) > 30*time.Second {
-			jc.Logf("      адрес пока не появился, жду (машина ещё поднимается)")
+			jc.Log("vmcreate.addressYetWaitingMachineStill")
 			told = time.Now()
 		}
 		select {
@@ -347,20 +348,20 @@ func resolveImage(store *vmimage.Store, id string) (vmimage.Image, error) {
 	// сперва в кэш значило бы занять место дважды.
 	if name, ok := strings.CutPrefix(id, HostPrefix); ok {
 		if !validImageName(name) {
-			return vmimage.Image{}, fmt.Errorf("недопустимое имя файла: %q", name)
+			return vmimage.Image{}, msgs.Errorf("vmcreate.invalidFileName", name)
 		}
 		return vmimage.Image{ID: id, Name: name, FileName: name, Custom: true}, nil
 	}
 	if name, ok := strings.CutPrefix(id, vmimage.CustomPrefix); ok {
 		img := vmimage.CustomImage(name)
 		if !store.Have(img) {
-			return vmimage.Image{}, fmt.Errorf("образа %s нет в кэше — загрузите его заново", name)
+			return vmimage.Image{}, msgs.Errorf("vmcreate.imageCacheDownloadAgain", name)
 		}
 		return img, nil
 	}
 	img, ok := vmimage.ByID(id)
 	if !ok {
-		return vmimage.Image{}, fmt.Errorf("нет такого образа: %q", id)
+		return vmimage.Image{}, msgs.Errorf("vmcreate.suchImage", id)
 	}
 	return img, nil
 }
@@ -382,12 +383,12 @@ func (r *CreateRunner) ensureNetwork(ctx context.Context, jc *jobs.Context, name
 	mgr := vmnet.NewManager(vmnet.Runner(r.run), r.store.Dir())
 	created, err := mgr.EnsureNAT(ctx, name)
 	if err != nil {
-		return fmt.Errorf("сеть libvirt «%s»: %w", name, err)
+		return msgs.Errorf("vmcreate.libvirtNetwork", name, err)
 	}
 	if created {
-		jc.Logf("сеть libvirt «%s» не существовала — завёл её (NAT с DHCP, автозапуск включён)", name)
+		jc.Log("vmcreate.libvirtNetworkDidExistCreated", name)
 	} else {
-		jc.Logf("сеть libvirt «%s» на месте", name)
+		jc.Log("vmcreate.libvirtNetworkPlace", name)
 	}
 	return nil
 }
@@ -415,11 +416,9 @@ func (r *CreateRunner) makeDisk(ctx context.Context, jc *jobs.Context, base, dis
 		// именем, и оператору нужно не «выберите другое имя», а команда,
 		// которой это убрать.
 		name := strings.TrimSuffix(filepath.Base(disk), ".qcow2")
-		return fmt.Errorf("файл диска %s уже существует. Если это остатки прошлой попытки, "+
-			"уберите машину целиком: virsh destroy %s; virsh undefine %s --remove-all-storage — "+
-			"либо выберите другое имя", disk, name, name)
+		return msgs.Errorf("vmcreate.diskFileAlreadyExistsIf", disk, name, name)
 	}
-	jc.Logf("готовлю диск %s (%d ГБ)", disk, sizeGB)
+	jc.Log("vmcreate.preparingDiskGB", disk, sizeGB)
 	res, err := r.run(ctx, "qemu-img", "convert", "-f", "qcow2", "-O", "qcow2", base, disk)
 	if err != nil {
 		return err
@@ -445,7 +444,7 @@ func (r *CreateRunner) makeDisk(ctx context.Context, jc *jobs.Context, base, dis
 func (r *CreateRunner) makeSeed(ctx context.Context, jc *jobs.Context, spec Spec, seedPath string) error {
 	dir, err := os.MkdirTemp(r.store.Dir(), "seed-")
 	if err != nil {
-		return fmt.Errorf("временный каталог: %w", err)
+		return msgs.Errorf("hub.temporaryDirectory", err)
 	}
 	defer os.RemoveAll(dir)
 
@@ -459,7 +458,7 @@ func (r *CreateRunner) makeSeed(ctx context.Context, jc *jobs.Context, spec Spec
 	}
 
 	if res, err := r.run(ctx, "cloud-localds", seedPath, userData, metaData); err == nil && res.ExitCode == 0 {
-		jc.Logf("настройки первого запуска: %s (cloud-localds)", seedPath)
+		jc.Log("vmcreate.firstBootSettingsCloudLocalds", seedPath)
 		return nil
 	}
 	// Запасной путь: genisoimage делает то же самое вручную — метка тома
@@ -467,12 +466,12 @@ func (r *CreateRunner) makeSeed(ctx context.Context, jc *jobs.Context, spec Spec
 	res, err := r.run(ctx, "genisoimage", "-output", seedPath, "-volid", "cidata",
 		"-joliet", "-rock", userData, metaData)
 	if err != nil {
-		return fmt.Errorf("сборка настроек первого запуска: %w", err)
+		return msgs.Errorf("vmcreate.buildingFirstBootSettings", err)
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("на хосте нет ни cloud-localds, ни genisoimage: %s", commandError(res.Stderr, res.Stdout))
+		return msgs.Errorf("vmcreate.hostHasNeitherCloudLocalds", commandError(res.Stderr, res.Stdout))
 	}
-	jc.Logf("настройки первого запуска: %s (genisoimage)", seedPath)
+	jc.Log("vmcreate.firstBootSettingsGenisoimage", seedPath)
 	return nil
 }
 
@@ -491,7 +490,7 @@ func (r *CreateRunner) defineDomain(ctx context.Context, jc *jobs.Context, spec 
 	if res.ExitCode != 0 {
 		return fmt.Errorf("virsh define: %s", commandError(res.Stderr, res.Stdout))
 	}
-	jc.Logf("домен %s определён", spec.Name)
+	jc.Log("vmcreate.domainDefined", spec.Name)
 	return nil
 }
 
@@ -521,7 +520,7 @@ func commandError(streams ...string) string {
 		}
 	}
 	if len(lines) == 0 {
-		return "команда завершилась с ошибкой"
+		return msgs.T(msgs.DefaultLang, "vmcreate.commandFailed")
 	}
 	// Три строки — потолок: дальше начинаются подсказки вида «see
 	// /var/log/...», которые в одну строку сообщения всё равно не влезут.
@@ -537,7 +536,7 @@ func firstLine(s string) string {
 		return s[:i]
 	}
 	if s == "" {
-		return "команда завершилась с ошибкой"
+		return msgs.T(msgs.DefaultLang, "vmcreate.commandFailed")
 	}
 	return s
 }

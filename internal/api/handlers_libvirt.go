@@ -36,7 +36,7 @@ func (s *Server) handleVMAction(w http.ResponseWriter, r *http.Request) {
 		err = s.libvirt.VMAction(r.Context(), user, name, action)
 	}
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -52,7 +52,7 @@ func (s *Server) handleVMDelete(w http.ResponseWriter, r *http.Request) {
 	force := r.URL.Query().Get("force") == "true"
 	user := auth.Username(r.Context())
 	if err := s.libvirt.UndefineVM(r.Context(), user, name, removeStorage, force); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -70,12 +70,12 @@ type createDiskRequest struct {
 func (s *Server) handleVMCreateDisk(w http.ResponseWriter, r *http.Request) {
 	var req createDiskRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
 	if err := s.libvirt.CreateDisk(r.Context(), user, req.Path, req.SizeGB); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})

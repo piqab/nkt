@@ -7,7 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"sort"
 	"sync"
 	"time"
@@ -203,7 +203,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 
 	if s.db != nil {
 		if err := s.persist(ctx, snap); err != nil {
-			return snap, fmt.Errorf("сохранение снапшота: %w", err)
+			return snap, msgs.Errorf("inventory.savingSnapshot", err)
 		}
 	}
 	return snap, nil

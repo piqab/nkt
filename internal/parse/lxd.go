@@ -3,7 +3,7 @@ package parse
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"sort"
 	"strings"
 	"time"
@@ -61,7 +61,7 @@ func LXD(ctx context.Context, c collect.Collector) LXDResult {
 		return res
 	}
 	if !out.OK() {
-		msg := fmt.Sprintf("lxd: lxc list вернул код %d: %s", out.ExitCode, strings.TrimSpace(out.Output()))
+		msg := msgs.Tc(ctx, "parse.lxdLxcListReturnedCode", out.ExitCode, strings.TrimSpace(out.Output()))
 		res.Status.Warnings = append(res.Status.Warnings, msg)
 		ref := model.TextRef{Key: "parse.lxdListFailed", Args: []any{out.ExitCode, strings.TrimSpace(out.Output())}}
 		res.Status.WarningRefs = append(res.Status.WarningRefs, ref)
@@ -74,7 +74,7 @@ func LXD(ctx context.Context, c collect.Collector) LXDResult {
 
 	var list []lxdInstance
 	if err := json.Unmarshal([]byte(out.Stdout), &list); err != nil {
-		res.Status.Warnings = append(res.Status.Warnings, fmt.Sprintf("lxd: разбор списка: %v", err))
+		res.Status.Warnings = append(res.Status.Warnings, msgs.Tc(ctx, "parse.lxdParsingList", err))
 		res.Status.WarningRefs = append(res.Status.WarningRefs,
 			model.TextRef{Key: "parse.lxdListParseFailed", Args: []any{err}})
 		return res

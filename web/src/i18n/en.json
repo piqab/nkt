@@ -1577,7 +1577,8 @@
     "count": "{{count}} items",
     "uptimeDays": "{{days}}d {{hours}}h",
     "uptimeHours": "{{hours}}h {{minutes}}m",
-    "uptimeMinutes": "{{minutes}}m"
+    "uptimeMinutes": "{{minutes}}m",
+    "mhz": "MHz"
   },
   "sysSettings": {
     "title": "System settings",

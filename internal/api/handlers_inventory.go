@@ -253,7 +253,7 @@ func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, topology.Build(snap))
+	writeJSON(w, http.StatusOK, topology.Build(r.Context(), snap))
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
@@ -312,13 +312,13 @@ type killProcessRequest struct {
 func (s *Server) handleKillProcess(w http.ResponseWriter, r *http.Request) {
 	var req killProcessRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
 
 	if err := s.services.KillProcess(r.Context(), user, req.PID, req.Command, req.Signal); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -452,7 +452,7 @@ func (s *Server) handleServiceAction(w http.ResponseWriter, r *http.Request) {
 
 	res, err := s.services.Action(r.Context(), user, name, action)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -469,7 +469,7 @@ func (s *Server) handleServiceValidate(w http.ResponseWriter, r *http.Request) {
 
 	res, ok, err := s.services.ValidateOnly(r.Context(), user, name)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -491,7 +491,7 @@ func (s *Server) handleServiceLogs(w http.ResponseWriter, r *http.Request) {
 
 	out, err := s.services.Logs(r.Context(), user, name, lines)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"output": out})
@@ -505,7 +505,7 @@ func (s *Server) handleContainerDelete(w http.ResponseWriter, r *http.Request) {
 	force := r.URL.Query().Get("force") == "true"
 	user := auth.Username(r.Context())
 	if err := s.services.DeleteContainer(r.Context(), user, name, force); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -518,7 +518,7 @@ func (s *Server) handleContainerAction(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 
 	if err := s.services.ContainerAction(r.Context(), user, name, action); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()

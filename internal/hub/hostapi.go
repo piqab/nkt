@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"net/http"
 
@@ -66,11 +66,11 @@ func (m *Manager) HostAPI(ctx context.Context, hostID int64, method, path string
 		return resp.StatusCode, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return resp.StatusCode, fmt.Errorf("%s %s: код %d: %s", method, path, resp.StatusCode, hostAPIError(raw))
+		return resp.StatusCode, msgs.Errorf("control.code", method, path, resp.StatusCode, hostAPIError(raw))
 	}
 	if out != nil {
 		if err := json.Unmarshal(raw, out); err != nil {
-			return resp.StatusCode, fmt.Errorf("разбор ответа %s: %w", path, err)
+			return resp.StatusCode, msgs.Errorf("hub.parsingResponse", path, err)
 		}
 	}
 	return resp.StatusCode, nil

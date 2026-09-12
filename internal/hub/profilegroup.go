@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"time"
 
 	"github.com/piqab/nkt/internal/jobs"
@@ -67,18 +68,18 @@ func (r *GroupApplyRunner) Resumable() bool { return true }
 func (r *GroupApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var p GroupApplyParams
 	if err := jc.Params(&p); err != nil {
-		return fmt.Errorf("разбор задания: %w", err)
+		return msgs.Errorf("hub.parsingJob", err)
 	}
 	if len(p.Hosts) == 0 {
-		jc.Logf("В группе «%s» нет хостов.", p.Group)
+		jc.Log("hub.groupHasHosts2", p.Group)
 		return nil
 	}
 	var done groupApplyResume
 	if err := jc.LoadResume(&done); err != nil {
-		return fmt.Errorf("разбор состояния продолжения: %w", err)
+		return msgs.Errorf("hub.parsingResumeState", err)
 	}
 	if done.Done > 0 {
-		jc.Logf("Продолжаю с хоста %d из %d.", done.Done+1, len(p.Hosts))
+		jc.Log("hub.continuingHost", done.Done+1, len(p.Hosts))
 	}
 
 	for i := done.Done; i < len(p.Hosts); i++ {
@@ -88,7 +89,7 @@ func (r *GroupApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		hostID := p.Hosts[i]
 		host, err := r.m.db.HostByID(ctx, hostID)
 		if err != nil {
-			jc.Logf("[%d/%d] хост %d пропущен: %v", i+1, len(p.Hosts), hostID, err)
+			jc.Log("hub.hostSkipped", i+1, len(p.Hosts), hostID, err)
 			done.Done = i + 1
 			jc.SaveResume(done)
 			continue
@@ -105,7 +106,7 @@ func (r *GroupApplyRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		done.Done = i + 1
 		jc.SaveResume(done)
 	}
-	jc.Logf("Готово: хостов обработано — %d.", len(p.Hosts))
+	jc.Log("hub.doneHostsProcessed", len(p.Hosts))
 	return nil
 }
 
@@ -116,23 +117,23 @@ func (r *GroupApplyRunner) applyToHost(ctx context.Context, jc *jobs.Context,
 	var plan profile.Plan
 	if _, err := r.m.HostAPI(ctx, host.ID, "POST", "/api/profiles/plan",
 		map[string]string{"content": p.Content}, &plan); err != nil {
-		return fmt.Errorf("построение плана: %w", err)
+		return msgs.Errorf("hub.buildingPlan", err)
 	}
 	for _, u := range plan.Unknown {
-		jc.Logf("      о чём судить не удалось: %s", u)
+		jc.Log("hub.couldJudge", u)
 	}
 	if len(plan.Changes) == 0 {
-		jc.Logf("      расхождений нет")
+		jc.Log("hub.drift")
 		return nil
 	}
-	jc.Logf("      расхождений: %d", len(plan.Changes))
+	jc.Log("hub.driftItems", len(plan.Changes))
 
 	var started struct {
 		JobID int64 `json:"job_id"`
 	}
 	if _, err := r.m.HostAPI(ctx, host.ID, "POST", "/api/profiles/apply",
 		map[string]any{"name": p.Profile, "changes": plan.Changes}, &started); err != nil {
-		return fmt.Errorf("запуск применения: %w", err)
+		return msgs.Errorf("hub.startingApply", err)
 	}
 	return r.waitHostJob(ctx, jc, host, started.JobID)
 }
@@ -149,7 +150,7 @@ func (r *GroupApplyRunner) waitHostJob(ctx context.Context, jc *jobs.Context,
 			return err
 		}
 		if time.Now().After(deadline) {
-			return fmt.Errorf("задание на хосте не завершилось за %s", hostJobTimeout)
+			return msgs.Errorf("hub.jobHostDidFinishWithin", hostJobTimeout)
 		}
 
 		var res struct {
@@ -161,7 +162,7 @@ func (r *GroupApplyRunner) waitHostJob(ctx context.Context, jc *jobs.Context,
 			// Связь с хостом могла моргнуть — это не повод считать
 			// применение проваленным: следующий заход дочитает то же
 			// самое, номер строки не сдвинулся.
-			jc.Logf("      связь прервалась (%v), пробую снова", err)
+			jc.Log("hub.connectionLostRetrying", err)
 			if !sleepCtx(ctx, hostJobPoll) {
 				return ctx.Err()
 			}
@@ -175,7 +176,7 @@ func (r *GroupApplyRunner) waitHostJob(ctx context.Context, jc *jobs.Context,
 		case store.JobSucceeded:
 			return nil
 		case store.JobFailed, store.JobCanceled, store.JobInterrupted:
-			return fmt.Errorf("задание на хосте: %s (%s)", res.Job.Status, res.Job.Error)
+			return msgs.Errorf("hub.jobHost", res.Job.Status, res.Job.Error)
 		}
 		if !sleepCtx(ctx, hostJobPoll) {
 			return ctx.Err()

@@ -3,6 +3,7 @@ package vmimage
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strings"
 
 	"github.com/piqab/nkt/internal/jobs"
@@ -53,49 +54,49 @@ func (r *DownloadRunner) Resumable() bool { return true }
 func (r *DownloadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var p DownloadParams
 	if err := jc.Params(&p); err != nil {
-		return fmt.Errorf("разбор задания: %w", err)
+		return msgs.Errorf("hub.parsingJob", err)
 	}
 	img, err := resolveDownload(p)
 	if err != nil {
 		return err
 	}
 
-	jc.Step(1, 3, "контрольная сумма")
-	jc.Logf("Образ: %s", img.Name)
-	jc.Logf("Источник: %s", img.URL)
+	jc.Step(1, 3, msgs.T(jc.Lang(), "vmimage.stepChecksum"))
+	jc.Log("vmimage.image", img.Name)
+	jc.Log("vmimage.source", img.URL)
 	if img.Custom && img.Checksum == "" {
 		// Сказать вслух: образ из каталога проверяется всегда, а свой по
 		// ссылке — только если сумму дали. Молчаливая разница в том,
 		// чему можно доверять, хуже отсутствия проверки.
-		jc.Logf("Контрольная сумма не задана — образ будет взят как есть, без проверки.")
+		jc.Log("vmimage.checksumGivenImageTakenAs")
 	}
 
-	jc.Step(2, 3, "скачивание")
+	jc.Step(2, 3, msgs.T(jc.Lang(), "vmimage.stepDownload"))
 	path, err := r.store.Download(ctx, img, func(pr Progress) {
 		if pr.Total > 0 {
-			jc.Logf("скачано %s из %s (%d%%)", humanBytes(pr.Done), humanBytes(pr.Total),
+			jc.Log("vmimage.downloaded", humanBytes(jc.Lang(), pr.Done), humanBytes(jc.Lang(), pr.Total),
 				pr.Done*100/pr.Total)
 			return
 		}
-		jc.Logf("скачано %s", humanBytes(pr.Done))
+		jc.Log("vmimage.downloaded2", humanBytes(jc.Lang(), pr.Done))
 	})
 	if err != nil {
 		return err
 	}
 
-	jc.Step(3, 3, "проверка")
+	jc.Step(3, 3, msgs.T(jc.Lang(), "vmimage.stepVerify"))
 	if p.ToHost {
 		if r.move == nil {
-			return fmt.Errorf("перенос в каталог дисков недоступен в этом режиме")
+			return msgs.Errorf("vmimage.movingDiskDirectoryUnavailableMode")
 		}
 		target, err := r.move(ctx, path, img.FileName)
 		if err != nil {
 			return err
 		}
-		jc.Logf("Готово: %s", target)
+		jc.Log("vmimage.done", target)
 		return nil
 	}
-	jc.Logf("Готово: %s (сумма %s сошлась)", path, img.ChecksumKind)
+	jc.Log("vmimage.doneChecksumMatched", path, img.ChecksumKind)
 	return nil
 }
 
@@ -104,16 +105,16 @@ func resolveDownload(p DownloadParams) (Image, error) {
 	if p.URL == "" {
 		img, ok := ByID(p.ImageID)
 		if !ok {
-			return Image{}, fmt.Errorf("нет такого образа в каталоге: %q", p.ImageID)
+			return Image{}, msgs.Errorf("vmimage.suchImageCatalog", p.ImageID)
 		}
 		return img, nil
 	}
 	name := strings.TrimSpace(p.FileName)
 	if name == "" {
-		return Image{}, fmt.Errorf("не задано имя файла для образа")
+		return Image{}, msgs.Errorf("vmimage.fileNameGivenImage")
 	}
 	if !validFileName(name) {
-		return Image{}, fmt.Errorf("недопустимое имя файла: %q", name)
+		return Image{}, msgs.Errorf("vmcreate.invalidFileName", name)
 	}
 	kind := strings.ToLower(strings.TrimSpace(p.ChecksumKind))
 	if kind == "" {
@@ -127,15 +128,15 @@ func resolveDownload(p DownloadParams) (Image, error) {
 }
 
 // humanBytes показывает размер так, как его читают, а не в байтах.
-func humanBytes(n int64) string {
+func humanBytes(lang msgs.Lang, n int64) string {
 	const unit = 1024
 	if n < unit {
-		return fmt.Sprintf("%d Б", n)
+		return msgs.T(lang, "vmimage.bytes", n)
 	}
 	div, exp := int64(unit), 0
 	for v := n / unit; v >= unit && exp < 3; v /= unit {
 		div *= unit
 		exp++
 	}
-	return fmt.Sprintf("%.1f %s", float64(n)/float64(div), []string{"КБ", "МБ", "ГБ", "ТБ"}[exp])
+	return fmt.Sprintf("%.1f %s", float64(n)/float64(div), msgs.T(lang, []string{"vmimage.unitKB", "vmimage.unitMB", "vmimage.unitGB", "vmimage.unitTB"}[exp]))
 }

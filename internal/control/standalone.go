@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	osuser "os/user"
 	"sort"
 	"strconv"
@@ -72,7 +73,7 @@ type StandalonePlan struct {
 func (m *CertManager) StandalonePlan(ctx context.Context) (StandalonePlan, error) {
 	listeners, status := parse.Listeners(ctx, m.c)
 	if !status.Available {
-		return StandalonePlan{}, fmt.Errorf("не удалось прочитать список слушающих сокетов: %s", status.Error)
+		return StandalonePlan{}, msgs.Errorf("control.couldReadListListeningSockets", status.Error)
 	}
 	var onPorts []model.Listener
 	for _, l := range listeners {
@@ -195,16 +196,16 @@ func (m *CertManager) freeStandalonePorts(ctx context.Context, user string, plan
 		case HolderService:
 			report.Msg("certgen.stoppingUnit", h.Unit)
 			if res, err := m.c.Run(ctx, "systemctl", "stop", h.Unit); err != nil {
-				return st, fmt.Errorf("остановка %s: %w", h.Unit, err)
+				return st, msgs.Errorf("control.stopping", h.Unit, err)
 			} else if res.ExitCode != 0 {
-				return st, fmt.Errorf("остановка %s: %s", h.Unit, strings.TrimSpace(res.Output()))
+				return st, msgs.Errorf("control.stopping2", h.Unit, strings.TrimSpace(res.Output()))
 			}
 			m.db.Audit(ctx, user, "cert.standalone_stop", h.Unit, "ok", nil)
 			st.units = append(st.units, h.Unit)
 			report.Msg("certgen.serviceStopped", h.Unit)
 		case HolderProcess:
 			if !restart[h.PID] {
-				return st, fmt.Errorf("порт %s занят процессом %s (pid %d, %s) — остановите его сами или разрешите перезапуск",
+				return st, msgs.Errorf("control.portHeldProcessPidStop",
 					portList(h.Ports), h.Process, h.PID, h.User)
 			}
 			report.Msg("certgen.stoppingProcess", h.Process, h.PID)
@@ -216,7 +217,7 @@ func (m *CertManager) freeStandalonePorts(ctx context.Context, user string, plan
 			st.procs = append(st.procs, h)
 			report.Msg("certgen.processStopped", h.Process, h.PID)
 		default:
-			return st, fmt.Errorf("порт %s занят: %s — nkt не может его освободить, сделайте это сами и повторите",
+			return st, msgs.Errorf("control.portBusyNktCannotFree",
 				portList(h.Ports), describeHolder(h))
 		}
 	}
@@ -227,9 +228,9 @@ func (m *CertManager) freeStandalonePorts(ctx context.Context, user string, plan
 func (m *CertManager) stopProcess(ctx context.Context, pid int) error {
 	spid := strconv.Itoa(pid)
 	if res, err := m.c.Run(ctx, "kill", "-TERM", spid); err != nil {
-		return fmt.Errorf("остановка pid %d: %w", pid, err)
+		return msgs.Errorf("control.stoppingPid", pid, err)
 	} else if res.ExitCode != 0 {
-		return fmt.Errorf("остановка pid %d: %s", pid, strings.TrimSpace(res.Output()))
+		return msgs.Errorf("control.stoppingPid2", pid, strings.TrimSpace(res.Output()))
 	}
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
@@ -241,7 +242,7 @@ func (m *CertManager) stopProcess(ctx context.Context, pid int) error {
 	_, _ = m.c.Run(ctx, "kill", "-KILL", spid)
 	time.Sleep(300 * time.Millisecond)
 	if m.processAlive(ctx, pid) {
-		return fmt.Errorf("процесс pid %d не завершается даже по SIGKILL", pid)
+		return msgs.Errorf("control.processPidDoesExitEven", pid)
 	}
 	return nil
 }
@@ -296,7 +297,7 @@ func (m *CertManager) restoreStandalone(user string, st standaloneState, report 
 // написано в подсказке окна.
 func (m *CertManager) relaunch(ctx context.Context, h PortHolder) error {
 	if len(h.argv) == 0 {
-		return fmt.Errorf("команда запуска неизвестна")
+		return msgs.Errorf("control.launchCommandUnknown")
 	}
 	// Смена пользователя нужна только на чужого: nkt под root поднимает
 	// процесс alex через runuser, а nkt, запущенный самим alex (стенд,
@@ -384,12 +385,12 @@ func portList(ports []int) string {
 func describeHolder(h PortHolder) string {
 	switch h.Kind {
 	case HolderContainer:
-		return fmt.Sprintf("контейнер %s (%s)", shortID(h.ContainerID), h.Process)
+		return msgs.T(msgs.DefaultLang, "control.containerHolder", shortID(h.ContainerID), h.Process)
 	case HolderUnknown:
 		if h.Process != "" {
 			return h.Process
 		}
-		return "неизвестный процесс"
+		return msgs.T(msgs.DefaultLang, "control.unknownProcess")
 	}
 	return fmt.Sprintf("%s (pid %d)", h.Process, h.PID)
 }

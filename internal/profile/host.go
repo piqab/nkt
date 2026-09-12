@@ -3,6 +3,7 @@ package profile
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strings"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -151,7 +152,7 @@ func (h *HostReader) FirewallState(ctx context.Context) (model.FirewallState, er
 // Users отдаёт системные учётки с полными ключами.
 func (h *HostReader) Users(ctx context.Context) (map[string]UserState, error) {
 	if h.osusers == nil {
-		return nil, fmt.Errorf("управление учётными записями недоступно")
+		return nil, msgs.Errorf("profile.accountManagementUnavailable")
 	}
 	list, err := h.osusers.List(ctx)
 	if err != nil {
@@ -192,7 +193,7 @@ func (h *HostReader) authorizedKeys(home string) []string {
 // System отдаёт имя машины и часовой пояс.
 func (h *HostReader) System(ctx context.Context) (string, string, error) {
 	if h.sysconf == nil {
-		return "", "", fmt.Errorf("системные настройки недоступны")
+		return "", "", msgs.Errorf("profile.systemSettingsAreUnavailable")
 	}
 	s := h.sysconf.Read(ctx)
 	name := s.StaticHostname

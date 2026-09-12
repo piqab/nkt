@@ -95,7 +95,7 @@ func Certificates(ctx context.Context, c collect.Collector, endpoints []model.En
 			files, err := certDirEntries(c, path)
 			if err != nil {
 				res.Certs = append(res.Certs, dirError(&res, path, u, renewals,
-					fmt.Sprintf("каталог сертификатов недоступен: %v", err),
+					msgs.Tc(ctx, "parse.certificateDirectoryUnavailable", err),
 					model.TextRef{Key: "parse.certDirUnavailable", Args: []any{err}}))
 				continue
 			}
@@ -461,7 +461,7 @@ func discoverRenewals(ctx context.Context, c collect.Collector) renewalIndex {
 		res, err := c.Run(ctx, "systemctl", "is-active", unit)
 		if err == nil && strings.TrimSpace(res.Stdout) == "active" {
 			idx.automatic = true
-			idx.detail = fmt.Sprintf("автообновление включено: таймер %s активен", unit)
+			idx.detail = msgs.Tc(ctx, "parse.autoRenewalEnabledTimerActive", unit)
 			idx.detailKey = "parse.renewalTimerActive"
 			idx.detailArgs = []any{unit}
 			return idx

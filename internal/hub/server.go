@@ -86,6 +86,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(s.requestLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(securityHeaders)
+	r.Use(msgs.LangMiddleware)
 
 	r.Route("/api", func(r chi.Router) {
 		// Long-lived WebSocket endpoints proxied onto the local or a

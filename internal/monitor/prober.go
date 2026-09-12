@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/tls"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"math"
 	"net"
 	"net/http"
@@ -55,7 +56,7 @@ func NewProber(db *store.DB, cfg *config.Config) *Prober {
 func (p *Prober) RunOnce(ctx context.Context) (int, error) {
 	targets, err := p.db.ListTargets(ctx, true)
 	if err != nil {
-		return 0, fmt.Errorf("список целей: %w", err)
+		return 0, msgs.Errorf("monitor.listingTargets", err)
 	}
 	if len(targets) == 0 {
 		return 0, nil
@@ -77,7 +78,7 @@ func (p *Prober) RunOnce(ctx context.Context) (int, error) {
 	wg.Wait()
 
 	if err := p.db.InsertProbeResults(ctx, results); err != nil {
-		return 0, fmt.Errorf("сохранение результатов: %w", err)
+		return 0, msgs.Errorf("monitor.savingResults", err)
 	}
 	return len(results), nil
 }

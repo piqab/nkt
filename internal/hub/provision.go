@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"os"
 	"os/exec"
@@ -71,10 +73,7 @@ func (m *Manager) resolveSourceRoot(report func(key string, args ...any)) (strin
 		}
 	}
 
-	return "", fmt.Errorf(
-		"исходники nkt не найдены (нет go.mod ни в одном из: %s) — хабу нужен каталог с исходниками для "+
-			"кросс-компиляции бинарников. Задайте NKT_HUB_SOURCE_ROOT абсолютным путём к клону репозитория "+
-			"(без Docker — в /etc/netknownsthat/hub.env, затем systemctl restart netknownsthat-hub)",
+	return "", msgs.Errorf("hub.nktSourcesFoundGoMod",
 		strings.Join(tried, ", "))
 }
 
@@ -106,7 +105,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 	sourceRoot, srcErr := m.resolveSourceRoot(report)
 	if srcErr != nil {
 		if dlErr := m.downloadReleaseBinary(ctx, goos, goarch, m.version, path, report); dlErr != nil {
-			return "", fmt.Errorf("%w; попытка скачать готовый бинарник с GitHub Releases тоже не удалась: %v", srcErr, dlErr)
+			return "", msgs.Errorf("hub.downloadingPrebuiltBinaryGitHubReleases", srcErr, dlErr)
 		}
 		return path, nil
 	}
@@ -118,7 +117,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 
 	report("hub.buildingBinary", goos, goarch)
 	if err := os.MkdirAll(m.cfg.HubBinCacheDir(), 0o750); err != nil {
-		return "", fmt.Errorf("каталог кэша бинарников: %w", err)
+		return "", msgs.Errorf("hub.binaryCacheDirectory", err)
 	}
 
 	cmd := exec.CommandContext(ctx, goBin, "build",
@@ -149,7 +148,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		_ = os.Remove(path)
-		return "", fmt.Errorf("сборка бинарника для %s/%s: %w: %s", goos, goarch, err, strings.TrimSpace(string(out)))
+		return "", msgs.Errorf("hub.buildingBinary2", goos, goarch, err, strings.TrimSpace(string(out)))
 	}
 	return path, nil
 }
@@ -213,7 +212,7 @@ func renderEnv(adminUser, adminPassword string, terminalEnabled bool, terminalUs
 func generatePassword() (string, error) {
 	buf := make([]byte, 24)
 	if _, err := rand.Read(buf); err != nil {
-		return "", fmt.Errorf("генерация пароля: %w", err)
+		return "", msgs.Errorf("hub.generatingPassword", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
@@ -244,7 +243,7 @@ func generatePassword() (string, error) {
 func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envContent, binPath, servicePath, envPath string, report, progress func(key string, args ...any)) error {
 	sftpClient, err := sftp.NewClient(client)
 	if err != nil {
-		return fmt.Errorf("открытие SFTP: %w", err)
+		return msgs.Errorf("hub.openingSFTP", err)
 	}
 	defer sftpClient.Close()
 
@@ -253,28 +252,28 @@ func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envCo
 
 	tmpBin := gopath.Join(tmpDir, "nkt")
 	if err := uploadFile(sftpClient, localBinaryPath, tmpBin, 0o644, progress); err != nil {
-		return fmt.Errorf("заливка бинарника: %w", err)
+		return msgs.Errorf("hub.uploadingBinary2", err)
 	}
 
 	report("hub.uploadingUnitAndConfig")
 	tmpUnit := gopath.Join(tmpDir, "netknownsthat.service")
 	if err := uploadBytes(sftpClient, []byte(unitContent), tmpUnit, 0o644); err != nil {
-		return fmt.Errorf("заливка systemd-юнита: %w", err)
+		return msgs.Errorf("hub.uploadingSystemdUnit", err)
 	}
 	tmpEnv := gopath.Join(tmpDir, "nkt.env")
 	if err := uploadBytes(sftpClient, []byte(envContent), tmpEnv, 0o644); err != nil {
-		return fmt.Errorf("заливка nkt.env: %w", err)
+		return msgs.Errorf("hub.uploadingNktEnv", err)
 	}
 
 	report("hub.installingFiles")
 	if err := installRemoteFile(client, sshUser, tmpBin, binPath, 0o755); err != nil {
-		return fmt.Errorf("установка бинарника: %w", err)
+		return msgs.Errorf("hub.installingBinary", err)
 	}
 	if err := installRemoteFile(client, sshUser, tmpUnit, servicePath, 0o644); err != nil {
-		return fmt.Errorf("установка systemd-юнита: %w", err)
+		return msgs.Errorf("hub.installingSystemdUnit", err)
 	}
 	if err := installRemoteFile(client, sshUser, tmpEnv, envPath, 0o640); err != nil {
-		return fmt.Errorf("установка nkt.env: %w", err)
+		return msgs.Errorf("hub.installingNktEnv", err)
 	}
 	return nil
 }
@@ -319,22 +318,16 @@ func diagnoseInstallError(sshUser, dst string, err error, out string) error {
 	out = strings.TrimSpace(out)
 	switch {
 	case strings.Contains(out, "a password is required"), strings.Contains(out, "sudo: sorry, a password"):
-		return fmt.Errorf(
-			"установка %s: пользователю %q нужен sudo без пароля (NOPASSWD) — на хосте выполните:\n%s\n"+
-				"либо укажите root как SSH-пользователя: %w: %s",
+		return msgs.Errorf("hub.installingUserNeedsPasswordlessSudo",
 			dst, sshUser, sudoersHint(sshUser), err, out)
 	case strings.Contains(out, "not in the sudoers file"):
-		return fmt.Errorf(
-			"установка %s: пользователь %q не может использовать sudo на этом хосте — на хосте выполните:\n%s\n"+
-				"либо укажите root как SSH-пользователя: %w: %s",
+		return msgs.Errorf("hub.installingUserCannotUseSudo",
 			dst, sshUser, sudoersHint(sshUser), err, out)
 	case strings.Contains(out, "Permission denied"), strings.Contains(out, "permission denied"):
-		return fmt.Errorf(
-			"установка %s: пользователю %q не хватает прав, а sudo недоступен — укажите root как "+
-				"SSH-пользователя, либо на хосте выполните:\n%s\n: %w: %s",
+		return msgs.Errorf("hub.installingUserLacksPermissionsSudo",
 			dst, sshUser, sudoersHint(sshUser), err, out)
 	default:
-		return fmt.Errorf("установка %s: %w: %s", dst, err, out)
+		return msgs.Errorf("hub.installing", dst, err, out)
 	}
 }
 
@@ -349,8 +342,11 @@ func sudoRequiresPassword(err error) bool {
 	if err == nil {
 		return false
 	}
-	msg := err.Error()
-	return strings.Contains(msg, "нужен sudo без пароля") || strings.Contains(msg, "не может использовать sudo")
+	var e *msgs.Err
+	if !errors.As(err, &e) {
+		return false
+	}
+	return e.Key == "hub.installingUserNeedsPasswordlessSudo" || e.Key == "hub.installingUserCannotUseSudo"
 }
 
 // activateService enables and (re)starts the freshly installed unit —
@@ -385,7 +381,7 @@ func activateService(client *ssh.Client, sshUser string, report func(key string,
 		if journal, jerr := runRemote(client,
 			sudo+"journalctl -u netknownsthat -n 25 --no-pager -o cat"); jerr == nil {
 			if journal = strings.TrimSpace(journal); journal != "" {
-				out = strings.TrimSpace(out) + "\n--- журнал сервиса на хосте (journalctl -u netknownsthat) ---\n" + journal
+				out = strings.TrimSpace(out) + msgs.T(msgs.DefaultLang, "hub.hostLogSeparator") + journal
 			}
 		}
 		return diagnoseInstallError(sshUser, "netknownsthat.service", err, out)
@@ -418,7 +414,7 @@ func resetRemoteAdminPassword(client *ssh.Client, sshUser, adminUser, adminPassw
 	// here means a future caller can never reintroduce this as an
 	// injection point by skipping that step.
 	if !validAdminUser.MatchString(adminUser) {
-		return fmt.Errorf("недопустимое имя администратора хоста %q", adminUser)
+		return msgs.Errorf("hub.invalidHostAdminName", adminUser)
 	}
 	encoded := base64.StdEncoding.EncodeToString([]byte(adminPassword))
 	inner := fmt.Sprintf("echo %s | base64 -d | env NKT_MODE=local NKT_DATA_DIR=%s %s passwd %s",
@@ -430,7 +426,7 @@ func resetRemoteAdminPassword(client *ssh.Client, sshUser, adminUser, adminPassw
 	}
 	out, err := runRemote(client, cmd)
 	if err != nil {
-		return diagnoseInstallError(sshUser, "пароль администратора на хосте", err, out)
+		return diagnoseInstallError(sshUser, msgs.T(msgs.DefaultLang, "hub.adminPasswordOnHost"), err, out)
 	}
 	return nil
 }
@@ -454,7 +450,7 @@ func uploadFile(sftpClient *sftp.Client, localPath, remotePath string, mode os.F
 	}
 
 	if err := sftpClient.MkdirAll(gopath.Dir(remotePath)); err != nil {
-		return fmt.Errorf("создание каталога %s: %w", gopath.Dir(remotePath), err)
+		return msgs.Errorf("collect.creatingDirectory", gopath.Dir(remotePath), err)
 	}
 	remote, err := sftpClient.Create(remotePath)
 	if err != nil {
@@ -523,7 +519,7 @@ func (p *progressReader) reportNow() {
 
 func uploadBytes(sftpClient *sftp.Client, data []byte, remotePath string, mode os.FileMode) error {
 	if err := sftpClient.MkdirAll(gopath.Dir(remotePath)); err != nil {
-		return fmt.Errorf("создание каталога %s: %w", gopath.Dir(remotePath), err)
+		return msgs.Errorf("collect.creatingDirectory", gopath.Dir(remotePath), err)
 	}
 	remote, err := sftpClient.Create(remotePath)
 	if err != nil {

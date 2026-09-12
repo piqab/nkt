@@ -17,7 +17,7 @@
 package profile
 
 import (
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"path"
 	"regexp"
 	"sort"
@@ -133,13 +133,13 @@ type System struct {
 }
 
 var (
-	packageRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
-	serviceRe  = regexp.MustCompile(`^[A-Za-z0-9@._-]+$`)
-	userRe     = regexp.MustCompile(`^[a-z_][a-z0-9_-]*\$?$`)
+	packageRe = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
+	serviceRe = regexp.MustCompile(`^[A-Za-z0-9@._-]+$`)
+	userRe    = regexp.MustCompile(`^[a-z_][a-z0-9_-]*\$?$`)
 	// composeNameRe — имя стека: оно же имя каталога и имя проекта
 	// docker, который сам приводит имя проекта к этому виду.
 	composeNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,63}$`)
-	hostnameRe = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`)
+	hostnameRe    = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$`)
 )
 
 // Parse читает профиль из YAML.
@@ -148,7 +148,7 @@ func Parse(raw []byte) (Profile, error) {
 	dec := yaml.NewDecoder(strings.NewReader(string(raw)))
 	dec.KnownFields(true) // опечатка в имени поля — ошибка, а не тихо забытая настройка
 	if err := dec.Decode(&p); err != nil {
-		return Profile{}, fmt.Errorf("разбор профиля: %w", err)
+		return Profile{}, msgs.Errorf("profile.parsingProfile", err)
 	}
 	if err := p.Validate(); err != nil {
 		return Profile{}, err
@@ -164,57 +164,57 @@ func (p Profile) Marshal() ([]byte, error) { return yaml.Marshal(p) }
 // запись на диск.
 func (p Profile) Validate() error {
 	if p.Version != 0 && p.Version != Version {
-		return fmt.Errorf("версия профиля %d, поддерживается %d", p.Version, Version)
+		return msgs.Errorf("profile.profileVersionSupported", p.Version, Version)
 	}
 	for _, pkg := range p.Packages {
 		if !packageRe.MatchString(pkg) {
-			return fmt.Errorf("некорректное имя пакета %q", pkg)
+			return msgs.Errorf("profile.invalidPackageName", pkg)
 		}
 	}
 	for name := range p.Services {
 		if !serviceRe.MatchString(name) {
-			return fmt.Errorf("некорректное имя службы %q", name)
+			return msgs.Errorf("profile.invalidServiceName", name)
 		}
 	}
 	seenPath := map[string]bool{}
 	for _, f := range p.Files {
 		switch {
 		case !strings.HasPrefix(f.Path, "/"):
-			return fmt.Errorf("путь файла должен быть абсолютным: %q", f.Path)
+			return msgs.Errorf("profile.filePathMustAbsolute", f.Path)
 		case strings.Contains(f.Path, ".."):
-			return fmt.Errorf("путь файла не может содержать «..»: %q", f.Path)
+			return msgs.Errorf("profile.filePathCannotContain", f.Path)
 		case seenPath[f.Path]:
-			return fmt.Errorf("файл %q указан дважды", f.Path)
+			return msgs.Errorf("profile.fileListedTwice", f.Path)
 		case len(f.Content) > maxFileBytes:
-			return fmt.Errorf("файл %q длиннее %d КиБ", f.Path, maxFileBytes>>10)
+			return msgs.Errorf("profile.fileLongerThanKiB", f.Path, maxFileBytes>>10)
 		}
 		if f.Mode != "" && !regexp.MustCompile(`^0?[0-7]{3}$`).MatchString(f.Mode) {
-			return fmt.Errorf("права файла %q должны быть восьмеричными, получено %q", f.Path, f.Mode)
+			return msgs.Errorf("profile.fileModeMustOctalGot", f.Path, f.Mode)
 		}
 		seenPath[f.Path] = true
 	}
 	if p.Firewall != nil {
 		for _, port := range p.Firewall.Allow {
 			if port.Port < 1 || port.Port > 65535 {
-				return fmt.Errorf("порт вне диапазона: %d", port.Port)
+				return msgs.Errorf("portprobe.portOutRange", port.Port)
 			}
 			if port.Proto != "" && port.Proto != "tcp" && port.Proto != "udp" {
-				return fmt.Errorf("протокол должен быть tcp или udp, получено %q", port.Proto)
+				return msgs.Errorf("control.protocolMustTcpUdpGot", port.Proto)
 			}
 		}
 	}
 	for _, u := range p.Users {
 		if !userRe.MatchString(u.Name) {
-			return fmt.Errorf("некорректное имя учётной записи %q", u.Name)
+			return msgs.Errorf("profile.invalidAccountName", u.Name)
 		}
 		for _, k := range u.Keys {
 			if !strings.HasPrefix(k, "ssh-") && !strings.HasPrefix(k, "ecdsa-") && !strings.HasPrefix(k, "sk-") {
-				return fmt.Errorf("ключ учётной записи %q не похож на публичный ключ SSH", u.Name)
+				return msgs.Errorf("profile.keyAccountDoesLookLike", u.Name)
 			}
 		}
 	}
 	if p.System != nil && p.System.Hostname != "" && !hostnameRe.MatchString(p.System.Hostname) {
-		return fmt.Errorf("некорректное имя машины %q", p.System.Hostname)
+		return msgs.Errorf("profile.invalidMachineName", p.System.Hostname)
 	}
 	seenStack := map[string]bool{}
 	for _, c := range p.Compose {
@@ -222,24 +222,24 @@ func (p Profile) Validate() error {
 		case !composeNameRe.MatchString(c.Name):
 			// Имя становится именем каталога и именем проекта docker:
 			// то, что нельзя положить в путь, здесь не годится.
-			return fmt.Errorf("некорректное имя стека %q: строчные буквы, цифры, дефис и подчёркивание", c.Name)
+			return msgs.Errorf("profile.invalidStackNameLowercaseLetters", c.Name)
 		case seenStack[c.Name]:
-			return fmt.Errorf("стек %q указан дважды", c.Name)
+			return msgs.Errorf("profile.stackListedTwice", c.Name)
 		case strings.TrimSpace(c.Content) == "":
-			return fmt.Errorf("у стека %q пустое описание compose", c.Name)
+			return msgs.Errorf("profile.stackHasEmptyComposeDescription", c.Name)
 		case len(c.Content) > maxFileBytes:
-			return fmt.Errorf("описание стека %q длиннее %d КиБ", c.Name, maxFileBytes>>10)
+			return msgs.Errorf("profile.stackDescriptionLongerThanKiB", c.Name, maxFileBytes>>10)
 		}
 		if c.Path != "" {
 			switch {
 			case !strings.HasPrefix(c.Path, "/"):
-				return fmt.Errorf("путь стека %q должен быть абсолютным", c.Name)
+				return msgs.Errorf("profile.stackPathMustAbsolute", c.Name)
 			case strings.Contains(c.Path, ".."):
-				return fmt.Errorf("путь стека %q не может содержать «..»", c.Name)
+				return msgs.Errorf("profile.stackPathCannotContain", c.Name)
 			case !composeFileNames[path.Base(c.Path)]:
 				// docker compose сам узнаёт свой файл по имени, и хост
 				// тоже: файл с другим именем никто не подхватит.
-				return fmt.Errorf("файл стека %q должен называться docker-compose.yml или compose.yml", c.Name)
+				return msgs.Errorf("profile.stackFileMustNamedDocker", c.Name)
 			}
 		}
 		seenStack[c.Name] = true

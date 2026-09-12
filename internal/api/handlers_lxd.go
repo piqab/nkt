@@ -25,12 +25,12 @@ type lxdCreateRequest struct {
 func (s *Server) handleLXDInstanceCreate(w http.ResponseWriter, r *http.Request) {
 	var req lxdCreateRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
 	if err := s.lxd.CreateInstance(r.Context(), user, req.Image, req.Name); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -42,7 +42,7 @@ func (s *Server) handleLXDInstanceAction(w http.ResponseWriter, r *http.Request)
 	action := chi.URLParam(r, "action")
 	user := auth.Username(r.Context())
 	if err := s.lxd.InstanceAction(r.Context(), user, name, action); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -54,7 +54,7 @@ func (s *Server) handleLXDInstanceDelete(w http.ResponseWriter, r *http.Request)
 	force := r.URL.Query().Get("force") == "true"
 	user := auth.Username(r.Context())
 	if err := s.lxd.DeleteInstance(r.Context(), user, name, force); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()

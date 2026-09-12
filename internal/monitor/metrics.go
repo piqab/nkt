@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"hash/fnv"
 	"math"
 	"strings"
@@ -53,7 +54,7 @@ func (m *MetricsCollector) RunOnce(ctx context.Context) (int, error) {
 	samples = append(samples, docker...)
 
 	if err := m.db.InsertMetrics(ctx, samples); err != nil {
-		return 0, fmt.Errorf("сохранение метрик: %w", err)
+		return 0, msgs.Errorf("monitor.savingMetrics", err)
 	}
 	return len(samples), nil
 }

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"path"
 	"strconv"
@@ -22,7 +23,7 @@ import (
 
 func (s *Server) handleVMImages(w http.ResponseWriter, r *http.Request) {
 	if s.vmimages == nil {
-		writeError(w, http.StatusServiceUnavailable, "работа с образами недоступна")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.imageManagementUnavailable"))
 		return
 	}
 	// Заодно отвечаем, чем на этом хосте машины вообще создавать: без
@@ -55,12 +56,12 @@ const maxUploadBytes = 10 << 30
 // поток на диск.
 func (s *Server) handleVMImageUpload(w http.ResponseWriter, r *http.Request) {
 	if s.vmimages == nil {
-		writeError(w, http.StatusServiceUnavailable, "работа с образами недоступна")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.imageManagementUnavailable"))
 		return
 	}
 	name := strings.TrimSpace(r.URL.Query().Get("name"))
 	if name == "" {
-		writeError(w, http.StatusBadRequest, "не указано имя файла")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.fileNameSpecified"))
 		return
 	}
 	user := auth.Username(r.Context())
@@ -70,14 +71,14 @@ func (s *Server) handleVMImageUpload(w http.ResponseWriter, r *http.Request) {
 	tmpPath, err := s.vmimages.SaveTemp(name, http.MaxBytesReader(w, r.Body, maxUploadBytes))
 	if err != nil {
 		s.db.Audit(r.Context(), user, "vmimage.upload", name, "error", err.Error())
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	target, err := vmcreate.PutHostImage(r.Context(), RunTooling, tmpPath, name)
 	if err != nil {
 		s.vmimages.RemoveTemp(tmpPath)
 		s.db.Audit(r.Context(), user, "vmimage.upload", name, "error", err.Error())
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vmimage.upload", name, "ok", target)
@@ -91,13 +92,13 @@ func (s *Server) handleVMHostImageDelete(w http.ResponseWriter, r *http.Request)
 		Name string `json:"name"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
 	if err := vmcreate.DeleteHostImage(r.Context(), RunTooling, strings.TrimSpace(req.Name)); err != nil {
 		s.db.Audit(r.Context(), user, "vmimage.hostDelete", req.Name, "error", err.Error())
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vmimage.hostDelete", req.Name, "ok", nil)
@@ -106,19 +107,19 @@ func (s *Server) handleVMHostImageDelete(w http.ResponseWriter, r *http.Request)
 
 func (s *Server) handleVMToolsInstall(w http.ResponseWriter, r *http.Request) {
 	if s.jobs == nil {
-		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind:   vmcreate.KindTools,
-		Title:  "пакеты для создания машин",
+		Title:  msgs.Tc(r.Context(), "api.vmToolsJobTitle"),
 		Queue:  "host",
 		Author: user,
 		Steps:  2,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vm.tools.install", "", "ok", nil)
@@ -137,11 +138,11 @@ func (s *Server) handleVMImageDownload(w http.ResponseWriter, r *http.Request) {
 		ChecksumKind string `json:"checksum_kind"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if s.jobs == nil || s.vmimages == nil {
-		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
 
@@ -157,7 +158,7 @@ func (s *Server) handleVMImageDownload(w http.ResponseWriter, r *http.Request) {
 	}
 	if params.URL != "" {
 		if !strings.HasPrefix(params.URL, "http://") && !strings.HasPrefix(params.URL, "https://") {
-			writeError(w, http.StatusBadRequest, "ссылка должна начинаться с http:// или https://")
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.linkMustStartHttpHttps"))
 			return
 		}
 		if params.FileName == "" {
@@ -165,14 +166,14 @@ func (s *Server) handleVMImageDownload(w http.ResponseWriter, r *http.Request) {
 			// ожидает, вводя URL на .qcow2.
 			params.FileName = path.Base(params.URL)
 		}
-		title = "образ " + params.FileName
+		title = msgs.Tc(r.Context(), "api.imageJobTitle", params.FileName)
 	} else {
 		img, ok := vmimage.ByID(req.ImageID)
 		if !ok {
-			writeError(w, http.StatusBadRequest, "нет такого образа в каталоге")
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.suchImageCatalog"))
 			return
 		}
-		title = "образ " + img.Name
+		title = msgs.Tc(r.Context(), "api.imageJobTitle", img.Name)
 	}
 
 	user := auth.Username(r.Context())
@@ -188,7 +189,7 @@ func (s *Server) handleVMImageDownload(w http.ResponseWriter, r *http.Request) {
 		Params: params,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vmimage.download", title, "ok", params.URL)
@@ -200,11 +201,11 @@ func (s *Server) handleVMImageDelete(w http.ResponseWriter, r *http.Request) {
 		ImageID string `json:"image_id"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if s.vmimages == nil {
-		writeError(w, http.StatusServiceUnavailable, "работа с образами недоступна")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.imageManagementUnavailable"))
 		return
 	}
 	user := auth.Username(r.Context())
@@ -212,7 +213,7 @@ func (s *Server) handleVMImageDelete(w http.ResponseWriter, r *http.Request) {
 	if name, ok := strings.CutPrefix(req.ImageID, vmimage.CustomPrefix); ok {
 		if err := s.vmimages.DeleteCustom(name); err != nil {
 			s.db.Audit(r.Context(), user, "vmimage.delete", name, "error", err.Error())
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 		s.db.Audit(r.Context(), user, "vmimage.delete", name, "ok", nil)
@@ -221,12 +222,12 @@ func (s *Server) handleVMImageDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	img, ok := vmimage.ByID(req.ImageID)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "нет такого образа в каталоге")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.suchImageCatalog"))
 		return
 	}
 	if err := s.vmimages.Delete(img); err != nil {
 		s.db.Audit(r.Context(), user, "vmimage.delete", img.ID, "error", err.Error())
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vmimage.delete", img.ID, "ok", nil)
@@ -241,11 +242,11 @@ func (s *Server) handleVMImageDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVMAddress(w http.ResponseWriter, r *http.Request) {
 	name := strings.TrimSpace(r.URL.Query().Get("name"))
 	if name == "" {
-		writeError(w, http.StatusBadRequest, "не указано имя машины")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.machineNameSpecified"))
 		return
 	}
 	if s.vmimages == nil {
-		writeError(w, http.StatusServiceUnavailable, "работа с машинами недоступна")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.machineManagementUnavailable"))
 		return
 	}
 	runner := vmcreate.NewCreateRunner(s.vmimages, s.scanner.Collector(), RunTooling)
@@ -262,7 +263,7 @@ func (s *Server) handleVMAddress(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 	var spec vmcreate.Spec
 	if err := decodeJSON(r, &spec); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	// Ключа нет — заводим свой. Облачный образ приходит без пароля, и
@@ -273,23 +274,23 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(spec.SSHKey) == "" {
 		priv, pub, err := vmcreate.GenerateKeyPair(spec.Name)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeErr(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		spec.SSHKey, generatedKey = pub, priv
 	}
 	if err := spec.Validate(); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if s.jobs == nil {
-		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind:  vmcreate.KindCreate,
-		Title: "машина " + spec.Name,
+		Title: msgs.Tc(r.Context(), "api.machineJobTitle", spec.Name),
 		// Ключ очереди — хост: создание машины занимает диск и вызывает
 		// virsh, и делать это парой параллельных заданий незачем.
 		Queue:  "host",
@@ -299,7 +300,7 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		s.db.Audit(r.Context(), user, "vm.create", spec.Name, "error", err.Error())
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vm.create", spec.Name, "ok", spec.ImageID)
@@ -320,7 +321,7 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVMTemplates(w http.ResponseWriter, r *http.Request) {
 	list, err := s.db.ListVMTemplates(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"templates": list})
@@ -332,26 +333,26 @@ func (s *Server) handleVMTemplateSave(w http.ResponseWriter, r *http.Request) {
 		Spec vmcreate.Spec `json:"spec"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
-		writeError(w, http.StatusBadRequest, "у шаблона должно быть имя")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.templateMustHaveName"))
 		return
 	}
 	// Имя машины в шаблоне не хранится: шаблон описывает, какая машина, а
 	// не какая именно — имя вводят при создании.
 	req.Spec.Name = "template"
 	if err := req.Spec.Validate(); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	req.Spec.Name = ""
 
 	raw, err := json.Marshal(req.Spec)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -359,7 +360,7 @@ func (s *Server) handleVMTemplateSave(w http.ResponseWriter, r *http.Request) {
 		Name: name, Spec: string(raw), Author: user,
 	})
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vm.template.save", name, "ok", nil)
@@ -369,7 +370,7 @@ func (s *Server) handleVMTemplateSave(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVMTemplateDelete(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "неверный номер шаблона")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.invalidTemplateNumber"))
 		return
 	}
 	tpl, err := s.db.VMTemplateByID(r.Context(), id)
@@ -378,7 +379,7 @@ func (s *Server) handleVMTemplateDelete(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if err := s.db.DeleteVMTemplate(r.Context(), id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "vm.template.delete", tpl.Name, "ok", nil)

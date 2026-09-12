@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -97,7 +98,7 @@ func ParseAuthorizedKey(line string) (OSUserKey, error) {
 	line = strings.TrimSpace(line)
 	m := authorizedKeyRe.FindStringSubmatch(line)
 	if m == nil {
-		return OSUserKey{}, fmt.Errorf("строка не похожа на публичный ключ SSH: ожидается «ssh-ed25519 AAAA… комментарий»")
+		return OSUserKey{}, msgs.Errorf("control.lineDoesLookLikeSSH")
 	}
 	body := m[2]
 	short := body
@@ -111,7 +112,7 @@ func ParseAuthorizedKey(line string) (OSUserKey, error) {
 func (m *OSUserManager) List(ctx context.Context) ([]OSUser, error) {
 	raw, err := m.c.ReadFile("/etc/passwd")
 	if err != nil {
-		return nil, fmt.Errorf("чтение /etc/passwd: %w", err)
+		return nil, msgs.Errorf("control.readingEtcPasswd", err)
 	}
 	sudoers := m.sudoGroupMembers(ctx)
 
@@ -256,7 +257,7 @@ type CreateOptions struct {
 // доступ, и отобрать его добавлением ещё одного ключа было бы неожиданно.
 func (m *OSUserManager) Create(ctx context.Context, opts CreateOptions) error {
 	if !osUserNameRe.MatchString(opts.Name) {
-		return fmt.Errorf("недопустимое имя пользователя: %q", opts.Name)
+		return msgs.Errorf("control.invalidUserName", opts.Name)
 	}
 	if _, err := ParseAuthorizedKey(opts.Key); err != nil {
 		return err
@@ -272,12 +273,12 @@ func (m *OSUserManager) Create(ctx context.Context, opts CreateOptions) error {
 		what string
 		argv []string
 	}{
-		{"создание пользователя", []string{"sh", "-c",
+		{msgs.Tc(ctx, "control.userStepCreate"), []string{"sh", "-c",
 			fmt.Sprintf("id -u %[1]s >/dev/null 2>&1 || useradd --create-home --shell /bin/bash %[1]s", opts.Name)}},
-		{"каталог .ssh", []string{"install", "-d", "-m", "0700", "-o", opts.Name, "-g", opts.Name, home + "/.ssh"}},
-		{"запись ключа", []string{"sh", "-c",
+		{msgs.Tc(ctx, "control.userStepSSHDir"), []string{"install", "-d", "-m", "0700", "-o", opts.Name, "-g", opts.Name, home + "/.ssh"}},
+		{msgs.Tc(ctx, "control.userStepKey"), []string{"sh", "-c",
 			fmt.Sprintf("printf '%%s\\n' %s >> %s/.ssh/authorized_keys", shellSingleQuote(line), home)}},
-		{"права на authorized_keys", []string{"sh", "-c",
+		{msgs.Tc(ctx, "control.userStepKeyPerms"), []string{"sh", "-c",
 			fmt.Sprintf("chown %[1]s:%[1]s %[2]s/.ssh/authorized_keys && chmod 0600 %[2]s/.ssh/authorized_keys", opts.Name, home)}},
 	}
 	for _, step := range steps {
@@ -310,10 +311,10 @@ func (m *OSUserManager) grantSudo(ctx context.Context, user string) error {
 		shellSingleQuote(rule), target)
 	res, err := m.run(ctx, "sh", "-c", cmd)
 	if err != nil {
-		return fmt.Errorf("настройка sudo: %w", err)
+		return msgs.Errorf("control.sudoSetup", err)
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("настройка sudo: %s", strings.TrimSpace(res.Output()))
+		return msgs.Errorf("control.sudoSetup2", strings.TrimSpace(res.Output()))
 	}
 	return nil
 }

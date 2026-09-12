@@ -42,6 +42,12 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
 }
 
+// writeErr — writeError for an error value, rendered in the request's
+// language when it came from the msgs catalog.
+func writeErr(w http.ResponseWriter, r *http.Request, status int, err error) {
+	writeError(w, status, msgs.Localize(msgs.FromContext(r.Context()), err))
+}
+
 func decodeJSON(r *http.Request, dst any) error {
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -58,7 +64,7 @@ type loginRequest struct {
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	req.Username = strings.TrimSpace(req.Username)
@@ -73,7 +79,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		if errors.Is(err, auth.ErrTooManyAttempts) {
 			status = http.StatusTooManyRequests
 		}
-		writeError(w, status, err.Error())
+		writeErr(w, r, status, err)
 		return
 	}
 	s.auth.SetSessionCookie(w, token, expires)
@@ -100,7 +106,7 @@ type passwordRequest struct {
 func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	var req passwordRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if !passwordLongEnough(req.NewPassword) {
@@ -109,11 +115,11 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	}
 	user, _ := auth.UserFromContext(r.Context())
 	if err := s.auth.ChangePassword(r.Context(), user.Username, req.OldPassword, req.NewPassword); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.auth.ClearSessionCookie(w)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Пароль изменён, войдите заново."})
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": msgs.Tc(r.Context(), "api.passwordChangedLoginAgain")})
 }
 
 // handleMe matches the shape of a plain nkt's own /api/auth/me (see
@@ -180,7 +186,7 @@ func versionInfoJSON(v VersionInfo) map[string]any {
 // before triggering this.
 func (s *Server) handleHubUpdate(w http.ResponseWriter, r *http.Request) {
 	if err := s.hub.ApplyUpdate(r.Context()); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -233,7 +239,7 @@ func vulnDBInfoJSON(v VulnDBInfo) map[string]any {
 func (s *Server) handleHostVulnStatus(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	scanning, progress, result, lastErr := s.hub.HostVulnStatus(r.Context(), id)
@@ -257,7 +263,7 @@ func (s *Server) handleHostVulnStatus(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHostVulnScanStart(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	// Same upfront existence check handleStartInstall makes: without it, a
@@ -269,8 +275,8 @@ func (s *Server) handleHostVulnScanStart(w http.ResponseWriter, r *http.Request)
 		fail(w, r, err)
 		return
 	}
-	if err := s.hub.StartHostVulnScan(id); err != nil {
-		writeError(w, http.StatusConflict, err.Error())
+	if err := s.hub.StartHostVulnScan(r.Context(), id); err != nil {
+		writeErr(w, r, http.StatusConflict, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
@@ -353,7 +359,7 @@ const localHostID = LocalHostID
 func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 	hosts, err := s.db.ListHosts(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	// Группа машины — это группа её хоста. Своё поле у неё может
@@ -430,7 +436,7 @@ func (s *Server) localHostEntry(ctx context.Context) *hostWithOverview {
 func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 	var req addHostRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	name := strings.TrimSpace(req.Name)
@@ -440,7 +446,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 	if req.AuthKind == authKindGenerated {
 		id, authorizedKey, err := s.hub.AddHostGenerated(r.Context(), name, addr, req.SSHPort, sshUser, req.TerminalEnabled)
 		if err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 		s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
@@ -451,7 +457,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 
 	id, err := s.hub.AddHost(r.Context(), name, addr, req.SSHPort, sshUser, req.AuthKind, req.Secret, req.TerminalEnabled)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
@@ -477,18 +483,18 @@ func (s *Server) setHostGroup(ctx context.Context, id int64, group string) {
 func (s *Server) handleSetHostGroup(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	var req struct {
 		Group string `json:"group"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.hub.SetHostGroup(r.Context(), id, req.Group); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
@@ -514,11 +520,11 @@ type groupRequest struct {
 func (s *Server) handleCreateHostGroup(w http.ResponseWriter, r *http.Request) {
 	var req groupRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.hub.CreateHostGroup(r.Context(), req.Name); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "hostgroup.create", req.Name, "ok", nil)
@@ -529,11 +535,11 @@ func (s *Server) handleCreateHostGroup(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRenameHostGroup(w http.ResponseWriter, r *http.Request) {
 	var req groupRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.hub.RenameHostGroup(r.Context(), req.Name, req.To); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "hostgroup.rename", req.Name+" → "+req.To, "ok", nil)
@@ -545,11 +551,11 @@ func (s *Server) handleRenameHostGroup(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteHostGroup(w http.ResponseWriter, r *http.Request) {
 	var req groupRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.hub.DeleteHostGroup(r.Context(), req.Name); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "hostgroup.delete", req.Name, "ok", nil)
@@ -588,12 +594,12 @@ type updateHostRequest struct {
 func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	var req updateHostRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	name := strings.TrimSpace(req.Name)
@@ -624,7 +630,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHostPubKey(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	line, err := s.hub.PublicKeyLine(r.Context(), id)
@@ -642,7 +648,7 @@ func (s *Server) handleHostPubKey(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleRemoveSudoAccess(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.hub.RemoveSudoAccess(r.Context(), id); err != nil {
@@ -661,7 +667,7 @@ func (s *Server) handleRemoveSudoAccess(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleStopHost(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.hub.SetServiceRunning(r.Context(), id, false); err != nil {
@@ -674,7 +680,7 @@ func (s *Server) handleStopHost(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleStartHost(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.hub.SetServiceRunning(r.Context(), id, true); err != nil {
@@ -713,12 +719,12 @@ func (s *Server) handleExportHosts(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, 16<<20)) // 16 MiB — generous for a host list, not unbounded
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	export, err := store.DecodeHubExport(body)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	imported, errs := s.hub.ImportHosts(r.Context(), export)
@@ -733,7 +739,7 @@ func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHostProbe(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	host, err := s.db.HostByID(r.Context(), id)
@@ -742,12 +748,12 @@ func (s *Server) handleHostProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if isPlaceholderAddr(host.Addr) {
-		writeError(w, http.StatusBadRequest, "адрес машины ещё не определён")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.machineSAddressKnownYet"))
 		return
 	}
 	var req portprobe.Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	// Имя хоста в записи — не обязательно IP; проверка требует IP, и
@@ -756,18 +762,18 @@ func (s *Server) handleHostProbe(w http.ResponseWriter, r *http.Request) {
 	if net.ParseIP(addr) == nil {
 		ips, err := net.DefaultResolver.LookupIPAddr(r.Context(), addr)
 		if err != nil || len(ips) == 0 {
-			writeError(w, http.StatusBadGateway, fmt.Sprintf("адрес хоста %q не разрешается: %v", addr, err))
+			writeError(w, http.StatusBadGateway, msgs.Tc(r.Context(), "hub.hostAddressDoesResolve", addr, err))
 			return
 		}
 		addr = ips[0].IP.String()
 	}
 	req.Address = addr
 	if req.Kind == portprobe.KindCurl {
-		writeError(w, http.StatusBadRequest, "curl со своими параметрами выполняется только на хосте")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.curlCustomArgumentsRunsOnly"))
 		return
 	}
 	if err := req.Validate(); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, portprobe.Probe(r.Context(), req))
@@ -783,14 +789,14 @@ func (s *Server) handleHostProbe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleVMDomainAction(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	action := chi.URLParam(r, "action")
 	switch action {
 	case "start", "shutdown", "destroy":
 	default:
-		writeError(w, http.StatusBadRequest, "неизвестное действие над машиной")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.unknownMachineAction"))
 		return
 	}
 	host, err := s.db.HostByID(r.Context(), id)
@@ -799,14 +805,14 @@ func (s *Server) handleVMDomainAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if host.ParentID == 0 {
-		writeError(w, http.StatusBadRequest, "это не машина, а хост: у него нет того, кто мог бы его включить")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.hostMachineThereNobodyPower"))
 		return
 	}
 	user := auth.Username(r.Context())
 	path := "/api/vms/" + url.PathEscape(host.Name) + "/" + action
 	if _, err := s.hub.HostAPI(r.Context(), host.ParentID, "POST", path, nil, nil); err != nil {
 		s.db.Audit(r.Context(), user, "vm."+action, host.Name, "error", err.Error())
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "vm."+action, host.Name, "ok", nil)
@@ -843,11 +849,11 @@ func (s *Server) handleEventSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	var settings EventSettings
 	if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.hub.SaveEventSettings(r.Context(), settings); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "events.settings", "", "ok", nil)
@@ -866,7 +872,7 @@ func (s *Server) handleEventsSeen(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteHost(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	// Тело необязательно: удаление без очистки приходит без него.
@@ -904,11 +910,11 @@ func (s *Server) handleBootstrapDefaults(w http.ResponseWriter, r *http.Request)
 	}
 	var opts BootstrapOptions
 	if err := json.NewDecoder(r.Body).Decode(&opts); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.hub.SaveBootstrapDefaults(r.Context(), opts); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, s.hub.BootstrapDefaults(r.Context()))
@@ -917,7 +923,7 @@ func (s *Server) handleBootstrapDefaults(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if _, err := s.db.HostByID(r.Context(), id); err != nil {
@@ -939,13 +945,13 @@ func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 			// make — the frontend recognizes this shape and re-prompts
 			// with foreign.Detail, retrying with ?force=true if confirmed.
 			writeJSON(w, http.StatusConflict, map[string]any{
-				"error":           err.Error(),
+				"error":           msgs.Localize(msgs.FromContext(r.Context()), err),
 				"foreign_install": true,
 				"detail":          foreign.Detail,
 			})
 			return
 		}
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"job": job})
@@ -957,7 +963,7 @@ func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCancelInstall(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := s.hub.CancelInstall(r.Context(), id); err != nil {
@@ -983,7 +989,7 @@ func (s *Server) handleInstallJobStatus(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleLatestInstallJob(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	jobID, ok := s.hub.LatestJobID(id)
@@ -997,7 +1003,7 @@ func (s *Server) handleLatestInstallJob(w http.ResponseWriter, r *http.Request) 
 func hostIDParam(r *http.Request) (int64, error) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
-		return 0, errors.New("неверный id хоста")
+		return 0, msgs.Errorf("hub.invalidHostId")
 	}
 	return id, nil
 }
@@ -1007,7 +1013,7 @@ func fail(w http.ResponseWriter, r *http.Request, err error) {
 		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "err.notFound"))
 		return
 	}
-	writeError(w, http.StatusBadRequest, err.Error())
+	writeErr(w, r, http.StatusBadRequest, err)
 }
 
 // ------------------------------------------------------------------- proxy
@@ -1050,7 +1056,7 @@ func (s *Server) proxyLocal(w http.ResponseWriter, r *http.Request) {
 func (s *Server) proxyHost(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	// Derived from the URL path itself, not chi.URLParam(r, "*") — see

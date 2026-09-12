@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"net/http"
 	"os"
@@ -45,36 +46,34 @@ func (m *Manager) downloadReleaseBinary(ctx context.Context, goos, goarch, versi
 
 	sums, err := fetchReleaseBytes(ctx, base+"/SHA256SUMS")
 	if err != nil {
-		return fmt.Errorf("контрольные суммы релиза v%s: %w", version, err)
+		return msgs.Errorf("hub.releaseVChecksums", version, err)
 	}
 	want, err := findSHA256(sums, assetName)
 	if err != nil {
-		return fmt.Errorf("релиз v%s: %w", version, err)
+		return msgs.Errorf("hub.releaseV", version, err)
 	}
 
 	binBytes, err := fetchReleaseBytes(ctx, base+"/"+assetName)
 	if err != nil {
-		return fmt.Errorf("бинарник релиза v%s: %w", version, err)
+		return msgs.Errorf("hub.releaseVBinary", version, err)
 	}
 
 	got := sha256.Sum256(binBytes)
 	if gotHex := hex.EncodeToString(got[:]); !strings.EqualFold(gotHex, want) {
-		return fmt.Errorf(
-			"контрольная сумма скачанного %s не совпадает (ожидалась %s, получена %s) — "+
-				"повреждённая загрузка или подмена, бинарник не установлен",
+		return msgs.Errorf("hub.checksumDownloadedDoesMatchExpected",
 			assetName, want, gotHex)
 	}
 
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
-		return fmt.Errorf("каталог кэша бинарников: %w", err)
+		return msgs.Errorf("hub.binaryCacheDirectory", err)
 	}
 	tmp := destPath + ".tmp"
 	if err := os.WriteFile(tmp, binBytes, 0o755); err != nil {
-		return fmt.Errorf("запись %s: %w", tmp, err)
+		return msgs.Errorf("control.writing", tmp, err)
 	}
 	if err := os.Rename(tmp, destPath); err != nil {
 		_ = os.Remove(tmp)
-		return fmt.Errorf("переименование %s: %w", tmp, err)
+		return msgs.Errorf("hub.renaming", tmp, err)
 	}
 
 	report("hub.releaseBinaryVerified", goos, goarch)
@@ -118,7 +117,7 @@ func findSHA256(sums []byte, asset string) (string, error) {
 			return strings.ToLower(fields[0]), nil
 		}
 	}
-	return "", fmt.Errorf("в SHA256SUMS нет строки для %s", asset)
+	return "", msgs.Errorf("hub.sha256sumsHasLine", asset)
 }
 
 // fetchReleaseBytes GETs url and returns the full body, failing on a
@@ -132,11 +131,11 @@ func fetchReleaseBytes(ctx context.Context, url string) ([]byte, error) {
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("загрузка %s: %w", url, err)
+		return nil, msgs.Errorf("hub.downloading", url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s: код %d", url, resp.StatusCode)
+		return nil, msgs.Errorf("hub.code2", url, resp.StatusCode)
 	}
 	return io.ReadAll(resp.Body)
 }

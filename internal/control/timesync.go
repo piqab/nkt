@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strings"
 	"time"
@@ -98,9 +99,9 @@ func (m *SysConfigManager) TimeSync(ctx context.Context) TimeSync {
 			out.Server, out.Offset, out.Stratum = st.server, st.offset, st.stratum
 		}
 	case "":
-		out.Note = "служба времени не установлена: часы никто не сверяет"
+		out.Note = msgs.Tc(ctx, "control.timeServiceMissingNote")
 	default:
-		out.Note = fmt.Sprintf("%s управляется своим конфигом — здесь только состояние", out.Service)
+		out.Note = msgs.Tc(ctx, "control.managedOwnConfigOnlyState", out.Service)
 	}
 	return out
 }
@@ -205,7 +206,7 @@ func parseChronyTracking(out string) syncStatus {
 func (m *SysConfigManager) SetTimeSyncServers(ctx context.Context, servers []string) error {
 	for _, s := range servers {
 		if !ntpServerRe.MatchString(s) {
-			return fmt.Errorf("недопустимое имя сервера %q", s)
+			return msgs.Errorf("control.invalidServerName", s)
 		}
 	}
 	st := m.TimeSync(ctx)
@@ -213,24 +214,24 @@ func (m *SysConfigManager) SetTimeSyncServers(ctx context.Context, servers []str
 	switch st.Service {
 	case "systemd-timesyncd":
 		file, unit = timesyncdDropIn, "systemd-timesyncd"
-		content = "# Записано NetKnownsThat: серверы из раздела «Системные настройки».\n[Time]\nNTP=" + strings.Join(servers, " ") + "\n"
+		content = "# Written by NetKnownsThat: servers from System settings.\n[Time]\nNTP=" + strings.Join(servers, " ") + "\n"
 	case "chrony":
 		file, unit = chronyDropIn, "chrony"
 		var b strings.Builder
-		b.WriteString("# Записано NetKnownsThat: серверы из раздела «Системные настройки».\n")
+		b.WriteString("# Written by NetKnownsThat: servers from System settings.\n")
 		for _, s := range servers {
 			fmt.Fprintf(&b, "server %s iburst\n", s)
 		}
 		content = b.String()
 	case "":
-		return fmt.Errorf("служба времени не установлена")
+		return msgs.Errorf("control.timeServiceInstalled")
 	default:
-		return fmt.Errorf("%s настраивается своим конфигом", st.Service)
+		return msgs.Errorf("control.configuredThroughOwnConfig", st.Service)
 	}
 	if len(servers) == 0 {
 		if m.c.Exists(file) {
 			if res, err := m.priv(ctx, "rm", "-f", "--", file); err != nil || res.ExitCode != 0 {
-				return fmt.Errorf("удаление %s не удалось", file)
+				return msgs.Errorf("control.removingFailed", file)
 			}
 		}
 	} else if err := m.c.WriteFile(file, []byte(content), 0o644); err != nil {
@@ -250,7 +251,7 @@ func (m *SysConfigManager) SetTimeSyncServers(ctx context.Context, servers []str
 func (m *SysConfigManager) SyncNow(ctx context.Context) error {
 	st := m.TimeSync(ctx)
 	if !st.Installed {
-		return fmt.Errorf("служба времени не установлена")
+		return msgs.Errorf("control.timeServiceInstalled")
 	}
 	if !st.NTP {
 		if err := m.SetNTP(ctx, true); err != nil {

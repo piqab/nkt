@@ -23,6 +23,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"net/http"
 	"os"
@@ -58,7 +59,7 @@ func trivyArch() (string, error) {
 	case "arm":
 		return "ARM", nil
 	default:
-		return "", fmt.Errorf("vuln: неподдерживаемая архитектура %s", runtime.GOARCH)
+		return "", msgs.Errorf("vuln.vulnUnsupportedArchitecture", runtime.GOARCH)
 	}
 }
 
@@ -73,38 +74,38 @@ func EnsureTrivy(ctx context.Context, dir string, report func(string)) (string, 
 		return bin, nil
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return "", fmt.Errorf("создание каталога %s: %w", dir, err)
+		return "", msgs.Errorf("collect.creatingDirectory", dir, err)
 	}
 
 	arch, err := trivyArch()
 	if err != nil {
 		return "", err
 	}
-	report("Определяю последнюю версию trivy...")
+	report(msgs.Tc(ctx, "vuln.detectingLatestTrivy"))
 	version, err := latestTrivyVersion(ctx)
 	if err != nil {
-		return "", fmt.Errorf("определение версии trivy: %w", err)
+		return "", msgs.Errorf("vuln.detectingTrivyVersion", err)
 	}
 	url := fmt.Sprintf(
 		"https://github.com/aquasecurity/trivy/releases/download/v%s/trivy_%s_Linux-%s.tar.gz",
 		version, version, arch,
 	)
-	report(fmt.Sprintf("Скачиваю trivy %s...", version))
+	report(msgs.Tc(ctx, "vuln.downloadingTrivy2", version))
 	body, err := fetchTarGz(ctx, url)
 	if err != nil {
-		return "", fmt.Errorf("скачивание trivy: %w", err)
+		return "", msgs.Errorf("vuln.downloadingTrivy", err)
 	}
 	defer body.Close()
 
 	tmp := bin + ".download"
 	if err := extractTrivyBinary(body, tmp); err != nil {
-		return "", fmt.Errorf("распаковка trivy: %w", err)
+		return "", msgs.Errorf("vuln.extractingTrivy", err)
 	}
 	if err := os.Rename(tmp, bin); err != nil {
 		_ = os.Remove(tmp)
-		return "", fmt.Errorf("установка trivy: %w", err)
+		return "", msgs.Errorf("vuln.installingTrivy", err)
 	}
-	report("trivy установлен")
+	report(msgs.Tc(ctx, "vuln.trivyInstalled"))
 	return bin, nil
 }
 
@@ -123,7 +124,7 @@ func latestTrivyVersion(ctx context.Context) (string, error) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return "", fmt.Errorf("GitHub API вернул %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+		return "", msgs.Errorf("vuln.githubAPIReturned", resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 	var payload struct {
 		TagName string `json:"tag_name"`
@@ -149,7 +150,7 @@ func fetchTarGz(ctx context.Context, url string) (io.ReadCloser, error) {
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
 		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("%s вернул %d: %s", url, resp.StatusCode, strings.TrimSpace(string(b)))
+		return nil, msgs.Errorf("vuln.returned", url, resp.StatusCode, strings.TrimSpace(string(b)))
 	}
 	return resp.Body, nil
 }
@@ -170,7 +171,7 @@ func extractTrivyBinary(r io.Reader, dest string) error {
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
-			return fmt.Errorf("архив trivy не содержит файл %q", "trivy")
+			return msgs.Errorf("vuln.trivyArchiveHasFile", "trivy")
 		}
 		if err != nil {
 			return err
@@ -198,15 +199,15 @@ func EnsureDB(ctx context.Context, trivyBin, dir string, report func(string)) er
 		return nil
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("создание каталога %s: %w", dir, err)
+		return msgs.Errorf("collect.creatingDirectory", dir, err)
 	}
-	report("Обновляю базу уязвимостей trivy (может занять несколько минут)...")
+	report(msgs.Tc(ctx, "vuln.updatingDB"))
 	cmd := exec.CommandContext(ctx, trivyBin, "image", "--cache-dir", dir, "--download-db-only", "--quiet")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("trivy --download-db-only: %w: %s", err, strings.TrimSpace(string(out)))
 	}
-	report("База уязвимостей обновлена")
+	report(msgs.Tc(ctx, "vuln.dbUpdated"))
 	return nil
 }
 
@@ -382,7 +383,7 @@ type trivyReport struct {
 func parseTrivyReport(out []byte) ([]model.VulnFinding, error) {
 	var report trivyReport
 	if err := json.Unmarshal(out, &report); err != nil {
-		return nil, fmt.Errorf("разбор отчёта trivy: %w", err)
+		return nil, msgs.Errorf("vuln.parsingTrivyReport", err)
 	}
 	var findings []model.VulnFinding
 	for _, res := range report.Results {

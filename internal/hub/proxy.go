@@ -2,7 +2,6 @@ package hub
 
 import (
 	"context"
-	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -52,10 +51,10 @@ func (m *Manager) clientFor(ctx context.Context, hostID int64) (*ssh.Client, err
 
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
-		return nil, fmt.Errorf("хост не найден: %w", err)
+		return nil, msgs.Errorf("hub.hostFound", err)
 	}
 	if host.Status != store.HostStatusOnline {
-		return nil, fmt.Errorf("хост %q ещё не готов (статус: %s)", host.Name, host.Status)
+		return nil, msgs.Errorf("hub.hostReadyYetStatus", host.Name, host.Status)
 	}
 	// Машина внутри хоста недостижима с хаба напрямую: dialHost сам
 	// проложит путь через её хост.
@@ -122,19 +121,19 @@ func (m *Manager) cookieFor(ctx context.Context, hostID int64, dial dialFunc) (s
 
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
-		return "", fmt.Errorf("хост не найден: %w", err)
+		return "", msgs.Errorf("hub.hostFound", err)
 	}
 	if host.AdminUser == "" || len(host.AdminPasswordEnc) == 0 {
-		return "", fmt.Errorf("для хоста %q ещё не сохранена учётная запись администратора", host.Name)
+		return "", msgs.Errorf("hub.adminAccountSavedHostYet", host.Name)
 	}
 	adminPassword, err := secretbox.Decrypt(m.key, host.AdminPasswordEnc)
 	if err != nil {
-		return "", fmt.Errorf("расшифровка пароля администратора: %w", err)
+		return "", msgs.Errorf("hub.decryptingAdminPassword", err)
 	}
 
 	cookie, err := bootstrapLogin(ctx, dial, host.AdminUser, string(adminPassword))
 	if err != nil {
-		return "", fmt.Errorf("вход на хост %q: %w", host.Name, err)
+		return "", msgs.Errorf("hub.loggingHost", host.Name, err)
 	}
 
 	m.sessionMu.Lock()
@@ -205,14 +204,14 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 			// whatever actually useful diagnosis dialerFor/cookieFor/the
 			// proxy's own ErrorHandler had already put together (which SSH
 			// path failed, whether the tunnel is even connected, ...).
-			writeError(w, http.StatusBadGateway, err.Error())
+			writeErr(w, r, http.StatusBadGateway, err)
 			return
 		}
 		m.recordChannel(hostID, channel)
 		cookie, err := m.cookieFor(ctx, hostID, dial)
 		if err != nil {
 			onFail()
-			writeError(w, http.StatusBadGateway, err.Error())
+			writeErr(w, r, http.StatusBadGateway, err)
 			return
 		}
 

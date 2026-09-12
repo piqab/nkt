@@ -3,7 +3,7 @@ package hub
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"net/url"
 	"sync"
@@ -160,7 +160,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		m.recordUnreachable(ctx, hostID, fmt.Errorf("код %d", resp.StatusCode))
+		m.recordUnreachable(ctx, hostID, msgs.Errorf("hub.code", resp.StatusCode))
 		return
 	}
 

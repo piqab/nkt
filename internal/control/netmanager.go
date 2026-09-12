@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strconv"
 	"strings"
@@ -66,7 +67,7 @@ func NewNetworkManagerControl(c collect.Collector) *NetworkManagerControl {
 // не ошибка: раздел просто говорит, что сетью управляет не NM.
 func (m *NetworkManagerControl) State(ctx context.Context) NetworkState {
 	if !collect.Which(ctx, m.c, "nmcli") {
-		return NetworkState{Note: "NetworkManager не установлен — сетью управляет что-то другое (netplan, systemd-networkd); их конфигурация правится в разделе «Конфигурации»"}
+		return NetworkState{Note: msgs.Tc(ctx, "control.networkManagerMissing")}
 	}
 	state := NetworkState{Available: true}
 
@@ -183,7 +184,7 @@ var nmUUIDRe = regexp.MustCompile(`^[0-9a-fA-F-]{8,64}$`)
 // при двух одинаково названных профилях подняло бы не тот.
 func (m *NetworkManagerControl) Connection(ctx context.Context, uuid string, up bool) error {
 	if !nmUUIDRe.MatchString(uuid) {
-		return fmt.Errorf("некорректный идентификатор соединения: %q", uuid)
+		return msgs.Errorf("control.invalidConnectionId", uuid)
 	}
 	action := "down"
 	if up {
@@ -202,7 +203,7 @@ func (m *NetworkManagerControl) Connection(ctx context.Context, uuid string, up 
 // ConnectWiFi подключается к сети по имени и паролю.
 func (m *NetworkManagerControl) ConnectWiFi(ctx context.Context, ssid, password string) error {
 	if ssid == "" || strings.ContainsAny(ssid, "\n\r") {
-		return fmt.Errorf("некорректное имя сети")
+		return msgs.Errorf("control.invalidNetworkName")
 	}
 	argv := []string{"device", "wifi", "connect", ssid}
 	if password != "" {

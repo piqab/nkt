@@ -5,6 +5,7 @@ package config
 
 import (
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -392,8 +393,7 @@ func Load() (*Config, error) {
 	}
 
 	if err := os.MkdirAll(c.DataDir, 0o750); err != nil {
-		return nil, fmt.Errorf(
-			"не удалось создать каталог данных %s: %w. Запустите от root или задайте NKT_DATA_DIR",
+		return nil, msgs.Errorf("config.couldCreateDataDirectoryRun",
 			c.DataDir, err)
 	}
 	return c, nil

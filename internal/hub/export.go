@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
@@ -45,7 +46,7 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport) (impo
 	if export.MasterKey != "" {
 		oldKey, err := base64.StdEncoding.DecodeString(export.MasterKey)
 		if err != nil {
-			return 0, []string{fmt.Sprintf("ключ шифрования в файле повреждён: %v", err)}
+			return 0, []string{msgs.Tc(ctx, "hub.encryptionKeyFileCorrupted", err)}
 		}
 
 		ok := export.Hosts[:0]
@@ -78,22 +79,22 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport) (impo
 func reencryptHostSecrets(oldKey, newKey []byte, h store.HostExport) (store.HostExport, error) {
 	secret, err := secretbox.Decrypt(oldKey, h.SecretEnc)
 	if err != nil {
-		return store.HostExport{}, fmt.Errorf("расшифровка SSH-секрета встроенным ключом: %w", err)
+		return store.HostExport{}, msgs.Errorf("hub.decryptingSSHSecretBuiltKey", err)
 	}
 	secretEnc, err := secretbox.Encrypt(newKey, secret)
 	if err != nil {
-		return store.HostExport{}, fmt.Errorf("перешифровка SSH-секрета: %w", err)
+		return store.HostExport{}, msgs.Errorf("hub.reEncryptingSSHSecret", err)
 	}
 	h.SecretEnc = secretEnc
 
 	if len(h.AdminPasswordEnc) > 0 {
 		pw, err := secretbox.Decrypt(oldKey, h.AdminPasswordEnc)
 		if err != nil {
-			return store.HostExport{}, fmt.Errorf("расшифровка admin-пароля встроенным ключом: %w", err)
+			return store.HostExport{}, msgs.Errorf("hub.decryptingAdminPasswordBuiltKey", err)
 		}
 		pwEnc, err := secretbox.Encrypt(newKey, pw)
 		if err != nil {
-			return store.HostExport{}, fmt.Errorf("перешифровка admin-пароля: %w", err)
+			return store.HostExport{}, msgs.Errorf("hub.reEncryptingAdminPassword", err)
 		}
 		h.AdminPasswordEnc = pwEnc
 	}
@@ -101,11 +102,11 @@ func reencryptHostSecrets(oldKey, newKey []byte, h store.HostExport) (store.Host
 	if len(h.TunnelTokenEnc) > 0 {
 		token, err := secretbox.Decrypt(oldKey, h.TunnelTokenEnc)
 		if err != nil {
-			return store.HostExport{}, fmt.Errorf("расшифровка токена резервного канала встроенным ключом: %w", err)
+			return store.HostExport{}, msgs.Errorf("hub.decryptingFallbackChannelTokenBuilt", err)
 		}
 		tokenEnc, err := secretbox.Encrypt(newKey, token)
 		if err != nil {
-			return store.HostExport{}, fmt.Errorf("перешифровка токена резервного канала: %w", err)
+			return store.HostExport{}, msgs.Errorf("hub.reEncryptingFallbackChannelToken", err)
 		}
 		h.TunnelTokenEnc = tokenEnc
 	}

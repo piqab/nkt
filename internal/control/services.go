@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strings"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -64,13 +65,13 @@ var allowedActions = map[string]bool{
 func (s *ServiceManager) Action(ctx context.Context, user, service, action string) (collect.CommandResult, error) {
 	spec, ok := s.specs[service]
 	if !ok {
-		return collect.CommandResult{}, fmt.Errorf("неизвестный сервис: %q", service)
+		return collect.CommandResult{}, msgs.Errorf("control.unknownService", service)
 	}
 	if !allowedActions[action] {
-		return collect.CommandResult{}, fmt.Errorf("недопустимое действие: %q", action)
+		return collect.CommandResult{}, msgs.Errorf("control.invalidAction", action)
 	}
 	if !contains(spec.Actions, action) {
-		return collect.CommandResult{}, fmt.Errorf("действие %q не поддерживается для %s", action, service)
+		return collect.CommandResult{}, msgs.Errorf("control.actionSupported", action, service)
 	}
 
 	var res collect.CommandResult
@@ -93,7 +94,7 @@ func (s *ServiceManager) Action(ctx context.Context, user, service, action strin
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("%s %s: код %d: %s", action, spec.Unit, res.ExitCode,
+		return res, msgs.Errorf("control.code", action, spec.Unit, res.ExitCode,
 			strings.TrimSpace(res.Output()))
 	}
 	return res, nil
@@ -116,7 +117,7 @@ func (s *ServiceManager) ApplyCompose(ctx context.Context, user, path string) (c
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("docker compose up -d: код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+		return res, msgs.Errorf("control.dockerComposeUpDCode", res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return res, nil
 }
@@ -140,7 +141,7 @@ func (s *ServiceManager) ComposeDown(ctx context.Context, user, path string) (co
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("docker compose down: код %d: %s", res.ExitCode, strings.TrimSpace(res.Output()))
+		return res, msgs.Errorf("control.dockerComposeDownCode", res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return res, nil
 }
@@ -163,7 +164,7 @@ func (s *ServiceManager) DefineLibvirtDomain(ctx context.Context, user, path str
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("virsh define %s: код %d: %s", path, res.ExitCode, strings.TrimSpace(res.Output()))
+		return res, msgs.Errorf("control.virshDefineCode", path, res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return res, nil
 }
@@ -256,7 +257,7 @@ func (s *ServiceManager) Validate(ctx context.Context, service string, paths ...
 func (s *ServiceManager) ValidateOnly(ctx context.Context, user, service string) (collect.CommandResult, bool, error) {
 	res, ok := s.Validate(ctx, service)
 	if !ok {
-		return res, false, fmt.Errorf("для %s нет доступной проверки конфигурации", service)
+		return res, false, msgs.Errorf("control.configurationCheckAvailable", service)
 	}
 	outcome := "ok"
 	if !res.OK() {
@@ -271,10 +272,10 @@ func (s *ServiceManager) ContainerAction(ctx context.Context, user, name, action
 	switch action {
 	case "start", "stop", "restart":
 	default:
-		return fmt.Errorf("недопустимое действие для контейнера: %q", action)
+		return msgs.Errorf("control.invalidActionContainer", action)
 	}
 	if name == "" || strings.ContainsAny(name, "/?&#") {
-		return fmt.Errorf("недопустимое имя контейнера: %q", name)
+		return msgs.Errorf("control.invalidContainerName", name)
 	}
 
 	_, code, err := s.c.DockerAPI(ctx, "POST", "/containers/"+name+"/"+action, nil)
@@ -300,7 +301,7 @@ func (s *ServiceManager) ContainerAction(ctx context.Context, user, name, action
 // осознанно.
 func (s *ServiceManager) DeleteContainer(ctx context.Context, user, name string, force bool) error {
 	if name == "" || strings.ContainsAny(name, "/?&#") {
-		return fmt.Errorf("недопустимое имя контейнера: %q", name)
+		return msgs.Errorf("control.invalidContainerName", name)
 	}
 	path := "/containers/" + name
 	if force {
@@ -338,7 +339,7 @@ const (
 func (s *ServiceManager) Logs(ctx context.Context, user, service string, lines int) (string, error) {
 	spec, ok := s.specs[service]
 	if !ok {
-		return "", fmt.Errorf("неизвестный сервис: %q", service)
+		return "", msgs.Errorf("control.unknownService", service)
 	}
 	if lines <= 0 || lines > maxLogLines {
 		lines = defaultLogLines
@@ -356,7 +357,7 @@ func (s *ServiceManager) Logs(ctx context.Context, user, service string, lines i
 		return "", fmt.Errorf("journalctl -u %s: %w", spec.Unit, err)
 	}
 	if !res.OK() {
-		return "", fmt.Errorf("journalctl -u %s: код %d: %s", spec.Unit, res.ExitCode, strings.TrimSpace(res.Stderr))
+		return "", msgs.Errorf("control.journalctlUCode", spec.Unit, res.ExitCode, strings.TrimSpace(res.Stderr))
 	}
 	return res.Stdout, nil
 }
@@ -378,10 +379,10 @@ var killableSignals = map[string]bool{"TERM": true, "KILL": true}
 // "process identity" more durable than this to compare against here.
 func (s *ServiceManager) KillProcess(ctx context.Context, user string, pid int, expectedCommand, signal string) error {
 	if pid <= 0 {
-		return fmt.Errorf("некорректный pid: %d", pid)
+		return msgs.Errorf("control.invalidPid", pid)
 	}
 	if !killableSignals[signal] {
-		return fmt.Errorf("недопустимый сигнал: %q", signal)
+		return msgs.Errorf("control.invalidSignal", signal)
 	}
 
 	// Reuses parse.ProcessDetails — the exact same `ps` invocation and
@@ -395,10 +396,10 @@ func (s *ServiceManager) KillProcess(ctx context.Context, user string, pid int, 
 	details, _ := parse.ProcessDetails(ctx, s.c, []int{pid})
 	current := details[pid].Command
 	if current == "" {
-		return fmt.Errorf("процесс %d уже не найден", pid)
+		return msgs.Errorf("control.processLongerExists", pid)
 	}
 	if current != strings.TrimSpace(expectedCommand) {
-		return fmt.Errorf("процесс %d теперь другой (PID переиспользован) — действие отменено для безопасности", pid)
+		return msgs.Errorf("control.processNowDifferentOnePID", pid)
 	}
 
 	res, err := s.c.Run(ctx, "kill", "-"+signal, fmt.Sprint(pid))
@@ -413,7 +414,7 @@ func (s *ServiceManager) KillProcess(ctx context.Context, user string, pid int, 
 		return err
 	}
 	if !res.OK() {
-		return fmt.Errorf("kill -%s %d: код %d: %s", signal, pid, res.ExitCode, strings.TrimSpace(res.Output()))
+		return msgs.Errorf("control.killCode", signal, pid, res.ExitCode, strings.TrimSpace(res.Output()))
 	}
 	return nil
 }

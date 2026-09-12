@@ -210,7 +210,7 @@ func (s *Server) handleTargetPatch(w http.ResponseWriter, r *http.Request) {
 	}
 	var req targetPatchRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if req.Enabled == nil {
@@ -231,12 +231,12 @@ func (s *Server) handleTargetPatch(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFirewallAdd(w http.ResponseWriter, r *http.Request) {
 	var spec control.RuleSpec
 	if err := decodeJSON(r, &spec); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	res, err := s.firewall.AddRule(r.Context(), auth.Username(r.Context()), spec)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -258,13 +258,13 @@ func (s *Server) handleFirewallDelete(w http.ResponseWriter, r *http.Request) {
 	var req firewallDeleteRequest
 	if r.ContentLength > 0 {
 		if err := decodeJSON(r, &req); err != nil {
-			writeError(w, http.StatusBadRequest, err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 	}
 	res, err := s.firewall.DeleteRule(r.Context(), auth.Username(r.Context()), number, req.Expected)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -281,12 +281,12 @@ func (s *Server) handleFirewallDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleFirewallDeleteBySpec(w http.ResponseWriter, r *http.Request) {
 	var spec control.RuleSpec
 	if err := decodeJSON(r, &spec); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	res, err := s.firewall.DeleteRuleBySpec(r.Context(), auth.Username(r.Context()), spec)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()
@@ -298,7 +298,7 @@ func (s *Server) handleFirewallDeleteBySpec(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleFirewallReload(w http.ResponseWriter, r *http.Request) {
 	res, err := s.firewall.Reload(r.Context(), auth.Username(r.Context()))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.rescanLater()

@@ -10,7 +10,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
-	"errors"
+	"github.com/piqab/nkt/internal/msgs"
 	"net"
 	"time"
 )
@@ -51,11 +51,11 @@ func Fetch(ctx context.Context, addr, serverName string, timeout time.Duration) 
 
 	tlsConn, ok := conn.(*tls.Conn)
 	if !ok {
-		return Served{}, errors.New("соединение не является TLS")
+		return Served{}, msgs.Errorf("tlscheck.connectionTLS")
 	}
 	state := tlsConn.ConnectionState()
 	if len(state.PeerCertificates) == 0 {
-		return Served{}, errors.New("сервер не предъявил сертификат")
+		return Served{}, msgs.Errorf("tlscheck.serverPresentedCertificate")
 	}
 
 	leaf := state.PeerCertificates[0]

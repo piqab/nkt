@@ -3,7 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"os"
 	"os/exec"
 	"strconv"
@@ -62,7 +62,7 @@ func unixChkpwdPath() string {
 func verifySystemPassword(ctx context.Context, username, password string) error {
 	helper := unixChkpwdPath()
 	if helper == "" {
-		return errors.New("на хосте нет unix_chkpwd — вход системной учётной записью недоступен")
+		return msgs.Errorf("auth.unixChkpwdInstalledHostLogging")
 	}
 	ctx, cancel := context.WithTimeout(ctx, systemLoginTimeout)
 	defer cancel()
@@ -76,7 +76,7 @@ func verifySystemPassword(ctx context.Context, username, password string) error 
 		// одно и то же, но в журнал попадает различимое.
 		var exitErr *exec.ExitError
 		if errors.As(err, &exitErr) {
-			return fmt.Errorf("unix_chkpwd отклонил вход (код %d)", exitErr.ExitCode())
+			return msgs.Errorf("auth.unixChkpwdRejectedLoginCode", exitErr.ExitCode())
 		}
 		return err
 	}

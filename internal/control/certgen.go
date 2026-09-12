@@ -98,7 +98,7 @@ var hostnameRe = regexp.MustCompile(
 func (r SelfSignedRequest) normalise() (SelfSignedRequest, error) {
 	out := r
 	if len(out.Names) == 0 {
-		return out, fmt.Errorf("нужно указать хотя бы одно имя")
+		return out, msgs.Errorf("control.specifyLeastOneName")
 	}
 	names := make([]string, len(out.Names))
 	for i, n := range out.Names {
@@ -109,7 +109,7 @@ func (r SelfSignedRequest) normalise() (SelfSignedRequest, error) {
 			prefix, bare = "*.", bare[2:]
 		}
 		if bare == "" {
-			return out, fmt.Errorf("недопустимое имя: %q", out.Names[i])
+			return out, msgs.Errorf("control.invalidName", out.Names[i])
 		}
 		if !hostnameRe.MatchString(bare) {
 			// DNS, TLS SNI and X.509 SANs only ever carry ASCII — a domain
@@ -117,7 +117,7 @@ func (r SelfSignedRequest) normalise() (SelfSignedRequest, error) {
 			// Convert it here instead of just rejecting it.
 			ascii, err := model.HostnameASCII(bare)
 			if err != nil || !hostnameRe.MatchString(ascii) {
-				return out, fmt.Errorf("недопустимое имя: %q", out.Names[i])
+				return out, msgs.Errorf("control.invalidName", out.Names[i])
 			}
 			bare = ascii
 		}
@@ -128,9 +128,9 @@ func (r SelfSignedRequest) normalise() (SelfSignedRequest, error) {
 	switch out.Service {
 	case "nginx", "haproxy":
 	case "":
-		return out, fmt.Errorf("укажите service: nginx или haproxy")
+		return out, msgs.Errorf("control.specifyServiceNginxHaproxy")
 	default:
-		return out, fmt.Errorf("service должен быть nginx или haproxy, получено %q", out.Service)
+		return out, msgs.Errorf("control.serviceMustNginxHaproxyGot", out.Service)
 	}
 
 	if out.Bits == 0 {
@@ -139,14 +139,14 @@ func (r SelfSignedRequest) normalise() (SelfSignedRequest, error) {
 	switch out.Bits {
 	case 2048, 3072, 4096:
 	default:
-		return out, fmt.Errorf("bits должен быть 2048, 3072 или 4096, получено %d", out.Bits)
+		return out, msgs.Errorf("control.bitsMust204830724096", out.Bits)
 	}
 
 	if out.Days == 0 {
 		out.Days = defaultDays
 	}
 	if out.Days < 1 || out.Days > maxDays {
-		return out, fmt.Errorf("days должен быть от 1 до %d, получено %d", maxDays, out.Days)
+		return out, msgs.Errorf("control.daysMustBetween1Got", maxDays, out.Days)
 	}
 	return out, nil
 }
@@ -183,11 +183,11 @@ func (m *CertManager) GenerateSelfSigned(ctx context.Context, user string, req S
 
 	key, err := rsa.GenerateKey(rand.Reader, req.Bits)
 	if err != nil {
-		return SelfSignedResult{}, fmt.Errorf("генерация ключа: %w", err)
+		return SelfSignedResult{}, msgs.Errorf("control.generatingKey", err)
 	}
 	serial, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 128))
 	if err != nil {
-		return SelfSignedResult{}, fmt.Errorf("генерация серийного номера: %w", err)
+		return SelfSignedResult{}, msgs.Errorf("control.generatingSerialNumber", err)
 	}
 
 	now := time.Now()
@@ -205,13 +205,13 @@ func (m *CertManager) GenerateSelfSigned(ctx context.Context, user string, req S
 	}
 	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 	if err != nil {
-		return SelfSignedResult{}, fmt.Errorf("создание сертификата: %w", err)
+		return SelfSignedResult{}, msgs.Errorf("control.creatingCertificate", err)
 	}
 
 	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
 	keyDER, err := x509.MarshalPKCS8PrivateKey(key)
 	if err != nil {
-		return SelfSignedResult{}, fmt.Errorf("сериализация ключа: %w", err)
+		return SelfSignedResult{}, msgs.Errorf("control.serializingKey", err)
 	}
 	keyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER})
 
@@ -244,10 +244,10 @@ func (m *CertManager) GenerateSelfSigned(ctx context.Context, user string, req S
 		res.CertPath = gopath.Join(dir, "fullchain.pem")
 		res.KeyPath = gopath.Join(dir, "privkey.pem")
 		if err := m.c.WriteFile(res.CertPath, certPEM, 0o644); err != nil {
-			return SelfSignedResult{}, fmt.Errorf("запись сертификата: %w", err)
+			return SelfSignedResult{}, msgs.Errorf("control.writingCertificate", err)
 		}
 		if err := m.c.WriteFile(res.KeyPath, keyPEM, 0o600); err != nil {
-			return SelfSignedResult{}, fmt.Errorf("запись ключа: %w", err)
+			return SelfSignedResult{}, msgs.Errorf("control.writingKey", err)
 		}
 		res.Snippet = fmt.Sprintf("ssl_certificate     %s;\nssl_certificate_key %s;", res.CertPath, res.KeyPath)
 
@@ -259,7 +259,7 @@ func (m *CertManager) GenerateSelfSigned(ctx context.Context, user string, req S
 		combined = append(combined, certPEM...)
 		combined = append(combined, keyPEM...)
 		if err := m.c.WriteFile(res.CombinedPath, combined, 0o600); err != nil {
-			return SelfSignedResult{}, fmt.Errorf("запись сертификата: %w", err)
+			return SelfSignedResult{}, msgs.Errorf("control.writingCertificate", err)
 		}
 		res.Snippet = fmt.Sprintf("bind *:443 ssl crt %s", res.CombinedPath)
 	}
@@ -324,7 +324,7 @@ func (m *CertManager) renewCertbot(
 	ctx context.Context, user, lineage string, restart map[int]bool, report *certProgress,
 ) (collect.CommandResult, error) {
 	if !lineageRe.MatchString(lineage) {
-		return collect.CommandResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
+		return collect.CommandResult{}, msgs.Errorf("control.invalidCertbotLineageName", lineage)
 	}
 
 	st, finish, err := m.beginStandalone(ctx, user, restart, report)
@@ -349,8 +349,7 @@ func (m *CertManager) renewCertbot(
 	report.Msg("certgen.certRenewed")
 
 	if _, err := m.recombineDerivedCerts(ctx, user, lineage, report); err != nil {
-		return finish(res, fmt.Errorf(
-			"сертификат %s продлён, но не удалось пересобрать копию для haproxy: %w", lineage, err))
+		return finish(res, msgs.Errorf("control.certificateRenewedButHaproxyCopy", lineage, err))
 	}
 
 	return finish(res, nil)
@@ -459,7 +458,7 @@ func (j *renewJob) snapshot() (events []RenewEvent, done bool, errMsg string) {
 // whole operation takes.
 func (m *CertManager) StartRenewCertbot(user, lineage string, restart map[int]bool) (string, error) {
 	if !lineageRe.MatchString(lineage) {
-		return "", fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
+		return "", msgs.Errorf("control.invalidCertbotLineageName", lineage)
 	}
 
 	job := &renewJob{created: time.Now()}
@@ -467,7 +466,7 @@ func (m *CertManager) StartRenewCertbot(user, lineage string, restart map[int]bo
 
 	id, err := newJobID()
 	if err != nil {
-		return "", fmt.Errorf("генерация id задачи: %w", err)
+		return "", msgs.Errorf("control.generatingTaskId", err)
 	}
 
 	m.jobsMu.Lock()
@@ -565,11 +564,11 @@ func (m *CertManager) recombineDerivedCerts(
 			var err error
 			certPEM, err = m.c.ReadFile(parse.LetsEncryptLive + lineage + "/fullchain.pem")
 			if err != nil {
-				return nil, fmt.Errorf("чтение обновлённого сертификата: %w", err)
+				return nil, msgs.Errorf("control.readingRenewedCertificate", err)
 			}
 			keyPEM, err = m.c.ReadFile(parse.LetsEncryptLive + lineage + "/privkey.pem")
 			if err != nil {
-				return nil, fmt.Errorf("чтение обновлённого ключа: %w", err)
+				return nil, msgs.Errorf("control.readingRenewedKey", err)
 			}
 		}
 
@@ -577,7 +576,7 @@ func (m *CertManager) recombineDerivedCerts(
 		combined = append(combined, certPEM...)
 		combined = append(combined, keyPEM...)
 		if err := m.c.WriteFile(cert.Path, combined, 0o600); err != nil {
-			return services, fmt.Errorf("запись %s: %w", cert.Path, err)
+			return services, msgs.Errorf("control.writing", cert.Path, err)
 		}
 		m.db.Audit(ctx, user, "cert.recombine", cert.Path, "ok", map[string]any{"lineage": lineage})
 		report.Msg("certgen.recombinedFile", cert.Service, cert.Path)
@@ -743,29 +742,28 @@ func (m *CertManager) haproxyCertDir() (string, bool) {
 // since there is nothing yet to safely overwrite.
 func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage, targetPath string) (CombineResult, error) {
 	if !lineageRe.MatchString(lineage) {
-		return CombineResult{}, fmt.Errorf("недопустимое имя lineage certbot: %q", lineage)
+		return CombineResult{}, msgs.Errorf("control.invalidCertbotLineageName", lineage)
 	}
 	if targetPath != "" && !m.isKnownHAProxyCertPath(targetPath) {
-		return CombineResult{}, fmt.Errorf(
-			"путь %q не найден среди текущих сертификатов haproxy — обновите страницу и выберите заново",
+		return CombineResult{}, msgs.Errorf("control.pathFoundAmongCurrentHaproxy",
 			targetPath)
 	}
 
 	certPEM, err := m.c.ReadFile(parse.LetsEncryptLive + lineage + "/fullchain.pem")
 	if err != nil {
-		return CombineResult{}, fmt.Errorf("чтение сертификата lineage %s: %w", lineage, err)
+		return CombineResult{}, msgs.Errorf("control.readingLineageCertificate", lineage, err)
 	}
 	keyPEM, err := m.c.ReadFile(parse.LetsEncryptLive + lineage + "/privkey.pem")
 	if err != nil {
-		return CombineResult{}, fmt.Errorf("чтение ключа lineage %s: %w", lineage, err)
+		return CombineResult{}, msgs.Errorf("control.readingLineageKey", lineage, err)
 	}
 	block, _ := pem.Decode(certPEM)
 	if block == nil || block.Type != "CERTIFICATE" {
-		return CombineResult{}, fmt.Errorf("lineage %s: fullchain.pem не в формате PEM", lineage)
+		return CombineResult{}, msgs.Errorf("control.lineageFullchainPemPEMFormat", lineage)
 	}
 	leaf, err := x509.ParseCertificate(block.Bytes)
 	if err != nil {
-		return CombineResult{}, fmt.Errorf("lineage %s: разбор сертификата: %w", lineage, err)
+		return CombineResult{}, msgs.Errorf("control.lineageParsingCertificate", lineage, err)
 	}
 
 	combined := make([]byte, 0, len(certPEM)+len(keyPEM))
@@ -781,14 +779,14 @@ func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage, targ
 
 	if targetPath != "" {
 		if err := m.c.WriteFile(targetPath, combined, 0o600); err != nil {
-			return CombineResult{}, fmt.Errorf("запись %s: %w", targetPath, err)
+			return CombineResult{}, msgs.Errorf("control.writing", targetPath, err)
 		}
 		res.CombinedPath = targetPath
 		m.db.Audit(ctx, user, "cert.combine_haproxy", targetPath, "ok", map[string]any{
 			"lineage": lineage, "fingerprint": res.Fingerprint,
 		})
 		if _, err := m.services.Action(ctx, user, model.ServiceHAProxy, "reload"); err != nil {
-			return res, fmt.Errorf("PEM собран и записан в %s, но не удалось перечитать конфигурацию haproxy: %w",
+			return res, msgs.Errorf("control.pemAssembledWrittenButHaproxy",
 				targetPath, err)
 		}
 		return res, nil
@@ -797,13 +795,13 @@ func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage, targ
 	if dir, ok := m.haproxyCertDir(); ok {
 		res.CombinedPath = gopath.Join(dir, lineage+".pem")
 		if err := m.c.WriteFile(res.CombinedPath, combined, 0o600); err != nil {
-			return CombineResult{}, fmt.Errorf("запись %s: %w", res.CombinedPath, err)
+			return CombineResult{}, msgs.Errorf("control.writing", res.CombinedPath, err)
 		}
 		m.db.Audit(ctx, user, "cert.combine_haproxy", res.CombinedPath, "ok", map[string]any{
 			"lineage": lineage, "fingerprint": res.Fingerprint,
 		})
 		if _, err := m.services.Action(ctx, user, model.ServiceHAProxy, "reload"); err != nil {
-			return res, fmt.Errorf("PEM собран и записан в %s, но не удалось перечитать конфигурацию haproxy: %w",
+			return res, msgs.Errorf("control.pemAssembledWrittenButHaproxy",
 				res.CombinedPath, err)
 		}
 		return res, nil
@@ -812,7 +810,7 @@ func (m *CertManager) CombineForHAProxy(ctx context.Context, user, lineage, targ
 	dir := gopath.Join(m.cfg.HAProxyRoot, "ssl-letsencrypt", safeDirName(lineage))
 	res.CombinedPath = gopath.Join(dir, "combined.pem")
 	if err := m.c.WriteFile(res.CombinedPath, combined, 0o600); err != nil {
-		return CombineResult{}, fmt.Errorf("запись %s: %w", res.CombinedPath, err)
+		return CombineResult{}, msgs.Errorf("control.writing", res.CombinedPath, err)
 	}
 	res.Snippet = fmt.Sprintf("bind *:443 ssl crt %s", res.CombinedPath)
 
@@ -847,9 +845,7 @@ func (m *CertManager) checkPortFreeForStandalone(ctx context.Context, report *ce
 	if free {
 		return nil
 	}
-	return fmt.Errorf(
-		"порт %d занят (%s) — certbot не сможет подтвердить домен через --standalone; "+
-			"остановите этот процесс и повторите", standalonePort, holder)
+	return msgs.Errorf("control.portBusyCertbotCannotValidate", standalonePort, holder)
 }
 
 // checkPortFree reports what, if anything, is listening on port right now,
@@ -868,7 +864,7 @@ func (m *CertManager) checkPortFree(ctx context.Context, port int) (holder strin
 			continue
 		}
 		if l.Process == "" {
-			return "неизвестный процесс", false
+			return msgs.T(msgs.DefaultLang, "control.unknownProcess"), false
 		}
 		if l.PID > 0 {
 			return fmt.Sprintf("%s, pid %d", l.Process, l.PID), false
@@ -936,7 +932,7 @@ func (m *CertManager) runCertbotRenew(ctx context.Context, user, lineage string)
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("certbot renew --cert-name %s: код %d: %s", lineage, res.ExitCode,
+		return res, msgs.Errorf("control.certbotRenewCertNameCode", lineage, res.ExitCode,
 			strings.TrimSpace(res.Output()))
 	}
 	return res, nil
@@ -958,19 +954,19 @@ func normaliseCertbotDomains(names []string) ([]string, error) {
 			continue
 		}
 		if strings.HasPrefix(n, "*.") {
-			return nil, fmt.Errorf("wildcard-имя %q требует DNS-подтверждения, которое это приложение не поддерживает", n)
+			return nil, msgs.Errorf("control.wildcardNameRequiresDNSValidation", n)
 		}
 		if !hostnameRe.MatchString(n) {
 			ascii, err := model.HostnameASCII(n)
 			if err != nil || !hostnameRe.MatchString(ascii) {
-				return nil, fmt.Errorf("недопустимое доменное имя: %q", n)
+				return nil, msgs.Errorf("control.invalidDomainName", n)
 			}
 			n = ascii
 		}
 		out = append(out, n)
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("нужно указать хотя бы одно доменное имя")
+		return nil, msgs.Errorf("control.specifyLeastOneDomainName")
 	}
 	return out, nil
 }
@@ -1045,7 +1041,7 @@ func (m *CertManager) runCertbotCertonly(ctx context.Context, user string, domai
 		return res, err
 	}
 	if !res.OK() {
-		return res, fmt.Errorf("certbot certonly -d %s: код %d: %s", strings.Join(domains, ","), res.ExitCode,
+		return res, msgs.Errorf("control.certbotCertonlyDCode", strings.Join(domains, ","), res.ExitCode,
 			strings.TrimSpace(res.Output()))
 	}
 	return res, nil
@@ -1067,7 +1063,7 @@ func (m *CertManager) StartIssueCertbot(user string, domains []string, restart m
 
 	id, err := newJobID()
 	if err != nil {
-		return "", fmt.Errorf("генерация id задачи: %w", err)
+		return "", msgs.Errorf("control.generatingTaskId", err)
 	}
 
 	m.jobsMu.Lock()

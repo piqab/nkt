@@ -68,7 +68,7 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 	if s.cfg.TerminalUser != "" {
 		cmd, err := unrestrictedCommandAsUser(env, s.cfg.TerminalUser, argv...)
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			writeErr(w, r, http.StatusInternalServerError, err)
 			return
 		}
 		s.runPTYSession(w, r, cmd, "terminal", auditTarget, s.cfg.TerminalIdleTimeout)
@@ -262,7 +262,7 @@ func (s *Server) handleTmuxMouse(w http.ResponseWriter, r *http.Request) {
 		Mouse bool `json:"mouse"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	value := "off"
@@ -270,7 +270,7 @@ func (s *Server) handleTmuxMouse(w http.ResponseWriter, r *http.Request) {
 		value = "on"
 	}
 	if _, err := s.runTmux(r.Context(), "set-option", "-t", tmuxSessionName, "mouse", value); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"session": true, "mouse": req.Mouse})

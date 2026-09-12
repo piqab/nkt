@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net"
 	"os"
 	"path/filepath"
@@ -32,7 +33,7 @@ func NewManager(run Runner, tmpDir string) *Manager {
 // пустой список. Список имён — это просто строки, и он одинаков везде.
 func (m *Manager) List(ctx context.Context) ([]Network, error) {
 	if m.run == nil {
-		return nil, fmt.Errorf("управление сетями недоступно в этом режиме")
+		return nil, msgs.Errorf("vmnet.networkManagementUnavailableMode")
 	}
 	all, err := m.names(ctx, "--all")
 	if err != nil {
@@ -107,7 +108,7 @@ func (m *Manager) Create(ctx context.Context, s Spec) error {
 		return err
 	}
 	if m.run == nil {
-		return fmt.Errorf("управление сетями недоступно в этом режиме")
+		return msgs.Errorf("vmnet.networkManagementUnavailableMode")
 	}
 	if err := m.checkSubnetFree(ctx, s); err != nil {
 		return err
@@ -226,7 +227,7 @@ func freeSubnet(existing []Network, taken []Occupied) (subnet, bridge string, er
 			}
 		}
 	}
-	return "", "", fmt.Errorf("не нашлось свободной подсети — задайте сеть вручную")
+	return "", "", msgs.Errorf("vmnet.freeSubnetFoundSetNetwork")
 }
 
 // Occupied собирает всё занятое на хосте: подсети сетей libvirt и
@@ -236,7 +237,7 @@ func (m *Manager) Occupied(ctx context.Context) ([]Occupied, []Network, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	taken := NetworkRanges(nets)
+	taken := NetworkRanges(ctx, nets)
 	taken = append(taken, m.hostRanges(ctx)...)
 	return taken, nets, nil
 }
@@ -281,7 +282,7 @@ func (m *Manager) hostRanges(ctx context.Context) []Occupied {
 		}
 		out = append(out, Occupied{
 			CIDR:  ipNet.String(),
-			Where: fmt.Sprintf("интерфейсом хоста %s", iface),
+			Where: msgs.Tc(ctx, "vmnet.hostInterface", iface),
 			Host:  true,
 		})
 	}
@@ -306,7 +307,7 @@ func (m *Manager) SetAutostart(ctx context.Context, name string, on bool) error 
 		argv = append(argv, "--disable")
 	}
 	if !nameRe.MatchString(name) {
-		return fmt.Errorf("некорректное имя сети: %q", name)
+		return msgs.Errorf("vmnet.invalidNetworkName", name)
 	}
 	res, err := m.run(ctx, argv...)
 	if err != nil {
@@ -322,7 +323,7 @@ func (m *Manager) SetAutostart(ctx context.Context, name string, on bool) error 
 // описание.
 func (m *Manager) Delete(ctx context.Context, name string) error {
 	if !nameRe.MatchString(name) {
-		return fmt.Errorf("некорректное имя сети: %q", name)
+		return msgs.Errorf("vmnet.invalidNetworkName", name)
 	}
 	// Остановка может отказать, если сеть и так не поднята, — это не
 	// повод не удалять.
@@ -334,10 +335,10 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 // безобидный отказ (сеть уже поднята, уже остановлена).
 func (m *Manager) simple(ctx context.Context, verb, name, benign string) error {
 	if !nameRe.MatchString(name) {
-		return fmt.Errorf("некорректное имя сети: %q", name)
+		return msgs.Errorf("vmnet.invalidNetworkName", name)
 	}
 	if m.run == nil {
-		return fmt.Errorf("управление сетями недоступно в этом режиме")
+		return msgs.Errorf("vmnet.networkManagementUnavailableMode")
 	}
 	res, err := m.run(ctx, "virsh", verb, name)
 	if err != nil {
@@ -393,8 +394,7 @@ func fillFromXML(n *Network, doc string) {
 func describeRunError(err error) error {
 	text := err.Error()
 	if strings.Contains(text, "executable file not found") || strings.Contains(text, "no such file or directory") {
-		return fmt.Errorf("на хосте нет virsh — установите пакет libvirt-clients "+
-			"(в «Профилях» для этого есть кнопка «Установить недостающее»): %w", err)
+		return msgs.Errorf("vmnet.virshInstalledHostInstallLibvirt", err)
 	}
 	return err
 }
@@ -418,7 +418,7 @@ func meaningfulLines(streams ...string) string {
 		}
 	}
 	if len(lines) == 0 {
-		return "команда завершилась с ошибкой"
+		return msgs.T(msgs.DefaultLang, "vmnet.commandFailed")
 	}
 	if len(lines) > 3 {
 		lines = lines[:3]

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"strconv"
 	"time"
@@ -29,12 +30,12 @@ func (s *Server) handleJobList(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	list, err := s.db.ListJobs(r.Context(), limit)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	active, err := s.db.CountActiveJobs(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"jobs": list, "active": active})
@@ -58,7 +59,7 @@ func (s *Server) handleJobLog(w http.ResponseWriter, r *http.Request) {
 	after, _ := strconv.ParseInt(r.URL.Query().Get("after"), 10, 64)
 	lines, err := s.db.JobLog(r.Context(), job.ID, after, jobLogLimit)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"job": job, "lines": lines})
@@ -71,13 +72,13 @@ func (s *Server) handleJobCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.jobs == nil {
-		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
 	user := auth.Username(r.Context())
 	if err := s.jobs.Cancel(r.Context(), job.ID); err != nil {
 		s.db.Audit(r.Context(), user, "job.cancel", job.Kind, "error", err.Error())
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	s.db.Audit(r.Context(), user, "job.cancel", job.Kind, "ok", job.Title)
@@ -96,7 +97,7 @@ func (s *Server) handleJobWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.jobs == nil {
-		writeError(w, http.StatusServiceUnavailable, "фоновые задания недоступны")
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
 	conn, err := websocket.Accept(w, r, nil)
@@ -116,7 +117,7 @@ func (s *Server) handleJobWS(w http.ResponseWriter, r *http.Request) {
 	// а всё, что было, он и так получил журналом.
 	if job.Done() {
 		_ = writeJobEvent(ctx, conn, map[string]any{"job": job})
-		conn.Close(websocket.StatusNormalClosure, "задание завершено")
+		conn.Close(websocket.StatusNormalClosure, msgs.Tc(r.Context(), "api.jobFinished"))
 		return
 	}
 
@@ -130,7 +131,7 @@ func (s *Server) handleJobWS(w http.ResponseWriter, r *http.Request) {
 				if err == nil {
 					_ = writeJobEvent(ctx, conn, map[string]any{"job": fresh})
 				}
-				conn.Close(websocket.StatusNormalClosure, "задание завершено")
+				conn.Close(websocket.StatusNormalClosure, msgs.Tc(r.Context(), "api.jobFinished"))
 				return
 			}
 			payload := map[string]any{}

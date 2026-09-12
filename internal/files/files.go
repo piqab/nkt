@@ -17,6 +17,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"os"
 	gopath "path"
@@ -85,14 +86,14 @@ func (m *Manager) Roots() []string { return append([]string(nil), m.roots...) }
 // Check отвергает путь вне корней и с подвохом («..», относительный).
 func (m *Manager) Check(p string) (string, error) {
 	if p == "" || !strings.HasPrefix(p, "/") || strings.Contains(p, "..") || gopath.Clean(p) != p {
-		return "", fmt.Errorf("путь должен быть абсолютным и без «..»: %q", p)
+		return "", msgs.Errorf("files.pathMustAbsoluteWithout", p)
 	}
 	for _, root := range m.roots {
 		if p == root || strings.HasPrefix(p, root+"/") {
 			return p, nil
 		}
 	}
-	return "", fmt.Errorf("путь %q вне разрешённых каталогов (%s)", p, strings.Join(m.roots, ", "))
+	return "", msgs.Errorf("files.pathOutsideAllowedDirectories", p, strings.Join(m.roots, ", "))
 }
 
 // Entry — элемент каталога.
@@ -135,7 +136,7 @@ func (m *Manager) List(p string) ([]Entry, error) {
 
 func (m *Manager) mutable() error {
 	if m.run == nil {
-		return fmt.Errorf("изменение файлов недоступно в этом режиме")
+		return msgs.Errorf("files.changingFilesUnavailableMode")
 	}
 	return nil
 }
@@ -178,7 +179,7 @@ func (m *Manager) Rename(ctx context.Context, from, to string) error {
 		return err
 	}
 	if m.c.Exists(to) {
-		return fmt.Errorf("%s уже существует", to)
+		return msgs.Errorf("files.alreadyExists", to)
 	}
 	return m.exec(ctx, "mv", "-n", "--", from, to)
 }
@@ -194,7 +195,7 @@ func (m *Manager) Delete(ctx context.Context, p string) error {
 	}
 	for _, root := range m.roots {
 		if p == root {
-			return fmt.Errorf("%s — корень проводника, его удалять нельзя", p)
+			return msgs.Errorf("files.browserRootCannotDeleted", p)
 		}
 	}
 	return m.exec(ctx, "rm", "-rf", "--", p)
@@ -235,7 +236,7 @@ func (m *Manager) Upload(ctx context.Context, dir, name string, r io.Reader) (st
 	}
 	if st, _ := tmp.Stat(); st != nil && st.Size() > MaxUploadBytes {
 		_ = tmp.Close()
-		return "", fmt.Errorf("файл больше %d ГиБ", MaxUploadBytes>>30)
+		return "", msgs.Errorf("files.fileLargerThanGiB", MaxUploadBytes>>30)
 	}
 	if err := tmp.Close(); err != nil {
 		return "", err
@@ -256,11 +257,11 @@ func (m *Manager) Upload(ctx context.Context, dir, name string, r io.Reader) (st
 func (m *Manager) uploadTarget(dir, name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || strings.HasPrefix(name, "/") || strings.ContainsRune(name, '\x00') {
-		return "", fmt.Errorf("некорректное имя файла: %q", name)
+		return "", msgs.Errorf("files.invalidFileName", name)
 	}
 	for _, part := range strings.Split(name, "/") {
 		if part == "" || part == "." || part == ".." {
-			return "", fmt.Errorf("некорректное имя файла: %q", name)
+			return "", msgs.Errorf("files.invalidFileName", name)
 		}
 	}
 	target := gopath.Join(dir, name)
@@ -281,7 +282,7 @@ func (m *Manager) Open(p string) (io.ReadCloser, int64, error) {
 		return nil, 0, err
 	}
 	if st.IsDir {
-		return nil, 0, fmt.Errorf("%s — каталог, скачать можно файл", p)
+		return nil, 0, msgs.Errorf("files.directoryOnlyFileCanDownloaded", p)
 	}
 	rc, err := m.c.Open(p)
 	if err != nil {
@@ -323,7 +324,7 @@ func (m *Manager) Extract(ctx context.Context, archive, dest string) error {
 	}
 	kind := ArchiveKind(archive)
 	if kind == "" {
-		return fmt.Errorf("%s не похож на архив (zip, tar, tar.gz, tar.xz, tar.bz2)", gopath.Base(archive))
+		return msgs.Errorf("files.doesLookLikeArchiveZip", gopath.Base(archive))
 	}
 	var listArgv, extractArgv []string
 	switch kind {
@@ -339,10 +340,10 @@ func (m *Manager) Extract(ctx context.Context, archive, dest string) error {
 		return err
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("не удалось прочитать архив: %s", lastLine(res.Output()))
+		return msgs.Errorf("files.couldReadArchive", lastLine(res.Output()))
 	}
 	if bad := UnsafeArchivePath(res.Stdout); bad != "" {
-		return fmt.Errorf("в архиве путь %q — он вышел бы за пределы каталога; такой архив не распаковывается", bad)
+		return msgs.Errorf("files.archiveContainsPathWouldEscape", bad)
 	}
 	if err := m.exec(ctx, "mkdir", "-p", "--", dest); err != nil {
 		return err
@@ -399,17 +400,17 @@ func (m *Manager) Read(p string) (*Text, error) {
 		return nil, err
 	}
 	if st.IsDir {
-		return nil, fmt.Errorf("%s — каталог", p)
+		return nil, msgs.Errorf("files.directory", p)
 	}
 	if st.Size > MaxEditBytes {
-		return nil, fmt.Errorf("файл %s больше %d МиБ — в редакторе не открыть, только скачать", gopath.Base(p), MaxEditBytes>>20)
+		return nil, msgs.Errorf("files.fileLargerThanMiBCannot", gopath.Base(p), MaxEditBytes>>20)
 	}
 	raw, err := m.c.ReadFile(p)
 	if err != nil {
 		return nil, err
 	}
 	if bytes.IndexByte(raw, 0) >= 0 || !utf8.Valid(raw) {
-		return nil, fmt.Errorf("%s — не текстовый файл", gopath.Base(p))
+		return nil, msgs.Errorf("files.textFile", gopath.Base(p))
 	}
 	return &Text{Path: p, Content: string(raw), Size: st.Size, SHA256: hashOf(raw), Mode: st.Mode}, nil
 }
@@ -429,14 +430,14 @@ func (m *Manager) Write(ctx context.Context, p, content, expected, newName strin
 	mode := "0644"
 	if st, err := m.c.Stat(p); err == nil {
 		if st.IsDir {
-			return "", fmt.Errorf("%s — каталог", p)
+			return "", msgs.Errorf("files.directory", p)
 		}
 		raw, err := m.c.ReadFile(p)
 		if err != nil {
 			return "", err
 		}
 		if expected != "" && hashOf(raw) != expected {
-			return "", fmt.Errorf("файл %s изменился с момента открытия — перечитайте его и повторите правку", gopath.Base(p))
+			return "", msgs.Errorf("files.fileHasChangedSinceOpened", gopath.Base(p))
 		}
 		if perm := permOctal(st.Mode); perm != "" {
 			mode = perm
@@ -449,7 +450,7 @@ func (m *Manager) Write(ctx context.Context, p, content, expected, newName strin
 			return "", err
 		}
 		if m.c.Exists(target) {
-			return "", fmt.Errorf("%s уже существует", target)
+			return "", msgs.Errorf("files.alreadyExists", target)
 		}
 	}
 	if err := os.MkdirAll(m.tmpDir, 0o755); err != nil {

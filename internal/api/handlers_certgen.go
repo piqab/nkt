@@ -26,7 +26,7 @@ import (
 func (s *Server) handleGenerateSelfSigned(w http.ResponseWriter, r *http.Request) {
 	var req control.SelfSignedRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if len(req.Names) == 0 {
@@ -74,7 +74,7 @@ type renewRequest struct {
 func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
 	var req renewRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if req.Lineage == "" {
@@ -85,7 +85,7 @@ func (s *Server) handleRenewCertbot(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	id, err := s.certs.StartRenewCertbot(user, req.Lineage, restartSet(req.RestartPIDs))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"job": id})
@@ -113,14 +113,14 @@ func restartSet(pids []int) map[int]bool {
 func (s *Server) handleIssueCertbot(w http.ResponseWriter, r *http.Request) {
 	var req issueRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 
 	user := auth.Username(r.Context())
 	id, err := s.certs.StartIssueCertbot(user, req.Domains, restartSet(req.RestartPIDs))
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"job": id})
@@ -177,7 +177,7 @@ type combineRequest struct {
 func (s *Server) handleCombineForHAProxy(w http.ResponseWriter, r *http.Request) {
 	var req combineRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if req.Lineage == "" {
@@ -188,7 +188,7 @@ func (s *Server) handleCombineForHAProxy(w http.ResponseWriter, r *http.Request)
 	user := auth.Username(r.Context())
 	res, err := s.certs.CombineForHAProxy(r.Context(), user, req.Lineage, req.TargetPath)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 
@@ -203,7 +203,7 @@ func (s *Server) handleCombineForHAProxy(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleStandalonePlan(w http.ResponseWriter, r *http.Request) {
 	plan, err := s.certs.StandalonePlan(r.Context())
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, plan)
@@ -246,7 +246,7 @@ func (s *Server) handleCertSnippets(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !found {
-		writeError(w, http.StatusNotFound, "такой lineage нет в /etc/letsencrypt/live")
+		writeError(w, http.StatusNotFound, msgs.Tc(r.Context(), "api.suchLineageEtcLetsencryptLive"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{

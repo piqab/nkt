@@ -9,6 +9,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"path/filepath"
 	"time"
 
@@ -145,6 +146,7 @@ CREATE TABLE IF NOT EXISTS jobs (
     resume      TEXT NOT NULL DEFAULT '',
     step        INTEGER NOT NULL DEFAULT 0,
     steps       INTEGER NOT NULL DEFAULT 0,
+    lang        TEXT NOT NULL DEFAULT '',
     step_name   TEXT NOT NULL DEFAULT '',
     error       TEXT NOT NULL DEFAULT '',
     author      TEXT NOT NULL DEFAULT '',
@@ -287,6 +289,7 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	// хостов. Машина не живёт отдельно от своего сервера: переносить её
 	// в другую группу бессмысленно, а переезжает она вместе с ним.
 	{"hosts", "parent_id", `ALTER TABLE hosts ADD COLUMN parent_id INTEGER NOT NULL DEFAULT 0`},
+	{"jobs", "lang", `ALTER TABLE jobs ADD COLUMN lang TEXT NOT NULL DEFAULT ''`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table
@@ -301,7 +304,7 @@ func addMissingColumns(ctx context.Context, db *sql.DB) error {
 	for table := range tables {
 		cols, err := tableColumns(ctx, db, table)
 		if err != nil {
-			return fmt.Errorf("чтение схемы %s: %w", table, err)
+			return msgs.Errorf("store.readingSchema", table, err)
 		}
 		existing[table] = cols
 	}
@@ -311,7 +314,7 @@ func addMissingColumns(ctx context.Context, db *sql.DB) error {
 			continue
 		}
 		if _, err := db.ExecContext(ctx, m.ddl); err != nil {
-			return fmt.Errorf("добавление колонки %s.%s: %w", m.table, m.column, err)
+			return msgs.Errorf("store.addingColumn", m.table, m.column, err)
 		}
 	}
 	return nil

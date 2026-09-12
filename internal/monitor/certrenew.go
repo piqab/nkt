@@ -3,6 +3,7 @@ package monitor
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strings"
 
 	"github.com/piqab/nkt/internal/config"
@@ -64,7 +65,7 @@ func (r *CertRenewer) RunOnce(ctx context.Context) (int, error) {
 		renewed++
 	}
 	if len(errs) > 0 {
-		return renewed, fmt.Errorf("%d/%d продлений не удались: %s",
+		return renewed, msgs.Errorf("monitor.renewalsFailed",
 			len(errs), len(errs)+renewed, strings.Join(errs, "; "))
 	}
 	return renewed, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	gopath "path"
 	"sort"
 	"strconv"
@@ -115,14 +116,14 @@ func (m *DiskManager) Overview(ctx context.Context) Overview {
 	}
 
 	if res, err := m.c.Run(ctx, "df", "-P", "-B1", "-T"); err != nil || res.ExitCode != 0 {
-		out.Errors = append(out.Errors, "df: "+commandError(res, err))
+		out.Errors = append(out.Errors, "df: "+commandError(ctx, res, err))
 	} else if list := parseDF(res.Stdout); list != nil {
 		out.Filesystems = list
 	}
 
 	if res, err := m.c.Run(ctx, "lsblk", "-J", "-b", "-o",
 		"NAME,PATH,TYPE,SIZE,MODEL,SERIAL,TRAN,FSTYPE,LABEL,MOUNTPOINTS,ROTA"); err != nil || res.ExitCode != 0 {
-		out.Errors = append(out.Errors, "lsblk: "+commandError(res, err))
+		out.Errors = append(out.Errors, "lsblk: "+commandError(ctx, res, err))
 	} else {
 		devices, err := parseLsblk(res.Stdout)
 		if err != nil {
@@ -142,14 +143,14 @@ func (m *DiskManager) Overview(ctx context.Context) Overview {
 	return out
 }
 
-func commandError(res collect.CommandResult, err error) string {
+func commandError(ctx context.Context, res collect.CommandResult, err error) string {
 	if err != nil {
 		return err.Error()
 	}
 	if out := strings.TrimSpace(res.Output()); out != "" {
 		return out
 	}
-	return fmt.Sprintf("код возврата %d", res.ExitCode)
+	return msgs.Tc(ctx, "control.exitCode", res.ExitCode)
 }
 
 // parseDF разбирает вывод `df -P -B1 -T`. -P гарантирует одну строку на
@@ -218,7 +219,7 @@ type lsblkDevice struct {
 func parseLsblk(out string) ([]BlockDevice, error) {
 	var doc lsblkJSON
 	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &doc); err != nil {
-		return nil, fmt.Errorf("не удалось разобрать вывод lsblk: %w", err)
+		return nil, msgs.Errorf("control.couldParseLsblkOutput", err)
 	}
 	return convertLsblk(doc.BlockDevices), nil
 }
@@ -281,7 +282,7 @@ const duTimeout = 60 * time.Second
 // и каждый шаг остаётся быстрым.
 func (m *DiskManager) DirUsage(ctx context.Context, path string) ([]DirEntry, error) {
 	if !strings.HasPrefix(path, "/") || strings.Contains(path, "..") || gopath.Clean(path) != path {
-		return nil, fmt.Errorf("некорректный путь: %q", path)
+		return nil, msgs.Errorf("control.invalidPath", path)
 	}
 	ctx, cancel := context.WithTimeout(ctx, duTimeout)
 	defer cancel()

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/piqab/nkt/internal/msgs"
 	"time"
 )
 
@@ -55,7 +56,7 @@ func (db *DB) CreateProfile(ctx context.Context, p Profile) (int64, error) {
 	}
 	if _, err := tx.ExecContext(ctx, `
 		INSERT INTO profile_versions (profile_id, ts, author, note, content)
-		VALUES (?, ?, ?, ?, ?)`, id, now, p.Author, "создан", p.Content); err != nil {
+		VALUES (?, ?, ?, ?, ?)`, id, now, p.Author, msgs.Tc(ctx, "store.profileCreated"), p.Content); err != nil {
 		return 0, err
 	}
 	return id, tx.Commit()

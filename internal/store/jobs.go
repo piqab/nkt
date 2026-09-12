@@ -33,13 +33,16 @@ type Job struct {
 	// Params — вход задания, как его задал оператор; Resume — что уже
 	// сделано. Оба JSON, но их разбирает исполнитель своего вида, а не
 	// хранилище.
-	Params     string `json:"params,omitempty"`
-	Resume     string `json:"resume,omitempty"`
-	Step       int    `json:"step"`
-	Steps      int    `json:"steps"`
-	StepName   string `json:"step_name,omitempty"`
-	Error      string `json:"error,omitempty"`
-	Author     string `json:"author,omitempty"`
+	Params   string `json:"params,omitempty"`
+	Resume   string `json:"resume,omitempty"`
+	Step     int    `json:"step"`
+	Steps    int    `json:"steps"`
+	StepName string `json:"step_name,omitempty"`
+	Error    string `json:"error,omitempty"`
+	Author   string `json:"author,omitempty"`
+	// Lang — язык автора на момент запуска: на нём пишется журнал и
+	// сообщение об ошибке, ведь читать их будет он же.
+	Lang       string `json:"lang,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	StartedAt  string `json:"started_at,omitempty"`
 	FinishedAt string `json:"finished_at,omitempty"`
@@ -69,10 +72,10 @@ func (db *DB) CreateJob(ctx context.Context, j Job) (int64, error) {
 	}
 	res, err := db.ExecContext(ctx, `
 		INSERT INTO jobs (kind, title, queue, status, params, resume, step, steps, step_name,
-		                  error, author, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)`,
+		                  error, author, lang, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?)`,
 		j.Kind, j.Title, j.Queue, j.Status, j.Params, j.Resume, j.Step, j.Steps, j.StepName,
-		j.Author, FormatTime(time.Now()))
+		j.Author, j.Lang, FormatTime(time.Now()))
 	if err != nil {
 		return 0, err
 	}
@@ -83,7 +86,7 @@ func (db *DB) CreateJob(ctx context.Context, j Job) (int64, error) {
 func (db *DB) JobByID(ctx context.Context, id int64) (Job, error) {
 	row := db.QueryRowContext(ctx, `
 		SELECT id, kind, title, queue, status, params, resume, step, steps, step_name,
-		       error, author, created_at, started_at, finished_at
+		       error, author, lang, created_at, started_at, finished_at
 		FROM jobs WHERE id = ?`, id)
 	j, err := scanJob(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -99,7 +102,7 @@ func (db *DB) ListJobs(ctx context.Context, limit int) ([]Job, error) {
 	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, kind, title, queue, status, params, resume, step, steps, step_name,
-		       error, author, created_at, started_at, finished_at
+		       error, author, lang, created_at, started_at, finished_at
 		FROM jobs ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -113,7 +116,7 @@ func (db *DB) ListJobs(ctx context.Context, limit int) ([]Job, error) {
 func (db *DB) UnfinishedJobs(ctx context.Context) ([]Job, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, kind, title, queue, status, params, resume, step, steps, step_name,
-		       error, author, created_at, started_at, finished_at
+		       error, author, lang, created_at, started_at, finished_at
 		FROM jobs WHERE status IN (?, ?) ORDER BY id`, JobQueued, JobRunning)
 	if err != nil {
 		return nil, err
@@ -222,7 +225,7 @@ type rowScanner interface{ Scan(dest ...any) error }
 func scanJob(row rowScanner) (Job, error) {
 	var j Job
 	err := row.Scan(&j.ID, &j.Kind, &j.Title, &j.Queue, &j.Status, &j.Params, &j.Resume,
-		&j.Step, &j.Steps, &j.StepName, &j.Error, &j.Author, &j.CreatedAt, &j.StartedAt, &j.FinishedAt)
+		&j.Step, &j.Steps, &j.StepName, &j.Error, &j.Author, &j.Lang, &j.CreatedAt, &j.StartedAt, &j.FinishedAt)
 	return j, err
 }
 

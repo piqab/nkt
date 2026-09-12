@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strings"
 	"time"
@@ -63,7 +64,7 @@ func (m *SandboxPkgManager) List(ctx context.Context) SandboxPackages {
 		if res, err := m.c.Run(ctx, "snap", "list"); err == nil && res.ExitCode == 0 {
 			out.Packages = append(out.Packages, parseSnapList(res.Stdout)...)
 		} else {
-			out.Notes = append(out.Notes, "snap list не отработал: "+commandError(res, err))
+			out.Notes = append(out.Notes, msgs.Tc(ctx, "control.snapListFailed", commandError(ctx, res, err)))
 		}
 	}
 	if collect.Which(ctx, m.c, "flatpak") {
@@ -71,11 +72,11 @@ func (m *SandboxPkgManager) List(ctx context.Context) SandboxPackages {
 		if res, err := m.c.Run(ctx, "flatpak", "list", "--columns=application,name,version,branch,origin"); err == nil && res.ExitCode == 0 {
 			out.Packages = append(out.Packages, parseFlatpakList(res.Stdout)...)
 		} else {
-			out.Notes = append(out.Notes, "flatpak list не отработал: "+commandError(res, err))
+			out.Notes = append(out.Notes, msgs.Tc(ctx, "control.flatpakListFailed", commandError(ctx, res, err)))
 		}
 	}
 	if !out.SnapAvailable && !out.FlatpakAvailable {
-		out.Notes = append(out.Notes, "ни snap, ни flatpak на хосте нет — весь софт ставится через apt")
+		out.Notes = append(out.Notes, msgs.Tc(ctx, "control.noSnapNoFlatpak"))
 	}
 	return out
 }
@@ -126,7 +127,7 @@ var sandboxNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9+._-]*$`)
 // системы с разными именами одного и того же приложения.
 func (m *SandboxPkgManager) Remove(ctx context.Context, kind, name string) error {
 	if !sandboxNameRe.MatchString(name) {
-		return fmt.Errorf("недопустимое имя пакета: %q", name)
+		return msgs.Errorf("control.invalidPackageName", name)
 	}
 	ctx, cancel := context.WithTimeout(ctx, sandboxPkgTimeout)
 	defer cancel()
@@ -139,7 +140,7 @@ func (m *SandboxPkgManager) Remove(ctx context.Context, kind, name string) error
 	case "flatpak":
 		res, err = m.c.Run(ctx, "flatpak", "uninstall", "-y", name)
 	default:
-		return fmt.Errorf("неизвестный вид пакета: %q", kind)
+		return msgs.Errorf("control.unknownPackageKind", kind)
 	}
 	if err != nil {
 		return err
@@ -165,7 +166,7 @@ func (m *SandboxPkgManager) Update(ctx context.Context, kind string) (string, er
 	case "flatpak":
 		res, err = m.c.Run(ctx, "flatpak", "update", "-y")
 	default:
-		return "", fmt.Errorf("неизвестный вид пакета: %q", kind)
+		return "", msgs.Errorf("control.unknownPackageKind", kind)
 	}
 	if err != nil {
 		return "", err

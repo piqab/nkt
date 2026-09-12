@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"crypto/x509"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // tunnelCertMismatchError is returned by verifyPinnedTunnelCert when a host
@@ -20,9 +20,12 @@ type tunnelCertMismatchError struct {
 }
 
 func (e *tunnelCertMismatchError) Error() string {
-	return fmt.Sprintf(
-		"сертификат резервного канала хоста изменился (ожидался %x, получен %x) — либо хост был переустановлен без сброса привязки, либо соединение перехватывается",
-		e.pinned, e.got)
+	return msgs.T(msgs.DefaultLang, "hub.tunnelCertMismatch", e.pinned, e.got)
+}
+
+// Unwrap отдаёт каталожную ошибку — на языке запроса её покажет writeErr.
+func (e *tunnelCertMismatchError) Unwrap() error {
+	return msgs.Errorf("hub.tunnelCertMismatch", e.pinned, e.got)
 }
 
 // verifyPinnedTunnelCert checks a freshly presented tunnel certificate
@@ -38,10 +41,10 @@ func (e *tunnelCertMismatchError) Error() string {
 // every single time" is a strictly weaker bar than this).
 func verifyPinnedTunnelCert(rawCerts [][]byte, pinned []byte) (fingerprint []byte, err error) {
 	if len(rawCerts) == 0 {
-		return nil, fmt.Errorf("хост не предъявил сертификат")
+		return nil, msgs.Errorf("hub.hostPresentedCertificate")
 	}
 	if _, err := x509.ParseCertificate(rawCerts[0]); err != nil {
-		return nil, fmt.Errorf("не удалось разобрать сертификат хоста: %w", err)
+		return nil, msgs.Errorf("hub.couldParseHostCertificate", err)
 	}
 	sum := sha256.Sum256(rawCerts[0])
 	fingerprint = sum[:]

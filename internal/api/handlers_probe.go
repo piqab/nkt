@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/piqab/nkt/internal/msgs"
 	"net"
 	"net/http"
 	"strings"
@@ -19,18 +20,18 @@ import (
 func (s *Server) handlePortProbe(w http.ResponseWriter, r *http.Request) {
 	var req portprobe.Request
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if err := req.Validate(); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	if req.Kind == portprobe.KindCurl {
 		// Настоящий curl с аргументами оператора — через ту же
 		// песочницу, что и остальные команды хоста; без оболочки.
 		if !collect.Which(r.Context(), s.scanner.Collector(), "curl") {
-			writeError(w, http.StatusBadRequest, "на хосте нет curl")
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.curlInstalledHost"))
 			return
 		}
 		run := func(ctx context.Context, argv ...string) (collect.CommandResult, error) {
@@ -40,7 +41,7 @@ func (s *Server) handlePortProbe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.isOwnAddress(r, req.Address) {
-		writeError(w, http.StatusBadRequest, "проверять можно только адреса самого хоста: loopback и адреса его интерфейсов")
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.onlyHostSOwnAddresses"))
 		return
 	}
 	writeJSON(w, http.StatusOK, portprobe.Probe(r.Context(), req))

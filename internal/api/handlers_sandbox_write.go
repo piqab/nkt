@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"strings"
 	"time"
@@ -48,7 +49,7 @@ var manualReloadCommands = []string{
 func (s *Server) handleConfigAllowWrite(w http.ResponseWriter, r *http.Request) {
 	var req allowWriteRequest
 	if err := decodeJSON(r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	user := auth.Username(r.Context())
@@ -65,8 +66,7 @@ func (s *Server) handleConfigAllowWrite(w http.ResponseWriter, r *http.Request) 
 		// всякий случай» нельзя — это рвёт открытые терминалы и журналы.
 		writeJSON(w, http.StatusOK, allowWriteResponse{
 			Status: "already", DropIn: dropIn, Commands: manualReloadCommands,
-			Message: "каталог уже открыт в " + control.WritablePathsDropIn +
-				"; если запись всё ещё не проходит, службе нужен перезапуск",
+			Message: msgs.Tc(r.Context(), "api.dirAlreadyOpen", control.WritablePathsDropIn),
 		})
 		return
 	}
@@ -85,8 +85,7 @@ func (s *Server) handleConfigAllowWrite(w http.ResponseWriter, r *http.Request) 
 		}
 		writeJSON(w, http.StatusOK, allowWriteResponse{
 			Status: "manual", DropIn: dropIn, Changed: true, Commands: manualReloadCommands,
-			Message: "каталог открыт в " + dropIn + ", но перечитать конфигурацию systemd отсюда не вышло: " +
-				detail,
+			Message: msgs.Tc(r.Context(), "api.dirOpenedReloadFailed", dropIn, detail),
 		})
 		return
 	}
@@ -95,7 +94,7 @@ func (s *Server) handleConfigAllowWrite(w http.ResponseWriter, r *http.Request) 
 	if err := cmd.Start(); err != nil {
 		writeJSON(w, http.StatusOK, allowWriteResponse{
 			Status: "manual", DropIn: dropIn, Changed: true, Commands: manualReloadCommands[1:],
-			Message: "каталог открыт и конфигурация перечитана, остался перезапуск: " + err.Error(),
+			Message: msgs.Tc(r.Context(), "api.dirOpenedRestartLeft", err),
 		})
 		return
 	}

@@ -2,7 +2,7 @@ package vmcreate
 
 import (
 	"context"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -127,11 +127,11 @@ func PutHostImage(ctx context.Context, run Runner, tmpPath, name string) (string
 		return "", errNoRunner
 	}
 	if !validHostImageName(name) {
-		return "", fmt.Errorf("недопустимое имя файла: %q", name)
+		return "", msgs.Errorf("vmcreate.invalidFileName", name)
 	}
 	target := filepath.Join(imagesRoot, name)
 	if res, err := run(ctx, "test", "-e", target); err == nil && res.ExitCode == 0 {
-		return "", fmt.Errorf("файл %s уже есть — удалите старый или выберите другое имя", name)
+		return "", msgs.Errorf("vmcreate.fileAlreadyExistsRemoveOld", name)
 	}
 	// install, а не mv: он же выставит права, с которыми qemu сможет
 	// прочитать файл.
@@ -140,7 +140,7 @@ func PutHostImage(ctx context.Context, run Runner, tmpPath, name string) (string
 		return "", err
 	}
 	if res.ExitCode != 0 {
-		return "", fmt.Errorf("перенос образа: %s", strings.TrimSpace(res.Output()))
+		return "", msgs.Errorf("vmcreate.movingImage", strings.TrimSpace(res.Output()))
 	}
 	if rm, err := run(ctx, "rm", "-f", tmpPath); err == nil && rm.ExitCode != 0 {
 		// Временный файл не убрался — это не повод считать перенос
@@ -160,14 +160,14 @@ func DeleteHostImage(ctx context.Context, run Runner, name string) error {
 		return errNoRunner
 	}
 	if !validHostImageName(name) {
-		return fmt.Errorf("недопустимое имя файла: %q", name)
+		return msgs.Errorf("vmcreate.invalidFileName", name)
 	}
 	res, err := run(ctx, "rm", "-f", filepath.Join(imagesRoot, name))
 	if err != nil {
 		return err
 	}
 	if res.ExitCode != 0 {
-		return fmt.Errorf("удаление %s: %s", name, strings.TrimSpace(res.Output()))
+		return msgs.Errorf("vmcreate.removing", name, strings.TrimSpace(res.Output()))
 	}
 	return nil
 }
@@ -180,5 +180,5 @@ func validHostImageName(name string) bool {
 
 var (
 	hostImageNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$`)
-	errNoRunner     = fmt.Errorf("работа с файлами хоста недоступна в этом режиме")
+	errNoRunner     = msgs.Errorf("vmcreate.hostFileAccessUnavailableMode")
 )

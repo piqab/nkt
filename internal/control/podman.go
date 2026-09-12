@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"strings"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -30,10 +31,10 @@ func (m *PodmanManager) ContainerAction(ctx context.Context, user, name, action 
 	switch action {
 	case "start", "stop", "restart":
 	default:
-		return fmt.Errorf("недопустимое действие для контейнера: %q", action)
+		return msgs.Errorf("control.invalidActionContainer", action)
 	}
 	if name == "" || strings.ContainsAny(name, "/?&#") {
-		return fmt.Errorf("недопустимое имя контейнера: %q", name)
+		return msgs.Errorf("control.invalidContainerName", name)
 	}
 
 	_, code, err := m.c.PodmanAPI(ctx, "POST", "/libpod/containers/"+name+"/"+action, nil)
@@ -55,15 +56,15 @@ func (m *PodmanManager) ContainerAction(ctx context.Context, user, name, action 
 // the two-step libpod equivalent of `podman run -d --name <name> <image>`.
 func (m *PodmanManager) CreateContainer(ctx context.Context, user, image, name string) error {
 	if strings.TrimSpace(image) == "" {
-		return fmt.Errorf("укажите образ")
+		return msgs.Errorf("control.specifyImage")
 	}
 	if name == "" || strings.ContainsAny(name, "/?&# ") {
-		return fmt.Errorf("недопустимое имя контейнера: %q", name)
+		return msgs.Errorf("control.invalidContainerName", name)
 	}
 
 	body, err := json.Marshal(map[string]string{"image": image, "name": name})
 	if err != nil {
-		return fmt.Errorf("сборка запроса: %w", err)
+		return msgs.Errorf("control.buildingRequest", err)
 	}
 	raw, code, err := m.c.PodmanAPI(ctx, "POST", "/libpod/containers/create", body)
 	outcome := "ok"
@@ -82,10 +83,10 @@ func (m *PodmanManager) CreateContainer(ctx context.Context, user, image, name s
 		ID string `json:"Id"`
 	}
 	if err := json.Unmarshal(raw, &created); err != nil || created.ID == "" {
-		return fmt.Errorf("podman create %s: не удалось прочитать ID нового контейнера", name)
+		return msgs.Errorf("control.podmanCreateCouldReadNew", name)
 	}
 	if err := m.ContainerAction(ctx, user, created.ID, "start"); err != nil {
-		return fmt.Errorf("контейнер %s создан, но не запущен: %w", name, err)
+		return msgs.Errorf("control.containerCreatedButStarted", name, err)
 	}
 	return nil
 }
@@ -95,7 +96,7 @@ func (m *PodmanManager) CreateContainer(ctx context.Context, user, image, name s
 // application makes explicit rather than silently escalating).
 func (m *PodmanManager) DeleteContainer(ctx context.Context, user, name string, force bool) error {
 	if name == "" || strings.ContainsAny(name, "/?&#") {
-		return fmt.Errorf("недопустимое имя контейнера: %q", name)
+		return msgs.Errorf("control.invalidContainerName", name)
 	}
 
 	path := "/libpod/containers/" + name

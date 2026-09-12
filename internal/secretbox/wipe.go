@@ -3,6 +3,7 @@ package secretbox
 import (
 	"crypto/rand"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -42,7 +43,7 @@ func SecureWipeFile(path string) error {
 
 	f, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err != nil {
-		return fmt.Errorf("открытие %s для затирания: %w", path, err)
+		return msgs.Errorf("secretbox.openingWiping", path, err)
 	}
 	defer f.Close()
 
@@ -52,10 +53,10 @@ func SecureWipeFile(path string) error {
 		n := min(remaining, int64(len(buf)))
 		chunk := buf[:n]
 		if _, err := rand.Read(chunk); err != nil {
-			return fmt.Errorf("генерация случайных данных: %w", err)
+			return msgs.Errorf("secretbox.generatingRandomData", err)
 		}
 		if _, err := f.Write(chunk); err != nil {
-			return fmt.Errorf("запись поверх %s: %w", path, err)
+			return msgs.Errorf("secretbox.overwriting", path, err)
 		}
 		remaining -= n
 	}
@@ -63,7 +64,7 @@ func SecureWipeFile(path string) error {
 		return fmt.Errorf("sync %s: %w", path, err)
 	}
 	if err := f.Close(); err != nil {
-		return fmt.Errorf("закрытие %s: %w", path, err)
+		return msgs.Errorf("secretbox.closing", path, err)
 	}
 	return os.Remove(path)
 }

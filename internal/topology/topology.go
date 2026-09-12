@@ -4,7 +4,9 @@
 package topology
 
 import (
+	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"sort"
 	"strconv"
 	"strings"
@@ -81,6 +83,8 @@ type Graph struct {
 }
 
 type builder struct {
+	// lang — язык подписей: узлы и сроки читают на языке запроса.
+	lang     msgs.Lang
 	nodes    map[string]*Node
 	order    []string
 	edges    []Edge
@@ -90,8 +94,9 @@ type builder struct {
 }
 
 // Build assembles the resource map from a snapshot.
-func Build(s *model.Snapshot) *Graph {
+func Build(ctx context.Context, s *model.Snapshot) *Graph {
 	b := &builder{
+		lang:     msgs.FromContext(ctx),
 		nodes:    map[string]*Node{},
 		edges:    []Edge{},
 		edgeSeen: map[string]bool{},
@@ -108,7 +113,7 @@ func Build(s *model.Snapshot) *Graph {
 		Status: StatusOK,
 		Meta:   map[string]string{"mode": s.Mode, "kernel": s.Host.Kernel},
 	})
-	b.node(Node{ID: "internet", Kind: KindInternet, Label: "Внешняя сеть", Status: StatusOK})
+	b.node(Node{ID: "internet", Kind: KindInternet, Label: b.t("topology.internet"), Status: StatusOK})
 
 	listeningPorts := map[int]bool{}
 	for _, l := range s.Listeners {
@@ -320,7 +325,7 @@ func Build(s *model.Snapshot) *Graph {
 					// Referenced but undefined: show it so the gap is visible.
 					b.node(Node{
 						ID: upID, Kind: KindUpstream, Label: r.Target,
-						Sublabel: "не определён", Group: e.Service, Status: StatusError,
+						Sublabel: b.t("topology.undetermined"), Group: e.Service, Status: StatusError,
 					})
 				}
 				b.edge(id, upID, "routes", r.Match, StatusOK)
@@ -328,7 +333,7 @@ func Build(s *model.Snapshot) *Graph {
 				beID := "be:" + r.Target
 				b.node(Node{
 					ID: beID, Kind: KindBackend, Label: displaySocket(r.Target), Group: e.Service,
-					Status: backendStatus(r.Target, listeningPorts), Sublabel: "прямой адрес",
+					Status: backendStatus(r.Target, listeningPorts), Sublabel: b.t("topology.directAddress"),
 				})
 				b.edge(id, beID, "routes", r.Match, StatusOK)
 				b.linkBackendToContainer(s, beID, r.Target)
@@ -375,7 +380,7 @@ func buildUndeclaredListeners(b *builder, s *model.Snapshot, hostID string) {
 		id := fmt.Sprintf("misc:%s:%s:%d", l.Protocol, l.Address, l.Port)
 		label := l.Process
 		if label == "" {
-			label = "неизвестно"
+			label = b.t("topology.unknown")
 		}
 		// Mirrors ruleListeningNotDeclared's own severity split (Medium
 		// only when public, Info otherwise) — attachFindings below refines
@@ -393,19 +398,19 @@ func buildUndeclaredListeners(b *builder, s *model.Snapshot, hostID string) {
 		if l.User != "" {
 			meta["user"] = l.User
 		}
-		if up := formatUptime(l.UptimeS); up != "" {
+		if up := formatUptime(b.lang, l.UptimeS); up != "" {
 			meta["started"] = up
 		}
 		switch l.Origin {
 		case model.OriginService:
-			meta["origin"] = "сервис"
+			meta["origin"] = b.t("topology.originService")
 			if l.Unit != "" {
 				meta["unit"] = l.Unit
 			}
 		case model.OriginManual:
-			meta["origin"] = "запущен вручную (интерактивная сессия)"
+			meta["origin"] = b.t("topology.originManual")
 		case model.OriginContainer:
-			meta["origin"] = "контейнер"
+			meta["origin"] = b.t("topology.originContainer")
 			if l.ContainerID != "" {
 				meta["container_id"] = l.ContainerID
 			}
@@ -427,23 +432,26 @@ func buildUndeclaredListeners(b *builder, s *model.Snapshot, hostID string) {
 
 // formatUptime mirrors Misc.tsx's own formatUptime — rough but readable is
 // the point, "minutes vs months" rather than a precise duration.
-func formatUptime(seconds int) string {
+func formatUptime(lang msgs.Lang, seconds int) string {
 	switch {
 	case seconds <= 0:
 		return ""
 	case seconds < 60:
-		return fmt.Sprintf("%d с", seconds)
+		return msgs.T(lang, "topology.seconds", seconds)
 	}
 	m := seconds / 60
 	if m < 60 {
-		return fmt.Sprintf("%d мин", m)
+		return msgs.T(lang, "topology.minutes", m)
 	}
 	h := m / 60
 	if h < 24 {
-		return fmt.Sprintf("%d ч", h)
+		return msgs.T(lang, "topology.hours", h)
 	}
-	return fmt.Sprintf("%d дн", h/24)
+	return msgs.T(lang, "topology.days", h/24)
 }
+
+// t — подпись на языке запроса.
+func (b *builder) t(key string, args ...any) string { return msgs.T(b.lang, key, args...) }
 
 // buildUpstreams adds every declared pool and its members.
 func buildUpstreams(b *builder, s *model.Snapshot, listeningPorts map[int]bool) {
@@ -456,7 +464,7 @@ func buildUpstreams(b *builder, s *model.Snapshot, listeningPorts map[int]bool) 
 		if len(u.Servers) == 0 {
 			// A pool that answers by itself, such as an haproxy backend built
 			// from http-request return.
-			sub = strings.TrimSpace(sub + " · без backend-серверов")
+			sub = strings.TrimSpace(sub + " · " + b.t("topology.noBackends"))
 		}
 		status := StatusOK
 		if u.Health == "" && len(u.Servers) > 1 {

@@ -3,7 +3,7 @@ package hub
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -55,7 +55,7 @@ func vulnScanKVKeyFor(hostID int64) string {
 // StartHostVulnScan kicks off a centralized scan for hostID in the
 // background and returns immediately — handleHostVulnScanStart's own
 // counterpart to a standalone nkt's handleVulnScanStart, one level up.
-func (m *Manager) StartHostVulnScan(hostID int64) error {
+func (m *Manager) StartHostVulnScan(ctx context.Context, hostID int64) error {
 	state := m.vulnStateFor(hostID)
 
 	state.mu.Lock()
@@ -65,17 +65,19 @@ func (m *Manager) StartHostVulnScan(hostID int64) error {
 	}
 	state.scanning = true
 	state.lastErr = ""
-	state.progress = "Запуск..."
+	state.progress = msgs.Tc(ctx, "hub.vulnStarting")
 	state.mu.Unlock()
 
 	// context.Background(), not a request context: a scan spanning an SSH
 	// round trip to the host plus a possible first-time DB download can
 	// legitimately outlive the fire-and-forget POST that started it.
-	go m.runHostVulnScan(context.Background(), hostID)
+	// Язык запроса переносится в фоновый контекст: строки хода сканирования
+	// читает тот, кто его запустил.
+	go m.runHostVulnScan(msgs.WithLang(context.Background(), msgs.FromContext(ctx)), hostID)
 	return nil
 }
 
-var errVulnScanAlreadyRunning = fmt.Errorf("сканирование уже выполняется")
+var errVulnScanAlreadyRunning = msgs.Errorf("hub.scanAlreadyRunning")
 
 // vulnStateFor returns hostID's own state, creating it on first use —
 // mirrors the lazy-creation shape connsMu/conns already uses, just for a
@@ -167,7 +169,7 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 	}
 	client := tunnelHTTPClientNoTimeout(dial)
 
-	report("Забираю список установленных пакетов с хоста...")
+	report(msgs.Tc(ctx, "hub.vulnFetchingPackages"))
 	manifest, err := fetchHostManifest(ctx, client, cookie)
 	if err != nil {
 		onFail()
@@ -175,7 +177,7 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 		return
 	}
 
-	report("Прошу хост просканировать образы контейнеров...")
+	report(msgs.Tc(ctx, "hub.vulnAskingImages"))
 	imgFindings, imgWarnings, imgDBUpdated, err := fetchHostImageScan(ctx, client, cookie)
 	if err != nil {
 		// A host that cannot scan its own images (trivy self-install
@@ -183,7 +185,7 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 		// hub can still do perfectly well itself — noted as a warning
 		// instead, same "degrade, don't abort" shape as a single
 		// unreachable image within one host's own scan.
-		imgWarnings = append(imgWarnings, "сканирование образов на хосте: "+err.Error())
+		imgWarnings = append(imgWarnings, msgs.Tc(ctx, "hub.vulnImageScanFailed", err))
 	}
 
 	var findings []model.VulnFinding
@@ -201,7 +203,7 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 			return
 		}
 
-		report("Сканирую пакеты ОС на уязвимости...")
+		report(msgs.Tc(ctx, "hub.vulnScanningOS"))
 		osFindings, err := vuln.Scan(ctx, trivyBin, dbDir, manifest)
 		if err != nil {
 			fail(err)
@@ -329,7 +331,7 @@ func fetchHostManifest(ctx context.Context, client *http.Client, cookie string) 
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return model.PackageManifest{}, fmt.Errorf("хост вернул код %d на /vulnerabilities/manifest", resp.StatusCode)
+		return model.PackageManifest{}, msgs.Errorf("hub.hostReturnedCodeVulnerabilitiesManifest", resp.StatusCode)
 	}
 	var body struct {
 		Manifest model.PackageManifest `json:"manifest"`
@@ -358,7 +360,7 @@ func fetchHostImageScan(ctx context.Context, client *http.Client, cookie string)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil, time.Time{}, fmt.Errorf("хост вернул код %d на /vulnerabilities/scan-images", resp.StatusCode)
+		return nil, nil, time.Time{}, msgs.Errorf("hub.hostReturnedCodeVulnerabilitiesScan", resp.StatusCode)
 	}
 	var body struct {
 		Findings  []model.VulnFinding `json:"findings"`

@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"io/fs"
 	"net"
@@ -140,7 +141,7 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 		if escErr := l.writeUnrestricted(p, data, mode); escErr == nil {
 			return nil
 		}
-		return fmt.Errorf("создание каталога %s: %w", dir, err)
+		return msgs.Errorf("collect.creatingDirectory", dir, err)
 	}
 	tmp, err := os.CreateTemp(dir, ".nkt-*")
 	if err != nil {
@@ -190,7 +191,7 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 
 // errNoEscape — выхода из песочницы нет (SetEscape не вызывали), значит
 // запасного пути тоже нет и звать его бессмысленно.
-var errNoEscape = errors.New("запись вне песочницы недоступна")
+var errNoEscape = msgs.Errorf("collect.writingOutsideSandboxUnavailable")
 
 // privilegedWriteScript пишет файл там, куда изнутри юнита не дотянуться.
 //
@@ -237,14 +238,16 @@ func (l *Local) writeUnrestricted(p string, data []byte, mode fs.FileMode) error
 	// Путь в текст не добавляется: вызывающий (control.describeWriteError)
 	// уже назвал файл, и повтор превращал бы сообщение в кашу.
 	if err != nil {
-		return fmt.Errorf("запись вне песочницы: %w", err)
+		return msgs.Errorf("collect.writingOutsideSandbox", err)
 	}
 	if res.ExitCode != 0 {
-		msg := strings.TrimSpace(res.Stderr)
-		if msg == "" {
-			msg = fmt.Sprintf("код %d", res.ExitCode)
+		// Код возврата — тоже каталожной ошибкой: так он переводится вместе
+		// с внешним сообщением.
+		var detail any = strings.TrimSpace(res.Stderr)
+		if detail == "" {
+			detail = msgs.Errorf("collect.exitCode", res.ExitCode)
 		}
-		return fmt.Errorf("запись вне песочницы: %s", msg)
+		return msgs.Errorf("collect.writingOutsideSandbox2", detail)
 	}
 	return nil
 }
@@ -339,21 +342,21 @@ func (l *Local) RunTimeout(ctx context.Context, timeout time.Duration, name stri
 	case errors.As(err, &exitErr):
 		res.ExitCode = exitErr.ExitCode()
 	default:
-		return res, fmt.Errorf("запуск %s: %w", name, err)
+		return res, msgs.Errorf("collect.running", name, err)
 	}
 	return res, nil
 }
 
 func (l *Local) DockerAPI(ctx context.Context, method, apiPath string, body []byte) ([]byte, int, error) {
 	if runtime.GOOS == "windows" {
-		return nil, 0, fmt.Errorf("%w: Docker через unix-сокет", ErrNotSupported)
+		return nil, 0, msgs.Errorf("collect.dockerOverUnixSocket", ErrNotSupported)
 	}
 	return engineAPI(ctx, l.docker, "docker", method, apiPath, body)
 }
 
 func (l *Local) PodmanAPI(ctx context.Context, method, apiPath string, body []byte) ([]byte, int, error) {
 	if runtime.GOOS == "windows" {
-		return nil, 0, fmt.Errorf("%w: Podman через unix-сокет", ErrNotSupported)
+		return nil, 0, msgs.Errorf("collect.podmanOverUnixSocket", ErrNotSupported)
 	}
 	return engineAPI(ctx, l.podman, "podman", method, apiPath, body)
 }
@@ -405,8 +408,7 @@ func (l *Local) HostInfo(ctx context.Context) HostInfo {
 		}
 	}
 	if os.Geteuid() != 0 {
-		info.Notes = append(info.Notes,
-			"процесс запущен не от root: часть конфигов и правил firewall может быть недоступна")
+		info.Notes = append(info.Notes, msgs.Tc(ctx, "collect.notRoot"))
 	}
 	return info
 }

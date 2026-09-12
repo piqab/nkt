@@ -8,7 +8,7 @@
 package vmimage
 
 import (
-	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
 	"strings"
 )
@@ -132,5 +132,5 @@ func parseChecksums(body, fileName string) (string, error) {
 			return strings.ToLower(fields[0]), nil
 		}
 	}
-	return "", fmt.Errorf("в файле сумм нет строки для %s", fileName)
+	return "", msgs.Errorf("vmimage.checksumFileHasLine", fileName)
 }
