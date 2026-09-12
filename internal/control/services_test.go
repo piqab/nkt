@@ -127,3 +127,26 @@ func TestKillProcess(t *testing.T) {
 		}
 	})
 }
+
+// enable/disable идут вне песочницы: у службы с SysV-скриптом systemctl
+// зовёт systemd-sysv-install → update-rc.d, а тот пишет в /etc/rc*.d — под
+// ProtectSystem=strict это «Read-only file system». start/stop идут через
+// D-Bus, и их гонять через выход из песочницы незачем.
+func TestServiceEnableDisableUseEscape(t *testing.T) {
+	m := servicesSetup(t)
+	var escaped [][]string
+	m.WithEscape(func(_ context.Context, argv ...string) (collect.CommandResult, error) {
+		escaped = append(escaped, argv)
+		return collect.CommandResult{}, nil
+	})
+
+	if _, err := m.Action(context.Background(), "test", "haproxy", "disable"); err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	if _, err := m.Action(context.Background(), "test", "haproxy", "start"); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	if len(escaped) != 1 || escaped[0][1] != "disable" {
+		t.Errorf("вне песочницы ушло %v, ожидался только systemctl disable", escaped)
+	}
+}

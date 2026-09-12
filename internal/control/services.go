@@ -18,15 +18,37 @@ type ServiceManager struct {
 	c     collect.Collector
 	db    *store.DB
 	specs map[string]parse.ServiceSpec
+	// escape — запуск вне песочницы юнита. Нужен enable/disable: у службы
+	// с SysV-скриптом systemctl вдобавок к symlink'ам зовёт
+	// systemd-sysv-install → update-rc.d, а тот пишет в /etc/rc*.d — под
+	// ProtectSystem=strict это «Read-only file system». start/stop идут
+	// через D-Bus, и им песочница не мешает.
+	escape PrivilegedRunner
 }
 
-// NewServiceManager builds the service control plane.
+// NewServiceManager builds the service control plane. escape может быть
+// nil — тогда все команды идут обычным путём (fixtures-режим, тесты).
 func NewServiceManager(cfg *config.Config, c collect.Collector, db *store.DB) *ServiceManager {
 	specs := map[string]parse.ServiceSpec{}
 	for _, s := range parse.DefaultServiceSpecs() {
 		specs[s.Name] = s
 	}
 	return &ServiceManager{cfg: cfg, c: c, db: db, specs: specs}
+}
+
+// WithEscape задаёт запуск вне песочницы (см. поле escape).
+func (s *ServiceManager) WithEscape(escape PrivilegedRunner) *ServiceManager {
+	s.escape = escape
+	return s
+}
+
+// run выполняет systemctl: enable/disable — вне песочницы, если есть
+// чем; остальное — обычным путём.
+func (s *ServiceManager) run(ctx context.Context, argv ...string) (collect.CommandResult, error) {
+	if s.escape != nil && len(argv) > 1 && argv[0] == "systemctl" && (argv[1] == "enable" || argv[1] == "disable") {
+		return s.escape(ctx, argv...)
+	}
+	return s.c.Run(ctx, argv[0], argv[1:]...)
 }
 
 // Actions the API accepts. Anything else is rejected before touching the host,
@@ -56,7 +78,7 @@ func (s *ServiceManager) Action(ctx context.Context, user, service, action strin
 	if service == model.ServiceUFW && action == "reload" {
 		res, err = s.c.Run(ctx, "ufw", "reload")
 	} else {
-		res, err = s.c.Run(ctx, "systemctl", action, spec.Unit)
+		res, err = s.run(ctx, "systemctl", action, spec.Unit)
 	}
 
 	outcome := "ok"

@@ -770,6 +770,8 @@ pre.diff .hunk { color: var(--text-muted); }
    колонку и сдвигало остальные; целиком оно в подсказке. */
 .host-name {
   display: inline-block;
+  width: 10ch;
+  min-width: 10ch;
   max-width: 10ch;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -249,7 +249,7 @@ func newRuntime() (*runtime, error) {
 		return nil, err
 	}
 	scanner := inventory.New(cfg, collector, db)
-	services := control.NewServiceManager(cfg, collector, db)
+	services := control.NewServiceManager(cfg, collector, db).WithEscape(privilegedRunner(cfg))
 	// Логгер здесь ещё не собран (его строит команда), а менеджеру
 	// заданий он нужен только для собственных сбоев записи — до
 	// подключения исполнителей в нём ничего не происходит.
@@ -608,7 +608,7 @@ func newHubRuntime() (*hubRuntime, error) {
 	}
 	enableUnrestrictedWrites(collector)
 	scanner := inventory.New(cfg, collector, db)
-	services := control.NewServiceManager(cfg, collector, db)
+	services := control.NewServiceManager(cfg, collector, db).WithEscape(privilegedRunner(cfg))
 
 	return &hubRuntime{
 		cfg: cfg, db: db, jobs: jobs.New(db, slog.Default()),
