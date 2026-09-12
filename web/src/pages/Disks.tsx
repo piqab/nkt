@@ -7,6 +7,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import FileBrowser from '../components/FileBrowser'
 
 interface Filesystem {
   device: string
@@ -276,6 +277,8 @@ export default function Disks() {
           )}
         </Card>
       )}
+
+      <FileBrowser />
 
       {(disks.data?.swap?.length ?? 0) > 0 && (
         <Card title={t('disks.swap')} subtitle={t('disks.swapHint')}>

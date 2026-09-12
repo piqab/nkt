@@ -45,7 +45,7 @@ type Config struct {
 	// Configs page is allowed to open/write as plain text, the same
 	// underRoot(path, ...) check ConfigManager.serviceForPath already does
 	// for the other services' own roots.
-	Fail2banRoot     string
+	Fail2banRoot string
 	// Корни новых категорий конфигураций. Отдельными полями, а не
 	// константами, по той же причине, что и корни nginx/haproxy: в
 	// fixtures-режиме и в тестах дерево лежит в другом месте.
@@ -57,9 +57,9 @@ type Config struct {
 	// умолчанию в local-режиме: на своей машине заводить отдельный пароль
 	// для панели незачем. В режиме хаба не имеет смысла — там учётки свои,
 	// а системных пользователей управляемых хостов хаб не знает.
-	SystemLogin bool
-	SysctlRoot      string
-	CronRoot        string
+	SystemLogin      bool
+	SysctlRoot       string
+	CronRoot         string
 	ComposeFiles     []string
 	NginxAccessLogs  []string
 	HAProxyAccessLog []string
@@ -75,9 +75,9 @@ type Config struct {
 	InventoryInterval time.Duration
 	// DriftInterval — как часто сверять хост с сохранёнными профилями.
 	// Ноль выключает проверку.
-	DriftInterval time.Duration
-	Retention         time.Duration
-	SchedulerEnabled  bool
+	DriftInterval    time.Duration
+	Retention        time.Duration
+	SchedulerEnabled bool
 	// DemoBackfill seeds synthetic history in fixtures mode so the availability
 	// and usage schedules have something to show on a fresh database.
 	DemoBackfill bool
@@ -198,6 +198,9 @@ type Config struct {
 	// credentials and remote session tokens at rest. Left empty, the hub
 	// generates one on first start and persists it under DataDir instead —
 	// see secretbox.ResolveKey.
+	// FilesRoots — каталоги, доступные проводнику «Диски → Файлы».
+	FilesRoots []string
+
 	HubMasterKey string
 	// HubSourceRoot is where the hub cross-compiles nkt for a remote host's
 	// architecture (`go build` is run with this as its working directory) —
@@ -372,6 +375,7 @@ func Load() (*Config, error) {
 		TLSHosts:   envList("NKT_TLS_HOSTS", defaultTLSHosts()),
 
 		HubMasterKey:             envStr("NKT_HUB_MASTER_KEY", ""),
+		FilesRoots:               envList("NKT_FILES_ROOTS", "/home,/srv,/opt,/var/www,/tmp"),
 		HubSourceRoot:            envStr("NKT_HUB_SOURCE_ROOT", wd),
 		HubGoBin:                 envStr("NKT_HUB_GO_BIN", "go"),
 		HubReleaseRepo:           envStr("NKT_HUB_RELEASE_REPO", "piqab/nkt"),

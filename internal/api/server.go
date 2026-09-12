@@ -19,6 +19,7 @@ import (
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/files"
 	"github.com/piqab/nkt/internal/inventory"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/monitor"
@@ -56,9 +57,14 @@ type Server struct {
 	jobs *jobs.Manager
 	// vmimages — кэш облачных образов для создания машин.
 	vmimages *vmimage.Store
-	ui       fs.FS
-	log      *slog.Logger
-	version  string
+	// files — проводник по каталогам хоста (раздел «Диски → Файлы»);
+	// cloneRunner — его исполнитель git clone, он же хранит токены на
+	// время задания.
+	files       *files.Manager
+	cloneRunner *files.CloneRunner
+	ui          fs.FS
+	log         *slog.Logger
+	version     string
 
 	// Keyed sessions ("packages", "ufw-install", ...) each outlive any one
 	// WebSocket connection to them — see runUpdateSession. A single shared
@@ -79,31 +85,33 @@ type Server struct {
 
 // Deps bundles the constructed subsystems.
 type Deps struct {
-	Cfg        *config.Config
-	DB         *store.DB
-	Auth       *auth.Service
-	Scanner    *inventory.Scanner
-	Scheduler  *monitor.Scheduler
-	Services   *control.ServiceManager
-	Configs    *control.ConfigManager
-	OSUsers    *control.OSUserManager
-	Disks      *control.DiskManager
-	Hardware   *control.HardwareManager
-	SysConfig  *control.SysConfigManager
-	NetManager *control.NetworkManagerControl
-	SandboxPkg *control.SandboxPkgManager
-	Firewall   *control.FirewallManager
-	Firewalld  *control.FirewalldManager
-	Certs      *control.CertManager
-	Podman     *control.PodmanManager
-	LXD        *control.LXDManager
-	Libvirt    *control.LibvirtManager
-	Logs       *control.LogManager
-	Images     *control.ImageManager
-	Jobs       *jobs.Manager
-	VMImages   *vmimage.Store
-	UI         fs.FS
-	Log        *slog.Logger
+	Cfg         *config.Config
+	DB          *store.DB
+	Auth        *auth.Service
+	Scanner     *inventory.Scanner
+	Scheduler   *monitor.Scheduler
+	Services    *control.ServiceManager
+	Configs     *control.ConfigManager
+	OSUsers     *control.OSUserManager
+	Disks       *control.DiskManager
+	Hardware    *control.HardwareManager
+	SysConfig   *control.SysConfigManager
+	NetManager  *control.NetworkManagerControl
+	SandboxPkg  *control.SandboxPkgManager
+	Firewall    *control.FirewallManager
+	Firewalld   *control.FirewalldManager
+	Certs       *control.CertManager
+	Podman      *control.PodmanManager
+	LXD         *control.LXDManager
+	Libvirt     *control.LibvirtManager
+	Logs        *control.LogManager
+	Images      *control.ImageManager
+	Jobs        *jobs.Manager
+	VMImages    *vmimage.Store
+	Files       *files.Manager
+	CloneRunner *files.CloneRunner
+	UI          fs.FS
+	Log         *slog.Logger
 	// Version is this binary's own version, reported by /api/health so
 	// the hub can show what is actually running on a host rather than
 	// what it recorded having installed there.
@@ -116,7 +124,7 @@ func New(d Deps) *Server {
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, osusers: d.OSUsers, disks: d.Disks, hardware: d.Hardware, sysconfig: d.SysConfig,
 		netmanager: d.NetManager, sandboxpkg: d.SandboxPkg, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
-		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images, jobs: d.Jobs, vmimages: d.VMImages,
+		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images, jobs: d.Jobs, vmimages: d.VMImages, files: d.Files, cloneRunner: d.CloneRunner,
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
 	}
@@ -251,6 +259,10 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/configs/file", s.handleConfigRead)
 			r.Get("/configs/browse", s.handleConfigBrowse)
 			r.Get("/configs/roots", s.handleConfigRoots)
+			r.Get("/files/roots", s.handleFilesRoots)
+			r.Get("/files/list", s.handleFilesList)
+			r.Get("/files/download", s.handleFilesDownload)
+			r.Get("/files/deploy-key", s.handleFilesDeployKey)
 			r.Get("/configs/blocks", s.handleConfigBlocks)
 			r.Get("/configs/versions", s.handleConfigVersions)
 			r.Get("/configs/ssh/preflight", s.handleSSHPreflight)
@@ -286,6 +298,12 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/inventory/refresh", s.handleRefresh)
 				// Проверка порта делает соединение от имени хоста — админам.
 				r.Post("/ports/probe", s.handlePortProbe)
+				r.Post("/files/mkdir", s.handleFilesMkdir)
+				r.Post("/files/rename", s.handleFilesRename)
+				r.Post("/files/delete", s.handleFilesDelete)
+				r.Post("/files/extract", s.handleFilesExtract)
+				r.Post("/files/clone", s.handleFilesClone)
+				r.Put("/files/upload", s.handleFilesUpload)
 				r.Post("/services/{name}/validate", s.handleServiceValidate)
 				r.Post("/services/{name}/{action}", s.handleServiceAction)
 				r.Post("/misc/kill", s.handleKillProcess)
