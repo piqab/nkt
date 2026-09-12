@@ -198,6 +198,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts/{id}/detect-address", s.handleDetectAddress)
 					r.Post("/hub/hosts/{id}/probe", s.handleHostProbe)
 					r.Post("/hub/hosts/{id}/vm/{action}", s.handleVMDomainAction)
+					r.Get("/hub/hosts/{id}/vm-discover", s.handleVMDiscover)
+					r.Post("/hub/hosts/{id}/vm-import", s.handleVMImport)
 					r.Post("/hub/events/settings", s.handleEventSettings)
 					r.Post("/hub/hosts/{id}/group", s.handleSetHostGroup)
 					r.Post("/hub/hosts/{id}/install", s.handleStartInstall)

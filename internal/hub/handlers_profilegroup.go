@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -9,6 +10,7 @@ import (
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/profile"
+	"github.com/piqab/nkt/internal/store"
 	"github.com/piqab/nkt/internal/vmcreate"
 )
 
@@ -151,7 +153,7 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 		// незачем.
 		Queue:  fmt.Sprintf("vm:%d", host.ID),
 		Author: user,
-		Steps: steps,
+		Steps:  steps,
 		Params: VMProvisionParams{
 			HostID: host.ID, Spec: req.Spec,
 			InstallNKT: req.InstallNKT, ProfileID: req.ProfileID,
@@ -217,4 +219,160 @@ func (s *Server) handleDetectAddress(w http.ResponseWriter, r *http.Request) {
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "vm.address", host.Name, "ok", res.Address)
 	writeJSON(w, http.StatusOK, map[string]any{"address": res.Address, "found": true})
+}
+
+// Импорт машин, которые уже есть на хосте: хаб видит домены libvirt тем
+// же вызовом, что и их состояние, и может завести их в список с
+// родителем — как созданные им самим, только ключ внутрь чужой машины
+// положить сам не может. Дальше — как с обычным хостом: пароль или
+// ключ, установка nkt.
+
+type discoveredVM struct {
+	Name    string `json:"name"`
+	State   string `json:"state"`
+	Address string `json:"address,omitempty"`
+}
+
+// discoverVMs — домены хоста, которых ещё нет в списке.
+func (s *Server) discoverVMs(ctx context.Context, hostID int64) ([]discoveredVM, error) {
+	hosts, err := s.db.ListHosts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	known := map[string]bool{}
+	for _, h := range hosts {
+		if h.ParentID == hostID {
+			known[h.Name] = true
+		}
+	}
+	var list struct {
+		VMs []struct {
+			Name  string `json:"name"`
+			State string `json:"state"`
+		} `json:"vms"`
+	}
+	if _, err := s.hub.HostAPI(ctx, hostID, "GET", "/api/vms", nil, &list); err != nil {
+		return nil, err
+	}
+	out := []discoveredVM{}
+	for _, vm := range list.VMs {
+		if known[vm.Name] {
+			continue
+		}
+		d := discoveredVM{Name: vm.Name, State: vm.State}
+		if vm.State == "running" {
+			// Адрес — только у работающей: у выключенной его не у кого
+			// спросить, а ждать здесь незачем — определится после старта.
+			var res struct {
+				Address string `json:"address"`
+			}
+			path := "/api/vm/address?name=" + url.QueryEscape(vm.Name)
+			if _, err := s.hub.HostAPI(ctx, hostID, "GET", path, nil, &res); err == nil {
+				d.Address = res.Address
+			}
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// handleVMDiscover отдаёт домены хоста, которых ещё нет в списке.
+func (s *Server) handleVMDiscover(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	vms, err := s.discoverVMs(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"vms": vms})
+}
+
+type vmImportRequest struct {
+	Names   []string `json:"names"`
+	SSHPort int      `json:"ssh_port"`
+	SSHUser string   `json:"ssh_user"`
+	// Password — вход по паролю; пусто — заводится ключ хаба, и его надо
+	// положить в машину руками (кнопка «публичный ключ» в строке).
+	Password string `json:"password,omitempty"`
+}
+
+// handleVMImport заводит выбранные домены записями с родителем.
+func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	var req vmImportRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(req.Names) == 0 {
+		writeError(w, http.StatusBadRequest, "выберите хотя бы одну машину")
+		return
+	}
+	if req.SSHPort <= 0 {
+		req.SSHPort = 22
+	}
+	if strings.TrimSpace(req.SSHUser) == "" {
+		req.SSHUser = "root"
+	}
+	parent, err := s.db.HostByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	// Адреса и состояния — свежие, тем же способом, что и при поиске.
+	discovered, err := s.discoverVMs(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	found := map[string]discoveredVM{}
+	for _, vm := range discovered {
+		found[vm.Name] = vm
+	}
+
+	user := auth.Username(r.Context())
+	type imported struct {
+		ID        int64  `json:"id"`
+		Name      string `json:"name"`
+		PublicKey string `json:"public_key,omitempty"`
+	}
+	var done []imported
+	var errs []string
+	for _, name := range req.Names {
+		vm, ok := found[name]
+		if !ok {
+			errs = append(errs, name+": такой машины на хосте нет или она уже в списке")
+			continue
+		}
+		addr := vm.Address
+		if addr == "" {
+			addr = PlaceholderAddr
+		}
+		var newID int64
+		var pub string
+		if req.Password != "" {
+			newID, err = s.hub.AddHost(r.Context(), name, addr, req.SSHPort, req.SSHUser, store.HostAuthPassword, req.Password, false)
+		} else {
+			newID, pub, err = s.hub.AddHostGenerated(r.Context(), name, addr, req.SSHPort, req.SSHUser, false)
+		}
+		if err != nil {
+			errs = append(errs, name+": "+err.Error())
+			continue
+		}
+		if err := s.db.SetHostParent(r.Context(), newID, parent.ID); err != nil {
+			errs = append(errs, name+": привязка к хосту: "+err.Error())
+			continue
+		}
+		s.db.Audit(r.Context(), user, "vm.import", name, "ok", parent.Name)
+		done = append(done, imported{ID: newID, Name: name, PublicKey: pub})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"imported": done, "errors": errs})
 }
