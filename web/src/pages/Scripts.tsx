@@ -385,7 +385,9 @@ export default function Scripts({ me }: { me: Me }) {
             />
           </Card>
 
-          {check && (
+          {/* Результат проверки относится к тексту — под справкой и схемой
+              ему не место. */}
+          {check && tab === 'text' && (
             <Card
               title={check.issues.length > 0 ? t('scripts.checkIssues', { count: check.issues.length }) : t('scripts.checkOk', { count: check.steps.length })}
             >
