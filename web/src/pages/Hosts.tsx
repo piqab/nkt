@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Select, Switch, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import {
   InfoCircleOutlined,
   CheckCircleFilled,
@@ -14,9 +14,8 @@ import {
 } from '@ant-design/icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
-import type { HostEvent, HubHost, Job, RenewEvent, RenewJobStatus, Severity } from '../types'
+import type { HubHost, Job, RenewEvent, RenewJobStatus, Severity } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, Spinner, formatRelative, severityLabel } from '../components/ui'
-import { notificationsEnabled, notifyNewEvents, requestNotificationPermission, setNotificationsEnabled } from '../notifications'
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
@@ -266,7 +265,6 @@ export default function Hosts({
   const [editingHost, setEditingHost] = useState<HubHost | null>(null)
   const [creatingHost, setCreatingHost] = useState(false)
   const [pubKeyInfo, setPubKeyInfo] = useState<{ hostName: string; key: string } | null>(null)
-  const [notifyOn, setNotifyOn] = useState(() => notificationsEnabled())
   const [busyServiceIds, setBusyServiceIds] = useState<Set<number>>(new Set())
   const [bulkBusy, setBulkBusy] = useState<'stop' | 'start' | null>(null)
   // Drives "Обновить всё": the hosts still waiting their turn (shrinks by
@@ -295,27 +293,6 @@ export default function Hosts({
   // actually finish before there's anything current to look at. Cleared
   // once the matching job settles, whether or not that navigation happens.
   const [autoOpenHost, setAutoOpenHost] = useState<{ id: number; name: string } | null>(null)
-
-  // Уведомления берутся из журнала оповещений хаба: переходы находит он
-  // сам в фоновом опросе, а вкладка только показывает то, чего оператор
-  // ещё не видел. Так во всплывающем есть и адрес, и подробности, а
-  // закрытая вкладка не значит «событие потеряно».
-  const events = useApi<{ events: HostEvent[]; notify?: Record<string, boolean> }>('/hub/events?limit=50', 30_000)
-  useEffect(() => {
-    if (events.data?.events) notifyNewEvents(events.data.events, events.data.notify)
-  }, [events.data])
-
-  async function toggleNotify(checked: boolean) {
-    if (checked) {
-      const granted = await requestNotificationPermission()
-      if (!granted) {
-        setNotice({ kind: 'error', text: t('hosts.notificationDenied') })
-        return
-      }
-    }
-    setNotificationsEnabled(checked)
-    setNotifyOn(checked)
-  }
 
   useEffect(() => {
     if (!job) return
@@ -1389,9 +1366,9 @@ export default function Hosts({
           </span>
         }
         actions={
-          <div className="row" style={{ gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
+          <div className="row" style={{ gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center' }}>
             <Button size="small" type="primary" onClick={() => setCreatingHost(true)}>
-              {t('hosts.addHost')}
+              {t('hosts.addHostBtn')}
             </Button>
             <Button
               size="small"
@@ -1402,7 +1379,7 @@ export default function Hosts({
                 setGroupDialog({ mode: 'create' })
               }}
             >
-              {t('hosts.createGroup')}
+              {t('hosts.createGroupBtn')}
             </Button>
             <Button
               size="small"
@@ -1449,12 +1426,6 @@ export default function Hosts({
                 if (file) void importHosts(file)
               }}
             />
-            <Tooltip title={t('hosts.notifyTooltip')}>
-              <span className="row small" style={{ gap: '0.4rem', alignItems: 'center' }}>
-                <Switch size="small" checked={notifyOn} onChange={toggleNotify} />
-                {t('hosts.notifyLabel')}
-              </span>
-            </Tooltip>
           </div>
         }
       >
