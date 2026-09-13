@@ -15,6 +15,7 @@ import (
 	"github.com/piqab/nkt/internal/analyze"
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/malware"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/parse"
 	"github.com/piqab/nkt/internal/store"
@@ -95,7 +96,9 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 		capRes      model.HostCapacity
 		capStatus   model.SourceStatus
 	)
-	wg.Add(12)
+	var malwareRep model.MalwareReport
+	wg.Add(13)
+	go func() { defer wg.Done(); malwareRep = malware.Scan(ctx, s.c) }()
 	go func() { defer wg.Done(); nginxRes = parse.Nginx(ctx, s.c, s.cfg.NginxMainConfig) }()
 	go func() { defer wg.Done(); hapRes = parse.HAProxy(ctx, s.c, s.cfg.HAProxyMainConf) }()
 	go func() { defer wg.Done(); caddyRes = parse.Caddy(ctx, s.c, s.cfg.CaddyMainConfig) }()
@@ -130,6 +133,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Container = dockerRes.Containers
 	snap.Networks = dockerRes.Networks
 	snap.DockerCLIMissing = dockerRes.CLIMissing
+	snap.Malware = malwareRep
 	snap.LXD = lxdRes.Instances
 	snap.VMs = libvirtRes.VMs
 	snap.Podman = podmanRes.Containers

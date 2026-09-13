@@ -714,6 +714,7 @@ type Snapshot struct {
 	// DockerCLIMissing — движок docker работает, а команды docker на хосте
 	// нет (Debian 13: docker.io без docker-cli).
 	DockerCLIMissing bool               `json:"docker_cli_missing,omitempty"`
+	Malware          MalwareReport      `json:"malware"`
 	Podman           []PodmanContainer  `json:"podman_containers,omitempty"`
 	LXD              []LXDInstance      `json:"lxd_instances,omitempty"`
 	VMs              []VirtualMachine   `json:"vms,omitempty"`
@@ -726,6 +727,30 @@ type Snapshot struct {
 	Findings         []Finding          `json:"findings"`
 	Digest           string             `json:"digest"`
 	ScanMS           int64              `json:"scan_ms"`
+}
+
+// MalwareHit — один признак вредоносного на хосте: см. internal/malware.
+type MalwareHit struct {
+	Kind     string `json:"kind"`
+	Severity string `json:"severity"`
+	// Object — что именно: «pid имя», путь к файлу, «файл:строка».
+	Object    string `json:"object"`
+	PID       int    `json:"pid,omitempty"`
+	User      string `json:"user,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Line      int    `json:"line,omitempty"`
+	Container string `json:"container,omitempty"`
+	// Evidence — улика как есть: аргументы процесса, строка cron, адрес.
+	Evidence string `json:"evidence"`
+}
+
+// MalwareReport — результат эвристической проверки за скан.
+type MalwareReport struct {
+	Checked    bool         `json:"checked"`
+	CheckedAt  string       `json:"checked_at,omitempty"`
+	Hits       []MalwareHit `json:"hits"`
+	Warnings   []string     `json:"warnings,omitempty"`
+	DurationMS int64        `json:"duration_ms"`
 }
 
 // HostCapacity is the host's total installed memory and CPU core count —

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/piqab/nkt/internal/model"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 // sensitivePorts are services that must never face the public internet.
@@ -74,6 +75,7 @@ func Run(s *model.Snapshot) []model.Finding {
 	ruleUpstreams(c, s, idx)
 	ruleHealthChecks(c, s)
 	ruleContainers(c, s)
+	ruleMalware(c, s)
 	ruleAdminInterfaces(c, s)
 
 	sort.SliceStable(c.findings, func(i, j int) bool {
@@ -1229,6 +1231,33 @@ func ruleHealthChecks(c *collector, s *model.Snapshot) {
 				model.ServiceNginx:   "finding.backendNoHealthcheck.suggestionNginx",
 				model.ServiceCaddy:   "finding.backendNoHealthcheck.suggestionCaddy",
 			}[u.Service],
+		})
+	}
+}
+
+// ruleMalware превращает признаки эвристики (internal/malware) в
+// находки: так майнер в процессах стоит в одном списке с просроченным
+// сертификатом и доходит до оповещений хаба.
+func ruleMalware(c *collector, s *model.Snapshot) {
+	for _, h := range s.Malware.Hits {
+		svc := "system"
+		if h.Container != "" {
+			svc = model.ServiceDocker
+		}
+		c.add(model.Finding{
+			Rule:     "malware-" + h.Kind,
+			ID:       "malware-" + h.Kind + ":" + h.Object,
+			Severity: h.Severity,
+			Service:  svc,
+			Object:   h.Object,
+			File:     h.Path,
+			Line:     h.Line,
+			Title:    msgs.T(msgs.RU, "finding.malware."+h.Kind+".title", h.Object),
+			TitleKey: "finding.malware." + h.Kind + ".title", TitleArgs: []any{h.Object},
+			Detail:    msgs.T(msgs.RU, "finding.malware."+h.Kind+".detail", h.Evidence),
+			DetailKey: "finding.malware." + h.Kind + ".detail", DetailArgs: []any{h.Evidence},
+			Suggestion:    msgs.T(msgs.RU, "finding.malware."+h.Kind+".suggestion"),
+			SuggestionKey: "finding.malware." + h.Kind + ".suggestion",
 		})
 	}
 }

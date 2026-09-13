@@ -1263,7 +1263,8 @@
     },
     "scanTitle": "Vulnerability scan",
     "hideContinuesBackground": "Hide (continues in the background)",
-    "firstRunNote": "The first run may need to download trivy and the vulnerability database (about 1 GB) — this can take a few minutes."
+    "firstRunNote": "The first run may need to download trivy and the vulnerability database (about 1 GB) — this can take a few minutes.",
+    "tabCVE": "CVE"
   },
   "availability": {
     "what": "monitoring targets",
@@ -2069,6 +2070,31 @@
       "examplesHint": "Copy or insert into the editor and put in your own addresses, names and profiles.",
       "insert": "Into editor",
       "confirmInsert": "Replace the editor text with this script? Unsaved edits will be lost."
+    }
+  },
+  "malware": {
+    "tab": "Malware",
+    "title": "Malware",
+    "heuristicsTitle": "Miners and signs of a break-in",
+    "heuristicsHint": "No signatures or third-party tools: processes named like miners, connections to pools, binaries deleted from disk or started from /tmp, long full CPU load by a process not from any package, /etc/ld.so.preload, cron with “curl | sh”, units from temporary directories, foreign SUID files, blocks in /etc/hosts. Checked on every host scan; whatever is found goes to Findings and to hub alerts.",
+    "checkedAt": "checked {{when}}, {{ms}} ms",
+    "notChecked": "not checked yet",
+    "recheck": "check again",
+    "rechecked": "Check completed.",
+    "clean": "No signs of miners or a break-in.",
+    "warnings": "could not check: {{count}}",
+    "kind": {
+      "miner-process": "miner process",
+      "container-mine": "miner in a container",
+      "stratum": "pool connection",
+      "deleted-exe": "binary deleted",
+      "tmp-exe": "started from /tmp",
+      "high-cpu": "long CPU load",
+      "ld-preload": "ld.so.preload",
+      "cron": "cron",
+      "unit": "systemd unit",
+      "suid": "SUID not from a package",
+      "hosts-block": "/etc/hosts"
     }
   }
 }
