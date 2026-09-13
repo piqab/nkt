@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button, ColorPicker, Input, Tabs, Tag, Tooltip } from 'antd'
+import { CopyOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Job, Me } from '../types'
@@ -64,6 +65,19 @@ interface HelpCommand {
   example: string
   block?: boolean
   on_host?: boolean
+}
+
+interface HelpExample {
+  title: string
+  summary: string
+  content: string
+}
+
+interface HelpData {
+  commands: HelpCommand[]
+  intro: string
+  rules: string[]
+  examples: HelpExample[]
 }
 
 /** Выполнение появляется следующей фазой; до неё кнопка скрыта. */
@@ -353,7 +367,20 @@ export default function Scripts({ me }: { me: Me }) {
                   children: <CodeEditor value={draft} onChange={(e) => { setDraft(e.target.value); setCheck(null) }} rows={22} readOnly={!canEdit} />,
                 },
                 { key: 'scheme', label: t('scripts.tabScheme'), children: <ScriptScheme content={draft} /> },
-                { key: 'help', label: t('scripts.tabHelp'), children: <ScriptHelp /> },
+                {
+                  key: 'help',
+                  label: t('scripts.tabHelp'),
+                  children: (
+                    <ScriptHelp
+                      canInsert={canEdit}
+                      onInsert={(text) => {
+                        setDraft(text)
+                        setCheck(null)
+                        setTab('text')
+                      }}
+                    />
+                  ),
+                },
               ]}
             />
           </Card>
@@ -477,32 +504,115 @@ function AskPasswordsModal({
   )
 }
 
-/** Справка по командам — с сервера, из той же таблицы, что и разбор. */
-function ScriptHelp() {
+/** Кнопка «копировать» для текста справки: пример или синтаксис. */
+function CopyButton({ text }: { text: string }) {
   const { t } = useTranslation()
-  const help = useApi<{ commands: HelpCommand[]; intro: string }>('/hub/scripts/help')
+  const [done, setDone] = useState(false)
+  return (
+    <Button
+      size="small"
+      type="text"
+      icon={<CopyOutlined />}
+      aria-label={t('common.copy')}
+      onClick={() => {
+        void navigator.clipboard?.writeText(text)
+        setDone(true)
+        setTimeout(() => setDone(false), 1500)
+      }}
+    >
+      {done ? t('common.copied') : t('common.copy')}
+    </Button>
+  )
+}
+
+/**
+ * Справка: правила языка, каждая команда с аргументами и примером,
+ * готовые сценарии целиком. Всё — с сервера, из той же таблицы, что и
+ * разбор, поэтому справка и парсер не расходятся. Примеры копируются в
+ * буфер, готовые сценарии — ещё и вставляются в редактор.
+ */
+function ScriptHelp({ canInsert, onInsert }: { canInsert: boolean; onInsert: (text: string) => void }) {
+  const { t } = useTranslation()
+  const help = useApi<HelpData>('/hub/scripts/help')
   if (help.loading && !help.data) return <Loading what={t('scripts.tabHelp')} />
   if (help.error) return <Banner kind="error">{help.error}</Banner>
+  const d = help.data
+  if (!d) return null
+  const insert = (text: string) => {
+    void (async () => {
+      if (!canInsert) return
+      if (await confirmAction(t('scripts.help.confirmInsert'), { okText: t('scripts.help.insert'), danger: false })) onInsert(text)
+    })()
+  }
   return (
-    <div className="col" style={{ gap: '0.8rem' }}>
-      <p className="small" style={{ margin: 0 }}>{help.data?.intro}</p>
-      {(help.data?.commands ?? []).map((c) => (
-        <div key={c.kind} className="script-help-cmd">
-          <pre className="mono script-help-syntax">{c.syntax}</pre>
-          <div className="small">{c.summary}</div>
-          {c.args.length > 0 && (
-            <ul className="small" style={{ margin: '0.3rem 0 0', paddingLeft: '1.2rem' }}>
-              {c.args.map((a) => (
-                <li key={a.name}>
-                  <code className="mono">{a.name}</code>
-                  {a.required && <span className="muted"> *</span>} — {a.desc}
-                </li>
-              ))}
-            </ul>
-          )}
-          <pre className="mono small script-help-example">{c.example}</pre>
+    <div className="col" style={{ gap: '1rem' }}>
+      <section className="col" style={{ gap: '0.4rem' }}>
+        <h3 className="script-help-h">{t('scripts.help.rules')}</h3>
+        <p className="small" style={{ margin: 0 }}>{d.intro}</p>
+        <ul className="small" style={{ margin: 0, paddingLeft: '1.2rem' }}>
+          {d.rules.map((r, i) => (
+            <li key={i}>{r}</li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="col" style={{ gap: '0.6rem' }}>
+        <h3 className="script-help-h">{t('scripts.help.commands')}</h3>
+        <div className="small muted">
+          {d.commands.map((c) => (
+            <a key={c.kind} href={`#cmd-${c.kind}`} className="script-help-link" onClick={(e) => { e.preventDefault(); document.getElementById(`cmd-${c.kind}`)?.scrollIntoView({ block: 'start' }) }}>
+              <code className="mono">{c.syntax.split(/\s/)[0] === 'on' ? c.syntax.split(/\s/)[2] : c.syntax.split(/\s/)[0]}</code>
+            </a>
+          ))}
         </div>
-      ))}
+        {d.commands.map((c) => (
+          <div key={c.kind} id={`cmd-${c.kind}`} className="script-help-cmd">
+            <div className="row spread" style={{ alignItems: 'flex-start', gap: '0.5rem' }}>
+              <pre className="mono script-help-syntax">{c.syntax}</pre>
+              <CopyButton text={c.syntax} />
+            </div>
+            <div className="small">{c.summary}</div>
+            {c.args.length > 0 && (
+              <ul className="small" style={{ margin: '0.3rem 0 0', paddingLeft: '1.2rem' }}>
+                {c.args.map((a) => (
+                  <li key={a.name}>
+                    <code className="mono">{a.name}</code>
+                    {a.required && <span className="muted"> *</span>} — {a.desc}
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="row spread" style={{ alignItems: 'flex-start', gap: '0.5rem', marginTop: '0.4rem' }}>
+              <pre className="mono small script-help-example">{c.example}</pre>
+              <CopyButton text={c.example} />
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <section className="col" style={{ gap: '0.6rem' }}>
+        <h3 className="script-help-h">{t('scripts.help.examples')}</h3>
+        <p className="small muted" style={{ margin: 0 }}>{t('scripts.help.examplesHint')}</p>
+        {d.examples.map((e) => (
+          <div key={e.title} className="script-help-cmd">
+            <div className="row spread" style={{ alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <div>
+                <strong>{e.title}</strong>
+                <div className="small muted">{e.summary}</div>
+              </div>
+              <span className="row" style={{ gap: '0.25rem' }}>
+                <CopyButton text={e.content} />
+                {canInsert && (
+                  <Button size="small" onClick={() => insert(e.content)}>
+                    {t('scripts.help.insert')}
+                  </Button>
+                )}
+              </span>
+            </div>
+            <pre className="mono small script-help-example">{e.content}</pre>
+          </div>
+        ))}
+      </section>
     </div>
   )
 }

@@ -914,3 +914,6 @@ span.vm-toggle {
 .scheme-actions { margin: 0.3rem 0 0; padding-left: 1.4rem; font-size: 0.82rem; }
 .scheme-actions li { margin: 0.1rem 0; }
 .scheme-vms { margin: 0.4rem 0 0 1rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.script-help-h { margin: 0; font-size: 0.95rem; }
+.script-help-link { margin-right: 0.6rem; }
+.script-help-example { flex: 1; min-width: 0; }
