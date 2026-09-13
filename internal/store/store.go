@@ -243,6 +243,27 @@ CREATE INDEX IF NOT EXISTS idx_hosts_name ON hosts(name);
 -- Группы хостов существуют сами по себе, а не выводятся из поля group_name
 -- у хостов: пустую группу иначе некуда записать, а её и создают первой —
 -- чтобы потом перетащить в неё хосты.
+-- Сценарии хаба (internal/script): текст и история, как у профилей.
+CREATE TABLE IF NOT EXISTS scripts (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL,
+    color      TEXT NOT NULL DEFAULT '',
+    content    TEXT NOT NULL,
+    note       TEXT NOT NULL DEFAULT '',
+    author     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS script_versions (
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    script_id INTEGER NOT NULL REFERENCES scripts(id) ON DELETE CASCADE,
+    ts        TEXT NOT NULL,
+    author    TEXT NOT NULL DEFAULT '',
+    note      TEXT NOT NULL DEFAULT '',
+    content   TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_script_versions ON script_versions(script_id, id DESC);
+
 CREATE TABLE IF NOT EXISTS host_groups (
     name       TEXT PRIMARY KEY,
     created_at TEXT NOT NULL,

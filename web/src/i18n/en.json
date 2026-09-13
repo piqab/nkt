@@ -1824,7 +1824,9 @@
     "hubHint": "Hub profiles: a description of what a host should be — packages, services, files, ports, accounts, stacks. Applied through groups: create a group with a profile in Hosts and drag hosts into it — each is brought to the profile, and drift later shows in its Findings.",
     "color": "Color",
     "colorPresets": "Palette",
-    "colorNone": "no color"
+    "colorNone": "no color",
+    "tabProfiles": "Profiles",
+    "tabScripts": "Scripts"
   },
   "vmimages": {
     "title": "VM images",
@@ -2004,5 +2006,39 @@
     "unknownFate": "Could not read what this process is — nkt leaves it alone. Free the port yourself and retry.",
     "processCaveat": "Stopping is SIGTERM, then SIGKILL after 10 s. After certbot, nkt waits up to 15 s for the process to take the port again; if it does not, the log says so and names the command to start it by hand.",
     "go": "Continue"
+  },
+  "scripts": {
+    "title": "Scripts",
+    "hint": "A script is a list of actions in a language of a few commands: create a group and hosts, install nkt, packages, Docker, a stack, machines. The hub runs it top to bottom with the same calls the UI buttons make, and stops at the first error. “Check” parses the text without changing anything.",
+    "listTitle": "Scripts",
+    "listSubtitle": "total: {{count}}",
+    "empty": "No scripts yet.",
+    "newScript": "New script",
+    "updated": "edited {{when}}",
+    "name": "Name",
+    "note": "Change note",
+    "notePlaceholder": "why change",
+    "saved": "Script saved.",
+    "history": "History",
+    "export": "Download",
+    "import": "Import",
+    "check": "Check",
+    "run": "Run",
+    "runHint": "Save, check and run the script as a hub job",
+    "confirmDelete": "Delete script “{{name}}”? Its history goes with it.",
+    "tabText": "Text",
+    "tabScheme": "Scheme",
+    "tabHelp": "Reference",
+    "schemeSoon": "The script scheme arrives in the next version.",
+    "checkIssues": "Errors: {{count}}",
+    "checkOk": "Script parsed: {{count}} steps",
+    "line": "line {{line}}:",
+    "willAsk": "Passwords will be asked at run time for: {{hosts}}.",
+    "colHost": "Host",
+    "colStep": "Step",
+    "runTitle": "Run script",
+    "runBody": "Steps: {{steps}}. The script runs as a hub job top to bottom and stops at the first error; progress is in the job log.",
+    "askPassword": "SSH password for {{host}}",
+    "runStart": "Start"
   }
 }

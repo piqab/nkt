@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Button, ConfigProvider, Layout, Menu, Tooltip, type MenuProps, type ThemeConfig } from 'antd'
+import { Badge, Button, ConfigProvider, Layout, Menu, Tabs, Tooltip, type MenuProps, type ThemeConfig } from 'antd'
 import {
   AlertOutlined,
   ApartmentOutlined,
@@ -42,6 +42,7 @@ import Login from './pages/Login'
 import Hosts from './pages/Hosts'
 import About from './pages/About'
 import Profiles from './pages/Profiles'
+import Scripts from './pages/Scripts'
 import OverviewPage from './pages/Overview'
 import Findings from './pages/Findings'
 import Vulnerabilities from './pages/Vulnerabilities'
@@ -564,7 +565,12 @@ function Shell({
             ) : hubView === 'jobs' ? (
               <JobsPage me={me} />
             ) : hubView === 'profiles' ? (
-              <Profiles me={me} hubLevel />
+              <Tabs
+                items={[
+                  { key: 'profiles', label: t('profiles.tabProfiles'), children: <Profiles me={me} hubLevel /> },
+                  { key: 'scripts', label: t('profiles.tabScripts'), children: <Scripts me={me} /> },
+                ]}
+              />
             ) : (
               <About />
             )}

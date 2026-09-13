@@ -99,6 +99,15 @@ type ProfileVersionExport struct {
 	Content string `json:"content"`
 }
 
+// ScriptExport — сценарий хаба (текущая редакция, без истории).
+type ScriptExport struct {
+	Name    string `json:"name"`
+	Color   string `json:"color,omitempty"`
+	Content string `json:"content"`
+	Note    string `json:"note,omitempty"`
+	Author  string `json:"author,omitempty"`
+}
+
 // VMTemplateExport — шаблон машины.
 type VMTemplateExport struct {
 	Name   string `json:"name"`
@@ -122,6 +131,7 @@ type HubExport struct {
 	GroupProfiles map[string]string  `json:"group_profiles,omitempty"`
 	Profiles      []ProfileExport    `json:"profiles,omitempty"`
 	VMTemplates   []VMTemplateExport `json:"vm_templates,omitempty"`
+	Scripts       []ScriptExport     `json:"scripts,omitempty"`
 	// Settings — настройки хаба из таблицы kv по ключу (настройки
 	// оповещений, группа строки localhost, умолчания подготовки).
 	Settings map[string]string `json:"settings,omitempty"`
@@ -221,6 +231,17 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 	for _, t := range templates {
 		out.VMTemplates = append(out.VMTemplates, VMTemplateExport{Name: t.Name, Spec: t.Spec, Author: t.Author})
 	}
+	scripts, err := d.ListScripts(ctx)
+	if err != nil {
+		return HubExport{}, err
+	}
+	for _, sc := range scripts {
+		full, err := d.ScriptByID(ctx, sc.ID)
+		if err != nil {
+			return HubExport{}, err
+		}
+		out.Scripts = append(out.Scripts, ScriptExport{Name: full.Name, Color: full.Color, Content: full.Content, Note: full.Note, Author: full.Author})
+	}
 	for _, key := range ExportedSettingKeys {
 		if v, ok, err := d.KVGet(ctx, key); err == nil && ok && v != "" {
 			if out.Settings == nil {
@@ -283,6 +304,7 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 	}
 	errs = append(errs, d.importProfiles(ctx, export.Profiles)...)
 	errs = append(errs, d.importVMTemplates(ctx, export.VMTemplates)...)
+	errs = append(errs, d.importScripts(ctx, export.Scripts)...)
 	// Профили групп — после профилей: искать их по имени можно только
 	// когда они уже заведены. Существующий профиль группы не трогается.
 	hostProfiles := false
@@ -384,6 +406,31 @@ func (d *DB) importProfiles(ctx context.Context, profiles []ProfileExport) (errs
 			}
 		}
 		taken[p.Name] = true
+	}
+	return errs
+}
+
+func (d *DB) importScripts(ctx context.Context, scripts []ScriptExport) (errs []string) {
+	existing, err := d.ListScripts(ctx)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	taken := map[string]bool{}
+	for _, s := range existing {
+		taken[s.Name] = true
+	}
+	for _, s := range scripts {
+		if s.Name == "" {
+			continue
+		}
+		if taken[s.Name] {
+			errs = append(errs, msgs.Tc(ctx, "store.importScriptExists", s.Name))
+			continue
+		}
+		if _, err := d.CreateScript(ctx, Script{Name: s.Name, Color: s.Color, Content: s.Content, Note: s.Note, Author: s.Author}); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", s.Name, err))
+		}
+		taken[s.Name] = true
 	}
 	return errs
 }
