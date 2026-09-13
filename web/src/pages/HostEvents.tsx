@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Button, Checkbox, InputNumber, Tag, type TableColumnsType } from 'antd'
+import { Button, Checkbox, InputNumber, Switch, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HostEvent } from '../types'
 import { Card, ErrorNote, InfoHint, Loading, formatDateTime, formatRelative } from '../components/ui'
+import { notificationsEnabled, requestNotificationPermission, setNotificationsEnabled } from '../notifications'
 import { DataTable } from '../components/DataTable'
 
 const POLL_MS = 30_000
@@ -30,6 +31,23 @@ function EventSettingsCard() {
   const [saved, setSaved] = useState(false)
   const settings = draft ?? data.data?.settings ?? null
   const kinds = data.data?.kinds ?? []
+  // Всплывающие уведомления — настройка этого браузера, не хаба: у
+  // каждого оператора своя.
+  const [notifyOn, setNotifyOn] = useState(() => notificationsEnabled())
+  const [denied, setDenied] = useState(false)
+
+  async function toggleNotify(checked: boolean) {
+    setDenied(false)
+    if (checked) {
+      const granted = await requestNotificationPermission()
+      if (!granted) {
+        setDenied(true)
+        return
+      }
+    }
+    setNotificationsEnabled(checked)
+    setNotifyOn(checked)
+  }
 
   function update(patch: (s: EventSettings) => EventSettings) {
     if (!settings) return
@@ -53,6 +71,15 @@ function EventSettingsCard() {
   return (
     <Card title={t('events.settingsTitle')} subtitle={t('events.settingsHint')}>
       <ErrorNote error={data.error} />
+      <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.6rem' }}>
+        <Tooltip title={t('events.notifyTooltip')}>
+          <span className="row" style={{ gap: '0.4rem', alignItems: 'center' }}>
+            <Switch size="small" checked={notifyOn} onChange={toggleNotify} />
+            {t('events.notifyLabel')}
+          </span>
+        </Tooltip>
+        {denied && <span className="small" style={{ color: 'var(--danger)' }}>{t('events.notificationDenied')}</span>}
+      </div>
       {!settings ? (
         <Loading what={t('events.settingsTitle')} />
       ) : (

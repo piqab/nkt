@@ -30,6 +30,7 @@ import {
   UserOutlined,
   WifiOutlined,
 } from '@ant-design/icons'
+import { notifyNewEvents } from './notifications'
 import type { ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
@@ -37,7 +38,7 @@ import { LOCAL_HOST_ID, api, hostScope, onUnauthorized, readSelectedHost, type S
 import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
 import type { Lang } from './i18n'
 import { useLang } from './hooks/useLang'
-import type { HubVersionInfo, Me, Overview } from './types'
+import type { HostEvent, HubVersionInfo, Me, Overview } from './types'
 import Login from './pages/Login'
 import Hosts from './pages/Hosts'
 import About from './pages/About'
@@ -393,7 +394,14 @@ function Shell({
   const hubJobs = useApi<{ active: number }>(isHub ? '/hosts/local/jobs?limit=1' : null, 10_000)
   // Непоказанные оповещения: счётчик у раздела — единственное, что видно,
   // когда браузер закрыт и всплывающие уведомления никто не получил.
-  const hubEvents = useApi<{ unread: number }>(isHub ? '/hub/events?limit=1' : null, 30_000)
+  // Всплывающие уведомления берутся из того же опроса: переходы находит
+  // хаб в фоне, браузер показывает то, чего оператор ещё не видел, — в
+  // любом разделе хаба, пока вкладка открыта (переключатель — в
+  // «Оповещениях»).
+  const hubEvents = useApi<{ unread: number; events: HostEvent[]; notify?: Record<string, boolean> }>(isHub ? '/hub/events?limit=50' : null, 30_000)
+  useEffect(() => {
+    if (hubEvents.data?.events) notifyNewEvents(hubEvents.data.events, hubEvents.data.notify)
+  }, [hubEvents.data])
 
   // Every page below reads through api()/useApi() unmodified; this is the
   // one place that redirects their calls to the selected host's own API
