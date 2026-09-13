@@ -38,7 +38,7 @@ SCREENS = [
     ('audit', 'host', '/audit', ''),
     ('services', 'host', '/services', ''),
     ('containers', 'host', '/containers', ''),
-    ('vms', 'host', '/vms', ''),
+    ('vms', 'host', '/containers', "tab({ru: 'Виртуальные машины', en: 'Virtual machines'})"),
     ('profiles', 'host', '/profiles', ''),
     ('configs', 'host', '/configs', ''),
     ('configs-editor', 'host', '/configs', "clickText('button', /^\\/etc\\/nginx\\/nginx\\.conf/)"),
@@ -65,14 +65,14 @@ const clickText = (sel, re) => {
   return !!e;
 };
 const menu = (m) => clickText('.ant-menu-item', new RegExp('^' + pick(m)));
-const tab = (m) => clickText('.ant-tabs-tab-btn', new RegExp('^' + pick(m) + '$'));
+const tab = (m) => clickText('.ant-tabs-tab-btn', new RegExp('^' + pick(m)));
 """
 
 # Перед снимком: убрать плашки режима fixtures — на сайте показывается
 # интерфейс, а не оговорки стенда — и снять фокус с поля ввода.
 CLEANUP = """
 (() => {
-  const re = /fixtures|снапшот|симуляци|simulat|snapshot mode/i;
+  const re = /fixture|снапшот|симуляци|simulat|snapshot mode|заготовленного вывода|no canned output/i;
   for (const el of document.querySelectorAll('.ant-alert, .banner, [class*="banner"]')) {
     if (re.test(el.textContent)) el.remove();
   }

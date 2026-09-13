@@ -108,7 +108,30 @@ function sidebarEn() {
       text: 'Start',
       items: [
         { text: 'Install on a host', link: '/en/guide/getting-started' },
+        { text: 'Command line and configuration', link: '/en/guide/cli' },
+      ],
+    },
+    {
+      text: 'Host',
+      items: [
+        { text: 'Overview and findings', link: '/en/guide/overview' },
+        { text: 'Monitoring', link: '/en/guide/monitoring' },
+        { text: 'Services', link: '/en/guide/services' },
+        { text: 'Containers and VMs', link: '/en/guide/containers' },
+        { text: 'Configs', link: '/en/guide/configs' },
+        { text: 'Profiles', link: '/en/guide/profiles' },
+        { text: 'Packages, disks, files, system', link: '/en/guide/system' },
+        { text: 'Network and firewall', link: '/en/guide/network' },
+        { text: 'Certificates', link: '/en/guide/certificates' },
+        { text: 'Access and security', link: '/en/guide/access' },
+      ],
+    },
+    {
+      text: 'Hub',
+      items: [
         { text: 'Hub: many hosts', link: '/en/guide/hub' },
+        { text: 'Scripts', link: '/en/guide/hub-scripts' },
+        { text: 'Alerts, jobs, updates', link: '/en/guide/hub-operations' },
       ],
     },
   ]
