@@ -251,6 +251,9 @@ func TestExportImportV2RoundTrip(t *testing.T) {
 	if _, err := src.SaveVMTemplate(ctx, VMTemplate{Name: "small", Spec: `{"vcpus":1}`, Author: "admin"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := src.CreateHostGroupWithProfile(ctx, "web-farm", pid); err != nil {
+		t.Fatal(err)
+	}
 	if err := src.KVSet(ctx, "hub.events.settings", `{"record":["unreachable"]}`); err != nil {
 		t.Fatal(err)
 	}
@@ -262,8 +265,11 @@ func TestExportImportV2RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if export.Version != 2 || len(export.Groups) != 2 || len(export.Profiles) != 1 || len(export.VMTemplates) != 1 {
+	if export.Version != 2 || len(export.Groups) != 3 || len(export.Profiles) != 1 || len(export.VMTemplates) != 1 {
 		t.Fatalf("export = %+v", export)
+	}
+	if export.GroupProfiles["web-farm"] != "web" {
+		t.Errorf("профиль группы в файле: %v", export.GroupProfiles)
 	}
 	if export.Profiles[0].Versions == nil || len(export.Profiles[0].Versions) != 2 || export.Profiles[0].Versions[0].Content != "version: 1\nname: web" {
 		t.Errorf("история профиля: %+v", export.Profiles[0].Versions)
@@ -305,8 +311,11 @@ func TestExportImportV2RoundTrip(t *testing.T) {
 		t.Errorf("связи после импорта: %+v", byName)
 	}
 	groups, _ := dst.ListHostGroups(ctx)
-	if len(groups) != 2 {
+	if len(groups) != 3 {
 		t.Errorf("группы: %v", groups)
+	}
+	if gp, _ := dst.HostGroupProfiles(ctx); len(gp) != 1 || gp["web-farm"] == 0 {
+		t.Errorf("профиль группы после импорта: %v", gp)
 	}
 	profiles, _ := dst.ListProfiles(ctx)
 	if len(profiles) != 1 || profiles[0].Name != "web" {

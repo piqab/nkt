@@ -488,6 +488,10 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 func (s *Server) setHostGroup(ctx context.Context, id int64, group string) {
 	if err := s.hub.SetHostGroup(ctx, id, group); err != nil {
 		s.log.Warn("не удалось сохранить группу хоста", "host", id, "err", err)
+		return
+	}
+	if _, err := s.applyGroupProfileToHost(ctx, id, auth.Username(ctx)); err != nil {
+		s.log.Warn("профиль группы не применён", "host", id, "err", err)
 	}
 }
 
@@ -510,7 +514,17 @@ func (s *Server) handleSetHostGroup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	// Группа с профилем: хост, попавший в неё, приводится к профилю —
+	// заданием, чей номер уходит в ответ, чтобы интерфейс мог его
+	// показать. Отказ запуска не отменяет смену группы: она уже
+	// сделана, а профиль можно применить и потом.
+	out := map[string]any{"status": "ok"}
+	if jobID, err := s.applyGroupProfileToHost(r.Context(), id, auth.Username(r.Context())); err != nil {
+		out["profile_error"] = msgs.Localize(msgs.FromContext(r.Context()), err)
+	} else if jobID != 0 {
+		out["job_id"] = jobID
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // handleHostGroups отдаёт список групп — и заведённых пустыми, и тех, что
@@ -521,12 +535,20 @@ func (s *Server) handleHostGroups(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"groups": groups})
+	profiles, err := s.hub.GroupProfiles(r.Context())
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"groups": groups, "profiles": profiles})
 }
 
 type groupRequest struct {
 	Name string `json:"name"`
 	To   string `json:"to"`
+	// ProfileID — профиль новой группы (0 — без профиля); только при
+	// создании.
+	ProfileID int64 `json:"profile_id,omitempty"`
 }
 
 // handleCreateHostGroup заводит пустую группу.
@@ -536,11 +558,11 @@ func (s *Server) handleCreateHostGroup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.hub.CreateHostGroup(r.Context(), req.Name); err != nil {
+	if err := s.hub.CreateHostGroup(r.Context(), req.Name, req.ProfileID); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	s.db.Audit(r.Context(), auth.Username(r.Context()), "hostgroup.create", req.Name, "ok", nil)
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "hostgroup.create", req.Name, "ok", map[string]any{"profile_id": req.ProfileID})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

@@ -69,7 +69,7 @@ type Host struct {
 	// хостов. Машина не живёт отдельно от своего сервера: она
 	// показывается под ним и переезжает между группами только вместе с
 	// ним.
-	ParentID int64 `json:"parent_id,omitempty"`
+	ParentID   int64  `json:"parent_id,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	LastSeenAt string `json:"last_seen_at,omitempty"`
 
@@ -448,9 +448,48 @@ func (d *DB) ListHostGroups(ctx context.Context) ([]string, error) {
 // CreateHostGroup заводит пустую группу. Повторное создание существующей —
 // не ошибка: результат тот же, что и просили.
 func (d *DB) CreateHostGroup(ctx context.Context, name string) error {
+	return d.CreateHostGroupWithProfile(ctx, name, 0)
+}
+
+// CreateHostGroupWithProfile заводит группу с профилем (0 — без него).
+// Профиль задаётся только при создании: у существующей группы он не
+// меняется — иначе хосты, уже лежащие в ней, оказались бы «под профилем»,
+// который к ним никто не применял.
+func (d *DB) CreateHostGroupWithProfile(ctx context.Context, name string, profileID int64) error {
 	_, err := d.ExecContext(ctx,
-		`INSERT OR IGNORE INTO host_groups(name, created_at) VALUES(?, ?)`, name, FormatTime(time.Now()))
+		`INSERT OR IGNORE INTO host_groups(name, created_at, profile_id) VALUES(?, ?, ?)`,
+		name, FormatTime(time.Now()), profileID)
 	return err
+}
+
+// HostGroupProfile — профиль группы: имя группы → идентификатор профиля.
+// Группы без профиля в карте нет.
+func (d *DB) HostGroupProfiles(ctx context.Context) (map[string]int64, error) {
+	rows, err := d.QueryContext(ctx, `SELECT name, profile_id FROM host_groups WHERE profile_id <> 0`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var name string
+		var id int64
+		if err := rows.Scan(&name, &id); err != nil {
+			return nil, err
+		}
+		out[name] = id
+	}
+	return out, rows.Err()
+}
+
+// HostGroupProfile отдаёт профиль одной группы (0 — нет).
+func (d *DB) HostGroupProfile(ctx context.Context, name string) (int64, error) {
+	var id int64
+	err := d.QueryRowContext(ctx, `SELECT profile_id FROM host_groups WHERE name = ?`, name).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
 }
 
 // RenameHostGroup переименовывает группу вместе с хостами в ней.
@@ -468,11 +507,15 @@ func (d *DB) RenameHostGroup(ctx context.Context, from, to string) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE hosts SET group_name = ? WHERE group_name = ?`, to, from); err != nil {
 		return err
 	}
+	// Профиль переезжает вместе с группой.
+	var profileID int64
+	_ = tx.QueryRowContext(ctx, `SELECT profile_id FROM host_groups WHERE name = ?`, from).Scan(&profileID)
 	if _, err := tx.ExecContext(ctx, `DELETE FROM host_groups WHERE name = ?`, from); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx,
-		`INSERT OR IGNORE INTO host_groups(name, created_at) VALUES(?, ?)`, to, FormatTime(time.Now())); err != nil {
+		`INSERT OR IGNORE INTO host_groups(name, created_at, profile_id) VALUES(?, ?, ?)`,
+		to, FormatTime(time.Now()), profileID); err != nil {
 		return err
 	}
 	return tx.Commit()

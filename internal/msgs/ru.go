@@ -1136,4 +1136,7 @@ var ruCatalog = map[string]string{
 	"store.importParentMissing": "%s: хост-родитель %q в файле не найден — машина заведена без привязки",
 	"store.importProfileExists": "профиль %q уже есть — пропущен",
 	"store.importTemplateExists": "шаблон машины %q уже есть — пропущен",
+	"hub.groupProfileNotFound": "профиль №%d не найден",
+	"hub.profileHostJobTitle": "профиль %s → %s",
+	"store.importGroupProfileMissing": "группа %q: профиль %q не найден — группа заведена без профиля",
 }

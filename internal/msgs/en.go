@@ -1137,4 +1137,7 @@ var enCatalog = map[string]string{
 	"store.importParentMissing": "%s: parent host %q not found in the file — the machine was added without a parent",
 	"store.importProfileExists": "profile %q already exists — skipped",
 	"store.importTemplateExists": "machine template %q already exists — skipped",
+	"hub.groupProfileNotFound": "profile #%d not found",
+	"hub.profileHostJobTitle": "profile %s → %s",
+	"store.importGroupProfileMissing": "group %q: profile %q not found — the group was created without a profile",
 }

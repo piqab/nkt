@@ -188,7 +188,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - Fallback channel (a reverse TLS tunnel with certificate pinning) for when SSH is unavailable.
 - Revoking passwordless sudo, address diagnostics, complete nkt removal from a host (restoring password login).
 - Machines inside a host: creating a virtual machine on a host from the hub, automatic nkt installation into it, profile application; discovery of existing machines and adding them to the list; start/shutdown through the parent host; removal together with disks.
-- Profiles by host group: applying one profile to a whole group as a job.
+- A "Profiles" section on the hub; a profile is set on a group at creation, and every host that joins the group is brought to it as a job; drift shows in the host's Findings.
 - Alerts: unreachable, responding again, serious problems appeared, resolved, job failed; an alert journal with settings for what to record and what to notify about, collapsing short episodes; browser notifications.
 - Hub jobs with a log.
 - Whole-hub export and import: hosts with secrets, groups, machines with parents, profiles with history, machine templates, settings; the file is password-encrypted.

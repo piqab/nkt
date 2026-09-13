@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Select, Switch, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import {
+  InfoCircleOutlined,
   CheckCircleFilled,
   CloseCircleFilled,
   ExclamationCircleFilled,
@@ -248,9 +249,12 @@ function ProblemsCell({ host }: { host: HubHost }) {
 export default function Hosts({
   onSelect,
   hubVersion,
+  onOpenProfiles,
 }: {
   onSelect: (host: { id: number; name: string }) => void
   hubVersion?: string
+  /** Открыть раздел «Профили» хаба — из подсказки и с тега группы. */
+  onOpenProfiles?: () => void
 }) {
   const { t } = useTranslation()
   const { data: hosts, error, loading, reload } = useApi<HubHost[]>('/hub/hosts', 30_000)
@@ -373,11 +377,11 @@ export default function Hosts({
   // Группы приходят с сервера, а не выводятся из хостов: пустую группу
   // иначе неоткуда взять, а её и создают первой — чтобы потом перетащить
   // в неё хосты.
-  const groups = useApi<{ groups: string[] }>('/hub/groups', 60_000)
+  const groups = useApi<{ groups: string[]; profiles?: GroupProfile[] }>('/hub/groups', 60_000)
+  const groupProfile = (group: string) => (groups.data?.profiles ?? []).find((p) => p.group === group)
   // Профили хаба — те же, что правятся в разделе «Профили» его
   // собственной машины: раскатывать по группе можно любой из них.
   const profiles = useApi<{ profiles: { id: number; name: string }[] }>('/hosts/local/profiles', 120_000)
-  const [applyTo, setApplyTo] = useState<{ group: string; hosts: number } | null>(null)
   const [provisionOn, setProvisionOn] = useState<HubHost | null>(null)
   // Раскрытые списки машин — по идентификатору хоста. По умолчанию
   // свёрнуто: у хоста с десятком машин список иначе оттеснил бы сами
@@ -487,6 +491,7 @@ export default function Hosts({
     })
   }
   const [groupDialog, setGroupDialog] = useState<{ mode: 'create' | 'rename'; from?: string } | null>(null)
+  const [groupProfileID, setGroupProfileID] = useState(0)
   const [groupName, setGroupName] = useState('')
 
   // Хосты по разделам. Порядок групп — алфавитный, «Без группы» всегда
@@ -532,7 +537,7 @@ export default function Hosts({
     if (!name) return
     try {
       if (groupDialog.mode === 'create') {
-        await api('/hub/groups', { method: 'POST', body: { name } })
+        await api('/hub/groups', { method: 'POST', body: { name, profile_id: groupProfileID } })
       } else {
         await api('/hub/groups/rename', { method: 'POST', body: { name: groupDialog.from, to: name } })
       }
@@ -585,8 +590,19 @@ export default function Hosts({
   // значениями.
   async function moveToGroup(hostID: number, group: string) {
     try {
-      await api(`/hub/hosts/${hostID}/group`, { method: 'POST', body: { group } })
+      const res = await api<{ job_id?: number; profile_error?: string }>(`/hub/hosts/${hostID}/group`, {
+        method: 'POST',
+        body: { group },
+      })
       reload()
+      // Группа с профилем: хост приводится к нему заданием — открываем
+      // его журнал, как при любой раскатке.
+      if (res.job_id) {
+        setNotice({ kind: 'info', text: t('hosts.groupProfileApplying', { group, job: res.job_id }) })
+        void openHubJob(res.job_id)
+      } else if (res.profile_error) {
+        setNotice({ kind: 'error', text: res.profile_error })
+      }
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
@@ -1383,19 +1399,6 @@ export default function Hosts({
 
       {hubJob && <JobLogModal job={hubJob} scope="/hosts/local" onClose={() => setHubJob(null)} />}
 
-      {applyTo && (
-        <ApplyProfileModal
-          group={applyTo.group}
-          hostCount={applyTo.hosts}
-          profiles={profiles.data?.profiles ?? []}
-          onClose={() => setApplyTo(null)}
-          onStarted={(text, jobID) => {
-            setApplyTo(null)
-            setNotice({ kind: 'info', text })
-            void openHubJob(jobID)
-          }}
-        />
-      )}
 
       {groupDialog && (
       <Modal
@@ -1406,6 +1409,21 @@ export default function Hosts({
           <Form.Item label={t('hosts.group')}>
             <Input value={groupName} onChange={(e) => setGroupName(e.target.value)} autoFocus maxLength={64} />
           </Form.Item>
+          {/* Профиль задаётся только при создании: у существующей группы
+              его не поменять — иначе хосты в ней оказались бы «под
+              профилем», который к ним никто не применял. */}
+          {groupDialog.mode === 'create' && (
+            <Form.Item label={t('hosts.groupProfile')} extra={t('hosts.groupProfileExtra')}>
+              <Select
+                value={groupProfileID}
+                onChange={(v) => setGroupProfileID(v)}
+                options={[
+                  { value: 0, label: t('hosts.groupProfileNone') },
+                  ...(profiles.data?.profiles ?? []).map((p) => ({ value: p.id, label: p.name })),
+                ]}
+              />
+            </Form.Item>
+          )}
           <div className="row" style={{ gap: '0.5rem' }}>
             <Button type="primary" htmlType="submit" disabled={!groupName.trim()}>
               {t('common.save')}
@@ -1430,6 +1448,7 @@ export default function Hosts({
             size="small"
             onClick={() => {
               setGroupName('')
+              setGroupProfileID(0)
               setGroupDialog({ mode: 'create' })
             }}
           >
@@ -1470,34 +1489,36 @@ export default function Hosts({
                       <span className="host-group-name">{group || t('hosts.groupNone')}</span>
                       <span className="small muted">{t('hosts.groupCount', { count: items.length })}</span>
                     </button>
-                    {/* Профиль раскатывается по группе целиком — хосты
-                        обходятся по одному, чтобы ошибка в описании не
-                        досталась сразу всем. */}
-                    {/* Считаются только настоящие хосты: localhost — своя
-                        машина хаба, к ней профиль применяют в её же
-                        разделе «Профили», а не через SSH. */}
-                    {items.some((h) => h.id !== LOCAL_HOST_ID) && (
-                      // Видна всегда, а не по наведению, как переименование
-                      // с удалением: раскатка профиля — то, ради чего в
-                      // этот заголовок и смотрят, и прятать её незачем.
-                      // Без единого профиля кнопка выключена и говорит,
-                      // где его завести, — иначе её отсутствие выглядело
-                      // бы поломкой.
-                      <span className="row" style={{ gap: '0.25rem' }}>
-                        <Tooltip title={(profiles.data?.profiles?.length ?? 0) === 0 ? t('hosts.applyProfileNone') : ''}>
-                          <Button
-                            size="small"
-                            type="text"
-                            disabled={(profiles.data?.profiles?.length ?? 0) === 0}
-                            onClick={() =>
-                              setApplyTo({ group, hosts: items.filter((h) => h.id !== LOCAL_HOST_ID).length })
-                            }
+                    {/* Профиль — свойство группы, заданное при её создании:
+                        хост, попавший в группу, приводится к нему сам. У
+                        группы без профиля — подсказка, как это устроено. */}
+                    {group &&
+                      (groupProfile(group) ? (
+                        <Tooltip title={t('hosts.groupProfileTooltip')}>
+                          <Tag
+                            color={groupProfile(group)!.missing ? 'error' : 'blue'}
+                            style={{ cursor: onOpenProfiles ? 'pointer' : undefined }}
+                            onClick={() => onOpenProfiles?.()}
                           >
-                            {t('hosts.applyProfile')}
-                          </Button>
+                            {groupProfile(group)!.missing ? t('hosts.groupProfileMissing') : groupProfile(group)!.name}
+                          </Tag>
                         </Tooltip>
-                      </span>
-                    )}
+                      ) : (
+                        <Tooltip
+                          title={
+                            <span>
+                              {t('hosts.groupProfileHowTo')}{' '}
+                              {onOpenProfiles && (
+                                <a href="#" onClick={(e) => { e.preventDefault(); onOpenProfiles() }}>
+                                  {t('nav.profiles')} →
+                                </a>
+                              )}
+                            </span>
+                          }
+                        >
+                          <InfoCircleOutlined className="muted" style={{ marginLeft: '0.25rem' }} aria-label={t('hosts.groupProfileHowToShort')} />
+                        </Tooltip>
+                      ))}
                     {/* «Без группы» — не группа, а остаток: переименовать
                         или удалить его нечего. */}
                     {group && (
@@ -2350,77 +2371,6 @@ function RemoveHostModal({
   )
 }
 
-/**
- * Выбор профиля для раскатки по группе.
- *
- * Запуск отвечает номером задания, а не ждёт конца работы: обход группы
- * идёт минутами и переживает закрытую вкладку — смотреть за ним нужно в
- * «Заданиях», а не здесь.
- */
-function ApplyProfileModal({
-  group,
-  hostCount,
-  profiles,
-  onClose,
-  onStarted,
-}: {
-  group: string
-  hostCount: number
-  profiles: { id: number; name: string }[]
-  onClose: () => void
-  onStarted: (text: string, jobID: number) => void
-}) {
-  const { t } = useTranslation()
-  const [profileID, setProfileID] = useState<number | null>(profiles[0]?.id ?? null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function start() {
-    if (!profileID) return
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await api<{ job_id: number; hosts: number }>('/hub/groups/apply-profile', {
-        method: 'POST',
-        body: { profile_id: profileID, group },
-      })
-      onStarted(t('hosts.applyProfileStarted', { count: res.hosts, job: res.job_id }), res.job_id)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Modal
-      title={t('hosts.applyProfileTitle', { group: group || t('hosts.groupNone'), count: hostCount })}
-      onClose={onClose}
-    >
-      <p className="small muted">{t('hosts.applyProfileBody')}</p>
-      <ErrorNote error={error} />
-      <div className="col" style={{ gap: '0.4rem', marginBottom: '0.6rem' }}>
-        {profiles.map((p) => (
-          <label key={p.id} style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
-            <input
-              type="radio"
-              name="profile"
-              checked={profileID === p.id}
-              onChange={() => setProfileID(p.id)}
-            />
-            {p.name}
-          </label>
-        ))}
-      </div>
-      <div className="row" style={{ gap: '0.5rem' }}>
-        <Button type="primary" loading={busy} disabled={!profileID} onClick={() => void start()}>
-          {t('hosts.applyProfileStart')}
-        </Button>
-        <Button onClick={onClose}>{t('common.cancel')}</Button>
-      </div>
-    </Modal>
-  )
-}
 
 /**
  * Создание виртуальной машины на управляемом хосте.
@@ -2690,6 +2640,14 @@ function ProvisionVMModal({
  * пока она не получит настоящий у DHCP. */
 function isAddrUnknown(h: HubHost): boolean {
   return h.id !== LOCAL_HOST_ID && (!h.addr || h.addr === '0.0.0.0')
+}
+
+/** Профиль группы, как его отдаёт GET /hub/groups. */
+interface GroupProfile {
+  group: string
+  id: number
+  name: string
+  missing?: boolean
 }
 
 interface DiscoveredVM {

@@ -20,6 +20,7 @@ import {
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlayCircleOutlined,
+  ProfileOutlined,
   SafetyCertificateOutlined,
   SafetyOutlined,
   SettingOutlined,
@@ -40,6 +41,7 @@ import type { HubVersionInfo, Me, Overview } from './types'
 import Login from './pages/Login'
 import Hosts from './pages/Hosts'
 import About from './pages/About'
+import Profiles from './pages/Profiles'
 import OverviewPage from './pages/Overview'
 import Findings from './pages/Findings'
 import Vulnerabilities from './pages/Vulnerabilities'
@@ -378,7 +380,7 @@ function Shell({
   // depends on the address bar staying whatever it was from a previous
   // host session — introducing routing here would have to interact with
   // that, for no real benefit (this is not something worth bookmarking).
-  const [hubView, setHubView] = useState<'hosts' | 'events' | 'jobs' | 'about'>('hosts')
+  const [hubView, setHubView] = useState<'hosts' | 'events' | 'jobs' | 'profiles' | 'about'>('hosts')
   // Polled independently of whichever section is actually showing, so the
   // sidebar's own "доступно обновление" badge stays current even while
   // looking at the host list — matches how criticalCount/certAlerts below
@@ -407,7 +409,9 @@ function Shell({
   // Задания самого хаба (создание машин, раскатка профилей) живут на его
   // машине, поэтому этот раздел смотрит в её API. Без этого запросы ушли
   // бы в API хаба, где раздела заданий нет вовсе.
-  if (isHub && !selectedHost && hubView === 'jobs') hostScope.id = LOCAL_HOST_ID
+  // Задания и профили хаба — это задания и профили его собственной машины:
+  // раздел работает через /hosts/local без выбранного хоста.
+  if (isHub && !selectedHost && (hubView === 'jobs' || hubView === 'profiles')) hostScope.id = LOCAL_HOST_ID
 
   function selectHost(host: SelectedHost | null) {
     setSelectedHost(host)
@@ -514,6 +518,7 @@ function Shell({
           </span>
         ),
       },
+      { key: 'profiles', icon: <ProfileOutlined />, label: t('nav.profiles') },
       {
         key: 'about',
         icon: navIcon(<InfoCircleOutlined />, hubUpdate.data?.update_available ? 1 : 0, false, collapsed),
@@ -553,11 +558,13 @@ function Shell({
         <Layout.Content className="main">
           <div className="content">
             {hubView === 'hosts' ? (
-              <Hosts onSelect={selectHost} hubVersion={me.hub_version} />
+              <Hosts onSelect={selectHost} hubVersion={me.hub_version} onOpenProfiles={() => setHubView('profiles')} />
             ) : hubView === 'events' ? (
               <HostEvents />
             ) : hubView === 'jobs' ? (
               <JobsPage me={me} />
+            ) : hubView === 'profiles' ? (
+              <Profiles me={me} hubLevel />
             ) : (
               <About />
             )}
