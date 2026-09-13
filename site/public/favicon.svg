@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="25 24 62 62">
+  <!-- Те же три связанных узла, что и на иконке Android-приложения
+       (android/app/src/main/res/drawable/ic_launcher_*.xml) — отсылка к карте
+       ресурсов. Кадр обрезан плотнее, чем у adaptive icon: у той поля нужны
+       под круглую маску, а фавиконке при 16px нужен максимально крупный знак. -->
+  <rect x="25" y="24" width="62" height="62" rx="14" fill="#183B6E"/>
+  <path d="M38 70 L54 40 L74 58" fill="none" stroke="#FFFFFF" stroke-width="3"
+        stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="38" cy="70" r="7" fill="#FFFFFF"/>
+  <circle cx="54" cy="40" r="7" fill="#FFFFFF"/>
+  <circle cx="74" cy="58" r="7" fill="#FFFFFF"/>
+</svg>
