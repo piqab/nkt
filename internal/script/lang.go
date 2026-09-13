@@ -22,6 +22,8 @@
 // могут.
 package script
 
+import "strings"
+
 // Kind — вид шага.
 type Kind string
 
@@ -346,4 +348,54 @@ on web1 service nginx reload
 on web2 packages remove telnet
 `,
 	},
+}
+
+// englishTerms — плейсхолдеры и служебные фразы синтаксиса и примеров
+// по-английски. Таблица команд пишется один раз по-русски, а справка на
+// английском получает те же строки через Localize; ключевые слова языка
+// и одинаковы в обоих вариантах.
+var englishTerms = [][2]string{
+	{"compose-файл построчно", "compose file line by line"},
+	{"содержимое построчно", "contents line by line"},
+	{"адрес нового сервера", "address of the new server"},
+	{"имя хоста в хабе", "host name on the hub"},
+	{"Этот сервер под управлением nkt", "This server is managed by nkt"},
+	{"hv1 уже есть в хабе — заводить не нужно", "hv1 is already on the hub — no need to register it"},
+	{"Хосты уже есть в хабе: только действия", "The hosts are already on the hub: actions only"},
+	{"ПОЛЬЗОВАТЕЛЬ", "USER"},
+	{"ДЛИТЕЛЬНОСТЬ", "DURATION"},
+	{"подсказка", "prompt"},
+	{"действие", "action"},
+	{"значение", "value"},
+	{"ПРОФИЛЬ", "PROFILE"},
+	{"КАТАЛОГ", "DIR"},
+	{"ГРУППА", "GROUP"},
+	{"ЛОКАЛЬ", "LOCALE"},
+	{"СЕРВЕР", "SERVER"},
+	{"ПАКЕТ", "PACKAGE"},
+	{"АДРЕС", "ADDR"},
+	{"ОБРАЗ", "IMAGE"},
+	{"ДОМЕН", "DOMAIN"},
+	{"ВЕТКА", "BRANCH"},
+	{"ХОСТ", "HOST"},
+	{"ПОРТ", "PORT"},
+	{"ПУТЬ", "PATH"},
+	{"СЕТЬ", "NETWORK"},
+	{"ЗОНА", "ZONE"},
+	{"ИМЯ", "NAME"},
+	{"КОД", "CODE"},
+	{"МБ", "MB"},
+	{"ГБ", "GB"},
+}
+
+// Localize возвращает строку синтаксиса или примера на английском, если
+// en; иначе — как есть.
+func Localize(text string, en bool) string {
+	if !en {
+		return text
+	}
+	for _, t := range englishTerms {
+		text = strings.ReplaceAll(text, t[0], t[1])
+	}
+	return text
 }

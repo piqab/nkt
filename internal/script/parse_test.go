@@ -218,3 +218,31 @@ on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
 		}
 	}
 }
+
+// Справка по-английски: плейсхолдеры синтаксиса и фразы примеров
+// переводятся, ключевые слова остаются.
+func TestLocalize(t *testing.T) {
+	for _, c := range Commands {
+		for _, s := range []string{c.Syntax, c.Example} {
+			if got := Localize(s, true); strings.ContainsAny(got, "абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ") {
+				t.Errorf("%s: русское осталось: %q", c.Kind, got)
+			}
+		}
+		for _, a := range c.Args {
+			if got := Localize(a.Name, true); strings.ContainsAny(got, "абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ") {
+				t.Errorf("%s: аргумент по-русски: %q", c.Kind, got)
+			}
+		}
+		if Localize(c.Syntax, false) != c.Syntax {
+			t.Errorf("%s: русский вариант изменился", c.Kind)
+		}
+	}
+	for _, e := range Examples {
+		if got := Localize(e.Content, true); strings.ContainsAny(got, "абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ") {
+			t.Errorf("%s: русское осталось: %q", e.Title, got)
+		}
+	}
+	if got := Localize("on ХОСТ file put ПУТЬ [mode 0644]", true); got != "on HOST file put PATH [mode 0644]" {
+		t.Errorf("Localize: %q", got)
+	}
+}
