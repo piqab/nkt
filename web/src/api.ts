@@ -84,7 +84,9 @@ export function writeSelectedHost(host: SelectedHost | null): void {
 /** Пути, которые никогда не относятся к выбранному хосту: вход и всё
  * под /hub/ — это сам хаб, у него нет «через хост». */
 function unscoped(path: string): boolean {
-  return path.startsWith('/auth/') || path.startsWith('/hub/')
+  // /hosts/… — уже абсолютный адрес хаба (например, задание хаба
+  // /hosts/local/jobs/{id}, открытое со страницы другого хоста).
+  return path.startsWith('/auth/') || path.startsWith('/hub/') || path.startsWith('/hosts/')
 }
 
 export function apiURL(path: string): string {

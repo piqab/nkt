@@ -72,7 +72,13 @@
     "previousVersion": "Previous",
     "rollbackTo": "Roll back to {{version}}",
     "confirmRollback": "Roll the hub back from {{current}} to {{version}}? The hub downloads the release binary, verifies its checksum and restarts — it will be unavailable for a few seconds. Hosts with a different version are brought to {{version}} when opened or via “update all”.",
-    "rollbackHint": "Rollback installs the release right before the current one. The hub always brings hosts to its own version — after a rollback they roll back too when opened."
+    "rollbackHint": "Rollback installs the release right before the current one. The hub always brings hosts to its own version — after a rollback they roll back too when opened.",
+    "clamDBTitle": "ClamAV database",
+    "clamDBHint": "A copy of the ClamAV signature database (~250 MB) for distribution to hosts: on a host page, in the “Malware” tab, the “database from hub” button uploads it over SSH — hosts do not need to download it themselves. Created by this button; then refreshed on a schedule (NKT_HUB_CLAMDB_REFRESH_INTERVAL), only what changed is downloaded.",
+    "clamDBReady": "ready",
+    "clamDBNotReady": "not downloaded yet",
+    "clamDBRefreshing": "refreshing…",
+    "clamDBSize": "size"
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",
@@ -2135,6 +2141,7 @@
     "quarantineTitle": "Quarantine ({{count}})",
     "restore": "restore",
     "restored": "{{path}} restored.",
-    "confirmPurge": "Delete {{path}} from quarantine for good?"
+    "confirmPurge": "Delete {{path}} from quarantine for good?",
+    "dbFromHub": "database from hub"
   }
 }
