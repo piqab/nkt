@@ -887,3 +887,30 @@ span.vm-toggle {
 .script-help-cmd { padding: 0.5rem 0.6rem; border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .script-help-syntax { margin: 0 0 0.3rem; font-weight: 600; white-space: pre-wrap; }
 .script-help-example { margin: 0.4rem 0 0; padding: 0.4rem 0.5rem; background: var(--wash); border-radius: var(--radius-sm); white-space: pre-wrap; }
+
+/* Схема сценария: группы колонками, хосты карточками, машины внутри
+   хоста, действия — нумерованным списком в порядке текста. */
+.scheme-groups { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: flex-start; }
+.scheme-group {
+  flex: 1 1 18rem;
+  min-width: 16rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.5rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: var(--wash);
+}
+.scheme-group-existing { border-style: dashed; background: transparent; }
+.scheme-group-head { display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap; }
+.scheme-host {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.5rem;
+  background: var(--surface-1);
+}
+.scheme-host-existing { border-style: dashed; }
+.scheme-actions { margin: 0.3rem 0 0; padding-left: 1.4rem; font-size: 0.82rem; }
+.scheme-actions li { margin: 0.1rem 0; }
+.scheme-vms { margin: 0.4rem 0 0 1rem; display: flex; flex-direction: column; gap: 0.3rem; }

@@ -2029,7 +2029,6 @@
     "tabText": "Text",
     "tabScheme": "Scheme",
     "tabHelp": "Reference",
-    "schemeSoon": "The script scheme arrives in the next version.",
     "checkIssues": "Errors: {{count}}",
     "checkOk": "Script parsed: {{count}} steps",
     "line": "line {{line}}:",
@@ -2039,6 +2038,21 @@
     "runTitle": "Run script",
     "runBody": "Steps: {{steps}}. The script runs as a hub job top to bottom and stops at the first error; progress is in the job log.",
     "askPassword": "SSH password for {{host}}",
-    "runStart": "Start"
+    "runStart": "Start",
+    "scheme": {
+      "building": "Building the scheme…",
+      "empty": "The script has no hosts or groups yet.",
+      "issues": "The text has errors ({{count}}) — the scheme is built from what parsed.",
+      "profile": "profile {{name}}",
+      "noHosts": "no hosts",
+      "existingHosts": "Already on the hub",
+      "existing": "on the hub",
+      "wait": "wait online",
+      "auth": {
+        "password": "password in text",
+        "password-ask": "password at run",
+        "key-hub": "hub key"
+      }
+    }
   }
 }
