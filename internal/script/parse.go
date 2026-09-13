@@ -52,12 +52,11 @@ type Script struct {
 }
 
 var (
-	nameRe  = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
-	varRe   = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
-	colorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
-	pkgRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
-	portRe  = regexp.MustCompile(`^([0-9]{1,5})(?:/(tcp|udp))?$`)
-	pathRe  = regexp.MustCompile(`^/[^\x00]*$`)
+	nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
+	varRe  = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
+	pkgRe  = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]*$`)
+	portRe = regexp.MustCompile(`^([0-9]{1,5})(?:/(tcp|udp))?$`)
+	pathRe = regexp.MustCompile(`^/[^\x00]*$`)
 )
 
 // Parse разбирает текст сценария. Ошибки собираются все разом — с
@@ -232,12 +231,9 @@ func parseStep(toks []string, sc *Script) (Step, error) {
 		if len(toks) < 2 || !nameRe.MatchString(toks[1]) {
 			return Step{}, msgs.Errorf("script.badName", "group")
 		}
-		args, err := kv(toks[2:], []string{"profile", "color"}, nil)
+		args, err := kv(toks[2:], []string{"profile"}, nil)
 		if err != nil {
 			return Step{}, err
-		}
-		if c := args["color"]; c != "" && !colorRe.MatchString(c) {
-			return Step{}, msgs.Errorf("script.badColor", c)
 		}
 		sc.Groups = append(sc.Groups, toks[1])
 		return Step{Kind: KindGroup, Name: toks[1], Args: args}, nil

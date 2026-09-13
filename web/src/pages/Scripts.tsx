@@ -67,12 +67,12 @@ interface HelpCommand {
 }
 
 /** Выполнение появляется следующей фазой; до неё кнопка скрыта. */
-const RUN_ENABLED = false
+const RUN_ENABLED = true
 
 const SCRIPT_COLORS = ['#4f86c6', '#5aa66f', '#c9a227', '#d0743c', '#b95c8a', '#7c6bc4', '#3fa5a5', '#8a8a8a']
 
 const TEMPLATE = `# Веб-ферма: группа, два хоста, nginx и стек
-group web-farm color #5aa66f
+group web-farm
 
 host web1 192.0.2.10 user root password ask group web-farm
 install web1
@@ -185,7 +185,9 @@ export default function Scripts({ me }: { me: Me }) {
     setBusy('run')
     try {
       const res = await api<{ job_id: number }>(`/hub/scripts/${selected}/run`, { method: 'POST', body: { passwords } })
-      const job = await api<Job>(`/hosts/local/jobs/${res.job_id}`)
+      // Раздел работает в области localhost (см. App.tsx): задания хаба — по
+      // обычному пути, без своей приставки.
+      const job = await api<Job>(`/jobs/${res.job_id}`)
       setOpenJob(job)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -407,7 +409,7 @@ export default function Scripts({ me }: { me: Me }) {
 
       {askModal && <AskPasswordsModal result={askModal} onClose={() => setAskModal(null)} onStart={startRun} />}
 
-      {openJob && <JobLogModal job={openJob} scope="/hosts/local" onClose={() => setOpenJob(null)} />}
+      {openJob && <JobLogModal job={openJob} onClose={() => setOpenJob(null)} />}
     </>
   )
 }
