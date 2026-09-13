@@ -191,7 +191,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - Profiles by host group: applying one profile to a whole group as a job.
 - Alerts: unreachable, responding again, serious problems appeared, resolved, job failed; an alert journal with settings for what to record and what to notify about, collapsing short episodes; browser notifications.
 - Hub jobs with a log.
-- Host registry export and import, including with keys (password-encrypted).
+- Whole-hub export and import: hosts with secrets, groups, machines with parents, profiles with history, machine templates, settings; the file is password-encrypted.
 - A centralized trivy vulnerability database for all hosts, refreshed on a schedule and by button.
 - "About": hub version, GitHub release check, update to the latest, rollback to the previous, the new version's notes before installing.
 - Configuration via `hub.env`, running as a systemd unit, in Docker Compose or Kubernetes.
