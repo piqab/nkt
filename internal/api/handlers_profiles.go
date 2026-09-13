@@ -3,6 +3,7 @@ package api
 import (
 	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,21 @@ type profileRequest struct {
 	Name    string `json:"name"`
 	Content string `json:"content"`
 	Note    string `json:"note"`
+	// Color — #rrggbb; пусто — без цвета.
+	Color string `json:"color"`
+}
+
+var profileColorRe = regexp.MustCompile(`^#[0-9a-fA-F]{6}$`)
+
+func cleanProfileColor(c string) (string, error) {
+	c = strings.ToLower(strings.TrimSpace(c))
+	if c == "" {
+		return "", nil
+	}
+	if !profileColorRe.MatchString(c) {
+		return "", msgs.Errorf("api.profileBadColor", c)
+	}
+	return c, nil
 }
 
 func (s *Server) handleProfileList(w http.ResponseWriter, r *http.Request) {
@@ -74,9 +90,14 @@ func (s *Server) handleProfileCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	color, err := cleanProfileColor(req.Color)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
 	user := auth.Username(r.Context())
 	id, err := s.db.CreateProfile(r.Context(), store.Profile{
-		Name: parsed.Name, Content: req.Content, Note: req.Note, Author: user,
+		Name: parsed.Name, Color: color, Content: req.Content, Note: req.Note, Author: user,
 	})
 	if err != nil {
 		s.db.Audit(r.Context(), user, "profile.create", parsed.Name, "error", err.Error())
@@ -103,9 +124,14 @@ func (s *Server) handleProfileUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	color, err := cleanProfileColor(req.Color)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
 	user := auth.Username(r.Context())
 	err = s.db.UpdateProfile(r.Context(), store.Profile{
-		ID: existing.ID, Name: parsed.Name, Content: req.Content, Note: req.Note, Author: user,
+		ID: existing.ID, Name: parsed.Name, Color: color, Content: req.Content, Note: req.Note, Author: user,
 	})
 	if err != nil {
 		s.db.Audit(r.Context(), user, "profile.update", parsed.Name, "error", err.Error())

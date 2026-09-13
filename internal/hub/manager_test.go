@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/piqab/nkt/internal/config"
-	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
 )
@@ -611,65 +610,46 @@ func TestLocalHostGroup(t *testing.T) {
 	}
 }
 
-// Профиль задаётся группе при создании и виден в списке; хост,
-// попавший в такую группу, получает задание применения — но только
-// если он в сети; у группы без профиля задания нет.
-func TestGroupProfileAppliesOnJoin(t *testing.T) {
+// Профиль задаётся группе при создании и виден в списке с цветом;
+// попадание хоста в группу ничего не запускает; переименование группы
+// сохраняет профиль.
+func TestGroupProfile(t *testing.T) {
 	ctx := context.Background()
 	m, db := newTestManager(t)
-	pid, err := db.CreateProfile(ctx, store.Profile{Name: "web", Content: "version: 1\nname: web\npackages: [nginx]"})
+	pid, err := db.CreateProfile(ctx, store.Profile{Name: "web", Color: "#3366cc", Content: "version: 1\nname: web\npackages: [nginx]"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := m.CreateHostGroup(ctx, "farm", pid); err != nil {
 		t.Fatalf("CreateHostGroup: %v", err)
 	}
-	if err := m.CreateHostGroup(ctx, "plain", 0); err != nil {
-		t.Fatal(err)
-	}
 	if err := m.CreateHostGroup(ctx, "bad", 999); err == nil {
 		t.Error("группа с несуществующим профилем создана")
 	}
 	gp, err := m.GroupProfiles(ctx)
-	if err != nil || len(gp) != 1 || gp[0].Group != "farm" || gp[0].Name != "web" {
+	if err != nil || len(gp) != 1 || gp[0].Group != "farm" || gp[0].Name != "web" || gp[0].Color != "#3366cc" {
 		t.Fatalf("GroupProfiles = %+v, %v", gp, err)
 	}
-
-	s := &Server{hub: m, db: db, jobs: jobs.New(db, slog.New(slog.DiscardHandler))}
-	s.jobs.Register(KindGroupApply, NewGroupApplyRunner(m))
 	id, err := m.AddHost(ctx, "h1", "10.0.0.1", 22, "deploy", store.HostAuthPassword, "pw", false)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Хост ещё не установлен — в группу попадает, задания нет.
 	if err := m.SetHostGroup(ctx, id, "farm"); err != nil {
 		t.Fatal(err)
 	}
-	if jobID, err := s.applyGroupProfileToHost(ctx, id, "admin"); err != nil || jobID != 0 {
-		t.Errorf("не в сети: job=%d err=%v", jobID, err)
+	if jobs, _ := db.ListJobs(ctx, 10); len(jobs) != 0 {
+		t.Errorf("перенос в группу запустил задание: %+v", jobs)
 	}
-	if err := db.SetHostStatus(ctx, id, store.HostStatusOnline, ""); err != nil {
-		t.Fatal(err)
-	}
-	jobID, err := s.applyGroupProfileToHost(ctx, id, "admin")
-	if err != nil || jobID == 0 {
-		t.Fatalf("в сети: job=%d err=%v", jobID, err)
-	}
-	job, _ := db.JobByID(ctx, jobID)
-	if job.Kind != KindGroupApply || job.Queue != "group:farm" {
-		t.Errorf("задание: %+v", job)
-	}
-	if err := m.SetHostGroup(ctx, id, "plain"); err != nil {
-		t.Fatal(err)
-	}
-	if jobID, err := s.applyGroupProfileToHost(ctx, id, "admin"); err != nil || jobID != 0 {
-		t.Errorf("группа без профиля: job=%d err=%v", jobID, err)
-	}
-	// Переименование сохраняет профиль группы.
 	if err := m.RenameHostGroup(ctx, "farm", "farm2"); err != nil {
 		t.Fatal(err)
 	}
 	if pid2, _ := db.HostGroupProfile(ctx, "farm2"); pid2 != pid {
 		t.Errorf("после переименования профиль = %d", pid2)
+	}
+	if err := db.SetHostProfile(ctx, id, pid); err != nil {
+		t.Fatal(err)
+	}
+	if h, _ := db.HostByID(ctx, id); h.ProfileID != pid {
+		t.Errorf("профиль хоста не записан: %+v", h)
 	}
 }

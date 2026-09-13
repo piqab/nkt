@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Select, Switch, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import {
@@ -590,19 +591,8 @@ export default function Hosts({
   // значениями.
   async function moveToGroup(hostID: number, group: string) {
     try {
-      const res = await api<{ job_id?: number; profile_error?: string }>(`/hub/hosts/${hostID}/group`, {
-        method: 'POST',
-        body: { group },
-      })
+      await api(`/hub/hosts/${hostID}/group`, { method: 'POST', body: { group } })
       reload()
-      // Группа с профилем: хост приводится к нему заданием — открываем
-      // его журнал, как при любой раскатке.
-      if (res.job_id) {
-        setNotice({ kind: 'info', text: t('hosts.groupProfileApplying', { group, job: res.job_id }) })
-        void openHubJob(res.job_id)
-      } else if (res.profile_error) {
-        setNotice({ kind: 'error', text: res.profile_error })
-      }
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
@@ -1160,7 +1150,12 @@ export default function Hosts({
         {vms.length > 0 && openVMs.has(h.id) && (
           <div className="col host-vms">
             {vms.map((vm) => (
-              <div key={vm.id} className="host-vm">
+              <div
+                key={vm.id}
+                className={`host-vm${vm.profile_color ? ' host-vm-profiled' : ''}`}
+                style={vm.profile_color ? ({ '--profile-color': vm.profile_color } as CSSProperties) : undefined}
+                title={vm.profile_name ? t('hosts.createdByProfile', { name: vm.profile_name }) : undefined}
+              >
                 <div className="row spread">
                   <span className="small">
                     <strong>{vm.name}</strong>{' '}
@@ -1386,6 +1381,7 @@ export default function Hosts({
         <ProvisionVMModal
           host={provisionOn}
           hubVersion={hubVersion}
+          defaultProfileID={groupProfile(provisionOn.group ?? '')?.id ?? 0}
           onImported={() => reload()}
           onClose={() => setProvisionOn(null)}
           onStarted={(text, jobID) => {
@@ -1496,7 +1492,7 @@ export default function Hosts({
                       (groupProfile(group) ? (
                         <Tooltip title={t('hosts.groupProfileTooltip')}>
                           <Tag
-                            color={groupProfile(group)!.missing ? 'error' : 'blue'}
+                            color={groupProfile(group)!.missing ? 'error' : groupProfile(group)!.color || 'blue'}
                             style={{ cursor: onOpenProfiles ? 'pointer' : undefined }}
                             onClick={() => onOpenProfiles?.()}
                           >
@@ -1548,8 +1544,16 @@ export default function Hosts({
                         dataSource={items}
                         columns={columns}
                         rowKey="id"
+                        // Строка хоста, созданного по профилю, подкрашена
+                        // его цветом — приглушённо, чтобы текст и иконки
+                        // читались как обычно. CSS-переменная, а не фон
+                        // напрямую: у antd свои фоны у ячеек, и красить
+                        // приходится их.
                         onRow={(host) => ({
                           draggable: true,
+                          title: host.profile_name ? t('hosts.createdByProfile', { name: host.profile_name }) : undefined,
+                          style: host.profile_color ? ({ '--profile-color': host.profile_color } as CSSProperties) : undefined,
+                          className: host.profile_color ? 'host-row-profiled' : undefined,
                           onDragStart: () => setDraggingHost(host.id),
                           onDragEnd: () => {
                             setDraggingHost(null)
@@ -2386,6 +2390,7 @@ function ProvisionVMModal({
   onClose,
   onStarted,
   onImported,
+  defaultProfileID = 0,
 }: {
   host: HubHost
   // Версия хаба, с которой сравнивается версия на хосте. Может быть не
@@ -2396,6 +2401,9 @@ function ProvisionVMModal({
   onStarted: (text: string, jobID: number) => void
   /** Вкладка «найти машины» добавила машины в список — перечитать хосты. */
   onImported: () => void
+  /** Профиль группы хоста — подставляется по умолчанию: машина в группе
+   * с профилем создаётся по нему. */
+  defaultProfileID?: number
 }) {
   const { t } = useTranslation()
   const [tab, setTab] = useState<'create' | 'discover'>('create')
@@ -2442,7 +2450,7 @@ function ProvisionVMModal({
   const nets = useApi<{ networks: { name: string; active: boolean }[] }>(`/hosts/${host.id}/vm/networks`, 60_000)
   const knownNets = nets.data?.networks ?? []
   const chosenNetwork = network || knownNets[0]?.name || 'default' 
-  const [profileID, setProfileID] = useState<number | null>(null)
+  const [profileID, setProfileID] = useState<number | null>(defaultProfileID || null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -2647,6 +2655,7 @@ interface GroupProfile {
   group: string
   id: number
   name: string
+  color?: string
   missing?: boolean
 }
 

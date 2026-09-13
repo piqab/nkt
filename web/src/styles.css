@@ -312,7 +312,12 @@ h3 { font-size: 0.95rem; }
    scroll wrapper survives, still placed around each antd Table the same
    way it wrapped the raw ones. */
 
-.table-wrap { overflow-x: auto; }
+/* overflow-y hidden явно: одно overflow-x: auto делает и вертикальную ось
+   auto, а таблица antd со sticky-заголовком выше обёртки на пиксель — и у
+   каждой таблицы появлялась вертикальная полоса прокрутки, хотя
+   прокручивать нечего. Высоту обёртка не ограничивает, так что прятать
+   нечего. */
+.table-wrap { overflow-x: auto; overflow-y: hidden; }
 
 /* Клетка переносит длинное значение, а не наползает на соседнюю. Нужно
    потому, что antd со sticky-заголовком раскладывает таблицу как
@@ -847,4 +852,28 @@ span.vm-toggle {
    а иконка и так занимает место — иначе длинные названия обрезаются. */
 .shell .sidebar:not(.ant-layout-sider-collapsed) .nav-menu .ant-menu-item {
   padding-inline: 0.5rem !important;
+}
+
+/* Цвет профиля в списке профилей. */
+.profile-swatch {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+/* Строка хоста, созданного по профилю: фон — цвет профиля, разбавленный
+   до 14%, чтобы не спорить с текстом и иконками; при наведении чуть
+   плотнее, как у обычных строк. */
+.host-row-profiled > td {
+  background: color-mix(in srgb, var(--profile-color) 14%, transparent) !important;
+}
+.host-row-profiled:hover > td {
+  background: color-mix(in srgb, var(--profile-color) 22%, transparent) !important;
+}
+.host-vm-profiled {
+  background: color-mix(in srgb, var(--profile-color) 14%, transparent);
+  border-radius: var(--radius-sm);
 }

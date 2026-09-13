@@ -363,6 +363,10 @@ type hostWithOverview struct {
 	// не опрошен. Выключенной машине «старт» службы nkt по SSH ни к
 	// чему — стучаться некуда; здесь по этому полю кнопки и выбираются.
 	VMState string `json:"vm_state,omitempty"`
+	// ProfileName/ProfileColor — профиль, по которому хост создан: строка
+	// подкрашивается его цветом.
+	ProfileName  string `json:"profile_name,omitempty"`
+	ProfileColor string `json:"profile_color,omitempty"`
 }
 
 // localHostID is the sentinel Host.ID for the synthetic "localhost" row —
@@ -383,6 +387,14 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 		groupByID[h.ID] = h.Group
 	}
 
+	// Профили — по одному запросу, а не по одному на хост.
+	profileByID := map[int64]store.Profile{}
+	if list, err := s.db.ListProfiles(r.Context()); err == nil {
+		for _, p := range list {
+			profileByID[p.ID] = p
+		}
+	}
+
 	out := make([]hostWithOverview, 0, len(hosts)+1)
 	if local := s.localHostEntry(r.Context()); local != nil {
 		out = append(out, *local)
@@ -394,6 +406,9 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		row := hostWithOverview{Host: h}
+		if p, ok := profileByID[h.ProfileID]; ok && h.ProfileID != 0 {
+			row.ProfileName, row.ProfileColor = p.Name, p.Color
+		}
 		if ov, ok := s.hub.Overview(h.ID); ok {
 			row.Findings = ov.Findings
 			reachable := ov.Reachable
@@ -488,10 +503,6 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 func (s *Server) setHostGroup(ctx context.Context, id int64, group string) {
 	if err := s.hub.SetHostGroup(ctx, id, group); err != nil {
 		s.log.Warn("не удалось сохранить группу хоста", "host", id, "err", err)
-		return
-	}
-	if _, err := s.applyGroupProfileToHost(ctx, id, auth.Username(ctx)); err != nil {
-		s.log.Warn("профиль группы не применён", "host", id, "err", err)
 	}
 }
 
@@ -514,17 +525,10 @@ func (s *Server) handleSetHostGroup(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	// Группа с профилем: хост, попавший в неё, приводится к профилю —
-	// заданием, чей номер уходит в ответ, чтобы интерфейс мог его
-	// показать. Отказ запуска не отменяет смену группы: она уже
-	// сделана, а профиль можно применить и потом.
-	out := map[string]any{"status": "ok"}
-	if jobID, err := s.applyGroupProfileToHost(r.Context(), id, auth.Username(r.Context())); err != nil {
-		out["profile_error"] = msgs.Localize(msgs.FromContext(r.Context()), err)
-	} else if jobID != 0 {
-		out["job_id"] = jobID
-	}
-	writeJSON(w, http.StatusOK, out)
+	// Профиль группы к перенесённому хосту не применяется: менять
+	// работающий хост из-за перетаскивания строки — не то, чего от
+	// перетаскивания ждут. Профиль — для машин, создаваемых в группе.
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // handleHostGroups отдаёт список групп — и заведённых пустыми, и тех, что

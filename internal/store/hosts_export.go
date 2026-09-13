@@ -77,11 +77,14 @@ type HostExport struct {
 	// единственное, что переживает переезд).
 	Group  string `json:"group,omitempty"`
 	Parent string `json:"parent,omitempty"`
+	// Profile — имя профиля, по которому хост создан.
+	Profile string `json:"profile,omitempty"`
 }
 
 // ProfileExport — профиль хаба с историей редакций.
 type ProfileExport struct {
 	Name     string                 `json:"name"`
+	Color    string                 `json:"color,omitempty"`
 	Content  string                 `json:"content"`
 	Note     string                 `json:"note,omitempty"`
 	Author   string                 `json:"author,omitempty"`
@@ -175,6 +178,11 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 	for _, p := range profiles {
 		profileNames[p.ID] = p.Name
 	}
+	for i, h := range hosts {
+		if h.ProfileID != 0 {
+			out.Hosts[i].Profile = profileNames[h.ProfileID]
+		}
+	}
 	if gp, err := d.HostGroupProfiles(ctx); err == nil {
 		for group, id := range gp {
 			if name := profileNames[id]; name != "" {
@@ -190,7 +198,7 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 		if err != nil {
 			return HubExport{}, err
 		}
-		pe := ProfileExport{Name: full.Name, Content: full.Content, Note: full.Note, Author: full.Author}
+		pe := ProfileExport{Name: full.Name, Color: full.Color, Content: full.Content, Note: full.Note, Author: full.Author}
 		versions, err := d.ProfileVersions(ctx, p.ID, 200)
 		if err != nil {
 			return HubExport{}, err
@@ -277,7 +285,13 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 	errs = append(errs, d.importVMTemplates(ctx, export.VMTemplates)...)
 	// Профили групп — после профилей: искать их по имени можно только
 	// когда они уже заведены. Существующий профиль группы не трогается.
-	if len(export.GroupProfiles) > 0 {
+	hostProfiles := false
+	for _, h := range export.Hosts {
+		if h.Profile != "" {
+			hostProfiles = true
+		}
+	}
+	if len(export.GroupProfiles) > 0 || hostProfiles {
 		all, err := d.ListProfiles(ctx)
 		if err != nil {
 			errs = append(errs, err.Error())
@@ -294,6 +308,16 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 				}
 				if _, err := d.ExecContext(ctx, `UPDATE host_groups SET profile_id = ? WHERE name = ? AND profile_id = 0`, id, group); err != nil {
 					errs = append(errs, fmt.Sprintf("%s: %v", group, err))
+				}
+			}
+			for _, h := range export.Hosts {
+				if h.Profile == "" {
+					continue
+				}
+				if id, ok := ids[h.Name]; ok {
+					if pid, ok := byName[h.Profile]; ok {
+						_ = d.SetHostProfile(ctx, id, pid)
+					}
 				}
 			}
 		}
@@ -338,7 +362,7 @@ func (d *DB) importProfiles(ctx context.Context, profiles []ProfileExport) (errs
 			errs = append(errs, msgs.Tc(ctx, "store.importProfileExists", p.Name))
 			continue
 		}
-		id, err := d.CreateProfile(ctx, Profile{Name: p.Name, Content: p.Content, Note: p.Note, Author: p.Author})
+		id, err := d.CreateProfile(ctx, Profile{Name: p.Name, Color: p.Color, Content: p.Content, Note: p.Note, Author: p.Author})
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
 			continue

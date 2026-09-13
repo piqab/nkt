@@ -69,7 +69,12 @@ type Host struct {
 	// хостов. Машина не живёт отдельно от своего сервера: она
 	// показывается под ним и переезжает между группами только вместе с
 	// ним.
-	ParentID   int64  `json:"parent_id,omitempty"`
+	ParentID int64 `json:"parent_id,omitempty"`
+	// ProfileID — профиль, по которому хост был создан (машина, заведённая
+	// хабом с профилем). 0 — создан не по профилю или до того, как хаб
+	// стал это запоминать. Только цвет строки, никакого повторного
+	// применения.
+	ProfileID  int64  `json:"profile_id,omitempty"`
 	CreatedAt  string `json:"created_at"`
 	LastSeenAt string `json:"last_seen_at,omitempty"`
 
@@ -114,7 +119,7 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
 	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, group_name,
-	parent_id`
+	parent_id, profile_id`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
@@ -123,7 +128,7 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
 		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen, &h.Group,
-		&h.ParentID)
+		&h.ParentID, &h.ProfileID)
 	if err != nil {
 		return Host{}, err
 	}
@@ -459,6 +464,12 @@ func (d *DB) CreateHostGroupWithProfile(ctx context.Context, name string, profil
 	_, err := d.ExecContext(ctx,
 		`INSERT OR IGNORE INTO host_groups(name, created_at, profile_id) VALUES(?, ?, ?)`,
 		name, FormatTime(time.Now()), profileID)
+	return err
+}
+
+// SetHostProfile запоминает, по какому профилю хост создан.
+func (d *DB) SetHostProfile(ctx context.Context, id, profileID int64) error {
+	_, err := d.ExecContext(ctx, `UPDATE hosts SET profile_id = ? WHERE id = ?`, profileID, id)
 	return err
 }
 

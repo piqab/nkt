@@ -15,8 +15,10 @@ import (
 // возвращают. Разбирает его internal/profile — хранилищу знать его
 // устройство незачем.
 type Profile struct {
-	ID        int64  `json:"id"`
-	Name      string `json:"name"`
+	ID   int64  `json:"id"`
+	Name string `json:"name"`
+	// Color — цвет профиля (#rrggbb) для строк хостов, созданных по нему.
+	Color     string `json:"color,omitempty"`
 	Content   string `json:"content,omitempty"`
 	Note      string `json:"note,omitempty"`
 	Author    string `json:"author,omitempty"`
@@ -45,8 +47,8 @@ func (db *DB) CreateProfile(ctx context.Context, p Profile) (int64, error) {
 	defer func() { _ = tx.Rollback() }()
 
 	res, err := tx.ExecContext(ctx, `
-		INSERT INTO profiles (name, content, note, author, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)`, p.Name, p.Content, p.Note, p.Author, now, now)
+		INSERT INTO profiles (name, color, content, note, author, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`, p.Name, p.Color, p.Content, p.Note, p.Author, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -72,8 +74,8 @@ func (db *DB) UpdateProfile(ctx context.Context, p Profile) error {
 	defer func() { _ = tx.Rollback() }()
 
 	res, err := tx.ExecContext(ctx,
-		`UPDATE profiles SET name = ?, content = ?, note = ?, author = ?, updated_at = ? WHERE id = ?`,
-		p.Name, p.Content, p.Note, p.Author, now, p.ID)
+		`UPDATE profiles SET name = ?, color = ?, content = ?, note = ?, author = ?, updated_at = ? WHERE id = ?`,
+		p.Name, p.Color, p.Content, p.Note, p.Author, now, p.ID)
 	if err != nil {
 		return err
 	}
@@ -97,9 +99,9 @@ func (db *DB) DeleteProfile(ctx context.Context, id int64) error {
 // ProfileByID отдаёт профиль с содержимым.
 func (db *DB) ProfileByID(ctx context.Context, id int64) (Profile, error) {
 	row := db.QueryRowContext(ctx,
-		`SELECT id, name, content, note, author, created_at, updated_at FROM profiles WHERE id = ?`, id)
+		`SELECT id, name, color, content, note, author, created_at, updated_at FROM profiles WHERE id = ?`, id)
 	var p Profile
-	err := row.Scan(&p.ID, &p.Name, &p.Content, &p.Note, &p.Author, &p.CreatedAt, &p.UpdatedAt)
+	err := row.Scan(&p.ID, &p.Name, &p.Color, &p.Content, &p.Note, &p.Author, &p.CreatedAt, &p.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Profile{}, ErrNotFound
 	}
@@ -110,7 +112,7 @@ func (db *DB) ProfileByID(ctx context.Context, id int64) (Profile, error) {
 // текст в нём не показывают.
 func (db *DB) ListProfiles(ctx context.Context) ([]Profile, error) {
 	rows, err := db.QueryContext(ctx,
-		`SELECT id, name, note, author, created_at, updated_at FROM profiles ORDER BY name`)
+		`SELECT id, name, color, note, author, created_at, updated_at FROM profiles ORDER BY name`)
 	if err != nil {
 		return nil, err
 	}
@@ -118,7 +120,7 @@ func (db *DB) ListProfiles(ctx context.Context) ([]Profile, error) {
 	out := []Profile{}
 	for rows.Next() {
 		var p Profile
-		if err := rows.Scan(&p.ID, &p.Name, &p.Note, &p.Author, &p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Color, &p.Note, &p.Author, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, p)

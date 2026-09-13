@@ -1140,4 +1140,5 @@ var enCatalog = map[string]string{
 	"hub.groupProfileNotFound": "profile #%d not found",
 	"hub.profileHostJobTitle": "profile %s → %s",
 	"store.importGroupProfileMissing": "group %q: profile %q not found — the group was created without a profile",
+	"api.profileBadColor": "the profile color must look like #rrggbb, got %q",
 }

@@ -1139,4 +1139,5 @@ var ruCatalog = map[string]string{
 	"hub.groupProfileNotFound": "профиль №%d не найден",
 	"hub.profileHostJobTitle": "профиль %s → %s",
 	"store.importGroupProfileMissing": "группа %q: профиль %q не найден — группа заведена без профиля",
+	"api.profileBadColor": "цвет профиля должен быть вида #rrggbb, получено %q",
 }
