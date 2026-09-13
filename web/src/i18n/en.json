@@ -586,11 +586,6 @@
     "renameGroup": "Rename",
     "groupEmpty": "The group is empty — drag hosts here.",
     "confirmDeleteGroup": "Delete the group \"{{name}}\"? Its hosts ({{count}} now) go back to Ungrouped.",
-    "applyProfile": "profile",
-    "applyProfileTitle": "Profile for group «{{group}}» ({{count}} hosts)",
-    "applyProfileBody": "Hosts are visited one at a time: each gets its own plan, and only what actually differs there is applied. A failure on the first host stops the rollout, so a wrong description does not reach the whole group. The work runs in the background — follow it in the Jobs section.",
-    "applyProfileStart": "Start",
-    "applyProfileStarted": "Rollout started: {{count}} hosts, job #{{job}}. Follow it in the Jobs section.",
     "newVM": "new VM",
     "newVMTitle": "New machine on host «{{host}}»",
     "newVMBody": "The host itself creates the machine from a cloud image, and the hub puts its own key inside on first boot and adds it to the list — inside that host. A machine has no group of its own: it moves between groups together with the host it runs on. Installing nkt on it stays a separate step. The work runs in the background; follow it in Jobs.",
@@ -604,7 +599,6 @@
     "newVMVcpus": "vCPUs",
     "newVMStart": "Create",
     "newVMStarted": "Creation of machine \"{{name}}\" started, job #{{job}}. Follow it in Jobs.",
-    "applyProfileNone": "Create a profile first in the Profiles section on the hub machine — there is nothing to roll out yet.",
     "vmCount_one": "{{count}} machine",
     "vmCount_other": "{{count}} machines",
     "newVMKeyOptional": "Optional: the hub always installs its own key and logs in with it. This one is only needed if you want to reach the machine directly, bypassing the hub.",
@@ -647,7 +641,15 @@
     "discoverSearching": "looking for machines on {{name}}…",
     "syncVersion": "bring to the hub's version",
     "newVMTabCreate": "New machine",
-    "discoverTab": "Find machines on the host"
+    "discoverTab": "Find machines on the host",
+    "groupProfile": "Group profile",
+    "groupProfileNone": "no profile",
+    "groupProfileExtra": "A host that lands in this group is brought to this profile (as a job with a log). A profile cannot be assigned later — create a new group instead.",
+    "groupProfileTooltip": "This group's profile: applied to every host when it joins the group; drift is later visible in the host's Findings",
+    "groupProfileMissing": "profile deleted",
+    "groupProfileHowTo": "How to use profiles on the hub: describe the desired state in the Profiles section, create a group with that profile and drag hosts into it — the profile is applied to each one automatically. An existing group cannot be given a profile.",
+    "groupProfileHowToShort": "How to use profiles",
+    "groupProfileApplying": "The host joined group “{{group}}” — applying its profile, job #{{job}}."
   },
   "events": {
     "title": "Alerts",
@@ -1818,7 +1820,8 @@
       "sudo-grant": "the account gets full rights",
       "hostname": "the hostname shows up in certificates and logs",
       "external-repo": "docker.com's own repository is added to the system"
-    }
+    },
+    "hubHint": "Hub profiles: a description of what a host should be — packages, services, files, ports, accounts, stacks. Applied through groups: create a group with a profile in Hosts and drag hosts into it — each is brought to the profile, and drift later shows in its Findings."
   },
   "vmimages": {
     "title": "VM images",

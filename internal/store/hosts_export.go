@@ -113,9 +113,12 @@ type HubExport struct {
 	Hosts      []HostExport `json:"hosts"`
 	// Groups — все группы, включая пустые: пустая группа — тоже
 	// настройка, которую заводили руками.
-	Groups      []string           `json:"groups,omitempty"`
-	Profiles    []ProfileExport    `json:"profiles,omitempty"`
-	VMTemplates []VMTemplateExport `json:"vm_templates,omitempty"`
+	Groups []string `json:"groups,omitempty"`
+	// GroupProfiles — профиль группы по имени профиля: идентификаторы в
+	// другом хабе другие.
+	GroupProfiles map[string]string  `json:"group_profiles,omitempty"`
+	Profiles      []ProfileExport    `json:"profiles,omitempty"`
+	VMTemplates   []VMTemplateExport `json:"vm_templates,omitempty"`
 	// Settings — настройки хаба из таблицы kv по ключу (настройки
 	// оповещений, группа строки localhost, умолчания подготовки).
 	Settings map[string]string `json:"settings,omitempty"`
@@ -167,6 +170,20 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 	profiles, err := d.ListProfiles(ctx)
 	if err != nil {
 		return HubExport{}, err
+	}
+	profileNames := map[int64]string{}
+	for _, p := range profiles {
+		profileNames[p.ID] = p.Name
+	}
+	if gp, err := d.HostGroupProfiles(ctx); err == nil {
+		for group, id := range gp {
+			if name := profileNames[id]; name != "" {
+				if out.GroupProfiles == nil {
+					out.GroupProfiles = map[string]string{}
+				}
+				out.GroupProfiles[group] = name
+			}
+		}
 	}
 	for _, p := range profiles {
 		full, err := d.ProfileByID(ctx, p.ID)
@@ -258,6 +275,29 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 	}
 	errs = append(errs, d.importProfiles(ctx, export.Profiles)...)
 	errs = append(errs, d.importVMTemplates(ctx, export.VMTemplates)...)
+	// Профили групп — после профилей: искать их по имени можно только
+	// когда они уже заведены. Существующий профиль группы не трогается.
+	if len(export.GroupProfiles) > 0 {
+		all, err := d.ListProfiles(ctx)
+		if err != nil {
+			errs = append(errs, err.Error())
+		} else {
+			byName := map[string]int64{}
+			for _, p := range all {
+				byName[p.Name] = p.ID
+			}
+			for group, name := range export.GroupProfiles {
+				id, ok := byName[name]
+				if !ok {
+					errs = append(errs, msgs.Tc(ctx, "store.importGroupProfileMissing", group, name))
+					continue
+				}
+				if _, err := d.ExecContext(ctx, `UPDATE host_groups SET profile_id = ? WHERE name = ? AND profile_id = 0`, id, group); err != nil {
+					errs = append(errs, fmt.Sprintf("%s: %v", group, err))
+				}
+			}
+		}
+	}
 	for key, value := range export.Settings {
 		if !exportedSettingKey(key) {
 			continue

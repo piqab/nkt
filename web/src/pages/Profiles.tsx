@@ -119,7 +119,7 @@ function ProfileGuide({ onClose }: { onClose: () => void }) {
   )
 }
 
-export default function Profiles({ me }: { me: Me }) {
+export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: boolean }) {
   const { t } = useTranslation()
   const canEdit = me.is_admin && me.allow_mutations
   const list = useApi<{ profiles: Profile[] }>('/profiles', 60_000)
@@ -280,7 +280,7 @@ export default function Profiles({ me }: { me: Me }) {
       <div className="page-head spread">
         <h1>
           {t('profiles.title')}
-          <InfoHint>{t('profiles.hint')}</InfoHint>
+          <InfoHint>{t(hubLevel ? 'profiles.hubHint' : 'profiles.hint')}</InfoHint>
           {/* Подсказка у заголовка отвечает «что это за раздел», а писать
               профиль приходится здесь же — за справочником с примерами
               уходить в репозиторий незачем. */}
@@ -364,9 +364,13 @@ export default function Profiles({ me }: { me: Me }) {
                     {t('common.save')}
                   </Button>
                 )}
-                <Button size="small" type="primary" loading={busy} onClick={() => void buildPlan()}>
-                  {t('profiles.buildPlan')}
-                </Button>
+                {/* На хабе профиль применяется к хостам через группы, а
+                    не к машине хаба — план здесь не строится. */}
+                {!hubLevel && (
+                  <Button size="small" type="primary" loading={busy} onClick={() => void buildPlan()}>
+                    {t('profiles.buildPlan')}
+                  </Button>
+                )}
                 {selected && canEdit && (
                   <Button
                     size="small"

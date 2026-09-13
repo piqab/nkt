@@ -242,7 +242,10 @@ CREATE INDEX IF NOT EXISTS idx_hosts_name ON hosts(name);
 -- чтобы потом перетащить в неё хосты.
 CREATE TABLE IF NOT EXISTS host_groups (
     name       TEXT PRIMARY KEY,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    -- profile_id — профиль группы: применяется хосту, когда он в неё
+    -- попадает. 0 — группа без профиля.
+    profile_id INTEGER NOT NULL DEFAULT 0
 );
 
 -- Оповещения хаба: хост перестал отвечать, снова отвечает, появились
@@ -290,6 +293,7 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	// в другую группу бессмысленно, а переезжает она вместе с ним.
 	{"hosts", "parent_id", `ALTER TABLE hosts ADD COLUMN parent_id INTEGER NOT NULL DEFAULT 0`},
 	{"jobs", "lang", `ALTER TABLE jobs ADD COLUMN lang TEXT NOT NULL DEFAULT ''`},
+	{"host_groups", "profile_id", `ALTER TABLE host_groups ADD COLUMN profile_id INTEGER NOT NULL DEFAULT 0`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

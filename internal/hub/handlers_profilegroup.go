@@ -378,3 +378,38 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"imported": done, "errors": errs})
 }
+
+// applyGroupProfileToHost запускает применение профиля группы к одному
+// хосту — тому, что только что в неё попал. 0 — применять нечего: у
+// группы нет профиля, хост не в сети, или это машина хаба.
+func (s *Server) applyGroupProfileToHost(ctx context.Context, hostID int64, author string) (int64, error) {
+	if hostID == LocalHostID || s.jobs == nil {
+		return 0, nil
+	}
+	host, err := s.db.HostByID(ctx, hostID)
+	if err != nil {
+		return 0, err
+	}
+	if host.Group == "" || host.Status != store.HostStatusOnline {
+		return 0, nil
+	}
+	profileID, err := s.db.HostGroupProfile(ctx, host.Group)
+	if err != nil || profileID == 0 {
+		return 0, err
+	}
+	prof, err := s.db.ProfileByID(ctx, profileID)
+	if err != nil {
+		return 0, msgs.Errorf("hub.groupProfileNotFound", profileID)
+	}
+	if _, err := profile.Parse([]byte(prof.Content)); err != nil {
+		return 0, err
+	}
+	return s.jobs.Start(ctx, jobs.Spec{
+		Kind:   KindGroupApply,
+		Title:  msgs.Tc(ctx, "hub.profileHostJobTitle", prof.Name, host.Name),
+		Queue:  "group:" + host.Group,
+		Author: author,
+		Steps:  1,
+		Params: GroupApplyParams{ProfileID: prof.ID, Profile: prof.Name, Group: host.Group, Content: prof.Content, Hosts: []int64{hostID}},
+	})
+}

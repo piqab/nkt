@@ -480,7 +480,7 @@ func (m *Manager) HostGroups(ctx context.Context) ([]string, error) {
 
 // CreateHostGroup заводит пустую группу — ту, в которую потом перетаскивают
 // хосты.
-func (m *Manager) CreateHostGroup(ctx context.Context, name string) error {
+func (m *Manager) CreateHostGroup(ctx context.Context, name string, profileID int64) error {
 	name, err := cleanGroupName(name)
 	if err != nil {
 		return err
@@ -488,7 +488,42 @@ func (m *Manager) CreateHostGroup(ctx context.Context, name string) error {
 	if name == "" {
 		return msgs.Errorf("hub.groupNameCannotEmpty")
 	}
-	return m.db.CreateHostGroup(ctx, name)
+	if profileID != 0 {
+		if _, err := m.db.ProfileByID(ctx, profileID); err != nil {
+			return msgs.Errorf("hub.groupProfileNotFound", profileID)
+		}
+	}
+	return m.db.CreateHostGroupWithProfile(ctx, name, profileID)
+}
+
+// GroupProfile — профиль группы для выдачи в список.
+type GroupProfile struct {
+	Group   string `json:"group"`
+	ID      int64  `json:"id"`
+	Name    string `json:"name"`
+	Missing bool   `json:"missing,omitempty"`
+}
+
+// GroupProfiles — профили групп с именами. Удалённый профиль остаётся
+// у группы как «нет такого»: молча снять его значило бы спрятать, что
+// группа когда-то была под профилем.
+func (m *Manager) GroupProfiles(ctx context.Context) ([]GroupProfile, error) {
+	byGroup, err := m.db.HostGroupProfiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := []GroupProfile{}
+	for group, id := range byGroup {
+		gp := GroupProfile{Group: group, ID: id}
+		if p, err := m.db.ProfileByID(ctx, id); err == nil {
+			gp.Name = p.Name
+		} else {
+			gp.Missing = true
+		}
+		out = append(out, gp)
+	}
+	slices.SortFunc(out, func(a, b GroupProfile) int { return strings.Compare(a.Group, b.Group) })
+	return out, nil
 }
 
 // RenameHostGroup переименовывает группу вместе с её хостами.
