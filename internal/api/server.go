@@ -81,6 +81,7 @@ type Server struct {
 	// second concurrent scan would just redo the same work the first one
 	// is already doing.
 	vuln vulnState
+	clam clamState
 }
 
 // Deps bundles the constructed subsystems.
@@ -235,6 +236,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/vulnerabilities", s.handleVulnerabilities)
 			r.Get("/vulnerabilities/manifest", s.handleVulnManifest)
 			r.Get("/malware", s.handleMalware)
+			r.Get("/clamav", s.handleClamStatus)
 			r.Get("/certificates", s.handleCertificates)
 			r.Get("/certificates/tools", s.handleCertTools)
 			r.Get("/certificates/standalone-plan", s.handleStandalonePlan)
@@ -297,6 +299,14 @@ func (s *Server) Handler() http.Handler {
 
 				r.Post("/vulnerabilities/scan", s.handleVulnScanStart)
 				r.Post("/vulnerabilities/scan-images", s.handleVulnScanImages)
+				r.Post("/clamav/install", s.handleClamInstall)
+				r.Post("/clamav/update-db", s.handleClamUpdateDB)
+				r.Post("/clamav/scan", s.handleClamScan)
+				r.Post("/clamav/scan-images", s.handleClamScanImages)
+				r.Post("/clamav/cancel", s.handleClamCancel)
+				r.Post("/clamav/quarantine", s.handleClamQuarantine)
+				r.Post("/clamav/restore", s.handleClamRestore)
+				r.Post("/clamav/purge", s.handleClamPurge)
 
 				r.Post("/inventory/refresh", s.handleRefresh)
 				// Проверка порта делает соединение от имени хоста — админам.

@@ -753,6 +753,46 @@ type MalwareReport struct {
 	DurationMS int64        `json:"duration_ms"`
 }
 
+// ClamStatus — установлен ли ClamAV и в каком состоянии база сигнатур.
+type ClamStatus struct {
+	Installed       bool   `json:"installed"`
+	Version         string `json:"version,omitempty"`
+	DBVersion       string `json:"db_version,omitempty"`
+	DBDate          string `json:"db_date,omitempty"`
+	DBPresent       bool   `json:"db_present"`
+	FreshclamActive bool   `json:"freshclam_active"`
+}
+
+// ClamHit — заражённый файл по мнению clamscan.
+type ClamHit struct {
+	Path      string `json:"path"`
+	Signature string `json:"signature"`
+	// Target — образ, в котором найден файл; пусто для файлов хоста.
+	Target string `json:"target,omitempty"`
+}
+
+// ClamScan — результат одного прогона clamscan по хосту или образам.
+type ClamScan struct {
+	Kind       string    `json:"kind"` // host | images
+	Targets    []string  `json:"targets"`
+	StartedAt  time.Time `json:"started_at"`
+	FinishedAt time.Time `json:"finished_at"`
+	Scanned    int       `json:"scanned"`
+	Hits       []ClamHit `json:"hits"`
+	Warnings   []string  `json:"warnings,omitempty"`
+	Error      string    `json:"error,omitempty"`
+}
+
+// QuarantineItem — файл, убранный в карантин: откуда, когда, что нашлось.
+type QuarantineItem struct {
+	ID        string    `json:"id"`
+	Original  string    `json:"original"`
+	Signature string    `json:"signature,omitempty"`
+	Target    string    `json:"target,omitempty"`
+	Size      int64     `json:"size"`
+	At        time.Time `json:"at"`
+}
+
 // HostCapacity is the host's total installed memory and CPU core count —
 // see parse.HostCapacity for how it's read. Used as the reference ceiling
 // for the CPU/memory usage charts (see /monitor/usage's "total" field),

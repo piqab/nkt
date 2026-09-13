@@ -63,6 +63,14 @@ database is downloaded automatically (or taken from the hub, which keeps
 one for all hosts). The list: severity, package, fixed version, links; the
 scan progress is live.
 
+The **“Malware”** tab — a check for miners and signs of a break-in with
+no third-party tools (processes named like miners, pool connections,
+binaries from /tmp or deleted from disk, cron with “curl | sh”, units
+from temporary directories, foreign SUID files, `/etc/ld.so.preload`,
+blocks in `/etc/hosts`) on every scan, and below it **ClamAV**: install,
+signature database, scans of host directories and container images,
+quarantine.
+
 ## Resource map
 
 ![Resource map](/screens/en/topology.png)
