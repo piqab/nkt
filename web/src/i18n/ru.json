@@ -2144,6 +2144,8 @@
     "restore": "вернуть",
     "restored": "{{path}} возвращён на место.",
     "confirmPurge": "Удалить {{path}} из карантина насовсем?",
-    "dbFromHub": "база с хаба"
+    "dbFromHub": "база с хаба",
+    "dbFromHubDone": "База ClamAV залита с хаба.",
+    "dbFromHubFailed": "Заливка базы с хаба не удалась — см. журнал задания."
   }
 }

@@ -2142,6 +2142,8 @@
     "restore": "restore",
     "restored": "{{path}} restored.",
     "confirmPurge": "Delete {{path}} from quarantine for good?",
-    "dbFromHub": "database from hub"
+    "dbFromHub": "database from hub",
+    "dbFromHubDone": "The ClamAV database was uploaded from the hub.",
+    "dbFromHubFailed": "The database upload from the hub failed — see the job log."
   }
 }
