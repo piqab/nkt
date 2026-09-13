@@ -16,7 +16,9 @@
     "readOnlyMode": "Changes are disabled by the <code>NKT_ALLOW_MUTATIONS=false</code> setting — the interface is read-only.",
     "loading": "Loading…",
     "backToHostList": "← back to host list",
-    "hubBrand": "NetKnownsThat — hub"
+    "hubBrand": "nkt — hub",
+    "sidebarCollapse": "Collapse menu",
+    "sidebarExpand": "Expand menu"
   },
   "nav": {
     "overview": "Overview",
@@ -493,7 +495,7 @@
     "updateAllNone": "no updates",
     "startAll": "start all",
     "stopAll": "stop all",
-    "export": "export",
+    "export": "Export",
     "exportWithKeyTooltip": "For moving to a new hub without manually copying NKT_HUB_MASTER_KEY — the file becomes self-sufficient to decrypt, so keep it as carefully as passwords",
     "exportWithKey": "export with key",
     "import": "import",
@@ -643,7 +645,9 @@
     "discoverImported": "Machines added: {{count}}.",
     "discoverKeyHint": "The hub key is not in the machines yet — open “public key” in the machine row and add it to authorized_keys.",
     "discoverSearching": "looking for machines on {{name}}…",
-    "syncVersion": "bring to the hub's version"
+    "syncVersion": "bring to the hub's version",
+    "newVMTabCreate": "New machine",
+    "discoverTab": "Find machines on the host"
   },
   "events": {
     "title": "Alerts",

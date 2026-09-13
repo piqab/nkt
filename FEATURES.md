@@ -10,7 +10,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - One static binary: web UI, API, terminal UI and hub.
 - Three modes: `local` (a real host), `fixtures` (a host snapshot for development, works on Windows too), `hub`.
 - Russian and English UI: the language follows the browser, switches at the bottom of the menu, and every server message arrives in the UI language.
-- Light, dark and system theme.
+- Light, dark and system theme; the sidebar collapses to icons (by button or automatically on narrow screens), the state is remembered.
 - Accounts with `admin` and `viewer` roles, argon2id passwords, sessions, brute-force protection, login with a host system account (PAM).
 - Read-only mode (`NKT_ALLOW_MUTATIONS=false`) that disables every change.
 - Audit log: every change is recorded with the user, the outcome and the command output.

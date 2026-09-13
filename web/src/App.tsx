@@ -1,5 +1,35 @@
 import { useCallback, useEffect, useState } from 'react'
-import { ConfigProvider, Layout, Menu, type MenuProps, type ThemeConfig } from 'antd'
+import { Badge, Button, ConfigProvider, Layout, Menu, Tooltip, type MenuProps, type ThemeConfig } from 'antd'
+import {
+  AlertOutlined,
+  ApartmentOutlined,
+  AppstoreOutlined,
+  AuditOutlined,
+  BellOutlined,
+  BugOutlined,
+  ClusterOutlined,
+  CodeOutlined,
+  DashboardOutlined,
+  DesktopOutlined,
+  FileTextOutlined,
+  FundOutlined,
+  HddOutlined,
+  HeartOutlined,
+  InfoCircleOutlined,
+  LogoutOutlined,
+  MenuFoldOutlined,
+  MenuUnfoldOutlined,
+  PlayCircleOutlined,
+  SafetyCertificateOutlined,
+  SafetyOutlined,
+  SettingOutlined,
+  ShareAltOutlined,
+  TeamOutlined,
+  ToolOutlined,
+  UserOutlined,
+  WifiOutlined,
+} from '@ant-design/icons'
+import type { ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
 import { LOCAL_HOST_ID, api, hostScope, onUnauthorized, readSelectedHost, type SelectedHost, useApi, writeSelectedHost } from './api'
@@ -92,77 +122,112 @@ function useTheme(): [Theme, (t: Theme) => void, ThemeConfig] {
 // изменениями во времени, правит сам хост, разбирается с сетью, выдаёт
 // доступ.
 //
-// Порядок групп — от «что происходит» к «кому что можно»: сверху то, ради
-// чего сюда заходят чаще всего.
-const NAV_GROUPS: {
-  key: string
+// Порядок разделов — от «что происходит» к «кому что можно»: сверху то,
+// ради чего сюда заходят чаще всего. Плоский список без групп: у каждого
+// раздела своя иконка, и в свёрнутом сайдбаре меню остаётся тем же
+// столбцом иконок.
+const NAV_ITEMS: {
+  to: string
   labelKey: string
-  items: { to: string; labelKey: string; end?: boolean; adminOnly?: boolean; badge?: 'findings' | 'certs' | 'jobs' }[]
+  icon: ReactNode
+  end?: boolean
+  adminOnly?: boolean
+  badge?: 'findings' | 'certs' | 'jobs'
 }[] = [
-  {
-    key: 'state',
-    labelKey: 'navGroup.state',
-    items: [
-      { to: '/', labelKey: 'nav.overview', end: true },
-      { to: '/findings', labelKey: 'nav.findings', badge: 'findings' },
-      { to: '/vulnerabilities', labelKey: 'nav.vulnerabilities' },
-      { to: '/topology', labelKey: 'nav.topology' },
-    ],
-  },
-  {
-    key: 'watch',
-    labelKey: 'navGroup.watch',
-    items: [
-      { to: '/availability', labelKey: 'nav.availability' },
-      { to: '/usage', labelKey: 'nav.usage' },
-      { to: '/logs', labelKey: 'nav.logs' },
-      // Задания рядом с журналами: и то, и другое — «что происходило,
-      // пока я не смотрел».
-      { to: '/jobs', labelKey: 'nav.jobs', badge: 'jobs' },
-      { to: '/audit', labelKey: 'nav.audit' },
-    ],
-  },
-  {
-    key: 'host',
-    labelKey: 'navGroup.host',
-    items: [
-      { to: '/services', labelKey: 'nav.services' },
-      { to: '/containers', labelKey: 'nav.containers' },
-      { to: '/packages', labelKey: 'nav.packages' },
-      { to: '/configs', labelKey: 'nav.configs' },
-      // Профили живут вкладкой в «Контейнеры и ВМ»: там же, где стеки
-      // compose и заготовки машин, которыми профиль и распоряжается.
-      { to: '/disks', labelKey: 'nav.disks' },
-      { to: '/hardware', labelKey: 'nav.hardware' },
-      { to: '/system', labelKey: 'nav.system', adminOnly: true },
-      // Терминал viewer'у бесполезен: подключиться он всё равно не сможет,
-      // а сервер откажет — поэтому скрыт, а не показан выключенным.
-      { to: '/terminal', labelKey: 'nav.terminal', adminOnly: true },
-    ],
-  },
-  {
-    key: 'network',
-    labelKey: 'navGroup.network',
-    items: [
-      { to: '/interfaces', labelKey: 'nav.interfaces' },
-      { to: '/firewall', labelKey: 'nav.firewall' },
-      { to: '/certificates', labelKey: 'nav.certificates', badge: 'certs' },
-    ],
-  },
-  {
-    key: 'access',
-    labelKey: 'navGroup.access',
-    items: [
-      // Учётки веб-интерфейса и учётки самой машины рядом, но по-прежнему
-      // раздельно: путать их нельзя, вторые дают вход на сам сервер.
-      { to: '/users', labelKey: 'nav.users', adminOnly: true },
-      { to: '/os-users', labelKey: 'nav.osUsers', adminOnly: true },
-    ],
-  },
+  { to: '/', labelKey: 'nav.overview', icon: <DashboardOutlined />, end: true },
+  { to: '/findings', labelKey: 'nav.findings', icon: <AlertOutlined />, badge: 'findings' },
+  { to: '/vulnerabilities', labelKey: 'nav.vulnerabilities', icon: <BugOutlined /> },
+  { to: '/topology', labelKey: 'nav.topology', icon: <ApartmentOutlined /> },
+  { to: '/availability', labelKey: 'nav.availability', icon: <HeartOutlined /> },
+  { to: '/usage', labelKey: 'nav.usage', icon: <FundOutlined /> },
+  { to: '/logs', labelKey: 'nav.logs', icon: <FileTextOutlined /> },
+  // Задания рядом с журналами: и то, и другое — «что происходило, пока я
+  // не смотрел».
+  { to: '/jobs', labelKey: 'nav.jobs', icon: <PlayCircleOutlined />, badge: 'jobs' },
+  { to: '/audit', labelKey: 'nav.audit', icon: <AuditOutlined /> },
+  { to: '/services', labelKey: 'nav.services', icon: <AppstoreOutlined /> },
+  { to: '/containers', labelKey: 'nav.containers', icon: <ClusterOutlined /> },
+  { to: '/packages', labelKey: 'nav.packages', icon: <ToolOutlined /> },
+  { to: '/configs', labelKey: 'nav.configs', icon: <SettingOutlined /> },
+  // Профили живут вкладкой в «Контейнеры и ВМ»: там же, где стеки compose
+  // и заготовки машин, которыми профиль и распоряжается.
+  { to: '/disks', labelKey: 'nav.disks', icon: <HddOutlined /> },
+  { to: '/hardware', labelKey: 'nav.hardware', icon: <DesktopOutlined /> },
+  { to: '/system', labelKey: 'nav.system', icon: <SafetyOutlined />, adminOnly: true },
+  // Терминал viewer'у бесполезен: подключиться он всё равно не сможет, а
+  // сервер откажет — поэтому скрыт, а не показан выключенным.
+  { to: '/terminal', labelKey: 'nav.terminal', icon: <CodeOutlined />, adminOnly: true },
+  { to: '/interfaces', labelKey: 'nav.interfaces', icon: <WifiOutlined /> },
+  { to: '/firewall', labelKey: 'nav.firewall', icon: <ShareAltOutlined /> },
+  { to: '/certificates', labelKey: 'nav.certificates', icon: <SafetyCertificateOutlined />, badge: 'certs' },
+  // Учётки веб-интерфейса и учётки самой машины рядом, но по-прежнему
+  // раздельно: путать их нельзя, вторые дают вход на сам сервер.
+  { to: '/users', labelKey: 'nav.users', icon: <UserOutlined />, adminOnly: true },
+  { to: '/os-users', labelKey: 'nav.osUsers', icon: <TeamOutlined />, adminOnly: true },
 ]
 
-/** Ключ, под которым запоминается, какие группы меню развёрнуты. */
-const NAV_OPEN_KEY = 'nkt-nav-open'
+/** Ключ, под которым запоминается, свёрнут ли сайдбар в иконки. */
+const SIDEBAR_KEY = 'nkt-sidebar-collapsed'
+
+/**
+ * Свёрнут ли сайдбар. Две причины: выбор пользователя (запоминается) и
+ * узкий экран (antd breakpoint — не запоминается: на широком экране
+ * сайдбар вернётся к тому, что выбрал человек).
+ */
+function useSidebarCollapsed(): [boolean, () => void, (broken: boolean) => void] {
+  const [chosen, setChosen] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_KEY) === '1'
+    } catch {
+      return false
+    }
+  })
+  const [narrow, setNarrow] = useState(false)
+  const toggle = () => {
+    const next = !(chosen || narrow)
+    setChosen(next)
+    if (narrow) setNarrow(false)
+    try {
+      localStorage.setItem(SIDEBAR_KEY, next ? '1' : '0')
+    } catch {
+      // Приватный режим браузера — состояние просто не запомнится.
+    }
+  }
+  return [chosen || narrow, toggle, setNarrow]
+}
+
+/** Иконка пункта меню со счётчиком: в свёрнутом меню счётчик —
+ * точка на иконке, потому что подписи там нет. */
+function navIcon(icon: ReactNode, count: number, busy: boolean, collapsed: boolean): ReactNode {
+  if (!collapsed || count === 0) return icon
+  return (
+    <Badge dot color={busy ? 'var(--series-1)' : undefined} offset={[2, -2]}>
+      {icon}
+    </Badge>
+  )
+}
+
+/** Шапка сайдбара: «nkt» и кнопка свернуть/развернуть. */
+function SidebarBrand({ collapsed, onToggle, sub }: { collapsed: boolean; onToggle: () => void; sub?: ReactNode }) {
+  const { t } = useTranslation()
+  return (
+    <div className={`brand${collapsed ? ' brand-collapsed' : ''}`}>
+      <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: '0.25rem' }}>
+        {!collapsed && <div className="brand-name">nkt</div>}
+        <Tooltip title={collapsed ? t('app.sidebarExpand') : t('app.sidebarCollapse')} placement="right">
+          <Button
+            type="text"
+            size="small"
+            aria-label={collapsed ? t('app.sidebarExpand') : t('app.sidebarCollapse')}
+            icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            onClick={onToggle}
+          />
+        </Tooltip>
+      </div>
+      {!collapsed && sub && <div className="brand-sub">{sub}</div>}
+    </div>
+  )
+}
 
 
 export default function App() {
@@ -273,6 +338,7 @@ function Shell({
   const { t } = useTranslation()
   const [lang, setLang] = useLang()
   const [showPassword, setShowPassword] = useState(false)
+  const [collapsed, toggleSidebar, setNarrow] = useSidebarCollapsed()
   const navigate = useNavigate()
   const location = useLocation()
   const isHub = me.mode === 'hub'
@@ -291,23 +357,10 @@ function Shell({
   // "/terminal" itself (element: null) — without it, <Routes>' own
   // catch-all would redirect away from that path entirely, since nothing
   // else in the switch claims it.
-  // Какая группа меню раскрыта — состояние человека, а не приложения:
-  // запоминается между заходами, чтобы каждый раз не раскрывать заново.
-  const [openGroups, setOpenGroups] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem(NAV_OPEN_KEY)
-      if (saved) return JSON.parse(saved) as string[]
-    } catch {
-      // Недоступное хранилище — просто раскрываем всё.
-    }
-    return NAV_GROUPS.map((g) => g.key)
-  })
-
   // Пункт меню — самый длинный подходящий путь: «/» иначе подсвечивался бы
   // на каждой странице, потому что с него начинается любой адрес.
   const navSelectedKey =
-    NAV_GROUPS.flatMap((g) => g.items)
-      .map((item) => item.to)
+    NAV_ITEMS.map((item) => item.to)
       .filter((to) => (to === '/' ? location.pathname === '/' : location.pathname.startsWith(to)))
       .sort((a, b) => b.length - a.length)[0] ?? '/'
 
@@ -393,62 +446,109 @@ function Shell({
     navigate('/login', { replace: true })
   }
 
+  const foot = (
+    <div className={`sidebar-foot${collapsed ? ' sidebar-foot-collapsed' : ''}`}>
+      {collapsed ? (
+        <Tooltip title={t('app.logout')} placement="right">
+          <Button type="text" size="small" aria-label={t('app.logout')} icon={<LogoutOutlined />} onClick={logout} />
+        </Tooltip>
+      ) : (
+        <>
+          <div className="row" style={{ marginBottom: '0.4rem' }}>
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
+              {t('app.theme')}
+              <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
+                <option value="auto">{t('app.themeAuto')}</option>
+                <option value="light">{t('app.themeLight')}</option>
+                <option value="dark">{t('app.themeDark')}</option>
+              </select>
+            </label>
+          </div>
+          <div className="row" style={{ marginBottom: '0.4rem' }}>
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
+              {t('app.language')}
+              <select value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
+                <option value="ru">Русский</option>
+                <option value="en">English</option>
+              </select>
+            </label>
+          </div>
+          <div>
+            {me.username} · {me.role}
+          </div>
+          <div className="row" style={{ gap: '0.25rem' }}>
+            {!isHub && (
+              <button className="ghost" onClick={() => setShowPassword(true)} style={{ paddingLeft: 0 }}>
+                {t('app.changePassword')}
+              </button>
+            )}
+            <button className="ghost" onClick={logout}>
+              {t('app.logout')}
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  )
+
   if (showingHostPicker) {
+    const hubItems: MenuProps['items'] = [
+      { key: 'hosts', icon: <ClusterOutlined />, label: t('hosts.title') },
+      {
+        key: 'events',
+        icon: navIcon(<BellOutlined />, hubEvents.data?.unread ?? 0, true, collapsed),
+        label: (
+          <span className="nav-item-label">
+            {t('events.title')}
+            {hubEvents.data?.unread ? <span className="nav-count nav-count-busy">{hubEvents.data.unread}</span> : null}
+          </span>
+        ),
+      },
+      {
+        key: 'jobs',
+        icon: navIcon(<PlayCircleOutlined />, hubJobs.data?.active ?? 0, true, collapsed),
+        label: (
+          <span className="nav-item-label">
+            {t('nav.jobs')}
+            {hubJobs.data?.active ? <span className="nav-count nav-count-busy">{hubJobs.data.active}</span> : null}
+          </span>
+        ),
+      },
+      {
+        key: 'about',
+        icon: navIcon(<InfoCircleOutlined />, hubUpdate.data?.update_available ? 1 : 0, false, collapsed),
+        label: (
+          <span className="nav-item-label">
+            {t('nav.about')}
+            {hubUpdate.data?.update_available && <span className="nav-count">1</span>}
+          </span>
+        ),
+      },
+    ]
     return (
       <Layout className="shell">
-        <Layout.Sider className="sidebar" width={208} theme="light" breakpoint="lg" collapsedWidth={0}>
-          <div className="brand">
-            <div className="brand-name">NetKnownsThat</div>
-            <div className="brand-sub">{t('app.brandSub')}</div>
-          </div>
+        <Layout.Sider
+          className="sidebar"
+          width={208}
+          theme="light"
+          collapsible
+          collapsed={collapsed}
+          trigger={null}
+          collapsedWidth={56}
+          breakpoint="lg"
+          onBreakpoint={setNarrow}
+        >
+          <SidebarBrand collapsed={collapsed} onToggle={toggleSidebar} sub={t('app.brandSub')} />
 
-          <nav className="nav">
-            <a href="#" className={hubView === 'hosts' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('hosts') }}>
-              <span>{t('hosts.title')}</span>
-            </a>
-            <a href="#" className={hubView === 'events' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('events') }}>
-              <span>{t('events.title')}</span>
-              {hubEvents.data?.unread ? <span className="nav-count nav-count-busy">{hubEvents.data.unread}</span> : null}
-            </a>
-            <a href="#" className={hubView === 'jobs' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('jobs') }}>
-              <span>{t('nav.jobs')}</span>
-              {hubJobs.data?.active ? <span className="nav-count nav-count-busy">{hubJobs.data.active}</span> : null}
-            </a>
-            <a href="#" className={hubView === 'about' ? 'active' : ''} onClick={(e) => { e.preventDefault(); setHubView('about') }}>
-              <span>{t('nav.about')}</span>
-              {hubUpdate.data?.update_available && <span className="nav-count">1</span>}
-            </a>
-          </nav>
+          <Menu
+            mode="inline"
+            className="nav-menu"
+            selectedKeys={[hubView]}
+            onClick={({ key }: { key: string }) => setHubView(key as typeof hubView)}
+            items={hubItems}
+          />
 
-          <div className="sidebar-foot">
-            <div className="row" style={{ marginBottom: '0.4rem' }}>
-              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-                {t('app.theme')}
-                <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
-                  <option value="auto">{t('app.themeAuto')}</option>
-                  <option value="light">{t('app.themeLight')}</option>
-                  <option value="dark">{t('app.themeDark')}</option>
-                </select>
-              </label>
-            </div>
-            <div className="row" style={{ marginBottom: '0.4rem' }}>
-              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-                {t('app.language')}
-                <select value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
-                  <option value="ru">Русский</option>
-                  <option value="en">English</option>
-                </select>
-              </label>
-            </div>
-            <div>
-              {me.username} · {me.role}
-            </div>
-            <div className="row" style={{ gap: '0.25rem' }}>
-              <button className="ghost" onClick={logout}>
-                {t('app.logout')}
-              </button>
-            </div>
-          </div>
+          {foot}
         </Layout.Sider>
         <Layout.Content className="main">
           <div className="content">
@@ -469,88 +569,51 @@ function Shell({
 
   const shell = (
     <Layout className="shell">
-      <Layout.Sider className="sidebar" width={208} theme="light" breakpoint="lg" collapsedWidth={0}>
-        <div className="brand">
-          <div className="brand-name">NetKnownsThat</div>
-          {!isHub && (
-            <div className="brand-sub">
-              {overview.data?.host.hostname ?? '…'} · {t('app.mode')} {me.mode}
-            </div>
-          )}
-        </div>
+      <Layout.Sider
+        className="sidebar"
+        width={208}
+        theme="light"
+        collapsible
+        collapsed={collapsed}
+        trigger={null}
+        collapsedWidth={56}
+        breakpoint="lg"
+        onBreakpoint={setNarrow}
+      >
+        <SidebarBrand
+          collapsed={collapsed}
+          onToggle={toggleSidebar}
+          sub={
+            !isHub ? (
+              <>
+                {overview.data?.host.hostname ?? '…'} · {t('app.mode')} {me.mode}
+              </>
+            ) : undefined
+          }
+        />
 
         <Menu
           mode="inline"
           className="nav-menu"
           selectedKeys={[navSelectedKey]}
-          openKeys={openGroups}
-          onOpenChange={(keys: string[]) => {
-            const next = keys
-            setOpenGroups(next)
-            try {
-              localStorage.setItem(NAV_OPEN_KEY, JSON.stringify(next))
-            } catch {
-              // Приватный режим браузера — состояние просто не запомнится.
-            }
-          }}
           onClick={({ key }: { key: string }) => navigate(key)}
-          items={(NAV_GROUPS.map((group) => ({
-            key: group.key,
-            label: t(group.labelKey),
-            children: group.items
-              .filter((item) => !item.adminOnly || me.is_admin)
-              .map((item) => ({
-                key: item.to,
-                label: (
-                  <span className="nav-item-label">
-                    {t(item.labelKey)}
-                    {item.badge === 'findings' && criticalCount > 0 && (
-                      <span className="nav-count">{criticalCount}</span>
-                    )}
-                    {item.badge === 'certs' && certAlerts > 0 && <span className="nav-count">{certAlerts}</span>}
-                    {item.badge === 'jobs' && activeJobs > 0 && <span className="nav-count nav-count-busy">{activeJobs}</span>}
-                  </span>
-                ),
-              })),
-          })).filter((group) => group.children.length > 0) as MenuProps['items'])}
+          items={NAV_ITEMS.filter((item) => !item.adminOnly || me.is_admin).map((item) => {
+            const count =
+              item.badge === 'findings' ? criticalCount : item.badge === 'certs' ? certAlerts : item.badge === 'jobs' ? activeJobs : 0
+            return {
+              key: item.to,
+              icon: navIcon(item.icon, count, item.badge === 'jobs', collapsed),
+              label: (
+                <span className="nav-item-label">
+                  {t(item.labelKey)}
+                  {count > 0 && <span className={`nav-count${item.badge === 'jobs' ? ' nav-count-busy' : ''}`}>{count}</span>}
+                </span>
+              ),
+            }
+          })}
         />
 
-        <div className="sidebar-foot">
-          <div className="row" style={{ marginBottom: '0.4rem' }}>
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-              {t('app.theme')}
-              <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
-                <option value="auto">{t('app.themeAuto')}</option>
-                <option value="light">{t('app.themeLight')}</option>
-                <option value="dark">{t('app.themeDark')}</option>
-              </select>
-            </label>
-          </div>
-          <div className="row" style={{ marginBottom: '0.4rem' }}>
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
-              {t('app.language')}
-              <select value={lang} onChange={(e) => setLang(e.target.value as Lang)}>
-                <option value="ru">Русский</option>
-                <option value="en">English</option>
-              </select>
-            </label>
-          </div>
-          {!isHub && (
-            <>
-              <div>
-                {me.username} · {me.role}
-              </div>
-              <div className="row" style={{ gap: '0.25rem' }}>
-                <button className="ghost" onClick={() => setShowPassword(true)} style={{ paddingLeft: 0 }}>
-                  {t('app.changePassword')}
-                </button>
-                <button className="ghost" onClick={logout}>
-                  {t('app.logout')}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+        {foot}
       </Layout.Sider>
 
       <Layout.Content className="main">
