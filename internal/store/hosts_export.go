@@ -23,7 +23,14 @@ var validAdminUser = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 // ExportFormatVersion guards against feeding an export from an incompatible
 // future (or malformed) file into ImportHosts — bumped only if the shape of
 // HostExport itself changes in a way old readers couldn't handle.
-const ExportFormatVersion = 1
+//
+// Версия 2 добавила группы, связь машины с хостом-родителем, профили,
+// шаблоны машин и настройки хаба; файлы версии 1 читаются по-прежнему.
+const ExportFormatVersion = 2
+
+// minExportFormatVersion — самая старая версия, которую импорт ещё
+// понимает.
+const minExportFormatVersion = 1
 
 // HostExport is store.Host with its encrypted-blob fields included (Host
 // itself hides them behind `json:"-"` to keep them out of the normal
@@ -65,6 +72,35 @@ type HostExport struct {
 	ErrorMsg         string `json:"error_msg,omitempty"`
 	CreatedAt        string `json:"created_at"`
 	LastSeenAt       string `json:"last_seen_at,omitempty"`
+	// Group — группа хоста; Parent — имя хоста-родителя для машины,
+	// созданной внутри хоста (идентификаторы в другом хабе другие, имя —
+	// единственное, что переживает переезд).
+	Group  string `json:"group,omitempty"`
+	Parent string `json:"parent,omitempty"`
+}
+
+// ProfileExport — профиль хаба с историей редакций.
+type ProfileExport struct {
+	Name     string                 `json:"name"`
+	Content  string                 `json:"content"`
+	Note     string                 `json:"note,omitempty"`
+	Author   string                 `json:"author,omitempty"`
+	Versions []ProfileVersionExport `json:"versions,omitempty"`
+}
+
+// ProfileVersionExport — одна прошлая редакция профиля.
+type ProfileVersionExport struct {
+	TS      string `json:"ts"`
+	Author  string `json:"author,omitempty"`
+	Note    string `json:"note,omitempty"`
+	Content string `json:"content"`
+}
+
+// VMTemplateExport — шаблон машины.
+type VMTemplateExport struct {
+	Name   string `json:"name"`
+	Spec   string `json:"spec"`
+	Author string `json:"author,omitempty"`
 }
 
 // HubExport is the full document GET /hub/export hands back and POST
@@ -75,6 +111,14 @@ type HubExport struct {
 	Version    int          `json:"version"`
 	ExportedAt string       `json:"exported_at"`
 	Hosts      []HostExport `json:"hosts"`
+	// Groups — все группы, включая пустые: пустая группа — тоже
+	// настройка, которую заводили руками.
+	Groups      []string           `json:"groups,omitempty"`
+	Profiles    []ProfileExport    `json:"profiles,omitempty"`
+	VMTemplates []VMTemplateExport `json:"vm_templates,omitempty"`
+	// Settings — настройки хаба из таблицы kv по ключу (настройки
+	// оповещений, группа строки localhost, умолчания подготовки).
+	Settings map[string]string `json:"settings,omitempty"`
 	// MasterKey is the exporting hub's own secretbox key (base64), present
 	// only when the operator opted into a one-step migration — see
 	// Manager.ExportHosts/ImportHosts in internal/hub, which is what
@@ -90,8 +134,14 @@ func hostToExport(h Host) HostExport {
 		AdminUser: h.AdminUser, AdminPasswordEnc: h.AdminPasswordEnc, SudoStatus: h.SudoStatus,
 		TerminalEnabled: h.TerminalEnabled, TunnelEnabled: h.TunnelEnabled, TunnelTokenEnc: h.TunnelTokenEnc,
 		ErrorMsg: h.ErrorMsg, CreatedAt: h.CreatedAt, LastSeenAt: h.LastSeenAt,
+		Group: h.Group,
 	}
 }
+
+// ExportedSettingKeys — какие ключи kv едут в экспорт. Перечислены явно:
+// в kv лежит и то, что переносить нельзя (например, что уже показано
+// пользователю).
+var ExportedSettingKeys = []string{"hub.events.settings", "hub.localhost.group", "hub.bootstrap.defaults"}
 
 // ExportHosts returns every managed host in the shape GET /hub/export sends
 // to the browser as a downloadable file.
@@ -101,8 +151,58 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 		return HubExport{}, err
 	}
 	out := HubExport{Version: ExportFormatVersion, ExportedAt: Now(), Hosts: make([]HostExport, len(hosts))}
+	byID := map[int64]string{}
+	for _, h := range hosts {
+		byID[h.ID] = h.Name
+	}
 	for i, h := range hosts {
 		out.Hosts[i] = hostToExport(h)
+		if h.ParentID != 0 {
+			out.Hosts[i].Parent = byID[h.ParentID]
+		}
+	}
+	if out.Groups, err = d.ListHostGroups(ctx); err != nil {
+		return HubExport{}, err
+	}
+	profiles, err := d.ListProfiles(ctx)
+	if err != nil {
+		return HubExport{}, err
+	}
+	for _, p := range profiles {
+		full, err := d.ProfileByID(ctx, p.ID)
+		if err != nil {
+			return HubExport{}, err
+		}
+		pe := ProfileExport{Name: full.Name, Content: full.Content, Note: full.Note, Author: full.Author}
+		versions, err := d.ProfileVersions(ctx, p.ID, 200)
+		if err != nil {
+			return HubExport{}, err
+		}
+		// ProfileVersions отдаёт список новыми вперёд и без содержимого;
+		// в файл — по порядку и целиком.
+		for i := len(versions) - 1; i >= 0; i-- {
+			v, err := d.ProfileVersion(ctx, versions[i].ID)
+			if err != nil {
+				return HubExport{}, err
+			}
+			pe.Versions = append(pe.Versions, ProfileVersionExport{TS: v.TS, Author: v.Author, Note: v.Note, Content: v.Content})
+		}
+		out.Profiles = append(out.Profiles, pe)
+	}
+	templates, err := d.ListVMTemplates(ctx)
+	if err != nil {
+		return HubExport{}, err
+	}
+	for _, t := range templates {
+		out.VMTemplates = append(out.VMTemplates, VMTemplateExport{Name: t.Name, Spec: t.Spec, Author: t.Author})
+	}
+	for _, key := range ExportedSettingKeys {
+		if v, ok, err := d.KVGet(ctx, key); err == nil && ok && v != "" {
+			if out.Settings == nil {
+				out.Settings = map[string]string{}
+			}
+			out.Settings[key] = v
+		}
 	}
 	return out, nil
 }
@@ -114,36 +214,163 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 // independently so one malformed entry (an export file hand-edited badly,
 // or from an incompatible future version) doesn't abort the rest — imported
 // counts the successes, errs carries one message per row that failed.
+//
+// Остальное из файла версии 2: группы заводятся (существующие не
+// трогаются), родитель машины находится по имени среди хостов файла,
+// профили и шаблоны с уже занятым именем пропускаются с сообщением —
+// затирать то, что есть в этом хабе, импорт не должен; настройки хаба
+// записываются только туда, где их ещё не задавали.
 func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, errs []string) {
+	for _, g := range export.Groups {
+		if g == "" {
+			continue
+		}
+		if err := d.CreateHostGroup(ctx, g); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", g, err))
+		}
+	}
+	ids := map[string]int64{}
 	for _, h := range export.Hosts {
-		if err := d.importOneHost(ctx, h); err != nil {
+		id, err := d.importOneHost(ctx, h)
+		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s (%s): %v", h.Name, h.Addr, err))
 			continue
 		}
+		ids[h.Name] = id
 		imported++
+	}
+	for _, h := range export.Hosts {
+		if h.Parent == "" {
+			continue
+		}
+		id, ok := ids[h.Name]
+		if !ok {
+			continue
+		}
+		parentID, ok := ids[h.Parent]
+		if !ok {
+			errs = append(errs, msgs.Tc(ctx, "store.importParentMissing", h.Name, h.Parent))
+			continue
+		}
+		if err := d.SetHostParent(ctx, id, parentID); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", h.Name, err))
+		}
+	}
+	errs = append(errs, d.importProfiles(ctx, export.Profiles)...)
+	errs = append(errs, d.importVMTemplates(ctx, export.VMTemplates)...)
+	for key, value := range export.Settings {
+		if !exportedSettingKey(key) {
+			continue
+		}
+		if _, ok, err := d.KVGet(ctx, key); err != nil || ok {
+			continue
+		}
+		if err := d.KVSet(ctx, key, value); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", key, err))
+		}
 	}
 	return imported, errs
 }
 
-func (d *DB) importOneHost(ctx context.Context, h HostExport) error {
+func exportedSettingKey(key string) bool {
+	for _, k := range ExportedSettingKeys {
+		if k == key {
+			return true
+		}
+	}
+	return false
+}
+
+func (d *DB) importProfiles(ctx context.Context, profiles []ProfileExport) (errs []string) {
+	existing, err := d.ListProfiles(ctx)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	taken := map[string]bool{}
+	for _, p := range existing {
+		taken[p.Name] = true
+	}
+	for _, p := range profiles {
+		if p.Name == "" {
+			continue
+		}
+		if taken[p.Name] {
+			errs = append(errs, msgs.Tc(ctx, "store.importProfileExists", p.Name))
+			continue
+		}
+		id, err := d.CreateProfile(ctx, Profile{Name: p.Name, Content: p.Content, Note: p.Note, Author: p.Author})
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
+			continue
+		}
+		// История — как была: CreateProfile записал редакцию «создан» с
+		// текущим содержимым, но раз в файле есть своя история, она и
+		// нужна, а не этот дубликат.
+		if len(p.Versions) > 0 {
+			if _, err := d.ExecContext(ctx, `DELETE FROM profile_versions WHERE profile_id = ?`, id); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
+			}
+		}
+		for _, v := range p.Versions {
+			if _, err := d.ExecContext(ctx, `
+				INSERT INTO profile_versions (profile_id, ts, author, note, content)
+				VALUES (?, ?, ?, ?, ?)`, id, v.TS, v.Author, v.Note, v.Content); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
+				break
+			}
+		}
+		taken[p.Name] = true
+	}
+	return errs
+}
+
+func (d *DB) importVMTemplates(ctx context.Context, templates []VMTemplateExport) (errs []string) {
+	existing, err := d.ListVMTemplates(ctx)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	taken := map[string]bool{}
+	for _, t := range existing {
+		taken[t.Name] = true
+	}
+	for _, t := range templates {
+		if t.Name == "" {
+			continue
+		}
+		if taken[t.Name] {
+			errs = append(errs, msgs.Tc(ctx, "store.importTemplateExists", t.Name))
+			continue
+		}
+		if _, err := d.SaveVMTemplate(ctx, VMTemplate{Name: t.Name, Spec: t.Spec, Author: t.Author}); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", t.Name, err))
+		}
+		taken[t.Name] = true
+	}
+	return errs
+}
+
+func (d *DB) importOneHost(ctx context.Context, h HostExport) (int64, error) {
 	if h.Name == "" || h.Addr == "" {
-		return msgs.Errorf("store.emptyNameAddress")
+		return 0, msgs.Errorf("store.emptyNameAddress")
 	}
 	if h.AdminUser != "" && !validAdminUser.MatchString(h.AdminUser) {
-		return msgs.Errorf("store.invalidAdminName", h.AdminUser)
+		return 0, msgs.Errorf("store.invalidAdminName", h.AdminUser)
 	}
-	_, err := d.ExecContext(ctx,
+	res, err := d.ExecContext(ctx,
 		`INSERT INTO hosts(
 			name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 			arch, status, nkt_version, admin_user, admin_password_enc,
 			sudo_status, terminal_enabled, tunnel_enabled, tunnel_token_enc,
-			error_msg, created_at, last_seen_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			error_msg, created_at, last_seen_at, group_name
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		h.Name, h.Addr, h.SSHPort, h.SSHUser, h.SSHAuthKind, h.SecretEnc,
 		h.Arch, h.Status, h.NktVersion, h.AdminUser, h.AdminPasswordEnc,
 		h.SudoStatus, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
-		h.ErrorMsg, h.CreatedAt, h.LastSeenAt)
-	return err
+		h.ErrorMsg, h.CreatedAt, h.LastSeenAt, h.Group)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
 }
 
 // DecodeHubExport parses an uploaded export file, rejecting one from an
@@ -154,7 +381,7 @@ func DecodeHubExport(data []byte) (HubExport, error) {
 	if err := json.Unmarshal(data, &export); err != nil {
 		return HubExport{}, msgs.Errorf("store.fileDoesLookLikeHub", err)
 	}
-	if export.Version != ExportFormatVersion {
+	if export.Version < minExportFormatVersion || export.Version > ExportFormatVersion {
 		return HubExport{}, msgs.Errorf("store.exportFormatVersionSupportedExpected",
 			export.Version, ExportFormatVersion)
 	}

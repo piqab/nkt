@@ -1134,4 +1134,7 @@ var enCatalog = map[string]string{
 	"vmnet.libvirtNetwork":                          "libvirt network “%s”",
 	"api.fileBrowserUnavailable":                    "the file browser is unavailable in this mode",
 	"hub.noPreviousRelease": "no release older than %s found — nothing to roll back to",
+	"store.importParentMissing": "%s: parent host %q not found in the file — the machine was added without a parent",
+	"store.importProfileExists": "profile %q already exists — skipped",
+	"store.importTemplateExists": "machine template %q already exists — skipped",
 }

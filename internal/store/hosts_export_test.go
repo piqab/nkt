@@ -216,3 +216,118 @@ func TestDecodeHubExportRejectsGarbage(t *testing.T) {
 		t.Fatal("expected an error for a non-JSON file")
 	}
 }
+
+// Формат 2: группы, родитель машины, профили с историей, шаблоны и
+// настройки хаба едут в файл и восстанавливаются в пустом хабе; занятые
+// имена профилей и шаблонов не затираются; файл версии 1 читается.
+func TestExportImportV2RoundTrip(t *testing.T) {
+	ctx := context.Background()
+	src, err := Open(filepath.Join(t.TempDir(), "src.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+	parent, _ := src.CreateHost(ctx, "parent", "10.0.0.1", 22, "root", HostAuthKey, []byte("s1"))
+	vm, _ := src.CreateHost(ctx, "vm1", "192.168.100.5", 22, "deploy", HostAuthKey, []byte("s2"))
+	if err := src.CreateHostGroup(ctx, "prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.CreateHostGroup(ctx, "empty-group"); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.SetHostGroup(ctx, parent, "prod"); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.SetHostParent(ctx, vm, parent); err != nil {
+		t.Fatal(err)
+	}
+	pid, err := src.CreateProfile(ctx, Profile{Name: "web", Content: "version: 1\nname: web", Note: "n", Author: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := src.UpdateProfile(ctx, Profile{ID: pid, Name: "web", Content: "version: 1\nname: web\npackages: [nginx]", Note: "add nginx", Author: "admin"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := src.SaveVMTemplate(ctx, VMTemplate{Name: "small", Spec: `{"vcpus":1}`, Author: "admin"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.KVSet(ctx, "hub.events.settings", `{"record":["unreachable"]}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := src.KVSet(ctx, "hub.events.seen", "do-not-export"); err != nil {
+		t.Fatal(err)
+	}
+
+	export, err := src.ExportHosts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if export.Version != 2 || len(export.Groups) != 2 || len(export.Profiles) != 1 || len(export.VMTemplates) != 1 {
+		t.Fatalf("export = %+v", export)
+	}
+	if export.Profiles[0].Versions == nil || len(export.Profiles[0].Versions) != 2 || export.Profiles[0].Versions[0].Content != "version: 1\nname: web" {
+		t.Errorf("история профиля: %+v", export.Profiles[0].Versions)
+	}
+	if _, ok := export.Settings["hub.events.seen"]; ok {
+		t.Error("в экспорт попал ключ, которого там быть не должно")
+	}
+	var vmExport HostExport
+	for _, h := range export.Hosts {
+		if h.Name == "vm1" {
+			vmExport = h
+		}
+	}
+	if vmExport.Parent != "parent" || vmExport.Group != "prod" {
+		t.Errorf("машина в файле: %+v", vmExport)
+	}
+
+	dst, err := Open(filepath.Join(t.TempDir(), "dst.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dst.Close()
+	if _, err := dst.SaveVMTemplate(ctx, VMTemplate{Name: "small", Spec: `{"vcpus":8}`}); err != nil {
+		t.Fatal(err)
+	}
+	imported, errs := dst.ImportHosts(ctx, export)
+	if imported != 2 {
+		t.Errorf("imported = %d, errs = %v", imported, errs)
+	}
+	if len(errs) != 1 {
+		t.Errorf("ожидалось одно сообщение о занятом шаблоне, получено %v", errs)
+	}
+	hosts, _ := dst.ListHosts(ctx)
+	byName := map[string]Host{}
+	for _, h := range hosts {
+		byName[h.Name] = h
+	}
+	if byName["vm1"].ParentID != byName["parent"].ID || byName["vm1"].Group != "prod" || byName["parent"].Group != "prod" {
+		t.Errorf("связи после импорта: %+v", byName)
+	}
+	groups, _ := dst.ListHostGroups(ctx)
+	if len(groups) != 2 {
+		t.Errorf("группы: %v", groups)
+	}
+	profiles, _ := dst.ListProfiles(ctx)
+	if len(profiles) != 1 || profiles[0].Name != "web" {
+		t.Fatalf("профили: %+v", profiles)
+	}
+	versions, _ := dst.ProfileVersions(ctx, profiles[0].ID, 10)
+	if len(versions) != 2 {
+		t.Errorf("история профиля после импорта: %+v", versions)
+	}
+	tpl, _ := dst.ListVMTemplates(ctx)
+	if len(tpl) != 1 || tpl[0].Spec != `{"vcpus":8}` {
+		t.Errorf("существующий шаблон затёрт: %+v", tpl)
+	}
+	if v, ok, _ := dst.KVGet(ctx, "hub.events.settings"); !ok || v != `{"record":["unreachable"]}` {
+		t.Errorf("настройки не перенесены: %q", v)
+	}
+
+	if _, err := DecodeHubExport([]byte(`{"version": 1, "hosts": []}`)); err != nil {
+		t.Errorf("файл версии 1 отвергнут: %v", err)
+	}
+	if _, err := DecodeHubExport([]byte(`{"version": 3, "hosts": []}`)); err == nil {
+		t.Error("файл из будущего принят")
+	}
+}
