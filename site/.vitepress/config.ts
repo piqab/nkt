@@ -73,7 +73,30 @@ function sidebarRu() {
       text: 'Начало',
       items: [
         { text: 'Установка на хост', link: '/guide/getting-started' },
+        { text: 'Командная строка и настройка', link: '/guide/cli' },
+      ],
+    },
+    {
+      text: 'Хост',
+      items: [
+        { text: 'Обзор и проблемы', link: '/guide/overview' },
+        { text: 'Наблюдение', link: '/guide/monitoring' },
+        { text: 'Сервисы', link: '/guide/services' },
+        { text: 'Контейнеры и ВМ', link: '/guide/containers' },
+        { text: 'Конфигурации', link: '/guide/configs' },
+        { text: 'Профили', link: '/guide/profiles' },
+        { text: 'Пакеты, диски, файлы, система', link: '/guide/system' },
+        { text: 'Сеть и firewall', link: '/guide/network' },
+        { text: 'Сертификаты', link: '/guide/certificates' },
+        { text: 'Доступ и безопасность', link: '/guide/access' },
+      ],
+    },
+    {
+      text: 'Хаб',
+      items: [
         { text: 'Хаб: много хостов', link: '/guide/hub' },
+        { text: 'Сценарии', link: '/guide/hub-scripts' },
+        { text: 'Оповещения, задания, обновления', link: '/guide/hub-operations' },
       ],
     },
   ]
