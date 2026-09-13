@@ -7,7 +7,6 @@ import {
   InfoCircleFilled,
   MinusCircleOutlined,
   QuestionCircleOutlined,
-  SearchOutlined,
   SyncOutlined,
   WarningFilled,
 } from '@ant-design/icons'
@@ -380,7 +379,6 @@ export default function Hosts({
   const profiles = useApi<{ profiles: { id: number; name: string }[] }>('/hosts/local/profiles', 120_000)
   const [applyTo, setApplyTo] = useState<{ group: string; hosts: number } | null>(null)
   const [provisionOn, setProvisionOn] = useState<HubHost | null>(null)
-  const [discoverOn, setDiscoverOn] = useState<HubHost | null>(null)
   // Раскрытые списки машин — по идентификатору хоста. По умолчанию
   // свёрнуто: у хоста с десятком машин список иначе оттеснил бы сами
   // хосты.
@@ -1077,14 +1075,6 @@ export default function Hosts({
             />
           </>
         )}
-        {/* Машину создаём только на хосте, где уже стоит nkt: команду
-            создания выполняет он сам, а хаб лишь просит и ждёт. */}
-        {h.status === 'online' && !h.parent_id && (
-          <>
-            <RowAction action="create" label={t('hosts.newVM')} disabled={busy} onClick={() => setProvisionOn(h)} />
-            <RowAction icon={<SearchOutlined />} label={t('hosts.discoverVMs')} disabled={busy} onClick={() => setDiscoverOn(h)} />
-          </>
-        )}
         <RowAction action="edit" label={t('hosts.edit')} disabled={busy} onClick={() => setEditingHost(h)} />
         {h.ssh_auth_kind === 'key' && (
           <RowAction action="key" label={t('hosts.publicKey')} disabled={busy} onClick={() => showPubKey(h)} />
@@ -1097,6 +1087,15 @@ export default function Hosts({
           disabled={busy}
           onClick={() => setRemovingHost(h)}
         />
+        {/* Машину создаём только на хосте, где уже стоит nkt: команду
+            создания выполняет он сам, а хаб лишь просит и ждёт. Последней
+            и тем же цветом, что «+ N» машин: это вход внутрь хоста, а не
+            действие над ним. Там же — поиск уже существующих машин. */}
+        {h.status === 'online' && !h.parent_id && (
+          <span className="vm-action">
+            <RowAction action="create" label={t('hosts.newVM')} disabled={busy} onClick={() => setProvisionOn(h)} />
+          </span>
+        )}
       </div>
     )
   }
@@ -1341,9 +1340,8 @@ export default function Hosts({
           >
             {t('hosts.stopAll')}
           </Button>
-          <Button onClick={() => exportHosts(false)}>{t('hosts.export')}</Button>
           <Tooltip title={t('hosts.exportWithKeyTooltip')}>
-            <Button onClick={() => exportHosts(true)}>{t('hosts.exportWithKey')}</Button>
+            <Button onClick={() => exportHosts(true)}>{t('hosts.export')}</Button>
           </Tooltip>
           <Button loading={importing} onClick={() => importInputRef.current?.click()}>
             {t('hosts.import')}
@@ -1368,18 +1366,11 @@ export default function Hosts({
         </div>
       </div>
 
-      {discoverOn && (
-        <DiscoverVMsModal
-          host={discoverOn}
-          onClose={() => setDiscoverOn(null)}
-          onImported={() => reload()}
-        />
-      )}
-
       {provisionOn && (
         <ProvisionVMModal
           host={provisionOn}
           hubVersion={hubVersion}
+          onImported={() => reload()}
           onClose={() => setProvisionOn(null)}
           onStarted={(text, jobID) => {
             setProvisionOn(null)
@@ -2444,6 +2435,7 @@ function ProvisionVMModal({
   hubVersion,
   onClose,
   onStarted,
+  onImported,
 }: {
   host: HubHost
   // Версия хаба, с которой сравнивается версия на хосте. Может быть не
@@ -2452,8 +2444,11 @@ function ProvisionVMModal({
   hubVersion?: string
   onClose: () => void
   onStarted: (text: string, jobID: number) => void
+  /** Вкладка «найти машины» добавила машины в список — перечитать хосты. */
+  onImported: () => void
 }) {
   const { t } = useTranslation()
+  const [tab, setTab] = useState<'create' | 'discover'>('create')
   // Тот же ответ, что и на странице образов самого хоста: заодно
   // говорит, чем на нём машины вообще создавать. Проверять это здесь
   // важнее, чем там: отсюда оператор не видит того хоста и узнал бы о
@@ -2536,8 +2531,8 @@ function ProvisionVMModal({
     }
   }
 
-  return (
-    <Modal title={t('hosts.newVMTitle', { host: host.name })} onClose={onClose} width={720}>
+  const createTab = (
+    <>
       <p className="small muted">{t('hosts.newVMBody')}</p>
       <ErrorNote error={error} />
       <ErrorNote error={images.error} />
@@ -2670,6 +2665,23 @@ function ProvisionVMModal({
         </Button>
         <Button onClick={onClose}>{t('common.cancel')}</Button>
       </div>
+    </>
+  )
+
+  return (
+    <Modal title={t('hosts.newVMTitle', { host: host.name })} onClose={onClose} width={720}>
+      <Tabs
+        activeKey={tab}
+        onChange={(k) => setTab(k as 'create' | 'discover')}
+        items={[
+          { key: 'create', label: t('hosts.newVMTabCreate'), children: createTab },
+          {
+            key: 'discover',
+            label: t('hosts.discoverTab'),
+            children: <DiscoverVMsPanel host={host} active={tab === 'discover'} onImported={onImported} />,
+          },
+        ]}
+      />
     </Modal>
   )
 }
@@ -2693,9 +2705,10 @@ interface DiscoveredVM {
  * чужой машины положить сам не может: либо пароль, либо ключ хаба, который
  * кладут руками (он в строке машины — «публичный ключ»).
  */
-function DiscoverVMsModal({ host, onClose, onImported }: { host: HubHost; onClose: () => void; onImported: () => void }) {
+function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active: boolean; onImported: () => void }) {
   const { t } = useTranslation()
-  const found = useApi<{ vms: DiscoveredVM[] }>(`/hub/hosts/${host.id}/vm-discover`)
+  // Поиск идёт по SSH к хосту — запускается, только когда вкладка открыта.
+  const found = useApi<{ vms: DiscoveredVM[] }>(active ? `/hub/hosts/${host.id}/vm-discover` : null)
   const [picked, setPicked] = useState<string[]>([])
   const [sshUser, setSSHUser] = useState('root')
   const [sshPort, setSSHPort] = useState(22)
@@ -2733,7 +2746,6 @@ function DiscoverVMsModal({ host, onClose, onImported }: { host: HubHost; onClos
   }
 
   return (
-    <Modal title={t('hosts.discoverTitle', { name: host.name })} onClose={onClose} width={680}>
       <div className="col" style={{ gap: '0.6rem' }}>
         <p className="small muted" style={{ margin: 0 }}>
           {t('hosts.discoverHint')}
@@ -2786,11 +2798,9 @@ function DiscoverVMsModal({ host, onClose, onImported }: { host: HubHost; onClos
               <Button type="primary" loading={busy} disabled={picked.length === 0} onClick={() => void importPicked()}>
                 {t('hosts.discoverImport', { count: picked.length })}
               </Button>
-              <Button onClick={onClose}>{t('common.cancel')}</Button>
             </div>
           </>
         )}
       </div>
-    </Modal>
   )
 }

@@ -32,7 +32,7 @@ export default function Login({ onSuccess }: { onSuccess: () => void }) {
       <Form<LoginValues> className="login-card" layout="vertical" onFinish={submit}>
         <div className="row spread" style={{ alignItems: 'flex-start' }}>
           <div>
-            <h1>NetKnownsThat</h1>
+            <h1>nkt</h1>
             <p className="secondary small" style={{ margin: '0.25rem 0 0' }}>
               {t('login.subtitle')}
             </p>

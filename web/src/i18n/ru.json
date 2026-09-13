@@ -16,7 +16,9 @@
     "readOnlyMode": "Изменения запрещены настройкой <code>NKT_ALLOW_MUTATIONS=false</code> — интерфейс работает только на чтение.",
     "loading": "Загрузка…",
     "backToHostList": "← к списку хостов",
-    "hubBrand": "NetKnownsThat — хаб"
+    "hubBrand": "nkt — хаб",
+    "sidebarCollapse": "Свернуть меню",
+    "sidebarExpand": "Развернуть меню"
   },
   "nav": {
     "overview": "Обзор",
@@ -493,7 +495,7 @@
     "updateAllNone": "обновлений нет",
     "startAll": "запустить все",
     "stopAll": "остановить все",
-    "export": "экспорт",
+    "export": "Экспорт",
     "exportWithKeyTooltip": "Для переноса на новый хаб без ручного копирования NKT_HUB_MASTER_KEY — файл станет самодостаточным для расшифровки, храните его так же осторожно, как пароли",
     "exportWithKey": "экспорт с ключом",
     "import": "импорт",
@@ -645,7 +647,9 @@
     "discoverImported": "Добавлено машин: {{count}}.",
     "discoverKeyHint": "Ключ хаба ещё не в машинах — откройте «публичный ключ» в строке машины и добавьте его в authorized_keys.",
     "discoverSearching": "ищу машины на {{name}}…",
-    "syncVersion": "привести к версии хаба"
+    "syncVersion": "привести к версии хаба",
+    "newVMTabCreate": "Новая машина",
+    "discoverTab": "Найти машины на хосте"
   },
   "events": {
     "title": "Оповещения",

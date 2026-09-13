@@ -828,3 +828,23 @@ span.vm-toggle {
   font-weight: 600;
   pointer-events: none;
 }
+
+/* «Новая машина» в строке хоста — тем же цветом, что «+ N» машин: обе
+   ведут внутрь хоста, а не действуют над ним. */
+.vm-action .ant-btn {
+  color: var(--accent, #1677ff);
+}
+
+/* Свёрнутый сайдбар: только иконки, шапка — одна кнопка по центру. */
+.brand-collapsed { padding: 0; text-align: center; }
+.sidebar-foot-collapsed { padding: 0; text-align: center; }
+.shell .ant-layout-sider-collapsed > .ant-layout-sider-children { padding-inline: 0.3rem; }
+.shell .ant-layout-sider-collapsed .nav-menu .ant-menu-item {
+  padding-inline: calc(50% - 8px) !important;
+}
+
+/* В развёрнутом меню отступ слева меньше антовского: групп больше нет,
+   а иконка и так занимает место — иначе длинные названия обрезаются. */
+.shell .sidebar:not(.ant-layout-sider-collapsed) .nav-menu .ant-menu-item {
+  padding-inline: 0.5rem !important;
+}
