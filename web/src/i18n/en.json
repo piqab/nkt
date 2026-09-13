@@ -644,12 +644,12 @@
     "discoverTab": "Find machines on the host",
     "groupProfile": "Group profile",
     "groupProfileNone": "no profile",
-    "groupProfileExtra": "A host that lands in this group is brought to this profile (as a job with a log). A profile cannot be assigned later — create a new group instead.",
-    "groupProfileTooltip": "This group's profile: applied to every host when it joins the group; drift is later visible in the host's Findings",
+    "groupProfileExtra": "Machines created in this group are built from this profile (it is preselected in the New machine dialog); hosts moved into the group are left untouched. A profile cannot be assigned later — create a new group instead.",
+    "groupProfileTooltip": "This group's profile: machines created in the group are built from it; rows of hosts created from it are tinted with its color",
     "groupProfileMissing": "profile deleted",
-    "groupProfileHowTo": "How to use profiles on the hub: describe the desired state in the Profiles section, create a group with that profile and drag hosts into it — the profile is applied to each one automatically. An existing group cannot be given a profile.",
+    "groupProfileHowTo": "How to use profiles on the hub: describe the desired state and pick a color in the Profiles section, create a group with that profile — machines created in it are built from the profile and tinted with its color. Hosts moved into the group are left untouched; an existing group cannot be given a profile.",
     "groupProfileHowToShort": "How to use profiles",
-    "groupProfileApplying": "The host joined group “{{group}}” — applying its profile, job #{{job}}."
+    "createdByProfile": "Created from profile “{{name}}”"
   },
   "events": {
     "title": "Alerts",
@@ -1821,7 +1821,10 @@
       "hostname": "the hostname shows up in certificates and logs",
       "external-repo": "docker.com's own repository is added to the system"
     },
-    "hubHint": "Hub profiles: a description of what a host should be — packages, services, files, ports, accounts, stacks. Applied through groups: create a group with a profile in Hosts and drag hosts into it — each is brought to the profile, and drift later shows in its Findings."
+    "hubHint": "Hub profiles: a description of what a host should be — packages, services, files, ports, accounts, stacks. Applied through groups: create a group with a profile in Hosts and drag hosts into it — each is brought to the profile, and drift later shows in its Findings.",
+    "color": "Color",
+    "colorPresets": "Palette",
+    "colorNone": "no color"
   },
   "vmimages": {
     "title": "VM images",

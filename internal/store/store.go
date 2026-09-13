@@ -163,6 +163,9 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
 CREATE TABLE IF NOT EXISTS profiles (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL,
+    -- color — цвет профиля (#rrggbb): им подкрашиваются хосты, созданные
+    -- по нему. Пусто — без цвета.
+    color      TEXT NOT NULL DEFAULT '',
     content    TEXT NOT NULL,
     note       TEXT NOT NULL DEFAULT '',
     author     TEXT NOT NULL DEFAULT '',
@@ -294,6 +297,8 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"hosts", "parent_id", `ALTER TABLE hosts ADD COLUMN parent_id INTEGER NOT NULL DEFAULT 0`},
 	{"jobs", "lang", `ALTER TABLE jobs ADD COLUMN lang TEXT NOT NULL DEFAULT ''`},
 	{"host_groups", "profile_id", `ALTER TABLE host_groups ADD COLUMN profile_id INTEGER NOT NULL DEFAULT 0`},
+	{"profiles", "color", `ALTER TABLE profiles ADD COLUMN color TEXT NOT NULL DEFAULT ''`},
+	{"hosts", "profile_id", `ALTER TABLE hosts ADD COLUMN profile_id INTEGER NOT NULL DEFAULT 0`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

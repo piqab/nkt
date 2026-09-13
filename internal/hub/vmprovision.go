@@ -245,6 +245,9 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		if err := r.applyProfile(ctx, jc, done.NewHostID, p.ProfileID); err != nil {
 			return err
 		}
+		// Машина создана по профилю — строка в списке подкрасится его
+		// цветом.
+		_ = r.m.db.SetHostProfile(ctx, done.NewHostID, p.ProfileID)
 		done.ProfileDone = true
 		jc.SaveResume(done)
 	}

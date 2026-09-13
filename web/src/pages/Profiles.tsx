@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Checkbox, Input, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Checkbox, ColorPicker, Input, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { QuestionCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -119,6 +119,10 @@ function ProfileGuide({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** Палитра цветов профиля: приглушённые, чтобы фон строки не спорил с
+ * текстом и иконками. Свой цвет тоже можно — через пипетку. */
+const PROFILE_COLORS = ['#4f86c6', '#5aa66f', '#c9a227', '#d0743c', '#b95c8a', '#7c6bc4', '#3fa5a5', '#8a8a8a']
+
 export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: boolean }) {
   const { t } = useTranslation()
   const canEdit = me.is_admin && me.allow_mutations
@@ -126,6 +130,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
   const [selected, setSelected] = useState<number | null>(null)
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')
+  const [color, setColor] = useState('')
   const [plan, setPlan] = useState<ProfilePlan | null>(null)
   const [chosen, setChosen] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
@@ -140,6 +145,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
   useEffect(() => {
     if (current.data) {
       setDraft(current.data.content ?? '')
+      setColor(current.data.color ?? '')
       setNote('')
       setPlan(null)
     }
@@ -152,9 +158,9 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
     setNotice(null)
     try {
       if (selected) {
-        await api(`/profiles/${selected}`, { method: 'PUT', body: { content: draft, note } })
+        await api(`/profiles/${selected}`, { method: 'PUT', body: { content: draft, note, color } })
       } else {
-        const res = await api<{ id: number }>('/profiles', { method: 'POST', body: { content: draft, note } })
+        const res = await api<{ id: number }>('/profiles', { method: 'POST', body: { content: draft, note, color } })
         setSelected(res.id)
       }
       await list.reload()
@@ -301,6 +307,8 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
               setDraft(TEMPLATE)
               setPlan(null)
               setNote('')
+              // Новому профилю — следующий свободный цвет палитры.
+              setColor(PROFILE_COLORS.find((c) => !profiles.some((p) => p.color === c)) ?? PROFILE_COLORS[0])
             }}
           >
             {t('profiles.newProfile')}
@@ -334,9 +342,12 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
                   style={{ textAlign: 'left', height: 'auto', padding: '0.35rem 0.5rem' }}
                   onClick={() => setSelected(p.id)}
                 >
-                  <span>
-                    <strong>{p.name}</strong>
-                    <div className="small muted">{t('profiles.updated', { when: formatDateTime(p.updated_at) })}</div>
+                  <span className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+                    <span className="profile-swatch" style={{ background: p.color || 'transparent' }} />
+                    <span>
+                      <strong>{p.name}</strong>
+                      <div className="small muted">{t('profiles.updated', { when: formatDateTime(p.updated_at) })}</div>
+                    </span>
                   </span>
                 </Button>
               ))}
@@ -390,10 +401,27 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
             }
           >
             {canEdit && (
-              <div className="filters" style={{ marginBottom: '0.5rem' }}>
+              <div className="filters" style={{ marginBottom: '0.5rem', alignItems: 'flex-end' }}>
                 <label style={{ flex: 1, minWidth: '14rem' }}>
                   {t('profiles.note')}
                   <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('profiles.notePlaceholder')} />
+                </label>
+                {/* Цвет профиля: им подкрашиваются строки хостов, созданных
+                    по этому профилю, — чтобы в списке хаба было видно,
+                    из чего машина сделана. */}
+                <label>
+                  {t('profiles.color')}
+                  <span className="row" style={{ gap: '0.3rem', alignItems: 'center' }}>
+                    <ColorPicker
+                      size="small"
+                      value={color || null}
+                      allowClear
+                      presets={[{ label: t('profiles.colorPresets'), colors: PROFILE_COLORS }]}
+                      onChange={(c, hex) => setColor(c ? hex : '')}
+                      onClear={() => setColor('')}
+                    />
+                    <span className="small muted mono">{color || t('profiles.colorNone')}</span>
+                  </span>
                 </label>
               </div>
             )}

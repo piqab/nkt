@@ -110,6 +110,9 @@ export interface HubHost {
    * «running», «shut off»… Пусто у обычных хостов и пока хост не
    * опрошен. */
   vm_state?: string
+  /** Профиль, по которому хост создан: имя и цвет — им подкрашена строка. */
+  profile_name?: string
+  profile_color?: string
 }
 
 export interface HostInfo {
@@ -874,6 +877,8 @@ export interface JobLogLine {
 export interface Profile {
   id: number
   name: string
+  /** Цвет профиля (#rrggbb): им подкрашиваются строки хостов, созданных по нему. */
+  color?: string
   content?: string
   note?: string
   author?: string

@@ -501,6 +501,7 @@ type GroupProfile struct {
 	Group   string `json:"group"`
 	ID      int64  `json:"id"`
 	Name    string `json:"name"`
+	Color   string `json:"color,omitempty"`
 	Missing bool   `json:"missing,omitempty"`
 }
 
@@ -516,7 +517,7 @@ func (m *Manager) GroupProfiles(ctx context.Context) ([]GroupProfile, error) {
 	for group, id := range byGroup {
 		gp := GroupProfile{Group: group, ID: id}
 		if p, err := m.db.ProfileByID(ctx, id); err == nil {
-			gp.Name = p.Name
+			gp.Name, gp.Color = p.Name, p.Color
 		} else {
 			gp.Missing = true
 		}
