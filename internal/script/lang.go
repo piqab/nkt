@@ -7,7 +7,7 @@
 // дел, а не как программу; всё, что сложнее, делают профили и compose.
 //
 //	# Веб-ферма
-//	group web-farm profile web-base color #5aa66f
+//	group web-farm profile web-base
 //	host web1 192.0.2.10 user root password ask
 //	install web1
 //	on web1 packages install nginx htop
@@ -79,14 +79,13 @@ var Commands = []CommandDoc{
 		Example: "set IMAGE ubuntu-24.04\non web1 vm create app1 image ${IMAGE}",
 	},
 	{
-		Kind: KindGroup, Syntax: "group ИМЯ [profile ПРОФИЛЬ] [color #rrggbb]",
+		Kind: KindGroup, Syntax: "group ИМЯ [profile ПРОФИЛЬ]",
 		Summary: "script.doc.group",
 		Args: []ArgDoc{
 			{Name: "ИМЯ", Required: true, Desc: "script.doc.group.name"},
 			{Name: "profile", Desc: "script.doc.group.profile"},
-			{Name: "color", Desc: "script.doc.group.color"},
 		},
-		Example: "group web-farm profile web-base color #5aa66f",
+		Example: "group web-farm profile web-base",
 	},
 	{
 		Kind: KindHost, Syntax: "host ИМЯ АДРЕС[:ПОРТ] user ПОЛЬЗОВАТЕЛЬ (password ask | password \"…\" | key hub) [group ГРУППА]",

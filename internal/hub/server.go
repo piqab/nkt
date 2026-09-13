@@ -40,6 +40,9 @@ type Server struct {
 	// идёт здесь, а не на хостах. nil допустим (тесты, которым это
 	// незачем): обработчик тогда отвечает, что задания недоступны.
 	jobs *jobs.Manager
+	// scripts — исполнитель сценариев (см. scriptrun.go); хранит пароли
+	// запуска в памяти, поэтому один на сервер.
+	scripts *ScriptRunner
 }
 
 // Deps bundles the constructed subsystems, mirroring api.Deps.
@@ -222,6 +225,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/groups/apply-profile", s.handleGroupApply)
 					r.Post("/hub/scripts", s.handleScriptCreate)
 					r.Post("/hub/scripts/check", s.handleScriptCheck)
+					r.Post("/hub/scripts/{id}/run", s.handleScriptRun)
 					r.Put("/hub/scripts/{id}", s.handleScriptUpdate)
 					r.Delete("/hub/scripts/{id}", s.handleScriptDelete)
 					r.Post("/hub/vm/provision", s.handleVMProvision)
@@ -343,4 +347,13 @@ func extendTransferDeadlines(next http.Handler) http.Handler {
 		_ = rc.SetWriteDeadline(deadline)
 		next.ServeHTTP(w, r)
 	})
+}
+
+// ScriptRunner — исполнитель сценариев этого сервера (один, с паролями
+// запуска в памяти); регистрируется в менеджере заданий из cmd/nkt.
+func (s *Server) ScriptRunner() *ScriptRunner {
+	if s.scripts == nil {
+		s.scripts = NewScriptRunner(s)
+	}
+	return s.scripts
 }

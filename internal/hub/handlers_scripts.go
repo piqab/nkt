@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/script"
 	"github.com/piqab/nkt/internal/store"
@@ -271,4 +272,63 @@ func (s *Server) handleScriptHelp(w http.ResponseWriter, r *http.Request) {
 		out = append(out, cj)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"commands": out, "intro": msgs.T(lang, "script.doc.intro")})
+}
+
+// handleScriptRun запускает сценарий заданием: текст берётся сохранённый,
+// перед запуском разбирается и сверяется ещё раз, пароли «password ask»
+// кладутся исполнителю в память по билету.
+func (s *Server) handleScriptRun(w http.ResponseWriter, r *http.Request) {
+	sc, err := s.scriptByIDParam(r)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if s.jobs == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
+		return
+	}
+	var req struct {
+		Passwords map[string]string `json:"passwords"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	parsed, issues := script.Parse(sc.Content)
+	if len(issues) == 0 {
+		issues = script.Check(parsed, s.refsNow(r))
+	}
+	lang := msgs.FromContext(r.Context())
+	if len(issues) > 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error":  msgs.T(lang, "hub.scriptParseFailed", issues[0].Line, msgs.Localize(lang, issues[0].Err)),
+			"issues": issuesJSON(lang, issues),
+		})
+		return
+	}
+	for _, h := range parsed.Asks {
+		if strings.TrimSpace(req.Passwords[h]) == "" {
+			writeError(w, http.StatusBadRequest, msgs.T(lang, "hub.scriptPasswordMissing", h))
+			return
+		}
+	}
+	ticket := s.ScriptRunner().keep(req.Passwords)
+	user := auth.Username(r.Context())
+	id, err := s.jobs.Start(r.Context(), jobs.Spec{
+		Kind:  KindScriptRun,
+		Title: msgs.Tc(r.Context(), "hub.scriptRunTitle", sc.Name),
+		// Ключ очереди — сам сценарий: два запуска одного разом мешали
+		// бы друг другу, разные идут параллельно.
+		Queue:  "script:" + strconv.FormatInt(sc.ID, 10),
+		Author: user,
+		Steps:  len(parsed.Steps),
+		Params: ScriptRunParams{ScriptID: sc.ID, Name: sc.Name, Content: sc.Content, Ticket: ticket},
+	})
+	if err != nil {
+		s.ScriptRunner().forget(ticket)
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	s.db.Audit(r.Context(), user, "script.run", sc.Name, "ok", map[string]any{"job_id": id})
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
 }

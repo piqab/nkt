@@ -7,9 +7,11 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/model"
@@ -426,4 +428,54 @@ func (s *Server) handleAptBatchRemoveStatus(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleAptBatchInstallStatus(w http.ResponseWriter, r *http.Request) {
 	active, finished, exitCode := s.sessionStatus(aptBatchSessionKey)
 	writeSessionStatus(w, active, finished, exitCode)
+}
+
+// handleAptRemoveSync удаляет пакеты одним apt-get remove -y и отвечает по
+// завершении — для сценариев хаба, которым нужен обычный HTTP-ответ, а
+// не PTY-сессия. Тот же выход из песочницы, что у установки по профилю.
+func (s *Server) handleAptRemoveSync(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Packages []string `json:"packages"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if len(req.Packages) == 0 {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.noPackages"))
+		return
+	}
+	for _, p := range req.Packages {
+		if !aptPackageNameRe.MatchString(p) {
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "pkgInstall.invalidPackageName", p))
+			return
+		}
+	}
+	if s.cfg.Mode != config.ModeLocal {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "profile.packageInstallationUnavailableMode"))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+	argv := append([]string{"apt-get", "remove", "-y"}, req.Packages...)
+	res, err := RunUnrestrictedEnv(ctx, map[string]string{"DEBIAN_FRONTEND": "noninteractive"}, nil, argv...)
+	user := auth.Username(r.Context())
+	if err != nil {
+		s.db.Audit(r.Context(), user, "apt.remove", strings.Join(req.Packages, " "), "error", err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if res.ExitCode != 0 {
+		s.db.Audit(r.Context(), user, "apt.remove", strings.Join(req.Packages, " "), "error", res.Output())
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.aptRemoveFailed", res.ExitCode, lastLineOf(res.Output())))
+		return
+	}
+	s.db.Audit(r.Context(), user, "apt.remove", strings.Join(req.Packages, " "), "ok", nil)
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "output": res.Output()})
+}
+
+func lastLineOf(s string) string {
+	lines := strings.Split(strings.TrimSpace(s), "\n")
+	return strings.TrimSpace(lines[len(lines)-1])
 }

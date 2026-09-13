@@ -306,6 +306,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/files/extract", s.handleFilesExtract)
 				r.Post("/files/clone", s.handleFilesClone)
 				r.Put("/files/upload", s.handleFilesUpload)
+				r.Post("/system/apt/remove", s.handleAptRemoveSync)
 				r.Post("/files/write", s.handleFilesWrite)
 				r.Post("/services/{name}/validate", s.handleServiceValidate)
 				r.Post("/services/{name}/{action}", s.handleServiceAction)

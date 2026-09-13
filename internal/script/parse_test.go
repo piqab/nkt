@@ -10,7 +10,7 @@ import (
 
 const sample = `# Веб-ферма
 set IMAGE ubuntu-24.04
-group web-farm profile web-base color #5aa66f
+group web-farm profile web-base
 
 host web1 192.0.2.10 user root password ask group web-farm
 host web2 192.0.2.11:2222 user deploy key hub
@@ -47,7 +47,7 @@ func TestParseSample(t *testing.T) {
 	if sc.Vars["IMAGE"] != "ubuntu-24.04" || len(sc.Asks) != 1 || sc.Asks[0] != "web1" {
 		t.Errorf("vars/asks: %+v %+v", sc.Vars, sc.Asks)
 	}
-	if sc.Steps[0].Kind != KindGroup || sc.Steps[0].Args["profile"] != "web-base" || sc.Steps[0].Args["color"] != "#5aa66f" {
+	if sc.Steps[0].Kind != KindGroup || sc.Steps[0].Args["profile"] != "web-base" {
 		t.Errorf("group: %+v", sc.Steps[0])
 	}
 	h2 := sc.Steps[2]
@@ -95,7 +95,6 @@ func TestParseErrors(t *testing.T) {
 		"on web1 vm create x image ${IMG}":            "unknownVar",
 		"frobnicate":                                  "unknownCommand",
 		"on web1 service nginx dance":                 "badService",
-		"group g color red":                           "badColor",
 		"host web1 192.0.2.10 user root password \"a": "unclosedQuote",
 	}
 	for text, want := range cases {
