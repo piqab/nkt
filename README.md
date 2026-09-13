@@ -470,6 +470,7 @@ link to the file and line, and a concrete action to fix it.
 | `container-restarting` | high | A container stuck in a restart loop |
 | `container-not-running` / `-undeclared` / `-no-restart-policy` | medium / low / low | Declared but not running; running but not declared; no restart policy |
 | `admin-interface-open` | high/medium | haproxy's stats panel is reachable with no password |
+| `docker-cli-missing` | medium | The docker daemon runs but there is no `docker` command (Debian 13: docker.io without docker-cli) |
 
 ### Resource map
 

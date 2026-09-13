@@ -47,7 +47,8 @@ What is checked:
 - **Pools and containers** — an undefined or unused upstream, a backend
   not listening, all backends disabled, a single backend, no health check,
   a container in a restart loop, not running, not declared, without a
-  restart policy, the haproxy stats page without a password.
+  restart policy, the haproxy stats page without a password, a docker
+  daemon without the client (Debian 13: docker.io without docker-cli).
 - **Profile drift** — when a [profile](/en/guide/profiles) is applied to
   the host, deviations from it show up here too.
 

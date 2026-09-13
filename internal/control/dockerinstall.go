@@ -104,6 +104,22 @@ func dockerAptScript(distro, codename string) string {
 	}, "\n")
 }
 
+// dockerCLIScript — только клиент и compose-плагин, когда демон уже есть.
+//
+// Debian 13 разнёс docker.io на демон и клиент: docker.io ставит один
+// dockerd, а команда docker живёт в docker-cli, который у него лишь в
+// Recommends — на образах VPS с выключенными Recommends хост получает
+// работающий демон и «docker: command not found». Ставить поверх него
+// docker-ce с docker.com нельзя: две установки Docker на одном хосте
+// конфликтуют пакетами и службой, — поэтому здесь доставляется именно
+// недостающее. docker-compose в Debian кладёт и compose-плагин.
+const dockerCLIScript = "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get update\napt-get install -y docker-cli docker-compose"
+
+// dockerCLIOnlyMissing — на хосте есть dockerd, но нет команды docker.
+// dockerd лежит в sbin, которого в PATH может не быть, поэтому файл
+// проверяется и по пути.
+const dockerCLIOnlyMissing = "command -v docker >/dev/null 2>&1 && exit 1; command -v dockerd >/dev/null 2>&1 || test -x /usr/sbin/dockerd || test -x /usr/bin/dockerd"
+
 // dockerScriptFallback — официальный установочный скрипт docker.com.
 //
 // Для систем, у которых своей ветки репозитория нет (Alpine, Fedora,
@@ -147,18 +163,28 @@ func InstallDocker(ctx context.Context, run PrivilegedRunner, logf func(string, 
 		return msgs.Errorf("control.installationUnavailableMode")
 	}
 
-	osr, err := ReadOSRelease(ctx, run)
-	if err != nil {
-		return err
+	script := ""
+	if res, err := run(ctx, "sh", "-c", dockerCLIOnlyMissing); err == nil && res.ExitCode == 0 {
+		if res, err := run(ctx, "sh", "-c", "command -v apt-get"); err == nil && res.ExitCode == 0 {
+			logf(msgs.Tc(ctx, "control.dockerInstallCLIOnly"))
+			script = dockerCLIScript
+		}
 	}
-	plan := PlanDockerInstall(osr)
-	if plan.Official {
-		logf(msgs.Tc(ctx, "control.dockerInstallOfficial", plan.Distro, plan.Codename))
-	} else {
-		logf(msgs.Tc(ctx, "control.dockerInstallScript", osr.ID))
+	if script == "" {
+		osr, err := ReadOSRelease(ctx, run)
+		if err != nil {
+			return err
+		}
+		plan := PlanDockerInstall(osr)
+		if plan.Official {
+			logf(msgs.Tc(ctx, "control.dockerInstallOfficial", plan.Distro, plan.Codename))
+		} else {
+			logf(msgs.Tc(ctx, "control.dockerInstallScript", osr.ID))
+		}
+		script = plan.Script
 	}
 
-	res, err := run(ctx, "sh", "-c", plan.Script)
+	res, err := run(ctx, "sh", "-c", script)
 	if err != nil {
 		return msgs.Errorf("control.installingDocker", err)
 	}

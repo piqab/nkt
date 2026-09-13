@@ -27,7 +27,12 @@ const ComposeStacksDir = "/srv/compose"
 
 // DockerResult is everything the docker parser produces.
 type DockerResult struct {
-	Status     model.SourceStatus
+	Status model.SourceStatus
+	// CLIMissing — движок отвечает, а команды docker нет: Debian 13
+	// ставит docker.io без docker-cli. Контейнеры при этом видны (они
+	// читаются через API движка), но compose-стеки и всё, что зовёт
+	// «docker …», работать не будет — отсюда находка.
+	CLIMissing bool
 	Containers []model.Container
 	Networks   []model.DockerNetwork
 	Endpoints  []model.Endpoint
@@ -56,6 +61,7 @@ func Docker(ctx context.Context, c collect.Collector, composePaths []string) Doc
 	} else {
 		res.Status.Available = true
 		res.Status.Version = version
+		res.CLIMissing = !collect.Which(ctx, c, "docker")
 	}
 	if nets, err := dockerNetworks(ctx, c); err != nil {
 		res.Status.Warnings = append(res.Status.Warnings, err.Error())

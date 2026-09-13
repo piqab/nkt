@@ -129,6 +129,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Files = append(snap.Files, fail2banFiles...)
 	snap.Container = dockerRes.Containers
 	snap.Networks = dockerRes.Networks
+	snap.DockerCLIMissing = dockerRes.CLIMissing
 	snap.LXD = lxdRes.Instances
 	snap.VMs = libvirtRes.VMs
 	snap.Podman = podmanRes.Containers

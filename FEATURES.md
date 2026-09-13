@@ -91,7 +91,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - **Docker**: containers (state, image, ports, networks), start/stop/restart/remove, logs, container creation, compose stack scanning.
 - **Docker → images**: list with size, date and usage, removal, saving to a tar on the host, pruning dangling layers.
 - **Docker → stacks**: the host's compose files, `up`/`down`/`restart`, compose editing through the config editor, a new stack from a template.
-- Docker installation from the official docker.com repository (or the get.docker.com script) with a live log.
+- Docker installation from the official docker.com repository (or the get.docker.com script) with a live log; when only the client is missing (Debian 13: docker.io without docker-cli) — just docker-cli and the compose plugin are installed, with a finding pointing it out.
 - **Podman**: containers over its own socket, the same lifecycle.
 - **LXD**: containers and virtual machines, `launch`, start/stop, removal.
 - **Virtual machines (libvirt/QEMU)**: domain list, start/shutdown/force-off/reboot, autostart, removal with or without disks, machine addresses.

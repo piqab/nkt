@@ -1,8 +1,11 @@
 package control
 
 import (
+	"context"
 	"strings"
 	"testing"
+
+	"github.com/piqab/nkt/internal/collect"
 )
 
 // Ветка репозитория выбирается по системе, а производные ставятся из
@@ -70,5 +73,33 @@ func TestPlanDockerInstallFallback(t *testing.T) {
 		if strings.Contains(plan.Script, "rm -rf /") {
 			t.Errorf("%+v: в сценарий просочилось значение из os-release", osr)
 		}
+	}
+}
+
+// Debian 13: docker.io ставит один демон, клиент — в docker-cli. Когда
+// dockerd на хосте уже есть, установка доставляет только клиент и
+// compose-плагин из репозитория дистрибутива, а не docker-ce поверх.
+func TestInstallDockerCLIOnly(t *testing.T) {
+	var scripts []string
+	run := func(ctx context.Context, argv ...string) (collect.CommandResult, error) {
+		cmd := strings.Join(argv, " ")
+		switch {
+		case strings.Contains(cmd, "command -v docker >/dev/null 2>&1 && exit 1"):
+			return collect.CommandResult{ExitCode: 0}, nil // dockerd есть, docker нет
+		case cmd == "sh -c command -v apt-get":
+			return collect.CommandResult{ExitCode: 0, Stdout: "/usr/bin/apt-get\n"}, nil
+		case strings.HasPrefix(cmd, "sh -c set -e"):
+			scripts = append(scripts, argv[2])
+			return collect.CommandResult{ExitCode: 0}, nil
+		case cmd == "sh -c command -v docker":
+			return collect.CommandResult{ExitCode: 0, Stdout: "/usr/bin/docker\n"}, nil
+		}
+		return collect.CommandResult{ExitCode: 0}, nil
+	}
+	if err := InstallDocker(context.Background(), run, nil); err != nil {
+		t.Fatal(err)
+	}
+	if len(scripts) != 1 || !strings.Contains(scripts[0], "apt-get install -y docker-cli docker-compose") || strings.Contains(scripts[0], "docker-ce") {
+		t.Errorf("ожидалась установка только клиента, выполнено: %q", scripts)
 	}
 }
