@@ -32,8 +32,8 @@ features:
     title: Certificates in full
     details: Every certificate from the configs and /etc/letsencrypt, comparison with the TLS socket, auto-renewal, Let's Encrypt issuance, PEM for haproxy, self-signed ones.
   - icon: 🛡️
-    title: Firewall and vulnerabilities
-    details: ufw and firewalld with port 22 protection, iptables as is; OS package and container image CVE scans via trivy.
+    title: Firewall, vulnerabilities, malware
+    details: ufw and firewalld with port 22 protection; CVEs in OS packages and images via trivy; miners and signs of a break-in with no third-party tools, ClamAV with quarantine.
   - icon: 📈
     title: Monitoring
     details: Availability of every listener on a schedule, a downtime heatmap, load graphs, live logs, a terminal and btop in the browser.

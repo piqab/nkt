@@ -49,6 +49,8 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - trivy is installed automatically on the first scan.
 - Vulnerability list with severity, package, fixed version and links; filters.
 - Scan progress in real time.
+- The “Malware” tab: a heuristic check for miners and signs of a break-in with no third-party tools — processes named like miners, pool connections, binaries deleted from disk or started from /tmp, long CPU load by a process not from any package, /etc/ld.so.preload, cron with “curl | sh”, units from temporary directories, foreign SUID files, blocks in /etc/hosts; on every scan, results go to Findings and hub alerts.
+- ClamAV: package install, signature database updates, scans of chosen host directories and container images (one, selected or all) with a live log, quarantine of infected files with restore and purge.
 
 ### Resource map
 - Graph "external network → service → listener → pool → backend → container → docker network" built from configs and the real state.
@@ -93,7 +95,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - **Docker**: containers (state, image, ports, networks), start/stop/restart/remove, logs, container creation, compose stack scanning.
 - **Docker → images**: list with size, date and usage, removal, saving to a tar on the host, pruning dangling layers.
 - **Docker → stacks**: the host's compose files, `up`/`down`/`restart`, compose editing through the config editor, a new stack from a template.
-- Docker installation from the official docker.com repository (or the get.docker.com script) with a live log.
+- Docker installation from the official docker.com repository (or the get.docker.com script) with a live log; when only the client is missing (Debian 13: docker.io without docker-cli) — just docker-cli and the compose plugin are installed, with a finding pointing it out.
 - **Podman**: containers over its own socket, the same lifecycle.
 - **LXD**: containers and virtual machines, `launch`, start/stop, removal.
 - **Virtual machines (libvirt/QEMU)**: domain list, start/shutdown/force-off/reboot, autostart, removal with or without disks, machine addresses.
@@ -196,6 +198,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Hub jobs with a log.
 - Whole-hub export and import: hosts with secrets, groups, machines with parents, profiles with history, machine templates, settings; the file is password-encrypted.
 - A centralized trivy vulnerability database for all hosts, refreshed on a schedule and by button.
+- A copy of the ClamAV signature database on the hub (created by a button in “About”, then refreshed on a schedule, only what changed is downloaded) and its upload to a host as a job — “database from hub” in the “Malware” tab.
 - "About": hub version, GitHub release check, update to the latest, rollback to the previous, the new version's notes before installing.
 - Configuration via `hub.env`, running as a systemd unit, in Docker Compose or Kubernetes.
 

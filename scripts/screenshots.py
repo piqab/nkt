@@ -33,6 +33,7 @@ SCREENS = [
     ('overview', 'host', '/', ''),
     ('findings', 'host', '/findings', ''),
     ('topology', 'host', '/topology', ''),
+    ('malware', 'host', '/vulnerabilities', "tab({ru: 'Вредоносное', en: 'Malware'})"),
     ('availability', 'host', '/availability', ''),
     ('usage', 'host', '/usage', ''),
     ('audit', 'host', '/audit', ''),
