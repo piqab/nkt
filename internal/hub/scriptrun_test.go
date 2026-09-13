@@ -34,7 +34,7 @@ func TestScriptRunnerHostsAndResume(t *testing.T) {
 		"host web2 192.0.2.11:2222 user deploy password ask",
 		"install web1",
 	}, "\n")
-	ticket := r.keep(map[string]string{"web2": "asked"})
+	ticket := r.keep(map[string]string{"host:web2": "asked"})
 	id, err := s.jobs.Start(ctx, jobs.Spec{Kind: KindScriptRun, Title: "t", Queue: "script:1", Steps: 4,
 		Params: ScriptRunParams{ScriptID: 1, Name: "t", Content: content, Ticket: ticket}})
 	if err != nil {
@@ -69,7 +69,7 @@ func TestScriptRunnerHostsAndResume(t *testing.T) {
 	if gp, _ := db.HostGroupProfile(ctx, "farm"); gp != pid {
 		t.Errorf("профиль группы = %d", gp)
 	}
-	if _, ok := r.password(ticket, "web2"); ok {
+	if _, ok := r.value(ticket, "host:web2"); ok {
 		t.Error("пароль запуска остался в памяти после задания")
 	}
 

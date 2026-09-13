@@ -795,27 +795,34 @@ func (s *Server) handleHostProbe(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	// Имя хоста в записи — не обязательно IP; проверка требует IP, и
-	// разрешаем его здесь, а не в браузере.
-	addr := host.Addr
-	if net.ParseIP(addr) == nil {
-		ips, err := net.DefaultResolver.LookupIPAddr(r.Context(), addr)
-		if err != nil || len(ips) == 0 {
-			writeError(w, http.StatusBadGateway, msgs.Tc(r.Context(), "hub.hostAddressDoesResolve", addr, err))
-			return
-		}
-		addr = ips[0].IP.String()
-	}
-	req.Address = addr
 	if req.Kind == portprobe.KindCurl {
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.curlCustomArgumentsRunsOnly"))
 		return
 	}
-	if err := req.Validate(); err != nil {
-		writeErr(w, r, http.StatusBadRequest, err)
+	res, err := s.hub.ProbeHost(r.Context(), host, req)
+	if err != nil {
+		writeErr(w, r, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, portprobe.Probe(r.Context(), req))
+	writeJSON(w, http.StatusOK, res)
+}
+
+// ProbeHost проверяет порт хоста с хаба — снаружи. Имя хоста в записи —
+// не обязательно IP; проверка требует IP, и разрешаем его здесь.
+func (m *Manager) ProbeHost(ctx context.Context, host store.Host, req portprobe.Request) (portprobe.Result, error) {
+	addr := host.Addr
+	if net.ParseIP(addr) == nil {
+		ips, err := net.DefaultResolver.LookupIPAddr(ctx, addr)
+		if err != nil || len(ips) == 0 {
+			return portprobe.Result{}, msgs.Errorf("hub.hostAddressDoesResolve", addr, err)
+		}
+		addr = ips[0].IP.String()
+	}
+	req.Address = addr
+	if err := req.Validate(); err != nil {
+		return portprobe.Result{}, err
+	}
+	return portprobe.Probe(ctx, req), nil
 }
 
 // handleVMDomainAction запускает или выключает саму машину — через хост,

@@ -188,7 +188,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - Fallback channel (a reverse TLS tunnel with certificate pinning) for when SSH is unavailable.
 - Revoking passwordless sudo, address diagnostics, complete nkt removal from a host (restoring password login).
 - Machines inside a host: creating a virtual machine on a host from the hub, automatic nkt installation into it, profile application; discovery of existing machines and adding them to the list; start/shutdown through the parent host; removal together with disks.
-- Scripts: a line-based deployment language (group, hosts, nkt install, packages, services, firewall, Docker and compose stacks, machines, profiles, files) with a check, a reference and execution as a hub job.
+- Scripts (experimental): a line-based deployment language (group, hosts, nkt install, packages, services, firewall, Docker and compose stacks, machines, profiles, files, user accounts, system settings, certificates, git clone; several hosts in one command) with run-time parameters, waiting for a port/HTTP/service, a check, a dry run, a reference and execution as a hub job.
 - A "Profiles" section on the hub, each profile has a color; a profile is set on a group at creation: machines created in the group are built from it and their rows are tinted with its color; moving a host into a group applies nothing.
 - Alerts: unreachable, responding again, serious problems appeared, resolved, job failed; an alert journal with settings for what to record and what to notify about, collapsing short episodes; browser notifications.
 - Hub jobs with a log.

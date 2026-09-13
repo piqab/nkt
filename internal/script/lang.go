@@ -40,6 +40,11 @@ const (
 	KindVMAction     Kind = "vm.action"
 	KindApplyProfile Kind = "apply"
 	KindFilePut      Kind = "file.put"
+	KindParam        Kind = "param"
+	KindUserAdd      Kind = "user.add"
+	KindSystem       Kind = "system"
+	KindCert         Kind = "cert"
+	KindGitClone     Kind = "git.clone"
 )
 
 // ArgDoc — один аргумент команды в справке.
@@ -70,13 +75,23 @@ type CommandDoc struct {
 // справка: от «завести» к «сделать на хосте».
 var Commands = []CommandDoc{
 	{
-		Kind: KindSet, Syntax: "set ИМЯ значение",
+		Kind: KindSet, Syntax: "set ИМЯ значение | set ИМЯ ask",
 		Summary: "script.doc.set",
 		Args: []ArgDoc{
 			{Name: "ИМЯ", Required: true, Desc: "script.doc.set.name"},
 			{Name: "значение", Required: true, Desc: "script.doc.set.value"},
+			{Name: "ask", Desc: "script.doc.set.ask"},
 		},
-		Example: "set IMAGE ubuntu-24.04\non web1 vm create app1 image ${IMAGE}",
+		Example: "set IMAGE ubuntu-24.04\nset DB_PASS ask\non web1 vm create app1 image ${IMAGE}",
+	},
+	{
+		Kind: KindParam, Syntax: "param ИМЯ \"подсказка\"",
+		Summary: "script.doc.param",
+		Args: []ArgDoc{
+			{Name: "ИМЯ", Required: true, Desc: "script.doc.param.name"},
+			{Name: "подсказка", Desc: "script.doc.param.prompt"},
+		},
+		Example: "param ADDR \"адрес нового сервера\"\nparam NAME \"имя хоста в хабе\"\nhost ${NAME} ${ADDR} user root password ask",
 	},
 	{
 		Kind: KindGroup, Syntax: "group ИМЯ [profile ПРОФИЛЬ]",
@@ -108,16 +123,20 @@ var Commands = []CommandDoc{
 		Example: "install web1 web2",
 	},
 	{
-		Kind: KindWait, Syntax: "wait ХОСТ online [ДЛИТЕЛЬНОСТЬ]",
+		Kind: KindWait, Syntax: "wait ХОСТ online [ДЛИТЕЛЬНОСТЬ]\nwait ХОСТ port ПОРТ [ДЛИТЕЛЬНОСТЬ]\nwait ХОСТ http URL [КОД] [ДЛИТЕЛЬНОСТЬ]\nwait ХОСТ service ИМЯ active [ДЛИТЕЛЬНОСТЬ]",
 		Summary: "script.doc.wait",
 		Args: []ArgDoc{
 			{Name: "ХОСТ", Required: true, Desc: "script.doc.wait.host"},
+			{Name: "online", Desc: "script.doc.wait.online"},
+			{Name: "port", Desc: "script.doc.wait.port"},
+			{Name: "http", Desc: "script.doc.wait.http"},
+			{Name: "service", Desc: "script.doc.wait.service"},
 			{Name: "ДЛИТЕЛЬНОСТЬ", Desc: "script.doc.wait.duration"},
 		},
-		Example: "wait web1 online 5m",
+		Example: "wait web1 online 5m\nwait web1 port 443 30s\nwait web1 http https://example.org/ 200 1m\nwait web1 service nginx active",
 	},
 	{
-		Kind: KindPackages, OnHost: true, Syntax: "on ХОСТ packages install|remove ПАКЕТ…",
+		Kind: KindPackages, OnHost: true, Syntax: "on ХОСТ… packages install|remove ПАКЕТ…",
 		Summary: "script.doc.packages",
 		Args: []ArgDoc{
 			{Name: "install|remove", Required: true, Desc: "script.doc.packages.action"},
@@ -195,6 +214,48 @@ var Commands = []CommandDoc{
 			{Name: "mode", Desc: "script.doc.filePut.mode"},
 		},
 		Example: "on web1 file put /etc/motd\nЭтот сервер под управлением nkt\nend",
+	},
+	{
+		Kind: KindUserAdd, OnHost: true, Syntax: "on ХОСТ user add ИМЯ [sudo] [key \"ssh-ed25519 …\"]",
+		Summary: "script.doc.userAdd",
+		Args: []ArgDoc{
+			{Name: "ИМЯ", Required: true, Desc: "script.doc.userAdd.name"},
+			{Name: "sudo", Desc: "script.doc.userAdd.sudo"},
+			{Name: "key", Desc: "script.doc.userAdd.key"},
+		},
+		Example: "on web1 user add deploy sudo key \"ssh-ed25519 AAAAC3Nza… deploy@laptop\"",
+	},
+	{
+		Kind: KindSystem, OnHost: true, Syntax: "on ХОСТ system hostname ИМЯ | timezone ЗОНА | locale ЛОКАЛЬ | ntp СЕРВЕР…",
+		Summary: "script.doc.system",
+		Args: []ArgDoc{
+			{Name: "hostname", Desc: "script.doc.system.hostname"},
+			{Name: "timezone", Desc: "script.doc.system.timezone"},
+			{Name: "locale", Desc: "script.doc.system.locale"},
+			{Name: "ntp", Desc: "script.doc.system.ntp"},
+		},
+		Example: "on web1 system hostname web1\non web1 system timezone Europe/Moscow\non web1 system locale ru_RU.UTF-8\non web1 system ntp time.google.com pool.ntp.org",
+	},
+	{
+		Kind: KindCert, OnHost: true, Syntax: "on ХОСТ cert issue ДОМЕН… | cert renew ДОМЕН",
+		Summary: "script.doc.cert",
+		Args: []ArgDoc{
+			{Name: "issue", Desc: "script.doc.cert.issue"},
+			{Name: "renew", Desc: "script.doc.cert.renew"},
+		},
+		Example: "on web1 cert issue example.org www.example.org\non web1 cert renew example.org",
+	},
+	{
+		Kind: KindGitClone, OnHost: true, Syntax: "on ХОСТ git clone URL /КАТАЛОГ [branch ВЕТКА] [token ask | key hub]",
+		Summary: "script.doc.gitClone",
+		Args: []ArgDoc{
+			{Name: "URL", Required: true, Desc: "script.doc.gitClone.url"},
+			{Name: "/КАТАЛОГ", Required: true, Desc: "script.doc.gitClone.dir"},
+			{Name: "branch", Desc: "script.doc.gitClone.branch"},
+			{Name: "token ask", Desc: "script.doc.gitClone.token"},
+			{Name: "key hub", Desc: "script.doc.gitClone.key"},
+		},
+		Example: "on web1 git clone https://github.com/org/app.git /srv/app branch main token ask",
 	},
 }
 

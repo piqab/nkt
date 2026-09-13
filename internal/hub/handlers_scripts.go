@@ -221,7 +221,7 @@ func (s *Server) handleScriptCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	lang := msgs.FromContext(r.Context())
-	sc, issues := script.Parse(req.Content)
+	sc, issues := script.Parse(req.Content, nil)
 	if len(issues) == 0 {
 		issues = script.Check(sc, s.refsNow(r))
 	}
@@ -229,10 +229,14 @@ func (s *Server) handleScriptCheck(w http.ResponseWriter, r *http.Request) {
 	if steps == nil {
 		steps = []script.Step{}
 	}
+	asks := sc.Asks
+	if asks == nil {
+		asks = []script.Ask{}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"steps":  steps,
 		"issues": issuesJSON(lang, issues),
-		"asks":   orEmpty(sc.Asks),
+		"asks":   asks,
 		"hosts":  orEmpty(sc.Hosts),
 		"groups": orEmpty(sc.Groups),
 	})
@@ -281,7 +285,7 @@ func (s *Server) handleScriptHelp(w http.ResponseWriter, r *http.Request) {
 		examples = append(examples, exampleJSON{Title: msgs.T(lang, e.Title), Summary: msgs.T(lang, e.Summary), Content: e.Content})
 	}
 	rules := []string{}
-	for _, k := range []string{"script.doc.rule.line", "script.doc.rule.comment", "script.doc.rule.quote", "script.doc.rule.var", "script.doc.rule.block", "script.doc.rule.hosts", "script.doc.rule.secrets", "script.doc.rule.run", "script.doc.rule.noShell"} {
+	for _, k := range []string{"script.doc.rule.line", "script.doc.rule.comment", "script.doc.rule.quote", "script.doc.rule.var", "script.doc.rule.block", "script.doc.rule.hosts", "script.doc.rule.secrets", "script.doc.rule.multi", "script.doc.rule.run", "script.doc.rule.dry", "script.doc.rule.noShell", "script.doc.rule.experimental"} {
 		rules = append(rules, msgs.T(lang, k))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"commands": out, "intro": msgs.T(lang, "script.doc.intro"), "rules": rules, "examples": examples})
@@ -301,13 +305,15 @@ func (s *Server) handleScriptRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Passwords map[string]string `json:"passwords"`
+		// Values — ответы на вопросы запуска по ключам script.Ask.
+		Values map[string]string `json:"values"`
+		DryRun bool              `json:"dry_run"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	parsed, issues := script.Parse(sc.Content)
+	parsed, issues := script.Parse(sc.Content, req.Values)
 	if len(issues) == 0 {
 		issues = script.Check(parsed, s.refsNow(r))
 	}
@@ -319,23 +325,27 @@ func (s *Server) handleScriptRun(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	for _, h := range parsed.Asks {
-		if strings.TrimSpace(req.Passwords[h]) == "" {
-			writeError(w, http.StatusBadRequest, msgs.T(lang, "hub.scriptPasswordMissing", h))
+	for _, a := range parsed.Asks {
+		if strings.TrimSpace(req.Values[a.Key]) == "" {
+			writeError(w, http.StatusBadRequest, msgs.T(lang, "hub.scriptPasswordMissing", a.Prompt))
 			return
 		}
 	}
-	ticket := s.ScriptRunner().keep(req.Passwords)
+	ticket := s.ScriptRunner().keep(req.Values)
+	title := msgs.Tc(r.Context(), "hub.scriptRunTitle", sc.Name)
+	if req.DryRun {
+		title = msgs.Tc(r.Context(), "hub.scriptDryRunTitle", sc.Name)
+	}
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind:  KindScriptRun,
-		Title: msgs.Tc(r.Context(), "hub.scriptRunTitle", sc.Name),
+		Title: title,
 		// Ключ очереди — сам сценарий: два запуска одного разом мешали
 		// бы друг другу, разные идут параллельно.
 		Queue:  "script:" + strconv.FormatInt(sc.ID, 10),
 		Author: user,
 		Steps:  len(parsed.Steps),
-		Params: ScriptRunParams{ScriptID: sc.ID, Name: sc.Name, Content: sc.Content, Ticket: ticket},
+		Params: ScriptRunParams{ScriptID: sc.ID, Name: sc.Name, Content: sc.Content, Ticket: ticket, DryRun: req.DryRun},
 	})
 	if err != nil {
 		s.ScriptRunner().forget(ticket)
