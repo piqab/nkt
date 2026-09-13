@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/portprobe"
 	"github.com/piqab/nkt/internal/store"
@@ -220,6 +221,62 @@ func (s *Server) handleHubVulnDBStatus(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleHubVulnDBRefresh(w http.ResponseWriter, r *http.Request) {
 	go func() { _ = s.hub.RefreshVulnDB(context.Background()) }()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
+}
+
+// handleHubClamDBStatus / handleHubClamDBRefresh — копия базы ClamAV на
+// хабе, карточка в «О системе» (см. clamdb.go).
+func (s *Server) handleHubClamDBStatus(w http.ResponseWriter, r *http.Request) {
+	v := s.hub.ClamDBStatus()
+	out := map[string]any{"available": v.Available, "refreshing": v.Refreshing, "size_bytes": v.SizeBytes}
+	if !v.UpdatedAt.IsZero() {
+		out["updated_at"] = v.UpdatedAt
+	}
+	if v.Progress != "" {
+		out["progress"] = v.Progress
+	}
+	if v.Error != "" {
+		out["error"] = v.Error
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func (s *Server) handleHubClamDBRefresh(w http.ResponseWriter, r *http.Request) {
+	go func() { _ = s.hub.RefreshClamDB(context.Background()) }()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
+}
+
+// handleHostClamDBPush заливает копию базы на хост заданием хаба.
+func (s *Server) handleHostClamDBPush(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if s.jobs == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
+		return
+	}
+	if !s.hub.ClamDBStatus().Available {
+		writeError(w, http.StatusConflict, msgs.Tc(r.Context(), "hub.clamDBNotCached"))
+		return
+	}
+	host, err := s.db.HostByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	user := auth.Username(r.Context())
+	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
+		Kind: KindClamDBPush, Title: msgs.Tc(r.Context(), "hub.clamDBJobTitle", host.Name),
+		Queue: fmt.Sprintf("host:%d", host.ID), Author: user, Steps: 3,
+		Params: ClamDBPushParams{HostID: host.ID},
+	})
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	s.db.Audit(r.Context(), user, "clamdb.push", host.Name, "ok", "")
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": jobID})
 }
 
 func vulnDBInfoJSON(v VulnDBInfo) map[string]any {

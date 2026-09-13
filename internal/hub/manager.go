@@ -227,6 +227,12 @@ type Manager struct {
 	vulnDBProgress   string
 	vulnDBErr        string
 
+	// clamDBMu — то же для копии базы ClamAV (см. clamdb.go).
+	clamDBMu         sync.Mutex
+	clamDBRefreshing bool
+	clamDBProgress   string
+	clamDBErr        string
+
 	// relayMu/relaySessions hold each host's live reverse-tunnel session
 	// (see relay.go) — populated by tunneldial.go's runTunnelDialer, which
 	// keeps one such connection alive per TunnelEnabled host, consumed by
@@ -282,6 +288,7 @@ func (m *Manager) Run(ctx context.Context) {
 	go m.maintainTunnelDialers(ctx)
 	go m.versionCheckLoop(ctx)
 	go m.vulnDBRefreshLoop(ctx)
+	go m.clamDBRefreshLoop(ctx)
 	m.evictIdleConns(ctx)
 }
 

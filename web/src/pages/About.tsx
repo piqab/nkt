@@ -3,7 +3,7 @@ import { Button } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HubVersionInfo, HubVulnDBInfo } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, formatBytesShort, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
 
 /**
@@ -34,6 +34,22 @@ export default function About() {
   const [vulnDBFast, setVulnDBFast] = useState(false)
   const vulndb = useApi<HubVulnDBInfo>('/hub/vulndb', vulnDBFast ? 5_000 : 60_000)
   const [vulnDBBusy, setVulnDBBusy] = useState(false)
+  const [clamDBFast, setClamDBFast] = useState(false)
+  const clamdb = useApi<HubVulnDBInfo & { size_bytes?: number }>('/hub/clamdb', clamDBFast ? 5_000 : 60_000)
+  const [clamDBBusy, setClamDBBusy] = useState(false)
+  useEffect(() => {
+    setClamDBFast(!!clamdb.data?.refreshing)
+  }, [clamdb.data?.refreshing])
+  async function refreshClamDB() {
+    setClamDBBusy(true)
+    try {
+      await api('/hub/clamdb/refresh', { method: 'POST' })
+      setClamDBFast(true)
+      await clamdb.reload()
+    } finally {
+      setClamDBBusy(false)
+    }
+  }
 
   useEffect(() => {
     setVulnDBFast(!!vulndb.data?.refreshing)
@@ -283,6 +299,44 @@ export default function About() {
 
             <div className="row" style={{ marginTop: '1rem' }}>
               <Button onClick={refreshVulnDB} loading={vulnDBBusy || vulndb.data?.refreshing}>
+                {t('about.vulnDBRefreshNow')}
+              </Button>
+            </div>
+          </>
+        )}
+      </Card>
+
+      <Card title={t('about.clamDBTitle')} subtitle={t('about.clamDBHint')}>
+        {clamdb.loading && !clamdb.data ? (
+          <Loading what={t('about.clamDBTitle')} />
+        ) : (
+          <>
+            <div className="row" style={{ gap: '2rem', flexWrap: 'wrap' }}>
+              <div>
+                <div className="small muted">{t('about.vulnDBStatus')}</div>
+                <div>{clamdb.data?.refreshing ? t('about.clamDBRefreshing') : clamdb.data?.available ? t('about.clamDBReady') : t('about.clamDBNotReady')}</div>
+              </div>
+              {clamdb.data?.updated_at && (
+                <div>
+                  <div className="small muted">{t('about.checkedAt')}</div>
+                  <div className="small">{formatRelative(clamdb.data.updated_at)}</div>
+                </div>
+              )}
+              {clamdb.data?.size_bytes ? (
+                <div>
+                  <div className="small muted">{t('about.clamDBSize')}</div>
+                  <div className="small">{formatBytesShort(clamdb.data.size_bytes)}</div>
+                </div>
+              ) : null}
+            </div>
+            {clamdb.data?.progress && <div className="small muted" style={{ marginTop: '0.5rem' }}>{clamdb.data.progress}</div>}
+            {clamdb.data?.error && (
+              <div className="small" style={{ color: 'var(--status-warning)', marginTop: '0.5rem' }}>
+                {t('about.checkFailed', { error: clamdb.data.error })}
+              </div>
+            )}
+            <div className="row" style={{ marginTop: '1rem' }}>
+              <Button onClick={refreshClamDB} loading={clamDBBusy || clamdb.data?.refreshing}>
                 {t('about.vulnDBRefreshNow')}
               </Button>
             </div>

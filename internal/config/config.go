@@ -247,6 +247,10 @@ type Config struct {
 	// already fresh, so this just needs to run more often than that TTL,
 	// not on every tick actually re-download anything.
 	HubVulnDBRefreshInterval time.Duration
+	// HubClamDBRefreshInterval — как часто хаб обновляет свою копию базы
+	// ClamAV для раздачи хостам; действует только после первого ручного
+	// обновления (см. internal/hub/clamdb.go). 0 — не обновлять.
+	HubClamDBRefreshInterval time.Duration
 	// HubTunnelPort is the port the hub dials on every TunnelEnabled host
 	// for the reverse-tunnel fallback channel (see internal/hub/tunneldial.go)
 	// — the same port is pushed to each such host at install time as
@@ -387,6 +391,7 @@ func Load() (*Config, error) {
 		HubFindingsPollInterval:  envDur("NKT_HUB_FINDINGS_POLL_INTERVAL", 60*time.Second),
 		HubUpdateCheckInterval:   envDur("NKT_HUB_UPDATE_CHECK_INTERVAL", 6*time.Hour),
 		HubVulnDBRefreshInterval: envDur("NKT_HUB_VULNDB_REFRESH_INTERVAL", 12*time.Hour),
+		HubClamDBRefreshInterval: envDur("NKT_HUB_CLAMDB_REFRESH_INTERVAL", 24*time.Hour),
 		HubTunnelPort:            envInt("NKT_HUB_TUNNEL_PORT", 8078),
 	}
 
