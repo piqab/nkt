@@ -231,6 +231,18 @@ func (r *ClamDBPushRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return err
 	}
 	defer link.Close()
+	// Отмена задания: ни SFTP, ни удалённая команда контекста не знают —
+	// закрытое SSH-соединение обрывает и заливку, и установку, а
+	// проверка ctx между шагами превращает обрыв в честное «отменено».
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = link.Close()
+		case <-stop:
+		}
+	}()
 	sftpClient, err := sftp.NewClient(link.client)
 	if err != nil {
 		return msgs.Errorf("hub.openingSFTP", err)
@@ -250,6 +262,9 @@ func (r *ClamDBPushRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		if err := uploadFile(sftpClient, src, gopath.Join(tmpDir, name), 0o644, func(_ string, args ...any) {
 			jc.Log("hub.clamDBUploading", append([]any{name}, args...)...)
 		}); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
 			return msgs.Errorf("hub.clamDBUpload", name, err)
 		}
 	}
@@ -265,6 +280,9 @@ func (r *ClamDBPushRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		cmd = "sudo -n " + cmd
 	}
 	if out, err := runRemote(link.client, cmd); err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		return msgs.Errorf("hub.clamDBInstall", err, out)
 	}
 	jc.Log("hub.clamDBDone", host.Name)
