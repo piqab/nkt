@@ -267,11 +267,12 @@ func (s *Server) handleScriptHelp(w http.ResponseWriter, r *http.Request) {
 		Block   bool      `json:"block,omitempty"`
 		OnHost  bool      `json:"on_host,omitempty"`
 	}
+	en := lang == msgs.EN
 	out := make([]cmdJSON, 0, len(script.Commands))
 	for _, c := range script.Commands {
-		cj := cmdJSON{Kind: string(c.Kind), Syntax: c.Syntax, Summary: msgs.T(lang, c.Summary), Example: c.Example, Block: c.Block, OnHost: c.OnHost, Args: []argJSON{}}
+		cj := cmdJSON{Kind: string(c.Kind), Syntax: script.Localize(c.Syntax, en), Summary: msgs.T(lang, c.Summary), Example: script.Localize(c.Example, en), Block: c.Block, OnHost: c.OnHost, Args: []argJSON{}}
 		for _, a := range c.Args {
-			cj.Args = append(cj.Args, argJSON{Name: a.Name, Required: a.Required, Desc: msgs.T(lang, a.Desc)})
+			cj.Args = append(cj.Args, argJSON{Name: script.Localize(a.Name, en), Required: a.Required, Desc: msgs.T(lang, a.Desc)})
 		}
 		out = append(out, cj)
 	}
@@ -282,7 +283,7 @@ func (s *Server) handleScriptHelp(w http.ResponseWriter, r *http.Request) {
 	}
 	examples := make([]exampleJSON, 0, len(script.Examples))
 	for _, e := range script.Examples {
-		examples = append(examples, exampleJSON{Title: msgs.T(lang, e.Title), Summary: msgs.T(lang, e.Summary), Content: e.Content})
+		examples = append(examples, exampleJSON{Title: msgs.T(lang, e.Title), Summary: msgs.T(lang, e.Summary), Content: script.Localize(e.Content, en)})
 	}
 	rules := []string{}
 	for _, k := range []string{"script.doc.rule.line", "script.doc.rule.comment", "script.doc.rule.quote", "script.doc.rule.var", "script.doc.rule.block", "script.doc.rule.hosts", "script.doc.rule.secrets", "script.doc.rule.multi", "script.doc.rule.run", "script.doc.rule.dry", "script.doc.rule.noShell", "script.doc.rule.experimental"} {
