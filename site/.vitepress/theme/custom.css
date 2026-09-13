@@ -1,0 +1,43 @@
+/* Скриншот в шапке лендинга — крупнее стандартного логотипа-«герба»
+   и с рамкой, как окно; картинки в руководстве — тоже с рамкой. */
+:root {
+  --vp-c-brand-1: #1f6feb;
+  --vp-c-brand-2: #1a5fd0;
+  --vp-c-brand-3: #164fb0;
+  --vp-home-hero-image-background-image: none;
+  --vp-home-hero-image-filter: none;
+}
+
+.VPHero .image-container {
+  max-width: 100%;
+  height: auto;
+  transform: none;
+}
+
+.VPHero .image-bg {
+  display: none;
+}
+
+.VPHero .image-src {
+  position: static;
+  max-width: 100%;
+  max-height: none;
+  width: 620px;
+  transform: none;
+  border-radius: 8px;
+  border: 1px solid var(--vp-c-divider);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+}
+
+@media (min-width: 960px) {
+  .VPHero .image {
+    flex-grow: 1;
+    max-width: 640px;
+  }
+}
+
+.vp-doc img {
+  border-radius: 6px;
+  border: 1px solid var(--vp-c-divider);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}

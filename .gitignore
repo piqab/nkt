@@ -35,3 +35,7 @@ Thumbs.db
 
 # NOTE: internal/webui/dist is intentionally committed — it is embedded into the
 # binary, so `go build ./cmd/nkt` must work on a fresh clone without npm.
+
+# Сайт (VitePress) — сборка и кэш
+/site/.vitepress/dist/
+/site/.vitepress/cache/
