@@ -81,8 +81,14 @@ export function writeSelectedHost(host: SelectedHost | null): void {
 
 /** Путь к API с областью выбранного хоста — для того, что уходит мимо
  * api(): загрузка файла через XHR с прогрессом, ссылка на скачивание. */
+/** Пути, которые никогда не относятся к выбранному хосту: вход и всё
+ * под /hub/ — это сам хаб, у него нет «через хост». */
+function unscoped(path: string): boolean {
+  return path.startsWith('/auth/') || path.startsWith('/hub/')
+}
+
 export function apiURL(path: string): string {
-  const scoped = hostScope.id !== null && !path.startsWith('/auth/')
+  const scoped = hostScope.id !== null && !unscoped(path)
   const prefix = scoped ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
   return `/api${prefix}${path}`
 }
@@ -90,7 +96,7 @@ export function apiURL(path: string): string {
 export async function api<T>(path: string, opts: Options = {}): Promise<T> {
   // Authentication always targets the hub itself — the operator only ever
   // logs in once, never per host (see internal/hub's design notes).
-  const scoped = hostScope.id !== null && !path.startsWith('/auth/')
+  const scoped = hostScope.id !== null && !unscoped(path)
   const prefix = scoped ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
 
   // Свой контроллер поверх переданного сигнала: отменить запрос может и
