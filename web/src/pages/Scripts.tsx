@@ -49,10 +49,18 @@ export interface ScriptStep {
   text: string
 }
 
+/** Что сценарий спросит перед запуском: пароль хоста, параметр,
+ * переменная или токен git — по ключу вида «host:web1». */
+export interface ScriptAsk {
+  key: string
+  prompt: string
+  secret: boolean
+}
+
 export interface CheckResult {
   steps: ScriptStep[]
   issues: { line: number; error: string }[]
-  asks: string[]
+  asks: ScriptAsk[]
   hosts: string[]
   groups: string[]
 }
@@ -119,7 +127,7 @@ export default function Scripts({ me }: { me: Me }) {
   const [check, setCheck] = useState<CheckResult | null>(null)
   const [showVersions, setShowVersions] = useState(false)
   const [openJob, setOpenJob] = useState<Job | null>(null)
-  const [askModal, setAskModal] = useState<CheckResult | null>(null)
+  const [askModal, setAskModal] = useState<{ result: CheckResult; dryRun: boolean } | null>(null)
   const importRef = useRef<HTMLInputElement | null>(null)
 
   const current = useApi<ScriptRow>(selected ? `/hub/scripts/${selected}` : null)
@@ -185,20 +193,20 @@ export default function Scripts({ me }: { me: Me }) {
 
   // Запуск: сохранить (выполняется сохранённое, а не черновик), проверить,
   // спросить пароли для «password ask» и отдать заданию.
-  async function run() {
+  async function run(dryRun = false) {
     const id = await save()
     if (!id) return
     const res = await runCheck()
     if (!res || res.issues.length > 0) return
-    setAskModal(res)
+    setAskModal({ result: res, dryRun })
   }
 
-  async function startRun(passwords: Record<string, string>) {
+  async function startRun(values: Record<string, string>, dryRun: boolean) {
     if (!selected) return
     setAskModal(null)
-    setBusy('run')
+    setBusy(dryRun ? 'dry' : 'run')
     try {
-      const res = await api<{ job_id: number }>(`/hub/scripts/${selected}/run`, { method: 'POST', body: { passwords } })
+      const res = await api<{ job_id: number }>(`/hub/scripts/${selected}/run`, { method: 'POST', body: { values, dry_run: dryRun } })
       // Раздел работает в области localhost (см. App.tsx): задания хаба — по
       // обычному пути, без своей приставки.
       const job = await api<Job>(`/jobs/${res.job_id}`)
@@ -232,6 +240,7 @@ export default function Scripts({ me }: { me: Me }) {
       </div>
 
       <ErrorNote error={list.error} />
+      <Banner kind="warn">{t('scripts.experimental')}</Banner>
       {notice && (
         <Banner kind={notice.kind} onClose={() => setNotice(null)}>
           {notice.text}
@@ -304,11 +313,18 @@ export default function Scripts({ me }: { me: Me }) {
                       {t('scripts.check')}
                     </Button>
                     {RUN_ENABLED && (
-                      <Tooltip title={t('scripts.runHint')}>
-                        <Button size="small" type="primary" loading={busy === 'run'} disabled={!trimmedName || busy !== null} onClick={() => void run()}>
-                          {t('scripts.run')}
-                        </Button>
-                      </Tooltip>
+                      <>
+                        <Tooltip title={t('scripts.dryRunHint')}>
+                          <Button size="small" loading={busy === 'dry'} disabled={!trimmedName || busy !== null} onClick={() => void run(true)}>
+                            {t('scripts.dryRun')}
+                          </Button>
+                        </Tooltip>
+                        <Tooltip title={t('scripts.runHint')}>
+                          <Button size="small" type="primary" loading={busy === 'run'} disabled={!trimmedName || busy !== null} onClick={() => void run()}>
+                            {t('scripts.run')}
+                          </Button>
+                        </Tooltip>
+                      </>
                     )}
                   </>
                 )}
@@ -403,7 +419,7 @@ export default function Scripts({ me }: { me: Me }) {
                 <>
                   {check.asks.length > 0 && (
                     <p className="small muted" style={{ marginTop: 0 }}>
-                      {t('scripts.willAsk', { hosts: check.asks.join(', ') })}
+                      {t('scripts.willAsk', { items: check.asks.map((a) => a.prompt).join(', ') })}
                     </p>
                   )}
                   <div className="table-wrap">
@@ -412,7 +428,11 @@ export default function Scripts({ me }: { me: Me }) {
                       rowKey="line"
                       columns={[
                         { title: '#', key: 'line', width: 60, render: (_, s) => <span className="mono muted">{s.line}</span> },
-                        { title: t('scripts.colHost'), key: 'host', width: 140, render: (_, s) => (s.host ? <Tag>{s.host}</Tag> : <span className="muted">—</span>) },
+                        { title: t('scripts.colHost'), key: 'host', width: 140, render: (_, s) => {
+                            const hs = s.hosts && s.hosts.length > 0 ? s.hosts : s.host ? [s.host] : []
+                            return hs.length > 0 ? hs.map((h) => <Tag key={h}>{h}</Tag>) : <span className="muted">—</span>
+                          },
+                        },
                         { title: t('scripts.colStep'), key: 'text', render: (_, s) => <code className="mono">{s.text}</code> },
                       ]}
                     />
@@ -436,7 +456,7 @@ export default function Scripts({ me }: { me: Me }) {
         </Modal>
       )}
 
-      {askModal && <AskPasswordsModal result={askModal} onClose={() => setAskModal(null)} onStart={startRun} />}
+      {askModal && <AskValuesModal result={askModal.result} dryRun={askModal.dryRun} onClose={() => setAskModal(null)} onStart={startRun} />}
 
       {openJob && <JobLogModal job={openJob} onClose={() => setOpenJob(null)} />}
     </>
@@ -470,35 +490,42 @@ function ScriptVersions({ scriptID, onRestore }: { scriptID: number; onRestore: 
   )
 }
 
-/** Пароли для «password ask»: спрашиваются перед запуском и уходят
- * только в задание — в тексте сценария их нет. */
-function AskPasswordsModal({
+/** Значения, которые сценарий просит перед запуском: пароли хостов,
+ * параметры, «set … ask», токены git. Секреты — скрытым полем; всё
+ * уходит только в задание, в тексте сценария их нет. */
+function AskValuesModal({
   result,
+  dryRun,
   onClose,
   onStart,
 }: {
   result: CheckResult
+  dryRun: boolean
   onClose: () => void
-  onStart: (passwords: Record<string, string>) => void
+  onStart: (values: Record<string, string>, dryRun: boolean) => void
 }) {
   const { t } = useTranslation()
-  const [passwords, setPasswords] = useState<Record<string, string>>({})
-  const ready = result.asks.every((h) => (passwords[h] ?? '') !== '')
+  const [values, setValues] = useState<Record<string, string>>({})
+  const ready = result.asks.every((a) => (values[a.key] ?? '') !== '')
   return (
-    <Modal title={t('scripts.runTitle')} onClose={onClose} closeLabel={t('common.cancel')}>
+    <Modal title={t(dryRun ? 'scripts.dryRunTitle' : 'scripts.runTitle')} onClose={onClose} closeLabel={t('common.cancel')}>
       <div className="col" style={{ gap: '0.6rem' }}>
         <p className="small muted" style={{ margin: 0 }}>
-          {t('scripts.runBody', { steps: result.steps.length })}
+          {t(dryRun ? 'scripts.dryRunBody' : 'scripts.runBody', { steps: result.steps.length })}
         </p>
-        {result.asks.map((h) => (
-          <label key={h} className="col" style={{ gap: '0.2rem' }}>
-            {t('scripts.askPassword', { host: h })}
-            <Input.Password value={passwords[h] ?? ''} onChange={(e) => setPasswords({ ...passwords, [h]: e.target.value })} autoComplete="new-password" />
+        {result.asks.map((a) => (
+          <label key={a.key} className="col" style={{ gap: '0.2rem' }}>
+            {a.prompt}
+            {a.secret ? (
+              <Input.Password value={values[a.key] ?? ''} onChange={(e) => setValues({ ...values, [a.key]: e.target.value })} autoComplete="new-password" />
+            ) : (
+              <Input value={values[a.key] ?? ''} onChange={(e) => setValues({ ...values, [a.key]: e.target.value })} />
+            )}
           </label>
         ))}
         <div className="row" style={{ justifyContent: 'flex-end' }}>
-          <Button type="primary" disabled={!ready} onClick={() => onStart(passwords)}>
-            {t('scripts.runStart')}
+          <Button type="primary" disabled={!ready} onClick={() => onStart(values, dryRun)}>
+            {t(dryRun ? 'scripts.dryRunStart' : 'scripts.runStart')}
           </Button>
         </div>
       </div>

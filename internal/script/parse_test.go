@@ -37,14 +37,14 @@ end
 `
 
 func TestParseSample(t *testing.T) {
-	sc, issues := Parse(sample)
+	sc, issues := Parse(sample, nil)
 	if len(issues) != 0 {
 		t.Fatalf("issues: %+v", issues)
 	}
 	if len(sc.Steps) != 15 {
 		t.Fatalf("steps = %d", len(sc.Steps))
 	}
-	if sc.Vars["IMAGE"] != "ubuntu-24.04" || len(sc.Asks) != 1 || sc.Asks[0] != "web1" {
+	if sc.Vars["IMAGE"] != "ubuntu-24.04" || len(sc.Asks) != 1 || sc.Asks[0].Key != "host:web1" {
 		t.Errorf("vars/asks: %+v %+v", sc.Vars, sc.Asks)
 	}
 	if sc.Steps[0].Kind != KindGroup || sc.Steps[0].Args["profile"] != "web-base" {
@@ -98,7 +98,7 @@ func TestParseErrors(t *testing.T) {
 		"host web1 192.0.2.10 user root password \"a": "unclosedQuote",
 	}
 	for text, want := range cases {
-		_, issues := Parse(text)
+		_, issues := Parse(text, nil)
 		if len(issues) == 0 {
 			t.Errorf("%q: ошибок нет, ожидалось %s", text, want)
 			continue
@@ -110,7 +110,7 @@ func TestParseErrors(t *testing.T) {
 }
 
 func TestCheckRefs(t *testing.T) {
-	sc, issues := Parse(sample)
+	sc, issues := Parse(sample, nil)
 	if len(issues) != 0 {
 		t.Fatal(issues)
 	}
@@ -131,7 +131,7 @@ func TestCheckRefs(t *testing.T) {
 		}
 	}
 	// Обращение к хосту, которого нет ни в хабе, ни выше.
-	sc2, _ := Parse("on ghost packages install htop")
+	sc2, _ := Parse("on ghost packages install htop", nil)
 	if got := Check(sc2, refs); len(got) != 1 || !strings.Contains(issueKey(got[0]), "unknownHost") {
 		t.Errorf("неизвестный хост: %+v", got)
 	}
@@ -143,4 +143,78 @@ func issueKey(i Issue) string {
 		return e.Key
 	}
 	return i.Err.Error()
+}
+
+// Новое: несколько хостов в «on», param/set ask с заглушкой и с
+// значениями, wait port/http/service, user/system/cert/git.
+func TestParseExtensions(t *testing.T) {
+	text := `param ADDR "адрес"
+set TOKEN ask
+host ${ADDR} 192.0.2.5 user root password ask
+on web1 web2 packages install htop
+wait web1 port 443 30s
+wait web1 http https://example.org/health 204 2m
+wait web1 service nginx active
+on web1 user add deploy sudo key "ssh-ed25519 AAAA deploy"
+on web1 system timezone Europe/Moscow
+on web1 system ntp time.google.com pool.ntp.org
+on web1 cert issue example.org www.example.org
+on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
+`
+	sc, issues := Parse(text, nil)
+	if len(issues) != 0 {
+		t.Fatalf("issues: %+v", issues)
+	}
+	keys := strings.Join(sc.AskKeys(), " ")
+	for _, want := range []string{"param:ADDR", "var:TOKEN", "host:1", "token:https://github.com/org/app.git"} {
+		if !strings.Contains(keys, want) {
+			t.Errorf("нет вопроса %s в %s", want, keys)
+		}
+	}
+	if sc.Steps[0].Name != "1" {
+		t.Errorf("заглушка параметра: %+v", sc.Steps[0])
+	}
+	sc2, _ := Parse(text, map[string]string{"param:ADDR": "web9"})
+	if sc2.Steps[0].Name != "web9" {
+		t.Errorf("значение параметра не подставилось: %+v", sc2.Steps[0])
+	}
+	multi := sc.Steps[1]
+	if strings.Join(multi.Hosts, ",") != "web1,web2" || multi.Host != "web1" {
+		t.Errorf("несколько хостов: %+v", multi)
+	}
+	if w := sc.Steps[2]; w.Action != "port" || w.Args["port"] != "443" || w.Args["timeout"] != "30s" {
+		t.Errorf("wait port: %+v", w)
+	}
+	if w := sc.Steps[3]; w.Action != "http" || w.Args["code"] != "204" || w.Args["timeout"] != "2m" {
+		t.Errorf("wait http: %+v", w)
+	}
+	if w := sc.Steps[4]; w.Action != "service" || w.Name != "nginx" {
+		t.Errorf("wait service: %+v", w)
+	}
+	if u := sc.Steps[5]; u.Kind != KindUserAdd || u.Args["sudo"] != "true" || u.Args["key"] != "ssh-ed25519 AAAA deploy" {
+		t.Errorf("user add: %+v", u)
+	}
+	if s := sc.Steps[7]; s.Kind != KindSystem || s.Action != "ntp" || len(s.List) != 2 {
+		t.Errorf("system ntp: %+v", s)
+	}
+	if c := sc.Steps[8]; c.Kind != KindCert || len(c.List) != 2 {
+		t.Errorf("cert: %+v", c)
+	}
+	if g := sc.Steps[9]; g.Kind != KindGitClone || g.Args["dir"] != "/srv/app" || g.Args["branch"] != "main" || g.Args["token"] != "ask" {
+		t.Errorf("git: %+v", g)
+	}
+	for text, want := range map[string]string{
+		"on web1 user add deploy key nope":    "badSSHKey",
+		"on web1 system foo bar":              "badSystem",
+		"on web1 cert issue nodot":            "badDomain",
+		"on web1 git clone x relative":        "badGitClone",
+		"wait web1 http ftp://x":              "badWaitHTTP",
+		"on web1 git clone u /d token secret": "tokenOnlyAsk",
+		"param 9bad":                          "badParam",
+	} {
+		_, issues := Parse(text, nil)
+		if len(issues) == 0 || !strings.Contains(issueKey(issues[0]), want) {
+			t.Errorf("%q: %v, ожидалось %s", text, issues, want)
+		}
+	}
 }

@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/portprobe"
 	"github.com/piqab/nkt/internal/profile"
 	"github.com/piqab/nkt/internal/script"
 	"github.com/piqab/nkt/internal/store"
@@ -38,6 +40,9 @@ type ScriptRunParams struct {
 	Name     string `json:"name"`
 	Content  string `json:"content"`
 	Ticket   string `json:"ticket,omitempty"`
+	// DryRun — сухой прогон: ничего не менять, а спросить у хостов
+	// планы и записать в журнал, что изменилось бы.
+	DryRun bool `json:"dry_run,omitempty"`
 }
 
 type scriptRunResume struct {
@@ -53,7 +58,7 @@ type ScriptRunner struct {
 	m    *Manager
 	s    *Server
 	mu   sync.Mutex
-	pass map[string]map[string]string // билет → хост → пароль
+	pass map[string]map[string]string // билет → ключ вопроса → значение
 }
 
 // NewScriptRunner строит исполнителя.
@@ -73,11 +78,17 @@ func (r *ScriptRunner) keep(passwords map[string]string) string {
 	return ticket
 }
 
-func (r *ScriptRunner) password(ticket, host string) (string, bool) {
+func (r *ScriptRunner) value(ticket, key string) (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	p, ok := r.pass[ticket][host]
+	p, ok := r.pass[ticket][key]
 	return p, ok
+}
+
+func (r *ScriptRunner) values(ticket string) map[string]string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.pass[ticket]
 }
 
 func (r *ScriptRunner) forget(ticket string) {
@@ -96,9 +107,18 @@ func (r *ScriptRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
 	defer r.forget(p.Ticket)
-	sc, issues := script.Parse(p.Content)
+	values := r.values(p.Ticket)
+	sc, issues := script.Parse(p.Content, values)
 	if len(issues) > 0 {
 		return msgs.Errorf("hub.scriptParseFailed", issues[0].Line, issues[0].Err)
+	}
+	// Ответы на вопросы живут в памяти; после перезапуска хаба их нет —
+	// и подставлять заглушки вместо адресов и паролей нельзя.
+	if len(sc.Asks) > 0 && values == nil {
+		return msgs.Errorf("hub.scriptValuesLost")
+	}
+	if p.DryRun {
+		jc.Log("hub.scriptDryRunStart")
 	}
 	var done scriptRunResume
 	if err := jc.LoadResume(&done); err != nil {
@@ -117,7 +137,13 @@ func (r *ScriptRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		st := sc.Steps[i]
 		jc.Step(i+1, len(sc.Steps), st.Text)
 		jc.Logf("[%d/%d] %s", i+1, len(sc.Steps), st.Text)
-		if err := r.step(ctx, jc, &p, &done, st); err != nil {
+		var err error
+		if p.DryRun {
+			err = r.dryStep(ctx, jc, &p, &done, st)
+		} else {
+			err = r.step(ctx, jc, &p, &done, st)
+		}
+		if err != nil {
 			return msgs.Errorf("hub.scriptStepFailed", st.Line, err)
 		}
 		done.Done = i + 1
@@ -186,14 +212,37 @@ func (r *ScriptRunner) step(ctx context.Context, jc *jobs.Context, p *ScriptRunP
 			return err
 		}
 		d, _ := time.ParseDuration(st.Args["timeout"])
-		return r.waitOnline(ctx, jc, h.ID, d)
+		if st.Action == "online" {
+			return r.waitOnline(ctx, jc, h.ID, d)
+		}
+		return r.waitFor(ctx, jc, h, st, d)
 	}
 
-	// Дальше — действия на хосте.
-	h, err := r.hostByName(ctx, done, st.Host)
-	if err != nil {
-		return err
+	// Дальше — действия на хосте; хостов в «on» может быть несколько.
+	hosts := st.Hosts
+	if len(hosts) == 0 {
+		hosts = []string{st.Host}
 	}
+	for _, name := range hosts {
+		h, err := r.hostByName(ctx, done, name)
+		if err != nil {
+			return err
+		}
+		if len(hosts) > 1 {
+			jc.Logf("    %s:", h.Name)
+		}
+		if err := r.hostStep(ctx, jc, p, done, h, st); err != nil {
+			if len(hosts) > 1 {
+				return fmt.Errorf("%s: %w", h.Name, err)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+// hostStep — один шаг на одном хосте.
+func (r *ScriptRunner) hostStep(ctx context.Context, jc *jobs.Context, p *ScriptRunParams, done *scriptRunResume, h store.Host, st script.Step) error {
 	switch st.Kind {
 	case script.KindPackages:
 		if st.Action == "remove" {
@@ -275,8 +324,310 @@ func (r *ScriptRunner) step(ctx context.Context, jc *jobs.Context, p *ScriptRunP
 		return r.applyMini(ctx, jc, h, p.Name, map[string]any{"files": []any{
 			map[string]any{"path": st.Args["path"], "mode": st.Args["mode"], "content": st.Block},
 		}})
+
+	case script.KindUserAdd:
+		u := map[string]any{"name": st.Name}
+		if st.Args["sudo"] == "true" {
+			u["sudo"] = true
+		}
+		if k := st.Args["key"]; k != "" {
+			u["keys"] = []string{k}
+		}
+		return r.applyMini(ctx, jc, h, p.Name, map[string]any{"users": []any{u}})
+
+	case script.KindSystem:
+		switch st.Action {
+		case "hostname", "timezone":
+			return r.applyMini(ctx, jc, h, p.Name, map[string]any{"system": map[string]any{st.Action: st.Args["value"]}})
+		case "locale":
+			var out map[string]any
+			_, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/system/locales",
+				map[string]any{"generate": []string{st.Args["value"]}, "default": st.Args["value"]}, &out)
+			return err
+		default: // ntp
+			var out map[string]any
+			_, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/system/timesync",
+				map[string]any{"servers": st.List, "sync_now": true}, &out)
+			return err
+		}
+
+	case script.KindCert:
+		var started struct {
+			Job string `json:"job"`
+		}
+		path, body := "/api/certificates/issue", map[string]any{"domains": st.List}
+		if st.Action == "renew" {
+			path, body = "/api/certificates/renew", map[string]any{"lineage": st.Name}
+		}
+		if _, err := r.m.HostAPI(ctx, h.ID, "POST", path, body, &started); err != nil {
+			return err
+		}
+		return r.waitCertJob(ctx, jc, h, started.Job)
+
+	case script.KindGitClone:
+		body := map[string]any{"url": st.Args["url"], "dir": st.Args["dir"], "branch": st.Args["branch"], "auth": "none"}
+		if st.Args["token"] == "ask" {
+			secret, ok := r.value(p.Ticket, "token:"+st.Args["url"])
+			if !ok {
+				return msgs.Errorf("hub.scriptValuesLost")
+			}
+			body["auth"], body["secret"] = "token", secret
+		} else if st.Args["key"] == "hub" {
+			body["auth"] = "deploy-key"
+		}
+		var started struct {
+			JobID int64 `json:"job_id"`
+		}
+		if _, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/files/clone", body, &started); err != nil {
+			return err
+		}
+		g := &GroupApplyRunner{m: r.m}
+		return g.waitHostJob(ctx, jc, h, started.JobID)
 	}
 	return msgs.Errorf("script.unknownCommand", string(st.Kind))
+}
+
+// waitFor ждёт порт, HTTP-ответ или активную службу на хосте.
+func (r *ScriptRunner) waitFor(ctx context.Context, jc *jobs.Context, h store.Host, st script.Step, timeout time.Duration) error {
+	if timeout <= 0 {
+		timeout = time.Minute
+	}
+	deadline := time.Now().Add(timeout)
+	var last string
+	for {
+		ok, detail := r.checkOnce(ctx, h, st)
+		if ok {
+			jc.Log("hub.scriptWaitOK", h.Name, st.Text)
+			return nil
+		}
+		last = detail
+		if time.Now().After(deadline) {
+			return msgs.Errorf("hub.scriptWaitFailed", st.Text, timeout, last)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(5 * time.Second):
+		}
+	}
+}
+
+// checkOnce — одна попытка проверки для wait/check.
+func (r *ScriptRunner) checkOnce(ctx context.Context, h store.Host, st script.Step) (bool, string) {
+	switch st.Action {
+	case "port":
+		port, _ := strconv.Atoi(st.Args["port"])
+		res, err := r.m.ProbeHost(ctx, h, portprobe.Request{Kind: portprobe.KindTCP, Port: port})
+		if err != nil {
+			return false, err.Error()
+		}
+		return res.OK, res.Error
+	case "http":
+		u, err := url.Parse(st.Args["url"])
+		if err != nil {
+			return false, err.Error()
+		}
+		port := 80
+		kind := portprobe.KindHTTP
+		if u.Scheme == "https" {
+			port, kind = 443, portprobe.KindHTTPS
+		}
+		if p := u.Port(); p != "" {
+			port, _ = strconv.Atoi(p)
+		}
+		path := u.RequestURI()
+		if path == "" {
+			path = "/"
+		}
+		res, err := r.m.ProbeHost(ctx, h, portprobe.Request{Kind: kind, Port: port, Path: path, Host: u.Hostname(), Insecure: true})
+		if err != nil {
+			return false, err.Error()
+		}
+		if !res.OK {
+			return false, res.Error
+		}
+		want := st.Args["code"]
+		got := strings.Fields(res.Status)
+		if len(got) >= 2 && strings.HasPrefix(got[1], want) {
+			return true, ""
+		}
+		if len(got) >= 1 && strings.HasPrefix(res.Status, want) {
+			return true, ""
+		}
+		return false, res.Status
+	case "service":
+		var out struct {
+			Services []struct {
+				Name        string `json:"name"`
+				ActiveState string `json:"active_state"`
+			} `json:"services"`
+		}
+		if _, err := r.m.HostAPI(ctx, h.ID, "GET", "/api/services", nil, &out); err != nil {
+			return false, err.Error()
+		}
+		for _, svc := range out.Services {
+			if svc.Name == st.Name {
+				return svc.ActiveState == "active", svc.ActiveState
+			}
+		}
+		return false, "not found"
+	}
+	return false, ""
+}
+
+// waitCertJob ждёт задание certbot на хосте, пересказывая его события.
+func (r *ScriptRunner) waitCertJob(ctx context.Context, jc *jobs.Context, h store.Host, job string) error {
+	deadline := time.Now().Add(scriptStepTimeout)
+	seen := 0
+	for {
+		var res struct {
+			Events []struct {
+				Text string `json:"text"`
+			} `json:"events"`
+			Done  bool   `json:"done"`
+			Error string `json:"error"`
+		}
+		if _, err := r.m.HostAPI(ctx, h.ID, "GET", "/api/certificates/renew/"+job, nil, &res); err != nil {
+			return err
+		}
+		for ; seen < len(res.Events); seen++ {
+			jc.Logf("      %s", res.Events[seen].Text)
+		}
+		if res.Done {
+			if res.Error != "" {
+				return fmt.Errorf("%s", res.Error)
+			}
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return msgs.Errorf("hub.jobOnHostDidFinish", scriptStepTimeout)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(3 * time.Second):
+		}
+	}
+}
+
+// dryStep — сухой прогон одного шага: план с хоста там, где шаг —
+// профиль, и «сделал бы …» для остального.
+func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptRunParams, done *scriptRunResume, st script.Step) error {
+	switch st.Kind {
+	case script.KindGroup, script.KindInstall, script.KindWait, script.KindVMCreate, script.KindVMAction,
+		script.KindDockerInst, script.KindCert, script.KindGitClone, script.KindSystem:
+		jc.Log("hub.scriptDryWould", st.Text)
+		return nil
+	case script.KindHost:
+		done.HostIDs[st.Name] = 0
+		jc.Log("hub.scriptDryHost", st.Name, st.Args["addr"])
+		return nil
+	case script.KindPackages:
+		if st.Action == "remove" {
+			jc.Log("hub.scriptDryWould", st.Text)
+			return nil
+		}
+	case script.KindService:
+		if st.Action == "restart" || st.Action == "reload" {
+			jc.Log("hub.scriptDryWould", st.Text)
+			return nil
+		}
+	case script.KindFirewall:
+		if st.Action == "deny" {
+			jc.Log("hub.scriptDryWould", st.Text)
+			return nil
+		}
+	case script.KindDockerStack:
+		if st.Block == "" || st.Action == "down" {
+			jc.Log("hub.scriptDryWould", st.Text)
+			return nil
+		}
+	}
+	// Остальное — мини-профиль: у хоста, которого ещё нет, плана не
+	// спросить.
+	hosts := st.Hosts
+	if len(hosts) == 0 {
+		hosts = []string{st.Host}
+	}
+	for _, name := range hosts {
+		if id, ok := done.HostIDs[name]; ok && id == 0 {
+			jc.Log("hub.scriptDryNewHost", name)
+			continue
+		}
+		h, err := r.hostByName(ctx, done, name)
+		if err != nil {
+			return err
+		}
+		content, err := r.miniContent(p.Name, st)
+		if err != nil {
+			return err
+		}
+		var plan profile.Plan
+		if _, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/profiles/plan", map[string]string{"content": content}, &plan); err != nil {
+			return msgs.Errorf("hub.buildingPlan", err)
+		}
+		if len(plan.Changes) == 0 {
+			jc.Log("hub.scriptDryNoChange", h.Name)
+		}
+		for _, c := range plan.Changes {
+			jc.Logf("      %s: %s %s → %s", h.Name, c.Action, c.Target, c.Desired)
+		}
+		for _, u := range plan.Unknown {
+			jc.Log("hub.couldJudge", u)
+		}
+	}
+	return nil
+}
+
+// miniContent — мини-профиль для шага, тот же, что применяется.
+func (r *ScriptRunner) miniContent(name string, st script.Step) (string, error) {
+	var section map[string]any
+	switch st.Kind {
+	case script.KindPackages:
+		section = map[string]any{"packages": st.List}
+	case script.KindService:
+		svc := map[string]any{}
+		if st.Action == "start" || st.Action == "stop" {
+			svc["active"] = st.Action == "start"
+		} else {
+			svc["enabled"] = st.Action == "enable"
+		}
+		section = map[string]any{"services": map[string]any{st.Name: svc}}
+	case script.KindFirewall:
+		port, _ := strconv.Atoi(st.Args["port"])
+		rule := map[string]any{"port": port, "proto": st.Args["proto"]}
+		if from := st.Args["from"]; from != "" {
+			rule["from"] = from
+		}
+		section = map[string]any{"firewall": map[string]any{"allow": []any{rule}}}
+	case script.KindDockerStack:
+		section = map[string]any{"compose": []any{map[string]any{"name": stackName(st.Args["path"]), "path": st.Args["path"], "up": true, "content": st.Block}}}
+	case script.KindFilePut:
+		section = map[string]any{"files": []any{map[string]any{"path": st.Args["path"], "mode": st.Args["mode"], "content": st.Block}}}
+	case script.KindUserAdd:
+		u := map[string]any{"name": st.Name}
+		if st.Args["sudo"] == "true" {
+			u["sudo"] = true
+		}
+		if k := st.Args["key"]; k != "" {
+			u["keys"] = []string{k}
+		}
+		section = map[string]any{"users": []any{u}}
+	case script.KindApplyProfile:
+		prof, err := r.profileByName(context.Background(), st.Name)
+		if err != nil {
+			return "", err
+		}
+		return prof.Content, nil
+	default:
+		return "", msgs.Errorf("script.unknownCommand", string(st.Kind))
+	}
+	doc := map[string]any{"version": 1, "name": "script:" + name}
+	for k, v := range section {
+		doc[k] = v
+	}
+	raw, err := yaml.Marshal(doc)
+	return string(raw), err
 }
 
 // addHost заводит хост: с паролем из текста, с паролем, спрошенным при
@@ -294,7 +645,7 @@ func (r *ScriptRunner) addHost(ctx context.Context, jc *jobs.Context, p *ScriptR
 	case "password":
 		id, err = r.m.AddHost(ctx, st.Name, st.Args["addr"], port, st.Args["user"], store.HostAuthPassword, st.Args["password"], false)
 	case "password-ask":
-		pw, ok := r.password(p.Ticket, st.Name)
+		pw, ok := r.value(p.Ticket, "host:"+st.Name)
 		if !ok {
 			return msgs.Errorf("hub.scriptPasswordLost", st.Name)
 		}

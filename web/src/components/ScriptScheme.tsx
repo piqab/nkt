@@ -6,9 +6,13 @@ import {
   ClusterOutlined,
   DesktopOutlined,
   FileTextOutlined,
+  ForkOutlined,
+  LockOutlined,
   ProfileOutlined,
   SafetyOutlined,
+  SettingOutlined,
   ToolOutlined,
+  UserAddOutlined,
 } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api'
@@ -89,8 +93,11 @@ function build(steps: ScriptStep[]): { groups: GroupNode[]; existing: HostNode[]
         hosts.set(vm.name, vm)
         break
       }
-      default:
-        if (s.host) hostFor(s.host).actions.push(s)
+      default: {
+        // «on web1 web2 …» — один шаг на нескольких хостах.
+        const targets = s.hosts && s.hosts.length > 0 ? s.hosts : s.host ? [s.host] : []
+        for (const n of targets) hostFor(n).actions.push(s)
+      }
     }
   }
   return { groups: [...groups.values()], existing }
@@ -113,12 +120,27 @@ function actionIcon(kind: string) {
       return <ProfileOutlined />
     case 'file.put':
       return <FileTextOutlined />
+    case 'user.add':
+      return <UserAddOutlined />
+    case 'system':
+      return <SettingOutlined />
+    case 'cert':
+      return <LockOutlined />
+    case 'git.clone':
+      return <ForkOutlined />
     default:
       return null
   }
 }
 
 function actionLabel(s: ScriptStep): string {
+  // Параметры подставляются только при запуске; в разборе вместо них
+  // заглушка, так что показываем исходную строку без «on ХОСТ…».
+  if (s.text.includes('${')) {
+    const hs = s.hosts && s.hosts.length > 0 ? s.hosts : s.host ? [s.host] : []
+    const esc = (v: string) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return s.text.replace(new RegExp(`^on\\s+${hs.map(esc).join('\\s+')}\\s+`), '')
+  }
   switch (s.kind) {
     case 'packages':
       return `${s.action} ${(s.list ?? []).join(', ')}`
@@ -136,6 +158,14 @@ function actionLabel(s: ScriptStep): string {
       return `profile ${s.name}`
     case 'file.put':
       return `file ${s.args?.path}`
+    case 'user.add':
+      return `user ${s.name}${s.args?.sudo === 'true' ? ' (sudo)' : ''}`
+    case 'system':
+      return `${s.action} ${s.args?.value ?? (s.list ?? []).join(' ')}`
+    case 'cert':
+      return `cert ${s.action} ${(s.list ?? []).join(', ')}`
+    case 'git.clone':
+      return `git ${s.args?.dir}`
     default:
       return s.text
   }
