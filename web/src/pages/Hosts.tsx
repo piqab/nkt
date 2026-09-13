@@ -1317,66 +1317,6 @@ export default function Hosts({
 
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1>
-            {t('hosts.title')}
-            <InfoHint>{t('hosts.hint')}</InfoHint>
-          </h1>
-        </div>
-        <div className="row" style={{ gap: '1rem' }}>
-          <Button type="primary" onClick={() => setCreatingHost(true)}>
-            {t('hosts.addHost')}
-          </Button>
-          <Button
-            type={outdatedCount > 0 ? 'primary' : 'default'}
-            loading={updateAllQueue !== null}
-            disabled={outdatedCount === 0 || bulkBusy !== null}
-            onClick={updateAllOutdated}
-          >
-            {outdatedCount > 0 ? t('hosts.updateAllCount', { count: outdatedCount }) : t('hosts.updateAllNone')}
-          </Button>
-          <Button
-            loading={bulkBusy === 'start'}
-            disabled={bulkBusy === 'stop' || updateAllQueue !== null}
-            onClick={() => bulkSetServiceRunning(true)}
-          >
-            {t('hosts.startAll')}
-          </Button>
-          <Button
-            danger
-            loading={bulkBusy === 'stop'}
-            disabled={bulkBusy === 'start' || updateAllQueue !== null}
-            onClick={() => bulkSetServiceRunning(false)}
-          >
-            {t('hosts.stopAll')}
-          </Button>
-          <Tooltip title={t('hosts.exportWithKeyTooltip')}>
-            <Button onClick={() => exportHosts(true)}>{t('hosts.export')}</Button>
-          </Tooltip>
-          <Button loading={importing} onClick={() => importInputRef.current?.click()}>
-            {t('hosts.import')}
-          </Button>
-          <input
-            ref={importInputRef}
-            type="file"
-            accept="application/json"
-            style={{ display: 'none' }}
-            onChange={(e) => {
-              const file = e.target.files?.[0]
-              e.target.value = ''
-              if (file) void importHosts(file)
-            }}
-          />
-          <Tooltip title={t('hosts.notifyTooltip')}>
-            <span className="row" style={{ gap: '0.4rem' }}>
-              <Switch checked={notifyOn} onChange={toggleNotify} />
-              {t('hosts.notifyLabel')}
-            </span>
-          </Tooltip>
-        </div>
-      </div>
-
       {provisionOn && (
         <ProvisionVMModal
           host={provisionOn}
@@ -1437,19 +1377,85 @@ export default function Hosts({
       )}
       <ErrorNote error={error} />
 
+      {/* Все действия над списком — в одной строке с заголовком карточки,
+          одного размера с «Создать группу»: отдельная шапка страницы
+          только отнимала высоту у самого списка. */}
       <Card
-        title={t('hosts.registeredHosts')}
+        className="hosts-card"
+        title={
+          <span style={{ whiteSpace: 'nowrap' }}>
+            {t('hosts.registeredHosts')}
+            <InfoHint>{t('hosts.hint')}</InfoHint>
+          </span>
+        }
         actions={
-          <Button
-            size="small"
-            onClick={() => {
-              setGroupName('')
-              setGroupProfileID(0)
-              setGroupDialog({ mode: 'create' })
-            }}
-          >
-            {t('hosts.createGroup')}
-          </Button>
+          <div className="row" style={{ gap: '0.3rem', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'flex-end' }}>
+            <Button size="small" type="primary" onClick={() => setCreatingHost(true)}>
+              {t('hosts.addHost')}
+            </Button>
+            <Button
+              size="small"
+              type="primary"
+              onClick={() => {
+                setGroupName('')
+                setGroupProfileID(0)
+                setGroupDialog({ mode: 'create' })
+              }}
+            >
+              {t('hosts.createGroup')}
+            </Button>
+            <Button
+              size="small"
+              type={outdatedCount > 0 ? 'primary' : 'default'}
+              loading={updateAllQueue !== null}
+              disabled={outdatedCount === 0 || bulkBusy !== null}
+              onClick={updateAllOutdated}
+            >
+              {outdatedCount > 0 ? t('hosts.updateAllCount', { count: outdatedCount }) : t('hosts.updateAllNone')}
+            </Button>
+            <Button
+              size="small"
+              loading={bulkBusy === 'start'}
+              disabled={bulkBusy === 'stop' || updateAllQueue !== null}
+              onClick={() => bulkSetServiceRunning(true)}
+            >
+              {t('hosts.startAll')}
+            </Button>
+            <Button
+              size="small"
+              danger
+              loading={bulkBusy === 'stop'}
+              disabled={bulkBusy === 'start' || updateAllQueue !== null}
+              onClick={() => bulkSetServiceRunning(false)}
+            >
+              {t('hosts.stopAll')}
+            </Button>
+            <Tooltip title={t('hosts.exportWithKeyTooltip')}>
+              <Button size="small" onClick={() => exportHosts(true)}>
+                {t('hosts.export')}
+              </Button>
+            </Tooltip>
+            <Button size="small" loading={importing} onClick={() => importInputRef.current?.click()}>
+              {t('hosts.import')}
+            </Button>
+            <input
+              ref={importInputRef}
+              type="file"
+              accept="application/json"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                e.target.value = ''
+                if (file) void importHosts(file)
+              }}
+            />
+            <Tooltip title={t('hosts.notifyTooltip')}>
+              <span className="row small" style={{ gap: '0.4rem', alignItems: 'center' }}>
+                <Switch size="small" checked={notifyOn} onChange={toggleNotify} />
+                {t('hosts.notifyLabel')}
+              </span>
+            </Tooltip>
+          </div>
         }
       >
         {loading && !hosts ? (
