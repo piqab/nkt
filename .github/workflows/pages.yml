@@ -29,11 +29,17 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: site/package-lock.json
-      - name: Собрать сайт
+      # Реестр npm с раннера иногда рвёт соединение (ECONNRESET) —
+      # повторяем установку, а не роняем публикацию из-за сети.
+      - name: Зависимости
         working-directory: site
         run: |
-          npm ci
-          npm run build
+          npm config set fetch-retries 5 fetch-retry-mintimeout 20000 fetch-retry-maxtimeout 120000
+          for i in 1 2 3 4; do npm ci && break; echo "npm ci не удался, попытка $i"; sleep 20; done
+          test -d node_modules/vitepress
+      - name: Собрать сайт
+        working-directory: site
+        run: npm run build
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

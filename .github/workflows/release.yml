@@ -49,7 +49,15 @@ jobs:
           node-version: "22"
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: cd web && npm ci && npm run build
+      # Реестр npm с раннера иногда рвёт соединение (ECONNRESET) —
+      # повторяем установку, а не роняем релиз из-за сети.
+      - name: Зависимости фронтенда
+        working-directory: web
+        run: |
+          npm config set fetch-retries 5 fetch-retry-mintimeout 20000 fetch-retry-maxtimeout 120000
+          for i in 1 2 3 4; do npm ci && break; echo "npm ci не удался, попытка $i"; sleep 20; done
+          test -d node_modules/vite
+      - run: cd web && npm run build
       - uses: actions/upload-artifact@v4
         with:
           name: webui-dist
