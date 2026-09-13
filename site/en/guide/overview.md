@@ -63,6 +63,8 @@ database is downloaded automatically (or taken from the hub, which keeps
 one for all hosts). The list: severity, package, fixed version, links; the
 scan progress is live.
 
+![Malware](/screens/en/malware.png)
+
 The **“Malware”** tab — a check for miners and signs of a break-in with
 no third-party tools (processes named like miners, pool connections,
 binaries from /tmp or deleted from disk, cron with “curl | sh”, units
