@@ -2096,5 +2096,45 @@
       "suid": "SUID not from a package",
       "hosts-block": "/etc/hosts"
     }
+  },
+  "clamav": {
+    "hint": "Signature-based search: classic viruses, webshells in /var/www, infected archives and images. The ~250 MB database is updated by the freshclam service. Scanning directories and images runs on the host in the background and loads the disk and CPU — run it at a quiet time.",
+    "notInstalled": "not installed",
+    "installed": "ClamAV {{version}} · {{db}}",
+    "dbInfo": "database {{version}}, updated {{when}}",
+    "dbUnknown": "database present",
+    "dbMissing": "database not downloaded yet",
+    "dbMissingHint": "The signature database is not downloaded yet: the freshclam service does it after install (a few minutes), or press “update database”.",
+    "needApt": "Installation is available only on hosts with apt (Debian/Ubuntu); install clamav by hand.",
+    "install": "install ClamAV",
+    "updateDB": "update database",
+    "op": {
+      "install": "installing",
+      "update": "updating the database",
+      "scan": "scanning the host",
+      "scan-images": "scanning images"
+    },
+    "log": "log ({{count}})",
+    "hostTitle": "Host directories",
+    "scanHost": "scan host",
+    "scanSummary": "{{when}}: files scanned — {{scanned}}, found — {{hits}} ({{targets}})",
+    "clean": "No infected files found.",
+    "colImage": "Image",
+    "colFile": "File",
+    "colSignature": "Signature",
+    "colWhen": "When",
+    "colSize": "Size",
+    "quarantine": "quarantine",
+    "confirmQuarantine": "Move {{path}} to quarantine? The file is moved into nkt's data directory without execute permission; it can be restored.",
+    "quarantined": "{{path}} moved to quarantine.",
+    "imagesTitle": "Container images",
+    "noImages": "No running containers on the host.",
+    "scanOne": "scan",
+    "scanSelected": "scan selected ({{count}})",
+    "scanAllImages": "scan all",
+    "quarantineTitle": "Quarantine ({{count}})",
+    "restore": "restore",
+    "restored": "{{path}} restored.",
+    "confirmPurge": "Delete {{path}} from quarantine for good?"
   }
 }
