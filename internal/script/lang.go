@@ -207,3 +207,82 @@ func docByKind(k Kind) *CommandDoc {
 	}
 	return nil
 }
+
+// Example — готовый сценарий целиком для справки: скопировать или
+// вставить в редактор и подправить.
+type Example struct {
+	// Title/Summary — ключи msgs.
+	Title   string `json:"title"`
+	Summary string `json:"summary"`
+	Content string `json:"content"`
+}
+
+// Examples — типовые сценарии от простого к сложному.
+var Examples = []Example{
+	{
+		Title: "script.ex.newHost.title", Summary: "script.ex.newHost.summary",
+		Content: `group prod
+
+host web1 192.0.2.10 user root password ask group prod
+install web1
+
+on web1 packages install nginx htop ncdu
+on web1 service nginx enable
+on web1 firewall allow 80/tcp
+on web1 firewall allow 443/tcp
+`,
+	},
+	{
+		Title: "script.ex.docker.title", Summary: "script.ex.docker.summary",
+		Content: `host app1 192.0.2.20 user deploy password ask
+install app1
+
+on app1 docker install
+on app1 docker stack /srv/app/docker-compose.yml up
+services:
+  web:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: change-me
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+volumes:
+  pgdata: {}
+end
+on app1 firewall allow 8080/tcp
+`,
+	},
+	{
+		Title: "script.ex.vms.title", Summary: "script.ex.vms.summary",
+		Content: `set IMAGE ubuntu-24.04
+group lab profile base
+
+# hv1 уже есть в хабе — заводить не нужно
+on hv1 vm create lab-web image ${IMAGE} cpu 2 mem 2048 disk 20 profile base install
+on hv1 vm create lab-db image ${IMAGE} cpu 2 mem 4096 disk 40 install
+
+on lab-db packages install postgresql
+on lab-db firewall allow 5432 from 192.168.100.0/24
+on lab-web packages install nginx
+`,
+	},
+	{
+		Title: "script.ex.maintain.title", Summary: "script.ex.maintain.summary",
+		Content: `# Хосты уже есть в хабе: только действия
+on web1 apply profile web-base
+on web2 apply profile web-base
+
+on web1 file put /etc/motd
+This server is managed by nkt.
+end
+on web1 service nginx reload
+on web2 packages remove telnet
+`,
+	},
+}

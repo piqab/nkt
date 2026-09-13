@@ -271,7 +271,20 @@ func (s *Server) handleScriptHelp(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, cj)
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"commands": out, "intro": msgs.T(lang, "script.doc.intro")})
+	type exampleJSON struct {
+		Title   string `json:"title"`
+		Summary string `json:"summary"`
+		Content string `json:"content"`
+	}
+	examples := make([]exampleJSON, 0, len(script.Examples))
+	for _, e := range script.Examples {
+		examples = append(examples, exampleJSON{Title: msgs.T(lang, e.Title), Summary: msgs.T(lang, e.Summary), Content: e.Content})
+	}
+	rules := []string{}
+	for _, k := range []string{"script.doc.rule.line", "script.doc.rule.comment", "script.doc.rule.quote", "script.doc.rule.var", "script.doc.rule.block", "script.doc.rule.hosts", "script.doc.rule.secrets", "script.doc.rule.run", "script.doc.rule.noShell"} {
+		rules = append(rules, msgs.T(lang, k))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"commands": out, "intro": msgs.T(lang, "script.doc.intro"), "rules": rules, "examples": examples})
 }
 
 // handleScriptRun запускает сценарий заданием: текст берётся сохранённый,

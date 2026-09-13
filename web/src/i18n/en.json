@@ -2053,6 +2053,14 @@
         "password-ask": "password at run",
         "key-hub": "hub key"
       }
+    },
+    "help": {
+      "rules": "How the language works",
+      "commands": "Commands",
+      "examples": "Ready-made scripts",
+      "examplesHint": "Copy or insert into the editor and put in your own addresses, names and profiles.",
+      "insert": "Into editor",
+      "confirmInsert": "Replace the editor text with this script? Unsaved edits will be lost."
     }
   }
 }
