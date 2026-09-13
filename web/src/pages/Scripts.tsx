@@ -335,7 +335,7 @@ export default function Scripts({ me }: { me: Me }) {
                       value={color || null}
                       allowClear
                       presets={[{ label: t('profiles.colorPresets'), colors: SCRIPT_COLORS }]}
-                      onChange={(c, hex) => setColor(c ? hex : '')}
+                      onChange={(c) => setColor(c ? c.toHexString().slice(0, 7) : '')}
                       onClear={() => setColor('')}
                     />
                     <span className="small muted mono">{color || t('profiles.colorNone')}</span>

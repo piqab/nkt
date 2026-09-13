@@ -417,7 +417,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
                       value={color || null}
                       allowClear
                       presets={[{ label: t('profiles.colorPresets'), colors: PROFILE_COLORS }]}
-                      onChange={(c, hex) => setColor(c ? hex : '')}
+                      onChange={(c) => setColor(c ? c.toHexString().slice(0, 7) : '')}
                       onClear={() => setColor('')}
                     />
                     <span className="small muted mono">{color || t('profiles.colorNone')}</span>

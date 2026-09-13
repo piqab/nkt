@@ -501,7 +501,7 @@
     "import": "import",
     "notifyTooltip": "Notifies via the browser about a new critical/high problem, or lost contact with a host — while this tab stays open",
     "notifyLabel": "Notify on problems",
-    "registeredHosts": "Registered hosts",
+    "registeredHosts": "Hosts",
     "loading": "hosts",
     "noHosts": "No hosts yet — add the first one below.",
     "editHostTitle": "Edit host \"{{name}}\"",
