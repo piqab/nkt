@@ -47,6 +47,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - trivy is installed automatically on the first scan.
 - Vulnerability list with severity, package, fixed version and links; filters.
 - Scan progress in real time.
+- The “Malware” tab: a heuristic check for miners and signs of a break-in with no third-party tools — processes named like miners, pool connections, binaries deleted from disk or started from /tmp, long CPU load by a process not from any package, /etc/ld.so.preload, cron with “curl | sh”, units from temporary directories, foreign SUID files, blocks in /etc/hosts; on every scan, results go to Findings and hub alerts.
 
 ### Resource map
 - Graph "external network → service → listener → pool → backend → container → docker network" built from configs and the real state.

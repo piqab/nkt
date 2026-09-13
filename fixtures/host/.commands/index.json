@@ -693,6 +693,48 @@
     },
     {
       "match": [
+        "ps",
+        "-eww",
+        "-o",
+        "pid=,user=,pcpu=,etimes=,args="
+      ],
+      "stdout_file": "ps_eww.txt"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "for d in /proc/[0-9]*; do printf '%s\\t%s\\t%s\\n' \"${d#/proc/}\" \"$(readlink \"$d/exe\" 2>/dev/null)\" \"$(readlink \"$d/cwd\" 2>/dev/null)\"; done"
+      ],
+      "stdout_file": "proc_links.txt"
+    },
+    {
+      "match": [
+        "ss",
+        "-tnpH",
+        "state",
+        "established"
+      ],
+      "stdout": "0 0 203.0.113.10:51234 94.130.12.34:4444 users:((\"kdevtmpfsi\",pid=31337,fd=3))\n0 0 203.0.113.10:22 198.51.100.7:53122 users:((\"sshd\",pid=701,fd=4))\n"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "find / -xdev -type f -perm -4000 2>/dev/null"
+      ],
+      "stdout": "/usr/bin/sudo\n/usr/bin/passwd\n/usr/bin/su\n/usr/bin/mount\n/usr/bin/umount\n/usr/bin/chsh\n/usr/bin/chfn\n/usr/bin/gpasswd\n/usr/bin/newgrp\n/usr/lib/openssh/ssh-keysign\n/usr/lib/dbus-1.0/dbus-daemon-launch-helper\n"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "command -v dpkg"
+      ],
+      "stdout": "/usr/bin/dpkg\n"
+    },
+    {
+      "match": [
         "ps"
       ],
       "stdout_file": "ps.txt"

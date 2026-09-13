@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Input, Select, Tag, type TableColumnsType } from 'antd'
+import { Button, Input, Select, Tabs, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SeverityBadge, Spinner, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
+import MalwareTab from './Malware'
 
 // Trivy's own severity scale, mapped onto the app's lowercase Severity
 // union so this page can reuse SeverityBadge instead of inventing its own
@@ -33,6 +34,26 @@ const SEVERITY_ORDER: VulnFinding['severity'][] = ['CRITICAL', 'HIGH', 'MEDIUM',
  * kicking off by accident.
  */
 export default function Vulnerabilities({ me }: { me: Me }) {
+  const { t } = useTranslation()
+  return (
+    <>
+      <div className="page-head">
+        <h1>
+          {t('vulns.title')}
+          <InfoHint>{t('vulns.hint')}</InfoHint>
+        </h1>
+      </div>
+      <Tabs
+        items={[
+          { key: 'cve', label: t('vulns.tabCVE'), children: <VulnTab me={me} /> },
+          { key: 'malware', label: t('malware.tab'), children: <MalwareTab me={me} /> },
+        ]}
+      />
+    </>
+  )
+}
+
+function VulnTab({ me }: { me: Me }) {
   const { t } = useTranslation()
   const canUse = me.is_admin && me.allow_mutations
   // Polls fast while a scan is actually running (for prompt progress text
@@ -211,12 +232,6 @@ export default function Vulnerabilities({ me }: { me: Me }) {
   return (
     <>
       <div className="page-head">
-        <div>
-          <h1>
-            {t('vulns.title')}
-            <InfoHint>{t('vulns.hint')}</InfoHint>
-          </h1>
-        </div>
         <div className="row">
           <Button type="primary" disabled={!canUse} loading={scanning} onClick={startScan}>
             {scanning ? status?.progress || t('common.scanning') : status?.scan ? t('common.rescan') : t('vulns.scan')}

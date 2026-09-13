@@ -234,6 +234,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/apt/packages/{name}/remove/status", s.handleAptRemoveStatus)
 			r.Get("/vulnerabilities", s.handleVulnerabilities)
 			r.Get("/vulnerabilities/manifest", s.handleVulnManifest)
+			r.Get("/malware", s.handleMalware)
 			r.Get("/certificates", s.handleCertificates)
 			r.Get("/certificates/tools", s.handleCertTools)
 			r.Get("/certificates/standalone-plan", s.handleStandalonePlan)

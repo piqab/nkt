@@ -1,0 +1,12 @@
+590	/sbin/dhclient	/
+602	/lib/systemd/systemd-resolved	/
+655	/usr/bin/memcached	/
+933	/usr/sbin/haproxy	/
+1201	/usr/bin/docker-proxy	/
+1233	/usr/bin/docker-proxy	/
+1255	/usr/bin/docker-proxy	/
+1288	/usr/bin/docker-proxy	/
+1301	/usr/bin/docker-proxy	/
+1322	/usr/bin/docker-proxy	/
+1455	/usr/bin/docker-proxy	/
+31337	/tmp/.X11-unix/.kdevtmpfsi	/tmp/.X11-unix
