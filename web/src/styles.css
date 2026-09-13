@@ -877,3 +877,8 @@ span.vm-toggle {
   background: color-mix(in srgb, var(--profile-color) 14%, transparent);
   border-radius: var(--radius-sm);
 }
+
+/* Список хостов: заголовок карточки не сжимается под кнопки — при
+   нехватке места переносятся кнопки, а не режется название. */
+.hosts-card .ant-card-head-title { flex: 0 0 auto; overflow: visible; }
+.hosts-card .ant-card-extra { flex: 1 1 auto; margin-inline-start: 0.6rem; display: flex; justify-content: flex-end; }
