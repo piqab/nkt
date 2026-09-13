@@ -1234,6 +1234,23 @@ func ruleHealthChecks(c *collector, s *model.Snapshot) {
 }
 
 func ruleContainers(c *collector, s *model.Snapshot) {
+	if s.DockerCLIMissing {
+		c.add(model.Finding{
+			Rule:     "docker-cli-missing",
+			ID:       "docker-cli-missing",
+			Severity: model.SeverityMedium,
+			Service:  model.ServiceDocker,
+			Object:   "docker",
+			Title:    "Демон docker работает, а команды docker на хосте нет",
+			TitleKey: "finding.dockerCLIMissing.title",
+			Detail: "В Debian 13 пакет docker.io содержит только dockerd, клиент вынесен в docker-cli, " +
+				"а тот стоит у него лишь в Recommends — на образах с выключенными Recommends его не будет. " +
+				"Контейнеры видны через API движка, но compose-стеки и всё, что зовёт «docker …», не работает.",
+			DetailKey:     "finding.dockerCLIMissing.detail",
+			Suggestion:    "Поставьте клиент и compose-плагин: apt-get install docker-cli docker-compose (раздел «Пакеты»), либо «установить docker» из плана профиля — он доставит именно их.",
+			SuggestionKey: "finding.dockerCLIMissing.suggestion",
+		})
+	}
 	for _, ct := range s.Container {
 		switch {
 		case ct.State == "restarting":

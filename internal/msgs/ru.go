@@ -308,6 +308,9 @@ var ruCatalog = map[string]string{
 	"finding.backendNoHealthcheck.suggestionNginx":   "Задайте max_fails и fail_timeout для пассивной проверки.",
 	"finding.backendNoHealthcheck.suggestionCaddy":   "Добавьте health_uri/health_interval в reverse_proxy для активной проверки.",
 
+	"finding.dockerCLIMissing.title":         "Демон docker работает, а команды docker на хосте нет",
+	"finding.dockerCLIMissing.detail":        "В Debian 13 пакет docker.io содержит только dockerd, клиент вынесен в docker-cli, а тот стоит у него лишь в Recommends — на образах с выключенными Recommends его не будет. Контейнеры видны через API движка, но compose-стеки и всё, что зовёт «docker …», не работает.",
+	"finding.dockerCLIMissing.suggestion":    "Поставьте клиент и compose-плагин: apt-get install docker-cli docker-compose (раздел «Пакеты»), либо «установить docker» из плана профиля — он доставит именно их.",
 	"finding.containerRestarting.title":      "Контейнер %s в цикле перезапуска",
 	"finding.containerRestarting.detail":     "Статус: %s. Обычно это конфликт порта, ошибка конфигурации или падение процесса на старте.",
 	"finding.containerRestarting.suggestion": "Посмотрите журнал: docker logs %s.",
@@ -1017,6 +1020,7 @@ var ruCatalog = map[string]string{
 	"control.diffTooBig":                            "--- %s (%d строк)\n+++ %s (%d строк)\nФайлы слишком велики для построчного сравнения.\n",
 	"control.stateBeforeFirstEdit":                  "состояние до первой правки",
 	"control.currentFile":                           "текущий файл",
+	"control.dockerInstallCLIOnly":                  "Демон docker уже есть, нет только клиента (Debian 13: docker.io без docker-cli) — ставлю docker-cli и docker-compose из репозитория дистрибутива, а не docker-ce поверх.",
 	"control.dockerInstallOfficial":                 "Ставлю docker из репозитория docker.com для %s %s (официальная инструкция).",
 	"control.dockerInstallScript":                   "Система %q не из тех, у кого есть своя ветка репозитория Docker — ставлю официальным скриптом get.docker.com.",
 	"control.dockerEnableCode":                      "      systemctl enable --now docker: код %d",

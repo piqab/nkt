@@ -222,3 +222,14 @@ func TestUndeclaredListeners(t *testing.T) {
 			len(findings), len(got))
 	}
 }
+
+// Debian 13: движок работает, а команды docker нет — отдельная находка,
+// чтобы «docker: command not found» в compose-стеках не был сюрпризом.
+func TestDockerCLIMissing(t *testing.T) {
+	if got := rules(Run(&model.Snapshot{DockerCLIMissing: true}))["docker-cli-missing"]; len(got) != 1 {
+		t.Errorf("находка не появилась: %+v", got)
+	}
+	if got := rules(Run(&model.Snapshot{}))["docker-cli-missing"]; len(got) != 0 {
+		t.Errorf("ложная находка: %+v", got)
+	}
+}

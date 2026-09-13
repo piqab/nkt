@@ -478,6 +478,7 @@ sudo journalctl -u netknownsthat-hub -n 30     # здесь будет паро�
 | `container-restarting` | высокая | Контейнер застрял в цикле перезапуска |
 | `container-not-running` / `-undeclared` / `-no-restart-policy` | средняя / низкая / низкая | Объявлен, но не запущен; запущен, но не объявлен; нет политики перезапуска |
 | `admin-interface-open` | высокая/средняя | Панель статистики haproxy доступна без пароля |
+| `docker-cli-missing` | средняя | Демон docker работает, а команды `docker` нет (Debian 13: docker.io без docker-cli) |
 
 ### Карта ресурсов
 

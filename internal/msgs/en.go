@@ -309,6 +309,9 @@ var enCatalog = map[string]string{
 	"finding.backendNoHealthcheck.suggestionNginx":   "Set max_fails and fail_timeout for passive checking.",
 	"finding.backendNoHealthcheck.suggestionCaddy":   "Add health_uri/health_interval to reverse_proxy for active checking.",
 
+	"finding.dockerCLIMissing.title":         "The docker daemon runs, but there is no docker command on the host",
+	"finding.dockerCLIMissing.detail":        "On Debian 13 the docker.io package contains only dockerd; the client moved to docker-cli, which it merely Recommends — images with Recommends disabled end up without it. Containers are visible through the engine API, but compose stacks and everything that calls “docker …” does not work.",
+	"finding.dockerCLIMissing.suggestion":    "Install the client and the compose plugin: apt-get install docker-cli docker-compose (the Packages section), or “install docker” from a profile plan — it installs exactly those.",
 	"finding.containerRestarting.title":      "Container %s is stuck in a restart loop",
 	"finding.containerRestarting.detail":     "Status: %s. Usually a port conflict, a config error, or the process crashing on startup.",
 	"finding.containerRestarting.suggestion": "Check its log: docker logs %s.",
@@ -1018,6 +1021,7 @@ var enCatalog = map[string]string{
 	"control.diffTooBig":                            "--- %s (%d lines)\n+++ %s (%d lines)\nThe files are too large for a line-by-line comparison.\n",
 	"control.stateBeforeFirstEdit":                  "state before the first edit",
 	"control.currentFile":                           "current file",
+	"control.dockerInstallCLIOnly":                  "The docker daemon is already there, only the client is missing (Debian 13: docker.io without docker-cli) — installing docker-cli and docker-compose from the distribution, not docker-ce on top.",
 	"control.dockerInstallOfficial":                 "Installing docker from the docker.com repository for %s %s (official instructions).",
 	"control.dockerInstallScript":                   "System %q has no Docker repository branch of its own — installing with the official get.docker.com script.",
 	"control.dockerEnableCode":                      "      systemctl enable --now docker: code %d",

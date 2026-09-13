@@ -701,28 +701,31 @@ type Finding struct {
 
 // Snapshot is the complete picture of the host at one moment.
 type Snapshot struct {
-	TS         string             `json:"ts"`
-	Mode       string             `json:"mode"`
-	Host       HostInfo           `json:"host"`
-	Sources    []SourceStatus     `json:"sources"`
-	Services   []ServiceUnit      `json:"services"`
-	Files      []ManagedFile      `json:"files"`
-	Endpoints  []Endpoint         `json:"endpoints"`
-	Upstreams  []Upstream         `json:"upstreams"`
-	Container  []Container        `json:"containers"`
-	Networks   []DockerNetwork    `json:"networks"`
-	Podman     []PodmanContainer  `json:"podman_containers,omitempty"`
-	LXD        []LXDInstance      `json:"lxd_instances,omitempty"`
-	VMs        []VirtualMachine   `json:"vms,omitempty"`
-	Firewall   FirewallState      `json:"firewall"`
-	Listeners  []Listener         `json:"listeners"`
-	Interfaces []NetworkInterface `json:"interfaces"`
-	Certs      []Certificate      `json:"certificates"`
-	Packages   PackageUpdates     `json:"package_updates"`
-	Capacity   HostCapacity       `json:"capacity"`
-	Findings   []Finding          `json:"findings"`
-	Digest     string             `json:"digest"`
-	ScanMS     int64              `json:"scan_ms"`
+	TS        string          `json:"ts"`
+	Mode      string          `json:"mode"`
+	Host      HostInfo        `json:"host"`
+	Sources   []SourceStatus  `json:"sources"`
+	Services  []ServiceUnit   `json:"services"`
+	Files     []ManagedFile   `json:"files"`
+	Endpoints []Endpoint      `json:"endpoints"`
+	Upstreams []Upstream      `json:"upstreams"`
+	Container []Container     `json:"containers"`
+	Networks  []DockerNetwork `json:"networks"`
+	// DockerCLIMissing — движок docker работает, а команды docker на хосте
+	// нет (Debian 13: docker.io без docker-cli).
+	DockerCLIMissing bool               `json:"docker_cli_missing,omitempty"`
+	Podman           []PodmanContainer  `json:"podman_containers,omitempty"`
+	LXD              []LXDInstance      `json:"lxd_instances,omitempty"`
+	VMs              []VirtualMachine   `json:"vms,omitempty"`
+	Firewall         FirewallState      `json:"firewall"`
+	Listeners        []Listener         `json:"listeners"`
+	Interfaces       []NetworkInterface `json:"interfaces"`
+	Certs            []Certificate      `json:"certificates"`
+	Packages         PackageUpdates     `json:"package_updates"`
+	Capacity         HostCapacity       `json:"capacity"`
+	Findings         []Finding          `json:"findings"`
+	Digest           string             `json:"digest"`
+	ScanMS           int64              `json:"scan_ms"`
 }
 
 // HostCapacity is the host's total installed memory and CPU core count —
