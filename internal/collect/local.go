@@ -105,12 +105,23 @@ func (l *Local) ListDir(p string) ([]FileInfo, error) {
 	}
 	out := make([]FileInfo, 0, len(entries))
 	for _, e := range entries {
+		full := path.Join(p, e.Name())
 		st, err := e.Info()
 		if err != nil {
-			out = append(out, FileInfo{Path: path.Join(p, e.Name()), IsDir: e.IsDir(), Readable: false})
+			out = append(out, FileInfo{Path: full, IsDir: e.IsDir(), Readable: false})
 			continue
 		}
-		out = append(out, fileInfoFrom(path.Join(p, e.Name()), st))
+		fi := fileInfoFrom(full, st)
+		// Символическая ссылка на каталог — каталог для того, кто по ней
+		// ходит: /var/www/html → /srv/site должен открываться как папка, а
+		// не показываться файлом, в который нельзя войти. Режим остаётся
+		// от самой ссылки («L…»), чтобы было видно, что это ссылка.
+		if st.Mode()&os.ModeSymlink != 0 {
+			if target, err := os.Stat(full); err == nil && target.IsDir() {
+				fi.IsDir = true
+			}
+		}
+		out = append(out, fi)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, nil
