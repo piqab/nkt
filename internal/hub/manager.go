@@ -959,7 +959,12 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	m.recordSudoOutcome(ctx, hostID, host.SSHUser, nil)
 
 	report("hub.waitingHealth")
-	healthCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	// Служба слушает сразу, первый скан идёт в фоне (см.
+	// monitor.Scheduler.Start), но на медленном хосте старт вместе с
+	// миграцией базы всё равно может занять больше прежних 30 секунд —
+	// а проваленное здесь обновление хаб потом повторяет заново, хотя
+	// служба уже работает.
+	healthCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
 	defer cancel()
 	if err := waitForHealth(healthCtx, client.Dial); err != nil {
 		return fail(err)
