@@ -101,16 +101,36 @@ func (s *Scheduler) record(name string, interval time.Duration, started time.Tim
 	}
 }
 
-// Start launches every job and returns once they are running. Jobs stop when
-// ctx is cancelled; wg tracks their shutdown.
+// Start запускает первый скан и все задания в фоне и возвращается сразу.
+//
+// Раньше первый скан шёл синхронно, до HTTP-слушателя: на большом хосте
+// он занимает десятки секунд (обход диска в поиске SUID, dpkg, docker), и
+// всё это время /health не отвечал — хаб, обновляющий хост, ждал ответа
+// 30 секунд и записывал обновление проваленным, хотя служба поднималась.
+// Теперь слушатель стартует сразу; до конца первого скана /health
+// отвечает scanned=false, а разделы, которым нужен снимок, получают его
+// через LatestOrScan. Пробы всё так же ждут первого скана: он создаёт
+// им цели.
 func (s *Scheduler) Start(ctx context.Context, wg *sync.WaitGroup) {
-	// The first scan must finish before probing, since it creates the targets.
-	started := time.Now()
-	_, err := s.scanner.Scan(ctx)
-	s.record("inventory", s.cfg.InventoryInterval, started, 1, err)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		started := time.Now()
+		_, err := s.scanner.Scan(ctx)
+		s.record("inventory", s.cfg.InventoryInterval, started, 1, err)
+		if ctx.Err() != nil {
+			return
+		}
+		s.startJobs(ctx, wg)
+	}()
+}
 
+// startJobs заводит периодические задания; вызывается после первого
+// скана, пока внешняя группа ожидания ещё держит горутину Start — иначе
+// Add после Wait был бы гонкой.
+func (s *Scheduler) startJobs(ctx context.Context, wg *sync.WaitGroup) {
 	if s.cfg.IsFixtures() && s.cfg.DemoBackfill {
-		started = time.Now()
+		started := time.Now()
 		n, err := BackfillDemoHistory(ctx, s.db, 14)
 		if n > 0 || err != nil {
 			s.record("demo-backfill", 0, started, n, err)
