@@ -124,7 +124,16 @@ export default function FileBrowser() {
   // текущим считается ближайший.
   const root = roots.filter((r) => dir !== null && underRoot(dir, r)).sort((a, b) => b.length - a.length)[0] ?? roots[0] ?? ''
   const listing = useApi<{ entries: Entry[] }>(dir ? `/files/list${qs({ path: dir })}` : null)
-  const entries = listing.data?.entries ?? []
+  // Чей это список: пока ответ для нового каталога не пришёл, показывать
+  // старый нельзя — большая папка грузится секунды, и старое содержимое
+  // выглядит как «ничего не произошло».
+  const [listedDir, setListedDir] = useState<string | null>(null)
+  useEffect(() => {
+    if (listing.data) setListedDir(dir)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- по приходу данных
+  }, [listing.data])
+  const stale = dir !== null && listedDir !== dir
+  const entries = stale ? [] : (listing.data?.entries ?? [])
 
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
@@ -420,7 +429,7 @@ export default function FileBrowser() {
 
       {listing.error ? (
         <Banner kind="error">{listing.error}</Banner>
-      ) : !listing.data && dir ? (
+      ) : (!listing.data || stale) && dir ? (
         <div className="small muted"><Spinner /> {t('files.loading')}</div>
       ) : (
         <div
