@@ -976,7 +976,7 @@ func normaliseCertbotDomains(names []string) ([]string, error) {
 // резолвиться, а адрес — быть на этом хосте. Адрес не с хоста, но
 // отвечающий на ping, — предупреждение (NAT, прокси), а не отказ; имя без
 // записи или с молчащим адресом — отказ до запуска certbot.
-func (m *CertManager) checkDomainsPointHere(ctx context.Context, domains []string, report *certProgress) error {
+func (m *CertManager) checkDomainsPointHere(ctx context.Context, domains []string, force bool, report *certProgress) error {
 	if m.cfg.IsFixtures() {
 		return nil
 	}
@@ -1001,12 +1001,12 @@ func (m *CertManager) checkDomainsPointHere(ctx context.Context, domains []strin
 		res, err := m.c.Run(ctx, "ping", "-c", "1", "-W", "3", ip)
 		return err == nil && res.OK()
 	}
-	return verifyDomains(ctx, domains, local, lookup, ping, report)
+	return verifyDomains(ctx, domains, local, lookup, ping, force, report)
 }
 
 // verifyDomains — сама проверка, отделённая от DNS и ping ради тестов.
 func verifyDomains(ctx context.Context, domains []string, local map[string]bool,
-	lookup func(context.Context, string) ([]net.IPAddr, error), ping func(string) bool, report *certProgress) error {
+	lookup func(context.Context, string) ([]net.IPAddr, error), ping func(string) bool, force bool, report *certProgress) error {
 	for _, d := range domains {
 		addrs, err := lookup(ctx, d)
 		if err != nil || len(addrs) == 0 {
@@ -1029,6 +1029,11 @@ func verifyDomains(ctx context.Context, domains []string, local map[string]bool,
 		if !ping(ips[0]) {
 			return msgs.Errorf("certgen.domainUnreachable", d, strings.Join(ips, ", "))
 		}
+		// Адрес живой, но чужой. Без явного «хост за NAT/прокси» это
+		// отказ: иначе certbot запустится впустую, а службы полежат зря.
+		if !force {
+			return msgs.Errorf("certgen.domainElsewhereRefused", d, strings.Join(ips, ", "))
+		}
 		report.Msg("certgen.domainElsewhere", d, strings.Join(ips, ", "))
 	}
 	return nil
@@ -1044,7 +1049,7 @@ func verifyDomains(ctx context.Context, domains []string, local map[string]bool,
 // on every exit path via the same finish-closure pattern renewCertbot uses —
 // "Готово" must mean the site is back up, not just that certbot returned.
 func (m *CertManager) issueCertbot(
-	ctx context.Context, user string, domains []string, restart map[int]bool, report *certProgress,
+	ctx context.Context, user string, domains []string, restart map[int]bool, force bool, report *certProgress,
 ) (collect.CommandResult, error) {
 	domains, err := normaliseCertbotDomains(domains)
 	if err != nil {
@@ -1054,7 +1059,7 @@ func (m *CertManager) issueCertbot(
 	// До остановки служб и запуска certbot: имя должно вести сюда. Иначе
 	// certbot гарантированно не пройдёт проверку, а Let's Encrypt считает
 	// неудачные попытки в лимит — и сайт при этом зря полежит.
-	if err := m.checkDomainsPointHere(ctx, domains, report); err != nil {
+	if err := m.checkDomainsPointHere(ctx, domains, force, report); err != nil {
 		return collect.CommandResult{}, err
 	}
 
@@ -1122,7 +1127,7 @@ func (m *CertManager) runCertbotCertonly(ctx context.Context, user string, domai
 // immediately — same progress-polling pattern as StartRenewCertbot, and the
 // two share one job registry, so a caller polls RenewJobStatus for either
 // kind of job with the same code.
-func (m *CertManager) StartIssueCertbot(user string, domains []string, restart map[int]bool) (string, error) {
+func (m *CertManager) StartIssueCertbot(user string, domains []string, restart map[int]bool, force bool) (string, error) {
 	domains, err := normaliseCertbotDomains(domains)
 	if err != nil {
 		return "", err
@@ -1147,7 +1152,7 @@ func (m *CertManager) StartIssueCertbot(user string, domains []string, restart m
 		// before certbot finishes.
 		ctx, cancel := context.WithTimeout(context.Background(), m.cfg.CertbotTimeout+2*time.Minute)
 		defer cancel()
-		_, err := m.issueCertbot(ctx, user, domains, restart, &certProgress{msg: job.append, raw: job.appendRaw})
+		_, err := m.issueCertbot(ctx, user, domains, restart, force, &certProgress{msg: job.append, raw: job.appendRaw})
 		// Rescan before marking done, same reasoning as StartRenewCertbot —
 		// a caller reacting to "done" should already see the new lineage.
 		_, _ = m.scanner.Scan(context.Background())

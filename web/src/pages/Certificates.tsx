@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Form, Input, InputNumber, Select, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Form, Input, InputNumber, Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type {
@@ -825,11 +825,11 @@ function IssueForm({
   confirm: (title: string, run: (restartPIDs: number[]) => Promise<void>) => void
 }) {
   const { t } = useTranslation()
-  const [form] = Form.useForm<{ domains: string }>()
+  const [form] = Form.useForm<{ domains: string; force?: boolean }>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  async function submit(values: { domains: string }) {
+  async function submit(values: { domains: string; force?: boolean }) {
     const domainList = values.domains
       .split(',')
       .map((d) => d.trim())
@@ -844,7 +844,7 @@ function IssueForm({
       try {
         const res = await api<{ job: string }>('/certificates/issue', {
           method: 'POST',
-          body: { domains: domainList, restart_pids: restartPIDs },
+          body: { domains: domainList, restart_pids: restartPIDs, force: !!values.force },
         })
         form.resetFields()
         onStarted(res.job, t('certs.issuingLabel', { domains: domainList.join(', ') }))
@@ -872,6 +872,15 @@ function IssueForm({
             <Input placeholder="new.example.com, www.new.example.com" />
           </Form.Item>
         </div>
+        {/* Перед запуском certbot имя проверяется: адрес должен быть на
+            этом хосте. За NAT или прокси адрес чужой, и проверку надо
+            обойти явно — иначе выпуск отклоняется. */}
+        <Form.Item name="force" valuePropName="checked" style={{ marginBottom: '0.6rem' }}>
+          <Checkbox>
+            {t('certs.forceNAT')}
+            <InfoHint>{t('certs.forceNATHint')}</InfoHint>
+          </Checkbox>
+        </Form.Item>
         <Form.Item style={{ marginBottom: 0 }}>
           <Button type="primary" htmlType="submit" loading={busy} disabled={disabled} title={disabled ? t('certs.certbotMissing') : undefined}>
             {busy ? t('certs.issuing') : t('certs.issue')}
