@@ -27,16 +27,23 @@ func TestVerifyDomains(t *testing.T) {
 	var log []string
 	report := &certProgress{msg: func(key string, args ...any) { log = append(log, key) }}
 
-	if err := verifyDomains(context.Background(), []string{"here.example", "proxy.example"}, local, lookup, ping, report); err != nil {
-		t.Fatalf("свои и отвечающие имена: %v", err)
+	if err := verifyDomains(context.Background(), []string{"here.example"}, local, lookup, ping, false, report); err != nil {
+		t.Fatalf("своё имя: %v", err)
+	}
+	// Чужой отвечающий адрес: без флага — отказ, с флагом — предупреждение.
+	if err := verifyDomains(context.Background(), []string{"proxy.example"}, local, lookup, ping, false, report); err == nil || !strings.Contains(err.Error(), "198.51.100.9") {
+		t.Errorf("чужой адрес без флага должен быть отказом: %v", err)
+	}
+	if err := verifyDomains(context.Background(), []string{"proxy.example"}, local, lookup, ping, true, report); err != nil {
+		t.Errorf("чужой адрес с флагом NAT: %v", err)
 	}
 	if strings.Join(log, ",") != "certgen.domainPointsHere,certgen.domainElsewhere" {
 		t.Errorf("журнал: %v", log)
 	}
-	if err := verifyDomains(context.Background(), []string{"dead.example"}, local, lookup, ping, report); err == nil || !strings.Contains(err.Error(), "192.0.2.77") {
-		t.Errorf("неотвечающий адрес должен быть отказом: %v", err)
+	if err := verifyDomains(context.Background(), []string{"dead.example"}, local, lookup, ping, true, report); err == nil || !strings.Contains(err.Error(), "192.0.2.77") {
+		t.Errorf("неотвечающий адрес должен быть отказом даже с флагом: %v", err)
 	}
-	if err := verifyDomains(context.Background(), []string{"nowhere.example"}, local, lookup, ping, report); err == nil || !strings.Contains(err.Error(), "nowhere.example") {
+	if err := verifyDomains(context.Background(), []string{"nowhere.example"}, local, lookup, ping, true, report); err == nil || !strings.Contains(err.Error(), "nowhere.example") {
 		t.Errorf("нерезолвящееся имя должно быть отказом: %v", err)
 	}
 }

@@ -164,7 +164,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - Check against the real TLS socket: the service serves the same certificate that lies on disk.
 - Auto-renewal state: whether certbot knows it, whether the timer or cron is active.
 - certbot lineage renewal via `--standalone`, stopping and restoring the services and processes holding 80/443 (including manually started ones), with their relaunch.
-- Issuing a new Let's Encrypt certificate; certbot check and installation if missing; before running certbot the name is checked: does it resolve and point at this host (a foreign address is a warning if it answers ping, a refusal otherwise).
+- Issuing a new Let's Encrypt certificate; certbot check and installation if missing; before running certbot the name is checked: does it resolve and point at this host (a foreign address is refused unless “host behind NAT or a proxy” is ticked; one that does not answer ping is always refused).
 - Assembling a haproxy PEM from a certbot lineage with a haproxy reload.
 - Self-signed certificate: RSA 2048/3072/4096, several names, wildcard, Unicode domains.
 - nginx, haproxy and caddy config snippets for the issued certificate with copy to clipboard.

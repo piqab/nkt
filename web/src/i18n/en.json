@@ -813,7 +813,9 @@
     "copy": "Copy",
     "copied": "Copied",
     "snippetNoteHaproxy": "haproxy reads the certificate and key from one file — {{path}}. “Assemble a haproxy PEM” below builds it; without that file the bind will not come up.",
-    "snippetNoteCaddy": "caddy can obtain certificates itself; an external one is for when several services share one certificate."
+    "snippetNoteCaddy": "caddy can obtain certificates itself; an external one is for when several services share one certificate.",
+    "forceNAT": "host behind NAT or a proxy — run even if the name's address is not on this host",
+    "forceNATHint": "Before running certbot the name is checked: it must resolve to an address of this host. If the host is seen from outside under a different address (NAT, proxy, load balancer) and port 80 is forwarded here — tick this; otherwise issuance with a foreign address is refused, so certbot is not run in vain and services are not stopped for nothing."
   },
   "fw": {
     "ufwActionAllow": "allowed",

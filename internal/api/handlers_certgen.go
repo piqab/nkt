@@ -96,6 +96,9 @@ type issueRequest struct {
 	// RestartPIDs — ручные процессы на 80/443, которые оператор разрешил
 	// остановить и поднять заново (см. control.StandalonePlan).
 	RestartPIDs []int `json:"restart_pids,omitempty"`
+	// Force — запускать certbot, даже если адрес имени не на этом хосте
+	// (хост за NAT или прокси): без флага такой выпуск отклоняется.
+	Force bool `json:"force,omitempty"`
 }
 
 func restartSet(pids []int) map[int]bool {
@@ -118,7 +121,7 @@ func (s *Server) handleIssueCertbot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := auth.Username(r.Context())
-	id, err := s.certs.StartIssueCertbot(user, req.Domains, restartSet(req.RestartPIDs))
+	id, err := s.certs.StartIssueCertbot(user, req.Domains, restartSet(req.RestartPIDs), req.Force)
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return

@@ -44,7 +44,7 @@ func TestNormaliseCertbotDomainsConvertsUnicode(t *testing.T) {
 func TestStartIssueCertbotSuccess(t *testing.T) {
 	m, _ := renewSetup(t)
 
-	id, err := m.StartIssueCertbot("test", []string{"newsite.example.com"}, nil)
+	id, err := m.StartIssueCertbot("test", []string{"newsite.example.com"}, nil, false)
 	if err != nil {
 		t.Fatalf("start: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestStartIssueCertbotSuccess(t *testing.T) {
 
 func TestStartIssueCertbotRejectsWildcard(t *testing.T) {
 	m, _ := renewSetup(t)
-	if _, err := m.StartIssueCertbot("test", []string{"*.example.com"}, nil); err == nil {
+	if _, err := m.StartIssueCertbot("test", []string{"*.example.com"}, nil, false); err == nil {
 		t.Error("ожидалась ошибка валидации до запуска задачи")
 	}
 }
