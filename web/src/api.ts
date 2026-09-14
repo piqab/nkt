@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import i18n from './i18n'
 
 /** Raised for any non-2xx API response, carrying the server's message. */
@@ -205,6 +206,11 @@ export interface Loadable<T> {
  * are aborted on change so a slow response cannot overwrite a newer one.
  */
 export function useApi<T>(path: string | null, pollMs = 0): Loadable<T> {
+  // Сервер отдаёт свои тексты (справка, находки, планы) на языке
+  // запроса — смена языка в меню должна перечитать их, а не оставить
+  // страницу на старом языке до следующего перехода.
+  const { i18n: i18nHook } = useTranslation()
+  const lang = i18nHook.language
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(path !== null)
@@ -237,7 +243,8 @@ export function useApi<T>(path: string | null, pollMs = 0): Loadable<T> {
     } finally {
       if (!controller.signal.aborted) setLoading(false)
     }
-  }, [path])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- lang нужен именно как триггер
+  }, [path, lang])
 
   useEffect(() => {
     load()

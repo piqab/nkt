@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"io/fs"
 	"math/big"
+	"net"
 	gopath "path"
 	"regexp"
 	"sort"
@@ -971,6 +972,68 @@ func normaliseCertbotDomains(names []string) ([]string, error) {
 	return out, nil
 }
 
+// checkDomainsPointHere проверяет каждое имя перед выпуском: оно должно
+// резолвиться, а адрес — быть на этом хосте. Адрес не с хоста, но
+// отвечающий на ping, — предупреждение (NAT, прокси), а не отказ; имя без
+// записи или с молчащим адресом — отказ до запуска certbot.
+func (m *CertManager) checkDomainsPointHere(ctx context.Context, domains []string, report *certProgress) error {
+	if m.cfg.IsFixtures() {
+		return nil
+	}
+	local := map[string]bool{}
+	if snap := m.scanner.Latest(); snap != nil {
+		for _, iface := range snap.Interfaces {
+			for _, a := range iface.Addresses {
+				if ip, _, err := net.ParseCIDR(a); err == nil {
+					local[ip.String()] = true
+				} else if ip := net.ParseIP(a); ip != nil {
+					local[ip.String()] = true
+				}
+			}
+		}
+	}
+	lookup := func(ctx context.Context, name string) ([]net.IPAddr, error) {
+		lookupCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
+		return net.DefaultResolver.LookupIPAddr(lookupCtx, name)
+	}
+	ping := func(ip string) bool {
+		res, err := m.c.Run(ctx, "ping", "-c", "1", "-W", "3", ip)
+		return err == nil && res.OK()
+	}
+	return verifyDomains(ctx, domains, local, lookup, ping, report)
+}
+
+// verifyDomains — сама проверка, отделённая от DNS и ping ради тестов.
+func verifyDomains(ctx context.Context, domains []string, local map[string]bool,
+	lookup func(context.Context, string) ([]net.IPAddr, error), ping func(string) bool, report *certProgress) error {
+	for _, d := range domains {
+		addrs, err := lookup(ctx, d)
+		if err != nil || len(addrs) == 0 {
+			return msgs.Errorf("certgen.domainNoDNS", d, err)
+		}
+		ips := make([]string, 0, len(addrs))
+		here := ""
+		for _, a := range addrs {
+			ips = append(ips, a.IP.String())
+			if local[a.IP.String()] {
+				here = a.IP.String()
+			}
+		}
+		if here != "" {
+			report.Msg("certgen.domainPointsHere", d, here)
+			continue
+		}
+		// Не наш адрес: хотя бы должен отвечать — иначе это опечатка или
+		// ещё не распространившаяся запись.
+		if !ping(ips[0]) {
+			return msgs.Errorf("certgen.domainUnreachable", d, strings.Join(ips, ", "))
+		}
+		report.Msg("certgen.domainElsewhere", d, strings.Join(ips, ", "))
+	}
+	return nil
+}
+
 // issueCertbot requests a brand-new certificate certbot does not manage
 // yet — unlike renewCertbot, there is no existing renewal.conf to read an
 // authenticator from, so this always uses --standalone: it is the only
@@ -985,6 +1048,13 @@ func (m *CertManager) issueCertbot(
 ) (collect.CommandResult, error) {
 	domains, err := normaliseCertbotDomains(domains)
 	if err != nil {
+		return collect.CommandResult{}, err
+	}
+
+	// До остановки служб и запуска certbot: имя должно вести сюда. Иначе
+	// certbot гарантированно не пройдёт проверку, а Let's Encrypt считает
+	// неудачные попытки в лимит — и сайт при этом зря полежит.
+	if err := m.checkDomainsPointHere(ctx, domains, report); err != nil {
 		return collect.CommandResult{}, err
 	}
 
