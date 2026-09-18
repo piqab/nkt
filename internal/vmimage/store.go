@@ -10,6 +10,7 @@ import (
 	"hash"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -35,6 +36,11 @@ const downloadTimeout = time.Hour
 type Store struct {
 	dir    string
 	client *http.Client
+	// Proxy — адрес кэша хаба (http://127.0.0.1:3142) или пусто: с ним
+	// образ берётся через /nkt/artifact и оседает на хабе, а хост без
+	// выхода наружу всё равно его получает. Вызывается на каждую
+	// загрузку: проброс порта появляется и пропадает вместе с хабом.
+	Proxy func() string
 }
 
 // NewStore строит хранилище в указанном каталоге.
@@ -341,7 +347,7 @@ func (s *Store) expectedChecksum(ctx context.Context, img Image) (string, error)
 	if img.ChecksumURL == "" {
 		return "", nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, img.ChecksumURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.via(img.ChecksumURL), nil)
 	if err != nil {
 		return "", err
 	}
@@ -360,6 +366,18 @@ func (s *Store) expectedChecksum(ctx context.Context, img Image) (string, error)
 	return parseChecksums(string(body), img.FileName)
 }
 
+// via — ссылка через кэш хаба, если он есть.
+func (s *Store) via(u string) string {
+	if s.Proxy == nil {
+		return u
+	}
+	p := s.Proxy()
+	if p == "" {
+		return u
+	}
+	return p + "/nkt/artifact?url=" + url.QueryEscape(u)
+}
+
 // fetch качает файл, продолжая с того места, где остановились.
 func (s *Store) fetch(ctx context.Context, img Image, part string, report func(Progress)) error {
 	var have int64
@@ -367,7 +385,7 @@ func (s *Store) fetch(ctx context.Context, img Image, part string, report func(P
 		have = st.Size()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, img.URL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.via(img.URL), nil)
 	if err != nil {
 		return err
 	}

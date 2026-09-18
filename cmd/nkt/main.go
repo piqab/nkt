@@ -285,7 +285,7 @@ func newRuntime() (*runtime, error) {
 		logs:       control.NewLogManager(collector, scanner),
 		images:     control.NewImageManager(collector, scanner, filepath.Join(cfg.DataDir, "image-backups")),
 		jobs:       jobManager,
-		vmimages:   vmimage.NewStore(filepath.Join(cfg.DataDir, "vm-images")),
+		vmimages:   vmimageStore(cfg),
 		files:      filesManager,
 		cloneRun:   files.NewCloneRunner(filesManager),
 	}, nil
@@ -625,7 +625,7 @@ func newHubRuntime() (*hubRuntime, error) {
 		filepath.Join(cfg.DataDir, "files"))
 	return &hubRuntime{
 		cfg: cfg, db: db, jobs: jobs.New(db, slog.Default()),
-		vmimages:  vmimage.NewStore(filepath.Join(cfg.DataDir, "vm-images")),
+		vmimages:  vmimageStore(cfg),
 		files:     filesManager,
 		cloneRun:  files.NewCloneRunner(filesManager),
 		collector: collector,
@@ -901,4 +901,12 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	jobs.Wait()
 	log.Info("stopped")
 	return nil
+}
+
+// vmimageStore — кэш облачных образов; образы идут через кэш хаба, когда
+// тот держит проброс порта на этом хосте.
+func vmimageStore(cfg *config.Config) *vmimage.Store {
+	st := vmimage.NewStore(filepath.Join(cfg.DataDir, "vm-images"))
+	st.Proxy = func() string { return api.HubCacheURL(cfg) }
+	return st
 }
