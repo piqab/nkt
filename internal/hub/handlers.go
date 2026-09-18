@@ -223,6 +223,65 @@ func (s *Server) handleHubVulnDBRefresh(w http.ResponseWriter, r *http.Request) 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
 }
 
+// Кэш пакетов (см. aptproxy.go): состояние, лимит, очистка и
+// включение на хосте.
+func (s *Server) handleHubAptCacheStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.hub.aptCacheStatsJSON())
+}
+
+func (s *Server) handleHubAptCacheSettings(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		MaxGB int `json:"max_gb"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.hub.SetAptCacheMaxGB(r.Context(), req.MaxGB); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "aptcache.limit", strconv.Itoa(req.MaxGB), "ok", "")
+	writeJSON(w, http.StatusOK, s.hub.aptCacheStatsJSON())
+}
+
+func (s *Server) handleHubAptCacheClear(w http.ResponseWriter, r *http.Request) {
+	if c := s.hub.AptCache(); c != nil {
+		if err := c.Clear(); err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "aptcache.clear", "", "ok", "")
+	writeJSON(w, http.StatusOK, s.hub.aptCacheStatsJSON())
+}
+
+// handleHostAptProxy включает или выключает apt через хаб на хосте —
+// сразу, по SSH, чтобы не ждать переустановки.
+func (s *Server) handleHostAptProxy(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var req struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	user := auth.Username(r.Context())
+	err = s.hub.ApplyAptProxy(r.Context(), id, req.Enabled)
+	if err != nil {
+		s.db.Audit(r.Context(), user, "host.apt_proxy", strconv.FormatInt(id, 10), "error", err.Error())
+		writeErr(w, r, http.StatusBadGateway, err)
+		return
+	}
+	s.db.Audit(r.Context(), user, "host.apt_proxy", strconv.FormatInt(id, 10), "ok", strconv.FormatBool(req.Enabled))
+	writeJSON(w, http.StatusOK, map[string]any{"enabled": req.Enabled})
+}
+
 // handleHubClamDBStatus / handleHubClamDBRefresh — копия базы ClamAV на
 // хабе, карточка в «О системе» (см. clamdb.go).
 func (s *Server) handleHubClamDBStatus(w http.ResponseWriter, r *http.Request) {
@@ -380,6 +439,9 @@ type addHostRequest struct {
 	// default. Set separately from AddHost/AddHostGenerated below (see
 	// Manager.SetTunnelEnabled's own doc comment for why).
 	TunnelEnabled bool `json:"tunnel_enabled"`
+	// AptViaHub — apt хоста через кэш пакетов хаба (см. aptproxy.go);
+	// применяется при установке, для уже установленного — сразу по SSH.
+	AptViaHub bool `json:"apt_via_hub"`
 }
 
 // hostWithOverview is store.Host plus what pollOverviews last learned about
@@ -415,6 +477,8 @@ type hostWithOverview struct {
 	// also working right now — a host can have a healthy standby channel
 	// (Channel still "ssh") long before it's ever actually needed.
 	TunnelConnected bool `json:"tunnel_connected,omitempty"`
+	// AptProxyConnected — хаб сейчас держит проброс кэша пакетов на хост.
+	AptProxyConnected bool `json:"apt_proxy_connected,omitempty"`
 	// VMState — состояние домена libvirt у машины (по данным опроса её
 	// хоста): «running», «shut off»… Пусто у обычных хостов и пока хост
 	// не опрошен. Выключенной машине «старт» службы nkt по SSH ни к
@@ -477,6 +541,7 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		row.TunnelConnected = s.hub.TunnelConnected(h.ID)
+		row.AptProxyConnected = s.hub.AptProxyConnected(h.ID)
 		if h.ParentID != 0 {
 			if state, ok := s.hub.VMState(h.ParentID, h.Name); ok {
 				row.VMState = state
@@ -535,6 +600,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
+		s.setAptViaHub(r.Context(), id, req.AptViaHub)
 		s.setHostGroup(r.Context(), id, req.Group)
 		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "authorized_key": authorizedKey})
 		return
@@ -546,6 +612,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
+	s.setAptViaHub(r.Context(), id, req.AptViaHub)
 	s.setHostGroup(r.Context(), id, req.Group)
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
@@ -664,6 +731,26 @@ func (s *Server) handleDeleteHostGroup(w http.ResponseWriter, r *http.Request) {
 // is logged rather than turned into an error response, since the host
 // itself was already committed and reporting the whole request as failed
 // would be misleading.
+// setAptViaHub запоминает флаг; на уже установленном хосте конфиг apt
+// раскладывается по SSH в фоне — форма хоста не должна ждать соединения.
+func (s *Server) setAptViaHub(ctx context.Context, hostID int64, enabled bool) {
+	h, err := s.db.HostByID(ctx, hostID)
+	if err != nil || h.AptViaHub == enabled {
+		return
+	}
+	if err := s.db.SetHostAptViaHub(ctx, hostID, enabled); err != nil {
+		s.log.Warn("could not save apt-via-hub setting", "host_id", hostID, "err", err)
+		return
+	}
+	if h.Status == store.HostStatusOnline {
+		go func() {
+			if err := s.hub.ApplyAptProxy(context.Background(), hostID, enabled); err != nil {
+				s.log.Warn("could not configure apt proxy on host", "host", h.Name, "err", err)
+			}
+		}()
+	}
+}
+
 func (s *Server) setTunnelEnabled(ctx context.Context, hostID int64, enabled bool) {
 	if err := s.hub.SetTunnelEnabled(ctx, hostID, enabled); err != nil {
 		s.log.Warn("could not save fallback channel setting", "host_id", hostID, "err", err)
@@ -683,6 +770,7 @@ type updateHostRequest struct {
 	Secret          string `json:"secret"`
 	TerminalEnabled bool   `json:"terminal_enabled"`
 	TunnelEnabled   bool   `json:"tunnel_enabled"`
+	AptViaHub       bool   `json:"apt_via_hub"`
 	// Group — раздел списка; пустая строка значит «Без группы».
 	Group string `json:"group"`
 }
@@ -709,6 +797,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
+		s.setAptViaHub(r.Context(), id, req.AptViaHub)
 		s.setHostGroup(r.Context(), id, req.Group)
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "authorized_key": authorizedKey})
 		return
@@ -719,6 +808,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
+	s.setAptViaHub(r.Context(), id, req.AptViaHub)
 	s.setHostGroup(r.Context(), id, req.Group)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

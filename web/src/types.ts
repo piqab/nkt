@@ -83,6 +83,7 @@ export interface HubHost {
    * down) — see internal/tunnel. Same "regenerated on every install/
    * update" shape as terminal_enabled. */
   tunnel_enabled: boolean
+  apt_via_hub?: boolean
   /** "ssh" or "tunnel" — which path the hub most recently reached this
    * host through (see internal/hub's Manager.recordChannel). Absent before
    * the first dial attempt. */
@@ -91,6 +92,7 @@ export interface HubHost {
    * registered, independent of channel — a healthy standby channel is
    * common long before SSH ever actually needs it. */
   tunnel_connected?: boolean
+  apt_proxy_connected?: boolean
   error_msg?: string
   created_at: string
   last_seen_at?: string

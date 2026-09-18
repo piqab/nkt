@@ -174,6 +174,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/version", s.handleHubVersion)
 				r.Get("/hub/vulndb", s.handleHubVulnDBStatus)
 				r.Get("/hub/clamdb", s.handleHubClamDBStatus)
+				r.Get("/hub/aptcache", s.handleHubAptCacheStatus)
 
 				r.Get("/hub/hosts", s.handleListHosts)
 				// Журнал оповещений читают все, кто видит список хостов:
@@ -214,6 +215,9 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/vulndb/refresh", s.handleHubVulnDBRefresh)
 					r.Post("/hub/clamdb/refresh", s.handleHubClamDBRefresh)
 					r.Post("/hub/hosts/{id}/clamdb", s.handleHostClamDBPush)
+					r.Post("/hub/aptcache/settings", s.handleHubAptCacheSettings)
+					r.Post("/hub/aptcache/clear", s.handleHubAptCacheClear)
+					r.Post("/hub/hosts/{id}/apt-proxy", s.handleHostAptProxy)
 
 					r.Get("/hub/bootstrap/defaults", s.handleBootstrapDefaults)
 					r.Put("/hub/bootstrap/defaults", s.handleBootstrapDefaults)

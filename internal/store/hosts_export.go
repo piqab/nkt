@@ -67,6 +67,7 @@ type HostExport struct {
 	AdminPasswordEnc []byte `json:"admin_password_enc,omitempty"`
 	SudoStatus       string `json:"sudo_status,omitempty"`
 	TerminalEnabled  bool   `json:"terminal_enabled"`
+	AptViaHub        bool   `json:"apt_via_hub,omitempty"`
 	TunnelEnabled    bool   `json:"tunnel_enabled"`
 	TunnelTokenEnc   []byte `json:"tunnel_token_enc,omitempty"`
 	ErrorMsg         string `json:"error_msg,omitempty"`
@@ -148,7 +149,7 @@ func hostToExport(h Host) HostExport {
 		Name: h.Name, Addr: h.Addr, SSHPort: h.SSHPort, SSHUser: h.SSHUser, SSHAuthKind: h.SSHAuthKind,
 		SecretEnc: h.SecretEnc, Arch: h.Arch, Status: h.Status, NktVersion: h.NktVersion,
 		AdminUser: h.AdminUser, AdminPasswordEnc: h.AdminPasswordEnc, SudoStatus: h.SudoStatus,
-		TerminalEnabled: h.TerminalEnabled, TunnelEnabled: h.TunnelEnabled, TunnelTokenEnc: h.TunnelTokenEnc,
+		TerminalEnabled: h.TerminalEnabled, AptViaHub: h.AptViaHub, TunnelEnabled: h.TunnelEnabled, TunnelTokenEnc: h.TunnelTokenEnc,
 		ErrorMsg: h.ErrorMsg, CreatedAt: h.CreatedAt, LastSeenAt: h.LastSeenAt,
 		Group: h.Group,
 	}
@@ -472,12 +473,12 @@ func (d *DB) importOneHost(ctx context.Context, h HostExport) (int64, error) {
 			name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 			arch, status, nkt_version, admin_user, admin_password_enc,
 			sudo_status, terminal_enabled, tunnel_enabled, tunnel_token_enc,
-			error_msg, created_at, last_seen_at, group_name
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			error_msg, created_at, last_seen_at, group_name, apt_via_hub
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		h.Name, h.Addr, h.SSHPort, h.SSHUser, h.SSHAuthKind, h.SecretEnc,
 		h.Arch, h.Status, h.NktVersion, h.AdminUser, h.AdminPasswordEnc,
 		h.SudoStatus, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
-		h.ErrorMsg, h.CreatedAt, h.LastSeenAt, h.Group)
+		h.ErrorMsg, h.CreatedAt, h.LastSeenAt, h.Group, h.AptViaHub)
 	if err != nil {
 		return 0, err
 	}

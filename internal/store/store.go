@@ -223,6 +223,7 @@ CREATE TABLE IF NOT EXISTS hosts (
                                                 -- used to re-login when a proxied session expires
     sudo_status        TEXT NOT NULL DEFAULT '' CHECK (sudo_status IN ('','root','nopasswd','password_required')),
     terminal_enabled   INTEGER NOT NULL DEFAULT 0, -- passed through as NKT_TERMINAL_ENABLED on install/update
+    apt_via_hub        INTEGER NOT NULL DEFAULT 0, -- apt хоста ходит через кэш хаба (обратный проброс по SSH)
     tunnel_enabled     INTEGER NOT NULL DEFAULT 0, -- reverse-tunnel fallback for when SSH is unreachable, see internal/tunnel
     tunnel_token_hash  BLOB,                       -- legacy/unused: SHA-256 of the token, from when the host verified it;
                                                     -- kept only per this file's own "never remove a past column" policy
@@ -307,6 +308,7 @@ var columnMigrations = []struct{ table, column, ddl string }{
 		CHECK (sudo_status IN ('','root','nopasswd','password_required'))`},
 	{"hosts", "terminal_enabled", `ALTER TABLE hosts ADD COLUMN terminal_enabled INTEGER NOT NULL DEFAULT 0`},
 	{"hosts", "tunnel_enabled", `ALTER TABLE hosts ADD COLUMN tunnel_enabled INTEGER NOT NULL DEFAULT 0`},
+	{"hosts", "apt_via_hub", `ALTER TABLE hosts ADD COLUMN apt_via_hub INTEGER NOT NULL DEFAULT 0`},
 	{"hosts", "tunnel_token_hash", `ALTER TABLE hosts ADD COLUMN tunnel_token_hash BLOB`},
 	{"hosts", "tunnel_token_enc", `ALTER TABLE hosts ADD COLUMN tunnel_token_enc BLOB`},
 	{"hosts", "tunnel_cert_sha256", `ALTER TABLE hosts ADD COLUMN tunnel_cert_sha256 BLOB`},

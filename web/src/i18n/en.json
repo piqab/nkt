@@ -78,7 +78,20 @@
     "clamDBReady": "ready",
     "clamDBNotReady": "not downloaded yet",
     "clamDBRefreshing": "refreshing…",
-    "clamDBSize": "size"
+    "clamDBSize": "size",
+    "aptCacheTitle": "Package cache",
+    "aptCacheHint": "A caching proxy for apt: hosts with “packages through the hub cache” enabled download .deb files through the hub over a reverse SSH forward, and every package leaves for the internet once. Repository indexes are not cached, https is tunneled as is. Without the hub the host's apt goes direct.",
+    "aptCacheUnavailable": "The cache is unavailable: the data directory could not be opened.",
+    "aptCacheSize": "Size",
+    "aptCacheEntries": "{{count}} files",
+    "aptCacheHits": "Hits / misses",
+    "aptCacheTraffic": "Traffic",
+    "aptCacheTrafficValue": "served {{served}}, fetched {{fetched}}",
+    "aptCacheHosts": "Hosts forwarded",
+    "aptCacheLimit": "Limit (0 — unlimited)",
+    "gb": "GB",
+    "aptCacheClear": "clear",
+    "aptCacheClearConfirm": "Delete every file from the package cache? Hosts keep working — packages are downloaded again on the next install."
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",
@@ -654,7 +667,11 @@
     "groupProfileMissing": "profile deleted",
     "groupProfileHowTo": "How to use profiles on the hub: describe the desired state and pick a color in the Profiles section, create a group with that profile — machines created in it are built from the profile and tinted with its color. Hosts moved into the group are left untouched; an existing group cannot be given a profile.",
     "groupProfileHowToShort": "How to use profiles",
-    "createdByProfile": "Created from profile “{{name}}”"
+    "createdByProfile": "Created from profile “{{name}}”",
+    "aptViaHub": "packages through the hub cache",
+    "aptViaHubHint": "The hub keeps an SSH session to the host with a reverse port forward, and the host's apt downloads packages through the hub cache (every .deb comes from the internet once for all hosts). When the hub is not connected, apt goes direct — nothing breaks. Applied right away on an installed host and during install on a new one.",
+    "aptProxyConnected": "packages through the hub cache: forward connected",
+    "aptProxyWaiting": "packages through the hub cache: forward not connected yet — apt goes direct"
   },
   "events": {
     "title": "Alerts",

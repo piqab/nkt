@@ -59,8 +59,12 @@ type Host struct {
 	// the dashboard/terminal if SSH becomes unreachable. Off by default,
 	// same reasoning as TerminalEnabled: a new opt-in surface, not
 	// something every host should get just by being added.
-	TunnelEnabled bool   `json:"tunnel_enabled"`
-	ErrorMsg      string `json:"error_msg,omitempty"`
+	TunnelEnabled bool `json:"tunnel_enabled"`
+	// AptViaHub — apt этого хоста ходит через кэш пакетов хаба: хаб держит
+	// SSH-сессию с обратным пробросом порта, а на хосте лежит
+	// Proxy-Auto-Detect, который при закрытом порте отвечает DIRECT.
+	AptViaHub bool   `json:"apt_via_hub"`
+	ErrorMsg  string `json:"error_msg,omitempty"`
 	// Group — произвольная группа в списке хостов («прод», «клиент А»).
 	// Пустая строка означает «Без группы»: такой раздел показывается в
 	// конце списка, а не прячется — хост без группы не должен исчезать.
@@ -119,7 +123,7 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
 	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, group_name,
-	parent_id, profile_id`
+	parent_id, profile_id, apt_via_hub`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
@@ -128,7 +132,7 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
 		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen, &h.Group,
-		&h.ParentID, &h.ProfileID)
+		&h.ParentID, &h.ProfileID, &h.AptViaHub)
 	if err != nil {
 		return Host{}, err
 	}
@@ -269,6 +273,18 @@ func (d *DB) SetHostSudoStatus(ctx context.Context, id int64, status string) err
 		return errors.New("unknown sudo status: " + status)
 	}
 	res, err := d.ExecContext(ctx, `UPDATE hosts SET sudo_status = ? WHERE id = ?`, status, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SetHostAptViaHub включает или выключает apt через кэш хаба.
+func (d *DB) SetHostAptViaHub(ctx context.Context, id int64, enabled bool) error {
+	res, err := d.ExecContext(ctx, `UPDATE hosts SET apt_via_hub = ? WHERE id = ?`, enabled, id)
 	if err != nil {
 		return err
 	}
