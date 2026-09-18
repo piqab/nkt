@@ -1117,6 +1117,8 @@ var enCatalog = map[string]string{
 	"k8s.stepFailed":                                "step “%s”: %v",
 	"k8s.installed":                                 "Kubernetes (%s, %s) installed.",
 	"k8s.step.prepare":                              "preparing the system (swap, modules, sysctl, packages)",
+	"k8s.step.sysprep":                              "preparing the system (swap, modules, sysctl)",
+	"k8s.step.runtime":                              "containerd: install or check the existing one, config with CRI and SystemdCgroup",
 	"k8s.step.download":                             "downloading the installer and repository",
 	"k8s.step.install":                              "installing the role",
 	"k8s.step.wait":                                 "waiting for the service",

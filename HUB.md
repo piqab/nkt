@@ -808,7 +808,12 @@ netknownsthat-hub` сразу после этого поднимает полн�
 «новая машина» есть **«новый кластер»**:
 
 * **вариант** — `k3s` (один бинарник, HA со встроенным etcd) или
-  `kubeadm` (containerd, репозиторий `pkgs.k8s.io`, Flannel);
+  `kubeadm` (containerd, репозиторий `pkgs.k8s.io`, Flannel; containerd
+  на машине из облачного образа ставится пакетом дистрибутива, а на
+  «железном» хосте уже стоящий — например, `containerd.io` от Docker —
+  не трогается: у него только включается CRI и `SystemdCgroup`, копия
+  прежнего конфига остаётся в `config.toml.nkt-bak`, контейнеры Docker
+  при перезапуске containerd не останавливаются);
 * **топология** — одна машина (control plane без taint, он же worker);
   1 control plane + N worker; 3 control plane + N worker (пока только
   k3s);

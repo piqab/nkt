@@ -1116,6 +1116,8 @@ var ruCatalog = map[string]string{
 	"k8s.stepFailed":                                "шаг «%s»: %v",
 	"k8s.installed":                                 "Kubernetes (%s, %s) установлен.",
 	"k8s.step.prepare":                              "подготовка системы (swap, модули, sysctl, пакеты)",
+	"k8s.step.sysprep":                              "подготовка системы (swap, модули, sysctl)",
+	"k8s.step.runtime":                              "containerd: установка или проверка имеющегося, конфиг с CRI и SystemdCgroup",
 	"k8s.step.download":                             "загрузка установщика и репозитория",
 	"k8s.step.install":                              "установка роли",
 	"k8s.step.wait":                                 "ожидание службы",
