@@ -97,13 +97,24 @@ func TestPollOverviewPopulatesFindings(t *testing.T) {
 		t.Fatalf("SetHostStatus: %v", err)
 	}
 
-	manager := NewManager(&config.Config{}, db, key, "test", slog.New(slog.DiscardHandler))
+	// Версия менеджера — "dev", как у собранного для теста бинарника
+	// хоста: так проверяется согласование записанной версии (см. ниже).
+	manager := NewManager(&config.Config{}, db, key, "dev", slog.New(slog.DiscardHandler))
 
 	if _, ok := manager.Overview(hostID); ok {
 		t.Fatalf("Overview before any poll tick should report ok=false")
 	}
+	// Хаб «помнит» на хосте старую версию — как после обновления, которое
+	// он посчитал проваленным, хотя служба поднялась новой.
+	if err := db.SetHostVersion(ctx, hostID, "1.9.64"); err != nil {
+		t.Fatal(err)
+	}
 
 	manager.pollOnce(ctx)
+
+	if h, _ := db.HostByID(ctx, hostID); h.NktVersion != "dev" {
+		t.Errorf("хост отвечает версией хаба, а записано %q — версия не согласована", h.NktVersion)
+	}
 
 	ov, ok := manager.Overview(hostID)
 	findings, reachable, lastPolledAt := ov.Findings, ov.Reachable, ov.LastPolledAt
