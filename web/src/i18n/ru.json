@@ -2212,5 +2212,27 @@
     "colState": "Связь",
     "reachable": "на связи",
     "unreachable": "недоступен"
+  },
+  "k8s": {
+    "notInstalled": "Kubernetes на этом хосте не установлен. Кластер создаётся на хабе: «новый кластер» у хоста с виртуализацией.",
+    "summary": "{{flavor}} · {{role}} · {{version}}",
+    "roleServer": "control plane",
+    "roleAgent": "worker",
+    "inactive": "Служба Kubernetes не запущена.",
+    "agentOnly": "Это worker-узел: узлы и поды видны на control plane.",
+    "uninstall": "удалить узел",
+    "confirmUninstall": "Удалить Kubernetes с этого хоста? Узел выйдет из кластера, контейнеры и данные k8s на нём будут удалены.",
+    "uninstalled": "Kubernetes удалён с хоста.",
+    "colNode": "Узел",
+    "colRoles": "Роли",
+    "colReady": "Готов",
+    "colVersion": "Версия",
+    "colAge": "Возраст",
+    "pods": "Поды",
+    "podsCount": "всего: {{count}}",
+    "allNamespaces": "все namespace",
+    "colPod": "Под",
+    "colPhase": "Состояние",
+    "colRestarts": "Перезапуски"
   }
 }

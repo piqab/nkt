@@ -2210,5 +2210,27 @@
     "colState": "Link",
     "reachable": "reachable",
     "unreachable": "unreachable"
+  },
+  "k8s": {
+    "notInstalled": "Kubernetes is not installed on this host. Clusters are created on the hub: “new cluster” next to a host with virtualization.",
+    "summary": "{{flavor}} · {{role}} · {{version}}",
+    "roleServer": "control plane",
+    "roleAgent": "worker",
+    "inactive": "The Kubernetes service is not running.",
+    "agentOnly": "This is a worker node: nodes and pods are shown on the control plane.",
+    "uninstall": "remove node",
+    "confirmUninstall": "Remove Kubernetes from this host? The node leaves the cluster; its containers and k8s data are deleted.",
+    "uninstalled": "Kubernetes removed from the host.",
+    "colNode": "Node",
+    "colRoles": "Roles",
+    "colReady": "Ready",
+    "colVersion": "Version",
+    "colAge": "Age",
+    "pods": "Pods",
+    "podsCount": "total: {{count}}",
+    "allNamespaces": "all namespaces",
+    "colPod": "Pod",
+    "colPhase": "Phase",
+    "colRestarts": "Restarts"
   }
 }
