@@ -1010,6 +1010,7 @@ func clusterSpecFromArgs(h store.Host, st script.Step) (ClusterSpec, error) {
 		spec.CNI = "cilium"
 		spec.KubeProxyReplacement = st.Args["no-kube-proxy"] == "true"
 	}
+	spec.K8sVersion = st.Args["version"]
 	if spec.Expose {
 		spec.ExposeAPI, spec.ExposeHTTP, spec.ExposeHTTPS = atoi("api", 6443), atoi("http", 80), atoi("https", 443)
 	}
