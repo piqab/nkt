@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -74,11 +75,16 @@ func TestDownloadReleaseBinaryLive(t *testing.T) {
 	m.cfg.HubReleaseRepo = "piqab/nkt"
 
 	dest := filepath.Join(t.TempDir(), "nkt-linux-amd64")
-	var events []string
+	var events, progress []string
 	err := m.downloadReleaseBinary(context.Background(), "linux", "amd64", version, dest,
-		func(key string, args ...any) { events = append(events, key) })
+		func(key string, args ...any) { events = append(events, key) },
+		func(key string, args ...any) { progress = append(progress, fmt.Sprintf("%s %v", key, args)) })
 	if err != nil {
 		t.Fatalf("downloadReleaseBinary: %v\nevents: %v", err, events)
+	}
+	// Прогресс: хотя бы итоговые 100%.
+	if len(progress) == 0 || !strings.Contains(progress[len(progress)-1], "hub.downloadingBinaryProgress [100 ") {
+		t.Errorf("progress: %v", progress)
 	}
 
 	info, err := os.Stat(dest)

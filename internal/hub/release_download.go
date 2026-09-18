@@ -38,7 +38,11 @@ import (
 // the hub's own self-update (checkAndApplyHubUpdate) needs exactly this same
 // download-and-verify logic for whatever *newer* version versionCheckLoop
 // last found — a different value than m.version by definition.
-func (m *Manager) downloadReleaseBinary(ctx context.Context, goos, goarch, version, destPath string, report func(key string, args ...any)) error {
+//
+// progress (может быть nil) получает «N% (X из Y МБ)» по ходу скачивания
+// — той же строкой-заменой, что и заливка на хост: иначе между
+// «скачиваю…» и «скачан» журнал молчит всё время загрузки.
+func (m *Manager) downloadReleaseBinary(ctx context.Context, goos, goarch, version, destPath string, report, progress func(key string, args ...any)) error {
 	assetName := fmt.Sprintf("nkt-%s-%s", goos, goarch)
 	base := fmt.Sprintf("https://github.com/%s/releases/download/v%s", m.cfg.HubReleaseRepo, version)
 
@@ -53,23 +57,19 @@ func (m *Manager) downloadReleaseBinary(ctx context.Context, goos, goarch, versi
 		return msgs.Errorf("hub.releaseV", version, err)
 	}
 
-	binBytes, err := fetchReleaseBytes(ctx, base+"/"+assetName)
-	if err != nil {
-		return msgs.Errorf("hub.releaseVBinary", version, err)
-	}
-
-	got := sha256.Sum256(binBytes)
-	if gotHex := hex.EncodeToString(got[:]); !strings.EqualFold(gotHex, want) {
-		return msgs.Errorf("hub.checksumDownloadedDoesMatchExpected",
-			assetName, want, gotHex)
-	}
-
 	if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
 		return msgs.Errorf("hub.binaryCacheDirectory", err)
 	}
 	tmp := destPath + ".tmp"
-	if err := os.WriteFile(tmp, binBytes, 0o755); err != nil {
-		return msgs.Errorf("control.writing", tmp, err)
+	gotHex, err := fetchReleaseFile(ctx, base+"/"+assetName, tmp, progress)
+	if err != nil {
+		_ = os.Remove(tmp)
+		return msgs.Errorf("hub.releaseVBinary", version, err)
+	}
+	if !strings.EqualFold(gotHex, want) {
+		_ = os.Remove(tmp)
+		return msgs.Errorf("hub.checksumDownloadedDoesMatchExpected",
+			assetName, want, gotHex)
 	}
 	if err := os.Rename(tmp, destPath); err != nil {
 		_ = os.Remove(tmp)
@@ -78,6 +78,45 @@ func (m *Manager) downloadReleaseBinary(ctx context.Context, goos, goarch, versi
 
 	report("hub.releaseBinaryVerified", goos, goarch)
 	return nil
+}
+
+// fetchReleaseFile скачивает url в файл dest (0755), считая sha256 по
+// ходу; progress получает проценты, когда сервер сообщил размер.
+func fetchReleaseFile(ctx context.Context, url, dest string, progress func(key string, args ...any)) (sha256Hex string, err error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", msgs.Errorf("hub.downloading", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", msgs.Errorf("hub.code2", url, resp.StatusCode)
+	}
+	out, err := os.OpenFile(dest, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o755)
+	if err != nil {
+		return "", msgs.Errorf("control.writing", dest, err)
+	}
+	var body io.Reader = resp.Body
+	var pr *progressReader
+	if progress != nil && resp.ContentLength > 0 {
+		pr = &progressReader{r: resp.Body, total: resp.ContentLength, report: progress, key: "hub.downloadingBinaryProgress"}
+		body = pr
+	}
+	sum := sha256.New()
+	if _, err := io.Copy(io.MultiWriter(out, sum), body); err != nil {
+		_ = out.Close()
+		return "", msgs.Errorf("hub.downloading", url, err)
+	}
+	if err := out.Close(); err != nil {
+		return "", msgs.Errorf("control.writing", dest, err)
+	}
+	if pr != nil {
+		pr.reportNow()
+	}
+	return hex.EncodeToString(sum.Sum(nil)), nil
 }
 
 // downloadUnitTemplate fetches deploy/<unitFile> straight from this

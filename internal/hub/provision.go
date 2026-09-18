@@ -94,7 +94,7 @@ func (m *Manager) resolveSourceRoot(report func(key string, args ...any)) (strin
 // reported together if that fallback also fails, since by then the operator
 // needs to know cross-compiling wasn't even attempted for a source-tree
 // reason, not because the download itself is what's broken.
-func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report func(key string, args ...any)) (string, error) {
+func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report, progress func(key string, args ...any)) (string, error) {
 	name := fmt.Sprintf("nkt-%s-%s-%s", goos, goarch, m.version)
 	path := filepath.Join(m.cfg.HubBinCacheDir(), name)
 	if _, err := os.Stat(path); err == nil {
@@ -104,7 +104,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report 
 
 	sourceRoot, srcErr := m.resolveSourceRoot(report)
 	if srcErr != nil {
-		if dlErr := m.downloadReleaseBinary(ctx, goos, goarch, m.version, path, report); dlErr != nil {
+		if dlErr := m.downloadReleaseBinary(ctx, goos, goarch, m.version, path, report, progress); dlErr != nil {
 			return "", msgs.Errorf("hub.downloadingPrebuiltBinaryGitHubReleases", srcErr, dlErr)
 		}
 		return path, nil
@@ -241,7 +241,11 @@ func generatePassword() (string, error) {
 // binary upload's percentage) — replacing the last log line in place rather
 // than adding a new one each time, unlike report's one-off step messages.
 func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envContent, binPath, servicePath, envPath string, report, progress func(key string, args ...any)) error {
-	sftpClient, err := sftp.NewClient(client)
+	// UseConcurrentWrites — без него pkg/sftp шлёт пакеты по 32 КиБ строго
+	// по одному, дожидаясь ответа на каждый: 16 МБ бинарника — это ~500
+	// круговых обходов, и на дальнем хосте заливка тянется минуту при
+	// свободном канале. С опцией в полёте до 64 пакетов.
+	sftpClient, err := sftp.NewClient(client, sftp.UseConcurrentWrites(true))
 	if err != nil {
 		return msgs.Errorf("hub.openingSFTP", err)
 	}
@@ -460,10 +464,10 @@ func uploadFile(sftpClient *sftp.Client, localPath, remotePath string, mode os.F
 
 	// sftp.File.ReadFrom is the reading side of the transfer — it repeatedly
 	// calls Read on whatever io.Reader it's handed, splitting into several
-	// concurrent max-packet-sized chunks under the hood. Wrapping `local`
-	// this way rides along with that without touching the SFTP protocol
-	// handling at all.
-	pr := &progressReader{r: local, total: info.Size(), report: progress}
+	// concurrent max-packet-sized chunks under the hood (with
+	// UseConcurrentWrites on the client). Wrapping `local` this way rides
+	// along with that without touching the SFTP protocol handling at all.
+	pr := &progressReader{r: local, total: info.Size(), report: progress, key: "hub.uploadingBinary"}
 	if _, err := remote.ReadFrom(pr); err != nil {
 		return err
 	}
@@ -480,6 +484,7 @@ type progressReader struct {
 	total  int64
 	read   int64
 	report func(key string, args ...any)
+	key    string // ключ строки прогресса: заливка или скачивание
 	last   time.Time
 }
 
@@ -514,7 +519,7 @@ func (p *progressReader) reportNow() {
 	// — the catalog template itself supplies the (localized) unit word, so
 	// the English side doesn't end up with a Russian "МБ" baked into an
 	// otherwise-translated line.
-	p.report("hub.uploadingBinary", pct, float64(p.read)/(1<<20), float64(p.total)/(1<<20))
+	p.report(p.key, pct, float64(p.read)/(1<<20), float64(p.total)/(1<<20))
 }
 
 func uploadBytes(sftpClient *sftp.Client, data []byte, remotePath string, mode os.FileMode) error {

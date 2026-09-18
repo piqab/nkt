@@ -136,7 +136,8 @@ var ruCatalog = map[string]string{
 	"hub.uploadingUnitAndConfig":    "Заливаю systemd-юнит и конфигурацию…",
 	"hub.installingFiles":           "Устанавливаю файлы…",
 	"hub.startingSystemdService":    "Запускаю systemd-сервис…",
-	"hub.uploadingBinary":           "Заливаю бинарник… %d%% (%.1f МБ из %.1f МБ)",
+	"hub.uploadingBinary":           "Заливаю бинарник на хост по SSH… %d%% (%.1f МБ из %.1f МБ)",
+	"hub.downloadingBinaryProgress": "Скачиваю бинарник с GitHub… %d%% (%.1f МБ из %.1f МБ)",
 
 	"hub.sendingViaTunnel":          "Отправляю бинарник и конфигурацию через резервный канал…",
 	"hub.hostAcceptedRestarting":    "Хост принял обновление и перезапускает сервис…",
