@@ -164,18 +164,19 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
             options={[
               { value: 'nat', label: t('clusters.netNAT'), disabled: distinctHosts > 1 },
               { value: 'bridge', label: t('clusters.netBridge') },
-              { value: 'wireguard', label: t('clusters.netWireGuard'), disabled: true },
+              { value: 'wireguard', label: t('clusters.netWireGuard') },
             ]}
           />
         </label>
       </div>
+      {network === 'wireguard' && <div className="muted" style={{ marginBottom: '0.4rem' }}>{t('clusters.netWireGuardHint')}</div>}
 
       <h3 style={{ margin: '0.4rem 0' }}>{t('clusters.placement')}</h3>
       <div className="table-wrap">
         <table className="ant-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr>
-              {[t('clusters.colHost'), t('clusters.colRole'), t('clusters.colKind'), t('clusters.colCount'), 'CPU', 'MB', 'GB', t('hosts.newVMImage'), network === 'bridge' ? t('clusters.colBridge') : t('hosts.newVMNetwork'), ''].map((h, i) => (
+              {[t('clusters.colHost'), t('clusters.colRole'), t('clusters.colKind'), t('clusters.colCount'), 'CPU', 'MB', 'GB', t('hosts.newVMImage'), network === 'bridge' ? t('clusters.colBridge') : network === 'wireguard' ? t('clusters.colSubnet') : t('hosts.newVMNetwork'), ''].map((h, i) => (
                 <th key={i} style={{ textAlign: 'left', padding: '0.2rem 0.4rem' }}>{h}</th>
               ))}
             </tr>
@@ -207,6 +208,8 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
                 <td style={{ padding: '0.2rem 0.4rem' }}>
                   {network === 'bridge' ? (
                     <Input size="small" value={r.bridge} disabled={r.kind === 'host'} placeholder="br0" onChange={(e) => update(i, { bridge: e.target.value.trim() })} style={{ width: '6rem' }} />
+                  ) : network === 'wireguard' ? (
+                    <span className="muted" style={{ whiteSpace: 'nowrap' }}>{r.kind === 'host' ? t('clusters.subnetTunnel') : t('clusters.subnetAuto')}</span>
                   ) : (
                     <Input size="small" value={r.network} disabled={r.kind === 'host'} placeholder="default" onChange={(e) => update(i, { network: e.target.value.trim() })} style={{ width: '6rem' }} />
                   )}

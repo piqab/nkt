@@ -259,6 +259,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/vm/networks", s.handleVMNetworks)
 			r.Get("/vm/preflight", s.handleVMPreflight)
 			r.Get("/net/check", s.handleNetCheck)
+			r.Get("/net/ping", s.handleNetPing)
+			r.Get("/vm/wgmesh/{name}", s.handleWGStatus)
 			r.Get("/vm/networks/free-subnet", s.handleVMFreeSubnet)
 
 			r.Get("/jobs", s.handleJobList)
@@ -310,6 +312,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/k8s/uninstall", s.handleK8sUninstall)
 				r.Post("/vm/portforward", s.handlePortForwardSet)
 				r.Delete("/vm/portforward/{name}", s.handlePortForwardDelete)
+				r.Post("/vm/wgmesh", s.handleWGApply)
+				r.Delete("/vm/wgmesh/{name}", s.handleWGRemove)
 				r.Post("/clamav/install", s.handleClamInstall)
 				r.Post("/clamav/update-db", s.handleClamUpdateDB)
 				r.Post("/clamav/scan", s.handleClamScan)

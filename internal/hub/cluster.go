@@ -267,7 +267,11 @@ func (s *ClusterSpec) validatePlacements() error {
 			}
 		}
 	case NetworkWireGuard:
-		return msgs.Errorf("hub.clusterWireGuardSoon")
+		// Сеть машин на каждом хосте заводится своя (см. cluster_wg.go),
+		// мост и выбранная сеть не нужны.
+		for i := range s.Placements {
+			s.Placements[i].Bridge, s.Placements[i].Network = "", ""
+		}
 	default:
 		return msgs.Errorf("hub.clusterBadNetwork", s.NetworkMode)
 	}
@@ -371,6 +375,8 @@ type ClusterJobParams struct {
 }
 
 type clusterResume struct {
+	// MeshUp — туннель между хостами уже поднят (режим wireguard).
+	MeshUp bool `json:"mesh_up,omitempty"`
 	// Hosts — заведённые машины по имени → id хоста.
 	Hosts map[string]int64 `json:"hosts"`
 	// Installed — узлы, на которых роль уже стоит.
@@ -483,6 +489,9 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		return msgs.Errorf("hub.clusterNoNodes")
 	}
 	total := len(nodes) + 4
+	if spec.NetworkMode == NetworkWireGuard {
+		total++
+	}
 	step := 0
 
 	// 0. Проверки — до первой машины. При продолжении после перезапуска
@@ -499,6 +508,45 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		}
 	} else {
 		jc.Log("hub.preflightSkipped")
+	}
+
+	// 0.5. Туннель между хостами: машины на каждом хосте — в своей сети
+	// libvirt, подсети соседей — через WireGuard.
+	var plan *wgPlan
+	if spec.NetworkMode == NetworkWireGuard {
+		step++
+		jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepMesh"))
+		var err error
+		if done.MeshUp {
+			if plan, err = r.m.clusterWG(cl); err != nil {
+				return err
+			}
+			if plan == nil {
+				return msgs.Errorf("hub.clusterMeshMissing")
+			}
+			jc.Log("hub.clusterMeshExists", plan.Iface)
+		} else {
+			if plan, err = r.setupMesh(ctx, jc, cl, nodes); err != nil {
+				return err
+			}
+			done.MeshUp = true
+			jc.SaveResume(*done)
+		}
+		for i := range nodes {
+			if nodes[i].Kind == KindVM {
+				nodes[i].Network, nodes[i].Bridge = plan.Iface, ""
+			}
+		}
+	}
+	// nodeAddr — адрес узла для остальных: у узла-хоста в туннеле — его
+	// адрес в туннеле, иначе обычный.
+	nodeAddr := func(h store.Host) string {
+		if plan != nil && h.ParentID == 0 {
+			if wh := plan.host(h.ID); wh != nil {
+				return wh.IP
+			}
+		}
+		return h.Addr
 	}
 
 	// 1. Узлы: машины — по одной, сам хост — просто запись.
@@ -542,23 +590,31 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		// Узел — сам хост: проброс не нужен, адрес API — его собственный.
 		cpHost = cp1
 	}
-	tlsSANs := []string{cp1.Addr}
+	cp1Addr := nodeAddr(cp1)
+	tlsSANs := []string{cp1Addr}
+	if cp1.Addr != cp1Addr {
+		tlsSANs = append(tlsSANs, cp1.Addr)
+	}
 	if spec.Expose && cpHost.Addr != "" && cpHost.ID != cp1.ID {
 		tlsSANs = append(tlsSANs, cpHost.Addr)
 	}
 	if !done.Installed[cp1Name] {
-		if err := r.installRole(ctx, jc, cp1, k8s.InstallSpec{
+		is := k8s.InstallSpec{
 			Flavor: spec.Flavor, Role: k8s.RoleServer, Single: len(nodes) == 1 && p.AddWorkers == 0,
 			ClusterInit: len(cps) == 3, TLSSANs: tlsSANs, NodeName: cp1Name,
-			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1.Addr,
-		}); err != nil {
+			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1Addr,
+		}
+		if cp1.ParentID == 0 && cp1Addr != cp1.Addr {
+			is.NodeIP = cp1Addr
+		}
+		if err := r.installRole(ctx, jc, cp1, is); err != nil {
 			return err
 		}
 		done.Installed[cp1Name] = true
 		jc.SaveResume(*done)
 	}
 	var join k8s.JoinInfo
-	if _, err := r.m.HostAPI(ctx, cp1.ID, "GET", "/api/k8s/join?server="+url.QueryEscape(cp1.Addr), nil, &join); err != nil {
+	if _, err := r.m.HostAPI(ctx, cp1.ID, "GET", "/api/k8s/join?server="+url.QueryEscape(cp1Addr), nil, &join); err != nil {
 		return msgs.Errorf("hub.clusterJoinInfo", err)
 	}
 	jc.Log("hub.clusterJoinReady", cp1.Name)
@@ -576,7 +632,10 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 			return err
 		}
 		is := k8s.InstallSpec{Flavor: spec.Flavor, Role: k8s.RoleAgent, ServerURL: join.ServerURL, Token: join.Token, CAHash: join.CAHash, NodeName: nd.Name,
-			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement}
+			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1Addr}
+		if h.ParentID == 0 && nodeAddr(h) != h.Addr {
+			is.NodeIP = nodeAddr(h)
+		}
 		if nd.Role == RoleControlPlane {
 			is.Role, is.CertKey, is.TLSSANs = k8s.RoleServer, join.CertKey, tlsSANs
 		}
@@ -605,6 +664,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	}
 	serverAddr := spec.apiAddr(cpHost.Addr, cp1.Addr)
 	if cp1.ParentID == 0 {
+		// Узел-хост: kubeconfig — на его обычный адрес, он в SAN.
 		serverAddr = cp1.Addr + ":6443"
 	}
 	var kubeconfig string
@@ -783,6 +843,7 @@ func (r *ClusterDeleteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 	}
 	jc.Step(total, total, msgs.T(jc.Lang(), "hub.clusterStepDeleteRecord"))
+	r.removeMesh(ctx, jc, cl)
 	_ = r.m.db.DeleteHostGroup(ctx, cl.Name)
 	if err := r.m.db.DeleteCluster(ctx, cl.ID); err != nil {
 		return err

@@ -67,6 +67,8 @@ func (s *Server) handleVMPreflight(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	out["bridges"] = bridges
+	// wireguard-tools — для туннеля между хостами.
+	out["wireguard"] = collect.Which(ctx, c, "wg")
 	if mgr := s.vmnets(); mgr != nil {
 		if nets, err := mgr.List(ctx); err == nil {
 			out["networks"] = nets

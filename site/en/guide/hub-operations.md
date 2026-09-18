@@ -51,7 +51,12 @@ line.
   virtualization: k3s or kubeadm, one machine / 1 control plane + N workers /
   3 control planes + N workers, host port forwarding; the nodes are
   machines with nkt in the cluster group, the kubeconfig is downloaded from
-  the cluster card.
+  the cluster card. The **“Clusters”** section (experimental) — a cluster
+  across several hosts: a placement table (host → role → machines or the
+  host itself → sizes), a network between hosts — a bridge or a WireGuard
+  tunnel (the hub installs `wireguard-tools`, generates keys and creates a
+  separate machine network on every host), Cilium by a checkbox, a “dry
+  run” before creation.
 - **Package cache** — hosts download `.deb` files through the hub over a
   reverse SSH forward, every package leaves for the internet once; without
   the hub apt goes direct. A checkbox in the host form, the limit and

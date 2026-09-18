@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/piqab/nkt/internal/jobs"
@@ -34,6 +35,7 @@ type hostPreflight struct {
 	MissingPackages []string `json:"missing_packages"`
 	ImagesDownload  []string `json:"images_downloaded"`
 	Bridges         []string `json:"bridges"`
+	WireGuard       bool     `json:"wireguard"`
 	Networks        []struct {
 		Name   string `json:"name"`
 		Active bool   `json:"active"`
@@ -89,6 +91,9 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 	if spec.NetworkMode != "" && spec.NetworkMode != NetworkNAT {
 		jc.Log("hub.preflightPlanNetwork", spec.NetworkMode)
 	}
+	if spec.NetworkMode == NetworkWireGuard {
+		jc.Log("hub.preflightPlanMesh", wgPort)
+	}
 	if spec.Expose {
 		jc.Log("hub.preflightPlanExpose", hostByID[spec.HostID].Addr, exposeSummary(spec))
 	}
@@ -126,6 +131,7 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 			add(false, false, "hub.preflightHostAPI", err)
 			continue
 		}
+		hostByID[host.ID] = host
 		jc.Log("hub.preflightHostHeader", host.Name)
 		if host.Status != store.HostStatusOnline {
 			add(false, false, "hub.preflightHostOffline", host.Name)
@@ -160,12 +166,34 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 				add(true, false, "hub.preflightHostNodeOK", host.Name)
 			}
 		}
-		if !vms {
+		wg := spec.NetworkMode == NetworkWireGuard
+		if !vms && !wg {
 			continue
 		}
 		var pf hostPreflight
 		if _, err := r.m.HostAPI(ctx, host.ID, "GET", "/api/vm/preflight", nil, &pf); err != nil {
 			add(false, false, "hub.preflightHostAPI", err)
+			continue
+		}
+		if wg {
+			// Туннель: адрес хоста — конечная точка для соседей,
+			// wireguard-tools ставится при создании, если нет.
+			if host.Addr == "" {
+				add(false, false, "hub.preflightHostNoAddr", host.Name)
+			} else {
+				add(true, false, "hub.preflightWGEndpoint", host.Addr, wgPort)
+			}
+			add(true, !pf.WireGuard, map[bool]string{true: "hub.preflightWGOK", false: "hub.preflightWGMissing"}[pf.WireGuard])
+			if prepare && !pf.WireGuard {
+				jc.Log("hub.preflightPrepPackages", "wireguard-tools")
+				if _, err := r.m.HostAPI(ctx, host.ID, "POST", "/api/system/apt/download", map[string]any{"packages": []string{"wireguard-tools"}}, nil); err != nil {
+					jc.Log("hub.preflightPrepFailed", err)
+				} else {
+					jc.Log("hub.preflightPrepPackagesDone")
+				}
+			}
+		}
+		if !vms {
 			continue
 		}
 		add(pf.KVM, false, map[bool]string{true: "hub.preflightKVMOK", false: "hub.preflightKVMMissing"}[pf.KVM])
@@ -308,6 +336,27 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 				} else {
 					jc.Log("hub.preflightPrepPackagesDone")
 				}
+			}
+		}
+	}
+	// Хосты туннеля видят друг друга? ICMP могут и резать, поэтому
+	// только предупреждение.
+	if spec.NetworkMode == NetworkWireGuard {
+		var ids []int64
+		for id := range seen {
+			ids = append(ids, id)
+		}
+		sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+		if len(ids) > 1 {
+			jc.Log("hub.preflightPeersHeader")
+		}
+		for _, a := range ids {
+			for _, b := range ids {
+				if a == b || hostByID[b].Addr == "" || hostByID[a].Status != store.HostStatusOnline {
+					continue
+				}
+				ok, detail := r.hostPing(ctx, a, hostByID[b].Addr)
+				add(true, !ok, map[bool]string{true: "hub.preflightPeerPingOK", false: "hub.preflightPeerPing"}[ok], hostByID[a].Name, hostByID[b].Name, detail)
 			}
 		}
 	}
