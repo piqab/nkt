@@ -206,7 +206,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 	goos, goarch := parts[0], parts[1]
 	report("hub.sshUnavailableUsingTunnel", goos, goarch)
 
-	binPath, err := m.ensureBinary(ctx, goos, goarch, report)
+	binPath, err := m.ensureBinary(ctx, goos, goarch, report, job.replaceLast)
 	if err != nil {
 		return fail(err)
 	}

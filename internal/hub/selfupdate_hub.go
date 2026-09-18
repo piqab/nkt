@@ -81,7 +81,7 @@ func (m *Manager) applyVersion(ctx context.Context, version string) error {
 	name := fmt.Sprintf("nkt-%s-%s-%s", runtime.GOOS, runtime.GOARCH, version)
 	binPath := filepath.Join(m.cfg.HubBinCacheDir(), name)
 	if _, err := os.Stat(binPath); err != nil {
-		if err := m.downloadReleaseBinary(ctx, runtime.GOOS, runtime.GOARCH, version, binPath, report); err != nil {
+		if err := m.downloadReleaseBinary(ctx, runtime.GOOS, runtime.GOARCH, version, binPath, report, nil); err != nil {
 			return msgs.Errorf("hub.downloadingBinaryV", version, err)
 		}
 	}

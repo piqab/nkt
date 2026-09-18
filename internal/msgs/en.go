@@ -137,7 +137,8 @@ var enCatalog = map[string]string{
 	"hub.uploadingUnitAndConfig":    "Uploading the systemd unit and config…",
 	"hub.installingFiles":           "Installing files…",
 	"hub.startingSystemdService":    "Starting the systemd service…",
-	"hub.uploadingBinary":           "Uploading the binary… %d%% (%.1f MB of %.1f MB)",
+	"hub.uploadingBinary":           "Uploading the binary to the host over SSH… %d%% (%.1f MB of %.1f MB)",
+	"hub.downloadingBinaryProgress": "Downloading the binary from GitHub… %d%% (%.1f MB of %.1f MB)",
 
 	"hub.sendingViaTunnel":          "Sending the binary and config over the fallback channel…",
 	"hub.hostAcceptedRestarting":    "The host accepted the update and is restarting the service…",

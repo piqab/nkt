@@ -926,7 +926,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		return fail(err)
 	}
 
-	binPath, err := m.ensureBinary(ctx, goos, goarch, report)
+	binPath, err := m.ensureBinary(ctx, goos, goarch, report, job.replaceLast)
 	if err != nil {
 		return fail(err)
 	}
