@@ -44,9 +44,11 @@ type hostPreflight struct {
 }
 
 // runPreflight проходит проверки по каждому хосту размещения, пишет
-// чек-лист в журнал и возвращает, сколько провалов. prepare — заодно
-// скачать образы и пакеты в кэш.
-func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec ClusterSpec, prepare bool) (failed int, err error) {
+// чек-лист в журнал и возвращает проваленные пункты. prepare — заодно
+// скачать образы и пакеты в кэш; selfID — запись самого создаваемого
+// кластера (уже заведена к этому моменту), её проверка имени не
+// считает занятой.
+func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec ClusterSpec, prepare bool, selfID int64) (failed []string, err error) {
 	lang := jc.Lang()
 	var checks []preflightCheck
 	// Строка чек-листа пишется сразу — под заголовком своего хоста.
@@ -105,7 +107,7 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 	// Имя свободно.
 	if list, err := r.m.db.ListClusters(ctx); err == nil {
 		for _, c := range list {
-			if c.Name == spec.Name {
+			if c.Name == spec.Name && c.ID != selfID {
 				add(false, false, "hub.preflightNameTaken", spec.Name)
 			}
 		}
@@ -378,6 +380,27 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 	return r.finishPreflight(jc, checks), nil
 }
 
+// failedMessages — тексты проваленных проверок.
+func failedMessages(checks []preflightCheck) []string {
+	var out []string
+	for _, c := range checks {
+		if !c.ok {
+			out = append(out, c.message)
+		}
+	}
+	return out
+}
+
+// preflightError — ошибка задания с перечнем проваленных пунктов: в
+// карточке кластера виден сам провал, а не только «сначала исправьте».
+func preflightError(failed []string) error {
+	list := failed
+	if len(list) > 3 {
+		list = append(append([]string{}, list[:3]...), "…")
+	}
+	return msgs.Errorf("hub.preflightFailedList", len(failed), strings.Join(list, "; "))
+}
+
 // isLoopback — адрес, по которому соседи хост не найдут.
 func isLoopback(addr string) bool {
 	if addr == "localhost" {
@@ -398,12 +421,12 @@ func countFailed(checks []preflightCheck) int {
 }
 
 // finishPreflight печатает итог.
-func (r *ClusterRunner) finishPreflight(jc *jobs.Context, checks []preflightCheck) int {
-	failed := countFailed(checks)
-	if failed == 0 {
+func (r *ClusterRunner) finishPreflight(jc *jobs.Context, checks []preflightCheck) []string {
+	failed := failedMessages(checks)
+	if len(failed) == 0 {
 		jc.Log("hub.preflightOK")
 	} else {
-		jc.Log("hub.preflightFailed", failed)
+		jc.Log("hub.preflightFailed", len(failed))
 	}
 	return failed
 }
