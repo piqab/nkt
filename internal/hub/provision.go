@@ -240,7 +240,7 @@ func generatePassword() (string, error) {
 // progress reports a step's repeated in-flight updates (currently just the
 // binary upload's percentage) — replacing the last log line in place rather
 // than adding a new one each time, unlike report's one-off step messages.
-func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envContent, binPath, servicePath, envPath string, report, progress func(key string, args ...any)) error {
+func stageFiles(client *ssh.Client, sshUser string, src binarySource, unitContent, envContent, binPath, servicePath, envPath string, report, progress func(key string, args ...any)) error {
 	// UseConcurrentWrites — без него pkg/sftp шлёт пакеты по 32 КиБ строго
 	// по одному, дожидаясь ответа на каждый: 16 МБ бинарника — это ~500
 	// круговых обходов, и на дальнем хосте заливка тянется минуту при
@@ -255,8 +255,41 @@ func stageFiles(client *ssh.Client, sshUser, localBinaryPath, unitContent, envCo
 	defer func() { _, _ = runRemote(client, "rm -rf "+tmpDir) }()
 
 	tmpBin := gopath.Join(tmpDir, "nkt")
-	if err := uploadFile(sftpClient, localBinaryPath, tmpBin, 0o644, progress); err != nil {
-		return msgs.Errorf("hub.uploadingBinary2", err)
+	if err := sftpClient.MkdirAll(tmpDir); err != nil {
+		return msgs.Errorf("collect.creatingDirectory", tmpDir, err)
+	}
+	// Откуда брать бинарник: запомненный способ, иначе проба; без копии
+	// на GitHub — только SFTP.
+	via := BinaryViaSFTP
+	if src.Release != nil {
+		switch src.Via {
+		case BinaryViaGitHub, BinaryViaSFTP:
+			via = src.Via
+			report("hub.deliveryRemembered", via)
+		default:
+			via = probeDelivery(client, sftpClient, tmpDir, src.Release, report)
+			if src.OnVia != nil {
+				src.OnVia(via)
+			}
+		}
+	}
+	if via == BinaryViaGitHub {
+		if err := downloadOnHost(client, src.Release, tmpBin, progress); err != nil {
+			// Не ошибка задания: бинарник есть у хаба, а выбор
+			// сбрасывается — в следующий раз проба повторится.
+			report("hub.hostDownloadFailedFallback", err)
+			via = BinaryViaSFTP
+			if src.OnVia != nil {
+				src.OnVia("")
+			}
+		} else {
+			report("hub.hostDownloadVerified")
+		}
+	}
+	if via == BinaryViaSFTP {
+		if err := uploadFile(sftpClient, src.LocalPath, tmpBin, 0o644, progress); err != nil {
+			return msgs.Errorf("hub.uploadingBinary2", err)
+		}
 	}
 
 	report("hub.uploadingUnitAndConfig")
