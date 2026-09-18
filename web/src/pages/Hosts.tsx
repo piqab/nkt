@@ -11,6 +11,7 @@ import {
   QuestionCircleOutlined,
   SyncOutlined,
   WarningFilled,
+  CloudDownloadOutlined,
 } from '@ant-design/icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
@@ -154,6 +155,19 @@ function HostStatusBadge({ status }: { status: HubHost['status'] }) {
  * host's tunnel listener yet (freshly installed, or the host itself
  * offline/unreachable on that port).
  */
+/** Кэш пакетов хаба: включён ли на хосте и держится ли проброс сейчас. */
+function AptProxyBadge({ host }: { host: HubHost }) {
+  const { t } = useTranslation()
+  if (!host.apt_via_hub) return null
+  return (
+    <Tooltip title={t(host.apt_proxy_connected ? 'hosts.aptProxyConnected' : 'hosts.aptProxyWaiting')}>
+      <span aria-label="apt" style={{ marginLeft: '0.35rem' }}>
+        <CloudDownloadOutlined style={{ color: host.apt_proxy_connected ? 'var(--status-ok)' : 'var(--text-muted)' }} />
+      </span>
+    </Tooltip>
+  )
+}
+
 function TunnelChannelBadge({ host }: { host: HubHost }) {
   const { t } = useTranslation()
   if (!host.tunnel_enabled) return <span className="small muted">—</span>
@@ -1246,7 +1260,15 @@ export default function Hosts({
     {
       title: t('hosts.colChannel'),
       key: 'channel',
-      render: (_, h) => (h.id === LOCAL_HOST_ID ? <span className="small muted">—</span> : <TunnelChannelBadge host={h} />),
+      render: (_, h) =>
+        h.id === LOCAL_HOST_ID ? (
+          <span className="small muted">—</span>
+        ) : (
+          <>
+            <TunnelChannelBadge host={h} />
+            <AptProxyBadge host={h} />
+          </>
+        ),
     },
     {
       title: t('hosts.colVersion'),
@@ -1924,6 +1946,7 @@ type HostFormValues = {
   group?: string
   terminal_enabled: boolean
   tunnel_enabled: boolean
+  apt_via_hub: boolean
 }
 
 /**
@@ -1993,6 +2016,7 @@ function HostForm({
     try {
       const terminalEnabled = values.terminal_enabled ?? false
       const tunnelEnabled = values.tunnel_enabled ?? false
+      const aptViaHub = values.apt_via_hub ?? false
       const body = {
         name: values.name,
         addr: values.addr,
@@ -2003,6 +2027,7 @@ function HostForm({
         secret: values.secret ?? '',
         terminal_enabled: terminalEnabled,
         tunnel_enabled: tunnelEnabled,
+        apt_via_hub: aptViaHub,
       }
       // Правка становится умолчанием для следующих хостов — ровно то, чего
       // ждёшь от поля, которое каждый раз показывает прошлое значение.
@@ -2086,6 +2111,9 @@ function HostForm({
         // exposure from having it ready. Editing an existing host still
         // defaults to whatever it already has.
         tunnel_enabled: initial?.tunnel_enabled ?? true,
+        // Тоже по умолчанию: без хаба apt идёт напрямую, так что риска
+        // нет, а трафик и время установки экономятся сразу.
+        apt_via_hub: initial?.apt_via_hub ?? true,
       }}
     >
       {!editing && <p className="small muted">{t('hosts.addHostHint')}</p>}
@@ -2254,6 +2282,14 @@ function HostForm({
           <div className="small muted" style={{ fontWeight: 400 }}>
             {t('hosts.tunnelEnabledHint')}
             {t(editing ? 'hosts.reinstallsOnChange' : 'hosts.appliesOnFirstInstall')}
+          </div>
+        </Checkbox>
+      </Form.Item>
+      <Form.Item name="apt_via_hub" valuePropName="checked" style={{ marginBottom: '0.4rem' }}>
+        <Checkbox>
+          {t('hosts.aptViaHub')}
+          <div className="small muted" style={{ fontWeight: 400 }}>
+            {t('hosts.aptViaHubHint')}
           </div>
         </Checkbox>
       </Form.Item>

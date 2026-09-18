@@ -47,5 +47,9 @@ line.
 - The trivy **vulnerability database** is shared by all hosts: updated on a
   schedule and by a button, hosts take it from the hub instead of
   downloading their own.
+- **Package cache** — hosts download `.deb` files through the hub over a
+  reverse SSH forward, every package leaves for the internet once; without
+  the hub apt goes direct. A checkbox in the host form, the limit and
+  clearing — in “About”.
 - **ClamAV database** — a copy of the signature database on the hub; on a
   host page, in the “Malware” tab, “database from hub” uploads it over SSH.

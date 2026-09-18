@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/piqab/nkt/internal/aptcache"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -227,6 +228,13 @@ type Manager struct {
 	vulnDBProgress   string
 	vulnDBErr        string
 
+	// aptCache — кэш пакетов (см. aptproxy.go); aptProxyLive — хосты, на
+	// которые сейчас держится проброс.
+	aptCacheOnce sync.Once
+	aptCache     *aptcache.Cache
+	aptProxyMu   sync.Mutex
+	aptProxyLive map[int64]bool
+
 	// clamDBMu — то же для копии базы ClamAV (см. clamdb.go).
 	clamDBMu         sync.Mutex
 	clamDBRefreshing bool
@@ -289,6 +297,7 @@ func (m *Manager) Run(ctx context.Context) {
 	go m.versionCheckLoop(ctx)
 	go m.vulnDBRefreshLoop(ctx)
 	go m.clamDBRefreshLoop(ctx)
+	go m.maintainAptProxies(ctx)
 	m.evictIdleConns(ctx)
 }
 
@@ -945,6 +954,16 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	if err := activateService(client, host.SSHUser, report); err != nil {
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
 		return fail(err)
+	}
+	// Кэш пакетов хаба: конфиг apt кладётся тем же соединением. Ошибка
+	// здесь не роняет установку — nkt уже работает, а без прокси apt
+	// просто ходит напрямую.
+	if host.AptViaHub {
+		if err := configureAptProxy(client, host.SSHUser, m.cfg.HubAptCachePort, true); err != nil {
+			report("hub.aptProxyConfigureWarn", err)
+		} else {
+			report("hub.aptProxyConfigured")
+		}
 	}
 	// Не меняем состояние хоста, только предупреждаем: без системной шины
 	// nkt не выйдет из песочницы своего юнита, и «Терминал» будет

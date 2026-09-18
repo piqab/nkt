@@ -251,6 +251,12 @@ type Config struct {
 	// ClamAV для раздачи хостам; действует только после первого ручного
 	// обновления (см. internal/hub/clamdb.go). 0 — не обновлять.
 	HubClamDBRefreshInterval time.Duration
+	// HubAptCacheMaxGB — лимит кэша пакетов на хабе (internal/aptcache),
+	// гигабайты; значение из настроек хаба («О системе») имеет приоритет.
+	HubAptCacheMaxGB int
+	// HubAptCachePort — порт на хосте (127.0.0.1), куда хаб пробрасывает
+	// свой кэш по SSH; его же слушает apt через Proxy-Auto-Detect.
+	HubAptCachePort int
 	// HubTunnelPort is the port the hub dials on every TunnelEnabled host
 	// for the reverse-tunnel fallback channel (see internal/hub/tunneldial.go)
 	// — the same port is pushed to each such host at install time as
@@ -392,6 +398,8 @@ func Load() (*Config, error) {
 		HubUpdateCheckInterval:   envDur("NKT_HUB_UPDATE_CHECK_INTERVAL", 6*time.Hour),
 		HubVulnDBRefreshInterval: envDur("NKT_HUB_VULNDB_REFRESH_INTERVAL", 12*time.Hour),
 		HubClamDBRefreshInterval: envDur("NKT_HUB_CLAMDB_REFRESH_INTERVAL", 24*time.Hour),
+		HubAptCacheMaxGB:         envInt("NKT_HUB_APTCACHE_MAX_GB", 20),
+		HubAptCachePort:          envInt("NKT_HUB_APTCACHE_PORT", 3142),
 		HubTunnelPort:            envInt("NKT_HUB_TUNNEL_PORT", 8078),
 	}
 

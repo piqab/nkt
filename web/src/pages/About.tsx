@@ -1,8 +1,20 @@
 import { useEffect, useState } from 'react'
-import { Button } from 'antd'
+import { Button, InputNumber } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HubVersionInfo, HubVulnDBInfo } from '../types'
+
+interface AptCacheInfo {
+  available: boolean
+  entries: number
+  size_bytes: number
+  max_bytes: number
+  hits: number
+  misses: number
+  bytes_served: number
+  bytes_fetched: number
+  connected_hosts: number
+}
 import { Banner, Card, ErrorNote, InfoHint, Loading, formatBytesShort, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
 
@@ -37,6 +49,19 @@ export default function About() {
   const [clamDBFast, setClamDBFast] = useState(false)
   const clamdb = useApi<HubVulnDBInfo & { size_bytes?: number }>('/hub/clamdb', clamDBFast ? 5_000 : 60_000)
   const [clamDBBusy, setClamDBBusy] = useState(false)
+  const aptcache = useApi<AptCacheInfo>('/hub/aptcache', 30_000)
+  const [aptMax, setAptMax] = useState<number | null>(null)
+  const [aptBusy, setAptBusy] = useState<string | null>(null)
+  async function aptCall(path: string, body?: unknown) {
+    setAptBusy(path)
+    try {
+      await api(path, { method: 'POST', body })
+      await aptcache.reload()
+      setAptMax(null)
+    } finally {
+      setAptBusy(null)
+    }
+  }
   useEffect(() => {
     setClamDBFast(!!clamdb.data?.refreshing)
   }, [clamdb.data?.refreshing])
@@ -300,6 +325,57 @@ export default function About() {
             <div className="row" style={{ marginTop: '1rem' }}>
               <Button onClick={refreshVulnDB} loading={vulnDBBusy || vulndb.data?.refreshing}>
                 {t('about.vulnDBRefreshNow')}
+              </Button>
+            </div>
+          </>
+        )}
+      </Card>
+
+      <Card title={t('about.aptCacheTitle')} subtitle={t('about.aptCacheHint')}>
+        {aptcache.loading && !aptcache.data ? (
+          <Loading what={t('about.aptCacheTitle')} />
+        ) : !aptcache.data?.available ? (
+          <p className="small muted">{t('about.aptCacheUnavailable')}</p>
+        ) : (
+          <>
+            <div className="row" style={{ gap: '2rem', flexWrap: 'wrap' }}>
+              <div>
+                <div className="small muted">{t('about.aptCacheSize')}</div>
+                <div>
+                  {formatBytesShort(aptcache.data.size_bytes)} · {t('about.aptCacheEntries', { count: aptcache.data.entries })}
+                </div>
+              </div>
+              <div>
+                <div className="small muted">{t('about.aptCacheHits')}</div>
+                <div>
+                  {aptcache.data.hits} / {aptcache.data.misses}
+                </div>
+              </div>
+              <div>
+                <div className="small muted">{t('about.aptCacheTraffic')}</div>
+                <div className="small">{t('about.aptCacheTrafficValue', { served: formatBytesShort(aptcache.data.bytes_served), fetched: formatBytesShort(aptcache.data.bytes_fetched) })}</div>
+              </div>
+              <div>
+                <div className="small muted">{t('about.aptCacheHosts')}</div>
+                <div>{aptcache.data.connected_hosts}</div>
+              </div>
+            </div>
+            <div className="row" style={{ marginTop: '1rem', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span className="small">{t('about.aptCacheLimit')}</span>
+              <InputNumber min={0} max={10000} value={aptMax ?? Math.round(aptcache.data.max_bytes / 2 ** 30)} onChange={(v) => setAptMax(v ?? 0)} addonAfter={t('about.gb')} style={{ width: '9rem' }} />
+              <Button size="small" disabled={aptMax === null} loading={aptBusy === '/hub/aptcache/settings'} onClick={() => void aptCall('/hub/aptcache/settings', { max_gb: aptMax })}>
+                {t('common.save')}
+              </Button>
+              <Button
+                size="small"
+                danger
+                loading={aptBusy === '/hub/aptcache/clear'}
+                onClick={async () => {
+                  if (!(await confirmAction(t('about.aptCacheClearConfirm')))) return
+                  await aptCall('/hub/aptcache/clear')
+                }}
+              >
+                {t('about.aptCacheClear')}
               </Button>
             </div>
           </>
