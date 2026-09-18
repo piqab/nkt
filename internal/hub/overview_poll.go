@@ -183,6 +183,21 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	// машин лишний вызов ни к чему.
 	vmStates := m.pollVMStates(ctx, hostID, dial, cookie)
 
+	// Обновление, которое хаб посчитал проваленным (например, не дождался
+	// /health на медленном хосте), а служба всё же поднялась новой версией:
+	// записанная «установленная» версия остаётся старой, и хаб предлагает
+	// обновить снова — и снова. Если хост сам сообщает ровно версию хаба,
+	// значит обновление состоялось, и запись приводится к факту. Любое
+	// другое расхождение остаётся видимым: оно и есть признак того, что
+	// обновление не подействовало.
+	if body.Version != "" && body.Version == m.version {
+		if h, err := m.db.HostByID(ctx, hostID); err == nil && h.NktVersion != body.Version && h.Status == store.HostStatusOnline {
+			if err := m.db.SetHostVersion(ctx, hostID, body.Version); err == nil {
+				m.log.Info("host runs the hub's version, installed version reconciled", "host", h.Name, "version", body.Version)
+			}
+		}
+	}
+
 	now := time.Now()
 	m.overviewMu.Lock()
 	m.overview[hostID] = hostOverview{

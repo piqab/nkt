@@ -964,7 +964,10 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// миграцией базы всё равно может занять больше прежних 30 секунд —
 	// а проваленное здесь обновление хаб потом повторяет заново, хотя
 	// служба уже работает.
-	healthCtx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	// Пять минут, а не полторы: обновление через несколько версий тянет
+	// миграции базы и первый скан, и на слабом VPS полутора минут не
+	// хватало — задание падало, хотя служба поднималась и работала.
+	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 	if err := waitForHealth(healthCtx, client.Dial); err != nil {
 		return fail(err)
