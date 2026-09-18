@@ -3,7 +3,8 @@ import { Button, Checkbox, Input, InputNumber, Select, Tag, Tooltip } from 'antd
 import { ClusterOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, useApi } from '../api'
-import type { HubHost } from '../types'
+import type { HubHost, Job } from '../types'
+import { JobLogModal } from '../pages/Jobs'
 import { Banner, Card, ErrorNote, Modal, formatRelative } from '../components/ui'
 import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
@@ -69,6 +70,9 @@ export function NewClusterModal({
   const [busy, setBusy] = useState<'create' | 'dry' | null>(null)
   const [prepare, setPrepare] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Журнал сухого прогона открывается поверх формы: настройки остаются,
+  // после проверок можно поправить и запустить создание.
+  const [dryJob, setDryJob] = useState<Job | null>(null)
   const downloaded = new Set((images.data?.local ?? []).filter((l) => l.downloaded).map((l) => l.id))
   const catalog = images.data?.catalog ?? []
   // Ubuntu 24.04 — умолчание из плана; иначе первый образ каталога.
@@ -105,7 +109,11 @@ export function NewClusterModal({
         method: 'POST',
         body: dry ? { ...body(), prepare } : body(),
       })
-      onStarted(t(dry ? 'clusters.dryStarted' : 'clusters.started', { name }), res.job_id)
+      if (dry) {
+        setDryJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
+        return
+      }
+      onStarted(t('clusters.started', { name }), res.job_id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -229,6 +237,7 @@ export function NewClusterModal({
           {t('clusters.create')}
         </Button>
       </div>
+      {dryJob && <JobLogModal job={dryJob} scope="/hosts/local" onClose={() => setDryJob(null)} />}
     </Modal>
   )
 }

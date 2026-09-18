@@ -2218,7 +2218,6 @@
     "dryRun": "Dry run",
     "dryHint": "Check the host (KVM, libvirt, disk, memory, network, image, internet, free names and ports) and show the machine plan without creating anything; with preparation — also download the image and packages into caches",
     "dryPrepare": "also prepare: download the image and packages into caches",
-    "dryStarted": "Dry run of cluster {{name}} started — see the job log.",
     "cilium": "Cilium",
     "ciliumHint": "instead of flannel: installed after the control plane via the cilium CLI (latest stable)",
     "kpr": "replace kube-proxy with Cilium",
