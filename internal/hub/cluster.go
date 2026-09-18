@@ -136,6 +136,11 @@ type ClusterJobParams struct {
 	ClusterID int64 `json:"cluster_id"`
 	// AddWorkers — для cluster.add: сколько worker'ов добавить.
 	AddWorkers int `json:"add_workers,omitempty"`
+	// DryRun — только проверки (и подготовка при Prepare); Spec — вместо
+	// записи кластера, которой в сухом прогоне не заводится.
+	DryRun  bool         `json:"dry_run,omitempty"`
+	Prepare bool         `json:"prepare,omitempty"`
+	Spec    *ClusterSpec `json:"spec,omitempty"`
 }
 
 type clusterResume struct {
@@ -162,6 +167,21 @@ func (r *ClusterRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var p ClusterJobParams
 	if err := jc.Params(&p); err != nil {
 		return msgs.Errorf("hub.parsingJob", err)
+	}
+	if p.DryRun && p.Spec != nil {
+		host, err := r.m.db.HostByID(ctx, p.Spec.HostID)
+		if err != nil {
+			return err
+		}
+		jc.Step(1, 1, msgs.T(jc.Lang(), "hub.clusterStepPreflight"))
+		failed, err := r.runPreflight(ctx, jc, host, *p.Spec, p.Prepare)
+		if err != nil {
+			return err
+		}
+		if failed > 0 {
+			return msgs.Errorf("hub.preflightFailed", failed)
+		}
+		return nil
 	}
 	cl, err := r.m.db.ClusterByID(ctx, p.ClusterID)
 	if err != nil {
@@ -214,8 +234,24 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		}
 	}
 	all := append(append([]string{}, cps...), workers...)
-	total := len(all) + 3
+	total := len(all) + 4
 	step := 0
+
+	// 0. Проверки — до первой машины. При продолжении после перезапуска
+	// не повторяются: машины уже есть, и «имя занято» было бы ложью.
+	step++
+	jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepPreflight"))
+	if len(done.Hosts) == 0 && p.AddWorkers == 0 {
+		failed, err := r.runPreflight(ctx, jc, host, spec, false)
+		if err != nil {
+			return err
+		}
+		if failed > 0 {
+			return msgs.Errorf("hub.preflightFailed", failed)
+		}
+	} else {
+		jc.Log("hub.preflightSkipped")
+	}
 
 	// 1. Машины: по одной, с установкой nkt — как «Новая машина».
 	for _, name := range all {

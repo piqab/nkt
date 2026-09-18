@@ -257,6 +257,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/vm/templates", s.handleVMTemplates)
 			r.Get("/vm/address", s.handleVMAddress)
 			r.Get("/vm/networks", s.handleVMNetworks)
+			r.Get("/vm/preflight", s.handleVMPreflight)
+			r.Get("/net/check", s.handleNetCheck)
 			r.Get("/vm/networks/free-subnet", s.handleVMFreeSubnet)
 
 			r.Get("/jobs", s.handleJobList)
@@ -358,6 +360,7 @@ func (s *Server) Handler() http.Handler {
 
 				r.Post("/vm/tools/install", s.handleVMToolsInstall)
 				r.Post("/vm/images/download", s.handleVMImageDownload)
+				r.Post("/system/apt/download", s.handleAptDownload)
 				r.Post("/vm/images/delete", s.handleVMImageDelete)
 				r.Post("/vm/images/upload", s.handleVMImageUpload)
 				r.Post("/vm/images/host-delete", s.handleVMHostImageDelete)

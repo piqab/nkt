@@ -63,7 +63,8 @@ export function NewClusterModal({
   const [network, setNetwork] = useState('')
   const [cp, setCP] = useState({ vcpus: 2, mem: 4096, disk: 30 })
   const [w, setW] = useState({ vcpus: 2, mem: 4096, disk: 30 })
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<'create' | 'dry' | null>(null)
+  const [prepare, setPrepare] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const downloaded = new Set((images.data?.local ?? []).filter((l) => l.downloaded).map((l) => l.id))
   const catalog = images.data?.catalog ?? []
@@ -71,13 +72,7 @@ export function NewClusterModal({
   const effectiveImage = imageID || catalog.find((i) => /ubuntu.*24/i.test(i.id + i.name))?.id || catalog[0]?.id || ''
   const machines = (topology === 'single' ? 1 : topology === 'cp3' ? 3 : 1) + (topology === 'single' ? 0 : workers)
 
-  async function start() {
-    setBusy(true)
-    setError(null)
-    try {
-      const res = await api<{ id: number; job_id: number }>('/hub/clusters', {
-        method: 'POST',
-        body: {
+  const body = () => ({
           name,
           host_id: host.id,
           flavor,
@@ -92,13 +87,21 @@ export function NewClusterModal({
           w_vcpus: w.vcpus,
           w_memory_mb: w.mem,
           w_disk_gb: w.disk,
-        },
+  })
+
+  async function start(dry: boolean) {
+    setBusy(dry ? 'dry' : 'create')
+    setError(null)
+    try {
+      const res = await api<{ id?: number; job_id: number }>(dry ? '/hub/clusters/dry-run' : '/hub/clusters', {
+        method: 'POST',
+        body: dry ? { ...body(), prepare } : body(),
       })
-      onStarted(t('clusters.started', { name }), res.job_id)
+      onStarted(t(dry ? 'clusters.dryStarted' : 'clusters.started', { name }), res.job_id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
   }
 
@@ -181,8 +184,17 @@ export function NewClusterModal({
         </span>
       </label>
       <p className="small muted">{t('clusters.summary', { machines, flavor, host: host.name })}</p>
-      <div className="row" style={{ justifyContent: 'flex-end' }}>
-        <Button type="primary" loading={busy} disabled={!name || !effectiveImage} onClick={() => void start()}>
+      <div className="row" style={{ justifyContent: 'flex-end', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+          <Checkbox checked={prepare} onChange={(e) => setPrepare(e.target.checked)} />
+          <span className="small">{t('clusters.dryPrepare')}</span>
+        </label>
+        <Tooltip title={t('clusters.dryHint')}>
+          <Button loading={busy === 'dry'} disabled={!name || !effectiveImage || busy === 'create'} onClick={() => void start(true)}>
+            {t('clusters.dryRun')}
+          </Button>
+        </Tooltip>
+        <Button type="primary" loading={busy === 'create'} disabled={!name || !effectiveImage || busy === 'dry'} onClick={() => void start(false)}>
           {t('clusters.create')}
         </Button>
       </div>

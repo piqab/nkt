@@ -2213,7 +2213,11 @@
     "colRole": "Role",
     "colState": "Link",
     "reachable": "reachable",
-    "unreachable": "unreachable"
+    "unreachable": "unreachable",
+    "dryRun": "Dry run",
+    "dryHint": "Check the host (KVM, libvirt, disk, memory, network, image, internet, free names and ports) and show the machine plan without creating anything; with preparation — also download the image and packages into caches",
+    "dryPrepare": "also prepare: download the image and packages into caches",
+    "dryStarted": "Dry run of cluster {{name}} started — see the job log."
   },
   "k8s": {
     "notInstalled": "Kubernetes is not installed on this host. Clusters are created on the hub: “new cluster” next to a host with virtualization.",

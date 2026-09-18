@@ -94,7 +94,7 @@ func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind: KindClusterCreate, Title: msgs.Tc(r.Context(), "hub.clusterJobTitle", spec.Name, host.Name),
-		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: spec.ControlPlanes() + spec.Workers + 3,
+		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: spec.ControlPlanes() + spec.Workers + 4,
 		Params: ClusterJobParams{ClusterID: id},
 	})
 	if err != nil {
@@ -104,6 +104,44 @@ func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	s.db.Audit(r.Context(), user, "cluster.create", spec.Name, "ok", host.Name)
 	writeJSON(w, http.StatusOK, map[string]any{"id": id, "job_id": jobID})
+}
+
+// handleClusterDryRun — проверки и подготовка без создания: задание с
+// чек-листом в журнале.
+func (s *Server) handleClusterDryRun(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ClusterSpec
+		Prepare bool `json:"prepare"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	spec := req.ClusterSpec
+	if err := spec.Validate(); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if s.jobs == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
+		return
+	}
+	host, err := s.db.HostByID(r.Context(), spec.HostID)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	user := auth.Username(r.Context())
+	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
+		Kind: KindClusterCreate, Title: msgs.Tc(r.Context(), "hub.clusterDryRunTitle", spec.Name, host.Name),
+		Queue: fmt.Sprintf("cluster-dry:%d", host.ID), Author: user, Steps: 1,
+		Params: ClusterJobParams{DryRun: true, Prepare: req.Prepare, Spec: &spec},
+	})
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": jobID})
 }
 
 func clusterIDParam(r *http.Request) (int64, error) {
@@ -184,7 +222,7 @@ func (s *Server) handleClusterAddWorkers(w http.ResponseWriter, r *http.Request)
 	_ = s.db.SetClusterStatus(r.Context(), id, store.ClusterCreating, "")
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind: KindClusterCreate, Title: msgs.Tc(r.Context(), "hub.clusterAddJobTitle", req.Count, cl.Name),
-		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: req.Count + 3,
+		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: req.Count + 4,
 		Params: ClusterJobParams{ClusterID: id, AddWorkers: req.Count},
 	})
 	if err != nil {

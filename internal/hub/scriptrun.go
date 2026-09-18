@@ -520,9 +520,27 @@ func (r *ScriptRunner) waitCertJob(ctx context.Context, jc *jobs.Context, h stor
 func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptRunParams, done *scriptRunResume, st script.Step) error {
 	switch st.Kind {
 	case script.KindGroup, script.KindInstall, script.KindWait, script.KindVMCreate, script.KindVMAction,
-		script.KindDockerInst, script.KindCert, script.KindGitClone, script.KindSystem, script.KindK8sCreate, script.KindK8sDestroy:
+		script.KindDockerInst, script.KindCert, script.KindGitClone, script.KindSystem, script.KindK8sDestroy:
 		jc.Log("hub.scriptDryWould", st.Text)
 		return nil
+	case script.KindK8sCreate:
+		// Кластер в сухом прогоне — те же проверки, что и кнопка «Сухой
+		// прогон» в диалоге: план машин и чек-лист хоста, без подготовки.
+		h, err := r.hostByName(ctx, done, st.Host)
+		if err != nil {
+			return err
+		}
+		if id, ok := done.HostIDs[st.Host]; ok && id == 0 {
+			jc.Log("hub.scriptDryNewHost", st.Host)
+			return nil
+		}
+		spec, err := clusterSpecFromStep(h, st)
+		if err != nil {
+			return err
+		}
+		cr := &ClusterRunner{m: r.m, s: r.s}
+		_, err = cr.runPreflight(ctx, jc, h, spec, false)
+		return err
 	case script.KindHost:
 		done.HostIDs[st.Name] = 0
 		jc.Log("hub.scriptDryHost", st.Name, st.Args["addr"])
@@ -903,8 +921,9 @@ func stackName(path string) string {
 	return "stack"
 }
 
-// createCluster заводит кластер как диалог «Новый кластер» и ждёт задание.
-func (r *ScriptRunner) createCluster(ctx context.Context, jc *jobs.Context, h store.Host, st script.Step) error {
+// clusterSpecFromStep — спецификация кластера из строки сценария; общая
+// для запуска и сухого прогона.
+func clusterSpecFromStep(h store.Host, st script.Step) (ClusterSpec, error) {
 	atoi := func(k string, def int) int {
 		if v, ok := st.Args[k]; ok {
 			n, _ := strconv.Atoi(v)
@@ -932,7 +951,13 @@ func (r *ScriptRunner) createCluster(ctx context.Context, jc *jobs.Context, h st
 	cpu, mem, disk := atoi("cpu", 2), atoi("mem", 4096), atoi("disk", 30)
 	spec.CPVCPUs, spec.CPMemoryMB, spec.CPDiskGB = cpu, mem, disk
 	spec.WVCPUs, spec.WMemoryMB, spec.WDiskGB = cpu, mem, disk
-	if err := spec.Validate(); err != nil {
+	return spec, spec.Validate()
+}
+
+// createCluster заводит кластер как диалог «Новый кластер» и ждёт задание.
+func (r *ScriptRunner) createCluster(ctx context.Context, jc *jobs.Context, h store.Host, st script.Step) error {
+	spec, err := clusterSpecFromStep(h, st)
+	if err != nil {
 		return err
 	}
 	raw, _ := json.Marshal(spec)
@@ -944,7 +969,7 @@ func (r *ScriptRunner) createCluster(ctx context.Context, jc *jobs.Context, h st
 	_ = r.m.db.CreateHostGroup(ctx, spec.Name)
 	jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindClusterCreate, Title: msgs.Tc(ctx, "hub.clusterJobTitle", spec.Name, h.Name),
-		Queue: fmt.Sprintf("cluster:%d", id), Author: jc.Job.Author, Steps: spec.ControlPlanes() + spec.Workers + 3,
+		Queue: fmt.Sprintf("cluster:%d", id), Author: jc.Job.Author, Steps: spec.ControlPlanes() + spec.Workers + 4,
 		Params: ClusterJobParams{ClusterID: id},
 	})
 	if err != nil {
