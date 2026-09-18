@@ -170,7 +170,7 @@ export function NewClusterModal({
           <Select
             value={effectiveImage}
             onChange={(v: string) => setImageID(v)}
-            options={catalog.map((img) => ({ value: img.id, label: img.name + (downloaded.has(img.id) ? '' : ` — ${t('hosts.newVMWillDownload')}`) }))}
+            options={catalog.map((img) => ({ value: img.id, label: img.name + (downloaded.has(img.id) ? '' : ` ${t('hosts.newVMWillDownload')}`) }))}
           />
         </label>
         <label>

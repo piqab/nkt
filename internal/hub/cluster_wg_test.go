@@ -8,7 +8,7 @@ import (
 
 func TestBuildWGPlan(t *testing.T) {
 	hosts := []store.Host{{ID: 7, Name: "hv1", Addr: "10.0.0.7"}, {ID: 9, Name: "hv2", Addr: "hv2.lan"}}
-	p, err := buildWGPlan(3, hosts)
+	p, err := buildWGPlan(3, hosts, func(h store.Host) string { return h.Addr })
 	if err != nil {
 		t.Fatal(err)
 	}

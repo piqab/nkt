@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"sort"
 	"strings"
@@ -178,10 +179,14 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 		if wg {
 			// Туннель: адрес хоста — конечная точка для соседей,
 			// wireguard-tools ставится при создании, если нет.
-			if host.Addr == "" {
+			ep := spec.wgEndpoint(host)
+			switch {
+			case ep == "":
 				add(false, false, "hub.preflightHostNoAddr", host.Name)
-			} else {
-				add(true, false, "hub.preflightWGEndpoint", host.Addr, wgPort)
+			case isLoopback(ep):
+				add(false, false, "hub.preflightHostLoopback", host.Name, ep)
+			default:
+				add(true, false, "hub.preflightWGEndpoint", ep, wgPort)
 			}
 			add(true, !pf.WireGuard, map[bool]string{true: "hub.preflightWGOK", false: "hub.preflightWGMissing"}[pf.WireGuard])
 			if prepare && !pf.WireGuard {
@@ -350,17 +355,36 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 		if len(ids) > 1 {
 			jc.Log("hub.preflightPeersHeader")
 		}
+		// Один адрес у двух хостов — соседи перепутают их между собой.
+		byAddr := map[string]string{}
+		for _, id := range ids {
+			ep := spec.wgEndpoint(hostByID[id])
+			if other, dup := byAddr[ep]; dup && ep != "" {
+				add(false, false, "hub.preflightAddrDuplicate", hostByID[id].Name, other, ep)
+			}
+			byAddr[ep] = hostByID[id].Name
+		}
 		for _, a := range ids {
 			for _, b := range ids {
-				if a == b || hostByID[b].Addr == "" || hostByID[a].Status != store.HostStatusOnline {
+				ep := spec.wgEndpoint(hostByID[b])
+				if a == b || ep == "" || isLoopback(ep) || hostByID[a].Status != store.HostStatusOnline {
 					continue
 				}
-				ok, detail := r.hostPing(ctx, a, hostByID[b].Addr)
+				ok, detail := r.hostPing(ctx, a, ep)
 				add(true, !ok, map[bool]string{true: "hub.preflightPeerPingOK", false: "hub.preflightPeerPing"}[ok], hostByID[a].Name, hostByID[b].Name, detail)
 			}
 		}
 	}
 	return r.finishPreflight(jc, checks), nil
+}
+
+// isLoopback — адрес, по которому соседи хост не найдут.
+func isLoopback(addr string) bool {
+	if addr == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(addr)
+	return ip != nil && ip.IsLoopback()
 }
 
 func countFailed(checks []preflightCheck) int {
