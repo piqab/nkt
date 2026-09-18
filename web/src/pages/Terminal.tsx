@@ -47,6 +47,14 @@ export default function TerminalPage({ me }: { me: Me }) {
   // mode opened it.
   const [tmuxMode, setTmuxMode] = useState(false)
   const [pendingStart, setPendingStart] = useState(false)
+  // Окно «kubectl»: откреплённый терминал на control plane кластера с
+  // готовым kubectl (?kubectl=1 — см. handleTerminalWS); подключается
+  // сразу, без кнопки.
+  const kubectlMode = isPopout && new URLSearchParams(location.search).get('kubectl') === '1'
+  useEffect(() => {
+    if (kubectlMode) setPendingStart(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
   // Mouse mode lives on the tmux session on the host, not here — read back
   // after connecting rather than assumed, since the session outlives this
   // page (and this process) and the operator can change the option from
@@ -54,7 +62,7 @@ export default function TerminalPage({ me }: { me: Me }) {
   // of the toolbar entirely.
   const [tmuxMouse, setTmuxMouse] = useState<boolean | null>(null)
   const [tmuxMouseBusy, setTmuxMouseBusy] = useState(false)
-  const wsUrl = wsURL(tmuxMode ? '/terminal/ws?tmux=1' : '/terminal/ws')
+  const wsUrl = wsURL(tmuxMode ? '/terminal/ws?tmux=1' : kubectlMode ? '/terminal/ws?kubectl=1' : '/terminal/ws')
 
 
   // Static for the page's lifetime (host config, not something that
@@ -170,8 +178,12 @@ export default function TerminalPage({ me }: { me: Me }) {
   useEffect(() => {
     if (!isPopout) return
     const name = new URLSearchParams(location.search).get('name')
-    document.title = name ? t('terminal.popoutTitle', { name }) : t('terminal.popoutTitleDefault')
-  }, [isPopout, location.search])
+    document.title = kubectlMode
+      ? t('terminal.popoutKubectlTitle', { name: name ?? '' })
+      : name
+        ? t('terminal.popoutTitle', { name })
+        : t('terminal.popoutTitleDefault')
+  }, [isPopout, kubectlMode, location.search])
 
   // Whether the terminal/updates/self-update escape hatch (systemd-run) is
   // currently unusable on this host because D-Bus isn't reachable — see

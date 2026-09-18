@@ -1156,7 +1156,8 @@
     "diagnosisTitle": "The terminal did not open. What is in the way:",
     "diagnosisHint": "Run these on the host from a console or over SSH — not from this terminal, which is the broken one:",
     "dbusInstallFailedTitle": "Installing dbus automatically failed",
-    "dbusInstallFailedHint": "The automatic install goes through the very path that is broken, so install dbus by hand — from the host console or over SSH:"
+    "dbusInstallFailedHint": "The automatic install goes through the very path that is broken, so install dbus by hand — from the host console or over SSH:",
+    "popoutKubectlTitle": "kubectl · {{name}}"
   },
   "commonPackages": {
     "title": "Quick install",
@@ -2275,7 +2276,8 @@
     "retryHint": "Continue the creation from where it failed: created machines and installed roles stay, the failed step runs again.",
     "k8sVersion": "Kubernetes version",
     "k8sVersionStable": "current stable ({{v}})",
-    "k8sVersionHint": "kubeadm — the pkgs.k8s.io branch, k3s — the channel; the same for every node. Inside a node the API is always on 6443, the port in “expose” is the host port"
+    "k8sVersionHint": "kubeadm — the pkgs.k8s.io branch, k3s — the channel; the same for every node. Inside a node the API is always on 6443, the port in “expose” is the host port",
+    "kubectlHint": "A terminal on the first control plane with kubectl ready (KUBECONFIG on the admin config, completion, alias k) — in a separate window"
   },
   "k8s": {
     "notInstalled": "Kubernetes is not installed on this host. Clusters are created on the hub: “new cluster” next to a host with virtualization.",

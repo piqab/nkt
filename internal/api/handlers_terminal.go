@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -57,6 +58,28 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 		argv = []string{"tmux", "attach-session", "-t", tmuxSessionName}
 		auditTarget = "tmux"
 	}
+	// ?kubectl=1 — оболочка с готовым kubectl к кластеру этого узла:
+	// KUBECONFIG на admin-конфиг найденного варианта, автодополнение,
+	// алиас k. Конфиг читается только root'ом, поэтому от пользователя
+	// терминала — через sudo -n.
+	kubectlMode := r.URL.Query().Get("kubectl") == "1"
+	if kubectlMode {
+		st := s.k8sManager().Status(r.Context())
+		if !st.Installed {
+			writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "k8s.notInstalled"))
+			return
+		}
+		rc, err := s.writeKubectlRC(kubeconfigPath(st.Flavor))
+		if err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		argv = []string{"bash", "--rcfile", rc, "-i"}
+		if s.cfg.TerminalUser != "" && s.cfg.TerminalUser != "root" {
+			argv = append([]string{"sudo", "-n"}, argv...)
+		}
+		auditTarget = "kubectl"
+	}
 	env := map[string]string{"TERM": "xterm-256color"}
 
 	// TerminalUser (NKT_TERMINAL_USER, written by the hub at install time —
@@ -77,6 +100,32 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 
 	cmd := unrestrictedCommand(env, argv...)
 	s.runPTYSession(w, r, cmd, "terminal", auditTarget, s.cfg.TerminalIdleTimeout)
+}
+
+// kubeconfigPath — admin-конфиг по варианту Kubernetes.
+func kubeconfigPath(flavor string) string {
+	if flavor == "k3s" {
+		return "/etc/rancher/k3s/k3s.yaml"
+	}
+	return "/etc/kubernetes/admin.conf"
+}
+
+// writeKubectlRC пишет rc-файл оболочки kubectl в каталог данных (туда
+// юнит писать может, а root по ту сторону sudo — прочитать).
+func (s *Server) writeKubectlRC(kubeconfig string) (string, error) {
+	rc := strings.Join([]string{
+		"[ -f /etc/bash.bashrc ] && . /etc/bash.bashrc",
+		"[ -f ~/.bashrc ] && . ~/.bashrc",
+		"export KUBECONFIG=" + kubeconfig,
+		"if command -v kubectl >/dev/null 2>&1; then source <(kubectl completion bash 2>/dev/null); alias k=kubectl; complete -o default -F __start_kubectl k 2>/dev/null; fi",
+		"echo \"kubectl → $(kubectl config current-context 2>/dev/null || echo '?') · KUBECONFIG=$KUBECONFIG · alias k=kubectl\"",
+		"",
+	}, "\n")
+	path := filepath.Join(s.cfg.DataDir, "kubectl.bashrc")
+	if err := os.WriteFile(path, []byte(rc), 0o644); err != nil {
+		return "", err
+	}
+	return path, nil
 }
 
 // handleTerminalConfig reports this host's own TerminalIdleTimeout so the

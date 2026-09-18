@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button, Checkbox, Input, InputNumber, Select, Tag, Tooltip } from 'antd'
-import { ClusterOutlined } from '@ant-design/icons'
+import { ClusterOutlined, CodeOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, useApi } from '../api'
 import type { HubHost, Job } from '../types'
@@ -288,6 +288,15 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
     }
   }
 
+  // Терминал с kubectl — откреплённое окно на первом control plane
+  // (?kubectl=1: KUBECONFIG на admin-конфиг, автодополнение).
+  function openKubectl(c: Cluster) {
+    const cp = c.nodes.find((n) => n.role === 'control-plane')
+    if (!cp) return
+    const params = new URLSearchParams({ host: String(cp.host_id), name: `${c.name} · ${cp.name}`, kubectl: '1' })
+    window.open(`/terminal/popout?${params.toString()}`, `nkt-kubectl-${c.id}`, 'width=980,height=640,resizable=yes')
+  }
+
   if (clusters.length === 0 && !showEmpty) return null
   return (
     <Card title={t('clusters.title')} subtitle={t('clusters.subtitle', { count: clusters.length })}>
@@ -321,6 +330,13 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
                   <a href={apiURL(`/hub/clusters/${c.id}/kubeconfig`)} download>
                     <Button size="small">{t('clusters.kubeconfig')}</Button>
                   </a>
+                </Tooltip>
+              )}
+              {c.status === 'ready' && c.nodes.some((n) => n.role === 'control-plane') && (
+                <Tooltip title={t('clusters.kubectlHint')}>
+                  <Button size="small" icon={<CodeOutlined />} onClick={() => openKubectl(c)}>
+                    kubectl
+                  </Button>
                 </Tooltip>
               )}
               {c.status === 'failed' && (
