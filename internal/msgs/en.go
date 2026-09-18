@@ -1263,6 +1263,8 @@ var enCatalog = map[string]string{
 	"hub.preflightHubImageOnHost":                   "hub image %s is already on the host",
 	"hub.preflightHubImageUpload":                   "hub image %s will be uploaded to the host (%.1f GB)",
 	"hub.clusterNoJob":                              "the cluster has no creation job to continue",
+	"hub.clusterNodeUpdate":                         "      node %s runs nkt %s, the hub is %s — updating nkt on the node so the install steps are current",
+	"hub.clusterNodeUpdateFailed":                   "updating nkt on node %s: %v",
 	"hub.clusterStepMesh":                           "WireGuard tunnel between hosts",
 	"hub.clusterMeshPlanned":                        "      tunnel %s: %d hosts, keys generated and stored",
 	"hub.clusterMeshExists":                         "      tunnel %s is already up, left untouched",

@@ -1262,6 +1262,8 @@ var ruCatalog = map[string]string{
 	"hub.preflightHubImageOnHost":                   "образ %s с хаба уже есть на хосте",
 	"hub.preflightHubImageUpload":                   "образ %s будет залит с хаба на хост (%.1f ГБ)",
 	"hub.clusterNoJob":                              "у кластера нет задания создания, которое можно продолжить",
+	"hub.clusterNodeUpdate":                         "      на узле %s nkt %s, у хаба %s — обновляю nkt на узле, чтобы шаги установки были свежими",
+	"hub.clusterNodeUpdateFailed":                   "обновление nkt на узле %s: %v",
 	"hub.clusterStepMesh":                           "туннель WireGuard между хостами",
 	"hub.clusterMeshPlanned":                        "      туннель %s: %d хостов, ключи созданы и сохранены",
 	"hub.clusterMeshExists":                         "      туннель %s уже поднят, повторно не трогаю",
