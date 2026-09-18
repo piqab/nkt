@@ -2185,7 +2185,7 @@
     "cpSizes": "Control plane size",
     "wSizes": "Worker size",
     "expose": "Expose outside",
-    "exposeHint": "ports 6443, 80 and 443 of the host ({{host}}) lead to the control plane — the cluster is reachable at the host address",
+    "exposeHint": "requests to the host address ({{host}}) go to the control plane",
     "summary": "Machines to create: {{machines}} ({{flavor}}) on host {{host}}.",
     "create": "Create cluster",
     "started": "Creation of cluster {{name}} started.",
@@ -2217,7 +2217,13 @@
     "dryRun": "Dry run",
     "dryHint": "Check the host (KVM, libvirt, disk, memory, network, image, internet, free names and ports) and show the machine plan without creating anything; with preparation — also download the image and packages into caches",
     "dryPrepare": "also prepare: download the image and packages into caches",
-    "dryStarted": "Dry run of cluster {{name}} started — see the job log."
+    "dryStarted": "Dry run of cluster {{name}} started — see the job log.",
+    "cilium": "Cilium",
+    "ciliumHint": "instead of flannel: installed after the control plane via the cilium CLI (latest stable)",
+    "kpr": "replace kube-proxy with Cilium",
+    "kprHint": "eBPF instead of kube-proxy; kube-proxy is not installed",
+    "portsHint": "host ports → 6443 / 80 / 443 on the control plane; 0 — do not forward",
+    "experimental": "Experimental feature: the cluster is created as real machines with Kubernetes installed on them, there is no undo. “Dry run” first, try it on test hosts, review the job log."
   },
   "k8s": {
     "notInstalled": "Kubernetes is not installed on this host. Clusters are created on the hub: “new cluster” next to a host with virtualization.",

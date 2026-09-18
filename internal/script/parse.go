@@ -554,7 +554,7 @@ func parseOn(toks []string) (Step, error) {
 			}
 			return Step{Kind: KindK8sDestroy, Name: toks[2]}, nil
 		case "create":
-			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network"}, []string{"expose"})
+			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "api", "http", "https", "cni"}, []string{"expose", "no-kube-proxy"})
 			if err != nil {
 				return Step{}, err
 			}
@@ -564,12 +564,15 @@ func parseOn(toks []string) (Step, error) {
 			if n := args["nodes"]; n != "" && !k8sNodesRe.MatchString(n) {
 				return Step{}, msgs.Errorf("script.badK8sNodes", n)
 			}
-			for _, k := range []string{"cpu", "mem", "disk"} {
+			for _, k := range []string{"cpu", "mem", "disk", "api", "http", "https"} {
 				if v := args[k]; v != "" {
 					if _, err := strconv.Atoi(v); err != nil {
 						return Step{}, msgs.Errorf("script.badNumber", k, v)
 					}
 				}
+			}
+			if c := args["cni"]; c != "" && c != "cilium" && c != "flannel" {
+				return Step{}, msgs.Errorf("script.badK8sCNI", c)
 			}
 			return Step{Kind: KindK8sCreate, Name: toks[2], Args: args}, nil
 		}

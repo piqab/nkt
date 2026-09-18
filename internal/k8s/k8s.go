@@ -61,6 +61,15 @@ type InstallSpec struct {
 	ControlPlaneEndpoint string `json:"control_plane_endpoint,omitempty"`
 	// NodeName — имя узла в кластере; пусто — hostname.
 	NodeName string `json:"node_name,omitempty"`
+	// CNI — «cilium»: кластер поднимается без flannel, а после старта
+	// control plane ставится Cilium через его CLI. Пусто — как у варианта
+	// по умолчанию (flannel).
+	CNI string `json:"cni,omitempty"`
+	// KubeProxyReplacement — Cilium вместо kube-proxy (eBPF).
+	KubeProxyReplacement bool `json:"kube_proxy_replacement,omitempty"`
+	// APIAddr — адрес control plane для Cilium при замене kube-proxy: без
+	// kube-proxy агенту нужен прямой адрес API, а не ClusterIP.
+	APIAddr string `json:"api_addr,omitempty"`
 }
 
 // Validate — базовая проверка формы: имена, роли, отсутствие shell-мусора.
@@ -74,7 +83,10 @@ func (s InstallSpec) Validate() error {
 	if s.Role == RoleAgent && (s.ServerURL == "" || s.Token == "") {
 		return msgs.Errorf("k8s.agentNeedsServer")
 	}
-	for _, v := range append([]string{s.ServerURL, s.Token, s.CAHash, s.CertKey, s.ControlPlaneEndpoint, s.NodeName}, s.TLSSANs...) {
+	if s.CNI != "" && s.CNI != "cilium" {
+		return msgs.Errorf("k8s.badCNI", s.CNI)
+	}
+	for _, v := range append([]string{s.ServerURL, s.Token, s.CAHash, s.CertKey, s.ControlPlaneEndpoint, s.NodeName, s.APIAddr}, s.TLSSANs...) {
 		if strings.ContainsAny(v, " \t\n'\"`$\\;&|") {
 			return msgs.Errorf("k8s.badValue", v)
 		}
@@ -311,7 +323,10 @@ func (m *Manager) Kubeconfig(ctx context.Context, serverAddr string) (string, er
 	}
 	cfg := string(raw)
 	if serverAddr != "" {
-		cfg = regexp.MustCompile(`server: https://[^\s]+`).ReplaceAllString(cfg, "server: https://"+serverAddr+":6443")
+		if !strings.Contains(serverAddr, ":") {
+			serverAddr += ":6443"
+		}
+		cfg = regexp.MustCompile(`server: https://[^\s]+`).ReplaceAllString(cfg, "server: https://"+serverAddr)
 	}
 	return cfg, nil
 }
@@ -418,6 +433,14 @@ func k3sSteps(s InstallSpec) []Step {
 		if s.ClusterInit && s.ServerURL == "" {
 			exec = append(exec, "--cluster-init")
 		}
+		if s.CNI == "cilium" {
+			// Cilium ставится сам: встроенный flannel и сетевые политики
+			// k3s выключаются, а с заменой kube-proxy — и он.
+			exec = append(exec, "--flannel-backend=none", "--disable-network-policy")
+			if s.KubeProxyReplacement {
+				exec = append(exec, "--disable-kube-proxy")
+			}
+		}
 		if s.ServerURL != "" {
 			// Дополнительный control plane входит по адресу первого.
 			env = append(env, "K3S_URL="+shq(s.ServerURL))
@@ -451,9 +474,39 @@ func k3sSteps(s InstallSpec) []Step {
 		{"k8s.step.wait", "set -e\nfor i in $(seq 1 60); do systemctl is-active --quiet " + unit + " && break; sleep 2; done\nsystemctl is-active --quiet " + unit},
 	}
 	if s.Role == RoleServer {
+		if s.CNI == "cilium" && s.ServerURL == "" {
+			// Без CNI узел не станет Ready — Cilium раньше ожидания.
+			steps = append(steps, ciliumStep(s, "/etc/rancher/k3s/k3s.yaml"))
+		}
 		steps = append(steps, Step{"k8s.step.ready", "set -e\nfor i in $(seq 1 90); do k3s kubectl get nodes 2>/dev/null | grep -q ' Ready' && exit 0; sleep 2; done\nk3s kubectl get nodes\nexit 1"})
 	}
 	return steps
+}
+
+// ciliumStep — установка Cilium официальным CLI: последняя стабильная
+// версия, архив с GitHub с проверкой суммы, затем cilium install и
+// ожидание готовности.
+func ciliumStep(s InstallSpec, kubeconfig string) Step {
+	install := "cilium install"
+	if s.KubeProxyReplacement {
+		install += " --set kubeProxyReplacement=true"
+		if s.APIAddr != "" {
+			install += " --set k8sServiceHost=" + s.APIAddr + " --set k8sServicePort=6443"
+		}
+	}
+	script := strings.Join([]string{
+		"set -e",
+		"export KUBECONFIG=" + kubeconfig,
+		"if ! command -v cilium >/dev/null; then",
+		"  ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m); case $ARCH in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac",
+		"  cd /tmp && curl -fsSL -O https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-$ARCH.tar.gz -O https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-$ARCH.tar.gz.sha256sum",
+		"  sha256sum --check cilium-linux-$ARCH.tar.gz.sha256sum",
+		"  tar -C /usr/local/bin -xzf cilium-linux-$ARCH.tar.gz && rm -f cilium-linux-$ARCH.tar.gz*",
+		"fi",
+		"cilium status --brief >/dev/null 2>&1 || " + install,
+		"cilium status --wait --wait-duration 10m",
+	}, "\n")
+	return Step{"k8s.step.cilium", script}
 }
 
 func kubeadmSteps(s InstallSpec) []Step {
@@ -477,12 +530,20 @@ func kubeadmSteps(s InstallSpec) []Step {
 		if s.NodeName != "" {
 			init += " --node-name=" + s.NodeName
 		}
-		init += "\nmkdir -p /root/.kube\ncp -f /etc/kubernetes/admin.conf /root/.kube/config\n" +
-			"kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"
+		if s.CNI == "cilium" && s.KubeProxyReplacement {
+			init += " --skip-phases=addon/kube-proxy"
+		}
+		init += "\nmkdir -p /root/.kube\ncp -f /etc/kubernetes/admin.conf /root/.kube/config"
+		if s.CNI != "cilium" {
+			init += "\nkubectl --kubeconfig /etc/kubernetes/admin.conf apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"
+		}
 		if s.Single {
 			init += "\nkubectl --kubeconfig /etc/kubernetes/admin.conf taint nodes --all node-role.kubernetes.io/control-plane- || true"
 		}
 		steps = append(steps, Step{"k8s.step.install", init})
+		if s.CNI == "cilium" {
+			steps = append(steps, ciliumStep(s, "/etc/kubernetes/admin.conf"))
+		}
 		steps = append(steps, Step{"k8s.step.ready", "set -e\nfor i in $(seq 1 90); do kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes 2>/dev/null | grep -q ' Ready' && exit 0; sleep 2; done\nexit 1"})
 		return steps
 	}

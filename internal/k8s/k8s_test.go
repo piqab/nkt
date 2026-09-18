@@ -86,3 +86,29 @@ func TestParseNodes(t *testing.T) {
 		t.Errorf("%+v", nodes)
 	}
 }
+
+// Cilium: k3s без flannel (и без kube-proxy при замене), kubeadm без
+// Flannel и с пропуском kube-proxy; шаг с CLI и cilium install до
+// ожидания Ready.
+func TestStepsCilium(t *testing.T) {
+	k := joinScripts(Steps(InstallSpec{Flavor: FlavorK3s, Role: RoleServer, Single: true, CNI: "cilium", KubeProxyReplacement: true, APIAddr: "192.168.122.10"}))
+	for _, want := range []string{"--flannel-backend=none", "--disable-network-policy", "--disable-kube-proxy", "cilium-cli/releases/latest", "sha256sum --check", "cilium install --set kubeProxyReplacement=true --set k8sServiceHost=192.168.122.10 --set k8sServicePort=6443", "cilium status --wait"} {
+		if !strings.Contains(k, want) {
+			t.Errorf("k3s cilium: нет %q", want)
+		}
+	}
+	if strings.Index(k, "cilium install") > strings.Index(k, "grep -q ' Ready'") {
+		t.Error("Cilium должен ставиться до ожидания Ready")
+	}
+	ka := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, Single: true, CNI: "cilium"}))
+	if strings.Contains(ka, "kube-flannel") || strings.Contains(ka, "skip-phases") || !strings.Contains(ka, "cilium install\n") {
+		t.Errorf("kubeadm cilium без замены kube-proxy: %s", ka)
+	}
+	kb := joinScripts(Steps(InstallSpec{Flavor: FlavorKubeadm, Role: RoleServer, CNI: "cilium", KubeProxyReplacement: true}))
+	if !strings.Contains(kb, "--skip-phases=addon/kube-proxy") {
+		t.Error("kubeadm с заменой kube-proxy должен пропускать его установку")
+	}
+	if (InstallSpec{Flavor: FlavorK3s, Role: RoleServer, CNI: "calico"}).Validate() == nil {
+		t.Error("неизвестный CNI прошёл проверку")
+	}
+}

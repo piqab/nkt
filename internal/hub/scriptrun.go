@@ -951,6 +951,13 @@ func clusterSpecFromStep(h store.Host, st script.Step) (ClusterSpec, error) {
 	cpu, mem, disk := atoi("cpu", 2), atoi("mem", 4096), atoi("disk", 30)
 	spec.CPVCPUs, spec.CPMemoryMB, spec.CPDiskGB = cpu, mem, disk
 	spec.WVCPUs, spec.WMemoryMB, spec.WDiskGB = cpu, mem, disk
+	if st.Args["cni"] == "cilium" {
+		spec.CNI = "cilium"
+		spec.KubeProxyReplacement = st.Args["no-kube-proxy"] == "true"
+	}
+	if spec.Expose {
+		spec.ExposeAPI, spec.ExposeHTTP, spec.ExposeHTTPS = atoi("api", 6443), atoi("http", 80), atoi("https", 443)
+	}
 	return spec, spec.Validate()
 }
 

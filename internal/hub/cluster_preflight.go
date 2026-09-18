@@ -58,7 +58,10 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, host
 		jc.Logf("      %s: worker, %d CPU, %d MB, %d GB, %s", n, spec.WVCPUs, spec.WMemoryMB, spec.WDiskGB, spec.ImageID)
 	}
 	if spec.Expose {
-		jc.Log("hub.preflightPlanExpose", host.Addr)
+		jc.Log("hub.preflightPlanExpose", host.Addr, exposeSummary(spec))
+	}
+	if spec.CNI == "cilium" {
+		jc.Log("hub.preflightPlanCilium", map[bool]string{true: "kube-proxy replacement", false: "kube-proxy"}[spec.KubeProxyReplacement])
 	}
 
 	// Имя свободно.
@@ -130,10 +133,10 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, host
 		}
 	}
 	if spec.Expose {
-		for _, p := range []int{6443, 80, 443} {
+		for _, r := range spec.exposeRules() {
 			for _, l := range pf.ListeningPorts {
-				if l == p {
-					add(false, false, "hub.preflightPortBusy", p)
+				if l == r["host_port"] {
+					add(false, false, "hub.preflightPortBusy", l)
 				}
 			}
 		}
@@ -161,6 +164,9 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, host
 	}
 	if imgKnown && !downloaded {
 		urls = append(urls, img.URL)
+	}
+	if spec.CNI == "cilium" {
+		urls = append(urls, "https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz.sha256sum")
 	}
 	for _, u := range urls {
 		var res struct {

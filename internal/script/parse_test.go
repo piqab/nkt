@@ -160,7 +160,7 @@ on web1 system timezone Europe/Moscow
 on web1 system ntp time.google.com pool.ntp.org
 on web1 cert issue example.org www.example.org
 on web1 git clone https://github.com/org/app.git /srv/app branch main token ask
-on web1 k8s create lab flavor k3s nodes 1+2 image ubuntu-24.04 mem 4096 expose
+on web1 k8s create lab flavor k3s nodes 1+2 image ubuntu-24.04 mem 4096 cni cilium no-kube-proxy expose api 16443
 on web1 k8s destroy lab
 `
 	sc, issues := Parse(text, nil)
@@ -205,7 +205,7 @@ on web1 k8s destroy lab
 	if g := sc.Steps[9]; g.Kind != KindGitClone || g.Args["dir"] != "/srv/app" || g.Args["branch"] != "main" || g.Args["token"] != "ask" {
 		t.Errorf("git: %+v", g)
 	}
-	if k := sc.Steps[10]; k.Kind != KindK8sCreate || k.Name != "lab" || k.Args["nodes"] != "1+2" || k.Args["expose"] != "true" || k.Args["mem"] != "4096" {
+	if k := sc.Steps[10]; k.Kind != KindK8sCreate || k.Name != "lab" || k.Args["nodes"] != "1+2" || k.Args["expose"] != "true" || k.Args["mem"] != "4096" || k.Args["cni"] != "cilium" || k.Args["no-kube-proxy"] != "true" || k.Args["api"] != "16443" {
 		t.Errorf("k8s create: %+v", k)
 	}
 	if k := sc.Steps[11]; k.Kind != KindK8sDestroy || k.Name != "lab" {
