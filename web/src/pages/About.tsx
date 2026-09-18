@@ -107,6 +107,14 @@ export default function About() {
     }
   }
 
+  // Заход в раздел — сам повод спросить GitHub: кнопка остаётся для
+  // повтора, но первый ответ должен быть свежим, а не часовой давности с
+  // фонового цикла. Один раз на открытие, а не при каждом опросе.
+  useEffect(() => {
+    void checkNow()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- только при открытии раздела
+  }, [])
+
   async function applyUpdate() {
     if (!(await confirmAction(t('about.confirmUpdate', { version: version.data?.latest })))) return
     setUpdating(true)
