@@ -51,3 +51,12 @@ On the hub a machine is created on a host straight from the host list,
 nkt is installed into it automatically and the group profile is applied
 right away — see [Hub](/en/guide/hub).
 :::
+
+## Kubernetes
+
+On a cluster node (a machine created by the hub via “new cluster”) — the
+**Kubernetes** tab: flavor and role, cluster nodes with roles and `Ready`,
+pods by namespace, kubeconfig and removing the node from the cluster.
+
+![Kubernetes](/screens/en/kubernetes.png)
+

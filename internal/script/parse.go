@@ -74,8 +74,10 @@ func (sc Script) AskKeys() []string {
 // разбор понимает, где кончается список хостов.
 var onCommands = map[string]bool{
 	"packages": true, "service": true, "firewall": true, "docker": true, "vm": true,
-	"apply": true, "file": true, "user": true, "system": true, "cert": true, "git": true,
+	"apply": true, "file": true, "user": true, "system": true, "cert": true, "git": true, "k8s": true,
 }
+
+var k8sNodesRe = regexp.MustCompile(`^(single|[13]\+\d{1,2})$`)
 
 // paramPlaceholder — чем подставляется параметр без значения при
 // проверке: разбор должен пройти, значение появится при запуске.
@@ -541,6 +543,37 @@ func parseOn(toks []string) (Step, error) {
 		}
 		args["url"], args["dir"] = toks[2], toks[3]
 		return Step{Kind: KindGitClone, Args: args}, nil
+	case "k8s":
+		if len(toks) < 3 || !nameRe.MatchString(toks[2]) {
+			return Step{}, msgs.Errorf("script.badK8s")
+		}
+		switch toks[1] {
+		case "destroy":
+			if len(toks) != 3 {
+				return Step{}, msgs.Errorf("script.badK8s")
+			}
+			return Step{Kind: KindK8sDestroy, Name: toks[2]}, nil
+		case "create":
+			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network"}, []string{"expose"})
+			if err != nil {
+				return Step{}, err
+			}
+			if f := args["flavor"]; f != "" && f != "k3s" && f != "kubeadm" {
+				return Step{}, msgs.Errorf("script.badK8sFlavor", f)
+			}
+			if n := args["nodes"]; n != "" && !k8sNodesRe.MatchString(n) {
+				return Step{}, msgs.Errorf("script.badK8sNodes", n)
+			}
+			for _, k := range []string{"cpu", "mem", "disk"} {
+				if v := args[k]; v != "" {
+					if _, err := strconv.Atoi(v); err != nil {
+						return Step{}, msgs.Errorf("script.badNumber", k, v)
+					}
+				}
+			}
+			return Step{Kind: KindK8sCreate, Name: toks[2], Args: args}, nil
+		}
+		return Step{}, msgs.Errorf("script.badK8s")
 	case "file":
 		if len(toks) < 3 || toks[1] != "put" || !pathRe.MatchString(toks[2]) {
 			return Step{}, msgs.Errorf("script.badFilePut")

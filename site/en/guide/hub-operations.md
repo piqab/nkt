@@ -47,6 +47,11 @@ line.
 - The trivy **vulnerability database** is shared by all hosts: updated on a
   schedule and by a button, hosts take it from the hub instead of
   downloading their own.
+- **Kubernetes clusters** — “new cluster” next to a host with
+  virtualization: k3s or kubeadm, one machine / 1 control plane + N workers /
+  3 control planes + N workers, host port forwarding; the nodes are
+  machines with nkt in the cluster group, the kubeconfig is downloaded from
+  the cluster card.
 - **Package cache** — hosts download `.deb` files through the hub over a
   reverse SSH forward, every package leaves for the internet once; without
   the hub apt goes direct. A checkbox in the host form, the limit and
