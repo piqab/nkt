@@ -858,6 +858,19 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 
 // installRole ставит роль заданием хоста и ждёт его.
 func (r *ClusterRunner) installRole(ctx context.Context, jc *jobs.Context, h store.Host, spec k8s.InstallSpec) error {
+	// Шаги установки выполняет nkt на самом узле — своей версии. Узел,
+	// созданный старым хабом, или «железный» хост с отставшим nkt получат
+	// старые скрипты; перед ролью узел обновляется до версии хаба.
+	if cur, err := r.m.db.HostByID(ctx, h.ID); err == nil {
+		h = cur
+	}
+	if h.NktVersion != "" && h.NktVersion != r.m.Version() {
+		jc.Log("hub.clusterNodeUpdate", h.Name, h.NktVersion, r.m.Version())
+		vr := &VMProvisionRunner{m: r.m}
+		if err := vr.runInstall(ctx, jc, h.ID); err != nil {
+			return msgs.Errorf("hub.clusterNodeUpdateFailed", h.Name, err)
+		}
+	}
 	jc.Log("hub.clusterInstalling", spec.Flavor, spec.Role, h.Name)
 	var started struct {
 		JobID int64 `json:"job_id"`
