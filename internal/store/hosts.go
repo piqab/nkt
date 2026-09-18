@@ -67,6 +67,10 @@ type Host struct {
 	// ClusterID и K8sRole — узел кластера Kubernetes (см. clusters.go).
 	ClusterID int64  `json:"cluster_id,omitempty"`
 	K8sRole   string `json:"k8s_role,omitempty"`
+	// BinaryVia — откуда хост берёт бинарник при установке и обновлении:
+	// «github» (хост качает сам) или «sftp» (с хаба) — по итогам пробы
+	// скорости; пусто — проба ещё не проводилась.
+	BinaryVia string `json:"binary_via,omitempty"`
 	ErrorMsg  string `json:"error_msg,omitempty"`
 	// Group — произвольная группа в списке хостов («прод», «клиент А»).
 	// Пустая строка означает «Без группы»: такой раздел показывается в
@@ -126,7 +130,7 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
 	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, group_name,
-	parent_id, profile_id, apt_via_hub, cluster_id, k8s_role`
+	parent_id, profile_id, apt_via_hub, cluster_id, k8s_role, binary_via`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
@@ -135,7 +139,7 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
 		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen, &h.Group,
-		&h.ParentID, &h.ProfileID, &h.AptViaHub, &h.ClusterID, &h.K8sRole)
+		&h.ParentID, &h.ProfileID, &h.AptViaHub, &h.ClusterID, &h.K8sRole, &h.BinaryVia)
 	if err != nil {
 		return Host{}, err
 	}
@@ -283,6 +287,12 @@ func (d *DB) SetHostSudoStatus(ctx context.Context, id int64, status string) err
 		return ErrNotFound
 	}
 	return nil
+}
+
+// SetHostBinaryVia запоминает, откуда хосту быстрее брать бинарник.
+func (d *DB) SetHostBinaryVia(ctx context.Context, id int64, via string) error {
+	_, err := d.ExecContext(ctx, `UPDATE hosts SET binary_via = ? WHERE id = ?`, via, id)
+	return err
 }
 
 // SetHostAptViaHub включает или выключает apt через кэш хаба.

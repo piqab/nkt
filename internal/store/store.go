@@ -226,6 +226,7 @@ CREATE TABLE IF NOT EXISTS hosts (
     apt_via_hub        INTEGER NOT NULL DEFAULT 0, -- apt хоста ходит через кэш хаба (обратный проброс по SSH)
     cluster_id         INTEGER NOT NULL DEFAULT 0, -- узел кластера Kubernetes (clusters.id)
     k8s_role           TEXT NOT NULL DEFAULT '',   -- control-plane | worker
+    binary_via         TEXT NOT NULL DEFAULT '',   -- откуда хост берёт бинарник nkt: github | sftp (по итогам пробы)
     tunnel_enabled     INTEGER NOT NULL DEFAULT 0, -- reverse-tunnel fallback for when SSH is unreachable, see internal/tunnel
     tunnel_token_hash  BLOB,                       -- legacy/unused: SHA-256 of the token, from when the host verified it;
                                                     -- kept only per this file's own "never remove a past column" policy
@@ -332,6 +333,7 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"hosts", "apt_via_hub", `ALTER TABLE hosts ADD COLUMN apt_via_hub INTEGER NOT NULL DEFAULT 0`},
 	{"hosts", "cluster_id", `ALTER TABLE hosts ADD COLUMN cluster_id INTEGER NOT NULL DEFAULT 0`},
 	{"hosts", "k8s_role", `ALTER TABLE hosts ADD COLUMN k8s_role TEXT NOT NULL DEFAULT ''`},
+	{"hosts", "binary_via", `ALTER TABLE hosts ADD COLUMN binary_via TEXT NOT NULL DEFAULT ''`},
 	{"clusters", "wg_enc", `ALTER TABLE clusters ADD COLUMN wg_enc BLOB`},
 	{"hosts", "tunnel_token_hash", `ALTER TABLE hosts ADD COLUMN tunnel_token_hash BLOB`},
 	{"hosts", "tunnel_token_enc", `ALTER TABLE hosts ADD COLUMN tunnel_token_enc BLOB`},

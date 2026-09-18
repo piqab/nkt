@@ -111,7 +111,7 @@ func TestSSHProvisioningRoundTrip(t *testing.T) {
 		events = append(events, key)
 	}
 
-	if err := stageFiles(client, "root", localBin, "unit-content", "env-content", binPath, servicePath, envPath, report, progress); err != nil {
+	if err := stageFiles(client, "root", binarySource{LocalPath: localBin}, "unit-content", "env-content", binPath, servicePath, envPath, report, progress); err != nil {
 		t.Fatalf("stageFiles: %v", err)
 	}
 	if len(events) == 0 {
