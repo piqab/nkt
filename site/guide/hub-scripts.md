@@ -52,6 +52,7 @@ wait web1 http http://${ADDR}/ 200 1m
 | `on ХОСТ system hostname\|timezone\|locale\|ntp …` | системные настройки |
 | `on ХОСТ cert issue ДОМЕН… \| cert renew ДОМЕН` | сертификат Let's Encrypt |
 | `on ХОСТ git clone URL /КАТАЛОГ [branch …] [token ask]` | клонировать репозиторий |
+| `on ХОСТ k8s create ИМЯ [nodes single\|1+N\|3+N\|"ХОСТ: cp N, w N, host cp\|w; …"] [network nat\|bridge\|wireguard] [cni cilium] [expose] …`, `on ХОСТ k8s destroy ИМЯ` | кластер Kubernetes на машинах хоста или с размещением по нескольким хостам (экспериментально) |
 
 Полная справка с примерами, которые можно скопировать или вставить в
 редактор, — вкладка «Справка» в самом разделе.

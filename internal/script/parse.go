@@ -554,14 +554,27 @@ func parseOn(toks []string) (Step, error) {
 			}
 			return Step{Kind: KindK8sDestroy, Name: toks[2]}, nil
 		case "create":
-			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "api", "http", "https", "cni"}, []string{"expose", "no-kube-proxy"})
+			args, err := kv(toks[3:], []string{"flavor", "nodes", "image", "cpu", "mem", "disk", "network", "bridge", "api", "http", "https", "cni"}, []string{"expose", "no-kube-proxy"})
 			if err != nil {
 				return Step{}, err
 			}
 			if f := args["flavor"]; f != "" && f != "k3s" && f != "kubeadm" {
 				return Step{}, msgs.Errorf("script.badK8sFlavor", f)
 			}
-			if n := args["nodes"]; n != "" && !k8sNodesRe.MatchString(n) {
+			switch n := args["nodes"]; {
+			case IsPlacement(n):
+				// Размещение по хостам: сеть между хостами — режим, а не
+				// имя сети libvirt.
+				if _, err := ParsePlacement(n); err != nil {
+					return Step{}, err
+				}
+				if m := args["network"]; m != "" && m != "nat" && m != "bridge" && m != "wireguard" {
+					return Step{}, msgs.Errorf("script.badK8sNetworkMode", m)
+				}
+				if b := args["bridge"]; b != "" && !nameRe.MatchString(b) {
+					return Step{}, msgs.Errorf("script.badK8sBridge", b)
+				}
+			case n != "" && !k8sNodesRe.MatchString(n):
 				return Step{}, msgs.Errorf("script.badK8sNodes", n)
 			}
 			for _, k := range []string{"cpu", "mem", "disk", "api", "http", "https"} {

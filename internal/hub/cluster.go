@@ -351,6 +351,32 @@ func (s ClusterSpec) ControlPlanes() int {
 	return 1
 }
 
+// NodeCounts — сколько control plane и worker'ов, с учётом размещения.
+func (s ClusterSpec) NodeCounts() (cps, workers int) {
+	if len(s.Placements) == 0 {
+		return s.ControlPlanes(), s.Workers
+	}
+	for _, pl := range s.Placements {
+		if pl.Role == RoleControlPlane {
+			cps += pl.Count
+		} else {
+			workers += pl.Count
+		}
+	}
+	return
+}
+
+// jobSteps — шагов в задании создания: проверки, узлы, control plane,
+// присоединение, Ready; в режиме wireguard ещё туннель.
+func (s ClusterSpec) jobSteps() int {
+	cps, workers := s.NodeCounts()
+	n := cps + workers + 4
+	if s.NetworkMode == NetworkWireGuard {
+		n++
+	}
+	return n
+}
+
 // nodeNames — имена машин: <кластер>-cp-N и <кластер>-w-N.
 func (s ClusterSpec) nodeNames() (cps, workers []string) {
 	for i := 1; i <= s.ControlPlanes(); i++ {

@@ -84,8 +84,9 @@ func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	raw, _ := json.Marshal(spec)
+	_, workers := spec.NodeCounts()
 	id, err := s.db.CreateCluster(r.Context(), store.Cluster{Name: spec.Name, HostID: host.ID, Flavor: spec.Flavor,
-		Topology: spec.Topology, Workers: spec.Workers, Expose: spec.Expose, SpecJSON: string(raw)})
+		Topology: spec.Topology, Workers: workers, Expose: spec.Expose, SpecJSON: string(raw)})
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("hub.clusterCreate", err))
 		return
@@ -94,7 +95,7 @@ func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind: KindClusterCreate, Title: msgs.Tc(r.Context(), "hub.clusterJobTitle", spec.Name, host.Name),
-		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: spec.ControlPlanes() + spec.Workers + 4,
+		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: spec.jobSteps(),
 		Params: ClusterJobParams{ClusterID: id},
 	})
 	if err != nil {

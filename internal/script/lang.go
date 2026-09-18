@@ -262,7 +262,7 @@ var Commands = []CommandDoc{
 		Example: "on web1 git clone https://github.com/org/app.git /srv/app branch main token ask",
 	},
 	{
-		Kind: KindK8sCreate, OnHost: true, Syntax: "on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ] [cni cilium|flannel] [no-kube-proxy] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]",
+		Kind: KindK8sCreate, OnHost: true, Syntax: "on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|\"ХОСТ: cp N, w N, host cp|w, bridge МОСТ; …\"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]",
 		Summary: "script.doc.k8sCreate",
 		Args: []ArgDoc{
 			{Name: "ИМЯ", Required: true, Desc: "script.doc.k8sCreate.name"},
@@ -270,12 +270,13 @@ var Commands = []CommandDoc{
 			{Name: "nodes", Desc: "script.doc.k8sCreate.nodes"},
 			{Name: "image", Desc: "script.doc.k8sCreate.image"},
 			{Name: "cpu / mem / disk", Desc: "script.doc.k8sCreate.sizes"},
+			{Name: "network / bridge", Desc: "script.doc.k8sCreate.network"},
 			{Name: "cni", Desc: "script.doc.k8sCreate.cni"},
 			{Name: "no-kube-proxy", Desc: "script.doc.k8sCreate.noKubeProxy"},
 			{Name: "expose", Desc: "script.doc.k8sCreate.expose"},
 			{Name: "api / http / https", Desc: "script.doc.k8sCreate.ports"},
 		},
-		Example: "on hv1 k8s create lab flavor k3s nodes 1+2 image ubuntu-24.04 mem 4096 cni cilium expose api 16443",
+		Example: "on hv1 k8s create lab nodes \"hv1: cp 1, w 2; hv2: w 2; hv3: host w\" network wireguard cni cilium expose api 16443",
 	},
 	{
 		Kind: KindK8sDestroy, OnHost: true, Syntax: "on ХОСТ k8s destroy ИМЯ",
@@ -399,6 +400,7 @@ var englishTerms = [][2]string{
 	{"ПАКЕТ", "PACKAGE"},
 	{"АДРЕС", "ADDR"},
 	{"ОБРАЗ", "IMAGE"},
+	{"МОСТ", "BRIDGE"},
 	{"ДОМЕН", "DOMAIN"},
 	{"ВЕТКА", "BRANCH"},
 	{"ХОСТ", "HOST"},
