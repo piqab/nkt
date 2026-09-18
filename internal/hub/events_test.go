@@ -100,12 +100,12 @@ func TestEventFindingsTransitions(t *testing.T) {
 	m.overviewMu.Unlock()
 
 	// Столько же — молчим.
-	m.noteFindings(ctx, id, map[string]int{"high": 1})
+	m.noteFindings(ctx, id, map[string]int{"high": 1}, nil)
 	if events, _, _ := m.Events(ctx, 10); len(events) != 0 {
 		t.Fatalf("неизменившиеся находки записаны: %+v", events)
 	}
 
-	m.noteFindings(ctx, id, map[string]int{"critical": 2, "high": 1})
+	m.noteFindings(ctx, id, map[string]int{"critical": 2, "high": 1}, map[string]string{"a": "Порт 6379 открыт наружу", "b": "Сертификат просрочен"})
 	events, _, _ := m.Events(ctx, 10)
 	if len(events) != 1 || events[0].Kind != store.EventProblems {
 		t.Fatalf("рост числа находок не записан: %+v", events)
@@ -113,11 +113,15 @@ func TestEventFindingsTransitions(t *testing.T) {
 	if !strings.Contains(events[0].Detail, "3") || !strings.Contains(events[0].Detail, "1") {
 		t.Errorf("в подробностях нет «было → стало»: %q", events[0].Detail)
 	}
+	// Какие именно — по именам, а не только счётчиком.
+	if !strings.Contains(events[0].Detail, "Порт 6379 открыт наружу; Сертификат просрочен") {
+		t.Errorf("в подробностях нет названий новых находок: %q", events[0].Detail)
+	}
 
 	m.overviewMu.Lock()
 	m.overview[id] = hostOverview{reachable: true, findings: map[string]int{"critical": 2, "high": 1}}
 	m.overviewMu.Unlock()
-	m.noteFindings(ctx, id, map[string]int{})
+	m.noteFindings(ctx, id, map[string]int{}, nil)
 	events, _, _ = m.Events(ctx, 10)
 	if len(events) != 2 || events[0].Kind != store.EventResolved {
 		t.Errorf("исчезновение находок не записано: %+v", events)

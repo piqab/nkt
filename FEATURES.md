@@ -39,7 +39,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - TLS rules: weak protocols, missing HSTS, certificate not set, expired, expiring, not yet valid, unreadable, name mismatch, not renewed automatically, orphan certbot lineage, self-signed, weak key or signature, service did not reload the certificate, public plaintext proxy.
 - Pool and container rules: undefined or orphan upstream, backend down, all backends disabled, single backend, no health check, container restarting, not running, undeclared, no restart policy, haproxy stats panel without a password.
 - Host drift from an applied profile — as a finding.
-- Search and filters by severity, service and text.
+- Search and filters by severity, service and text; findings that appeared since the last review are tagged “new”, with an “only new” filter.
 
 ### Vulnerabilities
 - Scan of installed OS packages for CVEs with trivy (the database downloads automatically or comes from the hub).

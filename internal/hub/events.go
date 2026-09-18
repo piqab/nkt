@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/piqab/nkt/internal/store"
@@ -117,7 +119,7 @@ func (m *Manager) noteReachability(ctx context.Context, hostID int64, reachable 
 // Считаются critical и high вместе: разделять их в оповещении незачем —
 // смотреть всё равно идут в раздел находок, а строк в журнале станет
 // вдвое больше.
-func (m *Manager) noteFindings(ctx context.Context, hostID int64, findings map[string]int) {
+func (m *Manager) noteFindings(ctx context.Context, hostID int64, findings map[string]int, severeNow map[string]string) {
 	m.overviewMu.Lock()
 	prev, seen := m.overview[hostID]
 	m.overviewMu.Unlock()
@@ -135,8 +137,24 @@ func (m *Manager) noteFindings(ctx context.Context, hostID int64, findings map[s
 	}
 	switch {
 	case now > was:
-		m.recordEvent(ctx, host, store.EventProblems, "critical+high",
-			msgs.Tc(ctx, "hub.seriousFindingsNow", now, was))
+		detail := msgs.Tc(ctx, "hub.seriousFindingsNow", now, was)
+		// Какие именно: те, чьих ID в прошлом опросе не было. Хост отдаёт
+		// только верхушку списка, так что для лавины находок будут
+		// названы первые, а счётчик — точный.
+		var names []string
+		for id, title := range severeNow {
+			if _, old := prev.severe[id]; !old {
+				names = append(names, title)
+			}
+		}
+		sort.Strings(names)
+		if len(names) > 5 {
+			names = append(names[:5], "…")
+		}
+		if len(names) > 0 {
+			detail += ": " + strings.Join(names, "; ")
+		}
+		m.recordEvent(ctx, host, store.EventProblems, "critical+high", detail)
 	case now == 0:
 		m.recordEvent(ctx, host, store.EventResolved, "critical+high",
 			msgs.Tc(ctx, "hub.seriousFindingsLeft", was))

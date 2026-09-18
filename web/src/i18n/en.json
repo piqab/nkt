@@ -213,7 +213,9 @@
     "service": "Service",
     "searchPlaceholder": "port, file, rule name…",
     "loadingList": "issue list",
-    "whatToDo": "What to do: "
+    "whatToDo": "What to do: ",
+    "onlyNew": "only new ({{count}})",
+    "newTag": "new"
   },
   "audit": {
     "title": "Audit log",
@@ -727,7 +729,8 @@
       "file": "config file",
       "cert": "certificate",
       "interface": "interface",
-      "package": "package update"
+      "package": "package update",
+      "finding": "finding"
     }
   },
   "certs": {
@@ -1581,7 +1584,8 @@
     "edit": "Edit",
     "editTitle": "Edit file",
     "fileName": "File name",
-    "loadingFile": "Reading file…"
+    "loadingFile": "Reading file…",
+    "renameOnly": "The contents could not be read (a binary file or no permission) — editing is off, but renaming works."
   },
   "hardware": {
     "title": "Hardware",

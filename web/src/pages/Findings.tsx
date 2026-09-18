@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Input, Select, Tag } from 'antd'
+import { Checkbox, Input, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { qs, useApi } from '../api'
 import type { Finding, Severity } from '../types'
@@ -22,6 +22,16 @@ export default function Findings() {
     `/findings${qs({ severity, service })}`,
     120_000,
   )
+  // Что появилось с прошлого просмотра — из того же сравнения снимков,
+  // что и карточка «Что изменилось» на обзоре: помечается тегом, и
+  // список можно сузить до новых.
+  const changes = useApi<{ changes: { kind: string; key: string; action: string }[] }>('/changes', 120_000)
+  const [onlyNew, setOnlyNew] = useState(false)
+  const newIDs = useMemo(() => {
+    const set = new Set<string>()
+    for (const c of changes.data?.changes ?? []) if (c.kind === 'finding' && c.action === 'appeared') set.add(c.key)
+    return set
+  }, [changes.data])
 
   const services = useMemo(() => {
     const set = new Set<string>()
@@ -32,11 +42,13 @@ export default function Findings() {
   const visible = useMemo(() => {
     if (!data) return []
     const needle = query.trim().toLowerCase()
-    if (!needle) return data.findings
-    return data.findings.filter((f) =>
+    let list = data.findings
+    if (onlyNew) list = list.filter((f) => newIDs.has(f.id))
+    if (!needle) return list
+    return list.filter((f) =>
       [f.title, f.detail, f.object, f.rule, f.file].some((v) => v?.toLowerCase().includes(needle)),
     )
-  }, [data, query])
+  }, [data, query, onlyNew, newIDs])
 
   return (
     <>
@@ -78,6 +90,10 @@ export default function Findings() {
             {t('common.search')}
             <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t('findings.searchPlaceholder')} />
           </label>
+          <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', paddingBottom: '0.4rem' }}>
+            <Checkbox checked={onlyNew} disabled={newIDs.size === 0} onChange={(e) => setOnlyNew(e.target.checked)} />
+            {t('findings.onlyNew', { count: newIDs.size })}
+          </label>
           <span className="small muted" style={{ paddingBottom: '0.4rem' }}>
             {t('common.shown', { shown: formatNumber(visible.length), total: formatNumber(data?.total ?? 0) })}
           </span>
@@ -98,6 +114,7 @@ export default function Findings() {
                 <div style={{ minWidth: 0 }}>
                   <div className="row" style={{ marginBottom: '0.25rem' }}>
                     <SeverityBadge severity={f.severity} />
+                    {newIDs.has(f.id) && <Tag color="gold">{t('findings.newTag')}</Tag>}
                     <Tag>{f.rule}</Tag>
                     <Tag>{f.service}</Tag>
                     {f.object && <Tag>{f.object}</Tag>}

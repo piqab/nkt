@@ -31,6 +31,9 @@ const pollHostTimeout = 10 * time.Second
 type hostOverview struct {
 	reachable bool
 	findings  map[string]int
+	// severe — критичные и высокие находки по ID → заголовок (из
+	// top_findings хоста): чтобы оповещение назвало новые по имени.
+	severe map[string]string
 	// lastPolledAt is the last *successful* poll — findings is only ever
 	// updated on success, so this is also findings' own freshness.
 	lastPolledAt time.Time
@@ -167,6 +170,13 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	var body struct {
 		Findings map[string]int `json:"findings"`
 		Version  string         `json:"version"`
+		// TopFindings — самые серьёзные находки хоста: по ним оповещение
+		// «новые проблемы» называет, что именно появилось.
+		TopFindings []struct {
+			ID       string `json:"id"`
+			Severity string `json:"severity"`
+			Title    string `json:"title"`
+		} `json:"top_findings"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		m.recordUnreachable(ctx, hostID, err)
@@ -176,7 +186,13 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	// Оповещения — до обновления кэша, по той же причине: переход виден
 	// только в сравнении с прошлым опросом.
 	m.noteReachability(ctx, hostID, true, "")
-	m.noteFindings(ctx, hostID, body.Findings)
+	severeNow := map[string]string{}
+	for _, f := range body.TopFindings {
+		if f.Severity == "critical" || f.Severity == "high" {
+			severeNow[f.ID] = f.Title
+		}
+	}
+	m.noteFindings(ctx, hostID, body.Findings, severeNow)
 
 	// Машины внутри хоста: их состояние знает только он. Спрашиваем
 	// вторым запросом и только когда есть кого спрашивать — у хоста без
@@ -203,6 +219,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	m.overview[hostID] = hostOverview{
 		reachable:     true,
 		findings:      body.Findings,
+		severe:        severeNow,
 		version:       body.Version,
 		lastPolledAt:  now,
 		lastCheckedAt: now,

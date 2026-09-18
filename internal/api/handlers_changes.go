@@ -86,6 +86,10 @@ func (s *Server) handleChanges(w http.ResponseWriter, r *http.Request) {
 	}
 
 	changes := statediff.Diff(prev, cur)
+	if changes == nil {
+		// null в JSON ломает .map на фронте; пустой список — честный ответ.
+		changes = []statediff.Change{}
+	}
 	truncated := false
 	if len(changes) > changesLimit {
 		changes, truncated = changes[:changesLimit], true
