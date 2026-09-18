@@ -8,6 +8,7 @@ import Podman from './Podman'
 import LXD from './LXD'
 import Virtualization from './Virtualization'
 import Profiles from './Profiles'
+import Kubernetes from './Kubernetes'
 
 function tabLabel(text: string, count: number | undefined): string {
   return count === undefined ? text : `${text} (${count})`
@@ -35,6 +36,7 @@ export default function Containers({ me }: { me: Me }) {
   const lxd = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
   const vms = useApi<{ vms: VirtualMachine[] }>('/vms', 30_000)
   const images = useApi<{ images: unknown[] }>('/images', 60_000)
+  const k8s = useApi<{ status: { installed: boolean }; nodes?: unknown[] }>('/k8s', 60_000)
   void images // счётчик образов теперь внутри вкладки Docker, отдельной метки у них нет
 
   return (
@@ -69,6 +71,11 @@ export default function Containers({ me }: { me: Me }) {
           label: tabLabel(t('containers.vms'), vms.data?.vms.length),
           children: <Virtualization me={me} />,
         },
+        // Kubernetes — только если на хосте он стоит: вкладка про
+        // кластер, узлом которого хост является.
+        ...(k8s.data?.status.installed
+          ? [{ key: 'k8s', label: tabLabel('Kubernetes', k8s.data.nodes?.length), children: <Kubernetes me={me} /> }]
+          : []),
         // Профиль описывает желаемое состояние хоста целиком, но на этом
         // экране он про то же, что и вкладки рядом: стеки compose и
         // заготовки машин. Последней — она не про то, что работает

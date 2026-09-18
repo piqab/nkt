@@ -128,8 +128,9 @@ func (m *Manager) Status(ctx context.Context) Status {
 		if m.c.Exists("/etc/systemd/system/k3s.service") {
 			st.Role = RoleServer
 		}
+		// «k3s version v1.31.4+k3s1 (a562d090)» — третье слово.
 		if out, err := m.c.Run(ctx, "k3s", "--version"); err == nil && out.OK() {
-			st.Version = firstField(out.Stdout, 2)
+			st.Version = firstField(out.Stdout, 3)
 		}
 		unit := "k3s"
 		if st.Role == RoleAgent {
@@ -229,8 +230,8 @@ func ParseNodes(raw []byte) ([]Node, error) {
 				n.InternalIP = a.Address
 			}
 		}
-		if !it.Metadata.CreationTimestamp.IsZero() {
-			n.Age = time.Since(it.Metadata.CreationTimestamp).Round(time.Minute).String()
+		if age := time.Since(it.Metadata.CreationTimestamp); !it.Metadata.CreationTimestamp.IsZero() && age > 0 {
+			n.Age = age.Round(time.Minute).String()
 		}
 		nodes = append(nodes, n)
 	}
