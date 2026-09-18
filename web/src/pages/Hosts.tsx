@@ -12,6 +12,7 @@ import {
   SyncOutlined,
   WarningFilled,
   CloudDownloadOutlined,
+  ClusterOutlined,
 } from '@ant-design/icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
@@ -23,6 +24,7 @@ import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { JobLogModal } from './Jobs'
+import { ClustersCard, NewClusterModal } from '../components/Clusters'
 
 /** How often to poll a running install job for new progress lines — same
  * cadence Certificates.tsx uses for certbot jobs. */
@@ -375,6 +377,7 @@ export default function Hosts({
   // собственной машины: раскатывать по группе можно любой из них.
   const profiles = useApi<{ profiles: { id: number; name: string }[] }>('/hosts/local/profiles', 120_000)
   const [provisionOn, setProvisionOn] = useState<HubHost | null>(null)
+  const [clusterOn, setClusterOn] = useState<HubHost | null>(null)
   // Раскрытые списки машин — по идентификатору хоста. По умолчанию
   // свёрнуто: у хоста с десятком машин список иначе оттеснил бы сами
   // хосты.
@@ -1091,6 +1094,7 @@ export default function Hosts({
         {h.status === 'online' && !h.parent_id && (
           <span className="vm-action">
             <RowAction action="create" label={t('hosts.newVM')} disabled={busy} onClick={() => setProvisionOn(h)} />
+            <RowAction icon={<ClusterOutlined />} label={t('clusters.new')} disabled={busy} onClick={() => setClusterOn(h)} />
           </span>
         )}
       </div>
@@ -1325,6 +1329,19 @@ export default function Hosts({
           onClose={() => setProvisionOn(null)}
           onStarted={(text, jobID) => {
             setProvisionOn(null)
+            setNotice({ kind: 'info', text })
+            void openHubJob(jobID)
+            reload()
+          }}
+        />
+      )}
+
+      {clusterOn && (
+        <NewClusterModal
+          host={clusterOn}
+          onClose={() => setClusterOn(null)}
+          onStarted={(text, jobID) => {
+            setClusterOn(null)
             setNotice({ kind: 'info', text })
             void openHubJob(jobID)
             reload()
@@ -1574,6 +1591,8 @@ export default function Hosts({
           </div>
         )}
       </Card>
+
+      <ClustersCard onOpenJob={(id) => void openHubJob(id)} onChanged={() => reload()} />
 
       {creatingHost && (
         <Modal title={t('hosts.addHostTitle')} onClose={() => setCreatingHost(false)} width={860}>

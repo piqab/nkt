@@ -224,6 +224,8 @@ CREATE TABLE IF NOT EXISTS hosts (
     sudo_status        TEXT NOT NULL DEFAULT '' CHECK (sudo_status IN ('','root','nopasswd','password_required')),
     terminal_enabled   INTEGER NOT NULL DEFAULT 0, -- passed through as NKT_TERMINAL_ENABLED on install/update
     apt_via_hub        INTEGER NOT NULL DEFAULT 0, -- apt хоста ходит через кэш хаба (обратный проброс по SSH)
+    cluster_id         INTEGER NOT NULL DEFAULT 0, -- узел кластера Kubernetes (clusters.id)
+    k8s_role           TEXT NOT NULL DEFAULT '',   -- control-plane | worker
     tunnel_enabled     INTEGER NOT NULL DEFAULT 0, -- reverse-tunnel fallback for when SSH is unreachable, see internal/tunnel
     tunnel_token_hash  BLOB,                       -- legacy/unused: SHA-256 of the token, from when the host verified it;
                                                     -- kept only per this file's own "never remove a past column" policy
@@ -254,6 +256,24 @@ CREATE TABLE IF NOT EXISTS scripts (
     author     TEXT NOT NULL DEFAULT '',
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
+);
+-- Кластеры Kubernetes на виртуалках хоста (internal/hub/cluster.go):
+-- узлы — обычные записи hosts с cluster_id и k8s_role.
+CREATE TABLE IF NOT EXISTS clusters (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    name           TEXT NOT NULL UNIQUE,
+    host_id        INTEGER NOT NULL,
+    flavor         TEXT NOT NULL,
+    topology       TEXT NOT NULL,
+    workers        INTEGER NOT NULL DEFAULT 0,
+    expose         INTEGER NOT NULL DEFAULT 0,
+    status         TEXT NOT NULL,
+    error_msg      TEXT NOT NULL DEFAULT '',
+    server_addr    TEXT NOT NULL DEFAULT '',
+    kubeconfig_enc BLOB,
+    spec_json      TEXT NOT NULL DEFAULT '',
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS script_versions (
     id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -309,6 +329,8 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"hosts", "terminal_enabled", `ALTER TABLE hosts ADD COLUMN terminal_enabled INTEGER NOT NULL DEFAULT 0`},
 	{"hosts", "tunnel_enabled", `ALTER TABLE hosts ADD COLUMN tunnel_enabled INTEGER NOT NULL DEFAULT 0`},
 	{"hosts", "apt_via_hub", `ALTER TABLE hosts ADD COLUMN apt_via_hub INTEGER NOT NULL DEFAULT 0`},
+	{"hosts", "cluster_id", `ALTER TABLE hosts ADD COLUMN cluster_id INTEGER NOT NULL DEFAULT 0`},
+	{"hosts", "k8s_role", `ALTER TABLE hosts ADD COLUMN k8s_role TEXT NOT NULL DEFAULT ''`},
 	{"hosts", "tunnel_token_hash", `ALTER TABLE hosts ADD COLUMN tunnel_token_hash BLOB`},
 	{"hosts", "tunnel_token_enc", `ALTER TABLE hosts ADD COLUMN tunnel_token_enc BLOB`},
 	{"hosts", "tunnel_cert_sha256", `ALTER TABLE hosts ADD COLUMN tunnel_cert_sha256 BLOB`},

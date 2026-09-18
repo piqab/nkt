@@ -69,6 +69,11 @@ func (m *Manager) HostAPI(ctx context.Context, hostID int64, method, path string
 		return resp.StatusCode, msgs.Errorf("control.code", method, path, resp.StatusCode, hostAPIError(raw))
 	}
 	if out != nil {
+		// *string — тело как есть (kubeconfig, YAML), не JSON.
+		if sp, ok := out.(*string); ok {
+			*sp = string(raw)
+			return resp.StatusCode, nil
+		}
 		if err := json.Unmarshal(raw, out); err != nil {
 			return resp.StatusCode, msgs.Errorf("hub.parsingResponse", path, err)
 		}

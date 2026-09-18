@@ -3,6 +3,8 @@ package api
 import (
 	"net/http"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
@@ -107,6 +109,53 @@ func (s *Server) handleK8sUninstall(w http.ResponseWriter, r *http.Request) {
 	s.db.Audit(r.Context(), user, "k8s.uninstall", "", auditResult(err), errText(err))
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// Пробросы портов хоста в машины (см. control.PortForwardManager).
+
+func (s *Server) portForwards() *control.PortForwardManager {
+	var run control.PrivilegedRunner
+	if s.cfg.Mode == config.ModeLocal {
+		run = RunUnrestricted
+	}
+	return control.NewPortForwardManager(s.scanner.Collector(), run)
+}
+
+func (s *Server) handlePortForwardList(w http.ResponseWriter, r *http.Request) {
+	list, err := s.portForwards().List()
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"forwards": list})
+}
+
+func (s *Server) handlePortForwardSet(w http.ResponseWriter, r *http.Request) {
+	var pf control.PortForward
+	if err := decodeJSON(r, &pf); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	user := auth.Username(r.Context())
+	err := s.portForwards().Set(r.Context(), pf)
+	s.db.Audit(r.Context(), user, "portforward.set", pf.Name, auditResult(err), errText(err))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handlePortForwardDelete(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	user := auth.Username(r.Context())
+	err := s.portForwards().Remove(r.Context(), name)
+	s.db.Audit(r.Context(), user, "portforward.remove", name, auditResult(err), errText(err))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
