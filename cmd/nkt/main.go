@@ -27,6 +27,7 @@ import (
 	"github.com/piqab/nkt/internal/hub"
 	"github.com/piqab/nkt/internal/inventory"
 	"github.com/piqab/nkt/internal/jobs"
+	"github.com/piqab/nkt/internal/k8s"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/monitor"
 	"github.com/piqab/nkt/internal/profile"
@@ -717,6 +718,7 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 			return vmcreate.PutHostImage(ctx, api.RunTooling, tmpPath, name)
 		}))
 	m.Register(vmcreate.KindCreate, vmcreate.NewCreateRunner(images, collector, api.RunTooling))
+	m.Register(k8s.KindInstall, k8s.NewInstallRunner(k8s.New(collector, privilegedRunner(cfg))))
 	m.Register(vmcreate.KindTools, vmcreate.NewToolsRunner(api.RunTooling))
 }
 
