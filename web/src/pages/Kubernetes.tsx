@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react'
 import { Button, Select, Tag } from 'antd'
+import { CodeOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { api, apiURL, useApi } from '../api'
+import { api, apiURL, hostScope, readSelectedHost, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
@@ -107,6 +108,23 @@ export default function Kubernetes({ me }: { me: Me }) {
               <a href={apiURL('/k8s/kubeconfig')} download="kubeconfig.yaml">
                 <Button size="small">kubeconfig</Button>
               </a>
+            )}
+            {isServer && me.is_admin && (
+              <Button
+                size="small"
+                icon={<CodeOutlined />}
+                title={t('clusters.kubectlHint')}
+                onClick={() => {
+                  // Откреплённый терминал с kubectl на этом узле (?kubectl=1).
+                  const params = new URLSearchParams({ kubectl: '1' })
+                  if (hostScope.id !== null) params.set('host', String(hostScope.id))
+                  const name = readSelectedHost()?.name
+                  if (name) params.set('name', name)
+                  window.open(`/terminal/popout?${params.toString()}`, `nkt-kubectl-host-${hostScope.id ?? 'local'}`, 'width=980,height=640,resizable=yes')
+                }}
+              >
+                kubectl
+              </Button>
             )}
             {me.is_admin && me.allow_mutations && (
               <Button size="small" danger loading={busy} onClick={() => void uninstall()}>
