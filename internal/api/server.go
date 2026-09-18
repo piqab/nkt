@@ -375,6 +375,7 @@ func (s *Server) Handler() http.Handler {
 				r.Delete("/vm/templates/{id}", s.handleVMTemplateDelete)
 
 				r.Post("/jobs/{id}/cancel", s.handleJobCancel)
+				r.Post("/jobs/{id}/retry", s.handleJobRetry)
 				r.Post("/configs/mkdir", s.handleConfigMkdir)
 				r.Post("/configs/allow-write", s.handleConfigAllowWrite)
 				r.Post("/configs/blocks", s.handleConfigBlockWrite)

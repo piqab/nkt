@@ -101,13 +101,27 @@ func (r *ScriptRunner) forget(ticket string) {
 // hostJobTimeout — сколько ждать одного шага на хосте.
 const scriptStepTimeout = 30 * time.Minute
 
+// scriptTicketTTL — сколько после провала хранить ответы на вопросы
+// сценария ради «попробовать снова».
+const scriptTicketTTL = time.Hour
+
 // Run выполняет сценарий.
-func (r *ScriptRunner) Run(ctx context.Context, jc *jobs.Context) error {
+func (r *ScriptRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 	var p ScriptRunParams
 	if err := jc.Params(&p); err != nil {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
-	defer r.forget(p.Ticket)
+	// Ответы на вопросы забываются после успеха; после провала живут ещё
+	// scriptTicketTTL — столько есть у «попробовать снова», у которого те
+	// же параметры и тот же билет, а спросить заново нечем.
+	defer func() {
+		if err == nil {
+			r.forget(p.Ticket)
+			return
+		}
+		ticket := p.Ticket
+		time.AfterFunc(scriptTicketTTL, func() { r.forget(ticket) })
+	}()
 	values := r.values(p.Ticket)
 	sc, issues := script.Parse(p.Content, values)
 	if len(issues) > 0 {

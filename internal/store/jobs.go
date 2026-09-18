@@ -46,6 +46,10 @@ type Job struct {
 	CreatedAt  string `json:"created_at"`
 	StartedAt  string `json:"started_at,omitempty"`
 	FinishedAt string `json:"finished_at,omitempty"`
+	// Resumable — тип задания умеет продолжаться с сохранённого места
+	// (кнопка «попробовать снова»). Не колонка: выставляется API по
+	// исполнителю.
+	Resumable bool `json:"resumable,omitempty"`
 }
 
 // Done отвечает, закончилось ли задание. Прерванное считается

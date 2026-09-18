@@ -5,6 +5,8 @@ import (
 	"errors"
 	"log/slog"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -269,5 +271,66 @@ func TestWatchReceivesLines(t *testing.T) {
 		case <-deadline:
 			t.Fatal("строка журнала не пришла наблюдателю")
 		}
+	}
+}
+
+// «Попробовать снова»: новое задание получает параметры и состояние
+// упавшего, сделанное пропускается; успешное и неумеющее продолжаться —
+// не повторяются.
+func TestRetryResumesFromState(t *testing.T) {
+	m, db := newTestManager(t)
+	ctx := context.Background()
+	type state struct {
+		Done int `json:"done"`
+	}
+	var runs []int
+	failFirst := true
+	m.Register("stepwise", runnerFunc{resumable: true, fn: func(ctx context.Context, jc *Context) error {
+		var st state
+		_ = jc.LoadResume(&st)
+		runs = append(runs, st.Done)
+		for i := st.Done; i < 3; i++ {
+			if i == 1 && failFirst {
+				failFirst = false
+				return errors.New("boom")
+			}
+			st.Done = i + 1
+			jc.SaveResume(st)
+		}
+		return nil
+	}})
+	m.Register("plain", runnerFunc{resumable: false, fn: func(context.Context, *Context) error { return errors.New("no") }})
+
+	id, err := m.Start(ctx, Spec{Kind: "stepwise", Title: "t", Queue: "q", Params: map[string]int{"x": 1}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "провал", func() bool { return jobStatus(t, db, id) == store.JobFailed })
+	if _, err := m.Retry(ctx, 0); err == nil {
+		t.Error("retry of unknown job must fail")
+	}
+	newID, err := m.Retry(ctx, id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, "успех повтора", func() bool { return jobStatus(t, db, newID) == store.JobSucceeded })
+	if len(runs) != 2 || runs[0] != 0 || runs[1] != 1 {
+		t.Errorf("runs: %v — повтор должен начаться с сохранённого места", runs)
+	}
+	nj, _ := db.JobByID(ctx, newID)
+	if nj.Params != `{"x":1}` || nj.Kind != "stepwise" {
+		t.Errorf("params not copied: %+v", nj)
+	}
+	lines, _ := db.JobLog(ctx, newID, 0, 10)
+	if len(lines) == 0 || !strings.Contains(lines[0].Text, "#"+strconv.FormatInt(id, 10)) {
+		t.Errorf("first line must reference the original job: %+v", lines)
+	}
+	if _, err := m.Retry(ctx, newID); err == nil {
+		t.Error("retry of a succeeded job must fail")
+	}
+	pid, _ := m.Start(ctx, Spec{Kind: "plain", Title: "p", Queue: "q2"})
+	waitFor(t, "провал plain", func() bool { return jobStatus(t, db, pid) == store.JobFailed })
+	if _, err := m.Retry(ctx, pid); err == nil {
+		t.Error("retry of a non-resumable job must fail")
 	}
 }

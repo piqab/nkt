@@ -308,6 +308,13 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
                   </a>
                 </Tooltip>
               )}
+              {c.status === 'failed' && (
+                <Tooltip title={t('clusters.retryHint')}>
+                  <Button size="small" type="primary" loading={busy === `retry:${c.id}`} onClick={() => void call(`retry:${c.id}`, `/hub/clusters/${c.id}/retry`, 'POST')}>
+                    {t('clusters.retry')}
+                  </Button>
+                </Tooltip>
+              )}
               {c.status === 'ready' && c.topology !== 'single' && (
                 <Button size="small" loading={busy === `add:${c.id}`} onClick={() => void call(`add:${c.id}`, `/hub/clusters/${c.id}/workers`, 'POST', { count: 1 })}>
                   {t('clusters.addWorker')}

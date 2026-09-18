@@ -1734,7 +1734,9 @@
       "failed": "failed",
       "canceled": "canceled",
       "interrupted": "interrupted"
-    }
+    },
+    "retry": "try again",
+    "retryHint": "A new job with the same parameters continues from where this one stopped: done work (created machines, installed roles) is skipped, the failed step runs again."
   },
   "profiles": {
     "title": "Profiles",
@@ -2268,7 +2270,9 @@
     "imageUpload": "upload an image",
     "imagesNone": "No images yet — upload a qcow2 and it appears in the image list when creating a cluster.",
     "imageDeleteConfirm": "Delete image “{{name}}” from the hub library? Copies on hosts stay.",
-    "imageFromHub": "from the hub"
+    "imageFromHub": "from the hub",
+    "retry": "continue",
+    "retryHint": "Continue the creation from where it failed: created machines and installed roles stay, the failed step runs again."
   },
   "k8s": {
     "notInstalled": "Kubernetes is not installed on this host. Clusters are created on the hub: “new cluster” next to a host with virtualization.",

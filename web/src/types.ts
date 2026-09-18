@@ -859,6 +859,8 @@ export interface Job {
   /** Вход задания как JSON-строка: разбирает его тот, кто знает вид. */
   params?: string
   status: 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled' | 'interrupted'
+  /** Тип задания умеет продолжаться с сохранённого места («попробовать снова»). */
+  resumable?: boolean
   step: number
   steps: number
   step_name?: string

@@ -47,7 +47,31 @@ func (s *Server) handleJobGet(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
+	job.Resumable = s.jobs != nil && s.jobs.IsResumable(job.Kind)
 	writeJSON(w, http.StatusOK, job)
+}
+
+// handleJobRetry — «попробовать снова»: новое задание с состоянием
+// упавшего.
+func (s *Server) handleJobRetry(w http.ResponseWriter, r *http.Request) {
+	job, err := s.jobByIDParam(r)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if s.jobs == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
+		return
+	}
+	user := auth.Username(r.Context())
+	newID, err := s.jobs.Retry(r.Context(), job.ID)
+	if err != nil {
+		s.db.Audit(r.Context(), user, "job.retry", job.Kind, "error", err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.db.Audit(r.Context(), user, "job.retry", job.Kind, "ok", job.Title)
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": newID})
 }
 
 func (s *Server) handleJobLog(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +86,7 @@ func (s *Server) handleJobLog(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	job.Resumable = s.jobs != nil && s.jobs.IsResumable(job.Kind)
 	writeJSON(w, http.StatusOK, map[string]any{"job": job, "lines": lines})
 }
 

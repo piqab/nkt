@@ -409,6 +409,9 @@ type InstallRunner struct{ m *Manager }
 
 func NewInstallRunner(m *Manager) *InstallRunner { return &InstallRunner{m: m} }
 
+// Resumable — да: сделанные шаги записаны.
+func (r *InstallRunner) Resumable() bool { return true }
+
 // Run выполняет шаги установки роли.
 func (r *InstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var spec InstallSpec
@@ -421,9 +424,19 @@ func (r *InstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if r.m.run == nil {
 		return msgs.Errorf("control.installationUnavailableMode")
 	}
+	// Продолжение: сделанные шаги пропускаются (все они и так
+	// идемпотентны, но повторять apt и загрузки незачем).
+	var done struct {
+		Steps int `json:"steps"`
+	}
+	_ = jc.LoadResume(&done)
 	steps := Steps(spec)
 	for i, st := range steps {
 		jc.Step(i+1, len(steps), msgs.T(jc.Lang(), st.Title))
+		if i < done.Steps {
+			jc.Log("k8s.stepSkipped")
+			continue
+		}
 		out, err := r.m.run(ctx, "sh", "-c", st.Script)
 		if err != nil {
 			return msgs.Errorf("k8s.stepFailed", msgs.T(jc.Lang(), st.Title), err)
@@ -440,6 +453,8 @@ func (r *InstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			}
 			return msgs.Errorf("k8s.stepFailed", msgs.T(jc.Lang(), st.Title), fmt.Sprintf("exit %d: %s", out.ExitCode, failureLine(out)))
 		}
+		done.Steps = i + 1
+		jc.SaveResume(done)
 	}
 	jc.Log("k8s.installed", spec.Flavor, spec.Role)
 	return nil

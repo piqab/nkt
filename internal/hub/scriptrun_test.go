@@ -69,8 +69,9 @@ func TestScriptRunnerHostsAndResume(t *testing.T) {
 	if gp, _ := db.HostGroupProfile(ctx, "farm"); gp != pid {
 		t.Errorf("профиль группы = %d", gp)
 	}
-	if _, ok := r.value(ticket, "host:web2"); ok {
-		t.Error("пароль запуска остался в памяти после задания")
+	// После провала ответы остаются (на час) — ради «попробовать снова».
+	if _, ok := r.value(ticket, "host:web2"); !ok {
+		t.Error("ответы запуска должны остаться после провала для повтора")
 	}
 
 	// Продолжение: три шага сделаны, install снова падает, а хосты не

@@ -261,6 +261,55 @@ func (s *Server) handleClusterDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": jobID})
 }
 
+// handleClusterRetry — «продолжить»: последнее упавшее задание кластера
+// заводится заново с его состоянием (машины и роли не пересоздаются).
+func (s *Server) handleClusterRetry(w http.ResponseWriter, r *http.Request) {
+	id, err := clusterIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	cl, err := s.db.ClusterByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if s.jobs == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
+		return
+	}
+	jobsList, err := s.db.ListJobs(r.Context(), 500)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	var last *store.Job
+	needle := fmt.Sprintf("\"cluster_id\":%d,", cl.ID)
+	for i := range jobsList {
+		j := &jobsList[i]
+		if j.Kind != KindClusterCreate || !strings.Contains(j.Params, needle) || strings.Contains(j.Params, "\"dry_run\":true") {
+			continue
+		}
+		if last == nil || j.ID > last.ID {
+			last = j
+		}
+	}
+	if last == nil {
+		writeError(w, http.StatusNotFound, msgs.Tc(r.Context(), "hub.clusterNoJob"))
+		return
+	}
+	user := auth.Username(r.Context())
+	newID, err := s.jobs.Retry(r.Context(), last.ID)
+	if err != nil {
+		s.db.Audit(r.Context(), user, "cluster.retry", cl.Name, "error", err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	_ = s.db.SetClusterStatus(r.Context(), cl.ID, store.ClusterCreating, "")
+	s.db.Audit(r.Context(), user, "cluster.retry", cl.Name, "ok", fmt.Sprint(last.ID))
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": newID})
+}
+
 // Библиотека образов для кластеров (см. clusterimages.go).
 
 func (s *Server) handleClusterImages(w http.ResponseWriter, r *http.Request) {
