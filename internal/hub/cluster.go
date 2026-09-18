@@ -655,7 +655,11 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		if raw, err := json.Marshal(spec); err == nil {
 			_ = r.m.db.SetClusterSpec(ctx, cl.ID, string(raw))
 		}
+	}
+	if spec.K8sVersion != "" {
 		jc.Log("hub.clusterK8sVersion", spec.K8sVersion)
+	} else {
+		jc.Log("hub.clusterK3sStable")
 	}
 	cp1, err := r.m.db.HostByID(ctx, done.Hosts[cp1Name])
 	if err != nil {
@@ -763,6 +767,19 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	}
 	jc.Log("hub.clusterDone", spec.Name, serverAddr)
 	return nil
+}
+
+// K8sVersions — актуальная минорная версия и три предыдущие (столько
+// веток поддерживает Kubernetes; у k3s каналы на них тоже есть).
+func (m *Manager) K8sVersions(ctx context.Context) (stable string, versions []string) {
+	stable = m.k8sStableMinor(ctx)
+	parts := strings.Split(stable, ".")
+	major, minor := parts[0], 0
+	fmt.Sscanf(parts[1], "%d", &minor)
+	for i := 0; i < 4 && minor-i >= 0; i++ {
+		versions = append(versions, fmt.Sprintf("%s.%d", major, minor-i))
+	}
+	return stable, versions
 }
 
 // k8sStableMinor — актуальная минорная версия Kubernetes по

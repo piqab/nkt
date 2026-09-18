@@ -58,6 +58,8 @@ export function NewClusterModal({
   const knownNets = nets.data?.networks ?? []
   const [name, setName] = useState('k8s')
   const [flavor, setFlavor] = useState<'k3s' | 'kubeadm'>('k3s')
+  const [k8sVersion, setK8sVersion] = useState('')
+  const versions = useApi<{ stable: string; versions: string[] }>('/hub/k8s-versions', 600_000)
   const [topology, setTopology] = useState<'single' | 'cp1' | 'cp3'>('cp1')
   const [workers, setWorkers] = useState(1)
   const [expose, setExpose] = useState(true)
@@ -84,6 +86,7 @@ export function NewClusterModal({
           name,
           host_id: host.id,
           flavor,
+          k8s_version: k8sVersion,
           topology,
           workers: topology === 'single' ? 0 : workers,
           expose,
@@ -157,6 +160,18 @@ export function NewClusterModal({
               { value: 'kubeadm', label: t('clusters.flavorKubeadm') },
             ]}
           />
+        </label>
+        <label>
+          {t('clusters.k8sVersion')}
+          <Select
+            value={k8sVersion}
+            onChange={(v: string) => setK8sVersion(v)}
+            options={[
+              { value: '', label: t('clusters.k8sVersionStable', { v: versions.data?.stable ?? '…' }) },
+              ...(versions.data?.versions ?? []).map((v) => ({ value: v, label: v })),
+            ]}
+          />
+          <span className="small muted">{t('clusters.k8sVersionHint')}</span>
         </label>
         <label>
           {t('clusters.topology')}

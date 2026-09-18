@@ -261,6 +261,13 @@ func (s *Server) handleClusterDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": jobID})
 }
 
+// handleK8sVersions — версии Kubernetes для формы: актуальная stable и
+// предыдущие.
+func (s *Server) handleK8sVersions(w http.ResponseWriter, r *http.Request) {
+	stable, versions := s.hub.K8sVersions(r.Context())
+	writeJSON(w, http.StatusOK, map[string]any{"stable": stable, "versions": versions})
+}
+
 // handleClusterRetry — «продолжить»: последнее упавшее задание кластера
 // заводится заново с его состоянием (машины и роли не пересоздаются).
 func (s *Server) handleClusterRetry(w http.ResponseWriter, r *http.Request) {

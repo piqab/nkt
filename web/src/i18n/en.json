@@ -2272,7 +2272,10 @@
     "imageDeleteConfirm": "Delete image “{{name}}” from the hub library? Copies on hosts stay.",
     "imageFromHub": "from the hub",
     "retry": "continue",
-    "retryHint": "Continue the creation from where it failed: created machines and installed roles stay, the failed step runs again."
+    "retryHint": "Continue the creation from where it failed: created machines and installed roles stay, the failed step runs again.",
+    "k8sVersion": "Kubernetes version",
+    "k8sVersionStable": "current stable ({{v}})",
+    "k8sVersionHint": "kubeadm — the pkgs.k8s.io branch, k3s — the channel; the same for every node. Inside a node the API is always on 6443, the port in “expose” is the host port"
   },
   "k8s": {
     "notInstalled": "Kubernetes is not installed on this host. Clusters are created on the hub: “new cluster” next to a host with virtualization.",
