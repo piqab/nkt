@@ -293,6 +293,24 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 		}
 		var toDownload []string
 		for id := range images {
+			if name := hubImageName(id); name != "" {
+				// Образ из библиотеки хаба: есть ли на хабе и на хосте.
+				img, err := r.m.ClusterImage(name)
+				if err != nil {
+					add(false, false, "hub.preflightHubImageMissing", name)
+					continue
+				}
+				has, err := r.m.hostHasImage(ctx, host.ID, img)
+				switch {
+				case err != nil:
+					add(false, false, "hub.preflightHostAPI", err)
+				case has:
+					add(true, false, "hub.preflightHubImageOnHost", name)
+				default:
+					add(true, true, "hub.preflightHubImageUpload", name, float64(img.Size)/(1<<30))
+				}
+				continue
+			}
 			img, known := vmimage.ByID(id)
 			downloaded := false
 			for _, d := range pf.ImagesDownload {

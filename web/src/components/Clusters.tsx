@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { api, apiURL, useApi } from '../api'
 import type { HubHost, Job } from '../types'
 import { JobLogModal } from '../pages/Jobs'
-import { Banner, Card, ErrorNote, Modal, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, Modal, formatBytesShort, formatRelative } from '../components/ui'
 import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
@@ -54,6 +54,7 @@ export function NewClusterModal({
   const { t } = useTranslation()
   const images = useApi<{ catalog: { id: string; name: string }[]; local: { id: string; downloaded: boolean }[] }>(`/hosts/${host.id}/vm/images`, 10_000)
   const nets = useApi<{ networks: { name: string; active: boolean }[] }>(`/hosts/${host.id}/vm/networks`, 60_000)
+  const hubImages = useApi<{ images: { name: string; size: number }[] }>('/hub/cluster-images', 60_000)
   const knownNets = nets.data?.networks ?? []
   const [name, setName] = useState('k8s')
   const [flavor, setFlavor] = useState<'k3s' | 'kubeadm'>('k3s')
@@ -178,7 +179,10 @@ export function NewClusterModal({
           <Select
             value={effectiveImage}
             onChange={(v: string) => setImageID(v)}
-            options={catalog.map((img) => ({ value: img.id, label: img.name + (downloaded.has(img.id) ? '' : ` ${t('hosts.newVMWillDownload')}`) }))}
+            options={[
+              ...catalog.map((img) => ({ value: img.id, label: img.name + (downloaded.has(img.id) ? '' : ` ${t('hosts.newVMWillDownload')}`) })),
+              ...(hubImages.data?.images ?? []).map((img) => ({ value: `hub:${img.name}`, label: `${t('clusters.imageFromHub')}: ${img.name} (${formatBytesShort(img.size)})` })),
+            ]}
           />
         </label>
         <label>
