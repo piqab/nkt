@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"github.com/piqab/nkt/internal/collect"
 	"strings"
 	"testing"
 )
@@ -110,5 +111,21 @@ func TestStepsCilium(t *testing.T) {
 	}
 	if (InstallSpec{Flavor: FlavorK3s, Role: RoleServer, CNI: "calico"}).Validate() == nil {
 		t.Error("неизвестный CNI прошёл проверку")
+	}
+}
+
+// Провал apt объясняет строка «E: …» из stderr, а не последний
+// «Processing triggers…» из stdout.
+func TestFailureLine(t *testing.T) {
+	out := collect.CommandResult{Stdout: "Setting up kubelet\nProcessing triggers for libc-bin ...\n",
+		Stderr: "W: something\nE: Could not get lock /var/lib/dpkg/lock-frontend\nE: Unable to acquire the dpkg frontend lock\n", ExitCode: 100}
+	if got := failureLine(out); got != "E: Unable to acquire the dpkg frontend lock" {
+		t.Errorf("got %q", got)
+	}
+	if got := failureLine(collect.CommandResult{Stdout: "ok\nlast\n"}); got != "last" {
+		t.Errorf("stdout fallback: %q", got)
+	}
+	if got := failureLine(collect.CommandResult{Stderr: "boom\n"}); got != "boom" {
+		t.Errorf("stderr last: %q", got)
 	}
 }

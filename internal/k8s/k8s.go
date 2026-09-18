@@ -398,11 +398,17 @@ func (r *InstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		if err != nil {
 			return msgs.Errorf("k8s.stepFailed", msgs.T(jc.Lang(), st.Title), err)
 		}
-		for _, line := range tail(out.Output(), 8) {
+		for _, line := range tail(out.Stdout, 8) {
 			jc.Logf("      %s", line)
 		}
 		if out.ExitCode != 0 {
-			return msgs.Errorf("k8s.stepFailed", msgs.T(jc.Lang(), st.Title), fmt.Sprintf("exit %d: %s", out.ExitCode, lastLine(out.Output())))
+			// Ошибка apt/dpkg уходит в stderr, а stdout заканчивается
+			// безобидным «Processing triggers…» — в журнал и в текст
+			// ошибки идёт именно stderr.
+			for _, line := range tail(out.Stderr, 12) {
+				jc.Logf("      ! %s", line)
+			}
+			return msgs.Errorf("k8s.stepFailed", msgs.T(jc.Lang(), st.Title), fmt.Sprintf("exit %d: %s", out.ExitCode, failureLine(out)))
 		}
 	}
 	jc.Log("k8s.installed", spec.Flavor, spec.Role)
@@ -477,7 +483,7 @@ func k3sSteps(s InstallSpec) []Step {
 		unit = "k3s-agent"
 	}
 	steps := []Step{
-		{"k8s.step.prepare", "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get update -qq\napt-get install -y -qq curl ca-certificates\nswapoff -a || true\nsed -i.bak '/\\sswap\\s/s/^/#/' /etc/fstab || true"},
+		{"k8s.step.prepare", "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq curl ca-certificates\nswapoff -a || true\nsed -i.bak '/\\sswap\\s/s/^/#/' /etc/fstab || true"},
 		{"k8s.step.download", "set -e\ncurl -fsSL https://get.k3s.io -o /tmp/nkt-k3s-install.sh\nhead -c 200 /tmp/nkt-k3s-install.sh | grep -q '#!/bin/sh'"},
 		{"k8s.step.install", "set -e\n" + strings.Join(env, " ") + " INSTALL_K3S_EXEC=" + shq(strings.Join(exec, " ")) + " sh /tmp/nkt-k3s-install.sh\nrm -f /tmp/nkt-k3s-install.sh"},
 		{"k8s.step.wait", "set -e\nfor i in $(seq 1 60); do systemctl is-active --quiet " + unit + " && break; sleep 2; done\nsystemctl is-active --quiet " + unit},
@@ -539,7 +545,7 @@ func containerdStep(s InstallSpec) string {
 		"if command -v containerd >/dev/null 2>&1; then",
 		"  echo \"containerd: already installed ($(containerd --version 2>/dev/null | head -1)), keeping the package\"",
 		"else",
-		"  apt-get install -y -qq containerd",
+		"  apt-get -o DPkg::Lock::Timeout=600 install -y -qq containerd",
 		"fi",
 		"mkdir -p /etc/containerd",
 		"if [ -f /etc/containerd/config.toml ]; then",
@@ -572,10 +578,10 @@ func kubeadmSteps(s InstallSpec) []Step {
 	const sysprep = "set -e\nswapoff -a || true\nsed -i.bak '/\\sswap\\s/s/^/#/' /etc/fstab || true\n" +
 		"printf 'overlay\\nbr_netfilter\\n' > /etc/modules-load.d/k8s.conf\nmodprobe overlay\nmodprobe br_netfilter\n" +
 		"printf 'net.bridge.bridge-nf-call-iptables=1\\nnet.bridge.bridge-nf-call-ip6tables=1\\nnet.ipv4.ip_forward=1\\n' > /etc/sysctl.d/k8s.conf\nsysctl --system >/dev/null"
-	const repo = "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get update -qq\napt-get install -y -qq apt-transport-https ca-certificates curl gpg\n" +
+	const repo = "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq apt-transport-https ca-certificates curl gpg\n" +
 		"install -m 0755 -d /etc/apt/keyrings\ncurl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg\n" +
 		"echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' > /etc/apt/sources.list.d/kubernetes.list\n" +
-		"apt-get update -qq\napt-get install -y -qq kubelet kubeadm kubectl\napt-mark hold kubelet kubeadm kubectl"
+		"apt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq kubelet kubeadm kubectl\napt-mark hold kubelet kubeadm kubectl"
 	runtime := containerdStep(s)
 	steps := []Step{{"k8s.step.sysprep", sysprep}, {"k8s.step.download", repo}, {"k8s.step.runtime", runtime}}
 	if s.Role == RoleServer && s.ServerURL == "" {
@@ -662,6 +668,21 @@ func tail(s string, n int) []string {
 		out = out[len(out)-n:]
 	}
 	return out
+}
+
+// failureLine — строка, объясняющая провал: «E: …» apt или последняя
+// строка stderr, и только если stderr пуст — последняя строка stdout.
+func failureLine(out collect.CommandResult) string {
+	errLines := tail(out.Stderr, 50)
+	for i := len(errLines) - 1; i >= 0; i-- {
+		if strings.HasPrefix(errLines[i], "E: ") || strings.HasPrefix(errLines[i], "error:") || strings.HasPrefix(errLines[i], "Error:") {
+			return errLines[i]
+		}
+	}
+	if len(errLines) > 0 {
+		return errLines[len(errLines)-1]
+	}
+	return lastLine(out.Stdout)
 }
 
 func lastLine(s string) string {
