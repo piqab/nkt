@@ -44,9 +44,18 @@ type ClusterSpec struct {
 	Topology string `json:"topology"`
 	Workers  int    `json:"workers"`
 	Expose   bool   `json:"expose"`
-	ImageID  string `json:"image_id"`
-	Network  string `json:"network,omitempty"`
-	User     string `json:"user"`
+	// Порты хоста при пробросе: API (→6443), HTTP (→80), HTTPS (→443);
+	// 0 — не пробрасывать этот. Пустые при Expose — умолчания.
+	ExposeAPI   int `json:"expose_api,omitempty"`
+	ExposeHTTP  int `json:"expose_http,omitempty"`
+	ExposeHTTPS int `json:"expose_https,omitempty"`
+	// CNI — «cilium» или пусто (flannel); KubeProxyReplacement — Cilium
+	// вместо kube-proxy.
+	CNI                  string `json:"cni,omitempty"`
+	KubeProxyReplacement bool   `json:"kube_proxy_replacement,omitempty"`
+	ImageID              string `json:"image_id"`
+	Network              string `json:"network,omitempty"`
+	User                 string `json:"user"`
 	// Размеры control plane и worker'ов.
 	CPVCPUs    int `json:"cp_vcpus"`
 	CPMemoryMB int `json:"cp_memory_mb"`
@@ -88,6 +97,29 @@ func (s *ClusterSpec) Validate() error {
 	if s.ImageID == "" {
 		return msgs.Errorf("hub.clusterNeedsImage")
 	}
+	if s.CNI != "" && s.CNI != "cilium" {
+		return msgs.Errorf("k8s.badCNI", s.CNI)
+	}
+	if s.CNI != "cilium" {
+		s.KubeProxyReplacement = false
+	}
+	if s.Expose {
+		if s.ExposeAPI == 0 && s.ExposeHTTP == 0 && s.ExposeHTTPS == 0 {
+			s.ExposeAPI, s.ExposeHTTP, s.ExposeHTTPS = 6443, 80, 443
+		}
+		for _, p := range []int{s.ExposeAPI, s.ExposeHTTP, s.ExposeHTTPS} {
+			if p < 0 || p > 65535 {
+				return msgs.Errorf("hub.clusterBadPort", p)
+			}
+		}
+		if s.ExposeAPI == 0 {
+			// Без API-порта kubeconfig наружу не собрать — проброс без
+			// него бессмыслен.
+			return msgs.Errorf("hub.clusterExposeNeedsAPI")
+		}
+	} else {
+		s.ExposeAPI, s.ExposeHTTP, s.ExposeHTTPS = 0, 0, 0
+	}
 	if s.User == "" {
 		s.User = "deploy"
 	}
@@ -110,6 +142,26 @@ func (s *ClusterSpec) Validate() error {
 		s.WDiskGB = 30
 	}
 	return nil
+}
+
+// exposeRules — правила проброса хоста в control plane.
+func (s ClusterSpec) exposeRules() []map[string]int {
+	var out []map[string]int
+	for _, pr := range [][2]int{{s.ExposeAPI, 6443}, {s.ExposeHTTP, 80}, {s.ExposeHTTPS, 443}} {
+		if pr[0] > 0 {
+			out = append(out, map[string]int{"host_port": pr[0], "vm_port": pr[1]})
+		}
+	}
+	return out
+}
+
+// APIAddr — адрес API в kubeconfig: хост с портом при пробросе, иначе
+// первый control plane.
+func (s ClusterSpec) apiAddr(hostAddr, cpAddr string) string {
+	if s.Expose && hostAddr != "" {
+		return fmt.Sprintf("%s:%d", hostAddr, s.ExposeAPI)
+	}
+	return cpAddr + ":6443"
 }
 
 // ControlPlanes — сколько control plane в топологии.
@@ -287,6 +339,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		if err := r.installRole(ctx, jc, cp1, k8s.InstallSpec{
 			Flavor: spec.Flavor, Role: k8s.RoleServer, Single: spec.Topology == TopologySingle,
 			ClusterInit: spec.Topology == TopologyCP3, TLSSANs: tlsSANs, NodeName: cps[0],
+			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1.Addr,
 		}); err != nil {
 			return err
 		}
@@ -313,6 +366,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		if err := r.installRole(ctx, jc, h, k8s.InstallSpec{
 			Flavor: spec.Flavor, Role: k8s.RoleServer, ServerURL: join.ServerURL, Token: join.Token,
 			CAHash: join.CAHash, CertKey: join.CertKey, TLSSANs: tlsSANs, NodeName: name,
+			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement,
 		}); err != nil {
 			return err
 		}
@@ -343,19 +397,16 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	if err := r.waitNodesReady(ctx, jc, cp1, want); err != nil {
 		return err
 	}
-	serverAddr := cp1.Addr
 	if spec.Expose && !done.Exposed {
 		if _, err := r.m.HostAPI(ctx, host.ID, "POST", "/api/vm/portforward",
-			map[string]any{"name": cp1.Name, "ip": cp1.Addr, "ports": []int{6443, 80, 443}}, nil); err != nil {
+			map[string]any{"name": cp1.Name, "ip": cp1.Addr, "rules": spec.exposeRules()}, nil); err != nil {
 			return msgs.Errorf("hub.clusterExpose", err)
 		}
 		done.Exposed = true
 		jc.SaveResume(*done)
-		jc.Log("hub.clusterExposed", host.Addr, cp1.Addr)
+		jc.Log("hub.clusterExposed", host.Addr, cp1.Addr, exposeSummary(spec))
 	}
-	if spec.Expose {
-		serverAddr = host.Addr
-	}
+	serverAddr := spec.apiAddr(host.Addr, cp1.Addr)
 	var kubeconfig string
 	code, err := r.m.HostAPI(ctx, cp1.ID, "GET", "/api/k8s/kubeconfig?server="+url.QueryEscape(serverAddr), nil, &kubeconfig)
 	if err != nil || code != 200 {
@@ -373,6 +424,15 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	}
 	jc.Log("hub.clusterDone", spec.Name, serverAddr)
 	return nil
+}
+
+// exposeSummary — «16443→6443, 80→80» для журнала.
+func exposeSummary(s ClusterSpec) string {
+	var parts []string
+	for _, r := range s.exposeRules() {
+		parts = append(parts, fmt.Sprintf("%d→%d", r["host_port"], r["vm_port"]))
+	}
+	return strings.Join(parts, ", ")
 }
 
 func isCP(name string, cps []string) bool {

@@ -6,7 +6,7 @@ import (
 )
 
 func TestPortForwardScript(t *testing.T) {
-	s := Script([]PortForward{{Name: "k8s-cp-1", IP: "192.168.122.10", Ports: []int{6443, 80}}})
+	s := Script([]PortForward{{Name: "k8s-cp-1", IP: "192.168.122.10", Ports: []int{6443, 80}, Rules: []PortRule{{HostPort: 8443, VMPort: 443}}}})
 	for _, want := range []string{
 		"iptables -t nat -N NKT-PF 2>/dev/null || iptables -t nat -F NKT-PF",
 		"iptables -t nat -I PREROUTING 1 -j NKT-PF",
@@ -14,6 +14,7 @@ func TestPortForwardScript(t *testing.T) {
 		"--dport 6443 -j DNAT --to-destination 192.168.122.10:6443",
 		"-d 192.168.122.10 --dport 80 -j ACCEPT",
 		"ip_forward=1",
+		"--dport 8443 -j DNAT --to-destination 192.168.122.10:443",
 	} {
 		if !strings.Contains(s, want) {
 			t.Errorf("нет %q", want)

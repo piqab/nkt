@@ -59,6 +59,9 @@ export function NewClusterModal({
   const [topology, setTopology] = useState<'single' | 'cp1' | 'cp3'>('cp1')
   const [workers, setWorkers] = useState(1)
   const [expose, setExpose] = useState(true)
+  const [ports, setPorts] = useState<{ api: number | null; http: number | null; https: number | null }>({ api: 6443, http: 80, https: 443 })
+  const [cilium, setCilium] = useState(true)
+  const [kpr, setKPR] = useState(false)
   const [imageID, setImageID] = useState('')
   const [network, setNetwork] = useState('')
   const [cp, setCP] = useState({ vcpus: 2, mem: 4096, disk: 30 })
@@ -79,6 +82,11 @@ export function NewClusterModal({
           topology,
           workers: topology === 'single' ? 0 : workers,
           expose,
+          expose_api: expose ? ports.api ?? 0 : 0,
+          expose_http: expose ? ports.http ?? 0 : 0,
+          expose_https: expose ? ports.https ?? 0 : 0,
+          cni: cilium ? 'cilium' : '',
+          kube_proxy_replacement: cilium && kpr,
           image_id: effectiveImage,
           network: network || knownNets[0]?.name || '',
           cp_vcpus: cp.vcpus,
@@ -118,6 +126,7 @@ export function NewClusterModal({
 
   return (
     <Modal title={t('clusters.newTitle', { host: host.name })} onClose={onClose} width={760}>
+      <Banner kind="warn">{t('clusters.experimental')}</Banner>
       <p className="small muted">{t('clusters.newBody')}</p>
       <ErrorNote error={error} />
       <ErrorNote error={images.error} />
@@ -177,12 +186,34 @@ export function NewClusterModal({
         {sizes(t('clusters.cpSizes'), cp, setCP)}
         {topology !== 'single' && sizes(t('clusters.wSizes'), w, setW)}
       </div>
-      <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem' }}>
-        <Checkbox checked={expose} onChange={(e) => setExpose(e.target.checked)} />
-        <span>
-          {t('clusters.expose')} <span className="small muted">{t('clusters.exposeHint', { host: host.addr })}</span>
-        </span>
-      </label>
+      <div className="col" style={{ gap: '0.4rem', marginBottom: '0.6rem' }}>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+          <Checkbox checked={cilium} onChange={(e) => setCilium(e.target.checked)} />
+          <span>
+            {t('clusters.cilium')} <span className="small muted">{t('clusters.ciliumHint')}</span>
+          </span>
+        </label>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', paddingLeft: '1.6rem' }}>
+          <Checkbox checked={cilium && kpr} disabled={!cilium} onChange={(e) => setKPR(e.target.checked)} />
+          <span>
+            {t('clusters.kpr')} <span className="small muted">{t('clusters.kprHint')}</span>
+          </span>
+        </label>
+        <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
+          <Checkbox checked={expose} onChange={(e) => setExpose(e.target.checked)} />
+          <span>
+            {t('clusters.expose')} <span className="small muted">{t('clusters.exposeHint', { host: host.addr })}</span>
+          </span>
+        </label>
+        {expose && (
+          <div className="row" style={{ gap: '0.5rem', paddingLeft: '1.6rem', flexWrap: 'wrap' }}>
+            <InputNumber min={0} max={65535} value={ports.api} onChange={(v) => setPorts({ ...ports, api: v })} addonBefore="API" style={{ width: '10rem' }} />
+            <InputNumber min={0} max={65535} value={ports.http} onChange={(v) => setPorts({ ...ports, http: v })} addonBefore="HTTP" style={{ width: '10rem' }} />
+            <InputNumber min={0} max={65535} value={ports.https} onChange={(v) => setPorts({ ...ports, https: v })} addonBefore="HTTPS" style={{ width: '10rem' }} />
+            <span className="small muted">{t('clusters.portsHint')}</span>
+          </div>
+        )}
+      </div>
       <p className="small muted">{t('clusters.summary', { machines, flavor, host: host.name })}</p>
       <div className="row" style={{ justifyContent: 'flex-end', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>

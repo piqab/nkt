@@ -28,10 +28,28 @@ const (
 )
 
 // PortForward — один набор правил: имя (машина) → адрес и порты.
+// Ports — «тот же порт с обеих сторон»; Rules — когда порт хоста другой
+// (16443 → 6443).
 type PortForward struct {
-	Name  string `json:"name"`
-	IP    string `json:"ip"`
-	Ports []int  `json:"ports"`
+	Name  string     `json:"name"`
+	IP    string     `json:"ip"`
+	Ports []int      `json:"ports,omitempty"`
+	Rules []PortRule `json:"rules,omitempty"`
+}
+
+// PortRule — порт хоста → порт машины.
+type PortRule struct {
+	HostPort int `json:"host_port"`
+	VMPort   int `json:"vm_port"`
+}
+
+// rules — все правила в одном виде.
+func (pf PortForward) rules() []PortRule {
+	out := append([]PortRule{}, pf.Rules...)
+	for _, p := range pf.Ports {
+		out = append(out, PortRule{HostPort: p, VMPort: p})
+	}
+	return out
 }
 
 var pfNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
@@ -78,12 +96,13 @@ func (m *PortForwardManager) Set(ctx context.Context, pf PortForward) error {
 	if ip := net.ParseIP(pf.IP); ip == nil || ip.To4() == nil {
 		return msgs.Errorf("control.portForwardBadIP", pf.IP)
 	}
-	if len(pf.Ports) == 0 {
+	rules := pf.rules()
+	if len(rules) == 0 {
 		return msgs.Errorf("control.portForwardNoPorts")
 	}
-	for _, p := range pf.Ports {
-		if p < 1 || p > 65535 {
-			return msgs.Errorf("control.portForwardBadPort", p)
+	for _, r := range rules {
+		if r.HostPort < 1 || r.HostPort > 65535 || r.VMPort < 1 || r.VMPort > 65535 {
+			return msgs.Errorf("control.portForwardBadPort", r.HostPort)
 		}
 	}
 	raw, _ := json.Marshal(pf)
@@ -160,9 +179,9 @@ func Script(list []PortForward) string {
 	b.WriteString("iptables -C FORWARD -j NKT-PF 2>/dev/null || iptables -I FORWARD 1 -j NKT-PF\n")
 	b.WriteString("sysctl -qw net.ipv4.ip_forward=1\n")
 	for _, pf := range list {
-		for _, p := range pf.Ports {
-			fmt.Fprintf(&b, "# %s\niptables -t nat -A NKT-PF -p tcp --dport %d -j DNAT --to-destination %s:%d\n", pf.Name, p, pf.IP, p)
-			fmt.Fprintf(&b, "iptables -A NKT-PF -p tcp -d %s --dport %d -j ACCEPT\n", pf.IP, p)
+		for _, r := range pf.rules() {
+			fmt.Fprintf(&b, "# %s\niptables -t nat -A NKT-PF -p tcp --dport %d -j DNAT --to-destination %s:%d\n", pf.Name, r.HostPort, pf.IP, r.VMPort)
+			fmt.Fprintf(&b, "iptables -A NKT-PF -p tcp -d %s --dport %d -j ACCEPT\n", pf.IP, r.VMPort)
 		}
 	}
 	return b.String()
