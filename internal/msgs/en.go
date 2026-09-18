@@ -1120,6 +1120,7 @@ var enCatalog = map[string]string{
 	"k8s.uninstall":                                 "removing the node: %s",
 	"k8s.stepSkipped":                               "      already done — skipping",
 	"hub.clusterGone":                               "the cluster record is gone — create the cluster again from the form",
+	"terminal.kubectlNoConfig":                      "no admin kubeconfig on this node (%s) — open kubectl on a control plane",
 	"k8s.stepFailed":                                "step “%s”: %v",
 	"k8s.installed":                                 "Kubernetes (%s, %s) installed.",
 	"k8s.step.prepare":                              "preparing the system (swap, modules, sysctl, packages)",
