@@ -59,6 +59,14 @@ func (s *Server) handleVMPreflight(w http.ResponseWriter, r *http.Request) {
 		}
 		out["images_downloaded"] = downloaded
 	}
+	// Мосты хоста — для кластеров на нескольких хостах.
+	bridges := []string{}
+	if res, err := c.Run(ctx, "sh", "-c", "ip -o link show type bridge 2>/dev/null | awk -F': ' '{print $2}'"); err == nil && res.OK() {
+		for _, l := range strings.Fields(res.Stdout) {
+			bridges = append(bridges, strings.SplitN(l, "@", 2)[0])
+		}
+	}
+	out["bridges"] = bridges
 	if mgr := s.vmnets(); mgr != nil {
 		if nets, err := mgr.List(ctx); err == nil {
 			out["networks"] = nets
