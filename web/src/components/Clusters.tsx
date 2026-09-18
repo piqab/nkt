@@ -235,7 +235,7 @@ export function NewClusterModal({
 
 const STATUS_COLOR: Record<Cluster['status'], string> = { creating: 'processing', ready: 'success', failed: 'error', deleting: 'default' }
 
-export function ClustersCard({ onOpenJob, onChanged }: { onOpenJob: (jobID: number) => void; onChanged: () => void }) {
+export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (jobID: number) => void; onChanged: () => void; showEmpty?: boolean }) {
   const { t } = useTranslation()
   const [pollMs, setPollMs] = useState(15_000)
   const list = useApi<Cluster[]>('/hub/clusters', pollMs)
@@ -260,9 +260,10 @@ export function ClustersCard({ onOpenJob, onChanged }: { onOpenJob: (jobID: numb
     }
   }
 
-  if (clusters.length === 0) return null
+  if (clusters.length === 0 && !showEmpty) return null
   return (
     <Card title={t('clusters.title')} subtitle={t('clusters.subtitle', { count: clusters.length })}>
+      {clusters.length === 0 && <p className="small muted">{t('clusters.none')}</p>}
       <ErrorNote error={list.error} />
       {notice && (
         <Banner kind={notice.kind} onClose={() => setNotice(null)}>

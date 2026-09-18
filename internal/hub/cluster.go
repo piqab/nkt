@@ -53,9 +53,16 @@ type ClusterSpec struct {
 	// вместо kube-proxy.
 	CNI                  string `json:"cni,omitempty"`
 	KubeProxyReplacement bool   `json:"kube_proxy_replacement,omitempty"`
-	ImageID              string `json:"image_id"`
-	Network              string `json:"network,omitempty"`
-	User                 string `json:"user"`
+	// Placements — размещение по хостам (раздел «Кластеры»); пусто —
+	// один хост из HostID/Topology/Workers (диалог у хоста).
+	Placements []Placement `json:"placements,omitempty"`
+	// NetworkMode — как узлы на разных хостах видят друг друга: nat (один
+	// хост, сеть libvirt), bridge (машины в сети хостов), wireguard
+	// (туннели между хостами).
+	NetworkMode string `json:"network_mode,omitempty"`
+	ImageID     string `json:"image_id"`
+	Network     string `json:"network,omitempty"`
+	User        string `json:"user"`
 	// Размеры control plane и worker'ов.
 	CPVCPUs    int `json:"cp_vcpus"`
 	CPMemoryMB int `json:"cp_memory_mb"`
@@ -63,6 +70,46 @@ type ClusterSpec struct {
 	WVCPUs     int `json:"w_vcpus"`
 	WMemoryMB  int `json:"w_memory_mb"`
 	WDiskGB    int `json:"w_disk_gb"`
+}
+
+// Placement — строка размещения: на хосте — N машин с ролью или сам хост.
+type Placement struct {
+	HostID int64  `json:"host_id"`
+	Role   string `json:"role"` // control-plane | worker
+	Kind   string `json:"kind"` // vm | host
+	Count  int    `json:"count"`
+	VCPUs  int    `json:"vcpus,omitempty"`
+	MemMB  int    `json:"memory_mb,omitempty"`
+	DiskGB int    `json:"disk_gb,omitempty"`
+	// ImageID/Network — для машин; Bridge — мост хоста в режиме bridge.
+	ImageID string `json:"image_id,omitempty"`
+	Network string `json:"network,omitempty"`
+	Bridge  string `json:"bridge,omitempty"`
+}
+
+const (
+	NetworkNAT       = "nat"
+	NetworkBridge    = "bridge"
+	NetworkWireGuard = "wireguard"
+
+	RoleControlPlane = "control-plane"
+	RoleWorker       = "worker"
+	KindVM           = "vm"
+	KindHost         = "host"
+)
+
+// clusterNode — один узел после разворачивания размещения.
+type clusterNode struct {
+	Name    string
+	HostID  int64 // хост, на котором машина (или сам узел при Kind=host)
+	Role    string
+	Kind    string
+	VCPUs   int
+	MemMB   int
+	DiskGB  int
+	ImageID string
+	Network string
+	Bridge  string
 }
 
 // hostnameLikeRe — имя кластера: оно же префикс имён машин и hostname.
@@ -77,25 +124,34 @@ func (s *ClusterSpec) Validate() error {
 	if s.Flavor != k8s.FlavorK3s && s.Flavor != k8s.FlavorKubeadm {
 		return msgs.Errorf("k8s.badFlavor", s.Flavor)
 	}
-	switch s.Topology {
-	case TopologySingle:
-		s.Workers = 0
-	case TopologyCP1:
-		if s.Workers < 1 {
-			return msgs.Errorf("hub.clusterNeedsWorkers")
+	if len(s.Placements) > 0 {
+		if err := s.validatePlacements(); err != nil {
+			return err
 		}
-	case TopologyCP3:
-		if s.Flavor != k8s.FlavorK3s {
-			return msgs.Errorf("hub.clusterCP3K3sOnly")
+	} else {
+		switch s.Topology {
+		case TopologySingle:
+			s.Workers = 0
+		case TopologyCP1:
+			if s.Workers < 1 {
+				return msgs.Errorf("hub.clusterNeedsWorkers")
+			}
+		case TopologyCP3:
+			if s.Flavor != k8s.FlavorK3s {
+				return msgs.Errorf("hub.clusterCP3K3sOnly")
+			}
+		default:
+			return msgs.Errorf("hub.clusterBadTopology", s.Topology)
 		}
-	default:
-		return msgs.Errorf("hub.clusterBadTopology", s.Topology)
-	}
-	if s.Workers > 20 {
-		return msgs.Errorf("hub.clusterTooManyWorkers")
-	}
-	if s.ImageID == "" {
-		return msgs.Errorf("hub.clusterNeedsImage")
+		if s.Workers > 20 {
+			return msgs.Errorf("hub.clusterTooManyWorkers")
+		}
+		if s.ImageID == "" {
+			return msgs.Errorf("hub.clusterNeedsImage")
+		}
+		if s.NetworkMode == "" {
+			s.NetworkMode = NetworkNAT
+		}
 	}
 	if s.CNI != "" && s.CNI != "cilium" {
 		return msgs.Errorf("k8s.badCNI", s.CNI)
@@ -142,6 +198,125 @@ func (s *ClusterSpec) Validate() error {
 		s.WDiskGB = 30
 	}
 	return nil
+}
+
+// validatePlacements проверяет размещение по хостам.
+func (s *ClusterSpec) validatePlacements() error {
+	cps, total := 0, 0
+	hosts := map[int64]bool{}
+	for i := range s.Placements {
+		pl := &s.Placements[i]
+		if pl.HostID <= 0 {
+			return msgs.Errorf("hub.clusterPlacementHost")
+		}
+		if pl.Role != RoleControlPlane && pl.Role != RoleWorker {
+			return msgs.Errorf("hub.clusterPlacementRole", pl.Role)
+		}
+		switch pl.Kind {
+		case KindHost:
+			pl.Count = 1
+		case KindVM:
+			if pl.Count < 1 || pl.Count > 20 {
+				return msgs.Errorf("hub.clusterTooManyWorkers")
+			}
+			if pl.ImageID == "" {
+				pl.ImageID = s.ImageID
+			}
+			if pl.ImageID == "" {
+				return msgs.Errorf("hub.clusterNeedsImage")
+			}
+			if pl.VCPUs == 0 {
+				pl.VCPUs = 2
+			}
+			if pl.MemMB == 0 {
+				pl.MemMB = 4096
+			}
+			if pl.DiskGB == 0 {
+				pl.DiskGB = 30
+			}
+		default:
+			return msgs.Errorf("hub.clusterPlacementKind", pl.Kind)
+		}
+		if pl.Role == RoleControlPlane {
+			cps += pl.Count
+		}
+		total += pl.Count
+		hosts[pl.HostID] = true
+	}
+	if cps != 1 && cps != 3 {
+		return msgs.Errorf("hub.clusterCPCount", cps)
+	}
+	if cps == 3 && s.Flavor != k8s.FlavorK3s {
+		return msgs.Errorf("hub.clusterCP3K3sOnly")
+	}
+	if total < 1 {
+		return msgs.Errorf("hub.clusterNoNodes")
+	}
+	if s.NetworkMode == "" {
+		s.NetworkMode = NetworkNAT
+	}
+	switch s.NetworkMode {
+	case NetworkNAT:
+		if len(hosts) > 1 {
+			return msgs.Errorf("hub.clusterNATSingleHost")
+		}
+	case NetworkBridge:
+		for _, pl := range s.Placements {
+			if pl.Kind == KindVM && pl.Bridge == "" {
+				return msgs.Errorf("hub.clusterBridgeNeeded")
+			}
+		}
+	case NetworkWireGuard:
+		return msgs.Errorf("hub.clusterWireGuardSoon")
+	default:
+		return msgs.Errorf("hub.clusterBadNetwork", s.NetworkMode)
+	}
+	// HostID — хост первого control plane: туда идут проброс и адрес
+	// kubeconfig.
+	for _, pl := range s.Placements {
+		if pl.Role == RoleControlPlane {
+			s.HostID = pl.HostID
+			break
+		}
+	}
+	s.Topology = ""
+	return nil
+}
+
+// nodes разворачивает размещение в узлы с именами <кластер>-cp-N /
+// <кластер>-w-N; узел-хост носит имя самого хоста.
+func (s ClusterSpec) nodes(hostName func(int64) string) []clusterNode {
+	pls := s.Placements
+	if len(pls) == 0 {
+		pls = []Placement{
+			{HostID: s.HostID, Role: RoleControlPlane, Kind: KindVM, Count: s.ControlPlanes(), VCPUs: s.CPVCPUs, MemMB: s.CPMemoryMB, DiskGB: s.CPDiskGB, ImageID: s.ImageID, Network: s.Network},
+			{HostID: s.HostID, Role: RoleWorker, Kind: KindVM, Count: s.Workers, VCPUs: s.WVCPUs, MemMB: s.WMemoryMB, DiskGB: s.WDiskGB, ImageID: s.ImageID, Network: s.Network},
+		}
+	}
+	var out []clusterNode
+	cp, w := 0, 0
+	// Сначала все control plane, потом worker'ы — порядок установки.
+	for _, role := range []string{RoleControlPlane, RoleWorker} {
+		for _, pl := range pls {
+			if pl.Role != role {
+				continue
+			}
+			for i := 0; i < pl.Count; i++ {
+				n := clusterNode{HostID: pl.HostID, Role: pl.Role, Kind: pl.Kind, VCPUs: pl.VCPUs, MemMB: pl.MemMB, DiskGB: pl.DiskGB, ImageID: pl.ImageID, Network: pl.Network, Bridge: pl.Bridge}
+				if pl.Kind == KindHost {
+					n.Name = hostName(pl.HostID)
+				} else if role == RoleControlPlane {
+					cp++
+					n.Name = fmt.Sprintf("%s-cp-%d", s.Name, cp)
+				} else {
+					w++
+					n.Name = fmt.Sprintf("%s-w-%d", s.Name, w)
+				}
+				out = append(out, n)
+			}
+		}
+	}
+	return out
 }
 
 // exposeRules — правила проброса хоста в control plane.
@@ -221,12 +396,8 @@ func (r *ClusterRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
 	if p.DryRun && p.Spec != nil {
-		host, err := r.m.db.HostByID(ctx, p.Spec.HostID)
-		if err != nil {
-			return err
-		}
 		jc.Step(1, 1, msgs.T(jc.Lang(), "hub.clusterStepPreflight"))
-		failed, err := r.runPreflight(ctx, jc, host, *p.Spec, p.Prepare)
+		failed, err := r.runPreflight(ctx, jc, *p.Spec, p.Prepare)
 		if err != nil {
 			return err
 		}
@@ -262,31 +433,56 @@ func (r *ClusterRunner) Run(ctx context.Context, jc *jobs.Context) error {
 }
 
 func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Cluster, spec ClusterSpec, p ClusterJobParams, done *clusterResume) error {
-	host, err := r.m.db.HostByID(ctx, cl.HostID)
-	if err != nil {
-		return err
+	hostName := func(id int64) string {
+		if h, err := r.m.db.HostByID(ctx, id); err == nil {
+			return h.Name
+		}
+		return fmt.Sprintf("host-%d", id)
 	}
-	cps, workers := spec.nodeNames()
+	nodes := spec.nodes(hostName)
 	if p.AddWorkers > 0 {
-		// Пополнение: новые worker'ы получают следующие номера.
+		// Пополнение: новые worker'ы на хосте последнего worker'а (или
+		// первого control plane) с теми же размерами, номера — дальше.
 		existing, _ := r.m.db.ClusterHosts(ctx, cl.ID)
 		n := 0
 		for _, h := range existing {
-			if h.K8sRole == "worker" {
+			if h.K8sRole == RoleWorker {
 				n++
 			}
 		}
-		workers = nil
+		tmpl := nodes[0]
+		for _, nd := range nodes {
+			if nd.Role == RoleWorker && nd.Kind == KindVM {
+				tmpl = nd
+			}
+		}
+		nodes = nil
 		for i := n + 1; i <= n+p.AddWorkers; i++ {
-			workers = append(workers, fmt.Sprintf("%s-w-%d", spec.Name, i))
+			nd := tmpl
+			nd.Name, nd.Role, nd.Kind = fmt.Sprintf("%s-w-%d", spec.Name, i), RoleWorker, KindVM
+			nodes = append(nodes, nd)
 		}
 		for _, h := range existing {
 			done.Hosts[h.Name] = h.ID
 			done.Installed[h.Name] = true
 		}
 	}
-	all := append(append([]string{}, cps...), workers...)
-	total := len(all) + 4
+	var cps []clusterNode
+	for _, nd := range nodes {
+		if nd.Role == RoleControlPlane {
+			cps = append(cps, nd)
+		}
+	}
+	// Первый control plane — из уже существующих при пополнении.
+	var cp1Name string
+	if len(cps) > 0 {
+		cp1Name = cps[0].Name
+	} else if existing, _ := r.m.db.ClusterHosts(ctx, cl.ID); len(existing) > 0 {
+		cp1Name = existing[0].Name
+	} else {
+		return msgs.Errorf("hub.clusterNoNodes")
+	}
+	total := len(nodes) + 4
 	step := 0
 
 	// 0. Проверки — до первой машины. При продолжении после перезапуска
@@ -294,7 +490,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	step++
 	jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepPreflight"))
 	if len(done.Hosts) == 0 && p.AddWorkers == 0 {
-		failed, err := r.runPreflight(ctx, jc, host, spec, false)
+		failed, err := r.runPreflight(ctx, jc, spec, false)
 		if err != nil {
 			return err
 		}
@@ -305,21 +501,28 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		jc.Log("hub.preflightSkipped")
 	}
 
-	// 1. Машины: по одной, с установкой nkt — как «Новая машина».
-	for _, name := range all {
+	// 1. Узлы: машины — по одной, сам хост — просто запись.
+	for _, nd := range nodes {
 		step++
-		jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepVM", name))
-		if id, ok := done.Hosts[name]; ok && id != 0 {
-			if done.Installed[name] {
-				jc.Log("hub.clusterVMExists", name)
-				continue
-			}
+		jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepVM", nd.Name))
+		if id, ok := done.Hosts[nd.Name]; ok && id != 0 {
 			if _, err := r.m.db.HostByID(ctx, id); err == nil {
-				jc.Log("hub.clusterVMExists", name)
+				jc.Log("hub.clusterVMExists", nd.Name)
 				continue
 			}
 		}
-		if err := r.createNode(ctx, jc, host, spec, cl.ID, name, isCP(name, cps), done); err != nil {
+		if nd.Kind == KindHost {
+			h, err := r.m.db.HostByID(ctx, nd.HostID)
+			if err != nil {
+				return err
+			}
+			_ = r.m.db.SetHostCluster(ctx, h.ID, cl.ID, nd.Role)
+			done.Hosts[nd.Name] = h.ID
+			jc.SaveResume(*done)
+			jc.Log("hub.clusterHostNode", h.Name, nd.Role)
+			continue
+		}
+		if err := r.createNode(ctx, jc, spec, cl.ID, nd, done); err != nil {
 			return err
 		}
 	}
@@ -327,23 +530,31 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	// 2. Control plane и токен.
 	step++
 	jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepControlPlane"))
-	cp1, err := r.m.db.HostByID(ctx, done.Hosts[cps[0]])
+	cp1, err := r.m.db.HostByID(ctx, done.Hosts[cp1Name])
 	if err != nil {
 		return err
 	}
-	tlsSANs := []string{cp1.Addr}
-	if spec.Expose && host.Addr != "" {
-		tlsSANs = append(tlsSANs, host.Addr)
+	cpHost, err := r.m.db.HostByID(ctx, cl.HostID)
+	if err != nil {
+		return err
 	}
-	if !done.Installed[cps[0]] {
+	if cp1.ParentID == 0 {
+		// Узел — сам хост: проброс не нужен, адрес API — его собственный.
+		cpHost = cp1
+	}
+	tlsSANs := []string{cp1.Addr}
+	if spec.Expose && cpHost.Addr != "" && cpHost.ID != cp1.ID {
+		tlsSANs = append(tlsSANs, cpHost.Addr)
+	}
+	if !done.Installed[cp1Name] {
 		if err := r.installRole(ctx, jc, cp1, k8s.InstallSpec{
-			Flavor: spec.Flavor, Role: k8s.RoleServer, Single: spec.Topology == TopologySingle,
-			ClusterInit: spec.Topology == TopologyCP3, TLSSANs: tlsSANs, NodeName: cps[0],
+			Flavor: spec.Flavor, Role: k8s.RoleServer, Single: len(nodes) == 1 && p.AddWorkers == 0,
+			ClusterInit: len(cps) == 3, TLSSANs: tlsSANs, NodeName: cp1Name,
 			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1.Addr,
 		}); err != nil {
 			return err
 		}
-		done.Installed[cps[0]] = true
+		done.Installed[cp1Name] = true
 		jc.SaveResume(*done)
 	}
 	var join k8s.JoinInfo
@@ -352,41 +563,27 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	}
 	jc.Log("hub.clusterJoinReady", cp1.Name)
 
-	// 3. Остальные узлы.
+	// 3. Остальные узлы: сначала control plane, потом worker'ы (nodes уже
+	// в этом порядке).
 	step++
 	jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepJoin"))
-	for _, name := range cps[1:] {
-		if done.Installed[name] {
+	for _, nd := range nodes {
+		if nd.Name == cp1Name || done.Installed[nd.Name] {
 			continue
 		}
-		h, err := r.m.db.HostByID(ctx, done.Hosts[name])
+		h, err := r.m.db.HostByID(ctx, done.Hosts[nd.Name])
 		if err != nil {
 			return err
 		}
-		if err := r.installRole(ctx, jc, h, k8s.InstallSpec{
-			Flavor: spec.Flavor, Role: k8s.RoleServer, ServerURL: join.ServerURL, Token: join.Token,
-			CAHash: join.CAHash, CertKey: join.CertKey, TLSSANs: tlsSANs, NodeName: name,
-			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement,
-		}); err != nil {
+		is := k8s.InstallSpec{Flavor: spec.Flavor, Role: k8s.RoleAgent, ServerURL: join.ServerURL, Token: join.Token, CAHash: join.CAHash, NodeName: nd.Name,
+			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement}
+		if nd.Role == RoleControlPlane {
+			is.Role, is.CertKey, is.TLSSANs = k8s.RoleServer, join.CertKey, tlsSANs
+		}
+		if err := r.installRole(ctx, jc, h, is); err != nil {
 			return err
 		}
-		done.Installed[name] = true
-		jc.SaveResume(*done)
-	}
-	for _, name := range workers {
-		if done.Installed[name] {
-			continue
-		}
-		h, err := r.m.db.HostByID(ctx, done.Hosts[name])
-		if err != nil {
-			return err
-		}
-		if err := r.installRole(ctx, jc, h, k8s.InstallSpec{
-			Flavor: spec.Flavor, Role: k8s.RoleAgent, ServerURL: join.ServerURL, Token: join.Token, CAHash: join.CAHash, NodeName: name,
-		}); err != nil {
-			return err
-		}
-		done.Installed[name] = true
+		done.Installed[nd.Name] = true
 		jc.SaveResume(*done)
 	}
 
@@ -397,16 +594,19 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	if err := r.waitNodesReady(ctx, jc, cp1, want); err != nil {
 		return err
 	}
-	if spec.Expose && !done.Exposed {
-		if _, err := r.m.HostAPI(ctx, host.ID, "POST", "/api/vm/portforward",
+	if spec.Expose && !done.Exposed && cp1.ParentID != 0 {
+		if _, err := r.m.HostAPI(ctx, cpHost.ID, "POST", "/api/vm/portforward",
 			map[string]any{"name": cp1.Name, "ip": cp1.Addr, "rules": spec.exposeRules()}, nil); err != nil {
 			return msgs.Errorf("hub.clusterExpose", err)
 		}
 		done.Exposed = true
 		jc.SaveResume(*done)
-		jc.Log("hub.clusterExposed", host.Addr, cp1.Addr, exposeSummary(spec))
+		jc.Log("hub.clusterExposed", cpHost.Addr, cp1.Addr, exposeSummary(spec))
 	}
-	serverAddr := spec.apiAddr(host.Addr, cp1.Addr)
+	serverAddr := spec.apiAddr(cpHost.Addr, cp1.Addr)
+	if cp1.ParentID == 0 {
+		serverAddr = cp1.Addr + ":6443"
+	}
 	var kubeconfig string
 	code, err := r.m.HostAPI(ctx, cp1.ID, "GET", "/api/k8s/kubeconfig?server="+url.QueryEscape(serverAddr), nil, &kubeconfig)
 	if err != nil || code != 200 {
@@ -435,28 +635,24 @@ func exposeSummary(s ClusterSpec) string {
 	return strings.Join(parts, ", ")
 }
 
-func isCP(name string, cps []string) bool {
-	for _, c := range cps {
-		if c == name {
-			return true
-		}
-	}
-	return false
-}
-
 // createNode создаёт машину заданием VMProvision и ждёт его.
-func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, host store.Host, spec ClusterSpec, clusterID int64, name string, cp bool, done *clusterResume) error {
-	vm := vmcreate.Spec{Name: name, ImageID: spec.ImageID, Network: spec.Network, User: spec.User, Autostart: true}
-	if cp {
-		vm.VCPUs, vm.MemoryMB, vm.DiskGB = spec.CPVCPUs, spec.CPMemoryMB, spec.CPDiskGB
-	} else {
-		vm.VCPUs, vm.MemoryMB, vm.DiskGB = spec.WVCPUs, spec.WMemoryMB, spec.WDiskGB
+func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec ClusterSpec, clusterID int64, nd clusterNode, done *clusterResume) error {
+	host, err := r.m.db.HostByID(ctx, nd.HostID)
+	if err != nil {
+		return err
+	}
+	vm := vmcreate.Spec{Name: nd.Name, ImageID: nd.ImageID, Network: nd.Network, Bridge: nd.Bridge, User: spec.User, Autostart: true,
+		VCPUs: nd.VCPUs, MemoryMB: nd.MemMB, DiskGB: nd.DiskGB}
+	if nd.Bridge != "" {
+		// На мосту адрес машины узнаётся через гостевого агента —
+		// cloud-init ставит его при первом запуске.
+		vm.Packages = append(vm.Packages, "qemu-guest-agent")
 	}
 	if r.s.jobs == nil {
 		return msgs.Errorf("api.backgroundJobsAreUnavailable")
 	}
 	jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
-		Kind: KindVMProvision, Title: msgs.Tc(ctx, "hub.machineOnHostJobTitle", name, host.Name),
+		Kind: KindVMProvision, Title: msgs.Tc(ctx, "hub.machineOnHostJobTitle", nd.Name, host.Name),
 		Queue: fmt.Sprintf("vm:%d", host.ID), Author: jc.Job.Author, Steps: 5,
 		Params: VMProvisionParams{HostID: host.ID, Spec: vm, InstallNKT: true},
 	})
@@ -472,19 +668,15 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, host s
 		return err
 	}
 	for _, h := range hosts {
-		if h.Name == name && h.ParentID == host.ID {
-			role := "worker"
-			if cp {
-				role = "control-plane"
-			}
-			_ = r.m.db.SetHostCluster(ctx, h.ID, clusterID, role)
+		if h.Name == nd.Name && h.ParentID == host.ID {
+			_ = r.m.db.SetHostCluster(ctx, h.ID, clusterID, nd.Role)
 			_ = r.m.db.SetHostGroup(ctx, h.ID, spec.Name)
-			done.Hosts[name] = h.ID
+			done.Hosts[nd.Name] = h.ID
 			jc.SaveResume(*done)
 			return nil
 		}
 	}
-	return msgs.Errorf("hub.clusterVMMissing", name)
+	return msgs.Errorf("hub.clusterVMMissing", nd.Name)
 }
 
 // installRole ставит роль заданием хоста и ждёт его.
@@ -567,6 +759,15 @@ func (r *ClusterDeleteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	total := len(hosts) + 1
 	for i, h := range hosts {
 		jc.Step(i+1, total, msgs.T(jc.Lang(), "hub.clusterStepDeleteVM", h.Name))
+		if h.ParentID == 0 {
+			// Узел-хост: Kubernetes убирается, запись хоста остаётся.
+			if _, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/k8s/uninstall", nil, nil); err != nil {
+				jc.Log("hub.clusterDeleteVMWarn", h.Name, err)
+			}
+			_ = r.m.db.SetHostCluster(ctx, h.ID, 0, "")
+			jc.Log("hub.clusterHostNodeRemoved", h.Name)
+			continue
+		}
 		if h.ParentID != 0 {
 			path := "/api/vms/" + url.PathEscape(h.Name) + "?remove_storage=true&force=true"
 			if _, err := r.m.HostAPI(ctx, h.ParentID, "DELETE", path, nil, nil); err != nil {

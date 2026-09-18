@@ -539,7 +539,7 @@ func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptR
 			return err
 		}
 		cr := &ClusterRunner{m: r.m, s: r.s}
-		_, err = cr.runPreflight(ctx, jc, h, spec, false)
+		_, err = cr.runPreflight(ctx, jc, spec, false)
 		return err
 	case script.KindHost:
 		done.HostIDs[st.Name] = 0

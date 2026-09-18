@@ -44,7 +44,8 @@
     "hardware": "Hardware",
     "system": "System settings",
     "jobs": "Jobs",
-    "profiles": "Profiles"
+    "profiles": "Profiles",
+    "clusters": "Clusters"
   },
   "about": {
     "title": "About",
@@ -2223,7 +2224,26 @@
     "kpr": "replace kube-proxy with Cilium",
     "kprHint": "eBPF instead of kube-proxy; kube-proxy is not installed",
     "portsHint": "host ports → 6443 / 80 / 443 on the control plane; 0 — do not forward",
-    "experimental": "Experimental feature: the cluster is created as real machines with Kubernetes installed on them, there is no undo. “Dry run” first, try it on test hosts, review the job log."
+    "experimental": "Experimental feature: the cluster is created as real machines with Kubernetes installed on them, there is no undo. “Dry run” first, try it on test hosts, review the job log.",
+    "pageHint": "Kubernetes clusters on hosts' machines and on the hosts themselves. A single host — “new cluster” in the host list; here — placement across several hosts with a network between them.",
+    "newMulti": "New cluster",
+    "newMultiTitle": "New Kubernetes cluster across several hosts",
+    "newMultiBody": "Each placement row is an nkt host and what runs on it: N machines with a role, or the host itself as a node. The hub creates the machines on every host, installs the first control plane, joins the other nodes over the inter-host network and fetches the kubeconfig at the address of the first control plane's host.",
+    "network": "Network between hosts",
+    "netNAT": "libvirt network (NAT) — single host only",
+    "netBridge": "bridge — machines in the hosts' network (one L2 segment)",
+    "netWireGuard": "WireGuard between hosts — next version",
+    "placement": "Placement",
+    "colHost": "Host",
+    "colKind": "What",
+    "colCount": "How many",
+    "colBridge": "Bridge",
+    "pickHost": "pick a host",
+    "kindVM": "machines",
+    "kindHost": "the host itself",
+    "addRow": "add row",
+    "exposeMultiHint": "ports of the first control plane's host lead into it",
+    "none": "No clusters yet."
   },
   "k8s": {
     "notInstalled": "Kubernetes is not installed on this host. Clusters are created on the hub: “new cluster” next to a host with virtualization.",
