@@ -110,6 +110,8 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const [prepare, setPrepare] = useState(true)
   const [busy, setBusy] = useState<'create' | 'dry' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Журнал сухого прогона — поверх формы, настройки не теряются.
+  const [dryJob, setDryJob] = useState<Job | null>(null)
 
   const hostIDs = [...new Set(rows.map((r) => r.host_id).filter((h): h is number => h !== null))]
   const distinctHosts = hostIDs.length
@@ -192,7 +194,11 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
         ...(dry ? { prepare } : {}),
       }
       const res = await api<{ job_id: number }>(dry ? '/hub/clusters/dry-run' : '/hub/clusters', { method: 'POST', body })
-      onStarted(t(dry ? 'clusters.dryStarted' : 'clusters.started', { name }), res.job_id)
+      if (dry) {
+        setDryJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
+        return
+      }
+      onStarted(t('clusters.started', { name }), res.job_id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -394,6 +400,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           {t('clusters.create')}
         </Button>
       </div>
+      {dryJob && <JobLogModal job={dryJob} scope="/hosts/local" onClose={() => setDryJob(null)} />}
     </Modal>
   )
 }
