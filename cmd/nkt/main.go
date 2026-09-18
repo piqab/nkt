@@ -843,6 +843,8 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// Сценарии — тоже задание хаба; исполнителю нужен сервер, потому что
 	// он запускает и другие задания хаба (создание машин).
 	r.jobs.Register(hub.KindScriptRun, server.ScriptRunner())
+	r.jobs.Register(hub.KindClusterCreate, hub.NewClusterRunner(server))
+	r.jobs.Register(hub.KindClusterDelete, hub.NewClusterDeleteRunner(manager))
 
 	// Хаб ведёт задания собственной машины — той самой строки
 	// «localhost» в списке хостов.

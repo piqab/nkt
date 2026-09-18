@@ -2166,5 +2166,51 @@
     "dbFromHub": "база с хаба",
     "dbFromHubDone": "База ClamAV залита с хаба.",
     "dbFromHubFailed": "Заливка базы с хаба не удалась — см. журнал задания."
+  },
+  "clusters": {
+    "new": "новый кластер",
+    "newTitle": "Новый кластер Kubernetes на хосте «{{host}}»",
+    "newBody": "Хаб создаст виртуальные машины на хосте из облачного образа, поставит в каждую nkt, на первую — control plane, остальные присоединит и дождётся, пока все узлы станут Ready. Узлы появятся в группе с именем кластера.",
+    "name": "Имя кластера",
+    "flavor": "Вариант",
+    "flavorK3s": "k3s — лёгкий, один бинарник, HA со встроенным etcd",
+    "flavorKubeadm": "kubeadm — стандартный Kubernetes (containerd, Flannel)",
+    "topology": "Топология",
+    "topoSingle": "одна машина: control plane + worker",
+    "topoCP1": "1 control plane + N worker",
+    "topoCP3": "3 control plane + N worker (HA, только k3s)",
+    "workers": "Worker'ов",
+    "cpSizes": "Размер control plane",
+    "wSizes": "Размер worker'а",
+    "expose": "Пробросить наружу",
+    "exposeHint": "порты 6443, 80 и 443 хоста ({{host}}) ведут в control plane — кластер доступен по адресу хоста",
+    "summary": "Будет создано машин: {{machines}} ({{flavor}}) на хосте {{host}}.",
+    "create": "Создать кластер",
+    "started": "Создание кластера {{name}} запущено.",
+    "title": "Кластеры Kubernetes",
+    "subtitle": "всего: {{count}}",
+    "status": {
+      "creating": "создаётся",
+      "ready": "готов",
+      "failed": "ошибка",
+      "deleting": "удаляется"
+    },
+    "topo": {
+      "single": "одна машина",
+      "cp1": "1 CP + worker",
+      "cp3": "3 CP + worker"
+    },
+    "onHost": "на {{host}}",
+    "internalOnly": "только с хоста",
+    "kubeconfig": "kubeconfig",
+    "kubeconfigHint": "Скачать kubeconfig администратора; адрес сервера — тот, что указан слева",
+    "addWorker": "+ worker",
+    "delete": "удалить кластер",
+    "confirmDelete": "Удалить кластер «{{name}}» — все его машины ({{count}}) с дисками будут удалены с хоста?",
+    "colNode": "Узел",
+    "colRole": "Роль",
+    "colState": "Связь",
+    "reachable": "на связи",
+    "unreachable": "недоступен"
   }
 }

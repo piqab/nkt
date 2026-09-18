@@ -63,7 +63,10 @@ type Host struct {
 	// AptViaHub — apt этого хоста ходит через кэш пакетов хаба: хаб держит
 	// SSH-сессию с обратным пробросом порта, а на хосте лежит
 	// Proxy-Auto-Detect, который при закрытом порте отвечает DIRECT.
-	AptViaHub bool   `json:"apt_via_hub"`
+	AptViaHub bool `json:"apt_via_hub"`
+	// ClusterID и K8sRole — узел кластера Kubernetes (см. clusters.go).
+	ClusterID int64  `json:"cluster_id,omitempty"`
+	K8sRole   string `json:"k8s_role,omitempty"`
 	ErrorMsg  string `json:"error_msg,omitempty"`
 	// Group — произвольная группа в списке хостов («прод», «клиент А»).
 	// Пустая строка означает «Без группы»: такой раздел показывается в
@@ -123,7 +126,7 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
 	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, group_name,
-	parent_id, profile_id, apt_via_hub`
+	parent_id, profile_id, apt_via_hub, cluster_id, k8s_role`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
@@ -132,7 +135,7 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
 		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen, &h.Group,
-		&h.ParentID, &h.ProfileID, &h.AptViaHub)
+		&h.ParentID, &h.ProfileID, &h.AptViaHub, &h.ClusterID, &h.K8sRole)
 	if err != nil {
 		return Host{}, err
 	}

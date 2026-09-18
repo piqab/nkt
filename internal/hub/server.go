@@ -175,6 +175,8 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/vulndb", s.handleHubVulnDBStatus)
 				r.Get("/hub/clamdb", s.handleHubClamDBStatus)
 				r.Get("/hub/aptcache", s.handleHubAptCacheStatus)
+				r.Get("/hub/clusters", s.handleClusterList)
+				r.Get("/hub/clusters/{id}/nodes", s.handleClusterNodes)
 
 				r.Get("/hub/hosts", s.handleListHosts)
 				// Журнал оповещений читают все, кто видит список хостов:
@@ -218,6 +220,10 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/aptcache/settings", s.handleHubAptCacheSettings)
 					r.Post("/hub/aptcache/clear", s.handleHubAptCacheClear)
 					r.Post("/hub/hosts/{id}/apt-proxy", s.handleHostAptProxy)
+					r.Post("/hub/clusters", s.handleClusterCreate)
+					r.Get("/hub/clusters/{id}/kubeconfig", s.handleClusterKubeconfig)
+					r.Post("/hub/clusters/{id}/workers", s.handleClusterAddWorkers)
+					r.Delete("/hub/clusters/{id}", s.handleClusterDelete)
 
 					r.Get("/hub/bootstrap/defaults", s.handleBootstrapDefaults)
 					r.Put("/hub/bootstrap/defaults", s.handleBootstrapDefaults)

@@ -1,0 +1,296 @@
+import { useState } from 'react'
+import { Button, Checkbox, Input, InputNumber, Select, Tag, Tooltip } from 'antd'
+import { ClusterOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
+import { api, apiURL, useApi } from '../api'
+import type { HubHost } from '../types'
+import { Banner, Card, ErrorNote, Modal, formatRelative } from '../components/ui'
+import { DataTable } from './DataTable'
+import { RowAction } from './RowAction'
+import { confirmAction } from './confirm'
+
+/**
+ * Кластеры Kubernetes на виртуалках хоста (internal/hub/cluster.go):
+ * диалог создания с выбором топологии и карточка со списком — узлы,
+ * состояние, kubeconfig, добавить worker'ов, удалить.
+ */
+
+export interface ClusterNode {
+  host_id: number
+  name: string
+  role: string
+  addr: string
+  status: string
+  reachable?: boolean
+}
+
+export interface Cluster {
+  id: number
+  name: string
+  host_id: number
+  host_name: string
+  flavor: string
+  topology: string
+  workers: number
+  expose: boolean
+  status: 'creating' | 'ready' | 'failed' | 'deleting'
+  error_msg?: string
+  server_addr?: string
+  has_kubeconfig: boolean
+  nodes: ClusterNode[]
+  created_at: string
+}
+
+export function NewClusterModal({
+  host,
+  onClose,
+  onStarted,
+}: {
+  host: HubHost
+  onClose: () => void
+  onStarted: (text: string, jobID: number) => void
+}) {
+  const { t } = useTranslation()
+  const images = useApi<{ catalog: { id: string; name: string }[]; local: { id: string; downloaded: boolean }[] }>(`/hosts/${host.id}/vm/images`, 10_000)
+  const nets = useApi<{ networks: { name: string; active: boolean }[] }>(`/hosts/${host.id}/vm/networks`, 60_000)
+  const knownNets = nets.data?.networks ?? []
+  const [name, setName] = useState('k8s')
+  const [flavor, setFlavor] = useState<'k3s' | 'kubeadm'>('k3s')
+  const [topology, setTopology] = useState<'single' | 'cp1' | 'cp3'>('cp1')
+  const [workers, setWorkers] = useState(1)
+  const [expose, setExpose] = useState(true)
+  const [imageID, setImageID] = useState('')
+  const [network, setNetwork] = useState('')
+  const [cp, setCP] = useState({ vcpus: 2, mem: 4096, disk: 30 })
+  const [w, setW] = useState({ vcpus: 2, mem: 4096, disk: 30 })
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const downloaded = new Set((images.data?.local ?? []).filter((l) => l.downloaded).map((l) => l.id))
+  const catalog = images.data?.catalog ?? []
+  // Ubuntu 24.04 — умолчание из плана; иначе первый образ каталога.
+  const effectiveImage = imageID || catalog.find((i) => /ubuntu.*24/i.test(i.id + i.name))?.id || catalog[0]?.id || ''
+  const machines = (topology === 'single' ? 1 : topology === 'cp3' ? 3 : 1) + (topology === 'single' ? 0 : workers)
+
+  async function start() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ id: number; job_id: number }>('/hub/clusters', {
+        method: 'POST',
+        body: {
+          name,
+          host_id: host.id,
+          flavor,
+          topology,
+          workers: topology === 'single' ? 0 : workers,
+          expose,
+          image_id: effectiveImage,
+          network: network || knownNets[0]?.name || '',
+          cp_vcpus: cp.vcpus,
+          cp_memory_mb: cp.mem,
+          cp_disk_gb: cp.disk,
+          w_vcpus: w.vcpus,
+          w_memory_mb: w.mem,
+          w_disk_gb: w.disk,
+        },
+      })
+      onStarted(t('clusters.started', { name }), res.job_id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const sizes = (label: string, v: { vcpus: number; mem: number; disk: number }, set: (v: { vcpus: number; mem: number; disk: number }) => void) => (
+    <div className="col" style={{ gap: '0.2rem' }}>
+      <span className="small muted">{label}</span>
+      <div className="row" style={{ gap: '0.4rem' }}>
+        <InputNumber min={1} max={64} value={v.vcpus} onChange={(n) => set({ ...v, vcpus: n ?? 2 })} addonBefore="CPU" style={{ width: '8rem' }} />
+        <InputNumber min={1024} step={1024} value={v.mem} onChange={(n) => set({ ...v, mem: n ?? 4096 })} addonBefore="MB" style={{ width: '9rem' }} />
+        <InputNumber min={10} max={2000} value={v.disk} onChange={(n) => set({ ...v, disk: n ?? 30 })} addonBefore="GB" style={{ width: '8rem' }} />
+      </div>
+    </div>
+  )
+
+  return (
+    <Modal title={t('clusters.newTitle', { host: host.name })} onClose={onClose} width={760}>
+      <p className="small muted">{t('clusters.newBody')}</p>
+      <ErrorNote error={error} />
+      <ErrorNote error={images.error} />
+      <div className="grid grid-2" style={{ marginBottom: '0.6rem' }}>
+        <label>
+          {t('clusters.name')}
+          <Input value={name} onChange={(e) => setName(e.target.value.trim())} placeholder="k8s" />
+        </label>
+        <label>
+          {t('clusters.flavor')}
+          <Select
+            value={flavor}
+            onChange={(v: 'k3s' | 'kubeadm') => {
+              setFlavor(v)
+              if (v === 'kubeadm' && topology === 'cp3') setTopology('cp1')
+            }}
+            options={[
+              { value: 'k3s', label: t('clusters.flavorK3s') },
+              { value: 'kubeadm', label: t('clusters.flavorKubeadm') },
+            ]}
+          />
+        </label>
+        <label>
+          {t('clusters.topology')}
+          <Select
+            value={topology}
+            onChange={(v: 'single' | 'cp1' | 'cp3') => setTopology(v)}
+            options={[
+              { value: 'single', label: t('clusters.topoSingle') },
+              { value: 'cp1', label: t('clusters.topoCP1') },
+              { value: 'cp3', label: t('clusters.topoCP3'), disabled: flavor !== 'k3s' },
+            ]}
+          />
+        </label>
+        <label>
+          {t('clusters.workers')}
+          <InputNumber min={1} max={20} value={workers} disabled={topology === 'single'} onChange={(v) => setWorkers(v ?? 1)} style={{ width: '100%' }} />
+        </label>
+        <label>
+          {t('hosts.newVMImage')}
+          <Select
+            value={effectiveImage}
+            onChange={(v: string) => setImageID(v)}
+            options={catalog.map((img) => ({ value: img.id, label: img.name + (downloaded.has(img.id) ? '' : ` — ${t('hosts.newVMWillDownload')}`) }))}
+          />
+        </label>
+        <label>
+          {t('hosts.newVMNetwork')}
+          <Select
+            value={network || knownNets[0]?.name || 'default'}
+            onChange={(v: string) => setNetwork(v)}
+            options={knownNets.length > 0 ? knownNets.map((n) => ({ value: n.name, label: n.name })) : [{ value: 'default', label: 'default' }]}
+          />
+        </label>
+      </div>
+      <div className="col" style={{ gap: '0.6rem', marginBottom: '0.6rem' }}>
+        {sizes(t('clusters.cpSizes'), cp, setCP)}
+        {topology !== 'single' && sizes(t('clusters.wSizes'), w, setW)}
+      </div>
+      <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem' }}>
+        <Checkbox checked={expose} onChange={(e) => setExpose(e.target.checked)} />
+        <span>
+          {t('clusters.expose')} <span className="small muted">{t('clusters.exposeHint', { host: host.addr })}</span>
+        </span>
+      </label>
+      <p className="small muted">{t('clusters.summary', { machines, flavor, host: host.name })}</p>
+      <div className="row" style={{ justifyContent: 'flex-end' }}>
+        <Button type="primary" loading={busy} disabled={!name || !effectiveImage} onClick={() => void start()}>
+          {t('clusters.create')}
+        </Button>
+      </div>
+    </Modal>
+  )
+}
+
+const STATUS_COLOR: Record<Cluster['status'], string> = { creating: 'processing', ready: 'success', failed: 'error', deleting: 'default' }
+
+export function ClustersCard({ onOpenJob, onChanged }: { onOpenJob: (jobID: number) => void; onChanged: () => void }) {
+  const { t } = useTranslation()
+  const [pollMs, setPollMs] = useState(15_000)
+  const list = useApi<Cluster[]>('/hub/clusters', pollMs)
+  const clusters = list.data ?? []
+  const anyBusy = clusters.some((c) => c.status === 'creating' || c.status === 'deleting')
+  if (anyBusy && pollMs !== 4_000) setPollMs(4_000)
+  if (!anyBusy && pollMs !== 15_000) setPollMs(15_000)
+  const [busy, setBusy] = useState<string | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+
+  async function call(key: string, path: string, method: 'POST' | 'DELETE', body?: unknown) {
+    setBusy(key)
+    try {
+      const res = await api<{ job_id?: number }>(path, { method, body })
+      if (res.job_id) onOpenJob(res.job_id)
+      await list.reload()
+      onChanged()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  if (clusters.length === 0) return null
+  return (
+    <Card title={t('clusters.title')} subtitle={t('clusters.subtitle', { count: clusters.length })}>
+      <ErrorNote error={list.error} />
+      {notice && (
+        <Banner kind={notice.kind} onClose={() => setNotice(null)}>
+          {notice.text}
+        </Banner>
+      )}
+      <div className="col" style={{ gap: '0.8rem' }}>
+        {clusters.map((c) => (
+          <div key={c.id} className="col" style={{ gap: '0.3rem' }}>
+            <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <ClusterOutlined />
+              <strong>{c.name}</strong>
+              <Tag color={STATUS_COLOR[c.status]}>{t(`clusters.status.${c.status}`)}</Tag>
+              <Tag>{c.flavor}</Tag>
+              <Tag>{t(`clusters.topo.${c.topology}`)}</Tag>
+              <span className="small muted">
+                {t('clusters.onHost', { host: c.host_name })} · {formatRelative(c.created_at)}
+              </span>
+              {c.server_addr && (
+                <span className="small mono muted">
+                  https://{c.server_addr}:6443{c.expose ? '' : ` (${t('clusters.internalOnly')})`}
+                </span>
+              )}
+              <span style={{ flex: 1 }} />
+              {c.has_kubeconfig && (
+                <Tooltip title={t('clusters.kubeconfigHint')}>
+                  <a href={apiURL(`/hub/clusters/${c.id}/kubeconfig`)} download>
+                    <Button size="small">{t('clusters.kubeconfig')}</Button>
+                  </a>
+                </Tooltip>
+              )}
+              {c.status === 'ready' && c.topology !== 'single' && (
+                <Button size="small" loading={busy === `add:${c.id}`} onClick={() => void call(`add:${c.id}`, `/hub/clusters/${c.id}/workers`, 'POST', { count: 1 })}>
+                  {t('clusters.addWorker')}
+                </Button>
+              )}
+              <RowAction
+                action="delete"
+                label={t('clusters.delete')}
+                danger
+                loading={busy === `del:${c.id}`}
+                disabled={c.status === 'deleting'}
+                onClick={async () => {
+                  if (!(await confirmAction(t('clusters.confirmDelete', { name: c.name, count: c.nodes.length })))) return
+                  await call(`del:${c.id}`, `/hub/clusters/${c.id}`, 'DELETE')
+                }}
+              />
+            </div>
+            {c.error_msg && <Banner kind="error">{c.error_msg}</Banner>}
+            <div className="table-wrap">
+              <DataTable<ClusterNode>
+                dataSource={c.nodes}
+                rowKey="host_id"
+                size="small"
+                pagination={false}
+                columns={[
+                  { title: t('clusters.colNode'), dataIndex: 'name', key: 'name', render: (v: string) => <span className="mono">{v}</span> },
+                  { title: t('clusters.colRole'), dataIndex: 'role', key: 'role', render: (v: string) => <Tag color={v === 'control-plane' ? 'blue' : 'default'}>{v}</Tag> },
+                  { title: t('hosts.colAddr'), dataIndex: 'addr', key: 'addr', render: (v: string) => <span className="mono small">{v}</span> },
+                  {
+                    title: t('clusters.colState'),
+                    key: 'state',
+                    render: (_: unknown, n: ClusterNode) =>
+                      n.reachable === undefined ? <span className="muted">—</span> : n.reachable ? <Tag color="success">{t('clusters.reachable')}</Tag> : <Tag color="error">{t('clusters.unreachable')}</Tag>,
+                  },
+                ]}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  )
+}

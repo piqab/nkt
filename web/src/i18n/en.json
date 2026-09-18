@@ -2164,5 +2164,51 @@
     "dbFromHub": "database from hub",
     "dbFromHubDone": "The ClamAV database was uploaded from the hub.",
     "dbFromHubFailed": "The database upload from the hub failed — see the job log."
+  },
+  "clusters": {
+    "new": "new cluster",
+    "newTitle": "New Kubernetes cluster on host “{{host}}”",
+    "newBody": "The hub creates virtual machines on the host from a cloud image, installs nkt into each, puts the control plane on the first one, joins the rest and waits until every node is Ready. The nodes appear in a group named after the cluster.",
+    "name": "Cluster name",
+    "flavor": "Flavor",
+    "flavorK3s": "k3s — lightweight, one binary, HA with embedded etcd",
+    "flavorKubeadm": "kubeadm — standard Kubernetes (containerd, Flannel)",
+    "topology": "Topology",
+    "topoSingle": "one machine: control plane + worker",
+    "topoCP1": "1 control plane + N workers",
+    "topoCP3": "3 control planes + N workers (HA, k3s only)",
+    "workers": "Workers",
+    "cpSizes": "Control plane size",
+    "wSizes": "Worker size",
+    "expose": "Expose outside",
+    "exposeHint": "ports 6443, 80 and 443 of the host ({{host}}) lead to the control plane — the cluster is reachable at the host address",
+    "summary": "Machines to create: {{machines}} ({{flavor}}) on host {{host}}.",
+    "create": "Create cluster",
+    "started": "Creation of cluster {{name}} started.",
+    "title": "Kubernetes clusters",
+    "subtitle": "total: {{count}}",
+    "status": {
+      "creating": "creating",
+      "ready": "ready",
+      "failed": "failed",
+      "deleting": "deleting"
+    },
+    "topo": {
+      "single": "one machine",
+      "cp1": "1 CP + workers",
+      "cp3": "3 CP + workers"
+    },
+    "onHost": "on {{host}}",
+    "internalOnly": "from the host only",
+    "kubeconfig": "kubeconfig",
+    "kubeconfigHint": "Download the admin kubeconfig; the server address is the one shown on the left",
+    "addWorker": "+ worker",
+    "delete": "delete cluster",
+    "confirmDelete": "Delete cluster “{{name}}” — all its machines ({{count}}) with disks will be removed from the host?",
+    "colNode": "Node",
+    "colRole": "Role",
+    "colState": "Link",
+    "reachable": "reachable",
+    "unreachable": "unreachable"
   }
 }
