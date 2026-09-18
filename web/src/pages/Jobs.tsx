@@ -158,6 +158,27 @@ function duration(j: Job, t: (k: string, o?: Record<string, unknown>) => string)
  * журнал соберётся целиком, а не с момента подключения. Если сокет не
  * открылся, включается опрос — раздел работает и без него.
  */
+/** Строка чек-листа («  ✓ …», «  ✗ …», «  ! …») подсвечивается по знаку;
+ * остальные строки — как есть. */
+function LogLine({ text, last }: { text: string; last: boolean }) {
+  const m = /^(\s*)([✓✗!])(\s.*)$/s.exec(text)
+  const color = m ? (m[2] === '✓' ? 'var(--series-3)' : m[2] === '✗' ? 'var(--series-8)' : 'var(--series-4)') : undefined
+  return (
+    <>
+      {m ? (
+        <>
+          {m[1]}
+          <span style={{ color, fontWeight: 600 }}>{m[2]}</span>
+          <span style={{ color: m[2] === '✗' ? color : undefined }}>{m[3]}</span>
+        </>
+      ) : (
+        text
+      )}
+      {last ? '' : '\n'}
+    </>
+  )
+}
+
 export function JobLogModal({
   job,
   onClose,
@@ -270,7 +291,7 @@ export function JobLogModal({
       {current.error && <Banner kind="error">{current.error}</Banner>}
 
       <pre ref={bodyRef} className="diff mono" style={{ maxHeight: '26rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
-        {lines.map((l) => l.text).join('\n') || t('jobs.noOutput')}
+        {lines.length === 0 ? t('jobs.noOutput') : lines.map((l, i) => <LogLine key={l.seq ?? i} text={l.text} last={i === lines.length - 1} />)}
       </pre>
     </Modal>
   )

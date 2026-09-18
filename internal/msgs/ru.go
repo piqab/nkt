@@ -1236,6 +1236,8 @@ var ruCatalog = map[string]string{
 	"hub.clusterMeshNoHandshake":                    "  ✗ %s → %s: рукопожатия нет — UDP 51820 на %s закрыт или адрес неверный",
 	"hub.preflightHostLoopback":                     "адрес хоста %s для соседей — %s: по нему другие хосты его не найдут; впишите адрес, видимый соседям",
 	"hub.preflightAddrDuplicate":                    "у хостов %s и %s один адрес для соседей (%s) — они перепутают друг друга",
+	"hub.preflightFailedList":                       "проверок не пройдено: %d — %s",
+	"hub.clusterDiscarded":                          "Кластер «%s» не создан: запись и группа убраны, исправьте проверки и запустите снова",
 	"hub.clusterStepMesh":                           "туннель WireGuard между хостами",
 	"hub.clusterMeshPlanned":                        "      туннель %s: %d хостов, ключи созданы и сохранены",
 	"hub.clusterMeshExists":                         "      туннель %s уже поднят, повторно не трогаю",

@@ -1237,6 +1237,8 @@ var enCatalog = map[string]string{
 	"hub.clusterMeshNoHandshake":                    "  ✗ %s → %s: no handshake — UDP 51820 on %s is closed or the address is wrong",
 	"hub.preflightHostLoopback":                     "the peer address of host %s is %s: other hosts cannot reach it there; enter an address the peers can see",
 	"hub.preflightAddrDuplicate":                    "hosts %s and %s share the peer address %s — they would mix each other up",
+	"hub.preflightFailedList":                       "%d checks failed — %s",
+	"hub.clusterDiscarded":                          "Cluster “%s” not created: the record and group were removed; fix the checks and start again",
 	"hub.clusterStepMesh":                           "WireGuard tunnel between hosts",
 	"hub.clusterMeshPlanned":                        "      tunnel %s: %d hosts, keys generated and stored",
 	"hub.clusterMeshExists":                         "      tunnel %s is already up, left untouched",

@@ -549,12 +549,12 @@ func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptR
 			return err
 		}
 		cr := &ClusterRunner{m: r.m, s: r.s}
-		failed, err := cr.runPreflight(ctx, jc, spec, false)
+		failed, err := cr.runPreflight(ctx, jc, spec, false, 0)
 		if err != nil {
 			return err
 		}
-		if failed > 0 {
-			return msgs.Errorf("hub.preflightFailed", failed)
+		if len(failed) > 0 {
+			return preflightError(failed)
 		}
 		return nil
 	case script.KindHost:

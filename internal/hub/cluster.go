@@ -448,12 +448,12 @@ func (r *ClusterRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	if p.DryRun && p.Spec != nil {
 		jc.Step(1, 1, msgs.T(jc.Lang(), "hub.clusterStepPreflight"))
-		failed, err := r.runPreflight(ctx, jc, *p.Spec, p.Prepare)
+		failed, err := r.runPreflight(ctx, jc, *p.Spec, p.Prepare, 0)
 		if err != nil {
 			return err
 		}
-		if failed > 0 {
-			return msgs.Errorf("hub.preflightFailed", failed)
+		if len(failed) > 0 {
+			return preflightError(failed)
 		}
 		return nil
 	}
@@ -544,12 +544,18 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	step++
 	jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepPreflight"))
 	if len(done.Hosts) == 0 && p.AddWorkers == 0 {
-		failed, err := r.runPreflight(ctx, jc, spec, false)
+		failed, err := r.runPreflight(ctx, jc, spec, false, cl.ID)
 		if err != nil {
 			return err
 		}
-		if failed > 0 {
-			return msgs.Errorf("hub.preflightFailed", failed)
+		if len(failed) > 0 {
+			// Ничего ещё не создано — запись и пустая группа не нужны:
+			// иначе в списке висит «кластер» без единой машины, а
+			// следующая попытка спотыкается о занятое имя.
+			_ = r.m.db.DeleteHostGroup(context.Background(), spec.Name)
+			_ = r.m.db.DeleteCluster(context.Background(), cl.ID)
+			jc.Log("hub.clusterDiscarded", spec.Name)
+			return preflightError(failed)
 		}
 	} else {
 		jc.Log("hub.preflightSkipped")
