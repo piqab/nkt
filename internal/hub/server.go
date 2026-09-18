@@ -227,6 +227,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/clusters/dry-run", s.handleClusterDryRun)
 					r.Get("/hub/clusters/{id}/kubeconfig", s.handleClusterKubeconfig)
 					r.Post("/hub/clusters/{id}/workers", s.handleClusterAddWorkers)
+					r.Post("/hub/clusters/{id}/retry", s.handleClusterRetry)
 					r.Delete("/hub/clusters/{id}", s.handleClusterDelete)
 
 					r.Get("/hub/bootstrap/defaults", s.handleBootstrapDefaults)

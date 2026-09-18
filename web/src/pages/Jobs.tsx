@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Tag, type TableColumnsType } from 'antd'
+import { Button, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { RedoOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import { wsURL } from '../hooks/usePty'
@@ -191,9 +192,14 @@ export function JobLogModal({
   scope?: string
 }) {
   const { t } = useTranslation()
+  // «Попробовать снова» открывает в этом же окне новое задание —
+  // openJob сменяется, журнал начинается заново.
+  const [openJob, setOpenJob] = useState<Job>(job)
   const [lines, setLines] = useState<JobLogLine[]>([])
   const [current, setCurrent] = useState<Job>(job)
   const [live, setLive] = useState(false)
+  const [retrying, setRetrying] = useState(false)
+  const [retryError, setRetryError] = useState<string | null>(null)
   const lastSeq = useRef(0)
   const bodyRef = useRef<HTMLPreElement | null>(null)
 
@@ -208,7 +214,7 @@ export function JobLogModal({
     fetching.current = true
     try {
       const res = await api<{ job: Job; lines: JobLogLine[] }>(
-        `${scope}/jobs/${job.id}/log${qs({ after: lastSeq.current })}`,
+        `${scope}/jobs/${openJob.id}/log${qs({ after: lastSeq.current })}`,
       )
       setCurrent(res.job)
       // Отбор по номеру строки, а не по «пришло что-то»: сверяемся с тем,
@@ -229,7 +235,7 @@ export function JobLogModal({
     } finally {
       fetching.current = false
     }
-  }, [job.id, scope])
+  }, [openJob.id, scope])
 
   // Первый заход всегда через базу — до всякого сокета.
   useEffect(() => {
@@ -240,11 +246,11 @@ export function JobLogModal({
   // он может пропустить событие под нагрузкой, поэтому по каждому сигналу
   // дочитывается хвост из базы — единственный источник правды.
   useEffect(() => {
-    if (isJobDone(job)) return
+    if (isJobDone(openJob)) return
     let closed = false
     let ws: WebSocket | null = null
     try {
-      ws = new WebSocket(wsURL(`${scope}/jobs/${job.id}/ws`))
+      ws = new WebSocket(wsURL(`${scope}/jobs/${openJob.id}/ws`))
     } catch {
       return
     }
@@ -260,7 +266,7 @@ export function JobLogModal({
       closed = true
       ws?.close()
     }
-  }, [job.id, fetchTail])
+  }, [openJob, scope, fetchTail])
 
   // Запасной опрос: работает, пока задание идёт и живого потока нет.
   useEffect(() => {
@@ -274,6 +280,24 @@ export function JobLogModal({
     if (el) el.scrollTop = el.scrollHeight
   }, [lines])
 
+  async function retry() {
+    setRetrying(true)
+    setRetryError(null)
+    try {
+      const res = await api<{ job_id: number }>(`${scope}/jobs/${openJob.id}/retry`, { method: 'POST' })
+      const next = await api<Job>(`${scope}/jobs/${res.job_id}`)
+      lastSeq.current = 0
+      setLines([])
+      setCurrent(next)
+      setOpenJob(next)
+    } catch (err) {
+      setRetryError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRetrying(false)
+    }
+  }
+  const canRetry = isJobDone(current) && current.status !== 'succeeded' && current.resumable
+
   return (
     <Modal title={current.title || current.kind} onClose={onClose} maskClosable={false} width={860}>
       <div className="row" style={{ marginBottom: '0.5rem' }}>
@@ -285,10 +309,18 @@ export function JobLogModal({
           </span>
         )}
         {!isJobDone(current) && !live && <span className="small muted">{t('jobs.polling')}</span>}
+        {canRetry && (
+          <Tooltip title={t('jobs.retryHint')}>
+            <Button size="small" type="primary" icon={<RedoOutlined />} loading={retrying} onClick={() => void retry()} style={{ marginLeft: 'auto' }}>
+              {t('jobs.retry')}
+            </Button>
+          </Tooltip>
+        )}
       </div>
 
       {current.status === 'interrupted' && <Banner kind="warn">{t('jobs.interruptedHint')}</Banner>}
       {current.error && <Banner kind="error">{current.error}</Banner>}
+      <ErrorNote error={retryError} />
 
       <pre ref={bodyRef} className="diff mono" style={{ maxHeight: '26rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
         {lines.length === 0 ? t('jobs.noOutput') : lines.map((l, i) => <LogLine key={l.seq ?? i} text={l.text} last={i === lines.length - 1} />)}

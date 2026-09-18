@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -471,6 +472,9 @@ func (r *ClusterRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	cl, err := r.m.db.ClusterByID(ctx, p.ClusterID)
 	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return msgs.Errorf("hub.clusterGone")
+		}
 		return err
 	}
 	var spec ClusterSpec
@@ -480,6 +484,10 @@ func (r *ClusterRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var done clusterResume
 	if err := jc.LoadResume(&done); err != nil {
 		return msgs.Errorf("hub.parsingResumeState", err)
+	}
+	if cl.Status == store.ClusterFailed {
+		// Продолжение после провала: кластер снова «создаётся».
+		_ = r.m.db.SetClusterStatus(ctx, cl.ID, store.ClusterCreating, "")
 	}
 	if done.Hosts == nil {
 		done.Hosts = map[string]int64{}

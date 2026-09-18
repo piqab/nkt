@@ -190,6 +190,45 @@ func (m *Manager) Start(ctx context.Context, spec Spec) (int64, error) {
 	return id, nil
 }
 
+// IsResumable — умеет ли тип задания продолжаться с сохранённого места.
+func (m *Manager) IsResumable(kind string) bool {
+	m.mu.Lock()
+	runner := m.runners[kind]
+	m.mu.Unlock()
+	r, ok := runner.(Resumable)
+	return ok && r.Resumable()
+}
+
+// Retry заводит новое задание с параметрами и состоянием продолжения
+// упавшего (прерванного, отменённого): сделанное пропускается, упавший
+// шаг выполняется заново. Старое задание и его журнал остаются как есть.
+func (m *Manager) Retry(ctx context.Context, id int64) (int64, error) {
+	job, err := m.db.JobByID(ctx, id)
+	if err != nil {
+		return 0, err
+	}
+	if !job.Done() {
+		return 0, msgs.Errorf("jobs.retryNotFinished")
+	}
+	if job.Status == store.JobSucceeded {
+		return 0, msgs.Errorf("jobs.retrySucceeded")
+	}
+	if !m.IsResumable(job.Kind) {
+		return 0, msgs.Errorf("jobs.retryNotResumable")
+	}
+	lang := msgs.FromContext(ctx)
+	newID, err := m.db.CreateJob(ctx, store.Job{
+		Kind: job.Kind, Title: job.Title, Queue: job.Queue, Status: store.JobQueued,
+		Params: job.Params, Resume: job.Resume, Steps: job.Steps, Author: job.Author, Lang: string(lang),
+	})
+	if err != nil {
+		return 0, err
+	}
+	m.appendLog(newID, msgs.T(lang, "jobs.retryOf", id))
+	m.enqueue(newID, job.Queue)
+	return newID, nil
+}
+
 // enqueue ставит задание в очередь ключа и запускает, если ключ свободен.
 func (m *Manager) enqueue(id int64, queue string) {
 	m.mu.Lock()
