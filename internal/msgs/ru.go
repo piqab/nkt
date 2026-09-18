@@ -1240,6 +1240,8 @@ var ruCatalog = map[string]string{
 	"hub.preflightAddrDuplicate":                    "у хостов %s и %s один адрес для соседей (%s) — они перепутают друг друга",
 	"hub.preflightFailedList":                       "проверок не пройдено: %d — %s",
 	"hub.clusterDiscarded":                          "Кластер «%s» не создан: запись и группа убраны, исправьте проверки и запустите снова",
+	"hub.preflightHubCache":                         "кэш хаба на хосте открыт — установщики, бинарники, образы машин и образы контейнеров пойдут через хаб и осядут в его кэше",
+	"hub.preflightNetCheckViaHub":                   "с хоста через кэш хаба доступен %s (%d мс)",
 	"hub.clusterStepMesh":                           "туннель WireGuard между хостами",
 	"hub.clusterMeshPlanned":                        "      туннель %s: %d хостов, ключи созданы и сохранены",
 	"hub.clusterMeshExists":                         "      туннель %s уже поднят, повторно не трогаю",

@@ -37,6 +37,7 @@ type hostPreflight struct {
 	ImagesDownload  []string `json:"images_downloaded"`
 	Bridges         []string `json:"bridges"`
 	WireGuard       bool     `json:"wireguard"`
+	HubCache        bool     `json:"hub_cache"`
 	Networks        []struct {
 		Name   string `json:"name"`
 		Active bool   `json:"active"`
@@ -178,6 +179,9 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 			add(false, false, "hub.preflightHostAPI", err)
 			continue
 		}
+		if pf.HubCache {
+			add(true, false, "hub.preflightHubCache")
+		}
 		if wg {
 			// Туннель: адрес хоста — конечная точка для соседей,
 			// wireguard-tools ставится при создании, если нет.
@@ -309,12 +313,15 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 				Status int    `json:"status"`
 				Error  string `json:"error"`
 				MS     int64  `json:"ms"`
+				ViaHub bool   `json:"via_hub"`
 			}
 			if _, err := r.m.HostAPI(ctx, host.ID, "GET", "/api/net/check?url="+url.QueryEscape(u), nil, &res); err != nil {
 				add(false, false, "hub.preflightNetCheck", u, err)
 				continue
 			}
-			if res.OK {
+			if res.OK && res.ViaHub {
+				add(true, false, "hub.preflightNetCheckViaHub", u, res.MS)
+			} else if res.OK {
 				add(true, false, "hub.preflightNetCheckOK", u, res.MS)
 			} else {
 				add(false, false, "hub.preflightNetCheck", u, fmt.Sprintf("%s %d", res.Error, res.Status))

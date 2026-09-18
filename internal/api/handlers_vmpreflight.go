@@ -69,6 +69,8 @@ func (s *Server) handleVMPreflight(w http.ResponseWriter, r *http.Request) {
 	out["bridges"] = bridges
 	// wireguard-tools — для туннеля между хостами.
 	out["wireguard"] = collect.Which(ctx, c, "wg")
+	// Кэш хаба на хосте: загрузки пойдут через него.
+	out["hub_cache"] = s.hubCacheURL() != ""
 	if mgr := s.vmnets(); mgr != nil {
 		if nets, err := mgr.List(ctx); err == nil {
 			out["networks"] = nets
@@ -93,8 +95,17 @@ func (s *Server) handleNetCheck(w http.ResponseWriter, r *http.Request) {
 	req, _ := http.NewRequestWithContext(ctx, http.MethodHead, raw, nil)
 	req.Header.Set("User-Agent", "nkt/"+s.version)
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	resp, err := client.Do(req)
 	out := map[string]any{"url": raw, "ms": time.Since(started).Milliseconds()}
+	// Через кэш хаба, если он есть: так же пойдёт и установка, а хосту без
+	// выхода наружу прямая проверка соврала бы.
+	if cache := s.hubCacheURL(); cache != "" {
+		if pu, err := url.Parse(cache); err == nil {
+			client.Transport = &http.Transport{Proxy: http.ProxyURL(pu)}
+			out["via_hub"] = true
+		}
+	}
+	resp, err := client.Do(req)
+	out["ms"] = time.Since(started).Milliseconds()
 	if err != nil {
 		out["ok"] = false
 		out["error"] = err.Error()

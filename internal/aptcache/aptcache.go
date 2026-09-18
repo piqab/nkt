@@ -38,11 +38,16 @@ type Cache struct {
 	inflight map[string]*download
 
 	hits, misses, bytesServed, bytesFetched atomic.Int64
+
+	auth registryAuth
 }
 
 type entry struct {
 	size     int64
 	lastUsed time.Time
+	// fetched — когда файл скачан: у изменяемых артефактов по нему
+	// решается, не пора ли перекачать.
+	fetched time.Time
 }
 
 type download struct {
@@ -56,7 +61,10 @@ func New(dir string, maxBytes int64) (*Cache, error) {
 		return nil, err
 	}
 	c := &Cache{dir: dir, entries: map[string]*entry{}, inflight: map[string]*download{},
-		client: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, MaxIdleConnsPerHost: 8}}}
+		client: &http.Client{Transport: &http.Transport{Proxy: http.ProxyFromEnvironment, MaxIdleConnsPerHost: 8,
+			// Источник, не ответивший заголовками за минуту, не держит
+			// хост в ожидании полчаса.
+			ResponseHeaderTimeout: time.Minute}}}
 	c.maxBytes.Store(maxBytes)
 	_ = filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
@@ -71,7 +79,11 @@ func New(dir string, maxBytes int64) (*Cache, error) {
 			return nil
 		}
 		rel, _ := filepath.Rel(dir, p)
-		c.entries[filepath.ToSlash(rel)] = &entry{size: info.Size(), lastUsed: info.ModTime()}
+		if strings.HasSuffix(p, ".ct") {
+			// Тип содержимого манифеста — довесок к основному файлу.
+			return nil
+		}
+		c.entries[filepath.ToSlash(rel)] = &entry{size: info.Size(), lastUsed: info.ModTime(), fetched: info.ModTime()}
 		c.total += info.Size()
 		return nil
 	})
@@ -111,6 +123,7 @@ func (c *Cache) Clear() error {
 	defer c.mu.Unlock()
 	for rel := range c.entries {
 		os.Remove(filepath.Join(c.dir, filepath.FromSlash(rel)))
+		os.Remove(filepath.Join(c.dir, filepath.FromSlash(rel)) + ".ct")
 	}
 	c.entries = map[string]*entry{}
 	c.total = 0
@@ -142,7 +155,21 @@ func (c *Cache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !r.URL.IsAbs() {
-		http.Error(w, "nkt apt cache: proxy requests only", http.StatusBadRequest)
+		// Свои адреса: файлы по ссылке (artifact.go) и зеркало registry
+		// (registry.go); всё остальное — только как прокси.
+		switch {
+		case r.URL.Path == "/nkt/ping":
+			// Опознавательный ответ: хост так отличает кэш хаба от чужого
+			// прокси на том же порту (apt-cacher-ng тоже любит 3142).
+			w.Header().Set("Content-Type", "text/plain")
+			_, _ = w.Write([]byte("nkt-cache"))
+		case r.URL.Path == "/nkt/artifact":
+			c.serveArtifact(w, r)
+		case r.URL.Path == "/v2" || strings.HasPrefix(r.URL.Path, "/v2/"):
+			c.serveRegistry(w, r)
+		default:
+			http.Error(w, "nkt apt cache: proxy requests only", http.StatusBadRequest)
+		}
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -237,6 +264,13 @@ func (c *Cache) download(ctx context.Context, rel, file, url string) error {
 	if resp.StatusCode != http.StatusOK {
 		return &statusError{code: resp.StatusCode}
 	}
+	_ = ctx
+	return c.store(rel, file, resp.Body, resp.ContentLength, "")
+}
+
+// store кладёт тело в файл кэша (через .part) и учитывает его; contentType
+// непустой — сохраняется довеском .ct (манифесты registry).
+func (c *Cache) store(rel, file string, body io.Reader, contentLength int64, contentType string) error {
 	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
 		return err
 	}
@@ -245,15 +279,18 @@ func (c *Cache) download(ctx context.Context, rel, file, url string) error {
 	if err != nil {
 		return err
 	}
-	n, err := io.Copy(f, resp.Body)
+	n, err := io.Copy(f, body)
 	f.Close()
 	if err != nil {
 		os.Remove(tmp)
 		return err
 	}
-	if resp.ContentLength > 0 && n != resp.ContentLength {
+	if contentLength > 0 && n != contentLength {
 		os.Remove(tmp)
 		return errors.New("short download")
+	}
+	if contentType != "" {
+		_ = os.WriteFile(file+".ct", []byte(contentType), 0o644)
 	}
 	if err := os.Rename(tmp, file); err != nil {
 		os.Remove(tmp)
@@ -264,12 +301,54 @@ func (c *Cache) download(ctx context.Context, rel, file, url string) error {
 	if old, ok := c.entries[rel]; ok {
 		c.total -= old.size
 	}
-	c.entries[rel] = &entry{size: n, lastUsed: time.Now()}
+	c.entries[rel] = &entry{size: n, lastUsed: time.Now(), fetched: time.Now()}
 	c.total += n
 	c.evictLocked()
 	c.mu.Unlock()
-	_ = ctx
 	return nil
+}
+
+// fetchWith — как fetch, но загрузку делает get: registry ходит к
+// источнику со своей авторизацией.
+func (c *Cache) fetchWith(rel string, get func() error) error {
+	c.mu.Lock()
+	if d, ok := c.inflight[rel]; ok {
+		c.mu.Unlock()
+		<-d.done
+		return d.err
+	}
+	d := &download{done: make(chan struct{})}
+	c.inflight[rel] = d
+	c.mu.Unlock()
+
+	d.err = get()
+	c.mu.Lock()
+	delete(c.inflight, rel)
+	c.mu.Unlock()
+	close(d.done)
+	return d.err
+}
+
+// fresh — файл в кэше и (для изменяемых, ttl > 0) скачан не раньше, чем
+// ttl назад. Отмечает попадание.
+func (c *Cache) fresh(rel string, ttl time.Duration) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.entries[rel]
+	if !ok {
+		return false
+	}
+	e.lastUsed = time.Now()
+	return ttl <= 0 || time.Since(e.fetched) < ttl
+}
+
+// has — файл есть (возможно, устаревший): чем отдать, когда источник
+// недоступен.
+func (c *Cache) has(rel string) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.entries[rel]
+	return ok
 }
 
 // evictLocked убирает самое давно не спрошенное, пока не влезем в лимит.
@@ -295,6 +374,7 @@ func (c *Cache) evictLocked() {
 			continue
 		}
 		os.Remove(filepath.Join(c.dir, filepath.FromSlash(it.rel)))
+		os.Remove(filepath.Join(c.dir, filepath.FromSlash(it.rel)) + ".ct")
 		c.total -= it.e.size
 		delete(c.entries, it.rel)
 	}
@@ -312,7 +392,9 @@ func (c *Cache) serveFile(w http.ResponseWriter, r *http.Request, file string) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/octet-stream")
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "application/octet-stream")
+	}
 	w.Header().Set("X-Cache", "nkt")
 	cw := &countWriter{ResponseWriter: w}
 	http.ServeContent(cw, r, filepath.Base(file), st.ModTime(), f)

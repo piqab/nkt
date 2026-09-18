@@ -1241,6 +1241,8 @@ var enCatalog = map[string]string{
 	"hub.preflightAddrDuplicate":                    "hosts %s and %s share the peer address %s — they would mix each other up",
 	"hub.preflightFailedList":                       "%d checks failed — %s",
 	"hub.clusterDiscarded":                          "Cluster “%s” not created: the record and group were removed; fix the checks and start again",
+	"hub.preflightHubCache":                         "the hub cache is open on the host — installers, binaries, machine images and container images go through the hub and stay in its cache",
+	"hub.preflightNetCheckViaHub":                   "%s reachable from the host through the hub cache (%d ms)",
 	"hub.clusterStepMesh":                           "WireGuard tunnel between hosts",
 	"hub.clusterMeshPlanned":                        "      tunnel %s: %d hosts, keys generated and stored",
 	"hub.clusterMeshExists":                         "      tunnel %s is already up, left untouched",

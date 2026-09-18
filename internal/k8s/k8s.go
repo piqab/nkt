@@ -73,6 +73,12 @@ type InstallSpec struct {
 	// NodeIP — адрес узла для других узлов (и API у server): нужен, когда
 	// у хоста несколько адресов, а видеть его должны через туннель.
 	NodeIP string `json:"node_ip,omitempty"`
+	// HubCache — адрес кэша хаба на этом хосте (http://127.0.0.1:3142),
+	// когда хаб держит проброс: установщики, бинарники, ключи и образы
+	// машин берутся через него (и оседают на хабе), а containerd тянет
+	// образы контейнеров через зеркало registry на том же адресе. Пусто
+	// — всё напрямую из интернета.
+	HubCache string `json:"hub_cache,omitempty"`
 }
 
 // Validate — базовая проверка формы: имена, роли, отсутствие shell-мусора.
@@ -89,7 +95,7 @@ func (s InstallSpec) Validate() error {
 	if s.CNI != "" && s.CNI != "cilium" {
 		return msgs.Errorf("k8s.badCNI", s.CNI)
 	}
-	for _, v := range append([]string{s.ServerURL, s.Token, s.CAHash, s.CertKey, s.ControlPlaneEndpoint, s.NodeName, s.APIAddr, s.NodeIP}, s.TLSSANs...) {
+	for _, v := range append([]string{s.ServerURL, s.Token, s.CAHash, s.CertKey, s.ControlPlaneEndpoint, s.NodeName, s.APIAddr, s.NodeIP, s.HubCache}, s.TLSSANs...) {
 		if strings.ContainsAny(v, " \t\n'\"`$\\;&|") {
 			return msgs.Errorf("k8s.badValue", v)
 		}
@@ -482,10 +488,35 @@ func k3sSteps(s InstallSpec) []Step {
 	if s.Role == RoleAgent {
 		unit = "k3s-agent"
 	}
+	download := fetchPrelude(s) + "art https://get.k3s.io > /tmp/nkt-k3s-install.sh\nhead -c 200 /tmp/nkt-k3s-install.sh | grep -q '#!/bin/sh'"
+	installEnv := strings.Join(env, " ")
+	if s.HubCache != "" {
+		// Через хаб: бинарник k3s и его airgap-образы берутся с кэша хаба
+		// заранее, установщик их не качает; образы контейнеров — через
+		// зеркало registry на хабе.
+		download += "\n" + strings.Join([]string{
+			"ARCH=$(uname -m); case $ARCH in x86_64) A=amd64; BIN=k3s;; aarch64) A=arm64; BIN=k3s-arm64;; *) echo \"unsupported arch $ARCH\"; exit 1;; esac",
+			"VER=$(art https://update.k3s.io/v1-release/channels | grep -o '\"id\":\"stable\".\\{0,400\\}' | grep -o '\"latest\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4)",
+			"test -n \"$VER\"",
+			"echo \"k3s $VER ($A) via hub cache\"",
+			"REL=https://github.com/k3s-io/k3s/releases/download/$VER",
+			"art $REL/sha256sum-$A.txt > /tmp/nkt-k3s.sums",
+			"art $REL/$BIN > /tmp/nkt-k3s.bin",
+			"echo \"$(grep \" $BIN$\" /tmp/nkt-k3s.sums | awk '{print $1}')  /tmp/nkt-k3s.bin\" | sha256sum -c - >/dev/null",
+			"install -m 755 /tmp/nkt-k3s.bin /usr/local/bin/k3s && rm -f /tmp/nkt-k3s.bin",
+			"mkdir -p /var/lib/rancher/k3s/agent/images",
+			"art $REL/k3s-airgap-images-$A.tar.zst > /var/lib/rancher/k3s/agent/images/k3s-airgap-images-$A.tar.zst.part",
+			"echo \"$(grep \" k3s-airgap-images-$A.tar.zst$\" /tmp/nkt-k3s.sums | awk '{print $1}')  /var/lib/rancher/k3s/agent/images/k3s-airgap-images-$A.tar.zst.part\" | sha256sum -c - >/dev/null",
+			"mv -f /var/lib/rancher/k3s/agent/images/k3s-airgap-images-$A.tar.zst.part /var/lib/rancher/k3s/agent/images/k3s-airgap-images-$A.tar.zst",
+			"mkdir -p /etc/rancher/k3s",
+			"cat > /etc/rancher/k3s/registries.yaml <<'EOF'\n" + registriesYAML(s.HubCache) + "EOF",
+		}, "\n")
+		installEnv += " INSTALL_K3S_SKIP_DOWNLOAD=true"
+	}
 	steps := []Step{
 		{"k8s.step.prepare", "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq curl ca-certificates\nswapoff -a || true\nsed -i.bak '/\\sswap\\s/s/^/#/' /etc/fstab || true"},
-		{"k8s.step.download", "set -e\ncurl -fsSL https://get.k3s.io -o /tmp/nkt-k3s-install.sh\nhead -c 200 /tmp/nkt-k3s-install.sh | grep -q '#!/bin/sh'"},
-		{"k8s.step.install", "set -e\n" + strings.Join(env, " ") + " INSTALL_K3S_EXEC=" + shq(strings.Join(exec, " ")) + " sh /tmp/nkt-k3s-install.sh\nrm -f /tmp/nkt-k3s-install.sh"},
+		{"k8s.step.download", download},
+		{"k8s.step.install", "set -e\n" + installEnv + " INSTALL_K3S_EXEC=" + shq(strings.Join(exec, " ")) + " sh /tmp/nkt-k3s-install.sh\nrm -f /tmp/nkt-k3s-install.sh"},
 		{"k8s.step.wait", "set -e\nfor i in $(seq 1 60); do systemctl is-active --quiet " + unit + " && break; sleep 2; done\nsystemctl is-active --quiet " + unit},
 	}
 	if s.Role == RoleServer {
@@ -510,11 +541,11 @@ func ciliumStep(s InstallSpec, kubeconfig string) Step {
 		}
 	}
 	script := strings.Join([]string{
-		"set -e",
+		strings.TrimRight(fetchPrelude(s), "\n"),
 		"export KUBECONFIG=" + kubeconfig,
 		"if ! command -v cilium >/dev/null; then",
 		"  ARCH=$(dpkg --print-architecture 2>/dev/null || uname -m); case $ARCH in x86_64) ARCH=amd64;; aarch64) ARCH=arm64;; esac",
-		"  cd /tmp && curl -fsSL -O https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-$ARCH.tar.gz -O https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-$ARCH.tar.gz.sha256sum",
+		"  cd /tmp && art https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-$ARCH.tar.gz > cilium-linux-$ARCH.tar.gz && art https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-$ARCH.tar.gz.sha256sum > cilium-linux-$ARCH.tar.gz.sha256sum",
 		"  sha256sum --check cilium-linux-$ARCH.tar.gz.sha256sum",
 		"  tar -C /usr/local/bin -xzf cilium-linux-$ARCH.tar.gz && rm -f cilium-linux-$ARCH.tar.gz*",
 		"fi",
@@ -566,6 +597,18 @@ func containerdStep(s InstallSpec) string {
 		"for i in $(seq 1 30); do test -S /run/containerd/containerd.sock && break; sleep 1; done",
 		"test -S /run/containerd/containerd.sock",
 	}
+	if s.HubCache != "" {
+		// Зеркало registry на хабе: hosts.toml на каждый registry, сам
+		// containerd добавляет ?ns=<registry> к запросам зеркала.
+		lines = append(lines,
+			"if grep -q 'config_path = \"\"' /etc/containerd/config.toml; then sed -i 's#config_path = \"\"#config_path = \"/etc/containerd/certs.d\"#' /etc/containerd/config.toml; elif ! grep -q 'config_path = \"/etc/containerd/certs.d\"' /etc/containerd/config.toml; then echo 'containerd: config.toml without registry config_path — hub registry mirror not enabled'; fi")
+		for _, reg := range mirroredRegistries {
+			lines = append(lines,
+				"mkdir -p /etc/containerd/certs.d/"+reg,
+				"printf 'server = \"https://"+registryServer(reg)+"\"\\n\\n[host.\""+s.HubCache+"\"]\\n  capabilities = [\"pull\", \"resolve\"]\\n' > /etc/containerd/certs.d/"+reg+"/hosts.toml")
+		}
+		lines = append(lines, "systemctl restart containerd")
+	}
 	if s.NodeIP != "" {
 		lines = append(lines, "echo 'KUBELET_EXTRA_ARGS=--node-ip="+s.NodeIP+"' > /etc/default/kubelet")
 	}
@@ -578,8 +621,8 @@ func kubeadmSteps(s InstallSpec) []Step {
 	const sysprep = "set -e\nswapoff -a || true\nsed -i.bak '/\\sswap\\s/s/^/#/' /etc/fstab || true\n" +
 		"printf 'overlay\\nbr_netfilter\\n' > /etc/modules-load.d/k8s.conf\nmodprobe overlay\nmodprobe br_netfilter\n" +
 		"printf 'net.bridge.bridge-nf-call-iptables=1\\nnet.bridge.bridge-nf-call-ip6tables=1\\nnet.ipv4.ip_forward=1\\n' > /etc/sysctl.d/k8s.conf\nsysctl --system >/dev/null"
-	const repo = "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq apt-transport-https ca-certificates curl gpg\n" +
-		"install -m 0755 -d /etc/apt/keyrings\ncurl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg\n" +
+	repo := fetchPrelude(s) + "export DEBIAN_FRONTEND=noninteractive\napt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq apt-transport-https ca-certificates curl gpg\n" +
+		"install -m 0755 -d /etc/apt/keyrings\nart https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg\n" +
 		"echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' > /etc/apt/sources.list.d/kubernetes.list\n" +
 		"apt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq kubelet kubeadm kubectl\napt-mark hold kubelet kubeadm kubectl"
 	runtime := containerdStep(s)
@@ -603,7 +646,8 @@ func kubeadmSteps(s InstallSpec) []Step {
 		}
 		init += "\nmkdir -p /root/.kube\ncp -f /etc/kubernetes/admin.conf /root/.kube/config"
 		if s.CNI != "cilium" {
-			init += "\nkubectl --kubeconfig /etc/kubernetes/admin.conf apply -f https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"
+			init = fetchPrelude(s) + strings.TrimPrefix(init, "set -e\n") +
+				"\nart https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml | kubectl --kubeconfig /etc/kubernetes/admin.conf apply -f -"
 		}
 		if s.Single {
 			init += "\nkubectl --kubeconfig /etc/kubernetes/admin.conf taint nodes --all node-role.kubernetes.io/control-plane- || true"
@@ -625,6 +669,36 @@ func kubeadmSteps(s InstallSpec) []Step {
 	steps = append(steps, Step{"k8s.step.install", join})
 	steps = append(steps, Step{"k8s.step.wait", "set -e\nfor i in $(seq 1 60); do systemctl is-active --quiet kubelet && break; sleep 2; done\nsystemctl is-active --quiet kubelet"})
 	return steps
+}
+
+// mirroredRegistries — registry, которые containerd берёт через зеркало
+// хаба, когда есть кэш хаба.
+var mirroredRegistries = []string{"docker.io", "quay.io", "registry.k8s.io", "ghcr.io", "gcr.io"}
+
+func registryServer(reg string) string {
+	if reg == "docker.io" {
+		return "registry-1.docker.io"
+	}
+	return reg
+}
+
+// fetchPrelude — начало скрипта с функцией art URL: через кэш хаба
+// (файл оседает на хабе) или напрямую curl'ом.
+func fetchPrelude(s InstallSpec) string {
+	if s.HubCache != "" {
+		return "set -e\nNKT_CACHE=" + s.HubCache + "\nart() { curl -fsSL -G --data-urlencode \"url=$1\" \"$NKT_CACHE/nkt/artifact\"; }\n"
+	}
+	return "set -e\nart() { curl -fsSL \"$1\"; }\n"
+}
+
+// registriesYAML — зеркала для k3s (/etc/rancher/k3s/registries.yaml).
+func registriesYAML(cache string) string {
+	var b strings.Builder
+	b.WriteString("mirrors:\n")
+	for _, reg := range mirroredRegistries {
+		b.WriteString("  " + reg + ":\n    endpoint:\n      - \"" + cache + "\"\n")
+	}
+	return b.String()
 }
 
 // humanAge — как у kubectl: 5d, 3h, 12m.

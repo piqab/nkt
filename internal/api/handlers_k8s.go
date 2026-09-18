@@ -57,6 +57,8 @@ func (s *Server) handleK8sInstall(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, msgs.T(msgs.LangFromRequest(r), "api.backgroundJobsAreUnavailable"))
 		return
 	}
+	// Хост сам решает, идти ли через кэш хаба: порт есть — идёт.
+	spec.HubCache = s.hubCacheURL()
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind: k8s.KindInstall, Title: msgs.Tc(r.Context(), "k8s.installJobTitle", spec.Flavor, spec.Role),
