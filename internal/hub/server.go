@@ -221,6 +221,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/aptcache/clear", s.handleHubAptCacheClear)
 					r.Post("/hub/hosts/{id}/apt-proxy", s.handleHostAptProxy)
 					r.Post("/hub/clusters", s.handleClusterCreate)
+					r.Post("/hub/clusters/dry-run", s.handleClusterDryRun)
 					r.Get("/hub/clusters/{id}/kubeconfig", s.handleClusterKubeconfig)
 					r.Post("/hub/clusters/{id}/workers", s.handleClusterAddWorkers)
 					r.Delete("/hub/clusters/{id}", s.handleClusterDelete)
