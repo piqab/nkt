@@ -1,10 +1,11 @@
-import { useEffect, useState, type CSSProperties } from 'react'
-import { Button, Checkbox, Input, InputNumber, Select, Tooltip } from 'antd'
-import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { Button, Checkbox, Input, InputNumber, Progress, Select, Tooltip } from 'antd'
+import { DeleteOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HubHost, Job, Me } from '../types'
-import { Banner, ErrorNote, InfoHint, Modal } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Modal, formatBytesShort, formatRelative } from '../components/ui'
+import { confirmAction } from '../components/confirm'
 import { ClustersCard } from '../components/Clusters'
 import { JobLogModal } from './Jobs'
 
@@ -14,6 +15,13 @@ import { JobLogModal } from './Jobs'
  * сам хост → размеры), сеть между хостами, Cilium, проброс. Задание и
  * проверки те же, что у диалога «новый кластер» у хоста.
  */
+
+/** Образ из библиотеки хаба: загружен один раз, заливается на хосты. */
+export interface ClusterImage {
+  name: string
+  size: number
+  mod_time: string
+}
 
 interface Row {
   host_id: number | null
@@ -77,6 +85,7 @@ export default function ClustersPage({ me }: { me: Me }) {
         </Banner>
       )}
       <ClustersCard key={tick} onOpenJob={(id) => void openHubJob(id)} onChanged={() => setTick((n) => n + 1)} showEmpty />
+      <ClusterImagesCard canEdit={me.is_admin} />
       {creating && (
         <MultiClusterModal
           onClose={() => setCreating(false)}
@@ -93,10 +102,99 @@ export default function ClustersPage({ me }: { me: Me }) {
   )
 }
 
+/** Библиотека образов хаба: загрузить qcow2/img/raw один раз — и любой
+ * кластер на любом хосте создаётся из него (хаб заливает образ на хост
+ * сам, если его там ещё нет). */
+function ClusterImagesCard({ canEdit }: { canEdit: boolean }) {
+  const { t } = useTranslation()
+  const images = useApi<{ images: ClusterImage[] }>('/hub/cluster-images')
+  const [uploading, setUploading] = useState<number | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function upload(file: File) {
+    setError(null)
+    setUploading(0)
+    const xhr = new XMLHttpRequest()
+    xhr.open('POST', `/api/hub/cluster-images/upload?name=${encodeURIComponent(file.name)}`)
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) setUploading(Math.round((e.loaded / e.total) * 100))
+    }
+    xhr.onload = () => {
+      setUploading(null)
+      if (xhr.status === 200) {
+        images.reload()
+        return
+      }
+      try {
+        setError((JSON.parse(xhr.responseText) as { error?: string }).error ?? `код ${xhr.status}`)
+      } catch {
+        setError(`код ${xhr.status}`)
+      }
+    }
+    xhr.onerror = () => {
+      setUploading(null)
+      setError(t('vmimages.uploadFailed'))
+    }
+    xhr.send(file)
+  }
+
+  async function remove(name: string) {
+    if (!(await confirmAction(t('clusters.imageDeleteConfirm', { name })))) return
+    try {
+      await api(`/hub/cluster-images/${encodeURIComponent(name)}`, { method: 'DELETE' })
+      images.reload()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const list = images.data?.images ?? []
+  return (
+    <Card
+      title={t('clusters.imagesTitle')}
+      subtitle={t('clusters.imagesHint')}
+      actions={
+        canEdit ? (
+          <>
+            <input ref={fileRef} type="file" accept=".qcow2,.img,.raw" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
+            <Button size="small" icon={<UploadOutlined />} disabled={uploading !== null} onClick={() => fileRef.current?.click()}>
+              {t('clusters.imageUpload')}
+            </Button>
+          </>
+        ) : undefined
+      }
+    >
+      <ErrorNote error={error} />
+      <ErrorNote error={images.error} />
+      {uploading !== null && <Progress percent={uploading} size="small" style={{ marginBottom: '0.5rem' }} />}
+      {list.length === 0 ? (
+        <p className="small muted" style={{ margin: 0 }}>{t('clusters.imagesNone')}</p>
+      ) : (
+        <table className="ant-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <tbody>
+            {list.map((img) => (
+              <tr key={img.name}>
+                <td style={{ padding: '0.2rem 0.4rem' }}><code>hub:{img.name}</code></td>
+                <td style={{ padding: '0.2rem 0.4rem' }} className="small muted">{formatBytesShort(img.size)}</td>
+                <td style={{ padding: '0.2rem 0.4rem' }} className="small muted">{formatRelative(img.mod_time)}</td>
+                <td style={{ padding: '0.2rem 0.4rem', textAlign: 'right' }}>
+                  {canEdit && <Button size="small" type="text" icon={<DeleteOutlined />} onClick={() => void remove(img.name)} />}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </Card>
+  )
+}
+
 function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStarted: (text: string, jobID: number) => void }) {
   const { t } = useTranslation()
   const hosts = useApi<HubHost[]>('/hub/hosts')
   const online = (hosts.data ?? []).filter((h) => h.status === 'online' && h.id > 0)
+  const hubImages = useApi<{ images: ClusterImage[] }>('/hub/cluster-images')
   const [name, setName] = useState('k8s')
   const [flavor, setFlavor] = useState<'k3s' | 'kubeadm'>('k3s')
   const [cilium, setCilium] = useState(true)
@@ -297,7 +395,10 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
                       placeholder={r.host_id === null ? t('clusters.pickHostFirst') : t('clusters.pickImage')}
                       disabled={r.host_id === null}
                       onChange={(v: string) => update(i, { image_id: v })}
-                      options={(hi?.images ?? []).map((img) => ({ value: img.id, label: img.name + (img.downloaded ? '' : ` ${t('hosts.newVMWillDownload')}`) }))}
+                      options={[
+                        ...(hi?.images ?? []).map((img) => ({ value: img.id, label: img.name + (img.downloaded ? '' : ` ${t('hosts.newVMWillDownload')}`) })),
+                        ...(hubImages.data?.images ?? []).map((img) => ({ value: `hub:${img.name}`, label: `${t('clusters.imageFromHub')}: ${img.name} (${formatBytesShort(img.size)})` })),
+                      ]}
                     />
                   </div>
                   {effectiveNetwork === 'bridge' && (

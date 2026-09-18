@@ -798,7 +798,19 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 	if err != nil {
 		return err
 	}
-	vm := vmcreate.Spec{Name: nd.Name, ImageID: nd.ImageID, Network: nd.Network, Bridge: nd.Bridge, User: spec.User, Autostart: true,
+	imageID := nd.ImageID
+	if name := hubImageName(imageID); name != "" {
+		// Свой образ из библиотеки хаба: на хост — если его там ещё нет.
+		img, err := r.m.ClusterImage(name)
+		if err != nil {
+			return err
+		}
+		if err := r.m.ensureHostImage(ctx, jc, host.ID, host.Name, img); err != nil {
+			return err
+		}
+		imageID = vmcreate.HostPrefix + name
+	}
+	vm := vmcreate.Spec{Name: nd.Name, ImageID: imageID, Network: nd.Network, Bridge: nd.Bridge, User: spec.User, Autostart: true,
 		VCPUs: nd.VCPUs, MemoryMB: nd.MemMB, DiskGB: nd.DiskGB}
 	if nd.Bridge != "" {
 		// На мосту адрес машины узнаётся через гостевого агента —

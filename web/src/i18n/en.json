@@ -2262,7 +2262,13 @@
     "bridgeMissingRow": "in bridge mode every row with machines needs a bridge",
     "natSingle": "a libvirt network (NAT) works for one host only",
     "endpoints": "Host addresses for peers",
-    "endpointsHint": "Other cluster hosts connect to the tunnel at this address (UDP 51820). A public address is not required — hosts only need to see each other (LAN, VPN). Empty — the address from the nkt list; if the hub reaches the host at an address the peers cannot see, enter another one."
+    "endpointsHint": "Other cluster hosts connect to the tunnel at this address (UDP 51820). A public address is not required — hosts only need to see each other (LAN, VPN). Empty — the address from the nkt list; if the hub reaches the host at an address the peers cannot see, enter another one.",
+    "imagesTitle": "Cluster images",
+    "imagesHint": "Upload your own qcow2/img/raw to the hub once; pick it in a placement as “from the hub: …” — the hub uploads it to every cluster host that lacks it (into the libvirt disk directory). The image must be a cloud image (cloud-init): that is how the hub sets the user and the key.",
+    "imageUpload": "upload an image",
+    "imagesNone": "No images yet — upload a qcow2 and it appears in the image list when creating a cluster.",
+    "imageDeleteConfirm": "Delete image “{{name}}” from the hub library? Copies on hosts stay.",
+    "imageFromHub": "from the hub"
   },
   "k8s": {
     "notInstalled": "Kubernetes is not installed on this host. Clusters are created on the hub: “new cluster” next to a host with virtualization.",

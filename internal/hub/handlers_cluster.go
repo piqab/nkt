@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -258,4 +259,35 @@ func (s *Server) handleClusterDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	s.db.Audit(r.Context(), user, "cluster.delete", cl.Name, "ok", "")
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": jobID})
+}
+
+// Библиотека образов для кластеров (см. clusterimages.go).
+
+func (s *Server) handleClusterImages(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"images": s.hub.ClusterImages()})
+}
+
+func (s *Server) handleClusterImageUpload(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	user := auth.Username(r.Context())
+	img, err := s.hub.SaveClusterImage(name, http.MaxBytesReader(w, r.Body, clusterImagesMax))
+	if err != nil {
+		s.db.Audit(r.Context(), user, "cluster_image.upload", name, "error", err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.db.Audit(r.Context(), user, "cluster_image.upload", name, "ok", fmt.Sprint(img.Size))
+	writeJSON(w, http.StatusOK, img)
+}
+
+func (s *Server) handleClusterImageDelete(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	user := auth.Username(r.Context())
+	if err := s.hub.DeleteClusterImage(name); err != nil {
+		s.db.Audit(r.Context(), user, "cluster_image.delete", name, "error", err.Error())
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.db.Audit(r.Context(), user, "cluster_image.delete", name, "ok", "")
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }

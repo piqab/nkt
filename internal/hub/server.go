@@ -176,6 +176,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/clamdb", s.handleHubClamDBStatus)
 				r.Get("/hub/aptcache", s.handleHubAptCacheStatus)
 				r.Get("/hub/clusters", s.handleClusterList)
+				r.Get("/hub/cluster-images", s.handleClusterImages)
 				r.Get("/hub/clusters/{id}/nodes", s.handleClusterNodes)
 
 				r.Get("/hub/hosts", s.handleListHosts)
@@ -221,6 +222,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/aptcache/clear", s.handleHubAptCacheClear)
 					r.Post("/hub/hosts/{id}/apt-proxy", s.handleHostAptProxy)
 					r.Post("/hub/clusters", s.handleClusterCreate)
+					r.Post("/hub/cluster-images/upload", s.handleClusterImageUpload)
+					r.Delete("/hub/cluster-images/{name}", s.handleClusterImageDelete)
 					r.Post("/hub/clusters/dry-run", s.handleClusterDryRun)
 					r.Get("/hub/clusters/{id}/kubeconfig", s.handleClusterKubeconfig)
 					r.Post("/hub/clusters/{id}/workers", s.handleClusterAddWorkers)
