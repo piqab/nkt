@@ -33,6 +33,7 @@ const (
 	KindCert      = "cert"
 	KindInterface = "interface"
 	KindPackage   = "package"
+	KindFinding   = "finding"
 )
 
 // Что произошло с фактом.
@@ -129,6 +130,14 @@ func Facts(s model.Snapshot) []Fact {
 
 	for _, p := range s.Packages.Packages {
 		add(KindPackage, p.Name, p.NewVersion)
+	}
+
+	// Находки — по устойчивому ID (правило + объект): так «Проблемы»
+	// показывают, какие именно появились с прошлого просмотра, а не
+	// только что счётчик вырос. Значение — серьёзность и заголовок:
+	// в списке изменений видно и что, и насколько важно.
+	for _, f := range s.Findings {
+		add(KindFinding, f.ID, f.Severity+": "+f.Title)
 	}
 
 	return out

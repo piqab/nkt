@@ -586,18 +586,27 @@ function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: (
   }, [text.data, content])
 
   const trimmed = name.trim()
-  const dirty = content !== null && text.data !== null && (content !== text.data.content || trimmed !== entry.name)
+  // Файл не прочитался (двоичный, нет прав) — содержимое не править, но
+  // переименовать всё равно можно: имя не зависит от того, что внутри.
+  const unreadable = !!text.error && !text.data
+  const renamed = trimmed !== entry.name
+  const dirty = unreadable ? renamed : content !== null && text.data !== null && (content !== text.data.content || renamed)
   const canSave = dirty && !badName(trimmed) && !busy
 
   async function save() {
-    if (!canSave || content === null || !text.data) return
+    if (!canSave) return
     setBusy(true)
     setError(null)
     try {
-      await api('/files/write', {
-        method: 'POST',
-        body: { path: entry.path, content, expected_sha256: text.data.sha256, name: trimmed },
-      })
+      if (unreadable) {
+        await api('/files/rename', { method: 'POST', body: { path: entry.path, to: joinPath(parentOf(entry.path), trimmed) } })
+      } else {
+        if (content === null || !text.data) return
+        await api('/files/write', {
+          method: 'POST',
+          body: { path: entry.path, content, expected_sha256: text.data.sha256, name: trimmed },
+        })
+      }
       onSaved()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -611,6 +620,7 @@ function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: (
       <div className="col" style={{ gap: '0.6rem' }}>
         {error && <Banner kind="error">{error}</Banner>}
         {text.error && <Banner kind="error">{text.error}</Banner>}
+        {unreadable && <p className="small muted" style={{ margin: 0 }}>{t('files.renameOnly')}</p>}
         <div className="filters" style={{ alignItems: 'flex-end' }}>
           <label className="col" style={{ gap: '0.2rem', flex: 1 }}>
             {t('files.fileName')}
@@ -623,10 +633,10 @@ function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: (
             </span>
           )}
           <Button type="primary" disabled={!canSave} loading={busy} onClick={save}>
-            {t('common.save')}
+            {unreadable ? t('files.rename') : t('common.save')}
           </Button>
         </div>
-        {content === null ? (
+        {unreadable ? null : content === null ? (
           !text.error && (
             <div className="small muted">
               <Spinner /> {t('files.loadingFile')}
