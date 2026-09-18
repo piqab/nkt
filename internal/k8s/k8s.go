@@ -518,20 +518,66 @@ func ciliumStep(s InstallSpec, kubeconfig string) Step {
 	return Step{"k8s.step.cilium", script}
 }
 
+// containerdStep ставит и настраивает containerd под kubeadm с оглядкой
+// на то, что уже есть на машине. На виртуалке из облачного образа
+// containerd нет — ставится пакет дистрибутива. На «железном» хосте он
+// часто уже стоит: containerd.io от Docker (пакет `containerd` из
+// дистрибутива с ним конфликтует — apt снёс бы Docker) или пакет
+// дистрибутива; тогда пакет не трогается. Конфиг: у Docker'овского
+// containerd.io в config.toml выключен CRI (disabled_plugins = ["cri"]),
+// без него kubelet не заработает — такой конфиг заменяется на конфиг по
+// умолчанию с копией в config.toml.nkt-bak (Docker с ним работает так
+// же); свой конфиг с включённым CRI остаётся, в нём только включается
+// SystemdCgroup — kubelet использует драйвер cgroup systemd. Перезапуск
+// containerd не останавливает контейнеры Docker: shim'ы живут отдельно.
+// /etc/default/kubelet пишется после установки пакета — иначе dpkg
+// упёрся бы в чужой conffile.
+func containerdStep(s InstallSpec) string {
+	lines := []string{
+		"set -e",
+		"export DEBIAN_FRONTEND=noninteractive",
+		"if command -v containerd >/dev/null 2>&1; then",
+		"  echo \"containerd: already installed ($(containerd --version 2>/dev/null | head -1)), keeping the package\"",
+		"else",
+		"  apt-get install -y -qq containerd",
+		"fi",
+		"mkdir -p /etc/containerd",
+		"if [ -f /etc/containerd/config.toml ]; then",
+		"  cp -a /etc/containerd/config.toml /etc/containerd/config.toml.nkt-bak",
+		"  if grep -Eq '^[[:space:]]*disabled_plugins[[:space:]]*=.*\"cri\"' /etc/containerd/config.toml || ! grep -q 'io.containerd.grpc.v1.cri' /etc/containerd/config.toml; then",
+		"    echo 'containerd: CRI is disabled in config.toml (Docker default) — writing the default config, backup in config.toml.nkt-bak'",
+		"    containerd config default > /etc/containerd/config.toml",
+		"  else",
+		"    echo 'containerd: keeping the existing config.toml, backup in config.toml.nkt-bak'",
+		"  fi",
+		"else",
+		"  containerd config default > /etc/containerd/config.toml",
+		"fi",
+		"sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml",
+		"grep -q 'SystemdCgroup = true' /etc/containerd/config.toml || echo 'containerd: no SystemdCgroup in config.toml — kubelet (systemd cgroup driver) may not match the runtime'",
+		"systemctl enable containerd >/dev/null 2>&1 || true",
+		"systemctl restart containerd",
+		"for i in $(seq 1 30); do test -S /run/containerd/containerd.sock && break; sleep 1; done",
+		"test -S /run/containerd/containerd.sock",
+	}
+	if s.NodeIP != "" {
+		lines = append(lines, "echo 'KUBELET_EXTRA_ARGS=--node-ip="+s.NodeIP+"' > /etc/default/kubelet")
+	}
+	return strings.Join(lines, "\n")
+}
+
 func kubeadmSteps(s InstallSpec) []Step {
-	const repo = "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get update -qq\napt-get install -y -qq apt-transport-https ca-certificates curl gpg containerd\n" +
+	// Подготовка системы: swap, модули, sysctl. containerd здесь не
+	// трогается — он ставится и настраивается отдельным шагом.
+	const sysprep = "set -e\nswapoff -a || true\nsed -i.bak '/\\sswap\\s/s/^/#/' /etc/fstab || true\n" +
+		"printf 'overlay\\nbr_netfilter\\n' > /etc/modules-load.d/k8s.conf\nmodprobe overlay\nmodprobe br_netfilter\n" +
+		"printf 'net.bridge.bridge-nf-call-iptables=1\\nnet.bridge.bridge-nf-call-ip6tables=1\\nnet.ipv4.ip_forward=1\\n' > /etc/sysctl.d/k8s.conf\nsysctl --system >/dev/null"
+	const repo = "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get update -qq\napt-get install -y -qq apt-transport-https ca-certificates curl gpg\n" +
 		"install -m 0755 -d /etc/apt/keyrings\ncurl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg\n" +
 		"echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' > /etc/apt/sources.list.d/kubernetes.list\n" +
 		"apt-get update -qq\napt-get install -y -qq kubelet kubeadm kubectl\napt-mark hold kubelet kubeadm kubectl"
-	const sysprep = "set -e\nswapoff -a || true\nsed -i.bak '/\\sswap\\s/s/^/#/' /etc/fstab || true\n" +
-		"printf 'overlay\\nbr_netfilter\\n' > /etc/modules-load.d/k8s.conf\nmodprobe overlay\nmodprobe br_netfilter\n" +
-		"printf 'net.bridge.bridge-nf-call-iptables=1\\nnet.bridge.bridge-nf-call-ip6tables=1\\nnet.ipv4.ip_forward=1\\n' > /etc/sysctl.d/k8s.conf\nsysctl --system >/dev/null\n" +
-		"mkdir -p /etc/containerd\ncontainerd config default > /etc/containerd/config.toml\nsed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml\nsystemctl restart containerd\nsystemctl enable containerd"
-	prep := sysprep
-	if s.NodeIP != "" {
-		prep += "\nmkdir -p /etc/default\necho 'KUBELET_EXTRA_ARGS=--node-ip=" + s.NodeIP + "' > /etc/default/kubelet"
-	}
-	steps := []Step{{"k8s.step.prepare", prep}, {"k8s.step.download", repo}}
+	runtime := containerdStep(s)
+	steps := []Step{{"k8s.step.sysprep", sysprep}, {"k8s.step.download", repo}, {"k8s.step.runtime", runtime}}
 	if s.Role == RoleServer && s.ServerURL == "" {
 		init := "set -e\nkubeadm init --pod-network-cidr=10.244.0.0/16"
 		if s.NodeIP != "" {
