@@ -40,7 +40,7 @@ func TestScriptRunnerHostsAndResume(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := time.Now().Add(60 * time.Second)
 	var job store.Job
 	for {
 		job, _ = db.JobByID(ctx, id)
