@@ -177,6 +177,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/aptcache", s.handleHubAptCacheStatus)
 				r.Get("/hub/clusters", s.handleClusterList)
 				r.Get("/hub/cluster-images", s.handleClusterImages)
+				r.Get("/hub/k8s-versions", s.handleK8sVersions)
 				r.Get("/hub/clusters/{id}/nodes", s.handleClusterNodes)
 
 				r.Get("/hub/hosts", s.handleListHosts)

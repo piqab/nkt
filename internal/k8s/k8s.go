@@ -73,9 +73,9 @@ type InstallSpec struct {
 	// NodeIP — адрес узла для других узлов (и API у server): нужен, когда
 	// у хоста несколько адресов, а видеть его должны через туннель.
 	NodeIP string `json:"node_ip,omitempty"`
-	// Version — kubeadm: минорная версия Kubernetes («1.34») — ветка
-	// репозитория pkgs.k8s.io. Пусто — DefaultKubeadmVersion. Хаб
-	// подбирает актуальную stable и передаёт одну и ту же всем узлам
+	// Version — минорная версия Kubernetes («1.36»): у kubeadm — ветка
+	// репозитория pkgs.k8s.io (пусто — DefaultKubeadmVersion), у k3s —
+	// канал v1.36 (пусто — stable). Хаб передаёт одну и ту же всем узлам
 	// кластера.
 	Version string `json:"version,omitempty"`
 	// HubCache — адрес кэша хаба на этом хосте (http://127.0.0.1:3142),
@@ -529,13 +529,20 @@ func k3sSteps(s InstallSpec) []Step {
 	}
 	download := fetchPrelude(s) + "art https://get.k3s.io > /tmp/nkt-k3s-install.sh\nhead -c 200 /tmp/nkt-k3s-install.sh | grep -q '#!/bin/sh'"
 	installEnv := strings.Join(env, " ")
+	// Канал k3s: stable или минорная ветка (v1.36) — та же «версия», что
+	// у kubeadm задаёт ветку репозитория.
+	channel := "stable"
+	if s.Version != "" {
+		channel = "v" + s.Version
+		installEnv += " INSTALL_K3S_CHANNEL=" + channel
+	}
 	if s.HubCache != "" {
 		// Через хаб: бинарник k3s и его airgap-образы берутся с кэша хаба
 		// заранее, установщик их не качает; образы контейнеров — через
 		// зеркало registry на хабе.
 		download += "\n" + strings.Join([]string{
 			"ARCH=$(uname -m); case $ARCH in x86_64) A=amd64; BIN=k3s;; aarch64) A=arm64; BIN=k3s-arm64;; *) echo \"unsupported arch $ARCH\"; exit 1;; esac",
-			"VER=$(art https://update.k3s.io/v1-release/channels | grep -o '\"id\":\"stable\".\\{0,400\\}' | grep -o '\"latest\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4)",
+			"VER=$(art https://update.k3s.io/v1-release/channels | grep -o '\"id\":\"" + channel + "\".\\{0,400\\}' | grep -o '\"latest\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4)",
 			"test -n \"$VER\"",
 			"echo \"k3s $VER ($A) via hub cache\"",
 			"REL=https://github.com/k3s-io/k3s/releases/download/$VER",
