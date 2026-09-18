@@ -958,7 +958,7 @@ func (r *ScriptRunner) clusterSpecFromStep(ctx context.Context, done *scriptRunR
 		if err != nil {
 			return spec, err
 		}
-		pl := Placement{HostID: ph.ID, Role: row.Role, Kind: row.Kind, Count: row.Count, Bridge: row.Bridge}
+		pl := Placement{HostID: ph.ID, Role: row.Role, Kind: row.Kind, Count: row.Count, Bridge: row.Bridge, Endpoint: row.Endpoint}
 		if row.Kind == KindVM {
 			pl.VCPUs, pl.MemMB, pl.DiskGB, pl.ImageID = spec.CPVCPUs, spec.CPMemoryMB, spec.CPDiskGB, spec.ImageID
 			if pl.Bridge == "" {

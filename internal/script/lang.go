@@ -262,7 +262,7 @@ var Commands = []CommandDoc{
 		Example: "on web1 git clone https://github.com/org/app.git /srv/app branch main token ask",
 	},
 	{
-		Kind: KindK8sCreate, OnHost: true, Syntax: "on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|\"ХОСТ: cp N, w N, host cp|w, bridge МОСТ; …\"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]",
+		Kind: KindK8sCreate, OnHost: true, Syntax: "on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N|\"ХОСТ: cp N, w N, host cp|w, bridge МОСТ, endpoint АДРЕС; …\"] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ|nat|bridge|wireguard] [bridge МОСТ] [cni cilium|flannel] [no-kube-proxy] [expose] [api ПОРТ] [http ПОРТ] [https ПОРТ]",
 		Summary: "script.doc.k8sCreate",
 		Args: []ArgDoc{
 			{Name: "ИМЯ", Required: true, Desc: "script.doc.k8sCreate.name"},

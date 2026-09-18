@@ -1,6 +1,7 @@
 package script
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -10,19 +11,21 @@ import (
 // Размещение кластера по хостам в сценарии — то же, что таблица в
 // разделе «Кластеры», одной строкой:
 //
-//	nodes "hv1: cp 1, w 2; hv2: w 2, bridge br0; hv3: host w"
+//	nodes "hv1: cp 1, w 2; hv2: w 2, bridge br0; hv3: host w, endpoint 10.0.0.7"
 //
 // Хосты через «;», внутри хоста через «,»: «cp N» / «w N» — машины с
 // ролью, «host cp|w» — сам хост как узел, «bridge ИМЯ» — мост этого
-// хоста в режиме моста.
+// хоста в режиме моста, «endpoint АДРЕС» — адрес хоста для соседей по
+// туннелю WireGuard.
 
 // PlacementRow — одна строка размещения.
 type PlacementRow struct {
-	Host   string
-	Role   string // control-plane | worker
-	Kind   string // vm | host
-	Count  int
-	Bridge string
+	Host     string
+	Role     string // control-plane | worker
+	Kind     string // vm | host
+	Count    int
+	Bridge   string
+	Endpoint string
 }
 
 // IsPlacement — nodes записан размещением по хостам, а не топологией.
@@ -41,7 +44,7 @@ func ParsePlacement(s string) ([]PlacementRow, error) {
 		if !ok || !nameRe.MatchString(host) {
 			return nil, msgs.Errorf("script.badPlacementHost", hostPart)
 		}
-		bridge := ""
+		bridge, endpoint := "", ""
 		var rows []PlacementRow
 		for _, item := range strings.Split(items, ",") {
 			f := strings.Fields(item)
@@ -65,6 +68,11 @@ func ParsePlacement(s string) ([]PlacementRow, error) {
 					return nil, msgs.Errorf("script.badPlacementItem", strings.TrimSpace(item))
 				}
 				bridge = f[1]
+			case "endpoint":
+				if !addrRe.MatchString(f[1]) {
+					return nil, msgs.Errorf("script.badPlacementItem", strings.TrimSpace(item))
+				}
+				endpoint = f[1]
 			default:
 				return nil, msgs.Errorf("script.badPlacementItem", strings.TrimSpace(item))
 			}
@@ -73,7 +81,7 @@ func ParsePlacement(s string) ([]PlacementRow, error) {
 			return nil, msgs.Errorf("script.badPlacementHost", hostPart)
 		}
 		for i := range rows {
-			rows[i].Bridge = bridge
+			rows[i].Bridge, rows[i].Endpoint = bridge, endpoint
 		}
 		out = append(out, rows...)
 	}
@@ -82,6 +90,9 @@ func ParsePlacement(s string) ([]PlacementRow, error) {
 	}
 	return out, nil
 }
+
+// addrRe — имя хоста или IP без порта.
+var addrRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]{0,253}$`)
 
 func placementRole(s string) string {
 	switch s {

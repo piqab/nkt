@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState, type CSSProperties } from 'react'
 import { Button, Checkbox, Input, InputNumber, Select, Tooltip } from 'antd'
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -28,7 +28,18 @@ interface Row {
   bridge: string
 }
 
-const newRow = (role: Row['role']): Row => ({ host_id: null, role, kind: 'vm', count: role === 'control-plane' ? 1 : 1, vcpus: 2, memory_mb: 4096, disk_gb: 30, image_id: 'ubuntu-24.04', network: '', bridge: '' })
+/** Что известно о хосте для строки размещения: каталог образов, мосты. */
+interface HostInfo {
+  images: { id: string; name: string; downloaded: boolean }[]
+  bridges: string[]
+  networks: string[]
+  loading: boolean
+  error?: string
+}
+
+const newRow = (role: Row['role']): Row => ({ host_id: null, role, kind: 'vm', count: 1, vcpus: 2, memory_mb: 4096, disk_gb: 30, image_id: '', network: '', bridge: '' })
+
+const cell: CSSProperties = { display: 'flex', flexDirection: 'column', gap: '0.15rem' }
 
 export default function ClustersPage({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -92,16 +103,63 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const [kpr, setKPR] = useState(false)
   const [network, setNetwork] = useState<'nat' | 'bridge' | 'wireguard'>('bridge')
   const [rows, setRows] = useState<Row[]>([newRow('control-plane'), newRow('worker')])
+  const [endpoints, setEndpoints] = useState<Record<number, string>>({})
+  const [info, setInfo] = useState<Record<number, HostInfo>>({})
   const [expose, setExpose] = useState(true)
   const [ports, setPorts] = useState<{ api: number | null; http: number | null; https: number | null }>({ api: 6443, http: 80, https: 443 })
   const [prepare, setPrepare] = useState(true)
   const [busy, setBusy] = useState<'create' | 'dry' | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const distinctHosts = new Set(rows.map((r) => r.host_id).filter((h) => h !== null)).size
+  const hostIDs = [...new Set(rows.map((r) => r.host_id).filter((h): h is number => h !== null))]
+  const distinctHosts = hostIDs.length
   const effectiveNetwork = distinctHosts <= 1 && network === 'bridge' && rows.every((r) => !r.bridge) ? 'nat' : network
+  const cpCount = rows.filter((r) => r.role === 'control-plane').reduce((n, r) => n + (r.kind === 'host' ? 1 : r.count), 0)
   const update = (i: number, patch: Partial<Row>) => setRows(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
-  const valid = name && rows.length > 0 && rows.every((r) => r.host_id !== null && (r.kind === 'host' || r.count > 0))
+
+  // Образы и мосты — с хоста строки: у каждого хоста свой каталог.
+  useEffect(() => {
+    for (const id of hostIDs) {
+      if (info[id]) continue
+      setInfo((m) => ({ ...m, [id]: { images: [], bridges: [], networks: [], loading: true } }))
+      void (async () => {
+        try {
+          const [img, pf] = await Promise.all([
+            api<{ catalog: { id: string; name: string }[]; local: { id: string; downloaded: boolean }[] }>(`/hosts/${id}/vm/images`),
+            api<{ bridges?: string[]; networks?: { name: string }[] }>(`/hosts/${id}/vm/preflight`),
+          ])
+          const downloaded = new Set((img.local ?? []).filter((l) => l.downloaded).map((l) => l.id))
+          setInfo((m) => ({
+            ...m,
+            [id]: {
+              images: (img.catalog ?? []).map((i) => ({ id: i.id, name: i.name, downloaded: downloaded.has(i.id) })),
+              bridges: pf.bridges ?? [],
+              networks: (pf.networks ?? []).map((n) => n.name),
+              loading: false,
+            },
+          }))
+        } catch (err) {
+          setInfo((m) => ({ ...m, [id]: { images: [], bridges: [], networks: [], loading: false, error: err instanceof Error ? err.message : String(err) } }))
+        }
+      })()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hostIDs.join(',')])
+
+  const defaultImage = (id: number | null) => {
+    const imgs = id !== null ? info[id]?.images ?? [] : []
+    return imgs.find((i) => /ubuntu.*24/i.test(i.id + i.name))?.id || imgs[0]?.id || ''
+  }
+  const imageOf = (r: Row) => r.image_id || defaultImage(r.host_id)
+
+  const problems: string[] = []
+  if (cpCount !== 1 && cpCount !== 3) problems.push(t('clusters.cpCountHint', { n: cpCount }))
+  if (cpCount === 3 && flavor === 'kubeadm') problems.push(t('clusters.cp3K3sOnly'))
+  if (effectiveNetwork === 'bridge') {
+    for (const r of rows) if (r.kind === 'vm' && r.host_id !== null && !r.bridge) problems.push(t('clusters.bridgeMissingRow'))
+  }
+  if (effectiveNetwork === 'nat' && distinctHosts > 1) problems.push(t('clusters.natSingle'))
+  const valid = !!name && rows.length > 0 && rows.every((r) => r.host_id !== null && (r.kind === 'host' || (r.count > 0 && imageOf(r)))) && problems.length === 0
 
   async function start(dry: boolean) {
     setBusy(dry ? 'dry' : 'create')
@@ -121,15 +179,16 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           vcpus: r.vcpus,
           memory_mb: r.memory_mb,
           disk_gb: r.disk_gb,
-          image_id: r.image_id,
+          image_id: r.kind === 'vm' ? imageOf(r) : '',
           network: effectiveNetwork === 'nat' ? r.network : '',
           bridge: effectiveNetwork === 'bridge' ? r.bridge : '',
+          endpoint: effectiveNetwork === 'wireguard' && r.host_id !== null ? (endpoints[r.host_id] ?? '').trim() : '',
         })),
         expose,
         expose_api: expose ? ports.api ?? 0 : 0,
         expose_http: expose ? ports.http ?? 0 : 0,
         expose_https: expose ? ports.https ?? 0 : 0,
-        image_id: rows[0]?.image_id ?? 'ubuntu-24.04',
+        image_id: imageOf(rows[0]) || 'ubuntu-24.04',
         ...(dry ? { prepare } : {}),
       }
       const res = await api<{ job_id: number }>(dry ? '/hub/clusters/dry-run' : '/hub/clusters', { method: 'POST', body })
@@ -141,13 +200,16 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     }
   }
 
+  const hostName = (id: number) => online.find((h) => h.id === id)?.name ?? `#${id}`
+  const hostAddr = (id: number) => online.find((h) => h.id === id)?.addr ?? ''
+
   return (
-    <Modal title={t('clusters.newMultiTitle')} onClose={onClose} width={1000}>
+    <Modal title={t('clusters.newMultiTitle')} onClose={onClose} width={1180}>
       <Banner kind="warn">{t('clusters.experimental')}</Banner>
       <p className="small muted">{t('clusters.newMultiBody')}</p>
       <ErrorNote error={error} />
       <ErrorNote error={hosts.error} />
-      <div className="grid grid-2" style={{ marginBottom: '0.6rem' }}>
+      <div className="grid grid-3" style={{ marginBottom: '0.6rem' }}>
         <label>
           {t('clusters.name')}
           <Input value={name} onChange={(e) => setName(e.target.value.trim())} />
@@ -155,6 +217,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
         <label>
           {t('clusters.flavor')}
           <Select value={flavor} onChange={(v: 'k3s' | 'kubeadm') => setFlavor(v)} options={[{ value: 'k3s', label: t('clusters.flavorK3s') }, { value: 'kubeadm', label: t('clusters.flavorKubeadm') }]} />
+          <span className="small muted">{t('clusters.flavorHint')}</span>
         </label>
         <label>
           {t('clusters.network')}
@@ -167,64 +230,134 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
               { value: 'wireguard', label: t('clusters.netWireGuard') },
             ]}
           />
+          <span className="small muted">{network === 'wireguard' ? t('clusters.netWireGuardHint') : network === 'bridge' ? t('clusters.netBridgeHint') : t('clusters.netNATHint')}</span>
         </label>
       </div>
-      {network === 'wireguard' && <div className="muted" style={{ marginBottom: '0.4rem' }}>{t('clusters.netWireGuardHint')}</div>}
 
       <h3 style={{ margin: '0.4rem 0' }}>{t('clusters.placement')}</h3>
-      <div className="table-wrap">
-        <table className="ant-table" style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              {[t('clusters.colHost'), t('clusters.colRole'), t('clusters.colKind'), t('clusters.colCount'), 'CPU', 'MB', 'GB', t('hosts.newVMImage'), network === 'bridge' ? t('clusters.colBridge') : network === 'wireguard' ? t('clusters.colSubnet') : t('hosts.newVMNetwork'), ''].map((h, i) => (
-                <th key={i} style={{ textAlign: 'left', padding: '0.2rem 0.4rem' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={i}>
-                <td style={{ padding: '0.2rem 0.4rem', minWidth: '10rem' }}>
+      <p className="small muted" style={{ marginTop: 0 }}>{t('clusters.placementHint')}</p>
+      <div className="col" style={{ gap: '0.5rem' }}>
+        {rows.map((r, i) => {
+          const hi = r.host_id !== null ? info[r.host_id] : undefined
+          return (
+            <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.5rem 0.6rem' }}>
+              <div className="row" style={{ gap: '0.6rem', alignItems: 'flex-end' }}>
+                <div style={{ ...cell, minWidth: '14rem', flex: 1 }}>
+                  <span className="small muted">{t('clusters.colHost')}</span>
                   <Select
                     size="small"
-                    style={{ width: '100%' }}
                     value={r.host_id ?? undefined}
                     placeholder={t('clusters.pickHost')}
-                    onChange={(v: number) => update(i, { host_id: v })}
-                    options={online.map((h) => ({ value: h.id, label: h.name + (h.parent_id ? ' (VM)' : '') }))}
+                    onChange={(v: number) => update(i, { host_id: v, image_id: '', bridge: '' })}
+                    options={online.map((h) => ({ value: h.id, label: h.name + (h.parent_id ? ' (VM)' : '') + (h.addr ? ` — ${h.addr}` : '') }))}
                   />
-                </td>
-                <td style={{ padding: '0.2rem 0.4rem' }}>
-                  <Select size="small" value={r.role} onChange={(v: Row['role']) => update(i, { role: v })} options={[{ value: 'control-plane', label: 'control plane' }, { value: 'worker', label: 'worker' }]} />
-                </td>
-                <td style={{ padding: '0.2rem 0.4rem' }}>
+                </div>
+                <div style={{ ...cell, minWidth: '11rem' }}>
+                  <span className="small muted">{t('clusters.colKind')}</span>
                   <Select size="small" value={r.kind} onChange={(v: Row['kind']) => update(i, { kind: v })} options={[{ value: 'vm', label: t('clusters.kindVM') }, { value: 'host', label: t('clusters.kindHost') }]} />
-                </td>
-                <td style={{ padding: '0.2rem 0.4rem' }}><InputNumber size="small" min={1} max={20} value={r.kind === 'host' ? 1 : r.count} disabled={r.kind === 'host'} onChange={(v) => update(i, { count: v ?? 1 })} style={{ width: '4.5rem' }} /></td>
-                <td style={{ padding: '0.2rem 0.4rem' }}><InputNumber size="small" min={1} value={r.vcpus} disabled={r.kind === 'host'} onChange={(v) => update(i, { vcpus: v ?? 2 })} style={{ width: '4.5rem' }} /></td>
-                <td style={{ padding: '0.2rem 0.4rem' }}><InputNumber size="small" min={1024} step={1024} value={r.memory_mb} disabled={r.kind === 'host'} onChange={(v) => update(i, { memory_mb: v ?? 4096 })} style={{ width: '6rem' }} /></td>
-                <td style={{ padding: '0.2rem 0.4rem' }}><InputNumber size="small" min={10} value={r.disk_gb} disabled={r.kind === 'host'} onChange={(v) => update(i, { disk_gb: v ?? 30 })} style={{ width: '5rem' }} /></td>
-                <td style={{ padding: '0.2rem 0.4rem' }}><Input size="small" value={r.image_id} disabled={r.kind === 'host'} onChange={(e) => update(i, { image_id: e.target.value })} style={{ width: '9rem' }} /></td>
-                <td style={{ padding: '0.2rem 0.4rem' }}>
-                  {network === 'bridge' ? (
-                    <Input size="small" value={r.bridge} disabled={r.kind === 'host'} placeholder="br0" onChange={(e) => update(i, { bridge: e.target.value.trim() })} style={{ width: '6rem' }} />
-                  ) : network === 'wireguard' ? (
-                    <span className="muted" style={{ whiteSpace: 'nowrap' }}>{r.kind === 'host' ? t('clusters.subnetTunnel') : t('clusters.subnetAuto')}</span>
-                  ) : (
-                    <Input size="small" value={r.network} disabled={r.kind === 'host'} placeholder="default" onChange={(e) => update(i, { network: e.target.value.trim() })} style={{ width: '6rem' }} />
+                </div>
+                <div style={{ ...cell, minWidth: '9rem' }}>
+                  <span className="small muted">{t('clusters.colRole')}</span>
+                  <Select size="small" value={r.role} onChange={(v: Row['role']) => update(i, { role: v })} options={[{ value: 'control-plane', label: 'control plane' }, { value: 'worker', label: 'worker' }]} />
+                </div>
+                {r.kind === 'vm' && (
+                  <div style={cell}>
+                    <span className="small muted">{t('clusters.colCount')}</span>
+                    <InputNumber size="small" min={1} max={20} value={r.count} onChange={(v) => update(i, { count: v ?? 1 })} style={{ width: '4.5rem' }} />
+                  </div>
+                )}
+                <Button size="small" type="text" icon={<DeleteOutlined />} disabled={rows.length === 1} onClick={() => setRows(rows.filter((_, j) => j !== i))} />
+              </div>
+              {r.kind === 'vm' && (
+                <div className="row" style={{ gap: '0.6rem', alignItems: 'flex-end', marginTop: '0.4rem' }}>
+                  <div style={cell}>
+                    <span className="small muted">CPU</span>
+                    <InputNumber size="small" min={1} value={r.vcpus} onChange={(v) => update(i, { vcpus: v ?? 2 })} style={{ width: '4.5rem' }} />
+                  </div>
+                  <div style={cell}>
+                    <span className="small muted">{t('clusters.colMem')}</span>
+                    <InputNumber size="small" min={1024} step={1024} value={r.memory_mb} onChange={(v) => update(i, { memory_mb: v ?? 4096 })} style={{ width: '6rem' }} />
+                  </div>
+                  <div style={cell}>
+                    <span className="small muted">{t('clusters.colDisk')}</span>
+                    <InputNumber size="small" min={10} value={r.disk_gb} onChange={(v) => update(i, { disk_gb: v ?? 30 })} style={{ width: '5rem' }} />
+                  </div>
+                  <div style={{ ...cell, minWidth: '16rem', flex: 1 }}>
+                    <span className="small muted">{t('hosts.newVMImage')}</span>
+                    <Select
+                      size="small"
+                      value={imageOf(r) || undefined}
+                      loading={hi?.loading}
+                      placeholder={r.host_id === null ? t('clusters.pickHostFirst') : t('clusters.pickImage')}
+                      disabled={r.host_id === null}
+                      onChange={(v: string) => update(i, { image_id: v })}
+                      options={(hi?.images ?? []).map((img) => ({ value: img.id, label: img.name + (img.downloaded ? '' : ` ${t('hosts.newVMWillDownload')}`) }))}
+                    />
+                  </div>
+                  {effectiveNetwork === 'bridge' && (
+                    <div style={{ ...cell, minWidth: '10rem' }}>
+                      <span className="small muted">{t('clusters.colBridge')}</span>
+                      {hi && !hi.loading && hi.bridges.length === 0 ? (
+                        <span className="small" style={{ color: 'var(--series-8)' }}>{t('clusters.noBridges')}</span>
+                      ) : (
+                        <Select
+                          size="small"
+                          value={r.bridge || undefined}
+                          loading={hi?.loading}
+                          placeholder={r.host_id === null ? t('clusters.pickHostFirst') : t('clusters.pickBridge')}
+                          disabled={r.host_id === null}
+                          onChange={(v: string) => update(i, { bridge: v })}
+                          options={(hi?.bridges ?? []).map((b) => ({ value: b, label: b }))}
+                        />
+                      )}
+                    </div>
                   )}
-                </td>
-                <td style={{ padding: '0.2rem 0.4rem' }}>
-                  <Button size="small" type="text" icon={<DeleteOutlined />} disabled={rows.length === 1} onClick={() => setRows(rows.filter((_, j) => j !== i))} />
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  {effectiveNetwork === 'nat' && (
+                    <div style={{ ...cell, minWidth: '10rem' }}>
+                      <span className="small muted">{t('hosts.newVMNetwork')}</span>
+                      <Select
+                        size="small"
+                        value={r.network || hi?.networks[0] || 'default'}
+                        loading={hi?.loading}
+                        disabled={r.host_id === null}
+                        onChange={(v: string) => update(i, { network: v })}
+                        options={(hi?.networks.length ? hi.networks : ['default']).map((n) => ({ value: n, label: n }))}
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
+              {hi?.error && <ErrorNote error={hi.error} />}
+            </div>
+          )
+        })}
       </div>
-      <Button size="small" icon={<PlusOutlined />} style={{ margin: '0.4rem 0 0.8rem' }} onClick={() => setRows([...rows, newRow('worker')])}>
+      <Button size="small" icon={<PlusOutlined />} style={{ margin: '0.5rem 0 0.8rem' }} onClick={() => setRows([...rows, newRow('worker')])}>
         {t('clusters.addRow')}
       </Button>
+
+      {effectiveNetwork === 'wireguard' && hostIDs.length > 0 && (
+        <div style={{ marginBottom: '0.8rem' }}>
+          <h3 style={{ margin: '0.2rem 0' }}>{t('clusters.endpoints')}</h3>
+          <p className="small muted" style={{ marginTop: 0 }}>{t('clusters.endpointsHint')}</p>
+          <div className="row" style={{ gap: '0.6rem' }}>
+            {hostIDs.map((id) => (
+              <label key={id} style={{ minWidth: '16rem' }}>
+                <span className="small">{hostName(id)}</span>
+                <Input size="small" value={endpoints[id] ?? ''} placeholder={hostAddr(id)} onChange={(e) => setEndpoints({ ...endpoints, [id]: e.target.value })} />
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {problems.length > 0 && (
+        <ul className="small" style={{ color: 'var(--series-8)', margin: '0 0 0.6rem', paddingLeft: '1.2rem' }}>
+          {[...new Set(problems)].map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
+      )}
 
       <div className="col" style={{ gap: '0.4rem', marginBottom: '0.6rem' }}>
         <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>

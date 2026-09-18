@@ -73,8 +73,9 @@ func wgKeyPair() (private, public string, err error) {
 	return base64.StdEncoding.EncodeToString(priv[:]), base64.StdEncoding.EncodeToString(pub), nil
 }
 
-// buildWGPlan раздаёт хостам номера, адреса и ключи.
-func buildWGPlan(clusterID int64, hosts []store.Host) (*wgPlan, error) {
+// buildWGPlan раздаёт хостам номера, адреса и ключи; endpoint — адрес
+// хоста для соседей.
+func buildWGPlan(clusterID int64, hosts []store.Host, endpoint func(store.Host) string) (*wgPlan, error) {
 	p := &wgPlan{Iface: wgIface(clusterID), Port: wgPort}
 	for i, h := range hosts {
 		priv, pub, err := wgKeyPair()
@@ -83,7 +84,7 @@ func buildWGPlan(clusterID int64, hosts []store.Host) (*wgPlan, error) {
 		}
 		addr, ip, vm := wgSubnets(clusterID, i+1)
 		p.Hosts = append(p.Hosts, wgHost{HostID: h.ID, Name: h.Name, PrivateKey: priv, PublicKey: pub,
-			Address: addr, IP: ip, VMSubnet: vm, Endpoint: fmt.Sprintf("%s:%d", h.Addr, wgPort)})
+			Address: addr, IP: ip, VMSubnet: vm, Endpoint: fmt.Sprintf("%s:%d", endpoint(h), wgPort)})
 	}
 	return p, nil
 }
@@ -158,7 +159,7 @@ func (m *Manager) saveClusterWG(ctx context.Context, id int64, p *wgPlan) error 
 // для машин на каждом, затем убеждается, что соседи отвечают по адресам
 // туннеля. План хранится в записи кластера: при продолжении и
 // пополнении ключи те же, конфиг просто переприменяется.
-func (r *ClusterRunner) setupMesh(ctx context.Context, jc *jobs.Context, cl store.Cluster, nodes []clusterNode) (*wgPlan, error) {
+func (r *ClusterRunner) setupMesh(ctx context.Context, jc *jobs.Context, cl store.Cluster, spec ClusterSpec, nodes []clusterNode) (*wgPlan, error) {
 	plan, err := r.m.clusterWG(cl)
 	if err != nil {
 		return nil, err
@@ -168,7 +169,7 @@ func (r *ClusterRunner) setupMesh(ctx context.Context, jc *jobs.Context, cl stor
 		return nil, err
 	}
 	if plan == nil {
-		if plan, err = buildWGPlan(cl.ID, hosts); err != nil {
+		if plan, err = buildWGPlan(cl.ID, hosts, spec.wgEndpoint); err != nil {
 			return nil, err
 		}
 		if err := r.m.saveClusterWG(ctx, cl.ID, plan); err != nil {
@@ -188,7 +189,7 @@ func (r *ClusterRunner) setupMesh(ctx context.Context, jc *jobs.Context, cl stor
 		}
 		addr, ip, vm := wgSubnets(cl.ID, len(plan.Hosts)+1)
 		plan.Hosts = append(plan.Hosts, wgHost{HostID: h.ID, Name: h.Name, PrivateKey: priv, PublicKey: pub,
-			Address: addr, IP: ip, VMSubnet: vm, Endpoint: fmt.Sprintf("%s:%d", h.Addr, plan.Port)})
+			Address: addr, IP: ip, VMSubnet: vm, Endpoint: fmt.Sprintf("%s:%d", spec.wgEndpoint(h), plan.Port)})
 		changed = true
 	}
 	if changed {
@@ -206,9 +207,12 @@ func (r *ClusterRunner) setupMesh(ctx context.Context, jc *jobs.Context, cl stor
 			return nil, msgs.Errorf("hub.clusterMeshNetwork", wh.Name, err)
 		}
 	}
-	// Соседи отвечают?
+	// Соседи отвечают? Ping через туннель, а если нет — по рукопожатию
+	// видно, дошли ли пакеты вообще (UDP-порт закрыт или адрес не тот).
 	failed := 0
 	for _, wh := range plan.Hosts {
+		var st control.WGStatus
+		_, _ = r.m.HostAPI(ctx, wh.HostID, "GET", "/api/vm/wgmesh/"+url.PathEscape(plan.Iface), nil, &st)
 		for _, o := range plan.Hosts {
 			if o.HostID == wh.HostID {
 				continue
@@ -216,9 +220,21 @@ func (r *ClusterRunner) setupMesh(ctx context.Context, jc *jobs.Context, cl stor
 			ok, detail := r.hostPing(ctx, wh.HostID, o.IP)
 			if ok {
 				jc.Logf("  ✓ %s → %s (%s): %s", wh.Name, o.Name, o.IP, detail)
-			} else {
-				failed++
+				continue
+			}
+			failed++
+			handshake := false
+			if _, err := r.m.HostAPI(ctx, wh.HostID, "GET", "/api/vm/wgmesh/"+url.PathEscape(plan.Iface), nil, &st); err == nil {
+				for _, p := range st.Peers {
+					if p.PublicKey == o.PublicKey && p.LastHandshake > 0 {
+						handshake = true
+					}
+				}
+			}
+			if handshake {
 				jc.Logf("  ✗ %s → %s (%s): %s", wh.Name, o.Name, o.IP, detail)
+			} else {
+				jc.Log("hub.clusterMeshNoHandshake", wh.Name, o.Name, o.Endpoint)
 			}
 		}
 	}

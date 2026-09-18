@@ -85,6 +85,9 @@ type Placement struct {
 	ImageID string `json:"image_id,omitempty"`
 	Network string `json:"network,omitempty"`
 	Bridge  string `json:"bridge,omitempty"`
+	// Endpoint — адрес этого хоста для соседей по туннелю (режим
+	// wireguard); пусто — адрес хоста из списка nkt.
+	Endpoint string `json:"endpoint,omitempty"`
 }
 
 const (
@@ -270,7 +273,12 @@ func (s *ClusterSpec) validatePlacements() error {
 		// Сеть машин на каждом хосте заводится своя (см. cluster_wg.go),
 		// мост и выбранная сеть не нужны.
 		for i := range s.Placements {
-			s.Placements[i].Bridge, s.Placements[i].Network = "", ""
+			pl := &s.Placements[i]
+			pl.Bridge, pl.Network = "", ""
+			pl.Endpoint = strings.TrimSpace(pl.Endpoint)
+			if pl.Endpoint != "" && (strings.ContainsAny(pl.Endpoint, " \t\n'\"`$\\;&|/") || strings.Contains(pl.Endpoint, ":")) {
+				return msgs.Errorf("hub.clusterBadEndpoint", pl.Endpoint)
+			}
 		}
 	default:
 		return msgs.Errorf("hub.clusterBadNetwork", s.NetworkMode)
@@ -321,6 +329,17 @@ func (s ClusterSpec) nodes(hostName func(int64) string) []clusterNode {
 		}
 	}
 	return out
+}
+
+// wgEndpoint — адрес хоста для соседей по туннелю: из размещения или
+// адрес хоста.
+func (s ClusterSpec) wgEndpoint(h store.Host) string {
+	for _, pl := range s.Placements {
+		if pl.HostID == h.ID && pl.Endpoint != "" {
+			return pl.Endpoint
+		}
+	}
+	return h.Addr
 }
 
 // exposeRules — правила проброса хоста в control plane.
@@ -552,7 +571,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 			}
 			jc.Log("hub.clusterMeshExists", plan.Iface)
 		} else {
-			if plan, err = r.setupMesh(ctx, jc, cl, nodes); err != nil {
+			if plan, err = r.setupMesh(ctx, jc, cl, spec, nodes); err != nil {
 				return err
 			}
 			done.MeshUp = true
