@@ -198,6 +198,10 @@ type Manager struct {
 	// sumsCache — SHA256SUMS релизов по версии (см. releaseSums).
 	sumsMu    sync.Mutex
 	sumsCache map[string]releaseSumsEntry
+	// k8sStable — актуальная минорная версия Kubernetes (см. k8sStableMinor).
+	k8sStableMu sync.Mutex
+	k8sStable   string
+	k8sStableAt time.Time
 
 	jobsMu    sync.Mutex
 	jobs      map[string]*installJob

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
@@ -53,6 +55,10 @@ type ClusterSpec struct {
 	// вместо kube-proxy.
 	CNI                  string `json:"cni,omitempty"`
 	KubeProxyReplacement bool   `json:"kube_proxy_replacement,omitempty"`
+	// K8sVersion — kubeadm: минорная версия («1.34»). Пусто — хаб
+	// подбирает актуальную stable при создании и записывает сюда, чтобы
+	// все узлы (и добавленные потом worker'ы) были одной версии.
+	K8sVersion string `json:"k8s_version,omitempty"`
 	// Placements — размещение по хостам (раздел «Кластеры»); пусто —
 	// один хост из HostID/Topology/Workers (диалог у хоста).
 	Placements []Placement `json:"placements,omitempty"`
@@ -115,6 +121,8 @@ type clusterNode struct {
 	Bridge  string
 }
 
+var k8sMinorRe = regexp.MustCompile(`^\d+\.\d+$`)
+
 // hostnameLikeRe — имя кластера: оно же префикс имён машин и hostname.
 var hostnameLikeRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,30}[a-z0-9])?$`)
 
@@ -126,6 +134,10 @@ func (s *ClusterSpec) Validate() error {
 	}
 	if s.Flavor != k8s.FlavorK3s && s.Flavor != k8s.FlavorKubeadm {
 		return msgs.Errorf("k8s.badFlavor", s.Flavor)
+	}
+	s.K8sVersion = strings.TrimPrefix(strings.TrimSpace(s.K8sVersion), "v")
+	if s.K8sVersion != "" && !k8sMinorRe.MatchString(s.K8sVersion) {
+		return msgs.Errorf("hub.clusterBadK8sVersion", s.K8sVersion)
 	}
 	if len(s.Placements) > 0 {
 		if err := s.validatePlacements(); err != nil {
@@ -629,6 +641,14 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	// 2. Control plane и токен.
 	step++
 	jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepControlPlane"))
+	if spec.Flavor == k8s.FlavorKubeadm && spec.K8sVersion == "" {
+		// Ветка pkgs.k8s.io — одна на весь кластер, записывается в spec.
+		spec.K8sVersion = r.m.k8sStableMinor(ctx)
+		if raw, err := json.Marshal(spec); err == nil {
+			_ = r.m.db.SetClusterSpec(ctx, cl.ID, string(raw))
+		}
+		jc.Log("hub.clusterK8sVersion", spec.K8sVersion)
+	}
 	cp1, err := r.m.db.HostByID(ctx, done.Hosts[cp1Name])
 	if err != nil {
 		return err
@@ -653,7 +673,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 		is := k8s.InstallSpec{
 			Flavor: spec.Flavor, Role: k8s.RoleServer, Single: len(nodes) == 1 && p.AddWorkers == 0,
 			ClusterInit: len(cps) == 3, TLSSANs: tlsSANs, NodeName: cp1Name,
-			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1Addr,
+			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1Addr, Version: spec.K8sVersion,
 		}
 		if cp1.ParentID == 0 && cp1Addr != cp1.Addr {
 			is.NodeIP = cp1Addr
@@ -683,7 +703,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 			return err
 		}
 		is := k8s.InstallSpec{Flavor: spec.Flavor, Role: k8s.RoleAgent, ServerURL: join.ServerURL, Token: join.Token, CAHash: join.CAHash, NodeName: nd.Name,
-			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1Addr}
+			CNI: spec.CNI, KubeProxyReplacement: spec.KubeProxyReplacement, APIAddr: cp1Addr, Version: spec.K8sVersion}
 		if h.ParentID == 0 && nodeAddr(h) != h.Addr {
 			is.NodeIP = nodeAddr(h)
 		}
@@ -735,6 +755,32 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	}
 	jc.Log("hub.clusterDone", spec.Name, serverAddr)
 	return nil
+}
+
+// k8sStableMinor — актуальная минорная версия Kubernetes по
+// dl.k8s.io/release/stable.txt («v1.36.2» → «1.36»); недоступно —
+// k8s.DefaultKubeadmVersion. Кэшируется на час.
+func (m *Manager) k8sStableMinor(ctx context.Context) string {
+	m.k8sStableMu.Lock()
+	defer m.k8sStableMu.Unlock()
+	if m.k8sStable != "" && time.Since(m.k8sStableAt) < time.Hour {
+		return m.k8sStable
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://dl.k8s.io/release/stable.txt", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err == nil {
+		defer resp.Body.Close()
+		if raw, _ := io.ReadAll(io.LimitReader(resp.Body, 64)); resp.StatusCode == 200 {
+			v := strings.TrimPrefix(strings.TrimSpace(string(raw)), "v")
+			if parts := strings.Split(v, "."); len(parts) >= 2 && k8sMinorRe.MatchString(parts[0]+"."+parts[1]) {
+				m.k8sStable, m.k8sStableAt = parts[0]+"."+parts[1], time.Now()
+				return m.k8sStable
+			}
+		}
+	}
+	return k8s.DefaultKubeadmVersion
 }
 
 // exposeSummary — «16443→6443, 80→80» для журнала.

@@ -73,6 +73,11 @@ type InstallSpec struct {
 	// NodeIP — адрес узла для других узлов (и API у server): нужен, когда
 	// у хоста несколько адресов, а видеть его должны через туннель.
 	NodeIP string `json:"node_ip,omitempty"`
+	// Version — kubeadm: минорная версия Kubernetes («1.34») — ветка
+	// репозитория pkgs.k8s.io. Пусто — DefaultKubeadmVersion. Хаб
+	// подбирает актуальную stable и передаёт одну и ту же всем узлам
+	// кластера.
+	Version string `json:"version,omitempty"`
 	// HubCache — адрес кэша хаба на этом хосте (http://127.0.0.1:3142),
 	// когда хаб держит проброс: установщики, бинарники, ключи и образы
 	// машин берутся через него (и оседают на хабе), а containerd тянет
@@ -100,7 +105,26 @@ func (s InstallSpec) Validate() error {
 			return msgs.Errorf("k8s.badValue", v)
 		}
 	}
+	if s.Version != "" && !kubeadmVersionRe.MatchString(s.Version) {
+		return msgs.Errorf("k8s.badValue", s.Version)
+	}
 	return nil
+}
+
+// DefaultKubeadmVersion — ветка pkgs.k8s.io, когда хаб не смог узнать
+// актуальную stable. Старые ветки (v1.31 и раньше) подписаны так, что apt
+// на Debian 13 (sqv) их отвергает — «Signature Packet v3 is not
+// considered secure».
+const DefaultKubeadmVersion = "1.34"
+
+var kubeadmVersionRe = regexp.MustCompile(`^\d+\.\d+$`)
+
+// KubeadmRepo — репозиторий pkgs.k8s.io для минорной версии.
+func KubeadmRepo(version string) string {
+	if version == "" {
+		version = DefaultKubeadmVersion
+	}
+	return "https://pkgs.k8s.io/core:/stable:/v" + version + "/deb"
 }
 
 // Status — что стоит на хосте.
@@ -622,8 +646,8 @@ func kubeadmSteps(s InstallSpec) []Step {
 		"printf 'overlay\\nbr_netfilter\\n' > /etc/modules-load.d/k8s.conf\nmodprobe overlay\nmodprobe br_netfilter\n" +
 		"printf 'net.bridge.bridge-nf-call-iptables=1\\nnet.bridge.bridge-nf-call-ip6tables=1\\nnet.ipv4.ip_forward=1\\n' > /etc/sysctl.d/k8s.conf\nsysctl --system >/dev/null"
 	repo := fetchPrelude(s) + "export DEBIAN_FRONTEND=noninteractive\napt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq apt-transport-https ca-certificates curl gpg\n" +
-		"install -m 0755 -d /etc/apt/keyrings\nart https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key | gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg\n" +
-		"echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /' > /etc/apt/sources.list.d/kubernetes.list\n" +
+		"install -m 0755 -d /etc/apt/keyrings\nart " + KubeadmRepo(s.Version) + "/Release.key | gpg --dearmor --yes -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg\n" +
+		"echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] " + KubeadmRepo(s.Version) + "/ /' > /etc/apt/sources.list.d/kubernetes.list\n" +
 		"apt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq kubelet kubeadm kubectl\napt-mark hold kubelet kubeadm kubectl"
 	runtime := containerdStep(s)
 	steps := []Step{{"k8s.step.sysprep", sysprep}, {"k8s.step.download", repo}, {"k8s.step.runtime", runtime}}

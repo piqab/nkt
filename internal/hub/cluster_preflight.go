@@ -282,7 +282,11 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 		}
 		urls := []string{"https://get.k3s.io"}
 		if spec.Flavor == k8s.FlavorKubeadm {
-			urls = []string{"https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key", "https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"}
+			ver := spec.K8sVersion
+			if ver == "" {
+				ver = r.m.k8sStableMinor(ctx)
+			}
+			urls = []string{k8s.KubeadmRepo(ver) + "/Release.key", "https://github.com/flannel-io/flannel/releases/latest/download/kube-flannel.yml"}
 		}
 		if spec.CNI == "cilium" {
 			urls = append(urls, "https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-amd64.tar.gz.sha256sum")

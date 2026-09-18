@@ -96,6 +96,13 @@ func (d *DB) SetClusterKubeconfig(ctx context.Context, id int64, serverAddr stri
 	return err
 }
 
+// SetClusterSpec обновляет сохранённые параметры (например, подобранную
+// версию Kubernetes — чтобы «+ worker» ставил ту же).
+func (d *DB) SetClusterSpec(ctx context.Context, id int64, specJSON string) error {
+	_, err := d.ExecContext(ctx, `UPDATE clusters SET spec_json = ?, updated_at = ? WHERE id = ?`, specJSON, Now(), id)
+	return err
+}
+
 // SetClusterWG сохраняет зашифрованный план туннеля.
 func (d *DB) SetClusterWG(ctx context.Context, id int64, enc []byte) error {
 	_, err := d.ExecContext(ctx, `UPDATE clusters SET wg_enc = ?, updated_at = ? WHERE id = ?`, enc, Now(), id)
