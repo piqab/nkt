@@ -51,6 +51,7 @@ wait web1 http http://${ADDR}/ 200 1m
 | `on HOST system hostname\|timezone\|locale\|ntp …` | system settings |
 | `on HOST cert issue DOMAIN… \| cert renew DOMAIN` | a Let's Encrypt certificate |
 | `on HOST git clone URL /DIR [branch …] [token ask]` | clone a repository |
+| `on HOST k8s create NAME [nodes single\|1+N\|3+N\|"HOST: cp N, w N, host cp\|w; …"] [network nat\|bridge\|wireguard] [cni cilium] [expose] …`, `on HOST k8s destroy NAME` | a Kubernetes cluster on the host's machines or placed across several hosts (experimental) |
 
 The full reference with examples you can copy or insert into the editor is
 the “Reference” tab in the section itself.

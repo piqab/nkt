@@ -385,7 +385,7 @@ func (r *ScriptRunner) hostStep(ctx context.Context, jc *jobs.Context, p *Script
 		g := &GroupApplyRunner{m: r.m}
 		return g.waitHostJob(ctx, jc, h, started.JobID)
 	case script.KindK8sCreate:
-		return r.createCluster(ctx, jc, h, st)
+		return r.createCluster(ctx, jc, done, h, st)
 	case script.KindK8sDestroy:
 		return r.destroyCluster(ctx, jc, h, st)
 	}
@@ -534,13 +534,29 @@ func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptR
 			jc.Log("hub.scriptDryNewHost", st.Host)
 			return nil
 		}
-		spec, err := clusterSpecFromStep(h, st)
+		if rows, _ := script.ParsePlacement(st.Args["nodes"]); script.IsPlacement(st.Args["nodes"]) && len(rows) > 0 {
+			// Хост размещения, заведённый этим же сценарием, ещё не
+			// существует — проверять нечего.
+			for _, row := range rows {
+				if id, ok := done.HostIDs[row.Host]; ok && id == 0 {
+					jc.Log("hub.scriptDryNewHost", row.Host)
+					return nil
+				}
+			}
+		}
+		spec, err := r.clusterSpecFromStep(ctx, done, h, st)
 		if err != nil {
 			return err
 		}
 		cr := &ClusterRunner{m: r.m, s: r.s}
-		_, err = cr.runPreflight(ctx, jc, spec, false)
-		return err
+		failed, err := cr.runPreflight(ctx, jc, spec, false)
+		if err != nil {
+			return err
+		}
+		if failed > 0 {
+			return msgs.Errorf("hub.preflightFailed", failed)
+		}
+		return nil
 	case script.KindHost:
 		done.HostIDs[st.Name] = 0
 		jc.Log("hub.scriptDryHost", st.Name, st.Args["addr"])
@@ -923,7 +939,46 @@ func stackName(path string) string {
 
 // clusterSpecFromStep — спецификация кластера из строки сценария; общая
 // для запуска и сухого прогона.
-func clusterSpecFromStep(h store.Host, st script.Step) (ClusterSpec, error) {
+func (r *ScriptRunner) clusterSpecFromStep(ctx context.Context, done *scriptRunResume, h store.Host, st script.Step) (ClusterSpec, error) {
+	spec, err := clusterSpecFromArgs(h, st)
+	if err != nil {
+		return spec, err
+	}
+	if !script.IsPlacement(st.Args["nodes"]) {
+		return spec, spec.Validate()
+	}
+	rows, err := script.ParsePlacement(st.Args["nodes"])
+	if err != nil {
+		return spec, err
+	}
+	// Размещение по хостам — как таблица раздела «Кластеры»: хосты по
+	// именам из списка nkt (в том числе заведённые этим сценарием).
+	for _, row := range rows {
+		ph, err := r.hostByName(ctx, done, row.Host)
+		if err != nil {
+			return spec, err
+		}
+		pl := Placement{HostID: ph.ID, Role: row.Role, Kind: row.Kind, Count: row.Count, Bridge: row.Bridge}
+		if row.Kind == KindVM {
+			pl.VCPUs, pl.MemMB, pl.DiskGB, pl.ImageID = spec.CPVCPUs, spec.CPMemoryMB, spec.CPDiskGB, spec.ImageID
+			if pl.Bridge == "" {
+				pl.Bridge = st.Args["bridge"]
+			}
+		}
+		spec.Placements = append(spec.Placements, pl)
+	}
+	spec.NetworkMode, spec.Network = st.Args["network"], ""
+	if spec.NetworkMode == "" {
+		spec.NetworkMode = NetworkNAT
+		if st.Args["bridge"] != "" {
+			spec.NetworkMode = NetworkBridge
+		}
+	}
+	return spec, spec.Validate()
+}
+
+// clusterSpecFromArgs — спецификация одного хоста (без размещения).
+func clusterSpecFromArgs(h store.Host, st script.Step) (ClusterSpec, error) {
 	atoi := func(k string, def int) int {
 		if v, ok := st.Args[k]; ok {
 			n, _ := strconv.Atoi(v)
@@ -958,25 +1013,32 @@ func clusterSpecFromStep(h store.Host, st script.Step) (ClusterSpec, error) {
 	if spec.Expose {
 		spec.ExposeAPI, spec.ExposeHTTP, spec.ExposeHTTPS = atoi("api", 6443), atoi("http", 80), atoi("https", 443)
 	}
-	return spec, spec.Validate()
+	return spec, nil
 }
 
 // createCluster заводит кластер как диалог «Новый кластер» и ждёт задание.
-func (r *ScriptRunner) createCluster(ctx context.Context, jc *jobs.Context, h store.Host, st script.Step) error {
-	spec, err := clusterSpecFromStep(h, st)
+func (r *ScriptRunner) createCluster(ctx context.Context, jc *jobs.Context, done *scriptRunResume, h store.Host, st script.Step) error {
+	spec, err := r.clusterSpecFromStep(ctx, done, h, st)
 	if err != nil {
 		return err
 	}
 	raw, _ := json.Marshal(spec)
-	id, err := r.m.db.CreateCluster(ctx, store.Cluster{Name: spec.Name, HostID: h.ID, Flavor: spec.Flavor,
-		Topology: spec.Topology, Workers: spec.Workers, Expose: spec.Expose, SpecJSON: string(raw)})
+	cpHost := h
+	if len(spec.Placements) > 0 && spec.HostID != h.ID {
+		if cpHost, err = r.m.db.HostByID(ctx, spec.HostID); err != nil {
+			return err
+		}
+	}
+	_, workers := spec.NodeCounts()
+	id, err := r.m.db.CreateCluster(ctx, store.Cluster{Name: spec.Name, HostID: spec.HostID, Flavor: spec.Flavor,
+		Topology: spec.Topology, Workers: workers, Expose: spec.Expose, SpecJSON: string(raw)})
 	if err != nil {
 		return msgs.Errorf("hub.clusterCreate", err)
 	}
 	_ = r.m.db.CreateHostGroup(ctx, spec.Name)
 	jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
-		Kind: KindClusterCreate, Title: msgs.Tc(ctx, "hub.clusterJobTitle", spec.Name, h.Name),
-		Queue: fmt.Sprintf("cluster:%d", id), Author: jc.Job.Author, Steps: spec.ControlPlanes() + spec.Workers + 4,
+		Kind: KindClusterCreate, Title: msgs.Tc(ctx, "hub.clusterJobTitle", spec.Name, cpHost.Name),
+		Queue: fmt.Sprintf("cluster:%d", id), Author: jc.Job.Author, Steps: spec.jobSteps(),
 		Params: ClusterJobParams{ClusterID: id},
 	})
 	if err != nil {
