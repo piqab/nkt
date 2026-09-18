@@ -603,19 +603,24 @@ func containerdStep(s InstallSpec) string {
 		"  apt-get -o DPkg::Lock::Timeout=600 install -y -qq containerd",
 		"fi",
 		"mkdir -p /etc/containerd",
-		"if [ -f /etc/containerd/config.toml ]; then",
+		// Свой конфиг остаётся только если в нём уже настроен runc с
+		// SystemdCgroup — иначе это заглушка дистрибутива или конфиг
+		// Docker с выключенным CRI: без SystemdCgroup=true kubelet
+		// (драйвер systemd) и containerd (cgroupfs) расходятся, поды
+		// падают, API-сервер моргает, и kubeadm init не доживает до
+		// последней фазы.
+		"if [ -f /etc/containerd/config.toml ] && grep -q 'SystemdCgroup' /etc/containerd/config.toml && ! grep -Eq '^[[:space:]]*disabled_plugins[[:space:]]*=.*\"cri\"' /etc/containerd/config.toml; then",
 		"  cp -a /etc/containerd/config.toml /etc/containerd/config.toml.nkt-bak",
-		"  if grep -Eq '^[[:space:]]*disabled_plugins[[:space:]]*=.*\"cri\"' /etc/containerd/config.toml || ! grep -q 'io.containerd.grpc.v1.cri' /etc/containerd/config.toml; then",
-		"    echo 'containerd: CRI is disabled in config.toml (Docker default) — writing the default config, backup in config.toml.nkt-bak'",
-		"    containerd config default > /etc/containerd/config.toml",
-		"  else",
-		"    echo 'containerd: keeping the existing config.toml, backup in config.toml.nkt-bak'",
-		"  fi",
+		"  echo 'containerd: keeping the existing config.toml (runc options present), backup in config.toml.nkt-bak'",
 		"else",
+		"  [ -f /etc/containerd/config.toml ] && cp -a /etc/containerd/config.toml /etc/containerd/config.toml.nkt-bak && echo 'containerd: config.toml is a stub or has CRI disabled — writing the default config, backup in config.toml.nkt-bak'",
 		"  containerd config default > /etc/containerd/config.toml",
 		"fi",
 		"sed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml",
-		"grep -q 'SystemdCgroup = true' /etc/containerd/config.toml || echo 'containerd: no SystemdCgroup in config.toml — kubelet (systemd cgroup driver) may not match the runtime'",
+		"grep -q 'SystemdCgroup = true' /etc/containerd/config.toml",
+		// Образ pause — тот, что ждёт kubeadm этой версии: иначе kubelet
+		// держит две пары pause и ругается.
+		"PAUSE=$(kubeadm config images list 2>/dev/null | grep '/pause:' | head -1); [ -n \"$PAUSE\" ] && sed -i \"s#sandbox_image = \\\"[^\\\"]*\\\"#sandbox_image = \\\"$PAUSE\\\"#\" /etc/containerd/config.toml",
 		"systemctl enable containerd >/dev/null 2>&1 || true",
 		"systemctl restart containerd",
 		"for i in $(seq 1 30); do test -S /run/containerd/containerd.sock && break; sleep 1; done",
@@ -652,7 +657,12 @@ func kubeadmSteps(s InstallSpec) []Step {
 	runtime := containerdStep(s)
 	steps := []Step{{"k8s.step.sysprep", sysprep}, {"k8s.step.download", repo}, {"k8s.step.runtime", runtime}}
 	if s.Role == RoleServer && s.ServerURL == "" {
-		init := "set -e\nkubeadm init --pod-network-cidr=10.244.0.0/16"
+		// Версия — своя, без похода в интернет за stable-1.txt (у узла
+		// его может не быть, а ждать таймаут незачем). Остатки прошлой
+		// неудачной попытки — снести reset'ом; живой control plane —
+		// оставить.
+		init := "set -e\nif [ -f /etc/kubernetes/admin.conf ]; then if kubectl --kubeconfig /etc/kubernetes/admin.conf get --raw=/healthz >/dev/null 2>&1; then echo 'kubeadm: control plane already initialized, skipping init'; SKIP_INIT=1; else echo 'kubeadm: leftovers of a failed init — resetting'; kubeadm reset -f >/dev/null 2>&1 || true; fi; fi\n" +
+			"[ -n \"$SKIP_INIT\" ] || kubeadm init --kubernetes-version=$(kubeadm version -o short) --pod-network-cidr=10.244.0.0/16"
 		if s.NodeIP != "" {
 			init += " --apiserver-advertise-address=" + s.NodeIP
 		}
@@ -683,7 +693,8 @@ func kubeadmSteps(s InstallSpec) []Step {
 		steps = append(steps, Step{"k8s.step.ready", "set -e\nfor i in $(seq 1 90); do kubectl --kubeconfig /etc/kubernetes/admin.conf get nodes 2>/dev/null | grep -q ' Ready' && exit 0; sleep 2; done\nexit 1"})
 		return steps
 	}
-	join := "set -e\nkubeadm join " + s.ServerURL + " --token " + s.Token + " --discovery-token-ca-cert-hash " + s.CAHash
+	join := "set -e\nif [ -f /etc/kubernetes/kubelet.conf ]; then if systemctl is-active --quiet kubelet; then echo 'kubeadm: node already joined, skipping join'; exit 0; fi; echo 'kubeadm: leftovers of a failed join — resetting'; kubeadm reset -f >/dev/null 2>&1 || true; fi\n" +
+		"kubeadm join " + s.ServerURL + " --token " + s.Token + " --discovery-token-ca-cert-hash " + s.CAHash
 	if s.Role == RoleServer {
 		join += " --control-plane --certificate-key " + s.CertKey
 	}
