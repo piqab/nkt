@@ -70,6 +70,9 @@ type InstallSpec struct {
 	// APIAddr — адрес control plane для Cilium при замене kube-proxy: без
 	// kube-proxy агенту нужен прямой адрес API, а не ClusterIP.
 	APIAddr string `json:"api_addr,omitempty"`
+	// NodeIP — адрес узла для других узлов (и API у server): нужен, когда
+	// у хоста несколько адресов, а видеть его должны через туннель.
+	NodeIP string `json:"node_ip,omitempty"`
 }
 
 // Validate — базовая проверка формы: имена, роли, отсутствие shell-мусора.
@@ -86,7 +89,7 @@ func (s InstallSpec) Validate() error {
 	if s.CNI != "" && s.CNI != "cilium" {
 		return msgs.Errorf("k8s.badCNI", s.CNI)
 	}
-	for _, v := range append([]string{s.ServerURL, s.Token, s.CAHash, s.CertKey, s.ControlPlaneEndpoint, s.NodeName, s.APIAddr}, s.TLSSANs...) {
+	for _, v := range append([]string{s.ServerURL, s.Token, s.CAHash, s.CertKey, s.ControlPlaneEndpoint, s.NodeName, s.APIAddr, s.NodeIP}, s.TLSSANs...) {
 		if strings.ContainsAny(v, " \t\n'\"`$\\;&|") {
 			return msgs.Errorf("k8s.badValue", v)
 		}
@@ -463,6 +466,12 @@ func k3sSteps(s InstallSpec) []Step {
 	if s.NodeName != "" {
 		exec = append(exec, "--node-name", s.NodeName)
 	}
+	if s.NodeIP != "" {
+		exec = append(exec, "--node-ip", s.NodeIP)
+		if s.Role == RoleServer {
+			exec = append(exec, "--advertise-address", s.NodeIP)
+		}
+	}
 	unit := "k3s"
 	if s.Role == RoleAgent {
 		unit = "k3s-agent"
@@ -518,9 +527,16 @@ func kubeadmSteps(s InstallSpec) []Step {
 		"printf 'overlay\\nbr_netfilter\\n' > /etc/modules-load.d/k8s.conf\nmodprobe overlay\nmodprobe br_netfilter\n" +
 		"printf 'net.bridge.bridge-nf-call-iptables=1\\nnet.bridge.bridge-nf-call-ip6tables=1\\nnet.ipv4.ip_forward=1\\n' > /etc/sysctl.d/k8s.conf\nsysctl --system >/dev/null\n" +
 		"mkdir -p /etc/containerd\ncontainerd config default > /etc/containerd/config.toml\nsed -i 's/SystemdCgroup = false/SystemdCgroup = true/' /etc/containerd/config.toml\nsystemctl restart containerd\nsystemctl enable containerd"
-	steps := []Step{{"k8s.step.prepare", sysprep}, {"k8s.step.download", repo}}
+	prep := sysprep
+	if s.NodeIP != "" {
+		prep += "\nmkdir -p /etc/default\necho 'KUBELET_EXTRA_ARGS=--node-ip=" + s.NodeIP + "' > /etc/default/kubelet"
+	}
+	steps := []Step{{"k8s.step.prepare", prep}, {"k8s.step.download", repo}}
 	if s.Role == RoleServer && s.ServerURL == "" {
 		init := "set -e\nkubeadm init --pod-network-cidr=10.244.0.0/16"
+		if s.NodeIP != "" {
+			init += " --apiserver-advertise-address=" + s.NodeIP
+		}
 		for _, san := range s.TLSSANs {
 			init += " --apiserver-cert-extra-sans=" + san
 		}

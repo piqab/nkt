@@ -22,7 +22,10 @@ type Cluster struct {
 	KubeconfigEnc []byte `json:"-"`
 	// SpecJSON — параметры машин (образ, размеры, сеть) — для «добавить
 	// worker» с теми же настройками.
-	SpecJSON  string `json:"-"`
+	SpecJSON string `json:"-"`
+	// WGEnc — зашифрованный план туннеля WireGuard (ключи, адреса) в
+	// режиме сети «wireguard»; пусто в остальных.
+	WGEnc     []byte `json:"-"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 }
@@ -34,14 +37,14 @@ const (
 	ClusterDeleting = "deleting"
 )
 
-const clusterColumns = `id, name, host_id, flavor, topology, workers, expose, status, error_msg, server_addr, kubeconfig_enc, spec_json, created_at, updated_at`
+const clusterColumns = `id, name, host_id, flavor, topology, workers, expose, status, error_msg, server_addr, kubeconfig_enc, spec_json, wg_enc, created_at, updated_at`
 
 func scanCluster(row interface{ Scan(...any) error }) (Cluster, error) {
 	var c Cluster
-	var kc []byte
+	var kc, wg []byte
 	err := row.Scan(&c.ID, &c.Name, &c.HostID, &c.Flavor, &c.Topology, &c.Workers, &c.Expose, &c.Status, &c.ErrorMsg,
-		&c.ServerAddr, &kc, &c.SpecJSON, &c.CreatedAt, &c.UpdatedAt)
-	c.KubeconfigEnc = kc
+		&c.ServerAddr, &kc, &c.SpecJSON, &wg, &c.CreatedAt, &c.UpdatedAt)
+	c.KubeconfigEnc, c.WGEnc = kc, wg
 	return c, err
 }
 
@@ -90,6 +93,12 @@ func (d *DB) SetClusterStatus(ctx context.Context, id int64, status, errMsg stri
 // SetClusterKubeconfig сохраняет зашифрованный kubeconfig и адрес API.
 func (d *DB) SetClusterKubeconfig(ctx context.Context, id int64, serverAddr string, enc []byte) error {
 	_, err := d.ExecContext(ctx, `UPDATE clusters SET server_addr = ?, kubeconfig_enc = ?, updated_at = ? WHERE id = ?`, serverAddr, enc, Now(), id)
+	return err
+}
+
+// SetClusterWG сохраняет зашифрованный план туннеля.
+func (d *DB) SetClusterWG(ctx context.Context, id int64, enc []byte) error {
+	_, err := d.ExecContext(ctx, `UPDATE clusters SET wg_enc = ?, updated_at = ? WHERE id = ?`, enc, Now(), id)
 	return err
 }
 
