@@ -1119,6 +1119,7 @@ var ruCatalog = map[string]string{
 	"k8s.uninstall":                                 "удаление узла: %s",
 	"k8s.stepSkipped":                               "      уже сделано — пропускаю",
 	"hub.clusterGone":                               "запись кластера удалена — создайте кластер заново из формы",
+	"terminal.kubectlNoConfig":                      "на этом узле нет admin-конфига (%s) — откройте kubectl на control plane",
 	"k8s.stepFailed":                                "шаг «%s»: %v",
 	"k8s.installed":                                 "Kubernetes (%s, %s) установлен.",
 	"k8s.step.prepare":                              "подготовка системы (swap, модули, sysctl, пакеты)",

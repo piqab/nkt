@@ -69,12 +69,21 @@ func (s *Server) handleTerminalWS(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "k8s.notInstalled"))
 			return
 		}
-		rc, err := s.writeKubectlRC(kubeconfigPath(st.Flavor))
+		kc := kubeconfigPath(st.Flavor)
+		// Admin-конфиг есть только на control plane; на worker'е kubectl
+		// без него молча пошёл бы на localhost:8080.
+		if !s.scanner.Collector().Exists(kc) {
+			writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "terminal.kubectlNoConfig", kc))
+			return
+		}
+		rc, err := s.writeKubectlRC(kc)
 		if err != nil {
 			writeErr(w, r, http.StatusInternalServerError, err)
 			return
 		}
-		argv = []string{"bash", "--rcfile", rc, "-i"}
+		// KUBECONFIG — и через env явно (sudo сбрасывает окружение, а
+		// rc-файл может не сработать из-за чужого bashrc), и в rc.
+		argv = []string{"env", "KUBECONFIG=" + kc, "bash", "--rcfile", rc, "-i"}
 		if s.cfg.TerminalUser != "" && s.cfg.TerminalUser != "root" {
 			argv = append([]string{"sudo", "-n"}, argv...)
 		}
@@ -117,8 +126,8 @@ func (s *Server) writeKubectlRC(kubeconfig string) (string, error) {
 		"[ -f /etc/bash.bashrc ] && . /etc/bash.bashrc",
 		"[ -f ~/.bashrc ] && . ~/.bashrc",
 		"export KUBECONFIG=" + kubeconfig,
-		"if command -v kubectl >/dev/null 2>&1; then source <(kubectl completion bash 2>/dev/null); alias k=kubectl; complete -o default -F __start_kubectl k 2>/dev/null; fi",
-		"echo \"kubectl → $(kubectl config current-context 2>/dev/null || echo '?') · KUBECONFIG=$KUBECONFIG · alias k=kubectl\"",
+		"if command -v kubectl >/dev/null 2>&1; then source <(kubectl completion bash 2>/dev/null); alias k=kubectl; complete -o default -F __start_kubectl k 2>/dev/null; else echo 'kubectl not found in PATH'; fi",
+		"if [ -r \"$KUBECONFIG\" ]; then echo \"kubectl → $(kubectl config current-context 2>/dev/null || echo '?') · KUBECONFIG=$KUBECONFIG · alias k=kubectl\"; else echo \"KUBECONFIG=$KUBECONFIG is not readable by $(id -un) — kubectl would fall back to localhost:8080\"; fi",
 		"",
 	}, "\n")
 	path := filepath.Join(s.cfg.DataDir, "kubectl.bashrc")
