@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strconv"
@@ -383,6 +384,10 @@ func (r *ScriptRunner) hostStep(ctx context.Context, jc *jobs.Context, p *Script
 		}
 		g := &GroupApplyRunner{m: r.m}
 		return g.waitHostJob(ctx, jc, h, started.JobID)
+	case script.KindK8sCreate:
+		return r.createCluster(ctx, jc, h, st)
+	case script.KindK8sDestroy:
+		return r.destroyCluster(ctx, jc, h, st)
 	}
 	return msgs.Errorf("script.unknownCommand", string(st.Kind))
 }
@@ -515,7 +520,7 @@ func (r *ScriptRunner) waitCertJob(ctx context.Context, jc *jobs.Context, h stor
 func (r *ScriptRunner) dryStep(ctx context.Context, jc *jobs.Context, p *ScriptRunParams, done *scriptRunResume, st script.Step) error {
 	switch st.Kind {
 	case script.KindGroup, script.KindInstall, script.KindWait, script.KindVMCreate, script.KindVMAction,
-		script.KindDockerInst, script.KindCert, script.KindGitClone, script.KindSystem:
+		script.KindDockerInst, script.KindCert, script.KindGitClone, script.KindSystem, script.KindK8sCreate, script.KindK8sDestroy:
 		jc.Log("hub.scriptDryWould", st.Text)
 		return nil
 	case script.KindHost:
@@ -816,7 +821,13 @@ func (r *ScriptRunner) createVM(ctx context.Context, jc *jobs.Context, p *Script
 
 // waitHubJob ждёт задание самого хаба, пересказывая его журнал.
 func (r *ScriptRunner) waitHubJob(ctx context.Context, jc *jobs.Context, jobID int64) error {
-	deadline := time.Now().Add(scriptStepTimeout)
+	return r.waitHubJobFor(ctx, jc, jobID, scriptStepTimeout)
+}
+
+// waitHubJobFor — то же с своим пределом: кластер из нескольких машин
+// с загрузкой образа в получасовой шаг не укладывается.
+func (r *ScriptRunner) waitHubJobFor(ctx context.Context, jc *jobs.Context, jobID int64, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
 	var after int64
 	for {
 		if err := ctx.Err(); err != nil {
@@ -890,4 +901,79 @@ func stackName(path string) string {
 		return parts[len(parts)-2]
 	}
 	return "stack"
+}
+
+// createCluster заводит кластер как диалог «Новый кластер» и ждёт задание.
+func (r *ScriptRunner) createCluster(ctx context.Context, jc *jobs.Context, h store.Host, st script.Step) error {
+	atoi := func(k string, def int) int {
+		if v, ok := st.Args[k]; ok {
+			n, _ := strconv.Atoi(v)
+			return n
+		}
+		return def
+	}
+	spec := ClusterSpec{Name: st.Name, HostID: h.ID, Flavor: st.Args["flavor"], Topology: TopologyCP1, Workers: 1,
+		Expose: st.Args["expose"] == "true", ImageID: st.Args["image"], Network: st.Args["network"]}
+	if spec.Flavor == "" {
+		spec.Flavor = "k3s"
+	}
+	if spec.ImageID == "" {
+		spec.ImageID = "ubuntu-24.04"
+	}
+	switch n := st.Args["nodes"]; {
+	case n == "single":
+		spec.Topology, spec.Workers = TopologySingle, 0
+	case strings.HasPrefix(n, "3+"):
+		spec.Topology = TopologyCP3
+		spec.Workers, _ = strconv.Atoi(strings.TrimPrefix(n, "3+"))
+	case strings.HasPrefix(n, "1+"):
+		spec.Workers, _ = strconv.Atoi(strings.TrimPrefix(n, "1+"))
+	}
+	cpu, mem, disk := atoi("cpu", 2), atoi("mem", 4096), atoi("disk", 30)
+	spec.CPVCPUs, spec.CPMemoryMB, spec.CPDiskGB = cpu, mem, disk
+	spec.WVCPUs, spec.WMemoryMB, spec.WDiskGB = cpu, mem, disk
+	if err := spec.Validate(); err != nil {
+		return err
+	}
+	raw, _ := json.Marshal(spec)
+	id, err := r.m.db.CreateCluster(ctx, store.Cluster{Name: spec.Name, HostID: h.ID, Flavor: spec.Flavor,
+		Topology: spec.Topology, Workers: spec.Workers, Expose: spec.Expose, SpecJSON: string(raw)})
+	if err != nil {
+		return msgs.Errorf("hub.clusterCreate", err)
+	}
+	_ = r.m.db.CreateHostGroup(ctx, spec.Name)
+	jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
+		Kind: KindClusterCreate, Title: msgs.Tc(ctx, "hub.clusterJobTitle", spec.Name, h.Name),
+		Queue: fmt.Sprintf("cluster:%d", id), Author: jc.Job.Author, Steps: spec.ControlPlanes() + spec.Workers + 3,
+		Params: ClusterJobParams{ClusterID: id},
+	})
+	if err != nil {
+		return err
+	}
+	jc.Log("hub.scriptClusterJob", spec.Name, jobID)
+	return r.waitHubJobFor(ctx, jc, jobID, 3*time.Hour)
+}
+
+// destroyCluster удаляет кластер по имени тем же заданием, что и кнопка.
+func (r *ScriptRunner) destroyCluster(ctx context.Context, jc *jobs.Context, h store.Host, st script.Step) error {
+	list, err := r.m.db.ListClusters(ctx)
+	if err != nil {
+		return err
+	}
+	for _, cl := range list {
+		if cl.Name != st.Name || cl.HostID != h.ID {
+			continue
+		}
+		_ = r.m.db.SetClusterStatus(ctx, cl.ID, store.ClusterDeleting, "")
+		jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
+			Kind: KindClusterDelete, Title: msgs.Tc(ctx, "hub.clusterDeleteJobTitle", cl.Name),
+			Queue: fmt.Sprintf("cluster:%d", cl.ID), Author: jc.Job.Author, Steps: 1,
+			Params: ClusterJobParams{ClusterID: cl.ID},
+		})
+		if err != nil {
+			return err
+		}
+		return r.waitHubJob(ctx, jc, jobID)
+	}
+	return msgs.Errorf("script.unknownCluster", st.Name, h.Name)
 }

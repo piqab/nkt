@@ -100,6 +100,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - Machine creation from a cloud image: name, cores, memory, disk, network, user and SSH key via cloud-init; missing tools are installed automatically; machine templates for repeat creation.
 - Cloud image catalog (Ubuntu, Debian, …) and own images: download with checksum verification, upload of an own file, move into the disk directory.
 - libvirt networks: list, NAT network creation with DHCP and autostart, subnet overlap check against host networks and interfaces, bridge onto a host interface.
+- **Kubernetes**: a tab on a cluster node — flavor, role, version, nodes (roles, Ready, IP), pods by namespace, kubeconfig, node removal; k3s/kubeadm role installation as a host job.
 - Domain XML editing through the config editor with `virt-xml-validate` and `virsh define` on apply.
 - **Profiles**: the host's desired state in YAML — packages, services, files, firewall rules, accounts, system settings, compose stacks.
 - Apply plan with risky items marked, application as a job with a log, scheduled drift check.
@@ -190,7 +191,8 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - Fallback channel (a reverse TLS tunnel with certificate pinning) for when SSH is unavailable.
 - Revoking passwordless sudo, address diagnostics, complete nkt removal from a host (restoring password login).
 - Machines inside a host: creating a virtual machine on a host from the hub, automatic nkt installation into it, profile application; discovery of existing machines and adding them to the list; start/shutdown through the parent host; removal together with disks.
-- Scripts (experimental): a line-based deployment language (group, hosts, nkt install, packages, services, firewall, Docker and compose stacks, machines, profiles, files, user accounts, system settings, certificates, git clone; several hosts in one command) with run-time parameters, waiting for a port/HTTP/service, a check, a dry run, a reference and execution as a hub job.
+- Kubernetes clusters on a host's virtual machines: “new cluster” — k3s or kubeadm, topology (one machine; 1 control plane + N workers; 3 control planes + N workers for k3s), sizes, image, network, forwarding of host ports 6443/80/443; the job creates machines with nkt, installs roles, joins nodes, waits for Ready, fetches the kubeconfig; the clusters card — nodes, kubeconfig, “+ worker”, deletion with disks.
+- Scripts (experimental): a line-based deployment language (group, hosts, nkt install, packages, services, firewall, Docker and compose stacks, machines, profiles, files, user accounts, system settings, certificates, git clone, k8s clusters; several hosts in one command) with run-time parameters, waiting for a port/HTTP/service, a check, a dry run, a reference and execution as a hub job.
 - A "Profiles" section on the hub, each profile has a color; a profile is set on a group at creation: machines created in the group are built from it and their rows are tinted with its color; moving a host into a group applies nothing.
 - Alerts: unreachable, responding again, serious problems appeared, resolved, job failed; an alert journal with settings for what to record and what to notify about, collapsing short episodes; browser notifications.
 - Hub jobs with a log.

@@ -47,6 +47,8 @@ const (
 	KindSystem       Kind = "system"
 	KindCert         Kind = "cert"
 	KindGitClone     Kind = "git.clone"
+	KindK8sCreate    Kind = "k8s.create"
+	KindK8sDestroy   Kind = "k8s.destroy"
 )
 
 // ArgDoc — один аргумент команды в справке.
@@ -258,6 +260,25 @@ var Commands = []CommandDoc{
 			{Name: "key hub", Desc: "script.doc.gitClone.key"},
 		},
 		Example: "on web1 git clone https://github.com/org/app.git /srv/app branch main token ask",
+	},
+	{
+		Kind: KindK8sCreate, OnHost: true, Syntax: "on ХОСТ k8s create ИМЯ [flavor k3s|kubeadm] [nodes single|1+N|3+N] [image ОБРАЗ] [cpu N] [mem МБ] [disk ГБ] [network СЕТЬ] [expose]",
+		Summary: "script.doc.k8sCreate",
+		Args: []ArgDoc{
+			{Name: "ИМЯ", Required: true, Desc: "script.doc.k8sCreate.name"},
+			{Name: "flavor", Desc: "script.doc.k8sCreate.flavor"},
+			{Name: "nodes", Desc: "script.doc.k8sCreate.nodes"},
+			{Name: "image", Desc: "script.doc.k8sCreate.image"},
+			{Name: "cpu / mem / disk", Desc: "script.doc.k8sCreate.sizes"},
+			{Name: "expose", Desc: "script.doc.k8sCreate.expose"},
+		},
+		Example: "on hv1 k8s create lab flavor k3s nodes 1+2 image ubuntu-24.04 mem 4096 expose",
+	},
+	{
+		Kind: KindK8sDestroy, OnHost: true, Syntax: "on ХОСТ k8s destroy ИМЯ",
+		Summary: "script.doc.k8sDestroy",
+		Args:    []ArgDoc{{Name: "ИМЯ", Required: true, Desc: "script.doc.k8sDestroy.name"}},
+		Example: "on hv1 k8s destroy lab",
 	},
 }
 

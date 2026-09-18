@@ -231,7 +231,7 @@ func ParseNodes(raw []byte) ([]Node, error) {
 			}
 		}
 		if age := time.Since(it.Metadata.CreationTimestamp); !it.Metadata.CreationTimestamp.IsZero() && age > 0 {
-			n.Age = age.Round(time.Minute).String()
+			n.Age = humanAge(age)
 		}
 		nodes = append(nodes, n)
 	}
@@ -496,6 +496,18 @@ func kubeadmSteps(s InstallSpec) []Step {
 	steps = append(steps, Step{"k8s.step.install", join})
 	steps = append(steps, Step{"k8s.step.wait", "set -e\nfor i in $(seq 1 60); do systemctl is-active --quiet kubelet && break; sleep 2; done\nsystemctl is-active --quiet kubelet"})
 	return steps
+}
+
+// humanAge — как у kubectl: 5d, 3h, 12m.
+func humanAge(d time.Duration) string {
+	switch {
+	case d >= 48*time.Hour:
+		return fmt.Sprintf("%dd", int(d.Hours())/24)
+	case d >= time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
 }
 
 func firstField(s string, i int) string {

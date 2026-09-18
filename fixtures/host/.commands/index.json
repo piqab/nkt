@@ -3,6 +3,78 @@
   "commands": [
     {
       "match": [
+        "sh",
+        "-c",
+        "command -v k3s"
+      ],
+      "stdout": "/usr/local/bin/k3s\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "--version"
+      ],
+      "stdout": "k3s version v1.31.4+k3s1 (a562d090)\ngo version go1.22.9\n"
+    },
+    {
+      "match": [
+        "systemctl",
+        "is-active",
+        "k3s"
+      ],
+      "stdout": "active\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "nodes",
+        "-o",
+        "json"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"lab-cp-1\", \"labels\": {\"node-role.kubernetes.io/control-plane\": \"true\"}, \"creationTimestamp\": \"2026-09-10T08:00:00Z\"}, \"status\": {\"conditions\": [{\"type\": \"Ready\", \"status\": \"True\"}], \"addresses\": [{\"type\": \"InternalIP\", \"address\": \"192.168.122.10\"}], \"nodeInfo\": {\"kubeletVersion\": \"v1.31.4+k3s1\"}}}, {\"metadata\": {\"name\": \"lab-w-1\", \"labels\": {}, \"creationTimestamp\": \"2026-09-10T08:05:00Z\"}, \"status\": {\"conditions\": [{\"type\": \"Ready\", \"status\": \"True\"}], \"addresses\": [{\"type\": \"InternalIP\", \"address\": \"192.168.122.11\"}], \"nodeInfo\": {\"kubeletVersion\": \"v1.31.4+k3s1\"}}}, {\"metadata\": {\"name\": \"lab-w-2\", \"labels\": {}, \"creationTimestamp\": \"2026-09-10T08:05:00Z\"}, \"status\": {\"conditions\": [{\"type\": \"Ready\", \"status\": \"False\"}], \"addresses\": [{\"type\": \"InternalIP\", \"address\": \"192.168.122.12\"}], \"nodeInfo\": {\"kubeletVersion\": \"v1.31.4+k3s1\"}}}]}"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "pods",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"coredns-7b98449c4-x9k2p\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:01:00Z\"}, \"spec\": {\"nodeName\": \"lab-cp-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"coredns\", \"ready\": true, \"restartCount\": 0}]}}, {\"metadata\": {\"name\": \"traefik-5d45f7b9d-abcde\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"traefik\", \"ready\": true, \"restartCount\": 1}]}}, {\"metadata\": {\"name\": \"metrics-server-6f7c9d-zz\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"metrics-server\", \"ready\": true, \"restartCount\": 0}]}}, {\"metadata\": {\"name\": \"web-6c9d8f-qwert\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-12T09:00:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"web\", \"ready\": true, \"restartCount\": 0}]}}, {\"metadata\": {\"name\": \"web-6c9d8f-asdfg\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-13T09:00:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-2\"}, \"status\": {\"phase\": \"Pending\", \"containerStatuses\": []}}]}"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "pods",
+        "-o",
+        "json",
+        "-n",
+        "default"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"web-6c9d8f-qwert\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-12T09:00:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"web\", \"ready\": true, \"restartCount\": 0}]}}, {\"metadata\": {\"name\": \"web-6c9d8f-asdfg\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-13T09:00:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-2\"}, \"status\": {\"phase\": \"Pending\", \"containerStatuses\": []}}]}"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "pods",
+        "-o",
+        "json",
+        "-n",
+        "kube-system"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"coredns-7b98449c4-x9k2p\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:01:00Z\"}, \"spec\": {\"nodeName\": \"lab-cp-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"coredns\", \"ready\": true, \"restartCount\": 0}]}}, {\"metadata\": {\"name\": \"traefik-5d45f7b9d-abcde\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"traefik\", \"ready\": true, \"restartCount\": 1}]}}, {\"metadata\": {\"name\": \"metrics-server-6f7c9d-zz\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"metrics-server\", \"ready\": true, \"restartCount\": 0}]}}]}"
+    },
+    {
+      "match": [
         "systemctl",
         "show",
         "nginx"
