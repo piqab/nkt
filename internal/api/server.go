@@ -256,6 +256,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/vm/images", s.handleVMImages)
 			r.Get("/vm/templates", s.handleVMTemplates)
 			r.Get("/vm/address", s.handleVMAddress)
+			r.Get("/vm/reach", s.handleVMReach)
 			r.Get("/vm/networks", s.handleVMNetworks)
 			r.Get("/vm/preflight", s.handleVMPreflight)
 			r.Get("/net/check", s.handleNetCheck)

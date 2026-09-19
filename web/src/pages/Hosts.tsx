@@ -1966,6 +1966,7 @@ type HostFormValues = {
   terminal_enabled: boolean
   tunnel_enabled: boolean
   apt_via_hub: boolean
+  via?: string
 }
 
 /**
@@ -2047,6 +2048,7 @@ function HostForm({
         terminal_enabled: terminalEnabled,
         tunnel_enabled: tunnelEnabled,
         apt_via_hub: aptViaHub,
+        ...(initial?.parent_id ? { via: values.via ?? '' } : {}),
       }
       // Правка становится умолчанием для следующих хостов — ровно то, чего
       // ждёшь от поля, которое каждый раз показывает прошлое значение.
@@ -2133,6 +2135,7 @@ function HostForm({
         // Тоже по умолчанию: без хаба apt идёт напрямую, так что риска
         // нет, а трафик и время установки экономятся сразу.
         apt_via_hub: initial?.apt_via_hub ?? true,
+        via: initial?.via ?? '',
       }}
     >
       {!editing && <p className="small muted">{t('hosts.addHostHint')}</p>}
@@ -2312,6 +2315,17 @@ function HostForm({
           </div>
         </Checkbox>
       </Form.Item>
+      {initial?.parent_id ? (
+        <Form.Item name="via" label={t('hosts.via')} extra={t('hosts.viaHint')} style={{ marginBottom: '0.6rem' }}>
+          <Select
+            options={[
+              { value: '', label: t('hosts.viaAuto') },
+              { value: 'direct', label: t('hosts.viaDirect') },
+              { value: 'jump', label: t('hosts.viaJump') },
+            ]}
+          />
+        </Form.Item>
+      ) : null}
       <Form.Item style={{ marginBottom: 0 }}>
         <Button type="primary" htmlType="submit" loading={busy}>
           {editing ? t('hosts.save') : t('hosts.addHost')}
@@ -2695,6 +2709,18 @@ interface DiscoveredVM {
   name: string
   state: string
   address?: string
+  addresses?: { addr: string; mac?: string; source: string }[]
+  ifaces?: { type: string; source?: string; mac?: string }[]
+}
+
+interface ReachResult {
+  host_tcp: boolean
+  host_ping: boolean
+  host_route: boolean
+  hub_tcp: boolean
+  macvtap: string
+  via: string
+  hint: string
 }
 
 /**
@@ -2715,6 +2741,23 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const vms = found.data?.vms ?? []
+  // Выбранный адрес по машине (у машины их может быть несколько) и итог
+  // «проверить доступ»: подсказка и способ связи, который уйдёт в запись.
+  const [addrs, setAddrs] = useState<Record<string, string>>({})
+  const [reach, setReach] = useState<Record<string, ReachResult | 'busy' | { error: string }>>({})
+  const addrOf = (vm: DiscoveredVM) => addrs[vm.name] ?? vm.addresses?.[0]?.addr ?? vm.address ?? ''
+
+  async function check(vm: DiscoveredVM) {
+    const addr = addrOf(vm)
+    if (!addr) return
+    setReach((m) => ({ ...m, [vm.name]: 'busy' }))
+    try {
+      const res = await api<ReachResult>(`/hub/hosts/${host.id}/vm-reach`, { method: 'POST', body: { name: vm.name, addr, port: sshPort } })
+      setReach((m) => ({ ...m, [vm.name]: res }))
+    } catch (err) {
+      setReach((m) => ({ ...m, [vm.name]: { error: err instanceof Error ? err.message : String(err) } }))
+    }
+  }
 
   const [done, setDone] = useState<string | null>(null)
 
@@ -2724,7 +2767,22 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
     try {
       const res = await api<{ imported?: { name: string; public_key?: string }[] | null; errors?: string[] | null }>(
         `/hub/hosts/${host.id}/vm-import`,
-        { method: 'POST', body: { names: picked, ssh_user: sshUser, ssh_port: sshPort, password } },
+        {
+          method: 'POST',
+          body: {
+            names: picked,
+            ssh_user: sshUser,
+            ssh_port: sshPort,
+            password,
+            addrs: Object.fromEntries(vms.filter((vm) => picked.includes(vm.name)).map((vm) => [vm.name, addrOf(vm)])),
+            via: Object.fromEntries(
+              picked.map((name) => {
+                const r = reach[name]
+                return [name, r && r !== 'busy' && 'via' in r ? r.via : '']
+              }),
+            ),
+          },
+        },
       )
       const imported = res.imported ?? []
       const errors = res.errors ?? []
@@ -2761,19 +2819,50 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
           <Banner kind="info">{t('hosts.discoverNone')}</Banner>
         ) : (
           <div className="col" style={{ gap: '0.3rem' }}>
-            {vms.map((vm) => (
-              <label key={vm.name} style={{ flexDirection: 'row', alignItems: 'center', gap: '0.5rem' }}>
-                <Checkbox
-                  checked={picked.includes(vm.name)}
-                  onChange={(e) => setPicked(e.target.checked ? [...picked, vm.name] : picked.filter((n) => n !== vm.name))}
-                />
-                <strong>{vm.name}</strong>
-                <Tag color={vm.state === 'running' ? 'success' : 'default'}>
-                  {vm.state === 'running' ? t('hosts.vmRunning') : t('hosts.vmOff', { state: vm.state })}
-                </Tag>
-                <span className="small muted mono">{vm.address || t('hosts.addrUnknown')}</span>
-              </label>
-            ))}
+            {vms.map((vm) => {
+              const candidates = vm.addresses?.length ? vm.addresses : vm.address ? [{ addr: vm.address, source: '' }] : []
+              const r = reach[vm.name]
+              const macvtap = vm.ifaces?.find((i) => i.type === 'direct')?.source
+              return (
+                <div key={vm.name} className="col" style={{ gap: '0.15rem' }}>
+                  <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <Checkbox
+                      checked={picked.includes(vm.name)}
+                      onChange={(e) => setPicked(e.target.checked ? [...picked, vm.name] : picked.filter((n) => n !== vm.name))}
+                    />
+                    <strong>{vm.name}</strong>
+                    <Tag color={vm.state === 'running' ? 'success' : 'default'}>
+                      {vm.state === 'running' ? t('hosts.vmRunning') : t('hosts.vmOff', { state: vm.state })}
+                    </Tag>
+                    {macvtap && <Tag color="warning">macvtap · {macvtap}</Tag>}
+                    {candidates.length > 1 ? (
+                      <Select
+                        size="small"
+                        value={addrOf(vm)}
+                        onChange={(v: string) => {
+                          setAddrs((m) => ({ ...m, [vm.name]: v }))
+                          setReach((m) => { const c = { ...m }; delete c[vm.name]; return c })
+                        }}
+                        options={candidates.map((a) => ({ value: a.addr, label: `${a.addr}${a.source ? ` (${a.source})` : ''}` }))}
+                        style={{ minWidth: '13rem' }}
+                      />
+                    ) : (
+                      <span className="small muted mono">{candidates[0]?.addr || t('hosts.addrUnknown')}</span>
+                    )}
+                    {candidates.length > 0 && (
+                      <Button size="small" loading={r === 'busy'} onClick={() => void check(vm)}>
+                        {t('hosts.checkReach')}
+                      </Button>
+                    )}
+                  </div>
+                  {r && r !== 'busy' && (
+                    <div className="small" style={{ paddingLeft: '1.6rem', color: 'error' in r ? 'var(--series-8)' : 'via' in r && r.via ? 'var(--series-3)' : 'var(--series-8)' }}>
+                      {'error' in r ? r.error : r.hint}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
         {vms.length > 0 && (

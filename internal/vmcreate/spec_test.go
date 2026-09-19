@@ -224,3 +224,29 @@ block      disk      vdc      /dev/sdb
 		t.Errorf("пути = %q", paths)
 	}
 }
+
+// Продолжения строк («-  -  ipv4 …») наследуют MAC интерфейса, а
+// domiflist даёт тип подключения и MAC.
+func TestParseDomifaddrAllAndDomiflist(t *testing.T) {
+	agent := ` Name       MAC address          Protocol     Address
+-------------------------------------------------------------------------------
+ lo         00:00:00:00:00:00    ipv4         127.0.0.1/8
+ enp1s0     52:54:00:ab:cd:ef    ipv6         fe80::1/64
+ -          -                    ipv4         192.168.38.175/24
+ cilium_host 8a:1b:2c:3d:4e:5f   ipv4         10.0.0.51/32
+ docker0    02:42:ac:11:00:01    ipv4         172.17.0.1/16
+`
+	all := parseDomifaddrAll(agent)
+	if len(all) != 3 || all[0].Addr != "192.168.38.175" || all[0].MAC != "52:54:00:ab:cd:ef" || all[1].Addr != "10.0.0.51" || all[2].MAC != "02:42:ac:11:00:01" {
+		t.Errorf("all: %+v", all)
+	}
+	list := ` Interface   Type     Source   Model    MAC
+-------------------------------------------------------
+ macvtap0    direct   enp7s0   virtio   52:54:00:ab:cd:ef
+ vnet3       bridge   br0      virtio   52:54:00:11:22:33
+`
+	ifs := ParseDomiflist(list)
+	if len(ifs) != 2 || ifs[0].Type != "direct" || ifs[0].Source != "enp7s0" || ifs[0].MAC != "52:54:00:ab:cd:ef" || ifs[1].Type != "bridge" {
+		t.Errorf("ifaces: %+v", ifs)
+	}
+}

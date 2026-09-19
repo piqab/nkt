@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
 	"net"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 
@@ -89,6 +90,29 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 		return &sshLink{client: client}, nil
 	}
 
+	// Машина: напрямую или через хост. «direct» — только напрямую;
+	// «jump» — только через хост; авто — напрямую, если порт SSH машины
+	// отвечает хабу (проба короткая, итог помнится directProbeTTL), иначе
+	// через хост. Хост с macvtap-гостями сам до них не достучится — им
+	// нужен прямой путь.
+	switch host.Via {
+	case store.HostViaDirect:
+		client, err := dialSSH(ctx, host.Addr, host.SSHPort, user, authKind, secret)
+		if err != nil {
+			return nil, err
+		}
+		return &sshLink{client: client}, nil
+	case store.HostViaJump:
+	default:
+		if m.directReachable(host) {
+			client, err := dialSSH(ctx, host.Addr, host.SSHPort, user, authKind, secret)
+			if err == nil {
+				return &sshLink{client: client}, nil
+			}
+			m.rememberDirect(host.ID, false)
+		}
+	}
+
 	parent, err := m.db.HostByID(ctx, host.ParentID)
 	if err != nil || parent.ID == host.ID {
 		// Родителя нет в списке (удалён): пробуем напрямую — вдруг
@@ -120,4 +144,52 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 		return nil, err
 	}
 	return &sshLink{client: client, under: jump}, nil
+}
+
+// directProbeTTL — сколько помнить итог пробы прямого подключения.
+const directProbeTTL = 10 * time.Minute
+
+type directProbe struct {
+	ok bool
+	at time.Time
+}
+
+// directReachable — отвечает ли порт SSH машины хабу напрямую (по
+// памяти или короткой пробой).
+func (m *Manager) directReachable(host store.Host) bool {
+	m.directMu.Lock()
+	if p, ok := m.directCache[host.ID]; ok && time.Since(p.at) < directProbeTTL {
+		m.directMu.Unlock()
+		return p.ok
+	}
+	m.directMu.Unlock()
+	ok := TCPReachable(net.JoinHostPort(host.Addr, fmt.Sprintf("%d", host.SSHPort)), 1500*time.Millisecond)
+	m.rememberDirect(host.ID, ok)
+	return ok
+}
+
+func (m *Manager) rememberDirect(hostID int64, ok bool) {
+	m.directMu.Lock()
+	if m.directCache == nil {
+		m.directCache = map[int64]directProbe{}
+	}
+	m.directCache[hostID] = directProbe{ok: ok, at: time.Now()}
+	m.directMu.Unlock()
+}
+
+// ForgetDirect сбрасывает память пробы (адрес или способ связи сменили).
+func (m *Manager) ForgetDirect(hostID int64) {
+	m.directMu.Lock()
+	delete(m.directCache, hostID)
+	m.directMu.Unlock()
+}
+
+// TCPReachable — открывается ли TCP-соединение за timeout.
+func TCPReachable(addr string, timeout time.Duration) bool {
+	c, err := net.DialTimeout("tcp", addr, timeout)
+	if err != nil {
+		return false
+	}
+	c.Close()
+	return true
 }

@@ -733,6 +733,22 @@ func (s *Server) handleDeleteHostGroup(w http.ResponseWriter, r *http.Request) {
 // would be misleading.
 // setAptViaHub запоминает флаг; на уже установленном хосте конфиг apt
 // раскладывается по SSH в фоне — форма хоста не должна ждать соединения.
+// setHostVia сохраняет способ связи с машиной и сбрасывает память пробы.
+func (s *Server) setHostVia(ctx context.Context, hostID int64, via *string) {
+	if via == nil {
+		return
+	}
+	v := strings.TrimSpace(*via)
+	if v != store.HostViaAuto && v != store.HostViaDirect && v != store.HostViaJump {
+		return
+	}
+	if err := s.db.SetHostVia(ctx, hostID, v); err != nil {
+		s.log.Warn("could not save via setting", "host_id", hostID, "err", err)
+		return
+	}
+	s.hub.ForgetDirect(hostID)
+}
+
 func (s *Server) setAptViaHub(ctx context.Context, hostID int64, enabled bool) {
 	h, err := s.db.HostByID(ctx, hostID)
 	if err != nil || h.AptViaHub == enabled {
@@ -773,6 +789,8 @@ type updateHostRequest struct {
 	AptViaHub       bool   `json:"apt_via_hub"`
 	// Group — раздел списка; пустая строка значит «Без группы».
 	Group string `json:"group"`
+	// Via — способ связи с машиной: '' авто, direct, jump (см. store.Host.Via).
+	Via *string `json:"via,omitempty"`
 }
 
 func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
@@ -799,6 +817,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 		s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
 		s.setAptViaHub(r.Context(), id, req.AptViaHub)
 		s.setHostGroup(r.Context(), id, req.Group)
+		s.setHostVia(r.Context(), id, req.Via)
 		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "authorized_key": authorizedKey})
 		return
 	}
@@ -810,6 +829,7 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 	s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
 	s.setAptViaHub(r.Context(), id, req.AptViaHub)
 	s.setHostGroup(r.Context(), id, req.Group)
+	s.setHostVia(r.Context(), id, req.Via)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

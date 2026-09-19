@@ -674,7 +674,13 @@
     "aptViaHub": "packages through the hub cache",
     "aptViaHubHint": "The hub keeps an SSH session to the host with a reverse port forward, and the host's apt downloads packages through the hub cache (every .deb comes from the internet once for all hosts). When the hub is not connected, apt goes direct — nothing breaks. Applied right away on an installed host and during install on a new one.",
     "aptProxyConnected": "packages through the hub cache: forward connected",
-    "aptProxyWaiting": "packages through the hub cache: forward not connected yet — apt goes direct"
+    "aptProxyWaiting": "packages through the hub cache: forward not connected yet — apt goes direct",
+    "via": "Connection to the machine",
+    "viaHint": "Auto — the hub tries the machine's SSH port directly and goes around the host when it answers, otherwise via the host. A host cannot see its macvtap guests — they need “direct”.",
+    "viaAuto": "auto (direct when reachable, otherwise via the host)",
+    "viaDirect": "direct (from the hub to the machine's address)",
+    "viaJump": "via the host",
+    "checkReach": "check access"
   },
   "events": {
     "title": "Alerts",

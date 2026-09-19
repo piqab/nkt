@@ -84,6 +84,8 @@ export interface HubHost {
    * update" shape as terminal_enabled. */
   tunnel_enabled: boolean
   apt_via_hub?: boolean
+  /** Способ связи хаба с машиной: '' авто, direct (напрямую), jump (через хост). */
+  via?: string
   /** "ssh" or "tunnel" — which path the hub most recently reached this
    * host through (see internal/hub's Manager.recordChannel). Absent before
    * the first dial attempt. */
