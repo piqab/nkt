@@ -225,7 +225,7 @@ func (r *ClamDBPushRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil {
 		return err
 	}
-	jc.Step(1, 3, msgs.Tc(ctx, "hub.clamDBStepConnect", host.Name))
+	jc.StepKey(1, 3, "hub.clamDBStepConnect", host.Name)
 	link, err := r.m.dialHost(ctx, host)
 	if err != nil {
 		return err
@@ -251,7 +251,7 @@ func (r *ClamDBPushRunner) Run(ctx context.Context, jc *jobs.Context) error {
 
 	tmpDir := fmt.Sprintf("/tmp/nkt-clamdb-%d", time.Now().UnixNano())
 	defer func() { _, _ = runRemote(link.client, "rm -rf "+tmpDir) }()
-	jc.Step(2, 3, msgs.Tc(ctx, "hub.clamDBStepUpload"))
+	jc.StepKey(2, 3, "hub.clamDBStepUpload")
 	for _, name := range clamDBFiles {
 		src := filepath.Join(r.m.clamDBDir(), name)
 		if _, err := os.Stat(src); err != nil {
@@ -268,7 +268,7 @@ func (r *ClamDBPushRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			return msgs.Errorf("hub.clamDBUpload", name, err)
 		}
 	}
-	jc.Step(3, 3, msgs.Tc(ctx, "hub.clamDBStepInstall"))
+	jc.StepKey(3, 3, "hub.clamDBStepInstall")
 	// Файлы принадлежат clamav, чтобы freshclam потом мог их обновлять;
 	// служба на время замены остановлена — иначе она может как раз в
 	// этот момент писать в те же файлы.

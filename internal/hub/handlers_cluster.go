@@ -94,7 +94,7 @@ func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind: KindClusterCreate, Title: msgs.Tc(r.Context(), "hub.clusterJobTitle", spec.Name, host.Name),
+		Kind: KindClusterCreate, TitleKey: "hub.clusterJobTitle", TitleArgs: []any{spec.Name, host.Name},
 		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: spec.jobSteps(),
 		Params: ClusterJobParams{ClusterID: id},
 	})
@@ -134,7 +134,7 @@ func (s *Server) handleClusterDryRun(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind: KindClusterCreate, Title: msgs.Tc(r.Context(), "hub.clusterDryRunTitle", spec.Name, host.Name),
+		Kind: KindClusterCreate, TitleKey: "hub.clusterDryRunTitle", TitleArgs: []any{spec.Name, host.Name},
 		Queue: fmt.Sprintf("cluster-dry:%d", host.ID), Author: user, Steps: 1,
 		Params: ClusterJobParams{DryRun: true, Prepare: req.Prepare, Spec: &spec},
 	})
@@ -222,7 +222,7 @@ func (s *Server) handleClusterAddWorkers(w http.ResponseWriter, r *http.Request)
 	user := auth.Username(r.Context())
 	_ = s.db.SetClusterStatus(r.Context(), id, store.ClusterCreating, "")
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind: KindClusterCreate, Title: msgs.Tc(r.Context(), "hub.clusterAddJobTitle", req.Count, cl.Name),
+		Kind: KindClusterCreate, TitleKey: "hub.clusterAddJobTitle", TitleArgs: []any{req.Count, cl.Name},
 		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: req.Count + 4,
 		Params: ClusterJobParams{ClusterID: id, AddWorkers: req.Count},
 	})
@@ -248,7 +248,7 @@ func (s *Server) handleClusterDelete(w http.ResponseWriter, r *http.Request) {
 	user := auth.Username(r.Context())
 	_ = s.db.SetClusterStatus(r.Context(), id, store.ClusterDeleting, "")
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind: KindClusterDelete, Title: msgs.Tc(r.Context(), "hub.clusterDeleteJobTitle", cl.Name),
+		Kind: KindClusterDelete, TitleKey: "hub.clusterDeleteJobTitle", TitleArgs: []any{cl.Name},
 		Queue: fmt.Sprintf("cluster:%d", id), Author: user, Steps: 1,
 		Params: ClusterJobParams{ClusterID: id},
 	})

@@ -68,8 +68,8 @@ func (s *Server) handleGroupApply(w http.ResponseWriter, r *http.Request) {
 
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind:  KindGroupApply,
-		Title: msgs.Tc(r.Context(), "hub.profileGroupJobTitle", prof.Name, groupTitle(r.Context(), group)),
+		Kind:     KindGroupApply,
+		TitleKey: "hub.profileGroupJobTitle", TitleArgs: []any{prof.Name, groupTitle(r.Context(), group)},
 		// Ключ очереди — сама группа: две раскатки по одной группе разом
 		// мешали бы друг другу, а по разным группам идут параллельно.
 		Queue:  "group:" + group,
@@ -149,8 +149,8 @@ func (s *Server) handleVMProvision(w http.ResponseWriter, r *http.Request) {
 
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind:  KindVMProvision,
-		Title: msgs.Tc(r.Context(), "hub.machineOnHostJobTitle", req.Spec.Name, host.Name),
+		Kind:     KindVMProvision,
+		TitleKey: "hub.machineOnHostJobTitle", TitleArgs: []any{req.Spec.Name, host.Name},
 		// Ключ очереди — хост, на котором создаётся машина: копирование
 		// образа занимает его диск, и делать это двумя заданиями разом
 		// незачем.

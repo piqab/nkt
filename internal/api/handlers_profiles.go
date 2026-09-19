@@ -280,8 +280,8 @@ func (s *Server) handleProfileApply(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind:  profile.KindApply,
-		Title: msgs.Tc(r.Context(), "api.profileJobTitle", name),
+		Kind:     profile.KindApply,
+		TitleKey: "api.profileJobTitle", TitleArgs: []any{name},
 		// Ключ очереди один на весь хост: два применения разом (или
 		// применение вместе с установкой пакетов) кончаются беспорядком.
 		Queue:  "host",

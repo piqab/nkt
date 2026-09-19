@@ -152,7 +152,16 @@ CREATE TABLE IF NOT EXISTS jobs (
     author      TEXT NOT NULL DEFAULT '',
     created_at  TEXT NOT NULL,
     started_at  TEXT NOT NULL DEFAULT '',
-    finished_at TEXT NOT NULL DEFAULT ''
+    finished_at TEXT NOT NULL DEFAULT '',
+    -- Ключи каталога msgs и аргументы (JSON) заголовка, шага и ошибки —
+    -- чтобы показывать их на языке читающего; текстовые поля выше —
+    -- на языке автора, для старых клиентов и CLI.
+    title_key   TEXT NOT NULL DEFAULT '',
+    title_args  TEXT NOT NULL DEFAULT '',
+    step_key    TEXT NOT NULL DEFAULT '',
+    step_args   TEXT NOT NULL DEFAULT '',
+    error_key   TEXT NOT NULL DEFAULT '',
+    error_args  TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_created ON jobs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
@@ -210,6 +219,8 @@ CREATE TABLE IF NOT EXISTS job_log (
     seq    INTEGER NOT NULL,
     ts     TEXT NOT NULL,
     text   TEXT NOT NULL,
+    key    TEXT NOT NULL DEFAULT '', -- ключ каталога msgs (пусто — сырой текст)
+    args   TEXT NOT NULL DEFAULT '', -- аргументы (msgs.EncodeArgs)
     PRIMARY KEY (job_id, seq)
 );
 
@@ -319,7 +330,9 @@ CREATE TABLE IF NOT EXISTS host_events (
     host_addr TEXT NOT NULL,
     kind      TEXT NOT NULL,
     severity  TEXT NOT NULL DEFAULT '',
-    detail    TEXT NOT NULL DEFAULT ''
+    detail    TEXT NOT NULL DEFAULT '',
+    detail_key  TEXT NOT NULL DEFAULT '', -- ключ каталога msgs (пусто — сырой текст)
+    detail_args TEXT NOT NULL DEFAULT ''  -- аргументы (msgs.EncodeArgs)
 );
 CREATE INDEX IF NOT EXISTS idx_host_events_ts ON host_events(id DESC);
 `
@@ -355,6 +368,16 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	// в другую группу бессмысленно, а переезжает она вместе с ним.
 	{"hosts", "parent_id", `ALTER TABLE hosts ADD COLUMN parent_id INTEGER NOT NULL DEFAULT 0`},
 	{"jobs", "lang", `ALTER TABLE jobs ADD COLUMN lang TEXT NOT NULL DEFAULT ''`},
+	{"jobs", "title_key", `ALTER TABLE jobs ADD COLUMN title_key TEXT NOT NULL DEFAULT ''`},
+	{"jobs", "title_args", `ALTER TABLE jobs ADD COLUMN title_args TEXT NOT NULL DEFAULT ''`},
+	{"jobs", "step_key", `ALTER TABLE jobs ADD COLUMN step_key TEXT NOT NULL DEFAULT ''`},
+	{"jobs", "step_args", `ALTER TABLE jobs ADD COLUMN step_args TEXT NOT NULL DEFAULT ''`},
+	{"jobs", "error_key", `ALTER TABLE jobs ADD COLUMN error_key TEXT NOT NULL DEFAULT ''`},
+	{"jobs", "error_args", `ALTER TABLE jobs ADD COLUMN error_args TEXT NOT NULL DEFAULT ''`},
+	{"host_events", "detail_key", `ALTER TABLE host_events ADD COLUMN detail_key TEXT NOT NULL DEFAULT ''`},
+	{"host_events", "detail_args", `ALTER TABLE host_events ADD COLUMN detail_args TEXT NOT NULL DEFAULT ''`},
+	{"job_log", "key", `ALTER TABLE job_log ADD COLUMN key TEXT NOT NULL DEFAULT ''`},
+	{"job_log", "args", `ALTER TABLE job_log ADD COLUMN args TEXT NOT NULL DEFAULT ''`},
 	{"host_groups", "profile_id", `ALTER TABLE host_groups ADD COLUMN profile_id INTEGER NOT NULL DEFAULT 0`},
 	{"profiles", "color", `ALTER TABLE profiles ADD COLUMN color TEXT NOT NULL DEFAULT ''`},
 	{"hosts", "profile_id", `ALTER TABLE hosts ADD COLUMN profile_id INTEGER NOT NULL DEFAULT 0`},

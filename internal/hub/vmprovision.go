@@ -144,7 +144,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 1. Запись нового хоста и ключ для него.
-	jc.Step(1, steps, msgs.T(jc.Lang(), "hub.vmStepKey"))
+	jc.StepKey(1, steps, "hub.vmStepKey")
 	if done.NewHostID == 0 {
 		// Адрес пока неизвестен — машины ещё нет. Ставится заглушка, а
 		// настоящий адрес запишется на шаге 3: без записи негде взять
@@ -169,7 +169,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 2. Создание машины на хосте.
-	jc.Step(2, steps, msgs.T(jc.Lang(), "hub.vmStepCreateOn", host.Name))
+	jc.StepKey(2, steps, "hub.vmStepCreateOn", host.Name)
 	if done.RemoteJobID == 0 {
 		var started struct {
 			JobID int64 `json:"job_id"`
@@ -190,7 +190,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 3. Ожидание конца и адреса.
-	jc.Step(3, steps, msgs.T(jc.Lang(), "hub.vmStepWait"))
+	jc.StepKey(3, steps, "hub.vmStepWait")
 	addr, err := r.waitVMJob(ctx, jc, host, done.RemoteJobID)
 	if err != nil {
 		return err
@@ -208,7 +208,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 4. Запись адреса.
-	jc.Step(4, steps, msgs.T(jc.Lang(), "hub.vmStepAddress"))
+	jc.StepKey(4, steps, "hub.vmStepAddress")
 	if done.Address == "" {
 		jc.Log("hub.machineCreatedButAddressDetected")
 		return nil
@@ -225,7 +225,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 5. Установка nkt.
-	jc.Step(5, steps, msgs.T(jc.Lang(), "hub.vmStepInstall"))
+	jc.StepKey(5, steps, "hub.vmStepInstall")
 	if !done.Installed {
 		if err := r.installNKT(ctx, jc, done.NewHostID); err != nil {
 			return err
@@ -240,7 +240,7 @@ func (r *VMProvisionRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 6. Применение профиля.
-	jc.Step(6, steps, msgs.T(jc.Lang(), "hub.vmStepProfile"))
+	jc.StepKey(6, steps, "hub.vmStepProfile")
 	if !done.ProfileDone {
 		if err := r.applyProfile(ctx, jc, done.NewHostID, p.ProfileID); err != nil {
 			return err

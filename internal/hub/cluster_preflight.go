@@ -22,9 +22,11 @@ import (
 // посреди третьей.
 
 type preflightCheck struct {
-	ok      bool
-	warn    bool
-	message string
+	ok   bool
+	warn bool
+	// msg — сообщение ключом: и в журнал, и в ошибку задания оно уходит
+	// локализуемым, а не готовой строкой.
+	msg *msgs.Err
 }
 
 type hostPreflight struct {
@@ -50,12 +52,11 @@ type hostPreflight struct {
 // скачать образы и пакеты в кэш; selfID — запись самого создаваемого
 // кластера (уже заведена к этому моменту), её проверка имени не
 // считает занятой.
-func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec ClusterSpec, prepare bool, selfID int64) (failed []string, err error) {
-	lang := jc.Lang()
+func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec ClusterSpec, prepare bool, selfID int64) (failed []*msgs.Err, err error) {
 	var checks []preflightCheck
 	// Строка чек-листа пишется сразу — под заголовком своего хоста.
 	add := func(ok, warn bool, key string, args ...any) {
-		c := preflightCheck{ok: ok, warn: warn, message: msgs.T(lang, key, args...)}
+		c := preflightCheck{ok: ok, warn: warn, msg: &msgs.Err{Key: key, Args: args}}
 		checks = append(checks, c)
 		mark := "✓"
 		switch {
@@ -64,7 +65,8 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 		case c.warn:
 			mark = "!"
 		}
-		jc.Logf("  %s %s", mark, c.message)
+		// Пункт — с ключом: читатель на другом языке увидит его на своём.
+		jc.Log("hub.preflightLine", mark, c.msg)
 	}
 	hostByID := map[int64]store.Host{}
 	hostName := func(id int64) string {
@@ -84,14 +86,14 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 	jc.Log("hub.preflightPlan", len(nodes), spec.Flavor, cpHost)
 	for _, n := range nodes {
 		if n.Kind == KindHost {
-			jc.Logf("      %s: %s (сам хост)", n.Name, n.Role)
+			jc.Log("hub.preflightPlanHostNode", n.Name, n.Role)
 			continue
 		}
 		net := n.Network
 		if n.Bridge != "" {
 			net = "bridge " + n.Bridge
 		}
-		jc.Logf("      %s: %s на %s, %d CPU, %d MB, %d GB, %s %s", n.Name, n.Role, hostName(n.HostID), n.VCPUs, n.MemMB, n.DiskGB, n.ImageID, net)
+		jc.Log("hub.preflightPlanVM", n.Name, n.Role, hostName(n.HostID), n.VCPUs, n.MemMB, n.DiskGB, n.ImageID, net)
 	}
 	if spec.NetworkMode != "" && spec.NetworkMode != NetworkNAT {
 		jc.Log("hub.preflightPlanNetwork", spec.NetworkMode)
@@ -437,12 +439,13 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 	return r.finishPreflight(jc, checks), nil
 }
 
-// failedMessages — тексты проваленных проверок.
-func failedMessages(checks []preflightCheck) []string {
-	var out []string
+// failedMessages — проваленные проверки ключами (в ошибку задания —
+// локализуемым перечнем).
+func failedMessages(checks []preflightCheck) []*msgs.Err {
+	var out []*msgs.Err
 	for _, c := range checks {
 		if !c.ok {
-			out = append(out, c.message)
+			out = append(out, c.msg)
 		}
 	}
 	return out
@@ -450,12 +453,16 @@ func failedMessages(checks []preflightCheck) []string {
 
 // preflightError — ошибка задания с перечнем проваленных пунктов: в
 // карточке кластера виден сам провал, а не только «сначала исправьте».
-func preflightError(failed []string) error {
-	list := failed
-	if len(list) > 3 {
-		list = append(append([]string{}, list[:3]...), "…")
+func preflightError(failed []*msgs.Err) error {
+	list := msgs.List{}
+	for i, e := range failed {
+		if i == 3 {
+			list = append(list, "…")
+			break
+		}
+		list = append(list, e)
 	}
-	return msgs.Errorf("hub.preflightFailedList", len(failed), strings.Join(list, "; "))
+	return msgs.Errorf("hub.preflightFailedList", len(failed), list)
 }
 
 // prepareArtifacts — крупные файлы, которые узел возьмёт с хаба: бинарник
@@ -531,7 +538,7 @@ func countFailed(checks []preflightCheck) int {
 }
 
 // finishPreflight печатает итог.
-func (r *ClusterRunner) finishPreflight(jc *jobs.Context, checks []preflightCheck) []string {
+func (r *ClusterRunner) finishPreflight(jc *jobs.Context, checks []preflightCheck) []*msgs.Err {
 	failed := failedMessages(checks)
 	if len(failed) == 0 {
 		jc.Log("hub.preflightOK")
