@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.63 — 2026-09-19
+
+- Privacy mode: a single checkbox right after the theme selector, no
+  caption (the description is in the tooltip); the "nkt" brand in the
+  header is a blue badge, orange in privacy mode.
+- Documentation site: a new "Kubernetes clusters" page (network modes
+  between hosts and what each needs, dry run, images, presets, hub cache,
+  kubectl, "try again"), updated "Hub", "Alerts, jobs, updates" (retry,
+  log language, privacy mode, file and registry cache) and the feature
+  list — in both languages.
+- TODO: the plan for connecting nodes across hosts that cannot see each
+  other (WireGuard through the hub), Cilium parameters for ClusterMesh and
+  "connect clusters".
+
 ## v1.10.62 — 2026-09-19
 
 - Privacy mode now covers **modal windows** too — titles with a
