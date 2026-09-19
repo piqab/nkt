@@ -17,19 +17,24 @@ import {
 } from '@ant-design/icons'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
-import type { HubHost, Job, RenewEvent, RenewJobStatus, Severity } from '../types'
+import type { HubHost, Job, Severity } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, Spinner, formatRelative, severityLabel } from '../components/ui'
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
-import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { JobLogModal } from './Jobs'
 import { ClustersCard, NewClusterModal } from '../components/Clusters'
 
-/** How often to poll a running install job for new progress lines — same
- * cadence Certificates.tsx uses for certbot jobs. */
-const INSTALL_POLL_MS = 800
+/** Хост из параметров задания установки (host.install), иначе null. */
+function installJobHost(job: Job): number | null {
+  try {
+    const p = JSON.parse(job.params ?? '{}') as { host_id?: number }
+    return typeof p.host_id === 'number' ? p.host_id : null
+  } catch {
+    return null
+  }
+}
 
 /** Parses a leading MAJOR.MINOR.PATCH off a version string, ignoring any
  * suffix (so "1.2.3-dirty" still parses as [1, 2, 3]). Returns null for
@@ -280,24 +285,13 @@ export default function Hosts({
     setKnownNames((hosts ?? []).map((h) => h.name))
   }, [hosts])
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
-  const [installHostId, setInstallHostId] = useState<number | null>(null)
-  const [job, setJob] = useState<string | null>(null)
-  const [jobStatus, setJobStatus] = useState<RenewJobStatus | null>(null)
   const [editingHost, setEditingHost] = useState<HubHost | null>(null)
   const [creatingHost, setCreatingHost] = useState(false)
   const [pubKeyInfo, setPubKeyInfo] = useState<{ hostName: string; key: string } | null>(null)
   const [busyServiceIds, setBusyServiceIds] = useState<Set<number>>(new Set())
   const [bulkBusy, setBulkBusy] = useState<'stop' | 'start' | null>(null)
-  // Drives "Обновить всё": the hosts still waiting their turn (shrinks by
-  // one every time the shared job/jobStatus state above clears — see the
-  // two effects below), and the outcome of each host already processed,
-  // for the combined summary notice once the queue empties. null means no
-  // batch update is running; an empty array (not null) means the last host
-  // is still being recorded/closed, distinct from "never started" — see
-  // the completion effect's own guard.
-  const [updateAllQueue, setUpdateAllQueue] = useState<HubHost[] | null>(null)
-  const [updateAllResults, setUpdateAllResults] = useState<{ name: string; ok: boolean }[]>([])
-  const [updateAllTotal, setUpdateAllTotal] = useState(0)
+  // «Обновить всё»: пока запускаются задания по хостам.
+  const [bulkUpdating, setBulkUpdating] = useState(false)
   const [importing, setImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
   // Set when "экспорт с ключом" is clicked — opens ExportPasswordModal
@@ -315,53 +309,23 @@ export default function Hosts({
   // once the matching job settles, whether or not that navigation happens.
   const [autoOpenHost, setAutoOpenHost] = useState<{ id: number; name: string } | null>(null)
 
-  useEffect(() => {
-    if (!job) return
-    let cancelled = false
-    let timer: number | undefined
-
-    async function poll() {
-      try {
-        const status = await api<RenewJobStatus>(`/hub/hosts/${installHostId}/install/${job}`)
-        if (cancelled) return
-        setJobStatus(status)
-        if (status.done) {
-          window.clearInterval(timer)
-          reload()
-          finishAutoOpen(status.error)
+  // «Открыть» на отставшем хосте: обновление запущено этим же кликом,
+  // переход — когда его задание завершилось успехом (см. JobLogModal
+  // onDone ниже); провал оставляет журнал на экране.
+  function finishAutoOpen(job: Job) {
+    if (job.kind !== 'host.install') return
+    const hostID = installJobHost(job)
+    setAutoOpenHost((pending) => {
+      if (pending && pending.id === hostID) {
+        if (job.status === 'succeeded') {
+          setHubJob(null)
+          onSelect(pending)
         }
-      } catch (err) {
-        if (cancelled) return
-        setJobStatus({ events: [], done: true, error: err instanceof Error ? err.message : String(err) })
-        window.clearInterval(timer)
-        finishAutoOpen(t('hosts.installStatusFailed'))
+        return null
       }
-    }
-
-    // Navigates into the host that "открыть" auto-triggered this very job
-    // for (see openHost) once it settles — but only on success: opening an
-    // outdated host anyway, silently, right after its update just failed,
-    // would hide the failure behind a dashboard that still isn't current.
-    function finishAutoOpen(jobError: string | undefined) {
-      setAutoOpenHost((pending) => {
-        if (pending && pending.id === installHostId) {
-          if (!jobError) {
-            closeJobModal()
-            onSelect(pending)
-          }
-          return null
-        }
-        return pending
-      })
-    }
-
-    void poll()
-    timer = window.setInterval(poll, INSTALL_POLL_MS)
-    return () => {
-      cancelled = true
-      window.clearInterval(timer)
-    }
-  }, [job, installHostId, reload])
+      return pending
+    })
+  }
 
   /** force is set on retry, after the operator confirms the 409 prompt
    * below — a first call is always unforced, so an existing "foreign"
@@ -600,21 +564,22 @@ export default function Hosts({
   // Принимает не весь хост, а только его идентификатор: сразу после
   // добавления полной записи ещё нет, а установке кроме id ничего и не
   // нужно.
-  async function startInstall(host: Pick<HubHost, 'id'>, force = false): Promise<boolean> {
+  async function startInstall(host: Pick<HubHost, 'id'>, force = false, showLog = true): Promise<boolean> {
     setNotice(null)
     try {
       // Подготовка относится к одной конкретной установке — к той, что
       // идёт сразу после добавления хоста. Повторная установка и
       // обновление её не повторяют: хост уже подготовлен.
       const bootstrap = pendingBootstrap.current.get(host.id)
-      const res = await api<{ job: string }>(
+      const res = await api<{ job: number }>(
         `/hub/hosts/${host.id}/install${force ? '?force=true' : ''}`,
         { method: 'POST', body: bootstrap ?? {} },
       )
       pendingBootstrap.current.delete(host.id)
-      setInstallHostId(host.id)
-      setJobStatus(null)
-      setJob(res.job)
+      // Установка — задание хаба: журнал в том же окне, что у остальных
+      // заданий, с отменой и «попробовать снова».
+      if (showLog) await openHubJob(res.job)
+      reload()
       return true
     } catch (err) {
       if (
@@ -626,7 +591,7 @@ export default function Hosts({
       ) {
         const detail = (err.payload as { detail?: string }).detail ?? ''
         if (await confirmAction(t('hosts.confirmForeignInstall', { detail }))) {
-          return startInstall(host, true)
+          return startInstall(host, true, showLog)
         }
         return false
       }
@@ -635,61 +600,29 @@ export default function Hosts({
     }
   }
 
-  /** Kicks off "Обновить всё": every non-local host that isOutdated says is
-   * behind the hub's own build. Deliberately sequential (see the two
-   * effects below), not Promise.all like bulkSetServiceRunning — updating
-   * several hosts' running nkt binary at once is riskier to watch/debug
-   * than starting/stopping a service, so this walks the queue one host's
-   * install-log modal at a time instead. */
+  /** «Обновить всё»: на каждый отставший хост заводится задание хаба
+   * (очередь — по хосту, так что они идут параллельно), ход — в
+   * «Заданиях» и в статусах строк таблицы. */
   async function updateAllOutdated() {
     const targets = (hosts ?? []).filter((h) => h.id !== LOCAL_HOST_ID && isOutdated(h, hubVersion))
     if (targets.length === 0) return
     if (!(await confirmAction(t('hosts.confirmUpdateAll', { count: targets.length })))) return
     setNotice(null)
-    setUpdateAllResults([])
-    setUpdateAllTotal(targets.length)
-    setUpdateAllQueue(targets)
-  }
-
-  // Advances the queue: fires whenever it changes, or whenever `job`
-  // clears (the completion effect below calls closeJobModal() once a
-  // host's install finishes, which is what actually unblocks this). Popping
-  // the next host *before* startInstall resolves means a host whose
-  // startInstall call itself fails synchronously (network error, or the
-  // foreign-install confirm being declined) still advances the queue —
-  // recorded as a failure in the .then() below, not left stuck forever.
-  useEffect(() => {
-    if (updateAllQueue === null || job) return
-    if (updateAllQueue.length === 0) {
-      const failed = updateAllResults.filter((r) => !r.ok).length
-      setNotice({
-        kind: failed > 0 ? 'error' : 'info',
-        text: t('hosts.bulkUpdateFinished', { total: updateAllResults.length, failed }),
-      })
-      setUpdateAllQueue(null)
-      setUpdateAllTotal(0)
-      return
+    setBulkUpdating(true)
+    let started = 0
+    try {
+      for (const h of targets) {
+        if (await startInstall(h, false, false)) started++
+      }
+    } finally {
+      setBulkUpdating(false)
     }
-    const [next, ...rest] = updateAllQueue
-    setUpdateAllQueue(rest)
-    void startInstall(next).then((started) => {
-      if (!started) setUpdateAllResults((prev) => [...prev, { name: next.name, ok: false }])
+    setNotice({
+      kind: started === targets.length ? 'info' : 'error',
+      text: t('hosts.bulkUpdateStarted', { started, total: targets.length }),
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [updateAllQueue, job])
-
-  // Records the just-finished host's outcome and closes its modal — which
-  // clears `job`, letting the effect above pick the next one. Only active
-  // while a batch is actually running (updateAllQueue !== null, including
-  // the empty-array "last host still settling" state — see its own
-  // declaration comment), so a manual single-host update never trips this.
-  useEffect(() => {
-    if (updateAllQueue === null || !jobStatus?.done) return
-    const finishedHost = hosts?.find((h) => h.id === installHostId)
-    setUpdateAllResults((prev) => [...prev, { name: finishedHost?.name ?? '', ok: !jobStatus.error }])
-    closeJobModal()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [jobStatus])
+    reload()
+  }
 
   /** "открыть" on a host whose nkt_version trails the hub's own: the
    * dashboard it would open into is for a build that's already known to be
@@ -954,33 +887,16 @@ export default function Hosts({
     }
   }
 
-  function closeJobModal() {
-    setJob(null)
-    setInstallHostId(null)
-    setJobStatus(null)
-    // The table's status/version/last-seen columns only otherwise refresh
-    // on done (see the poll effect above) or the next 30s tick — closing
-    // right after a job finishes, or while it's still running, must not
-    // leave the buttons showing stale state until then.
-    reload()
-  }
-
-  /** Reopens the progress/log for a host's current or most recent install —
-   * the only way back in once the modal has been closed, since the job id
-   * itself is otherwise only ever known transiently (see startInstall). */
+  /** Журнал текущей или последней установки хоста — задание хаба. */
   async function openInstallLog(host: HubHost) {
     setNotice(null)
     try {
-      const res = await api<{ job: string }>(`/hub/hosts/${host.id}/install/latest`)
-      setInstallHostId(host.id)
-      setJobStatus(null)
-      setJob(res.job)
+      const res = await api<{ job: number }>(`/hub/hosts/${host.id}/install/latest`)
+      await openHubJob(res.job)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
   }
-
-  const installingHost = hosts?.find((h) => h.id === installHostId)
 
   function renderActions(h: HubHost) {
     // "localhost" (the hub's own machine, see internal/hub/handlers.go's
@@ -1354,7 +1270,20 @@ export default function Hosts({
         />
       )}
 
-      {hubJob && <JobLogModal job={hubJob} scope="/hosts/local" onClose={() => setHubJob(null)} />}
+      {hubJob && (
+        <JobLogModal
+          job={hubJob}
+          scope="/hosts/local"
+          onClose={() => {
+            setHubJob(null)
+            reload()
+          }}
+          onDone={(j) => {
+            reload()
+            finishAutoOpen(j)
+          }}
+        />
+      )}
 
 
       {groupDialog && (
@@ -1428,7 +1357,7 @@ export default function Hosts({
             <Button
               size="small"
               type={outdatedCount > 0 ? 'primary' : 'default'}
-              loading={updateAllQueue !== null}
+              loading={bulkUpdating}
               disabled={outdatedCount === 0 || bulkBusy !== null}
               onClick={updateAllOutdated}
             >
@@ -1437,7 +1366,7 @@ export default function Hosts({
             <Button
               size="small"
               loading={bulkBusy === 'start'}
-              disabled={bulkBusy === 'stop' || updateAllQueue !== null}
+              disabled={bulkBusy === 'stop' || bulkUpdating}
               onClick={() => bulkSetServiceRunning(true)}
             >
               {t('hosts.startAll')}
@@ -1446,7 +1375,7 @@ export default function Hosts({
               size="small"
               danger
               loading={bulkBusy === 'stop'}
-              disabled={bulkBusy === 'start' || updateAllQueue !== null}
+              disabled={bulkBusy === 'start' || bulkUpdating}
               onClick={() => bulkSetServiceRunning(false)}
             >
               {t('hosts.stopAll')}
@@ -1673,47 +1602,6 @@ export default function Hosts({
         />
       )}
 
-      {job && (
-        <Modal
-          title={
-            updateAllQueue !== null
-              ? t('hosts.installTitleBatch', {
-                  name: installingHost?.name ?? t('hosts.installTitleFallback'),
-                  current: updateAllResults.length + 1,
-                  total: updateAllTotal,
-                })
-              : t('hosts.installTitle', { name: installingHost?.name ?? t('hosts.installTitleFallback') })
-          }
-          onClose={closeJobModal}
-          maskClosable={false}
-        >
-          <InstallLog events={jobStatus?.events ?? []} />
-          {jobStatus?.done ? (
-            jobStatus.error ? (
-              <Banner kind="error">
-                <div>{t('hosts.jobErrorLabel')}</div>
-                {/* Plain text through Alert's own message prop collapses
-                    newlines like any other inline content — losing exactly
-                    the line breaks diagnoseInstallError's sudoersHint
-                    depends on to be readable/copyable (the two commands an
-                    operator needs to grant passwordless sudo). A <pre>
-                    block, same styling PublicKeyModal already uses for its
-                    own copyable multi-line text, preserves them. */}
-                <pre className="diff mono sensitive-area" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', marginTop: '0.4rem' }}>
-                  {jobStatus.error}
-                </pre>
-              </Banner>
-            ) : (
-              <Banner kind="info">{t('hosts.jobDone')}</Banner>
-            )
-          ) : (
-            <p className="small muted row" style={{ alignItems: 'center', marginBottom: 0 }}>
-              {t('hosts.jobRunning')}
-            </p>
-          )}
-        </Modal>
-      )}
-
       {exportPrompt && (
         <ExportPasswordModal
           busy={exportBusy}
@@ -1883,30 +1771,6 @@ function ImportPasswordModal({
         </Form.Item>
       </Form>
     </Modal>
-  )
-}
-
-/** Auto-scrolling live log of an install job's progress — same shape as
- * Certificates.tsx's RenewLog. */
-function InstallLog({ events }: { events: RenewEvent[] }) {
-  const { t } = useTranslation()
-  const preRef = useRef<HTMLPreElement>(null)
-
-  useEffect(() => {
-    const el = preRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [events.length])
-
-  if (events.length === 0) {
-    return <p className="small muted">{t('hosts.startingLog')}</p>
-  }
-
-  return (
-    <pre ref={preRef} className="diff" style={{ maxHeight: '22rem' }}>
-      {events.map((e, i) => (
-        <div key={i}>{blurText(`[${new Date(e.time).toLocaleTimeString(i18n.language === 'en' ? 'en-US' : 'ru-RU')}] ${e.text}`)}</div>
-      ))}
-    </pre>
   )
 }
 

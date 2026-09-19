@@ -2,8 +2,6 @@ package hub
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"github.com/piqab/nkt/internal/aptcache"
@@ -20,6 +18,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
@@ -67,12 +66,20 @@ func localizeEvents(lang msgs.Lang, events []Event) []Event {
 	return out
 }
 
-// installJob tracks one StartInstall run in memory, mirroring
-// control.CertManager's renewJob.
+// installJob — состояние одной установки: живёт внутри задания хаба
+// (KindHostInstall, hostinstall.go): каждая строка уходит в журнал
+// задания через jc, а здесь остаются SSH-клиент для отмены и признак
+// завершения для isCurrentJob.
 type installJob struct {
-	id      string
+	jobID   int64
 	created time.Time
 	hostID  int64
+	// jc — задание хаба, в журнал которого пишутся строки; nil в тестах.
+	jc *jobs.Context
+	// lastProgress — когда строка прогресса с этим ключом писалась в
+	// последний раз: строки журнала не заменяются, поэтому прогресс
+	// пишется не чаще раза в progressLogEvery (см. replaceLast).
+	lastProgress map[string]time.Time
 	// bootstrap — разовая подготовка хоста перед установкой (пакеты,
 	// пользователь, ключ вместо пароля). nil для обычной установки и для
 	// любой переустановки: готовить уже подготовленный хост незачем.
@@ -100,6 +107,9 @@ func (j *installJob) append(key string, args ...any) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.events = append(j.events, Event{Time: time.Now(), Key: key, Args: args})
+	if j.jc != nil {
+		j.jc.Log(key, args...)
+	}
 }
 
 // appendRaw logs a literal, never-translated line — kept for symmetry with
@@ -110,7 +120,13 @@ func (j *installJob) appendRaw(text string) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	j.events = append(j.events, Event{Time: time.Now(), Text: text})
+	if j.jc != nil {
+		j.jc.Logf("%s", text)
+	}
 }
+
+// progressLogEvery — как часто строка прогресса попадает в журнал задания.
+const progressLogEvery = 5 * time.Second
 
 // replaceLast overwrites the most recent event instead of adding a new one
 // — for a step that reports progress repeatedly (an upload percentage
@@ -121,14 +137,34 @@ func (j *installJob) appendRaw(text string) {
 // Заменяется только строка с тем же ключом — своя прошлая отметка
 // прогресса; чужую последнюю строку (итог пробы, «заливаю…») прогресс
 // не затирает, а встаёт под ней.
+//
+// В журнал задания строки не заменяются — туда прогресс уходит не чаще
+// progressLogEvery и на 100 %.
 func (j *installJob) replaceLast(key string, args ...any) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
 	if n := len(j.events); n > 0 && j.events[n-1].Key == key {
 		j.events[n-1] = Event{Time: time.Now(), Key: key, Args: args}
+	} else {
+		j.events = append(j.events, Event{Time: time.Now(), Key: key, Args: args})
+	}
+	if j.jc == nil {
 		return
 	}
-	j.events = append(j.events, Event{Time: time.Now(), Key: key, Args: args})
+	if j.lastProgress == nil {
+		j.lastProgress = map[string]time.Time{}
+	}
+	final := false
+	if len(args) > 0 {
+		if pct, ok := args[0].(int); ok && pct >= 100 {
+			final = true
+		}
+	}
+	if !final && time.Since(j.lastProgress[key]) < progressLogEvery {
+		return
+	}
+	j.lastProgress[key] = time.Now()
+	j.jc.Log(key, args...)
 }
 
 func (j *installJob) finish(err error) {
@@ -212,8 +248,11 @@ type Manager struct {
 	k8sStable   string
 	k8sStableAt time.Time
 
+	// jobs — задания хаба (установка хоста — одно из них, см.
+	// hostinstall.go); задаётся SetJobs после создания менеджера.
+	jobs *jobs.Manager
+
 	jobsMu    sync.Mutex
-	jobs      map[string]*installJob
 	jobByHost map[int64]*installJob
 
 	connsMu sync.Mutex
@@ -293,7 +332,6 @@ func (m *Manager) Version() string { return m.version }
 func NewManager(cfg *config.Config, db *store.DB, key []byte, version string, log *slog.Logger) *Manager {
 	return &Manager{
 		cfg: cfg, db: db, key: key, version: version, log: log,
-		jobs:          map[string]*installJob{},
 		jobByHost:     map[int64]*installJob{},
 		conns:         map[int64]*hostConn{},
 		sessions:      map[int64]sessionCache{},
@@ -758,26 +796,36 @@ func orUnknown(ctx context.Context, s string) string {
 	return s
 }
 
-// StartInstall launches install as a background job and returns its id
-// immediately. force must be true to proceed when checkForeignInstall
-// finds an nkt on the target this hub didn't put there itself — set by the
-// operator explicitly confirming the overwrite after seeing
-// ForeignInstallError's detail.
-func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, boot *BootstrapOptions) (string, error) {
+// StartInstall заводит установку (или обновление) nkt на хосте как
+// задание хаба и возвращает его номер. force нужен, когда
+// checkForeignInstall нашёл на хосте чужой nkt — оператор явно
+// подтвердил перезапись, увидев ForeignInstallError. Если установка на
+// этот хост уже идёт, возвращается номер идущего задания: второй запуск
+// (двойной клик, «открыть» вдогонку «обновить») ничего не начинает.
+func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, boot *BootstrapOptions) (int64, error) {
 	host, err := m.db.HostByID(ctx, hostID)
 	if err != nil {
-		return "", msgs.Errorf("hub.hostFound", err)
+		return 0, msgs.Errorf("hub.hostFound", err)
 	}
 	// Заглушка вместо адреса — это машина, которая ещё не получила его
 	// от DHCP. Стучаться туда по SSH бессмысленно: рукопожатие с
 	// 0.0.0.0 всё равно провалится, и сообщение про «unable to
 	// authenticate» ничего не объяснит.
 	if isPlaceholderAddr(host.Addr) {
-		return "", msgs.Errorf("hub.addressMachineKnownYetWait", host.Name)
+		return 0, msgs.Errorf("hub.addressMachineKnownYetWait", host.Name)
 	}
+	if m.jobs == nil {
+		return 0, errors.New("hub: jobs manager not configured")
+	}
+	m.jobsMu.Lock()
+	if prev, ok := m.jobByHost[hostID]; ok && !prev.isDone() {
+		m.jobsMu.Unlock()
+		return prev.jobID, nil
+	}
+	m.jobsMu.Unlock()
 	if !force {
 		if foreign, err := m.checkForeignInstall(ctx, host); err == nil && foreign != nil {
-			return "", foreign
+			return 0, foreign
 		}
 	}
 
@@ -790,50 +838,31 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, bo
 			boot.Packages = defaults.Packages
 		}
 		if err := boot.Validate(); err != nil {
-			return "", err
+			return 0, err
 		}
+	} else {
+		boot = nil
 	}
 
-	job := &installJob{created: time.Now(), hostID: hostID, bootstrap: boot}
-	job.append("hub.startingInstall")
-
-	id, err := newJobID()
+	titleKey := "hub.installJobTitle"
+	if host.Status != store.HostStatusNew {
+		titleKey = "hub.updateJobTitle"
+	}
+	id, err := m.jobs.Start(ctx, jobs.Spec{
+		Kind: KindHostInstall, TitleKey: titleKey, TitleArgs: []any{host.Name},
+		Queue:  fmt.Sprintf("host-install:%d", hostID),
+		Params: HostInstallParams{HostID: hostID, Force: force, Bootstrap: boot},
+	})
 	if err != nil {
-		return "", msgs.Errorf("control.generatingTaskId", err)
+		return 0, err
 	}
-	job.id = id
-
-	// Detached from the HTTP request's context on purpose: the request that
-	// started this job returns long before the install finishes. cancel is
-	// kept on the job itself so CancelInstall can stop it later.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-	job.cancel = cancel
-
+	// Запись заводится сразу, до старта исполнителя: так LatestJobID и
+	// проверка «уже идёт» видят задание с первой секунды.
 	m.jobsMu.Lock()
-	// A still-running previous job for this host (a stray double click, or
-	// "открыть"'s auto-update racing a manual "обновить") must not be left
-	// running alongside this one: two install() goroutines both writing
-	// this host's status is a straight last-write-wins race — whichever
-	// finishes last decides the host's final status, so a slower goroutine
-	// that's still stuck (or simply behind) can silently overwrite a
-	// perfectly good "error"/"online" from the other with a stale
-	// "installing" that then never gets corrected, leaving the "обновить"
-	// button spinning forever. cancelNow forces it to stop and write its
-	// own terminal status (see CancelInstall) before this one starts, so
-	// only ever one install runs per host at a time.
-	if prev, ok := m.jobByHost[hostID]; ok && !prev.isDone() {
-		prev.cancelNow()
+	if prev, ok := m.jobByHost[hostID]; !ok || prev.isDone() || prev.jobID != id {
+		m.jobByHost[hostID] = &installJob{jobID: id, created: time.Now(), hostID: hostID, bootstrap: boot}
 	}
-	m.jobs[id] = job
-	m.jobByHost[hostID] = job
-	m.evictOldJobsLocked()
 	m.jobsMu.Unlock()
-
-	go func() {
-		defer cancel()
-		job.finish(m.install(ctx, hostID, job))
-	}()
-
 	return id, nil
 }
 
@@ -853,8 +882,13 @@ func (m *Manager) CancelInstall(ctx context.Context, hostID int64) error {
 		return m.db.SetHostStatus(ctx, hostID, store.HostStatusError, message)
 	}
 
-	job.cancelNow()
 	job.append("hub.installCancelledByUser")
+	if m.jobs != nil {
+		// Отмена задания гасит его контекст, а сторож в HostInstallRunner
+		// закрывает SSH-соединение (cancelNow).
+		_ = m.jobs.Cancel(ctx, job.jobID)
+	}
+	job.cancelNow()
 	job.finish(errors.New(message))
 	return m.db.SetHostStatus(ctx, hostID, store.HostStatusError, message)
 }
@@ -1268,54 +1302,16 @@ func (m *Manager) loadUnitTemplate(ctx context.Context, report func(key string, 
 	return content, nil
 }
 
-// InstallJobStatus returns everything reported for an install job so far.
-// ok is false when the job id is unknown — never existed, or evicted a
-// while after finishing.
-func (m *Manager) InstallJobStatus(id string) (events []Event, done bool, errMsg string, ok bool) {
-	m.jobsMu.Lock()
-	job := m.jobs[id]
-	m.jobsMu.Unlock()
-	if job == nil {
-		return nil, false, "", false
-	}
-	events, done, errMsg = job.snapshot()
-	return events, done, errMsg, true
-}
-
-// LatestJobID returns the id of the most recent install job for a host, so
-// the UI can reopen its progress/log — after closing the modal, or after a
-// page reload loses all local state — instead of that log becoming
-// unreachable the moment nothing is actively watching it.
-func (m *Manager) LatestJobID(hostID int64) (string, bool) {
+// LatestJobID — номер последнего задания установки хоста: интерфейс
+// открывает его журнал заново после закрытия окна или перезагрузки
+// страницы. После перезапуска хаба — неизвестен (задания видны в
+// разделе «Задания»).
+func (m *Manager) LatestJobID(hostID int64) (int64, bool) {
 	m.jobsMu.Lock()
 	defer m.jobsMu.Unlock()
 	job, ok := m.jobByHost[hostID]
 	if !ok {
-		return "", false
+		return 0, false
 	}
-	return job.id, true
-}
-
-// evictOldJobsLocked drops finished jobs older than an hour. Called with
-// jobsMu already held.
-func (m *Manager) evictOldJobsLocked() {
-	cutoff := time.Now().Add(-time.Hour)
-	for id, job := range m.jobs {
-		if job.created.Before(cutoff) {
-			if _, done, _ := job.snapshot(); done {
-				delete(m.jobs, id)
-			}
-		}
-	}
-}
-
-// newJobID generates a short, unguessable-enough handle for an in-memory
-// job — nothing sensitive is keyed by it, but a predictable sequence would
-// let one admin session poke at another's in-flight install.
-func newJobID() (string, error) {
-	buf := make([]byte, 9)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return base64.RawURLEncoding.EncodeToString(buf), nil
+	return job.jobID, true
 }

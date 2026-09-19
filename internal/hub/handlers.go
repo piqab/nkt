@@ -1167,7 +1167,7 @@ func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"job": job})
+	writeJSON(w, http.StatusOK, map[string]int64{"job": job})
 }
 
 // handleCancelInstall stops a host's in-flight install (or, if the hub
@@ -1186,16 +1186,6 @@ func (s *Server) handleCancelInstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Server) handleInstallJobStatus(w http.ResponseWriter, r *http.Request) {
-	events, done, errMsg, ok := s.hub.InstallJobStatus(chi.URLParam(r, "job"))
-	if !ok {
-		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "job.notFound"))
-		return
-	}
-	events = localizeEvents(msgs.LangFromRequest(r), events)
-	writeJSON(w, http.StatusOK, map[string]any{"events": events, "done": done, "error": errMsg})
-}
-
 // handleLatestInstallJob lets the UI reopen a host's most recent install
 // log — after closing the modal, or after a page reload — without having
 // kept the job id around itself.
@@ -1210,7 +1200,7 @@ func (s *Server) handleLatestInstallJob(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "hub.noInstallsYet"))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"job": jobID})
+	writeJSON(w, http.StatusOK, map[string]int64{"job": jobID})
 }
 
 func hostIDParam(r *http.Request) (int64, error) {

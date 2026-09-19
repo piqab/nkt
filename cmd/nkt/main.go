@@ -835,6 +835,10 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 
 	// Раскатка профиля по группе — задание самого хаба: он обходит хосты
 	// и следит за заданиями, которые запускает на каждом.
+	// Установка и обновление nkt на хосте — задание хаба: журнал в
+	// «Заданиях», отмена, след после перезапуска.
+	manager.SetJobs(r.jobs)
+	r.jobs.Register(hub.KindHostInstall, hub.NewHostInstallRunner(manager))
 	r.jobs.Register(hub.KindGroupApply, hub.NewGroupApplyRunner(manager))
 	// Создание машины на управляемом хосте с записью её в список — тоже
 	// задание хаба: одну половину делает хост, вторую он сам.
