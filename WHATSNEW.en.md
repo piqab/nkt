@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.65 — 2026-09-19
+
+- **Installing and updating nkt on a host is a hub job.** The log is in
+  the same window as every other job (live stream, in the reader's
+  language), listed in "Jobs", survives a page reload and a hub restart;
+  cancel — with the button in the host row. "Update all" starts a job
+  per outdated host and returns right away — progress is in "Jobs" and
+  in the row statuses. Starting again on a host whose install is already
+  running opens its log instead of starting a second one. Installing a
+  node while creating a machine or a cluster is a nested job whose log
+  is copied into the parent.
+
 ## v1.10.64 — 2026-09-19
 
 - Binary delivery to a host: the "GitHub from host vs SFTP from hub"

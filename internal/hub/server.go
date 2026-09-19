@@ -195,7 +195,6 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/scripts/{id}/versions", s.handleScriptVersions)
 				r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
 				r.Get("/hub/hosts/{id}/install/latest", s.handleLatestInstallJob)
-				r.Get("/hub/hosts/{id}/install/{job}", s.handleInstallJobStatus)
 
 				// "localhost" (internal/hub/handlers.go's synthetic entry
 				// prepended in handleListHosts) needs no RequireAdmin wrapper
