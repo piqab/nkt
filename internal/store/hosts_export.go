@@ -25,8 +25,11 @@ var validAdminUser = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 // HostExport itself changes in a way old readers couldn't handle.
 //
 // Версия 2 добавила группы, связь машины с хостом-родителем, профили,
-// шаблоны машин и настройки хаба; файлы версии 1 читаются по-прежнему.
-const ExportFormatVersion = 2
+// шаблоны машин и настройки хаба; версия 3 — кластеры Kubernetes с
+// узлами, способ связи и доставки у хостов, историю редакций сценариев,
+// лимит кэша пакетов и список образов для кластеров. Файлы версий 1 и 2
+// читаются по-прежнему.
+const ExportFormatVersion = 3
 
 // minExportFormatVersion — самая старая версия, которую импорт ещё
 // понимает.
@@ -80,6 +83,38 @@ type HostExport struct {
 	Parent string `json:"parent,omitempty"`
 	// Profile — имя профиля, по которому хост создан.
 	Profile string `json:"profile,omitempty"`
+	// Версия 3: связь с машиной (via), итог пробы доставки (binary_via),
+	// кластер и роль узла (по имени кластера).
+	Via       string `json:"via,omitempty"`
+	BinaryVia string `json:"binary_via,omitempty"`
+	Cluster   string `json:"cluster,omitempty"`
+	K8sRole   string `json:"k8s_role,omitempty"`
+}
+
+// ClusterExport — кластер Kubernetes: запись с зашифрованными kubeconfig
+// и планом WireGuard (читаются тем же мастер-ключом, что и секреты
+// хостов); узлы — хосты файла с полем Cluster.
+type ClusterExport struct {
+	Name          string `json:"name"`
+	Host          string `json:"host"`
+	Flavor        string `json:"flavor"`
+	Topology      string `json:"topology,omitempty"`
+	Workers       int    `json:"workers"`
+	Expose        bool   `json:"expose"`
+	Status        string `json:"status"`
+	ErrorMsg      string `json:"error_msg,omitempty"`
+	ServerAddr    string `json:"server_addr,omitempty"`
+	KubeconfigEnc []byte `json:"kubeconfig_enc,omitempty"`
+	WGEnc         []byte `json:"wg_enc,omitempty"`
+	SpecJSON      string `json:"spec_json"`
+	CreatedAt     string `json:"created_at"`
+}
+
+// ClusterImageExport — образ из библиотеки хаба: в файле только список,
+// сам файл копируют руками (см. hub.importImagesMissing).
+type ClusterImageExport struct {
+	Name string `json:"name"`
+	Size int64  `json:"size"`
 }
 
 // ProfileExport — профиль хаба с историей редакций.
@@ -100,13 +135,15 @@ type ProfileVersionExport struct {
 	Content string `json:"content"`
 }
 
-// ScriptExport — сценарий хаба (текущая редакция, без истории).
+// ScriptExport — сценарий хаба с историей редакций (версия 3; файлы
+// версии 2 — без неё).
 type ScriptExport struct {
-	Name    string `json:"name"`
-	Color   string `json:"color,omitempty"`
-	Content string `json:"content"`
-	Note    string `json:"note,omitempty"`
-	Author  string `json:"author,omitempty"`
+	Name     string                 `json:"name"`
+	Color    string                 `json:"color,omitempty"`
+	Content  string                 `json:"content"`
+	Note     string                 `json:"note,omitempty"`
+	Author   string                 `json:"author,omitempty"`
+	Versions []ProfileVersionExport `json:"versions,omitempty"`
 }
 
 // VMTemplateExport — шаблон машины.
@@ -134,8 +171,12 @@ type HubExport struct {
 	VMTemplates   []VMTemplateExport `json:"vm_templates,omitempty"`
 	Scripts       []ScriptExport     `json:"scripts,omitempty"`
 	// Settings — настройки хаба из таблицы kv по ключу (настройки
-	// оповещений, группа строки localhost, умолчания подготовки).
+	// оповещений, группа строки localhost, умолчания подготовки, лимит
+	// кэша пакетов).
 	Settings map[string]string `json:"settings,omitempty"`
+	// Clusters и ClusterImages — версия 3.
+	Clusters      []ClusterExport      `json:"clusters,omitempty"`
+	ClusterImages []ClusterImageExport `json:"cluster_images,omitempty"`
 	// MasterKey is the exporting hub's own secretbox key (base64), present
 	// only when the operator opted into a one-step migration — see
 	// Manager.ExportHosts/ImportHosts in internal/hub, which is what
@@ -151,14 +192,14 @@ func hostToExport(h Host) HostExport {
 		AdminUser: h.AdminUser, AdminPasswordEnc: h.AdminPasswordEnc, SudoStatus: h.SudoStatus,
 		TerminalEnabled: h.TerminalEnabled, AptViaHub: h.AptViaHub, TunnelEnabled: h.TunnelEnabled, TunnelTokenEnc: h.TunnelTokenEnc,
 		ErrorMsg: h.ErrorMsg, CreatedAt: h.CreatedAt, LastSeenAt: h.LastSeenAt,
-		Group: h.Group,
+		Group: h.Group, Via: h.Via, BinaryVia: h.BinaryVia, K8sRole: h.K8sRole,
 	}
 }
 
 // ExportedSettingKeys — какие ключи kv едут в экспорт. Перечислены явно:
 // в kv лежит и то, что переносить нельзя (например, что уже показано
 // пользователю).
-var ExportedSettingKeys = []string{"hub.events.settings", "hub.localhost.group", "hub.bootstrap.defaults"}
+var ExportedSettingKeys = []string{"hub.events.settings", "hub.localhost.group", "hub.bootstrap.defaults", "aptcache_max_gb"}
 
 // ExportHosts returns every managed host in the shape GET /hub/export sends
 // to the browser as a downloadable file.
@@ -172,10 +213,24 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 	for _, h := range hosts {
 		byID[h.ID] = h.Name
 	}
+	clusters, err := d.ListClusters(ctx)
+	if err != nil {
+		return HubExport{}, err
+	}
+	clusterNames := map[int64]string{}
+	for _, c := range clusters {
+		clusterNames[c.ID] = c.Name
+		out.Clusters = append(out.Clusters, ClusterExport{Name: c.Name, Host: byID[c.HostID], Flavor: c.Flavor, Topology: c.Topology,
+			Workers: c.Workers, Expose: c.Expose, Status: c.Status, ErrorMsg: c.ErrorMsg, ServerAddr: c.ServerAddr,
+			KubeconfigEnc: c.KubeconfigEnc, WGEnc: c.WGEnc, SpecJSON: c.SpecJSON, CreatedAt: c.CreatedAt})
+	}
 	for i, h := range hosts {
 		out.Hosts[i] = hostToExport(h)
 		if h.ParentID != 0 {
 			out.Hosts[i].Parent = byID[h.ParentID]
+		}
+		if h.ClusterID != 0 {
+			out.Hosts[i].Cluster = clusterNames[h.ClusterID]
 		}
 	}
 	if out.Groups, err = d.ListHostGroups(ctx); err != nil {
@@ -241,7 +296,19 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 		if err != nil {
 			return HubExport{}, err
 		}
-		out.Scripts = append(out.Scripts, ScriptExport{Name: full.Name, Color: full.Color, Content: full.Content, Note: full.Note, Author: full.Author})
+		se := ScriptExport{Name: full.Name, Color: full.Color, Content: full.Content, Note: full.Note, Author: full.Author}
+		versions, err := d.ScriptVersions(ctx, sc.ID, 200)
+		if err != nil {
+			return HubExport{}, err
+		}
+		for i := len(versions) - 1; i >= 0; i-- {
+			v, err := d.ScriptVersion(ctx, versions[i].ID)
+			if err != nil {
+				return HubExport{}, err
+			}
+			se.Versions = append(se.Versions, ProfileVersionExport{TS: v.TS, Author: v.Author, Note: v.Note, Content: v.Content})
+		}
+		out.Scripts = append(out.Scripts, se)
 	}
 	for _, key := range ExportedSettingKeys {
 		if v, ok, err := d.KVGet(ctx, key); err == nil && ok && v != "" {
@@ -303,6 +370,7 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 			errs = append(errs, fmt.Sprintf("%s: %v", h.Name, err))
 		}
 	}
+	errs = append(errs, d.importClusters(ctx, export, ids)...)
 	errs = append(errs, d.importProfiles(ctx, export.Profiles)...)
 	errs = append(errs, d.importVMTemplates(ctx, export.VMTemplates)...)
 	errs = append(errs, d.importScripts(ctx, export.Scripts)...)
@@ -428,10 +496,81 @@ func (d *DB) importScripts(ctx context.Context, scripts []ScriptExport) (errs []
 			errs = append(errs, msgs.Tc(ctx, "store.importScriptExists", s.Name))
 			continue
 		}
-		if _, err := d.CreateScript(ctx, Script{Name: s.Name, Color: s.Color, Content: s.Content, Note: s.Note, Author: s.Author}); err != nil {
+		id, err := d.CreateScript(ctx, Script{Name: s.Name, Color: s.Color, Content: s.Content, Note: s.Note, Author: s.Author})
+		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", s.Name, err))
+			continue
+		}
+		// История редакций из файла заменяет единственную «создан».
+		if len(s.Versions) > 0 {
+			if _, err := d.ExecContext(ctx, `DELETE FROM script_versions WHERE script_id = ?`, id); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", s.Name, err))
+			}
+			for _, v := range s.Versions {
+				if _, err := d.ExecContext(ctx, `
+					INSERT INTO script_versions (script_id, ts, author, note, content)
+					VALUES (?, ?, ?, ?, ?)`, id, v.TS, v.Author, v.Note, v.Content); err != nil {
+					errs = append(errs, fmt.Sprintf("%s: %v", s.Name, err))
+					break
+				}
+			}
 		}
 		taken[s.Name] = true
+	}
+	return errs
+}
+
+// importClusters заводит кластеры файла (существующее имя — пропуск) и
+// привязывает к ним узлы среди только что добавленных хостов.
+func (d *DB) importClusters(ctx context.Context, export HubExport, ids map[string]int64) (errs []string) {
+	if len(export.Clusters) == 0 {
+		return nil
+	}
+	existing, err := d.ListClusters(ctx)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	taken := map[string]bool{}
+	for _, c := range existing {
+		taken[c.Name] = true
+	}
+	clusterIDs := map[string]int64{}
+	for _, c := range export.Clusters {
+		if c.Name == "" {
+			continue
+		}
+		if taken[c.Name] {
+			errs = append(errs, msgs.Tc(ctx, "store.importClusterExists", c.Name))
+			continue
+		}
+		hostID, ok := ids[c.Host]
+		if !ok {
+			errs = append(errs, msgs.Tc(ctx, "store.importClusterHostMissing", c.Name, c.Host))
+			continue
+		}
+		res, err := d.ExecContext(ctx, `INSERT INTO clusters(name, host_id, flavor, topology, workers, expose, status, error_msg, server_addr, kubeconfig_enc, spec_json, wg_enc, created_at, updated_at)
+			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			c.Name, hostID, c.Flavor, c.Topology, c.Workers, c.Expose, c.Status, c.ErrorMsg, c.ServerAddr, c.KubeconfigEnc, c.SpecJSON, c.WGEnc, c.CreatedAt, Now())
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", c.Name, err))
+			continue
+		}
+		id, _ := res.LastInsertId()
+		clusterIDs[c.Name] = id
+		taken[c.Name] = true
+	}
+	for _, h := range export.Hosts {
+		if h.Cluster == "" {
+			continue
+		}
+		hostID, ok := ids[h.Name]
+		cid, ok2 := clusterIDs[h.Cluster]
+		if !ok || !ok2 {
+			continue
+		}
+		if err := d.SetHostCluster(ctx, hostID, cid, h.K8sRole); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", h.Name, err))
+		}
 	}
 	return errs
 }
@@ -473,12 +612,14 @@ func (d *DB) importOneHost(ctx context.Context, h HostExport) (int64, error) {
 			name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 			arch, status, nkt_version, admin_user, admin_password_enc,
 			sudo_status, terminal_enabled, tunnel_enabled, tunnel_token_enc,
-			error_msg, created_at, last_seen_at, group_name, apt_via_hub
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			error_msg, created_at, last_seen_at, group_name, apt_via_hub,
+			via, binary_via
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		h.Name, h.Addr, h.SSHPort, h.SSHUser, h.SSHAuthKind, h.SecretEnc,
 		h.Arch, h.Status, h.NktVersion, h.AdminUser, h.AdminPasswordEnc,
 		h.SudoStatus, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
-		h.ErrorMsg, h.CreatedAt, h.LastSeenAt, h.Group, h.AptViaHub)
+		h.ErrorMsg, h.CreatedAt, h.LastSeenAt, h.Group, h.AptViaHub,
+		h.Via, h.BinaryVia)
 	if err != nil {
 		return 0, err
 	}
