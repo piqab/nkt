@@ -654,9 +654,9 @@ function AddImageModal({
         return
       }
       try {
-        setError((JSON.parse(xhr.responseText) as { error?: string }).error ?? `код ${xhr.status}`)
+        setError((JSON.parse(xhr.responseText) as { error?: string }).error ?? t('common.httpCode', { code: xhr.status }))
       } catch {
-        setError(`код ${xhr.status}`)
+        setError(t('common.httpCode', { code: xhr.status }))
       }
     }
     xhr.onerror = () => {

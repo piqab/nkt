@@ -183,6 +183,16 @@ jobs:
             echo "::error::в WHATSNEW.md нет раздела для $GITHUB_REF_NAME — добавьте его и повторите выпуск"
             exit 1
           fi
+          # Английская часть — из WHATSNEW.en.md, после маркера «<!-- en -->»:
+          # хаб делит тело релиза по нему и показывает читающему его язык
+          # (versioncheck.go, splitReleaseNotes). Файл ведётся с v1.10.61;
+          # для более старых тегов раздела нет — описание останется русским.
+          if [ -f WHATSNEW.en.md ] && WHATSNEW_FILE=WHATSNEW.en.md sh scripts/release-notes.sh "$GITHUB_REF_NAME" "$prev" > notes.en.md 2>/dev/null; then
+            printf '\n\n<!-- en -->\n\n' >> notes.md
+            cat notes.en.md >> notes.md
+          else
+            echo "в WHATSNEW.en.md нет раздела для $GITHUB_REF_NAME — описание только по-русски"
+          fi
           cat notes.md
       - name: Создать GitHub Release
         env:

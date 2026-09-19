@@ -432,7 +432,7 @@ func (r *InstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	_ = jc.LoadResume(&done)
 	steps := Steps(spec)
 	for i, st := range steps {
-		jc.Step(i+1, len(steps), msgs.T(jc.Lang(), st.Title))
+		jc.StepKey(i+1, len(steps), st.Title)
 		if i < done.Steps {
 			jc.Log("k8s.stepSkipped")
 			continue

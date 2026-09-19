@@ -53,7 +53,7 @@ func (r *ToolsRunner) Resumable() bool { return true }
 
 // Run ставит то, чего не хватает.
 func (r *ToolsRunner) Run(ctx context.Context, jc *jobs.Context) error {
-	jc.Step(1, 1, msgs.Tc(ctx, "vmcreate.stepInstall"))
+	jc.StepKey(1, 1, "vmcreate.stepInstall")
 	return InstallTools(ctx, r.escape, jc.Logf)
 }
 

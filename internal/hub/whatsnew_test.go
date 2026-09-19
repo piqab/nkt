@@ -41,6 +41,44 @@ func TestWhatsNewCoversCurrentVersion(t *testing.T) {
 		"откажет — добавьте его тем же коммитом, что и бамп VERSION.", want)
 }
 
+// Английский файл ведётся тем же коммитом: без раздела за текущую
+// версию хаб покажет английскому читателю русские заметки.
+func TestWhatsNewENCoversCurrentVersion(t *testing.T) {
+	version, err := os.ReadFile("../../VERSION")
+	if err != nil {
+		t.Skipf("VERSION не прочитан (запуск вне репозитория): %v", err)
+	}
+	notes, err := os.ReadFile("../../WHATSNEW.en.md")
+	if err != nil {
+		t.Skipf("WHATSNEW.en.md не прочитан: %v", err)
+	}
+	current := strings.TrimSpace(string(version))
+	if current == "" || current == "dev" {
+		t.Skip("версия не задана")
+	}
+	want := "## v" + current
+	for _, line := range strings.Split(string(notes), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), want) {
+			return
+		}
+	}
+	t.Errorf("в WHATSNEW.en.md нет раздела «%s» для текущей версии — добавьте его тем же коммитом, что и в WHATSNEW.md", want)
+}
+
+// Тело релиза с маркером «<!-- en -->» делится на русскую и английскую
+// части; без маркера всё тело — русское, английской нет (fallback на
+// русское в VersionStatusFor).
+func TestSplitReleaseNotes(t *testing.T) {
+	ru, en := splitReleaseNotes("## v1.10.61\n- строка\n\n<!-- en -->\n\n## v1.10.61\n- line\n")
+	if ru != "## v1.10.61\n- строка" || en != "## v1.10.61\n- line" {
+		t.Errorf("split = %q / %q", ru, en)
+	}
+	ru, en = splitReleaseNotes("## v1.10.60\n- только русский\n")
+	if ru != "## v1.10.60\n- только русский" || en != "" {
+		t.Errorf("без маркера = %q / %q", ru, en)
+	}
+}
+
 // Заметки из WHATSNEW.md должны доходить до «О системе» целиком.
 //
 // Проверяется тот же путь, которым они идут на самом деле: текст

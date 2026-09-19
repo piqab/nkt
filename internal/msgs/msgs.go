@@ -77,9 +77,12 @@ func (e *Err) In(lang Lang) string {
 	}
 	args := make([]any, len(e.Args))
 	for i, a := range e.Args {
-		if err, ok := a.(error); ok {
-			args[i] = Localize(lang, err)
-		} else {
+		switch v := a.(type) {
+		case error:
+			args[i] = Localize(lang, v)
+		case List:
+			args[i] = v.In(lang)
+		default:
 			args[i] = a
 		}
 	}

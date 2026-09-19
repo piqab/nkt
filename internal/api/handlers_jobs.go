@@ -38,7 +38,26 @@ func (s *Server) handleJobList(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
+	lang := msgs.FromContext(r.Context())
+	for i := range list {
+		localizeJob(lang, &list[i])
+	}
 	writeJSON(w, http.StatusOK, map[string]any{"jobs": list, "active": active})
+}
+
+// localizeJob подставляет заголовок, шаг и ошибку на языке читающего —
+// по ключам каталога, если задание их записало; иначе остаётся текст на
+// языке автора.
+func localizeJob(lang msgs.Lang, j *store.Job) {
+	j.Title = msgs.Render(lang, j.TitleKey, j.TitleArgs, j.Title)
+	j.StepName = msgs.Render(lang, j.StepKey, j.StepArgs, j.StepName)
+	j.Error = msgs.Render(lang, j.ErrorKey, j.ErrorArgs, j.Error)
+}
+
+func localizeLines(lang msgs.Lang, lines []store.JobLogLine) {
+	for i := range lines {
+		lines[i].Text = msgs.Render(lang, lines[i].Key, lines[i].Args, lines[i].Text)
+	}
 }
 
 func (s *Server) handleJobGet(w http.ResponseWriter, r *http.Request) {
@@ -48,6 +67,7 @@ func (s *Server) handleJobGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job.Resumable = s.jobs != nil && s.jobs.IsResumable(job.Kind)
+	localizeJob(msgs.FromContext(r.Context()), &job)
 	writeJSON(w, http.StatusOK, job)
 }
 
@@ -87,6 +107,9 @@ func (s *Server) handleJobLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job.Resumable = s.jobs != nil && s.jobs.IsResumable(job.Kind)
+	lang := msgs.FromContext(r.Context())
+	localizeJob(lang, &job)
+	localizeLines(lang, lines)
 	writeJSON(w, http.StatusOK, map[string]any{"job": job, "lines": lines})
 }
 
@@ -154,17 +177,21 @@ func (s *Server) handleJobWS(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				fresh, err := s.db.JobByID(context.Background(), job.ID)
 				if err == nil {
+					localizeJob(msgs.FromContext(r.Context()), &fresh)
 					_ = writeJobEvent(ctx, conn, map[string]any{"job": fresh})
 				}
 				conn.Close(websocket.StatusNormalClosure, msgs.Tc(r.Context(), "api.jobFinished"))
 				return
 			}
 			payload := map[string]any{}
+			lang := msgs.FromContext(r.Context())
 			if u.Line != nil {
-				payload["line"] = u.Line.Text
+				payload["line"] = msgs.Render(lang, u.Line.Key, u.Line.Args, u.Line.Text)
 			}
 			if u.Job != nil {
-				payload["job"] = *u.Job
+				j := *u.Job
+				localizeJob(lang, &j)
+				payload["job"] = j
 			}
 			if err := writeJobEvent(ctx, conn, payload); err != nil {
 				return

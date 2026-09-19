@@ -151,7 +151,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 // background check (versionCheckLoop) last learned about the latest
 // release — never triggers a fresh check itself, that's handleHubVersionCheck.
 func (s *Server) handleHubVersion(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, versionInfoJSON(s.hub.VersionStatus()))
+	writeJSON(w, http.StatusOK, versionInfoJSON(s.hub.VersionStatusFor(msgs.FromContext(r.Context()))))
 }
 
 // handleHubVersionCheck runs a fresh check against GitHub right now — the
@@ -326,7 +326,7 @@ func (s *Server) handleHostClamDBPush(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind: KindClamDBPush, Title: msgs.Tc(r.Context(), "hub.clamDBJobTitle", host.Name),
+		Kind: KindClamDBPush, TitleKey: "hub.clamDBJobTitle", TitleArgs: []any{host.Name},
 		Queue: fmt.Sprintf("host:%d", host.ID), Author: user, Steps: 3,
 		Params: ClamDBPushParams{HostID: host.ID},
 	})
