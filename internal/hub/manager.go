@@ -117,14 +117,18 @@ func (j *installJob) appendRaw(text string) {
 // ticking up) and should read as one line changing in place, not a new log
 // line every tick stretching the job modal taller with each update. Falls
 // back to appending when there is nothing yet to replace.
+//
+// Заменяется только строка с тем же ключом — своя прошлая отметка
+// прогресса; чужую последнюю строку (итог пробы, «заливаю…») прогресс
+// не затирает, а встаёт под ней.
 func (j *installJob) replaceLast(key string, args ...any) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	if len(j.events) == 0 {
-		j.events = append(j.events, Event{Time: time.Now(), Key: key, Args: args})
+	if n := len(j.events); n > 0 && j.events[n-1].Key == key {
+		j.events[n-1] = Event{Time: time.Now(), Key: key, Args: args}
 		return
 	}
-	j.events[len(j.events)-1] = Event{Time: time.Now(), Key: key, Args: args}
+	j.events = append(j.events, Event{Time: time.Now(), Key: key, Args: args})
 }
 
 func (j *installJob) finish(err error) {
