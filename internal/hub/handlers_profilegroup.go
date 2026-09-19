@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -372,8 +373,23 @@ func (s *Server) handleVMReach(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// vmImportItem — реквизиты одной машины; пустые поля берутся из общих
+// (SSHUser/SSHPort/Password запроса).
+type vmImportItem struct {
+	Name     string `json:"name"`
+	Addr     string `json:"addr,omitempty"`
+	Via      string `json:"via,omitempty"`
+	SSHUser  string `json:"ssh_user,omitempty"`
+	SSHPort  int    `json:"ssh_port,omitempty"`
+	Password string `json:"password,omitempty"`
+}
+
 type vmImportRequest struct {
-	Names []string `json:"names"`
+	// Items — по машине: адрес, способ связи и свои реквизиты SSH
+	// (форма даёт каждой отмеченной машине свои поля). Без Items берутся
+	// Names и общие поля.
+	Items []vmImportItem `json:"items,omitempty"`
+	Names []string       `json:"names"`
 	// Addrs — выбранный адрес по имени машины (иначе первый найденный);
 	// Via — способ связи по имени: '' авто, direct, jump.
 	Addrs   map[string]string `json:"addrs,omitempty"`
@@ -396,6 +412,17 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
+	}
+	// Items — тот же список, но с реквизитами по машине.
+	items := map[string]vmImportItem{}
+	for _, it := range req.Items {
+		if it.Name == "" {
+			continue
+		}
+		items[it.Name] = it
+		if !slices.Contains(req.Names, it.Name) {
+			req.Names = append(req.Names, it.Name)
+		}
 	}
 	if len(req.Names) == 0 {
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.pickLeastOneMachine"))
@@ -439,19 +466,36 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 			errs = append(errs, msgs.Tc(r.Context(), "hub.vmNotOnHostOrListed", name))
 			continue
 		}
+		it := items[name]
 		addr := vm.Address
 		if chosen := strings.TrimSpace(req.Addrs[name]); chosen != "" {
+			addr = chosen
+		}
+		if chosen := strings.TrimSpace(it.Addr); chosen != "" {
 			addr = chosen
 		}
 		if addr == "" {
 			addr = PlaceholderAddr
 		}
+		sshUser, sshPort, password, via := req.SSHUser, req.SSHPort, req.Password, req.Via[name]
+		if u := strings.TrimSpace(it.SSHUser); u != "" {
+			sshUser = u
+		}
+		if it.SSHPort > 0 {
+			sshPort = it.SSHPort
+		}
+		if it.Password != "" {
+			password = it.Password
+		}
+		if it.Via != "" {
+			via = it.Via
+		}
 		var newID int64
 		var pub string
-		if req.Password != "" {
-			newID, err = s.hub.AddHost(r.Context(), name, addr, req.SSHPort, req.SSHUser, store.HostAuthPassword, req.Password, false)
+		if password != "" {
+			newID, err = s.hub.AddHost(r.Context(), name, addr, sshPort, sshUser, store.HostAuthPassword, password, false)
 		} else {
-			newID, pub, err = s.hub.AddHostGenerated(r.Context(), name, addr, req.SSHPort, req.SSHUser, false)
+			newID, pub, err = s.hub.AddHostGenerated(r.Context(), name, addr, sshPort, sshUser, false)
 		}
 		if err != nil {
 			errs = append(errs, name+": "+err.Error())
@@ -461,7 +505,7 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 			errs = append(errs, msgs.Tc(r.Context(), "hub.vmBindFailed", name, err))
 			continue
 		}
-		if via := req.Via[name]; via == store.HostViaDirect || via == store.HostViaJump {
+		if via == store.HostViaDirect || via == store.HostViaJump {
 			_ = s.db.SetHostVia(r.Context(), newID, via)
 		}
 		s.db.Audit(r.Context(), user, "vm.import", name, "ok", parent.Name)
