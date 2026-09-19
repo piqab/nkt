@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/jobs"
@@ -231,6 +233,10 @@ type discoveredVM struct {
 	Name    string `json:"name"`
 	State   string `json:"state"`
 	Address string `json:"address,omitempty"`
+	// Addresses — все адреса на NIC машины (выбор в форме); Ifaces —
+	// как машина подключена (мост / сеть libvirt / macvtap).
+	Addresses []vmcreate.VMAddr  `json:"addresses,omitempty"`
+	Ifaces    []vmcreate.VMIface `json:"ifaces,omitempty"`
 }
 
 // discoverVMs — домены хоста, которых ещё нет в списке.
@@ -264,11 +270,13 @@ func (s *Server) discoverVMs(ctx context.Context, hostID int64) ([]discoveredVM,
 			// Адрес — только у работающей: у выключенной его не у кого
 			// спросить, а ждать здесь незачем — определится после старта.
 			var res struct {
-				Address string `json:"address"`
+				Address   string             `json:"address"`
+				Addresses []vmcreate.VMAddr  `json:"addresses"`
+				Ifaces    []vmcreate.VMIface `json:"ifaces"`
 			}
 			path := "/api/vm/address?name=" + url.QueryEscape(vm.Name)
 			if _, err := s.hub.HostAPI(ctx, hostID, "GET", path, nil, &res); err == nil {
-				d.Address = res.Address
+				d.Address, d.Addresses, d.Ifaces = res.Address, res.Addresses, res.Ifaces
 			}
 		}
 		out = append(out, d)
@@ -291,10 +299,87 @@ func (s *Server) handleVMDiscover(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"vms": vms})
 }
 
+// vmReachRequest — проверка доступа к найденной машине по выбранному
+// адресу: с хоста (маршрут, ping, порт, тип подключения) и с хаба
+// напрямую.
+type vmReachRequest struct {
+	Name string `json:"name"`
+	Addr string `json:"addr"`
+	Port int    `json:"port"`
+}
+
+func (s *Server) handleVMReach(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var req vmReachRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if req.Port <= 0 {
+		req.Port = 22
+	}
+	if net.ParseIP(req.Addr) == nil || req.Name == "" {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.machineSAddressKnownYet"))
+		return
+	}
+	var fromHost struct {
+		Route       bool               `json:"route"`
+		RouteDetail string             `json:"route_detail"`
+		Ping        bool               `json:"ping"`
+		TCP         bool               `json:"tcp"`
+		TCPError    string             `json:"tcp_error"`
+		Ifaces      []vmcreate.VMIface `json:"ifaces"`
+	}
+	path := fmt.Sprintf("/api/vm/reach?name=%s&addr=%s&port=%d", url.QueryEscape(req.Name), url.QueryEscape(req.Addr), req.Port)
+	hostErr := ""
+	if _, err := s.hub.HostAPI(r.Context(), id, "GET", path, nil, &fromHost); err != nil {
+		hostErr = err.Error()
+	}
+	hubOK := TCPReachable(net.JoinHostPort(req.Addr, fmt.Sprint(req.Port)), 1500*time.Millisecond)
+	macvtap := ""
+	for _, i := range fromHost.Ifaces {
+		if i.Type == "direct" {
+			macvtap = i.Source
+		}
+	}
+	// Диагноз и рекомендуемый способ связи.
+	via, hint := "", ""
+	switch {
+	case fromHost.TCP:
+		via, hint = store.HostViaJump, msgs.Tc(r.Context(), "hub.vmReachHostOK", req.Port)
+	case hubOK && macvtap != "":
+		via, hint = store.HostViaDirect, msgs.Tc(r.Context(), "hub.vmReachMacvtapDirect", macvtap)
+	case hubOK:
+		via, hint = store.HostViaDirect, msgs.Tc(r.Context(), "hub.vmReachHubOnly")
+	case macvtap != "":
+		hint = msgs.Tc(r.Context(), "hub.vmReachMacvtapNone", macvtap)
+	case hostErr != "":
+		hint = msgs.Tc(r.Context(), "hub.vmReachHostError", hostErr)
+	case !fromHost.Route:
+		hint = msgs.Tc(r.Context(), "hub.vmReachNoRoute", fromHost.RouteDetail)
+	case !fromHost.Ping:
+		hint = msgs.Tc(r.Context(), "hub.vmReachNoPing")
+	default:
+		hint = msgs.Tc(r.Context(), "hub.vmReachPortClosed", req.Port)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"host_tcp": fromHost.TCP, "host_ping": fromHost.Ping, "host_route": fromHost.Route, "host_error": hostErr,
+		"hub_tcp": hubOK, "macvtap": macvtap, "via": via, "hint": hint,
+	})
+}
+
 type vmImportRequest struct {
-	Names   []string `json:"names"`
-	SSHPort int      `json:"ssh_port"`
-	SSHUser string   `json:"ssh_user"`
+	Names []string `json:"names"`
+	// Addrs — выбранный адрес по имени машины (иначе первый найденный);
+	// Via — способ связи по имени: '' авто, direct, jump.
+	Addrs   map[string]string `json:"addrs,omitempty"`
+	Via     map[string]string `json:"via,omitempty"`
+	SSHPort int               `json:"ssh_port"`
+	SSHUser string            `json:"ssh_user"`
 	// Password — вход по паролю; пусто — заводится ключ хаба, и его надо
 	// положить в машину руками (кнопка «публичный ключ» в строке).
 	Password string `json:"password,omitempty"`
@@ -355,6 +440,9 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		addr := vm.Address
+		if chosen := strings.TrimSpace(req.Addrs[name]); chosen != "" {
+			addr = chosen
+		}
 		if addr == "" {
 			addr = PlaceholderAddr
 		}
@@ -372,6 +460,9 @@ func (s *Server) handleVMImport(w http.ResponseWriter, r *http.Request) {
 		if err := s.db.SetHostParent(r.Context(), newID, parent.ID); err != nil {
 			errs = append(errs, msgs.Tc(r.Context(), "hub.vmBindFailed", name, err))
 			continue
+		}
+		if via := req.Via[name]; via == store.HostViaDirect || via == store.HostViaJump {
+			_ = s.db.SetHostVia(r.Context(), newID, via)
 		}
 		s.db.Audit(r.Context(), user, "vm.import", name, "ok", parent.Name)
 		done = append(done, imported{ID: newID, Name: name, PublicKey: pub})

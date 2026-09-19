@@ -58,6 +58,11 @@ func TestDialHostGoesThroughParentForMachine(t *testing.T) {
 	if err := db.SetHostParent(ctx, vmID, hostID); err != nil {
 		t.Fatalf("SetHostParent: %v", err)
 	}
+	// Способ связи «через хост»: в авто-режиме машина на loopback
+	// доступна напрямую, и переход не понадобился бы (см. ниже).
+	if err := db.SetHostVia(ctx, vmID, store.HostViaJump); err != nil {
+		t.Fatalf("SetHostVia: %v", err)
+	}
 
 	m := NewManager(&config.Config{}, db, key, "test", slog.New(slog.DiscardHandler))
 
@@ -93,6 +98,20 @@ func TestDialHostGoesThroughParentForMachine(t *testing.T) {
 	}
 	if !strings.Contains(out, "через-хост") {
 		t.Errorf("вывод через переход = %q", out)
+	}
+
+	// Авто: порт машины отвечает хабу напрямую — переход не нужен.
+	if err := db.SetHostVia(ctx, vmID, store.HostViaAuto); err != nil {
+		t.Fatalf("SetHostVia: %v", err)
+	}
+	vm, _ = db.HostByID(ctx, vmID)
+	auto, err := m.dialHost(ctx, vm)
+	if err != nil {
+		t.Fatalf("авто-подключение к машине: %v", err)
+	}
+	defer auto.Close()
+	if auto.under != nil {
+		t.Errorf("авто: машина доступна напрямую, а пошли через переход")
 	}
 }
 

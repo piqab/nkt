@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"github.com/piqab/nkt/internal/msgs"
+	"net"
 	"net/http"
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -252,12 +255,60 @@ func (s *Server) handleVMAddress(w http.ResponseWriter, r *http.Request) {
 	runner := vmcreate.NewCreateRunner(s.vmimages, s.scanner.Collector(), RunTooling)
 	report := runner.AddressReport(r.Context(), name)
 	writeJSON(w, http.StatusOK, map[string]any{
-		"name":    name,
-		"address": report.Address,
-		"state":   report.State,
-		"reason":  report.Reason,
-		"detail":  report.Detail,
+		"name":      name,
+		"address":   report.Address,
+		"addresses": report.Addresses,
+		"ifaces":    report.Ifaces,
+		"state":     report.State,
+		"reason":    report.Reason,
+		"detail":    report.Detail,
 	})
+}
+
+// handleVMReach — доступна ли машина с этого хоста по адресу: маршрут,
+// ping, TCP-порт и как машина подключена (macvtap-гостей хост не видит).
+func (s *Server) handleVMReach(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	addr := strings.TrimSpace(r.URL.Query().Get("addr"))
+	port := strings.TrimSpace(r.URL.Query().Get("port"))
+	if port == "" {
+		port = "22"
+	}
+	if name == "" || net.ParseIP(addr) == nil {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.machineNameSpecified"))
+		return
+	}
+	if _, err := strconv.Atoi(port); err != nil {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "control.portForwardBadPort", port))
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	out := map[string]any{"name": name, "addr": addr, "port": port}
+	if res, err := RunTooling(ctx, "virsh", "domiflist", name); err == nil && res.ExitCode == 0 {
+		out["ifaces"] = vmcreate.ParseDomiflist(res.Stdout)
+	}
+	if res, err := RunTooling(ctx, "ip", "route", "get", addr); err == nil {
+		out["route"] = res.ExitCode == 0
+		out["route_detail"] = strings.TrimSpace(firstLineOf(res.Output()))
+	}
+	if res, err := RunTooling(ctx, "ping", "-c", "1", "-W", "2", addr); err == nil {
+		out["ping"] = res.ExitCode == 0
+	}
+	c, err := net.DialTimeout("tcp", net.JoinHostPort(addr, port), 3*time.Second)
+	if err == nil {
+		c.Close()
+	}
+	out["tcp"] = err == nil
+	if err != nil {
+		out["tcp_error"] = err.Error()
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func firstLineOf(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return line
 }
 
 func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {

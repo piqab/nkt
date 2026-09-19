@@ -244,6 +244,11 @@ var addressSources = []string{"lease", "agent", "arp"}
 // «определить адрес» превращается в тупик.
 type AddressReport struct {
 	Address string `json:"address"`
+	// Addresses — все адреса на NIC самой машины (без loopback и
+	// link-local, без внутренних мостов гостя: только MAC интерфейсов
+	// домена); Ifaces — интерфейсы домена по virsh domiflist.
+	Addresses []VMAddr  `json:"addresses,omitempty"`
+	Ifaces    []VMIface `json:"ifaces,omitempty"`
 	// State — состояние домена по virsh domstate: running, shut off и
 	// прочее. Пусто, если состояние узнать не удалось.
 	State string `json:"state,omitempty"`
@@ -252,6 +257,21 @@ type AddressReport struct {
 	// Detail — сырой ответ virsh, когда он что-то сказал: пересказывать
 	// его своими словами хуже, чем показать.
 	Detail string `json:"detail,omitempty"`
+}
+
+// VMAddr — адрес машины с тем, откуда он известен.
+type VMAddr struct {
+	Addr   string `json:"addr"`
+	MAC    string `json:"mac,omitempty"`
+	Source string `json:"source"` // lease | agent | arp
+}
+
+// VMIface — интерфейс домена: тип подключения (bridge, network, direct —
+// macvtap), источник (мост, сеть или физический интерфейс) и MAC.
+type VMIface struct {
+	Type   string `json:"type"`
+	Source string `json:"source,omitempty"`
+	MAC    string `json:"mac,omitempty"`
 }
 
 // Причины, по которым адрес неизвестен.
@@ -287,16 +307,56 @@ func (r *CreateRunner) AddressReport(ctx context.Context, name string) AddressRe
 		return AddressReport{State: domState, Reason: ReasonNotRunning}
 	}
 
+	report := AddressReport{State: domState}
+	if res, err := r.run(ctx, "virsh", "domiflist", name); err == nil && res.ExitCode == 0 {
+		report.Ifaces = ParseDomiflist(res.Stdout)
+	}
+	macs := map[string]bool{}
+	for _, i := range report.Ifaces {
+		if i.MAC != "" {
+			macs[strings.ToLower(i.MAC)] = true
+		}
+	}
+	seen := map[string]bool{}
 	for _, source := range addressSources {
 		res, err := r.run(ctx, "virsh", "domifaddr", name, "--source", source)
 		if err != nil || res.ExitCode != 0 {
 			continue
 		}
-		if addr := parseDomifaddr(res.Output()); addr != "" {
-			return AddressReport{Address: addr, State: domState}
+		for _, a := range parseDomifaddrAll(res.Output()) {
+			// Адреса чужих MAC — внутренние мосты гостя (docker0, cni0,
+			// cilium_host): с хоста по ним не попасть.
+			if len(macs) > 0 && a.MAC != "" && !macs[strings.ToLower(a.MAC)] {
+				continue
+			}
+			if seen[a.Addr] {
+				continue
+			}
+			seen[a.Addr] = true
+			a.Source = source
+			report.Addresses = append(report.Addresses, a)
 		}
 	}
-	return AddressReport{State: domState, Reason: ReasonNoLease}
+	if len(report.Addresses) > 0 {
+		report.Address = report.Addresses[0].Addr
+		return report
+	}
+	report.Reason = ReasonNoLease
+	return report
+}
+
+// ParseDomiflist разбирает virsh domiflist: интерфейс, тип, источник,
+// модель, MAC.
+func ParseDomiflist(out string) []VMIface {
+	var ifaces []VMIface
+	for _, line := range strings.Split(out, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 5 || f[0] == "Interface" || strings.HasPrefix(f[0], "-") {
+			continue
+		}
+		ifaces = append(ifaces, VMIface{Type: f[1], Source: f[2], MAC: f[4]})
+	}
+	return ifaces
 }
 
 // parseDomifaddr достаёт адрес из вывода virsh domifaddr.
@@ -310,12 +370,29 @@ func (r *CreateRunner) AddressReport(ctx context.Context, name string) AddressRe
 // loopback и link-local (169.254/16) адресами не считаются: по ним хаб
 // в машину не попадёт.
 func parseDomifaddr(out string) string {
+	if all := parseDomifaddrAll(out); len(all) > 0 {
+		return all[0].Addr
+	}
+	return ""
+}
+
+// parseDomifaddrAll — все годные IPv4 из вывода с их MAC: продолжения
+// («-  -  ipv4  …») относятся к MAC предыдущей строки.
+func parseDomifaddrAll(out string) []VMAddr {
+	var all []VMAddr
+	iface, mac := "", ""
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		if len(fields) < 4 || !strings.EqualFold(fields[2], "ipv4") {
+		if len(fields) < 4 || fields[0] == "Name" || strings.HasPrefix(fields[0], "-----") {
 			continue
 		}
-		if fields[0] == "lo" {
+		if fields[0] != "-" {
+			iface, mac = fields[0], fields[1]
+			if mac == "-" {
+				mac = ""
+			}
+		}
+		if !strings.EqualFold(fields[2], "ipv4") || iface == "lo" {
 			continue
 		}
 		addr, _, _ := strings.Cut(fields[3], "/")
@@ -323,9 +400,9 @@ func parseDomifaddr(out string) string {
 		if ip == nil || ip.IsUnspecified() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
 			continue
 		}
-		return addr
+		all = append(all, VMAddr{Addr: addr, MAC: mac})
 	}
-	return ""
+	return all
 }
 
 // HostPrefix — приставка идентификатора файла из каталога дисков
