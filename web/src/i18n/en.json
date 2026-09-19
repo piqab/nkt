@@ -154,7 +154,8 @@
     "requestTimeout": "Request {{path}} did not answer within {{seconds}}s. That usually means a command on the host is stuck — df on an unresponsive network share, for instance.",
     "confirmTitle": "Confirm the action",
     "confirmOk": "Confirm",
-    "noData": "Nothing found"
+    "noData": "Nothing found",
+    "httpCode": "code {{code}}"
   },
   "containers": {
     "vms": "Virtual machines"
@@ -2113,7 +2114,8 @@
       "examplesHint": "Copy or insert into the editor and put in your own addresses, names and profiles.",
       "insert": "Into editor",
       "confirmInsert": "Replace the editor text with this script? Unsaved edits will be lost."
-    }
+    },
+    "templateComment": "Web farm: a group, two hosts, nginx and a stack"
   },
   "malware": {
     "tab": "Malware",

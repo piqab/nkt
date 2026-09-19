@@ -61,7 +61,7 @@ func (r *DownloadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return err
 	}
 
-	jc.Step(1, 3, msgs.T(jc.Lang(), "vmimage.stepChecksum"))
+	jc.StepKey(1, 3, "vmimage.stepChecksum")
 	jc.Log("vmimage.image", img.Name)
 	jc.Log("vmimage.source", img.URL)
 	if img.Custom && img.Checksum == "" {
@@ -71,7 +71,7 @@ func (r *DownloadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		jc.Log("vmimage.checksumGivenImageTakenAs")
 	}
 
-	jc.Step(2, 3, msgs.T(jc.Lang(), "vmimage.stepDownload"))
+	jc.StepKey(2, 3, "vmimage.stepDownload")
 	path, err := r.store.Download(ctx, img, func(pr Progress) {
 		if pr.Total > 0 {
 			jc.Log("vmimage.downloaded", humanBytes(jc.Lang(), pr.Done), humanBytes(jc.Lang(), pr.Total),
@@ -84,7 +84,7 @@ func (r *DownloadRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return err
 	}
 
-	jc.Step(3, 3, msgs.T(jc.Lang(), "vmimage.stepVerify"))
+	jc.StepKey(3, 3, "vmimage.stepVerify")
 	if p.ToHost {
 		if r.move == nil {
 			return msgs.Errorf("vmimage.movingDiskDirectoryUnavailableMode")

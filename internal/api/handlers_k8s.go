@@ -61,7 +61,7 @@ func (s *Server) handleK8sInstall(w http.ResponseWriter, r *http.Request) {
 	spec.HubCache = s.hubCacheURL()
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind: k8s.KindInstall, Title: msgs.Tc(r.Context(), "k8s.installJobTitle", spec.Flavor, spec.Role),
+		Kind: k8s.KindInstall, TitleKey: "k8s.installJobTitle", TitleArgs: []any{spec.Flavor, spec.Role},
 		Queue: "host", Author: user, Steps: len(k8s.Steps(spec)), Params: spec,
 	})
 	if err != nil {

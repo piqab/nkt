@@ -840,8 +840,8 @@ func (r *ScriptRunner) createVM(ctx context.Context, jc *jobs.Context, p *Script
 		steps = 6
 	}
 	jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
-		Kind:  KindVMProvision,
-		Title: msgs.Tc(ctx, "hub.machineOnHostJobTitle", spec.Name, h.Name),
+		Kind:     KindVMProvision,
+		TitleKey: "hub.machineOnHostJobTitle", TitleArgs: []any{spec.Name, h.Name},
 		Queue: fmt.Sprintf("vm:%d", h.ID), Author: jc.Job.Author, Steps: steps,
 		Params: VMProvisionParams{HostID: h.ID, Spec: spec, InstallNKT: install, ProfileID: profileID},
 	})
@@ -1051,7 +1051,7 @@ func (r *ScriptRunner) createCluster(ctx context.Context, jc *jobs.Context, done
 		return msgs.Errorf("hub.clusterCreate", err)
 	}
 	jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
-		Kind: KindClusterCreate, Title: msgs.Tc(ctx, "hub.clusterJobTitle", spec.Name, cpHost.Name),
+		Kind: KindClusterCreate, TitleKey: "hub.clusterJobTitle", TitleArgs: []any{spec.Name, cpHost.Name},
 		Queue: fmt.Sprintf("cluster:%d", id), Author: jc.Job.Author, Steps: spec.jobSteps(),
 		Params: ClusterJobParams{ClusterID: id},
 	})
@@ -1074,7 +1074,7 @@ func (r *ScriptRunner) destroyCluster(ctx context.Context, jc *jobs.Context, h s
 		}
 		_ = r.m.db.SetClusterStatus(ctx, cl.ID, store.ClusterDeleting, "")
 		jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
-			Kind: KindClusterDelete, Title: msgs.Tc(ctx, "hub.clusterDeleteJobTitle", cl.Name),
+			Kind: KindClusterDelete, TitleKey: "hub.clusterDeleteJobTitle", TitleArgs: []any{cl.Name},
 			Queue: fmt.Sprintf("cluster:%d", cl.ID), Author: jc.Job.Author, Steps: 1,
 			Params: ClusterJobParams{ClusterID: cl.ID},
 		})
