@@ -1279,6 +1279,7 @@ var ruCatalog = map[string]string{
 	"hub.preflightPrepNetwork":                      "Подготовка: сеть libvirt «%s» поднята (или заведена как NAT-сеть)",
 	"hub.preflightCachedOnHub":                      "в кэше хаба: %s (%.1f МБ) — узел возьмёт с хаба",
 	"hub.preflightHubFetch":                         "хаб не смог скачать %s: %v",
+	"hub.clusterPresetBad":                          "у набора должно быть имя (до 64 символов) и содержимое формы",
 	"hub.clusterStepMesh":                           "туннель WireGuard между хостами",
 	"hub.clusterMeshPlanned":                        "      туннель %s: %d хостов, ключи созданы и сохранены",
 	"hub.clusterMeshExists":                         "      туннель %s уже поднят, повторно не трогаю",
