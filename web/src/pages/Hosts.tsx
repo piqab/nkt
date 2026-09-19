@@ -2014,7 +2014,9 @@ function HostForm({
   // Включена сразу: в сценарии с паролем подготовка — это и есть то, ради
   // чего сценарий выбран. Снять её осмысленно, только если хост уже
   // подготовлен, а пароль просто удобнее.
-  const [bootstrapEnabled, setBootstrapEnabled] = useState(!initial)
+  // На вкладке ключа хаба (generated) подготовка по умолчанию выключена:
+  // ключ уже положен руками, хост, скорее всего, готов; включить можно.
+  const [bootstrapEnabled, setBootstrapEnabled] = useState(!initial && authKind === 'password')
   const [bootstrapUser, setBootstrapUser] = useState('')
   const [bootstrapUserKey, setBootstrapUserKey] = useState('')
   const [bootstrapPackages, setBootstrapPackages] = useState(BOOTSTRAP_PACKAGES_DEFAULT)
@@ -2186,7 +2188,12 @@ function HostForm({
           установка падала на подключении, так и не дойдя до неё. */}
       <Tabs
         activeKey={authKind}
-        onChange={(key) => setAuthKind(key as AuthKind)}
+        onChange={(key) => {
+          setAuthKind(key as AuthKind)
+          // Смена вкладки для нового хоста — своё умолчание подготовки:
+          // с паролем — включена, с ключом хаба — выключена.
+          if (!editing) setBootstrapEnabled(key === 'password')
+        }}
         items={AUTH_KIND_OPTIONS.map((o) => ({ key: o.value, label: t(o.labelKey) }))}
         style={{ marginBottom: '0.4rem' }}
       />
@@ -2212,10 +2219,11 @@ function HostForm({
           )}
         </Form.Item>
       )}
-      {/* Только в сценарии с паролем: подготовке нужен рабочий доступ, а
-          на свежем сервере он ровно один — root с паролем. Для правки
-          существующего хоста блока нет: подготовка делается один раз. */}
-      {!editing && authKind === 'password' && (
+      {/* На обеих вкладках: по ключу хаба подготовка работает так же
+          (вход ключом, шаги через sudo), только по умолчанию выключена.
+          Для правки существующего хоста блока нет: подготовка делается
+          один раз. */}
+      {!editing && (
         <div
           style={{
             border: '1px solid var(--border)',
