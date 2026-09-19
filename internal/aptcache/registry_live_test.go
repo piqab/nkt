@@ -1,6 +1,7 @@
 package aptcache
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -101,4 +102,33 @@ func TestRegistryMirrorLive(t *testing.T) {
 	}
 	st := c.Stats()
 	t.Logf("stats: %+v", st)
+}
+
+// Prefetch кладёт файл по ссылке в кэш и второй раз не качает.
+func TestPrefetch(t *testing.T) {
+	hits := 0
+	src := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		_, _ = w.Write([]byte(`{"data":[{"id":"stable","latest":"v1.2.3+k3s1"}]}`))
+	}))
+	defer src.Close()
+	c, err := New(t.TempDir(), 1<<30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	n, err := c.Prefetch(ctx, src.URL+"/releases/download/v1/file.bin")
+	if err != nil || n == 0 {
+		t.Fatalf("prefetch: %d %v", n, err)
+	}
+	raw, err := c.PrefetchBytes(ctx, src.URL+"/releases/download/v1/file.bin", 1<<20)
+	if err != nil || !strings.Contains(string(raw), "v1.2.3+k3s1") {
+		t.Fatalf("bytes: %q %v", raw, err)
+	}
+	if hits != 1 {
+		t.Errorf("upstream hits = %d, want 1 (immutable link cached)", hits)
+	}
+	if _, err := c.Prefetch(ctx, "ftp://x/y"); err == nil {
+		t.Error("bad scheme accepted")
+	}
 }

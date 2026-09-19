@@ -89,7 +89,7 @@ func (s *Server) handleNetCheck(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "api.linkMustStartHttpHttps"))
 		return
 	}
-	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	started := time.Now()
 	req, _ := http.NewRequestWithContext(ctx, http.MethodHead, raw, nil)

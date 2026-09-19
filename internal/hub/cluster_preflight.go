@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"net/url"
@@ -257,9 +258,18 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 			case !found:
 				add(true, true, "hub.preflightNetMissing", netName)
 			case !active:
-				add(true, true, "hub.preflightNetInactive", netName)
+				add(true, false, "hub.preflightNetInactive", netName)
 			default:
 				add(true, false, "hub.preflightNetOK", netName)
+			}
+			// Подготовка: поднять (или завести NAT-сеть) сразу — то же, что
+			// сделает создание, только заранее и на виду.
+			if prepare && (!found || !active) {
+				if _, err := r.m.HostAPI(ctx, host.ID, "POST", "/api/vm/networks/"+url.PathEscape(netName)+"/ensure", nil, nil); err != nil {
+					jc.Log("hub.preflightPrepFailed", err)
+				} else {
+					jc.Log("hub.preflightPrepNetwork", netName)
+				}
 			}
 		}
 		for br := range bridges {
@@ -328,6 +338,24 @@ func (r *ClusterRunner) runPreflight(ctx context.Context, jc *jobs.Context, spec
 			default:
 				add(false, false, "hub.preflightImageUnknown", id)
 			}
+		}
+		if pf.HubCache && r.m.AptCache() != nil {
+			// Узел возьмёт всё с хаба — значит, и проверяет хаб: качает в
+			// свой кэш сам (у него прямой интернет, а HEAD через туннель к
+			// GitHub-редиректам не укладывается в таймаут). С подготовкой —
+			// заодно всё крупное: k3s с airgap-образами, Cilium CLI.
+			if prepare {
+				urls = append(urls, r.prepareArtifacts(ctx, spec, host)...)
+			}
+			for _, u := range urls {
+				size, err := r.m.AptCache().Prefetch(ctx, u)
+				if err != nil {
+					add(false, false, "hub.preflightHubFetch", u, err)
+					continue
+				}
+				add(true, false, "hub.preflightCachedOnHub", u, float64(size)/(1<<20))
+			}
+			urls = nil
 		}
 		for _, u := range urls {
 			var res struct {
@@ -428,6 +456,59 @@ func preflightError(failed []string) error {
 		list = append(append([]string{}, list[:3]...), "…")
 	}
 	return msgs.Errorf("hub.preflightFailedList", len(failed), strings.Join(list, "; "))
+}
+
+// prepareArtifacts — крупные файлы, которые узел возьмёт с хаба: бинарник
+// k3s с суммами и airgap-образами своей ветки, Cilium CLI. Версия k3s —
+// из JSON каналов (тоже через кэш).
+func (r *ClusterRunner) prepareArtifacts(ctx context.Context, spec ClusterSpec, host store.Host) []string {
+	arch := "amd64"
+	if _, a, ok := strings.Cut(host.Arch, "/"); ok && a != "" {
+		arch = a
+	}
+	var out []string
+	if spec.Flavor == k8s.FlavorK3s {
+		channel := "stable"
+		if spec.K8sVersion != "" {
+			channel = "v" + spec.K8sVersion
+		}
+		if ver := r.m.k3sChannelLatest(ctx, channel); ver != "" {
+			bin := "k3s"
+			if arch != "amd64" {
+				bin = "k3s-" + arch
+			}
+			rel := "https://github.com/k3s-io/k3s/releases/download/" + ver
+			out = append(out, rel+"/sha256sum-"+arch+".txt", rel+"/"+bin, rel+"/k3s-airgap-images-"+arch+".tar.zst")
+		}
+	}
+	if spec.CNI == "cilium" {
+		out = append(out, "https://github.com/cilium/cilium-cli/releases/latest/download/cilium-linux-"+arch+".tar.gz")
+	}
+	return out
+}
+
+// k3sChannelLatest — версия канала k3s по JSON update.k3s.io (через кэш
+// хаба, чтобы она же досталась узлу).
+func (m *Manager) k3sChannelLatest(ctx context.Context, channel string) string {
+	raw, err := m.AptCache().PrefetchBytes(ctx, "https://update.k3s.io/v1-release/channels", 1<<20)
+	if err != nil {
+		return ""
+	}
+	var body struct {
+		Data []struct {
+			ID     string `json:"id"`
+			Latest string `json:"latest"`
+		} `json:"data"`
+	}
+	if json.Unmarshal(raw, &body) != nil {
+		return ""
+	}
+	for _, c := range body.Data {
+		if c.ID == channel {
+			return c.Latest
+		}
+	}
+	return ""
 }
 
 // isLoopback — адрес, по которому соседи хост не найдут.
