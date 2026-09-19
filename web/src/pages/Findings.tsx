@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { blurText } from '../privacy'
 import { Checkbox, Input, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { qs, useApi } from '../api'
@@ -119,9 +120,9 @@ export default function Findings() {
                     <Tag>{f.service}</Tag>
                     {f.object && <Tag>{f.object}</Tag>}
                   </div>
-                  <h3>{f.title}</h3>
+                  <h3>{blurText(f.title)}</h3>
                   <p className="secondary" style={{ margin: '0.3rem 0 0' }}>
-                    {f.detail}
+                    {blurText(f.detail ?? '')}
                   </p>
                   {f.suggestion && (
                     <p style={{ margin: '0.45rem 0 0' }}>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Sensitive } from '../privacy'
 import { Link } from 'react-router-dom'
 import { Button, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
@@ -109,7 +110,7 @@ export default function OverviewPage({ me }: { me: Me }) {
     <>
       <div className="page-head spread">
         <div>
-          <h1>{data.host.hostname}</h1>
+          <h1><Sensitive>{data.host.hostname}</Sensitive></h1>
           <p>
             {t('overview.summary', {
               os: data.host.os,

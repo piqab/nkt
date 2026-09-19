@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Sensitive } from '../privacy'
 import { Button, Checkbox, Form, Input, InputNumber, Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -121,7 +122,7 @@ function certColumns(
         // достаётся самое длинное слово, и имя домена ломается посреди
         // себя («api.example.co» и «m» на следующей строке).
         <div style={{ minWidth: '10rem' }}>
-          <strong>{certName(cert)}</strong>
+          <strong><Sensitive>{certName(cert)}</Sensitive></strong>
           {cert.self_signed && <div className="small muted">{t('certs.selfSigned')}</div>}
           {cert.error && (
             <div className="small" style={{ color: TONE_COLOR.critical }}>
@@ -487,7 +488,7 @@ export default function Certificates({ me }: { me: Me }) {
                     style={{ width: '15rem', flex: '0 0 15rem', overflow: 'hidden', textOverflow: 'ellipsis' }}
                     title={certName(cert)}
                   >
-                    {certName(cert)}
+                    <Sensitive>{certName(cert)}</Sensitive>
                   </span>
                   <span
                     style={{

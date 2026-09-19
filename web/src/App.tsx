@@ -36,6 +36,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { Trans, useTranslation } from 'react-i18next'
 import { LOCAL_HOST_ID, api, hostScope, onUnauthorized, readSelectedHost, type SelectedHost, useApi, writeSelectedHost } from './api'
 import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
+import { applyPrivacy, readPrivacy, setKnownNames, usePrivacy } from './privacy'
 import type { Lang } from './i18n'
 import { useLang } from './hooks/useLang'
 import type { HostEvent, HubVersionInfo, Me, Overview } from './types'
@@ -93,6 +94,11 @@ function useTheme(): [Theme, (t: Theme) => void, ThemeConfig] {
   const [antdTheme, setAntdTheme] = useState<ThemeConfig>(() =>
     buildAntdTheme(resolveIsDark(theme)),
   )
+
+  // Приватный режим — с первого кадра, в том числе в откреплённых окнах.
+  useEffect(() => {
+    applyPrivacy(readPrivacy())
+  }, [])
 
   useEffect(() => {
     const root = document.documentElement
@@ -460,8 +466,16 @@ function Shell({
     navigate('/login', { replace: true })
   }
 
+  const [privacy, setPrivacy] = usePrivacy()
+  // Имена хостов — для размывки свободного текста на любой странице,
+  // а не только после захода в список хостов.
+  const knownHosts = useApi<{ name: string }[]>(isHub && privacy ? '/hub/hosts' : null, 120_000)
+  useEffect(() => {
+    if (knownHosts.data) setKnownNames(knownHosts.data.map((h) => h.name))
+  }, [knownHosts.data])
   const foot = (
     <div className={`sidebar-foot${collapsed ? ' sidebar-foot-collapsed' : ''}`}>
+      {privacy && <div className="privacy-badge">{t('app.privacyBadge')}</div>}
       {collapsed ? (
         <Tooltip title={t('app.logout')} placement="right">
           <Button type="text" size="small" aria-label={t('app.logout')} icon={<LogoutOutlined />} onClick={logout} />
@@ -476,6 +490,12 @@ function Shell({
                 <option value="light">{t('app.themeLight')}</option>
                 <option value="dark">{t('app.themeDark')}</option>
               </select>
+            </label>
+          </div>
+          <div className="row" style={{ marginBottom: '0.4rem' }}>
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }} title={t('app.privacyHint')}>
+              <input type="checkbox" checked={privacy} onChange={(e) => setPrivacy(e.target.checked)} />
+              {t('app.privacy')}
             </label>
           </div>
           <div className="row" style={{ marginBottom: '0.4rem' }}>

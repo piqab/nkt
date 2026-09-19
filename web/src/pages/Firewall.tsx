@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Sensitive } from '../privacy'
 import { Badge, Button, Checkbox, Form, Input, Radio, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -539,7 +540,7 @@ export default function Firewall({ me }: { me: Me }) {
 
   const listenerColumns: TableColumnsType<Listener> = [
     { title: t('fw.colProtocol'), key: 'protocol', render: (_, l) => <span className="small mono">{l.protocol}</span> },
-    { title: t('fw.colAddress'), key: 'address', render: (_, l) => <span className="small mono">{l.address}</span> },
+    { title: t('fw.colAddress'), key: 'address', render: (_, l) => <span className="small mono"><Sensitive>{l.address}</Sensitive></span> },
     {
       title: t('fw.colPort'),
       key: 'port',
