@@ -460,7 +460,7 @@ func (r *ClusterRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
 	if p.DryRun && p.Spec != nil {
-		jc.Step(1, 1, msgs.T(jc.Lang(), "hub.clusterStepPreflight"))
+		jc.StepKey(1, 1, "hub.clusterStepPreflight")
 		failed, err := r.runPreflight(ctx, jc, *p.Spec, p.Prepare, 0)
 		if err != nil {
 			return err
@@ -562,7 +562,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	// 0. Проверки — до первой машины. При продолжении после перезапуска
 	// не повторяются: машины уже есть, и «имя занято» было бы ложью.
 	step++
-	jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepPreflight"))
+	jc.StepKey(step, total, "hub.clusterStepPreflight")
 	if len(done.Hosts) == 0 && p.AddWorkers == 0 {
 		failed, err := r.runPreflight(ctx, jc, spec, false, cl.ID)
 		if err != nil {
@@ -585,7 +585,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	var plan *wgPlan
 	if spec.NetworkMode == NetworkWireGuard {
 		step++
-		jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepMesh"))
+		jc.StepKey(step, total, "hub.clusterStepMesh")
 		var err error
 		if done.MeshUp {
 			if plan, err = r.m.clusterWG(cl); err != nil {
@@ -622,7 +622,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	// 1. Узлы: машины — по одной, сам хост — просто запись.
 	for _, nd := range nodes {
 		step++
-		jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepVM", nd.Name))
+		jc.StepKey(step, total, "hub.clusterStepVM", nd.Name)
 		if id, ok := done.Hosts[nd.Name]; ok && id != 0 {
 			if _, err := r.m.db.HostByID(ctx, id); err == nil {
 				jc.Log("hub.clusterVMExists", nd.Name)
@@ -647,7 +647,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 
 	// 2. Control plane и токен.
 	step++
-	jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepControlPlane"))
+	jc.StepKey(step, total, "hub.clusterStepControlPlane")
 	if spec.Flavor == k8s.FlavorKubeadm && spec.K8sVersion == "" {
 		// Ветка pkgs.k8s.io — одна на весь кластер, записывается в spec.
 		spec.K8sVersion = r.m.k8sStableMinor(ctx)
@@ -704,7 +704,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 	// 3. Остальные узлы: сначала control plane, потом worker'ы (nodes уже
 	// в этом порядке).
 	step++
-	jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepJoin"))
+	jc.StepKey(step, total, "hub.clusterStepJoin")
 	for _, nd := range nodes {
 		if nd.Name == cp1Name || done.Installed[nd.Name] {
 			continue
@@ -730,7 +730,7 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 
 	// 4. Ready, проброс, kubeconfig.
 	step++
-	jc.Step(step, total, msgs.T(jc.Lang(), "hub.clusterStepReady"))
+	jc.StepKey(step, total, "hub.clusterStepReady")
 	want := len(done.Hosts)
 	if err := r.waitNodesReady(ctx, jc, cp1, want); err != nil {
 		return err
@@ -845,7 +845,7 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 		return msgs.Errorf("api.backgroundJobsAreUnavailable")
 	}
 	jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
-		Kind: KindVMProvision, Title: msgs.Tc(ctx, "hub.machineOnHostJobTitle", nd.Name, host.Name),
+		Kind: KindVMProvision, TitleKey: "hub.machineOnHostJobTitle", TitleArgs: []any{nd.Name, host.Name},
 		Queue: fmt.Sprintf("vm:%d", host.ID), Author: jc.Job.Author, Steps: 5,
 		Params: VMProvisionParams{HostID: host.ID, Spec: vm, InstallNKT: true},
 	})
@@ -963,7 +963,7 @@ func (r *ClusterDeleteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	total := len(hosts) + 1
 	for i, h := range hosts {
-		jc.Step(i+1, total, msgs.T(jc.Lang(), "hub.clusterStepDeleteVM", h.Name))
+		jc.StepKey(i+1, total, "hub.clusterStepDeleteVM", h.Name)
 		if h.ParentID == 0 {
 			// Узел-хост: Kubernetes убирается, запись хоста остаётся.
 			if _, err := r.m.HostAPI(ctx, h.ID, "POST", "/api/k8s/uninstall", nil, nil); err != nil {
@@ -987,7 +987,7 @@ func (r *ClusterDeleteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			return err
 		}
 	}
-	jc.Step(total, total, msgs.T(jc.Lang(), "hub.clusterStepDeleteRecord"))
+	jc.StepKey(total, total, "hub.clusterStepDeleteRecord")
 	r.removeMesh(ctx, jc, cl)
 	if err := r.m.db.DeleteCluster(ctx, cl.ID); err != nil {
 		return err

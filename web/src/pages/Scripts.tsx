@@ -93,7 +93,7 @@ const RUN_ENABLED = true
 
 const SCRIPT_COLORS = ['#4f86c6', '#5aa66f', '#c9a227', '#d0743c', '#b95c8a', '#7c6bc4', '#3fa5a5', '#8a8a8a']
 
-const TEMPLATE = `# Веб-ферма: группа, два хоста, nginx и стек
+const TEMPLATE_BODY = `
 group web-farm
 
 host web1 192.0.2.10 user root password ask group web-farm
@@ -111,6 +111,9 @@ services:
       - "8080:80"
 end
 `
+
+// Заголовок примера — на языке интерфейса, тело сценария одно.
+const template = (comment: string) => `# ${comment}${TEMPLATE_BODY}`
 
 export default function Scripts({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -146,7 +149,7 @@ export default function Scripts({ me }: { me: Me }) {
   function startNew() {
     setSelected(null)
     setName('')
-    setDraft(TEMPLATE)
+    setDraft(template(t('scripts.templateComment')))
     setNote('')
     setCheck(null)
     setColor(SCRIPT_COLORS.find((c) => !scripts.some((s) => s.color === c)) ?? SCRIPT_COLORS[0])

@@ -179,7 +179,7 @@ func (r *CloneRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 	}
 
-	jc.Step(1, 2, msgs.T(jc.Lang(), "files.stepPrepare"))
+	jc.StepKey(1, 2, "files.stepPrepare")
 	env := map[string]string{"GIT_TERMINAL_PROMPT": "0"}
 	cloneURL := p.URL
 	var secret string

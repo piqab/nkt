@@ -27,7 +27,17 @@ const eventKeep = 2000
 //
 // Ошибка записи не должна ронять опрос: журнал — дополнение к состоянию,
 // а не само состояние.
+// recordEventMsg — событие с текстом из каталога: ключ и аргументы
+// хранятся рядом, чтобы журнал читался на языке смотрящего.
+func (m *Manager) recordEventMsg(ctx context.Context, host store.Host, kind, severity, key string, args ...any) {
+	m.recordEventKey(ctx, host, kind, severity, msgs.Tc(ctx, key, args...), key, msgs.EncodeArgs(args))
+}
+
 func (m *Manager) recordEvent(ctx context.Context, host store.Host, kind, severity, detail string) {
+	m.recordEventKey(ctx, host, kind, severity, detail, "", "")
+}
+
+func (m *Manager) recordEventKey(ctx context.Context, host store.Host, kind, severity, detail, key, args string) {
 	settings := m.EventSettings(ctx)
 	if !settings.Record[kind] {
 		return
@@ -37,7 +47,7 @@ func (m *Manager) recordEvent(ctx context.Context, host store.Host, kind, severi
 	}
 	_, err := m.db.AddHostEvent(ctx, store.HostEvent{
 		HostID: host.ID, HostName: host.Name, HostAddr: hostAddrLabel(ctx, host),
-		Kind: kind, Severity: severity, Detail: detail,
+		Kind: kind, Severity: severity, Detail: detail, DetailKey: key, DetailArgs: args,
 	})
 	if err != nil {
 		m.log.Warn("не удалось записать оповещение", "host", host.Name, "kind", kind, "err", err)
@@ -65,11 +75,11 @@ func (m *Manager) collapseOutage(ctx context.Context, host store.Host, limit int
 		return false
 	}
 	minutes := int(down.Round(time.Minute) / time.Minute)
-	detail := msgs.Tc(ctx, "hub.unreachableMin", minutes)
+	key, args := "hub.unreachableMin", []any{minutes}
 	if minutes == 0 {
-		detail = msgs.Tc(ctx, "hub.unreachableUnderMinute")
+		key, args = "hub.unreachableUnderMinute", nil
 	}
-	return m.db.RewriteHostEvent(ctx, last.ID, store.EventRecovered, detail) == nil
+	return m.db.RewriteHostEvent(ctx, last.ID, store.EventRecovered, msgs.Tc(ctx, key, args...), key, msgs.EncodeArgs(args)) == nil
 }
 
 // hostAddrLabel — адрес в том виде, в каком его узнают: пользователь и
@@ -108,7 +118,7 @@ func (m *Manager) noteReachability(ctx context.Context, hostID int64, reachable 
 		return
 	}
 	if reachable {
-		m.recordEvent(ctx, host, store.EventRecovered, "", msgs.Tc(ctx, "hub.hostRespondsAgain"))
+		m.recordEventMsg(ctx, host, store.EventRecovered, "", "hub.hostRespondsAgain")
 		return
 	}
 	m.recordEvent(ctx, host, store.EventUnreachable, "", reason)
@@ -137,7 +147,6 @@ func (m *Manager) noteFindings(ctx context.Context, hostID int64, findings map[s
 	}
 	switch {
 	case now > was:
-		detail := msgs.Tc(ctx, "hub.seriousFindingsNow", now, was)
 		// Какие именно: те, чьих ID в прошлом опросе не было. Хост отдаёт
 		// только верхушку списка, так что для лавины находок будут
 		// названы первые, а счётчик — точный.
@@ -152,12 +161,12 @@ func (m *Manager) noteFindings(ctx context.Context, hostID int64, findings map[s
 			names = append(names[:5], "…")
 		}
 		if len(names) > 0 {
-			detail += ": " + strings.Join(names, "; ")
+			m.recordEventMsg(ctx, host, store.EventProblems, "critical+high", "hub.seriousFindingsNowNamed", now, was, strings.Join(names, "; "))
+		} else {
+			m.recordEventMsg(ctx, host, store.EventProblems, "critical+high", "hub.seriousFindingsNow", now, was)
 		}
-		m.recordEvent(ctx, host, store.EventProblems, "critical+high", detail)
 	case now == 0:
-		m.recordEvent(ctx, host, store.EventResolved, "critical+high",
-			msgs.Tc(ctx, "hub.seriousFindingsLeft", was))
+		m.recordEventMsg(ctx, host, store.EventResolved, "critical+high", "hub.seriousFindingsLeft", was)
 	}
 }
 
@@ -185,6 +194,10 @@ func (m *Manager) Events(ctx context.Context, limit int) ([]store.HostEvent, int
 	events, err := m.db.ListHostEvents(ctx, limit)
 	if err != nil {
 		return nil, 0, err
+	}
+	lang := msgs.FromContext(ctx)
+	for i := range events {
+		events[i].Detail = msgs.Render(lang, events[i].DetailKey, events[i].DetailArgs, events[i].Detail)
 	}
 	seen, err := m.seenEventID(ctx)
 	if err != nil {

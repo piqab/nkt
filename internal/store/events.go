@@ -42,6 +42,10 @@ type HostEvent struct {
 	Kind     string `json:"kind"`
 	Severity string `json:"severity,omitempty"`
 	Detail   string `json:"detail,omitempty"`
+	// DetailKey/DetailArgs — ключ каталога и аргументы: API подставляет
+	// Detail на языке читающего; в JSON не уходят.
+	DetailKey  string `json:"-"`
+	DetailArgs string `json:"-"`
 }
 
 // AddHostEvent записывает оповещение.
@@ -50,9 +54,9 @@ func (d *DB) AddHostEvent(ctx context.Context, e HostEvent) (int64, error) {
 		e.TS = FormatTime(time.Now())
 	}
 	res, err := d.ExecContext(ctx, `
-		INSERT INTO host_events (ts, host_id, host_name, host_addr, kind, severity, detail)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		e.TS, e.HostID, e.HostName, e.HostAddr, e.Kind, e.Severity, e.Detail)
+		INSERT INTO host_events (ts, host_id, host_name, host_addr, kind, severity, detail, detail_key, detail_args)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.TS, e.HostID, e.HostName, e.HostAddr, e.Kind, e.Severity, e.Detail, e.DetailKey, e.DetailArgs)
 	if err != nil {
 		return 0, err
 	}
@@ -65,7 +69,7 @@ func (d *DB) ListHostEvents(ctx context.Context, limit int) ([]HostEvent, error)
 		limit = 200
 	}
 	rows, err := d.QueryContext(ctx, `
-		SELECT id, ts, host_id, host_name, host_addr, kind, severity, detail
+		SELECT id, ts, host_id, host_name, host_addr, kind, severity, detail, detail_key, detail_args
 		FROM host_events ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -77,7 +81,7 @@ func (d *DB) ListHostEvents(ctx context.Context, limit int) ([]HostEvent, error)
 	for rows.Next() {
 		var e HostEvent
 		if err := rows.Scan(&e.ID, &e.TS, &e.HostID, &e.HostName, &e.HostAddr,
-			&e.Kind, &e.Severity, &e.Detail); err != nil {
+			&e.Kind, &e.Severity, &e.Detail, &e.DetailKey, &e.DetailArgs); err != nil {
 			return nil, err
 		}
 		out = append(out, e)
@@ -135,8 +139,8 @@ func (d *DB) LastHostEventFor(ctx context.Context, hostID int64) (HostEvent, boo
 // короткий эпизод «не отвечает → снова отвечает» становится одной
 // строкой, а не двумя. Время события сдвигается на момент переписывания:
 // это уже итог эпизода, а не его начало.
-func (d *DB) RewriteHostEvent(ctx context.Context, id int64, kind, detail string) error {
-	_, err := d.ExecContext(ctx, `UPDATE host_events SET kind = ?, detail = ?, ts = ? WHERE id = ?`,
-		kind, detail, FormatTime(time.Now()), id)
+func (d *DB) RewriteHostEvent(ctx context.Context, id int64, kind, detail, detailKey, detailArgs string) error {
+	_, err := d.ExecContext(ctx, `UPDATE host_events SET kind = ?, detail = ?, detail_key = ?, detail_args = ?, ts = ? WHERE id = ?`,
+		kind, detail, detailKey, detailArgs, FormatTime(time.Now()), id)
 	return err
 }

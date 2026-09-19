@@ -46,6 +46,14 @@ type Job struct {
 	CreatedAt  string `json:"created_at"`
 	StartedAt  string `json:"started_at,omitempty"`
 	FinishedAt string `json:"finished_at,omitempty"`
+	// Ключи и аргументы заголовка, шага и ошибки (msgs) — API
+	// подставляет текст на языке читающего; в JSON не уходят.
+	TitleKey  string `json:"-"`
+	TitleArgs string `json:"-"`
+	StepKey   string `json:"-"`
+	StepArgs  string `json:"-"`
+	ErrorKey  string `json:"-"`
+	ErrorArgs string `json:"-"`
 	// Resumable — тип задания умеет продолжаться с сохранённого места
 	// (кнопка «попробовать снова»). Не колонка: выставляется API по
 	// исполнителю.
@@ -67,6 +75,10 @@ type JobLogLine struct {
 	Seq  int64  `json:"seq"`
 	TS   string `json:"ts"`
 	Text string `json:"text"`
+	// Key/Args — ключ каталога и аргументы (msgs.EncodeArgs); пусто у
+	// сырых строк. API подставляет Text на языке читающего.
+	Key  string `json:"-"`
+	Args string `json:"-"`
 }
 
 // CreateJob заводит задание в очереди.
@@ -76,10 +88,10 @@ func (db *DB) CreateJob(ctx context.Context, j Job) (int64, error) {
 	}
 	res, err := db.ExecContext(ctx, `
 		INSERT INTO jobs (kind, title, queue, status, params, resume, step, steps, step_name,
-		                  error, author, lang, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?)`,
+		                  error, author, lang, created_at, title_key, title_args)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?)`,
 		j.Kind, j.Title, j.Queue, j.Status, j.Params, j.Resume, j.Step, j.Steps, j.StepName,
-		j.Author, j.Lang, FormatTime(time.Now()))
+		j.Author, j.Lang, FormatTime(time.Now()), j.TitleKey, j.TitleArgs)
 	if err != nil {
 		return 0, err
 	}
@@ -90,7 +102,8 @@ func (db *DB) CreateJob(ctx context.Context, j Job) (int64, error) {
 func (db *DB) JobByID(ctx context.Context, id int64) (Job, error) {
 	row := db.QueryRowContext(ctx, `
 		SELECT id, kind, title, queue, status, params, resume, step, steps, step_name,
-		       error, author, lang, created_at, started_at, finished_at
+		       error, author, lang, created_at, started_at, finished_at,
+		       title_key, title_args, step_key, step_args, error_key, error_args
 		FROM jobs WHERE id = ?`, id)
 	j, err := scanJob(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -106,7 +119,8 @@ func (db *DB) ListJobs(ctx context.Context, limit int) ([]Job, error) {
 	}
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, kind, title, queue, status, params, resume, step, steps, step_name,
-		       error, author, lang, created_at, started_at, finished_at
+		       error, author, lang, created_at, started_at, finished_at,
+		       title_key, title_args, step_key, step_args, error_key, error_args
 		FROM jobs ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -120,7 +134,8 @@ func (db *DB) ListJobs(ctx context.Context, limit int) ([]Job, error) {
 func (db *DB) UnfinishedJobs(ctx context.Context) ([]Job, error) {
 	rows, err := db.QueryContext(ctx, `
 		SELECT id, kind, title, queue, status, params, resume, step, steps, step_name,
-		       error, author, lang, created_at, started_at, finished_at
+		       error, author, lang, created_at, started_at, finished_at,
+		       title_key, title_args, step_key, step_args, error_key, error_args
 		FROM jobs WHERE status IN (?, ?) ORDER BY id`, JobQueued, JobRunning)
 	if err != nil {
 		return nil, err
@@ -159,8 +174,19 @@ func (db *DB) FinishJob(ctx context.Context, id int64, status, errMsg string) er
 // SetJobStep запоминает, на каком шаге задание, — чтобы это пережило
 // перезапуск и было видно в списке без чтения всего журнала.
 func (db *DB) SetJobStep(ctx context.Context, id int64, step, steps int, name string) error {
+	return db.SetJobStepKey(ctx, id, step, steps, name, "", "")
+}
+
+// SetJobStepKey — то же с ключом каталога и аргументами шага.
+func (db *DB) SetJobStepKey(ctx context.Context, id int64, step, steps int, name, key, args string) error {
 	_, err := db.ExecContext(ctx,
-		`UPDATE jobs SET step = ?, steps = ?, step_name = ? WHERE id = ?`, step, steps, name, id)
+		`UPDATE jobs SET step = ?, steps = ?, step_name = ?, step_key = ?, step_args = ? WHERE id = ?`, step, steps, name, key, args, id)
+	return err
+}
+
+// SetJobErrorKey записывает ключ и аргументы ошибки (текст — в FinishJob).
+func (db *DB) SetJobErrorKey(ctx context.Context, id int64, key, args string) error {
+	_, err := db.ExecContext(ctx, `UPDATE jobs SET error_key = ?, error_args = ? WHERE id = ?`, key, args, id)
 	return err
 }
 
@@ -174,10 +200,16 @@ func (db *DB) SetJobResume(ctx context.Context, id int64, resume string) error {
 // одним запросом с вставкой: параллельных писателей у одного задания нет
 // (его выполняет одна горутина), а гонки с чтением так не возникает.
 func (db *DB) AppendJobLog(ctx context.Context, id int64, text string) error {
+	return db.AppendJobLogKey(ctx, id, text, "", "")
+}
+
+// AppendJobLogKey — строка с ключом каталога и аргументами: текст — на
+// языке автора, ключ — чтобы отрисовать на языке читающего.
+func (db *DB) AppendJobLogKey(ctx context.Context, id int64, text, key, args string) error {
 	_, err := db.ExecContext(ctx, `
-		INSERT INTO job_log (job_id, seq, ts, text)
-		VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM job_log WHERE job_id = ?), ?, ?)`,
-		id, id, FormatTime(time.Now()), text)
+		INSERT INTO job_log (job_id, seq, ts, text, key, args)
+		VALUES (?, (SELECT COALESCE(MAX(seq), 0) + 1 FROM job_log WHERE job_id = ?), ?, ?, ?, ?)`,
+		id, id, FormatTime(time.Now()), text, key, args)
 	return err
 }
 
@@ -188,7 +220,7 @@ func (db *DB) JobLog(ctx context.Context, id int64, after int64, limit int) ([]J
 		limit = 2000
 	}
 	rows, err := db.QueryContext(ctx,
-		`SELECT seq, ts, text FROM job_log WHERE job_id = ? AND seq > ? ORDER BY seq LIMIT ?`,
+		`SELECT seq, ts, text, key, args FROM job_log WHERE job_id = ? AND seq > ? ORDER BY seq LIMIT ?`,
 		id, after, limit)
 	if err != nil {
 		return nil, err
@@ -197,7 +229,7 @@ func (db *DB) JobLog(ctx context.Context, id int64, after int64, limit int) ([]J
 	out := []JobLogLine{}
 	for rows.Next() {
 		var l JobLogLine
-		if err := rows.Scan(&l.Seq, &l.TS, &l.Text); err != nil {
+		if err := rows.Scan(&l.Seq, &l.TS, &l.Text, &l.Key, &l.Args); err != nil {
 			return nil, err
 		}
 		out = append(out, l)
@@ -229,7 +261,8 @@ type rowScanner interface{ Scan(dest ...any) error }
 func scanJob(row rowScanner) (Job, error) {
 	var j Job
 	err := row.Scan(&j.ID, &j.Kind, &j.Title, &j.Queue, &j.Status, &j.Params, &j.Resume,
-		&j.Step, &j.Steps, &j.StepName, &j.Error, &j.Author, &j.Lang, &j.CreatedAt, &j.StartedAt, &j.FinishedAt)
+		&j.Step, &j.Steps, &j.StepName, &j.Error, &j.Author, &j.Lang, &j.CreatedAt, &j.StartedAt, &j.FinishedAt,
+		&j.TitleKey, &j.TitleArgs, &j.StepKey, &j.StepArgs, &j.ErrorKey, &j.ErrorArgs)
 	return j, err
 }
 

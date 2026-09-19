@@ -95,7 +95,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// то есть потратив минуты и гигабайты впустую.
 	if !done.ToolsReady {
 		if missing := MissingTools(CheckTools(ctx, r.run)); len(missing) > 0 {
-			jc.Step(0, 5, msgs.T(jc.Lang(), "vmcreate.stepMissingTools"))
+			jc.StepKey(0, 5, "vmcreate.stepMissingTools")
 			if err := InstallTools(ctx, r.run, jc.Logf); err != nil {
 				return msgs.Errorf("vmcreate.hostLacksProgramsNeededCreate", err)
 			}
@@ -108,7 +108,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	seedPath := filepath.Join(imagesRoot, spec.Name+"-seed.iso")
 
 	// 1. Образ.
-	jc.Step(1, 5, msgs.T(jc.Lang(), "vmcreate.stepImage"))
+	jc.StepKey(1, 5, "vmcreate.stepImage")
 	// Образ, уже лежащий в кэше (или прямо в каталоге дисков libvirt),
 	// берётся как есть: заново спрашивать у зеркала контрольную сумму
 	// значило бы ставить создание машины в зависимость от сети, которой
@@ -131,7 +131,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 2. Диск машины: копия образа нужного размера.
-	jc.Step(2, 5, msgs.T(jc.Lang(), "vmcreate.stepDisk"))
+	jc.StepKey(2, 5, "vmcreate.stepDisk")
 	if !done.DiskReady {
 		if err := r.makeDisk(ctx, jc, r.imagePath(img), diskPath, spec.DiskGB); err != nil {
 			return err
@@ -151,7 +151,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 4. Определение домена.
-	jc.Step(4, 5, msgs.T(jc.Lang(), "vmcreate.stepDomain"))
+	jc.StepKey(4, 5, "vmcreate.stepDomain")
 	if !done.Defined {
 		if err := r.defineDomain(ctx, jc, spec, diskPath, seedPath); err != nil {
 			return err
@@ -161,7 +161,7 @@ func (r *CreateRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	// 5. Запуск.
-	jc.Step(5, 5, msgs.T(jc.Lang(), "vmcreate.stepStart"))
+	jc.StepKey(5, 5, "vmcreate.stepStart")
 	// Сеть — самая частая причина, по которой машина не стартует на
 	// свежем libvirt: сама сеть «default» заведена, но не поднята, и
 	// virsh отвечает «Failed to start domain» с причиной на следующей

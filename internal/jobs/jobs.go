@@ -55,9 +55,15 @@ func (jc *Context) Logf(format string, args ...any) {
 	jc.m.appendLog(jc.Job.ID, fmt.Sprintf(format, args...))
 }
 
-// Log — строка журнала из каталога сообщений на языке автора задания.
+// Log — строка журнала из каталога сообщений: текст на языке автора
+// задания плюс ключ и аргументы, чтобы API отдал её на языке читающего.
 func (jc *Context) Log(key string, args ...any) {
-	jc.m.appendLog(jc.Job.ID, msgs.T(jc.Lang(), key, args...))
+	jc.m.appendLogKey(jc.Job.ID, msgs.T(jc.Lang(), key, args...), key, msgs.EncodeArgs(args))
+}
+
+// StepKey — шаг с названием из каталога (см. Log).
+func (jc *Context) StepKey(n, total int, key string, args ...any) {
+	jc.m.setStepKey(jc.Job.ID, n, total, msgs.T(jc.Lang(), key, args...), key, msgs.EncodeArgs(args))
 }
 
 // Lang — язык автора задания (см. Spec.Lang).
@@ -156,6 +162,11 @@ type Spec struct {
 	Lang   msgs.Lang
 	Params any
 	Steps  int
+	// TitleKey/TitleArgs — заголовок ключом каталога: тогда Title можно
+	// не задавать (он отрисуется на языке автора сам), а читающему API
+	// покажет заголовок на его языке.
+	TitleKey  string
+	TitleArgs []any
 }
 
 // Start заводит задание и запускает его, если ключ очереди свободен.
@@ -179,9 +190,14 @@ func (m *Manager) Start(ctx context.Context, spec Spec) (int64, error) {
 	if lang == "" {
 		lang = msgs.FromContext(ctx)
 	}
+	title := spec.Title
+	if spec.TitleKey != "" && title == "" {
+		title = msgs.T(lang, spec.TitleKey, spec.TitleArgs...)
+	}
 	id, err := m.db.CreateJob(ctx, store.Job{
-		Kind: spec.Kind, Title: spec.Title, Queue: spec.Queue, Status: store.JobQueued,
+		Kind: spec.Kind, Title: title, Queue: spec.Queue, Status: store.JobQueued,
 		Params: params, Steps: spec.Steps, Author: spec.Author, Lang: string(lang),
+		TitleKey: spec.TitleKey, TitleArgs: msgs.EncodeArgs(spec.TitleArgs),
 	})
 	if err != nil {
 		return 0, err
@@ -220,6 +236,7 @@ func (m *Manager) Retry(ctx context.Context, id int64) (int64, error) {
 	newID, err := m.db.CreateJob(ctx, store.Job{
 		Kind: job.Kind, Title: job.Title, Queue: job.Queue, Status: store.JobQueued,
 		Params: job.Params, Resume: job.Resume, Steps: job.Steps, Author: job.Author, Lang: string(lang),
+		TitleKey: job.TitleKey, TitleArgs: job.TitleArgs,
 	})
 	if err != nil {
 		return 0, err
@@ -301,7 +318,9 @@ func (m *Manager) run(ctx context.Context, id int64, queue string) {
 		status, msg = store.JobFailed, msgs.Localize(jc.Lang(), runErr)
 	}
 	if runErr != nil {
-		m.appendLog(id, "— "+msg)
+		key, args := msgs.ErrParts(runErr)
+		m.appendLogKey(id, "— "+msg, keyIf(key, "jobs.errorLine"), argsIf(key, msgs.EncodeArgs([]any{runErr})))
+		_ = m.db.SetJobErrorKey(context.Background(), id, key, args)
 	}
 	if err := m.db.FinishJob(context.Background(), id, status, msg); err != nil {
 		m.log.Error("исход задания не записан", "id", id, "err", err)
@@ -434,11 +453,39 @@ func (m *Manager) Watch(id int64) (<-chan Update, func()) {
 
 // appendLog пишет строку в базу и рассылает наблюдателям.
 func (m *Manager) appendLog(id int64, text string) {
-	if err := m.db.AppendJobLog(context.Background(), id, text); err != nil {
+	m.appendLogKey(id, text, "", "")
+}
+
+func (m *Manager) appendLogKey(id int64, text, key, args string) {
+	if err := m.db.AppendJobLogKey(context.Background(), id, text, key, args); err != nil {
 		m.log.Error("строка журнала задания не записана", "id", id, "err", err)
 		return
 	}
-	m.notify(id, Update{Line: &store.JobLogLine{Text: text}})
+	m.notify(id, Update{Line: &store.JobLogLine{Text: text, Key: key, Args: args}})
+}
+
+// keyIf/argsIf — ключ строки «— ошибка» только когда сама ошибка из
+// каталога; иначе строка остаётся текстом.
+func keyIf(errKey, key string) string {
+	if errKey == "" {
+		return ""
+	}
+	return key
+}
+
+func argsIf(errKey, args string) string {
+	if errKey == "" {
+		return ""
+	}
+	return args
+}
+
+func (m *Manager) setStepKey(id int64, n, total int, name, key, args string) {
+	if err := m.db.SetJobStepKey(context.Background(), id, n, total, name, key, args); err != nil {
+		m.log.Error("шаг задания не записан", "id", id, "err", err)
+		return
+	}
+	m.notifyJob(id)
 }
 
 func (m *Manager) setStep(id int64, n, total int, name string) {

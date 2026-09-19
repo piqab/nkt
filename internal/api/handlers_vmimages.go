@@ -115,11 +115,11 @@ func (s *Server) handleVMToolsInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind:   vmcreate.KindTools,
-		Title:  msgs.Tc(r.Context(), "api.vmToolsJobTitle"),
-		Queue:  "host",
-		Author: user,
-		Steps:  2,
+		Kind:     vmcreate.KindTools,
+		TitleKey: "api.vmToolsJobTitle",
+		Queue:    "host",
+		Author:   user,
+		Steps:    2,
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
@@ -340,8 +340,8 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind:  vmcreate.KindCreate,
-		Title: msgs.Tc(r.Context(), "api.machineJobTitle", spec.Name),
+		Kind:     vmcreate.KindCreate,
+		TitleKey: "api.machineJobTitle", TitleArgs: []any{spec.Name},
 		// Ключ очереди — хост: создание машины занимает диск и вызывает
 		// virsh, и делать это парой параллельных заданий незачем.
 		Queue:  "host",

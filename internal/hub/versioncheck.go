@@ -136,7 +136,11 @@ func (m *Manager) checkLatestVersion(ctx context.Context) {
 		m.recordVersionCheck("", "", "", msgs.Errorf("hub.emptyTagNameGitHubResponse"))
 		return
 	}
-	m.recordVersionCheck(latest, previous, cleanReleaseNotes(rel.Body), nil)
+	ru, en := splitReleaseNotes(rel.Body)
+	m.recordVersionCheck(latest, previous, ru, nil)
+	m.versionMu.Lock()
+	m.latestNotesEN = en
+	m.versionMu.Unlock()
 }
 
 // maxReleaseNotes caps what is kept from a release body. Nothing this
@@ -148,6 +152,20 @@ const maxReleaseNotes = 16 << 10
 // cleanReleaseNotes normalises a GitHub release body for display. The UI
 // renders it as plain text (no markdown renderer, no HTML), so the only
 // work here is line endings, trimming and the size cap.
+// releaseNotesMarker разделяет в теле релиза русскую и английскую части
+// (workflow склеивает WHATSNEW.md и WHATSNEW.en.md через него); без
+// маркера всё тело — на одном языке для обоих.
+const releaseNotesMarker = "<!-- en -->"
+
+// splitReleaseNotes — русская и английская части тела релиза.
+func splitReleaseNotes(body string) (ru, en string) {
+	ru, en, found := strings.Cut(body, releaseNotesMarker)
+	if !found {
+		return cleanReleaseNotes(body), ""
+	}
+	return cleanReleaseNotes(ru), cleanReleaseNotes(en)
+}
+
 func cleanReleaseNotes(body string) string {
 	notes := strings.ReplaceAll(body, "\r\n", "\n")
 	notes = strings.TrimSpace(notes)
@@ -204,9 +222,18 @@ type VersionInfo struct {
 // versionCheckLoop last learned about the latest release — never triggers a
 // fresh check itself (see CheckNow for that).
 func (m *Manager) VersionStatus() VersionInfo {
+	return m.VersionStatusFor(msgs.DefaultLang)
+}
+
+// VersionStatusFor — то же с описанием релиза на языке lang (английская
+// часть есть только у релизов с WHATSNEW.en.md; иначе — русская).
+func (m *Manager) VersionStatusFor(lang msgs.Lang) VersionInfo {
 	m.versionMu.Lock()
 	latest, checkedAt, checkErr := m.latestVersion, m.versionCheckedAt, m.versionCheckErr
 	notes, previous := m.latestNotes, m.previousVersion
+	if lang == msgs.EN && m.latestNotesEN != "" {
+		notes = m.latestNotesEN
+	}
 	m.versionMu.Unlock()
 
 	return VersionInfo{
