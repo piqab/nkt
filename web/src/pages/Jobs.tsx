@@ -185,12 +185,16 @@ export function JobLogModal({
   job,
   onClose,
   scope = '',
+  onDone,
 }: {
   job: Job
   onClose: () => void
   /** Приставка пути к API — например «/hosts/local» для заданий самого
    * хаба, открытых из списка хостов, где область запросов не выбрана. */
   scope?: string
+  /** Вызывается один раз, когда открытое задание завершилось (любым
+   * исходом) — список хостов по этому сигналу обновляет строки. */
+  onDone?: (job: Job) => void
 }) {
   const { t } = useTranslation()
   // «Попробовать снова» открывает в этом же окне новое задание —
@@ -280,6 +284,13 @@ export function JobLogModal({
     const el = bodyRef.current
     if (el) el.scrollTop = el.scrollHeight
   }, [lines])
+
+  const doneNotified = useRef<number | null>(null)
+  useEffect(() => {
+    if (!onDone || !isJobDone(current) || doneNotified.current === current.id) return
+    doneNotified.current = current.id
+    onDone(current)
+  }, [current, onDone])
 
   async function retry() {
     setRetrying(true)

@@ -428,14 +428,14 @@ func TestSetServiceRunningRejectsUninstalledHost(t *testing.T) {
 	}
 }
 
-// TestStartInstallSupersedesRunningJob covers the race a real double-click
+// TestStartInstallSupersedesRunningJob covers (теперь это блок HostInstallRunner.Run) the race a real double-click
 // (or "открыть"'s auto-update overlapping a manual "обновить") could
 // trigger: two install() goroutines for the same host, each writing that
 // host's status independently. Without a guard, whichever one finishes last
 // wins regardless of which actually reflects reality — a slow or stuck
 // straggler can silently overwrite a perfectly good terminal status with a
 // stale one, leaving the host's "обновить" button spinning forever. This
-// exercises the guard directly (isCurrentJob + StartInstall's supersede
+// exercises the guard directly (isCurrentJob + HostInstallRunner's supersede
 // logic) rather than through two real SSH installs, which the rest of this
 // package's tests already show is expensive to set up.
 func TestStartInstallSupersedesRunningJob(t *testing.T) {
@@ -448,10 +448,9 @@ func TestStartInstallSupersedesRunningJob(t *testing.T) {
 	}
 
 	jobACtx, cancelA := context.WithCancel(context.Background())
-	jobA := &installJob{id: "job-a", hostID: id, cancel: cancelA}
+	jobA := &installJob{jobID: 1, hostID: id, cancel: cancelA}
 
 	m.jobsMu.Lock()
-	m.jobs[jobA.id] = jobA
 	m.jobByHost[id] = jobA
 	m.jobsMu.Unlock()
 
@@ -461,12 +460,11 @@ func TestStartInstallSupersedesRunningJob(t *testing.T) {
 
 	// Mirrors StartInstall's own supersede block exactly: a still-running
 	// previous job for this host is cancelled before the new one takes over.
-	jobB := &installJob{id: "job-b", hostID: id}
+	jobB := &installJob{jobID: 2, hostID: id}
 	m.jobsMu.Lock()
 	if prev, ok := m.jobByHost[id]; ok && !prev.isDone() {
 		prev.cancelNow()
 	}
-	m.jobs[jobB.id] = jobB
 	m.jobByHost[id] = jobB
 	m.jobsMu.Unlock()
 

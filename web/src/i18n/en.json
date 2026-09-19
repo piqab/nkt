@@ -484,7 +484,6 @@
     "confirmBulkStop": "Stop nkt on every host at once ({{count}})? They'll all become unreachable through the hub until you start them again.",
     "bulkFailed": "Failed on {{failed}} of {{total}} hosts.",
     "confirmUpdateAll": "Bring nkt to the hub's version on {{count}} hosts with a different version? This runs sequentially, one host at a time.",
-    "bulkUpdateFinished": "Update finished: {{total}} hosts, {{failed}} failed.",
     "confirmImport": "Import hosts from this file? Hosts are added alongside existing ones (the file doesn't replace or dedupe by name/address). Secrets in the file only decrypt if it was exported with this same hub's NKT_HUB_MASTER_KEY.",
     "imported": "Imported hosts: {{count}}.{{errors}}",
     "importedErrors": " Errors: {{errors}}.",
@@ -529,12 +528,6 @@
     "loading": "hosts",
     "noHosts": "No hosts yet — add the first one below.",
     "editHostTitle": "Edit host \"{{name}}\"",
-    "installTitle": "Installing on {{name}}",
-    "installTitleBatch": "Installing on {{name}} ({{current}} of {{total}})",
-    "installTitleFallback": "host",
-    "jobErrorLabel": "Error:",
-    "jobDone": "Done.",
-    "jobRunning": "in progress — you can close this window, the install continues in the background.",
     "publicKeyTitle": "Public key for \"{{name}}\"",
     "publicKeyBody": "Add this line to <code>~/.ssh/authorized_keys</code> on the host itself (for the user given when it was added), then click \"install\". The matching private half is stored only on the hub and never leaves it.",
     "copied": "copied",
@@ -549,7 +542,6 @@
     "encryptedFileBody": "\"{{fileName}}\" is password-protected — enter it to decrypt and import the hosts.",
     "password": "Password",
     "decryptAndImport": "Decrypt and import",
-    "startingLog": "Starting…",
     "authGenerated": "Manual",
     "authPassword": "Automatic",
     "secretKeyEditing": "New private key (PEM) — leave empty to keep the current one",
@@ -686,7 +678,8 @@
     "viaDirect": "direct (from the hub to the machine's address)",
     "viaJump": "via the host",
     "checkReach": "check access",
-    "discoverDefaults": "Defaults for the checked machines — each has its own fields under its row, editable:"
+    "discoverDefaults": "Defaults for the checked machines — each has its own fields under its row, editable:",
+    "bulkUpdateStarted": "Update started for {{started}} of {{total}} hosts — progress in \"Jobs\" and in the table rows"
   },
   "events": {
     "title": "Alerts",

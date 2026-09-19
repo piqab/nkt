@@ -298,15 +298,22 @@ func (r *VMProvisionRunner) installNKT(ctx context.Context, jc *jobs.Context, ho
 	return r.runInstall(ctx, jc, hostID)
 }
 
-// runInstall запускает установку (или обновление) nkt на хосте и ждёт
-// её конца, пересказывая ход дела в свой журнал.
+// runInstall запускает установку (или обновление) nkt на хосте — задание
+// хаба — и ждёт его конца, пересказывая журнал в свой (ключами, чтобы
+// читающий видел строки на своём языке).
 func (r *VMProvisionRunner) runInstall(ctx context.Context, jc *jobs.Context, hostID int64) error {
 	jobID, err := r.m.StartInstall(ctx, hostID, false, nil)
 	if err != nil {
 		return msgs.Errorf("hub.startingNktInstallation", err)
 	}
+	return r.m.waitInstallJob(ctx, jc, jobID)
+}
+
+// waitInstallJob ждёт задание установки jobID, перекладывая его журнал в
+// jc с отступом.
+func (m *Manager) waitInstallJob(ctx context.Context, jc *jobs.Context, jobID int64) error {
 	deadline := time.Now().Add(installTimeout)
-	seen := 0
+	var after int64
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -314,17 +321,22 @@ func (r *VMProvisionRunner) runInstall(ctx context.Context, jc *jobs.Context, ho
 		if time.Now().After(deadline) {
 			return msgs.Errorf("hub.nktInstallationDidFinishWithin", installTimeout)
 		}
-		events, done, errMsg, ok := r.m.InstallJobStatus(jobID)
-		if !ok {
+		job, err := m.db.JobByID(ctx, jobID)
+		if err != nil {
 			return msgs.Errorf("hub.installationJobLost")
 		}
-		for _, e := range events[seen:] {
-			jc.Logf("      %s", e.Text)
+		lines, _ := m.db.JobLog(ctx, jobID, after, 500)
+		for _, l := range lines {
+			jc.LogStored("      ", l)
+			after = l.Seq
 		}
-		seen = len(events)
-		if done {
-			if errMsg != "" {
-				return msgs.Errorf("hub.installingNkt", errMsg)
+		if job.Done() {
+			if job.Status != store.JobSucceeded {
+				errText := job.Error
+				if job.ErrorKey != "" {
+					errText = msgs.Render(jc.Lang(), job.ErrorKey, job.ErrorArgs, job.Error)
+				}
+				return msgs.Errorf("hub.installingNkt", errText)
 			}
 			return nil
 		}
