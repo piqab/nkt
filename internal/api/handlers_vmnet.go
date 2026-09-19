@@ -117,6 +117,10 @@ func (s *Server) handleVMNetworkAction(w http.ResponseWriter, r *http.Request) {
 		err = mgr.SetAutostart(r.Context(), name, false)
 	case "delete":
 		err = mgr.Delete(r.Context(), name)
+	case "ensure":
+		// Поднять, а если нет — завести NAT-сеть (как перед созданием
+		// машины); подготовка кластера делает это заранее.
+		_, err = mgr.EnsureNAT(r.Context(), name)
 	default:
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "api.unknownNetworkAction"))
 		return
