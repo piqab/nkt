@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"path/filepath"
 	"testing"
 )
@@ -265,7 +266,7 @@ func TestExportImportV2RoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if export.Version != 2 || len(export.Groups) != 3 || len(export.Profiles) != 1 || len(export.VMTemplates) != 1 {
+	if export.Version != ExportFormatVersion || len(export.Groups) != 3 || len(export.Profiles) != 1 || len(export.VMTemplates) != 1 {
 		t.Fatalf("export = %+v", export)
 	}
 	if export.GroupProfiles["web-farm"] != "web" {
@@ -336,7 +337,106 @@ func TestExportImportV2RoundTrip(t *testing.T) {
 	if _, err := DecodeHubExport([]byte(`{"version": 1, "hosts": []}`)); err != nil {
 		t.Errorf("файл версии 1 отвергнут: %v", err)
 	}
-	if _, err := DecodeHubExport([]byte(`{"version": 3, "hosts": []}`)); err == nil {
+	if _, err := DecodeHubExport([]byte(`{"version": 4, "hosts": []}`)); err == nil {
 		t.Error("файл из будущего принят")
+	}
+}
+
+// Версия 3: кластер с узлами, способ связи и доставки у хостов, история
+// редакций сценария и лимит кэша переезжают целиком; файл версии 2 без
+// этих разделов читается по-прежнему.
+func TestExportImportV3ClustersAndScripts(t *testing.T) {
+	ctx := context.Background()
+	src, err := Open(filepath.Join(t.TempDir(), "src.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer src.Close()
+	hv, _ := src.CreateHost(ctx, "hv1", "10.0.0.1", 22, "root", HostAuthKey, []byte("s1"))
+	cp, _ := src.CreateHost(ctx, "lab-cp-1", "10.101.1.10", 22, "ops", HostAuthKey, []byte("s2"))
+	w, _ := src.CreateHost(ctx, "lab-w-1", "10.101.1.11", 22, "ops", HostAuthKey, []byte("s3"))
+	for _, id := range []int64{cp, w} {
+		_ = src.SetHostParent(ctx, id, hv)
+	}
+	_ = src.SetHostVia(ctx, cp, HostViaDirect)
+	_ = src.SetHostBinaryVia(ctx, hv, "github")
+	clID, err := src.CreateCluster(ctx, Cluster{Name: "lab", HostID: hv, Flavor: "k3s", Topology: "cp1", Workers: 1, Expose: true, SpecJSON: `{"name":"lab"}`})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = src.SetClusterStatus(ctx, clID, ClusterReady, "")
+	_ = src.SetClusterKubeconfig(ctx, clID, "10.0.0.1:16443", []byte("kc-enc"))
+	_ = src.SetClusterWG(ctx, clID, []byte("wg-enc"))
+	_ = src.SetHostCluster(ctx, cp, clID, "control-plane")
+	_ = src.SetHostCluster(ctx, w, clID, "worker")
+	sid, err := src.CreateScript(ctx, Script{Name: "deploy", Content: "group a", Author: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := src.UpdateScript(ctx, Script{ID: sid, Name: "deploy", Content: "group a\ngroup b", Note: "second", Author: "admin"}); err != nil {
+		t.Fatal(err)
+	}
+	_ = src.KVSet(ctx, "aptcache_max_gb", "40")
+
+	export, err := src.ExportHosts(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(export.Clusters) != 1 || export.Clusters[0].Host != "hv1" || string(export.Clusters[0].KubeconfigEnc) != "kc-enc" || string(export.Clusters[0].WGEnc) != "wg-enc" {
+		t.Fatalf("clusters: %+v", export.Clusters)
+	}
+	byName := map[string]HostExport{}
+	for _, h := range export.Hosts {
+		byName[h.Name] = h
+	}
+	if byName["lab-cp-1"].Cluster != "lab" || byName["lab-cp-1"].K8sRole != "control-plane" || byName["lab-cp-1"].Via != HostViaDirect || byName["hv1"].BinaryVia != "github" {
+		t.Errorf("hosts: %+v", byName)
+	}
+	if len(export.Scripts) != 1 || len(export.Scripts[0].Versions) != 2 || export.Scripts[0].Versions[1].Note != "second" {
+		t.Errorf("scripts: %+v", export.Scripts)
+	}
+	if export.Settings["aptcache_max_gb"] != "40" {
+		t.Errorf("settings: %v", export.Settings)
+	}
+
+	raw, _ := json.Marshal(export)
+	decoded, err := DecodeHubExport(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dst, err := Open(filepath.Join(t.TempDir(), "dst.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dst.Close()
+	n, errs := dst.ImportHosts(ctx, decoded)
+	if n != 3 || len(errs) != 0 {
+		t.Fatalf("imported %d, errs %v", n, errs)
+	}
+	clusters, _ := dst.ListClusters(ctx)
+	if len(clusters) != 1 || clusters[0].Status != ClusterReady || clusters[0].ServerAddr != "10.0.0.1:16443" || string(clusters[0].KubeconfigEnc) != "kc-enc" {
+		t.Fatalf("dst clusters: %+v", clusters)
+	}
+	nodes, _ := dst.ClusterHosts(ctx, clusters[0].ID)
+	if len(nodes) != 2 || nodes[0].Name != "lab-cp-1" || nodes[0].K8sRole != "control-plane" || nodes[0].Via != HostViaDirect || nodes[0].ParentID == 0 {
+		t.Errorf("dst nodes: %+v", nodes)
+	}
+	scripts, _ := dst.ListScripts(ctx)
+	if len(scripts) != 1 {
+		t.Fatalf("dst scripts: %+v", scripts)
+	}
+	if vs, _ := dst.ScriptVersions(ctx, scripts[0].ID, 10); len(vs) != 2 {
+		t.Errorf("dst script versions: %+v", vs)
+	}
+	if v, ok, _ := dst.KVGet(ctx, "aptcache_max_gb"); !ok || v != "40" {
+		t.Errorf("dst aptcache limit: %q", v)
+	}
+	// Повторный импорт: кластер и хосты с теми же именами не дублируются.
+	_, errs = dst.ImportHosts(ctx, decoded)
+	if len(errs) == 0 {
+		t.Errorf("повторный импорт должен сообщить о занятых именах")
+	}
+	if clusters, _ = dst.ListClusters(ctx); len(clusters) != 1 {
+		t.Errorf("кластер задублирован: %d", len(clusters))
 	}
 }

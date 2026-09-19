@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"strings"
 
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
@@ -29,6 +30,11 @@ func (m *Manager) ExportHosts(ctx context.Context, includeKey bool) (store.HubEx
 	}
 	if includeKey {
 		export.MasterKey = base64.StdEncoding.EncodeToString(m.key)
+	}
+	// Образы для кластеров — только список: файлы копируют руками, а
+	// импорт скажет, каких не хватает.
+	for _, img := range m.ClusterImages() {
+		export.ClusterImages = append(export.ClusterImages, store.ClusterImageExport{Name: img.Name, Size: img.Size})
 	}
 	return export, nil
 }
@@ -59,11 +65,57 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport) (impo
 			ok = append(ok, reenc)
 		}
 		export.Hosts = ok
+		// Секреты кластеров — kubeconfig и план WireGuard — тем же ключом.
+		okc := export.Clusters[:0]
+		for _, c := range export.Clusters {
+			reenc, err := reencryptClusterSecrets(oldKey, m.key, c)
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", c.Name, err))
+				continue
+			}
+			okc = append(okc, reenc)
+		}
+		export.Clusters = okc
 		export.MasterKey = "" // never persisted; the point of this whole path is to not need it again
 	}
 
 	n, storeErrs := m.db.ImportHosts(ctx, export)
-	return n, append(errs, storeErrs...)
+	errs = append(errs, storeErrs...)
+	// Образы для кластеров: чего нет в библиотеке этого хаба.
+	have := map[string]bool{}
+	for _, img := range m.ClusterImages() {
+		have[img.Name] = true
+	}
+	var missing []string
+	for _, img := range export.ClusterImages {
+		if !have[img.Name] {
+			missing = append(missing, img.Name)
+		}
+	}
+	if len(missing) > 0 {
+		errs = append(errs, msgs.Tc(ctx, "hub.importImagesMissing", strings.Join(missing, ", "), m.clusterImagesDir()))
+	}
+	return n, errs
+}
+
+// reencryptClusterSecrets перешифровывает kubeconfig и план WireGuard
+// кластера с ключа старого хаба на ключ этого.
+func reencryptClusterSecrets(oldKey, newKey []byte, c store.ClusterExport) (store.ClusterExport, error) {
+	for _, f := range []*[]byte{&c.KubeconfigEnc, &c.WGEnc} {
+		if len(*f) == 0 {
+			continue
+		}
+		raw, err := secretbox.Decrypt(oldKey, *f)
+		if err != nil {
+			return store.ClusterExport{}, msgs.Errorf("hub.decryptingClusterSecret", err)
+		}
+		enc, err := secretbox.Encrypt(newKey, raw)
+		if err != nil {
+			return store.ClusterExport{}, err
+		}
+		*f = enc
+	}
+	return c, nil
 }
 
 // reencryptHostSecrets decrypts h's secret_enc/admin_password_enc/
