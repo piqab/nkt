@@ -80,6 +80,7 @@ export default function UpdateModal({
       )}
       <div
         ref={containerRef}
+        className="sensitive-area"
         style={{
           height: '50vh',
           background: '#141414',

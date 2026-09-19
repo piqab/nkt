@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { blurText } from '../privacy'
 import { Button, Checkbox, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api'
@@ -111,10 +112,10 @@ export function StandaloneConfirm({
                   {t('standalone.processFate')}
                 </label>
                 <pre className="diff mono" style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                  {h.command}
+                  {blurText(h.command)}
                 </pre>
                 <div className="small muted">
-                  {t('standalone.processDetail', { cwd: h.cwd || '/', user: h.user || 'root' })}
+                  {blurText(t('standalone.processDetail', { cwd: h.cwd || '/', user: h.user || 'root' }))}
                 </div>
                 {h.pid !== undefined && !restart.has(h.pid) && (
                   <div className="small" style={{ color: 'var(--status-warning)' }}>

@@ -297,7 +297,7 @@ export function PortProbeModal({ address, port, onClose }: { address: string; po
             <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
               <label style={{ flex: 1, minWidth: '10rem' }}>
                 {t('probe.host')}
-                <Input value={host} onChange={(e) => setHost(e.target.value)} placeholder="example.com" />
+                <Input className="sensitive" value={host} onChange={(e) => setHost(e.target.value)} placeholder="example.com" />
               </label>
               {kind === 'https' && (
                 <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
@@ -337,7 +337,7 @@ export function PortProbeModal({ address, port, onClose }: { address: string; po
           <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <label style={{ flex: 1, minWidth: '10rem' }}>
               {t('probe.host')}
-              <Input value={host} onChange={(e) => setHost(e.target.value)} placeholder="example.com" />
+              <Input className="sensitive" value={host} onChange={(e) => setHost(e.target.value)} placeholder="example.com" />
             </label>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem' }}>
               <Checkbox checked={insecure} onChange={(e) => setInsecure(e.target.checked)} />
@@ -448,11 +448,11 @@ function ProbeOutcome({
       } catch {
         // Не разобрался — покажем как есть.
       }
-      return <pre className="diff mono" style={{ margin: 0, maxHeight: '24rem', overflow: 'auto' }}>{pretty}</pre>
+      return <pre className="diff mono sensitive-area" style={{ margin: 0, maxHeight: '24rem', overflow: 'auto' }}>{pretty}</pre>
     }
     if (isText) {
       return (
-        <pre className="diff mono" style={{ margin: 0, maxHeight: '24rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+        <pre className="diff mono sensitive-area" style={{ margin: 0, maxHeight: '24rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
           {bytesToText(bytes)}
           {result.truncated ? '\n…' : ''}
         </pre>

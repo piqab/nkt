@@ -923,8 +923,8 @@ span.vm-toggle {
 .privacy .sensitive-block { filter: blur(8px); display: inline-block; }
 .privacy .sensitive-area { filter: blur(9px); }
 .privacy input.sensitive, .privacy .sensitive input, .privacy .sensitive textarea { filter: blur(4px); }
-.privacy-badge {
-  position: fixed; bottom: 0.6rem; right: 0.8rem; z-index: 1100;
-  font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 999px;
-  background: var(--series-4); color: #fff; opacity: 0.9;
+/* Метка режима — окрашенное название «nkt» в шапке сайдбара и хаба. */
+.privacy .brand-name, .privacy .hub-topbar-brand {
+  color: #fff; background: var(--series-4); border-radius: 4px; padding: 0 0.35rem;
 }
+.privacy .brand-collapsed .ant-btn { background: var(--series-4); color: #fff; }

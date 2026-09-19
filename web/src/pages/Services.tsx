@@ -494,7 +494,7 @@ function ServiceLogsModal({ service, onClose }: { service: ServiceUnit; onClose:
       {logs.loading && !logs.data ? (
         <Loading what={t('services.loadingLogs')} />
       ) : (
-        <pre className="diff" style={{ maxHeight: '28rem' }}>
+        <pre className="diff sensitive-area" style={{ maxHeight: '28rem' }}>
           {logs.data?.output?.trim() || t('services.empty')}
         </pre>
       )}

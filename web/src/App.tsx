@@ -36,7 +36,7 @@ import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-
 import { Trans, useTranslation } from 'react-i18next'
 import { LOCAL_HOST_ID, api, hostScope, onUnauthorized, readSelectedHost, type SelectedHost, useApi, writeSelectedHost } from './api'
 import { buildAntdTheme, resolveIsDark, type Theme } from './theme'
-import { applyPrivacy, readPrivacy, setKnownNames, usePrivacy } from './privacy'
+import { Sensitive, applyPrivacy, readPrivacy, setKnownNames, usePrivacy } from './privacy'
 import type { Lang } from './i18n'
 import { useLang } from './hooks/useLang'
 import type { HostEvent, HubVersionInfo, Me, Overview } from './types'
@@ -221,10 +221,17 @@ function navIcon(icon: ReactNode, count: number, busy: boolean, collapsed: boole
 /** Шапка сайдбара: «nkt» и кнопка свернуть/развернуть. */
 function SidebarBrand({ collapsed, onToggle, sub }: { collapsed: boolean; onToggle: () => void; sub?: ReactNode }) {
   const { t } = useTranslation()
+  const [privacy] = usePrivacy()
   return (
     <div className={`brand${collapsed ? ' brand-collapsed' : ''}`}>
       <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center', gap: '0.25rem' }}>
-        {!collapsed && <div className="brand-name">nkt</div>}
+        {/* В приватном режиме название окрашено — метка режима без
+            отдельного бейджа (см. .privacy .brand-name). */}
+        {!collapsed && (
+          <Tooltip title={privacy ? t('app.privacyBadge') : undefined} placement="right">
+            <div className="brand-name">nkt</div>
+          </Tooltip>
+        )}
         <Tooltip title={collapsed ? t('app.sidebarExpand') : t('app.sidebarCollapse')} placement="right">
           <Button
             type="text"
@@ -475,7 +482,6 @@ function Shell({
   }, [knownHosts.data])
   const foot = (
     <div className={`sidebar-foot${collapsed ? ' sidebar-foot-collapsed' : ''}`}>
-      {privacy && <div className="privacy-badge">{t('app.privacyBadge')}</div>}
       {collapsed ? (
         <Tooltip title={t('app.logout')} placement="right">
           <Button type="text" size="small" aria-label={t('app.logout')} icon={<LogoutOutlined />} onClick={logout} />
@@ -762,7 +768,7 @@ function Shell({
         </button>
         <span className="hub-topbar-brand">{t('app.hubBrand')}</span>
         <span className="hub-topbar-sep">→</span>
-        <span className="hub-topbar-host">{selectedHost!.name}</span>
+        <span className="hub-topbar-host"><Sensitive>{selectedHost!.name}</Sensitive></span>
         <span className="hub-topbar-spacer" />
         <span className="small muted">
           {me.username} · {me.role}
