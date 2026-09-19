@@ -248,13 +248,14 @@ function CreateNetworkModal({ onClose, onDone }: { onClose: () => void; onDone: 
         {mode === 'bridge' ? (
           <label>
             {t('vmnet.bridgeExisting')}
-            <Input value={bridge} onChange={(e) => setBridge(e.target.value)} placeholder="br0" />
+            <Input className="sensitive" value={bridge} onChange={(e) => setBridge(e.target.value)} placeholder="br0" />
           </label>
         ) : (
           <>
             <label>
               {t('vmnet.subnet')}
               <Input
+                className="sensitive"
                 value={subnet}
                 onChange={(e) => setSubnet(e.target.value)}
                 placeholder={subnet ? '192.168.100.0/24' : t('vmnet.subnetPicking')}

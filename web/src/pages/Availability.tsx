@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { Sensitive, blurText } from '../privacy'
 import { Button, Modal, Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, tzOffsetMinutes, useApi } from '../api'
@@ -37,7 +38,7 @@ function targetColumns(
       key: 'label',
       render: (_, tgt) => (
         <>
-          <strong>{tgt.label}</strong>
+          <strong>{blurText(tgt.label)}</strong>
           <div className="small muted">{tgt.source}</div>
         </>
       ),
@@ -262,9 +263,9 @@ export default function Availability() {
         title={
           selectedTarget && (
             <div>
-              <div>{t('availability.availabilityAndLatencyFor', { label: selectedTarget.label })}</div>
+              <div>{blurText(t('availability.availabilityAndLatencyFor', { label: selectedTarget.label }))}</div>
               <div className="small secondary mono">
-                {`${selectedTarget.kind}://${selectedTarget.host}:${selectedTarget.port}${selectedTarget.path ?? ''}`}
+                <Sensitive>{`${selectedTarget.kind}://${selectedTarget.host}:${selectedTarget.port}${selectedTarget.path ?? ''}`}</Sensitive>
               </div>
             </div>
           )
@@ -349,7 +350,7 @@ export default function Availability() {
 
             <div style={{ marginTop: '1rem' }}>
               <div className="small muted" style={{ marginBottom: '0.35rem' }}>
-                {t('availability.downtimeByHourFor', { label: selectedTarget.label })}
+                {blurText(t('availability.downtimeByHourFor', { label: selectedTarget.label }))}
               </div>
               {targetHeatmap.loading && !targetHeatmap.data ? (
                 <Loading what={t('common.schedule')} />

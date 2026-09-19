@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react'
-import { Sensitive, setKnownNames } from '../privacy'
+import { Sensitive, blurText, setKnownNames } from '../privacy'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import {
@@ -1903,9 +1903,9 @@ function InstallLog({ events }: { events: RenewEvent[] }) {
 
   return (
     <pre ref={preRef} className="diff" style={{ maxHeight: '22rem' }}>
-      {events
-        .map((e) => `[${new Date(e.time).toLocaleTimeString(i18n.language === 'en' ? 'en-US' : 'ru-RU')}] ${e.text}`)
-        .join('\n')}
+      {events.map((e, i) => (
+        <div key={i}>{blurText(`[${new Date(e.time).toLocaleTimeString(i18n.language === 'en' ? 'en-US' : 'ru-RU')}] ${e.text}`)}</div>
+      ))}
     </pre>
   )
 }
@@ -2149,7 +2149,7 @@ function HostForm({
       {error && <Banner kind="error">{error}</Banner>}
       <div className="filters" style={{ flexWrap: 'nowrap' }}>
         <Form.Item name="name" label={t('hosts.name')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '9rem' }}>
-          <Input />
+          <Input className="sensitive" />
         </Form.Item>
         <Form.Item
           name="addr"
@@ -2211,7 +2211,7 @@ function HostForm({
         <Form.Item name="secret" label={secretLabel} rules={[{ required: !editing }]}>
           {authKind === 'key' ? (
             <Input.TextArea
-              className="mono"
+              className="mono sensitive"
               rows={6}
               placeholder="-----BEGIN OPENSSH PRIVATE KEY-----"
               spellCheck={false}
@@ -2248,6 +2248,7 @@ function HostForm({
               <label className="small">
                 {t('hosts.bootstrapUser')}
                 <Input
+                  className="sensitive"
                   value={bootstrapUser}
                   onChange={(e) => setBootstrapUser(e.target.value)}
                   placeholder="nkt"
@@ -2260,7 +2261,7 @@ function HostForm({
                 <label className="small" style={{ display: 'block', marginTop: '0.4rem' }}>
                   {t('hosts.bootstrapUserKey')}
                   <Input.TextArea
-                    className="mono"
+                    className="mono sensitive"
                     value={bootstrapUserKey}
                     onChange={(e) => setBootstrapUserKey(e.target.value)}
                     autoSize={{ minRows: 2, maxRows: 4 }}
@@ -2384,7 +2385,7 @@ function RemoveHostModal({
   })
   const [busy, setBusy] = useState(false)
 
-  const item = (key: keyof PurgeOptions, label: string, hint: string, disabled = false) => (
+  const item = (key: keyof PurgeOptions, label: ReactNode, hint: string, disabled = false) => (
     <label style={{ display: 'block', marginBottom: '0.5rem', opacity: disabled ? 0.5 : 1 }}>
       <Checkbox
         checked={purge[key]}
@@ -2410,7 +2411,7 @@ function RemoveHostModal({
       {item('access', t('hosts.purgeAccess'), t('hosts.purgeAccessHint'), isVM && purge.vm)}
       {item(
         'user',
-        t('hosts.purgeUser', { user: host.ssh_user }),
+        blurText(t('hosts.purgeUser', { user: host.ssh_user })),
         host.ssh_user === 'root' ? t('hosts.purgeUserRoot') : t('hosts.purgeUserHint'),
         host.ssh_user === 'root' || (isVM && purge.vm),
       )}
@@ -2600,11 +2601,11 @@ function ProvisionVMModal({
       <div className="grid grid-2" style={{ marginBottom: '0.6rem' }}>
         <label>
           {t('hosts.newVMName')}
-          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="web-02" />
+          <Input className="sensitive" value={name} onChange={(e) => setName(e.target.value)} placeholder="web-02" />
         </label>
         <label>
           {t('hosts.newVMUser')}
-          <Input value={user} onChange={(e) => setUser(e.target.value)} />
+          <Input className="sensitive" value={user} onChange={(e) => setUser(e.target.value)} />
         </label>
         <label>
           {t('hosts.newVMDisk')}
@@ -2640,7 +2641,7 @@ function ProvisionVMModal({
           мимо хаба. */}
       <label style={{ marginBottom: '0.6rem' }}>
         {t('hosts.newVMKey')}
-        <Input.TextArea rows={3} value={sshKey} onChange={(e) => setSSHKey(e.target.value)} placeholder="ssh-ed25519 AAAA..." />
+        <Input.TextArea className="sensitive" rows={3} value={sshKey} onChange={(e) => setSSHKey(e.target.value)} placeholder="ssh-ed25519 AAAA..." />
         <span className="small muted">{t('hosts.newVMKeyOptional')}</span>
       </label>
 
@@ -2838,7 +2839,7 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
             <div className="filters">
               <label>
                 {t('hosts.sshUser')}
-                <Input value={sshUser} onChange={(e) => setSSHUser(e.target.value)} style={{ width: '9rem' }} />
+                <Input className="sensitive" value={sshUser} onChange={(e) => setSSHUser(e.target.value)} style={{ width: '9rem' }} />
               </label>
               <label>
                 {t('hosts.sshPort')}
@@ -2906,7 +2907,7 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
                     <div className="row" style={{ gap: '0.5rem', paddingLeft: '1.6rem', flexWrap: 'wrap' }}>
                       <label className="small" style={{ margin: 0 }}>
                         {t('hosts.sshUser')}
-                        <Input size="small" value={credsOf(vm.name).ssh_user} onChange={(e) => setCred(vm.name, { ssh_user: e.target.value })} style={{ width: '8rem' }} />
+                        <Input size="small" className="sensitive" value={credsOf(vm.name).ssh_user} onChange={(e) => setCred(vm.name, { ssh_user: e.target.value })} style={{ width: '8rem' }} />
                       </label>
                       <label className="small" style={{ margin: 0 }}>
                         {t('hosts.sshPort')}

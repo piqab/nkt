@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.62 — 2026-09-19
+
+- Privacy mode now covers **modal windows** too — titles with a
+  host/machine/domain name, the name, address, user and key fields of
+  the host and machine forms, "find machines" credentials, install and
+  renewal logs, service logs, certificate configuration snippets,
+  confirmation texts, the host picker in the cluster form. **Domains**
+  are blurred in free text and paths (including
+  `/etc/letsencrypt/live/<domain>/…` and `<domain>.pem`), certificate
+  domains always; the host name in the bar above the page and the
+  "What's broken" card on the overview as well. The mode mark is the
+  colored "nkt" brand in the header instead of a corner badge.
+
 ## v1.10.61 — 2026-09-19
 
 - **Job logs, notifications and release notes in the reader's
