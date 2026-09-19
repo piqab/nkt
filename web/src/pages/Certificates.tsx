@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Sensitive } from '../privacy'
+import { Sensitive, blurText, setKnownNames } from '../privacy'
 import { Button, Checkbox, Form, Input, InputNumber, Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -139,7 +139,7 @@ function certColumns(
         // Минимальная ширина — чтобы путь не рвался после каждых
         // двух-трёх символов, когда колонке достаётся мало места.
         <span className="small mono" style={{ display: 'block', minWidth: '11rem', wordBreak: 'break-all' }}>
-          {cert.path}
+          {blurText(cert.path)}
         </span>
       ),
     },
@@ -167,7 +167,7 @@ function certColumns(
         </span>
       ),
     },
-    { title: t('certs.colIssuer'), key: 'issuer', render: (_, cert) => <span className="small">{commonName(cert.issuer)}</span> },
+    { title: t('certs.colIssuer'), key: 'issuer', render: (_, cert) => <span className="small">{blurText(commonName(cert.issuer))}</span> },
     {
       title: t('certs.colRenewal'),
       key: 'renewal',
@@ -239,6 +239,20 @@ export default function Certificates({ me }: { me: Me }) {
   const [jobStatus, setJobStatus] = useState<RenewJobStatus | null>(null)
 
   const certs = useMemo(() => data?.certificates ?? [], [data])
+  // Домены, сайты и lineage сертификатов — в известные имена приватного
+  // режима: тогда размываются и пути (/live/<lineage>/…), и упоминания
+  // в журналах, даже если TLD экзотический.
+  useEffect(() => {
+    const names = new Set<string>()
+    for (const c of certs) {
+      for (const n of c.names ?? []) names.add(n)
+      for (const n of c.sites ?? []) names.add(n)
+      const m = /\/live\/([^/]+)\//.exec(c.path)
+      if (m) names.add(m[1])
+    }
+    setKnownNames([...names], 'certs')
+    return () => setKnownNames([], 'certs')
+  }, [certs])
   const summary = data?.summary
   const canControl = me.is_admin && me.allow_mutations
 
@@ -586,7 +600,7 @@ export default function Certificates({ me }: { me: Me }) {
       )}
 
       {job && (
-        <Modal title={job.label} onClose={closeJobModal} maskClosable={false}>
+        <Modal title={blurText(job.label)} onClose={closeJobModal} maskClosable={false}>
           <RenewLog events={jobStatus?.events ?? []} />
           {jobStatus?.done ? (
             <Banner kind={jobStatus.error ? 'error' : 'info'}>
@@ -752,18 +766,18 @@ function SnippetModal({ lineage, service, onClose }: { lineage: string; service:
         <div className="col" style={{ gap: '0.5rem' }}>
           <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
             <span className="small muted">{t('certs.snippetFile')}</span>
-            <code className="mono small">{snip.file}</code>
+            <code className="mono small">{blurText(snip.file)}</code>
             <span style={{ flex: 1 }} />
             <Button type="primary" size="small" onClick={() => void copy()}>
               {copied ? t('certs.copied') : t('certs.copy')}
             </Button>
           </div>
           <pre className="diff mono" style={{ margin: 0, whiteSpace: 'pre', overflow: 'auto', maxHeight: '26rem' }}>
-            {snip.content}
+            {blurText(snip.content)}
           </pre>
           {snip.service === 'haproxy' && (
             <p className="small muted" style={{ margin: 0 }}>
-              {t('certs.snippetNoteHaproxy', { path: snip.combined_path })}
+              {blurText(t('certs.snippetNoteHaproxy', { path: snip.combined_path }))}
             </p>
           )}
           {snip.service === 'caddy' && (
@@ -793,9 +807,9 @@ function RenewLog({ events }: { events: RenewEvent[] }) {
 
   return (
     <pre ref={preRef} className="diff" style={{ maxHeight: '22rem' }}>
-      {events
-        .map((e) => `[${new Date(e.time).toLocaleTimeString(i18n.language === 'en' ? 'en-US' : 'ru-RU')}] ${e.text}`)
-        .join('\n')}
+      {events.map((e, i) => (
+        <div key={i}>{blurText(`[${new Date(e.time).toLocaleTimeString(i18n.language === 'en' ? 'en-US' : 'ru-RU')}] ${e.text}`)}</div>
+      ))}
     </pre>
   )
 }
@@ -988,13 +1002,13 @@ function CombineForm({
             <Banner kind="info">
               {t('certs.combinedSnippet', { lineage: result.lineage, date: formatDateTime(result.not_after) })}
             </Banner>
-            <pre className="diff">{result.snippet}</pre>
+            <pre className="diff">{blurText(result.snippet)}</pre>
           </div>
         ) : (
           <div style={{ marginTop: '0.85rem' }}>
             <Banner kind="info">
-              {t('certs.combinedFile', { lineage: result.lineage })}
-              <code className="mono">{result.combined_path}</code>
+              {blurText(t('certs.combinedFile', { lineage: result.lineage }))}
+              <code className="mono">{blurText(result.combined_path)}</code>
               {t('certs.combinedFileSuffix', { date: formatDateTime(result.not_after) })}
               {rescanning ? (
                 <span className="row" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -1101,10 +1115,12 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
           {results.map((result) => (
             <div className="col" key={result.cert_path || result.combined_path || result.names.join(',')}>
               <Banner kind="info">
-                {t('certs.selfSignedResult', {
-                  names: result.names.join(', '),
-                  date: formatDateTime(result.not_after),
-                })}
+                {blurText(
+                  t('certs.selfSignedResult', {
+                    names: result.names.join(', '),
+                    date: formatDateTime(result.not_after),
+                  }),
+                )}
               </Banner>
               {result.unicode_names && (
                 <p className="small muted">

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Sensitive } from '../privacy'
+import { Sensitive, blurText } from '../privacy'
 import { Link } from 'react-router-dom'
 import { Button, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
@@ -202,10 +202,10 @@ export default function OverviewPage({ me }: { me: Me }) {
                 <div key={f.id} style={{ borderBottom: '1px solid var(--gridline)', paddingBottom: '0.5rem' }}>
                   <div className="row" style={{ gap: '0.5rem' }}>
                     <SeverityBadge severity={f.severity} />
-                    <strong>{f.title}</strong>
+                    <strong>{blurText(f.title)}</strong>
                   </div>
-                  <div className="small secondary">{f.detail}</div>
-                  {f.object && <Tag>{f.object}</Tag>}
+                  <div className="small secondary">{blurText(f.detail ?? '')}</div>
+                  {f.object && <Tag>{blurText(f.object)}</Tag>}
                 </div>
               ))}
             </div>
