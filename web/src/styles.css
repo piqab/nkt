@@ -159,7 +159,11 @@ h3 { font-size: 0.95rem; }
 }
 
 .brand { padding: 0 0.4rem; }
-.brand-name { font-size: 0.95rem; font-weight: 650; letter-spacing: -0.01em; }
+.brand-name {
+  font-size: 0.95rem; font-weight: 650; letter-spacing: -0.01em;
+  /* Бейдж: синий по умолчанию, в приватном режиме — оранжевый (см. ниже). */
+  color: #fff; background: var(--accent, #1677ff); border-radius: 4px; padding: 0 0.35rem;
+}
 .brand-sub { font-size: 0.7rem; color: var(--text-muted); }
 
 .nav { display: flex; flex-direction: column; gap: 1px; }
@@ -226,7 +230,7 @@ h3 { font-size: 0.95rem; }
   top: 0;
   z-index: 6;
 }
-.hub-topbar-brand { font-weight: 650; }
+.hub-topbar-brand { font-weight: 650; color: #fff; background: var(--accent, #1677ff); border-radius: 4px; padding: 0 0.35rem; }
 .hub-topbar-sep { color: var(--text-muted); }
 .hub-topbar-host { font-weight: 600; }
 .hub-topbar-spacer { flex: 1; }
@@ -923,8 +927,6 @@ span.vm-toggle {
 .privacy .sensitive-block { filter: blur(8px); display: inline-block; }
 .privacy .sensitive-area { filter: blur(9px); }
 .privacy input.sensitive, .privacy .sensitive input, .privacy .sensitive textarea { filter: blur(4px); }
-/* Метка режима — окрашенное название «nkt» в шапке сайдбара и хаба. */
-.privacy .brand-name, .privacy .hub-topbar-brand {
-  color: #fff; background: var(--series-4); border-radius: 4px; padding: 0 0.35rem;
-}
+/* Метка режима — бейдж «nkt» в шапке сайдбара и хаба становится оранжевым. */
+.privacy .brand-name, .privacy .hub-topbar-brand { background: var(--series-4); }
 .privacy .brand-collapsed .ant-btn { background: var(--series-4); color: #fff; }

@@ -96,6 +96,7 @@ function sidebarRu() {
       items: [
         { text: 'Хаб: много хостов', link: '/guide/hub' },
         { text: 'Сценарии', link: '/guide/hub-scripts' },
+        { text: 'Кластеры Kubernetes', link: '/guide/hub-clusters' },
         { text: 'Оповещения, задания, обновления', link: '/guide/hub-operations' },
       ],
     },
@@ -131,6 +132,7 @@ function sidebarEn() {
       items: [
         { text: 'Hub: many hosts', link: '/en/guide/hub' },
         { text: 'Scripts', link: '/en/guide/hub-scripts' },
+        { text: 'Kubernetes clusters', link: '/en/guide/hub-clusters' },
         { text: 'Alerts, jobs, updates', link: '/en/guide/hub-operations' },
       ],
     },
