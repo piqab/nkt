@@ -75,10 +75,10 @@ passwordless `sudo`, the way typical VPS images are set up). Login method:
   failure.
 
 Then “install”: the hub delivers the binary for the right architecture the
-fastest way — on the first delivery it measures a download from GitHub
-Releases on the host itself against an SFTP upload from the hub and
-remembers the choice per host (the checksum is verified; on failure SFTP
-in the same job) — puts the unit in place and starts the service; progress
+fastest way — on every delivery it measures a download from GitHub
+Releases on the host itself against an SFTP upload from the hub and takes
+whichever is faster and available (the checksum is verified; on failure
+SFTP in the same job) — puts the unit in place and starts the service; progress
 is in a live log. The
 host shows up in the list with its version, findings and availability —
 “open” leads to the same panel a standalone nkt has.

@@ -95,7 +95,8 @@
     "aptCacheLimit": "Limit (0 — unlimited)",
     "gb": "GB",
     "aptCacheClear": "clear",
-    "aptCacheClearConfirm": "Delete every file from the package cache? Hosts keep working — packages are downloaded again on the next install."
+    "aptCacheClearConfirm": "Delete every file from the package cache? Hosts keep working — packages are downloaded again on the next install.",
+    "privacyTitle": "Privacy mode"
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",

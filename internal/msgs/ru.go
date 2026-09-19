@@ -141,7 +141,6 @@ var ruCatalog = map[string]string{
 	"hub.probeGitHubUnavailable":     "GitHub с хоста недоступен (%s) — заливаю с хаба по SSH",
 	"hub.probeChooseGitHub":          "GitHub с хоста %.1f МБ/с, SFTP с хаба %.1f МБ/с — хост качает сам с GitHub",
 	"hub.probeChooseSFTP":            "GitHub с хоста %.1f МБ/с, SFTP с хаба %.1f МБ/с — заливаю с хаба по SSH",
-	"hub.deliveryRemembered":         "Способ доставки бинарника по итогам прошлой пробы: %s",
 	"hub.downloadingOnHost":          "Хост качает бинарник с GitHub… %d%% (%.1f МБ из %.1f МБ)",
 	"hub.hostDownloadVerified":       "Хост скачал бинарник с GitHub, контрольная сумма совпала",
 	"hub.hostDownloadFailedFallback": "Скачивание на хосте не удалось (%v) — заливаю с хаба по SSH; в следующий раз проба повторится",

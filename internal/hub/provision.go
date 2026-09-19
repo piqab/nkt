@@ -258,29 +258,23 @@ func stageFiles(client *ssh.Client, sshUser string, src binarySource, unitConten
 	if err := sftpClient.MkdirAll(tmpDir); err != nil {
 		return msgs.Errorf("collect.creatingDirectory", tmpDir, err)
 	}
-	// Откуда брать бинарник: запомненный способ, иначе проба; без копии
-	// на GitHub — только SFTP.
+	// Откуда брать бинарник: проба обоих путей при каждой доставке —
+	// доступность GitHub и скорость каналов меняются, прошлый итог
+	// ничего не гарантирует; без копии на GitHub — только SFTP.
 	via := BinaryViaSFTP
 	if src.Release != nil {
-		switch src.Via {
-		case BinaryViaGitHub, BinaryViaSFTP:
-			via = src.Via
-			report("hub.deliveryRemembered", via)
-		default:
-			via = probeDelivery(client, sftpClient, tmpDir, src.Release, report)
-			if src.OnVia != nil {
-				src.OnVia(via)
-			}
+		via = probeDelivery(client, sftpClient, tmpDir, src.Release, report)
+		if src.OnVia != nil {
+			src.OnVia(via)
 		}
 	}
 	if via == BinaryViaGitHub {
 		if err := downloadOnHost(client, src.Release, tmpBin, progress); err != nil {
-			// Не ошибка задания: бинарник есть у хаба, а выбор
-			// сбрасывается — в следующий раз проба повторится.
+			// Не ошибка задания: бинарник есть у хаба.
 			report("hub.hostDownloadFailedFallback", err)
 			via = BinaryViaSFTP
 			if src.OnVia != nil {
-				src.OnVia("")
+				src.OnVia(via)
 			}
 		} else {
 			report("hub.hostDownloadVerified")

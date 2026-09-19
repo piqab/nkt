@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.64 — 2026-09-19
+
+- Binary delivery to a host: the "GitHub from host vs SFTP from hub"
+  probe now runs on **every** install and update — the previous result
+  is not remembered, whichever is faster and available right now wins.
+- The privacy mode checkbox moved to "About" (a "Privacy mode" card); on
+  a standalone nkt without a hub it stays at the bottom of the menu,
+  after the theme.
+
 ## v1.10.63 — 2026-09-19
 
 - Privacy mode: a single checkbox right after the theme selector, no
