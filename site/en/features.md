@@ -198,7 +198,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Hub jobs with a log, “try again” for failed ones (resuming from the saved state); job logs and alerts in the reader's language.
 - Kubernetes clusters (k3s/kubeadm, version choice) on one host or across several: a placement table, the network between hosts — NAT, bridge or a WireGuard tunnel, Cilium, a dry run with a checklist and preparation, your own qcow2 images in the hub library, saved form presets, a kubectl terminal on the control plane.
 - Hub cache for hosts without internet: apt packages, files by URL (installers, binaries, machine images) and a registry mirror for container images — everything stays on the hub and leaves for the internet once.
-- The binary is delivered to a host the fastest way: a probe of GitHub from the host against SFTP from the hub, the choice is remembered.
+- The binary is delivered to a host the fastest way: on every delivery a probe of GitHub from the host against SFTP from the hub.
 - Machines: discovery of existing ones with all their addresses and per-machine SSH credentials, “check access”, connection direct or via the host (auto).
 - Privacy mode: sensitive data (addresses, names, users, keys, domains) is blurred on every page and in modal windows — for screen sharing.
 - Whole-hub export and import: hosts with secrets, groups, machines with parents, clusters with nodes and kubeconfig, profiles and scripts with history, machine templates, cluster form presets, settings; the file is password-encrypted.

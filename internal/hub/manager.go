@@ -964,7 +964,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	}
 
 	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, tun)
-	src := binarySource{LocalPath: binPath, Release: m.releaseDelivery(ctx, goos, goarch, binPath), Via: host.BinaryVia,
+	src := binarySource{LocalPath: binPath, Release: m.releaseDelivery(ctx, goos, goarch, binPath),
 		OnVia: func(via string) { _ = m.db.SetHostBinaryVia(ctx, hostID, via) }}
 	if err := stageFiles(client, host.SSHUser, src, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report, job.replaceLast); err != nil {
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
