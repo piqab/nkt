@@ -142,7 +142,6 @@ var enCatalog = map[string]string{
 	"hub.probeGitHubUnavailable":     "GitHub is unreachable from the host (%s) — uploading from the hub over SSH",
 	"hub.probeChooseGitHub":          "GitHub from the host %.1f MB/s, SFTP from the hub %.1f MB/s — the host downloads from GitHub itself",
 	"hub.probeChooseSFTP":            "GitHub from the host %.1f MB/s, SFTP from the hub %.1f MB/s — uploading from the hub over SSH",
-	"hub.deliveryRemembered":         "Binary delivery method from the last probe: %s",
 	"hub.downloadingOnHost":          "The host is downloading the binary from GitHub… %d%% (%.1f MB of %.1f MB)",
 	"hub.hostDownloadVerified":       "The host downloaded the binary from GitHub, checksum matches",
 	"hub.hostDownloadFailedFallback": "Download on the host failed (%v) — uploading from the hub over SSH; the probe repeats next time",
