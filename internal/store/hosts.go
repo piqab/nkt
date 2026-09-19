@@ -67,9 +67,9 @@ type Host struct {
 	// ClusterID и K8sRole — узел кластера Kubernetes (см. clusters.go).
 	ClusterID int64  `json:"cluster_id,omitempty"`
 	K8sRole   string `json:"k8s_role,omitempty"`
-	// BinaryVia — откуда хост берёт бинарник при установке и обновлении:
-	// «github» (хост качает сам) или «sftp» (с хаба) — по итогам пробы
-	// скорости; пусто — проба ещё не проводилась.
+	// BinaryVia — каким путём бинарник доставлен в последний раз:
+	// «github» (хост качал сам) или «sftp» (с хаба). Только для сведения:
+	// проба скорости повторяется при каждой доставке.
 	BinaryVia string `json:"binary_via,omitempty"`
 	// Via — как хаб подключается к машине (ParentID != 0): пусто — авто
 	// (проба напрямую, иначе через хост), «direct» — только напрямую,
@@ -307,7 +307,7 @@ func (d *DB) SetHostVia(ctx context.Context, id int64, via string) error {
 	return err
 }
 
-// SetHostBinaryVia запоминает, откуда хосту быстрее брать бинарник.
+// SetHostBinaryVia записывает, каким путём бинарник доставлен в последний раз.
 func (d *DB) SetHostBinaryVia(ctx context.Context, id int64, via string) error {
 	_, err := d.ExecContext(ctx, `UPDATE hosts SET binary_via = ? WHERE id = ?`, via, id)
 	return err

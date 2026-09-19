@@ -67,11 +67,11 @@ line.
   host page, in the “Malware” tab, “database from hub” uploads it over SSH.
 ## Privacy mode
 
-The **“hide sensitive data”** checkbox at the bottom of the menu — for
+The **“hide sensitive data”** checkbox in “About” — for
 screen sharing and screenshots: addresses and names of hosts and
 machines, users, keys and tokens, domains, cluster API addresses, IP/MAC
 are blurred on every page and in modal windows; in logs, alerts, findings
 and audit — addresses, e-mail, domains and the host names from the list;
 terminal, logs and topology — as a whole. Nothing shows on hover — turn
-the mode off to read. The mode mark is the colored “nkt” brand in the
+the mode off to read. The mode mark is the orange “nkt” badge in the
 header; the state is remembered in the browser.

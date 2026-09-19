@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Button, InputNumber } from 'antd'
+import { Button, Checkbox, InputNumber } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
+import { usePrivacy } from '../privacy'
 import type { HubVersionInfo, HubVulnDBInfo } from '../types'
 
 interface AptCacheInfo {
@@ -32,6 +33,7 @@ import { confirmAction } from '../components/confirm'
  */
 export default function About() {
   const { t } = useTranslation()
+  const [privacy, setPrivacy] = usePrivacy()
   const version = useApi<HubVersionInfo>('/hub/version', 5 * 60_000)
   const [checking, setChecking] = useState(false)
   const [updating, setUpdating] = useState(false)
@@ -194,6 +196,15 @@ export default function About() {
           {notice.text}
         </Banner>
       )}
+
+      {/* Приватный режим — настройка браузера, живёт здесь рядом с
+          остальными настройками хаба; включённый виден по оранжевому
+          «nkt» в шапке. */}
+      <Card title={t('about.privacyTitle')} subtitle={t('app.privacyHint')}>
+        <Checkbox checked={privacy} onChange={(e) => setPrivacy(e.target.checked)}>
+          {t('app.privacy')}
+        </Checkbox>
+      </Card>
 
       <Card title={t('about.hubVersionTitle')}>
         {version.loading && !info ? (
