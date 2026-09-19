@@ -409,6 +409,7 @@ function UsageBtop({ me }: { me: Me }) {
             <div style={{ position: 'relative' }}>
               <div
                 ref={containerRef}
+                className="sensitive-area"
                 style={{
                   height: '65vh',
                   background: '#141414',

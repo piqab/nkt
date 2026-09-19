@@ -189,7 +189,7 @@ export function Modal({
   width,
   children,
 }: {
-  title: string
+  title: ReactNode
   onClose?: () => void
   closeLabel?: string
   // Defaults to true (click outside to close) for ordinary content modals.

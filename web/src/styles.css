@@ -917,3 +917,14 @@ span.vm-toggle {
 .script-help-h { margin: 0; font-size: 0.95rem; }
 .script-help-link { margin-right: 0.6rem; }
 .script-help-example { flex: 1; min-width: 0; }
+
+/* Приватный режим: чувствительное размыто и не выделяется (см. privacy.tsx). */
+.privacy .sensitive { filter: blur(5px); user-select: none; -webkit-user-select: none; }
+.privacy .sensitive-block { filter: blur(8px); display: inline-block; }
+.privacy .sensitive-area { filter: blur(9px); }
+.privacy input.sensitive, .privacy .sensitive input, .privacy .sensitive textarea { filter: blur(4px); }
+.privacy-badge {
+  position: fixed; bottom: 0.6rem; right: 0.8rem; z-index: 1100;
+  font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: 999px;
+  background: var(--series-4); color: #fff; opacity: 0.9;
+}
