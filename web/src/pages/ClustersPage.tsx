@@ -576,7 +576,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
             {hostIDs.map((id) => (
               <label key={id} style={{ minWidth: '16rem' }}>
                 <span className="small">{hostName(id)}</span>
-                <Input size="small" value={endpoints[id] ?? ''} placeholder={hostAddr(id)} onChange={(e) => setEndpoints({ ...endpoints, [id]: e.target.value })} />
+                <Input size="small" className="sensitive" value={endpoints[id] ?? ''} placeholder={hostAddr(id)} onChange={(e) => setEndpoints({ ...endpoints, [id]: e.target.value })} />
               </label>
             ))}
           </div>

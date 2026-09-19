@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { blurText } from '../privacy'
 import { Button, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { RedoOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -39,7 +40,7 @@ export default function Jobs({ me }: { me: Me }) {
       key: 'title',
       render: (_, j) => (
         <div style={{ minWidth: '14rem' }}>
-          <strong>{j.title || j.kind}</strong>
+          <strong>{blurText(j.title || j.kind)}</strong>
           <div className="small muted mono">{j.kind}</div>
         </div>
       ),
@@ -170,10 +171,10 @@ function LogLine({ text, last }: { text: string; last: boolean }) {
         <>
           {m[1]}
           <span style={{ color, fontWeight: 600 }}>{m[2]}</span>
-          <span style={{ color: m[2] === '✗' ? color : undefined }}>{m[3]}</span>
+          <span style={{ color: m[2] === '✗' ? color : undefined }}>{blurText(m[3])}</span>
         </>
       ) : (
-        text
+        blurText(text)
       )}
       {last ? '' : '\n'}
     </>
@@ -299,7 +300,7 @@ export function JobLogModal({
   const canRetry = isJobDone(current) && current.status !== 'succeeded' && current.resumable
 
   return (
-    <Modal title={current.title || current.kind} onClose={onClose} maskClosable={false} width={860}>
+    <Modal title={blurText(current.title || current.kind)} onClose={onClose} maskClosable={false} width={860}>
       <div className="row" style={{ marginBottom: '0.5rem' }}>
         <Tag color={STATUS_COLOR[current.status] ?? 'default'}>{t(`jobs.status.${current.status}`)}</Tag>
         {current.steps > 0 && (

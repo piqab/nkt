@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react'
+import { Sensitive, setKnownNames } from '../privacy'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import {
@@ -274,6 +275,10 @@ export default function Hosts({
 }) {
   const { t } = useTranslation()
   const { data: hosts, error, loading, reload } = useApi<HubHost[]>('/hub/hosts', 30_000)
+  // Имена хостов — в размывку свободного текста (журналы, оповещения).
+  useEffect(() => {
+    setKnownNames((hosts ?? []).map((h) => h.name))
+  }, [hosts])
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [installHostId, setInstallHostId] = useState<number | null>(null)
   const [job, setJob] = useState<string | null>(null)
@@ -1153,12 +1158,12 @@ export default function Hosts({
               >
                 <div className="row spread">
                   <span className="small">
-                    <strong>{vm.name}</strong>{' '}
+                    <strong><Sensitive>{vm.name}</Sensitive></strong>{' '}
                     {isAddrUnknown(vm) ? (
                       <span className="muted">{t('hosts.addrUnknown')}</span>
                     ) : (
                       <span className="mono muted">
-                        {vm.ssh_user}@{vm.addr}
+                        <Sensitive>{vm.ssh_user}@{vm.addr}</Sensitive>
                       </span>
                     )}
                   </span>
@@ -1201,7 +1206,7 @@ export default function Hosts({
       render: (_, h) => (
         <div className="row row-nowrap" style={{ gap: '0.5rem' }}>
           <strong className="host-name" title={h.name}>
-            {h.name}
+            <Sensitive>{h.name}</Sensitive>
           </strong>
           {renderVMToggle(h)}
           {renderActions(h)}
@@ -1220,7 +1225,7 @@ export default function Hosts({
           <span className="small muted">{t('hosts.addrUnknown')}</span>
         ) : (
           <span className="mono small">
-            {h.ssh_user}@{h.addr}:{h.ssh_port}
+            <Sensitive>{h.ssh_user}@{h.addr}:{h.ssh_port}</Sensitive>
           </span>
         ),
     },
@@ -1694,7 +1699,7 @@ export default function Hosts({
                     operator needs to grant passwordless sudo). A <pre>
                     block, same styling PublicKeyModal already uses for its
                     own copyable multi-line text, preserves them. */}
-                <pre className="diff mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', marginTop: '0.4rem' }}>
+                <pre className="diff mono sensitive-area" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', marginTop: '0.4rem' }}>
                   {jobStatus.error}
                 </pre>
               </Banner>
@@ -1761,7 +1766,7 @@ function PublicKeyModal({
       <p className="small muted">
         <Trans i18nKey="hosts.publicKeyBody" components={{ code: <code className="mono" /> }} />
       </p>
-      <pre className="diff mono" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+      <pre className="diff mono sensitive-area" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
         {authorizedKey}
       </pre>
       <div>
@@ -2152,13 +2157,13 @@ function HostForm({
           rules={[{ required: true }]}
           style={{ flex: 1, minWidth: '9rem' }}
         >
-          <Input />
+          <Input className="sensitive" />
         </Form.Item>
         <Form.Item name="ssh_port" label={t('hosts.sshPort')} rules={[{ required: true }]} style={{ width: '6rem' }}>
           <InputNumber min={1} max={65535} style={{ width: '100%' }} />
         </Form.Item>
         <Form.Item name="ssh_user" label={t('hosts.sshUser')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '8rem' }}>
-          <Input />
+          <Input className="sensitive" />
         </Form.Item>
         {/* Группа — свободный текст с подсказкой уже существующих: новые
             заводятся на ходу, а справочник, который надо заполнять заранее,

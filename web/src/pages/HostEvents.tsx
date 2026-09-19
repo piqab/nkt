@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Sensitive, blurText } from '../privacy'
 import { Button, Checkbox, InputNumber, Switch, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -188,8 +189,8 @@ export default function HostEvents() {
       key: 'host',
       render: (_, e) => (
         <div>
-          <strong>{e.host_name}</strong>
-          <div className="small muted mono">{e.host_addr}</div>
+          <strong><Sensitive>{e.host_name}</Sensitive></strong>
+          <div className="small muted mono"><Sensitive>{e.host_addr}</Sensitive></div>
         </div>
       ),
     },
@@ -203,7 +204,7 @@ export default function HostEvents() {
         </span>
       ),
     },
-    { title: t('events.colDetail'), key: 'detail', render: (_, e) => <span className="small">{e.detail || '—'}</span> },
+    { title: t('events.colDetail'), key: 'detail', render: (_, e) => <span className="small">{e.detail ? blurText(e.detail) : '—'}</span> },
   ]
 
   return (
