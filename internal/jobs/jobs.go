@@ -61,6 +61,17 @@ func (jc *Context) Log(key string, args ...any) {
 	jc.m.appendLogKey(jc.Job.ID, msgs.T(jc.Lang(), key, args...), key, msgs.EncodeArgs(args))
 }
 
+// LogStored перекладывает строку журнала другого задания в этот с
+// отступом: строка с ключом остаётся переводимой (ключ и аргументы
+// вкладываются в jobs.nestedLine), сырая — как есть.
+func (jc *Context) LogStored(indent string, l store.JobLogLine) {
+	if l.Key == "" {
+		jc.Logf("%s%s", indent, l.Text)
+		return
+	}
+	jc.Log("jobs.nestedLine", indent, &msgs.Err{Key: l.Key, Args: msgs.DecodeArgs(l.Args)})
+}
+
 // StepKey — шаг с названием из каталога (см. Log).
 func (jc *Context) StepKey(n, total int, key string, args ...any) {
 	jc.m.setStepKey(jc.Job.ID, n, total, msgs.T(jc.Lang(), key, args...), key, msgs.EncodeArgs(args))

@@ -20,8 +20,9 @@ the menu item.
 
 ## Hub jobs
 
-Installing nkt on a host, updating, creating a machine, applying a profile
-to a group, a script, a cluster — all of these are hub jobs with a live
+Installing and updating nkt on a host (including “update all”), creating
+a machine, applying a profile to a group, a script, a cluster — all of
+these are hub jobs with a live
 log; a job interrupted by a hub restart resumes. A failed job has **“try
 again”**: a new job with the same parameters continues from the saved
 state (created machines, the tunnel, installed roles are skipped), the
