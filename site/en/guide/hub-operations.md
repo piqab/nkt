@@ -50,7 +50,7 @@ line.
 - **Kubernetes clusters** — “new cluster” next to a host with
   virtualization: k3s or kubeadm, one machine / 1 control plane + N workers /
   3 control planes + N workers, host port forwarding; the nodes are
-  machines with nkt in the cluster group, the kubeconfig is downloaded from
+  machines with nkt under their host, the kubeconfig is downloaded from
   the cluster card. The **“Clusters”** section (experimental) — a cluster
   across several hosts: a placement table (host → role → machines or the
   host itself → sizes), a network between hosts — a bridge or a WireGuard

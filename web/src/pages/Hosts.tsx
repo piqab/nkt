@@ -1952,8 +1952,8 @@ type AuthKind = 'generated' | 'password' | 'key'
 // интерфейса: тип 'key' остаётся в модели ради уже добавленных так
 // хостов, но заводить новые этим способом больше нельзя.
 const AUTH_KIND_OPTIONS: { value: AuthKind; labelKey: string }[] = [
-  { value: 'password', labelKey: 'hosts.authPassword' },
   { value: 'generated', labelKey: 'hosts.authGenerated' },
+  { value: 'password', labelKey: 'hosts.authPassword' },
 ]
 
 type HostFormValues = {
@@ -2005,7 +2005,7 @@ function HostForm({
   // свежего сервера, и только в нём хаб способен подготовить хост сам.
   // Правка существующего открывается на том способе, который у него уже
   // есть — менять его при открытии формы никто не просил.
-  const [authKind, setAuthKind] = useState<AuthKind>(initial?.ssh_auth_kind ?? 'password')
+  const [authKind, setAuthKind] = useState<AuthKind>(initial?.ssh_auth_kind ?? 'generated')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   // Подготовка имеет смысл ровно один раз — при добавлении нового хоста,
@@ -2350,9 +2350,9 @@ function RemoveHostModal({
     access: false,
     user: false,
     restore_password: !isVM,
-    vm: isVM,
-    // Диски — отдельный вопрос и отдельная галочка: описание машины
-    // заводится заново за минуту, а диск с её данными — нет.
+    // Всё про саму машину — только по явной галочке: по умолчанию
+    // «удалить» убирает запись из списка хаба, машина и диски остаются.
+    vm: false,
     vm_disks: false,
   })
   const [busy, setBusy] = useState(false)

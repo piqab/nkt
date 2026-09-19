@@ -36,7 +36,6 @@ func TestClusterPreflightOwnRecordAndDiscard(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_ = db.CreateHostGroup(ctx, spec.Name)
 
 	id, err := s.jobs.Start(ctx, jobs.Spec{Kind: KindClusterCreate, Title: "t", Queue: "cluster:1", Steps: 5, Params: ClusterJobParams{ClusterID: clID}})
 	if err != nil {
@@ -68,11 +67,5 @@ func TestClusterPreflightOwnRecordAndDiscard(t *testing.T) {
 	}
 	if _, err := db.ClusterByID(ctx, clID); err == nil {
 		t.Errorf("запись кластера должна быть удалена после провала проверок")
-	}
-	groups, _ := db.ListHostGroups(ctx)
-	for _, g := range groups {
-		if g == "lab" {
-			t.Errorf("пустая группа lab должна быть удалена")
-		}
 	}
 }

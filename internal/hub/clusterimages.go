@@ -216,3 +216,26 @@ func hubImageName(imageID string) string {
 	}
 	return name
 }
+
+// DropClusterGroups убирает группы хостов с именами кластеров — раньше
+// хаб заводил их под узлы, теперь узлы видны у своего хоста и в разделе
+// «Кластеры», а группа только дублировала. Вызывается при старте.
+func (m *Manager) DropClusterGroups(ctx context.Context) {
+	clusters, err := m.db.ListClusters(ctx)
+	if err != nil {
+		return
+	}
+	groups, err := m.db.ListHostGroups(ctx)
+	if err != nil {
+		return
+	}
+	have := map[string]bool{}
+	for _, g := range groups {
+		have[g] = true
+	}
+	for _, cl := range clusters {
+		if have[cl.Name] {
+			_ = m.db.DeleteHostGroup(ctx, cl.Name)
+		}
+	}
+}
