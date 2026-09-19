@@ -28,8 +28,10 @@ interrupted by a hub restart resumes.
 
 “Export” in the host list saves everything the hub knows and that takes
 long to set up again: hosts with SSH and admin secrets, groups, machines
-with parents, profiles with history, machine templates, scripts,
-settings. The file is encrypted with a password — “import” on a new hub
+with parents, Kubernetes clusters with their nodes and kubeconfig,
+profiles and scripts with history, machine templates, settings. Cluster
+images (qcow2) are not in the file — the import lists the ones to copy by
+hand. The file is encrypted with a password — “import” on a new hub
 asks for the same one. `nkt hub import` does the same from the command
 line.
 
