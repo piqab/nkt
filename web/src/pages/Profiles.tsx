@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { blurText } from '../privacy'
 import { Button, Checkbox, ColorPicker, Input, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { QuestionCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -480,7 +481,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
       {detail && (
         <Modal title={detail.target} onClose={() => setDetail(null)} width={760}>
           <pre className="diff mono" style={{ maxHeight: '24rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
-            {detail.detail}
+            {blurText(detail.detail)}
           </pre>
         </Modal>
       )}

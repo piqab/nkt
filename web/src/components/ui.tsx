@@ -2,6 +2,7 @@ import { useRef, type ChangeEvent, type ReactNode } from 'react'
 import { Alert, Badge, Button, Card as AntCard, Modal as AntModal, Spin, Tooltip } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { blurText } from '../privacy'
 import i18n from '../i18n'
 import type { Severity } from '../types'
 
@@ -206,7 +207,8 @@ export function Modal({
   const { t } = useTranslation()
   return (
     <AntModal
-      title={title}
+      // Заголовок с именем хоста/машины/домена — в приватном режиме размыт.
+      title={blurText(title)}
       open
       closable={false}
       maskClosable={maskClosable ?? !!onClose}

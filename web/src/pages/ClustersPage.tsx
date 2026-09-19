@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react'
+import { Sensitive } from '../privacy'
 import { Button, Checkbox, Input, InputNumber, Progress, Select, Tooltip } from 'antd'
 import { DeleteOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -478,7 +479,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
                     value={r.host_id ?? undefined}
                     placeholder={t('clusters.pickHost')}
                     onChange={(v: number) => update(i, { host_id: v, image_id: '', bridge: '' })}
-                    options={online.map((h) => ({ value: h.id, label: h.name + (h.parent_id ? ' (VM)' : '') + (h.addr ? ` — ${h.addr}` : '') }))}
+                    options={online.map((h) => ({ value: h.id, label: <Sensitive>{h.name + (h.parent_id ? ' (VM)' : '') + (h.addr ? ` — ${h.addr}` : '')}</Sensitive> }))}
                   />
                 </div>
                 <div style={{ ...cell, minWidth: '11rem' }}>
@@ -575,7 +576,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
           <div className="row" style={{ gap: '0.6rem' }}>
             {hostIDs.map((id) => (
               <label key={id} style={{ minWidth: '16rem' }}>
-                <span className="small">{hostName(id)}</span>
+                <span className="small"><Sensitive>{hostName(id)}</Sensitive></span>
                 <Input size="small" className="sensitive" value={endpoints[id] ?? ''} placeholder={hostAddr(id)} onChange={(e) => setEndpoints({ ...endpoints, [id]: e.target.value })} />
               </label>
             ))}

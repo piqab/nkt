@@ -1,4 +1,5 @@
 import { Modal } from 'antd'
+import { blurText } from '../privacy'
 import i18n from '../i18n'
 
 /**
@@ -20,8 +21,8 @@ export function confirmAction(
 ): Promise<boolean> {
   return new Promise((resolve) => {
     Modal.confirm({
-      title: opts.title ?? i18n.t('common.confirmTitle'),
-      content,
+      title: blurText(opts.title ?? i18n.t('common.confirmTitle')),
+      content: blurText(content),
       okText: opts.okText ?? i18n.t('common.confirmOk'),
       cancelText: i18n.t('common.cancel'),
       okButtonProps: { danger: opts.danger ?? true },
