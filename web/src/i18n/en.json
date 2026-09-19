@@ -18,7 +18,10 @@
     "backToHostList": "← back to host list",
     "hubBrand": "nkt — hub",
     "sidebarCollapse": "Collapse menu",
-    "sidebarExpand": "Expand menu"
+    "sidebarExpand": "Expand menu",
+    "privacy": "hide sensitive data",
+    "privacyHint": "Privacy mode for screen sharing: addresses, host names, users, keys, domains and e-mail are blurred on every page; turn it off to read them.",
+    "privacyBadge": "privacy mode"
   },
   "nav": {
     "overview": "Overview",

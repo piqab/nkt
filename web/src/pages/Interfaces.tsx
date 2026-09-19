@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { Sensitive } from '../privacy'
 import { Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
@@ -132,7 +133,7 @@ export default function Interfaces() {
       render: (_, i) => (
         <>
           <strong>{i.name}</strong>
-          {i.mac && <div className="small mono muted">{i.mac}</div>}
+          {i.mac && <div className="small mono muted"><Sensitive>{i.mac}</Sensitive></div>}
         </>
       ),
     },
@@ -158,7 +159,7 @@ export default function Interfaces() {
         i.addresses?.length ? (
           <div className="small mono">
             {i.addresses.map((a) => (
-              <div key={a}>{a}</div>
+              <div key={a}><Sensitive>{a}</Sensitive></div>
             ))}
           </div>
         ) : (

@@ -437,6 +437,7 @@ export default function TopologyPage() {
           </div>
 
           <svg
+            className="sensitive-area"
             ref={svgRef}
             viewBox={`${pan.x} ${pan.y} ${viewW} ${viewH}`}
             style={{ height: Math.min(height, 720) }}

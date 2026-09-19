@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Sensitive } from '../privacy'
 import { Button, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
@@ -115,7 +116,7 @@ function buildMiscColumns(
       key: 'socket',
       render: (_, l) => (
         <span className="small mono nowrap">
-          {l.protocol} {l.address}:{l.port}
+          {l.protocol} <Sensitive>{l.address}</Sensitive>:{l.port}
           <ProbeLink address={l.address} port={l.port} protocol={l.protocol} />
         </span>
       ),

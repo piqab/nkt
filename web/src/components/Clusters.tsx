@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Sensitive } from '../privacy'
 import { Button, Checkbox, Input, InputNumber, Select, Tag, Tooltip } from 'antd'
 import { ClusterOutlined, CodeOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -321,7 +322,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
               </span>
               {c.server_addr && (
                 <span className="small mono muted">
-                  https://{c.server_addr}:6443{c.expose ? '' : ` (${t('clusters.internalOnly')})`}
+                  https://<Sensitive>{c.server_addr}</Sensitive>:6443{c.expose ? '' : ` (${t('clusters.internalOnly')})`}
                 </span>
               )}
               <span style={{ flex: 1 }} />
@@ -371,9 +372,9 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
                 size="small"
                 pagination={false}
                 columns={[
-                  { title: t('clusters.colNode'), dataIndex: 'name', key: 'name', render: (v: string) => <span className="mono">{v}</span> },
+                  { title: t('clusters.colNode'), dataIndex: 'name', key: 'name', render: (v: string) => <span className="mono"><Sensitive>{v}</Sensitive></span> },
                   { title: t('clusters.colRole'), dataIndex: 'role', key: 'role', render: (v: string) => <Tag color={v === 'control-plane' ? 'blue' : 'default'}>{v}</Tag> },
-                  { title: t('hosts.colAddr'), dataIndex: 'addr', key: 'addr', render: (v: string) => <span className="mono small">{v}</span> },
+                  { title: t('hosts.colAddr'), dataIndex: 'addr', key: 'addr', render: (v: string) => <span className="mono small"><Sensitive>{v}</Sensitive></span> },
                   {
                     title: t('clusters.colState'),
                     key: 'state',

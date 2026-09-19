@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { blurText } from '../privacy'
 import { Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { qs, useApi } from '../api'
@@ -65,7 +66,7 @@ export default function Audit() {
     { title: t('audit.auditWhen'), key: 'ts', render: (_, e) => <span className="small nowrap">{formatDateTime(e.ts)}</span> },
     { title: t('audit.auditWho'), dataIndex: 'username', key: 'username', className: 'small' },
     { title: t('audit.auditAction'), dataIndex: 'action', key: 'action', className: 'small mono' },
-    { title: t('audit.auditTarget'), key: 'target', render: (_, e) => <span className="small mono">{e.target || '—'}</span> },
+    { title: t('audit.auditTarget'), key: 'target', render: (_, e) => <span className="small mono">{e.target ? blurText(e.target) : '—'}</span> },
     { title: t('audit.auditResult'), key: 'result', render: (_, e) => <StateBadge state={e.result === 'ok' ? 'active' : 'failed'} /> },
     {
       title: t('audit.auditDetail'),

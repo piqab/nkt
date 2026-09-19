@@ -296,7 +296,7 @@ export default function Logs() {
       </Card>
 
       <Card title={t('logs.outputTitle')}>
-        <pre className="diff" style={{ maxHeight: isPopout ? '72vh' : '58vh', overflow: 'auto' }}>
+        <pre className="diff sensitive-area" style={{ maxHeight: isPopout ? '72vh' : '58vh', overflow: 'auto' }}>
           {shown.map((line, i) => (
             <LogLine key={i} text={line} highlight={highlight} caseSensitive={caseSensitive} />
           ))}
