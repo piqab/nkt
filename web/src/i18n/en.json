@@ -680,7 +680,8 @@
     "viaAuto": "auto (direct when reachable, otherwise via the host)",
     "viaDirect": "direct (from the hub to the machine's address)",
     "viaJump": "via the host",
-    "checkReach": "check access"
+    "checkReach": "check access",
+    "discoverDefaults": "Defaults for the checked machines — each has its own fields under its row, editable:"
   },
   "events": {
     "title": "Alerts",
