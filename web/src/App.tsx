@@ -488,8 +488,8 @@ function Shell({
         </Tooltip>
       ) : (
         <>
-          <div className="row" style={{ marginBottom: '0.4rem' }}>
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
+          <div className="row row-nowrap" style={{ marginBottom: '0.4rem' }}>
+            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem', flex: '0 0 auto' }}>
               {t('app.theme')}
               <select value={theme} onChange={(e) => setTheme(e.target.value as Theme)}>
                 <option value="auto">{t('app.themeAuto')}</option>
@@ -497,12 +497,18 @@ function Shell({
                 <option value="dark">{t('app.themeDark')}</option>
               </select>
             </label>
-          </div>
-          <div className="row" style={{ marginBottom: '0.4rem' }}>
-            <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }} title={t('app.privacyHint')}>
-              <input type="checkbox" checked={privacy} onChange={(e) => setPrivacy(e.target.checked)} />
-              {t('app.privacy')}
-            </label>
+            {/* Приватный режим — одна галочка сразу за темой, без подписи:
+                что это, скажет подсказка, а включённый режим виден по
+                окрашенному «nkt» в шапке. */}
+            <Tooltip title={`${t('app.privacy')}: ${t('app.privacyHint')}`} placement="right">
+              <input
+                type="checkbox"
+                aria-label={t('app.privacy')}
+                checked={privacy}
+                onChange={(e) => setPrivacy(e.target.checked)}
+                style={{ margin: 0 }}
+              />
+            </Tooltip>
           </div>
           <div className="row" style={{ marginBottom: '0.4rem' }}>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>

@@ -74,8 +74,12 @@ passwordless `sudo`, the way typical VPS images are set up). Login method:
   optionally disables password login — every step checked and reverted on
   failure.
 
-Then “install”: the hub copies the binary for the right architecture, puts
-the unit in place and starts the service; progress is in a live log. The
+Then “install”: the hub delivers the binary for the right architecture the
+fastest way — on the first delivery it measures a download from GitHub
+Releases on the host itself against an SFTP upload from the hub and
+remembers the choice per host (the checksum is verified; on failure SFTP
+in the same job) — puts the unit in place and starts the service; progress
+is in a live log. The
 host shows up in the list with its version, findings and availability —
 “open” leads to the same panel a standalone nkt has.
 
@@ -91,7 +95,12 @@ Useful switches in the host form:
   profile: machines created in it are built from it.
 - **Machines inside a host** — a virtual machine is created on the host
   straight from the hub, nkt is installed into it automatically, a profile
-  is applied.
+  is applied. “Find machines on host” lists the existing machines with all
+  their addresses, each with its own SSH credentials and a “check access”
+  from the host and from the hub. The hub connects to a machine directly
+  when its SSH port answers the hub without the host, otherwise through
+  the host (“auto” mode; the machine form can set it explicitly) — this
+  matters for machines on macvtap, which the host itself cannot see.
 - **Profiles** — the desired state of a host in YAML (packages, services,
   files, firewall, accounts, compose stacks) with a plan and application as
   a job; drift shows up as findings.

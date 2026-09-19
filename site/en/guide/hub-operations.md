@@ -21,8 +21,13 @@ the menu item.
 ## Hub jobs
 
 Installing nkt on a host, updating, creating a machine, applying a profile
-to a group, a script — all of these are hub jobs with a live log; a job
-interrupted by a hub restart resumes.
+to a group, a script, a cluster — all of these are hub jobs with a live
+log; a job interrupted by a hub restart resumes. A failed job has **“try
+again”**: a new job with the same parameters continues from the saved
+state (created machines, the tunnel, installed roles are skipped), the
+old log stays. Job logs, titles and errors, like alerts, are shown **in
+the reader's language** — a job started from a Russian UI reads in
+English for an English user; raw tool output stays as is.
 
 ## Export and import
 
@@ -42,26 +47,31 @@ line.
 - The hub version, a check of GitHub releases, **update to the latest** —
   the hub downloads the binary, verifies the checksum and restarts;
   **rollback** to the previous version if something went wrong. The new
-  version's notes are shown before installing.
+  version's notes are shown before installing — in the UI language.
 - Hosts whose version differs from the hub's are brought to the hub's
   version when opened; “update all” in the host list — for the ones
   behind.
 - The trivy **vulnerability database** is shared by all hosts: updated on a
   schedule and by a button, hosts take it from the hub instead of
   downloading their own.
-- **Kubernetes clusters** — “new cluster” next to a host with
-  virtualization: k3s or kubeadm, one machine / 1 control plane + N workers /
-  3 control planes + N workers, host port forwarding; the nodes are
-  machines with nkt under their host, the kubeconfig is downloaded from
-  the cluster card. The **“Clusters”** section (experimental) — a cluster
-  across several hosts: a placement table (host → role → machines or the
-  host itself → sizes), a network between hosts — a bridge or a WireGuard
-  tunnel (the hub installs `wireguard-tools`, generates keys and creates a
-  separate machine network on every host), Cilium by a checkbox, a “dry
-  run” before creation.
+- **Kubernetes clusters** — on one host or across several, with
+  WireGuard between hosts, Cilium, your own images and saved form
+  presets: a separate page, [Kubernetes clusters](/en/guide/hub-clusters).
 - **Package cache** — hosts download `.deb` files through the hub over a
   reverse SSH forward, every package leaves for the internet once; without
   the hub apt goes direct. A checkbox in the host form, the limit and
-  clearing — in “About”.
+  clearing — in “About”. The same port serves files by URL (installers,
+  binaries, machine images) and a registry mirror for container images —
+  a host without internet gets everything from the hub.
 - **ClamAV database** — a copy of the signature database on the hub; on a
   host page, in the “Malware” tab, “database from hub” uploads it over SSH.
+## Privacy mode
+
+The **“hide sensitive data”** checkbox at the bottom of the menu — for
+screen sharing and screenshots: addresses and names of hosts and
+machines, users, keys and tokens, domains, cluster API addresses, IP/MAC
+are blurred on every page and in modal windows; in logs, alerts, findings
+and audit — addresses, e-mail, domains and the host names from the list;
+terminal, logs and topology — as a whole. Nothing shows on hover — turn
+the mode off to read. The mode mark is the colored “nkt” brand in the
+header; the state is remembered in the browser.
