@@ -346,3 +346,57 @@ func (s *Server) handleClusterImageDelete(w http.ResponseWriter, r *http.Request
 	s.db.Audit(r.Context(), user, "cluster_image.delete", name, "ok", "")
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// Сохранённые наборы формы «Новый кластер на нескольких хостах».
+
+func (s *Server) handleClusterPresets(w http.ResponseWriter, r *http.Request) {
+	list, err := s.db.ListClusterPresets(r.Context())
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"presets": list})
+}
+
+func (s *Server) handleClusterPresetSave(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string          `json:"name"`
+		Form json.RawMessage `json:"form"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	name := strings.TrimSpace(req.Name)
+	if name == "" || len(name) > 64 || len(req.Form) == 0 || len(req.Form) > 256<<10 {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "hub.clusterPresetBad"))
+		return
+	}
+	user := auth.Username(r.Context())
+	id, err := s.db.SaveClusterPreset(r.Context(), store.ClusterPreset{Name: name, Form: string(req.Form), Author: user})
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.db.Audit(r.Context(), user, "cluster_preset.save", name, "ok", "")
+	writeJSON(w, http.StatusOK, map[string]any{"id": id})
+}
+
+func (s *Server) handleClusterPresetDelete(w http.ResponseWriter, r *http.Request) {
+	id, err := clusterIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	p, err := s.db.ClusterPresetByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if err := s.db.DeleteClusterPreset(r.Context(), id); err != nil {
+		fail(w, r, err)
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "cluster_preset.delete", p.Name, "ok", "")
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}

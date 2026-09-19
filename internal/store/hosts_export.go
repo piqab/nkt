@@ -110,6 +110,13 @@ type ClusterExport struct {
 	CreatedAt     string `json:"created_at"`
 }
 
+// ClusterPresetExport — сохранённая форма кластера.
+type ClusterPresetExport struct {
+	Name   string `json:"name"`
+	Form   string `json:"form"`
+	Author string `json:"author,omitempty"`
+}
+
 // ClusterImageExport — образ из библиотеки хаба: в файле только список,
 // сам файл копируют руками (см. hub.importImagesMissing).
 type ClusterImageExport struct {
@@ -175,8 +182,9 @@ type HubExport struct {
 	// кэша пакетов).
 	Settings map[string]string `json:"settings,omitempty"`
 	// Clusters и ClusterImages — версия 3.
-	Clusters      []ClusterExport      `json:"clusters,omitempty"`
-	ClusterImages []ClusterImageExport `json:"cluster_images,omitempty"`
+	Clusters       []ClusterExport       `json:"clusters,omitempty"`
+	ClusterImages  []ClusterImageExport  `json:"cluster_images,omitempty"`
+	ClusterPresets []ClusterPresetExport `json:"cluster_presets,omitempty"`
 	// MasterKey is the exporting hub's own secretbox key (base64), present
 	// only when the operator opted into a one-step migration — see
 	// Manager.ExportHosts/ImportHosts in internal/hub, which is what
@@ -310,6 +318,13 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 		}
 		out.Scripts = append(out.Scripts, se)
 	}
+	presets, err := d.ListClusterPresets(ctx)
+	if err != nil {
+		return HubExport{}, err
+	}
+	for _, p := range presets {
+		out.ClusterPresets = append(out.ClusterPresets, ClusterPresetExport{Name: p.Name, Form: p.Form, Author: p.Author})
+	}
 	for _, key := range ExportedSettingKeys {
 		if v, ok, err := d.KVGet(ctx, key); err == nil && ok && v != "" {
 			if out.Settings == nil {
@@ -374,6 +389,7 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 	errs = append(errs, d.importProfiles(ctx, export.Profiles)...)
 	errs = append(errs, d.importVMTemplates(ctx, export.VMTemplates)...)
 	errs = append(errs, d.importScripts(ctx, export.Scripts)...)
+	errs = append(errs, d.importClusterPresets(ctx, export.ClusterPresets)...)
 	// Профили групп — после профилей: искать их по имени можно только
 	// когда они уже заведены. Существующий профиль группы не трогается.
 	hostProfiles := false
@@ -571,6 +587,27 @@ func (d *DB) importClusters(ctx context.Context, export HubExport, ids map[strin
 		if err := d.SetHostCluster(ctx, hostID, cid, h.K8sRole); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", h.Name, err))
 		}
+	}
+	return errs
+}
+
+func (d *DB) importClusterPresets(ctx context.Context, presets []ClusterPresetExport) (errs []string) {
+	existing, err := d.ListClusterPresets(ctx)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	taken := map[string]bool{}
+	for _, p := range existing {
+		taken[p.Name] = true
+	}
+	for _, p := range presets {
+		if p.Name == "" || taken[p.Name] {
+			continue
+		}
+		if _, err := d.SaveClusterPreset(ctx, ClusterPreset{Name: p.Name, Form: p.Form, Author: p.Author}); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
+		}
+		taken[p.Name] = true
 	}
 	return errs
 }

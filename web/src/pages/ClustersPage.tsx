@@ -213,6 +213,91 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   // Журнал сухого прогона — поверх формы, настройки не теряются.
   const [dryJob, setDryJob] = useState<Job | null>(null)
 
+  // Сохранённые наборы: вся форма одним JSON на хабе; хосты в наборе —
+  // по имени, чтобы набор пережил пересоздание хоста.
+  interface PresetForm {
+    name: string
+    flavor: 'k3s' | 'kubeadm'
+    k8s_version: string
+    cilium: boolean
+    kpr: boolean
+    network: 'nat' | 'bridge' | 'wireguard'
+    rows: (Omit<Row, 'host_id'> & { host: string })[]
+    endpoints: Record<string, string>
+    expose: boolean
+    ports: { api: number | null; http: number | null; https: number | null }
+  }
+  const presets = useApi<{ presets: { id: number; name: string; form: string }[] }>('/hub/cluster-presets')
+  const [presetName, setPresetName] = useState('')
+  const [presetBusy, setPresetBusy] = useState(false)
+  const [presetNote, setPresetNote] = useState<string | null>(null)
+  const hostNameOf = (id: number | null) => (id === null ? '' : (hosts.data ?? []).find((h) => h.id === id)?.name ?? '')
+
+  async function savePreset() {
+    const pname = presetName.trim()
+    if (!pname) return
+    if ((presets.data?.presets ?? []).some((p) => p.name === pname) && !(await confirmAction(t('clusters.presetOverwrite', { name: pname })))) return
+    setPresetBusy(true)
+    try {
+      const form: PresetForm = {
+        name, flavor, k8s_version: k8sVersion, cilium, kpr, network, expose, ports,
+        rows: rows.map(({ host_id, ...r }) => ({ ...r, host: hostNameOf(host_id) })),
+        endpoints: Object.fromEntries(Object.entries(endpoints).map(([id, v]) => [hostNameOf(Number(id)), v]).filter(([h]) => h)),
+      }
+      await api('/hub/cluster-presets', { method: 'POST', body: { name: pname, form } })
+      await presets.reload()
+      setPresetNote(t('clusters.presetSaved', { name: pname }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPresetBusy(false)
+    }
+  }
+
+  function applyPreset(id: number) {
+    const p = (presets.data?.presets ?? []).find((x) => x.id === id)
+    if (!p) return
+    let form: PresetForm
+    try {
+      form = JSON.parse(p.form) as PresetForm
+    } catch {
+      setError(t('clusters.presetBroken', { name: p.name }))
+      return
+    }
+    const byName = new Map((hosts.data ?? []).map((h) => [h.name, h.id]))
+    const missing: string[] = []
+    setName(form.name ?? 'k8s')
+    setFlavor(form.flavor ?? 'k3s')
+    setK8sVersion(form.k8s_version ?? '')
+    setCilium(form.cilium ?? true)
+    setKPR(form.kpr ?? false)
+    setNetwork(form.network ?? 'bridge')
+    setExpose(form.expose ?? true)
+    setPorts(form.ports ?? { api: 6443, http: 80, https: 443 })
+    setRows(
+      (form.rows ?? []).map(({ host, ...r }) => {
+        const hid = byName.get(host)
+        if (host && hid === undefined) missing.push(host)
+        return { ...newRow(r.role), ...r, host_id: hid ?? null }
+      }),
+    )
+    setEndpoints(Object.fromEntries(Object.entries(form.endpoints ?? {}).flatMap(([h, v]) => (byName.has(h) ? [[String(byName.get(h)), v]] : []))))
+    setPresetName(p.name)
+    setPresetNote(missing.length ? t('clusters.presetHostsMissing', { hosts: [...new Set(missing)].join(', ') }) : t('clusters.presetApplied', { name: p.name }))
+  }
+
+  async function deletePreset(id: number) {
+    const p = (presets.data?.presets ?? []).find((x) => x.id === id)
+    if (!p || !(await confirmAction(t('clusters.presetDeleteConfirm', { name: p.name })))) return
+    try {
+      await api(`/hub/cluster-presets/${id}`, { method: 'DELETE' })
+      await presets.reload()
+      setPresetNote(null)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
   const hostIDs = [...new Set(rows.map((r) => r.host_id).filter((h): h is number => h !== null))]
   const distinctHosts = hostIDs.length
   const effectiveNetwork = distinctHosts <= 1 && network === 'bridge' && rows.every((r) => !r.bridge) ? 'nat' : network
@@ -316,6 +401,31 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
       <p className="small muted">{t('clusters.newMultiBody')}</p>
       <ErrorNote error={error} />
       <ErrorNote error={hosts.error} />
+      <div className="row" style={{ gap: '0.5rem', alignItems: 'flex-end', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
+        <label style={{ minWidth: '16rem', margin: 0 }}>
+          {t('clusters.presets')}
+          <Select
+            placeholder={t('clusters.presetPick')}
+            value={undefined}
+            onChange={(v: number) => applyPreset(v)}
+            options={(presets.data?.presets ?? []).map((p) => ({ value: p.id, label: p.name }))}
+            notFoundContent={t('clusters.presetsNone')}
+          />
+        </label>
+        <label style={{ minWidth: '12rem', margin: 0 }}>
+          {t('clusters.presetName')}
+          <Input value={presetName} onChange={(e) => setPresetName(e.target.value)} placeholder={t('clusters.presetNamePlaceholder')} />
+        </label>
+        <Button loading={presetBusy} disabled={!presetName.trim()} onClick={() => void savePreset()}>
+          {t('clusters.presetSave')}
+        </Button>
+        {(presets.data?.presets ?? []).some((p) => p.name === presetName.trim()) && (
+          <Button danger onClick={() => { const p = (presets.data?.presets ?? []).find((x) => x.name === presetName.trim()); if (p) void deletePreset(p.id) }}>
+            {t('clusters.presetDelete')}
+          </Button>
+        )}
+        {presetNote && <span className="small muted">{presetNote}</span>}
+      </div>
       <div className="grid grid-4" style={{ marginBottom: '0.6rem' }}>
         <label>
           {t('clusters.name')}
