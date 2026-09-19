@@ -569,10 +569,9 @@ func (r *ClusterRunner) run(ctx context.Context, jc *jobs.Context, cl store.Clus
 			return err
 		}
 		if len(failed) > 0 {
-			// Ничего ещё не создано — запись и пустая группа не нужны:
-			// иначе в списке висит «кластер» без единой машины, а
-			// следующая попытка спотыкается о занятое имя.
-			_ = r.m.db.DeleteHostGroup(context.Background(), spec.Name)
+			// Ничего ещё не создано — запись не нужна: иначе в списке
+			// висит «кластер» без единой машины, а следующая попытка
+			// спотыкается о занятое имя.
 			_ = r.m.db.DeleteCluster(context.Background(), cl.ID)
 			jc.Log("hub.clusterDiscarded", spec.Name)
 			return preflightError(failed)
@@ -864,7 +863,6 @@ func (r *ClusterRunner) createNode(ctx context.Context, jc *jobs.Context, spec C
 	for _, h := range hosts {
 		if h.Name == nd.Name && h.ParentID == host.ID {
 			_ = r.m.db.SetHostCluster(ctx, h.ID, clusterID, nd.Role)
-			_ = r.m.db.SetHostGroup(ctx, h.ID, spec.Name)
 			done.Hosts[nd.Name] = h.ID
 			jc.SaveResume(*done)
 			return nil
@@ -991,7 +989,6 @@ func (r *ClusterDeleteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	jc.Step(total, total, msgs.T(jc.Lang(), "hub.clusterStepDeleteRecord"))
 	r.removeMesh(ctx, jc, cl)
-	_ = r.m.db.DeleteHostGroup(ctx, cl.Name)
 	if err := r.m.db.DeleteCluster(ctx, cl.ID); err != nil {
 		return err
 	}

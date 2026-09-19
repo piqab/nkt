@@ -111,6 +111,18 @@ func TestParseDomifaddr(t *testing.T) {
 	if got := parseDomifaddr(out); got != "192.168.122.67" {
 		t.Errorf("parseDomifaddr = %q", got)
 	}
+	// Гостевой агент: lo первым, потом настоящий интерфейс — 127.0.0.1
+	// адресом машины не считается; link-local тоже.
+	agent := ` Name       MAC address          Protocol     Address
+-------------------------------------------------------------------------------
+ lo         00:00:00:00:00:00    ipv4         127.0.0.1/8
+ -          -                    ipv6         ::1/128
+ enp1s0     52:54:00:ab:cd:ef    ipv4         169.254.10.5/16
+ -          -                    ipv4         192.168.38.175/24
+`
+	if got := parseDomifaddr(agent); got != "192.168.38.175" {
+		t.Errorf("agent: parseDomifaddr = %q", got)
+	}
 	// Аренды ещё нет — это не адрес «0.0.0.0», а «пока не знаю».
 	empty := " Name       MAC address          Protocol     Address\n-----\n"
 	if got := parseDomifaddr(empty); got != "" {

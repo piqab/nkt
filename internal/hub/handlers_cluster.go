@@ -92,7 +92,6 @@ func (s *Server) handleClusterCreate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("hub.clusterCreate", err))
 		return
 	}
-	_ = s.db.CreateHostGroup(r.Context(), spec.Name)
 	user := auth.Username(r.Context())
 	jobID, err := s.jobs.Start(r.Context(), jobs.Spec{
 		Kind: KindClusterCreate, Title: msgs.Tc(r.Context(), "hub.clusterJobTitle", spec.Name, host.Name),

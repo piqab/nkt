@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -304,16 +305,25 @@ func (r *CreateRunner) AddressReport(ctx context.Context, name string) AddressRe
 // колонке. Берётся первый IPv4: у машины с одним интерфейсом он и есть
 // ответ, а разбирать несколько сетей здесь незачем — это работа
 // оператора, а не догадка.
+//
+// Гостевой агент (--source agent) перечисляет и lo с 127.0.0.1 — первым;
+// loopback и link-local (169.254/16) адресами не считаются: по ним хаб
+// в машину не попадёт.
 func parseDomifaddr(out string) string {
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 4 || !strings.EqualFold(fields[2], "ipv4") {
 			continue
 		}
-		addr, _, _ := strings.Cut(fields[3], "/")
-		if addr != "" && addr != "0.0.0.0" {
-			return addr
+		if fields[0] == "lo" {
+			continue
 		}
+		addr, _, _ := strings.Cut(fields[3], "/")
+		ip := net.ParseIP(addr)
+		if ip == nil || ip.IsUnspecified() || ip.IsLoopback() || ip.IsLinkLocalUnicast() {
+			continue
+		}
+		return addr
 	}
 	return ""
 }

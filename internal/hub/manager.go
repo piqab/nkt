@@ -299,6 +299,7 @@ func NewManager(cfg *config.Config, db *store.DB, key []byte, version string, lo
 // dialers, and the hub's own update-availability check — and blocks until
 // ctx is done.
 func (m *Manager) Run(ctx context.Context) {
+	m.DropClusterGroups(ctx)
 	go m.pollOverviews(ctx)
 	go m.maintainTunnelDialers(ctx)
 	go m.versionCheckLoop(ctx)

@@ -1050,7 +1050,6 @@ func (r *ScriptRunner) createCluster(ctx context.Context, jc *jobs.Context, done
 	if err != nil {
 		return msgs.Errorf("hub.clusterCreate", err)
 	}
-	_ = r.m.db.CreateHostGroup(ctx, spec.Name)
 	jobID, err := r.s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindClusterCreate, Title: msgs.Tc(ctx, "hub.clusterJobTitle", spec.Name, cpHost.Name),
 		Queue: fmt.Sprintf("cluster:%d", id), Author: jc.Job.Author, Steps: spec.jobSteps(),
