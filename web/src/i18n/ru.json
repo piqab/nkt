@@ -2286,7 +2286,20 @@
     "k8sVersion": "Версия Kubernetes",
     "k8sVersionStable": "актуальная stable ({{v}})",
     "k8sVersionHint": "kubeadm — ветка репозитория pkgs.k8s.io, k3s — канал; одна на все узлы. Внутри узла API всегда на 6443, порт в «пробросить наружу» — это порт хоста",
-    "kubectlHint": "Терминал на первом control plane с готовым kubectl (KUBECONFIG на admin-конфиг, автодополнение, alias k) — в отдельном окне"
+    "kubectlHint": "Терминал на первом control plane с готовым kubectl (KUBECONFIG на admin-конфиг, автодополнение, alias k) — в отдельном окне",
+    "presets": "Сохранённые наборы",
+    "presetPick": "выбрать набор — заполнит форму",
+    "presetsNone": "наборов пока нет",
+    "presetName": "Имя набора",
+    "presetNamePlaceholder": "например, lab-3-nodes",
+    "presetSave": "сохранить набор",
+    "presetDelete": "удалить набор",
+    "presetSaved": "набор «{{name}}» сохранён на хабе",
+    "presetApplied": "форма заполнена из набора «{{name}}»",
+    "presetHostsMissing": "форма заполнена, но хостов нет в этом хабе: {{hosts}} — выберите хосты заново",
+    "presetOverwrite": "Набор «{{name}}» уже есть. Перезаписать его текущей формой?",
+    "presetDeleteConfirm": "Удалить набор «{{name}}»?",
+    "presetBroken": "набор «{{name}}» не читается"
   },
   "k8s": {
     "notInstalled": "Kubernetes на этом хосте не установлен. Кластер создаётся на хабе: «новый кластер» у хоста с виртуализацией.",

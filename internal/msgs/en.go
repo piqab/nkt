@@ -1280,6 +1280,7 @@ var enCatalog = map[string]string{
 	"hub.preflightPrepNetwork":                      "Preparation: libvirt network “%s” started (or created as a NAT network)",
 	"hub.preflightCachedOnHub":                      "in the hub cache: %s (%.1f MB) — the node takes it from the hub",
 	"hub.preflightHubFetch":                         "the hub could not download %s: %v",
+	"hub.clusterPresetBad":                          "a preset needs a name (up to 64 characters) and the form contents",
 	"hub.clusterStepMesh":                           "WireGuard tunnel between hosts",
 	"hub.clusterMeshPlanned":                        "      tunnel %s: %d hosts, keys generated and stored",
 	"hub.clusterMeshExists":                         "      tunnel %s is already up, left untouched",

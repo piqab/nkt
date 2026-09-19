@@ -440,3 +440,52 @@ func TestExportImportV3ClustersAndScripts(t *testing.T) {
 		t.Errorf("кластер задублирован: %d", len(clusters))
 	}
 }
+
+// Наборы формы кластера: перезапись одноимённого, список, экспорт и
+// импорт без дублей.
+func TestClusterPresets(t *testing.T) {
+	ctx := context.Background()
+	db, err := Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	id, err := db.SaveClusterPreset(ctx, ClusterPreset{Name: "lab", Form: `{"name":"lab"}`, Author: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	id2, err := db.SaveClusterPreset(ctx, ClusterPreset{Name: "lab", Form: `{"name":"lab2"}`, Author: "admin"})
+	if err != nil || id2 != id {
+		t.Fatalf("overwrite: %d %d %v", id, id2, err)
+	}
+	list, _ := db.ListClusterPresets(ctx)
+	if len(list) != 1 || list[0].Form != `{"name":"lab2"}` {
+		t.Fatalf("list: %+v", list)
+	}
+	export, _ := db.ExportHosts(ctx)
+	if len(export.ClusterPresets) != 1 || export.ClusterPresets[0].Name != "lab" {
+		t.Fatalf("export: %+v", export.ClusterPresets)
+	}
+	dst, _ := Open(filepath.Join(t.TempDir(), "dst.db"))
+	defer dst.Close()
+	if _, errs := dst.ImportHosts(ctx, export); len(errs) != 0 {
+		t.Fatalf("import: %v", errs)
+	}
+	if _, errs := dst.ImportHosts(ctx, export); len(errs) != 0 {
+		t.Fatalf("second import: %v", errs)
+	}
+	if l, _ := dst.ListClusterPresets(ctx); len(l) != 1 {
+		t.Errorf("dst presets: %+v", l)
+	}
+	l, _ := dst.ListClusterPresets(ctx)
+	if err := dst.DeleteClusterPreset(ctx, l0(l)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func l0(l []ClusterPreset) int64 {
+	if len(l) == 0 {
+		return 0
+	}
+	return l[0].ID
+}

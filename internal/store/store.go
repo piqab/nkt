@@ -186,6 +186,14 @@ CREATE INDEX IF NOT EXISTS idx_profile_versions ON profile_versions(profile_id, 
 -- Шаблоны машин: «2 ядра, 4 ГБ, 20 ГБ, Debian 13» под своим именем.
 -- Тот же профиль, только про железо: описание хранится целиком, чтобы
 -- добавление поля не требовало миграции таблицы.
+CREATE TABLE IF NOT EXISTS cluster_presets (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    form       TEXT NOT NULL,             -- форма «Новый кластер на нескольких хостах» целиком, JSON
+    author     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS vm_templates (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT NOT NULL UNIQUE,

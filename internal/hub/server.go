@@ -178,6 +178,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/clusters", s.handleClusterList)
 				r.Get("/hub/cluster-images", s.handleClusterImages)
 				r.Get("/hub/k8s-versions", s.handleK8sVersions)
+				r.Get("/hub/cluster-presets", s.handleClusterPresets)
 				r.Get("/hub/clusters/{id}/nodes", s.handleClusterNodes)
 
 				r.Get("/hub/hosts", s.handleListHosts)
@@ -224,6 +225,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts/{id}/apt-proxy", s.handleHostAptProxy)
 					r.Post("/hub/clusters", s.handleClusterCreate)
 					r.Post("/hub/cluster-images/upload", s.handleClusterImageUpload)
+					r.Post("/hub/cluster-presets", s.handleClusterPresetSave)
+					r.Delete("/hub/cluster-presets/{id}", s.handleClusterPresetDelete)
 					r.Delete("/hub/cluster-images/{name}", s.handleClusterImageDelete)
 					r.Post("/hub/clusters/dry-run", s.handleClusterDryRun)
 					r.Get("/hub/clusters/{id}/kubeconfig", s.handleClusterKubeconfig)

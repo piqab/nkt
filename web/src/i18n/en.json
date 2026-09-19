@@ -2284,7 +2284,20 @@
     "k8sVersion": "Kubernetes version",
     "k8sVersionStable": "current stable ({{v}})",
     "k8sVersionHint": "kubeadm — the pkgs.k8s.io branch, k3s — the channel; the same for every node. Inside a node the API is always on 6443, the port in “expose” is the host port",
-    "kubectlHint": "A terminal on the first control plane with kubectl ready (KUBECONFIG on the admin config, completion, alias k) — in a separate window"
+    "kubectlHint": "A terminal on the first control plane with kubectl ready (KUBECONFIG on the admin config, completion, alias k) — in a separate window",
+    "presets": "Saved presets",
+    "presetPick": "pick a preset — fills the form",
+    "presetsNone": "no presets yet",
+    "presetName": "Preset name",
+    "presetNamePlaceholder": "e.g. lab-3-nodes",
+    "presetSave": "save preset",
+    "presetDelete": "delete preset",
+    "presetSaved": "preset “{{name}}” saved on the hub",
+    "presetApplied": "form filled from preset “{{name}}”",
+    "presetHostsMissing": "form filled, but these hosts are not in this hub: {{hosts}} — pick the hosts again",
+    "presetOverwrite": "Preset “{{name}}” already exists. Overwrite it with the current form?",
+    "presetDeleteConfirm": "Delete preset “{{name}}”?",
+    "presetBroken": "preset “{{name}}” cannot be read"
   },
   "k8s": {
     "notInstalled": "Kubernetes is not installed on this host. Clusters are created on the hub: “new cluster” next to a host with virtualization.",
