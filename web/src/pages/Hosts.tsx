@@ -2754,13 +2754,23 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
   const [addrs, setAddrs] = useState<Record<string, string>>({})
   const [reach, setReach] = useState<Record<string, ReachResult | 'busy' | { error: string }>>({})
   const addrOf = (vm: DiscoveredVM) => addrs[vm.name] ?? vm.addresses?.[0]?.addr ?? vm.address ?? ''
+  // Реквизиты по машине: поля под отмеченной машиной, заполнены из общих
+  // умолчаний; тронутое руками общие правки не перебивают.
+  type Creds = { ssh_user: string; ssh_port: number; password: string }
+  const [creds, setCreds] = useState<Record<string, Partial<Creds>>>({})
+  const credsOf = (name: string): Creds => ({
+    ssh_user: creds[name]?.ssh_user ?? sshUser,
+    ssh_port: creds[name]?.ssh_port ?? sshPort,
+    password: creds[name]?.password ?? password,
+  })
+  const setCred = (name: string, patch: Partial<Creds>) => setCreds((m) => ({ ...m, [name]: { ...m[name], ...patch } }))
 
   async function check(vm: DiscoveredVM) {
     const addr = addrOf(vm)
     if (!addr) return
     setReach((m) => ({ ...m, [vm.name]: 'busy' }))
     try {
-      const res = await api<ReachResult>(`/hub/hosts/${host.id}/vm-reach`, { method: 'POST', body: { name: vm.name, addr, port: sshPort } })
+      const res = await api<ReachResult>(`/hub/hosts/${host.id}/vm-reach`, { method: 'POST', body: { name: vm.name, addr, port: credsOf(vm.name).ssh_port } })
       setReach((m) => ({ ...m, [vm.name]: res }))
     } catch (err) {
       setReach((m) => ({ ...m, [vm.name]: { error: err instanceof Error ? err.message : String(err) } }))
@@ -2782,13 +2792,12 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
             ssh_user: sshUser,
             ssh_port: sshPort,
             password,
-            addrs: Object.fromEntries(vms.filter((vm) => picked.includes(vm.name)).map((vm) => [vm.name, addrOf(vm)])),
-            via: Object.fromEntries(
-              picked.map((name) => {
-                const r = reach[name]
-                return [name, r && r !== 'busy' && 'via' in r ? r.via : '']
+            items: vms
+              .filter((vm) => picked.includes(vm.name))
+              .map((vm) => {
+                const r = reach[vm.name]
+                return { name: vm.name, addr: addrOf(vm), via: r && r !== 'busy' && 'via' in r ? r.via : '', ...credsOf(vm.name) }
               }),
-            ),
           },
         },
       )
@@ -2818,6 +2827,26 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
         <ErrorNote error={found.error} />
         {error && <Banner kind="error">{error}</Banner>}
         {done && <Banner kind="info" onClose={() => setDone(null)}>{done}</Banner>}
+        {vms.length > 0 && (
+          <>
+            <span className="small muted">{t('hosts.discoverDefaults')}</span>
+            <div className="filters">
+              <label>
+                {t('hosts.sshUser')}
+                <Input value={sshUser} onChange={(e) => setSSHUser(e.target.value)} style={{ width: '9rem' }} />
+              </label>
+              <label>
+                {t('hosts.sshPort')}
+                <InputNumber min={1} max={65535} value={sshPort} onChange={(v) => setSSHPort(v ?? 22)} />
+              </label>
+              <label style={{ flex: 1, minWidth: '12rem' }}>
+                {t('hosts.discoverPassword')}
+                <Input.Password value={password} onChange={(e) => setPassword(e.target.value)} />
+              </label>
+            </div>
+            <span className="small muted">{t('hosts.discoverAuthHint')}</span>
+          </>
+        )}
         {found.loading && !found.data ? (
           <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
             <Spinner />
@@ -2868,34 +2897,33 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
                       {'error' in r ? r.error : r.hint}
                     </div>
                   )}
+                  {picked.includes(vm.name) && (
+                    <div className="row" style={{ gap: '0.5rem', paddingLeft: '1.6rem', flexWrap: 'wrap' }}>
+                      <label className="small" style={{ margin: 0 }}>
+                        {t('hosts.sshUser')}
+                        <Input size="small" value={credsOf(vm.name).ssh_user} onChange={(e) => setCred(vm.name, { ssh_user: e.target.value })} style={{ width: '8rem' }} />
+                      </label>
+                      <label className="small" style={{ margin: 0 }}>
+                        {t('hosts.sshPort')}
+                        <InputNumber size="small" min={1} max={65535} value={credsOf(vm.name).ssh_port} onChange={(v) => setCred(vm.name, { ssh_port: v ?? 22 })} style={{ width: '6rem' }} />
+                      </label>
+                      <label className="small" style={{ margin: 0, minWidth: '11rem' }}>
+                        {t('hosts.discoverPassword')}
+                        <Input.Password size="small" value={credsOf(vm.name).password} onChange={(e) => setCred(vm.name, { password: e.target.value })} />
+                      </label>
+                    </div>
+                  )}
                 </div>
               )
             })}
           </div>
         )}
         {vms.length > 0 && (
-          <>
-            <div className="filters">
-              <label>
-                {t('hosts.sshUser')}
-                <Input value={sshUser} onChange={(e) => setSSHUser(e.target.value)} style={{ width: '9rem' }} />
-              </label>
-              <label>
-                {t('hosts.sshPort')}
-                <InputNumber min={1} max={65535} value={sshPort} onChange={(v) => setSSHPort(v ?? 22)} />
-              </label>
-              <label style={{ flex: 1, minWidth: '12rem' }}>
-                {t('hosts.discoverPassword')}
-                <Input.Password value={password} onChange={(e) => setPassword(e.target.value)} />
-              </label>
-            </div>
-            <span className="small muted">{t('hosts.discoverAuthHint')}</span>
-            <div className="row" style={{ gap: '0.5rem' }}>
-              <Button type="primary" loading={busy} disabled={picked.length === 0} onClick={() => void importPicked()}>
-                {t('hosts.discoverImport', { count: picked.length })}
-              </Button>
-            </div>
-          </>
+          <div className="row" style={{ gap: '0.5rem' }}>
+            <Button type="primary" loading={busy} disabled={picked.length === 0} onClick={() => void importPicked()}>
+              {t('hosts.discoverImport', { count: picked.length })}
+            </Button>
+          </div>
         )}
       </div>
   )
