@@ -102,8 +102,15 @@ private class TofuTrustManager(
         try {
             delegate.checkServerTrusted(chain, authType)
             return
-        } catch (_: CertificateException) {
-            // Not chain-validatable — the self-signed case below.
+        } catch (e: CertificateException) {
+            // Only apply TOFU to genuinely self-signed certificates. Reject
+            // all other validation failures (expired, wrong issuer, revoked,
+            // malformed, etc.) to prevent an attacker from enrolling an
+            // arbitrary rejected certificate.
+            if (!isSelfSigned(leaf)) {
+                throw e
+            }
+            // Self-signed case: proceed to fingerprint-based TOFU below.
         }
 
         val authority = pins.currentAuthority
@@ -114,6 +121,28 @@ private class TofuTrustManager(
             null -> pins.record(authority, presented)
             presented -> Unit
             else -> throw CertPinMismatchException(authority, pinned, presented)
+        }
+    }
+
+    /**
+     * Returns true if the certificate is self-signed: issuer DN equals
+     * subject DN and the signature verifies with the certificate's own
+     * public key. This is the only case where TOFU should apply; all other
+     * validation failures (expired CA-issued certificates, revoked
+     * certificates, etc.) must be rejected.
+     */
+    private fun isSelfSigned(cert: X509Certificate): Boolean {
+        return try {
+            // A self-signed certificate has issuer == subject
+            if (cert.issuerX500Principal != cert.subjectX500Principal) {
+                return false
+            }
+            // Verify the signature with the certificate's own public key
+            cert.verify(cert.publicKey)
+            true
+        } catch (_: Exception) {
+            // Signature verification failed, so not self-signed
+            false
         }
     }
 
