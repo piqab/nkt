@@ -15,7 +15,13 @@
 # доступа не только с localhost.
 services:
   hub:
-    image: ghcr.io/piqab/nkt-hub:latest
+    # Pinned to a specific version tag to prevent supply-chain substitution
+    # attacks. Update this version explicitly when upgrading. Do NOT use
+    # :latest — it is a mutable tag that can be repointed without changing
+    # this file, allowing an attacker who compromises the image registry to
+    # substitute a malicious image that would gain access to the persistent
+    # hub data volume, including the master key and encrypted host secrets.
+    image: ghcr.io/piqab/nkt-hub:1.10.54
     ports:
       - "8443:8077"
     environment:
