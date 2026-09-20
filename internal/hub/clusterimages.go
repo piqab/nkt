@@ -152,7 +152,11 @@ func (m *Manager) ensureHostImage(ctx context.Context, jc *jobs.Context, hostID 
 	}
 	// Старый файл с тем же именем — убрать, иначе хост откажется.
 	_, _ = m.HostAPI(ctx, hostID, "POST", "/api/vm/images/host-delete", map[string]string{"name": img.Name}, nil)
-	f, err := os.Open(filepath.Join(m.clusterImagesDir(), img.Name))
+	joined := filepath.Join(m.clusterImagesDir(), img.Name)
+	if !strings.HasPrefix(joined, filepath.Clean(m.clusterImagesDir())+string(filepath.Separator)) {
+		return msgs.Errorf("hub.clusterImageMissing", img.Name)
+	}
+	f, err := os.Open(joined)
 	if err != nil {
 		return msgs.Errorf("hub.clusterImageMissing", img.Name)
 	}
