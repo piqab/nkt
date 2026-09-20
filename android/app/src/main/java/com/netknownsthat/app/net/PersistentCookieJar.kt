@@ -42,9 +42,14 @@ class PersistentCookieJar(
      * first request of a fresh process. */
     suspend fun restore(baseUrl: HttpUrl) {
         val restored = settingsStore.savedCookies().mapNotNull { raw ->
-            // Cookie.toString() (used in persist() below) produces exactly
-            // the Set-Cookie wire format Cookie.parse expects back.
-            Cookie.parse(baseUrl, raw)
+            // Each entry is "host|cookieString" — the host prefix ensures
+            // cookies are only restored for their original origin, preventing
+            // cross-origin session leakage if the hub URL changes.
+            val parts = raw.split("|", limit = 2)
+            if (parts.size != 2) return@mapNotNull null
+            val (host, cookieStr) = parts
+            if (host != baseUrl.host) return@mapNotNull null
+            Cookie.parse(baseUrl, cookieStr)
         }
         if (restored.isNotEmpty()) {
             synchronized(cookiesByHost) { cookiesByHost[baseUrl.host] = restored }
@@ -60,7 +65,11 @@ class PersistentCookieJar(
 
     private fun persist() {
         val snapshot = synchronized(cookiesByHost) {
-            cookiesByHost.values.flatten().map { it.toString() }.toSet()
+            cookiesByHost.flatMap { (host, cookies) ->
+                // Prefix each cookie with its host to preserve origin binding
+                // across restarts — prevents cross-origin session leakage.
+                cookies.map { "$host|${it}" }
+            }.toSet()
         }
         scope.launch { settingsStore.saveCookies(snapshot) }
     }
