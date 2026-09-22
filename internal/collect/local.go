@@ -437,9 +437,13 @@ func writeInPlace(path string, data []byte, mode fs.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 	if _, err := f.Write(data); err != nil {
+		f.Close()
 		return err
 	}
-	return f.Sync()
+	if err := f.Sync(); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }

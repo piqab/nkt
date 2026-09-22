@@ -9,6 +9,7 @@ import (
 	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	gopath "path"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -206,12 +207,15 @@ func classifyLog(path string) (isLog, archived, compressed bool) {
 // rotation replacing the file underneath it, which is exactly what happens
 // to any log worth watching for more than a day.
 func (m *LogManager) StreamArgv(source LogSource, lines int) ([]string, error) {
-	if lines <= 0 {
-		lines = 500
+	if lines <= 0 || lines > maxLogFileLines {
+		lines = clampLogLines(lines)
 	}
 	switch source.Kind {
 	case LogKindUnit:
-		if source.Name == "" || strings.ContainsAny(source.Name, " \t\n") {
+		// Имя юнита — только символы имён systemd и не с «-»: оно уходит
+		// аргументом journalctl, и хоть без оболочки, лишним флагам там
+		// не место.
+		if !unitNameRe.MatchString(source.Name) {
 			return nil, msgs.Errorf("control.invalidUnitName")
 		}
 		return []string{
@@ -240,8 +244,8 @@ func (m *LogManager) StreamArgv(source LogSource, lines int) ([]string, error) {
 // memory — an archive can be tens of megabytes decompressed, and none of it
 // except the end is wanted.
 func (m *LogManager) Snapshot(ctx context.Context, source LogSource, lines int) (string, error) {
-	if lines <= 0 {
-		lines = 500
+	if lines <= 0 || lines > maxLogFileLines {
+		lines = clampLogLines(lines)
 	}
 	if source.Kind == LogKindUnit {
 		argv, err := m.StreamArgv(source, lines)
@@ -309,6 +313,23 @@ func (m *LogManager) readCompressed(ctx context.Context, path string, lines int)
 	}
 	defer zr.Close()
 	return lastLines(zr, lines)
+}
+
+// unitNameRe — допустимое имя юнита для journalctl -u (с шаблонами «*»).
+var unitNameRe = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.@:*\\-]{0,255}$`)
+
+// maxLogFileLines — потолок «последних строк»: число приходит из запроса и
+// идёт в размер буфера; без потолка ?lines=2000000000 — это гигабайты.
+const maxLogFileLines = 20000
+
+func clampLogLines(n int) int {
+	if n <= 0 {
+		return 500
+	}
+	if n > maxLogFileLines {
+		return maxLogFileLines
+	}
+	return n
 }
 
 // lastLines keeps a ring of the final n lines, so decoding a large archive

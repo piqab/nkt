@@ -97,3 +97,30 @@ func TestProxyCachesPoolOnly(t *testing.T) {
 		t.Errorf("404 наверху должен пройти как 404: %d", resp.StatusCode)
 	}
 }
+
+// ?ns= зеркала registry входит в путь кэша и в адрес источника: «..» и
+// «/» в нём — путь наружу из каталога кэша, поэтому принимается только
+// имя хоста.
+func TestRegistryMirrorRejectsBadNS(t *testing.T) {
+	c, err := New(t.TempDir(), 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(c)
+	defer srv.Close()
+	for _, ns := range []string{"../../etc", "a/b", "evil.example.com/..", "x y"} {
+		resp, err := http.Get(srv.URL + "/v2/library/alpine/manifests/latest?ns=" + url.QueryEscape(ns))
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Errorf("ns=%q: код %d, ждали 400", ns, resp.StatusCode)
+		}
+	}
+	for _, ns := range []string{"ghcr.io", "registry.k8s.io", "quay.io", "localhost:5000", "docker.io"} {
+		if !registryNSRe.MatchString(ns) {
+			t.Errorf("ns=%q должен приниматься", ns)
+		}
+	}
+}

@@ -173,3 +173,18 @@ type fakeCollector struct {
 }
 
 func (f fakeCollector) ReadFile(string) ([]byte, error) { return f.data, nil }
+
+// Число строк из запроса ограничено сверху: оно идёт в размер буфера.
+func TestLogLinesClamped(t *testing.T) {
+	m := &LogManager{}
+	argv, err := m.StreamArgv(LogSource{Kind: LogKindUnit, Name: "nginx.service"}, 2_000_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if argv[4] != "20000" {
+		t.Errorf("argv = %v, ждали -n 20000", argv)
+	}
+	if got := clampLogLines(-5); got != 500 {
+		t.Errorf("clamp(-5) = %d", got)
+	}
+}

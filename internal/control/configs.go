@@ -386,6 +386,7 @@ var privateKeyRe = regexp.MustCompile(`^(ssh_host_[a-z0-9]+_key|id_(rsa|dsa|ecds
 func isSensitiveFile(path string) bool {
 	return privateKeyRe.MatchString(gopath.Base(path))
 }
+
 // walkConfigDepth ограничивает обход: sites-enabled/conf.d/sshd_config.d
 // лежат на первом-втором уровне, а глубже начинаются каталоги вроде
 // /etc/nginx/modules-available с сотнями файлов, которые правят не отсюда.

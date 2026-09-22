@@ -36,6 +36,9 @@ const (
 
 var digestRe = regexp.MustCompile(`^[a-z0-9]+:[a-f0-9]{32,128}$`)
 
+// registryNSRe — допустимое имя registry в ?ns= (см. serveRegistry).
+var registryNSRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*(:[0-9]{1,5})?$`)
+
 // registryUpstream — адрес источника по имени registry из ?ns=.
 func registryUpstream(ns string) string {
 	switch ns {
@@ -69,6 +72,12 @@ func (c *Cache) serveRegistry(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ns := r.URL.Query().Get("ns")
+	// ns — имя registry (хост[:порт]): оно входит в путь кэша и в адрес
+	// источника, поэтому только символы имени хоста — ни «..», ни «/».
+	if ns != "" && !registryNSRe.MatchString(ns) {
+		http.Error(w, "nkt registry mirror: bad ns", http.StatusBadRequest)
+		return
+	}
 	upstream := registryUpstream(ns)
 	if ns == "" || ns == "index.docker.io" || ns == "registry-1.docker.io" {
 		ns = "docker.io"

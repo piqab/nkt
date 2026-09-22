@@ -250,7 +250,7 @@ func (s *Server) runUpdateSession(w http.ResponseWriter, r *http.Request, key st
 			sess.write(data)
 		case websocket.MessageText:
 			var ctrl ptyControl
-			if json.Unmarshal(data, &ctrl) == nil && ctrl.Type == "resize" && ctrl.Cols > 0 && ctrl.Rows > 0 {
+			if json.Unmarshal(data, &ctrl) == nil && ctrl.Type == "resize" && ctrl.Cols > 0 && ctrl.Rows > 0 && ctrl.Cols <= 500 && ctrl.Rows <= 500 {
 				sess.resize(uint16(ctrl.Cols), uint16(ctrl.Rows))
 			}
 		}
