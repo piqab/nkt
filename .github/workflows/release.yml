@@ -29,7 +29,7 @@ jobs:
   check-version:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Тег должен совпадать с файлом VERSION
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -43,7 +43,7 @@ jobs:
     needs: check-version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -72,7 +72,7 @@ jobs:
       matrix:
         goarch: [amd64, arm64, arm]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
@@ -112,7 +112,7 @@ jobs:
     needs: check-version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Прочитать версию
         id: version
         run: echo "value=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
@@ -145,7 +145,7 @@ jobs:
       # fetch-depth: 0 — за тегами: описание релиза собирается из разделов
       # WHATSNEW.md, накопившихся с предыдущего тега, а его надо чем-то
       # определить. При depth 1 в клоне нет ни истории, ни тегов.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: actions/download-artifact@v4
