@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.78 — 2026-09-22
+
+- The write-path check (absolute, cleaned, no `..`) now sits in both
+  write points instead of a shared helper — visible right where it
+  matters, to a reader of the code and to the CI code scanner alike.
+
 ## v1.10.77 — 2026-09-22
 
 - Go toolchain extraction on the hub now goes through `os.Root`:
