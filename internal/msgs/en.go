@@ -463,6 +463,7 @@ var enCatalog = map[string]string{
 	"control.dockerReplied":                               "Docker replied %d: %s",
 	"control.domainRunningStopFirstShutdown":              "domain %s is running — stop it first (shutdown/destroy)",
 	"control.fileFound":                                   "file not found",
+	"control.sensitiveFileAccessDenied": "key files are neither listed nor readable through the config editor",
 	"control.fileHasChangedSincePage":                     "the file has changed since the page was loaded, refresh the block list and retry",
 	"control.fileOutsideAllowedDirectories":               "file outside the allowed directories",
 	"control.fileTooLargeEditor":                          "file too large for the editor",
