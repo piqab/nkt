@@ -73,7 +73,7 @@ dependencies {
 
     // OkHttp: REST + WebSocket (terminal/install-log streams, phase 6) share
     // one client and its CookieJar — see net/HubClient.kt.
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
 
     // JSON models mirror internal/model/model.go's structs 1:1 — see
     // net/model/*.kt. kotlinx.serialization over Moshi/Gson: no reflection,
