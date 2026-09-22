@@ -87,8 +87,10 @@ type HostExport struct {
 	// кластер и роль узла (по имени кластера).
 	Via       string `json:"via,omitempty"`
 	BinaryVia string `json:"binary_via,omitempty"`
-	Cluster   string `json:"cluster,omitempty"`
-	K8sRole   string `json:"k8s_role,omitempty"`
+	// SSHHostKey — запомненный ключ SSH хоста (base64), с v1.10.70.
+	SSHHostKey string `json:"ssh_host_key,omitempty"`
+	Cluster    string `json:"cluster,omitempty"`
+	K8sRole    string `json:"k8s_role,omitempty"`
 }
 
 // ClusterExport — кластер Kubernetes: запись с зашифрованными kubeconfig
@@ -200,7 +202,7 @@ func hostToExport(h Host) HostExport {
 		AdminUser: h.AdminUser, AdminPasswordEnc: h.AdminPasswordEnc, SudoStatus: h.SudoStatus,
 		TerminalEnabled: h.TerminalEnabled, AptViaHub: h.AptViaHub, TunnelEnabled: h.TunnelEnabled, TunnelTokenEnc: h.TunnelTokenEnc,
 		ErrorMsg: h.ErrorMsg, CreatedAt: h.CreatedAt, LastSeenAt: h.LastSeenAt,
-		Group: h.Group, Via: h.Via, BinaryVia: h.BinaryVia, K8sRole: h.K8sRole,
+		Group: h.Group, Via: h.Via, BinaryVia: h.BinaryVia, K8sRole: h.K8sRole, SSHHostKey: h.SSHHostKey,
 	}
 }
 
@@ -650,13 +652,13 @@ func (d *DB) importOneHost(ctx context.Context, h HostExport) (int64, error) {
 			arch, status, nkt_version, admin_user, admin_password_enc,
 			sudo_status, terminal_enabled, tunnel_enabled, tunnel_token_enc,
 			error_msg, created_at, last_seen_at, group_name, apt_via_hub,
-			via, binary_via
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			via, binary_via, ssh_host_key
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		h.Name, h.Addr, h.SSHPort, h.SSHUser, h.SSHAuthKind, h.SecretEnc,
 		h.Arch, h.Status, h.NktVersion, h.AdminUser, h.AdminPasswordEnc,
 		h.SudoStatus, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
 		h.ErrorMsg, h.CreatedAt, h.LastSeenAt, h.Group, h.AptViaHub,
-		h.Via, h.BinaryVia)
+		h.Via, h.BinaryVia, h.SSHHostKey)
 	if err != nil {
 		return 0, err
 	}

@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.70 — 2026-09-22
+
+- **The SSH host key is recorded** on the first connection and required
+  on every later one (like `known_hosts`): a swapped key fails with "SSH
+  host key changed: known …, presented …" instead of logging in with the
+  password to a possibly foreign machine. The host form shows the
+  fingerprint and has "forget host key" (after a reinstall). The key is
+  part of export/import. Existing hosts record their key on the first
+  connection after the update.
+- **The hub container runs as non-root** (uid 1000): `Dockerfile.hub`
+  with `USER nkt`, the Go build cache in the data volume, a
+  `HEALTHCHECK`; the Kubernetes manifest — `runAsNonRoot`, `fsGroup`,
+  `readOnlyRootFilesystem`, `drop: [ALL]`, `seccomp`, resource limits. A
+  data volume created by an earlier root-run version must be handed to
+  uid 1000 once — the hub exits at start with the `chown` command
+  (HUB.md, section 2.2). The plain nkt image stays root: it needs the
+  host's /etc, systemd and Docker socket.
+
 ## v1.10.69 — 2026-09-22
 
 - From the CodeQL/gosec/Trivy findings in the Security tab:

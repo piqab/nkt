@@ -14,34 +14,45 @@
 
 # ---- frontend -----------------------------------------------------------------
 FROM node:22-alpine AS web
-WORKDIR /src
-COPY web/package.json web/package-lock.json ./web/
-RUN cd web && npm ci
-COPY web ./web
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web ./
 # Vite writes straight into the Go embed directory.
-RUN cd web && npm run build
+RUN npm run build
 
 # ---- runtime --------------------------------------------------------------
 FROM golang:1.26-alpine
-RUN apk add --no-cache ca-certificates tzdata
+RUN apk add --no-cache ca-certificates tzdata \
+    && addgroup -g 1000 nkt && adduser -D -u 1000 -G nkt nkt \
+    && mkdir -p /src /var/lib/netknownsthat \
+    && chown -R nkt:nkt /src /go /var/lib/netknownsthat
 
+# Не от root: хабу root не нужен (SSH к хостам, база в томе, кросс-сборка
+# Go). Всё, куда он пишет, — том данных (в нём же кэш сборки Go) и /go
+# (кэш модулей, бинарник). Том, заведённый прежней версией от root, надо
+# отдать uid 1000 — хаб при старте скажет об этом сам.
+USER nkt
 WORKDIR /src
-COPY go.mod go.sum ./
+COPY --chown=nkt:nkt go.mod go.sum ./
 RUN go mod download
-COPY . .
-COPY --from=web /src/internal/webui/dist ./internal/webui/dist
+COPY --chown=nkt:nkt . .
+COPY --from=web --chown=nkt:nkt /src/internal/webui/dist ./internal/webui/dist
 
 ARG VERSION=docker
 # CGO off keeps every binary the hub produces — its own, and every one it
 # later cross-compiles for a managed host — static: modernc.org/sqlite is
 # pure Go, so nothing ever needs to link against a C library.
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /usr/local/bin/nkt ./cmd/nkt
+RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /go/bin/nkt ./cmd/nkt
 
 ENV NKT_MODE=hub \
     NKT_ADDR=0.0.0.0:8077 \
     NKT_DATA_DIR=/var/lib/netknownsthat \
-    NKT_HUB_SOURCE_ROOT=/src
+    NKT_HUB_SOURCE_ROOT=/src \
+    HOME=/var/lib/netknownsthat \
+    GOCACHE=/var/lib/netknownsthat/.gocache
 
 VOLUME ["/var/lib/netknownsthat"]
 EXPOSE 8077
-ENTRYPOINT ["/usr/local/bin/nkt", "hub"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD wget -qO- http://127.0.0.1:8077/api/health >/dev/null || exit 1
+ENTRYPOINT ["/go/bin/nkt", "hub"]

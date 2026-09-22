@@ -80,10 +80,11 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 		return nil, msgs.Errorf("hub.addressMachineKnownYetWait", host.Name)
 	}
 	target := net.JoinHostPort(host.Addr, fmt.Sprintf("%d", host.SSHPort))
+	pin := m.hostKeyPin(ctx, host)
 
 	// Обычный хост — напрямую, как было.
 	if host.ParentID == 0 || depth >= maxJumpDepth {
-		client, err := dialSSH(ctx, host.Addr, host.SSHPort, user, authKind, secret)
+		client, err := dialSSHPinned(ctx, host.Addr, host.SSHPort, user, authKind, secret, pin)
 		if err != nil {
 			return nil, err
 		}
@@ -97,7 +98,7 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 	// нужен прямой путь.
 	switch host.Via {
 	case store.HostViaDirect:
-		client, err := dialSSH(ctx, host.Addr, host.SSHPort, user, authKind, secret)
+		client, err := dialSSHPinned(ctx, host.Addr, host.SSHPort, user, authKind, secret, pin)
 		if err != nil {
 			return nil, err
 		}
@@ -105,7 +106,7 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 	case store.HostViaJump:
 	default:
 		if m.directReachable(host) {
-			client, err := dialSSH(ctx, host.Addr, host.SSHPort, user, authKind, secret)
+			client, err := dialSSHPinned(ctx, host.Addr, host.SSHPort, user, authKind, secret, pin)
 			if err == nil {
 				return &sshLink{client: client}, nil
 			}
@@ -117,7 +118,7 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 	if err != nil || parent.ID == host.ID {
 		// Родителя нет в списке (удалён): пробуем напрямую — вдруг
 		// машина всё же доступна, а отказывать заранее незачем.
-		client, dialErr := dialSSH(ctx, host.Addr, host.SSHPort, user, authKind, secret)
+		client, dialErr := dialSSHPinned(ctx, host.Addr, host.SSHPort, user, authKind, secret, pin)
 		if dialErr != nil {
 			return nil, dialErr
 		}
@@ -138,7 +139,7 @@ func (m *Manager) dialHostDepth(ctx context.Context, host store.Host,
 		_ = jump.Close()
 		return nil, msgs.Errorf("hub.accessHost", parent.Name, target, err)
 	}
-	client, err := dialSSHOver(conn, target, user, authKind, secret)
+	client, err := dialSSHOver(conn, target, user, authKind, secret, pin)
 	if err != nil {
 		_ = jump.Close()
 		return nil, err
@@ -192,4 +193,17 @@ func TCPReachable(addr string, timeout time.Duration) bool {
 	}
 	c.Close()
 	return true
+}
+
+// hostKeyPin — пин ключа SSH из записи хоста: при первом подключении
+// ключ запоминается, дальше требуется тот же (см. hostKeyCallback).
+func (m *Manager) hostKeyPin(ctx context.Context, host store.Host) *hostKeyPin {
+	if host.ID == 0 {
+		return nil
+	}
+	return &hostKeyPin{Host: host.Name, Known: host.SSHHostKey, Record: func(key string) {
+		if err := m.db.SetHostSSHKey(context.WithoutCancel(ctx), host.ID, key); err != nil {
+			m.log.Warn("host key not recorded", "host", host.Name, "err", err)
+		}
+	}}
 }

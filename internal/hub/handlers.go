@@ -488,6 +488,9 @@ type hostWithOverview struct {
 	// подкрашивается его цветом.
 	ProfileName  string `json:"profile_name,omitempty"`
 	ProfileColor string `json:"profile_color,omitempty"`
+	// HostKeyFP — SHA256-отпечаток запомненного ключа SSH хоста (пусто,
+	// пока хаб ни разу не подключался); «забыть ключ хоста» сбрасывает.
+	HostKeyFP string `json:"host_key_fp,omitempty"`
 }
 
 // localHostID is the sentinel Host.ID for the synthetic "localhost" row —
@@ -527,6 +530,9 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		row := hostWithOverview{Host: h}
+		if h.SSHHostKey != "" {
+			row.HostKeyFP = fingerprintOf(h.SSHHostKey)
+		}
 		if p, ok := profileByID[h.ProfileID]; ok && h.ProfileID != 0 {
 			row.ProfileName, row.ProfileColor = p.Name, p.Color
 		}
@@ -1173,6 +1179,29 @@ func (s *Server) handleStartInstall(w http.ResponseWriter, r *http.Request) {
 // handleCancelInstall stops a host's in-flight install (or, if the hub
 // restarted mid-install and lost track of it, just clears the stuck status)
 // so its controls have something to act on again either way.
+// handleForgetHostKey сбрасывает запомненный ключ SSH хоста: после
+// переустановки хост предъявляет новый, и до сброса хаб к нему не
+// подключится (HostKeyMismatchError). Следующее подключение запомнит
+// новый ключ.
+func (s *Server) handleForgetHostKey(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if _, err := s.db.HostByID(r.Context(), id); err != nil {
+		fail(w, r, err)
+		return
+	}
+	if err := s.db.SetHostSSHKey(r.Context(), id, ""); err != nil {
+		fail(w, r, err)
+		return
+	}
+	s.hub.DropSSHPool(id)
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "hub.forget_hostkey", fmt.Sprint(id), "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 func (s *Server) handleCancelInstall(w http.ResponseWriter, r *http.Request) {
 	id, err := hostIDParam(r)
 	if err != nil {

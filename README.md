@@ -412,8 +412,11 @@ Known limitations:
   (with a mandatory offer to save a keyed export first — and encrypt the
   export file itself with a password — for recovery via `nkt hub import`)
   — see HUB.md, "Stop / delete".
-* An SSH host key is accepted on first connection with no `known_hosts`
-  cross-check — the same trust-on-first-use as an interactive `ssh`.
+* The SSH host key is recorded on the first connection and required on
+  every later one (trust-on-first-use, like `known_hosts`): a swapped key
+  fails with "SSH host key changed" instead of logging in; after a
+  reinstall use "forget host key" in the host form. The fingerprint is
+  shown there.
 * Management operations go through an SSH tunnel to the host's own API,
   which fully applies its own rules (`NKT_ALLOW_MUTATIONS`, the user's
   role); the hub doesn't override them.

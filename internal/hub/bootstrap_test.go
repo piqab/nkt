@@ -2,6 +2,8 @@ package hub
 
 import (
 	"context"
+	"errors"
+	"github.com/piqab/nkt/internal/msgs"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -222,5 +224,47 @@ func TestWantsDbus(t *testing.T) {
 		if got := wantsDbus(tc.packages); got != tc.want {
 			t.Errorf("wantsDbus(%v) = %v, want %v", tc.packages, got, tc.want)
 		}
+	}
+}
+
+// Пин ключа хоста: первое подключение запоминает ключ, второе с тем же
+// пином проходит, а подмена (другой sshd с другим ключом на месте
+// прежнего) даёт HostKeyMismatchError, а не вход.
+func TestHostKeyPinAgainstRealSSHD(t *testing.T) {
+	sshdPath := findExecutable(t, []string{"/usr/sbin/sshd", "/usr/local/sbin/sshd", "sshd"})
+	sftpServer := findExecutable(t, []string{"/usr/lib/openssh/sftp-server", "/usr/libexec/openssh/sftp-server", "/usr/lib/ssh/sftp-server"})
+	pem, line, err := generateHostKeyPair()
+	if err != nil {
+		t.Fatal(err)
+	}
+	user := currentUsername(t)
+	addr, port := launchTestSSHD(t, sshdPath, sftpServer, t.TempDir(), line)
+
+	var recorded string
+	pin := &hostKeyPin{Host: "h", Record: func(k string) { recorded = k }}
+	c, err := dialSSHPinned(context.Background(), addr, port, user, store.HostAuthKey, []byte(pem), pin)
+	if err != nil {
+		t.Fatalf("первое подключение: %v", err)
+	}
+	_ = c.Close()
+	if recorded == "" {
+		t.Fatal("ключ хоста не записан при первом подключении")
+	}
+	pin.Known = recorded
+	c, err = dialSSHPinned(context.Background(), addr, port, user, store.HostAuthKey, []byte(pem), pin)
+	if err != nil {
+		t.Fatalf("повторное подключение с пином: %v", err)
+	}
+	_ = c.Close()
+
+	// Другой sshd — другой ключ хоста.
+	addr2, port2 := launchTestSSHD(t, sshdPath, sftpServer, t.TempDir(), line)
+	_, err = dialSSHPinned(context.Background(), addr2, port2, user, store.HostAuthKey, []byte(pem), pin)
+	var mismatch *HostKeyMismatchError
+	if !errors.As(err, &mismatch) {
+		t.Fatalf("подмена ключа не замечена: %v", err)
+	}
+	if !strings.Contains(msgs.Localize(msgs.EN, err), "SSH host key of h changed") {
+		t.Errorf("текст ошибки: %s", msgs.Localize(msgs.EN, err))
 	}
 }

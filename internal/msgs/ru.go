@@ -770,6 +770,7 @@ var ruCatalog = map[string]string{
 	"hub.sha256sumsHasLine":                         "в SHA256SUMS нет строки для %s",
 	"hub.specifyNameAddressSSHUser":                 "укажите имя, адрес, пользователя SSH и секрет (пароль или приватный ключ)",
 	"hub.specifyNameAddressSSHUser2":                "укажите имя, адрес и пользователя SSH",
+	"hub.hostKeyChanged":                            "ключ SSH хоста %s изменился: запомнен %s, предъявлен %s — если хост переустановлен, нажмите «забыть ключ хоста» в его форме; иначе это возможная подмена",
 	"hub.sshHandshake":                              "SSH-рукопожатие с %s: %v",
 	"hub.sshUnavailableHostSArchitecture":           "SSH недоступен, и для хоста ещё не известна архитектура для обновления через резервный канал",
 	"hub.sshdConfigHasIncludeSshd":                  "в sshd_config нет Include для sshd_config.d — вход по паролю оставлен включённым",

@@ -58,9 +58,32 @@ spec:
       labels:
         app: nkt-hub
     spec:
+      # Хаб работает не от root (uid 1000 в образе); fsGroup отдаёт ему
+      # том данных, остальное — обычное ужесточение пода.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
       containers:
         - name: hub
           image: ghcr.io/piqab/nkt-hub:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          # Кросс-сборка nkt для хостов — до 1–2 ГБ памяти на время сборки.
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
           ports:
             - containerPort: 8077
           env:
@@ -85,6 +108,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/netknownsthat
+            # Корень только на чтение — временные файлы сборки в emptyDir.
+            - name: tmp
+              mountPath: /tmp
           readinessProbe:
             httpGet:
               path: /api/health
@@ -99,6 +125,8 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: nkt-hub-data
+        - name: tmp
+          emptyDir: {}
 
 ---
 apiVersion: v1

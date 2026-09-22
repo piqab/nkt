@@ -260,6 +260,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts/{id}/group", s.handleSetHostGroup)
 					r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 					r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)
+					r.Post("/hub/hosts/{id}/forget-hostkey", s.handleForgetHostKey)
 					r.Post("/hub/hosts/{id}/sudo/remove", s.handleRemoveSudoAccess)
 					r.Post("/hub/hosts/{id}/stop", s.handleStopHost)
 					r.Post("/hub/hosts/{id}/start", s.handleStartHost)
