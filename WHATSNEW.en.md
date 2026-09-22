@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.68 — 2026-09-22
+
+- CI: the `trivy` job failed at setup — the `trivy-action@0.28.0` tag
+  does not exist; now `v0.36.0`. CodeQL bumped to v4 (v3 is deprecated).
+
 ## v1.10.67 — 2026-09-22
 
 - Security checks in CI instead of a third-party bot: govulncheck and
