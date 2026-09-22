@@ -117,6 +117,8 @@ export interface HubHost {
   /** Профиль, по которому хост создан: имя и цвет — им подкрашена строка. */
   profile_name?: string
   profile_color?: string
+  /** SHA256-отпечаток запомненного ключа SSH хоста; пусто — ещё не подключались. */
+  host_key_fp?: string
 }
 
 export interface HostInfo {

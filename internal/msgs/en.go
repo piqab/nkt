@@ -771,6 +771,7 @@ var enCatalog = map[string]string{
 	"hub.sha256sumsHasLine":                         "SHA256SUMS has no line for %s",
 	"hub.specifyNameAddressSSHUser":                 "specify a name, an address, an SSH user and a secret (password or private key)",
 	"hub.specifyNameAddressSSHUser2":                "specify a name, an address and an SSH user",
+	"hub.hostKeyChanged":                            "SSH host key of %s changed: known %s, presented %s — if the host was reinstalled, use \"forget host key\" in its form; otherwise this may be spoofing",
 	"hub.sshHandshake":                              "SSH handshake with %s: %v",
 	"hub.sshUnavailableHostSArchitecture":           "SSH is unavailable, and the host's architecture for an update over the fallback channel is not known yet",
 	"hub.sshdConfigHasIncludeSshd":                  "sshd_config has no Include for sshd_config.d — password login left enabled",

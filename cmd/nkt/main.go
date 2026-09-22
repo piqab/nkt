@@ -602,6 +602,9 @@ func newHubRuntime() (*hubRuntime, error) {
 	if cfg.Mode != config.ModeHub {
 		return nil, fmt.Errorf("nkt hub requires NKT_MODE=hub, currently %q", cfg.Mode)
 	}
+	if err := checkDataDirWritable(cfg.DataDir); err != nil {
+		return nil, err
+	}
 	db, err := store.Open(cfg.DBPath())
 	if err != nil {
 		return nil, err
@@ -913,4 +916,23 @@ func vmimageStore(cfg *config.Config) *vmimage.Store {
 	st := vmimage.NewStore(filepath.Join(cfg.DataDir, "vm-images"))
 	st.Proxy = func() string { return api.HubCacheURL(cfg) }
 	return st
+}
+
+// checkDataDirWritable — понятная ошибка вместо «permission denied» из
+// глубины sqlite: образ хаба с v1.10.70 работает не от root (uid 1000), и
+// том данных, заведённый прежней версией от root, надо переназначить.
+func checkDataDirWritable(dir string) error {
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return fmt.Errorf("каталог данных %s: %w\n"+
+			"хаб работает от пользователя uid %d; отдайте ему каталог данных, например:\n"+
+			"  docker run --rm -v <том>:/data alpine chown -R 1000:1000 /data", dir, err, os.Getuid())
+	}
+	probe := filepath.Join(dir, ".write-check")
+	if err := os.WriteFile(probe, []byte("ok"), 0o600); err != nil {
+		return fmt.Errorf("каталог данных %s не доступен на запись: %w\n"+
+			"хаб работает от пользователя uid %d; отдайте ему каталог данных, например:\n"+
+			"  docker run --rm -v <том>:/data alpine chown -R 1000:1000 /data", dir, err, os.Getuid())
+	}
+	_ = os.Remove(probe)
+	return nil
 }

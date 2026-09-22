@@ -1867,6 +1867,20 @@ function HostForm({
   const { t } = useTranslation()
   const editing = initial !== undefined
   const [form] = Form.useForm<HostFormValues>()
+  const [hostKeyFP, setHostKeyFP] = useState(initial?.host_key_fp ?? '')
+  const [forgettingKey, setForgettingKey] = useState(false)
+  async function forgetHostKey() {
+    if (!initial || !(await confirmAction(t('hosts.hostKeyForgetConfirm', { name: initial.name })))) return
+    setForgettingKey(true)
+    try {
+      await api(`/hub/hosts/${initial.id}/forget-hostkey`, { method: 'POST' })
+      setHostKeyFP('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setForgettingKey(false)
+    }
+  }
   // New hosts default to a hub-generated key — the operator's own private
   // key never has to be pasted anywhere for the common case. Editing
   // defaults to whatever the host already uses, since switching it is an
@@ -2204,6 +2218,21 @@ function HostForm({
           />
         </Form.Item>
       ) : null}
+      {/* Ключ SSH хоста запоминается при первом подключении (TOFU): после
+          переустановки хост предъявит другой, и до «забыть» хаб к нему
+          не подключится — здесь это и снимается. */}
+      {editing && (
+        <div className="small muted" style={{ marginBottom: '0.6rem' }}>
+          {t('hosts.hostKey')}:{' '}
+          {hostKeyFP ? <Sensitive>{hostKeyFP}</Sensitive> : t('hosts.hostKeyNone')}
+          {hostKeyFP && (
+            <Button size="small" style={{ marginLeft: '0.5rem' }} loading={forgettingKey} onClick={() => void forgetHostKey()}>
+              {t('hosts.hostKeyForget')}
+            </Button>
+          )}
+          <div>{t('hosts.hostKeyHint')}</div>
+        </div>
+      )}
       <Form.Item style={{ marginBottom: 0 }}>
         <Button type="primary" htmlType="submit" loading={busy}>
           {editing ? t('hosts.save') : t('hosts.addHost')}

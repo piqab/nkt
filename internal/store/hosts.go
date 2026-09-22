@@ -71,6 +71,11 @@ type Host struct {
 	// «github» (хост качал сам) или «sftp» (с хаба). Только для сведения:
 	// проба скорости повторяется при каждой доставке.
 	BinaryVia string `json:"binary_via,omitempty"`
+	// SSHHostKey — публичный ключ SSH хоста (base64 wire-формата),
+	// запомненный при первом подключении: дальше хаб требует тот же
+	// (TOFU, как known_hosts). Пусто — ещё не подключались или ключ
+	// забыт («забыть ключ хоста» после переустановки).
+	SSHHostKey string `json:"-"`
 	// Via — как хаб подключается к машине (ParentID != 0): пусто — авто
 	// (проба напрямую, иначе через хост), «direct» — только напрямую,
 	// «jump» — только через хост. Хост с macvtap-гостями своих машин не
@@ -135,7 +140,7 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
 	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, group_name,
-	parent_id, profile_id, apt_via_hub, cluster_id, k8s_role, binary_via, via`
+	parent_id, profile_id, apt_via_hub, cluster_id, k8s_role, binary_via, via, ssh_host_key`
 
 func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	var h Host
@@ -144,7 +149,7 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	err := row.Scan(&h.ID, &h.Name, &h.Addr, &h.SSHPort, &h.SSHUser, &h.SSHAuthKind, &h.SecretEnc,
 		&h.Arch, &h.Status, &h.NktVersion, &h.AdminUser, &adminPasswordEnc, &h.SudoStatus, &h.TerminalEnabled,
 		&h.TunnelEnabled, &tunnelTokenEnc, &tunnelCertSHA256, &h.ErrorMsg, &h.CreatedAt, &lastSeen, &h.Group,
-		&h.ParentID, &h.ProfileID, &h.AptViaHub, &h.ClusterID, &h.K8sRole, &h.BinaryVia, &h.Via)
+		&h.ParentID, &h.ProfileID, &h.AptViaHub, &h.ClusterID, &h.K8sRole, &h.BinaryVia, &h.Via, &h.SSHHostKey)
 	if err != nil {
 		return Host{}, err
 	}
@@ -304,6 +309,12 @@ const (
 // SetHostVia задаёт способ подключения к машине: пусто (авто), direct или jump.
 func (d *DB) SetHostVia(ctx context.Context, id int64, via string) error {
 	_, err := d.ExecContext(ctx, `UPDATE hosts SET via = ? WHERE id = ?`, via, id)
+	return err
+}
+
+// SetHostSSHKey запоминает публичный ключ SSH хоста (пусто — забыть).
+func (d *DB) SetHostSSHKey(ctx context.Context, id int64, key string) error {
+	_, err := d.ExecContext(ctx, `UPDATE hosts SET ssh_host_key = ? WHERE id = ?`, key, id)
 	return err
 }
 

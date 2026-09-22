@@ -328,3 +328,7 @@ func (m *Manager) dropSSHPool(hostID int64) {
 	m.dropClient(hostID)
 	m.dropSession(hostID)
 }
+
+// DropSSHPool — dropSSHPool для обработчиков: после «забыть ключ хоста»
+// следующее подключение должно идти заново и запомнить новый ключ.
+func (m *Manager) DropSSHPool(hostID int64) { m.dropSSHPool(hostID) }

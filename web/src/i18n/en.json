@@ -679,7 +679,12 @@
     "viaJump": "via the host",
     "checkReach": "check access",
     "discoverDefaults": "Defaults for the checked machines — each has its own fields under its row, editable:",
-    "bulkUpdateStarted": "Update started for {{started}} of {{total}} hosts — progress in \"Jobs\" and in the table rows"
+    "bulkUpdateStarted": "Update started for {{started}} of {{total}} hosts — progress in \"Jobs\" and in the table rows",
+    "hostKey": "SSH host key",
+    "hostKeyNone": "not recorded yet (recorded on the first connection)",
+    "hostKeyForget": "forget host key",
+    "hostKeyForgetConfirm": "Forget the recorded SSH host key of \"{{name}}\"? The next connection will accept and record whatever key the host presents. Do this only after reinstalling the host.",
+    "hostKeyHint": "The hub records the key on the first connection and requires the same one afterwards — a swap on the path gives the \"SSH host key changed\" error."
   },
   "events": {
     "title": "Alerts",

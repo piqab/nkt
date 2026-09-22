@@ -2,6 +2,8 @@ package hub
 
 import (
 	"context"
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
 	"net"
@@ -16,18 +18,76 @@ import (
 // sshDialTimeout bounds both the TCP connect and the SSH handshake.
 const sshDialTimeout = 15 * time.Second
 
+// hostKeyPin — ключ SSH хоста, запомненный при первом подключении
+// (TOFU, как known_hosts у обычного ssh): Known — base64 публичного
+// ключа из записи хоста (пусто — ещё не видели), Record — куда записать
+// ключ при первом подключении. Подмена ключа на пути даёт
+// HostKeyMismatchError, а не тихий вход с паролем к чужой машине.
+type hostKeyPin struct {
+	Host   string
+	Known  string
+	Record func(key string)
+}
+
+// HostKeyMismatchError — хост предъявил не тот ключ, что запомнен.
+type HostKeyMismatchError struct {
+	Host      string
+	Known     string
+	Presented string
+}
+
+func (e *HostKeyMismatchError) Error() string { return e.Unwrap().Error() }
+
+// Unwrap — та же ошибка ключом каталога: API покажет её на языке
+// читающего (msgs.Localize идёт по цепочке errors.As).
+func (e *HostKeyMismatchError) Unwrap() error {
+	return msgs.Errorf("hub.hostKeyChanged", e.Host, e.Known, e.Presented)
+}
+
+// hostKeyCallback — проверка по пину; без пина (nil) ключ принимается
+// любой, как раньше (тесты и разовые подключения).
+func hostKeyCallback(pin *hostKeyPin) ssh.HostKeyCallback {
+	if pin == nil {
+		return ssh.InsecureIgnoreHostKey() //nolint:gosec // без пина — TOFU без памяти
+	}
+	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
+		presented := base64.StdEncoding.EncodeToString(key.Marshal())
+		if pin.Known == "" {
+			if pin.Record != nil {
+				pin.Record(presented)
+			}
+			return nil
+		}
+		if presented == pin.Known {
+			return nil
+		}
+		return &HostKeyMismatchError{Host: pin.Host, Known: fingerprintOf(pin.Known), Presented: ssh.FingerprintSHA256(key)}
+	}
+}
+
+// fingerprintOf — SHA256-отпечаток ключа из его base64.
+func fingerprintOf(b64 string) string {
+	raw, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		return "?"
+	}
+	key, err := ssh.ParsePublicKey(raw)
+	if err != nil {
+		return "?"
+	}
+	return ssh.FingerprintSHA256(key)
+}
+
 // dialSSH opens an authenticated SSH connection to a host, using its
 // decrypted secret (an SSH password or a PEM-encoded private key, depending
-// on authKind).
-//
-// HostKeyCallback intentionally accepts whatever key the host presents:
-// there is no known_hosts entry to check on first contact, the same
-// trust-on-first-use trade-off an interactive `ssh` makes. A future
-// iteration could pin the host key after this first successful connect and
-// verify it on every later one — not done here to keep the first
-// installable version simple.
+// on authKind). Без пина ключ хоста принимается любой (см. hostKeyCallback);
+// dialHost передаёт пин из записи хоста.
 func dialSSH(ctx context.Context, addr string, port int, user, authKind string, secret []byte) (*ssh.Client, error) {
-	cfg, err := sshClientConfig(user, authKind, secret)
+	return dialSSHPinned(ctx, addr, port, user, authKind, secret, nil)
+}
+
+func dialSSHPinned(ctx context.Context, addr string, port int, user, authKind string, secret []byte, pin *hostKeyPin) (*ssh.Client, error) {
+	cfg, err := sshClientConfig(user, authKind, secret, pin)
 	if err != nil {
 		return nil, err
 	}
@@ -43,8 +103,8 @@ func dialSSH(ctx context.Context, addr string, port int, user, authKind string, 
 // dialSSHOver делает рукопожатие поверх уже открытого соединения —
 // канала, пробитого через другой хост (см. dialHost). Сам канал закрывать
 // здесь не нужно: он закроется вместе с клиентом.
-func dialSSHOver(conn net.Conn, target, user, authKind string, secret []byte) (*ssh.Client, error) {
-	cfg, err := sshClientConfig(user, authKind, secret)
+func dialSSHOver(conn net.Conn, target, user, authKind string, secret []byte, pin *hostKeyPin) (*ssh.Client, error) {
+	cfg, err := sshClientConfig(user, authKind, secret, pin)
 	if err != nil {
 		_ = conn.Close()
 		return nil, err
@@ -56,13 +116,18 @@ func handshake(conn net.Conn, target string, cfg *ssh.ClientConfig) (*ssh.Client
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, target, cfg)
 	if err != nil {
 		_ = conn.Close()
+		var mismatch *HostKeyMismatchError
+		if errors.As(err, &mismatch) {
+			// Не «рукопожатие не удалось», а внятное: ключ хоста сменился.
+			return nil, mismatch
+		}
 		return nil, msgs.Errorf("hub.sshHandshake", target, err)
 	}
 	return ssh.NewClient(sshConn, chans, reqs), nil
 }
 
 // sshClientConfig собирает способ входа и общие настройки клиента.
-func sshClientConfig(user, authKind string, secret []byte) (*ssh.ClientConfig, error) {
+func sshClientConfig(user, authKind string, secret []byte, pin *hostKeyPin) (*ssh.ClientConfig, error) {
 	var auth ssh.AuthMethod
 	switch authKind {
 	case store.HostAuthPassword:
@@ -79,7 +144,7 @@ func sshClientConfig(user, authKind string, secret []byte) (*ssh.ClientConfig, e
 	return &ssh.ClientConfig{
 		User:            user,
 		Auth:            []ssh.AuthMethod{auth},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(), //nolint:gosec // see doc comment above
+		HostKeyCallback: hostKeyCallback(pin),
 		Timeout:         sshDialTimeout,
 	}, nil
 }

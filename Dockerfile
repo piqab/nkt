@@ -2,12 +2,12 @@
 
 # ---- frontend -----------------------------------------------------------------
 FROM node:22-alpine AS web
-WORKDIR /src
-COPY web/package.json web/package-lock.json ./web/
-RUN cd web && npm ci
-COPY web ./web
+WORKDIR /src/web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web ./
 # Vite writes straight into the Go embed directory.
-RUN cd web && npm run build
+RUN npm run build
 
 # ---- binary -------------------------------------------------------------------
 FROM golang:1.26-alpine AS build
@@ -34,4 +34,7 @@ ENV NKT_MODE=local \
 
 VOLUME ["/var/lib/netknownsthat"]
 EXPOSE 8077
+# Без USER намеренно: одиночный nkt читает /etc, systemd и сокет Docker
+# хоста — ему нужен root (см. README, «Безопасность»).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s CMD wget -qO- http://127.0.0.1:8077/api/health >/dev/null || exit 1
 ENTRYPOINT ["/usr/local/bin/nkt"]
