@@ -140,6 +140,15 @@ class HubClient(
         val normalized = rawUrl.trim().let { if ("://" in it) it else "http://$it" }
         val parsed = normalized.toHttpUrlOrNull()
             ?: return Result.failure(IllegalArgumentException("Не похоже на адрес хаба: $rawUrl"))
+        
+        // Clear cookies when changing hub URL to prevent cross-origin session
+        // leakage: a host-only session cookie issued by hub A must never be
+        // sent to hub B. Without this guard, the cookie jar's restore() would
+        // rebind persisted cookies to the new hub on the next app launch.
+        if (baseUrl != null && baseUrl?.host != parsed.host) {
+            cookieJar.clear()
+        }
+        
         baseUrl = parsed
         certPins.currentAuthority = parsed.authority()
         settingsStore.setHubBaseUrl(parsed.toString())
