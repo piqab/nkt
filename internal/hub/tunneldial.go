@@ -134,6 +134,10 @@ func (m *Manager) tunnelDialOnce(ctx context.Context, hostID int64) (connected b
 			// gap that left, an on-path attacker swapping in their own
 			// cert to read that token off the wire before this existed.
 			InsecureSkipVerify: true, //nolint:gosec
+			// Возобновление сессии обходит VerifyPeerCertificate: клиент
+			// и так не возобновляет (ClientSessionCache пуст), но
+			// сказано явно — пин проверяется на каждом соединении.
+			SessionTicketsDisabled: true,
 			VerifyPeerCertificate: func(rawCerts [][]byte, _ [][]*x509.Certificate) error {
 				fp, verr := verifyPinnedTunnelCert(rawCerts, host.TunnelCertSHA256)
 				fingerprint = fp

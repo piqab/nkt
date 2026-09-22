@@ -702,6 +702,16 @@ echo 'new-password' | sudo nkt passwd ops    # неинтерактивно, д�
   ни один из путей, и предлагает кнопку установки dbus всякий раз, когда
   сработал бы путь через `nsenter`.
 
+* CI (`.github/workflows/security.yml`): на каждый push, pull request и
+  раз в неделю — govulncheck (известные уязвимости в вызываемом Go-коде,
+  блокирует), gitleaks (секреты в истории, блокирует; синтетические ключи
+  fixtures разрешены в `.gitleaks.toml`), CodeQL для Go и TypeScript,
+  gosec (`.gosec.json` исключает правила, которые здесь по замыслу) и
+  Trivy (зависимости, манифесты `deploy/`, Dockerfile) — эти три пишут в
+  Security → Code scanning и не блокируют. Dependabot
+  (`.github/dependabot.yml`) заводит сгруппированные еженедельные PR с
+  обновлениями зависимостей.
+
 ---
 
 ## Если что-то пошло не так
