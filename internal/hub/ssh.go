@@ -48,7 +48,9 @@ func (e *HostKeyMismatchError) Unwrap() error {
 // любой, как раньше (тесты и разовые подключения).
 func hostKeyCallback(pin *hostKeyPin) ssh.HostKeyCallback {
 	if pin == nil {
-		return ssh.InsecureIgnoreHostKey() //nolint:gosec // без пина — TOFU без памяти
+		// Сюда попадают только тесты (см. dialSSH): у боевых путей пин
+		// есть всегда. Ключ принимается любой и нигде не запоминается.
+		return ssh.InsecureIgnoreHostKey() //nolint:gosec // см. dialSSH
 	}
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
 		presented := base64.StdEncoding.EncodeToString(key.Marshal())
@@ -78,10 +80,9 @@ func fingerprintOf(b64 string) string {
 	return ssh.FingerprintSHA256(key)
 }
 
-// dialSSH opens an authenticated SSH connection to a host, using its
-// decrypted secret (an SSH password or a PEM-encoded private key, depending
-// on authKind). Без пина ключ хоста принимается любой (см. hostKeyCallback);
-// dialHost передаёт пин из записи хоста.
+// dialSSH — подключение без пина ключа хоста. Только для тестов: у
+// боевых путей пин есть всегда (dialHostDepth берёт его из записи
+// хоста), поэтому отдельной функции без пина в рабочем коде нет.
 func dialSSH(ctx context.Context, addr string, port int, user, authKind string, secret []byte) (*ssh.Client, error) {
 	return dialSSHPinned(ctx, addr, port, user, authKind, secret, nil)
 }

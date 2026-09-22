@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.73 — 2026-09-22
+
+- Frontend dependencies: `vite` 5 → 8, `@vitejs/plugin-react` 6,
+  `react-router-dom` 6 → 7 — closes the dev-server advisories (`vite`,
+  `esbuild`, `launch-editor`) and two in `react-router` (open redirect
+  and constructor execution during hydration; neither applied to nkt —
+  navigation targets are hardcoded and SSR is not used).
+- Releases now carry `docker-compose.hub.release.yml` and `hub.yaml`
+  with the **exact image version** instead of `:latest` — a mutable tag
+  can be repointed, and the hub volume holds the master key. In the
+  repository the manifests stay on `:latest` so `docker compose pull`
+  keeps working.
+
 ## v1.10.72 — 2026-09-22
 
 - The host overview now shows **uptime** ("Up 27d 4h") under the

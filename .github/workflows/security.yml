@@ -104,6 +104,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: aquasecurity/trivy-action@v0.36.0
+        env:
+          # Неприменимые проверки с обоснованием — в .trivyignore.
+          TRIVY_IGNOREFILE: .trivyignore
         with:
           scan-type: fs
           scanners: vuln,secret,misconfig
