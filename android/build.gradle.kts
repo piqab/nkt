@@ -5,10 +5,10 @@
 // plan, phases 1-2).
 plugins {
     id("com.android.application") version "8.6.0" apply false
-    id("org.jetbrains.kotlin.android") version "2.0.20" apply false
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.0.20" apply false
+    id("org.jetbrains.kotlin.android") version "2.4.20" apply false
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.4.20" apply false
     // Required from Kotlin 2.0 onward whenever Compose is enabled — the
     // compiler's Compose support moved out of kotlinCompilerExtensionVersion
     // and into this separate plugin, versioned in lockstep with Kotlin itself.
-    id("org.jetbrains.kotlin.plugin.compose") version "2.0.20" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.4.20" apply false
 }
