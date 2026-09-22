@@ -1,0 +1,118 @@
+# Проверки безопасности — вместо стороннего бота с автоисправлениями:
+# находки идут во вкладку Security → Code scanning (SARIF) и в статус
+# коммита, а не в сгенерированные PR.
+#
+# Красный статус дают только govulncheck (известные уязвимости в
+# вызываемом коде, ложных почти нет) и gitleaks (секреты в истории;
+# заведомо ненастоящее — в .gitleaks.toml). CodeQL, gosec и Trivy пишут
+# в Security tab и не блокируют: у них есть шум, его разбирают руками.
+# Обновления зависимостей — Dependabot (.github/dependabot.yml).
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Раз в неделю: базы уязвимостей пополняются и без наших коммитов.
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Известные уязвимости в Go-модулях и стандартной библиотеке — только
+  # те, чей код мы реально вызываем. Единственный блокирующий шаг по коду.
+  govulncheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: govulncheck ./...
+
+  # Секреты в истории коммитов. Полная история — иначе gitleaks видит
+  # только последний коммит.
+  gitleaks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Статический анализ Go и TypeScript от GitHub: path traversal, TLS,
+  # инъекции — то, что искал Aikido, но с объяснением каждой находки.
+  codeql:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        if: matrix.language == 'go'
+        with:
+          go-version-file: go.mod
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: codeql/${{ matrix.language }}
+
+  # Go-специфичные паттерны. Шумные правила исключены в .gosec.json —
+  # чтение файлов по переменному пути, subprocess и права на файлы у
+  # этой программы по замыслу.
+  gosec:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go install github.com/securego/gosec/v2/cmd/gosec@latest
+      - run: gosec -conf .gosec.json -fmt sarif -out gosec.sarif -no-fail ./...
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: gosec.sarif
+          category: gosec
+
+  # Уязвимости зависимостей (go.sum, package-lock.json), секреты в
+  # рабочем дереве и ошибки конфигурации в Dockerfile, compose и
+  # k8s-манифестах (deploy/).
+  trivy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy.sarif
+          severity: MEDIUM,HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "0"
+      - uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
