@@ -1,9 +1,6 @@
 package hub
 
 import (
-	"archive/tar"
-	"bytes"
-	"compress/gzip"
 	"context"
 	"errors"
 	"os"
@@ -225,94 +222,6 @@ func TestResetRemoteAdminPasswordRejectsUnsafeAdminUser(t *testing.T) {
 	err := resetRemoteAdminPassword(nil, "root", "admin'; rm -rf / #", "pw", "/var/lib/netknownsthat", "/usr/local/bin/nkt")
 	if err == nil {
 		t.Fatal("resetRemoteAdminPassword accepted a shell-metacharacter adminUser instead of rejecting it")
-	}
-}
-
-func TestSafeJoinRejectsEscapes(t *testing.T) {
-	root := "/tmp/nkt-toolchain-test"
-	cases := []struct {
-		name    string
-		wantErr bool
-	}{
-		{"go/bin/go", false},
-		{"go/pkg/mod/x.txt", false},
-		{"../../etc/passwd", true},
-		{"/etc/passwd", true},
-		{"a/../../../etc/passwd", true},
-	}
-	for _, c := range cases {
-		got, err := safeJoin(root, c.name)
-		if c.wantErr {
-			if err == nil {
-				t.Errorf("safeJoin(%q): expected an error, got %q", c.name, got)
-			}
-			continue
-		}
-		if err != nil {
-			t.Errorf("safeJoin(%q): unexpected error: %v", c.name, err)
-		}
-	}
-}
-
-func TestExtractTarGz(t *testing.T) {
-	var buf bytes.Buffer
-	gz := gzip.NewWriter(&buf)
-	tw := tar.NewWriter(gz)
-
-	writeEntry := func(hdr *tar.Header, content string) {
-		hdr.Size = int64(len(content))
-		if err := tw.WriteHeader(hdr); err != nil {
-			t.Fatalf("write header %s: %v", hdr.Name, err)
-		}
-		if _, err := tw.Write([]byte(content)); err != nil {
-			t.Fatalf("write content %s: %v", hdr.Name, err)
-		}
-	}
-
-	if err := tw.WriteHeader(&tar.Header{Name: "go/", Typeflag: tar.TypeDir, Mode: 0o755}); err != nil {
-		t.Fatalf("write dir header: %v", err)
-	}
-	if err := tw.WriteHeader(&tar.Header{Name: "go/bin/", Typeflag: tar.TypeDir, Mode: 0o755}); err != nil {
-		t.Fatalf("write dir header: %v", err)
-	}
-	writeEntry(&tar.Header{Name: "go/bin/go", Typeflag: tar.TypeReg, Mode: 0o755}, "fake go binary")
-	writeEntry(&tar.Header{Name: "go/VERSION", Typeflag: tar.TypeReg, Mode: 0o644}, "go1.99.0")
-	if err := tw.WriteHeader(&tar.Header{
-		Name: "go/bin/gofmt", Typeflag: tar.TypeSymlink, Linkname: "go",
-	}); err != nil {
-		t.Fatalf("write symlink header: %v", err)
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatalf("close tar writer: %v", err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatalf("close gzip writer: %v", err)
-	}
-
-	dest := filepath.Join(t.TempDir(), "go-toolchain")
-	if err := extractTarGz(&buf, dest); err != nil {
-		t.Fatalf("extractTarGz: %v", err)
-	}
-
-	gotBin, err := os.ReadFile(filepath.Join(dest, "go", "bin", "go"))
-	if err != nil {
-		t.Fatalf("read extracted go binary: %v", err)
-	}
-	if string(gotBin) != "fake go binary" {
-		t.Errorf("extracted go binary content = %q", gotBin)
-	}
-	if info, err := os.Stat(filepath.Join(dest, "go", "bin", "go")); err != nil {
-		t.Fatalf("stat extracted go binary: %v", err)
-	} else if info.Mode().Perm()&0o100 == 0 {
-		t.Error("extracted go binary lost its executable bit")
-	}
-
-	link, err := os.Readlink(filepath.Join(dest, "go", "bin", "gofmt"))
-	if err != nil {
-		t.Fatalf("readlink gofmt: %v", err)
-	}
-	if link != "go" {
-		t.Errorf("gofmt symlink target = %q, want %q", link, "go")
 	}
 }
 

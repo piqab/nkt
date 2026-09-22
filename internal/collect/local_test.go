@@ -152,3 +152,19 @@ func TestLocalRunForcesCLocale(t *testing.T) {
 		t.Errorf("окружение команды = %q, а разбор рассчитан на английский вывод", res.Stdout)
 	}
 }
+
+// Писать по относительному пути или пути с «..» нельзя: проверка стоит
+// в самой WriteFile, а не только у вызывающих.
+func TestWriteFileRejectsBadPaths(t *testing.T) {
+	l := NewLocal("", "", 0)
+	for _, bad := range []string{"relative/path.conf", "/etc/../etc/passwd", "/etc/nginx/../../root/.ssh/authorized_keys", ""} {
+		if err := l.WriteFile(bad, []byte("x"), 0o644); err == nil {
+			t.Errorf("WriteFile(%q) принят", bad)
+		}
+	}
+	dir := t.TempDir()
+	good := filepath.Join(dir, "ok.conf")
+	if err := l.WriteFile(good, []byte("x"), 0o644); err != nil {
+		t.Errorf("WriteFile(%q): %v", good, err)
+	}
+}

@@ -408,6 +408,7 @@ var enCatalog = map[string]string{
 	"auth.tooManyFailedLoginAttempts":                     "too many failed login attempts, try again later",
 	"auth.unixChkpwdInstalledHostLogging":                 "unix_chkpwd is not installed on the host — logging in with a system account is unavailable",
 	"auth.unixChkpwdRejectedLoginCode":                    "unix_chkpwd rejected the login (code %d)",
+	"collect.badWritePath":                                "a write path must be absolute and free of \"..\": %s",
 	"collect.creatingDirectory":                           "creating directory %s: %v",
 	"collect.dockerOverUnixSocket":                        "%v: Docker over unix socket",
 	"collect.localModeWorksOnlyLinux":                     "local mode works only on Linux, but the system is %s. Use NKT_MODE=fixtures for development",
