@@ -127,6 +127,8 @@ export interface HostInfo {
   kernel: string
   os: string
   notes?: string[]
+  /** Секунды с загрузки хоста (/proc/uptime); 0/отсутствует — неизвестно. */
+  uptime_s?: number
 }
 
 export interface SourceStatus {

@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"github.com/piqab/nkt/internal/msgs"
 	"log/slog"
 	"path/filepath"
 	"strings"
@@ -208,5 +209,44 @@ func TestEventSettingsRecordAndCollapse(t *testing.T) {
 	s := m.EventSettings(ctx)
 	if !s.Notify[store.EventUnreachable] || s.Notify[store.EventRecovered] {
 		t.Errorf("уведомления по умолчанию = %v", s.Notify)
+	}
+}
+
+// Аптайм растёт — тишина; стал меньше прежнего — машина перезагрузилась,
+// и это событие «rebooted» с обеими длительностями. Хост без аптайма
+// (старый nkt) молчит, как и первое наблюдение.
+func TestEventRebootedOnUptimeDrop(t *testing.T) {
+	m, id := eventTestManager(t)
+	ctx := context.Background()
+
+	// Первое наблюдение: сравнивать не с чем.
+	m.noteUptime(ctx, id, 500)
+	m.overviewMu.Lock()
+	m.overview[id] = hostOverview{reachable: true, uptimeS: 86400 * 27}
+	m.overviewMu.Unlock()
+
+	// Вырос — не событие.
+	m.noteUptime(ctx, id, 86400*27+60)
+	if events, _, _ := m.Events(ctx, 10); len(events) != 0 {
+		t.Fatalf("рост аптайма записан как событие: %+v", events)
+	}
+	// Хост без аптайма — тоже молчим.
+	m.noteUptime(ctx, id, 0)
+	if events, _, _ := m.Events(ctx, 10); len(events) != 0 {
+		t.Fatalf("нулевой аптайм записан: %+v", events)
+	}
+
+	m.noteUptime(ctx, id, 180)
+	events, _, _ := m.Events(ctx, 10)
+	if len(events) != 1 || events[0].Kind != store.EventRebooted {
+		t.Fatalf("падение аптайма не записано: %+v", events)
+	}
+	if !strings.Contains(events[0].Detail, "3 мин") || !strings.Contains(events[0].Detail, "27 дн") {
+		t.Errorf("в подробностях нет «сейчас → было»: %q", events[0].Detail)
+	}
+	// Читающему по-английски — по-английски (ключ, а не готовая строка).
+	en, _, _ := m.Events(msgs.WithLang(ctx, msgs.EN), 10)
+	if !strings.Contains(en[0].Detail, "host rebooted") || !strings.Contains(en[0].Detail, "27 d") {
+		t.Errorf("английский текст: %q", en[0].Detail)
 	}
 }

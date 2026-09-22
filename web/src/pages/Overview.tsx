@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Sensitive, blurText } from '../privacy'
 import { Link } from 'react-router-dom'
 import { Button, Tag, type TableColumnsType } from 'antd'
@@ -8,7 +8,7 @@ import ChangesCard from '../components/ChangesCard'
 import { useApi } from '../api'
 import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
-import { Banner, Card, ErrorNote, InfoHint, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative, formatUptime } from '../components/ui'
 import i18n from '../i18n'
 import { DataTable } from '../components/DataTable'
 
@@ -87,6 +87,12 @@ export default function OverviewPage({ me }: { me: Me }) {
 
   // Обзор — тот же снимок инвентаря, что и остальные разделы: при входе
   // он пересобирается сам, кнопка остаётся для правок, сделанных руками.
+  // Аптайм и вывод о нём: фиксируется при первом приходе данных (см. ниже).
+  const uptimeRef = useRef<UptimeState | null>(null)
+  if (uptimeRef.current === null && data?.host) {
+    uptimeRef.current = uptimeState(data.host.hostname, data.host.uptime_s ?? 0)
+  }
+
   const { rescanning: busy, rescan } = useHostRescan({
     reload,
     // Сканирование меняет состояние на сервере и требует прав: у
@@ -94,6 +100,12 @@ export default function OverviewPage({ me }: { me: Me }) {
     canScan: me.is_admin && me.allow_mutations,
     onNotice: (_kind, text) => setNotice(text),
   })
+
+  // Сравнение с прошлым заходом делается один раз — при первом приходе
+  // данных: обзор перечитывается сам, и пересчёт на каждом обновлении
+  // затёр бы сохранённое значение (а с ним и «перезагружался») через
+  // секунды после показа.
+  const uptime = uptimeRef.current
 
   if (loading && !data) return <Loading what={t('overview.what')} />
   if (error && !data) return <ErrorNote error={error} />
@@ -119,6 +131,15 @@ export default function OverviewPage({ me }: { me: Me }) {
               ms: data.scan_ms,
             })}
           </p>
+          {/* Аптайм и что с ним стало с прошлого захода: красный —
+              машина перезагружалась (аптайм упал), зелёный — растёт, как
+              и должен; первый заход и прыжок часов — без цвета. */}
+          {uptime?.show && (
+            <p className="small" style={{ marginTop: '-0.35rem', color: uptime.color }}>
+              {t('overview.uptime', { uptime: formatUptime(data.host.uptime_s ?? 0) })}
+              {uptime.note && <> — {uptime.note}</>}
+            </p>
+          )}
         </div>
         <div className="row">
           {me.is_admin && (
@@ -272,4 +293,48 @@ export default function OverviewPage({ me }: { me: Me }) {
       </div>
     </>
   )
+}
+
+/** Что показывать про аптайм: цвет и пояснение по сравнению с прошлым
+ * заходом на эту страницу. Прошлое значение (аптайм и момент, когда его
+ * видели) живёт в браузере по имени хоста — хаб про свои оповещения
+ * знает сам, а тут вопрос «с моего прошлого захода».
+ *
+ * Аптайм меньше прежнего — машина перезагружалась: красный. Вырос
+ * примерно на прошедшее время (±10 %, но не меньше 5 минут допуска —
+ * часы хоста и браузера расходятся) — всё в порядке, зелёный. Вырос
+ * необъяснимо больше — часы прыгнули, выводов не делаем.
+ */
+interface UptimeState {
+  show: boolean
+  color?: string
+  note?: string
+}
+
+function uptimeState(host: string, uptimeS: number): UptimeState {
+  if (uptimeS <= 0) return { show: false }
+  const key = `nkt-uptime:${host}`
+
+  let prev: { s: number; at: number } | null = null
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw) prev = JSON.parse(raw) as { s: number; at: number }
+  } catch {
+    prev = null
+  }
+  try {
+    localStorage.setItem(key, JSON.stringify({ s: uptimeS, at: Date.now() }))
+  } catch {
+    // Приватное окно — обойдёмся без сравнения.
+  }
+  if (!prev || prev.s <= 0) return { show: true }
+  if (uptimeS < prev.s) {
+    return { show: true, color: 'var(--status-critical)', note: i18n.t('overview.uptimeRebooted', { was: formatUptime(prev.s) }) }
+  }
+  const elapsed = Math.max(0, (Date.now() - prev.at) / 1000)
+  const grew = uptimeS - prev.s
+  if (Math.abs(grew - elapsed) <= Math.max(300, elapsed * 0.1)) {
+    return { show: true, color: 'var(--status-good)', note: i18n.t('overview.uptimeSteady') }
+  }
+  return { show: true }
 }

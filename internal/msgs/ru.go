@@ -1336,6 +1336,7 @@ var ruCatalog = map[string]string{
 	"control.userStepKeyPerms":                      "права на authorized_keys",
 	"hub.unreachableUnderMinute":                    "был недоступен меньше минуты",
 	"hub.addrUndetected":                            "адрес не определён",
+	"hub.hostRebooted":                              "хост перезагружен: работает %s, до этого работал %s",
 	"hub.hostRespondsAgain":                         "хост снова отвечает на опрос",
 	"hub.noGroup":                                   "без группы",
 	"hub.profileGroupJobTitle":                      "профиль %s → группа %s",

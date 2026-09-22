@@ -40,6 +40,9 @@ type hostOverview struct {
 	// lastCheckedAt is the last attempt, success or failure.
 	lastCheckedAt time.Time
 	errMsg        string
+	// uptimeS — сколько хост работает (секунды, /proc/uptime): падение
+	// значения между опросами и есть перезагрузка (см. noteUptime).
+	uptimeS int64
 	// version is what the host's own binary reports serving the request,
 	// which is not the same thing as the version the hub recorded having
 	// installed there (store.Host.NktVersion): an update that silently
@@ -170,6 +173,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	var body struct {
 		Findings map[string]int `json:"findings"`
 		Version  string         `json:"version"`
+		UptimeS  int64          `json:"uptime_s"`
 		// TopFindings — самые серьёзные находки хоста: по ним оповещение
 		// «новые проблемы» называет, что именно появилось.
 		TopFindings []struct {
@@ -193,6 +197,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		}
 	}
 	m.noteFindings(ctx, hostID, body.Findings, severeNow)
+	m.noteUptime(ctx, hostID, body.UptimeS)
 
 	// Машины внутри хоста: их состояние знает только он. Спрашиваем
 	// вторым запросом и только когда есть кого спрашивать — у хоста без
@@ -219,6 +224,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	m.overview[hostID] = hostOverview{
 		reachable:     true,
 		findings:      body.Findings,
+		uptimeS:       body.UptimeS,
 		severe:        severeNow,
 		version:       body.Version,
 		lastPolledAt:  now,

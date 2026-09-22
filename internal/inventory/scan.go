@@ -73,6 +73,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 			Kernel:   hostInfo.Kernel,
 			OS:       hostInfo.OS,
 			Notes:    hostInfo.Notes,
+			UptimeS:  hostInfo.UptimeS,
 		},
 	}
 

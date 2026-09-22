@@ -429,6 +429,7 @@ func (f *Fixtures) HostInfo(ctx context.Context) HostInfo {
 			msgs.Tc(ctx, "collect.snapshotMode", filepath.ToSlash(f.root)),
 			msgs.Tc(ctx, "collect.snapshotSimulated"),
 		},
+		UptimeS: readUptimeSeconds(f),
 	}
 	if raw, err := os.ReadFile(filepath.Join(f.root, "etc", "hostname")); err == nil {
 		if h := strings.TrimSpace(string(raw)); h != "" {

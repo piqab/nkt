@@ -913,6 +913,8 @@ type HostInfo struct {
 	Kernel   string   `json:"kernel"`
 	OS       string   `json:"os"`
 	Notes    []string `json:"notes,omitempty"`
+	// UptimeS — секунды с загрузки хоста (см. collect.HostInfo).
+	UptimeS int64 `json:"uptime_s,omitempty"`
 }
 
 // FindingCounts summarises findings by severity.

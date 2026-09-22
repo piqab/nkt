@@ -156,7 +156,12 @@
     "confirmTitle": "Подтвердите действие",
     "confirmOk": "Подтвердить",
     "noData": "Ничего не найдено",
-    "httpCode": "код {{code}}"
+    "httpCode": "код {{code}}",
+    "uptimeDH": "{{d}} дн. {{h}} ч",
+    "uptimeD": "{{d}} дн.",
+    "uptimeHM": "{{h}} ч {{m}} мин",
+    "uptimeH": "{{h}} ч",
+    "uptimeM": "{{m}} мин"
   },
   "containers": {
     "vms": "Виртуальные машины"
@@ -1272,7 +1277,10 @@
       "status": "Статус",
       "version": "Версия",
       "ms": "мс"
-    }
+    },
+    "uptime": "Работает {{uptime}}",
+    "uptimeRebooted": "перезагружался с прошлого просмотра (было {{was}})",
+    "uptimeSteady": "без перезагрузок с прошлого просмотра"
   },
   "vulns": {
     "title": "Уязвимости",

@@ -156,7 +156,12 @@
     "confirmTitle": "Confirm the action",
     "confirmOk": "Confirm",
     "noData": "Nothing found",
-    "httpCode": "code {{code}}"
+    "httpCode": "code {{code}}",
+    "uptimeDH": "{{d}}d {{h}}h",
+    "uptimeD": "{{d}}d",
+    "uptimeHM": "{{h}}h {{m}}m",
+    "uptimeH": "{{h}}h",
+    "uptimeM": "{{m}}m"
   },
   "containers": {
     "vms": "Virtual machines"
@@ -1270,7 +1275,10 @@
       "status": "Status",
       "version": "Version",
       "ms": "ms"
-    }
+    },
+    "uptime": "Up {{uptime}}",
+    "uptimeRebooted": "rebooted since your last visit (was {{was}})",
+    "uptimeSteady": "no reboots since your last visit"
   },
   "vulns": {
     "title": "Vulnerabilities",
