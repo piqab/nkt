@@ -1597,7 +1597,8 @@
     "editTitle": "Edit file",
     "fileName": "File name",
     "loadingFile": "Reading file…",
-    "renameOnly": "The contents could not be read (a binary file or no permission) — editing is off, but renaming works."
+    "renameOnly": "The contents could not be read (a binary file or no permission) — editing is off, but renaming works.",
+    "refresh": "refresh"
   },
   "hardware": {
     "title": "Hardware",

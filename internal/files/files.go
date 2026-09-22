@@ -36,8 +36,10 @@ type Runner func(ctx context.Context, argv ...string) (collect.CommandResult, er
 // RunnerEnv — то же с окружением: git получает секрет и ключ через него.
 type RunnerEnv func(ctx context.Context, env map[string]string, argv ...string) (collect.CommandResult, error)
 
-// DefaultRoots — где проводнику можно.
-var DefaultRoots = []string{"/home", "/srv", "/opt", "/var/www", "/tmp"}
+// DefaultRoots — где проводнику можно. /tmp намеренно нет: у юнита с
+// PrivateTmp свой /tmp, и проводник показывал бы не тот каталог, куда
+// кладут файлы снаружи.
+var DefaultRoots = []string{"/home", "/srv", "/opt", "/var/www"}
 
 // MaxUploadBytes — потолок одной загрузки. int64 явно: на 32-битных
 // сборках 2 ГиБ в int не помещается.
@@ -248,6 +250,12 @@ func (m *Manager) Upload(ctx context.Context, dir, name string, r io.Reader) (st
 	// или с правами юнита — копия с нормальными правами надёжнее.
 	if err := m.exec(ctx, "install", "-m", "0644", "--", tmpPath, target); err != nil {
 		return "", err
+	}
+	// Файл лёг снаружи, а изнутри юнита его не видно — песочница
+	// (ProtectHome=yes у старого юнита, PrivateTmp): сказать прямо, а не
+	// молча вернуть «ok» с пустым списком.
+	if !m.c.Exists(target) {
+		return "", msgs.Errorf("files.writtenButInvisible", target)
 	}
 	return target, nil
 }

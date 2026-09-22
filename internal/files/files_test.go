@@ -16,6 +16,15 @@ func testManager(t *testing.T) (*Manager, string, *[][]string) {
 	var calls [][]string
 	run := func(_ context.Context, argv ...string) (collect.CommandResult, error) {
 		calls = append(calls, argv)
+		// Как настоящие mkdir/install — иначе Upload не увидит результат
+		// (проверка видимости изнутри песочницы).
+		switch argv[0] {
+		case "mkdir":
+			_ = os.MkdirAll(argv[len(argv)-1], 0o755)
+		case "install":
+			data, _ := os.ReadFile(argv[len(argv)-2])
+			_ = os.WriteFile(argv[len(argv)-1], data, 0o644)
+		}
 		return collect.CommandResult{}, nil
 	}
 	m := NewManager([]string{root}, collect.NewLocal("", "", 0), run, nil, filepath.Join(root, ".nkt-tmp"))
@@ -187,6 +196,9 @@ func TestReadWrite(t *testing.T) {
 	if _, err := m.Write(context.Background(), path, "x", "deadbeef", ""); err == nil {
 		t.Error("устаревший хеш принят")
 	}
+	// Фейковый install теперь пишет по-настоящему: хеш после первой
+	// записи другой — перечитать, как сделал бы редактор.
+	txt, _ = m.Read(path)
 	target, err = m.Write(context.Background(), path, "a=3\n", txt.SHA256, "renamed.conf")
 	if err != nil {
 		t.Fatalf("Write с именем: %v", err)
@@ -203,5 +215,19 @@ func TestReadWrite(t *testing.T) {
 	}
 	if got := permOctal("-rwxr-x---"); got != "0750" {
 		t.Errorf("permOctal = %s", got)
+	}
+}
+
+// Файл лёг снаружи, но изнутри юнита не виден (ProtectHome=yes) —
+// ошибка с объяснением, а не «ok» с пустым списком.
+func TestUploadInvisibleFromSandbox(t *testing.T) {
+	root := t.TempDir()
+	run := func(_ context.Context, argv ...string) (collect.CommandResult, error) {
+		return collect.CommandResult{}, nil
+	}
+	m := NewManager([]string{root}, collect.NewLocal("", "", 0), run, nil, filepath.Join(root, ".nkt-tmp"))
+	_, err := m.Upload(context.Background(), root, "a.png", strings.NewReader("x"))
+	if err == nil || !strings.Contains(err.Error(), "не видно") {
+		t.Errorf("ждали ошибку о невидимом файле, получили %v", err)
 	}
 }

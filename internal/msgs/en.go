@@ -591,6 +591,8 @@ var enCatalog = map[string]string{
 	"files.fileLargerThanMiBCannot":                       "file %s is larger than %d MiB — it cannot be opened in the editor, only downloaded",
 	"files.gitCloneExitedCode":                            "git clone exited with code %d: %s",
 	"files.invalidBranchName":                             "invalid branch name %q",
+	"files.writtenButInvisible":                           "the file was written to %s, but the nkt service cannot see it: the unit sandbox hides this directory (ProtectHome=yes in the old unit, PrivateTmp for /tmp) — update nkt on the host, the unit is rewritten with ProtectHome=read-only",
+	"files.protectHomeWarning":                            "unit %s has ProtectHome=yes: the nkt service cannot see /home — folders there look empty and uploads \"do not appear\". Update nkt on the host (the unit is rewritten with ProtectHome=read-only) or change the directive and restart the service",
 	"files.invalidFileName":                               "invalid file name: %q",
 	"files.invalidRepositoryAddress":                      "invalid repository address",
 	"files.invalidUserName":                               "invalid user name",

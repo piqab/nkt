@@ -19,7 +19,7 @@ title: Packages, disks, files, system
   and partitions.
 - **What takes the space**: subdirectory sizes on click, level by level.
 - **Files** — a browser over the allowed roots (`/home`, `/srv`, `/opt`,
-  `/var/www`, `/tmp`; configurable with `NKT_FILES_ROOTS`): folders,
+  `/var/www`; configurable with `NKT_FILES_ROOTS`): folders,
   rename, delete, download; upload of files and whole folders via a dialog
   or drag and drop with overall progress; unpacking zip/tar in place; `git
   clone` as a job, private repositories included (a token over HTTPS or

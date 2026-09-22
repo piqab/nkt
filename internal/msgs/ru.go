@@ -590,6 +590,8 @@ var ruCatalog = map[string]string{
 	"files.fileLargerThanMiBCannot":                       "файл %s больше %d МиБ — в редакторе не открыть, только скачать",
 	"files.gitCloneExitedCode":                            "git clone завершился кодом %d: %s",
 	"files.invalidBranchName":                             "некорректное имя ветки %q",
+	"files.writtenButInvisible":                           "файл записан в %s, но изнутри службы nkt его не видно: песочница юнита скрывает этот каталог (ProtectHome=yes в старом юните, PrivateTmp для /tmp) — обновите nkt на хосте, юнит перепишется с ProtectHome=read-only",
+	"files.protectHomeWarning":                            "юнит %s собран с ProtectHome=yes: службе nkt не виден /home — папки там будут пустыми, а загруженное «не появится». Обновите nkt на хосте (юнит перепишется с ProtectHome=read-only) или поправьте директиву и перезапустите службу",
 	"files.invalidFileName":                               "некорректное имя файла: %q",
 	"files.invalidRepositoryAddress":                      "некорректный адрес репозитория",
 	"files.invalidUserName":                               "некорректное имя пользователя",

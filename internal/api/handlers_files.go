@@ -6,6 +6,7 @@ import (
 	"io"
 	"mime"
 	"net/http"
+	"os"
 	gopath "path"
 	"strconv"
 	"strings"
@@ -32,7 +33,16 @@ func (s *Server) handleFilesRoots(w http.ResponseWriter, r *http.Request) {
 	if m == nil {
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"roots": m.Roots(), "max_upload": files.MaxUploadBytes})
+	out := map[string]any{"roots": m.Roots(), "max_upload": files.MaxUploadBytes}
+	// Старый юнит с ProtectHome=yes: /home для службы пуст, загруженное
+	// туда снаружи «не появляется». Предупредить сразу, а не после
+	// первой загрузки.
+	if os.Getenv("INVOCATION_ID") != "" {
+		if d := readUnit("netknownsthat.service"); d.Found && (d.ProtectHome == "yes" || d.ProtectHome == "true" || d.ProtectHome == "tmpfs") {
+			out["warning"] = msgs.Tc(r.Context(), "files.protectHomeWarning", d.Path)
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (s *Server) handleFilesList(w http.ResponseWriter, r *http.Request) {

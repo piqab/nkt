@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import { Button, Input, Progress, Select, Tag, Tooltip, type TableColumnsType } from 'antd'
-import { FolderOutlined, FolderAddOutlined, FileOutlined, FileZipOutlined, BranchesOutlined, DownloadOutlined, UploadOutlined } from '@ant-design/icons'
+import { FolderOutlined, FolderAddOutlined, FileOutlined, FileZipOutlined, BranchesOutlined, DownloadOutlined, UploadOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, qs, useApi } from '../api'
 import type { Job } from '../types'
@@ -38,6 +38,8 @@ interface Entry {
 interface RootsInfo {
   roots: string[]
   max_upload: number
+  /** Песочница юнита прячет /home (ProtectHome=yes) — предупреждение сервера. */
+  warning?: string
 }
 
 function joinPath(dir: string, name: string): string {
@@ -228,18 +230,27 @@ export default function FileBrowser() {
         }
         xhr.send(p.file)
       })
+    let lastRefresh = Date.now()
     const worker = async () => {
       for (let p = queue.shift(); p; p = queue.shift()) {
         await one(p)
         summary.done += 1
         publish()
+        // Не на каждый файл: сотня мелких файлов иначе даст сотню
+        // запросов списка.
+        if (Date.now() - lastRefresh > 1500) {
+          lastRefresh = Date.now()
+          void reload()
+        }
       }
     }
     void Promise.all(Array.from({ length: Math.min(UPLOAD_PARALLEL, list.length) }, worker)).then(() => {
       summary.finished = true
       summary.current = ''
       publish()
-      reload()
+      // Список перечитывается и по ходу (см. worker), и в конце: у
+      // большой папки иначе ничего не видно до последнего файла.
+      void reload()
     })
   }
 
@@ -329,6 +340,7 @@ export default function FileBrowser() {
   return (
     <Card title={t('files.title')} subtitle={t('files.hint')}>
       {info.error && <Banner kind="error">{info.error}</Banner>}
+      {info.data?.warning && <Banner kind="warn">{info.data.warning}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
 
       <div className="filters" style={{ alignItems: 'center' }}>
@@ -359,6 +371,9 @@ export default function FileBrowser() {
             )
           })}
         </div>
+        <Button size="small" icon={<ReloadOutlined />} loading={listing.loading} disabled={!dir} onClick={() => void reload()}>
+          {t('files.refresh')}
+        </Button>
         <Button size="small" icon={<FolderAddOutlined />} disabled={!dir} onClick={() => setFolderModal(true)}>
           {t('files.newFolder')}
         </Button>
@@ -510,8 +525,9 @@ export default function FileBrowser() {
           job={openJob}
           onClose={() => {
             setOpenJob(null)
-            reload()
+            void reload()
           }}
+          onDone={() => void reload()}
         />
       )}
     </Card>
