@@ -407,6 +407,7 @@ var ruCatalog = map[string]string{
 	"auth.tooManyFailedLoginAttempts":                     "слишком много неудачных попыток входа, попробуйте позже",
 	"auth.unixChkpwdInstalledHostLogging":                 "на хосте нет unix_chkpwd — вход системной учётной записью недоступен",
 	"auth.unixChkpwdRejectedLoginCode":                    "unix_chkpwd отклонил вход (код %d)",
+	"collect.badWritePath":                                "путь для записи должен быть абсолютным и без «..»: %s",
 	"collect.creatingDirectory":                           "создание каталога %s: %v",
 	"collect.dockerOverUnixSocket":                        "%v: Docker через unix-сокет",
 	"collect.localModeWorksOnlyLinux":                     "режим local работает только на Linux, а система — %s. Для разработки используйте NKT_MODE=fixtures",

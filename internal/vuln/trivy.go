@@ -184,13 +184,20 @@ func extractTrivyBinary(r io.Reader, dest string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(f, tr); err != nil { //nolint:gosec // trusted GitHub release, no size cap needed
+		// Потолок на распакованный размер: архив доверенный (GitHub
+		// Releases по HTTPS, сумма сверена), но бомба сжатия — это про
+		// «а если источник однажды окажется не тем»; 512 МБ с запасом
+		// перекрывают бинарник trivy в несколько десятков мегабайт.
+		if _, err := io.Copy(f, io.LimitReader(tr, maxExtractedBytes)); err != nil {
 			return errors.Join(err, f.Close())
 		}
 		// Ошибка Close на записи — потерянные данные, а не мелочь.
 		return f.Close()
 	}
 }
+
+// maxExtractedBytes — потолок распаковки одного файла из архива.
+const maxExtractedBytes = 512 << 20
 
 // EnsureDB makes sure dir has a trivy vulnerability DB no older than
 // dbMaxAge, (re)downloading it via trivy's own --download-db-only when

@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.77 — 2026-09-22
+
+- Go toolchain extraction on the hub now goes through `os.Root`:
+  **nothing** escapes the extraction directory any more — not `..` in a
+  name, not an absolute path, not a write through a symlink the archive
+  itself created (the last one slipped past the previous name check,
+  which was purely lexical). A test for that escape was added.
+- Extraction of the trivy archive is size-capped (512 MB per file) — in
+  case the source ever turns out not to be the one expected.
+- `collect.WriteFile` validates the path itself: absolute, cleaned, free
+  of `..`. Who may write into a given directory is still decided by the
+  callers.
+
 ## v1.10.76 — 2026-09-22
 
 - The release workflow failed while uploading assets ("read

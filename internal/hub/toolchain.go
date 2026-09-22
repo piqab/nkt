@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	gopath "path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -191,6 +192,18 @@ func extractTarGz(r io.Reader, destDir string) error {
 	}
 	defer os.RemoveAll(tmpDir) // no-op once the rename below succeeds
 
+	// Распаковка идёт через os.Root: любая запись, которая вышла бы за
+	// каталог — «..» в имени, абсолютный путь, проход через созданный
+	// самим же архивом симлинк наружу — отвергается стандартной
+	// библиотекой, а не нашей проверкой имени. Лексической проверки для
+	// этого мало: симлинк «внутрь», через который следующая запись
+	// уходит наружу, она не видит.
+	root, err := os.OpenRoot(tmpDir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+
 	tr := tar.NewReader(gz)
 	for {
 		hdr, err := tr.Next()
@@ -201,38 +214,32 @@ func extractTarGz(r io.Reader, destDir string) error {
 			return msgs.Errorf("hub.readingArchive", err)
 		}
 
-		target, err := safeJoin(tmpDir, hdr.Name)
+		name, err := archiveEntryName(hdr.Name)
 		if err != nil {
 			return err
 		}
 
 		switch hdr.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0o755); err != nil {
+			if err := root.MkdirAll(name, 0o755); err != nil {
 				return err
 			}
 		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			if err := root.MkdirAll(gopath.Dir(name), 0o755); err != nil {
 				return err
 			}
-			if err := writeExtractedFile(target, tr, os.FileMode(hdr.Mode&0o777)); err != nil {
+			if err := writeExtractedFile(root, name, tr, os.FileMode(hdr.Mode&0o777)); err != nil {
 				return err
 			}
 		case tar.TypeSymlink:
-			// Цель ссылки — тоже путь из архива: абсолютная или ведущая
-			// наружу (../../etc/passwd) подменила бы файл вне каталога.
-			// safeSymlinkTarget возвращает её же, но только пройдя
-			// проверку, — так между значением из архива и os.Symlink
-			// заведомо нет пути в обход.
-			linkname, err := safeSymlinkTarget(tmpDir, target, hdr.Linkname)
-			if err != nil {
+			if err := root.MkdirAll(gopath.Dir(name), 0o755); err != nil {
 				return err
 			}
-			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
-				return err
-			}
-			_ = os.Remove(target)
-			if err := os.Symlink(linkname, target); err != nil {
+			_ = root.Remove(name)
+			// Цель ссылки не проверяется: сама ссылка наружу безвредна,
+			// а пройти по ней os.Root не даст — ни этой распаковке, ни
+			// чему-либо ещё, что работает через корень.
+			if err := root.Symlink(hdr.Linkname, name); err != nil {
 				return err
 			}
 		}
@@ -244,8 +251,8 @@ func extractTarGz(r io.Reader, destDir string) error {
 	return os.Rename(tmpDir, destDir)
 }
 
-func writeExtractedFile(target string, r io.Reader, mode os.FileMode) error {
-	f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+func writeExtractedFile(root *os.Root, name string, r io.Reader, mode os.FileMode) error {
+	f, err := root.OpenFile(name, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}
@@ -257,32 +264,14 @@ func writeExtractedFile(target string, r io.Reader, mode os.FileMode) error {
 	return closeErr
 }
 
-// safeJoin resolves a tar entry name against root, rejecting anything that
-// would land outside it (a "../" escape, or an absolute path) — a corrupt
-// or hostile tarball must never be able to write outside the toolchain
-// directory it is meant to populate. Rejects outright rather than silently
-// remapping the entry back under root: either way is safe, but a tarball
-// that tries this is corrupt or hostile, and that is worth surfacing as an
-// error rather than quietly working around it.
-// safeSymlinkTarget — цель символической ссылки link, взятая из архива:
-// возвращается только та, что после разрешения относительно каталога
-// ссылки остаётся внутри root. Абсолютная цель и «..» наружу —
-// отвергаются.
-func safeSymlinkTarget(root, link, linkname string) (string, error) {
-	if filepath.IsAbs(linkname) || linkname == "" {
-		return "", msgs.Errorf("hub.archiveContainsPathOutsideInstall", linkname)
-	}
-	resolved := filepath.Clean(filepath.Join(filepath.Dir(link), linkname))
-	if resolved != root && !strings.HasPrefix(resolved, filepath.Clean(root)+string(filepath.Separator)) {
-		return "", msgs.Errorf("hub.archiveContainsPathOutsideInstall", linkname)
-	}
-	return linkname, nil
-}
-
-func safeJoin(root, name string) (string, error) {
-	cleaned := filepath.Clean(name)
-	if filepath.IsAbs(cleaned) || cleaned == ".." || strings.HasPrefix(cleaned, ".."+string(filepath.Separator)) {
+// archiveEntryName — имя записи архива как путь внутри корня
+// распаковки. Абсолютное и ведущее наружу отвергаются здесь ради
+// внятной ошибки вместо «path escapes from parent» из глубины os.Root,
+// который всё равно не пропустил бы ни то, ни другое.
+func archiveEntryName(name string) (string, error) {
+	rel := strings.TrimPrefix(gopath.Clean("/"+filepath.ToSlash(name)), "/")
+	if rel == "" || rel == "." {
 		return "", msgs.Errorf("hub.archiveContainsPathOutsideInstall", name)
 	}
-	return filepath.Join(root, cleaned), nil
+	return rel, nil
 }
