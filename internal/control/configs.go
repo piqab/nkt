@@ -27,7 +27,8 @@ var (
 	// no longer matches the file — the same optimistic-lock contract Write's
 	// callers already implement at the handler layer, enforced once here so
 	// every block-write caller gets it for free.
-	ErrStaleContent = msgs.Errorf("control.fileHasChangedSincePage")
+	ErrStaleContent  = msgs.Errorf("control.fileHasChangedSincePage")
+	ErrSensitiveFile = msgs.Errorf("control.sensitiveFileAccessDenied")
 )
 
 // maxEditableBytes caps what the editor will load. Config files are small; a
@@ -378,6 +379,13 @@ func (m *ConfigManager) editableRoots() []string {
 // чего его и крадут.
 var privateKeyRe = regexp.MustCompile(`^(ssh_host_[a-z0-9]+_key|id_(rsa|dsa|ecdsa|ed25519)|.*\.(key|pem))$`)
 
+// isSensitiveFile — файл, который через API конфигураций нельзя ни
+// прочитать, ни показать, даже если он лежит внутри разрешённого корня
+// (/etc/ssh/ssh_host_*_key — под корнем sshd). Исключение из списка
+// одного не хватало: путь можно было набрать руками (PR #5, Aikido).
+func isSensitiveFile(path string) bool {
+	return privateKeyRe.MatchString(gopath.Base(path))
+}
 // walkConfigDepth ограничивает обход: sites-enabled/conf.d/sshd_config.d
 // лежат на первом-втором уровне, а глубже начинаются каталоги вроде
 // /etc/nginx/modules-available с сотнями файлов, которые правят не отсюда.
@@ -415,6 +423,11 @@ func (m *ConfigManager) describeFile(path string) (model.ManagedFile, bool) {
 	if err != nil {
 		return model.ManagedFile{}, false
 	}
+	// Exclude sensitive files from the listing to prevent them from appearing
+	// in the file list at all, not just from being directly readable.
+	if isSensitiveFile(path) {
+		return model.ManagedFile{}, false
+	}
 	st, err := m.c.Stat(path)
 	if err != nil || st.IsDir {
 		return model.ManagedFile{}, false
@@ -430,6 +443,9 @@ func (m *ConfigManager) Read(path string) (FileContent, error) {
 	service, err := m.checkPath(path)
 	if err != nil {
 		return FileContent{}, err
+	}
+	if isSensitiveFile(path) {
+		return FileContent{}, ErrSensitiveFile
 	}
 	st, err := m.c.Stat(path)
 	if err != nil {
@@ -462,6 +478,9 @@ func (m *ConfigManager) ListBlocks(path string) ([]parse.Block, error) {
 	service, err := m.checkPath(path)
 	if err != nil {
 		return nil, err
+	}
+	if isSensitiveFile(path) {
+		return nil, ErrSensitiveFile
 	}
 	return parse.Blocks(m.c, path, service)
 }
@@ -748,6 +767,12 @@ func (m *ConfigManager) Versions(ctx context.Context, path string, limit int) ([
 		if _, err := m.checkPath(path); err != nil {
 			return nil, err
 		}
+		// Reject version history requests for sensitive files to prevent
+		// enumeration of version IDs that could be used to bypass the
+		// VersionContent check.
+		if isSensitiveFile(path) {
+			return nil, ErrSensitiveFile
+		}
 	}
 	return m.db.ListVersions(ctx, path, limit)
 }
@@ -757,6 +782,12 @@ func (m *ConfigManager) VersionContent(ctx context.Context, id int64) (store.Con
 	v, err := m.db.VersionByID(ctx, id)
 	if err != nil {
 		return v, "", err
+	}
+	// Validate the version's path against the same sensitivity filter applied
+	// to direct reads: a version of a sensitive file must not be retrievable
+	// even if the version ID is known.
+	if isSensitiveFile(v.Path) {
+		return v, "", ErrSensitiveFile
 	}
 	raw, err := m.hist.get(v.BlobName)
 	if err != nil {
