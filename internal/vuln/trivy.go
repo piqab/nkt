@@ -183,11 +183,12 @@ func extractTrivyBinary(r io.Reader, dest string) error {
 		if err != nil {
 			return err
 		}
-		defer f.Close()
 		if _, err := io.Copy(f, tr); err != nil { //nolint:gosec // trusted GitHub release, no size cap needed
+			f.Close()
 			return err
 		}
-		return nil
+		// Ошибка Close на записи — потерянные данные, а не мелочь.
+		return f.Close()
 	}
 }
 

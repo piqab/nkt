@@ -462,7 +462,7 @@ var ruCatalog = map[string]string{
 	"control.dockerReplied":                               "Docker ответил %d: %s",
 	"control.domainRunningStopFirstShutdown":              "домен %s запущен — сначала остановите его (shutdown/destroy)",
 	"control.fileFound":                                   "файл не найден",
-	"control.sensitiveFileAccessDenied": "файл с ключом не показывается и не читается через редактор конфигураций",
+	"control.sensitiveFileAccessDenied":                   "файл с ключом не показывается и не читается через редактор конфигураций",
 	"control.fileHasChangedSincePage":                     "файл изменился с момента загрузки страницы, обновите список блоков и повторите",
 	"control.fileOutsideAllowedDirectories":               "файл вне разрешённых каталогов",
 	"control.fileTooLargeEditor":                          "файл слишком большой для редактора",

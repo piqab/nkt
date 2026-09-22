@@ -244,7 +244,7 @@ export default function Firewall({ me }: { me: Me }) {
 
   async function addRule(values: AddRuleValues) {
     const port = Number(values.port)
-    if (values.action !== 'allow' && !confirmCriticalPort(port, t('fw.actionForPort', { action: values.action, port }))) return
+    if (values.action !== 'allow' && !(await confirmCriticalPort(port, t('fw.actionForPort', { action: values.action, port })))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -279,7 +279,7 @@ export default function Firewall({ me }: { me: Me }) {
       return
     }
     const isService = values.targetType === 'service'
-    if (!isService && !confirmCriticalPort(Number(values.port), t('fw.addingFirewalldRule'))) return
+    if (!isService && !(await confirmCriticalPort(Number(values.port), t('fw.addingFirewalldRule')))) return
     setBusy(true)
     setNotice(null)
     try {
@@ -314,7 +314,7 @@ export default function Firewall({ me }: { me: Me }) {
    * than risk deleting the wrong thing from a reconstructed string. */
   async function deleteFirewalldRule(r: FirewallRule) {
     const isPort = (r.ports?.length ?? 0) > 0
-    if (isPort && r.ports && !confirmCriticalPort(r.ports[0], t('fw.deletingFirewalldRule'))) return
+    if (isPort && r.ports && !(await confirmCriticalPort(r.ports[0], t('fw.deletingFirewalldRule')))) return
     const label = isPort ? `${r.port_spec}/${r.protocol}` : r.port_spec
     if (!(await confirmAction(t('fw.confirmDeleteFirewalldRule', { zone: r.zone, label })))) return
     setBusy(true)
@@ -339,7 +339,7 @@ export default function Firewall({ me }: { me: Me }) {
 
   async function deleteRule(rule: NumberedRule) {
     const parsed = parseNumberedRule(rule.text)
-    if (parsed && !confirmCriticalPort(parsed.port, t('fw.deletingRule'))) return
+    if (parsed && !(await confirmCriticalPort(parsed.port, t('fw.deletingRule')))) return
     if (!(await confirmAction(t('fw.confirmDeleteRule', { number: rule.number, text: rule.text })))) return
     setBusy(true)
     setNotice(null)
@@ -362,7 +362,7 @@ export default function Firewall({ me }: { me: Me }) {
    * row creates a plain allow, so that's what a quick-remove from the same
    * row is undoing. */
   async function deleteAddedRule(added: AddedRule) {
-    if (added.port && !confirmCriticalPort(added.port, t('fw.deletingRule'))) return
+    if (added.port && !(await confirmCriticalPort(added.port, t('fw.deletingRule')))) return
     if (!(await confirmAction(t('fw.confirmDeleteAddedRule', { spec: added.spec })))) return
     setBusy(true)
     setNotice(null)

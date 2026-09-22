@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.69 — 2026-09-22
+
+- From the CodeQL/gosec/Trivy findings in the Security tab:
+  - **Firewall**: the confirmation for a critical port (22 and others)
+    did not work — the dialog appeared, but the rule was applied without
+    waiting for the answer (a missing `await`); declining now really
+    stops adding or deleting the rule.
+  - **Registry mirror** in the hub cache: `?ns=` accepts only a host
+    name — before, `..` in it could write a file outside the cache
+    directory and request an arbitrary address.
+  - Go toolchain extraction on the hub: symlink targets from the archive
+    are checked against escaping the directory.
+  - Logs: `?lines=` capped at 20000 (it sized a buffer), the unit name
+    for `journalctl -u` is validated by characters.
+  - A `Close` error when writing a file is no longer lost (trivy, config
+    files).
+  - `react-router-dom` 6.30.6 (CVE-2026-53668).
+
 ## v1.10.68 — 2026-09-22
 
 - CI: the `trivy` job failed at setup — the `trivy-action@0.28.0` tag
