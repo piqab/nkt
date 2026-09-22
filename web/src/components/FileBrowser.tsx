@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type React from 'react'
-import { Button, Input, Progress, Select, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, Progress, Select, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { FolderOutlined, FolderAddOutlined, FileOutlined, FileZipOutlined, BranchesOutlined, DownloadOutlined, UploadOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, qs, useApi } from '../api'
@@ -11,6 +11,7 @@ import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
 import { JobLogModal } from '../pages/Jobs'
+import { collectIgnoreSets, ignoredBy, isHiddenPath } from '../gitignore'
 
 /**
  * Проводник по каталогам хоста — раздел «Диски → Файлы».
@@ -76,11 +77,37 @@ interface UploadSummary {
   current: string
   errors: { rel: string; error: string }[]
   finished: boolean
+  /** Сколько отсеяно галочкой «без скрытых» (скрытые и .gitignore). */
+  skipped: number
+  /** Не загрузившиеся файлы — для кнопки «повторить неудачные». */
+  failed: Pending[]
 }
 
 /** Сколько файлов грузить разом: через SSH-туннель хаба каждый запрос —
- * свой канал, и сотня параллельных только мешала бы друг другу. */
-const UPLOAD_PARALLEL = 3
+ * свой канал, и сотня параллельных только мешала бы друг другу. Два, а
+ * не три: на медленном канале три потока через одно SSH-соединение
+ * заметно чаще ловят обрыв, чем успевают выиграть в скорости. */
+const UPLOAD_PARALLEL = 2
+
+/** Сколько раз повторять неудачную загрузку файла и какие паузы между
+ * попытками. Единичная ошибка — обычно мёртвое соединение хаба с хостом
+ * («хост недоступен», 502): следующая попытка идёт уже по свежему, и
+ * файл доходит. Без повторов такой файл терялся молча — в списке ошибок
+ * и всё. */
+const UPLOAD_RETRY_DELAYS = [500, 2000, 5000]
+
+/** Ключ галочки «без скрытых» в браузере. */
+const SKIP_HIDDEN_KEY = 'nkt-upload-skip-hidden'
+
+function readSkipHidden(): boolean {
+  try {
+    // По умолчанию включена: папка проекта почти всегда содержит .git и
+    // то, что перечислено в .gitignore, — грузить это на хост незачем.
+    return localStorage.getItem(SKIP_HIDDEN_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
 
 /** Обход перетащенной папки: FileSystemEntry — единственный способ
  * получить дерево из drop, обычный DataTransfer.files папок не отдаёт. */
@@ -145,6 +172,7 @@ export default function FileBrowser() {
   const [cloneModal, setCloneModal] = useState(false)
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [upload, setUpload] = useState<UploadSummary | null>(null)
+  const [skipHidden, setSkipHidden] = useState(readSkipHidden)
   const [dragging, setDragging] = useState(false)
   const fileInput = useRef<HTMLInputElement | null>(null)
   const dirInput = useRef<HTMLInputElement | null>(null)
@@ -183,53 +211,88 @@ export default function FileBrowser() {
   // Загрузка идёт по одному файлу за запрос: серверу так проще — тело и
   // есть файл, без разбора multipart, — а папка отличается от файлов
   // только тем, что в имени есть путь: каталоги хост создаёт по дороге.
-  function uploadPending(list: Pending[]) {
+  async function uploadPending(list: Pending[]) {
     if (!dir || list.length === 0) return
+    let skipped = 0
+    if (skipHidden) {
+      const sets = await collectIgnoreSets(list)
+      const before = list.length
+      list = list.filter((p) => !isHiddenPath(p.rel) && !ignoredBy(sets, p.rel))
+      skipped = before - list.length
+    }
+    if (list.length === 0) {
+      setUpload({ total: 0, done: 0, bytesTotal: 0, bytesDone: 0, current: '', errors: [], finished: true, skipped, failed: [] })
+      return
+    }
     const max = info.data?.max_upload ?? 0
     const summary: UploadSummary = {
       total: list.length, done: 0, bytesTotal: list.reduce((n, p) => n + p.file.size, 0), bytesDone: 0,
-      current: '', errors: [], finished: false,
+      current: '', errors: [], finished: false, skipped, failed: [],
     }
-    const publish = () => setUpload({ ...summary, errors: [...summary.errors] })
+    const publish = () => setUpload({ ...summary, errors: [...summary.errors], failed: [...summary.failed] })
     publish()
     const queue = [...list]
-    const one = (p: Pending) =>
-      new Promise<void>((resolve) => {
-        if (max > 0 && p.file.size > max) {
-          summary.errors.push({ rel: p.rel, error: t('files.tooBig', { max: formatBytes(max) }) })
-          resolve()
-          return
-        }
-        summary.current = p.rel
+    // Одна попытка: отдаёт текст ошибки или null при успехе. Байты
+    // считаются по факту отправленного, чтобы повтор не удваивал полосу.
+    const attempt = (p: Pending, onBytes: (delta: number) => void) =>
+      new Promise<string | null>((resolve) => {
         let sent = 0
         const xhr = new XMLHttpRequest()
         xhr.open('PUT', apiURL(`/files/upload${qs({ dir, name: p.rel })}`))
         xhr.upload.onprogress = (ev) => {
           if (!ev.lengthComputable) return
-          summary.bytesDone += ev.loaded - sent
+          onBytes(ev.loaded - sent)
           sent = ev.loaded
           publish()
         }
         xhr.onload = () => {
           if (xhr.status >= 300) {
+            onBytes(-sent)
             let err: string
             try {
               err = (JSON.parse(xhr.responseText) as { error?: string }).error ?? `HTTP ${xhr.status}`
             } catch {
               err = `HTTP ${xhr.status}`
             }
-            summary.errors.push({ rel: p.rel, error: err })
+            resolve(err)
+            return
           }
-          summary.bytesDone += p.file.size - sent
-          resolve()
+          onBytes(p.file.size - sent)
+          resolve(null)
         }
         xhr.onerror = () => {
-          summary.errors.push({ rel: p.rel, error: t('files.uploadFailed') })
-          summary.bytesDone += p.file.size - sent
-          resolve()
+          onBytes(-sent)
+          resolve(t('files.uploadFailed'))
         }
         xhr.send(p.file)
       })
+
+    const one = async (p: Pending) => {
+      if (max > 0 && p.file.size > max) {
+        summary.errors.push({ rel: p.rel, error: t('files.tooBig', { max: formatBytes(max) }) })
+        summary.bytesDone += p.file.size
+        return
+      }
+      summary.current = p.rel
+      const onBytes = (delta: number) => {
+        summary.bytesDone += delta
+      }
+      for (let attemptNo = 0; ; attemptNo++) {
+        const err = await attempt(p, onBytes)
+        if (err === null) return
+        if (attemptNo >= UPLOAD_RETRY_DELAYS.length) {
+          summary.errors.push({ rel: p.rel, error: err })
+          summary.failed.push(p)
+          summary.bytesDone += p.file.size
+          return
+        }
+        // Обрыв обычно один на соединение: подождать и повторить тем же
+        // файлом — следующая попытка пойдёт по свежему каналу.
+        await new Promise((r) => setTimeout(r, UPLOAD_RETRY_DELAYS[attemptNo]))
+        publish()
+      }
+    }
+
     let lastRefresh = Date.now()
     const worker = async () => {
       for (let p = queue.shift(); p; p = queue.shift()) {
@@ -244,14 +307,11 @@ export default function FileBrowser() {
         }
       }
     }
-    void Promise.all(Array.from({ length: Math.min(UPLOAD_PARALLEL, list.length) }, worker)).then(() => {
-      summary.finished = true
-      summary.current = ''
-      publish()
-      // Список перечитывается и по ходу (см. worker), и в конце: у
-      // большой папки иначе ничего не видно до последнего файла.
-      void reload()
-    })
+    await Promise.all(Array.from({ length: Math.min(UPLOAD_PARALLEL, list.length) }, worker))
+    summary.finished = true
+    summary.current = ''
+    publish()
+    void reload()
   }
 
   async function onDrop(ev: React.DragEvent) {
@@ -263,7 +323,7 @@ export default function FileBrowser() {
     const items = ev.dataTransfer.items
     let list = items && items.length > 0 ? await collectEntries(items) : []
     if (list.length === 0) list = fromFileList(ev.dataTransfer.files)
-    uploadPending(list)
+    void uploadPending(list)
   }
 
   const rootSegments = root.split('/').filter(Boolean)
@@ -383,13 +443,30 @@ export default function FileBrowser() {
         <Button size="small" icon={<FolderOutlined />} disabled={!dir} onClick={() => dirInput.current?.click()}>
           {t('files.uploadFolder')}
         </Button>
+        {/* По умолчанию включена: в папке проекта почти всегда есть .git
+            и то, что перечислено в .gitignore, — на хосте это лишнее. */}
+        <Tooltip title={t('files.skipHiddenHint')}>
+          <Checkbox
+            checked={skipHidden}
+            onChange={(e) => {
+              setSkipHidden(e.target.checked)
+              try {
+                localStorage.setItem(SKIP_HIDDEN_KEY, e.target.checked ? '1' : '0')
+              } catch {
+                // приватное окно — галочка просто не переживёт перезагрузку
+              }
+            }}
+          >
+            {t('files.skipHidden')}
+          </Checkbox>
+        </Tooltip>
         <input
           ref={fileInput}
           type="file"
           multiple
           hidden
           onChange={(e) => {
-            if (e.target.files) uploadPending(fromFileList(e.target.files))
+            if (e.target.files) void uploadPending(fromFileList(e.target.files))
             e.target.value = ''
           }}
         />
@@ -402,7 +479,7 @@ export default function FileBrowser() {
           // @ts-expect-error нестандартный, но поддержан всеми браузерами
           webkitdirectory=""
           onChange={(e) => {
-            if (e.target.files) uploadPending(fromFileList(e.target.files))
+            if (e.target.files) void uploadPending(fromFileList(e.target.files))
             e.target.value = ''
           }}
         />
@@ -434,6 +511,19 @@ export default function FileBrowser() {
               <Tag color="error">{e.error}</Tag>
             </div>
           ))}
+          {upload.skipped > 0 && (
+            <div className="small muted">{t('files.uploadSkipped', { count: upload.skipped })}</div>
+          )}
+          {upload.finished && upload.failed.length > 0 && (
+            <Button
+              size="small"
+              type="primary"
+              style={{ alignSelf: 'flex-start' }}
+              onClick={() => void uploadPending(upload.failed)}
+            >
+              {t('files.retryFailed', { count: upload.failed.length })}
+            </Button>
+          )}
           {upload.finished && (
             <Button type="link" size="small" style={{ alignSelf: 'flex-start', padding: 0 }} onClick={() => setUpload(null)}>
               {t('files.clearUploads')}

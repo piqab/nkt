@@ -1606,7 +1606,11 @@
     "fileName": "File name",
     "loadingFile": "Reading file…",
     "renameOnly": "The contents could not be read (a binary file or no permission) — editing is off, but renaming works.",
-    "refresh": "refresh"
+    "refresh": "refresh",
+    "skipHidden": "skip hidden",
+    "skipHiddenHint": "Do not upload hidden files and folders (starting with a dot: .git, .env) and whatever the uploaded folder's .gitignore lists. Uncheck to upload everything as is.",
+    "uploadSkipped": "skipped: {{count}} (hidden and .gitignore)",
+    "retryFailed": "retry failed ({{count}})"
   },
   "hardware": {
     "title": "Hardware",

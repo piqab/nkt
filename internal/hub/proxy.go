@@ -302,6 +302,34 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 	})
 }
 
+// EnsureLive проверяет, что соединение с хостом ещё живое, и меняет
+// мёртвое на свежее.
+//
+// Нужно перед передачей файла: у запроса с телом нет второй попытки —
+// тело уже вычитано, и Proxy не может передознить, как делает для
+// обычного GET. Мёртвое соединение из пула (NAT закрыл сессию, sshd
+// перезапустили) обнаруживалось бы уже в середине PUT и возвращало
+// «хост недоступен», теряя файл. Проба дешёвая: открыть канал и
+// спросить /api/health — миллисекунды по живому соединению.
+func (m *Manager) EnsureLive(ctx context.Context, hostID int64) {
+	dial, _, onFail, err := m.dialerFor(ctx, hostID)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+remoteAPIAddr+"/api/health", nil)
+	if err != nil {
+		return
+	}
+	resp, err := tunnelHTTPClient(dial).Do(req)
+	if err != nil {
+		// Пул отдал мёртвое соединение — выбросить, следующий вызов
+		// dialerFor (уже внутри Proxy) дозвонится заново.
+		onFail()
+		return
+	}
+	_ = resp.Body.Close()
+}
+
 // CloseHost drops any pooled connection/session/cached overview/tunnel
 // session for a host — called when a host is removed from the registry
 // entirely. Deliberately not used by UpdateHost/UpdateHostGenerated (see

@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.74 — 2026-09-22
+
+- **File upload: lost files.** A failed file is retried up to three
+  times (0.5 → 2 → 5 s) — a single drop no longer loses it silently; the
+  rest go with the **"retry failed"** button. Before sending a file the
+  hub checks that the connection to the host is alive and replaces a
+  dead one: a request with a body has no second attempt, and that is
+  exactly where "host unreachable" came from. Two upload streams instead
+  of three.
+- **A "skip hidden" checkbox** next to "upload folder", **on by
+  default**: hidden files and folders (`.git`, `.env`, `.venv/…`) and
+  whatever the uploaded folder's `.gitignore` lists are not uploaded
+  (nested ones included, with `!` negations, `**` and directory
+  anchoring). The summary shows how many were skipped; uncheck it to
+  upload everything as is.
+
 ## v1.10.73 — 2026-09-22
 
 - Frontend dependencies: `vite` 5 → 8, `@vitejs/plugin-react` 6,

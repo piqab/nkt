@@ -21,7 +21,10 @@ title: Packages, disks, files, system
 - **Files** — a browser over the allowed roots (`/home`, `/srv`, `/opt`,
   `/var/www`; configurable with `NKT_FILES_ROOTS`): folders,
   rename, delete, download; upload of files and whole folders via a dialog
-  or drag and drop with overall progress; unpacking zip/tar in place; `git
+  or drag and drop with overall progress (the **"skip hidden"** checkbox,
+  on by default, skips hidden entries — `.git`, `.env` — and whatever the
+  uploaded folder's `.gitignore` lists; a failed file is retried up to
+  three times, the rest with the "retry failed" button); unpacking zip/tar in place; `git
   clone` as a job, private repositories included (a token over HTTPS or
   the host's deploy key over SSH); a file editor with line numbers and
   protection against overwriting someone else's change.

@@ -1300,5 +1300,9 @@ func (s *Server) proxyHost(w http.ResponseWriter, r *http.Request) {
 	r2 := r.Clone(r.Context())
 	r2.URL.Path = "/api/" + rest
 	r2.URL.RawPath = ""
+	if r.Method == http.MethodPut && strings.HasSuffix(rest, "files/upload") {
+		// У запроса с телом второй попытки нет (см. EnsureLive).
+		s.hub.EnsureLive(r.Context(), id)
+	}
 	s.hub.Proxy(id).ServeHTTP(w, r2)
 }
