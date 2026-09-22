@@ -689,6 +689,15 @@ essentials:
   neither path is available, and offers an install button for dbus
   whenever the `nsenter` path would work.
 
+* CI (`.github/workflows/security.yml`): on every push, pull request and
+  weekly — govulncheck (known vulnerabilities in called Go code, blocking),
+  gitleaks (secrets in history, blocking; synthetic fixture keys are
+  allowlisted in `.gitleaks.toml`), CodeQL for Go and TypeScript, gosec
+  (`.gosec.json` excludes the rules that are by-design here) and Trivy
+  (dependencies, `deploy/` manifests, Dockerfile) — the last three report
+  to Security → Code scanning without blocking. Dependabot
+  (`.github/dependabot.yml`) opens grouped weekly dependency updates.
+
 ---
 
 ## If something goes wrong

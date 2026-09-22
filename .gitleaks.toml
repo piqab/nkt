@@ -1,0 +1,17 @@
+# gitleaks (.github/workflows/security.yml): ищет секреты в истории.
+# Ниже — заведомо ненастоящее: синтетические ключи снимка хоста для
+# режима fixtures и тестовые токены.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "синтетические ключи fixtures и тестовые значения"
+paths = [
+  '''^fixtures/''',
+  '''_test\.go$''',
+]
+regexTarget = "line"
+regexes = [
+  # Комментарий в internal/api/server.go: «there is no per-task key: …».
+  '''there is no per-task key''',
+]
