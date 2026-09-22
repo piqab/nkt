@@ -135,7 +135,11 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"host":      snap.Host,
+		"host": snap.Host,
+		// Аптайм отдельным полем, а не только внутри host: опрос хаба
+		// читает именно его (overview_poll), и сжимать разбор до одного
+		// поля надёжнее, чем зависеть от структуры host.
+		"uptime_s":  snap.Host.UptimeS,
 		"mode":      snap.Mode,
 		"scanned":   snap.TS,
 		"scan_ms":   snap.ScanMS,

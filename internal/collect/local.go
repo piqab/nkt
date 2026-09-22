@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -418,10 +419,30 @@ func (l *Local) HostInfo(ctx context.Context) HostInfo {
 			}
 		}
 	}
+	info.UptimeS = readUptimeSeconds(l)
 	if os.Geteuid() != 0 {
 		info.Notes = append(info.Notes, msgs.Tc(ctx, "collect.notRoot"))
 	}
 	return info
+}
+
+// readUptimeSeconds — первое поле /proc/uptime (секунды с загрузки).
+func readUptimeSeconds(c interface {
+	ReadFile(string) ([]byte, error)
+}) int64 {
+	raw, err := c.ReadFile("/proc/uptime")
+	if err != nil {
+		return 0
+	}
+	fields := strings.Fields(string(raw))
+	if len(fields) == 0 {
+		return 0
+	}
+	secs, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil || secs < 0 {
+		return 0
+	}
+	return int64(secs)
 }
 
 // writeInPlace перезаписывает существующий файл без временного: запасной

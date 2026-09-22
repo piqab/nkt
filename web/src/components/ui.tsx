@@ -308,6 +308,16 @@ export function formatRelative(iso: string | undefined | null): string {
   return i18n.t('common.daysAgo', { count: Math.floor(diff / 86400) })
 }
 
+/** «27 дн. 4 ч», «5 ч 20 мин», «3 мин» — как в оповещениях хаба. */
+export function formatUptime(seconds: number): string {
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (d > 0) return h > 0 ? i18n.t('common.uptimeDH', { d, h }) : i18n.t('common.uptimeD', { d })
+  if (h > 0) return m > 0 ? i18n.t('common.uptimeHM', { h, m }) : i18n.t('common.uptimeH', { h })
+  return i18n.t('common.uptimeM', { m })
+}
+
 export function formatBytesShort(n: number): string {
   if (!n) return '0'
   const units = ['common.unit.byte', 'common.unit.kb', 'common.unit.mb', 'common.unit.gb', 'common.unit.tb']

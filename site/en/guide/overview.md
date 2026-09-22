@@ -15,6 +15,11 @@ TLS connection to the socket.
 ![Host overview](/screens/en/overview.png)
 
 - Summary: OS, kernel, uptime, load, memory, disks, network.
+- **Uptime** under the summary: "Up 27d 4h". Green — the machine has not
+  rebooted since your last visit (uptime grew by exactly the elapsed
+  time), red — it has (uptime dropped). The previous value is remembered
+  in the browser per host name; the hub records an alert about a reboot
+  on its own.
 - Counters: findings by severity, declared and public listeners,
   containers, availability over 24 h, package updates. Each leads to its
   section.

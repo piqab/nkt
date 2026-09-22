@@ -170,6 +170,45 @@ func (m *Manager) noteFindings(ctx context.Context, hostID int64, findings map[s
 	}
 }
 
+// noteUptime записывает перезагрузку хоста: аптайм монотонно растёт,
+// поэтому значение меньше прежнего бывает только после старта машины —
+// ложных срабатываний тут нет по построению. Хост без аптайма (старая
+// версия nkt на нём, снимок без /proc/uptime) молчит.
+func (m *Manager) noteUptime(ctx context.Context, hostID int64, uptimeS int64) {
+	if uptimeS <= 0 {
+		return
+	}
+	m.overviewMu.Lock()
+	prev, seen := m.overview[hostID]
+	m.overviewMu.Unlock()
+	if !seen || prev.uptimeS <= 0 || uptimeS >= prev.uptimeS {
+		return
+	}
+	host, err := m.db.HostByID(ctx, hostID)
+	if err != nil {
+		return
+	}
+	m.recordEventMsg(ctx, host, store.EventRebooted, "", "hub.hostRebooted",
+		uptimeText(uptimeS), uptimeText(prev.uptimeS))
+}
+
+// uptimeText — длительность ключом каталога («27 дн.», «5 ч», «3 мин»):
+// оповещение читают глазами, секунды в нём не нужны, а язык — того, кто
+// читает (аргумент подставляется в hub.hostRebooted как вложенное
+// сообщение, см. msgs.Err).
+func uptimeText(secs int64) *msgs.Err {
+	switch {
+	case secs >= 86400:
+		return &msgs.Err{Key: "topology.days", Args: []any{int(secs / 86400)}}
+	case secs >= 3600:
+		return &msgs.Err{Key: "topology.hours", Args: []any{int(secs / 3600)}}
+	case secs >= 60:
+		return &msgs.Err{Key: "topology.minutes", Args: []any{int(secs / 60)}}
+	default:
+		return &msgs.Err{Key: "topology.seconds", Args: []any{int(secs)}}
+	}
+}
+
 // severe — сколько находок, ради которых стоит будить человека.
 func severe(findings map[string]int) int {
 	return findings["critical"] + findings["high"]
@@ -256,7 +295,7 @@ type EventSettings struct {
 }
 
 // EventKinds — все виды в порядке показа.
-var EventKinds = []string{store.EventUnreachable, store.EventRecovered, store.EventProblems, store.EventResolved, store.EventJobFailed}
+var EventKinds = []string{store.EventUnreachable, store.EventRecovered, store.EventProblems, store.EventResolved, store.EventJobFailed, store.EventRebooted}
 
 // defaultEventSettings — всё записывается; будят недоступностью,
 // проблемами и провалом задания, но не возвратами.
@@ -268,6 +307,7 @@ func defaultEventSettings() EventSettings {
 	s.Notify[store.EventUnreachable] = true
 	s.Notify[store.EventProblems] = true
 	s.Notify[store.EventJobFailed] = true
+	s.Notify[store.EventRebooted] = true
 	return s
 }
 

@@ -9,6 +9,7 @@ title: Alerts, jobs, updates
 ![Alerts](/screens/en/hub-alerts.png)
 
 The hub notices transitions itself: a host is **down** / **back**,
+**rebooted** (its uptime dropped, which only happens after a boot),
 **serious findings** appeared / **were fixed**, **a job failed**. An alert
 log with settings for what to record and what to notify about; short
 episodes (“down” → “back” a couple of minutes later) collapse into one

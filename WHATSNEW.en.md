@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.72 — 2026-09-22
+
+- The host overview now shows **uptime** ("Up 27d 4h") under the
+  summary. The color compares it with your previous visit to that page:
+  **green** if the machine has not rebooted (uptime grew by exactly the
+  elapsed time), **red** if it has (uptime dropped), no color on the
+  first visit or a clock jump. The previous value is remembered in the
+  browser per host name.
+- The hub records an **alert** for it — "host rebooted: up 5 min,
+  previously up 27 d" — a new `rebooted` kind with its own
+  record/notify setting. No false positives: uptime only drops after a
+  boot.
+- `/api/overview` serves `uptime_s`; hosts with an older nkt do not know
+  the field — then no uptime is shown and no alerts are recorded.
+
 ## v1.10.71 — 2026-09-22
 
 - **"Files" on a host: empty folders and "uploads do not appear".** The

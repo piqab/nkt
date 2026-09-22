@@ -58,6 +58,10 @@ type HostInfo struct {
 	Kernel   string   `json:"kernel"`
 	OS       string   `json:"os"`
 	Notes    []string `json:"notes,omitempty"`
+	// UptimeS — сколько хост работает, секунды (/proc/uptime). 0 —
+	// неизвестно. Монотонно растёт, пока машина не перезагрузится, —
+	// на этом построены и подсветка в обзоре, и оповещение хаба.
+	UptimeS int64 `json:"uptime_s,omitempty"`
 }
 
 // Collector reads, observes and mutates the inspected host.

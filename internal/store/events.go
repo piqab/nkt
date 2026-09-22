@@ -27,6 +27,9 @@ const (
 	EventResolved = "resolved"
 	// EventJobFailed — фоновое задание хаба завершилось ошибкой.
 	EventJobFailed = "job-failed"
+	// EventRebooted — аптайм хоста стал меньше прежнего: машина
+	// перезагрузилась между опросами.
+	EventRebooted = "rebooted"
 )
 
 // HostEvent — одно оповещение.

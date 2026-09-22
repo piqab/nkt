@@ -1337,6 +1337,7 @@ var enCatalog = map[string]string{
 	"control.userStepKeyPerms":                      "authorized_keys permissions",
 	"hub.unreachableUnderMinute":                    "was unreachable for under a minute",
 	"hub.addrUndetected":                            "address not detected",
+	"hub.hostRebooted":                              "host rebooted: up %s, previously up %s",
 	"hub.hostRespondsAgain":                         "the host answers polling again",
 	"hub.noGroup":                                   "no group",
 	"hub.profileGroupJobTitle":                      "profile %s → group %s",
