@@ -219,16 +219,20 @@ func extractTarGz(r io.Reader, destDir string) error {
 				return err
 			}
 		case tar.TypeSymlink:
+			// Цель ссылки — тоже путь из архива: абсолютная или ведущая
+			// наружу (../../etc/passwd) подменила бы файл вне каталога.
+			// safeSymlinkTarget возвращает её же, но только пройдя
+			// проверку, — так между значением из архива и os.Symlink
+			// заведомо нет пути в обход.
+			linkname, err := safeSymlinkTarget(tmpDir, target, hdr.Linkname)
+			if err != nil {
+				return err
+			}
 			if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 				return err
 			}
-			// Цель ссылки — тоже путь из архива: абсолютная или ведущая
-			// наружу (../../etc/passwd) подменила бы файл вне каталога.
-			if err := checkSymlinkTarget(tmpDir, target, hdr.Linkname); err != nil {
-				return err
-			}
 			_ = os.Remove(target)
-			if err := os.Symlink(hdr.Linkname, target); err != nil {
+			if err := os.Symlink(linkname, target); err != nil {
 				return err
 			}
 		}
@@ -260,18 +264,19 @@ func writeExtractedFile(target string, r io.Reader, mode os.FileMode) error {
 // remapping the entry back under root: either way is safe, but a tarball
 // that tries this is corrupt or hostile, and that is worth surfacing as an
 // error rather than quietly working around it.
-// checkSymlinkTarget — цель символической ссылки link, взятая из архива,
-// должна оставаться внутри root после разрешения относительно каталога
-// ссылки; абсолютная цель отвергается.
-func checkSymlinkTarget(root, link, linkname string) error {
-	if filepath.IsAbs(linkname) {
-		return msgs.Errorf("hub.archiveContainsPathOutsideInstall", linkname)
+// safeSymlinkTarget — цель символической ссылки link, взятая из архива:
+// возвращается только та, что после разрешения относительно каталога
+// ссылки остаётся внутри root. Абсолютная цель и «..» наружу —
+// отвергаются.
+func safeSymlinkTarget(root, link, linkname string) (string, error) {
+	if filepath.IsAbs(linkname) || linkname == "" {
+		return "", msgs.Errorf("hub.archiveContainsPathOutsideInstall", linkname)
 	}
 	resolved := filepath.Clean(filepath.Join(filepath.Dir(link), linkname))
-	if resolved != root && !strings.HasPrefix(resolved, root+string(filepath.Separator)) {
-		return msgs.Errorf("hub.archiveContainsPathOutsideInstall", linkname)
+	if resolved != root && !strings.HasPrefix(resolved, filepath.Clean(root)+string(filepath.Separator)) {
+		return "", msgs.Errorf("hub.archiveContainsPathOutsideInstall", linkname)
 	}
-	return nil
+	return linkname, nil
 }
 
 func safeJoin(root, name string) (string, error) {

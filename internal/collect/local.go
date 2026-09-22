@@ -458,13 +458,14 @@ func writeInPlace(path string, data []byte, mode fs.FileMode) error {
 	if err != nil {
 		return err
 	}
+	// errors.Join, а не «ошибка есть — Close молча»: потеря данных на
+	// закрытии (ENOSPC, сетевая ФС) обязана дойти до вызывающего вместе
+	// с первой ошибкой, а не вместо неё.
 	if _, err := f.Write(data); err != nil {
-		f.Close()
-		return err
+		return errors.Join(err, f.Close())
 	}
 	if err := f.Sync(); err != nil {
-		f.Close()
-		return err
+		return errors.Join(err, f.Close())
 	}
 	return f.Close()
 }

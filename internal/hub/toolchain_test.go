@@ -4,7 +4,7 @@ import "testing"
 
 // Цель символической ссылки из архива не может вести наружу из каталога
 // распаковки — ни абсолютная, ни через «..».
-func TestCheckSymlinkTarget(t *testing.T) {
+func TestSafeSymlinkTarget(t *testing.T) {
 	root := "/tmp/tc.tmp"
 	for linkname, ok := range map[string]bool{
 		"bin/go":            true,
@@ -13,7 +13,7 @@ func TestCheckSymlinkTarget(t *testing.T) {
 		"../../etc/passwd":  false,
 		"../../tc.tmp2/bin": false,
 	} {
-		err := checkSymlinkTarget(root, root+"/x/link", linkname)
+		_, err := safeSymlinkTarget(root, root+"/x/link", linkname)
 		if (err == nil) != ok {
 			t.Errorf("%q: err=%v, ждали ok=%v", linkname, err, ok)
 		}

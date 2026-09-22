@@ -334,7 +334,13 @@ func clampLogLines(n int) int {
 
 // lastLines keeps a ring of the final n lines, so decoding a large archive
 // never holds more than that in memory.
+//
+// Потолок ставится здесь же, у самого выделения памяти, а не только у
+// вызывающих: n приходит из запроса (?lines=), и «где-то выше это уже
+// ограничено» — не то свойство, на которое стоит полагаться в функции,
+// выделяющей срез этого размера.
 func lastLines(r io.Reader, n int) (string, error) {
+	n = clampLogLines(n)
 	ring := make([]string, 0, n)
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)

@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.75 — 2026-09-22
+
+- CI security checks now recognize the fixes from earlier versions
+  (CodeQL could not connect the check with the action): the symlink
+  target from an archive is now **returned** by the checking function
+  (`safeSymlinkTarget`), the log line cap sits right at the allocation,
+  and the hub cache file path is built in a single place (`cacheFile`)
+  that refuses anything escaping the cache directory — used by every
+  access to it (packages, files by URL, the registry mirror).
+- A `Close` error when writing a file is no longer lost even on the
+  error path: it is returned alongside (`errors.Join`).
+
 ## v1.10.74 — 2026-09-22
 
 - **File upload: lost files.** A failed file is retried up to three

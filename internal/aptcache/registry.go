@@ -12,7 +12,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -120,7 +119,11 @@ func digestRel(kind, digest string) string {
 
 func (c *Cache) serveBlob(w http.ResponseWriter, r *http.Request, upstream, name, digest string) {
 	rel := digestRel("blobs", digest)
-	file := filepath.Join(c.dir, filepath.FromSlash(rel))
+	file := c.cacheFile(rel)
+	if file == "" {
+		http.Error(w, "nkt registry mirror: bad path", http.StatusBadRequest)
+		return
+	}
 	if !c.fresh(rel, 0) {
 		c.misses.Add(1)
 		err := c.fetchWith(rel, func() error {
@@ -155,7 +158,11 @@ func (c *Cache) serveManifest(w http.ResponseWriter, r *http.Request, upstream, 
 		// сроком; при недоступном источнике — прошлое значение.
 		sum := sha256.Sum256([]byte(accept))
 		relTag := path.Join("registry", "tags", ns, name, ref+"."+hex.EncodeToString(sum[:4]))
-		fileTag := filepath.Join(c.dir, filepath.FromSlash(relTag))
+		fileTag := c.cacheFile(relTag)
+		if fileTag == "" {
+			http.Error(w, "nkt registry mirror: bad path", http.StatusBadRequest)
+			return
+		}
 		if !c.fresh(relTag, tagTTL) {
 			err := c.fetchWith(relTag, func() error {
 				resp, err := c.registryDo(context.Background(), http.MethodHead, upstream+"/v2/"+name+"/manifests/"+ref, accept)
@@ -185,7 +192,11 @@ func (c *Cache) serveManifest(w http.ResponseWriter, r *http.Request, upstream, 
 		digest = strings.TrimSpace(string(raw))
 	}
 	rel := digestRel("manifests", digest)
-	file := filepath.Join(c.dir, filepath.FromSlash(rel))
+	file := c.cacheFile(rel)
+	if file == "" {
+		http.Error(w, "nkt registry mirror: bad path", http.StatusBadRequest)
+		return
+	}
 	if !c.fresh(rel, 0) {
 		c.misses.Add(1)
 		err := c.fetchWith(rel, func() error {

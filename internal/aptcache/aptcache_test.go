@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"strings"
 	"testing"
 )
 
@@ -122,5 +124,23 @@ func TestRegistryMirrorRejectsBadNS(t *testing.T) {
 		if !registryNSRe.MatchString(ns) {
 			t.Errorf("ns=%q должен приниматься", ns)
 		}
+	}
+}
+
+// Ключ кэша превращается в путь только внутри каталога кэша: «..» и
+// абсолютный путь дают пустую строку, и вызывающий отвечает отказом.
+func TestCacheFileStaysInsideDir(t *testing.T) {
+	dir := t.TempDir()
+	c, err := New(dir, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{"../etc/passwd", "a/../../../etc/passwd", "/etc/passwd/../../.."} {
+		if got := c.cacheFile(rel); got != "" && !strings.HasPrefix(got, dir+string(os.PathSeparator)) {
+			t.Errorf("cacheFile(%q) = %q — вне каталога кэша", rel, got)
+		}
+	}
+	if got := c.cacheFile("deb.debian.org/pool/main/x.deb"); !strings.HasPrefix(got, dir+string(os.PathSeparator)) {
+		t.Errorf("обычный ключ = %q", got)
 	}
 }

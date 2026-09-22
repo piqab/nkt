@@ -22,6 +22,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
 	"io"
@@ -184,8 +185,7 @@ func extractTrivyBinary(r io.Reader, dest string) error {
 			return err
 		}
 		if _, err := io.Copy(f, tr); err != nil { //nolint:gosec // trusted GitHub release, no size cap needed
-			f.Close()
-			return err
+			return errors.Join(err, f.Close())
 		}
 		// Ошибка Close на записи — потерянные данные, а не мелочь.
 		return f.Close()
