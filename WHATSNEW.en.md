@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.66 — 2026-09-22
+
+- Security: key files (`ssh_host_*_key`, `id_*`, `*.key`, `*.pem`) can no
+  longer be read through the config editor by typing a path under an
+  allowed root (e.g. `/etc/ssh`) — before, they were only hidden from the
+  listing. Refused for read, blocks, version history and version content
+  (Aikido finding, PR #5).
+
 ## v1.10.65 — 2026-09-19
 
 - **Installing and updating nkt on a host is a hub job.** The log is in
