@@ -147,9 +147,8 @@ func (l *Local) WriteFile(p string, data []byte, mode fs.FileMode) error {
 	// функции, перезаписывающей файлы на хосте, не стоит. Кто имеет
 	// право писать в конкретный каталог, по-прежнему решают вызывающие
 	// (allowlist редактора конфигураций, корни проводника).
-	p, err := cleanWritePath(p)
-	if err != nil {
-		return err
+	if !filepath.IsAbs(p) || strings.Contains(p, "..") || filepath.Clean(p) != p {
+		return msgs.Errorf("collect.badWritePath", p)
 	}
 	// Write to a sibling temp file and rename, so a crash mid-write can never
 	// leave nginx or haproxy with a truncated config.
@@ -455,26 +454,18 @@ func readUptimeSeconds(c interface {
 	return int64(secs)
 }
 
-// cleanWritePath — путь, по которому вообще допустимо писать: только
-// абсолютный, очищенный и без «..». Возвращается он же — так между
-// значением из запроса и открытием файла нет пути в обход проверки.
-func cleanWritePath(p string) (string, error) {
-	clean := filepath.Clean(p)
-	if !filepath.IsAbs(clean) || clean != p || strings.Contains(p, "..") {
-		return "", msgs.Errorf("collect.badWritePath", p)
-	}
-	return clean, nil
-}
-
 // writeInPlace перезаписывает существующий файл без временного: запасной
 // путь для случая, когда каталог только на чтение (см. WriteFile).
 // Именно существующий: если файла нет, создать его в закрытом на запись
 // каталоге всё равно нельзя, и молча делать вид, что получилось, нельзя
 // тем более.
 func writeInPlace(path string, data []byte, mode fs.FileMode) error {
-	path, err := cleanWritePath(path)
-	if err != nil {
-		return err
+	// Проверка здесь же, а не только в вызывающей WriteFile: это
+	// отдельная экспортируемая внутрь пакета точка записи, и путь у неё
+	// обязан быть абсолютным, очищенным и без «..» независимо от того,
+	// кто её позвал.
+	if !filepath.IsAbs(path) || strings.Contains(path, "..") || filepath.Clean(path) != path {
+		return msgs.Errorf("collect.badWritePath", path)
 	}
 	if _, err := os.Stat(path); err != nil {
 		return err
