@@ -194,10 +194,25 @@ jobs:
             echo "в WHATSNEW.en.md нет раздела для $GITHUB_REF_NAME — описание только по-русски"
           fi
           cat notes.md
+      # Манифесты для «готового образа» приклеиваются к релизу с точной
+      # версией вместо :latest — мутабельный тег можно переставить на
+      # чужой образ, а том хаба хранит мастер-ключ и секреты хостов.
+      # Правятся копии для ассетов, а не файлы в репозитории: там :latest
+      # остаётся, чтобы `docker compose pull` продолжал подтягивать
+      # свежий образ у тех, кто этого и хочет.
+      - name: Манифесты с версией релиза
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist/deploy
+          sed "s|ghcr.io/piqab/nkt-hub:latest|ghcr.io/piqab/nkt-hub:$version|" \
+            deploy/docker-compose.hub.release.yml > dist/deploy/docker-compose.hub.release.yml
+          sed "s|ghcr.io/piqab/nkt-hub:latest|ghcr.io/piqab/nkt-hub:$version|" \
+            deploy/k8s/hub.yaml > dist/deploy/hub.yaml
+          grep -n "nkt-hub:" dist/deploy/*.yml dist/deploy/*.yaml
       - name: Создать GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* \
+          gh release create "$GITHUB_REF_NAME" dist/* dist/deploy/* \
             --title "$GITHUB_REF_NAME" \
             --notes-file notes.md
