@@ -122,12 +122,29 @@ func (c *Cache) Clear() error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	for rel := range c.entries {
-		os.Remove(filepath.Join(c.dir, filepath.FromSlash(rel)))
-		os.Remove(filepath.Join(c.dir, filepath.FromSlash(rel)) + ".ct")
+		os.Remove(c.cacheFile(rel))
+		os.Remove(c.cacheFile(rel) + ".ct")
 	}
 	c.entries = map[string]*entry{}
 	c.total = 0
 	return nil
+}
+
+// cacheFile — путь файла кэша по его относительному ключу.
+//
+// Единственное место, где относительный ключ (складывается из хоста и
+// пути запроса, имени образа, ссылки на файл) превращается в путь на
+// диске: ключ чистится и обязан остаться под каталогом кэша, иначе
+// возвращается пустая строка и вызывающий отказывает. Одна проверка в
+// одном месте надёжнее, чем «нет ли тут ..» у каждого os.Open.
+func (c *Cache) cacheFile(rel string) string {
+	file := filepath.Join(c.dir, filepath.FromSlash(path.Clean("/"+rel)))
+	// Строго внутри: сам каталог кэша — не файл, и ключ, схлопнувшийся
+	// в него («a/../..»), — тоже отказ.
+	if !strings.HasPrefix(file, filepath.Clean(c.dir)+string(filepath.Separator)) {
+		return ""
+	}
+	return file
 }
 
 // Cacheable — стоит ли класть путь в кэш: только то, что не меняется под
@@ -189,7 +206,11 @@ func (c *Cache) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad path", http.StatusBadRequest)
 		return
 	}
-	file := filepath.Join(c.dir, filepath.FromSlash(rel))
+	file := c.cacheFile(rel)
+	if file == "" {
+		http.Error(w, "nkt cache: bad path", http.StatusBadRequest)
+		return
+	}
 
 	if c.touch(rel) {
 		c.hits.Add(1)
@@ -373,8 +394,8 @@ func (c *Cache) evictLocked() {
 		if _, inflight := c.inflight[it.rel]; inflight {
 			continue
 		}
-		os.Remove(filepath.Join(c.dir, filepath.FromSlash(it.rel)))
-		os.Remove(filepath.Join(c.dir, filepath.FromSlash(it.rel)) + ".ct")
+		os.Remove(c.cacheFile(it.rel))
+		os.Remove(c.cacheFile(it.rel) + ".ct")
 		c.total -= it.e.size
 		delete(c.entries, it.rel)
 	}

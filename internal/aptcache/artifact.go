@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"path"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -59,7 +58,11 @@ func (c *Cache) serveArtifact(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad path", http.StatusBadRequest)
 		return
 	}
-	file := filepath.Join(c.dir, filepath.FromSlash(rel))
+	file := c.cacheFile(rel)
+	if file == "" {
+		http.Error(w, "bad path", http.StatusBadRequest)
+		return
+	}
 	ttl := artifactTTL
 	if ArtifactImmutable(u) {
 		ttl = 0
@@ -101,7 +104,10 @@ func (c *Cache) Prefetch(ctx context.Context, rawURL string) (int64, error) {
 		p = path.Join(p, "index")
 	}
 	rel := path.Join("artifacts", u.Host, p)
-	file := filepath.Join(c.dir, filepath.FromSlash(rel))
+	file := c.cacheFile(rel)
+	if file == "" {
+		return 0, errors.New("bad url")
+	}
 	ttl := artifactTTL
 	if ArtifactImmutable(u) {
 		ttl = 0
@@ -129,7 +135,11 @@ func (c *Cache) PrefetchBytes(ctx context.Context, rawURL string, limit int64) (
 	if strings.HasSuffix(u.Path, "/") || p == "/" {
 		p = path.Join(p, "index")
 	}
-	f, err := os.Open(filepath.Join(c.dir, filepath.FromSlash(path.Join("artifacts", u.Host, p))))
+	file := c.cacheFile(path.Join("artifacts", u.Host, p))
+	if file == "" {
+		return nil, errors.New("bad url")
+	}
+	f, err := os.Open(file)
 	if err != nil {
 		return nil, err
 	}
