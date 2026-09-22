@@ -21,7 +21,7 @@ ARG VERSION=docker
 RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/nkt ./cmd/nkt
 
 # ---- runtime ------------------------------------------------------------------
-FROM alpine:3.21
+FROM alpine:3.24
 # The tools the collector shells out to. nginx and haproxy are present only so
 # that `nginx -t` and `haproxy -c` can validate configs before they are written.
 RUN apk add --no-cache ca-certificates iproute2 iptables nginx haproxy docker-cli tzdata
