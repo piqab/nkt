@@ -153,11 +153,31 @@ jobs:
           pattern: nkt-linux-*
           path: dist
           merge-multiple: true
+      # Манифесты для «готового образа» приклеиваются к релизу с точной
+      # версией вместо :latest — мутабельный тег можно переставить на
+      # чужой образ, а том хаба хранит мастер-ключ и секреты хостов.
+      # Правятся копии для ассетов, а не файлы в репозитории: там :latest
+      # остаётся, чтобы `docker compose pull` продолжал подтягивать
+      # свежий образ у тех, кто этого и хочет.
+      #
+      # Файлы кладутся прямо в dist, без подкаталога: `gh release create
+      # dist/*` загружает ассеты по одному и на каталоге падает с «read
+      # dist/deploy: is a directory».
+      - name: Манифесты с версией релиза
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sed "s|ghcr.io/piqab/nkt-hub:latest|ghcr.io/piqab/nkt-hub:$version|" \
+            deploy/docker-compose.hub.release.yml > dist/docker-compose.hub.release.yml
+          sed "s|ghcr.io/piqab/nkt-hub:latest|ghcr.io/piqab/nkt-hub:$version|" \
+            deploy/k8s/hub.yaml > dist/k8s-hub.yaml
+          grep -n "nkt-hub:" dist/docker-compose.hub.release.yml dist/k8s-hub.yaml
       - name: Контрольные суммы
         working-directory: dist
         run: |
           chmod +x nkt-linux-*
-          sha256sum nkt-linux-* > SHA256SUMS
+          # Манифесты тоже: они лежат рядом с бинарниками и их так же
+          # скачивают по ссылке из README.
+          sha256sum nkt-linux-* docker-compose.hub.release.yml k8s-hub.yaml > SHA256SUMS
       # Описание релиза — то, что хаб показывает в «О системе», когда видит
       # новую версию (internal/hub/versioncheck.go читает body этого релиза).
       # Поэтому оно должно быть написанным текстом из WHATSNEW.md, а не
@@ -194,25 +214,10 @@ jobs:
             echo "в WHATSNEW.en.md нет раздела для $GITHUB_REF_NAME — описание только по-русски"
           fi
           cat notes.md
-      # Манифесты для «готового образа» приклеиваются к релизу с точной
-      # версией вместо :latest — мутабельный тег можно переставить на
-      # чужой образ, а том хаба хранит мастер-ключ и секреты хостов.
-      # Правятся копии для ассетов, а не файлы в репозитории: там :latest
-      # остаётся, чтобы `docker compose pull` продолжал подтягивать
-      # свежий образ у тех, кто этого и хочет.
-      - name: Манифесты с версией релиза
-        run: |
-          version="${GITHUB_REF_NAME#v}"
-          mkdir -p dist/deploy
-          sed "s|ghcr.io/piqab/nkt-hub:latest|ghcr.io/piqab/nkt-hub:$version|" \
-            deploy/docker-compose.hub.release.yml > dist/deploy/docker-compose.hub.release.yml
-          sed "s|ghcr.io/piqab/nkt-hub:latest|ghcr.io/piqab/nkt-hub:$version|" \
-            deploy/k8s/hub.yaml > dist/deploy/hub.yaml
-          grep -n "nkt-hub:" dist/deploy/*.yml dist/deploy/*.yaml
       - name: Создать GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* dist/deploy/* \
+          gh release create "$GITHUB_REF_NAME" dist/* \
             --title "$GITHUB_REF_NAME" \
             --notes-file notes.md

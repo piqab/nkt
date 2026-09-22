@@ -127,7 +127,13 @@ ls`). Манифест Kubernetes делает то же через `fsGroup: 10
 ### 2.3. Готовым образом, без клонирования (Docker Compose и Kubernetes)
 
 Не нужен ни `git clone`, ни локальная сборка — образ публикуется в GHCR под
-каждый релиз. Команды и манифест (`deploy/docker-compose.hub.release.yml`,
+каждый релиз. К самому релизу приложены манифесты с **точной версией**
+образа вместо `:latest` — `docker-compose.hub.release.yml` и
+`k8s-hub.yaml` (их суммы в `SHA256SUMS`): мутабельный тег можно
+переставить, а том хаба хранит мастер-ключ и секреты хостов. В
+репозитории те же файлы остаются на `:latest`, чтобы `docker compose
+pull` подтягивал свежий образ. Команды и манифест
+(`deploy/docker-compose.hub.release.yml`,
 `deploy/k8s/hub.yaml`) — в README, раздел
 [«Хаб в контейнере»](README.md#launch-the-hub-in-docker).
 

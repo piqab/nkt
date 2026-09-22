@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.76 — 2026-09-22
+
+- The release workflow failed while uploading assets ("read
+  dist/deploy: is a directory"): the manifests with the exact image
+  version now sit next to the binaries instead of a subdirectory, and
+  their checksums land in `SHA256SUMS` —
+  `docker-compose.hub.release.yml` and `k8s-hub.yaml`.
+
 ## v1.10.75 — 2026-09-22
 
 - CI security checks now recognize the fixes from earlier versions
