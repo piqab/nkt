@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.67 — 2026-09-22
+
+- Security checks in CI instead of a third-party bot: govulncheck and
+  gitleaks (blocking), CodeQL for Go and TypeScript, gosec and Trivy
+  (into the Security tab), Dependabot for dependencies —
+  `.github/workflows/security.yml`, `.github/dependabot.yml`,
+  `.gitleaks.toml`, `.gosec.json`.
+- Go 1.26.8 and `golang.org/x/crypto` 0.56: closes 33 known
+  vulnerabilities of the standard library and the ssh package that
+  govulncheck found in called code on 1.25.0 (release binaries were
+  built with them).
+- Fallback channel: TLS session resumption is explicitly off — the
+  certificate pin is checked on every connection.
+
 ## v1.10.66 — 2026-09-22
 
 - Security: key files (`ssh_host_*_key`, `id_*`, `*.key`, `*.pem`) can no
