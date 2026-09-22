@@ -33,9 +33,12 @@ type unitDirectives struct {
 	HasSetnsFilter bool
 	HasSysAdminCap bool
 	AllowsMountNS  bool
-	Found          bool
-	Path           string
-	ModTime        time.Time
+	// ProtectHome — значение директивы (последнее): «yes» прячет /home
+	// от юнита целиком, проводник файлов там пуст.
+	ProtectHome string
+	Found       bool
+	Path        string
+	ModTime     time.Time
 }
 
 // SandboxProblem — одна найденная причина с готовым способом починки.
@@ -129,6 +132,8 @@ func parseUnitDirectives(content string) unitDirectives {
 					d.HasSysAdminCap = true
 				}
 			}
+		case "ProtectHome":
+			d.ProtectHome = strings.ToLower(value)
 		case "RestrictNamespaces":
 			switch {
 			case strings.EqualFold(value, "no") || strings.EqualFold(value, "false"):

@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.71 — 2026-09-22
+
+- **"Files" on a host: empty folders and "uploads do not appear".** The
+  host unit was built with `ProtectHome=yes` — the nkt service could not
+  see `/home` at all: the browser showed empty folders, and a file
+  written there from outside the sandbox never appeared in the listing.
+  It is now `ProtectHome=read-only` (update nkt on the host and the unit
+  is rewritten); until then the "Files" section warns about it and an
+  upload into an invisible directory answers with a clear error instead
+  of "ok".
+- `/tmp` is no longer a default browser root: the unit has its own
+  `/tmp` (`PrivateTmp=yes`), which is not the directory files are put
+  into from outside. Add it to `NKT_FILES_ROOTS` if you need it.
+- The listing refreshes **while** an upload runs (every 1.5 s), not only
+  at the end, and right after `git clone`; next to "new folder" there is
+  a **"refresh"** button.
+
 ## v1.10.70 — 2026-09-22
 
 - **The SSH host key is recorded** on the first connection and required

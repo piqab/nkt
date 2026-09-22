@@ -94,7 +94,12 @@ ReadWritePaths=-/etc/hosts
 # писать надо именно туда; на остальных это обычный файл в /etc.
 ReadWritePaths=-/etc/resolv.conf
 ReadWritePaths=-/run/systemd/resolve
-ProtectHome=yes
+# read-only, а не yes: при ProtectHome=yes /home (и /root) для юнита
+# пусты — проводник файлов показывал пустые папки, загруженное через
+# systemd-run «не появлялось», compose-стеки из /home не находились.
+# Запись в /home идёт через выход из песочницы, читать юниту можно.
+ProtectHome=read-only
+# /tmp у юнита свой (PrivateTmp): в проводнике его нет по умолчанию.
 PrivateTmp=yes
 NoNewPrivileges=yes
 

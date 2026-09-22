@@ -389,7 +389,7 @@ func Load() (*Config, error) {
 		TLSHosts:   envList("NKT_TLS_HOSTS", defaultTLSHosts()),
 
 		HubMasterKey:             envStr("NKT_HUB_MASTER_KEY", ""),
-		FilesRoots:               envList("NKT_FILES_ROOTS", "/home,/srv,/opt,/var/www,/tmp"),
+		FilesRoots:               envList("NKT_FILES_ROOTS", "/home,/srv,/opt,/var/www"),
 		HubSourceRoot:            envStr("NKT_HUB_SOURCE_ROOT", wd),
 		HubGoBin:                 envStr("NKT_HUB_GO_BIN", "go"),
 		HubReleaseRepo:           envStr("NKT_HUB_RELEASE_REPO", "piqab/nkt"),
