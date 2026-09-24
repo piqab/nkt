@@ -109,6 +109,12 @@ finding analysis and one for the architecture review, in Russian and
 English; saving goes through a window with a diff against the default,
 "restore default" removes the edit.
 
+When writing a configuration fails (validation or apply), the failure
+banner carries the same bulb: the model gets the check output and the
+diff of the edit, with the task to explain and show a corrected
+fragment. Passwords, tokens and keys are always cut from the request,
+regardless of the checkbox below.
+
 The "hide addresses and names" checkbox (on by default) replaces host
 names, IPs, domains and e-mail with aliases before sending and puts them
 back in the answer; "show request" shows exactly what left.  Answers are

@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.85 — 2026-09-24
+
+- **The machine configuration editor is a modal.** The pencil in a
+  machine's row opens the XML editor as a window instead of a card at the
+  very bottom of the page; the pre-write diff opens on top of it.
+- **The architecture review looks at what is on the map.** Nodes hidden
+  by "hide stopped services" and "problems only" are left out of the
+  request; the review card says how many nodes out of how many are
+  reviewed.
+- **AI on a failed configuration edit.** When a write fails validation or
+  apply and is rolled back, the failure banner gets a bulb: the model
+  receives the check output and the diff of the edit, with the task to
+  explain and show a corrected fragment.
+- **Secrets never reach the model**: passwords, tokens, API keys, private
+  keys, `Authorization` headers and credentials in URLs are cut from the
+  request regardless of the "hide addresses and names" checkbox.
+
 ## v1.10.84 — 2026-09-24
 
 - **The AI answer stays with the finding.** A bulb with a saved answer is

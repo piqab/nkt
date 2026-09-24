@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { AIConfigError } from '../components/AIConfigError'
 import { Button, Checkbox, Input, Segmented, Select, type TableColumnsType } from 'antd'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
@@ -462,7 +463,10 @@ export default function Configs({ me }: { me: Me }) {
                     {error && <Banner kind="error">{error}</Banner>}
                     {result && (
                       <Banner kind={result.rolled_back ? 'error' : 'info'}>
-                        <div>{result.message}</div>
+                        <div>
+                          {result.message}
+                          {result.rolled_back && <AIConfigError path={file.data.path} service={file.data.service} content={draft} result={result} />}
+                        </div>
                         {result.validation && (
                           <div className="small mono" style={{ marginTop: '0.25rem' }}>
                             {t('configs.validation', { output: result.validation.stdout || result.validation.stderr || t('configs.noOutput') })}
@@ -712,7 +716,10 @@ function NewFileForm({
       {error && <Banner kind="error">{error}</Banner>}
       {result && (
         <Banner kind={result.rolled_back ? 'error' : 'info'}>
-          <div>{result.message}</div>
+          <div>
+            {result.message}
+            {result.rolled_back && <AIConfigError path={path} content={content} result={result} />}
+          </div>
           {result.validation && (
             <div className="small mono" style={{ marginTop: '0.25rem' }}>
               {t('configs.validation', { output: result.validation.stdout || result.validation.stderr || t('configs.noOutput') })}

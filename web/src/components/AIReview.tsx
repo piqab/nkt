@@ -59,7 +59,19 @@ export function graphToLines(g: Graph): string[] {
   return lines
 }
 
-export function AIReviewCard({ graph, hostID, scope }: { graph?: Graph; hostID?: number; scope: 'host' | 'hub' }) {
+export function AIReviewCard({
+  graph,
+  totalNodes,
+  hostID,
+  scope,
+}: {
+  graph?: Graph
+  /** Сколько узлов на карте всего — чтобы было видно, что фильтры
+   * («скрыть остановленные», «только проблемы») сужают и разбор. */
+  totalNodes?: number
+  hostID?: number
+  scope: 'host' | 'hub'
+}) {
   const { t } = useTranslation()
   const scopeKey = scope === 'hub' ? 'hub' : `host:${hostID ?? 0}`
   const history = useApi<{ reviews: Review[] }>(`/hub/ai/reviews?scope=${encodeURIComponent(scopeKey)}`)
@@ -96,7 +108,11 @@ export function AIReviewCard({ graph, hostID, scope }: { graph?: Graph; hostID?:
   return (
     <Card
       title={t('ai.review')}
-      subtitle={t('ai.reviewHint')}
+      subtitle={
+        graph && totalNodes !== undefined && totalNodes !== graph.nodes.length
+          ? `${t('ai.reviewHint')} ${t('ai.reviewScope', { shown: graph.nodes.length, total: totalNodes })}`
+          : t('ai.reviewHint')
+      }
       actions={
         <Button type="primary" size="small" icon={<BulbOutlined />} loading={busy} onClick={() => void run()}>
           {scope === 'hub' ? `${t('ai.reviewRun')} — ${t('ai.reviewHub')}` : t('ai.reviewRun')}

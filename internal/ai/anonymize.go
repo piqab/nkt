@@ -32,6 +32,30 @@ func NewMapper(enabled bool) *Mapper {
 	return &Mapper{enabled: enabled, to: map[string]string{}, back: map[string]string{}, counts: map[string]int{}}
 }
 
+// Секреты в конфигурациях и выводе команд: значение после
+// password/secret/token/key, приватные ключи PEM, Authorization,
+// учётные данные в URL, ключи известных сервисов по форме.
+var (
+	// Имя ключа может быть с префиксом (DB_PASSWORD, redis.secret), но
+	// не с суффиксом: password_file — путь, а не пароль.
+	secretKVRe    = regexp.MustCompile(`(?i)\b([\w.-]*?(?:passwords?|passwd|pwd|secrets?|tokens?|api[_-]?keys?|access[_-]?keys?|secret[_-]?keys?|private[_-]?keys?|auth[_-]?tokens?|client[_-]?secrets?|credentials?))\b(\s*[=:]\s*)(["']?)([^\s"';,]+)`)
+	pemRe         = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----`)
+	authHeaderRe  = regexp.MustCompile(`(?i)(authorization:\s*(?:bearer|basic|token)\s+)\S+`)
+	urlCredsRe    = regexp.MustCompile(`(://)([^/\s:@]+):([^/\s@]+)@`)
+	knownTokensRe = regexp.MustCompile(`\b(?:AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b`)
+)
+
+// RedactSecrets заменяет секреты на «<secret>» — необратимо. Имя ключа
+// остаётся (модель должна видеть, что это пароль), значение — нет.
+func RedactSecrets(text string) string {
+	text = pemRe.ReplaceAllString(text, "<private-key>")
+	text = authHeaderRe.ReplaceAllString(text, "${1}<secret>")
+	text = urlCredsRe.ReplaceAllString(text, "${1}${2}:<secret>@")
+	text = secretKVRe.ReplaceAllString(text, "${1}${2}${3}<secret>")
+	text = knownTokensRe.ReplaceAllString(text, "<secret>")
+	return text
+}
+
 var (
 	ipv4Re   = regexp.MustCompile(`\b(?:\d{1,3}\.){3}\d{1,3}\b`)
 	domainRe = regexp.MustCompile(`\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b`)
@@ -69,7 +93,14 @@ func (m *Mapper) alias(kind, real string) string {
 // Hide заменяет в тексте всё известное и всё, что похоже на адрес,
 // домен или почту.
 func (m *Mapper) Hide(text string) string {
-	if !m.enabled || text == "" {
+	if text == "" {
+		return text
+	}
+	// Секреты вырезаются всегда, независимо от галочки «скрывать адреса и
+	// имена»: пароль в конфигурации или токен в выводе команды не нужны
+	// модели ни для какого разбора, а обратно они не подставляются.
+	text = RedactSecrets(text)
+	if !m.enabled {
 		return text
 	}
 	// Сначала выученные имена — они длиннее и конкретнее.
