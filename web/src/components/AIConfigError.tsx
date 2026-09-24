@@ -11,10 +11,30 @@ import { AIExplain } from './AIExplain'
  * даёт ровно то, что пытались записать), а не весь файл; пароли и токены
  * в них хаб вырезает до отправки.
  */
-export function AIConfigError({ path, service, content, result }: { path: string; service?: string; content: string; result: WriteResult }) {
+export function AIConfigError({
+  path,
+  service,
+  content,
+  snippet,
+  result,
+  message,
+}: {
+  path: string
+  service?: string
+  /** Черновик всего файла — дифф «на диске → черновик» считает хост… */
+  content?: string
+  /** …или только правленый фрагмент (блочный редактор): уходит как есть. */
+  snippet?: string
+  /** Итог записи с откатом (проверка или apply не прошли)… */
+  result?: WriteResult
+  /** …или ошибка запроса, когда до записи не дошло (путь, валидатор,
+   * конфликт версий): текста ошибки модели хватает. */
+  message?: string
+}) {
   const { t } = useTranslation()
-  const [diff, setDiff] = useState<string | null>(null)
+  const [diff, setDiff] = useState<string | null>(snippet ?? null)
   useEffect(() => {
+    if (content === undefined) return
     let cancelled = false
     api<{ changed: boolean; diff: string }>('/configs/preview-diff', { method: 'POST', body: { path, content } })
       .then((res) => {
@@ -28,8 +48,12 @@ export function AIConfigError({ path, service, content, result }: { path: string
       cancelled = true
     }
   }, [path, content])
-  const output = result.validation ? result.validation.stdout || result.validation.stderr : ''
-  const firstLine = (output || result.message).split('\n').find((l) => l.trim() !== '') ?? result.message
+  useEffect(() => {
+    if (snippet !== undefined) setDiff(snippet)
+  }, [snippet])
+  const output = result?.validation ? result.validation.stdout || result.validation.stderr : ''
+  const text = result?.message ?? message ?? ''
+  const firstLine = (output || text).split('\n').find((l) => l.trim() !== '') ?? text
   return (
     <span title={t('ai.explainConfigError')}>
       <AIExplain
@@ -37,7 +61,7 @@ export function AIConfigError({ path, service, content, result }: { path: string
         ctx={{
           kind: 'config-error',
           title: firstLine,
-          detail: result.message,
+          detail: text,
           service,
           object: path,
           file: path,
