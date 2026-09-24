@@ -519,7 +519,7 @@ export default function TopologyPage() {
       </Card>
       {/* Разбор архитектуры: карта уже собрана — модель смотрит на неё
           целиком и говорит о том, чего в ней не хватает. */}
-      {data && reviewGraph && <AIReviewCard graph={reviewGraph} totalNodes={data.nodes.length} hostID={reviewHostID} scope="host" />}
+      {data && <AIReviewCard graph={reviewGraph} totalNodes={data.nodes.length} hostID={reviewHostID} scope="host" />}
     </>
   )
 }
