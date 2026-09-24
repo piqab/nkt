@@ -177,6 +177,8 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/aptcache", s.handleHubAptCacheStatus)
 				r.Get("/hub/ai", s.handleAIStatus)
 				r.Get("/hub/ai/reviews", s.handleAIReviews)
+				r.Get("/hub/ai/answers", s.handleAIAnswers)
+				r.Get("/hub/ai/prompts", s.handleAIPrompts)
 				// Разбор находки — обычному пользователю тоже: это
 				// объяснение, а не изменение. Настройка и ключ — только
 				// администратору (ниже).
@@ -232,6 +234,9 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/ai/settings", s.handleAISettings)
 					r.Post("/hub/ai/cache/clear", s.handleAICacheClear)
 					r.Post("/hub/ai/test", s.handleAITest)
+					r.Post("/hub/ai/answers/delete", s.handleAIAnswerDelete)
+					r.Post("/hub/ai/prompts", s.handleAIPromptSet)
+					r.Post("/hub/ai/prompts/diff", s.handleAIPromptDiff)
 					r.Post("/hub/hosts/{id}/apt-proxy", s.handleHostAptProxy)
 					r.Post("/hub/clusters", s.handleClusterCreate)
 					r.Post("/hub/cluster-images/upload", s.handleClusterImageUpload)

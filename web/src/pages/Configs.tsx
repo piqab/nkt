@@ -3,7 +3,7 @@ import { Button, Checkbox, Input, Segmented, Select, type TableColumnsType } fro
 import { Trans, useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
-import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDateTime } from '../components/ui'
+import { Banner, Card, CodeEditor, DiffView, ErrorNote, formatDateTime, InfoHint, Loading, Modal } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import BlockTree from '../components/BlockTree'
 import i18n from '../i18n'
@@ -198,6 +198,20 @@ export default function Configs({ me }: { me: Me }) {
   const sshBlocked = isSSHPath && sshPreflight.data?.reserve.ok === false && !sshForce
 
   const dirty = file.data !== null && draft !== file.data.content
+  // Предпросмотр правки: дифф «на диске → черновик» до сохранения.
+  const [preview, setPreview] = useState<string | null>(null)
+  async function showChanges() {
+    if (!file.data) return
+    try {
+      const res = await api<{ changed: boolean; diff: string }>('/configs/preview-diff', {
+        method: 'POST',
+        body: { path: file.data.path, content: draft },
+      })
+      setPreview(res.changed ? res.diff : '')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   async function save() {
     if (!file.data) return
@@ -400,6 +414,14 @@ export default function Configs({ me }: { me: Me }) {
                         <Button onClick={() => setDraft(file.data!.content)} disabled={!dirty}>
                           {t('configs.reset')}
                         </Button>
+                        <Button onClick={() => void showChanges()} disabled={!dirty}>
+                          {t('configs.showChanges')}
+                        </Button>
+                        {preview !== null && (
+                          <Modal title={t('configs.changesTitle', { path: file.data!.path })} onClose={() => setPreview(null)} width={900}>
+                            {preview === '' ? <p className="small muted">{t('configs.noChanges')}</p> : <DiffView text={preview} />}
+                          </Modal>
+                        )}
                         {me.is_admin && me.allow_mutations && (
                           <>
                             <Button
@@ -716,23 +738,3 @@ function NewFileForm({
   )
 }
 
-function DiffView({ text }: { text: string }) {
-  return (
-    <pre className="diff" style={{ marginTop: '0.75rem' }}>
-      {text.split('\n').map((line, i) => {
-        const cls = line.startsWith('+')
-          ? 'add'
-          : line.startsWith('-')
-            ? 'del'
-            : line.startsWith('@@')
-              ? 'hunk'
-              : undefined
-        return (
-          <div key={i} className={cls}>
-            {line || ' '}
-          </div>
-        )
-      })}
-    </pre>
-  )
-}

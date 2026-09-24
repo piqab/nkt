@@ -76,6 +76,19 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport) (impo
 			okc = append(okc, reenc)
 		}
 		export.Clusters = okc
+		// Ключ модели — тем же мастер-ключом, что и секреты хостов.
+		if enc := export.Settings[aiKeyKVKey]; enc != "" {
+			raw, err := secretbox.Decrypt(oldKey, []byte(enc))
+			if err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", aiKeyKVKey, err))
+				delete(export.Settings, aiKeyKVKey)
+			} else if reenc, err := secretbox.Encrypt(m.key, raw); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: %v", aiKeyKVKey, err))
+				delete(export.Settings, aiKeyKVKey)
+			} else {
+				export.Settings[aiKeyKVKey] = string(reenc)
+			}
+		}
 		export.MasterKey = "" // never persisted; the point of this whole path is to not need it again
 	}
 

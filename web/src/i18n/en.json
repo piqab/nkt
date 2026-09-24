@@ -465,7 +465,12 @@
       "resume": "resume"
     },
     "editXML": "machine configuration (XML)",
-    "editXMLRunning": "the machine is running: changes take effect after it restarts"
+    "editXMLRunning": "the machine is running: changes take effect after it restarts",
+    "noChanges": "No changes — the XML matches the file on disk.",
+    "reviewChanges": "Configuration changes for {{name}}",
+    "reviewChangesApply": "After writing, virsh define runs — the machine configuration is updated.",
+    "reviewChangesNoApply": "Write the file only, without virsh define.",
+    "applyChanges": "Write"
   },
   "hosts": {
     "notPasswordEncrypted": "This file doesn't look like a password-encrypted export",
@@ -1046,7 +1051,10 @@
     "pathNoDotDot": "\"..\" is not allowed in the path",
     "pathSameAsSource": "That is the source file’s own path — pick another",
     "newFileCategory": "Category",
-    "newFileRoot": "Root"
+    "newFileRoot": "Root",
+    "showChanges": "show changes",
+    "changesTitle": "Changes: {{path}}",
+    "noChanges": "No changes — the draft matches the file."
   },
   "charts": {
     "seconds": "{{value}} s",
@@ -2387,6 +2395,26 @@
     "testOK": "the model replied in {{ms}} ms: {{reply}}",
     "timeout": "Answer wait time, s",
     "timeoutHint": "How long to wait for the model (10–1800 s). 90 is enough for the cloud; a local model on a weak machine needs 300 or more.",
-    "thinkingFor": "the model is thinking… {{seconds}} s"
+    "thinkingFor": "the model is thinking… {{seconds}} s",
+    "hasAnswer": "the model’s answer is saved — open",
+    "hasSimilar": "the same finding was already analysed on another host",
+    "similarSeen": "The same problem was already analysed: {{host}}, {{date}}. That answer is below.",
+    "askForThisHost": "ask for this host",
+    "storedAt": "saved answer from {{date}}",
+    "askAgain": "ask again",
+    "deleteAnswer": "delete answer",
+    "prompts": "Model instructions (prompts)",
+    "promptsHint": "The system instruction the model gets before every request. The default ships with nkt; an edit is stored on the hub, saved through a window showing the difference from the default, and clears saved answers — they were produced with a different instruction.",
+    "promptKind": "Instruction",
+    "promptLang": "Language",
+    "promptFinding": "finding analysis (findings, vulnerabilities, malware, alerts, job errors)",
+    "promptMap": "architecture review of the resource map",
+    "promptModified": "modified",
+    "promptModifiedHint": "This instruction differs from the default.",
+    "promptSave": "Save instruction",
+    "promptReset": "Restore default",
+    "promptDiffTitle": "Difference from the default instruction",
+    "promptApply": "Apply",
+    "promptToDefault": "The text matches the default instruction — the edit will be removed."
   }
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // API разбора моделью. Всё идёт через хаб: настройка одна на установку,
@@ -112,6 +113,8 @@ type aiExplainRequest struct {
 	// HostID — на каком хосте найдено (0 — сам хаб/localhost): по нему
 	// собирается контекст «что рядом».
 	HostID int64 `json:"host_id"`
+	// Force — спросить модель заново, минуя сохранённый и «похожий» ответ.
+	Force bool `json:"force"`
 }
 
 func (s *Server) handleAIExplain(w http.ResponseWriter, r *http.Request) {
@@ -136,12 +139,79 @@ func (s *Server) handleAIExplain(w http.ResponseWriter, r *http.Request) {
 	}
 	fc.Host, fc.Around = s.aiHostContext(r.Context(), req.HostID)
 	s.aiExtendDeadline(w, s.hub.AISettings(r.Context()).TimeoutS)
-	answer, err := s.hub.AIExplain(r.Context(), kind, fc, s.aiKnownNames(r.Context()))
+	answer, err := s.hub.AIExplain(r.Context(), kind, fc, s.aiKnownNames(r.Context()), req.HostID, req.Force)
 	if err != nil {
 		fail(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, answer)
+}
+
+// handleAIAnswers — ссылки на все сохранённые ответы: страница красит по
+// ним лампочки (свой ответ есть / такая находка разбиралась на другом
+// хосте).
+func (s *Server) handleAIAnswers(w http.ResponseWriter, r *http.Request) {
+	refs, err := s.db.AIAnswerRefs(r.Context())
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if refs == nil {
+		refs = []store.AIAnswerRef{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"answers": refs})
+}
+
+// handleAIAnswerDelete — «удалить ответ» в окне разбора.
+func (s *Server) handleAIAnswerDelete(w http.ResponseWriter, r *http.Request) {
+	var req aiExplainRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.hub.AIAnswerDelete(r.Context(), req.Kind, req.Title, req.Object, req.File, req.HostID); err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+type aiPromptRequest struct {
+	Kind string `json:"kind"`
+	Lang string `json:"lang"`
+	Text string `json:"text"`
+}
+
+func (s *Server) handleAIPrompts(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"prompts": s.hub.AIPrompts(r.Context())})
+}
+
+// handleAIPromptSet — сохранить правленую инструкцию (пустой текст —
+// вернуть стандартную).
+func (s *Server) handleAIPromptSet(w http.ResponseWriter, r *http.Request) {
+	var req aiPromptRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.hub.SetAIPrompt(r.Context(), req.Kind, req.Lang, req.Text); err != nil {
+		fail(w, r, err)
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "ai.prompt", req.Kind+"/"+req.Lang, "ok", nil)
+	writeJSON(w, http.StatusOK, map[string]any{"prompts": s.hub.AIPrompts(r.Context())})
+}
+
+// handleAIPromptDiff — отличия черновика от стандартной инструкции: окно
+// подтверждения показывает их до сохранения.
+func (s *Server) handleAIPromptDiff(w http.ResponseWriter, r *http.Request) {
+	var req aiPromptRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	diff := s.hub.AIPromptDiff(r.Context(), req.Kind, req.Lang, req.Text)
+	writeJSON(w, http.StatusOK, map[string]any{"diff": diff, "changed": diff != ""})
 }
 
 // aiHostContext — короткая справка о хосте и о том, что на нём рядом.

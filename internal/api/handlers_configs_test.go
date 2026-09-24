@@ -1,9 +1,13 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -86,5 +90,66 @@ func TestHandleConfigListAttachesSiteNames(t *testing.T) {
 		if names[i] != w {
 			t.Errorf("Sites[%d] = %q, want %q (full: %v)", i, names[i], w, names)
 		}
+	}
+}
+
+// Предпросмотр правки: дифф «файл на диске → черновик» без записи;
+// черновик, равный файлу, — «изменений нет».
+func TestHandleConfigPreviewDiff(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "fixtures", "host"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{
+		Mode: config.ModeFixtures, FixturesRoot: root, DataDir: t.TempDir(),
+		NginxRoot: "/etc/nginx", NginxMainConfig: "/etc/nginx/nginx.conf",
+		HAProxyRoot: "/etc/haproxy", HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
+		CommandTimeout: 5 * time.Second,
+	}
+	c := collect.NewFixtures(root)
+	db, err := store.Open(filepath.Join(t.TempDir(), "nkt.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	scanner := inventory.New(cfg, c, db)
+	configs := control.NewConfigManager(cfg, c, db, scanner, control.NewServiceManager(cfg, c, db))
+	s := &Server{cfg: cfg, scanner: scanner, configs: configs}
+
+	const path = "/etc/nginx/nginx.conf"
+	current, err := configs.Read(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := func(content string) (bool, string) {
+		body, _ := json.Marshal(map[string]string{"path": path, "content": content})
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/configs/preview-diff", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		s.handleConfigPreviewDiff(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status = %d: %s", rec.Code, rec.Body.String())
+		}
+		var out struct {
+			Changed bool   `json:"changed"`
+			Diff    string `json:"diff"`
+		}
+		decodeJSONBody(t, rec, &out)
+		return out.Changed, out.Diff
+	}
+	if changed, diff := call(current.Content); changed || diff != "" {
+		t.Errorf("тот же текст: changed=%v diff=%q", changed, diff)
+	}
+	changed, diff := call(current.Content + "\n# добавлено черновиком\n")
+	if !changed || !strings.Contains(diff, "+# добавлено черновиком") {
+		t.Errorf("правка не видна в диффе: changed=%v\n%s", changed, diff)
+	}
+	if _, err := os.Stat(filepath.Join(root, path)); err != nil {
+		t.Fatal(err)
+	}
+	// Файл на диске не тронут.
+	after, _ := configs.Read(path)
+	if after.Content != current.Content {
+		t.Error("предпросмотр изменил файл")
 	}
 }

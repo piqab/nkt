@@ -232,6 +232,30 @@ export function Modal({
  * from split("\n") can span several visual rows and the numbers stop lining
  * up with the text. A long line scrolls horizontally instead.
  */
+/** Unified diff построчно: добавленное, удалённое и заголовки ханков —
+ * своим цветом (см. .diff в стилях). Общий для истории версий,
+ * предпросмотра правки и сравнения промптов. */
+export function DiffView({ text }: { text: string }) {
+  return (
+    <pre className="diff" style={{ marginTop: '0.75rem' }}>
+      {text.split('\n').map((line, i) => {
+        const cls = line.startsWith('+')
+          ? 'add'
+          : line.startsWith('-')
+            ? 'del'
+            : line.startsWith('@@')
+              ? 'hunk'
+              : undefined
+        return (
+          <div key={i} className={cls}>
+            {line || ' '}
+          </div>
+        )
+      })}
+    </pre>
+  )
+}
+
 export function CodeEditor({
   value,
   onChange,

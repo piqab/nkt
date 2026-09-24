@@ -137,6 +137,24 @@ CREATE TABLE IF NOT EXISTS ai_cache (
     used_at    TEXT NOT NULL
 );
 
+-- Сохранённые ответы модели по находке и хосту: ответ остаётся у строки
+-- после закрытия окна, а такая же находка на другом хосте показывается
+-- как «уже разбиралась» — без нового запроса (см. store/aicache.go).
+CREATE TABLE IF NOT EXISTS ai_answers (
+    key        TEXT NOT NULL,             -- ai.FindingKey: вид + заголовок + объект + файл
+    host_id    INTEGER NOT NULL DEFAULT 0,
+    kind       TEXT NOT NULL DEFAULT '',
+    title      TEXT NOT NULL DEFAULT '',
+    object     TEXT NOT NULL DEFAULT '',
+    file       TEXT NOT NULL DEFAULT '',
+    model      TEXT NOT NULL DEFAULT '',
+    lang       TEXT NOT NULL DEFAULT '',
+    prompt     TEXT NOT NULL DEFAULT '',
+    answer     TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (key, host_id)
+);
+
 -- Расход запросов к модели по суткам: лимит общий для всех хостов.
 CREATE TABLE IF NOT EXISTS ai_usage (
     day      TEXT PRIMARY KEY,            -- YYYY-MM-DD (UTC)

@@ -5,6 +5,8 @@ import (
 	"encoding/base64"
 	"testing"
 
+	"github.com/piqab/nkt/internal/ai"
+	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
 )
@@ -183,5 +185,45 @@ func TestImportHostsDropsEntryUndecryptableWithEmbeddedKey(t *testing.T) {
 	}
 	if len(hosts) != 0 {
 		t.Errorf("ListHosts = %+v, want none imported", hosts)
+	}
+}
+
+// Ключ модели едет в экспорт зашифрованным и перешифровывается мастер-
+// ключом принимающего хаба — как секреты хостов; настройки и правленые
+// инструкции переносятся как есть.
+func TestImportReencryptsAIKeyAndCarriesAISettings(t *testing.T) {
+	m1, _ := newTestManager(t)
+	m2, _ := newTestManager(t)
+	ctx := context.Background()
+	key := "sk-secret"
+	if err := m1.SetAISettings(ctx, ai.Settings{Enabled: true, Provider: ai.ProviderAnthropic, BaseURL: "https://api.anthropic.com", Model: "claude"}, &key); err != nil {
+		t.Fatal(err)
+	}
+	if err := m1.SetAIPrompt(ctx, ai.PromptMap, "en", "Custom map prompt."); err != nil {
+		t.Fatal(err)
+	}
+	if err := m1.SetBetaChannel(ctx, true); err != nil {
+		t.Fatal(err)
+	}
+	export, err := m1.ExportHosts(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if export.Settings["ai.api_key_enc"] == "" || export.Settings["ai.settings"] == "" || export.Settings["update.beta"] != "1" {
+		t.Fatalf("настройки ИИ и бета-канал не в экспорте: %v", export.Settings)
+	}
+	if _, errs := m2.ImportHosts(ctx, export); len(errs) != 0 {
+		t.Fatalf("ImportHosts errs = %v", errs)
+	}
+	// Ключ читается мастер-ключом второго хаба — значит, перешифрован.
+	_, set, err := m2.aiClient(ctx)
+	if err != nil || set.APIKey != key {
+		t.Fatalf("ключ после импорта = %q, %v", set.APIKey, err)
+	}
+	if got := ai.SystemWith(m2.aiPromptOverrides(ctx), ai.KindMap, msgs.EN); got != "Custom map prompt." {
+		t.Errorf("инструкция после импорта = %q", got)
+	}
+	if !m2.betaChannelEnabled(ctx) {
+		t.Error("бета-канал не перенёсся")
 	}
 }

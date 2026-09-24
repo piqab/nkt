@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Button, Spin, Tooltip } from 'antd'
-import { BulbOutlined } from '@ant-design/icons'
+import { BulbFilled, BulbOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { api, hostScope, LOCAL_HOST_ID } from '../api'
-import { Banner, Modal } from './ui'
+import { api } from '../api'
+import { Banner, Modal, formatDateTime } from './ui'
 import { blurText } from '../privacy'
+import { aiAnswerState, currentAIHostID, invalidateAIAnswers, useAIAnswers } from '../aiAnswers'
 
 /**
  * «Объяснить» — одна кнопка для любой строки, о которой можно спросить
@@ -14,6 +15,11 @@ import { blurText } from '../privacy'
  * Запрос всегда уходит на хаб (/hub/ai/…, см. api.ts's unscoped): ключ и
  * адрес модели живут только там, одни на все хосты, и хосту наружу
  * ничего не нужно — у него может не быть интернета.
+ *
+ * Ответ остаётся у строки: лампочка с ответом — оранжевая, открывается
+ * без нового запроса. Та же находка, уже разобранная на другом хосте, —
+ * синяя: окно сначала показывает тот ответ с пометкой, откуда он, а
+ * свой запрос делается отдельной кнопкой.
  *
  * Модель ничего не выполняет: команды показываются для копирования,
  * применяются обычными кнопками nkt. Приписка об этом стоит под каждым
@@ -42,13 +48,19 @@ interface AIAnswer {
   answer: string
   sections: AISection[]
   model: string
-  cached: boolean
   prompt: string
   notice: string
+  /** Ответ сохранён раньше для этой находки на этом хосте. */
+  stored_at?: string
+  /** Ответ той же находки на другом хосте — своего ещё нет. */
+  similar?: { host_id: number; host_name: string; created_at: string }
 }
 
 export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolean }) {
   const { t } = useTranslation()
+  const refs = useAIAnswers()
+  const hostID = currentAIHostID()
+  const state = aiAnswerState(refs, ctx, hostID)
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [answer, setAnswer] = useState<AIAnswer | null>(null)
@@ -56,11 +68,12 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
   const [showPrompt, setShowPrompt] = useState(false)
   const elapsed = useElapsed(busy)
 
-  async function ask() {
+  async function ask(force = false) {
     setOpen(true)
-    if (answer || busy) return
+    if (!force && (answer || busy)) return
     setBusy(true)
     setError(null)
+    if (force) setAnswer(null)
     try {
       const res = await api<AIAnswer>('/hub/ai/explain', {
         method: 'POST',
@@ -72,10 +85,13 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
           ...ctx,
           // Какому хосту принадлежит находка — по нему хаб добавит в
           // запрос, что там рядом (порты, контейнеры, firewall).
-          host_id: hostScope.id !== null && hostScope.id !== LOCAL_HOST_ID ? hostScope.id : 0,
+          host_id: hostID,
+          force,
         },
       })
       setAnswer(res)
+      // Новый ответ сохранён на хабе — лампочки на странице перекрасятся.
+      if (!res.stored_at && !res.similar) invalidateAIAnswers()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -83,10 +99,31 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
     }
   }
 
+  async function remove() {
+    try {
+      await api('/hub/ai/answers/delete', { method: 'POST', body: { ...ctx, host_id: hostID } })
+      setAnswer(null)
+      setOpen(false)
+      invalidateAIAnswers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  const icon =
+    state === 'own' ? (
+      <BulbFilled style={{ color: 'var(--status-warning)' }} />
+    ) : state === 'similar' ? (
+      <BulbOutlined style={{ color: 'var(--series-1)' }} />
+    ) : (
+      <BulbOutlined />
+    )
+  const hint = state === 'own' ? t('ai.hasAnswer') : state === 'similar' ? t('ai.hasSimilar') : t('ai.explainHint')
+
   return (
     <>
-      <Tooltip title={t('ai.explainHint')}>
-        <Button type="text" size="small" icon={<BulbOutlined />} disabled={disabled} onClick={() => void ask()} />
+      <Tooltip title={hint}>
+        <Button type="text" size="small" icon={icon} disabled={disabled} onClick={() => void ask()} />
       </Tooltip>
       {open && (
         <Modal title={blurText(ctx.title)} onClose={() => setOpen(false)} width={760}>
@@ -96,6 +133,14 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
             <Banner kind="error">{error}</Banner>
           ) : answer ? (
             <div className="col">
+              {answer.similar && (
+                <Banner kind="info">
+                  {blurText(t('ai.similarSeen', { host: answer.similar.host_name, date: formatDateTime(answer.similar.created_at) }))}{' '}
+                  <Button type="link" size="small" onClick={() => void ask(true)}>
+                    {t('ai.askForThisHost')}
+                  </Button>
+                </Banner>
+              )}
               {answer.sections.map((s, i) => (
                 <div key={i}>
                   {s.title && <h3 style={{ marginBottom: '0.3rem' }}>{s.title}</h3>}
@@ -104,10 +149,22 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
               ))}
               <div className="small muted">
                 {answer.notice}
-                {answer.cached && <> · {t('ai.fromCache')}</>}
+                {answer.stored_at && <> · {t('ai.storedAt', { date: formatDateTime(answer.stored_at) })}</>}
                 <Button type="link" size="small" onClick={() => setShowPrompt((v) => !v)}>
                   {showPrompt ? t('ai.hidePrompt') : t('ai.showPrompt')}
                 </Button>
+                {!answer.similar && (
+                  <>
+                    <Button type="link" size="small" onClick={() => void ask(true)}>
+                      {t('ai.askAgain')}
+                    </Button>
+                    {answer.stored_at && (
+                      <Button type="link" size="small" danger onClick={() => void remove()}>
+                        {t('ai.deleteAnswer')}
+                      </Button>
+                    )}
+                  </>
+                )}
               </div>
               {showPrompt && (
                 <pre className="diff mono small" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>

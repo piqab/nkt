@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
-import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, StateBadge, formatBytesShort } from '../components/ui'
+import { Banner, Card, CodeEditor, DiffView, ErrorNote, formatBytesShort, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
@@ -507,10 +507,37 @@ function VMEditor({
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<WriteResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Дифф «на диске → черновик», который надо подтвердить перед записью:
+  // define применяется к работающей машине, и «применить» должно
+  // нажиматься глядя на изменения, а не на весь XML.
+  const [preview, setPreview] = useState<string | null>(null)
 
   const content = draft ?? existing.data?.content ?? (isNew ? initialContent ?? domainXMLSkeleton(name) : '')
 
   async function save() {
+    // Новой машине сравнивать не с чем — сразу запись.
+    if (isNew) return doSave()
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ changed: boolean; diff: string }>('/configs/preview-diff', {
+        method: 'POST',
+        body: { path, content },
+      })
+      if (!res.changed) {
+        setError(t('virt.noChanges'))
+        return
+      }
+      setPreview(res.diff)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function doSave() {
+    setPreview(null)
     setBusy(true)
     setError(null)
     setResult(null)
@@ -562,10 +589,22 @@ function VMEditor({
             {t('virt.applyVirshDefine')}
           </label>
           <div>
-            <Button type="primary" onClick={save} loading={busy}>
+            <Button type="primary" onClick={() => void save()} loading={busy}>
               {busy ? t('virt.saving') : t('virt.save')}
             </Button>
           </div>
+          {preview !== null && (
+            <Modal title={t('virt.reviewChanges', { name })} onClose={() => setPreview(null)} width={900} maskClosable={false}>
+              <div className="small muted">{apply ? t('virt.reviewChangesApply') : t('virt.reviewChangesNoApply')}</div>
+              <DiffView text={preview} />
+              <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
+                <Button type="primary" onClick={() => void doSave()} loading={busy}>
+                  {t('virt.applyChanges')}
+                </Button>
+                <Button onClick={() => setPreview(null)}>{t('common.cancel')}</Button>
+              </div>
+            </Modal>
+          )}
         </div>
       )}
     </Card>
