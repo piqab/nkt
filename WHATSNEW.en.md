@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.87 — 2026-09-24
+
+- Row action icons in the standard blue (like links), dangerous ones red:
+  Services, Containers & VMs, Hosts and the other tables; "probe port"
+  and the AI bulb without an answer (it used to be grey) too. A bulb with
+  an answer is orange, with an answer from another host — filled blue.
+
 ## v1.10.86 — 2026-09-24
 
 - **The AI bulb on any configuration edit error.** It used to appear only

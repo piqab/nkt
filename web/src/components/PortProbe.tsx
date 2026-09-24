@@ -102,7 +102,8 @@ export function ProbeLink({ address, port, protocol }: { address: string; port: 
           type="text"
           size="small"
           aria-label={t('probe.open', { port })}
-          icon={<ApiOutlined />}
+          // Стандартный синий, как у остальных иконок действий в строке.
+          icon={<ApiOutlined style={{ color: 'var(--series-1)' }} />}
           onClick={() => setOpen(true)}
         />
       </Tooltip>

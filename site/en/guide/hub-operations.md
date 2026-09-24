@@ -98,10 +98,11 @@ The "Resource map" page gets an **architecture review**: single points
 of failure, needless exposure, inconsistencies, where to start; on the
 hub — across all hosts at once. Reviews are kept with their date.
 
-The answer stays with the finding: a bulb with an answer is **orange**
-and opens the saved answer without a request ("ask again" and "delete
-answer" sit under the answer). The same finding already analysed on
-another host is **blue**: that answer is shown first with a note where it
+The answer stays with the finding: a bulb without an answer is outlined
+blue, one with an answer is **orange** and opens the saved answer
+without a request ("ask again" and "delete answer" sit under the
+answer). The same finding already analysed on another host is **filled
+blue**: that answer is shown first with a note where it
 came from, and a request for this host is a separate button.
 
 **Model instructions** (prompts) are edited in the same card: one for
