@@ -146,6 +146,13 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	cookie, err := m.cookieFor(ctx, hostID, dial)
 	if err != nil {
 		onFail()
+		// SSH дозвонился, а API — нет: служба nkt не запущена (не
+		// поднялась после обновления пакетов или упала). Это чинится
+		// «обновить» с хаба, и в строке хоста должно быть написано именно
+		// это, а не голый «connection refused».
+		if isAPIDown(err) {
+			err = msgs.Errorf("hub.hostAPIDown", err)
+		}
 		m.recordUnreachable(ctx, hostID, err)
 		return
 	}

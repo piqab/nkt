@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/ssh"
@@ -142,6 +143,75 @@ func (m *Manager) cookieFor(ctx context.Context, hostID int64, dial dialFunc) (s
 	return cookie, nil
 }
 
+// Перезапуск nkt на хосте — «обновить пакеты» перезапускает службу,
+// самообновление тоже — на секунды оставляет API без слушателя. Запрос,
+// пришедший в это окно, раньше падал с голым «connection refused»;
+// теперь прокси ждёт, если хост отвечал по SSH совсем недавно. Окно
+// короче таймаута запроса в интерфейсе (30 с), чтобы отказ пришёл от
+// хаба с объяснением, а не от таймера браузера.
+const (
+	apiRestartWait   = 20 * time.Second
+	apiRestartPoll   = 2 * time.Second
+	apiRecentlySeen  = 3 * time.Minute
+	apiDownHintAfter = apiRestartWait
+)
+
+// isAPIDown — ошибка входа означает «SSH есть, а API nkt не слушает»:
+// отказ соединения через туннель или оборванный ответ, а не неверный
+// пароль и не недоступный SSH.
+func isAPIDown(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	if strings.Contains(s, "unable to authenticate") || strings.Contains(s, "handshake") {
+		return false
+	}
+	for _, needle := range []string{"connection refused", "connect failed", "connection reset", "eof"} {
+		if strings.Contains(s, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// seenRecently — хост успешно отвечал по SSH не дальше apiRecentlySeen
+// назад: тогда отказ API — скорее всего перезапуск, и его стоит
+// подождать.
+func (m *Manager) seenRecently(ctx context.Context, hostID int64) bool {
+	host, err := m.db.HostByID(ctx, hostID)
+	if err != nil || host.LastSeenAt == "" {
+		return false
+	}
+	seen, err := time.Parse(time.RFC3339, host.LastSeenAt)
+	return err == nil && time.Since(seen) < apiRecentlySeen
+}
+
+// cookieForWithWait — cookieFor с ожиданием перезапуска API: пока хост
+// недавно отвечал по SSH, а вход падает отказом соединения, пробует
+// заново каждые apiRestartPoll до apiRestartWait. Если API так и не
+// поднялся — ошибка с подсказкой: служба на хосте не запущена, «обновить»
+// с хаба переустановит и перезапустит её.
+func (m *Manager) cookieForWithWait(ctx context.Context, hostID int64, dial dialFunc) (string, error) {
+	cookie, err := m.cookieFor(ctx, hostID, dial)
+	if err == nil || !isAPIDown(err) || !m.seenRecently(ctx, hostID) {
+		return cookie, err
+	}
+	deadline := time.Now().Add(apiRestartWait)
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			return "", err
+		case <-time.After(apiRestartPoll):
+		}
+		cookie, err = m.cookieFor(ctx, hostID, dial)
+		if err == nil || !isAPIDown(err) {
+			return cookie, err
+		}
+	}
+	return "", msgs.Errorf("hub.hostAPIDown", err)
+}
+
 // dropSession forgets a cached cookie — called alongside dropClient so a
 // reconnect also gets a fresh login instead of replaying a cookie tied to a
 // connection that's gone.
@@ -209,7 +279,7 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 			return
 		}
 		m.recordChannel(hostID, channel)
-		cookie, err := m.cookieFor(ctx, hostID, dial)
+		cookie, err := m.cookieForWithWait(ctx, hostID, dial)
 		if err != nil {
 			onFail()
 			writeErr(w, r, http.StatusBadGateway, err)

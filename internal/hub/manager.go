@@ -940,7 +940,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	report("hub.connectingSSH", host.Addr)
 	// Машина внутри хоста доступна только с него: dialHost проложит путь
 	// через хост, обычный хост — как прежде, напрямую.
-	link, sshErr := m.dialHost(ctx, host)
+	link, sshErr := m.dialHostRetry(ctx, host, report)
 	if sshErr != nil {
 		if m.awaitTunnelReinstallFallback(ctx, host) {
 			return m.installOverTunnel(ctx, hostID, host, job)
@@ -1078,9 +1078,60 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 			return fail(err)
 		}
 	}
+	// Опрос сразу: пока nkt перезапускался, фоновый опрос мог пометить
+	// хост «недоступен», и без этого метка висела бы до следующего тика.
+	go m.pollHost(context.WithoutCancel(ctx), hostID)
 
 	report("hub.done")
 	return nil
+}
+
+// Временная сетевая ошибка SSH — отказ соединения, обрыв, таймаут:
+// пересборка сети, перезапуск sshd, MaxStartups при массовом
+// обновлении. «Неверный ключ» и «нет такого хоста» — не временные.
+const (
+	sshDialAttempts = 3
+	sshDialRetryGap = 5 * time.Second
+)
+
+func isTransientSSHError(err error) bool {
+	if err == nil {
+		return false
+	}
+	s := strings.ToLower(err.Error())
+	if strings.Contains(s, "unable to authenticate") || strings.Contains(s, "no such host") || strings.Contains(s, "host key") {
+		return false
+	}
+	for _, needle := range []string{"connection refused", "connection reset", "i/o timeout", "timed out", "eof", "connect failed", "broken pipe"} {
+		if strings.Contains(s, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// dialHostRetry — dialHost с повторами при временной ошибке: массовое
+// обновление или только что перезапущенный sshd не должны оставлять
+// хост «недоступным» с первой попытки.
+func (m *Manager) dialHostRetry(ctx context.Context, host store.Host, report func(key string, args ...any)) (*sshLink, error) {
+	var last error
+	for attempt := 1; attempt <= sshDialAttempts; attempt++ {
+		link, err := m.dialHost(ctx, host)
+		if err == nil {
+			return link, nil
+		}
+		last = err
+		if !isTransientSSHError(err) || attempt == sshDialAttempts {
+			break
+		}
+		report("hub.sshRetry", attempt, sshDialAttempts, err)
+		select {
+		case <-ctx.Done():
+			return nil, err
+		case <-time.After(sshDialRetryGap):
+		}
+	}
+	return nil, last
 }
 
 // prepareTunnelEnv generates this install's reverse-tunnel fallback
