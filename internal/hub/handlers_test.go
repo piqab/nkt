@@ -82,6 +82,13 @@ func TestHandleListHostsMergesOverview(t *testing.T) {
 	if len(out) != 3 {
 		t.Fatalf("got %d hosts, want 3", len(out))
 	}
+	// Версия хаба — в каждой строке: интерфейс сравнивает с ней, а не с
+	// hub_version из /auth/me, устаревающим после самообновления хаба.
+	for _, h := range out {
+		if h.HubVersion != srv.hub.Version() {
+			t.Errorf("host %d: hub_version = %q, want %q", h.ID, h.HubVersion, srv.hub.Version())
+		}
+	}
 
 	var polled, down, unpolled *hostWithOverview
 	for i := range out {

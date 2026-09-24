@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.91 — 2026-09-24
+
+- **Hosts no longer look "behind" after a hub self-update.** An open tab
+  compared host versions with the hub version remembered at page load;
+  after the hub updated, every host looked behind, "update all (N)"
+  counted them and each "open" reinstalled the very same version (a
+  "done, 6 s" job again and again). The hub version now comes with the
+  host list response, and the header re-reads the hub info once it
+  notices a version change.
+
 ## v1.10.90 — 2026-09-24
 
 - **The hub key comes with ready-made commands.** The public-key window

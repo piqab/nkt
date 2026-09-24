@@ -492,7 +492,13 @@ type hostWithOverview struct {
 	// since every page keeps working, just without whatever the new
 	// version added.
 	RunningVersion string `json:"running_version,omitempty"`
-	LastPolledAt   string `json:"last_polled_at,omitempty"`
+	// HubVersion — версия самого хаба на момент ответа. Интерфейс
+	// сравнивает с ней nkt_version хоста; раньше он брал версию хаба из
+	// /auth/me, загруженного при открытии вкладки, и после самообновления
+	// хаба в открытой вкладке все хосты «отставали» до перезагрузки
+	// страницы — каждое «открыть» переустанавливало ту же версию.
+	HubVersion   string `json:"hub_version"`
+	LastPolledAt string `json:"last_polled_at,omitempty"`
 	// Channel is "ssh" or "tunnel" — which path the hub most recently
 	// reached this host through (see Manager.recordChannel). Omitted
 	// before the first dial attempt.
@@ -554,7 +560,7 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 				h.Group = group
 			}
 		}
-		row := hostWithOverview{Host: h}
+		row := hostWithOverview{Host: h, HubVersion: s.hub.Version()}
 		if h.SSHHostKey != "" {
 			row.HostKeyFP = fingerprintOf(h.SSHHostKey)
 		}
@@ -605,6 +611,7 @@ func (s *Server) localHostEntry(ctx context.Context) *hostWithOverview {
 	reachable := true
 	row.Reachable = &reachable
 	row.RunningVersion = s.hub.Version()
+	row.HubVersion = s.hub.Version()
 	if s.localScanner != nil {
 		if snap := s.localScanner.Latest(); snap != nil {
 			row.Findings = snap.FindingCounts()

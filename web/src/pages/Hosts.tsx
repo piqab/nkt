@@ -272,7 +272,7 @@ function ProblemsCell({ host }: { host: HubHost }) {
  */
 export default function Hosts({
   onSelect,
-  hubVersion,
+  hubVersion: hubVersionProp,
   onOpenProfiles,
 }: {
   onSelect: (host: { id: number; name: string }) => void
@@ -282,6 +282,10 @@ export default function Hosts({
 }) {
   const { t } = useTranslation()
   const { data: hosts, error, loading, reload } = useApi<HubHost[]>('/hub/hosts', 30_000)
+  // Версия хаба — из ответа списка, а не из /auth/me: тот загружен при
+  // открытии вкладки, и после самообновления хаба в старой вкладке все
+  // хосты «отставали», а каждое «открыть» переустанавливало ту же версию.
+  const hubVersion = (hosts ?? []).find((h) => h.hub_version)?.hub_version ?? hubVersionProp
   // Имена хостов — в размывку свободного текста (журналы, оповещения).
   useEffect(() => {
     setKnownNames((hosts ?? []).map((h) => h.name))

@@ -345,7 +345,7 @@ export default function App() {
       ) : isPopoutLogs ? (
         <LogsPage />
       ) : (
-        <Shell me={me} theme={theme} setTheme={setTheme} onLogout={() => setMe(null)} />
+        <Shell me={me} theme={theme} setTheme={setTheme} onLogout={() => setMe(null)} reloadMe={loadMe} />
       )}
     </ConfigProvider>
   )
@@ -356,11 +356,14 @@ function Shell({
   theme,
   setTheme,
   onLogout,
+  reloadMe,
 }: {
   me: Me
   theme: Theme
   setTheme: (t: Theme) => void
   onLogout: () => void
+  /** Перечитать /auth/me — после самообновления хаба его hub_version устарел. */
+  reloadMe: () => void
 }) {
   const { t } = useTranslation()
   const [lang, setLang] = useLang()
@@ -411,6 +414,12 @@ function Shell({
   // looking at the host list — matches how criticalCount/certAlerts below
   // are always live regardless of which per-host page is open.
   const hubUpdate = useApi<HubVersionInfo>(isHub ? '/hub/version' : null, 5 * 60_000)
+  // Хаб обновился, пока вкладка открыта: /auth/me с прежней hub_version
+  // перечитывается, чтобы бейджи и сравнение версий не жили прошлым.
+  useEffect(() => {
+    if (hubUpdate.data?.current && me.hub_version && hubUpdate.data.current !== me.hub_version) reloadMe()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- только по смене версии
+  }, [hubUpdate.data?.current])
   // Счётчик заданий самого хаба: он и подсказывает, что раздел «Задания»
   // здесь есть. Путь указан явно — область запросов в списке хостов не
   // выбрана, и обычный «/jobs» ушёл бы в API хаба, где их нет.
