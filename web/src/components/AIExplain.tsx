@@ -114,13 +114,17 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
     }
   }
 
+  // Цвета: без ответа — контурная стандартного синего, как остальные
+  // иконки действий в строке; свой ответ — залитая оранжевая; ответ с
+  // другого хоста — залитая синяя (контурная синяя сливалась бы с «нет
+  // ответа»).
   const icon =
     state === 'own' ? (
       <BulbFilled style={{ color: 'var(--status-warning)' }} />
     ) : state === 'similar' ? (
-      <BulbOutlined style={{ color: 'var(--series-1)' }} />
+      <BulbFilled style={{ color: 'var(--series-1)' }} />
     ) : (
-      <BulbOutlined />
+      <BulbOutlined style={{ color: 'var(--series-1)' }} />
     )
   const hint = state === 'own' ? t('ai.hasAnswer') : state === 'similar' ? t('ai.hasSimilar') : t('ai.explainHint')
 

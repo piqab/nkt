@@ -112,6 +112,10 @@ export function RowAction({
         size="small"
         aria-label={label}
         icon={glyph}
+        // Иконки действий — стандартного синего (как ссылки), опасные —
+        // красные: иначе в строке серые «старт/перезапуск/правка» и синие
+        // «проверить порт»/«разбор» выглядели разными сортами кнопок.
+        style={danger || disabled ? undefined : { color: 'var(--series-1)' }}
         danger={danger}
         loading={loading}
         disabled={disabled}
