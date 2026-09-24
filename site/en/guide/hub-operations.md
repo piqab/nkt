@@ -49,7 +49,8 @@ line.
 - The hub version, a check of GitHub releases, **update to the latest** —
   the hub downloads the binary, verifies the checksum and restarts;
   **rollback** to the previous version if something went wrong. The new
-  version's notes are shown before installing — in the UI language.
+  version's notes are shown before installing — in the UI language; while
+  no update is out, the installed version's notes stay in that spot.
 - Hosts whose version differs from the hub's are brought to the hub's
   version when opened; “update all” in the host list — for the ones
   behind.
@@ -75,8 +76,13 @@ vLLM, LM Studio), address, model, key. The key is stored encrypted on
 the hub and never handed out; requests go from the hub — hosts need no
 internet. Off by default.
 
-When on, a bulb button appears in the row of a finding, a vulnerability,
-a malware hit, an alert and next to a job error: what it means, why it
+The **Test** button sends the model a short probe using whatever is in
+the form right now: a wrong address or key shows up immediately.
+
+When on, a bulb button appears in the row of a finding (including
+"What's broken" on the overview), a vulnerability (packages and images),
+a malware hit (both heuristic hits and ClamAV findings), an alert and
+next to a job error: what it means, why it
 matters here, what to do — with commands. Commands are only shown; you
 apply them.
 

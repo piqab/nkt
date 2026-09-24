@@ -34,6 +34,9 @@ export function AISettingsCard() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  // Итог проверки: живой запрос к модели теми настройками, что сейчас в
+  // форме, — иначе неверный ключ обнаружится только при первом разборе.
+  const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null)
 
   const cur = draft ?? status.data
   const local = cur?.provider === 'openai' && /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\]|10\.|192\.168\.|172\.)/.test(cur?.base_url ?? '')
@@ -71,6 +74,36 @@ export function AISettingsCard() {
       void res
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function runTest() {
+    if (!cur) return
+    setBusy(true)
+    setTest(null)
+    try {
+      const res = await api<{ ok: boolean; model: string; took_ms: number; reply: string; message?: string }>('/hub/ai/test', {
+        method: 'POST',
+        body: {
+          enabled: true,
+          provider: cur.provider,
+          base_url: cur.base_url,
+          model: cur.model,
+          anonymize: cur.anonymize,
+          daily_limit: cur.daily_limit,
+          api_key: apiKey === '' ? null : apiKey,
+        },
+      })
+      setTest(
+        res.ok
+          ? { ok: true, text: t('ai.testOK', { ms: res.took_ms, reply: res.reply }) }
+          : { ok: false, text: res.message ?? '' },
+      )
+      status.reload()
+    } catch (err) {
+      setTest({ ok: false, text: err instanceof Error ? err.message : String(err) })
     } finally {
       setBusy(false)
     }
@@ -158,6 +191,9 @@ export function AISettingsCard() {
             <Button type="primary" loading={busy} onClick={() => void save()}>
               {t('ai.save')}
             </Button>
+            <Button loading={busy} onClick={() => void runTest()}>
+              {t('ai.test')}
+            </Button>
             {saved && <span className="small muted">{t('common.savedShort')}</span>}
             <span className="small muted">
               {t('ai.usageToday')}: {cur.usage_today}
@@ -167,6 +203,13 @@ export function AISettingsCard() {
               {t('ai.cacheClear')}
             </Button>
           </div>
+          {/* Итог — своей строкой: ответ модели бывает длинным и не должен
+              растаскивать кнопки и счётчики. */}
+          {test && (
+            <div className="small" style={{ color: test.ok ? 'var(--status-good)' : 'var(--status-critical)', whiteSpace: 'pre-wrap' }}>
+              {test.ok ? '✓' : '✗'} {test.text}
+            </div>
+          )}
         </div>
       )}
     </Card>

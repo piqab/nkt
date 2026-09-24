@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/ai"
 	"github.com/piqab/nkt/internal/msgs"
@@ -228,6 +229,60 @@ func (m *Manager) aiAnswer(answer, prompt string, set ai.Settings, cached bool) 
 		Prompt:   prompt,
 		Notice:   fmt.Sprintf(msgs.T(msgs.DefaultLang, "ai.generated"), ai.Describe(set)),
 	}
+}
+
+// AITestResult — итог проверки настроек.
+type AITestResult struct {
+	OK      bool   `json:"ok"`
+	Model   string `json:"model"`
+	TookMS  int64  `json:"took_ms"`
+	Reply   string `json:"reply"`
+	Message string `json:"message,omitempty"`
+}
+
+// AITest проверяет настройки живым запросом к модели.
+//
+// Проверяются именно переданные настройки, а не сохранённые: смысл
+// кнопки в том, чтобы убедиться до сохранения. Пустой ключ означает
+// «взять сохранённый» — заново набирать его ради проверки не нужно.
+//
+// Суточный лимит здесь не действует: невозможность проверить настройку
+// в конце дня — худшее, чем один лишний запрос.
+func (m *Manager) AITest(ctx context.Context, set ai.Settings, apiKey *string) (AITestResult, error) {
+	if set.BaseURL == "" || set.Model == "" {
+		return AITestResult{}, msgs.Errorf("ai.badURL")
+	}
+	switch set.Provider {
+	case ai.ProviderAnthropic, ai.ProviderOpenAI:
+	default:
+		return AITestResult{}, msgs.Errorf("ai.badProvider", set.Provider)
+	}
+	if apiKey != nil && *apiKey != "" {
+		set.APIKey = *apiKey
+	} else if enc, ok, err := m.db.KVGet(ctx, aiKeyKVKey); err == nil && ok && enc != "" {
+		key, err := secretbox.Decrypt(m.key, []byte(enc))
+		if err != nil {
+			return AITestResult{}, err
+		}
+		set.APIKey = string(key)
+	}
+	if set.APIKey == "" && !isLocalURL(set.BaseURL) {
+		return AITestResult{}, msgs.Errorf("ai.noKey")
+	}
+	// Короткий вопрос без контекста: проверяется доступность и ключ, а не
+	// качество ответа, и платить за длинный разбор здесь незачем.
+	started := time.Now()
+	answer, err := ai.New(set).Ask(ctx, msgs.T(msgs.FromContext(ctx), "ai.testSystem"), msgs.T(msgs.FromContext(ctx), "ai.testUser"))
+	took := time.Since(started).Milliseconds()
+	_ = m.db.AIUsageAdd(ctx)
+	if err != nil {
+		return AITestResult{OK: false, Model: set.Model, TookMS: took, Message: msgs.Localize(msgs.FromContext(ctx), err)}, nil
+	}
+	reply := strings.TrimSpace(answer)
+	if len(reply) > 200 {
+		reply = reply[:200] + "…"
+	}
+	return AITestResult{OK: true, Model: set.Model, TookMS: took, Reply: reply}, nil
 }
 
 // AIStatus — что показать в «О системе».

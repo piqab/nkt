@@ -179,6 +179,7 @@ func versionInfoJSON(v VersionInfo) map[string]any {
 	}
 	if v.Notes != "" {
 		out["notes"] = v.Notes
+		out["notes_are_current"] = v.NotesAreCurrent
 	}
 	return out
 }

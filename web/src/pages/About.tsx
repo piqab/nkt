@@ -286,10 +286,12 @@ export default function About() {
                 нет. Рендерится как обычный текст с переносами, не как
                 markdown: тело релиза правится на стороне GitHub, и
                 интерпретировать его разметку здесь незачем. */}
-            {info?.update_available && info.notes && (
+            {info?.notes && (
               <div style={{ marginTop: '1rem' }}>
                 <div className="small muted">
-                  {t('about.whatsNew', { version: info.latest })}
+                  {info.notes_are_current
+                    ? t('about.whatsNewCurrent', { version: info.current })
+                    : t('about.whatsNew', { version: info.latest })}
                 </div>
                 <pre
                   style={{

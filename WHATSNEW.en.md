@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.82 — 2026-09-24
+
+- **"What's new" no longer disappears after updating.** While no next
+  version is out, "About" keeps showing the installed version's notes —
+  what just arrived is more useful than an empty space. Once a newer
+  version appears, the block switches to its notes by itself.
+- **A "Test" button in the AI settings.** A short probe request using
+  whatever is in the form right now (no need to retype the key — an
+  empty field means "use the stored one"): it shows the model's reply
+  and how long it took. A wrong address or key shows up immediately
+  instead of at the first analysis; the daily limit does not block the
+  test.
+- **The AI bulb where it was missing**: the "Miners and signs of
+  compromise" hits (the button used to be only on ClamAV findings) and
+  the "What's broken" card on the overview.
+
 ## v1.10.81 — 2026-09-24
 
 - Security checks: the cookie-attribute rule (G124) moved into the

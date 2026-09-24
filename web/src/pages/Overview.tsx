@@ -9,6 +9,7 @@ import { useApi } from '../api'
 import type { FirewallPolicy, Me, Outage, Overview, ServiceUnit, SourceStatus } from '../types'
 import { StatTile, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, SeverityBadge, StateBadge, formatDateTime, formatRelative, formatUptime } from '../components/ui'
+import { AIExplain } from '../components/AIExplain'
 import i18n from '../i18n'
 import { DataTable } from '../components/DataTable'
 
@@ -221,9 +222,19 @@ export default function OverviewPage({ me }: { me: Me }) {
             <div className="col">
               {data.top_findings.map((f) => (
                 <div key={f.id} style={{ borderBottom: '1px solid var(--gridline)', paddingBottom: '0.5rem' }}>
-                  <div className="row" style={{ gap: '0.5rem' }}>
+                  <div className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
                     <SeverityBadge severity={f.severity} />
-                    <strong>{blurText(f.title)}</strong>
+                    <strong style={{ flex: 1, minWidth: 0 }}>{blurText(f.title)}</strong>
+                    <AIExplain
+                      ctx={{
+                        kind: 'finding',
+                        title: f.title,
+                        detail: f.detail,
+                        suggestion: f.suggestion,
+                        severity: f.severity,
+                        object: f.object,
+                      }}
+                    />
                   </div>
                   <div className="small secondary">{blurText(f.detail ?? '')}</div>
                   {f.object && <Tag>{blurText(f.object)}</Tag>}
