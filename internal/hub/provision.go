@@ -182,11 +182,11 @@ type tunnelEnvParams struct {
 	Token      string
 }
 
-func renderEnv(adminUser, adminPassword string, terminalEnabled bool, terminalUser string, tun tunnelEnvParams) string {
+func renderEnv(adminUser, adminPassword string, terminalEnabled bool, terminalUser string, tun tunnelEnvParams, apiAddr string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "NKT_MODE=local\n")
 	fmt.Fprintf(&b, "NKT_DATA_DIR=%s\n", remoteDataDir)
-	fmt.Fprintf(&b, "NKT_ADDR=127.0.0.1:8077\n")
+	fmt.Fprintf(&b, "NKT_ADDR=%s\n", apiAddr)
 	fmt.Fprintf(&b, "NKT_BOOTSTRAP_ADMIN_USER=%s\n", adminUser)
 	fmt.Fprintf(&b, "NKT_BOOTSTRAP_ADMIN_PASSWORD=%s\n", adminPassword)
 	fmt.Fprintf(&b, "NKT_COOKIE_SECURE=false\n")

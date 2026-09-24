@@ -922,6 +922,11 @@ span.vm-toggle {
 .script-help-link { margin-right: 0.6rem; }
 .script-help-example { flex: 1; min-width: 0; }
 
+/* Текст, который должен выделяться мышью внутри перетаскиваемой строки
+   таблицы: адрес хоста копируют руками, а drag&drop строки в группу
+   перехватывал выделение. */
+.selectable { user-select: text; -webkit-user-select: text; cursor: text; }
+
 /* Приватный режим: чувствительное размыто и не выделяется (см. privacy.tsx). */
 .privacy .sensitive { filter: blur(5px); user-select: none; -webkit-user-select: none; }
 .privacy .sensitive-block { filter: blur(8px); display: inline-block; }

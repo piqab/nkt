@@ -56,6 +56,7 @@ function vmColumns(
   act: (name: string, action: string) => void,
   toggleAutostart: (name: string, on: boolean) => void,
   del: (name: string, removeStorage: boolean) => void,
+  editXML: (name: string) => void,
 ): TableColumnsType<VirtualMachine> {
   const t = i18n.t.bind(i18n)
   return [
@@ -157,6 +158,17 @@ function vmColumns(
               onClick={() => act(vm.name, 'destroy')}
             />
           )}
+          {/* Конфигурация машины — тот же XML, из которого её и создают:
+              /etc/libvirt/qemu/<имя>.xml через редактор конфигураций, с
+              историей версий и «применить» (virsh define). У транзитной
+              машины файла нет — libvirt хранит её только в памяти. */}
+          {canControl && vm.persistent && (
+            <RowAction
+              action="edit"
+              label={`${t('virt.editXML')}${vm.state === 'running' ? ` — ${t('virt.editXMLRunning')}` : ''}`}
+              onClick={() => editXML(vm.name)}
+            />
+          )}
           {canControl && vm.persistent && (
             <>
               <RowAction
@@ -187,6 +199,8 @@ export default function Virtualization({ me }: { me: Me }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [creating, setCreating] = useState<{ name: string; initialContent?: string } | null>(null)
+  // Правка XML существующей машины — тот же VMEditor, что и создание.
+  const [editing, setEditing] = useState<string | null>(null)
   const [chooserOpen, setChooserOpen] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
@@ -301,7 +315,7 @@ export default function Virtualization({ me }: { me: Me }) {
             <DataTable<VirtualMachine>
               dataSource={allVMs}
               rowKey="name"
-              columns={vmColumns(canControl, busy, act, toggleAutostart, del)}
+              columns={vmColumns(canControl, busy, act, toggleAutostart, del, (name) => setEditing(name))}
             />
           </div>
         )}
@@ -322,6 +336,17 @@ export default function Virtualization({ me }: { me: Me }) {
           рядом с описаниями желаемого состояния, к которым отношения не
           имеют. */}
       <VMImagesSection me={me} />
+
+      {editing && (
+        <VMEditor
+          name={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null)
+            vms.reload()
+          }}
+        />
+      )}
 
       {creating && (
         <VMEditor

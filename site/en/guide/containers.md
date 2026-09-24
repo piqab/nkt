@@ -33,6 +33,10 @@ stop, delete.
 
 - libvirt domains: start, shut down, force off, reboot, autostart, delete
   with or without disks; machine addresses.
+- **Machine configuration (XML)** — the pencil in the row: opens
+  `/etc/libvirt/qemu/<name>.xml` in the config editor, with version
+  history, rollback and `virsh define` on save. For a running machine the
+  changes take effect after it restarts.
 - **New machine** from a cloud image: name, cores, memory, disk, network,
   user and SSH key via cloud-init. Missing tools (`virt-install`,
   `qemu-img`…) install themselves. Machine templates — to create identical

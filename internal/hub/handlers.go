@@ -442,6 +442,10 @@ type addHostRequest struct {
 	// AptViaHub — apt хоста через кэш пакетов хаба (см. aptproxy.go);
 	// применяется при установке, для уже установленного — сразу по SSH.
 	AptViaHub bool `json:"apt_via_hub"`
+	// APIPort — порт собственного API nkt на хосте (loopback); 0 —
+	// общий у хаба (NKT_HUB_HOST_API_PORT). Задаётся, когда 8077 на
+	// хосте занят.
+	APIPort int `json:"api_port,omitempty"`
 }
 
 // hostWithOverview is store.Host plus what pollOverviews last learned about
@@ -607,6 +611,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 		}
 		s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
 		s.setAptViaHub(r.Context(), id, req.AptViaHub)
+		s.setHostAPIPort(r.Context(), id, req.APIPort)
 		s.setHostGroup(r.Context(), id, req.Group)
 		writeJSON(w, http.StatusCreated, map[string]any{"id": id, "authorized_key": authorizedKey})
 		return
@@ -619,6 +624,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 	}
 	s.setTunnelEnabled(r.Context(), id, req.TunnelEnabled)
 	s.setAptViaHub(r.Context(), id, req.AptViaHub)
+	s.setHostAPIPort(r.Context(), id, req.APIPort)
 	s.setHostGroup(r.Context(), id, req.Group)
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
@@ -739,6 +745,25 @@ func (s *Server) handleDeleteHostGroup(w http.ResponseWriter, r *http.Request) {
 // would be misleading.
 // setAptViaHub запоминает флаг; на уже установленном хосте конфиг apt
 // раскладывается по SSH в фоне — форма хоста не должна ждать соединения.
+// setHostAPIPort сохраняет порт API хоста. Возвращает true, если он
+// изменился: порт живёт в nkt.env на самом хосте, и до переустановки
+// хост продолжит слушать прежний — вызывающий перезапускает установку.
+func (s *Server) setHostAPIPort(ctx context.Context, hostID int64, port int) bool {
+	if port < 0 || port > 65535 {
+		return false
+	}
+	h, err := s.db.HostByID(ctx, hostID)
+	if err != nil || h.APIPort == port {
+		return false
+	}
+	if err := s.db.SetHostAPIPort(ctx, hostID, port); err != nil {
+		s.log.Warn("could not save api port", "host_id", hostID, "err", err)
+		return false
+	}
+	s.hub.DropSSHPool(hostID)
+	return true
+}
+
 // setHostVia сохраняет способ связи с машиной и сбрасывает память пробы.
 func (s *Server) setHostVia(ctx context.Context, hostID int64, via *string) {
 	if via == nil {
@@ -797,6 +822,9 @@ type updateHostRequest struct {
 	Group string `json:"group"`
 	// Via — способ связи с машиной: '' авто, direct, jump (см. store.Host.Via).
 	Via *string `json:"via,omitempty"`
+	// APIPort — порт API nkt на хосте; 0 — общий у хаба. Смена требует
+	// переустановки: порт прописан в nkt.env хоста.
+	APIPort int `json:"api_port,omitempty"`
 }
 
 func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
@@ -824,7 +852,8 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 		s.setAptViaHub(r.Context(), id, req.AptViaHub)
 		s.setHostGroup(r.Context(), id, req.Group)
 		s.setHostVia(r.Context(), id, req.Via)
-		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "authorized_key": authorizedKey})
+		apiPortChanged := s.setHostAPIPort(r.Context(), id, req.APIPort)
+		writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "authorized_key": authorizedKey, "api_port_changed": apiPortChanged})
 		return
 	}
 
@@ -836,7 +865,10 @@ func (s *Server) handleUpdateHost(w http.ResponseWriter, r *http.Request) {
 	s.setAptViaHub(r.Context(), id, req.AptViaHub)
 	s.setHostGroup(r.Context(), id, req.Group)
 	s.setHostVia(r.Context(), id, req.Via)
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	// Порт живёт в nkt.env хоста: пока не переустановим, хост слушает
+	// прежний — фронт по этому признаку запускает установку сам.
+	apiPortChanged := s.setHostAPIPort(r.Context(), id, req.APIPort)
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "api_port_changed": apiPortChanged})
 }
 
 func (s *Server) handleHostPubKey(w http.ResponseWriter, r *http.Request) {

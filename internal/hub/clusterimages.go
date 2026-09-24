@@ -195,14 +195,15 @@ func (m *Manager) HostAPIStream(ctx context.Context, hostID int64, method, path 
 		onFail()
 		return 0, nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, method, "http://"+remoteAPIAddr+path, body)
+	addr := m.hostAPIAddr(ctx, hostID)
+	req, err := http.NewRequestWithContext(ctx, method, "http://"+addr+path, body)
 	if err != nil {
 		return 0, nil, err
 	}
 	req.ContentLength = contentLength
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
-	resp, err := tunnelHTTPClientNoTimeout(dial).Do(req)
+	resp, err := tunnelHTTPClientNoTimeout(dial, addr).Do(req)
 	if err != nil {
 		onFail()
 		return 0, nil, err

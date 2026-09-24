@@ -150,14 +150,15 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		return
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+remoteAPIAddr+"/api/overview", nil)
+	addr := m.hostAPIAddr(ctx, hostID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/api/overview", nil)
 	if err != nil {
 		m.recordUnreachable(ctx, hostID, err)
 		return
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
 
-	resp, err := tunnelHTTPClient(dial).Do(req)
+	resp, err := tunnelHTTPClient(dial, addr).Do(req)
 	if err != nil {
 		onFail()
 		m.recordUnreachable(ctx, hostID, err)
@@ -241,12 +242,13 @@ func (m *Manager) pollVMStates(ctx context.Context, hostID int64, dial dialFunc,
 	if !m.hasMachines(ctx, hostID) {
 		return nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+remoteAPIAddr+"/api/vms", nil)
+	addr := m.hostAPIAddr(ctx, hostID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/api/vms", nil)
 	if err != nil {
 		return nil
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
-	resp, err := tunnelHTTPClient(dial).Do(req)
+	resp, err := tunnelHTTPClient(dial, addr).Do(req)
 	if err != nil {
 		return nil
 	}

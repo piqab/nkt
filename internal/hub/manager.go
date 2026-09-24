@@ -257,6 +257,10 @@ type Manager struct {
 
 	connsMu sync.Mutex
 	conns   map[int64]*hostConn
+	// apiPorts — порт API nkt по хостам (см. hostAPIAddr): читается из
+	// записи хоста один раз, сбрасывается вместе с пулом соединений,
+	// когда хост правят.
+	apiPorts map[int64]int
 
 	sessionMu sync.Mutex
 	sessions  map[int64]sessionCache
@@ -334,6 +338,7 @@ func NewManager(cfg *config.Config, db *store.DB, key []byte, version string, lo
 		cfg: cfg, db: db, key: key, version: version, log: log,
 		jobByHost:     map[int64]*installJob{},
 		conns:         map[int64]*hostConn{},
+		apiPorts:      map[int64]int{},
 		sessions:      map[int64]sessionCache{},
 		overview:      map[int64]hostOverview{},
 		relaySessions: map[int64]*yamux.Session{},
@@ -997,7 +1002,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		return fail(err)
 	}
 
-	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, tun)
+	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, tun, m.hostAPIAddrFor(host))
 	src := binarySource{LocalPath: binPath, Release: m.releaseDelivery(ctx, goos, goarch, binPath),
 		OnVia: func(via string) { _ = m.db.SetHostBinaryVia(ctx, hostID, via) }}
 	if err := stageFiles(client, host.SSHUser, src, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report, job.replaceLast); err != nil {
@@ -1041,17 +1046,18 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// хватало — задание падало, хотя служба поднималась и работала.
 	healthCtx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
-	if err := waitForHealth(healthCtx, client.Dial); err != nil {
+	apiAddr := m.hostAPIAddrFor(host)
+	if err := waitForHealth(healthCtx, client.Dial, apiAddr); err != nil {
 		return fail(err)
 	}
 
 	report("hub.checkingAdminAccount")
-	if _, err := bootstrapLogin(ctx, client.Dial, adminUser, adminPassword); err != nil {
+	if _, err := bootstrapLogin(ctx, client.Dial, apiAddr, adminUser, adminPassword); err != nil {
 		report("hub.loginFailedResetting")
 		if resetErr := resetRemoteAdminPassword(client, host.SSHUser, adminUser, adminPassword, remoteDataDir, remoteBinPath); resetErr != nil {
 			return fail(msgs.Errorf("hub.adminLoginFailedResettingPassword", err, resetErr))
 		}
-		if _, err := bootstrapLogin(ctx, client.Dial, adminUser, adminPassword); err != nil {
+		if _, err := bootstrapLogin(ctx, client.Dial, apiAddr, adminUser, adminPassword); err != nil {
 			return fail(msgs.Errorf("hub.adminLoginStillFailsAfter", err))
 		}
 		report("hub.adminPasswordSynced")

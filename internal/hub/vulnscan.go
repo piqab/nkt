@@ -167,10 +167,11 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 		fail(err)
 		return
 	}
-	client := tunnelHTTPClientNoTimeout(dial)
+	addr := m.hostAPIAddr(ctx, hostID)
+	client := tunnelHTTPClientNoTimeout(dial, addr)
 
 	report(msgs.Tc(ctx, "hub.vulnFetchingPackages"))
-	manifest, err := fetchHostManifest(ctx, client, cookie)
+	manifest, err := fetchHostManifest(ctx, client, addr, cookie)
 	if err != nil {
 		onFail()
 		fail(err)
@@ -178,7 +179,7 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 	}
 
 	report(msgs.Tc(ctx, "hub.vulnAskingImages"))
-	imgFindings, imgWarnings, imgDBUpdated, err := fetchHostImageScan(ctx, client, cookie)
+	imgFindings, imgWarnings, imgDBUpdated, err := fetchHostImageScan(ctx, client, addr, cookie)
 	if err != nil {
 		// A host that cannot scan its own images (trivy self-install
 		// failed there, say) must not throw away the OS-package half the
@@ -319,8 +320,8 @@ func (m *Manager) dropVulnScan(hostID int64) {
 // new, cheap GET handleVulnManifest (internal/api/handlers_vulnerabilities.go)
 // exists specifically so a hub never has to run trivy on the host's own
 // filesystem to get this.
-func fetchHostManifest(ctx context.Context, client *http.Client, cookie string) (model.PackageManifest, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+remoteAPIAddr+"/api/vulnerabilities/manifest", nil)
+func fetchHostManifest(ctx context.Context, client *http.Client, addr, cookie string) (model.PackageManifest, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/api/vulnerabilities/manifest", nil)
 	if err != nil {
 		return model.PackageManifest{}, err
 	}
@@ -348,8 +349,8 @@ func fetchHostManifest(ctx context.Context, client *http.Client, cookie string) 
 // doc comment). Posts to the new handleVulnScanImages
 // (internal/api/handlers_vulnerabilities.go), which self-installs trivy+DB
 // on the host only if it actually has images to scan.
-func fetchHostImageScan(ctx context.Context, client *http.Client, cookie string) ([]model.VulnFinding, []string, time.Time, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+remoteAPIAddr+"/api/vulnerabilities/scan-images", nil)
+func fetchHostImageScan(ctx context.Context, client *http.Client, addr, cookie string) ([]model.VulnFinding, []string, time.Time, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+addr+"/api/vulnerabilities/scan-images", nil)
 	if err != nil {
 		return nil, nil, time.Time{}, err
 	}
@@ -378,11 +379,11 @@ func fetchHostImageScan(ctx context.Context, client *http.Client, cookie string)
 // (self-installing trivy + downloading its own ~1GB DB, see
 // handleVulnScanImages) can legitimately take longer than that, and this
 // call's own deadline already comes from vulnScanTimeout via ctx instead.
-func tunnelHTTPClientNoTimeout(dial dialFunc) *http.Client {
+func tunnelHTTPClientNoTimeout(dial dialFunc, addr string) *http.Client {
 	return &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-				return dial("tcp", remoteAPIAddr)
+				return dial("tcp", addr)
 			},
 		},
 	}

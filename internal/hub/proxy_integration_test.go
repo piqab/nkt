@@ -349,7 +349,7 @@ func TestFetchHostManifestOverRealTunnel(t *testing.T) {
 		t.Fatalf("cookieFor: %v", err)
 	}
 
-	manifest, err := fetchHostManifest(ctx, tunnelHTTPClientNoTimeout(dial), cookie)
+	manifest, err := fetchHostManifest(ctx, tunnelHTTPClientNoTimeout(dial, testHostAPIAddr), testHostAPIAddr, cookie)
 	if err != nil {
 		t.Fatalf("fetchHostManifest: %v", err)
 	}
@@ -390,7 +390,7 @@ func TestResetRemoteAdminPasswordSyncsRealNkt(t *testing.T) {
 	remoteCmd.Dir = repoRoot
 	remoteCmd.Env = append(os.Environ(),
 		"NKT_MODE=fixtures",
-		"NKT_ADDR="+remoteAPIAddr, // must match what bootstrapLogin/dialSSH's tunnel dials
+		"NKT_ADDR="+testHostAPIAddr, // must match what bootstrapLogin/dialSSH's tunnel dials
 		"NKT_DATA_DIR="+remoteDataDir,
 		"NKT_BOOTSTRAP_ADMIN_USER=admin",
 		"NKT_BOOTSTRAP_ADMIN_PASSWORD="+oldPassword,
@@ -404,7 +404,7 @@ func TestResetRemoteAdminPasswordSyncsRealNkt(t *testing.T) {
 		_ = remoteCmd.Process.Kill()
 		_, _ = remoteCmd.Process.Wait()
 	})
-	waitForLocalHTTP(t, "http://"+remoteAPIAddr+"/api/health")
+	waitForLocalHTTP(t, "http://"+testHostAPIAddr+"/api/health")
 
 	me, err := osuser.Current()
 	if err != nil {
@@ -418,10 +418,10 @@ func TestResetRemoteAdminPasswordSyncsRealNkt(t *testing.T) {
 	}
 	defer client.Close()
 
-	if _, err := bootstrapLogin(ctx, client.Dial, "admin", oldPassword); err != nil {
+	if _, err := bootstrapLogin(ctx, client.Dial, testHostAPIAddr, "admin", oldPassword); err != nil {
 		t.Fatalf("login with the password the remote was actually bootstrapped with should succeed: %v", err)
 	}
-	if _, err := bootstrapLogin(ctx, client.Dial, "admin", newPassword); err == nil {
+	if _, err := bootstrapLogin(ctx, client.Dial, testHostAPIAddr, "admin", newPassword); err == nil {
 		t.Fatal("login with a password the remote was never given should fail")
 	}
 
@@ -429,10 +429,10 @@ func TestResetRemoteAdminPasswordSyncsRealNkt(t *testing.T) {
 		t.Fatalf("resetRemoteAdminPassword: %v", err)
 	}
 
-	if _, err := bootstrapLogin(ctx, client.Dial, "admin", newPassword); err != nil {
+	if _, err := bootstrapLogin(ctx, client.Dial, testHostAPIAddr, "admin", newPassword); err != nil {
 		t.Fatalf("login with the new password should succeed after resetRemoteAdminPassword: %v", err)
 	}
-	if _, err := bootstrapLogin(ctx, client.Dial, "admin", oldPassword); err == nil {
+	if _, err := bootstrapLogin(ctx, client.Dial, testHostAPIAddr, "admin", oldPassword); err == nil {
 		t.Fatal("the old password should no longer work after the reset")
 	}
 }

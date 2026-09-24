@@ -150,7 +150,8 @@ func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial d
 		return msgs.Errorf("hub.loggingHostOverFallbackChannel", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+remoteAPIAddr+"/api/self-update", &body)
+	addr := m.hostAPIAddr(ctx, hostID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+addr+"/api/self-update", &body)
 	if err != nil {
 		return err
 	}
@@ -161,7 +162,7 @@ func (m *Manager) selfUpdateOverTunnel(ctx context.Context, hostID int64, dial d
 	client := &http.Client{
 		Transport: &http.Transport{
 			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-				return dial("tcp", remoteAPIAddr)
+				return dial("tcp", addr)
 			},
 		},
 	}
@@ -222,7 +223,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 	if err != nil {
 		return fail(err)
 	}
-	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, tun)
+	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, tun, m.hostAPIAddrFor(host))
 
 	// A single attempt sometimes hits a transient stall on the relay itself
 	// (read i/o timeout while parsing the multipart body) — plausible on
@@ -254,7 +255,8 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 	report("hub.waitingHealth")
 	healthCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := waitForHealth(healthCtx, dial); err != nil {
+	apiAddr := m.hostAPIAddr(ctx, hostID)
+	if err := waitForHealth(healthCtx, dial, apiAddr); err != nil {
 		return fail(err)
 	}
 
@@ -282,7 +284,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 			case <-time.After(time.Second):
 			}
 		}
-		if _, err := bootstrapLogin(ctx, dial, adminUser, adminPassword); err != nil {
+		if _, err := bootstrapLogin(ctx, dial, apiAddr, adminUser, adminPassword); err != nil {
 			loginErr = err
 			continue
 		}

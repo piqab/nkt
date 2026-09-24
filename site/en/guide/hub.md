@@ -85,6 +85,10 @@ host shows up in the list with its version, findings and availability —
 
 Useful switches in the host form:
 
+- **API port** — where the host's own nkt listens (localhost only); empty
+  means the hub's shared one (`NKT_HUB_HOST_API_PORT`, 8077 by default).
+  Set your own when 8077 is taken on the host; changing it restarts the
+  install;
 - **web terminal** — a root shell in the browser, off by default;
 - **fallback channel** — a reverse TLS tunnel for when SSH gets firewalled:
   the panel, the terminal and updates keep working through it.

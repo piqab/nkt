@@ -248,6 +248,7 @@ CREATE TABLE IF NOT EXISTS hosts (
     binary_via         TEXT NOT NULL DEFAULT '',   -- откуда хост берёт бинарник nkt: github | sftp (по итогам пробы)
     via                TEXT NOT NULL DEFAULT '',   -- как хаб подключается к машине: '' авто | direct | jump (через хост)
     ssh_host_key       TEXT NOT NULL DEFAULT '',   -- публичный ключ SSH хоста (base64), запомнен при первом подключении
+    api_port           INTEGER NOT NULL DEFAULT 0, -- порт API nkt на хосте; 0 — как у хаба (NKT_HUB_HOST_API_PORT)
     tunnel_enabled     INTEGER NOT NULL DEFAULT 0, -- reverse-tunnel fallback for when SSH is unreachable, see internal/tunnel
     tunnel_token_hash  BLOB,                       -- legacy/unused: SHA-256 of the token, from when the host verified it;
                                                     -- kept only per this file's own "never remove a past column" policy
@@ -359,6 +360,7 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"hosts", "binary_via", `ALTER TABLE hosts ADD COLUMN binary_via TEXT NOT NULL DEFAULT ''`},
 	{"hosts", "via", `ALTER TABLE hosts ADD COLUMN via TEXT NOT NULL DEFAULT ''`},
 	{"hosts", "ssh_host_key", `ALTER TABLE hosts ADD COLUMN ssh_host_key TEXT NOT NULL DEFAULT ''`},
+	{"hosts", "api_port", `ALTER TABLE hosts ADD COLUMN api_port INTEGER NOT NULL DEFAULT 0`},
 	{"clusters", "wg_enc", `ALTER TABLE clusters ADD COLUMN wg_enc BLOB`},
 	{"hosts", "tunnel_token_hash", `ALTER TABLE hosts ADD COLUMN tunnel_token_hash BLOB`},
 	{"hosts", "tunnel_token_enc", `ALTER TABLE hosts ADD COLUMN tunnel_token_enc BLOB`},

@@ -5,19 +5,53 @@ import (
 	"context"
 	"encoding/json"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 	"io"
 	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/piqab/nkt/internal/auth"
 )
 
-// remoteAPIAddr is where a host's own nkt listens, per NKT_ADDR in
-// renderEnv — loopback only, reachable exclusively through a tunnel dialed
-// below (SSH port-forwarding, or the reverse-tunnel fallback channel in
-// internal/tunnel — see dialFunc), never directly over the network.
-const remoteAPIAddr = "127.0.0.1:8077"
+// defaultHostAPIPort — порт собственного API nkt на хосте по умолчанию
+// (NKT_HUB_HOST_API_PORT у хаба, api_port в записи хоста — если на нём
+// 8077 занят). Loopback: снаружи он недоступен, хаб ходит туда только
+// через туннель (проброс по SSH или резервный канал, см. dialFunc).
+const defaultHostAPIPort = 8077
+
+// hostAPIAddr — адрес API конкретного хоста для туннеля.
+func (m *Manager) hostAPIAddr(ctx context.Context, hostID int64) string {
+	m.connsMu.Lock()
+	port, ok := m.apiPorts[hostID]
+	m.connsMu.Unlock()
+	if !ok {
+		port = m.cfg.HubHostAPIPort
+		if host, err := m.db.HostByID(ctx, hostID); err == nil && host.APIPort > 0 {
+			port = host.APIPort
+		}
+		if port <= 0 {
+			port = defaultHostAPIPort
+		}
+		m.connsMu.Lock()
+		m.apiPorts[hostID] = port
+		m.connsMu.Unlock()
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+}
+
+// hostAPIAddrFor — то же по уже прочитанной записи, без обращения к базе.
+func (m *Manager) hostAPIAddrFor(host store.Host) string {
+	port := host.APIPort
+	if port <= 0 {
+		port = m.cfg.HubHostAPIPort
+	}
+	if port <= 0 {
+		port = defaultHostAPIPort
+	}
+	return net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+}
 
 // dialFunc opens a connection to a host's own nkt API — satisfied
 // identically by *ssh.Client.Dial (the primary path: SSH port-forwarding)
@@ -32,12 +66,12 @@ type dialFunc func(network, addr string) (net.Conn, error)
 // through dial to a host's own nkt API — no separate port-forward listener
 // to manage either way. Reused by the install job's health check and
 // login, and by Server's per-host reverse proxy (see server.go).
-func tunnelHTTPClient(dial dialFunc) *http.Client {
+func tunnelHTTPClient(dial dialFunc, addr string) *http.Client {
 	return &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(_ context.Context, _, _ string) (net.Conn, error) {
-				return dial("tcp", remoteAPIAddr)
+				return dial("tcp", addr)
 			},
 		},
 	}
@@ -46,8 +80,8 @@ func tunnelHTTPClient(dial dialFunc) *http.Client {
 // waitForHealth polls the remote nkt's /health endpoint through the tunnel
 // until it answers or ctx is done — systemctl reporting the unit started
 // does not guarantee the HTTP listener is bound yet.
-func waitForHealth(ctx context.Context, dial dialFunc) error {
-	httpClient := tunnelHTTPClient(dial)
+func waitForHealth(ctx context.Context, dial dialFunc, addr string) error {
+	httpClient := tunnelHTTPClient(dial, addr)
 	var lastErr error
 	for {
 		select {
@@ -59,7 +93,7 @@ func waitForHealth(ctx context.Context, dial dialFunc) error {
 		default:
 		}
 
-		if err := probeHealth(ctx, httpClient); err != nil {
+		if err := probeHealth(ctx, httpClient, addr); err != nil {
 			lastErr = err
 			time.Sleep(500 * time.Millisecond)
 			continue
@@ -68,8 +102,8 @@ func waitForHealth(ctx context.Context, dial dialFunc) error {
 	}
 }
 
-func probeHealth(ctx context.Context, httpClient *http.Client) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+remoteAPIAddr+"/health", nil)
+func probeHealth(ctx context.Context, httpClient *http.Client, addr string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/health", nil)
 	if err != nil {
 		return err
 	}
@@ -88,19 +122,19 @@ func probeHealth(ctx context.Context, httpClient *http.Client) error {
 // admin and returns the session cookie value, so the hub can later replay it
 // when proxying requests — the human operator authenticates to the hub only
 // once, never to each managed host individually.
-func bootstrapLogin(ctx context.Context, dial dialFunc, username, password string) (string, error) {
+func bootstrapLogin(ctx context.Context, dial dialFunc, addr, username, password string) (string, error) {
 	body, err := json.Marshal(map[string]string{"username": username, "password": password})
 	if err != nil {
 		return "", err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		"http://"+remoteAPIAddr+"/api/auth/login", bytes.NewReader(body))
+		"http://"+addr+"/api/auth/login", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := tunnelHTTPClient(dial).Do(req)
+	resp, err := tunnelHTTPClient(dial, addr).Do(req)
 	if err != nil {
 		return "", msgs.Errorf("hub.loginRequest", err)
 	}

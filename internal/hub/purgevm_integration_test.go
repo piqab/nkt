@@ -133,7 +133,7 @@ func startFixturesHost(t *testing.T) (*Manager, *store.DB, []byte, int64) {
 	remoteCmd.Dir = repoRoot
 	remoteCmd.Env = append(os.Environ(),
 		"NKT_MODE=fixtures",
-		"NKT_ADDR="+remoteAPIAddr,
+		"NKT_ADDR="+testHostAPIAddr,
 		"NKT_DATA_DIR="+t.TempDir(),
 		"NKT_BOOTSTRAP_ADMIN_USER=admin",
 		"NKT_BOOTSTRAP_ADMIN_PASSWORD="+adminPassword,
@@ -147,7 +147,7 @@ func startFixturesHost(t *testing.T) (*Manager, *store.DB, []byte, int64) {
 		_ = remoteCmd.Process.Kill()
 		_, _ = remoteCmd.Process.Wait()
 	})
-	waitForLocalHTTP(t, "http://"+remoteAPIAddr+"/api/health")
+	waitForLocalHTTP(t, "http://"+testHostAPIAddr+"/api/health")
 
 	db, err := store.Open(filepath.Join(t.TempDir(), "hub.db"))
 	if err != nil {

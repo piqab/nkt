@@ -158,7 +158,7 @@ func TestHubTerminalWebSocketThroughFullRouter(t *testing.T) {
 	header := http.Header{}
 	header.Set("Cookie", cookieHeader)
 	// A real browser always sends Origin on a WebSocket handshake — set here
-	// deliberately (real hub address, not the remote's own remoteAPIAddr)
+	// deliberately (real hub address, not the remote's own testHostAPIAddr)
 	// so this test actually exercises coder/websocket's default same-origin
 	// check on the remote's Accept() call, the same way a real browser
 	// would. Manager.Proxy's Director must NOT rewrite req.Host to the

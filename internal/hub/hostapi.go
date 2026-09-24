@@ -45,7 +45,8 @@ func (m *Manager) HostAPI(ctx context.Context, hostID int64, method, path string
 		}
 		body = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, "http://"+remoteAPIAddr+path, body)
+	addr := m.hostAPIAddr(ctx, hostID)
+	req, err := http.NewRequestWithContext(ctx, method, "http://"+addr+path, body)
 	if err != nil {
 		return 0, err
 	}
@@ -54,7 +55,7 @@ func (m *Manager) HostAPI(ctx context.Context, hostID int64, method, path string
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := tunnelHTTPClient(dial).Do(req)
+	resp, err := tunnelHTTPClient(dial, addr).Do(req)
 	if err != nil {
 		onFail()
 		return 0, err
