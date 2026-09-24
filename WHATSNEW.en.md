@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.90 — 2026-09-24
+
+- **The hub key comes with ready-made commands.** The public-key window
+  (when adding a host, via the "key" button in the row) shows, next to
+  the key, a command to run on the host itself (creates `~/.ssh`, appends
+  the key to `authorized_keys`, sets permissions) and a command from your
+  machine over `ssh` with the host's address, port and user; each has a
+  "copy" button.
+- **"The nkt API is not up" — with a diagnosis.** When SSH answers but the
+  host API does not, the hub collects over SSH the unit state, who
+  listens on the port and the last journal lines of the service, and adds
+  them to the error and to the "unreachable" label: it shows whether nkt
+  restarts in a loop, the port is taken or the listener is just not up
+  yet.
+
 ## v1.10.89 — 2026-09-24
 
 - **An nkt restart on a host no longer fails requests.** After "upgrade

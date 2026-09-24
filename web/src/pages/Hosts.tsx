@@ -1604,6 +1604,12 @@ export default function Hosts({
         <PublicKeyModal
           hostName={pubKeyInfo.hostName}
           authorizedKey={pubKeyInfo.key}
+          // Адрес и пользователь — из записи хоста по имени: окно
+          // открывается и из формы добавления, где записи в списке ещё
+          // могло не быть, и из строки таблицы.
+          addr={(hosts ?? []).find((h) => h.name === pubKeyInfo.hostName)?.addr}
+          sshPort={(hosts ?? []).find((h) => h.name === pubKeyInfo.hostName)?.ssh_port}
+          sshUser={(hosts ?? []).find((h) => h.name === pubKeyInfo.hostName)?.ssh_user}
           onClose={() => setPubKeyInfo(null)}
         />
       )}
@@ -1635,37 +1641,69 @@ export default function Hosts({
 function PublicKeyModal({
   hostName,
   authorizedKey,
+  addr,
+  sshPort,
+  sshUser,
   onClose,
 }: {
   hostName: string
   authorizedKey: string
+  /** Адрес, порт и пользователь SSH из записи хоста — для готовой
+   * команды «с вашей машины»; без них показывается только команда для
+   * выполнения на самом хосте. */
+  addr?: string
+  sshPort?: number
+  sshUser?: string
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState<string | null>(null)
 
-  async function copy() {
+  async function copy(what: string, text: string) {
     try {
-      await navigator.clipboard.writeText(authorizedKey)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(text)
+      setCopied(what)
+      window.setTimeout(() => setCopied(null), 2000)
     } catch {
       // Clipboard API can be unavailable (e.g. no HTTPS) — the text below
       // is still selectable and copyable by hand either way.
     }
   }
 
+  // Ключ — в одинарных кавычках: в нём нет своих кавычек (base64 и
+  // комментарий), а shell его так не трогает. Права выставляются те, без
+  // которых sshd файл проигнорирует.
+  const appendCmd = `mkdir -p ~/.ssh && chmod 700 ~/.ssh && printf '%s\\n' '${authorizedKey}' >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys`
+  const remoteCmd = addr && sshUser ? `ssh -p ${sshPort || 22} ${sshUser}@${addr} "${appendCmd}"` : null
+
+  const block = (what: string, text: string) => (
+    <div style={{ marginBottom: '0.6rem' }}>
+      <pre className="diff mono sensitive-area" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: '0.25rem 0' }}>
+        {text}
+      </pre>
+      <Button size="small" onClick={() => void copy(what, text)}>
+        {copied === what ? t('hosts.copied') : t('hosts.copy')}
+      </Button>
+    </div>
+  )
+
   return (
-    <Modal title={t('hosts.publicKeyTitle', { name: hostName })} onClose={onClose}>
+    <Modal title={t('hosts.publicKeyTitle', { name: hostName })} onClose={onClose} width={760}>
       <p className="small muted">
         <Trans i18nKey="hosts.publicKeyBody" components={{ code: <code className="mono" /> }} />
       </p>
-      <pre className="diff mono sensitive-area" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-        {authorizedKey}
-      </pre>
-      <div>
-        <Button onClick={copy}>{copied ? t('hosts.copied') : t('hosts.copy')}</Button>
+      {block('key', authorizedKey)}
+      <div className="small" style={{ marginTop: '0.4rem' }}>
+        {t('hosts.keyCmdLocal', { user: sshUser || 'root' })}
       </div>
+      {block('local', appendCmd)}
+      {remoteCmd && (
+        <>
+          <div className="small">{t('hosts.keyCmdRemote', { user: sshUser })}</div>
+          {block('remote', remoteCmd)}
+        </>
+      )}
+      <div className="small muted">{t('hosts.keyCmdAfter')}</div>
     </Modal>
   )
 }

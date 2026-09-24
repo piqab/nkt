@@ -2,9 +2,11 @@ package hub
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strconv"
 	"strings"
 	"time"
 
@@ -209,7 +211,77 @@ func (m *Manager) cookieForWithWait(ctx context.Context, hostID int64, dial dial
 			return cookie, err
 		}
 	}
-	return "", msgs.Errorf("hub.hostAPIDown", err)
+	return "", m.apiDownError(ctx, hostID, err)
+}
+
+// apiDownError — «SSH отвечает, API nkt нет» с диагностикой, снятой по
+// SSH: состояние юнита, кто слушает порт API, хвост журнала службы.
+// «Служба active» у systemd появляется сразу после запуска процесса,
+// до открытия порта, поэтому одного is-active мало — нужен и слушатель,
+// и журнал (старт по кругу, занятый порт, ошибка конфигурации).
+func (m *Manager) apiDownError(ctx context.Context, hostID int64, cause error) error {
+	diag := m.apiDownDiagnosis(ctx, hostID)
+	if diag == "" {
+		return msgs.Errorf("hub.hostAPIDown", cause)
+	}
+	return msgs.Errorf("hub.hostAPIDownDiag", cause, diag)
+}
+
+// apiDownDiagCmd — одной сессией, с нулевым кодом выхода: нужен вывод,
+// а не статус. Без root журнал может быть недоступен — тогда его просто
+// не будет.
+const apiDownDiagCmd = `systemctl is-active netknownsthat.service 2>&1; echo '--'; ss -ltnH 'sport = :%d' 2>/dev/null; echo '--'; journalctl -u netknownsthat.service -n 5 --no-pager -o cat 2>/dev/null | tail -n 5; true`
+
+func (m *Manager) apiDownDiagnosis(ctx context.Context, hostID int64) string {
+	client, err := m.clientFor(ctx, hostID)
+	if err != nil {
+		return ""
+	}
+	_, portStr, _ := net.SplitHostPort(m.hostAPIAddr(ctx, hostID))
+	port, _ := strconv.Atoi(portStr)
+	out, err := runRemote(client, fmt.Sprintf(apiDownDiagCmd, port))
+	if err != nil && strings.TrimSpace(out) == "" {
+		return ""
+	}
+	return formatAPIDiag(out, port)
+}
+
+// formatAPIDiag сворачивает вывод apiDownDiagCmd в одну строку.
+func formatAPIDiag(out string, port int) string {
+	parts := strings.SplitN(strings.ReplaceAll(out, "\r\n", "\n"), "\n--\n", 3)
+	for len(parts) < 3 {
+		parts = append(parts, "")
+	}
+	state := strings.TrimSpace(parts[0])
+	if state == "" {
+		state = "?"
+	}
+	listen := strings.TrimSpace(parts[1])
+	if listen == "" {
+		listen = msgs.T(msgs.DefaultLang, "hub.apiDiagNobody")
+	} else {
+		// Из строк ss нужен только адрес: «LISTEN 0 4096 127.0.0.1:8077 0.0.0.0:*».
+		var addrs []string
+		for _, line := range strings.Split(listen, "\n") {
+			f := strings.Fields(line)
+			if len(f) >= 4 {
+				addrs = append(addrs, f[3])
+			}
+		}
+		if len(addrs) > 0 {
+			listen = strings.Join(addrs, ", ")
+		}
+	}
+	journal := strings.TrimSpace(parts[2])
+	if journal == "" {
+		journal = "—"
+	} else {
+		journal = strings.ReplaceAll(journal, "\n", " | ")
+		if len(journal) > 400 {
+			journal = journal[:400] + "…"
+		}
+	}
+	return fmt.Sprintf(msgs.T(msgs.DefaultLang, "hub.apiDiag"), state, port, listen, journal)
 }
 
 // dropSession forgets a cached cookie — called alongside dropClient so a

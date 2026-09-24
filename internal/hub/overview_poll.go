@@ -151,7 +151,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		// «обновить» с хаба, и в строке хоста должно быть написано именно
 		// это, а не голый «connection refused».
 		if isAPIDown(err) {
-			err = msgs.Errorf("hub.hostAPIDown", err)
+			err = m.apiDownError(ctx, hostID, err)
 		}
 		m.recordUnreachable(ctx, hostID, err)
 		return

@@ -705,7 +705,10 @@
     "hostKeyHint": "The hub records the key on the first connection and requires the same one afterwards — a swap on the path gives the \"SSH host key changed\" error.",
     "apiPort": "API port",
     "apiPortHint": "The port of the host's own nkt API (localhost only, never exposed). Empty — the hub's shared one (NKT_HUB_HOST_API_PORT, 8077 by default). Set your own when 8077 is taken on the host; changing it restarts the install to rewrite nkt.env.",
-    "apiPortDefault": "hub default"
+    "apiPortDefault": "hub default",
+    "keyCmdLocal": "Add the key with one command on the host itself (logged in as {{user}}):",
+    "keyCmdRemote": "Or from your machine — ssh will ask for the password of {{user}}:",
+    "keyCmdAfter": "Then press \"install\" in the host row."
   },
   "events": {
     "title": "Alerts",
