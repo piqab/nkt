@@ -221,6 +221,7 @@ func (s *Server) Handler() http.Handler {
 					r.Use(s.auth.RequireAdmin)
 
 					r.Post("/hub/version/check", s.handleHubVersionCheck)
+					r.Post("/hub/version/settings", s.handleHubVersionSettings)
 					r.Post("/hub/update", s.handleHubUpdate)
 					r.Post("/hub/rollback", s.handleHubRollback)
 					r.Post("/hub/vulndb/refresh", s.handleHubVulnDBRefresh)

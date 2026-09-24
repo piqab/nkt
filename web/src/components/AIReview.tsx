@@ -3,7 +3,8 @@ import { Button } from 'antd'
 import { BulbOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import { Banner, Card, Loading, formatDateTime } from './ui'
+import { AI_REQUEST_TIMEOUT_MS, Thinking, useElapsed } from './AIExplain'
+import { Banner, Card, formatDateTime } from './ui'
 import { blurText } from '../privacy'
 import type { Graph } from '../types'
 
@@ -65,6 +66,7 @@ export function AIReviewCard({ graph, hostID, scope }: { graph?: Graph; hostID?:
   const [answer, setAnswer] = useState<AIAnswer | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const elapsed = useElapsed(busy)
 
   async function run() {
     setBusy(true)
@@ -72,6 +74,7 @@ export function AIReviewCard({ graph, hostID, scope }: { graph?: Graph; hostID?:
     try {
       const res = await api<AIAnswer>('/hub/ai/review', {
         method: 'POST',
+        timeoutMs: AI_REQUEST_TIMEOUT_MS,
         body: {
           scope,
           host_id: hostID ?? 0,
@@ -102,7 +105,7 @@ export function AIReviewCard({ graph, hostID, scope }: { graph?: Graph; hostID?:
     >
       {error && <Banner kind="error">{error}</Banner>}
       {busy && !answer ? (
-        <Loading what={t('ai.thinking')} />
+        <Thinking seconds={elapsed} />
       ) : shown === '' ? (
         <p className="small muted">{t('ai.reviewEmpty')}</p>
       ) : (

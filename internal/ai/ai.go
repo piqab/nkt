@@ -23,8 +23,10 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -59,10 +61,16 @@ type Settings struct {
 	// DailyLimit — сколько запросов в сутки разрешено (0 — без лимита).
 	// Считается на хабе, общий для всех хостов и пользователей.
 	DailyLimit int `json:"daily_limit"`
-	// Timeout — предел одного запроса; локальная модель на слабой
-	// машине думает дольше облачной.
+	// TimeoutS — предел одного запроса в секундах; локальная модель на
+	// слабой машине думает дольше облачной, и 90 секунд ей мало.
+	TimeoutS int `json:"timeout_s"`
+	// Timeout — то же для кода; выставляется из TimeoutS в New.
 	Timeout time.Duration `json:"-"`
 }
+
+// DefaultTimeoutS — время ожидания по умолчанию: облачной модели хватает
+// с запасом, локальной обычно нужно больше — это настраивается.
+const DefaultTimeoutS = 90
 
 // DefaultSettings — с чего начинается выключенный ИИ.
 func DefaultSettings() Settings {
@@ -72,7 +80,7 @@ func DefaultSettings() Settings {
 		Model:      "claude-sonnet-5",
 		Anonymize:  true,
 		DailyLimit: 200,
-		Timeout:    90 * time.Second,
+		TimeoutS:   DefaultTimeoutS,
 	}
 }
 
@@ -84,8 +92,11 @@ type Client struct {
 
 // New строит клиента. Вызывающий сам решает, включён ли ИИ (Settings.Enabled).
 func New(set Settings) *Client {
+	if set.TimeoutS > 0 {
+		set.Timeout = time.Duration(set.TimeoutS) * time.Second
+	}
 	if set.Timeout <= 0 {
-		set.Timeout = 90 * time.Second
+		set.Timeout = DefaultTimeoutS * time.Second
 	}
 	return &Client{set: set, http: &http.Client{Timeout: set.Timeout}}
 }
@@ -193,6 +204,12 @@ const maxResponseBytes = 4 << 20
 func (c *Client) do(req *http.Request) ([]byte, error) {
 	resp, err := c.http.Do(req)
 	if err != nil {
+		// Таймаут — самая частая причина у локальных моделей, и «context
+		// deadline exceeded» ничего не говорит о том, что делать.
+		var ne net.Error
+		if errors.Is(err, context.DeadlineExceeded) || (errors.As(err, &ne) && ne.Timeout()) {
+			return nil, msgs.Errorf("ai.timeout", int(c.set.Timeout/time.Second))
+		}
 		return nil, msgs.Errorf("ai.requestFailed", err)
 	}
 	defer resp.Body.Close()

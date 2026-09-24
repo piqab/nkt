@@ -31,6 +31,10 @@ export interface HubVersionInfo {
   /** Заметки относятся к уже установленной версии: обновления нет, и
    * блок показывает «что нового в этой версии», а не в будущей. */
   notes_are_current?: boolean
+  /** Бета-канал включён: пререлизы vX.Y.Z-beta считаются за обновления. */
+  beta?: boolean
+  /** Установлена бета-сборка (версия с суффиксом -beta). */
+  is_beta?: boolean
 }
 
 /** GET /hub/vulndb's shape (internal/hub/handlers.go's vulnDBInfoJSON). */

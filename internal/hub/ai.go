@@ -40,6 +40,7 @@ func (m *Manager) AISettings(ctx context.Context) ai.Settings {
 			Model      string `json:"model"`
 			Anonymize  bool   `json:"anonymize"`
 			DailyLimit int    `json:"daily_limit"`
+			TimeoutS   int    `json:"timeout_s"`
 		}
 		if json.Unmarshal([]byte(raw), &stored) == nil {
 			set.Enabled = stored.Enabled
@@ -48,6 +49,7 @@ func (m *Manager) AISettings(ctx context.Context) ai.Settings {
 			set.Model = stored.Model
 			set.Anonymize = stored.Anonymize
 			set.DailyLimit = stored.DailyLimit
+			set.TimeoutS = normalizeAITimeout(stored.TimeoutS)
 		}
 	}
 	if enc, ok, err := m.db.KVGet(ctx, aiKeyKVKey); err == nil && ok && enc != "" {
@@ -89,6 +91,28 @@ func isLocalURL(u string) bool {
 	return false
 }
 
+// Границы времени ожидания: меньше десяти секунд не успеет ответить и
+// облако, больше получаса — уже не «подумать», а зависнуть.
+const (
+	aiTimeoutMinS = 10
+	aiTimeoutMaxS = 1800
+)
+
+// normalizeAITimeout — время ожидания в допустимых границах; 0 или
+// мусор — значение по умолчанию.
+func normalizeAITimeout(s int) int {
+	if s <= 0 {
+		return ai.DefaultTimeoutS
+	}
+	if s < aiTimeoutMinS {
+		return aiTimeoutMinS
+	}
+	if s > aiTimeoutMaxS {
+		return aiTimeoutMaxS
+	}
+	return s
+}
+
 // SetAISettings сохраняет настройки. apiKey: nil — не трогать, "" —
 // стереть, иначе — заменить. Смена модели или провайдера чистит кэш:
 // прежние ответы принадлежат другой модели.
@@ -109,6 +133,7 @@ func (m *Manager) SetAISettings(ctx context.Context, set ai.Settings, apiKey *st
 		"model":       strings.TrimSpace(set.Model),
 		"anonymize":   set.Anonymize,
 		"daily_limit": set.DailyLimit,
+		"timeout_s":   normalizeAITimeout(set.TimeoutS),
 	})
 	if err != nil {
 		return err
@@ -257,6 +282,7 @@ func (m *Manager) AITest(ctx context.Context, set ai.Settings, apiKey *string) (
 	default:
 		return AITestResult{}, msgs.Errorf("ai.badProvider", set.Provider)
 	}
+	set.TimeoutS = normalizeAITimeout(set.TimeoutS)
 	if apiKey != nil && *apiKey != "" {
 		set.APIKey = *apiKey
 	} else if enc, ok, err := m.db.KVGet(ctx, aiKeyKVKey); err == nil && ok && enc != "" {

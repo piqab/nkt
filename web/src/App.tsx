@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Badge, Button, ConfigProvider, Layout, Menu, Tabs, Tooltip, type MenuProps, type ThemeConfig } from 'antd'
+import { Badge, Button, ConfigProvider, Layout, Menu, Tabs, Tag, Tooltip, type MenuProps, type ThemeConfig } from 'antd'
 import {
   AlertOutlined,
   ApartmentOutlined,
@@ -219,7 +219,7 @@ function navIcon(icon: ReactNode, count: number, busy: boolean, collapsed: boole
 }
 
 /** Шапка сайдбара: «nkt» и кнопка свернуть/развернуть. */
-function SidebarBrand({ collapsed, onToggle, sub }: { collapsed: boolean; onToggle: () => void; sub?: ReactNode }) {
+function SidebarBrand({ collapsed, onToggle, sub, beta }: { collapsed: boolean; onToggle: () => void; sub?: ReactNode; beta?: boolean }) {
   const { t } = useTranslation()
   const [privacy] = usePrivacy()
   return (
@@ -230,6 +230,15 @@ function SidebarBrand({ collapsed, onToggle, sub }: { collapsed: boolean; onTogg
         {!collapsed && (
           <Tooltip title={privacy ? t('app.privacyBadge') : undefined} placement="right">
             <div className="brand-name">nkt</div>
+          </Tooltip>
+        )}
+        {/* Бета-сборка хаба помечена прямо в шапке: с чем работаешь —
+            видно всегда, а не только в «О системе». */}
+        {!collapsed && beta && (
+          <Tooltip title={t('app.betaBadge')} placement="right">
+            <Tag color="orange" style={{ margin: 0 }}>
+              beta
+            </Tag>
           </Tooltip>
         )}
         <Tooltip title={collapsed ? t('app.sidebarExpand') : t('app.sidebarCollapse')} placement="right">
@@ -581,7 +590,7 @@ function Shell({
           breakpoint="lg"
           onBreakpoint={setNarrow}
         >
-          <SidebarBrand collapsed={collapsed} onToggle={toggleSidebar} sub={t('app.brandSub')} />
+          <SidebarBrand collapsed={collapsed} onToggle={toggleSidebar} sub={t('app.brandSub')} beta={me.hub_version?.endsWith('-beta')} />
 
           <Menu
             mode="inline"
@@ -635,6 +644,7 @@ function Shell({
         <SidebarBrand
           collapsed={collapsed}
           onToggle={toggleSidebar}
+          beta={me.hub_version?.endsWith('-beta')}
           sub={
             !isHub ? (
               <>

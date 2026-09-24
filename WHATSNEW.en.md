@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.83 — 2026-09-24
+
+- **Beta releases.** The tag `vX.Y.Z-beta` builds a beta: the release is
+  marked pre-release, the binary carries version `X.Y.Z-beta`, the hub
+  image is published as `:X.Y.Z-beta` and `:beta` (`:latest` is left
+  alone). "About" gets a **"use beta versions"** checkbox: with it betas
+  count as updates; without it a hub on a beta updates to the stable
+  build of the same version once it is out. A beta build shows a "beta"
+  badge in the header.
+- **AI analysis no longer hangs until an error.** The cause was the UI's
+  general 30 s request timeout and the hub's 90 s limit: a local model
+  with a long analysis could not make it, while "Test" with its short
+  question could. AI now has its own **"answer wait time"** setting
+  (10–1800 s), the analysis window shows a seconds counter, and a clear
+  refusal with a hint arrives when the time is up.
+
 ## v1.10.82 — 2026-09-24
 
 - **"What's new" no longer disappears after updating.** While no next

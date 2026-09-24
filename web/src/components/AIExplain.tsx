@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import { Button, Tooltip } from 'antd'
+import { useEffect, useState } from 'react'
+import { Button, Spin, Tooltip } from 'antd'
 import { BulbOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, hostScope, LOCAL_HOST_ID } from '../api'
-import { Banner, Loading, Modal } from './ui'
+import { Banner, Modal } from './ui'
 import { blurText } from '../privacy'
 
 /**
@@ -54,6 +54,7 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
   const [answer, setAnswer] = useState<AIAnswer | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [showPrompt, setShowPrompt] = useState(false)
+  const elapsed = useElapsed(busy)
 
   async function ask() {
     setOpen(true)
@@ -63,6 +64,10 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
     try {
       const res = await api<AIAnswer>('/hub/ai/explain', {
         method: 'POST',
+        // Настоящий предел — время ожидания в настройках ИИ на хабе (до
+        // получаса); здесь только запас, чтобы общий таймаут запросов в
+        // 30 с не оборвал ответ раньше модели.
+        timeoutMs: AI_REQUEST_TIMEOUT_MS,
         body: {
           ...ctx,
           // Какому хосту принадлежит находка — по нему хаб добавит в
@@ -86,7 +91,7 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
       {open && (
         <Modal title={blurText(ctx.title)} onClose={() => setOpen(false)} width={760}>
           {busy && !answer ? (
-            <Loading what={t('ai.thinking')} />
+            <Thinking seconds={elapsed} />
           ) : error ? (
             <Banner kind="error">{error}</Banner>
           ) : answer ? (
@@ -115,6 +120,37 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
       )}
     </>
   )
+}
+
+/** Предел ожидания на стороне браузера — заведомо больше серверного
+ * максимума (30 мин), чтобы отказ всегда приходил от хаба с понятной
+ * причиной, а не от таймера здесь. */
+export const AI_REQUEST_TIMEOUT_MS = 31 * 60_000
+
+/** «Модель думает… N с» — без «Загружаю…» общего Loading: это не
+ * загрузка страницы, а ожидание ответа, и счётчик здесь главное. */
+export function Thinking({ seconds }: { seconds: number }) {
+  const { t } = useTranslation()
+  return (
+    <div className="chart-empty">
+      <Spin size="small" /> {t('ai.thinkingFor', { seconds })}
+    </div>
+  )
+}
+
+/** Секунды с начала запроса — чтобы «модель думает…» не выглядело
+ * зависанием: локальная модель отвечает минуты, и счётчик показывает,
+ * что ожидание идёт, а не встало. */
+export function useElapsed(running: boolean): number {
+  const [seconds, setSeconds] = useState(0)
+  useEffect(() => {
+    if (!running) return
+    setSeconds(0)
+    const started = Date.now()
+    const id = setInterval(() => setSeconds(Math.round((Date.now() - started) / 1000)), 1000)
+    return () => clearInterval(id)
+  }, [running])
+  return seconds
 }
 
 /** Текст ответа: блоки ```…``` показываются моноширинно, чтобы команду

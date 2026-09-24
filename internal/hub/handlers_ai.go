@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/ai"
 	"github.com/piqab/nkt/internal/auth"
@@ -27,6 +28,7 @@ type aiSettingsRequest struct {
 	Model      string `json:"model"`
 	Anonymize  bool   `json:"anonymize"`
 	DailyLimit int    `json:"daily_limit"`
+	TimeoutS   int    `json:"timeout_s"`
 	// APIKey: null — оставить прежний, "" — стереть, иначе заменить.
 	APIKey *string `json:"api_key"`
 }
@@ -39,7 +41,7 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 	}
 	set := ai.Settings{
 		Enabled: req.Enabled, Provider: req.Provider, BaseURL: strings.TrimSpace(req.BaseURL),
-		Model: req.Model, Anonymize: req.Anonymize, DailyLimit: req.DailyLimit,
+		Model: req.Model, Anonymize: req.Anonymize, DailyLimit: req.DailyLimit, TimeoutS: req.TimeoutS,
 	}
 	if err := s.hub.SetAISettings(r.Context(), set, req.APIKey); err != nil {
 		fail(w, r, err)
@@ -61,8 +63,9 @@ func (s *Server) handleAITest(w http.ResponseWriter, r *http.Request) {
 	}
 	set := ai.Settings{
 		Provider: req.Provider, BaseURL: strings.TrimSpace(req.BaseURL), Model: strings.TrimSpace(req.Model),
-		Anonymize: req.Anonymize, DailyLimit: req.DailyLimit,
+		Anonymize: req.Anonymize, DailyLimit: req.DailyLimit, TimeoutS: req.TimeoutS,
 	}
+	s.aiExtendDeadline(w, normalizeAITimeout(req.TimeoutS))
 	res, err := s.hub.AITest(r.Context(), set, req.APIKey)
 	if err != nil {
 		fail(w, r, err)
@@ -84,6 +87,14 @@ func (s *Server) handleAICacheClear(w http.ResponseWriter, r *http.Request) {
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "ai.cache_clear", "", "ok", nil)
 	writeJSON(w, http.StatusOK, s.hub.AIStatusFor(r.Context()))
+}
+
+// aiExtendDeadline отодвигает срок записи ответа: у сервера общий
+// WriteTimeout в две минуты (cmd/nkt/main.go), а модель вправе думать
+// столько, сколько разрешено в настройках, — иначе ответ, который она
+// всё-таки дала, оборвётся на полпути к браузеру.
+func (s *Server) aiExtendDeadline(w http.ResponseWriter, timeoutS int) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(time.Duration(timeoutS)*time.Second + 30*time.Second))
 }
 
 // aiExplainRequest — одна находка на разбор. Поля повторяют то, что
@@ -124,6 +135,7 @@ func (s *Server) handleAIExplain(w http.ResponseWriter, r *http.Request) {
 		Severity: req.Severity, Service: req.Service, Object: req.Object, File: req.File, Line: req.Line,
 	}
 	fc.Host, fc.Around = s.aiHostContext(r.Context(), req.HostID)
+	s.aiExtendDeadline(w, s.hub.AISettings(r.Context()).TimeoutS)
 	answer, err := s.hub.AIExplain(r.Context(), kind, fc, s.aiKnownNames(r.Context()))
 	if err != nil {
 		fail(w, r, err)
@@ -240,6 +252,7 @@ func (s *Server) handleAIReview(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("ai.badResponse", "empty map"))
 		return
 	}
+	s.aiExtendDeadline(w, s.hub.AISettings(r.Context()).TimeoutS)
 	answer, err := s.hub.AIReviewMap(r.Context(), scope, lines, s.aiKnownNames(r.Context()), auth.Username(r.Context()))
 	if err != nil {
 		fail(w, r, err)

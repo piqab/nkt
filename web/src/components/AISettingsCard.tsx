@@ -22,6 +22,7 @@ interface AIStatus {
   has_key: boolean
   anonymize: boolean
   daily_limit: number
+  timeout_s: number
   usage_today: number
   cache_size: number
 }
@@ -61,6 +62,7 @@ export function AISettingsCard() {
           model: cur.model,
           anonymize: cur.anonymize,
           daily_limit: cur.daily_limit,
+          timeout_s: cur.timeout_s,
           // Пустая строка оставляет прежний ключ: набирать его заново
           // при каждой правке лимита — ровно тот случай, когда настройку
           // перестают трогать вовсе.
@@ -86,6 +88,9 @@ export function AISettingsCard() {
     try {
       const res = await api<{ ok: boolean; model: string; took_ms: number; reply: string; message?: string }>('/hub/ai/test', {
         method: 'POST',
+        // Ждём столько, сколько разрешено модели, плюс запас на дорогу:
+        // общий таймаут запросов (30 с) короче любого разумного ответа.
+        timeoutMs: (cur.timeout_s + 30) * 1000,
         body: {
           enabled: true,
           provider: cur.provider,
@@ -93,6 +98,7 @@ export function AISettingsCard() {
           model: cur.model,
           anonymize: cur.anonymize,
           daily_limit: cur.daily_limit,
+          timeout_s: cur.timeout_s,
           api_key: apiKey === '' ? null : apiKey,
         },
       })
@@ -176,17 +182,31 @@ export function AISettingsCard() {
               {t('ai.anonymize')}
             </Checkbox>
           </label>
-          <label style={{ maxWidth: '16rem' }}>
-            {t('ai.dailyLimit')}
-            <InputNumber
-              min={0}
-              max={100000}
-              value={cur.daily_limit}
-              onChange={(v) => edit({ daily_limit: v ?? 0 })}
-              title={t('ai.dailyLimitHint')}
-              style={{ width: '100%' }}
-            />
-          </label>
+          <div className="filters">
+            <label style={{ maxWidth: '16rem' }}>
+              {t('ai.dailyLimit')}
+              <InputNumber
+                min={0}
+                max={100000}
+                value={cur.daily_limit}
+                onChange={(v) => edit({ daily_limit: v ?? 0 })}
+                title={t('ai.dailyLimitHint')}
+                style={{ width: '100%' }}
+              />
+            </label>
+            <label style={{ maxWidth: '16rem' }}>
+              {t('ai.timeout')}
+              <InputNumber
+                min={10}
+                max={1800}
+                value={cur.timeout_s}
+                onChange={(v) => edit({ timeout_s: v ?? 90 })}
+                title={t('ai.timeoutHint')}
+                style={{ width: '100%' }}
+              />
+            </label>
+          </div>
+          {local && <div className="small muted">{t('ai.timeoutHint')}</div>}
           <div className="row" style={{ gap: '0.75rem', alignItems: 'center' }}>
             <Button type="primary" loading={busy} onClick={() => void save()}>
               {t('ai.save')}
