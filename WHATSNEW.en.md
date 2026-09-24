@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.88 — 2026-09-24
+
+- Resource map: a redundant condition when handing the graph to the
+  architecture review is removed (CodeQL #157).
+
 ## v1.10.87 — 2026-09-24
 
 - Row action icons in the standard blue (like links), dangerous ones red:
