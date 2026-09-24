@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/piqab/nkt/internal/ai"
+	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
@@ -162,12 +163,25 @@ func (m *Manager) SetAISettings(ctx context.Context, set ai.Settings, apiKey *st
 	return nil
 }
 
+// AISimilar — та же находка уже разбиралась на другом хосте.
+type AISimilar struct {
+	HostID    int64  `json:"host_id"`
+	HostName  string `json:"host_name"`
+	CreatedAt string `json:"created_at"`
+}
+
 // AIAnswer — ответ модели для интерфейса.
 type AIAnswer struct {
 	Answer   string       `json:"answer"`
 	Sections []ai.Section `json:"sections"`
 	Model    string       `json:"model"`
 	Cached   bool         `json:"cached"`
+	// StoredAt — ответ сохранён раньше (для этой находки на этом хосте)
+	// и показан без нового запроса; пусто — ответ только что получен.
+	StoredAt string `json:"stored_at,omitempty"`
+	// Similar — ответ принадлежит той же находке на другом хосте: своего
+	// ещё нет, запрос делается отдельной кнопкой.
+	Similar *AISimilar `json:"similar,omitempty"`
 	// Prompt — то, что ушло к модели (после псевдонимизации): оператор
 	// вправе видеть, что именно покинуло его сервер.
 	Prompt string `json:"prompt"`
@@ -176,23 +190,38 @@ type AIAnswer struct {
 }
 
 // AIExplain объясняет одну находку. hostNames — имена, которые надо
-// спрятать при псевдонимизации (хосты и машины хаба).
-func (m *Manager) AIExplain(ctx context.Context, kind string, fc ai.FindingContext, hostNames []string) (AIAnswer, error) {
+// спрятать при псевдонимизации (хосты и машины хаба). hostID — чья
+// находка (0 — сам хаб).
+//
+// Ответ остаётся у находки: повторное открытие показывает сохранённый
+// без запроса к модели. Та же находка на другом хосте показывается как
+// «уже разбиралась» — тоже без запроса; свой ответ для этого хоста
+// запрашивается отдельно (force), как и «спросить заново».
+func (m *Manager) AIExplain(ctx context.Context, kind string, fc ai.FindingContext, hostNames []string, hostID int64, force bool) (AIAnswer, error) {
 	lang := msgs.FromContext(ctx)
 	client, set, err := m.aiClient(ctx)
 	if err != nil {
 		return AIAnswer{}, err
 	}
+	key := ai.FindingKey(kind, fc.Title, fc.Object, fc.File)
+	if !force {
+		if own, ok, err := m.db.AIAnswerGet(ctx, key, hostID); err == nil && ok {
+			out := m.aiAnswer(own.Answer, own.Prompt, set, false)
+			out.Model, out.StoredAt = own.Model, own.CreatedAt
+			return out, nil
+		}
+		if other, ok, err := m.db.AIAnswerOther(ctx, key, hostID); err == nil && ok {
+			out := m.aiAnswer(other.Answer, other.Prompt, set, false)
+			out.Model = other.Model
+			out.Similar = &AISimilar{HostID: other.HostID, HostName: m.aiHostName(ctx, other.HostID), CreatedAt: other.CreatedAt}
+			return out, nil
+		}
+	}
 
 	mapper := ai.NewMapper(set.Anonymize)
 	mapper.Learn("host", hostNames)
 	user := mapper.Hide(ai.UserPrompt(fc, lang))
-	system := ai.SystemFor(kind, lang)
-
-	key := ai.CacheKey(kind, set.Model, string(lang), user)
-	if cached, ok, err := m.db.AICacheGet(ctx, key); err == nil && ok {
-		return m.aiAnswer(mapper.Reveal(cached), user, set, true), nil
-	}
+	system := ai.SystemWith(m.aiPromptOverrides(ctx), kind, lang)
 
 	used, _ := m.db.AIUsageToday(ctx)
 	if ai.LimitReached(set, ai.Usage{Requests: used}) {
@@ -204,8 +233,113 @@ func (m *Manager) AIExplain(ctx context.Context, kind string, fc ai.FindingConte
 		return AIAnswer{}, err
 	}
 	_ = m.db.AIUsageAdd(ctx)
-	_ = m.db.AICachePut(ctx, key, kind, set.Model, string(lang), answer)
-	return m.aiAnswer(mapper.Reveal(answer), user, set, false), nil
+	revealed := mapper.Reveal(answer)
+	if err := m.db.AIAnswerPut(ctx, store.AIAnswer{
+		Key: key, HostID: hostID, Kind: kind, Title: fc.Title, Object: fc.Object, File: fc.File,
+		Model: set.Model, Lang: string(lang), Prompt: user, Answer: revealed,
+	}); err != nil {
+		m.log.Warn("ai answer not saved", "err", err)
+	}
+	return m.aiAnswer(revealed, user, set, false), nil
+}
+
+// aiHostName — имя хоста для пометки «уже разбиралась»; 0 — сам хаб.
+func (m *Manager) aiHostName(ctx context.Context, hostID int64) string {
+	if hostID == 0 {
+		return "hub"
+	}
+	if h, err := m.db.HostByID(ctx, hostID); err == nil {
+		return h.Name
+	}
+	return fmt.Sprintf("#%d", hostID)
+}
+
+// AIAnswerDelete убирает сохранённый ответ у находки.
+func (m *Manager) AIAnswerDelete(ctx context.Context, kind, title, object, file string, hostID int64) error {
+	return m.db.AIAnswerDelete(ctx, ai.FindingKey(kind, title, object, file), hostID)
+}
+
+// aiPromptKVKey — ключ правленой инструкции в базе: ai.prompt.finding/ru.
+func aiPromptKVKey(promptKey string) string { return "ai.prompt." + promptKey }
+
+// aiPromptOverrides — правленые оператором инструкции по ключу
+// ai.PromptKey; отсутствующие — стандартные.
+func (m *Manager) aiPromptOverrides(ctx context.Context) map[string]string {
+	out := map[string]string{}
+	for _, pk := range ai.PromptKinds {
+		for _, lang := range []msgs.Lang{msgs.RU, msgs.EN} {
+			key := ai.PromptKey(pk, lang)
+			if raw, ok, err := m.db.KVGet(ctx, aiPromptKVKey(key)); err == nil && ok && strings.TrimSpace(raw) != "" {
+				out[key] = raw
+			}
+		}
+	}
+	return out
+}
+
+// AIPromptInfo — инструкция для настроек: текущий текст, стандартный и
+// признак правки.
+type AIPromptInfo struct {
+	Kind     string `json:"kind"`
+	Lang     string `json:"lang"`
+	Text     string `json:"text"`
+	Default  string `json:"default"`
+	Modified bool   `json:"modified"`
+}
+
+// AIPrompts — все редактируемые инструкции.
+func (m *Manager) AIPrompts(ctx context.Context) []AIPromptInfo {
+	over := m.aiPromptOverrides(ctx)
+	var out []AIPromptInfo
+	for _, pk := range ai.PromptKinds {
+		for _, lang := range []msgs.Lang{msgs.RU, msgs.EN} {
+			key := ai.PromptKey(pk, lang)
+			def := ai.SystemFor(pk, lang)
+			text, modified := over[key]
+			if !modified {
+				text = def
+			}
+			out = append(out, AIPromptInfo{Kind: pk, Lang: string(lang), Text: text, Default: def, Modified: modified})
+		}
+	}
+	return out
+}
+
+// aiPromptLang — язык из запроса настроек; всё, что не en, — ru.
+func aiPromptLang(lang string) msgs.Lang {
+	if lang == "en" {
+		return msgs.EN
+	}
+	return msgs.RU
+}
+
+// SetAIPrompt сохраняет правленую инструкцию; пустой текст или текст,
+// равный стандартному, — возврат к стандартной. Сохранённые ответы
+// чистятся: они получены другой инструкцией.
+func (m *Manager) SetAIPrompt(ctx context.Context, promptKind, lang, text string) error {
+	if promptKind != ai.PromptFinding && promptKind != ai.PromptMap {
+		return msgs.Errorf("ai.badPromptKind", promptKind)
+	}
+	l := aiPromptLang(lang)
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
+	if text == strings.TrimSpace(ai.SystemFor(promptKind, l)) {
+		text = ""
+	}
+	if err := m.db.KVSet(ctx, aiPromptKVKey(ai.PromptKey(promptKind, l)), text); err != nil {
+		return err
+	}
+	return m.db.AICacheClear(ctx)
+}
+
+// AIPromptDiff — отличия текста от стандартной инструкции, unified diff.
+func (m *Manager) AIPromptDiff(ctx context.Context, promptKind, lang, text string) string {
+	l := aiPromptLang(lang)
+	def := ai.SystemFor(promptKind, l)
+	text = strings.TrimSpace(strings.ReplaceAll(text, "\r\n", "\n"))
+	if text == strings.TrimSpace(def) {
+		return ""
+	}
+	return control.UnifiedDiff(ctx, msgs.Tc(ctx, "ai.promptDefault"), msgs.Tc(ctx, "ai.promptYours"), def+"\n", text+"\n")
 }
 
 // AIReviewMap разбирает карту ресурсов и сохраняет разбор.
@@ -222,7 +356,7 @@ func (m *Manager) AIReviewMap(ctx context.Context, scope string, lines []string,
 	mapper := ai.NewMapper(set.Anonymize)
 	mapper.Learn("host", hostNames)
 	user := mapper.Hide(ai.MapPrompt(lines, lang))
-	system := ai.SystemFor(kind, lang)
+	system := ai.SystemWith(m.aiPromptOverrides(ctx), kind, lang)
 
 	// Архитектурный разбор не кэшируется по содержимому: карта меняется,
 	// и смысл ревизии именно в том, чтобы получить свежий взгляд —

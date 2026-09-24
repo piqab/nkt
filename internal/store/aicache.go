@@ -45,7 +45,112 @@ func (d *DB) AICachePut(ctx context.Context, key, kind, model, lang, answer stri
 
 // AICacheClear убирает весь кэш (смена модели или провайдера делает
 // прежние ответы чужими).
+// AIAnswer — сохранённый ответ модели по находке на хосте.
+type AIAnswer struct {
+	Key       string `json:"key"`
+	HostID    int64  `json:"host_id"`
+	Kind      string `json:"kind"`
+	Title     string `json:"title"`
+	Object    string `json:"object"`
+	File      string `json:"file"`
+	Model     string `json:"model"`
+	Lang      string `json:"lang"`
+	Prompt    string `json:"prompt"`
+	Answer    string `json:"answer"`
+	CreatedAt string `json:"created_at"`
+}
+
+// AIAnswerRef — ссылка на сохранённый ответ без текста: интерфейс по ней
+// красит лампочки, сравнивая вид, заголовок, объект и файл строки.
+type AIAnswerRef struct {
+	Key       string `json:"key"`
+	HostID    int64  `json:"host_id"`
+	Kind      string `json:"kind"`
+	Title     string `json:"title"`
+	Object    string `json:"object"`
+	File      string `json:"file"`
+	CreatedAt string `json:"created_at"`
+}
+
+// AIAnswerPut сохраняет ответ; повторный запрос по той же находке на том
+// же хосте заменяет прежний.
+func (d *DB) AIAnswerPut(ctx context.Context, a AIAnswer) error {
+	if a.CreatedAt == "" {
+		a.CreatedAt = Now()
+	}
+	_, err := d.ExecContext(ctx,
+		`INSERT INTO ai_answers(key, host_id, kind, title, object, file, model, lang, prompt, answer, created_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(key, host_id) DO UPDATE SET
+		   kind = excluded.kind, title = excluded.title, object = excluded.object, file = excluded.file,
+		   model = excluded.model, lang = excluded.lang, prompt = excluded.prompt, answer = excluded.answer,
+		   created_at = excluded.created_at`,
+		a.Key, a.HostID, a.Kind, a.Title, a.Object, a.File, a.Model, a.Lang, a.Prompt, a.Answer, a.CreatedAt)
+	return err
+}
+
+const aiAnswerCols = `key, host_id, kind, title, object, file, model, lang, prompt, answer, created_at`
+
+func scanAIAnswer(row interface{ Scan(dest ...any) error }) (AIAnswer, error) {
+	var a AIAnswer
+	err := row.Scan(&a.Key, &a.HostID, &a.Kind, &a.Title, &a.Object, &a.File, &a.Model, &a.Lang, &a.Prompt, &a.Answer, &a.CreatedAt)
+	return a, err
+}
+
+// AIAnswerGet — ответ по находке на этом хосте.
+func (d *DB) AIAnswerGet(ctx context.Context, key string, hostID int64) (AIAnswer, bool, error) {
+	a, err := scanAIAnswer(d.QueryRowContext(ctx, `SELECT `+aiAnswerCols+` FROM ai_answers WHERE key = ? AND host_id = ?`, key, hostID))
+	switch {
+	case err == sql.ErrNoRows:
+		return AIAnswer{}, false, nil
+	case err != nil:
+		return AIAnswer{}, false, err
+	}
+	return a, true, nil
+}
+
+// AIAnswerOther — самый свежий ответ по той же находке на другом хосте:
+// «такая уже была» — показать его первым, а спрашивать заново по кнопке.
+func (d *DB) AIAnswerOther(ctx context.Context, key string, hostID int64) (AIAnswer, bool, error) {
+	a, err := scanAIAnswer(d.QueryRowContext(ctx,
+		`SELECT `+aiAnswerCols+` FROM ai_answers WHERE key = ? AND host_id != ? ORDER BY created_at DESC LIMIT 1`, key, hostID))
+	switch {
+	case err == sql.ErrNoRows:
+		return AIAnswer{}, false, nil
+	case err != nil:
+		return AIAnswer{}, false, err
+	}
+	return a, true, nil
+}
+
+// AIAnswerRefs — все сохранённые ответы без текста.
+func (d *DB) AIAnswerRefs(ctx context.Context) ([]AIAnswerRef, error) {
+	rows, err := d.QueryContext(ctx, `SELECT key, host_id, kind, title, object, file, created_at FROM ai_answers ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AIAnswerRef
+	for rows.Next() {
+		var r AIAnswerRef
+		if err := rows.Scan(&r.Key, &r.HostID, &r.Kind, &r.Title, &r.Object, &r.File, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// AIAnswerDelete убирает сохранённый ответ.
+func (d *DB) AIAnswerDelete(ctx context.Context, key string, hostID int64) error {
+	_, err := d.ExecContext(ctx, `DELETE FROM ai_answers WHERE key = ? AND host_id = ?`, key, hostID)
+	return err
+}
+
 func (d *DB) AICacheClear(ctx context.Context) error {
+	if _, err := d.ExecContext(ctx, `DELETE FROM ai_answers`); err != nil {
+		return err
+	}
 	_, err := d.ExecContext(ctx, `DELETE FROM ai_cache`)
 	return err
 }
@@ -53,7 +158,7 @@ func (d *DB) AICacheClear(ctx context.Context) error {
 // AICacheSize — сколько ответов лежит в кэше.
 func (d *DB) AICacheSize(ctx context.Context) (int, error) {
 	var n int
-	err := d.QueryRowContext(ctx, `SELECT COUNT(*) FROM ai_cache`).Scan(&n)
+	err := d.QueryRowContext(ctx, `SELECT (SELECT COUNT(*) FROM ai_answers) + (SELECT COUNT(*) FROM ai_cache)`).Scan(&n)
 	return n, err
 }
 

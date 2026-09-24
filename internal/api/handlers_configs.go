@@ -73,6 +73,31 @@ func (s *Server) handleConfigRead(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, file)
 }
 
+// handleConfigPreviewDiff — дифф «файл на диске → черновик» до записи:
+// редактор XML машины и редактор конфигураций показывают его в
+// модальном окне, чтобы «применить» нажималось глядя на изменения, а
+// не на весь файл.
+func (s *Server) handleConfigPreviewDiff(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Path    string `json:"path"`
+		Content string `json:"content"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	file, err := s.configs.Read(req.Path)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	diff := ""
+	if file.Content != req.Content {
+		diff = control.UnifiedDiff(r.Context(), req.Path, req.Path, file.Content, req.Content)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"path": req.Path, "changed": file.Content != req.Content, "diff": diff})
+}
+
 type configWriteRequest struct {
 	Path     string `json:"path"`
 	Content  string `json:"content"`

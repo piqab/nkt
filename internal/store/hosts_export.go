@@ -183,7 +183,7 @@ type HubExport struct {
 	Scripts       []ScriptExport     `json:"scripts,omitempty"`
 	// Settings — настройки хаба из таблицы kv по ключу (настройки
 	// оповещений, группа строки localhost, умолчания подготовки, лимит
-	// кэша пакетов).
+	// кэша пакетов, разбор моделью, бета-канал).
 	Settings map[string]string `json:"settings,omitempty"`
 	// Clusters и ClusterImages — версия 3.
 	Clusters       []ClusterExport       `json:"clusters,omitempty"`
@@ -212,7 +212,15 @@ func hostToExport(h Host) HostExport {
 // ExportedSettingKeys — какие ключи kv едут в экспорт. Перечислены явно:
 // в kv лежит и то, что переносить нельзя (например, что уже показано
 // пользователю).
-var ExportedSettingKeys = []string{"hub.events.settings", "hub.localhost.group", "hub.bootstrap.defaults", "aptcache_max_gb"}
+var ExportedSettingKeys = []string{
+	"hub.events.settings", "hub.localhost.group", "hub.bootstrap.defaults", "aptcache_max_gb",
+	// Разбор моделью: настройки, ключ (перешифровывается при импорте с
+	// мастер-ключом — см. hub.ImportHosts) и правленые инструкции.
+	"ai.settings", "ai.api_key_enc",
+	"ai.prompt.finding/ru", "ai.prompt.finding/en", "ai.prompt.map/ru", "ai.prompt.map/en",
+	// Бета-канал обновлений.
+	"update.beta",
+}
 
 // ExportHosts returns every managed host in the shape GET /hub/export sends
 // to the browser as a downloadable file.

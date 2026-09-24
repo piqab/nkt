@@ -39,7 +39,9 @@ with parents, Kubernetes clusters with their nodes and kubeconfig,
 profiles and scripts with history, machine templates, settings. Cluster
 images (qcow2) are not in the file — the import lists the ones to copy by
 hand. The file is encrypted with a password — “import” on a new hub
-asks for the same one. `nkt hub import` does the same from the command
+asks for the same one. `nkt hub import` does the same from the command The export also carries the AI
+settings (including the API key and edited instructions) and the beta
+update channel.
 line.
 
 ## About
@@ -95,6 +97,17 @@ apply them.
 The "Resource map" page gets an **architecture review**: single points
 of failure, needless exposure, inconsistencies, where to start; on the
 hub — across all hosts at once. Reviews are kept with their date.
+
+The answer stays with the finding: a bulb with an answer is **orange**
+and opens the saved answer without a request ("ask again" and "delete
+answer" sit under the answer). The same finding already analysed on
+another host is **blue**: that answer is shown first with a note where it
+came from, and a request for this host is a separate button.
+
+**Model instructions** (prompts) are edited in the same card: one for
+finding analysis and one for the architecture review, in Russian and
+English; saving goes through a window with a diff against the default,
+"restore default" removes the edit.
 
 The "hide addresses and names" checkbox (on by default) replaces host
 names, IPs, domains and e-mail with aliases before sending and puts them

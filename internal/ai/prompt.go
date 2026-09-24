@@ -1,6 +1,8 @@
 package ai
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -86,14 +88,67 @@ func mapSystemPrompt(lang msgs.Lang) string {
 	}, "\n")
 }
 
-// SystemFor — инструкция по виду разбора.
+// SystemFor — стандартная инструкция по виду разбора.
 func SystemFor(kind string, lang msgs.Lang) string {
+	return systemPromptFor(PromptKindFor(kind), lang)
+}
+
+// Виды редактируемых инструкций: одна для разбора находок (finding, vuln,
+// malware, event, job-error), другая для архитектурного разбора карты.
+const (
+	PromptFinding = "finding"
+	PromptMap     = "map"
+)
+
+// PromptKinds — в порядке показа в настройках.
+var PromptKinds = []string{PromptFinding, PromptMap}
+
+// PromptKindFor — какая инструкция нужна виду разбора.
+func PromptKindFor(kind string) string {
 	switch kind {
 	case KindMap, KindHubReview:
-		return mapSystemPrompt(lang)
+		return PromptMap
 	default:
-		return systemPrompt(lang)
+		return PromptFinding
 	}
+}
+
+func systemPromptFor(promptKind string, lang msgs.Lang) string {
+	if promptKind == PromptMap {
+		return mapSystemPrompt(lang)
+	}
+	return systemPrompt(lang)
+}
+
+// SystemWith — инструкция с учётом правок оператора: overrides хранит
+// текст по ключу PromptKey; пусто — стандартная.
+func SystemWith(overrides map[string]string, kind string, lang msgs.Lang) string {
+	pk := PromptKindFor(kind)
+	if text := strings.TrimSpace(overrides[PromptKey(pk, lang)]); text != "" {
+		return text
+	}
+	return systemPromptFor(pk, lang)
+}
+
+// PromptKey — ключ правленой инструкции: «finding/ru», «map/en».
+func PromptKey(promptKind string, lang msgs.Lang) string {
+	l := "ru"
+	if lang == msgs.EN {
+		l = "en"
+	}
+	return promptKind + "/" + l
+}
+
+// FindingKey — устойчивый ключ находки без привязки к хосту: по нему
+// ответ сохраняется у строки и та же находка на другом хосте узнаётся
+// как «уже разбиралась». Подробности и подсказка в ключ не входят:
+// они меняются от сканирования к сканированию (номера PID, даты), а
+// проблема остаётся той же.
+func FindingKey(kind, title, object, file string) string {
+	h := sha256.Sum256([]byte(strings.Join([]string{
+		strings.TrimSpace(kind), strings.TrimSpace(title), strings.TrimSpace(object), strings.TrimSpace(file),
+	}, "\x00")))
+	return hex.EncodeToString(h[:16])
 }
 
 // FindingContext — контекст одной находки для промпта. Поля

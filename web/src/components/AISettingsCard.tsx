@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { Button, Checkbox, Input, InputNumber, Select } from 'antd'
+import { Button, Checkbox, Input, InputNumber, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import { Banner, Card, ErrorNote, Loading } from './ui'
+import { Banner, Card, DiffView, ErrorNote, Loading, Modal } from './ui'
+import { invalidateAIAnswers } from '../aiAnswers'
 
 /**
  * Настройка модели — одна на всю установку, на хабе: ключ хранится
@@ -27,9 +28,67 @@ interface AIStatus {
   cache_size: number
 }
 
+interface AIPrompt {
+  kind: 'finding' | 'map'
+  lang: 'ru' | 'en'
+  text: string
+  default: string
+  modified: boolean
+}
+
 export function AISettingsCard() {
   const { t } = useTranslation()
   const status = useApi<AIStatus>('/hub/ai')
+  // Инструкции модели: стандартные лежат в бинарнике, правка хранится на
+  // хабе; сохранение — через окно с диффом, чтобы было видно, что именно
+  // изменилось относительно стандартной.
+  const prompts = useApi<{ prompts: AIPrompt[] }>('/hub/ai/prompts')
+  const [promptKind, setPromptKind] = useState<AIPrompt['kind']>('finding')
+  const [promptLang, setPromptLang] = useState<AIPrompt['lang']>('ru')
+  const [promptDrafts, setPromptDrafts] = useState<Record<string, string>>({})
+  const [promptDiff, setPromptDiff] = useState<{ diff: string; toDefault: boolean } | null>(null)
+  const promptKey = `${promptKind}/${promptLang}`
+  const currentPrompt = prompts.data?.prompts.find((p) => p.kind === promptKind && p.lang === promptLang)
+  const promptText = promptDrafts[promptKey] ?? currentPrompt?.text ?? ''
+  const promptDirty = currentPrompt !== undefined && promptText !== currentPrompt.text
+
+  async function reviewPrompt() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ changed: boolean; diff: string }>('/hub/ai/prompts/diff', {
+        method: 'POST',
+        body: { kind: promptKind, lang: promptLang, text: promptText },
+      })
+      setPromptDiff({ diff: res.diff, toDefault: !res.changed })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function savePrompt(text: string) {
+    setBusy(true)
+    setError(null)
+    setPromptDiff(null)
+    try {
+      await api('/hub/ai/prompts', { method: 'POST', body: { kind: promptKind, lang: promptLang, text } })
+      setPromptDrafts((d) => {
+        const next = { ...d }
+        delete next[promptKey]
+        return next
+      })
+      prompts.reload()
+      status.reload()
+      // Прежние ответы получены другой инструкцией — хаб их снёс.
+      invalidateAIAnswers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
   const [draft, setDraft] = useState<AIStatus | null>(null)
   const [apiKey, setAPIKey] = useState('')
   const [busy, setBusy] = useState(false)
@@ -229,6 +288,78 @@ export function AISettingsCard() {
             <div className="small" style={{ color: test.ok ? 'var(--status-good)' : 'var(--status-critical)', whiteSpace: 'pre-wrap' }}>
               {test.ok ? '✓' : '✗'} {test.text}
             </div>
+          )}
+
+          <details style={{ marginTop: '0.5rem' }}>
+            <summary>
+              {t('ai.prompts')}
+              {prompts.data?.prompts.some((p) => p.modified) && (
+                <Tag color="orange" style={{ marginLeft: '0.5rem' }}>
+                  {t('ai.promptModified')}
+                </Tag>
+              )}
+            </summary>
+            <div className="col" style={{ marginTop: '0.5rem' }}>
+              <div className="small muted">{t('ai.promptsHint')}</div>
+              <div className="filters">
+                <label style={{ minWidth: '16rem' }}>
+                  {t('ai.promptKind')}
+                  <Select
+                    value={promptKind}
+                    onChange={(v: AIPrompt['kind']) => setPromptKind(v)}
+                    options={[
+                      { value: 'finding', label: t('ai.promptFinding') },
+                      { value: 'map', label: t('ai.promptMap') },
+                    ]}
+                  />
+                </label>
+                <label style={{ minWidth: '10rem' }}>
+                  {t('ai.promptLang')}
+                  <Select
+                    value={promptLang}
+                    onChange={(v: AIPrompt['lang']) => setPromptLang(v)}
+                    options={[
+                      { value: 'ru', label: 'Русский' },
+                      { value: 'en', label: 'English' },
+                    ]}
+                  />
+                </label>
+              </div>
+              {currentPrompt?.modified && (
+                <div className="small" style={{ color: 'var(--status-warning)' }}>
+                  {t('ai.promptModifiedHint')}
+                </div>
+              )}
+              <Input.TextArea
+                className="mono"
+                rows={10}
+                value={promptText}
+                onChange={(e) => setPromptDrafts((d) => ({ ...d, [promptKey]: e.target.value }))}
+              />
+              <div className="row" style={{ gap: '0.5rem' }}>
+                <Button type="primary" disabled={!promptDirty} loading={busy} onClick={() => void reviewPrompt()}>
+                  {t('ai.promptSave')}
+                </Button>
+                <Button disabled={!currentPrompt?.modified && !promptDirty} onClick={() => void savePrompt('')}>
+                  {t('ai.promptReset')}
+                </Button>
+              </div>
+            </div>
+          </details>
+          {promptDiff && (
+            <Modal title={t('ai.promptDiffTitle')} onClose={() => setPromptDiff(null)} width={900}>
+              {promptDiff.toDefault ? (
+                <p className="small muted">{t('ai.promptToDefault')}</p>
+              ) : (
+                <DiffView text={promptDiff.diff} />
+              )}
+              <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
+                <Button type="primary" loading={busy} onClick={() => void savePrompt(promptText)}>
+                  {t('ai.promptApply')}
+                </Button>
+                <Button onClick={() => setPromptDiff(null)}>{t('common.cancel')}</Button>
+              </div>
+            </Modal>
           )}
         </div>
       )}

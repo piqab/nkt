@@ -8,6 +8,25 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.84 — 2026-09-24
+
+- **The AI answer stays with the finding.** A bulb with a saved answer is
+  orange and opens it without a new request; under the answer — the date,
+  "ask again" and "delete answer". If the same finding was already
+  analysed on another host, the bulb is blue: that answer is shown first
+  with a note where it came from, and a request for this host is a
+  separate button.
+- **Model instructions (prompts)** are editable in "About": for finding
+  analysis and for the architecture review, in Russian and English.
+  Saving goes through a window with a diff against the default; "restore
+  default" removes the edit.
+- **Diff before writing a machine configuration**: the libvirt XML editor
+  shows the "on disk → draft" changes in a modal, and `virsh define` runs
+  only after confirmation. The config editor gets a "show changes" button.
+- **Export/import** carries the AI settings (the API key is re-encrypted
+  with the new hub's master key), edited instructions and the beta update
+  channel.
+
 ## v1.10.83 — 2026-09-24
 
 - **Beta releases.** The tag `vX.Y.Z-beta` builds a beta: the release is
