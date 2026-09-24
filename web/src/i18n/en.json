@@ -21,7 +21,8 @@
     "sidebarExpand": "Expand menu",
     "privacy": "hide sensitive data",
     "privacyHint": "Privacy mode for screen sharing: addresses, host names, users, keys, domains and e-mail are blurred on every page; turn it off to read them.",
-    "privacyBadge": "privacy mode"
+    "privacyBadge": "privacy mode",
+    "betaBadge": "beta build of the hub"
   },
   "nav": {
     "overview": "Overview",
@@ -97,7 +98,9 @@
     "aptCacheClear": "clear",
     "aptCacheClearConfirm": "Delete every file from the package cache? Hosts keep working — packages are downloaded again on the next install.",
     "privacyTitle": "Privacy mode",
-    "whatsNewCurrent": "What's new in this version ({{version}})"
+    "whatsNewCurrent": "What's new in this version ({{version}})",
+    "beta": "use beta versions",
+    "betaHint": "Pre-releases (vX.Y.Z-beta) count as updates; hosts always follow the hub version. Unchecked, a hub on a beta updates to the stable build of the same version once it is out."
   },
   "login": {
     "subtitle": "Network resource map, config auditing, and host service management.",
@@ -2381,6 +2384,9 @@
     "reviewAt": "review from {{date}}",
     "disabledHint": "AI analysis is off. Enable it in \"About\" on the hub.",
     "test": "Test",
-    "testOK": "the model replied in {{ms}} ms: {{reply}}"
+    "testOK": "the model replied in {{ms}} ms: {{reply}}",
+    "timeout": "Answer wait time, s",
+    "timeoutHint": "How long to wait for the model (10–1800 s). 90 is enough for the cloud; a local model on a weak machine needs 300 or more.",
+    "thinkingFor": "the model is thinking… {{seconds}} s"
   }
 }

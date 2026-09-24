@@ -8,18 +8,28 @@ name: release
 # Registry для docker compose/Kubernetes (deploy/docker-compose.hub.release.yml,
 # deploy/k8s/hub.yaml).
 #
-# Тег должен совпадать с файлом VERSION в репозитории (без ведущего "v") —
-# это то же число, что hub's own "обновить" сравнивает у управляемых
-# хостов, так что релиз и VERSION не должны расходиться.
+# Тег должен совпадать с файлом VERSION в репозитории (без ведущего "v" и
+# без суффикса "-beta") — это то же число, что hub's own "обновить"
+# сравнивает у управляемых хостов, так что релиз и VERSION не должны
+# расходиться.
 #
 # Как выпустить релиз:
 #   1. Обновить VERSION (или make bump-version), закоммитить.
 #   2. git tag v$(cat VERSION) && git push origin v$(cat VERSION)
 #   3. Дальше всё делает этот workflow — вручную собирать/заливать не нужно.
+#
+# Бета — тот же путь с суффиксом:
+#   git tag v$(cat VERSION)-beta && git push origin v$(cat VERSION)-beta
+# Отличия: релиз помечен pre-release (хаб предлагает его только с галочкой
+# «использовать бета-версии» в «О системе»), бинарник несёт версию
+# X.Y.Z-beta, образ хаба публикуется как :X.Y.Z-beta и :beta — :latest
+# бета не трогает. Заметки берутся из того же раздела «## vX.Y.Z»
+# WHATSNEW.md, что и у стабильного релиза.
 on:
   push:
     tags:
       - "v*.*.*"
+      - "v*.*.*-beta"
 
 permissions:
   contents: write
@@ -28,16 +38,39 @@ permissions:
 jobs:
   check-version:
     runs-on: ubuntu-latest
+    # Род релиза решается один раз по тегу и раздаётся остальным заданиям:
+    # version — число из VERSION (для бинарника с суффиксом), beta — 'true'
+    # для тега с «-beta», notes_tag — под каким заголовком искать раздел
+    # в WHATSNEW.md (у беты он тот же, что у стабильного релиза).
+    outputs:
+      version: ${{ steps.kind.outputs.version }}
+      binary_version: ${{ steps.kind.outputs.binary_version }}
+      beta: ${{ steps.kind.outputs.beta }}
+      notes_tag: ${{ steps.kind.outputs.notes_tag }}
     steps:
       - uses: actions/checkout@v7
       - name: Тег должен совпадать с файлом VERSION
+        id: kind
         run: |
           tag="${GITHUB_REF_NAME#v}"
+          beta=false
+          case "$tag" in
+            *-beta) beta=true; tag="${tag%-beta}" ;;
+          esac
           file="$(tr -d '[:space:]' < VERSION)"
           if [ "$tag" != "$file" ]; then
-            echo "::error::тег v$tag не совпадает с VERSION ($file) — обновите VERSION и перетегируйте"
+            echo "::error::тег $GITHUB_REF_NAME не совпадает с VERSION ($file) — обновите VERSION и перетегируйте"
             exit 1
           fi
+          binary="$file"
+          if [ "$beta" = true ]; then binary="$file-beta"; fi
+          {
+            echo "version=$file"
+            echo "binary_version=$binary"
+            echo "beta=$beta"
+            echo "notes_tag=v$file"
+          } >> "$GITHUB_OUTPUT"
+          echo "версия $file, бета: $beta, бинарник: $binary"
 
   frontend:
     needs: check-version
@@ -65,7 +98,7 @@ jobs:
           retention-days: 1
 
   build:
-    needs: frontend
+    needs: [check-version, frontend]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -92,7 +125,10 @@ jobs:
           GOARM: ${{ matrix.goarch == 'arm' && '6' || '' }}
         run: |
           mkdir -p dist
-          version="$(tr -d '[:space:]' < VERSION)"
+          # Бета несёт версию X.Y.Z-beta: так хаб на бете отличает себя
+          # от стабильной сборки той же версии (internal/hub/versioncheck.go)
+          # и собирает ссылки на свой релиз (releases/download/vX.Y.Z-beta).
+          version="${{ needs.check-version.outputs.binary_version }}"
           out="dist/nkt-linux-${{ matrix.goarch }}"
           go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=$version" -o "$out" ./cmd/nkt
           chmod +x "$out"
@@ -113,9 +149,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - name: Прочитать версию
+      # Теги образа: стабильный — :X.Y.Z и :latest; бета — :X.Y.Z-beta и
+      # :beta. :latest бета не двигает — на него смотрят готовые манифесты.
+      - name: Теги образа
         id: version
-        run: echo "value=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+        run: |
+          v="${{ needs.check-version.outputs.binary_version }}"
+          repo="ghcr.io/${{ github.repository_owner }}/nkt-hub"
+          if [ "${{ needs.check-version.outputs.beta }}" = true ]; then
+            channel=beta
+          else
+            channel=latest
+          fi
+          {
+            echo "value=$v"
+            echo "tags=$repo:$v,$repo:$channel"
+          } >> "$GITHUB_OUTPUT"
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
         with:
@@ -129,12 +178,10 @@ jobs:
           push: true
           build-args: |
             VERSION=${{ steps.version.outputs.value }}
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/nkt-hub:${{ steps.version.outputs.value }}
-            ghcr.io/${{ github.repository_owner }}/nkt-hub:latest
+          tags: ${{ steps.version.outputs.tags }}
 
   release:
-    needs: build
+    needs: [check-version, build]
     runs-on: ubuntu-latest
     steps:
       # Нужен именно чекаут, а не голый gh: --generate-notes и определение
@@ -165,7 +212,7 @@ jobs:
       # dist/deploy: is a directory».
       - name: Манифесты с версией релиза
         run: |
-          version="${GITHUB_REF_NAME#v}"
+          version="${{ needs.check-version.outputs.binary_version }}"
           sed "s|ghcr.io/piqab/nkt-hub:latest|ghcr.io/piqab/nkt-hub:$version|" \
             deploy/docker-compose.hub.release.yml > dist/docker-compose.hub.release.yml
           sed "s|ghcr.io/piqab/nkt-hub:latest|ghcr.io/piqab/nkt-hub:$version|" \
@@ -186,11 +233,17 @@ jobs:
       - name: Описание релиза из WHATSNEW.md
         id: notes
         run: |
-          # Предыдущий тег — самый старший из тех, что строго младше
-          # выпускаемого. "|| true": без единого прошлого тега grep выходит с
+          # Раздел ищется по стабильному заголовку «## vX.Y.Z» и для беты:
+          # отдельных заметок у неё нет, это те же изменения раньше срока.
+          notes_tag="${{ needs.check-version.outputs.notes_tag }}"
+          # Предыдущий тег — последний стабильный (беты не считаются): и
+          # бета, и стабильный релиз описывают всё с прошлого стабильного,
+          # так что стабильные заметки полны, даже если часть уже выходила
+          # бетой. "|| true": без единого прошлого тега grep выходит с
           # кодом 1, и под bash -e это уронило бы шаг вместо честного "нет".
           prev="$(git tag --list 'v*.*.*' --sort=-v:refname \
-            | awk -v cur="$GITHUB_REF_NAME" 'cur != $0' \
+            | grep -v -- '-beta$' \
+            | awk -v cur="$notes_tag" 'cur != $0' \
             | head -1 || true)"
           echo "предыдущий тег: ${prev:-нет}"
           # Без раздела релиз не выпускается. Раньше здесь был запасной
@@ -199,25 +252,31 @@ jobs:
           # Changelog», которую хаб честно показывал вместо текста
           # изменений. Лучше громко упасть на выпуске, чем тихо выдать
           # пользователю ссылку.
-          if ! sh scripts/release-notes.sh "$GITHUB_REF_NAME" "$prev" > notes.md; then
-            echo "::error::в WHATSNEW.md нет раздела для $GITHUB_REF_NAME — добавьте его и повторите выпуск"
+          if ! sh scripts/release-notes.sh "$notes_tag" "$prev" > notes.md; then
+            echo "::error::в WHATSNEW.md нет раздела для $notes_tag — добавьте его и повторите выпуск"
             exit 1
           fi
           # Английская часть — из WHATSNEW.en.md, после маркера «<!-- en -->»:
           # хаб делит тело релиза по нему и показывает читающему его язык
           # (versioncheck.go, splitReleaseNotes). Файл ведётся с v1.10.61;
           # для более старых тегов раздела нет — описание останется русским.
-          if [ -f WHATSNEW.en.md ] && WHATSNEW_FILE=WHATSNEW.en.md sh scripts/release-notes.sh "$GITHUB_REF_NAME" "$prev" > notes.en.md 2>/dev/null; then
+          if [ -f WHATSNEW.en.md ] && WHATSNEW_FILE=WHATSNEW.en.md sh scripts/release-notes.sh "$notes_tag" "$prev" > notes.en.md 2>/dev/null; then
             printf '\n\n<!-- en -->\n\n' >> notes.md
             cat notes.en.md >> notes.md
           else
-            echo "в WHATSNEW.en.md нет раздела для $GITHUB_REF_NAME — описание только по-русски"
+            echo "в WHATSNEW.en.md нет раздела для $notes_tag — описание только по-русски"
           fi
           cat notes.md
       - name: Создать GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Бета — pre-release: хаб (internal/hub/versioncheck.go) предлагает
+          # такие только с включённым бета-каналом.
+          extra=""
+          if [ "${{ needs.check-version.outputs.beta }}" = true ]; then
+            extra="--prerelease"
+          fi
           gh release create "$GITHUB_REF_NAME" dist/* \
             --title "$GITHUB_REF_NAME" \
-            --notes-file notes.md
+            --notes-file notes.md $extra

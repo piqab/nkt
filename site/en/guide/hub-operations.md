@@ -50,7 +50,10 @@ line.
   the hub downloads the binary, verifies the checksum and restarts;
   **rollback** to the previous version if something went wrong. The new
   version's notes are shown before installing — in the UI language; while
-  no update is out, the installed version's notes stay in that spot.
+  no update is out, the installed version's notes stay in that spot. The
+  **"use beta versions"** checkbox makes betas (tag `vX.Y.Z-beta`) count
+  as updates; a beta hub carries a "beta" badge in the header and hands
+  the beta to its hosts.
 - Hosts whose version differs from the hub's are brought to the hub's
   version when opened; “update all” in the host list — for the ones
   behind.
@@ -78,6 +81,9 @@ internet. Off by default.
 
 The **Test** button sends the model a short probe using whatever is in
 the form right now: a wrong address or key shows up immediately.
+**Answer wait time** is how long to wait for the model (90 s by default;
+a local model on a weak machine needs 300+); the analysis window shows
+a running seconds counter.
 
 When on, a bulb button appears in the row of a finding (including
 "What's broken" on the overview), a vulnerability (packages and images),

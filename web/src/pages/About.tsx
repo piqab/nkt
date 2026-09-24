@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Checkbox, InputNumber } from 'antd'
+import { Button, Checkbox, InputNumber, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { usePrivacy } from '../privacy'
@@ -118,6 +118,21 @@ export default function About() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- только при открытии раздела
   }, [])
 
+  // Бета-канал: переключение сразу перепроверяет версии — «последняя
+  // доступная» меняется на глазах.
+  async function setBeta(on: boolean) {
+    setChecking(true)
+    setNotice(null)
+    try {
+      await api('/hub/version/settings', { method: 'POST', body: { beta: on } })
+      await version.reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setChecking(false)
+    }
+  }
+
   async function applyUpdate() {
     if (!(await confirmAction(t('about.confirmUpdate', { version: version.data?.latest })))) return
     setUpdating(true)
@@ -221,6 +236,11 @@ export default function About() {
                 <div className="small muted">{t('about.currentVersion')}</div>
                 <div className="mono" style={{ fontSize: '1.1rem' }}>
                   {info?.current}
+                  {info?.is_beta && (
+                    <Tag color="orange" style={{ marginLeft: '0.5rem', verticalAlign: 'middle' }}>
+                      beta
+                    </Tag>
+                  )}
                 </div>
               </div>
               {info?.latest && (
@@ -273,6 +293,12 @@ export default function About() {
                 {t('about.rollbackHint')}
               </div>
             )}
+            <div style={{ marginTop: '0.75rem' }} title={t('about.betaHint')}>
+              <Checkbox checked={!!info?.beta} disabled={checking} onChange={(e) => void setBeta(e.target.checked)}>
+                {t('about.beta')}
+              </Checkbox>
+              <div className="small muted">{t('about.betaHint')}</div>
+            </div>
 
             {info?.update_available && !info.updatable && (
               <div className="small muted" style={{ marginTop: '0.75rem' }}>

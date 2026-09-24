@@ -57,7 +57,9 @@ function isOlderVersion(current: string, latest: string): boolean {
   for (let i = 0; i < 3; i++) {
     if (a[i] !== b[i]) return a[i] < b[i]
   }
-  return false
+  // Бета старше стабильной той же версии (зеркало isNewerVersion в
+  // internal/hub/versioncheck.go).
+  return current.endsWith('-beta') && !latest.endsWith('-beta')
 }
 
 /** Версия nkt на хосте не совпадает с версией хаба — в любую сторону.

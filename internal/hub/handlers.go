@@ -167,6 +167,8 @@ func versionInfoJSON(v VersionInfo) map[string]any {
 		"latest":           v.Latest,
 		"update_available": v.UpdateAvailable,
 		"updatable":        v.Updatable,
+		"beta":             v.Beta,
+		"is_beta":          v.IsBeta,
 	}
 	if v.Previous != "" {
 		out["previous"] = v.Previous
@@ -228,6 +230,24 @@ func (s *Server) handleHubVulnDBRefresh(w http.ResponseWriter, r *http.Request) 
 // включение на хосте.
 func (s *Server) handleHubAptCacheStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.hub.aptCacheStatsJSON())
+}
+
+// handleHubVersionSettings — галочка «использовать бета-версии»: после
+// переключения версии перепроверяются сразу, ответ — свежий статус.
+func (s *Server) handleHubVersionSettings(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Beta bool `json:"beta"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.hub.SetBetaChannel(r.Context(), req.Beta); err != nil {
+		fail(w, r, err)
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "hub.beta", strconv.FormatBool(req.Beta), "ok", "")
+	writeJSON(w, http.StatusOK, versionInfoJSON(s.hub.CheckNow(r.Context())))
 }
 
 func (s *Server) handleHubAptCacheSettings(w http.ResponseWriter, r *http.Request) {

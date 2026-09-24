@@ -247,6 +247,9 @@ type Manager struct {
 	// показывает «О системе», пока обновления нет.
 	currentNotes   string
 	currentNotesEN string
+	// betaChannel — «использовать бета-версии» (update.beta в базе);
+	// копия для VersionStatusFor, у которого нет контекста для базы.
+	betaChannel bool
 	// k8sStable — актуальная минорная версия Kubernetes (см. k8sStableMinor).
 	k8sStableMu sync.Mutex
 	k8sStable   string

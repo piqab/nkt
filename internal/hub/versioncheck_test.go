@@ -183,7 +183,7 @@ func TestPickReleases(t *testing.T) {
 		{TagName: "v1.9.60"},
 		{TagName: "garbage"},
 	}
-	latest, prev, cur := pickReleases(rels, "1.9.63")
+	latest, prev, cur := pickReleases(rels, "1.9.63", false)
 	if latest.TagName != "v1.9.63" || prev != "1.9.62" {
 		t.Errorf("current 1.9.63: latest=%s prev=%s", latest.TagName, prev)
 	}
@@ -192,11 +192,11 @@ func TestPickReleases(t *testing.T) {
 	if cur.TagName != "v1.9.63" || cur.Body != "latest" {
 		t.Errorf("релиз текущей версии = %+v", cur)
 	}
-	_, prev, cur = pickReleases(rels, "1.9.62")
+	_, prev, cur = pickReleases(rels, "1.9.62", false)
 	if prev != "1.9.61" || cur.TagName != "v1.9.62" {
 		t.Errorf("current 1.9.62: prev=%s cur=%s", prev, cur.TagName)
 	}
-	_, prev, cur = pickReleases(rels, "1.9.60")
+	_, prev, cur = pickReleases(rels, "1.9.60", false)
 	if prev != "" {
 		t.Errorf("самая старая версия: prev=%s, ожидалось пусто", prev)
 	}
@@ -205,8 +205,59 @@ func TestPickReleases(t *testing.T) {
 	}
 	// Версии нет среди релизов (сборка из исходников) — пусто, а не
 	// чужое описание.
-	if _, _, none := pickReleases(rels, "9.9.9"); none.TagName != "" {
+	if _, _, none := pickReleases(rels, "9.9.9", false); none.TagName != "" {
 		t.Errorf("для неизвестной версии вернулся релиз %s", none.TagName)
+	}
+}
+
+// Бета-канал: пререлизы vX.Y.Z-beta считаются за обновления только с
+// включённой галочкой; свои заметки бета-хаб видит в любом случае.
+func TestPickReleasesBeta(t *testing.T) {
+	rels := []githubRelease{
+		{TagName: "v1.10.84-beta", Prerelease: true, Body: "beta notes"},
+		{TagName: "v1.10.83", Body: "stable"},
+		{TagName: "v1.10.83-beta", Prerelease: true, Body: "old beta"},
+		{TagName: "v1.10.82"},
+	}
+	// Стабильный хаб без галочки бету не видит.
+	latest, prev, _ := pickReleases(rels, "1.10.83", false)
+	if latest.TagName != "v1.10.83" || prev != "1.10.82" {
+		t.Errorf("канал stable: latest=%s prev=%s", latest.TagName, prev)
+	}
+	// С галочкой — предлагается следующая бета.
+	latest, _, _ = pickReleases(rels, "1.10.83", true)
+	if latest.TagName != "v1.10.84-beta" {
+		t.Errorf("канал beta: latest=%s", latest.TagName)
+	}
+	// Хаб на бете 1.10.83-beta без галочки: обновление — стабильная
+	// 1.10.83, заметки — своей беты.
+	latest, prev, cur := pickReleases(rels, "1.10.83-beta", false)
+	if latest.TagName != "v1.10.83" || cur.Body != "old beta" || prev != "1.10.82" {
+		t.Errorf("бета-хаб без галочки: latest=%s cur=%q prev=%s", latest.TagName, cur.Body, prev)
+	}
+}
+
+// Порядок версий с бетой: бета старше стабильной той же версии и новее
+// прошлой стабильной.
+func TestIsNewerVersionBeta(t *testing.T) {
+	cases := []struct {
+		latest, current string
+		want            bool
+	}{
+		{"1.10.83", "1.10.83-beta", true},
+		{"1.10.83-beta", "1.10.83", false},
+		{"1.10.84-beta", "1.10.83", true},
+		{"1.10.83-beta", "1.10.83-beta", false},
+		{"1.10.83", "1.10.83", false},
+		{"1.10.82", "1.10.83-beta", false},
+	}
+	for _, c := range cases {
+		if got := isNewerVersion(c.latest, c.current); got != c.want {
+			t.Errorf("isNewerVersion(%s, %s) = %v, ожидалось %v", c.latest, c.current, got, c.want)
+		}
+	}
+	if !isBetaVersion("1.10.83-beta") || isBetaVersion("1.10.83") {
+		t.Error("isBetaVersion")
 	}
 }
 

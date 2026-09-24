@@ -67,14 +67,26 @@ type githubRelease struct {
 
 // pickReleases picks, out of a release list, the newest published version
 // and the one right below current — what "обновить" and "откатить" would
-// install. Drafts and pre-releases never count.
-func pickReleases(rels []githubRelease, current string) (latest githubRelease, previous string, cur githubRelease) {
+// install. Drafts never count; pre-releases (беты, тег vX.Y.Z-beta) —
+// только когда хаб переведён на бета-канал (beta). Релиз установленной
+// версии (cur) ищется и среди бет: хаб на бете должен видеть свои заметки
+// независимо от канала.
+func pickReleases(rels []githubRelease, current string, beta bool) (latest githubRelease, previous string, cur githubRelease) {
 	for _, r := range rels {
-		if r.Draft || r.Prerelease {
+		if r.Draft {
 			continue
 		}
 		v := strings.TrimPrefix(strings.TrimSpace(r.TagName), "v")
 		if _, ok := parseSemver(v); !ok {
+			continue
+		}
+		// Релиз установленной версии: его описание показывается, пока
+		// обновления нет, — «что нового в этой версии» полезнее пустого
+		// места, а после выхода следующей блок сам переключится на неё.
+		if v == current {
+			cur = r
+		}
+		if r.Prerelease && !beta {
 			continue
 		}
 		if latest.TagName == "" || isNewerVersion(v, strings.TrimPrefix(latest.TagName, "v")) {
@@ -83,15 +95,17 @@ func pickReleases(rels []githubRelease, current string) (latest githubRelease, p
 		if isNewerVersion(current, v) && (previous == "" || isNewerVersion(v, previous)) {
 			previous = v
 		}
-		// Релиз установленной версии: его описание показывается, пока
-		// обновления нет, — «что нового в этой версии» полезнее пустого
-		// места, а после выхода следующей блок сам переключится на неё.
-		if v == current {
-			cur = r
-		}
 	}
 	return latest, previous, cur
 }
+
+// betaSuffix — так помечена бета и в теге релиза (vX.Y.Z-beta), и в
+// версии бинарника (X.Y.Z-beta): одна строка, чтобы ссылки на GitHub
+// (releases/download/v<версия>/…) собирались без ветвлений.
+const betaSuffix = "-beta"
+
+// isBetaVersion — версия бета-сборки.
+func isBetaVersion(v string) bool { return strings.HasSuffix(strings.TrimSpace(v), betaSuffix) }
 
 // checkLatestVersion asks GitHub's public, unauthenticated Releases API for
 // HubReleaseRepo's latest tag and records the result — success or failure —
@@ -136,7 +150,8 @@ func (m *Manager) checkLatestVersion(ctx context.Context) {
 		m.recordVersionCheck("", "", "", err)
 		return
 	}
-	rel, previous, cur := pickReleases(rels, m.version)
+	beta := m.betaChannelEnabled(ctx)
+	rel, previous, cur := pickReleases(rels, m.version, beta)
 	latest := strings.TrimPrefix(strings.TrimSpace(rel.TagName), "v")
 	if latest == "" {
 		m.recordVersionCheck("", "", "", msgs.Errorf("hub.emptyTagNameGitHubResponse"))
@@ -148,7 +163,35 @@ func (m *Manager) checkLatestVersion(ctx context.Context) {
 	m.versionMu.Lock()
 	m.latestNotesEN = en
 	m.currentNotes, m.currentNotesEN = curRU, curEN
+	m.betaChannel = beta
 	m.versionMu.Unlock()
+}
+
+// betaChannelKVKey — настройка «использовать бета-версии» в базе хаба.
+const betaChannelKVKey = "update.beta"
+
+// betaChannelEnabled читает настройку из базы: она меняется из
+// интерфейса, и фоновая проверка должна видеть свежее значение.
+func (m *Manager) betaChannelEnabled(ctx context.Context) bool {
+	raw, ok, err := m.db.KVGet(ctx, betaChannelKVKey)
+	return err == nil && ok && raw == "1"
+}
+
+// SetBetaChannel включает или выключает бета-канал и сразу перепроверяет
+// версии: «последняя доступная» после переключения должна измениться на
+// глазах, а не через шесть часов.
+func (m *Manager) SetBetaChannel(ctx context.Context, on bool) error {
+	v := "0"
+	if on {
+		v = "1"
+	}
+	if err := m.db.KVSet(ctx, betaChannelKVKey, v); err != nil {
+		return err
+	}
+	m.versionMu.Lock()
+	m.betaChannel = on
+	m.versionMu.Unlock()
+	return nil
 }
 
 // maxReleaseNotes caps what is kept from a release body. Nothing this
@@ -223,6 +266,10 @@ type VersionInfo struct {
 	Notes string
 	// NotesAreCurrent — Notes описывают уже установленную версию.
 	NotesAreCurrent bool
+	// Beta — хаб переведён на бета-канал: беты считаются за обновления.
+	Beta bool
+	// IsBeta — установлена бета-сборка (версия с суффиксом -beta).
+	IsBeta bool
 	// Updatable reports whether applyHubUpdate has any real way to install
 	// a downloaded binary back onto this machine at all — false for a
 	// Docker/Kubernetes-deployed hub (no writable, persistent binary path;
@@ -252,6 +299,7 @@ func (m *Manager) VersionStatusFor(lang msgs.Lang) VersionInfo {
 	if lang == msgs.EN && m.currentNotesEN != "" {
 		curNotes = m.currentNotesEN
 	}
+	beta := m.betaChannel
 	m.versionMu.Unlock()
 
 	updateAvailable := latest != "" && isNewerVersion(latest, m.version)
@@ -270,6 +318,8 @@ func (m *Manager) VersionStatusFor(lang msgs.Lang) VersionInfo {
 		Notes:           notes,
 		NotesAreCurrent: notesAreCurrent,
 		Updatable:       hubSelfUpdateSupported(),
+		Beta:            beta,
+		IsBeta:          isBetaVersion(m.version),
 	}
 }
 
@@ -308,6 +358,11 @@ func parseSemver(v string) ([3]int, bool) {
 // either side doesn't parse as semver, same as the frontend: the best that
 // can be said about an opaque string like "dev" is that it differs, never a
 // guess at which of two incomparable strings is "newer".
+//
+// Бета той же версии старше стабильной (1.10.83-beta < 1.10.83), а
+// следующая бета новее прошлой стабильной (1.10.84-beta > 1.10.83) —
+// обычный порядок pre-release, без него хаб на бете не увидел бы выхода
+// той же версии в стабильном виде.
 func isNewerVersion(latest, current string) bool {
 	a, aok := parseSemver(latest)
 	b, bok := parseSemver(current)
@@ -319,7 +374,7 @@ func isNewerVersion(latest, current string) bool {
 			return a[i] > b[i]
 		}
 	}
-	return false
+	return isBetaVersion(current) && !isBetaVersion(latest)
 }
 
 // hubSelfUpdateSupported reports whether this process is running in a way a
