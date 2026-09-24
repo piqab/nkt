@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AIExplain } from '../components/AIExplain'
 import { Sensitive, blurText } from '../privacy'
 import { Button, Checkbox, InputNumber, Switch, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
@@ -204,7 +205,20 @@ export default function HostEvents() {
         </span>
       ),
     },
-    { title: t('events.colDetail'), key: 'detail', render: (_, e) => <span className="small">{e.detail ? blurText(e.detail) : '—'}</span> },
+    {
+      title: t('events.colDetail'),
+      key: 'detail',
+      render: (_, e) => (
+        <span className="row row-nowrap" style={{ gap: '0.3rem', alignItems: 'center' }}>
+          <span className="small">{e.detail ? blurText(e.detail) : '—'}</span>
+          {e.detail && (
+            <AIExplain
+              ctx={{ kind: 'event', title: `${e.kind}: ${e.host_name}`, detail: e.detail, severity: e.severity }}
+            />
+          )}
+        </span>
+      ),
+    },
   ]
 
   return (

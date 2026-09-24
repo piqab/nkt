@@ -8,6 +8,30 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.80 — 2026-09-24
+
+- **AI analysis of findings and architecture.** One setting for the
+  whole installation — a card in "About" on the hub: provider
+  **Anthropic** or **OpenAI-compatible** (local ones included — Ollama,
+  vLLM, LM Studio), address, model, key. The key is stored encrypted on
+  the hub and never handed out, requests go from the hub — **hosts need
+  no internet**. Everything is off by default.
+- A bulb button **"explain"** in the row of a finding, a vulnerability,
+  a malware hit, a hub alert and next to a job error: what it means, why
+  it matters here (what is nearby on the host — ports, containers,
+  firewall — is added to the request) and what to do, step by step with
+  commands. **The model runs nothing** — commands are shown, you apply
+  them.
+- **Architecture review** on the "Resource map": single points of
+  failure, needless exposure, inconsistencies, where to start — over the
+  whole map; on the hub the same across all hosts. Reviews are kept with
+  their date.
+- What leaves the machine: by default host names, IPs, domains and
+  e-mail are replaced with aliases and restored in the answer; "show
+  request" shows what was sent verbatim. Answers are cached (one finding
+  across ten hosts is one request) and spending is capped by a daily
+  limit.
+
 ## v1.10.79 — 2026-09-24
 
 - **The host API port is configurable** — globally on the hub

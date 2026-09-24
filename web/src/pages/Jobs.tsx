@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { blurText } from '../privacy'
 import { Button, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { RedoOutlined } from '@ant-design/icons'
+import { AIExplain } from '../components/AIExplain'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import { wsURL } from '../hooks/usePty'
@@ -331,7 +332,16 @@ export function JobLogModal({
       </div>
 
       {current.status === 'interrupted' && <Banner kind="warn">{t('jobs.interruptedHint')}</Banner>}
-      {current.error && <Banner kind="error">{current.error}</Banner>}
+      {current.error && (
+        <Banner kind="error">
+          <span className="row row-nowrap" style={{ gap: '0.4rem', alignItems: 'flex-start' }}>
+            <span>{current.error}</span>
+            {/* Ошибка задания — тот же случай, что находка: объяснить и
+                подсказать, что делать. */}
+            <AIExplain ctx={{ kind: 'job-error', title: current.title || current.kind, detail: current.error, service: current.kind }} />
+          </span>
+        </Banner>
+      )}
       <ErrorNote error={retryError} />
 
       <pre ref={bodyRef} className="diff mono" style={{ maxHeight: '26rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>

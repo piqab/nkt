@@ -3,6 +3,7 @@ import { Button, Checkbox, InputNumber } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { usePrivacy } from '../privacy'
+import { AISettingsCard } from '../components/AISettingsCard'
 import type { HubVersionInfo, HubVulnDBInfo } from '../types'
 
 interface AptCacheInfo {
@@ -205,6 +206,8 @@ export default function About() {
           {t('app.privacy')}
         </Checkbox>
       </Card>
+
+      <AISettingsCard />
 
       <Card title={t('about.hubVersionTitle')}>
         {version.loading && !info ? (
