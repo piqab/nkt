@@ -66,6 +66,9 @@ interface Placed extends GraphNode {
 export default function TopologyPage() {
   const { t } = useTranslation()
   const { data, error, loading } = useApi<Graph>('/topology', 120_000)
+  // Чей это разбор: настоящий хост хаба или сам хаб/одиночный nkt.
+  // LOCAL_HOST_ID (-1) и «хост не выбран» (null) — это 0, то есть «свой».
+  const reviewHostID = Math.max(hostScope.id ?? 0, 0)
   const [selected, setSelected] = useState<string | null>(null)
   const [hovered, setHovered] = useState<string | null>(null)
   const [hideHealthy, setHideHealthy] = useState(false)
@@ -505,7 +508,7 @@ export default function TopologyPage() {
       </Card>
       {/* Разбор архитектуры: карта уже собрана — модель смотрит на неё
           целиком и говорит о том, чего в ней не хватает. */}
-      {data && <AIReviewCard graph={data} hostID={hostScope.id && hostScope.id > 0 ? hostScope.id : 0} scope="host" />}
+      {data && <AIReviewCard graph={data} hostID={reviewHostID} scope="host" />}
     </>
   )
 }
