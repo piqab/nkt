@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.92 — 2026-09-24
+
+- Resource map: a condition made redundant by the early "no data" return
+  above it is removed (CodeQL #158).
+
 ## v1.10.91 — 2026-09-24
 
 - **Hosts no longer look "behind" after a hub self-update.** An open tab
