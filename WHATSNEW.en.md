@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.89 — 2026-09-24
+
+- **An nkt restart on a host no longer fails requests.** After "upgrade
+  packages" (or a self-update) the service is not listening for a few
+  seconds, and pages failed with "connection refused". Now, if the host
+  answered over SSH recently, the hub waits up to 20 s and retries the
+  login; if the API never comes back it says so plainly: "SSH answers,
+  but the nkt API is not up — 'update' from the hub reinstalls and
+  restarts the service". The same hint sits on the "unreachable" label
+  in the host list.
+- **"Update all" no longer loses hosts.** No more than three are updated
+  at once (the rest wait — visible in the job log): dozens of SSH
+  connections at the same time hit sshd or jump-host limits and hosts
+  ended up "unreachable" although "open" updated them fine. A transient
+  SSH error (refused, reset, timeout) is retried three times with a
+  pause. After a successful update the host is polled immediately — the
+  "unreachable" label does not linger until the next tick.
+
 ## v1.10.88 — 2026-09-24
 
 - Resource map: a redundant condition when handing the graph to the

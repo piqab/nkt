@@ -37,6 +37,34 @@ func NewHostInstallRunner(m *Manager) *HostInstallRunner { return &HostInstallRu
 // первый вход через туннель укладываются с запасом.
 const installJobTimeout = 10 * time.Minute
 
+// maxParallelInstalls — сколько хостов обновляются одновременно.
+// «Обновить всё» заводит задание на каждый хост, и без предела десятки
+// SSH-подключений разом упирались в MaxStartups sshd или в один и тот же
+// jump-хост: часть попыток получала «connection refused» и хост
+// оказывался «недоступен», хотя поодиночке обновлялся без вопросов.
+const maxParallelInstalls = 3
+
+var installSlots = make(chan struct{}, maxParallelInstalls)
+
+// acquireInstallSlot ждёт свободного места; ожидание видно в журнале
+// задания, чтобы «выполняется» без строк не выглядело зависанием.
+func acquireInstallSlot(ctx context.Context, job *installJob) error {
+	select {
+	case installSlots <- struct{}{}:
+		return nil
+	default:
+	}
+	job.append("hub.installQueued", maxParallelInstalls)
+	select {
+	case installSlots <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func releaseInstallSlot() { <-installSlots }
+
 // Run — одна установка.
 func (r *HostInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	var p HostInstallParams
@@ -79,7 +107,13 @@ func (r *HostInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		case <-watch:
 		}
 	}()
+	if err := acquireInstallSlot(ctx, job); err != nil {
+		close(watch)
+		job.finish(err)
+		return err
+	}
 	err := r.m.install(ctx, p.HostID, job)
+	releaseInstallSlot()
 	close(watch)
 	job.finish(err)
 	if err != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {

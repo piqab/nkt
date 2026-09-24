@@ -97,6 +97,9 @@ var enCatalog = map[string]string{
 	"hub.noInstallsYet":          "there haven't been any installs for this host yet",
 	"hub.localScannerNotRunning": "the hub's local scanner isn't running",
 	"hub.hostUnreachable":        "host unreachable: %s",
+	"hub.hostAPIDown":            "SSH answers, but the nkt API on the host is not up (%v): the service is not running or did not come back after a package upgrade — “update” from the hub reinstalls and restarts it",
+	"hub.installQueued":          "waiting for a slot: no more than %d hosts are updated at once",
+	"hub.sshRetry":               "SSH did not answer (attempt %d of %d): %v — retrying in a few seconds",
 
 	"hub.dbusMissingAfterInstall":        "Warning: the host has no running dbus system bus — the terminal and in-app package installs stay unavailable until `systemctl enable --now dbus` is run",
 	"hub.bootstrapDbus":                  "Bootstrap: enabling and starting dbus…",
