@@ -144,6 +144,17 @@ export default function TopologyPage() {
   }, [data, hideHealthy, hideInactive])
 
   const positions = useMemo(() => new Map(placed.map((n) => [n.id, n])), [placed])
+  // Модели — ровно то, что на экране: узлы, скрытые фильтрами, и рёбра к
+  // ним в разбор не попадают.
+  const reviewGraph = useMemo<Graph | undefined>(() => {
+    if (!data) return undefined
+    const visible = new Set(placed.map((n) => n.id))
+    return {
+      ...data,
+      nodes: data.nodes.filter((n) => visible.has(n.id)),
+      edges: (data.edges ?? []).filter((e) => visible.has(e.from) && visible.has(e.to)),
+    }
+  }, [data, placed])
 
   // A node with several incoming (or outgoing) edges used to have every
   // one of them meet at the exact same point — the box's dead centre.
@@ -508,7 +519,7 @@ export default function TopologyPage() {
       </Card>
       {/* Разбор архитектуры: карта уже собрана — модель смотрит на неё
           целиком и говорит о том, чего в ней не хватает. */}
-      {data && <AIReviewCard graph={data} hostID={reviewHostID} scope="host" />}
+      {data && reviewGraph && <AIReviewCard graph={reviewGraph} totalNodes={data.nodes.length} hostID={reviewHostID} scope="host" />}
     </>
   )
 }

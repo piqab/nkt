@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button, Checkbox, Form, Input, InputNumber, Segmented, type TableColumnsType } from 'antd'
 import { CheckCircleFilled, CloseCircleOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import { AIConfigError } from '../components/AIConfigError'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
@@ -561,23 +562,24 @@ function VMEditor({
     }
   }
 
+  // Окном, а не карточкой: карточка рисовалась под списком машин и
+  // каталогом образов, и после нажатия карандаша казалось, что ничего не
+  // открылось.
   return (
-    <Card
-      title={t(isNew ? 'virt.newVmName' : 'virt.editVmName', { name })}
-      subtitle={path}
-      actions={
-        <Button type="link" onClick={onClose}>
-          {t('common.close')}
-        </Button>
-      }
-    >
+    <Modal title={t(isNew ? 'virt.newVmName' : 'virt.editVmName', { name })} onClose={onClose} width={960} maskClosable={false}>
+      <div className="small muted mono" style={{ marginBottom: '0.5rem' }}>
+        {path}
+      </div>
       {existing.loading && !isNew ? (
         <Loading what={t('virt.loadingDefinition')} />
       ) : (
         <div className="col">
           {error && <Banner kind="error">{error}</Banner>}
           {result && (
-            <Banner kind={result.rolled_back ? 'error' : 'info'}>{result.message}</Banner>
+            <Banner kind={result.rolled_back ? 'error' : 'info'}>
+              {result.message}
+              {result.rolled_back && <AIConfigError path={path} service="libvirt" content={content} result={result} />}
+            </Banner>
           )}
           <CodeEditor value={content} onChange={(e) => setDraft(e.target.value)} rows={20} />
           <label>
@@ -607,6 +609,6 @@ function VMEditor({
           )}
         </div>
       )}
-    </Card>
+    </Modal>
   )
 }

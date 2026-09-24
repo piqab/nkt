@@ -2415,6 +2415,8 @@
     "promptReset": "Restore default",
     "promptDiffTitle": "Difference from the default instruction",
     "promptApply": "Apply",
-    "promptToDefault": "The text matches the default instruction — the edit will be removed."
+    "promptToDefault": "The text matches the default instruction — the edit will be removed.",
+    "explainConfigError": "explain the error and suggest a fix (AI)",
+    "reviewScope": "Reviewing {{shown}} of {{total}} nodes — as shown on the map with the current filters."
   }
 }

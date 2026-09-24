@@ -168,3 +168,45 @@ func TestAnthropicRequestShape(t *testing.T) {
 		t.Fatalf("сообщений = %d", len(msgsList))
 	}
 }
+
+// Секреты вырезаются всегда — и с выключенной псевдонимизацией: пароль
+// из конфигурации или токен из вывода команды модели не нужны.
+func TestRedactSecrets(t *testing.T) {
+	in := strings.Join([]string{
+		"password = \"hunter2\"",
+		"DB_PASSWORD: s3cr3t",
+		"api_key=sk-abcdefghijklmnopqrstuvwxyz0123",
+		"Authorization: Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.abcdefghijklmnop",
+		"url: postgres://app:pa55@db.internal:5432/app",
+		"ssl_password_file /etc/nginx/pw.txt",
+		"-----BEGIN RSA PRIVATE KEY-----\nMIIBOgIBAAJBAK\n-----END RSA PRIVATE KEY-----",
+		"AKIAIOSFODNN7EXAMPLE",
+	}, "\n")
+	out := NewMapper(false).Hide(in)
+	for _, secret := range []string{"hunter2", "s3cr3t", "sk-abcdefghijklmnopqrstuvwxyz0123", "eyJhbGciOiJIUzI1NiJ9", "pa55@", "MIIBOgIBAAJBAK", "AKIAIOSFODNN7EXAMPLE"} {
+		if strings.Contains(out, secret) {
+			t.Errorf("секрет %q ушёл в запрос:\n%s", secret, out)
+		}
+	}
+	// Имена ключей и путь к файлу пароля — не секреты, они и есть предмет.
+	for _, keep := range []string{"password = \"<secret>", "DB_PASSWORD: <secret>", "ssl_password_file /etc/nginx/pw.txt", "postgres://app:<secret>@", "<private-key>"} {
+		if !strings.Contains(out, keep) {
+			t.Errorf("ожидали %q в:\n%s", keep, out)
+		}
+	}
+}
+
+// Ошибка правки конфигурации: в запросе — вывод проверки, дифф и своя
+// постановка задачи.
+func TestUserPromptConfigError(t *testing.T) {
+	p := UserPrompt(FindingContext{
+		Kind: KindConfigError, Title: "nginx: [emerg] unknown directive", File: "/etc/nginx/nginx.conf",
+		Output: "nginx: [emerg] unknown directive \"servr\" in /etc/nginx/nginx.conf:12",
+		Diff:   "--- a\n+++ b\n@@ -12 +12 @@\n-server {\n+servr {",
+	}, msgs.RU)
+	for _, want := range []string{"Вывод проверки", "```diff", "+servr {", "Задача: правка файла"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("нет %q в промпте:\n%s", want, p)
+		}
+	}
+}

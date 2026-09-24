@@ -20,13 +20,16 @@ import (
 
 // Kind — что разбираем: от этого зависит и инструкция, и ключ кэша.
 const (
-	KindFinding   = "finding"
-	KindVuln      = "vuln"
-	KindMalware   = "malware"
-	KindEvent     = "event"
-	KindJobError  = "job-error"
-	KindMap       = "map"
-	KindHubReview = "hub-review"
+	KindFinding  = "finding"
+	KindVuln     = "vuln"
+	KindMalware  = "malware"
+	KindEvent    = "event"
+	KindJobError = "job-error"
+	// KindConfigError — правка конфигурации не прошла проверку или apply:
+	// модели даются вывод проверки и дифф правки.
+	KindConfigError = "config-error"
+	KindMap         = "map"
+	KindHubReview   = "hub-review"
 )
 
 // systemPrompt — общая инструкция для разбора одной находки.
@@ -169,6 +172,11 @@ type FindingContext struct {
 	// Around — что рядом: слушатели, контейнеры, правила firewall —
 	// ровно то, из чего модель может сделать вывод «грозит здесь».
 	Around []string
+	// Diff — для ошибки правки конфигурации: что именно меняли (unified
+	// diff «на диске → черновик»), а не весь файл.
+	Diff string
+	// Output — вывод проверки (валидатора, apply) — сама ошибка.
+	Output string
 }
 
 // UserPrompt собирает текст запроса. Пустые поля пропускаются: строка
@@ -202,6 +210,12 @@ func UserPrompt(c FindingContext, lang msgs.Lang) string {
 	}
 	add(label("Подсказка nkt", "nkt suggestion"), c.Suggestion)
 	add(label("Хост", "Host"), c.Host)
+	if strings.TrimSpace(c.Output) != "" {
+		fmt.Fprintf(&b, "%s:\n```\n%s\n```\n", label("Вывод проверки", "Check output"), strings.TrimSpace(c.Output))
+	}
+	if strings.TrimSpace(c.Diff) != "" {
+		fmt.Fprintf(&b, "%s:\n```diff\n%s\n```\n", label("Дифф правки", "Diff of the edit"), strings.TrimSpace(c.Diff))
+	}
 	if len(c.Around) > 0 {
 		fmt.Fprintf(&b, "%s:\n", label("Рядом на хосте", "Nearby on the host"))
 		for _, line := range c.Around {
@@ -210,6 +224,13 @@ func UserPrompt(c FindingContext, lang msgs.Lang) string {
 			}
 			fmt.Fprintf(&b, "- %s\n", strings.TrimSpace(line))
 		}
+	}
+	if c.Kind == KindConfigError {
+		// Своя постановка задачи: это не находка сканера, а отказ при
+		// записи — нужен не риск, а исправленный фрагмент.
+		b.WriteString(label(
+			"Задача: правка файла не прошла проверку и откатилась. Объясни, что именно не так (с номером строки, если он есть в выводе), и покажи исправленный фрагмент.\n",
+			"Task: the edit failed validation and was rolled back. Explain exactly what is wrong (with the line number if the output has one) and show the corrected fragment.\n"))
 	}
 	return strings.TrimSpace(b.String())
 }

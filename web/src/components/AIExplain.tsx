@@ -28,7 +28,7 @@ import { aiAnswerState, currentAIHostID, invalidateAIAnswers, useAIAnswers } fro
  */
 
 export interface AIContext {
-  kind: 'finding' | 'vuln' | 'malware' | 'event' | 'job-error'
+  kind: 'finding' | 'vuln' | 'malware' | 'event' | 'job-error' | 'config-error'
   title: string
   detail?: string
   suggestion?: string
@@ -37,6 +37,10 @@ export interface AIContext {
   object?: string
   file?: string
   line?: number
+  /** Для ошибки правки конфигурации: дифф «на диске → черновик» и вывод
+   * проверки. Секреты из них хаб вырезает до отправки (ai.RedactSecrets). */
+  diff?: string
+  output?: string
 }
 
 interface AISection {
