@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.81 — 2026-09-24
+
+- Security checks: the cookie-attribute rule (G124) moved into the
+  config with an explanation — it looks at any `http.Cookie`, while on
+  the hub these are outgoing requests to a host's API where
+  `Secure`/`HttpOnly` mean nothing; the browser session cookie is
+  unchanged — `HttpOnly`, `SameSite=Lax`, `Secure` per
+  `NKT_COOKIE_SECURE`.
+- Resource map: dropped a redundant condition when passing the host id
+  to the architecture review.
+
 ## v1.10.80 — 2026-09-24
 
 - **AI analysis of findings and architecture.** One setting for the
