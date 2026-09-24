@@ -11,8 +11,13 @@ import (
 	"time"
 )
 
+// testHostAPIAddr — адрес API хоста по умолчанию в интеграционных
+// тестах: раньше это была константа remoteAPIAddr, теперь порт
+// настраивается (см. Manager.hostAPIAddr).
+const testHostAPIAddr = "127.0.0.1:8077"
+
 func TestRenderEnvContainsExpectedLines(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw", false, "", tunnelEnvParams{})
+	out := renderEnv("admin", "s3cr3t-pw", false, "", tunnelEnvParams{}, "127.0.0.1:8077")
 
 	for _, want := range []string{
 		"NKT_MODE=local",
@@ -45,7 +50,7 @@ func TestRenderEnvContainsExpectedLines(t *testing.T) {
 // what actually has to survive that regeneration, so this asserts renderEnv
 // itself faithfully reflects whatever it is told, not a hardcoded default.
 func TestRenderEnvPassesThroughTerminalEnabled(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw", true, "", tunnelEnvParams{})
+	out := renderEnv("admin", "s3cr3t-pw", true, "", tunnelEnvParams{}, "127.0.0.1:8077")
 	if !strings.Contains(out, "NKT_TERMINAL_ENABLED=true") {
 		t.Errorf("renderEnv(..., true) output missing NKT_TERMINAL_ENABLED=true, got:\n%s", out)
 	}
@@ -57,7 +62,7 @@ func TestRenderEnvPassesThroughTerminalEnabled(t *testing.T) {
 // process, which has no other way to learn what account the hub connects
 // with, knows what to setuid the terminal shell to.
 func TestRenderEnvWritesTerminalUserForNonRootSSHUser(t *testing.T) {
-	out := renderEnv("admin", "s3cr3t-pw", true, "deploy", tunnelEnvParams{})
+	out := renderEnv("admin", "s3cr3t-pw", true, "deploy", tunnelEnvParams{}, "127.0.0.1:8077")
 	if !strings.Contains(out, "NKT_TERMINAL_USER=deploy") {
 		t.Errorf("renderEnv(..., \"deploy\", ...) output missing NKT_TERMINAL_USER=deploy, got:\n%s", out)
 	}
@@ -70,7 +75,7 @@ func TestRenderEnvWritesTerminalUserForNonRootSSHUser(t *testing.T) {
 // self-setuid).
 func TestRenderEnvOmitsTerminalUserForRootOrEmpty(t *testing.T) {
 	for _, sshUser := range []string{"", "root"} {
-		out := renderEnv("admin", "s3cr3t-pw", true, sshUser, tunnelEnvParams{})
+		out := renderEnv("admin", "s3cr3t-pw", true, sshUser, tunnelEnvParams{}, "127.0.0.1:8077")
 		if strings.Contains(out, "NKT_TERMINAL_USER") {
 			t.Errorf("renderEnv(..., %q, ...) output unexpectedly contains NKT_TERMINAL_USER, got:\n%s", sshUser, out)
 		}
@@ -85,7 +90,7 @@ func TestRenderEnvWritesTunnelVarsWhenEnabled(t *testing.T) {
 		Enabled:    true,
 		ListenAddr: "0.0.0.0:8078",
 		Token:      "the-token",
-	})
+	}, "127.0.0.1:8077")
 	for _, want := range []string{
 		"NKT_HUB_TUNNEL_LISTEN_ADDR=0.0.0.0:8078",
 		"NKT_HUB_TUNNEL_TOKEN=the-token",

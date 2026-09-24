@@ -1140,7 +1140,11 @@ export default function Hosts({
           // выдавать заглушку за настоящий адрес.
           <span className="small muted">{t('hosts.addrUnknown')}</span>
         ) : (
-          <span className="mono small">
+          // draggable={false} и selectable: строка таблицы перетаскивается
+          // в другую группу (onRow ниже), и браузер начинал перетаскивание
+          // вместо выделения — адрес нельзя было выделить мышью и
+          // скопировать.
+          <span className="mono small selectable" draggable={false} onDragStart={(e) => e.preventDefault()}>
             <Sensitive>{h.ssh_user}@{h.addr}:{h.ssh_port}</Sensitive>
           </span>
         ),
@@ -1836,6 +1840,7 @@ type HostFormValues = {
   tunnel_enabled: boolean
   apt_via_hub: boolean
   via?: string
+  api_port?: number
 }
 
 /**
@@ -1918,6 +1923,9 @@ function HostForm({
   async function submit(values: HostFormValues) {
     setBusy(true)
     setError(null)
+    // Порт API прописан в nkt.env на самом хосте: пока не переустановим,
+    // он слушает прежний — сервер сообщает, что порт сменился.
+    let apiPortChanged = false
     try {
       const terminalEnabled = values.terminal_enabled ?? false
       const tunnelEnabled = values.tunnel_enabled ?? false
@@ -1933,6 +1941,8 @@ function HostForm({
         terminal_enabled: terminalEnabled,
         tunnel_enabled: tunnelEnabled,
         apt_via_hub: aptViaHub,
+        // 0 — «как у хаба»: поле оставлено пустым.
+        api_port: Number(values.api_port) || 0,
         ...(initial?.parent_id ? { via: values.via ?? '' } : {}),
       }
       // Правка становится умолчанием для следующих хостов — ровно то, чего
@@ -1953,11 +1963,12 @@ function HostForm({
       let authorizedKey: string | undefined
       let createdId: number | undefined
       if (editing) {
-        const res = await api<{ authorized_key?: string }>(`/hub/hosts/${initial.id}`, {
+        const res = await api<{ authorized_key?: string; api_port_changed?: boolean }>(`/hub/hosts/${initial.id}`, {
           method: 'PATCH',
           body,
         })
         authorizedKey = res.authorized_key
+        apiPortChanged = res.api_port_changed ?? false
       } else {
         const res = await api<{ id: number; authorized_key?: string }>('/hub/hosts', {
           method: 'POST',
@@ -1974,7 +1985,7 @@ function HostForm({
         values.name,
         authorizedKey,
         terminalEnabledChanged,
-        tunnelEnabledChanged,
+        tunnelEnabledChanged || apiPortChanged,
         createdId === undefined
           ? undefined
           : {
@@ -2021,6 +2032,7 @@ function HostForm({
         // нет, а трафик и время установки экономятся сразу.
         apt_via_hub: initial?.apt_via_hub ?? true,
         via: initial?.via ?? '',
+        api_port: initial?.api_port || undefined,
       }}
     >
       {!editing && <p className="small muted">{t('hosts.addHostHint')}</p>}
@@ -2039,6 +2051,18 @@ function HostForm({
         </Form.Item>
         <Form.Item name="ssh_port" label={t('hosts.sshPort')} rules={[{ required: true }]} style={{ width: '6rem' }}>
           <InputNumber min={1} max={65535} style={{ width: '100%' }} />
+        </Form.Item>
+        {/* Порт собственного API nkt на хосте: только loopback, наружу не
+            смотрит. Пусто — общий у хаба (NKT_HUB_HOST_API_PORT); свой
+            нужен, когда 8077 на хосте уже занят. */}
+        <Form.Item name="api_port" label={t('hosts.apiPort')} style={{ width: '7rem' }}>
+          <InputNumber
+            min={1}
+            max={65535}
+            placeholder={t('hosts.apiPortDefault')}
+            title={t('hosts.apiPortHint')}
+            style={{ width: '100%' }}
+          />
         </Form.Item>
         <Form.Item name="ssh_user" label={t('hosts.sshUser')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '8rem' }}>
           <Input className="sensitive" />

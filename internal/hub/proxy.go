@@ -131,7 +131,7 @@ func (m *Manager) cookieFor(ctx context.Context, hostID int64, dial dialFunc) (s
 		return "", msgs.Errorf("hub.decryptingAdminPassword", err)
 	}
 
-	cookie, err := bootstrapLogin(ctx, dial, host.AdminUser, string(adminPassword))
+	cookie, err := bootstrapLogin(ctx, dial, m.hostAPIAddrFor(host), host.AdminUser, string(adminPassword))
 	if err != nil {
 		return "", msgs.Errorf("hub.loggingHost", host.Name, err)
 	}
@@ -193,6 +193,7 @@ func (m *Manager) dialerFor(ctx context.Context, hostID int64) (dial dialFunc, c
 func (m *Manager) Proxy(hostID int64) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
+		apiAddr := m.hostAPIAddr(ctx, hostID)
 
 		dial, channel, onFail, err := m.dialerFor(ctx, hostID)
 		if err != nil {
@@ -218,7 +219,7 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 		proxy := &httputil.ReverseProxy{
 			Director: func(req *http.Request) {
 				req.URL.Scheme = "http"
-				req.URL.Host = remoteAPIAddr
+				req.URL.Host = apiAddr
 				// req.Host deliberately left as whatever the browser sent
 				// (the hub's own address) — NOT rewritten to remoteAPIAddr.
 				// dial() below already hardcodes the real network target
@@ -256,7 +257,7 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 			},
 			Transport: &http.Transport{
 				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-					conn, err := dial("tcp", remoteAPIAddr)
+					conn, err := dial("tcp", apiAddr)
 					if err == nil {
 						return conn, nil
 					}
@@ -280,7 +281,7 @@ func (m *Manager) Proxy(hostID int64) http.Handler {
 					if dialErr != nil {
 						return nil, err
 					}
-					conn, err = freshDial("tcp", remoteAPIAddr)
+					conn, err = freshDial("tcp", apiAddr)
 					if err != nil {
 						freshOnFail()
 						return nil, err
@@ -316,11 +317,12 @@ func (m *Manager) EnsureLive(ctx context.Context, hostID int64) {
 	if err != nil {
 		return
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+remoteAPIAddr+"/api/health", nil)
+	addr := m.hostAPIAddr(ctx, hostID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/api/health", nil)
 	if err != nil {
 		return
 	}
-	resp, err := tunnelHTTPClient(dial).Do(req)
+	resp, err := tunnelHTTPClient(dial, addr).Do(req)
 	if err != nil {
 		// Пул отдал мёртвое соединение — выбросить, следующий вызов
 		// dialerFor (уже внутри Proxy) дозвонится заново.
@@ -355,6 +357,10 @@ func (m *Manager) CloseHost(hostID int64) {
 func (m *Manager) dropSSHPool(hostID int64) {
 	m.dropClient(hostID)
 	m.dropSession(hostID)
+	// Порт API мог измениться вместе с остальными реквизитами.
+	m.connsMu.Lock()
+	delete(m.apiPorts, hostID)
+	m.connsMu.Unlock()
 }
 
 // DropSSHPool — dropSSHPool для обработчиков: после «забыть ключ хоста»

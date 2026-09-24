@@ -263,6 +263,11 @@ type Config struct {
 	// NKT_HUB_TUNNEL_LISTEN_ADDR (internal/hub/provision.go's renderEnv), so
 	// both sides always agree on it without needing a value per host.
 	HubTunnelPort int
+	// HubHostAPIPort — порт, на котором слушает собственный API nkt на
+	// управляемом хосте (loopback, доступен только через туннель). Хаб
+	// пишет его в nkt.env при установке и ходит по нему; у хоста может
+	// быть свой (store.Host.APIPort), если 8077 там занят.
+	HubHostAPIPort int
 }
 
 // defaultMode picks the mode for a bare invocation. Linux is the platform this
@@ -401,6 +406,7 @@ func Load() (*Config, error) {
 		HubAptCacheMaxGB:         envInt("NKT_HUB_APTCACHE_MAX_GB", 20),
 		HubAptCachePort:          envInt("NKT_HUB_APTCACHE_PORT", 3142),
 		HubTunnelPort:            envInt("NKT_HUB_TUNNEL_PORT", 8078),
+		HubHostAPIPort:           envInt("NKT_HUB_HOST_API_PORT", 8077),
 	}
 
 	switch c.Mode {

@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.79 — 2026-09-24
+
+- **The host API port is configurable** — globally on the hub
+  (`NKT_HUB_HOST_API_PORT`, 8077 by default) and per host (the "API
+  port" field in its form, empty means the hub's). Needed when 8077 is
+  taken on the host; the port is still localhost-only and never exposed.
+  Changing it on an existing host restarts the install to rewrite
+  `nkt.env`. The port is part of export/import.
+- The host address in the list is **selectable with the mouse** again —
+  dragging a row into another group swallowed the selection, so the
+  address could not be copied.
+- Every libvirt machine now has a **"machine configuration (XML)"**
+  icon: it opens `/etc/libvirt/qemu/<name>.xml` in the config editor
+  with version history and `virsh define` on save.
+
 ## v1.10.78 — 2026-09-22
 
 - The write-path check (absolute, cleaned, no `..`) now sits in both

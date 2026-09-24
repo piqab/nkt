@@ -38,7 +38,7 @@ func TestPollOverviewPopulatesFindings(t *testing.T) {
 	remoteCmd.Dir = repoRoot // fixtures mode reads ./fixtures/host by default
 	remoteCmd.Env = append(os.Environ(),
 		"NKT_MODE=fixtures",
-		"NKT_ADDR="+remoteAPIAddr,
+		"NKT_ADDR="+testHostAPIAddr,
 		"NKT_DATA_DIR="+remoteDataDir,
 		"NKT_BOOTSTRAP_ADMIN_USER=admin",
 		"NKT_BOOTSTRAP_ADMIN_PASSWORD="+adminPassword,
@@ -58,7 +58,7 @@ func TestPollOverviewPopulatesFindings(t *testing.T) {
 		_, _ = remoteCmd.Process.Wait()
 	}
 	t.Cleanup(killRemote)
-	waitForLocalHTTP(t, "http://"+remoteAPIAddr+"/api/health")
+	waitForLocalHTTP(t, "http://"+testHostAPIAddr+"/api/health")
 
 	db, err := store.Open(filepath.Join(t.TempDir(), "hub.db"))
 	if err != nil {
