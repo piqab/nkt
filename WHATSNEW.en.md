@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.86 — 2026-09-24
+
+- **The AI bulb on any configuration edit error.** It used to appear only
+  after a validation rollback; now also when the write never happened (a
+  request error: path, version conflict, validator) — in the config
+  editor, the new-file form, the block editor and the machine XML editor.
+
 ## v1.10.85 — 2026-09-24
 
 - **The machine configuration editor is a modal.** The pencil in a

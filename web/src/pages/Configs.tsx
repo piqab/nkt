@@ -460,7 +460,12 @@ export default function Configs({ me }: { me: Me }) {
                   />
                 ) : (
                   <>
-                    {error && <Banner kind="error">{error}</Banner>}
+                    {error && (
+                      <Banner kind="error">
+                        {error}
+                        <AIConfigError path={file.data.path} service={file.data.service} content={draft} message={error} />
+                      </Banner>
+                    )}
                     {result && (
                       <Banner kind={result.rolled_back ? 'error' : 'info'}>
                         <div>
@@ -713,7 +718,12 @@ function NewFileForm({
         </>
       }
     >
-      {error && <Banner kind="error">{error}</Banner>}
+      {error && (
+        <Banner kind="error">
+          {error}
+          <AIConfigError path={path} content={content} message={error} />
+        </Banner>
+      )}
       {result && (
         <Banner kind={result.rolled_back ? 'error' : 'info'}>
           <div>

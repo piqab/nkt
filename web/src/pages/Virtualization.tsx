@@ -574,7 +574,12 @@ function VMEditor({
         <Loading what={t('virt.loadingDefinition')} />
       ) : (
         <div className="col">
-          {error && <Banner kind="error">{error}</Banner>}
+          {error && (
+            <Banner kind="error">
+              {error}
+              {error !== t('virt.noChanges') && <AIConfigError path={path} service="libvirt" content={content} message={error} />}
+            </Banner>
+          )}
           {result && (
             <Banner kind={result.rolled_back ? 'error' : 'info'}>
               {result.message}

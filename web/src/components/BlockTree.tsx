@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { AIConfigError } from './AIConfigError'
 import { api, qs, useApi } from '../api'
 import type { BlockKind, ConfigBlock, Me, WriteResult } from '../types'
 import { Banner, CodeEditor, Modal, Spinner } from './ui'
@@ -72,7 +73,7 @@ export default function BlockTree({
   const [note, setNote] = useState('')
   const [apply, setApply] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string; snippet?: string } | null>(null)
   const appliedDeepLink = useRef(false)
 
   const canControl = me.is_admin && me.allow_mutations
@@ -119,12 +120,12 @@ export default function BlockTree({
         method: 'POST',
         body: { path, expected_sha256: sha256, ...body },
       })
-      setNotice({ kind: res.rolled_back ? 'error' : 'info', text: res.message })
+      setNotice({ kind: res.rolled_back ? 'error' : 'info', text: res.message, snippet: res.rolled_back ? String(body.content ?? '') : undefined })
       blocks.reload()
       onSaved()
       return true
     } catch (err) {
-      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err), snippet: String(body.content ?? '') })
       return false
     } finally {
       setBusy(false)
@@ -160,7 +161,12 @@ export default function BlockTree({
 
   return (
     <div className="col">
-      {notice && <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>{notice.text}</Banner>}
+      {notice && (
+        <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>
+          {notice.text}
+          {notice.kind === 'error' && <AIConfigError path={path} service={service} snippet={notice.snippet ?? ''} message={notice.text} />}
+        </Banner>
+      )}
 
       {canControl && creatableKinds(service).length > 0 && (
         <div className="row" style={{ gap: '0.4rem', marginBottom: '0.5rem' }}>
