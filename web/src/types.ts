@@ -68,6 +68,9 @@ export interface HubHost {
    * working, just without whatever the newer version added. Absent until
    * the first successful poll. */
   running_version?: string
+  /** Версия хаба на момент ответа — с ней сравнивается nkt_version;
+   * свежее, чем hub_version из /auth/me, загруженного при открытии вкладки. */
+  hub_version?: string
   /** Раздел списка хостов; пустая строка — «Без группы». */
   group?: string
   admin_user?: string
