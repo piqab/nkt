@@ -98,6 +98,9 @@ var enCatalog = map[string]string{
 	"hub.localScannerNotRunning": "the hub's local scanner isn't running",
 	"hub.hostUnreachable":        "host unreachable: %s",
 	"hub.hostAPIDown":            "SSH answers, but the nkt API on the host is not up (%v): the service is not running or did not come back after a package upgrade — “update” from the hub reinstalls and restarts it",
+	"hub.hostAPIDownDiag":        "SSH answers, but the nkt API on the host is not up (%v) — “update” from the hub reinstalls and restarts the service. Diagnosis over SSH: %s",
+	"hub.apiDiag":                "service %s; port %d listened by: %s; journal: %s",
+	"hub.apiDiagNobody":          "nobody",
 	"hub.installQueued":          "waiting for a slot: no more than %d hosts are updated at once",
 	"hub.sshRetry":               "SSH did not answer (attempt %d of %d): %v — retrying in a few seconds",
 

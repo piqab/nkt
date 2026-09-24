@@ -127,3 +127,18 @@ func TestInstallSlots(t *testing.T) {
 		releaseInstallSlot()
 	}
 }
+
+// Вывод диагностики сворачивается в одну строку: состояние юнита, адреса
+// слушателей порта, хвост журнала.
+func TestFormatAPIDiag(t *testing.T) {
+	out := "activating\n--\nLISTEN 0 4096 127.0.0.1:8077 0.0.0.0:*\n--\nstarting server\nopen database: locked\n"
+	got := formatAPIDiag(out, 8077)
+	for _, want := range []string{"activating", "127.0.0.1:8077", "open database: locked", "starting server | open"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("нет %q в %q", want, got)
+		}
+	}
+	if got := formatAPIDiag("inactive\n--\n\n--\n", 8077); !strings.Contains(got, "inactive") || !strings.Contains(got, "никто") {
+		t.Errorf("пустой слушатель: %q", got)
+	}
+}

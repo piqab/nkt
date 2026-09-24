@@ -61,8 +61,9 @@ line.
   behind (no more than three at once, the rest wait in a queue; a
   transient SSH error is retried). While nkt on a host restarts (package
   upgrade, self-update) the hub waits up to 20 s instead of failing; if
-  the service does not come back, it says so, and “update” from the hub
-  reinstalls and restarts it over SSH.
+  the service does not come back, it says so with a diagnosis taken over
+  SSH (unit state, who listens on the port, the journal), and “update”
+  from the hub reinstalls and restarts it over SSH.
 - The trivy **vulnerability database** is shared by all hosts: updated on a
   schedule and by a button, hosts take it from the hub instead of
   downloading their own.
