@@ -50,6 +50,33 @@ func (s *Server) handleAISettings(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, s.hub.AIStatusFor(r.Context()))
 }
 
+// handleAITest — «проверить»: живой запрос к модели с теми настройками,
+// что сейчас в форме. Без этого ошибка настройки обнаруживается только
+// при первом разборе и выглядит как «сломался ИИ», а не «ключ не тот».
+func (s *Server) handleAITest(w http.ResponseWriter, r *http.Request) {
+	var req aiSettingsRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	set := ai.Settings{
+		Provider: req.Provider, BaseURL: strings.TrimSpace(req.BaseURL), Model: strings.TrimSpace(req.Model),
+		Anonymize: req.Anonymize, DailyLimit: req.DailyLimit,
+	}
+	res, err := s.hub.AITest(r.Context(), set, req.APIKey)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	// Запрос ушёл наружу — в журнале должно остаться, кто и куда.
+	outcome := "ok"
+	if !res.OK {
+		outcome = "error"
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "ai.test", ai.Describe(set), outcome, nil)
+	writeJSON(w, http.StatusOK, res)
+}
+
 func (s *Server) handleAICacheClear(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.AICacheClear(r.Context()); err != nil {
 		fail(w, r, err)

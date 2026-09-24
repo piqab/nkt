@@ -183,17 +183,30 @@ func TestPickReleases(t *testing.T) {
 		{TagName: "v1.9.60"},
 		{TagName: "garbage"},
 	}
-	latest, prev := pickReleases(rels, "1.9.63")
+	latest, prev, cur := pickReleases(rels, "1.9.63")
 	if latest.TagName != "v1.9.63" || prev != "1.9.62" {
 		t.Errorf("current 1.9.63: latest=%s prev=%s", latest.TagName, prev)
 	}
-	_, prev = pickReleases(rels, "1.9.62")
-	if prev != "1.9.61" {
-		t.Errorf("current 1.9.62: prev=%s", prev)
+	// Релиз установленной версии: его описание показывается, пока нет
+	// обновления.
+	if cur.TagName != "v1.9.63" || cur.Body != "latest" {
+		t.Errorf("релиз текущей версии = %+v", cur)
 	}
-	_, prev = pickReleases(rels, "1.9.60")
+	_, prev, cur = pickReleases(rels, "1.9.62")
+	if prev != "1.9.61" || cur.TagName != "v1.9.62" {
+		t.Errorf("current 1.9.62: prev=%s cur=%s", prev, cur.TagName)
+	}
+	_, prev, cur = pickReleases(rels, "1.9.60")
 	if prev != "" {
 		t.Errorf("самая старая версия: prev=%s, ожидалось пусто", prev)
+	}
+	if cur.TagName != "v1.9.60" {
+		t.Errorf("релиз текущей версии не найден: %s", cur.TagName)
+	}
+	// Версии нет среди релизов (сборка из исходников) — пусто, а не
+	// чужое описание.
+	if _, _, none := pickReleases(rels, "9.9.9"); none.TagName != "" {
+		t.Errorf("для неизвестной версии вернулся релиз %s", none.TagName)
 	}
 }
 

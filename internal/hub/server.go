@@ -230,6 +230,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/aptcache/clear", s.handleHubAptCacheClear)
 					r.Post("/hub/ai/settings", s.handleAISettings)
 					r.Post("/hub/ai/cache/clear", s.handleAICacheClear)
+					r.Post("/hub/ai/test", s.handleAITest)
 					r.Post("/hub/hosts/{id}/apt-proxy", s.handleHostAptProxy)
 					r.Post("/hub/clusters", s.handleClusterCreate)
 					r.Post("/hub/cluster-images/upload", s.handleClusterImageUpload)

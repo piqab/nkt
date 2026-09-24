@@ -377,6 +377,9 @@ var enCatalog = map[string]string{
 	"finding.adminInterfaceOpen.suggestion": "Add stats auth <user>:<password> and bind it to an internal address.",
 
 	// --- сообщения, переведённые из fmt.Errorf/jc.Logf/writeError (v1.9.63) ---
+	"ai.testSystem":                                       "Answer with a single word.",
+	"ai.testUser":                                         "Connection check. Reply: ok",
+	"ai.testOK":                                           "the model replied in %d ms: %s",
 	"ai.badResponse":                                      "unreadable model response: %v",
 	"ai.emptyResponse":                                    "the model returned an empty response",
 	"ai.requestFailed":                                    "the model request failed: %v",

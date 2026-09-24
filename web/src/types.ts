@@ -28,6 +28,9 @@ export interface HubVersionInfo {
   /** Описание последнего релиза с GitHub (WHATSNEW.md через release.yml) —
    * единственный способ узнать, что несёт новая версия, до её установки. */
   notes?: string
+  /** Заметки относятся к уже установленной версии: обновления нет, и
+   * блок показывает «что нового в этой версии», а не в будущей. */
+  notes_are_current?: boolean
 }
 
 /** GET /hub/vulndb's shape (internal/hub/handlers.go's vulnDBInfoJSON). */

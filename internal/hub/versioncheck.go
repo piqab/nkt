@@ -68,7 +68,7 @@ type githubRelease struct {
 // pickReleases picks, out of a release list, the newest published version
 // and the one right below current — what "обновить" and "откатить" would
 // install. Drafts and pre-releases never count.
-func pickReleases(rels []githubRelease, current string) (latest githubRelease, previous string) {
+func pickReleases(rels []githubRelease, current string) (latest githubRelease, previous string, cur githubRelease) {
 	for _, r := range rels {
 		if r.Draft || r.Prerelease {
 			continue
@@ -83,8 +83,14 @@ func pickReleases(rels []githubRelease, current string) (latest githubRelease, p
 		if isNewerVersion(current, v) && (previous == "" || isNewerVersion(v, previous)) {
 			previous = v
 		}
+		// Релиз установленной версии: его описание показывается, пока
+		// обновления нет, — «что нового в этой версии» полезнее пустого
+		// места, а после выхода следующей блок сам переключится на неё.
+		if v == current {
+			cur = r
+		}
 	}
-	return latest, previous
+	return latest, previous, cur
 }
 
 // checkLatestVersion asks GitHub's public, unauthenticated Releases API for
@@ -130,16 +136,18 @@ func (m *Manager) checkLatestVersion(ctx context.Context) {
 		m.recordVersionCheck("", "", "", err)
 		return
 	}
-	rel, previous := pickReleases(rels, m.version)
+	rel, previous, cur := pickReleases(rels, m.version)
 	latest := strings.TrimPrefix(strings.TrimSpace(rel.TagName), "v")
 	if latest == "" {
 		m.recordVersionCheck("", "", "", msgs.Errorf("hub.emptyTagNameGitHubResponse"))
 		return
 	}
 	ru, en := splitReleaseNotes(rel.Body)
+	curRU, curEN := splitReleaseNotes(cur.Body)
 	m.recordVersionCheck(latest, previous, ru, nil)
 	m.versionMu.Lock()
 	m.latestNotesEN = en
+	m.currentNotes, m.currentNotesEN = curRU, curEN
 	m.versionMu.Unlock()
 }
 
@@ -208,7 +216,13 @@ type VersionInfo struct {
 	// UpdateAvailable, so an operator reads what an update brings before
 	// deciding to apply it. Empty when the check has never succeeded, or
 	// when the release itself carries no description.
+	//
+	// Когда обновления нет, здесь описание установленной версии: «что
+	// нового» нужно читать и после обновления, а не только до него.
+	// NotesAreCurrent отличает один случай от другого.
 	Notes string
+	// NotesAreCurrent — Notes описывают уже установленную версию.
+	NotesAreCurrent bool
 	// Updatable reports whether applyHubUpdate has any real way to install
 	// a downloaded binary back onto this machine at all — false for a
 	// Docker/Kubernetes-deployed hub (no writable, persistent binary path;
@@ -234,16 +248,27 @@ func (m *Manager) VersionStatusFor(lang msgs.Lang) VersionInfo {
 	if lang == msgs.EN && m.latestNotesEN != "" {
 		notes = m.latestNotesEN
 	}
+	curNotes := m.currentNotes
+	if lang == msgs.EN && m.currentNotesEN != "" {
+		curNotes = m.currentNotesEN
+	}
 	m.versionMu.Unlock()
 
+	updateAvailable := latest != "" && isNewerVersion(latest, m.version)
+	notesAreCurrent := false
+	if !updateAvailable {
+		// Обновления нет — показываем описание того, что уже стоит.
+		notes, notesAreCurrent = curNotes, curNotes != ""
+	}
 	return VersionInfo{
 		Current:         m.version,
 		Latest:          latest,
-		UpdateAvailable: latest != "" && isNewerVersion(latest, m.version),
+		UpdateAvailable: updateAvailable,
 		Previous:        previous,
 		CheckedAt:       checkedAt,
 		CheckError:      checkErr,
 		Notes:           notes,
+		NotesAreCurrent: notesAreCurrent,
 		Updatable:       hubSelfUpdateSupported(),
 	}
 }

@@ -243,6 +243,10 @@ type Manager struct {
 	directCache map[int64]directProbe
 	// latestNotesEN — английская часть описания релиза (см. splitReleaseNotes).
 	latestNotesEN string
+	// currentNotes/currentNotesEN — описание установленной версии: его
+	// показывает «О системе», пока обновления нет.
+	currentNotes   string
+	currentNotesEN string
 	// k8sStable — актуальная минорная версия Kubernetes (см. k8sStableMinor).
 	k8sStableMu sync.Mutex
 	k8sStable   string

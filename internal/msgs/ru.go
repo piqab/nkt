@@ -376,6 +376,9 @@ var ruCatalog = map[string]string{
 	"finding.adminInterfaceOpen.suggestion": "Добавьте stats auth <user>:<password> и привяжите bind к внутреннему адресу.",
 
 	// --- сообщения, переведённые из fmt.Errorf/jc.Logf/writeError (v1.9.63) ---
+	"ai.testSystem":                                       "Отвечай одним словом.",
+	"ai.testUser":                                         "Проверка связи. Ответь: ok",
+	"ai.testOK":                                           "модель ответила за %d мс: %s",
 	"ai.badResponse":                                      "непонятный ответ модели: %v",
 	"ai.emptyResponse":                                    "модель вернула пустой ответ",
 	"ai.requestFailed":                                    "запрос к модели не удался: %v",
