@@ -161,7 +161,9 @@
     "uptimeD": "{{d}}d",
     "uptimeHM": "{{h}}h {{m}}m",
     "uptimeH": "{{h}}h",
-    "uptimeM": "{{m}}m"
+    "uptimeM": "{{m}}m",
+    "saved": "saved",
+    "savedShort": "saved"
   },
   "containers": {
     "vms": "Virtual machines"
@@ -2342,5 +2344,40 @@
     "colPod": "Pod",
     "colPhase": "Phase",
     "colRestarts": "Restarts"
+  },
+  "ai": {
+    "explainHint": "explain and suggest a fix (AI)",
+    "thinking": "the model is thinking…",
+    "fromCache": "answer from cache",
+    "showPrompt": "show request",
+    "hidePrompt": "hide request",
+    "title": "Model analysis (AI)",
+    "enabled": "enable analysis of findings and architecture",
+    "provider": "Provider",
+    "providerAnthropic": "Anthropic",
+    "providerOpenAI": "OpenAI-compatible (local included)",
+    "baseUrl": "API address",
+    "model": "Model",
+    "apiKey": "API key",
+    "apiKeySet": "a key is stored — leave empty to keep it",
+    "apiKeyLocal": "a local model usually needs no key",
+    "anonymize": "hide addresses and names in requests",
+    "anonymizeHint": "Before sending, host names, IPs, domains and e-mail are replaced with aliases (host-1, ip-1) and put back in the answer. The model sees the shape of the problem, not your addresses.",
+    "dailyLimit": "Requests per day",
+    "dailyLimitHint": "0 — no limit. Counted on the hub, shared by all hosts.",
+    "usageToday": "Requests today",
+    "cacheSize": "Cached answers",
+    "cacheClear": "clear cache",
+    "save": "Save",
+    "hint": "One setting for the whole installation: the key is stored encrypted on the hub and requests go from it — hosts need no internet. The model runs nothing: commands from the answer are applied by you.",
+    "localHint": "For a local model set its address, e.g. http://127.0.0.1:11434 (Ollama) — then nothing leaves the machine.",
+    "review": "Architecture review",
+    "reviewRun": "review the architecture",
+    "reviewHint": "The model looks at the whole map: single points of failure, needless exposure, inconsistencies, where to start.",
+    "reviewHub": "across all hosts",
+    "reviewEmpty": "No review yet.",
+    "reviewHistory": "Previous reviews",
+    "reviewAt": "review from {{date}}",
+    "disabledHint": "AI analysis is off. Enable it in \"About\" on the hub."
   }
 }

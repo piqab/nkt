@@ -175,6 +175,13 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/vulndb", s.handleHubVulnDBStatus)
 				r.Get("/hub/clamdb", s.handleHubClamDBStatus)
 				r.Get("/hub/aptcache", s.handleHubAptCacheStatus)
+				r.Get("/hub/ai", s.handleAIStatus)
+				r.Get("/hub/ai/reviews", s.handleAIReviews)
+				// Разбор находки — обычному пользователю тоже: это
+				// объяснение, а не изменение. Настройка и ключ — только
+				// администратору (ниже).
+				r.Post("/hub/ai/explain", s.handleAIExplain)
+				r.Post("/hub/ai/review", s.handleAIReview)
 				r.Get("/hub/clusters", s.handleClusterList)
 				r.Get("/hub/cluster-images", s.handleClusterImages)
 				r.Get("/hub/k8s-versions", s.handleK8sVersions)
@@ -221,6 +228,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts/{id}/clamdb", s.handleHostClamDBPush)
 					r.Post("/hub/aptcache/settings", s.handleHubAptCacheSettings)
 					r.Post("/hub/aptcache/clear", s.handleHubAptCacheClear)
+					r.Post("/hub/ai/settings", s.handleAISettings)
+					r.Post("/hub/ai/cache/clear", s.handleAICacheClear)
 					r.Post("/hub/hosts/{id}/apt-proxy", s.handleHostAptProxy)
 					r.Post("/hub/clusters", s.handleClusterCreate)
 					r.Post("/hub/cluster-images/upload", s.handleClusterImageUpload)

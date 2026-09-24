@@ -376,6 +376,16 @@ var ruCatalog = map[string]string{
 	"finding.adminInterfaceOpen.suggestion": "Добавьте stats auth <user>:<password> и привяжите bind к внутреннему адресу.",
 
 	// --- сообщения, переведённые из fmt.Errorf/jc.Logf/writeError (v1.9.63) ---
+	"ai.badResponse":                                      "непонятный ответ модели: %v",
+	"ai.emptyResponse":                                    "модель вернула пустой ответ",
+	"ai.requestFailed":                                    "запрос к модели не удался: %v",
+	"ai.providerCode":                                     "модель ответила %d: %s",
+	"ai.disabled":                                         "разбор ИИ выключен: включите его в «О системе» и укажите модель",
+	"ai.limitReached":                                     "исчерпан суточный лимит запросов к модели (%d)",
+	"ai.noKey":                                            "для этого провайдера нужен ключ API",
+	"ai.badProvider":                                      "неизвестный провайдер: %s",
+	"ai.badURL":                                           "адрес модели должен начинаться с http:// или https://",
+	"ai.generated":                                        "Сгенерировано моделью %s. Проверьте команды перед выполнением.",
 	"api.backgroundJobsAreUnavailable":                    "фоновые задания недоступны",
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",

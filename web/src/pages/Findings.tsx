@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { AIExplain } from '../components/AIExplain'
 import { blurText } from '../privacy'
 import { Checkbox, Input, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
@@ -120,7 +121,24 @@ export default function Findings() {
                     <Tag>{f.service}</Tag>
                     {f.object && <Tag>{f.object}</Tag>}
                   </div>
-                  <h3>{blurText(f.title)}</h3>
+                  <div className="row" style={{ gap: '0.35rem', alignItems: 'center' }}>
+                    <h3 style={{ margin: 0 }}>{blurText(f.title)}</h3>
+                    {/* «Объяснить» — та же кнопка, что и в уязвимостях,
+                        вредоносном и оповещениях: один разбор на всё. */}
+                    <AIExplain
+                      ctx={{
+                        kind: 'finding',
+                        title: f.title,
+                        detail: f.detail,
+                        suggestion: f.suggestion,
+                        severity: f.severity,
+                        service: f.service,
+                        object: f.object,
+                        file: f.file,
+                        line: f.line,
+                      }}
+                    />
+                  </div>
                   <p className="secondary" style={{ margin: '0.3rem 0 0' }}>
                     {blurText(f.detail ?? '')}
                   </p>

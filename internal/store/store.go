@@ -125,6 +125,37 @@ CREATE TABLE IF NOT EXISTS kv (
     value TEXT NOT NULL
 );
 
+-- Ответы языковой модели: одна находка встречается на многих хостах, и
+-- платить за неё много раз незачем (см. internal/ai, store/aicache.go).
+CREATE TABLE IF NOT EXISTS ai_cache (
+    key        TEXT PRIMARY KEY,          -- ai.CacheKey: вид + модель + язык + содержимое
+    kind       TEXT NOT NULL DEFAULT '',  -- finding | vuln | malware | event | map | ...
+    model      TEXT NOT NULL DEFAULT '',
+    lang       TEXT NOT NULL DEFAULT '',
+    answer     TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    used_at    TEXT NOT NULL
+);
+
+-- Расход запросов к модели по суткам: лимит общий для всех хостов.
+CREATE TABLE IF NOT EXISTS ai_usage (
+    day      TEXT PRIMARY KEY,            -- YYYY-MM-DD (UTC)
+    requests INTEGER NOT NULL DEFAULT 0
+);
+
+-- Архитектурные разборы карты ресурсов: хранятся, чтобы видеть, что
+-- изменилось с прошлого раза.
+CREATE TABLE IF NOT EXISTS ai_reviews (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    scope      TEXT NOT NULL,             -- host:<id> | hub
+    model      TEXT NOT NULL DEFAULT '',
+    lang       TEXT NOT NULL DEFAULT '',
+    answer     TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    author     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_ai_reviews_scope ON ai_reviews(scope, id DESC);
+
 -- Фоновые задания: применение профиля, скачивание образа, создание ВМ.
 -- Живут в базе, а не только в памяти процесса: браузер закрывают,
 -- сеть рвётся, службу перезапускают — а оператор должен через час

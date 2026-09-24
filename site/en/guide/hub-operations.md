@@ -67,6 +67,28 @@ line.
   a host without internet gets everything from the hub.
 - **ClamAV database** — a copy of the signature database on the hub; on a
   host page, in the “Malware” tab, “database from hub” uploads it over SSH.
+## Model analysis (AI)
+
+A card in "About" — one setting for the whole installation: the provider
+(**Anthropic** or **OpenAI-compatible**, local ones included — Ollama,
+vLLM, LM Studio), address, model, key. The key is stored encrypted on
+the hub and never handed out; requests go from the hub — hosts need no
+internet. Off by default.
+
+When on, a bulb button appears in the row of a finding, a vulnerability,
+a malware hit, an alert and next to a job error: what it means, why it
+matters here, what to do — with commands. Commands are only shown; you
+apply them.
+
+The "Resource map" page gets an **architecture review**: single points
+of failure, needless exposure, inconsistencies, where to start; on the
+hub — across all hosts at once. Reviews are kept with their date.
+
+The "hide addresses and names" checkbox (on by default) replaces host
+names, IPs, domains and e-mail with aliases before sending and puts them
+back in the answer; "show request" shows exactly what left.  Answers are
+cached and spending is capped by a daily limit.
+
 ## Privacy mode
 
 The **“hide sensitive data”** checkbox in “About” — for

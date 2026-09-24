@@ -3,6 +3,8 @@ import { Button, Checkbox } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
+import { AIReviewCard } from '../components/AIReview'
+import { hostScope } from '../api'
 import { Card, ErrorNote, InfoHint, Loading, SeverityBadge } from '../components/ui'
 
 /**
@@ -501,6 +503,9 @@ export default function TopologyPage() {
           </svg>
         </div>
       </Card>
+      {/* Разбор архитектуры: карта уже собрана — модель смотрит на неё
+          целиком и говорит о том, чего в ней не хватает. */}
+      {data && <AIReviewCard graph={data} hostID={hostScope.id && hostScope.id > 0 ? hostScope.id : 0} scope="host" />}
     </>
   )
 }

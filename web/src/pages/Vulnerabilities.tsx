@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, Select, Tabs, Tag, type TableColumnsType } from 'antd'
+import { AIExplain } from '../components/AIExplain'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
@@ -227,6 +228,29 @@ function VulnTab({ me }: { me: Me }) {
       render: (v: string | undefined) => v || <span className="small muted">{t('vulns.noFixYet')}</span>,
     },
     { title: t('vulns.col.description'), dataIndex: 'title' },
+    {
+      title: '',
+      key: 'ai',
+      width: 44,
+      render: (_: unknown, f: VulnFinding) => (
+        <AIExplain
+          ctx={{
+            kind: 'vuln',
+            title: `${f.id}: ${f.title || f.package}`,
+            detail: [
+              f.title,
+              `пакет ${f.package} ${f.installed_version}`,
+              f.fixed_version ? `исправлено в ${f.fixed_version}` : 'исправления пока нет',
+              f.target ? `источник ${f.target}` : '',
+            ]
+              .filter(Boolean)
+              .join('. '),
+            severity: f.severity,
+            object: f.package,
+          }}
+        />
+      ),
+    },
   ]
 
   return (
