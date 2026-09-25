@@ -12,6 +12,8 @@ import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { ProbeLink } from '../components/PortProbe'
+import CommandModal from '../components/CommandModal'
+import ContainerLogsModal from '../components/ContainerLogsModal'
 
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -144,6 +146,7 @@ export default function Docker({ me }: { me: Me }) {
               onClick={() => containerAct(c.name, a)}
             />
           ))}
+          <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(c.name)} />
           {canControl && c.compose_file && c.service_name && (
             <RowAction
               action="edit"
@@ -209,8 +212,26 @@ export default function Docker({ me }: { me: Me }) {
     }
   }
 
+  // Запуск и перезапуск — в окне выполнения: Docker API отвечает 204 и
+  // молчит о контейнере, упавшем через секунду; сессия показывает вывод,
+  // состояние через несколько секунд и хвост логов, если не running.
+  const [run, setRun] = useState<{ name: string; action: 'start' | 'restart'; outcome?: { ok: boolean; exitCode?: number } | null } | null>(null)
+  const [logsFor, setLogsFor] = useState<string | null>(null)
+
+  async function runFinished() {
+    if (!run) return
+    const st = await api<{ succeeded?: boolean; exit_code?: number }>(`/containers/${encodeURIComponent(run.name)}/run/status`).catch(() => null)
+    setRun((r) => (r ? { ...r, outcome: { ok: !!st?.succeeded, exitCode: st?.exit_code } } : r))
+    await api('/inventory/refresh', { method: 'POST' }).catch(() => undefined)
+    await docker.reload()
+  }
+
   async function containerAct(name: string, action: string) {
     if (!(await confirmAction(t('docker.confirmAction', { action, name })))) return
+    if (action === 'start' || action === 'restart') {
+      setRun({ name, action })
+      return
+    }
     setBusy(`${name}:${action}`)
     setNotice(null)
     try {
@@ -332,6 +353,17 @@ export default function Docker({ me }: { me: Me }) {
           onSaved={() => docker.reload()}
         />
       )}
+      {run && (
+        <CommandModal
+          title={t('docker.runTitle', { action: t(`docker.action.${run.action}`, { defaultValue: run.action }), name: run.name })}
+          description={t('docker.runHint')}
+          wsPath={`/containers/${encodeURIComponent(run.name)}/run/ws?action=${run.action}`}
+          outcome={run.outcome === undefined ? null : run.outcome ? { ...run.outcome, okText: t('docker.runOk', { name: run.name }), failText: t('docker.runFailed', { name: run.name }) } : null}
+          onFinished={() => void runFinished()}
+          onClose={() => setRun(null)}
+        />
+      )}
+      {logsFor && <ContainerLogsModal name={logsFor} base="/containers" onClose={() => setLogsFor(null)} />}
     </>
   )
 }

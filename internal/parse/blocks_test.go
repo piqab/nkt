@@ -232,16 +232,25 @@ func TestComposeBlocksRoundTrip(t *testing.T) {
 		t.Fatalf("Blocks(docker): %v", err)
 	}
 	wantNames := []string{"app", "api", "redis", "postgres", "grafana", "prometheus", "minio"}
-	var gotNames []string
+	// После сервисов идут элементы networks:/volumes: — у фикстуры сети
+	// backend, monitoring и том pgdata.
+	var gotNames, sections []string
+	var services []Block
 	for _, b := range blocks {
-		if b.Kind != BlockService {
-			t.Errorf("kind = %s, ожидался service", b.Kind)
+		if b.Kind == BlockService {
+			gotNames = append(gotNames, b.Name)
+			services = append(services, b)
+		} else {
+			sections = append(sections, string(b.Kind)+":"+b.Name)
 		}
-		gotNames = append(gotNames, b.Name)
 	}
 	if strings.Join(gotNames, ",") != strings.Join(wantNames, ",") {
 		t.Fatalf("сервисы = %v, ожидалось %v", gotNames, wantNames)
 	}
+	if strings.Join(sections, ",") != "network:backend,network:monitoring,volume:pgdata" {
+		t.Errorf("разделы = %v", sections)
+	}
+	blocks = services
 	for _, b := range blocks {
 		if !strings.Contains(b.Raw, "image:") {
 			t.Errorf("%s: сырой текст без image: %q", b.Name, b.Raw)
@@ -268,7 +277,9 @@ func TestComposeBlocksRoundTrip(t *testing.T) {
 	}
 	gotNames = nil
 	for _, b := range reparsed {
-		gotNames = append(gotNames, b.Name)
+		if b.Kind == BlockService {
+			gotNames = append(gotNames, b.Name)
+		}
 	}
 	want := append(append([]string{}, wantNames...), "worker")
 	if strings.Join(gotNames, ",") != strings.Join(want, ",") {

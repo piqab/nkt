@@ -33,6 +33,11 @@ stop, delete.
 
 - libvirt domains: start, shut down, force off, reboot, autostart, delete
   with or without disks; machine addresses.
+- **Starting and restarting a container** runs in nkt's command window:
+  the `docker start` output, the state a few seconds later and, if the
+  container is not running, the tail of its logs with the reason.
+  **Logs** — an icon in the row: live `docker logs`, tail 200/1000/5000
+  lines, "follow", "timestamps". Same for Podman.
 - **Machine configuration (XML)** — the pencil in the row: "text" and
   **"blocks"** tabs (domain elements and devices one by one: disk,
   network interface, graphics — edit, delete, `+ disk`/`+ interface`/

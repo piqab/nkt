@@ -405,7 +405,16 @@
       "restart": "restart",
       "stop": "stop",
       "pause": "pause"
-    }
+    },
+    "logs": "logs",
+    "logsTitle": "Container logs: {{name}}",
+    "logsTail": "tail, lines",
+    "logsFollow": "follow",
+    "logsTimestamps": "timestamps",
+    "runTitle": "{{action}}: {{name}}",
+    "runHint": "The command runs on the host; a few seconds later the container state is checked, and if it is not running, the tail of its logs with the reason is shown.",
+    "runOk": "Container {{name}} is running.",
+    "runFailed": "Container {{name}} did not start — the reason is in the output above (the tail of the container logs)."
   },
   "virt": {
     "colName": "Name",
@@ -1457,7 +1466,8 @@
     "reloadServiceAfterSave": "reload the service after saving",
     "saving": "Saving…",
     "save": "Save",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "previewTitle": "Changes before writing"
   },
   "pathPicker": {
     "owner": "user: {{owner}}",

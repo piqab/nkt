@@ -37,7 +37,11 @@ rollback is checked by the service as well.
 
 ## Block mode
 
-nginx and haproxy have **blocks**: a tree of `server`, `location`,
-`frontend`, `backend`. A block is added, edited and removed on its own —
-with no risk of breaking its neighbours. The same mode is used for
-compose files and machine XML.
+nginx, haproxy, caddy, compose files and machine XML have **blocks**: a
+tree of `server`/`location`/`upstream`, `frontend`/`backend`/`listen`,
+`site`, for compose — `service`, `network`, `volume`, `secret`, `config`,
+for a machine — settings and devices (`disk`, `interface`, `graphics`).
+A block is added (`+` with a template), edited and deleted on its own —
+without the risk of breaking its neighbours; a diff "on disk → after the
+edit" is shown before writing, and the write is validated and rolled
+back on failure.

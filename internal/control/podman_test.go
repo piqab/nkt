@@ -3,6 +3,7 @@ package control
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -116,5 +117,18 @@ func TestPodmanDeleteContainerRejectsBadName(t *testing.T) {
 	m, _ := podmanSetup(t)
 	if err := m.DeleteContainer(context.Background(), "test", "foo/bar", false); err == nil {
 		t.Error("ожидалась ошибка валидации имени")
+	}
+}
+
+// Причина отказа Docker/Podman API — из тела ответа, а не «HTTP 500».
+func TestEngineAPIMessage(t *testing.T) {
+	if got := EngineAPIMessage([]byte(`{"message":"driver failed programming external connectivity: Bind for 0.0.0.0:80 failed: port is already allocated"}`)); !strings.Contains(got, "port is already allocated") {
+		t.Errorf("json: %q", got)
+	}
+	if got := EngineAPIMessage([]byte("plain text error\nsecond line")); got != "plain text error" {
+		t.Errorf("text: %q", got)
+	}
+	if got := EngineAPIMessage(nil); got != "no details" {
+		t.Errorf("empty: %q", got)
 	}
 }

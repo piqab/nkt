@@ -37,7 +37,7 @@ func (m *PodmanManager) ContainerAction(ctx context.Context, user, name, action 
 		return msgs.Errorf("control.invalidContainerName", name)
 	}
 
-	_, code, err := m.c.PodmanAPI(ctx, "POST", "/libpod/containers/"+name+"/"+action, nil)
+	body, code, err := m.c.PodmanAPI(ctx, "POST", "/libpod/containers/"+name+"/"+action, nil)
 	outcome := "ok"
 	if err != nil || (code != 204 && code != 304) {
 		outcome = "error"
@@ -47,7 +47,7 @@ func (m *PodmanManager) ContainerAction(ctx context.Context, user, name, action 
 		return fmt.Errorf("podman %s %s: %w", action, name, err)
 	}
 	if code != 204 && code != 304 {
-		return fmt.Errorf("podman %s %s: HTTP %d", action, name, code)
+		return fmt.Errorf("podman %s %s: HTTP %d: %s", action, name, code, EngineAPIMessage(body))
 	}
 	return nil
 }

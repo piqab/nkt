@@ -70,7 +70,11 @@ type WriteResult struct {
 	RolledBack bool                   `json:"rolled_back"`
 	Message    string                 `json:"message"`
 	Applied    bool                   `json:"applied"`
-	Apply      *collect.CommandResult `json:"apply,omitempty"`
+	// Diff — для dry_run: unified diff «на диске → после правки», без
+	// записи; DryRun — что это был предпросмотр.
+	Diff   string                 `json:"diff,omitempty"`
+	DryRun bool                   `json:"dry_run,omitempty"`
+	Apply  *collect.CommandResult `json:"apply,omitempty"`
 }
 
 // serviceForPath decides which service owns a path, and therefore which
@@ -500,6 +504,9 @@ type BlockWriteRequest struct {
 	Content   string `json:"content"` // ignored for delete
 	Note      string `json:"note"`
 	Apply     bool   `json:"apply"`
+	// DryRun — не писать, а вернуть дифф: окно правки блока показывает
+	// его перед записью, как редактор XML машины.
+	DryRun bool `json:"dry_run"`
 	// Expected is the file's expected_sha256, the same optimistic-lock
 	// contract Write already uses — a stale block edit (line numbers computed
 	// against content someone else has since changed) is refused rather than
@@ -554,6 +561,13 @@ func (m *ConfigManager) WriteBlock(ctx context.Context, lang msgs.Lang, user, pa
 	note := req.Note
 	if note == "" {
 		note = msgs.Tc(ctx, "control.block", req.Kind, req.Op)
+	}
+	if req.DryRun {
+		diff := ""
+		if newText != current.Content {
+			diff = UnifiedDiff(ctx, path, path, current.Content, newText)
+		}
+		return WriteResult{Path: path, Diff: diff, DryRun: true}, nil
 	}
 	return m.Write(ctx, lang, user, path, newText, note, req.Apply)
 }

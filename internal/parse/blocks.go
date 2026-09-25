@@ -30,6 +30,12 @@ const (
 	BlockGlobal   BlockKind = "global"
 	BlockDefaults BlockKind = "defaults"
 	BlockService  BlockKind = "service"
+	// Прочие верхнеуровневые разделы compose: элементы networks:,
+	// volumes:, secrets:, configs: — тем же способом, что и сервисы.
+	BlockNetwork BlockKind = "network"
+	BlockVolume  BlockKind = "volume"
+	BlockSecret  BlockKind = "secret"
+	BlockConfig  BlockKind = "config"
 	// BlockSite is one Caddyfile site block ("example.com { ... }") — always
 	// flat in v1, same as haproxy's sections: a handle{}/route{} nested
 	// inside stays part of its site's raw text rather than its own
@@ -392,7 +398,121 @@ func dockerBlocks(c collect.Collector, path string) ([]Block, error) {
 		return nil, msgs.Errorf("parse.readingFile", err)
 	}
 	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
-	return composeServiceBlocks(lines), nil
+	out := composeServiceBlocks(lines)
+	for _, sec := range composeSections {
+		out = append(out, composeSectionBlocks(lines, sec.key, sec.kind)...)
+	}
+	return out, nil
+}
+
+// composeSections — разделы compose кроме services, чьи элементы
+// показываются и правятся блоками.
+var composeSections = []struct {
+	key  string
+	kind BlockKind
+}{
+	{"networks", BlockNetwork}, {"volumes", BlockVolume}, {"secrets", BlockSecret}, {"configs", BlockConfig},
+}
+
+// composeSectionKind — раздел для вида блока; "" — не раздел compose.
+func composeSectionKey(kind BlockKind) string {
+	for _, sec := range composeSections {
+		if sec.kind == kind {
+			return sec.key
+		}
+	}
+	return ""
+}
+
+// composeSectionLine — строка «key:» верхнего уровня (0-based), -1 если нет.
+func composeSectionLine(lines []string, key string) int {
+	re := regexp.MustCompile(`^` + regexp.QuoteMeta(key) + `:\s*(\{\s*\})?\s*(#.*)?$`)
+	for i, l := range lines {
+		if re.MatchString(strings.TrimRight(l, "\r")) {
+			return i
+		}
+	}
+	return -1
+}
+
+// composeEntryRe — элемент раздела: «  name:», «  name: {}» или
+// «  name: ~» — у сетей и томов пустое тело в ходу, в отличие от
+// сервисов, где composeKeyAt требует голого ключа.
+var composeEntryRe = regexp.MustCompile(`^(\s*)([A-Za-z0-9_.-]+):\s*(\{\s*\}|~|null)?\s*(#.*)?$`)
+
+func composeEntryAt(line string) (indent int, key string, ok bool) {
+	m := composeEntryRe.FindStringSubmatch(strings.TrimRight(line, "\r"))
+	if m == nil {
+		return 0, "", false
+	}
+	return len(m[1]), m[2], true
+}
+
+// composeSectionBlocks — элементы раздела key: как блоки вида kind; та же
+// логика по отступам, что у сервисов.
+func composeSectionBlocks(lines []string, key string, kind BlockKind) []Block {
+	secIdx := composeSectionLine(lines, key)
+	if secIdx < 0 {
+		return nil
+	}
+	childIndent := -1
+	for i := secIdx + 1; i < len(lines); i++ {
+		indent, _, ok := composeEntryAt(lines[i])
+		if !ok {
+			if strings.TrimSpace(lines[i]) != "" && !strings.HasPrefix(strings.TrimSpace(lines[i]), "#") {
+				return nil // раздел в потоковой записи или с неожиданным телом
+			}
+			continue
+		}
+		if indent == 0 {
+			return nil
+		}
+		childIndent = indent
+		break
+	}
+	if childIndent < 0 {
+		return nil
+	}
+	var out []Block
+	start, name := -1, ""
+	closeBlock := func(endExclusive int) {
+		if start < 0 {
+			return
+		}
+		end := endExclusive
+		for end > start+1 && strings.TrimSpace(lines[end-1]) == "" {
+			end--
+		}
+		out = append(out, Block{
+			ID: fmt.Sprintf("%s:%d", kind, start+1), Kind: kind, Name: name,
+			StartLine: start + 1, EndLine: end, Raw: strings.Join(lines[start:end], "\n"), Editable: true,
+		})
+		start = -1
+	}
+	for i := secIdx + 1; i < len(lines); i++ {
+		indent, key, ok := composeEntryAt(lines[i])
+		if !ok {
+			// Строка верхнего уровня с значением («version: "3"») тоже
+			// закрывает раздел.
+			if strings.TrimSpace(lines[i]) != "" && !strings.HasPrefix(lines[i], " ") && !strings.HasPrefix(lines[i], "\t") {
+				closeBlock(i)
+				return out
+			}
+			continue
+		}
+		switch {
+		case indent == childIndent:
+			closeBlock(i)
+			start, name = i, key
+		case indent < childIndent:
+			closeBlock(i)
+			return out
+		}
+	}
+	// Элемент «name: value» одной строкой (volumes:\n  data:) composeKeyAt
+	// тоже считает ключом — он закроется здесь.
+	closeBlock(len(lines))
+	return out
 }
 
 // composeKeyAt reports the indent and key name of a YAML "key:" mapping line
@@ -560,6 +680,28 @@ func InsertBlockAtEnd(fileText string, kind BlockKind, newText string, parentEnd
 			return "", msgs.Errorf("parse.parentBlockOutsideFileRange")
 		}
 		return insertBefore(lines, parentEndLine, block), nil
+
+	case BlockNetwork, BlockVolume, BlockSecret, BlockConfig:
+		key := composeSectionKey(kind)
+		idx := composeSectionLine(lines, key)
+		if idx < 0 {
+			// Раздела ещё нет — он появляется вместе с первым элементом, в
+			// конце файла.
+			lines = append([]string{}, lines...)
+			for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+				lines = lines[:len(lines)-1]
+			}
+			lines = append(lines, "", key+":")
+			idx = len(lines) - 1
+		} else if strings.TrimRight(lines[idx], " \t\r") != key+":" {
+			lines = append([]string{}, lines...)
+			lines[idx] = key + ":"
+		}
+		target := idx + 2
+		if existing := composeSectionBlocks(lines, key, kind); len(existing) > 0 {
+			target = existing[len(existing)-1].EndLine + 1
+		}
+		return insertBefore(lines, target, indentLines(block, "  ")), nil
 
 	case BlockService:
 		// A freshly created, still-empty compose file spells its services:
@@ -815,11 +957,10 @@ func indentLines(block []string, indent string) []string {
 			out[i] = l
 			continue
 		}
-		if strings.HasPrefix(l, indent) {
-			out[i] = l
-		} else {
-			out[i] = indent + strings.TrimLeft(l, " \t")
-		}
+		// Отступ добавляется всегда: относительные отступы внутри блока
+		// («  <source …/>» под «<disk>») должны сохраниться, а не
+		// схлопнуться до уровня родителя.
+		out[i] = indent + l
 	}
 	return out
 }
