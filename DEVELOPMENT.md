@@ -113,6 +113,19 @@ cd web && npm run dev        # интерфейс на :5173, проксируе
 терминала через SSH-туннель. Моков в этом слое намеренно нет: слишком
 многое здесь ломается именно на стыке с реальностью.
 
+Живые тесты, которые ходят в сеть (скачивание trivy и его базы, релизы
+GitHub, установка Go, реестр образов), по умолчанию пропускаются и
+включаются переменными:
+
+| Переменная | Что включает |
+|---|---|
+| `NKT_TEST_LIVE_VULN=1` | Скачивание trivy и его базы, настоящий скан (`internal/vuln`) |
+| `NKT_TEST_LIVE_REGISTRY=1` | Запросы к реестру образов (`internal/aptcache`) |
+| `NKT_TEST_LIVE_GO_INSTALL=1` | Установка Go на хост при сборке из исходников (`internal/hub`) |
+| `NKT_TEST_LIVE_RELEASE_DOWNLOAD=1` | Скачивание бинарника релиза с GitHub (`internal/hub`) |
+| `NKT_TEST_LIVE_RELEASE_VERSION` | Какую версию релиза качать в этом тесте |
+| `NKT_TEST_LIVE_VERSION_CHECK=1` | Проверка последней версии через API GitHub (`internal/hub`) |
+
 Добавление нового парсера: новый файл в `internal/parse`, возвращающий
 `model.Endpoint` / `model.Upstream` / `model.SourceStatus`, и вызов в
 `internal/inventory/scan.go`. Всё остальное — карта, анализ, мониторинг,
