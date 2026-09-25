@@ -4,6 +4,74 @@
     {
       "match": [
         "lxc",
+        "config",
+        "show",
+        "build-runner",
+        "--expanded"
+      ],
+      "stdout": "architecture: x86_64\nconfig:\n  boot.autostart: \"true\"\n  image.description: Debian bookworm amd64\n  image.os: Debian\n  limits.cpu: \"2\"\n  limits.memory: 2GiB\n  volatile.base_image: 4e4b5c6a1f\n  volatile.eth0.hwaddr: 00:16:3e:4a:1b:2c\ndevices:\n  eth0:\n    name: eth0\n    network: lxdbr0\n    type: nic\n  root:\n    path: /\n    pool: default\n    type: disk\n  web:\n    connect: tcp:127.0.0.1:80\n    listen: tcp:0.0.0.0:8088\n    type: proxy\nephemeral: false\nprofiles:\n- default\nstateful: false\ndescription: CI runner\n"
+    },
+    {
+      "match": [
+        "lxc",
+        "config",
+        "show",
+        "build-runner"
+      ],
+      "stdout": "architecture: x86_64\nconfig:\n  boot.autostart: \"true\"\n  image.description: Debian bookworm amd64\n  image.os: Debian\n  limits.cpu: \"2\"\n  limits.memory: 2GiB\n  volatile.base_image: 4e4b5c6a1f\n  volatile.eth0.hwaddr: 00:16:3e:4a:1b:2c\ndevices:\n  web:\n    connect: tcp:127.0.0.1:80\n    listen: tcp:0.0.0.0:8088\n    type: proxy\nephemeral: false\nprofiles:\n- default\nstateful: false\ndescription: CI runner\n"
+    },
+    {
+      "match": [
+        "lxc",
+        "query",
+        "-X",
+        "PUT"
+      ],
+      "stdout": "",
+      "exit_code": 0,
+      "simulated": true
+    },
+    {
+      "match": [
+        "lxc",
+        "config",
+        "show",
+        "dns-cache",
+        "--expanded"
+      ],
+      "stdout": "architecture: x86_64\nconfig: {}\ndevices: {}\nephemeral: false\nprofiles:\n- default\nstateful: false\ndescription: \"\"\n"
+    },
+    {
+      "match": [
+        "lxc",
+        "config",
+        "show",
+        "dns-cache"
+      ],
+      "stdout": "architecture: x86_64\nconfig: {}\ndevices: {}\nephemeral: false\nprofiles:\n- default\nstateful: false\ndescription: \"\"\n"
+    },
+    {
+      "match": [
+        "lxc",
+        "config",
+        "show",
+        "win-testbed",
+        "--expanded"
+      ],
+      "stdout": "architecture: x86_64\nconfig: {}\ndevices: {}\nephemeral: false\nprofiles:\n- default\nstateful: false\ndescription: \"\"\n"
+    },
+    {
+      "match": [
+        "lxc",
+        "config",
+        "show",
+        "win-testbed"
+      ],
+      "stdout": "architecture: x86_64\nconfig: {}\ndevices: {}\nephemeral: false\nprofiles:\n- default\nstateful: false\ndescription: \"\"\n"
+    },
+    {
+      "match": [
+        "lxc",
         "query",
         "/1.0/instances/build-runner/snapshots?recursion=1"
       ],

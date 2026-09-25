@@ -36,6 +36,11 @@ Instance **snapshots** open in their own window from the row: take one
 (optionally with memory), restore (`lxc restore`), delete. A snapshot
 lives on the same storage pool; moving to another host needs a backup.
 
+The instance **configuration** (`lxc config show`/`edit`) is edited in a
+window: text, quick `limits.cpu` and `limits.memory` fields, a diff
+before writing and version history with rollback. Next to it — the
+effective configuration with profiles (`--expanded`), read-only.
+
 ## Libvirt (KVM virtual machines)
 
 ![Virtual machines](/screens/en/vms.png)

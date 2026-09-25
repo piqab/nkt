@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.112 — 2026-09-25
+
+- **LXD instance configuration in a window.** The "edit" icon in the row
+  opens what `lxc config edit` does: config (limits, autostart,
+  cloud-init), devices, profiles. The `limits.cpu` and `limits.memory`
+  fields edit the text; a "saved → draft" diff comes before writing. A
+  YAML error shows before writing; if the configuration was changed
+  meanwhile, the write is rejected.
+- **LXD configuration version history** — the same as for files: every
+  edit is kept, diff against the current one, rollback to any version.
+  Next to it — the effective configuration with profiles (read-only).
+
 ## v1.10.111 — 2026-09-25
 
 - **LXD instance backup.** The "backup" icon in an instance row opens the
