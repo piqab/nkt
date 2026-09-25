@@ -115,6 +115,11 @@ finding analysis and one for the architecture review, in Russian and
 English; saving goes through a window with a diff against the default,
 "restore default" removes the edit.
 
+In "Configs" every open file (any service) and the selected program have
+a bulb: "what is configured / what to fix / example", with a field for a
+task-specific question. Passwords, keys, tokens and password hashes are
+always cut from the text.
+
 When writing a configuration fails (validation or apply), the failure
 banner carries the same bulb: the model gets the check output and the
 diff of the edit, with the task to explain and show a corrected

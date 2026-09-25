@@ -33,7 +33,10 @@ stop, delete.
 
 - libvirt domains: start, shut down, force off, reboot, autostart, delete
   with or without disks; machine addresses.
-- **Machine configuration (XML)** — the pencil in the row; before
+- **Machine configuration (XML)** — the pencil in the row: "text" and
+  **"blocks"** tabs (domain elements and devices one by one: disk,
+  network interface, graphics — edit, delete, `+ disk`/`+ interface`/
+  `+ graphics` with a template); before
   writing, a window shows the **diff** "on disk → draft", and `virsh
   define` runs only after "Write". The pencil opens
   `/etc/libvirt/qemu/<name>.xml` in the config editor, with version

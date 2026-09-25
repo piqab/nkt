@@ -210,3 +210,39 @@ func TestUserPromptConfigError(t *testing.T) {
 		}
 	}
 }
+
+// Помощь по конфигурации: текст файла в блоке, обрезка длинного, вопрос
+// оператора; хэши паролей и ключи WireGuard/kubeconfig вырезаются.
+func TestConfigPromptAndSecrets(t *testing.T) {
+	long := strings.Repeat("server_tokens off;\n", MaxConfigContent/10)
+	p := UserPrompt(FindingContext{Kind: KindConfig, Title: "/etc/nginx/nginx.conf", Service: "nginx", Content: long, Question: "reverse proxy на :3000"}, msgs.RU)
+	for _, want := range []string{"Конфигурация:", "```", "файл обрезан", "Вопрос оператора: reverse proxy на :3000"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("нет %q в промпте", want)
+		}
+	}
+	if len(p) > MaxConfigContent+2000 {
+		t.Errorf("промпт не обрезан: %d байт", len(p))
+	}
+	if !strings.Contains(SystemFor(KindConfig, msgs.EN), "What is configured") {
+		t.Error("инструкция config не выбрана")
+	}
+	in := strings.Join([]string{
+		"PrivateKey = wG5m2j8c9Xk3LpQ7rT1vB4nH6sD8fJ0aZ2yC5uE9iK4=",
+		"PresharedKey = abc123def456ghi789",
+		"psk=\"WiFiPass123\"",
+		"client-key-data: LS0tLS1CRUdJTiBQUklWQVRF",
+		"admin:$apr1$Xy9kQ2Lm$0uPz1Vb6rT3eW8nH4jK5c/",
+		"root:$6$rounds=5000$saltsalt$hashhashhash:19000:0:99999:7:::",
+		"ssl_certificate /etc/ssl/site.pem;",
+	}, "\n")
+	out := RedactSecrets(in)
+	for _, secret := range []string{"wG5m2j8c9Xk3", "abc123def456", "WiFiPass123", "LS0tLS1CRUdJTiBQUklWQVRF", "$apr1$Xy9kQ2Lm", "$6$rounds"} {
+		if strings.Contains(out, secret) {
+			t.Errorf("секрет %q ушёл в запрос:\n%s", secret, out)
+		}
+	}
+	if !strings.Contains(out, "ssl_certificate /etc/ssl/site.pem") || !strings.Contains(out, "admin:<hash>") {
+		t.Errorf("лишнее вырезано или хэш не помечен:\n%s", out)
+	}
+}

@@ -3,6 +3,7 @@ import { Button, Checkbox, Form, Input, InputNumber, Segmented, type TableColumn
 import { CheckCircleFilled, CloseCircleOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { AIConfigError } from '../components/AIConfigError'
+import BlockTree from '../components/BlockTree'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
@@ -341,6 +342,7 @@ export default function Virtualization({ me }: { me: Me }) {
       {editing && (
         <VMEditor
           name={editing}
+          me={me}
           onClose={() => setEditing(null)}
           onSaved={() => {
             setEditing(null)
@@ -353,6 +355,7 @@ export default function Virtualization({ me }: { me: Me }) {
         <VMEditor
           name={creating.name}
           initialContent={creating.initialContent}
+          me={me}
           onClose={() => setCreating(null)}
           onSaved={() => {
             setCreating(null)
@@ -488,10 +491,12 @@ function VMCreateChooser({
 function VMEditor({
   name,
   initialContent,
+  me,
   onClose,
   onSaved,
 }: {
   name: string
+  me: Me
   /** Pre-filled by the wizard; falls back to the plain skeleton when the
    * operator went the raw-XML route instead. */
   initialContent?: string
@@ -512,6 +517,10 @@ function VMEditor({
   // define применяется к работающей машине, и «применить» должно
   // нажиматься глядя на изменения, а не на весь XML.
   const [preview, setPreview] = useState<string | null>(null)
+  // «Блоки» — тот же BlockTree, что у nginx/haproxy/docker: элементы
+  // домена и устройства по одному. У новой машины файла ещё нет — только
+  // текст.
+  const [tab, setTab] = useState<'text' | 'blocks'>('text')
 
   const content = draft ?? existing.data?.content ?? (isNew ? initialContent ?? domainXMLSkeleton(name) : '')
 
@@ -574,6 +583,29 @@ function VMEditor({
         <Loading what={t('virt.loadingDefinition')} />
       ) : (
         <div className="col">
+          {!isNew && (
+            <Segmented
+              value={tab}
+              onChange={(v) => setTab(v as 'text' | 'blocks')}
+              options={[
+                { value: 'text', label: t('configs.text') },
+                { value: 'blocks', label: t('configs.blocks') },
+              ]}
+            />
+          )}
+          {tab === 'blocks' && !isNew && existing.data ? (
+            <BlockTree
+              path={path}
+              service="libvirt"
+              sha256={existing.data.sha256}
+              me={me}
+              onSaved={() => {
+                existing.reload()
+                onSaved()
+              }}
+            />
+          ) : (
+            <>
           {error && (
             <Banner kind="error">
               {error}
@@ -600,6 +632,8 @@ function VMEditor({
               {busy ? t('virt.saving') : t('virt.save')}
             </Button>
           </div>
+            </>
+          )}
           {preview !== null && (
             <Modal title={t('virt.reviewChanges', { name })} onClose={() => setPreview(null)} width={900} maskClosable={false}>
               <div className="small muted">{apply ? t('virt.reviewChangesApply') : t('virt.reviewChangesNoApply')}</div>

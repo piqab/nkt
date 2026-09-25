@@ -114,6 +114,9 @@ type aiExplainRequest struct {
 	// ответила проверка.
 	Diff   string `json:"diff"`
 	Output string `json:"output"`
+	// Content и Question — помощь по конфигурации: текст файла и вопрос.
+	Content  string `json:"content"`
+	Question string `json:"question"`
 	// HostID — на каком хосте найдено (0 — сам хаб/localhost): по нему
 	// собирается контекст «что рядом».
 	HostID int64 `json:"host_id"`
@@ -133,14 +136,14 @@ func (s *Server) handleAIExplain(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := req.Kind
 	switch kind {
-	case ai.KindFinding, ai.KindVuln, ai.KindMalware, ai.KindEvent, ai.KindJobError, ai.KindConfigError:
+	case ai.KindFinding, ai.KindVuln, ai.KindMalware, ai.KindEvent, ai.KindJobError, ai.KindConfigError, ai.KindConfig:
 	default:
 		kind = ai.KindFinding
 	}
 	fc := ai.FindingContext{
 		Kind: kind, Title: req.Title, Detail: req.Detail, Suggestion: req.Suggestion,
 		Severity: req.Severity, Service: req.Service, Object: req.Object, File: req.File, Line: req.Line,
-		Diff: req.Diff, Output: req.Output,
+		Diff: req.Diff, Output: req.Output, Content: req.Content, Question: req.Question,
 	}
 	fc.Host, fc.Around = s.aiHostContext(r.Context(), req.HostID)
 	s.aiExtendDeadline(w, s.hub.AISettings(r.Context()).TimeoutS)

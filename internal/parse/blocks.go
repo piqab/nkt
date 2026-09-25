@@ -35,6 +35,16 @@ const (
 	// inside stays part of its site's raw text rather than its own
 	// addressable block.
 	BlockSite BlockKind = "site"
+	// libvirt: XML домена режется на элементы. Верхний уровень
+	// (<name>, <memory>, <os>…) — «setting», контейнер <devices> —
+	// «devices» (не редактируется сам, только его дети), устройства —
+	// «disk»/«interface»/«graphics», остальные — «device».
+	BlockSetting   BlockKind = "setting"
+	BlockDevices   BlockKind = "devices"
+	BlockDisk      BlockKind = "disk"
+	BlockInterface BlockKind = "interface"
+	BlockGraphics  BlockKind = "graphics"
+	BlockDevice    BlockKind = "device"
 )
 
 // Block is one structural unit of a single config file — a nginx server{}/
@@ -70,6 +80,8 @@ func Blocks(c collect.Collector, path, service string) ([]Block, error) {
 		return haproxyBlocks(c, path)
 	case model.ServiceDocker:
 		return dockerBlocks(c, path)
+	case model.ServiceLibvirt:
+		return libvirtBlocks(c, path)
 	case model.ServiceCaddy:
 		return caddyBlocks(c, path)
 	default:
@@ -537,6 +549,12 @@ func InsertBlockAtEnd(fileText string, kind BlockKind, newText string, parentEnd
 	block := strings.Split(strings.TrimRight(newText, "\n"), "\n")
 
 	switch kind {
+	case BlockDisk, BlockInterface, BlockGraphics, BlockDevice:
+		// Устройство — внутрь <devices>, перед его закрывающим тегом.
+		if parentEndLine < 1 || parentEndLine > len(lines) {
+			return "", fmt.Errorf("parse: devices end line %d out of range", parentEndLine)
+		}
+		return insertBefore(lines, parentEndLine, indentLines(block, "    ")), nil
 	case BlockLocation:
 		if parentEndLine < 1 || parentEndLine > len(lines) {
 			return "", msgs.Errorf("parse.parentBlockOutsideFileRange")
@@ -580,4 +598,228 @@ func insertBefore(lines []string, at int, block []string) string {
 	out = append(out, block...)
 	out = append(out, lines[at-1:]...)
 	return strings.Join(out, "\n")
+}
+
+// ---------------------------------------------------------------- libvirt
+
+var xmlOpenTagRe = regexp.MustCompile(`^\s*<([A-Za-z][\w:-]*)([^>]*)>`)
+
+// libvirtBlocks режет XML домена на блоки по элементам. virsh всегда
+// отдаёт XML с отступами и одним элементом на строку — на это и
+// рассчитан построчный разбор: границы элемента — по вложенности тегов,
+// а не по отступам, так что и вручную выровненный файл разберётся.
+func libvirtBlocks(c collect.Collector, path string) ([]Block, error) {
+	raw, err := c.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	lines := strings.Split(strings.ReplaceAll(string(raw), "\r\n", "\n"), "\n")
+	rootStart := -1
+	for i, l := range lines {
+		if m := xmlOpenTagRe.FindStringSubmatch(l); m != nil && m[1] == "domain" {
+			rootStart = i
+			break
+		}
+	}
+	if rootStart < 0 {
+		return nil, fmt.Errorf("parse: %s: no <domain> element", path)
+	}
+	rootEnd, err := xmlElementEnd(lines, rootStart)
+	if err != nil {
+		return nil, err
+	}
+	var out []Block
+	children, err := xmlChildren(lines, rootStart, rootEnd)
+	if err != nil {
+		return nil, err
+	}
+	for _, ch := range children {
+		if ch.name == "devices" {
+			dev := Block{ID: fmt.Sprintf("%s:%d", BlockDevices, ch.start+1), Kind: BlockDevices, Name: "", StartLine: ch.start + 1, EndLine: ch.end + 1, Raw: strings.Join(lines[ch.start:ch.end+1], "\n"), Editable: false}
+			devs, err := xmlChildren(lines, ch.start, ch.end)
+			if err != nil {
+				return nil, err
+			}
+			for _, d := range devs {
+				kind := BlockDevice
+				switch d.name {
+				case "disk":
+					kind = BlockDisk
+				case "interface":
+					kind = BlockInterface
+				case "graphics":
+					kind = BlockGraphics
+				}
+				dev.Children = append(dev.Children, Block{
+					ID: fmt.Sprintf("%s:%d", kind, d.start+1), Kind: kind, Name: libvirtDeviceName(d.name, lines[d.start:d.end+1]),
+					StartLine: d.start + 1, EndLine: d.end + 1, Raw: strings.Join(lines[d.start:d.end+1], "\n"), Editable: true,
+				})
+			}
+			out = append(out, dev)
+			continue
+		}
+		out = append(out, Block{
+			ID: fmt.Sprintf("%s:%d", BlockSetting, ch.start+1), Kind: BlockSetting, Name: libvirtSettingName(ch.name, lines[ch.start:ch.end+1]),
+			StartLine: ch.start + 1, EndLine: ch.end + 1, Raw: strings.Join(lines[ch.start:ch.end+1], "\n"), Editable: true,
+		})
+	}
+	return out, nil
+}
+
+type xmlChild struct {
+	name       string
+	start, end int // 0-based
+}
+
+// xmlChildren — прямые дети элемента, занимающего строки [start, end].
+func xmlChildren(lines []string, start, end int) ([]xmlChild, error) {
+	var out []xmlChild
+	for i := start + 1; i < end; i++ {
+		m := xmlOpenTagRe.FindStringSubmatch(lines[i])
+		if m == nil || strings.HasPrefix(strings.TrimSpace(lines[i]), "</") {
+			continue
+		}
+		e, err := xmlElementEnd(lines, i)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, xmlChild{name: m[1], start: i, end: e})
+		i = e
+	}
+	return out, nil
+}
+
+var xmlTagRe = regexp.MustCompile(`<(/?)([A-Za-z][\w:-]*)[^>]*?(/?)>`)
+
+// xmlElementEnd — строка закрывающего тега элемента, открытого в start;
+// сам start, если элемент однострочный (<x/> или <x>…</x>).
+func xmlElementEnd(lines []string, start int) (int, error) {
+	depth := 0
+	for i := start; i < len(lines); i++ {
+		line := lines[i]
+		if ci := strings.Index(line, "<!--"); ci >= 0 {
+			line = line[:ci]
+		}
+		for _, m := range xmlTagRe.FindAllStringSubmatch(line, -1) {
+			switch {
+			case m[1] == "/":
+				depth--
+			case m[3] == "/":
+				// самозакрывающийся — глубину не меняет
+			default:
+				depth++
+			}
+		}
+		if depth <= 0 {
+			return i, nil
+		}
+	}
+	return 0, fmt.Errorf("parse: unclosed element at line %d", start+1)
+}
+
+var xmlAttrRe = regexp.MustCompile(`([\w:-]+)='([^']*)'|([\w:-]+)="([^"]*)"`)
+
+func xmlAttrs(line string) map[string]string {
+	out := map[string]string{}
+	for _, m := range xmlAttrRe.FindAllStringSubmatch(line, -1) {
+		if m[1] != "" {
+			out[m[1]] = m[2]
+		} else {
+			out[m[3]] = m[4]
+		}
+	}
+	return out
+}
+
+// libvirtDeviceName — короткая подпись устройства: «vda (qcow2, /var/lib/…)»,
+// «bridge br0 (52:54:…)», «vnc», «virtio-serial».
+func libvirtDeviceName(elem string, body []string) string {
+	head := xmlAttrs(body[0])
+	find := func(tag, attr string) string {
+		for _, l := range body[1:] {
+			if strings.Contains(l, "<"+tag+" ") || strings.Contains(l, "<"+tag+">") {
+				if v := xmlAttrs(l)[attr]; v != "" {
+					return v
+				}
+			}
+		}
+		return ""
+	}
+	switch elem {
+	case "disk":
+		var bits []string
+		if dev := find("target", "dev"); dev != "" {
+			bits = append(bits, dev)
+		}
+		var in []string
+		if d := find("driver", "type"); d != "" {
+			in = append(in, d)
+		}
+		if src := find("source", "file"); src != "" {
+			in = append(in, src)
+		} else if src := find("source", "dev"); src != "" {
+			in = append(in, src)
+		}
+		if head["device"] != "" && head["device"] != "disk" {
+			in = append(in, head["device"])
+		}
+		if len(in) > 0 {
+			bits = append(bits, "("+strings.Join(in, ", ")+")")
+		}
+		return strings.Join(bits, " ")
+	case "interface":
+		var bits []string
+		if head["type"] != "" {
+			bits = append(bits, head["type"])
+		}
+		if b := find("source", "bridge"); b != "" {
+			bits = append(bits, b)
+		} else if n := find("source", "network"); n != "" {
+			bits = append(bits, n)
+		}
+		if mac := find("mac", "address"); mac != "" {
+			bits = append(bits, "("+mac+")")
+		}
+		return strings.Join(bits, " ")
+	case "graphics":
+		return head["type"]
+	default:
+		name := elem
+		if head["type"] != "" {
+			name += " " + head["type"]
+		}
+		return name
+	}
+}
+
+// libvirtSettingName — «memory 2097152 KiB», «vcpu 2», «os».
+func libvirtSettingName(elem string, body []string) string {
+	if len(body) == 1 {
+		if m := regexp.MustCompile(`>([^<]+)</`).FindStringSubmatch(body[0]); m != nil {
+			v := strings.TrimSpace(m[1])
+			if unit := xmlAttrs(body[0])["unit"]; unit != "" {
+				v += " " + unit
+			}
+			return elem + " " + v
+		}
+	}
+	return elem
+}
+
+// indentLines добавляет отступ каждой непустой строке блока: устройство
+// вставляется внутрь <devices>, а пишут его обычно без отступа.
+func indentLines(block []string, indent string) []string {
+	out := make([]string, len(block))
+	for i, l := range block {
+		if strings.TrimSpace(l) == "" {
+			out[i] = l
+			continue
+		}
+		if strings.HasPrefix(l, indent) {
+			out[i] = l
+		} else {
+			out[i] = indent + strings.TrimLeft(l, " \t")
+		}
+	}
+	return out
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AIConfigError } from '../components/AIConfigError'
+import { AIExplain } from '../components/AIExplain'
 import { Button, Checkbox, Input, Segmented, Select, type TableColumnsType } from 'antd'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
@@ -13,7 +14,7 @@ import { DataTable } from '../components/DataTable'
 import PathPicker from '../components/PathPicker'
 import { RowAction } from '../components/RowAction'
 
-const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker', 'caddy'])
+const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker', 'caddy', 'libvirt'])
 
 function versionColumns(
   diff: { id: number; text: string } | null,
@@ -314,12 +315,23 @@ export default function Configs({ me }: { me: Me }) {
             <Loading what={t('configs.loadingFileList')} />
           ) : (
             <div className="col" style={{ gap: '0.15rem' }}>
-              <Select
-                value={category}
-                onChange={setCategory}
-                options={categories}
-                style={{ width: '100%', marginBottom: '0.4rem' }}
-              />
+              <div className="row" style={{ gap: '0.25rem', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <Select value={category} onChange={setCategory} options={categories} style={{ flex: 1 }} />
+                {category !== 'all' && category !== 'unused' && (
+                  <AIExplain
+                    askFirst
+                    ctx={{
+                      kind: 'config',
+                      title: category,
+                      service: category,
+                      object: category,
+                      // Список файлов программы без содержимого: модели нужно
+                      // знать, что есть, а не читать всё разом.
+                      detail: visibleFiles.map((f) => `${f.path} (${formatBytes(f.size)})`).join('\n'),
+                    }}
+                  />
+                )}
+              </div>
               {visibleFiles.map((f) => (
                 <Button
                   key={f.path}
@@ -399,6 +411,18 @@ export default function Configs({ me }: { me: Me }) {
                 subtitle={t('configs.modified', { service: file.data.service, size: formatBytes(file.data.size), time: formatDateTime(file.data.mod_time) })}
                 actions={
                   <>
+                    {/* Помощь по этому файлу: что настроено, что поправить,
+                        пример — с текущим черновиком, а не с файлом на диске. */}
+                    <AIExplain
+                      ctx={{
+                        kind: 'config',
+                        title: file.data.path,
+                        service: file.data.service,
+                        object: file.data.path,
+                        file: file.data.path,
+                        content: draft,
+                      }}
+                    />
                     {BLOCK_SERVICES.has(file.data.service) && (
                       <Segmented
                         value={view}

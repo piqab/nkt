@@ -17,6 +17,20 @@ const KIND_LABEL: Record<BlockKind, string> = {
   defaults: 'defaults',
   service: 'service',
   site: 'site',
+  setting: 'setting',
+  devices: 'devices',
+  disk: 'disk',
+  interface: 'interface',
+  graphics: 'graphics',
+  device: 'device',
+}
+
+// Шаблон нового устройства libvirt: пустая форма заставляла бы вспоминать
+// схему XML наизусть; значения в шаблоне — самые обычные (virtio, qcow2).
+const LIBVIRT_TEMPLATE: Partial<Record<BlockKind, string>> = {
+  disk: "<disk type='file' device='disk'>\n  <driver name='qemu' type='qcow2'/>\n  <source file='/var/lib/libvirt/images/NAME.qcow2'/>\n  <target dev='vdb' bus='virtio'/>\n</disk>",
+  interface: "<interface type='bridge'>\n  <source bridge='br0'/>\n  <model type='virtio'/>\n</interface>",
+  graphics: "<graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'/>",
 }
 
 // What a "+" button can create at the top level of each service's file — a
@@ -30,6 +44,7 @@ function creatableKinds(service: string): BlockKind[] {
   if (service === 'haproxy') return ['frontend', 'backend', 'listen']
   if (service === 'docker') return ['service']
   if (service === 'caddy') return ['site']
+  if (service === 'libvirt') return ['disk', 'interface', 'graphics']
   return []
 }
 
@@ -99,9 +114,14 @@ export default function BlockTree({
   }, [blocks.data])
 
   function openCreate(kind: BlockKind, parentEndLine?: number) {
-    setDraft('')
+    setDraft(LIBVIRT_TEMPLATE[kind] ?? '')
     setNote('')
     setApply(false)
+    // Устройство libvirt живёт внутри <devices>: родитель — его блок,
+    // а не корень файла.
+    if (parentEndLine === undefined && service === 'libvirt') {
+      parentEndLine = (blocks.data?.blocks ?? []).find((b) => b.kind === 'devices')?.end_line
+    }
     setModal({ mode: 'create', kind, parentEndLine })
   }
 

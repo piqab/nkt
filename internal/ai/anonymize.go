@@ -38,11 +38,13 @@ func NewMapper(enabled bool) *Mapper {
 var (
 	// Имя ключа может быть с префиксом (DB_PASSWORD, redis.secret), но
 	// не с суффиксом: password_file — путь, а не пароль.
-	secretKVRe    = regexp.MustCompile(`(?i)\b([\w.-]*?(?:passwords?|passwd|pwd|secrets?|tokens?|api[_-]?keys?|access[_-]?keys?|secret[_-]?keys?|private[_-]?keys?|auth[_-]?tokens?|client[_-]?secrets?|credentials?))\b(\s*[=:]\s*)(["']?)([^\s"';,]+)`)
-	pemRe         = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----`)
-	authHeaderRe  = regexp.MustCompile(`(?i)(authorization:\s*(?:bearer|basic|token)\s+)\S+`)
-	urlCredsRe    = regexp.MustCompile(`(://)([^/\s:@]+):([^/\s@]+)@`)
-	knownTokensRe = regexp.MustCompile(`\b(?:AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b`)
+	secretKVRe = regexp.MustCompile(`(?i)\b([\w.-]*?(?:passwords?|passwd|pwd|secrets?|tokens?|api[_-]?keys?|access[_-]?keys?|secret[_-]?keys?|private[_-]?keys?|preshared[_-]?keys?|auth[_-]?tokens?|client[_-]?secrets?|credentials?|passphrases?|psk|key-data))\b(\s*[=:]\s*)(["']?)([^\s"';,]+)`)
+	// Хэши паролей (htpasswd, shadow, bcrypt, argon2): $apr1$…, $2y$…, $6$…
+	passwordHashRe = regexp.MustCompile(`\$(?:apr1|2[aby]|1|5|6|y|argon2id?|argon2i)\$[^\s:'",]+`)
+	pemRe          = regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----`)
+	authHeaderRe   = regexp.MustCompile(`(?i)(authorization:\s*(?:bearer|basic|token)\s+)\S+`)
+	urlCredsRe     = regexp.MustCompile(`(://)([^/\s:@]+):([^/\s@]+)@`)
+	knownTokensRe  = regexp.MustCompile(`\b(?:AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9]{30,}|xox[baprs]-[A-Za-z0-9-]{10,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b`)
 )
 
 // RedactSecrets заменяет секреты на «<secret>» — необратимо. Имя ключа
@@ -52,6 +54,7 @@ func RedactSecrets(text string) string {
 	text = authHeaderRe.ReplaceAllString(text, "${1}<secret>")
 	text = urlCredsRe.ReplaceAllString(text, "${1}${2}:<secret>@")
 	text = secretKVRe.ReplaceAllString(text, "${1}${2}${3}<secret>")
+	text = passwordHashRe.ReplaceAllString(text, "<hash>")
 	text = knownTokensRe.ReplaceAllString(text, "<secret>")
 	return text
 }
