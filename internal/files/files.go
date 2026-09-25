@@ -36,10 +36,11 @@ type Runner func(ctx context.Context, argv ...string) (collect.CommandResult, er
 // RunnerEnv — то же с окружением: git получает секрет и ключ через него.
 type RunnerEnv func(ctx context.Context, env map[string]string, argv ...string) (collect.CommandResult, error)
 
-// DefaultRoots — где проводнику можно. /tmp намеренно нет: у юнита с
-// PrivateTmp свой /tmp, и проводник показывал бы не тот каталог, куда
-// кладут файлы снаружи.
-var DefaultRoots = []string{"/home", "/srv", "/opt", "/var/www"}
+// DefaultRoots — где проводнику можно. /tmp — при юните с PrivateTmp=no
+// (deploy/netknownsthat.service); старому юниту с PrivateTmp=yes /tmp
+// свой, не тот, куда кладут файлы снаружи, и раздача корней его
+// убирает (см. api.handleFilesRoots).
+var DefaultRoots = []string{"/home", "/srv", "/opt", "/var/www", "/tmp"}
 
 // MaxUploadBytes — потолок одной загрузки. int64 явно: на 32-битных
 // сборках 2 ГиБ в int не помещается.
@@ -84,6 +85,19 @@ func NewManager(roots []string, c collect.Collector, run Runner, runEnv RunnerEn
 
 // Roots — корни проводника.
 func (m *Manager) Roots() []string { return append([]string(nil), m.roots...) }
+
+// ExistingRoots — только те корни, что есть на диске как каталоги:
+// /srv или /var/www на многих хостах нет, и пустая папка в списке —
+// вопрос «а где мои файлы?» без ответа.
+func (m *Manager) ExistingRoots() []string {
+	out := make([]string, 0, len(m.roots))
+	for _, root := range m.roots {
+		if info, err := m.c.Stat(root); err == nil && info.IsDir {
+			out = append(out, root)
+		}
+	}
+	return out
+}
 
 // Check отвергает путь вне корней и с подвохом («..», относительный).
 func (m *Manager) Check(p string) (string, error) {

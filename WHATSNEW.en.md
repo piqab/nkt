@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.95 — 2026-09-25
+
+- **Disks → Files: `/tmp` is back, and only existing folders are
+  listed.** The host unit now has `PrivateTmp=no`, so the browser shows
+  the real `/tmp` rather than the service's private one (on a host with
+  the old unit `/tmp` stays out of the list until the host is updated).
+  Roots missing on disk (`/srv`, `/var/www`…) are no longer shown.
+
 ## v1.10.94 — 2026-09-25
 
 - Port probe: when the response is a single-page JavaScript application

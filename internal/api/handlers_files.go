@@ -33,15 +33,29 @@ func (s *Server) handleFilesRoots(w http.ResponseWriter, r *http.Request) {
 	if m == nil {
 		return
 	}
-	out := map[string]any{"roots": m.Roots(), "max_upload": files.MaxUploadBytes}
+	roots := m.ExistingRoots()
+	out := map[string]any{"max_upload": files.MaxUploadBytes}
 	// Старый юнит с ProtectHome=yes: /home для службы пуст, загруженное
 	// туда снаружи «не появляется». Предупредить сразу, а не после
 	// первой загрузки.
 	if os.Getenv("INVOCATION_ID") != "" {
-		if d := readUnit("netknownsthat.service"); d.Found && (d.ProtectHome == "yes" || d.ProtectHome == "true" || d.ProtectHome == "tmpfs") {
+		d := readUnit("netknownsthat.service")
+		if d.Found && (d.ProtectHome == "yes" || d.ProtectHome == "true" || d.ProtectHome == "tmpfs") {
 			out["warning"] = msgs.Tc(r.Context(), "files.protectHomeWarning", d.Path)
 		}
+		// Старый юнит с PrivateTmp=yes: /tmp у службы свой — показывать его
+		// значило бы показывать не тот каталог, куда кладут файлы снаружи.
+		if d.Found && (d.PrivateTmp == "yes" || d.PrivateTmp == "true") {
+			kept := roots[:0]
+			for _, root := range roots {
+				if root != "/tmp" {
+					kept = append(kept, root)
+				}
+			}
+			roots = kept
+		}
 	}
+	out["roots"] = roots
 	writeJSON(w, http.StatusOK, out)
 }
 

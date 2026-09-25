@@ -99,8 +99,14 @@ ReadWritePaths=-/run/systemd/resolve
 # systemd-run «не появлялось», compose-стеки из /home не находились.
 # Запись в /home идёт через выход из песочницы, читать юниту можно.
 ProtectHome=read-only
-# /tmp у юнита свой (PrivateTmp): в проводнике его нет по умолчанию.
-PrivateTmp=yes
+# /tmp общий с системой, а не свой (PrivateTmp=no): проводник «Диски →
+# Файлы» показывает тот же /tmp, куда кладут файлы снаружи, и раздел
+# «Вредоносное» смотрит на настоящие бинарники в /tmp. Цена — нет
+# защиты от подмены файлов в /tmp через симлинки, но nkt в /tmp ничего
+# своего не пишет (временные файлы — в /var/lib/netknownsthat). Под
+# ProtectSystem=strict /tmp без ReadWritePaths был бы только для чтения.
+PrivateTmp=no
+ReadWritePaths=-/tmp
 NoNewPrivileges=yes
 
 # Управление сервисами и firewall требует этих возможностей; всё остальное

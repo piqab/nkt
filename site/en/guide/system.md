@@ -18,7 +18,8 @@ title: Packages, disks, files, system
 - Filesystems with usage (pseudo-filesystems hidden), swap, physical disks
   and partitions.
 - **What takes the space**: subdirectory sizes on click, level by level.
-- **Files** — a browser over the allowed roots (`/home`, `/srv`, `/opt`,
+- **Files** — a browser over the allowed roots, showing only the ones
+  that exist (`/home`, `/srv`, `/opt`, `/tmp`,
   `/var/www`; configurable with `NKT_FILES_ROOTS`): folders,
   rename, delete, download; upload of files and whole folders via a dialog
   or drag and drop with overall progress (the **"skip hidden"** checkbox,

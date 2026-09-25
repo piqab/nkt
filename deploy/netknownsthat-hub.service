@@ -59,7 +59,10 @@ ReadWritePaths=-/var/log/nginx
 ReadWritePaths=-/var/log/haproxy
 ReadWritePaths=-/var/log/caddy
 ProtectHome=yes
-PrivateTmp=yes
+# Как у юнита хоста: /tmp общий, чтобы строка localhost в проводнике
+# показывала настоящий /tmp.
+PrivateTmp=no
+ReadWritePaths=-/tmp
 NoNewPrivileges=yes
 
 # Тот же набор, что и у netknownsthat.service, по тем же причинам — см.
