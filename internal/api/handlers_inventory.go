@@ -257,7 +257,9 @@ func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, topology.Build(r.Context(), snap))
+	g := topology.Build(r.Context(), snap)
+	s.enrichTopology(r.Context(), g)
+	writeJSON(w, http.StatusOK, g)
 }
 
 func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {

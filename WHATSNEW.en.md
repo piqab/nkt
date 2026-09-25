@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.121 — 2026-09-25
+
+- **Machines on the resource map.** An nginx/HAProxy/Caddy backend that
+  points at a libvirt machine's or an LXD instance's address is linked to
+  it — you see which site lives on which machine. Machines are linked to
+  their networks (a libvirt bridge, an LXD network); forwarded LXD ports
+  are an entry from the host into the instance, like published container
+  ports.
+- **Machine node details:** address, ping (latency and 24h availability),
+  current CPU and memory, the vulnerabilities of packages inside by
+  severity. No ping reply turns the node red, critical vulnerabilities
+  turn it yellow. The "Networks" column is now shared by Docker, LXD and
+  libvirt.
+- **Fixed:** an LXD instance's addresses included 127.0.0.1 from the lo
+  interface — the availability ping could go to the host's loopback.
+
 ## v1.10.120 — 2026-09-25
 
 - **Installs and upgrades run as jobs.** Installing and removing apt,

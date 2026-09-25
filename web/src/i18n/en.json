@@ -982,7 +982,7 @@
     "colPodman": "Podman",
     "colLxd": "LXD",
     "colVms": "Virtual machines",
-    "colNetworks": "Docker networks",
+    "colNetworks": "Networks",
     "title": "Resource map",
     "hint": "Red for critical problems, yellow for warnings. Hover or click a node to see the whole route — from the external network to the backend and back — and its details.",
     "findingsHint": "{{count}} findings on the map — click a node for details",

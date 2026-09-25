@@ -221,6 +221,38 @@ func Build(ctx context.Context, s *model.Snapshot) *Graph {
 		if b.nodes["svc:lxd"] != nil {
 			b.edge("svc:lxd", id, "manages", "", StatusOK)
 		}
+		// Сети: сеть LXD или мост хоста, подпись связи — адрес инстанса.
+		ip := ""
+		if len(inst.IPv4) > 0 {
+			ip = inst.IPv4[0]
+			b.nodes[id].Meta["ip"] = strings.Join(inst.IPv4, ", ")
+		}
+		for _, n := range inst.Networks {
+			netID := "net:lxd:" + n
+			b.node(Node{ID: netID, Kind: KindNetwork, Label: n, Sublabel: "LXD", Group: model.ServiceLXD, Status: StatusOK})
+			b.edge(id, netID, "attached", ip, StatusOK)
+		}
+		// Проброшенные порты (устройства proxy) — вход с хоста в инстанс,
+		// как опубликованный порт контейнера.
+		for _, p := range inst.Ports {
+			addr, port, ok := lxdListen(p.Listen)
+			if !ok {
+				continue
+			}
+			epID := fmt.Sprintf("ep:lxd:%s:%s", inst.Name, p.Device)
+			public := addr == "" || addr == "0.0.0.0" || addr == "::"
+			b.node(Node{
+				ID: epID, Kind: KindEndpoint, Label: fmt.Sprintf(":%d", port), Sublabel: "lxd proxy " + p.Device,
+				Group: model.ServiceLXD, Status: StatusOK, Port: port, Public: public,
+				Meta: map[string]string{"listen": p.Listen, "connect": p.Connect},
+			})
+			b.edge(hostID, epID, "listens", "", StatusOK)
+			if public {
+				b.edge("internet", epID, "ingress", "tcp", StatusOK)
+			}
+			_, cport, _ := lxdListen(p.Connect)
+			b.edge(epID, id, "publishes", strconv.Itoa(cport), StatusOK)
+		}
 	}
 
 	// libvirt/QEMU virtual machines.
@@ -245,6 +277,21 @@ func Build(ctx context.Context, s *model.Snapshot) *Graph {
 		b.attachFindings(id, vm.Name)
 		if b.nodes["svc:libvirt"] != nil {
 			b.edge("svc:libvirt", id, "manages", "", StatusOK)
+		}
+		var ips []string
+		for _, n := range vm.Networks {
+			if n.IP != "" {
+				ips = append(ips, n.IP)
+			}
+			if n.Source == "" {
+				continue
+			}
+			netID := "net:libvirt:" + n.Source
+			b.node(Node{ID: netID, Kind: KindNetwork, Label: n.Source, Sublabel: "libvirt", Group: model.ServiceLibvirt, Status: StatusOK})
+			b.edge(id, netID, "attached", n.IP, StatusOK)
+		}
+		if len(ips) > 0 {
+			b.nodes[id].Meta["ip"] = strings.Join(ips, ", ")
 		}
 	}
 
@@ -530,6 +577,40 @@ func (b *builder) linkBackendToContainer(s *model.Snapshot, beID, socket string)
 			}
 		}
 	}
+	// Бэкенд на адресе машины или инстанса LXD — сайт живёт там.
+	for _, in := range s.LXD {
+		for _, ip := range in.IPv4 {
+			if ip == host {
+				b.edge(beID, "lxd:"+in.Name, "served-by", portStr, StatusOK)
+				return
+			}
+		}
+	}
+	for _, vm := range s.VMs {
+		for _, n := range vm.Networks {
+			if n.IP != "" && n.IP == host {
+				b.edge(beID, "vm:"+vm.Name, "served-by", portStr, StatusOK)
+				return
+			}
+		}
+	}
+}
+
+// lxdListen — «tcp:0.0.0.0:8088» → адрес и порт.
+func lxdListen(s string) (string, int, bool) {
+	_, rest, ok := strings.Cut(s, ":")
+	if !ok {
+		return "", 0, false
+	}
+	i := strings.LastIndex(rest, ":")
+	if i < 0 {
+		return "", 0, false
+	}
+	port, err := strconv.Atoi(rest[i+1:])
+	if err != nil || port <= 0 {
+		return "", 0, false
+	}
+	return strings.Trim(rest[:i], "[]"), port, true
 }
 
 func (b *builder) node(n Node) {

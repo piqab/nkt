@@ -106,18 +106,32 @@ func LXD(ctx context.Context, c collect.Collector) LXDResult {
 		inst.Snapshots = len(e.Snapshots)
 		inst.Profiles = e.Profiles
 		for dev, d := range e.ExpandedDevices {
-			if d["type"] == "proxy" {
+			switch d["type"] {
+			case "proxy":
 				inst.Ports = append(inst.Ports, model.LXDPort{Device: dev, Listen: d["listen"], Connect: d["connect"]})
+			case "nic":
+				// Сеть LXD (network=) или мост хоста (parent=) — для карты.
+				if n := d["network"]; n != "" {
+					inst.Networks = append(inst.Networks, n)
+				} else if p := d["parent"]; p != "" {
+					inst.Networks = append(inst.Networks, p)
+				}
 			}
 		}
+		sort.Strings(inst.Networks)
 		sort.Slice(inst.Ports, func(i, j int) bool { return inst.Ports[i].Device < inst.Ports[j].Device })
 		if e.State != nil {
 			inst.MemoryBytes = e.State.Memory.Usage
 			inst.DiskBytes = e.State.Disk["root"].Usage
 			inst.Processes = e.State.Processes
-			for _, iface := range e.State.Network {
+			for ifname, iface := range e.State.Network {
+				if ifname == "lo" {
+					continue
+				}
 				for _, addr := range iface.Addresses {
-					if addr.Family == "inet" {
+					// 127.0.0.1 — адрес не инстанса: по нему ping цели
+					// доступности ушёл бы в loopback самого хоста.
+					if addr.Family == "inet" && !strings.HasPrefix(addr.Address, "127.") {
 						inst.IPv4 = append(inst.IPv4, addr.Address)
 					}
 				}

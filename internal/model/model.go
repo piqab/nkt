@@ -347,6 +347,8 @@ type LXDInstance struct {
 	Ports     []LXDPort `json:"ports,omitempty"`
 	Snapshots int       `json:"snapshots,omitempty"`
 	Profiles  []string  `json:"profiles,omitempty"`
+	// Networks — сети LXD или мосты хоста, к которым подключены nic.
+	Networks []string `json:"networks,omitempty"`
 }
 
 // LXDPort — устройство proxy: listen tcp:0.0.0.0:8080 → connect tcp:127.0.0.1:80.
