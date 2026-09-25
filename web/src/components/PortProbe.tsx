@@ -434,7 +434,17 @@ function ProbeOutcome({
       const csp = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; font-src data:">`
       const html = bytesToText(bytes)
       const doc = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + csp) : csp + html
-      return <iframe title="response" sandbox="" srcDoc={doc} style={{ width: '100%', height: '24rem', border: '1px solid var(--border)', background: '#fff' }} />
+      // Одностраничное приложение (SvelteKit, React, Vue…): в теле —
+      // только загрузчик скриптов, а всё содержимое рисует JavaScript,
+      // который здесь намеренно выключен. Пустой белый кадр в таком
+      // случае — не ошибка, и об этом стоит сказать словами.
+      const spa = /<script[^>]*type=["']module["']|import\(["']\/|<div[^>]*id=["'](app|root|svelte|__next|__nuxt)["']/i.test(html)
+      return (
+        <>
+          <iframe title="response" sandbox="" srcDoc={doc} style={{ width: '100%', height: '24rem', border: '1px solid var(--border)', background: '#fff' }} />
+          {spa && <div className="small muted">{t('probe.renderSPA')}</div>}
+        </>
+      )
     }
     if (view === 'render' && isImage && blobURL) {
       return <img src={blobURL} alt="" style={{ maxWidth: '100%', maxHeight: '24rem', border: '1px solid var(--border)' }} />

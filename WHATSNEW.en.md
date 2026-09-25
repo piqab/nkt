@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.94 — 2026-09-25
+
+- Port probe: when the response is a single-page JavaScript application
+  (SvelteKit, React, Vue…), the empty "render" frame now says why it is
+  empty: scripts and assets from the address are deliberately off in the
+  sandbox, the port answers and the HTML arrived — see "text".
+
 ## v1.10.93 — 2026-09-25
 
 - **Large uploads no longer fail with "i/o timeout".** A cluster image on
