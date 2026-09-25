@@ -2448,5 +2448,22 @@
     "draft": "draft",
     "changes": "Changes",
     "noChanges": "The text has not changed."
+  },
+  "engineInstall": {
+    "lxd": "LXD is not installed. Installation: snapd (if missing) → snap install lxd → lxd init --auto (default storage and bridge).",
+    "podman": "Podman is not installed. Installation via apt.",
+    "install": "install"
+  },
+  "lxdImages": {
+    "local": "on the host",
+    "placeholder": "choose an image",
+    "loading": "loading the list…",
+    "empty": "no images",
+    "unavailable": "list unavailable",
+    "hint": {
+      "images": "images: — the LXD image server (images.lxd.canonical.com): Debian, Alpine, Rocky, Fedora, Arch and more. The host needs internet; the list is cached for a day.",
+      "ubuntu": "ubuntu: — official Ubuntu images (cloud-images.ubuntu.com). The host needs internet.",
+      "local": "Images already on the host. Without internet an image can be added from a file: lxc image import <file> --alias <name>."
+    }
   }
 }

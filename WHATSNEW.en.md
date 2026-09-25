@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.102 — 2026-09-25
+
+- **LXD and Podman install from their tabs.** When the engine is missing,
+  a banner with an "install" button runs in the command window: Podman
+  via apt, LXD via snap; snapd is installed first if missing (Debian has
+  none by default), and after LXD — `lxd init --auto` (default storage
+  and bridge).
+- **Images for "New LXD instance" come as a list.** Three sources:
+  `images:` (the LXD image server — Debian, Alpine, Rocky, Fedora,
+  Arch…), `ubuntu:` (official Ubuntu) and those already on the host; a
+  "container / VM" filter, search, size. The host fetches the remote list
+  itself and caches it for a day; without internet the local images and
+  a hint on adding an image from a file are shown. A VM image launches
+  with `--vm`.
+
 ## v1.10.101 — 2026-09-25
 
 - **Creation happens in modal windows**: a new virtual machine, a new

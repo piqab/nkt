@@ -48,7 +48,7 @@ func (s *Server) handleServiceInstallWS(w http.ResponseWriter, r *http.Request) 
 		env := map[string]string{"TERM": "xterm-256color", "DEBIAN_FRONTEND": "noninteractive"}
 		var argv []string
 		if target.Method == parse.InstallViaSnap {
-			argv = []string{"bash", "-c", "snap install " + target.Package}
+			argv = []string{"bash", "-c", snapInstallScript(target.Package)}
 		} else {
 			argv = []string{"bash", "-c", "apt-get update && apt-get install -y " + target.Package}
 		}
@@ -63,4 +63,31 @@ func (s *Server) handleServiceInstallStatus(w http.ResponseWriter, r *http.Reque
 	name := chi.URLParam(r, "name")
 	active, finished, exitCode := s.sessionStatus("service-install:" + name)
 	writeSessionStatus(w, active, finished, exitCode)
+}
+
+// snapInstallScript — установка пакета snap с подготовкой: snapd ставится
+// через apt, если его нет (на Debian его нет по умолчанию), затем
+// дожидается готовности («seed.loaded» — первый старт snapd занимает
+// десятки секунд), и только потом snap install. LXD после установки
+// инициализируется умолчаниями (lxd init --auto: хранилище dir, мост
+// lxdbr0) — без этого «новый инстанс» падает на отсутствии пула.
+func snapInstallScript(pkg string) string {
+	script := `set -e
+export PATH="$PATH:/snap/bin"
+if ! command -v snap >/dev/null 2>&1; then
+  echo '--- snapd is missing: apt-get install snapd ---'
+  apt-get update
+  apt-get install -y snapd
+  systemctl enable --now snapd.socket snapd.service || true
+fi
+echo '--- waiting for snapd to be ready ---'
+snap wait system seed.loaded
+snap install ` + pkg
+	if pkg == "lxd" {
+		script += `
+echo '--- lxd init --auto ---'
+lxd waitready --timeout=120 || true
+lxd init --auto || echo 'lxd init: already initialised or needs manual setup'`
+	}
+	return script
 }

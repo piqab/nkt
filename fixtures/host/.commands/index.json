@@ -3,6 +3,38 @@
   "commands": [
     {
       "match": [
+        "lxc",
+        "image",
+        "list",
+        "--format",
+        "json"
+      ],
+      "stdout_file": "lxc_images_local.json"
+    },
+    {
+      "match": [
+        "lxc",
+        "image",
+        "list",
+        "ubuntu:",
+        "--format",
+        "json"
+      ],
+      "stdout_file": "lxc_images_ubuntu.json"
+    },
+    {
+      "match": [
+        "lxc",
+        "image",
+        "list",
+        "images:",
+        "--format",
+        "json"
+      ],
+      "stdout_file": "lxc_images_remote.json"
+    },
+    {
+      "match": [
         "sh",
         "-c",
         "command -v k3s"

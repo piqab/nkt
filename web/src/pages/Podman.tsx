@@ -11,6 +11,7 @@ import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 import CommandModal from '../components/CommandModal'
+import { EngineInstallBanner } from '../components/EngineInstallBanner'
 import ContainerLogsModal from '../components/ContainerLogsModal'
 
 export default function Podman({ me }: { me: Me }) {
@@ -177,6 +178,7 @@ export default function Podman({ me }: { me: Me }) {
         </div>
       </div>
 
+      <EngineInstallBanner service="podman" canControl={canControl} onInstalled={() => containers.reload()} />
       <ErrorNote error={containers.error} />
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>

@@ -53,7 +53,7 @@ func (m *LXDManager) InstanceAction(ctx context.Context, user, name, action stri
 // CreateInstance launches a new instance from an image — `lxc launch` does
 // image-fetch, create and start in one step, so unlike Podman there is no
 // separate create-then-start round trip needed here.
-func (m *LXDManager) CreateInstance(ctx context.Context, user, image, name string) error {
+func (m *LXDManager) CreateInstance(ctx context.Context, user, image, name string, vm ...bool) error {
 	if strings.TrimSpace(image) == "" {
 		return msgs.Errorf("control.specifyImage")
 	}
@@ -61,7 +61,13 @@ func (m *LXDManager) CreateInstance(ctx context.Context, user, image, name strin
 		return msgs.Errorf("control.invalidInstanceName", name)
 	}
 
-	res, err := m.c.Run(ctx, "lxc", "launch", image, name)
+	args := []string{"launch", image, name}
+	// Образ виртуальной машины запускается с --vm: без флага lxc ищет
+	// образ контейнера с тем же алиасом.
+	if len(vm) > 0 && vm[0] {
+		args = append(args, "--vm")
+	}
+	res, err := m.c.Run(ctx, "lxc", args...)
 	outcome := "ok"
 	if err != nil || !res.OK() {
 		outcome = "error"

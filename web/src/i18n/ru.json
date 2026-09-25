@@ -2450,5 +2450,22 @@
     "draft": "черновик",
     "changes": "Изменения",
     "noChanges": "Текст не изменился."
+  },
+  "engineInstall": {
+    "lxd": "LXD не установлен. Установка: snapd (если его нет) → snap install lxd → lxd init --auto (хранилище и мост по умолчанию).",
+    "podman": "Podman не установлен. Установка через apt.",
+    "install": "установить"
+  },
+  "lxdImages": {
+    "local": "на хосте",
+    "placeholder": "выберите образ",
+    "loading": "загружаю список…",
+    "empty": "образов нет",
+    "unavailable": "список недоступен",
+    "hint": {
+      "images": "images: — сервер образов LXD (images.lxd.canonical.com): Debian, Alpine, Rocky, Fedora, Arch и другие. Хосту нужен интернет; список кэшируется на сутки.",
+      "ubuntu": "ubuntu: — официальные образы Ubuntu (cloud-images.ubuntu.com). Хосту нужен интернет.",
+      "local": "Уже скачанные на хост образы. Без интернета образ можно положить файлом: lxc image import <файл> --alias <имя>."
+    }
   }
 }

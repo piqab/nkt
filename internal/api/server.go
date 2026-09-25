@@ -210,6 +210,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/images", s.handleImages)
 			r.Get("/podman/containers", s.handlePodmanContainers)
 			r.Get("/lxd/instances", s.handleLXDInstances)
+			r.Get("/lxd/images", s.handleLXDImages)
 			r.Get("/vms", s.handleVMs)
 			r.Get("/misc", s.handleMisc)
 			r.Get("/interfaces", s.handleInterfaces)
