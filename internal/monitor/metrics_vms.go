@@ -56,7 +56,7 @@ func (m *MetricsCollector) workloadSamples(ctx context.Context, ts string, now t
 	if m.Simulated() {
 		shape := dailyShape(now, source+name)
 		if memBytes == 0 {
-			memBytes = float64(256<<20 + hashRange(name, 2<<30))
+			memBytes = float64(256<<20) + float64(hashRange(name, 1<<30))*2
 		}
 		return []store.MetricSample{
 			sample(ts, source, name, "cpu_pct", math.Round(shape*float64(4+hashRange(name, 60))*10)/10),
