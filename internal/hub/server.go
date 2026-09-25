@@ -112,6 +112,7 @@ func (s *Server) Handler() http.Handler {
 		hubWSPaths := []string{
 			"/terminal/ws",
 			"/console/ws",
+			"/vms/{name}/vnc/ws",
 			"/terminal/btop/ws",
 			"/updates/ws",
 			"/firewall/ufw-install/ws",

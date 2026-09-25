@@ -33,6 +33,9 @@ stop, delete.
 
 - libvirt domains: start, shut down, force off, reboot, autostart, delete
   with or without disks; machine addresses.
+- **Machine screen** — a "screen" icon on a running machine: VNC right in
+  the browser (noVNC), with Ctrl+Alt+Del and a "view only" mode, through
+  the hub too. The machine needs VNC graphics.
 - **Console** — an icon in the row of a running container (Docker,
   Podman: `exec`, bash or sh, a user can be set), LXD instance (`lxc
   exec`) and machine (serial console `virsh console`, exit with Ctrl+]).

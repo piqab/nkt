@@ -1,8 +1,14 @@
 package api
 
 import (
+	"context"
+	"github.com/coder/websocket"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Команда запуска: сам start, пауза, проверка состояния и хвост логов
@@ -77,5 +83,59 @@ func TestConsoleArgv(t *testing.T) {
 		if _, ok := consoleArgv(bad[0], bad[1], bad[2]); ok {
 			t.Errorf("принято %v", bad)
 		}
+	}
+}
+
+// Номер экрана VNC → адрес подключения.
+func TestParseVNCDisplay(t *testing.T) {
+	for in, want := range map[string]string{"127.0.0.1:0\n": "127.0.0.1:5900", ":1": "127.0.0.1:5901", "[::1]:2": "[::1]:5902", "0.0.0.0:3": "127.0.0.1:5903"} {
+		if got, ok := parseVNCDisplay(in); !ok || got != want {
+			t.Errorf("%q → %q, %v", in, got, ok)
+		}
+	}
+	if _, ok := parseVNCDisplay("error: no graphics"); ok {
+		t.Error("мусор принят")
+	}
+}
+
+// Мост WebSocket ↔ TCP: байты ходят в обе стороны без искажений.
+func TestProxyWSToTCP(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		defer c.Close()
+		_, _ = c.Write([]byte("RFB 003.008\n"))
+		buf := make([]byte, 64)
+		n, _ := c.Read(buf)
+		_, _ = c.Write(append([]byte("echo:"), buf[:n]...))
+	}()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		proxyWSToTCP(w, r, ln.Addr().String(), time.Minute)
+	}))
+	defer srv.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(srv.URL, "http"), &websocket.DialOptions{Subprotocols: []string{"binary"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.CloseNow()
+	_, msg, err := conn.Read(ctx)
+	if err != nil || string(msg) != "RFB 003.008\n" {
+		t.Fatalf("приветствие: %q %v", msg, err)
+	}
+	if err := conn.Write(ctx, websocket.MessageBinary, []byte{1, 2, 3}); err != nil {
+		t.Fatal(err)
+	}
+	_, msg, err = conn.Read(ctx)
+	if err != nil || string(msg) != "echo:\x01\x02\x03" {
+		t.Fatalf("эхо: %q %v", msg, err)
 	}
 }
