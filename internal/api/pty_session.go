@@ -814,14 +814,11 @@ func RunToolingStream(ctx context.Context, logf func(string, ...any), argv ...st
 		defer close(done)
 		sc := bufio.NewScanner(pr)
 		sc.Buffer(make([]byte, 64<<10), 1<<20)
+		// Строка кончается и на \r: qemu-img -p обновляет прогресс им, без
+		// перевода строки, — построчно было бы видно только финал.
+		sc.Split(splitCRLF)
 		for sc.Scan() {
-			// qemu-img -p рисует прогресс через \r — последнее значение
-			// в строке и есть текущее.
-			line := sc.Text()
-			if i := strings.LastIndexByte(line, '\r'); i >= 0 {
-				line = line[i+1:]
-			}
-			if strings.TrimSpace(line) != "" {
+			if line := sc.Text(); strings.TrimSpace(line) != "" {
 				logf("%s", line)
 			}
 		}
@@ -838,4 +835,17 @@ func RunToolingStream(ctx context.Context, logf func(string, ...any), argv ...st
 	default:
 		return -1, err
 	}
+}
+
+// splitCRLF — bufio.SplitFunc: строки по \n и по \r.
+func splitCRLF(data []byte, atEOF bool) (advance int, token []byte, err error) {
+	for i, b := range data {
+		if b == '\n' || b == '\r' {
+			return i + 1, data[:i], nil
+		}
+	}
+	if atEOF && len(data) > 0 {
+		return len(data), data, nil
+	}
+	return 0, nil, nil
 }

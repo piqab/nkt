@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { blurText } from '../privacy'
-import { Button, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Progress, Spin, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { RedoOutlined } from '@ant-design/icons'
 import { AIExplain } from '../components/AIExplain'
 import { useTranslation } from 'react-i18next'
@@ -60,7 +60,14 @@ export default function Jobs({ me }: { me: Me }) {
       title: t('jobs.colStep'),
       key: 'step',
       render: (_, j) =>
-        j.steps > 0 ? (
+        // steps === 100 — задание сообщает проценты (бэкап, копирование),
+        // а не номер шага: полоса вместо «45/100».
+        j.steps === 100 && !isJobDone(j) ? (
+          <div style={{ minWidth: '9rem' }}>
+            <Progress percent={j.step} size="small" status="active" />
+            {j.step_name && <div className="small muted">{j.step_name}</div>}
+          </div>
+        ) : j.steps > 0 ? (
           <span className="small nowrap">
             {j.step}/{j.steps}
             {j.step_name && <div className="small muted">{j.step_name}</div>}
@@ -315,7 +322,7 @@ export function JobLogModal({
     <Modal title={blurText(current.title || current.kind)} onClose={onClose} maskClosable={false} width={860}>
       <div className="row" style={{ marginBottom: '0.5rem' }}>
         <Tag color={STATUS_COLOR[current.status] ?? 'default'}>{t(`jobs.status.${current.status}`)}</Tag>
-        {current.steps > 0 && (
+        {current.steps > 0 && current.steps !== 100 && (
           <span className="small muted">
             {t('jobs.stepOf', { step: current.step, steps: current.steps })}
             {current.step_name ? ` · ${current.step_name}` : ''}
@@ -330,6 +337,21 @@ export function JobLogModal({
           </Tooltip>
         )}
       </div>
+      {/* Прогресс долгой операции: у заданий с шагами — доля шагов, у
+          сообщающих проценты (steps = 100) — сами проценты; шаг без
+          процентов (сохранение образа, virsh define) — индикатор занятости
+          с названием. */}
+      {!isJobDone(current) && current.steps > 0 && (
+        <div style={{ marginBottom: '0.5rem' }}>
+          <Progress percent={Math.round((current.step / current.steps) * 100)} status="active" />
+          {current.steps === 100 && current.step_name && <div className="small muted">{current.step_name}</div>}
+        </div>
+      )}
+      {!isJobDone(current) && current.steps === 0 && current.step_name && (
+        <div className="small muted" style={{ marginBottom: '0.5rem' }}>
+          <Spin size="small" /> {current.step_name}
+        </div>
+      )}
 
       {current.status === 'interrupted' && <Banner kind="warn">{t('jobs.interruptedHint')}</Banner>}
       {current.error && (

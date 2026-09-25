@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.105 — 2026-09-25
+
+- **Backup and restore progress as a bar.** The job window (and the
+  "Step" column in "Jobs") shows the percentage of the current operation
+  and what is going on: copying a disk (`qemu-img`), packing volumes, the
+  project directory and the archive, unpacking on restore (`tar`). Steps
+  without a percentage (saving an image, `virsh define`) show a busy
+  indicator with a name. Every job with steps (installing and updating
+  hosts and others) got the bar too.
+
 ## v1.10.104 — 2026-09-25
 
 - **A machine backup failed right away** ("unary operator expected",
