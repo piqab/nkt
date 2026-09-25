@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.103 — 2026-09-25
+
+- **Backup and restore of machines and containers.** A "backup" icon in
+  the row of a libvirt machine, a Docker or Podman container opens a
+  window: archives on the host, "create backup" (a background job with a
+  live log), download (through the hub too), delete, restore — as a copy
+  with a new name or over the original.
+  - **Machine:** XML and disks (compressed qcow2). A running one is not
+    stopped: disks move to an external snapshot while copying, then the
+    changes are merged back (`blockcommit`); consistent with
+    qemu-guest-agent. A copy gets new UUID and MACs.
+  - **Container:** an image of the current state (`commit` + `save`),
+    run options and named volumes. A copy gets its own volumes and no
+    published ports.
+  - **Compose stack** (a container from compose): the project directory,
+    the project volumes and, if checked, the images; restore —
+    `compose up`.
+
 ## v1.10.102 — 2026-09-25
 
 - **LXD and Podman install from their tabs.** When the engine is missing,

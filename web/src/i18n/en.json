@@ -2465,5 +2465,35 @@
       "ubuntu": "ubuntu: — official Ubuntu images (cloud-images.ubuntu.com). The host needs internet.",
       "local": "Images already on the host. Without internet an image can be added from a file: lxc image import <file> --alias <name>."
     }
+  },
+  "backups": {
+    "action": "backup",
+    "title": "Backups: {{name}}",
+    "create": "Create backup",
+    "withImages": "include images (heavy; they are usually in a registry)",
+    "loading": "loading…",
+    "empty": "No backups yet.",
+    "colFile": "Archive",
+    "colCreated": "Created",
+    "colSize": "Size",
+    "download": "download",
+    "restore": "restore",
+    "confirmDelete": "Delete backup {{file}}? The file is removed from the host permanently.",
+    "restoreTitle": "Restore from {{file}}",
+    "restoreCopy": "as a copy with a new name",
+    "restoreOver": "over \"{{name}}\"",
+    "restoreStart": "Restore",
+    "hint": {
+      "vm": "The archive holds the machine's XML and its disks (compressed qcow2). A running machine is not stopped: disks move to a snapshot while copying, then the changes are merged back (consistent with qemu-guest-agent). Stored on the host:",
+      "docker": "The archive holds an image of the container's current state (commit + save), its run options and named volumes. Stored on the host:",
+      "podman": "The archive holds an image of the container's current state, its run options and named volumes. Stored on the host:",
+      "compose": "The whole stack: the project directory (compose file, .env, configs), the named volumes of the project and, if checked, the images. Stored on the host:"
+    },
+    "restoreHint": {
+      "vm": "A copy gets new UUID and MACs, disks <name>-<disk>.qcow2. Over the original — only when the machine is shut off: its disks are replaced.",
+      "docker": "A copy gets its own volumes (<name>-<volume>) and publishes no ports — so as not to clash with the original. Over — the container is recreated.",
+      "podman": "A copy gets its own volumes and publishes no ports. Over — the container is recreated.",
+      "compose": "A copy is a <project>-<name> directory next to it with its own volumes. Over — the stack is stopped, the directory and volumes are replaced, then compose up."
+    }
   }
 }

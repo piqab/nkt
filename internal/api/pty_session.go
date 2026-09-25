@@ -1,17 +1,20 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"github.com/piqab/nkt/internal/msgs"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"os/user"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -791,4 +794,48 @@ func RunUnrestrictedEnv(ctx context.Context, env map[string]string, stdin []byte
 		return res, err
 	}
 	return res, nil
+}
+
+// RunToolingStream выполняет команду вне песочницы юнита, как
+// RunTooling, но отдаёт вывод построчно по мере появления — для долгих
+// заданий (бэкапы), где журнал в конце бесполезен.
+func RunToolingStream(ctx context.Context, logf func(string, ...any), argv ...string) (int, error) {
+	if len(argv) == 0 {
+		return -1, msgs.Errorf("api.emptyCommand")
+	}
+	cmd := unrestrictedQuietCommand(ctx, map[string]string{"LC_ALL": "C"}, argv...)
+	pr, pw := io.Pipe()
+	cmd.Stdout, cmd.Stderr = pw, pw
+	if err := cmd.Start(); err != nil {
+		return -1, err
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sc := bufio.NewScanner(pr)
+		sc.Buffer(make([]byte, 64<<10), 1<<20)
+		for sc.Scan() {
+			// qemu-img -p рисует прогресс через \r — последнее значение
+			// в строке и есть текущее.
+			line := sc.Text()
+			if i := strings.LastIndexByte(line, '\r'); i >= 0 {
+				line = line[i+1:]
+			}
+			if strings.TrimSpace(line) != "" {
+				logf("%s", line)
+			}
+		}
+	}()
+	err := cmd.Wait()
+	_ = pw.Close()
+	<-done
+	var exitErr *exec.ExitError
+	switch {
+	case err == nil:
+		return 0, nil
+	case errors.As(err, &exitErr):
+		return exitErr.ExitCode(), nil
+	default:
+		return -1, err
+	}
 }
