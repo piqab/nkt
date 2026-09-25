@@ -15,7 +15,9 @@ import { ConsoleModal } from '../components/ConsoleModal'
 import LXDLogsModal from '../components/LXDLogsModal'
 import { BackupModal } from '../components/BackupModal'
 import LXDSnapshotsModal from '../components/LXDSnapshotsModal'
-import LXDConfigModal from '../components/LXDConfigModal'
+import LXDConfigModal, { removeYamlDevice } from '../components/LXDConfigModal'
+import LXDPortModal from '../components/LXDPortModal'
+import { LXDResources } from '../components/LXDResources'
 import { ProbeLink } from '../components/PortProbe'
 import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
 import { LXDImagePicker } from '../components/LXDImagePicker'
@@ -30,7 +32,8 @@ export default function LXD({ me }: { me: Me }) {
   const [logsFor, setLogsFor] = useState<string | null>(null)
   const [backupFor, setBackupFor] = useState<string | null>(null)
   const [snapsFor, setSnapsFor] = useState<LXDInstance | null>(null)
-  const [configFor, setConfigFor] = useState<string | null>(null)
+  const [configFor, setConfigFor] = useState<{ name: string; edit?: (saved: string) => string; intro?: string } | null>(null)
+  const [portFor, setPortFor] = useState<string | null>(null)
 
   async function toggleAutostart(name: string, on: boolean) {
     setBusy(`${name}:autostart`)
@@ -120,14 +123,29 @@ export default function LXD({ me }: { me: Me }) {
       key: 'ports',
       render: (_, i) => (
         <span className="small mono">
+          {canControl && (
+            <RowAction action="add" label={t('lxdPort.add')} onClick={() => setPortFor(i.name)} />
+          )}
           {(i.ports ?? []).length === 0
-            ? '—'
+            ? canControl
+              ? null
+              : '—'
             : (i.ports ?? []).map((p) => {
                 const [, host, port] = /^tcp:(.*):(\d+)$/.exec(p.listen) ?? []
                 return (
                   <div key={p.device}>
                     {p.listen.replace(/^tcp:/, '')} → {p.connect.replace(/^tcp:/, '')}
                     {port && <ProbeLink address={host || '0.0.0.0'} port={Number(port)} protocol="tcp" />}
+                    {canControl && (
+                      <RowAction
+                        action="delete"
+                        danger
+                        label={t('lxdPort.remove', { device: p.device })}
+                        onClick={() =>
+                          setConfigFor({ name: i.name, edit: (s) => removeYamlDevice(s, p.device), intro: t('lxdPort.removeIntro', { device: p.device }) })
+                        }
+                      />
+                    )}
                   </div>
                 )
               })}
@@ -173,7 +191,7 @@ export default function LXD({ me }: { me: Me }) {
               />
             ))}
           <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(i.name)} />
-          <RowAction action="edit" label={t('lxdConfig.action')} onClick={() => setConfigFor(i.name)} />
+          <RowAction action="edit" label={t('lxdConfig.action')} onClick={() => setConfigFor({ name: i.name })} />
           <RowAction
             action="snapshot"
             label={`${t('lxdSnap.action')}${i.snapshots ? ` (${i.snapshots})` : ''}`}
@@ -263,6 +281,8 @@ export default function LXD({ me }: { me: Me }) {
         )}
       </Card>
 
+      <LXDResources canControl={canControl} />
+
       {creating && (
         <CreateInstanceForm
           onClose={() => setCreating(false)}
@@ -276,11 +296,24 @@ export default function LXD({ me }: { me: Me }) {
       {logsFor && <LXDLogsModal name={logsFor} onClose={() => setLogsFor(null)} />}
       {configFor && (
         <LXDConfigModal
-          name={configFor}
+          key={configFor.name + (configFor.intro ?? '')}
+          name={configFor.name}
+          edit={configFor.edit}
+          intro={configFor.intro && <Banner kind="info">{configFor.intro}</Banner>}
           me={me}
           canControl={canControl}
           onClose={() => setConfigFor(null)}
           onSaved={() => void api('/inventory/refresh', { method: 'POST' }).then(() => instances.reload())}
+        />
+      )}
+      {portFor && (
+        <LXDPortModal
+          name={portFor}
+          onClose={() => setPortFor(null)}
+          onContinue={(edit) => {
+            setConfigFor({ name: portFor, edit, intro: t('lxdPort.addIntro') })
+            setPortFor(null)
+          }}
         />
       )}
       {snapsFor && (

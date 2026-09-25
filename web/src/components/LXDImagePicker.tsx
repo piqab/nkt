@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
 import { formatBytes } from './charts'
 
-interface LXDImage {
+export interface LXDImage {
   ref: string
   alias: string
   remote: string
@@ -14,6 +14,7 @@ interface LXDImage {
   size: number
   os: string
   release: string
+  fingerprint?: string
 }
 
 /**
