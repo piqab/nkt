@@ -9,8 +9,9 @@ title: Services
 systemd units with state, autostart, description and the ports each one
 listens on.
 
-- **Actions**: start, stop, restart, reload, enable or disable autostart,
-  the unit's journal.
+- **Actions**: one power button by state (running — "stop", stopped —
+  "start"), restart, reload, one autostart button by state, the unit's
+  journal.
 - **Config check before an action**: `nginx -t`, `haproxy -c`, `caddy
   validate` — a broken config will not take the service down with a
   restart.

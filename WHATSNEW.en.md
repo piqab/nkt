@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.99 — 2026-09-25
+
+- **One button instead of a "start / stop" pair.** Services, Docker,
+  Podman, LXD, virtual machines and the nkt service in the host list now
+  have a single power button by state: running — "stop", stopped —
+  "start", paused — "resume", in transition — busy. Restart, reload,
+  pause and force power-off show only when they make sense (on a running
+  one).
+- **Autostart is one button too**: services get a single button by the
+  current state instead of an "enable / disable autostart" pair
+  (machines and machine networks already had it).
+
 ## v1.10.98 — 2026-09-25
 
 - **Editing a block works again.** The block edit window (machine XML,

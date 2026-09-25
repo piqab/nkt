@@ -12,6 +12,7 @@ import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { PowerToggle, servicePowerState } from '../components/PowerToggle'
 import { ProbeLink } from '../components/PortProbe'
 
 const ACTION_LABEL_KEY: Record<string, string> = {
@@ -312,17 +313,40 @@ export default function Services({ me }: { me: Me }) {
       className: 'nowrap',
       render: (_, s) => (
         <div className="row row-nowrap">
-          {(s.actions ?? []).map((a) => (
-            <RowAction
-              key={a}
-              action={a}
-              label={ACTION_LABEL_KEY[a] ? t(ACTION_LABEL_KEY[a]) : a}
-              danger={a === 'stop' || a === 'disable'}
+          {/* Запуск/остановка и автозапуск — по одной кнопке на пару:
+              видно только действие, которое сейчас имеет смысл. */}
+          {(s.actions ?? []).includes('start') && (
+            <PowerToggle
+              state={servicePowerState(s.active_state)}
+              labels={{ start: t('services.actionStart'), stop: t('services.actionStop') }}
               disabled={!canControl}
-              loading={busy === `${s.name}:${a}`}
-              onClick={() => act(s.name, a)}
+              loading={busy === `${s.name}:start` || busy === `${s.name}:stop`}
+              onStart={() => act(s.name, 'start')}
+              onStop={() => act(s.name, 'stop')}
             />
-          ))}
+          )}
+          {(s.actions ?? [])
+            .filter((a) => a !== 'start' && a !== 'stop' && a !== 'enable' && a !== 'disable')
+            .map((a) => (
+              <RowAction
+                key={a}
+                action={a}
+                label={ACTION_LABEL_KEY[a] ? t(ACTION_LABEL_KEY[a]) : a}
+                disabled={!canControl}
+                loading={busy === `${s.name}:${a}`}
+                onClick={() => act(s.name, a)}
+              />
+            ))}
+          {(s.actions ?? []).includes('enable') && (
+            <RowAction
+              action={s.enabled === 'enabled' ? 'disable' : 'autostart'}
+              label={s.enabled === 'enabled' ? t('services.actionDisable') : t('services.actionEnable')}
+              danger={s.enabled === 'enabled'}
+              disabled={!canControl}
+              loading={busy === `${s.name}:enable` || busy === `${s.name}:disable`}
+              onClick={() => act(s.name, s.enabled === 'enabled' ? 'disable' : 'enable')}
+            />
+          )}
           <RowAction action="logs" label={t('services.logs')} onClick={() => setLogsFor(s)} />
         </div>
       ),

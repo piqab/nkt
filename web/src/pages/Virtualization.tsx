@@ -12,9 +12,8 @@ import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { PowerToggle, vmPowerState } from '../components/PowerToggle'
 import VMImagesSection from '../components/VMImagesSection'
-
-const LIFECYCLE_ACTIONS = ['start', 'shutdown', 'reboot', 'suspend', 'resume']
 
 function domainXMLSkeleton(name: string): string {
   return domainXMLFromWizard(name, { memoryMB: 2048, vcpus: 2, diskPath: defaultDiskPath(name), bridge: 'br0' })
@@ -140,18 +139,30 @@ function vmColumns(
       key: 'actions',
       render: (_, vm) => (
         <div className="row">
-          {LIFECYCLE_ACTIONS.map((a) => (
-            <RowAction
-              key={a}
-              action={a}
-              label={t(`virt.action.${a}`, { defaultValue: a })}
-              danger={a === 'shutdown'}
-              disabled={!canControl}
-              loading={busy === `${vm.name}:${a}`}
-              onClick={() => act(vm.name, a)}
-            />
-          ))}
-          {canControl && (
+          {/* Одна кнопка питания: работает — «выключить», выключена —
+              «запустить», на паузе — «возобновить». Перезагрузка и пауза —
+              только у работающей. */}
+          <PowerToggle
+            state={vmPowerState(vm.state)}
+            labels={{ start: t('virt.action.start', { defaultValue: 'start' }), stop: t('virt.action.shutdown', { defaultValue: 'shutdown' }), resume: t('virt.action.resume', { defaultValue: 'resume' }) }}
+            disabled={!canControl}
+            loading={busy === `${vm.name}:start` || busy === `${vm.name}:shutdown` || busy === `${vm.name}:resume`}
+            onStart={() => act(vm.name, 'start')}
+            onStop={() => act(vm.name, 'shutdown')}
+            onResume={() => act(vm.name, 'resume')}
+          />
+          {vmPowerState(vm.state) === 'running' &&
+            ['reboot', 'suspend'].map((a) => (
+              <RowAction
+                key={a}
+                action={a}
+                label={t(`virt.action.${a}`, { defaultValue: a })}
+                disabled={!canControl}
+                loading={busy === `${vm.name}:${a}`}
+                onClick={() => act(vm.name, a)}
+              />
+            ))}
+          {canControl && vmPowerState(vm.state) !== 'stopped' && (
             <RowAction
               action="destroy"
               label={`${t('virt.forceDestroy')} — ${t('virt.forceDestroyTooltip')}`}

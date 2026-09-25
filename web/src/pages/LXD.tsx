@@ -9,6 +9,7 @@ import { InactiveSummary } from '../components/InactiveSummary'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 
 export default function LXD({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -77,17 +78,26 @@ export default function LXD({ me }: { me: Me }) {
       key: 'actions',
       render: (_, i) => (
         <div className="row">
-          {['start', 'restart', 'stop', 'pause'].map((a) => (
-            <RowAction
-              key={a}
-              action={a === 'pause' ? 'suspend' : a}
-              label={t(`docker.action.${a}`, { defaultValue: a })}
-              danger={a === 'stop'}
-              disabled={!canControl}
-              loading={busy === `${i.name}:${a}`}
-              onClick={() => act(i.name, a)}
-            />
-          ))}
+          <PowerToggle
+            state={containerPowerState(i.status)}
+            labels={{ start: t('docker.action.start', { defaultValue: 'start' }), stop: t('docker.action.stop', { defaultValue: 'stop' }) }}
+            disabled={!canControl}
+            loading={busy === `${i.name}:start` || busy === `${i.name}:stop`}
+            onStart={() => act(i.name, 'start')}
+            onStop={() => act(i.name, 'stop')}
+            onResume={() => act(i.name, 'start')}
+          />
+          {containerPowerState(i.status) === 'running' &&
+            ['restart', 'pause'].map((a) => (
+              <RowAction
+                key={a}
+                action={a === 'pause' ? 'suspend' : a}
+                label={t(`docker.action.${a}`, { defaultValue: a })}
+                disabled={!canControl}
+                loading={busy === `${i.name}:${a}`}
+                onClick={() => act(i.name, a)}
+              />
+            ))}
           {canControl && (
             <RowAction
               action="delete"

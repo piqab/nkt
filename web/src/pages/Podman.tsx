@@ -9,6 +9,7 @@ import { InactiveSummary } from '../components/InactiveSummary'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 import CommandModal from '../components/CommandModal'
 import ContainerLogsModal from '../components/ContainerLogsModal'
 
@@ -126,17 +127,23 @@ export default function Podman({ me }: { me: Me }) {
       key: 'actions',
       render: (_, c) => (
         <div className="row">
-          {['start', 'restart', 'stop'].map((a) => (
+          <PowerToggle
+            state={containerPowerState(c.state)}
+            labels={{ start: t('docker.action.start', { defaultValue: 'start' }), stop: t('docker.action.stop', { defaultValue: 'stop' }) }}
+            disabled={!canControl}
+            loading={busy === `${c.name}:start` || busy === `${c.name}:stop`}
+            onStart={() => act(c.name, 'start')}
+            onStop={() => act(c.name, 'stop')}
+          />
+          {containerPowerState(c.state) === 'running' && (
             <RowAction
-              key={a}
-              action={a}
-              label={t(`docker.action.${a}`, { defaultValue: a })}
-              danger={a === 'stop'}
+              action="restart"
+              label={t('docker.action.restart', { defaultValue: 'restart' })}
               disabled={!canControl}
-              loading={busy === `${c.name}:${a}`}
-              onClick={() => act(c.name, a)}
+              loading={busy === `${c.name}:restart`}
+              onClick={() => act(c.name, 'restart')}
             />
-          ))}
+          )}
           <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(c.name)} />
           {canControl && (
             <RowAction

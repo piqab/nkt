@@ -11,6 +11,7 @@ import PathPicker, { ownerFromPath } from '../components/PathPicker'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 import { ProbeLink } from '../components/PortProbe'
 import CommandModal from '../components/CommandModal'
 import ContainerLogsModal from '../components/ContainerLogsModal'
@@ -135,17 +136,23 @@ export default function Docker({ me }: { me: Me }) {
       // это дешевле высоких строк.
       render: (_, c) => (
         <div className="row row-nowrap">
-          {['start', 'restart', 'stop'].map((a) => (
+          <PowerToggle
+            state={containerPowerState(c.state)}
+            labels={{ start: t('docker.action.start', { defaultValue: 'start' }), stop: t('docker.action.stop', { defaultValue: 'stop' }) }}
+            disabled={!canControl}
+            loading={busy === `${c.name}:start` || busy === `${c.name}:stop`}
+            onStart={() => containerAct(c.name, 'start')}
+            onStop={() => containerAct(c.name, 'stop')}
+          />
+          {containerPowerState(c.state) === 'running' && (
             <RowAction
-              key={a}
-              action={a}
-              label={t(`docker.action.${a}`, { defaultValue: a })}
-              danger={a === 'stop'}
+              action="restart"
+              label={t('docker.action.restart', { defaultValue: 'restart' })}
               disabled={!canControl}
-              loading={busy === `${c.name}:${a}`}
-              onClick={() => containerAct(c.name, a)}
+              loading={busy === `${c.name}:restart`}
+              onClick={() => containerAct(c.name, 'restart')}
             />
-          ))}
+          )}
           <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(c.name)} />
           {canControl && c.compose_file && c.service_name && (
             <RowAction
