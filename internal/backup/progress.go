@@ -16,6 +16,8 @@ import (
 // (step/steps = N/100), и окно журнала рисует по нему полосу.
 
 var (
+	// lxc export/import: «Exporting the backup: 45% (12.3MB/s)».
+	lxcProgressRe  = regexp.MustCompile(`^(Exporting|Importing|Backing up|Uploading|Unpacking)[^:]*:\s*(\d+)%`)
 	qemuProgressRe = regexp.MustCompile(`^\s*\((\d+(?:\.\d+)?)/100%\)\s*$`)
 	tarCheckRe     = regexp.MustCompile(`@@tarcp (\d+)`)
 )
@@ -52,6 +54,11 @@ func (p *Progress) Line(line string) bool {
 		p.total = 0
 		p.set(-1)
 		return true
+	case strings.HasPrefix(line, "--- lxc "):
+		p.label = strings.TrimPrefix(line, "--- ")
+		p.total = 0
+		p.set(0)
+		return false
 	case strings.HasPrefix(line, "--- copy "):
 		// qemu-img -p следом — шаг копирования диска.
 		p.label = strings.TrimPrefix(line, "--- ")
@@ -68,6 +75,14 @@ func (p *Progress) Line(line string) bool {
 			}
 			p.set(pct)
 		}
+		return true
+	}
+	if m := lxcProgressRe.FindStringSubmatch(line); m != nil {
+		n, _ := strconv.Atoi(m[2])
+		if p.label == "" {
+			p.label = m[1]
+		}
+		p.set(n)
 		return true
 	}
 	if m := qemuProgressRe.FindStringSubmatch(line); m != nil {

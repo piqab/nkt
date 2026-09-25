@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.111 — 2026-09-25
+
+- **LXD instance backup.** The "backup" icon in an instance row opens the
+  same window as for Docker and Libvirt: an archive via `lxc export`
+  (root filesystem or VM disk, configuration and snapshots) with
+  percentages in the job, download, restore as a copy under a new name
+  (`lxc import`) or over the original — only when the instance is stopped.
+- **LXD snapshots.** The "snapshots" icon (with their count) opens the
+  list: take one, optionally with memory, restore (`lxc restore`) after a
+  confirmation, delete.
+
 ## v1.10.110 — 2026-09-25
 
 - **The "Virtual machines" tab is renamed to "Libvirt"**: LXD has virtual

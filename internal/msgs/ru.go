@@ -548,6 +548,7 @@ var ruCatalog = map[string]string{
 	"control.lineageParsingCertificate":                   "lineage %s: разбор сертификата: %v",
 	"control.localeGeneratedGenerateFirst":                "локаль %s не сгенерирована — сначала сгенерируйте её",
 	"control.localesPackageInstalledNothingGenerate":      "пакет locales не установлен — сгенерировать локаль нечем",
+	"control.invalidSnapshotName":                         "недопустимое имя снимка: %q",
 	"control.lxcCode":                                     "lxc %s %s: код %d: %s",
 	"control.lxcDeleteCode":                               "lxc delete %s: код %d: %s",
 	"control.lxcLaunchCode":                               "lxc launch %s %s: код %d: %s",

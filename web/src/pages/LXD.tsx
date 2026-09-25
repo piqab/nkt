@@ -13,6 +13,8 @@ import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 import { EngineInstallBanner } from '../components/EngineInstallBanner'
 import { ConsoleModal } from '../components/ConsoleModal'
 import LXDLogsModal from '../components/LXDLogsModal'
+import { BackupModal } from '../components/BackupModal'
+import LXDSnapshotsModal from '../components/LXDSnapshotsModal'
 import { ProbeLink } from '../components/PortProbe'
 import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
 import { LXDImagePicker } from '../components/LXDImagePicker'
@@ -25,6 +27,8 @@ export default function LXD({ me }: { me: Me }) {
   const [creating, setCreating] = useState(false)
   const [consoleFor, setConsoleFor] = useState<string | null>(null)
   const [logsFor, setLogsFor] = useState<string | null>(null)
+  const [backupFor, setBackupFor] = useState<string | null>(null)
+  const [snapsFor, setSnapsFor] = useState<LXDInstance | null>(null)
 
   async function toggleAutostart(name: string, on: boolean) {
     setBusy(`${name}:autostart`)
@@ -167,6 +171,12 @@ export default function LXD({ me }: { me: Me }) {
               />
             ))}
           <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(i.name)} />
+          <RowAction
+            action="snapshot"
+            label={`${t('lxdSnap.action')}${i.snapshots ? ` (${i.snapshots})` : ''}`}
+            onClick={() => setSnapsFor(i)}
+          />
+          <RowAction action="backup" label={t('backups.action')} onClick={() => setBackupFor(i.name)} />
           {canControl && containerPowerState(i.status) === 'running' && (
             <RowAction action="console" label={t('console.action')} onClick={() => setConsoleFor(i.name)} />
           )}
@@ -261,6 +271,18 @@ export default function LXD({ me }: { me: Me }) {
       )}
       {consoleFor && <ConsoleModal kind="lxd" name={consoleFor} onClose={() => setConsoleFor(null)} />}
       {logsFor && <LXDLogsModal name={logsFor} onClose={() => setLogsFor(null)} />}
+      {snapsFor && (
+        <LXDSnapshotsModal
+          name={snapsFor.name}
+          isVM={snapsFor.type === 'virtual-machine'}
+          canControl={canControl}
+          onClose={() => setSnapsFor(null)}
+          onChanged={() => void api('/inventory/refresh', { method: 'POST' }).then(() => instances.reload())}
+        />
+      )}
+      {backupFor && (
+        <BackupModal kind="lxd" name={backupFor} canControl={canControl} onClose={() => setBackupFor(null)} onRestored={() => instances.reload()} />
+      )}
     </>
   )
 }

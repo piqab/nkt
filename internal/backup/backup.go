@@ -26,12 +26,13 @@ const (
 	KindDocker     = "docker"
 	KindPodman     = "podman"
 	KindCompose    = "compose"
+	KindLXD        = "lxd"
 	JobKindBackup  = "backup.create"
 	JobKindRestore = "backup.restore"
 )
 
 // Kinds — допустимые виды.
-var Kinds = []string{KindVM, KindDocker, KindPodman, KindCompose}
+var Kinds = []string{KindVM, KindDocker, KindPodman, KindCompose, KindLXD}
 
 var nameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$`)
 
@@ -184,6 +185,8 @@ manifest() { printf '{"kind":"%%s","name":"%%s","created":"%%s","files":[%%s]}\n
 		body = strings.ReplaceAll(containerBackupScript, "ENGINE", "docker")
 	case KindPodman:
 		body = strings.ReplaceAll(containerBackupScript, "ENGINE", "podman")
+	case KindLXD:
+		body = lxdBackupScript
 	case KindCompose:
 		if p.ProjectDir == "" || !filepath.IsAbs(p.ProjectDir) {
 			return "", "", msgs.Errorf("backup.composeNeedsDir")
@@ -351,6 +354,8 @@ cat "$WORK/manifest.json"; echo
 		return head + strings.ReplaceAll(containerRestoreScript, "ENGINE", "podman"), nil
 	case KindCompose:
 		return head + composeRestoreScript, nil
+	case KindLXD:
+		return head + lxdRestoreScript, nil
 	}
 	return "", msgs.Errorf("backup.badPath", p.Path)
 }
@@ -493,3 +498,30 @@ func ReadManifest(raw []byte) (Manifest, error) {
 	err := json.Unmarshal(raw, &m)
 	return m, err
 }
+
+// Бэкап инстанса LXD: lxc export — архив инстанса вместе со снимками,
+// в формате, который lxc import разворачивает на любом хосте с LXD.
+// lxc из snap живёт в /snap/bin, которого нет в PATH транзитного юнита.
+const lxdBackupScript = `
+export PATH="$PATH:/snap/bin"
+command -v lxc >/dev/null || { echo "lxc is missing"; exit 1; }
+echo "--- lxc export $NAME"
+lxc export "$NAME" "$WORK/instance.tar.gz"
+manifest lxd "\"instance.tar.gz\""
+`
+
+// Восстановление LXD: копией — lxc import под новым именем; поверх —
+// прежний инстанс удаляется (только остановленный), затем import.
+const lxdRestoreScript = `
+export PATH="$PATH:/snap/bin"
+command -v lxc >/dev/null || { echo "lxc is missing"; exit 1; }
+if [ "$NAME" = "$ORIG" ] && lxc info "$NAME" >/dev/null 2>&1; then
+  st=$(lxc list "$NAME" -c s --format csv | head -1)
+  [ "$st" = "STOPPED" ] || { echo "instance $NAME is $st: stop it before restoring over it"; exit 1; }
+  echo "--- delete existing $NAME"
+  lxc delete "$NAME"
+fi
+echo "--- lxc import as $NAME"
+lxc import "$WORK/instance.tar.gz" "$NAME"
+echo "--- done"
+`
