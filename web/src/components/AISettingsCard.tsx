@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { Banner, Card, DiffView, ErrorNote, Loading, Modal } from './ui'
 import { invalidateAIAnswers } from '../aiAnswers'
+import { EditTextModal } from './EditTextModal'
 
 /**
  * Настройка модели — одна на всю установку, на хабе: ключ хранится
@@ -68,7 +69,9 @@ export function AISettingsCard() {
     }
   }
 
-  async function savePrompt(text: string) {
+  const [editingPrompt, setEditingPrompt] = useState(false)
+
+  async function savePrompt(text: string): Promise<boolean> {
     setBusy(true)
     setError(null)
     setPromptDiff(null)
@@ -83,8 +86,10 @@ export function AISettingsCard() {
       status.reload()
       // Прежние ответы получены другой инструкцией — хаб их снёс.
       invalidateAIAnswers()
+      return true
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      return false
     } finally {
       setBusy(false)
     }
@@ -331,15 +336,16 @@ export function AISettingsCard() {
                   {t('ai.promptModifiedHint')}
                 </div>
               )}
-              <Input.TextArea
-                className="mono"
-                rows={10}
-                value={promptText}
-                onChange={(e) => setPromptDrafts((d) => ({ ...d, [promptKey]: e.target.value }))}
-              />
+              {/* Просмотр; правка — в окне с диффом перед записью. */}
+              <pre className="diff mono small" style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: '16rem', overflow: 'auto' }}>
+                {currentPrompt?.text ?? ''}
+              </pre>
               <div className="row" style={{ gap: '0.5rem' }}>
-                <Button type="primary" disabled={!promptDirty} loading={busy} onClick={() => void reviewPrompt()}>
-                  {t('ai.promptSave')}
+                <Button type="primary" disabled={!currentPrompt} onClick={() => setEditingPrompt(true)}>
+                  {t('configs.edit')}
+                </Button>
+                <Button disabled={!currentPrompt?.modified} loading={busy} onClick={() => void reviewPrompt()}>
+                  {t('ai.promptDiffTitle')}
                 </Button>
                 <Button disabled={!currentPrompt?.modified && !promptDirty} onClick={() => void savePrompt('')}>
                   {t('ai.promptReset')}
@@ -347,6 +353,26 @@ export function AISettingsCard() {
               </div>
             </div>
           </details>
+          {editingPrompt && currentPrompt && (
+            <EditTextModal
+              title={`${t('ai.prompts')}: ${promptKind === 'finding' ? t('ai.promptFinding') : promptKind === 'map' ? t('ai.promptMap') : t('ai.promptConfig')} (${promptLang})`}
+              saved={currentPrompt.text}
+              draft={promptText}
+              onDraft={(v) => setPromptDrafts((d) => ({ ...d, [promptKey]: v }))}
+              busy={busy}
+              rows={16}
+              below={<div className="small muted" style={{ marginTop: '0.4rem' }}>{t('ai.promptsHint')}</div>}
+              onSave={() => savePrompt(promptText)}
+              onClose={() => {
+                setEditingPrompt(false)
+                setPromptDrafts((d) => {
+                  const next = { ...d }
+                  delete next[promptKey]
+                  return next
+                })
+              }}
+            />
+          )}
           {promptDiff && (
             <Modal title={t('ai.promptDiffTitle')} onClose={() => setPromptDiff(null)} width={900}>
               {promptDiff.toDefault ? (

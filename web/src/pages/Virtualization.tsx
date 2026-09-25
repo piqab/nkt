@@ -1,15 +1,16 @@
 import { useState } from 'react'
 import { Button, Checkbox, Form, Input, InputNumber, Segmented, type TableColumnsType } from 'antd'
-import { CheckCircleFilled, CloseCircleOutlined, DeleteOutlined } from '@ant-design/icons'
+import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { AIConfigError } from '../components/AIConfigError'
 import BlockTree from '../components/BlockTree'
+import { VersionHistory } from '../components/VersionHistory'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
 import { Banner, Card, CodeEditor, DiffView, ErrorNote, formatBytesShort, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
 import i18n from '../i18n'
-import { confirmAction } from '../components/confirm'
+import { confirmAction, confirmWithOption } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { PowerToggle, vmPowerState } from '../components/PowerToggle'
@@ -56,7 +57,7 @@ function vmColumns(
   busy: string | null,
   act: (name: string, action: string) => void,
   toggleAutostart: (name: string, on: boolean) => void,
-  del: (name: string, removeStorage: boolean) => void,
+  del: (name: string) => Promise<void>,
   editXML: (name: string) => void,
 ): TableColumnsType<VirtualMachine> {
   const t = i18n.t.bind(i18n)
@@ -184,19 +185,14 @@ function vmColumns(
           )}
           {canControl && vm.persistent && (
             <>
+              {/* Одна кнопка удаления; «вместе с дисками» — галочка в окне
+                  подтверждения, по умолчанию выключена. */}
               <RowAction
                 action="delete"
                 label={t('common.delete')}
                 danger
                 loading={busy === `${vm.name}:delete`}
-                onClick={() => del(vm.name, false)}
-              />
-              <RowAction
-                icon={<DeleteOutlined />}
-                label={t('virt.deleteWithDisks')}
-                danger
-                loading={busy === `${vm.name}:delete`}
-                onClick={() => del(vm.name, true)}
+                onClick={() => void del(vm.name)}
               />
             </>
           )}
@@ -262,9 +258,12 @@ export default function Virtualization({ me }: { me: Me }) {
     }
   }
 
-  async function del(name: string, removeStorage: boolean) {
-    const warning = t(removeStorage ? 'virt.confirmDeleteWithDisks' : 'virt.confirmDeleteDefinition', { name })
-    if (!(await confirmAction(warning))) return
+  async function del(name: string) {
+    const answer = await confirmWithOption(t('virt.confirmDeleteDefinition', { name }), t('virt.deleteDisksOption'), {
+      optionHint: t('virt.deleteDisksHint'),
+    })
+    if (!answer) return
+    const removeStorage = answer.checked
     setBusy(`${name}:delete`)
     setNotice(null)
     try {
@@ -531,7 +530,7 @@ function VMEditor({
   // «Блоки» — тот же BlockTree, что у nginx/haproxy/docker: элементы
   // домена и устройства по одному. У новой машины файла ещё нет — только
   // текст.
-  const [tab, setTab] = useState<'text' | 'blocks'>('text')
+  const [tab, setTab] = useState<'text' | 'blocks' | 'history'>('text')
 
   const content = draft ?? existing.data?.content ?? (isNew ? initialContent ?? domainXMLSkeleton(name) : '')
 
@@ -597,14 +596,17 @@ function VMEditor({
           {!isNew && (
             <Segmented
               value={tab}
-              onChange={(v) => setTab(v as 'text' | 'blocks')}
+              onChange={(v) => setTab(v as 'text' | 'blocks' | 'history')}
               options={[
                 { value: 'text', label: t('configs.text') },
                 { value: 'blocks', label: t('configs.blocks') },
+                { value: 'history', label: t('configs.versionHistoryTitle') },
               ]}
             />
           )}
-          {tab === 'blocks' && !isNew && existing.data ? (
+          {tab === 'history' && !isNew ? (
+            <VersionHistory path={path} me={me} apply onChanged={() => existing.reload()} />
+          ) : tab === 'blocks' && !isNew && existing.data ? (
             <BlockTree
               path={path}
               service="libvirt"

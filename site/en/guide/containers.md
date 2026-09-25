@@ -41,7 +41,10 @@ stop, delete.
   container is not running, the tail of its logs with the reason.
   **Logs** — an icon in the row: live `docker logs`, tail 200/1000/5000
   lines, "follow", "timestamps". Same for Podman.
-- **Machine configuration (XML)** — the pencil in the row: "text" and
+- **Deleting a machine** is one button; "delete the machine's disks too"
+  is a checkbox in the confirmation window, off by default.
+- **Machine configuration (XML)** — the pencil in the row: "text",
+  "history" and
   **"blocks"** tabs (domain elements and devices one by one: disk,
   network interface, graphics — edit, delete, `+ disk`/`+ interface`/
   `+ graphics` with a template); before

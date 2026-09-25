@@ -434,7 +434,7 @@
     "confirmAction": "Выполнить «{{action}}» для VM {{name}}?",
     "actionDone": "{{name}}: {{action}} выполнено.",
     "confirmDeleteWithDisks": "Удалить VM {{name}} вместе с дисками? Образы дисков будут удалены безвозвратно.",
-    "confirmDeleteDefinition": "Удалить определение VM {{name}}? Диски останутся на месте.",
+    "confirmDeleteDefinition": "Удалить машину {{name}}? Её определение в libvirt будет удалено.",
     "definitionDeleted": "{{name}}: определение удалено.",
     "title": "Виртуальные машины",
     "hint": "libvirt/QEMU домены — управление через virsh. Создание и редактирование — через XML-определение.",
@@ -479,7 +479,9 @@
     "reviewChanges": "Изменения конфигурации {{name}}",
     "reviewChangesApply": "После записи будет выполнен virsh define — конфигурация машины обновится.",
     "reviewChangesNoApply": "Только запись файла, без virsh define.",
-    "applyChanges": "Записать"
+    "applyChanges": "Записать",
+    "deleteDisksOption": "удалить и диски машины",
+    "deleteDisksHint": "Образы дисков будут удалены безвозвратно. Без галочки диски остаются на месте."
   },
   "hosts": {
     "notPasswordEncrypted": "Файл не похож на зашифрованный паролем экспорт",
@@ -1068,7 +1070,10 @@
     "newFileRoot": "Корень",
     "showChanges": "показать изменения",
     "changesTitle": "Изменения: {{path}}",
-    "noChanges": "Изменений нет — черновик совпадает с файлом."
+    "noChanges": "Изменений нет — черновик совпадает с файлом.",
+    "edit": "Править",
+    "editTitle": "Правка {{path}}",
+    "editTab": "Правка"
   },
   "charts": {
     "seconds": "{{value}} с",
@@ -2438,5 +2443,11 @@
     "askFirstHint": "Что нужно? Например: «reverse proxy на :3000 с TLS и кэшем». Пусто — обзор возможностей и типовой пример.",
     "askFirstPlaceholder": "задача или вопрос (необязательно)",
     "askFirstGo": "спросить"
+  },
+  "editModal": {
+    "saved": "сохранено",
+    "draft": "черновик",
+    "changes": "Изменения",
+    "noChanges": "Текст не изменился."
   }
 }

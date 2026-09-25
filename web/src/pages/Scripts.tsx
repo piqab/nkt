@@ -6,6 +6,7 @@ import { api, useApi } from '../api'
 import type { Job, Me } from '../types'
 import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDateTime } from '../components/ui'
 import { DataTable } from '../components/DataTable'
+import { EditTextModal } from '../components/EditTextModal'
 import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
 import ScriptScheme from '../components/ScriptScheme'
@@ -154,7 +155,10 @@ export default function Scripts({ me }: { me: Me }) {
     setCheck(null)
     setColor(SCRIPT_COLORS.find((c) => !scripts.some((s) => s.color === c)) ?? SCRIPT_COLORS[0])
     setTab('text')
+    setEditing(true)
   }
+
+  const [editing, setEditing] = useState(false)
 
   async function save(): Promise<number | null> {
     setBusy('save')
@@ -169,6 +173,7 @@ export default function Scripts({ me }: { me: Me }) {
         setSelected(id)
       }
       await list.reload()
+      await current.reload()
       setNotice({ kind: 'info', text: t('scripts.saved') })
       return id
     } catch (err) {
@@ -309,8 +314,8 @@ export default function Scripts({ me }: { me: Me }) {
                         if (f) importFile(f)
                       }}
                     />
-                    <Button size="small" loading={busy === 'save'} disabled={!trimmedName || busy !== null} onClick={() => void save()}>
-                      {t('common.save')}
+                    <Button size="small" type="primary" disabled={busy !== null} onClick={() => setEditing(true)}>
+                      {t('configs.edit')}
                     </Button>
                     <Button size="small" loading={busy === 'check'} disabled={busy !== null} onClick={() => void runCheck()}>
                       {t('scripts.check')}
@@ -350,32 +355,6 @@ export default function Scripts({ me }: { me: Me }) {
               </div>
             }
           >
-            {canEdit && (
-              <div className="filters" style={{ marginBottom: '0.5rem', alignItems: 'flex-end' }}>
-                <label style={{ minWidth: '12rem' }}>
-                  {t('scripts.name')}
-                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="web-farm" />
-                </label>
-                <label style={{ flex: 1, minWidth: '14rem' }}>
-                  {t('scripts.note')}
-                  <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('scripts.notePlaceholder')} />
-                </label>
-                <label>
-                  {t('profiles.color')}
-                  <span className="row" style={{ gap: '0.3rem', alignItems: 'center' }}>
-                    <ColorPicker
-                      size="small"
-                      value={color || null}
-                      allowClear
-                      presets={[{ label: t('profiles.colorPresets'), colors: SCRIPT_COLORS }]}
-                      onChange={(c) => setColor(c ? c.toHexString().slice(0, 7) : '')}
-                      onClear={() => setColor('')}
-                    />
-                    <span className="small muted mono">{color || t('profiles.colorNone')}</span>
-                  </span>
-                </label>
-              </div>
-            )}
             <Tabs
               activeKey={tab}
               onChange={(k) => setTab(k as typeof tab)}
@@ -383,7 +362,7 @@ export default function Scripts({ me }: { me: Me }) {
                 {
                   key: 'text',
                   label: t('scripts.tabText'),
-                  children: <CodeEditor value={draft} onChange={(e) => { setDraft(e.target.value); setCheck(null) }} rows={22} readOnly={!canEdit} />,
+                  children: <CodeEditor value={draft} onChange={() => undefined} rows={22} readOnly />,
                 },
                 { key: 'scheme', label: t('scripts.tabScheme'), children: <ScriptScheme content={draft} /> },
                 {
@@ -396,6 +375,7 @@ export default function Scripts({ me }: { me: Me }) {
                         setDraft(text)
                         setCheck(null)
                         setTab('text')
+                        setEditing(true)
                       }}
                     />
                   ),
@@ -462,6 +442,51 @@ export default function Scripts({ me }: { me: Me }) {
       {askModal && <AskValuesModal result={askModal.result} dryRun={askModal.dryRun} onClose={() => setAskModal(null)} onStart={startRun} />}
 
       {openJob && <JobLogModal job={openJob} onClose={() => setOpenJob(null)} />}
+      {editing && (
+        <EditTextModal
+          title={current.data?.name ?? t('scripts.newScript')}
+          saved={selected ? current.data?.content ?? '' : ''}
+          draft={draft}
+          onDraft={(v) => {
+            setDraft(v)
+            setCheck(null)
+          }}
+          busy={busy === 'save'}
+          fields={(<div className="filters" style={{ marginBottom: '0.5rem', alignItems: 'flex-end' }}>
+                <label style={{ minWidth: '12rem' }}>
+                  {t('scripts.name')}
+                  <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="web-farm" />
+                </label>
+                <label style={{ flex: 1, minWidth: '14rem' }}>
+                  {t('scripts.note')}
+                  <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('scripts.notePlaceholder')} />
+                </label>
+                <label>
+                  {t('profiles.color')}
+                  <span className="row" style={{ gap: '0.3rem', alignItems: 'center' }}>
+                    <ColorPicker
+                      size="small"
+                      value={color || null}
+                      allowClear
+                      presets={[{ label: t('profiles.colorPresets'), colors: SCRIPT_COLORS }]}
+                      onChange={(c) => setColor(c ? c.toHexString().slice(0, 7) : '')}
+                      onClear={() => setColor('')}
+                    />
+                    <span className="small muted mono">{color || t('profiles.colorNone')}</span>
+                  </span>
+                </label>
+              </div>)}
+          onSave={async () => (trimmedName ? (await save()) !== null : false)}
+          onHistory={selected ? () => setShowVersions(true) : undefined}
+          onClose={() => {
+            setEditing(false)
+            if (selected && current.data) {
+              setDraft(current.data.content ?? '')
+              setName(current.data.name)
+            }
+          }}
+        />
+      )}
     </>
   )
 }

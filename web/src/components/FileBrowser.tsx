@@ -5,7 +5,8 @@ import { FolderOutlined, FolderAddOutlined, FileOutlined, FileZipOutlined, Branc
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, qs, useApi } from '../api'
 import type { Job } from '../types'
-import { Banner, Card, CodeEditor, Modal, Spinner } from './ui'
+import { Banner, Card, CodeEditor, DiffView, Modal, Spinner } from './ui'
+import { unifiedDiff } from './textDiff'
 import { formatBytes } from './charts'
 import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
@@ -698,6 +699,13 @@ function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: (
   const renamed = trimmed !== entry.name
   const dirty = unreadable ? renamed : content !== null && text.data !== null && (content !== text.data.content || renamed)
   const canSave = dirty && !badName(trimmed) && !busy
+  // Перед записью — дифф «на диске → черновик»; переименование без правки
+  // текста пишется сразу.
+  const [preview, setPreview] = useState<string | null>(null)
+  function review() {
+    if (unreadable || content === null || !text.data || content === text.data.content) return void save()
+    setPreview(unifiedDiff(text.data.content, content, entry.path, entry.path))
+  }
 
   async function save() {
     if (!canSave) return
@@ -738,7 +746,7 @@ function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: (
               {formatBytes(text.data.size)} · {text.data.mode}
             </span>
           )}
-          <Button type="primary" disabled={!canSave} loading={busy} onClick={save}>
+          <Button type="primary" disabled={!canSave} loading={busy} onClick={review}>
             {unreadable ? t('files.rename') : t('common.save')}
           </Button>
         </div>
@@ -752,6 +760,24 @@ function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: (
           <CodeEditor value={content} onChange={(e) => setContent(e.target.value)} rows={26} autoFocus />
         )}
       </div>
+      {preview !== null && (
+        <Modal title={t('blocks.previewTitle')} onClose={() => setPreview(null)} width={900} maskClosable={false}>
+          <DiffView text={preview} />
+          <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
+            <Button
+              type="primary"
+              loading={busy}
+              onClick={() => {
+                setPreview(null)
+                void save()
+              }}
+            >
+              {t('virt.applyChanges')}
+            </Button>
+            <Button onClick={() => setPreview(null)}>{t('common.cancel')}</Button>
+          </div>
+        </Modal>
+      )}
     </Modal>
   )
 }

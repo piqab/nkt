@@ -8,6 +8,7 @@ import type { Job, Me, Profile, ProfilePlan, PlanChange, ProfileVersion } from '
 import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDateTime } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { EditTextModal } from '../components/EditTextModal'
 import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
 
@@ -154,7 +155,9 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
 
   const profiles = list.data?.profiles ?? []
 
-  async function save() {
+  const [editing, setEditing] = useState(false)
+
+  async function save(): Promise<boolean> {
     setBusy(true)
     setNotice(null)
     try {
@@ -165,9 +168,12 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
         setSelected(res.id)
       }
       await list.reload()
+      await current.reload()
       setNotice({ kind: 'info', text: t('profiles.saved') })
+      return true
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+      return false
     } finally {
       setBusy(false)
     }
@@ -310,6 +316,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
               setNote('')
               // Новому профилю — следующий свободный цвет палитры.
               setColor(PROFILE_COLORS.find((c) => !profiles.some((p) => p.color === c)) ?? PROFILE_COLORS[0])
+              setEditing(true)
             }}
           >
             {t('profiles.newProfile')}
@@ -372,8 +379,8 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
                   </Button>
                 )}
                 {canEdit && (
-                  <Button size="small" loading={busy} onClick={() => void save()}>
-                    {t('common.save')}
+                  <Button size="small" type="primary" onClick={() => setEditing(true)}>
+                    {t('configs.edit')}
                   </Button>
                 )}
                 {/* На хабе профиль применяется к хостам через группы, а
@@ -401,32 +408,8 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
               </>
             }
           >
-            {canEdit && (
-              <div className="filters" style={{ marginBottom: '0.5rem', alignItems: 'flex-end' }}>
-                <label style={{ flex: 1, minWidth: '14rem' }}>
-                  {t('profiles.note')}
-                  <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('profiles.notePlaceholder')} />
-                </label>
-                {/* Цвет профиля: им подкрашиваются строки хостов, созданных
-                    по этому профилю, — чтобы в списке хаба было видно,
-                    из чего машина сделана. */}
-                <label>
-                  {t('profiles.color')}
-                  <span className="row" style={{ gap: '0.3rem', alignItems: 'center' }}>
-                    <ColorPicker
-                      size="small"
-                      value={color || null}
-                      allowClear
-                      presets={[{ label: t('profiles.colorPresets'), colors: PROFILE_COLORS }]}
-                      onChange={(c) => setColor(c ? c.toHexString().slice(0, 7) : '')}
-                      onClear={() => setColor('')}
-                    />
-                    <span className="small muted mono">{color || t('profiles.colorNone')}</span>
-                  </span>
-                </label>
-              </div>
-            )}
-            <CodeEditor value={draft} onChange={(e) => setDraft(e.target.value)} rows={18} readOnly={!canEdit} />
+            {/* Просмотр; правка — в окне с диффом перед записью. */}
+            <CodeEditor value={draft} onChange={() => undefined} rows={18} readOnly />
           </Card>
 
           {plan && (
@@ -497,6 +480,45 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
           живут здесь же. */}
 
       {openJob && <JobLogModal job={openJob} onClose={() => setOpenJob(null)} />}
+      {editing && (
+        <EditTextModal
+          title={current.data?.name ?? t('profiles.newProfile')}
+          saved={selected ? current.data?.content ?? '' : ''}
+          draft={draft}
+          onDraft={setDraft}
+          busy={busy}
+          fields={(<div className="filters" style={{ marginBottom: '0.5rem', alignItems: 'flex-end' }}>
+                <label style={{ flex: 1, minWidth: '14rem' }}>
+                  {t('profiles.note')}
+                  <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('profiles.notePlaceholder')} />
+                </label>
+                {/* Цвет профиля: им подкрашиваются строки хостов, созданных
+                    по этому профилю, — чтобы в списке хаба было видно,
+                    из чего машина сделана. */}
+                <label>
+                  {t('profiles.color')}
+                  <span className="row" style={{ gap: '0.3rem', alignItems: 'center' }}>
+                    <ColorPicker
+                      size="small"
+                      value={color || null}
+                      allowClear
+                      presets={[{ label: t('profiles.colorPresets'), colors: PROFILE_COLORS }]}
+                      onChange={(c) => setColor(c ? c.toHexString().slice(0, 7) : '')}
+                      onClear={() => setColor('')}
+                    />
+                    <span className="small muted mono">{color || t('profiles.colorNone')}</span>
+                  </span>
+                </label>
+              </div>)}
+          onSave={save}
+          onHistory={selected ? () => setShowVersions(true) : undefined}
+          onClose={() => {
+            setEditing(false)
+            if (selected && current.data) setDraft(current.data.content ?? '')
+          }}
+          rows={20}
+        />
+      )}
     </>
   )
 }

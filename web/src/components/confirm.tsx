@@ -34,3 +34,40 @@ export function confirmAction(
     })
   })
 }
+
+/**
+ * Подтверждение с галочкой-уточнением («удалить и диски»): одна кнопка
+ * действия вместо двух похожих, а опасный вариант — осознанный выбор в
+ * окне, по умолчанию выключенный. Возвращает null при отмене, иначе
+ * состояние галочки.
+ */
+export function confirmWithOption(
+  content: string,
+  optionLabel: string,
+  opts: { title?: string; okText?: string; optionHint?: string } = {},
+): Promise<{ checked: boolean } | null> {
+  return new Promise((resolve) => {
+    let checked = false
+    Modal.confirm({
+      title: blurText(opts.title ?? i18n.t('common.confirmTitle')),
+      content: (
+        <div>
+          <p>{blurText(content)}</p>
+          <label style={{ display: 'flex', flexDirection: 'row', gap: '0.4rem', alignItems: 'flex-start' }}>
+            <input type="checkbox" defaultChecked={false} onChange={(e) => (checked = e.target.checked)} style={{ marginTop: '0.2rem' }} />
+            <span>
+              {optionLabel}
+              {opts.optionHint && <div className="small muted">{opts.optionHint}</div>}
+            </span>
+          </label>
+        </div>
+      ),
+      okText: opts.okText ?? i18n.t('common.confirmOk'),
+      cancelText: i18n.t('common.cancel'),
+      okButtonProps: { danger: true },
+      width: 560,
+      onOk: () => resolve({ checked }),
+      onCancel: () => resolve(null),
+    })
+  })
+}

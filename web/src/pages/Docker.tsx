@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Segmented, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
@@ -7,6 +7,7 @@ import type { Container, DockerNetwork, FileContent, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, shortImageRef } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 import BlockTree from '../components/BlockTree'
+import { VersionHistory } from '../components/VersionHistory'
 import PathPicker, { ownerFromPath } from '../components/PathPicker'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
@@ -395,10 +396,24 @@ function ContainerConfigModal({
 }) {
   const { t } = useTranslation()
   const file = useApi<FileContent>(`/configs/file${qs({ path })}`)
+  // Блоки и история версий файла — в одном окне: правка через блоки
+  // (с диффом перед записью), откат — из истории.
+  const [tab, setTab] = useState<'blocks' | 'history'>('blocks')
 
   return (
-    <Modal title={path} onClose={onClose}>
-      {file.loading && !file.data ? (
+    <Modal title={path} onClose={onClose} width={960}>
+      <Segmented
+        value={tab}
+        onChange={(v) => setTab(v as 'blocks' | 'history')}
+        options={[
+          { value: 'blocks', label: t('configs.blocks') },
+          { value: 'history', label: t('configs.versionHistoryTitle') },
+        ]}
+        style={{ marginBottom: '0.6rem' }}
+      />
+      {tab === 'history' ? (
+        <VersionHistory path={path} me={me} onChanged={() => { file.reload(); onSaved() }} />
+      ) : file.loading && !file.data ? (
         <Loading what={t('docker.loadingFile')} />
       ) : file.error ? (
         <ErrorNote error={file.error} />
