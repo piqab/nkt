@@ -80,7 +80,15 @@ export function AIExplain({
   const [asked, setAsked] = useState(false)
   const refs = useAIAnswers()
   const hostID = currentAIHostID()
-  const state = aiAnswerState(refs, ctx, hostID)
+  // Помощь по программе (askFirst): ответы хранятся по вопросу — объект
+  // «категория?вопрос». Прежние вопросы этого хоста показываются списком,
+  // а лампочка горит, если хоть на один уже есть ответ.
+  const prior = askFirst
+    ? refs.filter((r) => r.kind === ctx.kind && r.title === ctx.title.trim() && r.object.startsWith(`${(ctx.object ?? '').trim()}?`))
+    : []
+  const priorOwn = prior.filter((r) => r.host_id === hostID)
+  const baseState = aiAnswerState(refs, ctx, hostID)
+  const state = baseState !== 'none' ? baseState : priorOwn.length > 0 ? 'own' : prior.length > 0 ? 'similar' : 'none'
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [answer, setAnswer] = useState<AIAnswer | null>(null)
@@ -88,11 +96,13 @@ export function AIExplain({
   const [showPrompt, setShowPrompt] = useState(false)
   const elapsed = useElapsed(busy)
 
-  async function ask(force = false) {
+  async function ask(force = false, withQuestion?: string) {
     setOpen(true)
-    if (askFirst && !asked && !force) return
+    // Сохранённый ответ без вопроса есть — он показывается сразу, а не
+    // пустое поле вопроса; спросить другое можно кнопкой.
+    if (askFirst && !asked && !force && withQuestion === undefined && baseState === 'none') return
     setAsked(true)
-    if (!force && (answer || busy)) return
+    if (!force && withQuestion === undefined && (answer || busy)) return
     setBusy(true)
     setError(null)
     if (force) setAnswer(null)
@@ -105,7 +115,7 @@ export function AIExplain({
         timeoutMs: AI_REQUEST_TIMEOUT_MS,
         body: {
           ...ctx,
-          question: question.trim() || ctx.question,
+          question: (withQuestion ?? question).trim() || ctx.question,
           // Какому хосту принадлежит находка — по нему хаб добавит в
           // запрос, что там рядом (порты, контейнеры, firewall).
           host_id: hostID,
@@ -157,6 +167,23 @@ export function AIExplain({
           {askFirst && !asked ? (
             <div className="col">
               <div className="small muted">{t('ai.askFirstHint')}</div>
+              {priorOwn.length > 0 && (
+                <div className="small">
+                  {t('ai.priorQuestions')}{' '}
+                  {priorOwn.map((r) => {
+                    const q = r.object.slice((ctx.object ?? '').trim().length + 1)
+                    return (
+                      <Button key={r.key} type="link" size="small" onClick={() => {
+                        setQuestion(q)
+                        setAnswer(null)
+                        void ask(false, q)
+                      }}>
+                        {q}
+                      </Button>
+                    )
+                  })}
+                </div>
+              )}
               <Input.TextArea rows={2} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t('ai.askFirstPlaceholder')} autoFocus />
               <div>
                 <Button type="primary" onClick={() => void ask(true)}>
@@ -178,18 +205,35 @@ export function AIExplain({
                   </Button>
                 </Banner>
               )}
-              {answer.sections.map((s, i) => (
-                <div key={i}>
-                  {s.title && <h3 style={{ marginBottom: '0.3rem' }}>{s.title}</h3>}
-                  <AIBody text={s.body} />
-                </div>
-              ))}
+              {answer.sections && answer.sections.length > 0 ? (
+                answer.sections.map((s, i) => (
+                  <div key={i}>
+                    {s.title && <h3 style={{ marginBottom: '0.3rem' }}>{s.title}</h3>}
+                    <AIBody text={s.body} />
+                  </div>
+                ))
+              ) : answer.answer?.trim() ? (
+                // Разделов не нашлось (модель ответила без заголовков «##»)
+                // — текст целиком, а не пустое окно.
+                <AIBody text={answer.answer} />
+              ) : (
+                <Banner kind="warn">{t('ai.emptyAnswer')}</Banner>
+              )}
               <div className="small muted">
                 {answer.notice}
                 {answer.stored_at && <> · {t('ai.storedAt', { date: formatDateTime(answer.stored_at) })}</>}
                 <Button type="link" size="small" onClick={() => setShowPrompt((v) => !v)}>
                   {showPrompt ? t('ai.hidePrompt') : t('ai.showPrompt')}
                 </Button>
+                {askFirst && (
+                  <Button type="link" size="small" onClick={() => {
+                    setAsked(false)
+                    setAnswer(null)
+                    setQuestion('')
+                  }}>
+                    {t('ai.askOther')}
+                  </Button>
+                )}
                 {!answer.similar && (
                   <>
                     <Button type="link" size="small" onClick={() => void ask(true)}>

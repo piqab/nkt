@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.5 — 2026-09-25
+
+- **The AI answer window no longer opens empty.**
+  - The program help bulb in "Configs" shows a saved answer right away.
+    Before, an empty question field opened instead.
+  - "Ask another question" opens the field with a list of earlier
+    questions: a click shows that question's saved answer without a new
+    model request.
+  - A category bulb also lights up when answers to questions about it
+    exist.
+- **An answer without sections** — no "##" headings — is shown as plain
+  text. **An empty answer** is shown as a message with "ask again" and
+  "ask another question". The hub no longer returns `sections: null`,
+  which crashed the window.
+
 ## v1.11.4 — 2026-09-25
 
 - **Code scanning: the last three findings are closed.** A string from the

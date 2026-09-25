@@ -385,9 +385,14 @@ func (m *Manager) AIReviewMap(ctx context.Context, scope string, lines []string,
 }
 
 func (m *Manager) aiAnswer(answer, prompt string, set ai.Settings, cached bool) AIAnswer {
+	sections := ai.ParseSections(answer)
+	if sections == nil {
+		// Пустой список, а не null: интерфейс перебирает разделы.
+		sections = []ai.Section{}
+	}
 	return AIAnswer{
 		Answer:   answer,
-		Sections: ai.ParseSections(answer),
+		Sections: sections,
 		Model:    set.Model,
 		Cached:   cached,
 		Prompt:   prompt,

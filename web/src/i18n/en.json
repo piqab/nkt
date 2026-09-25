@@ -2460,7 +2460,10 @@
     "promptConfig": "configuration help (what is configured, what to fix, example)",
     "askFirstHint": "What do you need? For example: \"a reverse proxy to :3000 with TLS and caching\". Empty — an overview and a typical example.",
     "askFirstPlaceholder": "task or question (optional)",
-    "askFirstGo": "ask"
+    "askFirstGo": "ask",
+    "priorQuestions": "Earlier questions:",
+    "emptyAnswer": "The model returned an empty answer. Ask again — perhaps with another model or a longer timeout in the AI settings.",
+    "askOther": "ask another question"
   },
   "editModal": {
     "saved": "saved",
