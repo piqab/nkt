@@ -64,7 +64,8 @@ live output) and **storage pools** (read-only).
 - **Console** — an icon in the row of a running container (Docker,
   Podman: `exec`, bash or sh, a user can be set), LXD instance (`lxc
   exec`) and machine (serial console `virsh console`, exit with Ctrl+]).
-  The web terminal must be enabled.
+  The web terminal must be enabled. The console runs as root, even when
+  the host terminal under a hub runs as the SSH user.
 - **Backup** — an icon in the row of a machine and a container (Docker,
   Podman, LXD via `lxc export`/`lxc import`; a compose container — the
   whole stack): archives on the host in

@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.115 — 2026-09-25
+
+- **Container and machine console on hosts under a hub.** It used to run
+  as the hub's SSH user: lxc answered "LXD unix socket … permission
+  denied", and virsh did not see system machines. Now the Docker, Podman,
+  LXD and libvirt console runs as root, like logs and the other actions;
+  only administrators can open it, and every connection is audited. The
+  host's own terminal still runs as the SSH user.
+- **The libvirt console** connects to `qemu:///system` explicitly.
+
 ## v1.10.114 — 2026-09-25
 
 - **Screen over SPICE.** For a libvirt machine with SPICE graphics only,

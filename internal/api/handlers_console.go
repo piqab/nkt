@@ -10,9 +10,12 @@ import (
 )
 
 // Консоль внутри контейнера или машины — тот же PTY-мост, что у
-// веб-терминала, и те же ворота: NKT_TERMINAL_ENABLED, не fixtures, а
-// при заданном TerminalUser (хост под хабом) — от его имени: без членства
-// в группах docker/lxd/libvirt войти не выйдет, и это правильно.
+// веб-терминала, и те же ворота: администратор, NKT_TERMINAL_ENABLED, не
+// fixtures. Запуск — от root, как у логов и остальных действий с
+// контейнерами, даже при заданном TerminalUser (хост под хабом): от имени
+// пользователя SSH lxc упирался в сокет LXD, virsh — в личный
+// qemu:///session, а членство в группах lxd/docker/libvirt всё равно
+// равно root на хосте. Понижение прав остаётся у терминала самого хоста.
 //
 //	docker/podman — ENGINE exec -it [-u USER] NAME, bash или sh;
 //	lxd           — lxc exec NAME -- bash или sh;
@@ -46,7 +49,7 @@ func consoleArgv(kind, name, user string) ([]string, bool) {
 		}
 		return []string{lxc, "exec", name, "--env", "TERM=xterm-256color", "--", "sh", "-c", shellPick}, true
 	case "vm":
-		return []string{"virsh", "console", name, "--force"}, true
+		return []string{"virsh", "-c", "qemu:///system", "console", name, "--force"}, true
 	}
 	return nil, false
 }
@@ -68,17 +71,6 @@ func (s *Server) handleConsoleWS(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "api.consoleBadTarget", kind, name))
 		return
 	}
-	env := map[string]string{"TERM": "xterm-256color"}
-	var cmd *exec.Cmd
-	if s.cfg.TerminalUser != "" {
-		c, err := unrestrictedCommandAsUser(env, s.cfg.TerminalUser, argv...)
-		if err != nil {
-			writeErr(w, r, http.StatusInternalServerError, err)
-			return
-		}
-		cmd = c
-	} else {
-		cmd = unrestrictedCommand(env, argv...)
-	}
+	cmd := unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, argv...)
 	s.runPTYSession(w, r, cmd, "console", kind+":"+name, s.cfg.TerminalIdleTimeout)
 }
