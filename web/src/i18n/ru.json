@@ -170,7 +170,7 @@
     "savedShort": "сохранено"
   },
   "containers": {
-    "vms": "Виртуальные машины"
+    "vms": "Libvirt"
   },
   "ptyToolbar": {
     "copySelection": "Скопировать выделенное",
@@ -350,7 +350,10 @@
     "image": "Образ",
     "instanceName": "Имя инстанса",
     "launching": "Запускаю…",
-    "createAndStart": "Создать и запустить"
+    "createAndStart": "Создать и запустить",
+    "colResources": "Память / лимиты",
+    "colPorts": "Порты",
+    "disk": "диск"
   },
   "podman": {
     "confirmAction": "Выполнить «{{action}}» для контейнера {{name}}?",
@@ -436,8 +439,8 @@
     "confirmDeleteWithDisks": "Удалить VM {{name}} вместе с дисками? Образы дисков будут удалены безвозвратно.",
     "confirmDeleteDefinition": "Удалить машину {{name}}? Её определение в libvirt будет удалено.",
     "definitionDeleted": "{{name}}: определение удалено.",
-    "title": "Виртуальные машины",
-    "hint": "libvirt/QEMU домены — управление через virsh. Создание и редактирование — через XML-определение.",
+    "title": "Libvirt — виртуальные машины KVM",
+    "hint": "Домены libvirt/QEMU (KVM) — управление через virsh. Создание и редактирование — через XML-определение.",
     "domains": "Домены libvirt",
     "newVm": "+ новая VM",
     "loading": "виртуальные машины",
@@ -2533,5 +2536,9 @@
     },
     "hint": "Клик по экрану — ввод с клавиатуры в машину. Нужна графика VNC у машины (graphics type=vnc) и включённый веб-терминал.",
     "noConnect": "Не удалось подключиться к экрану машины. Частые причины: у машины нет графики VNC (graphics type=vnc), веб-терминал выключен (NKT_TERMINAL_ENABLED), режим демонстрации (fixtures)."
+  },
+  "lxdLogs": {
+    "journal": "журнал внутри",
+    "lxd": "лог LXD"
   }
 }

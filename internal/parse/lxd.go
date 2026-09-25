@@ -33,7 +33,19 @@ type lxdInstance struct {
 				Address string `json:"address"`
 			} `json:"addresses"`
 		} `json:"network"`
+		Memory struct {
+			Usage int64 `json:"usage"`
+		} `json:"memory"`
+		Disk map[string]struct {
+			Usage int64 `json:"usage"`
+		} `json:"disk"`
+		Processes int `json:"processes"`
 	} `json:"state"`
+	// Конфигурация с учётом профилей (lxc list отдаёт expanded_*).
+	ExpandedConfig  map[string]string            `json:"expanded_config"`
+	ExpandedDevices map[string]map[string]string `json:"expanded_devices"`
+	Snapshots       []json.RawMessage            `json:"snapshots"`
+	Profiles        []string                     `json:"profiles"`
 }
 
 // LXD lists every instance the local LXD daemon manages, via `lxc list
@@ -88,7 +100,21 @@ func LXD(ctx context.Context, c collect.Collector) LXDResult {
 			// colouring work without a special case per source.
 			Name: e.Name, Type: e.Type, Status: strings.ToLower(e.Status), Architecture: e.Architecture,
 		}
+		inst.Autostart = e.ExpandedConfig["boot.autostart"] == "true"
+		inst.LimitCPU = e.ExpandedConfig["limits.cpu"]
+		inst.LimitMemory = e.ExpandedConfig["limits.memory"]
+		inst.Snapshots = len(e.Snapshots)
+		inst.Profiles = e.Profiles
+		for dev, d := range e.ExpandedDevices {
+			if d["type"] == "proxy" {
+				inst.Ports = append(inst.Ports, model.LXDPort{Device: dev, Listen: d["listen"], Connect: d["connect"]})
+			}
+		}
+		sort.Slice(inst.Ports, func(i, j int) bool { return inst.Ports[i].Device < inst.Ports[j].Device })
 		if e.State != nil {
+			inst.MemoryBytes = e.State.Memory.Usage
+			inst.DiskBytes = e.State.Disk["root"].Usage
+			inst.Processes = e.State.Processes
 			for _, iface := range e.State.Network {
 				for _, addr := range iface.Addresses {
 					if addr.Family == "inet" {

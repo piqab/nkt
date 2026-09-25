@@ -445,6 +445,16 @@
     {
       "match": [
         "lxc",
+        "config",
+        "set"
+      ],
+      "stdout": "",
+      "exit_code": 0,
+      "simulated": true
+    },
+    {
+      "match": [
+        "lxc",
         "start"
       ],
       "stdout": "",

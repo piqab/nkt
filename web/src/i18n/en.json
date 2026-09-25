@@ -170,7 +170,7 @@
     "savedShort": "saved"
   },
   "containers": {
-    "vms": "Virtual machines"
+    "vms": "Libvirt"
   },
   "ptyToolbar": {
     "copySelection": "Copy selection",
@@ -350,7 +350,10 @@
     "image": "Image",
     "instanceName": "Instance name",
     "launching": "Launching…",
-    "createAndStart": "Create and start"
+    "createAndStart": "Create and start",
+    "colResources": "Memory / limits",
+    "colPorts": "Ports",
+    "disk": "disk"
   },
   "podman": {
     "confirmAction": "Run \"{{action}}\" on the container {{name}}?",
@@ -436,8 +439,8 @@
     "confirmDeleteWithDisks": "Delete the VM {{name}} together with its disks? Disk images will be permanently deleted.",
     "confirmDeleteDefinition": "Delete machine {{name}}? Its libvirt definition will be removed.",
     "definitionDeleted": "{{name}}: definition deleted.",
-    "title": "Virtual machines",
-    "hint": "libvirt/QEMU domains — managed via virsh. Created and edited through the XML definition.",
+    "title": "Libvirt — KVM virtual machines",
+    "hint": "libvirt/QEMU (KVM) domains managed through virsh. Creation and editing go through the XML definition.",
     "domains": "libvirt domains",
     "newVm": "+ new VM",
     "loading": "virtual machines",
@@ -2531,5 +2534,9 @@
     },
     "hint": "Click the screen to send keyboard input to the machine. The machine needs VNC graphics (graphics type=vnc) and the web terminal must be enabled.",
     "noConnect": "Could not connect to the machine's screen. Common causes: the machine has no VNC graphics (graphics type=vnc), the web terminal is disabled (NKT_TERMINAL_ENABLED), demo (fixtures) mode."
+  },
+  "lxdLogs": {
+    "journal": "journal inside",
+    "lxd": "LXD log"
   }
 }

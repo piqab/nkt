@@ -114,3 +114,28 @@ func (m *LXDManager) DeleteInstance(ctx context.Context, user, name string, forc
 	}
 	return nil
 }
+
+// SetAutostart включает или выключает запуск инстанса вместе с хостом
+// (boot.autostart).
+func (m *LXDManager) SetAutostart(ctx context.Context, user, name string, on bool) error {
+	if name == "" || strings.ContainsAny(name, "/?&# ") {
+		return msgs.Errorf("control.invalidInstanceName", name)
+	}
+	v := "false"
+	if on {
+		v = "true"
+	}
+	res, err := m.c.Run(ctx, "lxc", "config", "set", name, "boot.autostart", v)
+	outcome := "ok"
+	if err != nil || !res.OK() {
+		outcome = "error"
+	}
+	m.db.Audit(ctx, user, "lxd.autostart", name, outcome, map[string]any{"on": on})
+	if err != nil {
+		return err
+	}
+	if !res.OK() {
+		return fmt.Errorf("lxc config set: %s", strings.TrimSpace(res.Output()))
+	}
+	return nil
+}

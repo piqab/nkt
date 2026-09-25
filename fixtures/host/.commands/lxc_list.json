@@ -8,19 +8,74 @@
       "network": {
         "eth0": {
           "addresses": [
-            { "family": "inet", "address": "10.90.10.11" },
-            { "family": "inet6", "address": "fd42:1a2b:3c4d::11" }
+            {
+              "family": "inet",
+              "address": "10.90.10.11"
+            },
+            {
+              "family": "inet6",
+              "address": "fd42:1a2b:3c4d::11"
+            }
           ]
         }
+      },
+      "memory": {
+        "usage": 412000000
+      },
+      "disk": {
+        "root": {
+          "usage": 1800000000
+        }
+      },
+      "processes": 37
+    },
+    "profiles": [
+      "default"
+    ],
+    "expanded_config": {
+      "boot.autostart": "true",
+      "limits.cpu": "2",
+      "limits.memory": "2GiB"
+    },
+    "expanded_devices": {
+      "root": {
+        "type": "disk",
+        "path": "/",
+        "pool": "default"
+      },
+      "eth0": {
+        "type": "nic",
+        "network": "lxdbr0"
+      },
+      "http": {
+        "type": "proxy",
+        "listen": "tcp:0.0.0.0:8088",
+        "connect": "tcp:127.0.0.1:80"
       }
-    }
+    },
+    "snapshots": [
+      {
+        "name": "before-upgrade"
+      },
+      {
+        "name": "nightly"
+      }
+    ]
   },
   {
     "name": "win-testbed",
     "status": "Stopped",
     "type": "virtual-machine",
     "architecture": "x86_64",
-    "state": null
+    "state": null,
+    "profiles": [
+      "default"
+    ],
+    "expanded_config": {
+      "limits.cpu": "4",
+      "limits.memory": "8GiB"
+    },
+    "expanded_devices": {}
   },
   {
     "name": "dns-cache",
@@ -30,8 +85,36 @@
     "state": {
       "network": {
         "eth0": {
-          "addresses": [{ "family": "inet", "address": "10.90.10.15" }]
+          "addresses": [
+            {
+              "family": "inet",
+              "address": "10.90.10.15"
+            }
+          ]
         }
+      },
+      "memory": {
+        "usage": 48000000
+      },
+      "disk": {
+        "root": {
+          "usage": 310000000
+        }
+      },
+      "processes": 9
+    },
+    "profiles": [
+      "default"
+    ],
+    "expanded_config": {
+      "boot.autostart": "false",
+      "limits.memory": "256MiB"
+    },
+    "expanded_devices": {
+      "root": {
+        "type": "disk",
+        "path": "/",
+        "pool": "default"
       }
     }
   }
