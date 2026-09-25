@@ -191,7 +191,8 @@ export default function BlockTree({
     if (!modal) return
     await previewThen(
       {
-        op: modal.mode,
+        // Окно правки — mode «edit», а сервер понимает «update».
+        op: modal.mode === 'edit' ? 'update' : 'create',
         kind: modal.kind,
         start_line: modal.block?.start_line,
         end_line: modal.block?.end_line,

@@ -375,3 +375,47 @@ func TestWriteBlockDeleteDockerService(t *testing.T) {
 		t.Errorf("сервисов после удаления = %d, ожидалось %d", len(after), len(blocks)-1)
 	}
 }
+
+// Правка блока compose и XML машины: предпросмотр (dry_run) даёт дифф без
+// записи, «edit» от старой вкладки понимается как «update».
+func TestWriteBlockEditComposeAndLibvirt(t *testing.T) {
+	m := configsSetup(t)
+	ctx := context.Background()
+	for _, tc := range []struct {
+		path, name, content, marker string
+		kind                        parse.BlockKind
+	}{
+		{composeFile, "redis", "  redis:\n    image: redis:7.4-alpine\n    restart: unless-stopped", "7.4-alpine", parse.BlockService},
+		{"/etc/libvirt/qemu/web-vm.xml", "vcpu 2", "  <vcpu placement='static'>4</vcpu>", "'static'>4<", parse.BlockSetting},
+	} {
+		blocks, err := m.ListBlocks(tc.path)
+		if err != nil {
+			t.Fatalf("%s: %v", tc.path, err)
+		}
+		var target *parse.Block
+		for i := range blocks {
+			if blocks[i].Name == tc.name {
+				target = &blocks[i]
+			}
+		}
+		if target == nil {
+			t.Fatalf("%s: нет блока %q", tc.path, tc.name)
+		}
+		before, _ := m.Read(tc.path)
+		req := BlockWriteRequest{Op: "edit", Kind: tc.kind, Start: target.StartLine, End: target.EndLine, Content: tc.content, DryRun: true}
+		res, err := m.WriteBlock(ctx, msgs.RU, "test", tc.path, req)
+		if err != nil || !res.DryRun || !strings.Contains(res.Diff, tc.marker) {
+			t.Fatalf("%s: предпросмотр %+v, %v", tc.path, res, err)
+		}
+		if after, _ := m.Read(tc.path); after.Content != before.Content {
+			t.Fatalf("%s: предпросмотр изменил файл", tc.path)
+		}
+		req.DryRun = false
+		if _, err := m.WriteBlock(ctx, msgs.RU, "test", tc.path, req); err != nil {
+			t.Fatalf("%s: запись: %v", tc.path, err)
+		}
+		if after, _ := m.Read(tc.path); !strings.Contains(after.Content, tc.marker) {
+			t.Errorf("%s: правка не записана", tc.path)
+		}
+	}
+}
