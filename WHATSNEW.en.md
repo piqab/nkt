@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.93 — 2026-09-25
+
+- **Large uploads no longer fail with "i/o timeout".** A cluster image on
+  the hub and a custom machine image to a host (through the hub) sat
+  under the common 30-second body read and the 2-minute ceiling; image
+  uploads now have their own limit — 6 hours.
+- **"Add your own image" on a host through the hub** answered "Unknown
+  API method: /api/vm/images/upload": the request went to the hub
+  itself without the host prefix. Fixed.
+
 ## v1.10.92 — 2026-09-24
 
 - Resource map: a condition made redundant by the early "no data" return

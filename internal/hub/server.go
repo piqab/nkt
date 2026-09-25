@@ -143,6 +143,20 @@ func (s *Server) Handler() http.Handler {
 		// двухминутного потолка: у неё свой, длиннее, и сроки соединения
 		// продлеваются на то же время, иначе http.Server оборвёт чтение
 		// тела через 30 секунд.
+		// Образы — гигабайты по любой сети: у них свой потолок, много
+		// длиннее и файлового, иначе загрузка образа кластера или своего
+		// образа машины на хост через хаб обрывалась «i/o timeout» на
+		// 30-секундном чтении тела http.Server (или на 2-минутном
+		// потолке админ-группы).
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.Timeout(imageUploadTimeout))
+			r.Use(extendImageUploadDeadlines)
+			r.Use(s.auth.RequireAuth)
+			r.Use(s.auth.RequireAdmin)
+			r.Post("/hub/cluster-images/upload", s.handleClusterImageUpload)
+			r.Post("/hosts/{id}/vm/images/upload", s.proxyHost)
+		})
+
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.Timeout(files.TransferTimeout))
 			r.Use(extendTransferDeadlines)
@@ -239,7 +253,6 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/ai/prompts/diff", s.handleAIPromptDiff)
 					r.Post("/hub/hosts/{id}/apt-proxy", s.handleHostAptProxy)
 					r.Post("/hub/clusters", s.handleClusterCreate)
-					r.Post("/hub/cluster-images/upload", s.handleClusterImageUpload)
 					r.Post("/hub/cluster-presets", s.handleClusterPresetSave)
 					r.Delete("/hub/cluster-presets/{id}", s.handleClusterPresetDelete)
 					r.Delete("/hub/cluster-images/{name}", s.handleClusterImageDelete)
@@ -372,6 +385,22 @@ func securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "same-origin")
+		next.ServeHTTP(w, r)
+	})
+}
+
+// imageUploadTimeout — предел одной загрузки образа (кластера или
+// машины): 20 ГБ по 10 Мбит/с — это часы, а не минуты.
+const imageUploadTimeout = 6 * time.Hour
+
+// extendImageUploadDeadlines — то же, что extendTransferDeadlines, но на
+// imageUploadTimeout.
+func extendImageUploadDeadlines(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rc := http.NewResponseController(w)
+		deadline := time.Now().Add(imageUploadTimeout)
+		_ = rc.SetReadDeadline(deadline)
+		_ = rc.SetWriteDeadline(deadline)
 		next.ServeHTTP(w, r)
 	})
 }

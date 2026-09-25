@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Button, Checkbox, Input, InputNumber, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { api, useApi } from '../api'
+import { api, apiURL, useApi } from '../api'
 import type { Job, Me, VMImage, VMImageLocal, VMTemplate, VMSpec, VMTool, VMHostImage, VMNetwork } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal } from './ui'
 import { formatBytes } from './charts'
@@ -643,7 +643,10 @@ function AddImageModal({
     setError(null)
     setUploading(0)
     const xhr = new XMLHttpRequest()
-    xhr.open('POST', `/api/vm/images/upload?name=${encodeURIComponent(file.name)}`)
+    // apiURL, а не строка «/api/…»: через хаб путь хоста получает префикс
+    // /hosts/{id}, без него запрос уходил в сам хаб и получал «неизвестный
+    // метод API».
+    xhr.open('POST', apiURL(`/vm/images/upload?name=${encodeURIComponent(file.name)}`))
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) setUploading(Math.round((e.loaded / e.total) * 100))
     }
