@@ -403,6 +403,7 @@ var ruCatalog = map[string]string{
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",
 	"api.consoleBadTarget":                                "нельзя открыть консоль: %s %q",
+	"api.vncUnavailable":                                  "экран машины %s недоступен: %s — у машины должна быть графика VNC (graphics type=vnc)",
 	"api.fileNameSpecified":                               "не указано имя файла",
 	"api.hostStateReadingUnavailable":                     "чтение состояния хоста недоступно",
 	"api.imageManagementUnavailable":                      "работа с образами недоступна",

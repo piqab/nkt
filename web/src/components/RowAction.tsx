@@ -25,6 +25,7 @@ import {
   UploadOutlined,
   SafetyOutlined,
   CodeOutlined,
+  DesktopOutlined,
 } from '@ant-design/icons'
 
 /**
@@ -76,6 +77,7 @@ export const ACTION_ICON: Record<string, ReactNode> = {
   kill: <StopOutlined />,
   backup: <SafetyOutlined />,
   console: <CodeOutlined />,
+  screen: <DesktopOutlined />,
 }
 
 export function RowAction({

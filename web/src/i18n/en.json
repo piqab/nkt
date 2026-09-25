@@ -2514,5 +2514,22 @@
   },
   "commandModal": {
     "connectError": "Could not open the session on the host. Common causes: the web terminal is disabled (NKT_TERMINAL_ENABLED), demo (fixtures) mode, the object is not running, or no permission."
+  },
+  "vnc": {
+    "action": "screen",
+    "title": "Screen: {{name}}",
+    "viewOnly": "view only",
+    "password": "VNC password",
+    "send": "Send",
+    "lost": "The screen connection was lost.",
+    "failed": "VNC refused the connection.",
+    "state": {
+      "connecting": "connecting…",
+      "connected": "connected",
+      "disconnected": "disconnected",
+      "password": "VNC password required"
+    },
+    "hint": "Click the screen to send keyboard input to the machine. The machine needs VNC graphics (graphics type=vnc) and the web terminal must be enabled.",
+    "noConnect": "Could not connect to the machine's screen. Common causes: the machine has no VNC graphics (graphics type=vnc), the web terminal is disabled (NKT_TERMINAL_ENABLED), demo (fixtures) mode."
   }
 }

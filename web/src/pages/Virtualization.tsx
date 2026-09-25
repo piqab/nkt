@@ -7,6 +7,7 @@ import BlockTree from '../components/BlockTree'
 import { VersionHistory } from '../components/VersionHistory'
 import { BackupModal } from '../components/BackupModal'
 import { ConsoleModal } from '../components/ConsoleModal'
+import { VNCModal } from '../components/VNCModal'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
@@ -62,6 +63,7 @@ function vmColumns(
   del: (name: string) => Promise<void>,
   openBackup: (name: string) => void,
   openConsole: (name: string) => void,
+  openScreen: (name: string) => void,
   editXML: (name: string) => void,
 ): TableColumnsType<VirtualMachine> {
   const t = i18n.t.bind(i18n)
@@ -189,7 +191,10 @@ function vmColumns(
           )}
           <RowAction action="backup" label={t('backups.action')} onClick={() => openBackup(vm.name)} />
           {canControl && vmPowerState(vm.state) === 'running' && (
-            <RowAction action="console" label={t('console.action')} onClick={() => openConsole(vm.name)} />
+            <>
+              <RowAction action="console" label={t('console.action')} onClick={() => openConsole(vm.name)} />
+              <RowAction action="screen" label={t('vnc.action')} onClick={() => openScreen(vm.name)} />
+            </>
           )}
           {canControl && vm.persistent && (
             <>
@@ -220,6 +225,7 @@ export default function Virtualization({ me }: { me: Me }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [backupFor, setBackupFor] = useState<string | null>(null)
   const [consoleFor, setConsoleFor] = useState<string | null>(null)
+  const [screenFor, setScreenFor] = useState<string | null>(null)
   const [chooserOpen, setChooserOpen] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
@@ -337,7 +343,7 @@ export default function Virtualization({ me }: { me: Me }) {
             <DataTable<VirtualMachine>
               dataSource={allVMs}
               rowKey="name"
-              columns={vmColumns(canControl, busy, act, toggleAutostart, del, (name) => setBackupFor(name), (name) => setConsoleFor(name), (name) => setEditing(name))}
+              columns={vmColumns(canControl, busy, act, toggleAutostart, del, (name) => setBackupFor(name), (name) => setConsoleFor(name), (name) => setScreenFor(name), (name) => setEditing(name))}
             />
           </div>
         )}
@@ -360,6 +366,7 @@ export default function Virtualization({ me }: { me: Me }) {
       <VMImagesSection me={me} />
 
       {consoleFor && <ConsoleModal kind="vm" name={consoleFor} onClose={() => setConsoleFor(null)} />}
+      {screenFor && <VNCModal name={screenFor} onClose={() => setScreenFor(null)} />}
       {backupFor && (
         <BackupModal kind="vm" name={backupFor} canControl={canControl} onClose={() => setBackupFor(null)} onRestored={() => vms.reload()} />
       )}

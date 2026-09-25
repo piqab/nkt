@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.109 — 2026-09-25
+
+- **A virtual machine's screen in the browser (VNC).** A "screen" icon in
+  the row of a running machine opens its display right in an nkt window
+  (noVNC): an installer, BIOS, a desktop, a machine without network —
+  everything a serial console cannot show. Ctrl+Alt+Del, a "view only"
+  mode, a VNC password prompt when one is set. Works through the hub too:
+  the machine's VNC port listens on the host's 127.0.0.1, and nkt forwards
+  it over a WebSocket. The machine needs VNC graphics
+  (`graphics type=vnc` — nkt creates machines that way) and the web
+  terminal must be enabled.
+
 ## v1.10.108 — 2026-09-25
 
 - **A console inside containers and machines.** A "console" icon in the
