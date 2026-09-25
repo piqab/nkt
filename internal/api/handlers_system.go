@@ -268,10 +268,21 @@ func (s *Server) handleSandboxPackagesWS(w http.ResponseWriter, r *http.Request)
 	}
 	var script string
 	var err error
+	if op != "update" && op != "remove" {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("control.unknownOperation", op))
+		return
+	}
 	if op == "update" {
-		script, err = control.SandboxScript(op, nil, nil, q.Get("snap") == "1", q.Get("flatpak") == "1")
+		script, err = control.SandboxScript("update", nil, nil, q.Get("snap") == "1", q.Get("flatpak") == "1")
 	} else {
-		script, err = control.SandboxScript(op, split(q.Get("snap")), split(q.Get("flatpak")), false, false)
+		// В сценарий идут имена из списка установленного, а не строки
+		// запроса; неизвестное имя — ошибка.
+		snaps, flatpaks, bad := s.installedSandboxNames(r, split(q.Get("snap")), split(q.Get("flatpak")))
+		if bad != "" {
+			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("control.invalidPackageName", bad))
+			return
+		}
+		script, err = control.SandboxScript("remove", snaps, flatpaks, false, false)
 	}
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -287,4 +298,39 @@ func (s *Server) handleSandboxPackagesWS(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleSandboxPackagesStatus(w http.ResponseWriter, r *http.Request) {
 	active, finished, exitCode := s.sessionStatus("sandbox-pkg")
 	writeSessionStatus(w, active, finished, exitCode)
+}
+
+// installedSandboxNames — запрошенные snap и flatpak, замененные именами из
+// списка установленного (flatpak — по имени или идентификатору, дальше
+// идёт идентификатор). bad — первое неизвестное имя.
+func (s *Server) installedSandboxNames(r *http.Request, snaps, flatpaks []string) ([]string, []string, string) {
+	list := s.sandboxpkg.List(r.Context())
+	var snapNames, flatpakIDs []string
+	for _, p := range list.Packages {
+		switch p.Kind {
+		case "snap":
+			snapNames = append(snapNames, p.Name)
+		case "flatpak":
+			if p.ID != "" {
+				flatpakIDs = append(flatpakIDs, p.ID)
+			}
+			flatpakIDs = append(flatpakIDs, p.Name)
+		}
+	}
+	var outS, outF []string
+	for _, n := range snaps {
+		t, ok := trustedName(n, snapNames)
+		if !ok {
+			return nil, nil, n
+		}
+		outS = append(outS, t)
+	}
+	for _, n := range flatpaks {
+		t, ok := trustedName(n, flatpakIDs)
+		if !ok {
+			return nil, nil, n
+		}
+		outF = append(outF, t)
+	}
+	return outS, outF, ""
 }

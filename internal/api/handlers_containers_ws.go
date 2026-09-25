@@ -80,8 +80,22 @@ func (s *Server) handleContainerRunWS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	engine := s.containerEngine(r)
+	// В сценарий идёт имя из инвентаря, а не строка запроса.
+	kind := "docker"
+	if engine == "podman" {
+		kind = "podman"
+	}
+	trusted, found := s.consoleTarget(r, kind, name)
+	if !found {
+		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "control.invalidContainerName", name))
+		return
+	}
+	act := "start"
+	if action == "restart" {
+		act = "restart"
+	}
 	buildCmd := func() *exec.Cmd {
-		return unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, "bash", "-c", containerRunScript(engine, action, name))
+		return unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, "bash", "-c", containerRunScript(engine, act, trusted))
 	}
 	s.runUpdateSession(w, r, "container-run:"+engine+":"+name, buildCmd, "container."+action, name, s.cfg.TerminalIdleTimeout)
 }

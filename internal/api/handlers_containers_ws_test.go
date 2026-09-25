@@ -64,11 +64,11 @@ func TestInlineScriptsHaveNoBraceExpansion(t *testing.T) {
 // без ${…}.
 func TestConsoleArgv(t *testing.T) {
 	for kind, want := range map[string]string{
-		"docker": "docker exec -it -e TERM=xterm-256color -u app web sh -c",
-		"podman": "podman exec -it -e TERM=xterm-256color -u app web sh -c",
+		"docker": "docker exec -it -e TERM=xterm-256color web sh -c",
+		"podman": "podman exec -it -e TERM=xterm-256color web sh -c",
 		"vm":     "virsh -c qemu:///system console web --force",
 	} {
-		argv, ok := consoleArgv(kind, "web", map[bool]string{true: "app", false: ""}[kind != "vm"])
+		argv, ok := consoleArgv(kind, "web", false)
 		if !ok || !strings.HasPrefix(strings.Join(argv, " "), want) {
 			t.Errorf("%s: %v", kind, argv)
 		}
@@ -76,13 +76,21 @@ func TestConsoleArgv(t *testing.T) {
 			t.Errorf("%s: ${…} в команде", kind)
 		}
 	}
-	if argv, ok := consoleArgv("lxd", "c1", ""); !ok || !strings.Contains(strings.Join(argv, " "), "exec c1 --env TERM=xterm-256color -- sh -c") {
+	if argv, ok := consoleArgv("lxd", "c1", false); !ok || !strings.Contains(strings.Join(argv, " "), "exec c1 --env TERM=xterm-256color -- sh -c") {
 		t.Errorf("lxd: %v", argv)
 	}
-	for _, bad := range [][3]string{{"docker", "a;b", ""}, {"docker", "web", "root;x"}, {"kvm", "web", ""}} {
-		if _, ok := consoleArgv(bad[0], bad[1], bad[2]); ok {
+	// С пользователем: он не в argv, а в окружении; сценарий — константа.
+	argv, ok := consoleArgv("podman", "web", true)
+	if !ok || argv[0] != "sh" || argv[2] != consoleUserScript || argv[3] != "podman" || argv[4] != "web" {
+		t.Errorf("user: %v", argv)
+	}
+	for _, bad := range [][2]string{{"docker", "a;b"}, {"kvm", "web"}} {
+		if _, ok := consoleArgv(bad[0], bad[1], false); ok {
 			t.Errorf("принято %v", bad)
 		}
+	}
+	if _, ok := trustedName("x", []string{"a", "b"}); ok {
+		t.Error("trustedName")
 	}
 }
 

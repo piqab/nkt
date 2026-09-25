@@ -79,24 +79,29 @@ func List(root, kind, name string) ([]Entry, error) {
 	if !ValidKind(kind) || (name != "" && !ValidName(name)) {
 		return nil, msgs.Errorf("backup.badTarget", kind, name)
 	}
-	// Вид — из списка констант, а не строка запроса; имя — только после
-	// проверки: в путь попадает уже не пользовательский ввод.
-	kind = canonicalKind(kind)
-	if name != "" {
-		name = filepath.Base(name)
+	// Каталоги берутся из листинга root, а не из запроса: вид и имя из
+	// запроса только сравниваются с тем, что лежит на диске.
+	kindDir := ""
+	tops, err := os.ReadDir(root)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+	for _, e := range tops {
+		if e.IsDir() && e.Name() == kind {
+			kindDir = filepath.Join(root, e.Name())
+		}
+	}
+	if kindDir == "" {
+		return nil, nil
+	}
+	objs, err := os.ReadDir(kindDir)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
 	}
 	var dirs []string
-	if name != "" {
-		dirs = []string{Dir(root, kind, name)}
-	} else {
-		ents, err := os.ReadDir(filepath.Join(root, kind))
-		if err != nil && !os.IsNotExist(err) {
-			return nil, err
-		}
-		for _, e := range ents {
-			if e.IsDir() && ValidName(e.Name()) {
-				dirs = append(dirs, filepath.Join(root, kind, e.Name()))
-			}
+	for _, e := range objs {
+		if e.IsDir() && ValidName(e.Name()) && (name == "" || e.Name() == name) {
+			dirs = append(dirs, filepath.Join(kindDir, e.Name()))
 		}
 	}
 	var out []Entry
@@ -537,13 +542,3 @@ echo "--- lxc import as $NAME"
 lxc import "$WORK/instance.tar.gz" "$NAME"
 echo "--- done"
 `
-
-// canonicalKind — вид из Kinds (константа), совпадающий с kind.
-func canonicalKind(kind string) string {
-	for _, k := range Kinds {
-		if k == kind {
-			return k
-		}
-	}
-	return ""
-}

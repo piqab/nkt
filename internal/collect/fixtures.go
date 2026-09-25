@@ -416,9 +416,17 @@ func (f *Fixtures) PodmanAPI(_ context.Context, method, apiPath string, _ []byte
 	if strings.HasSuffix(slug, "_stats") {
 		candidates = append(candidates, "stats.json")
 	}
+	// Файл ищется в листинге каталога: в путь идёт имя с диска, а не
+	// строка из запроса.
+	dir := filepath.Join(f.root, ".podman")
+	entries, _ := os.ReadDir(dir)
 	for _, c := range candidates {
-		if raw, err := os.ReadFile(filepath.Join(f.root, ".podman", filepath.Base(c))); err == nil {
-			return raw, 200, nil
+		for _, e := range entries {
+			if e.Name() == c && !e.IsDir() {
+				if raw, err := os.ReadFile(filepath.Join(dir, e.Name())); err == nil {
+					return raw, 200, nil
+				}
+			}
 		}
 	}
 	return []byte(`{"message":"no such fixture"}`), 404, nil
