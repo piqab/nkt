@@ -108,3 +108,59 @@ func TestProxyHostRequiresAdmin(t *testing.T) {
 		}
 	})
 }
+
+// Загрузки образов вынесены в свою группу с длинным потолком: маршруты
+// должны остаться на месте (не 404) и за админской проверкой (viewer —
+// 403). Хост 999 не существует — админский запрос падает по другой
+// причине, но не на воротах хаба.
+func TestImageUploadRoutesGated(t *testing.T) {
+	db, err := store.Open(filepath.Join(t.TempDir(), "hub.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	cfg := &config.Config{AllowMutations: true, SessionTTL: time.Hour, CookieSecure: false, DataDir: t.TempDir()}
+	authSvc := auth.NewService(db, cfg)
+	hash, _ := auth.HashPassword("admin-password-1234")
+	if _, err := db.CreateUser(context.Background(), "admin", hash, store.RoleAdmin); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.CreateUser(context.Background(), "viewer", hash, store.RoleViewer); err != nil {
+		t.Fatal(err)
+	}
+	key, _ := secretbox.GenerateKey()
+	manager := NewManager(cfg, db, key, "test", slog.New(slog.DiscardHandler))
+	handler := New(Deps{Cfg: cfg, DB: db, Auth: authSvc, Hub: manager, Log: slog.Default()}).Handler()
+
+	login := func(username string) *http.Cookie {
+		rec := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, "/api/auth/login",
+			strings.NewReader(`{"username":"`+username+`","password":"admin-password-1234"}`))
+		req.Header.Set("Content-Type", "application/json")
+		handler.ServeHTTP(rec, req)
+		for _, c := range rec.Result().Cookies() {
+			if c.Name == auth.SessionCookie {
+				return c
+			}
+		}
+		t.Fatalf("login as %s: %d %s", username, rec.Code, rec.Body.String())
+		return nil
+	}
+	for _, path := range []string{"/api/hub/cluster-images/upload?name=x.qcow2", "/api/hosts/999/vm/images/upload?name=x.qcow2"} {
+		for _, tc := range []struct {
+			user string
+			want func(int) bool
+		}{
+			{"viewer", func(c int) bool { return c == http.StatusForbidden }},
+			{"admin", func(c int) bool { return c != http.StatusForbidden && c != http.StatusNotFound }},
+		} {
+			rec := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodPost, path, strings.NewReader("not an image"))
+			req.AddCookie(login(tc.user))
+			handler.ServeHTTP(rec, req)
+			if !tc.want(rec.Code) {
+				t.Errorf("%s %s: status %d (body %s)", tc.user, path, rec.Code, rec.Body.String())
+			}
+		}
+	}
+}
