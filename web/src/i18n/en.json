@@ -2498,5 +2498,21 @@
       "podman": "A copy gets its own volumes and publishes no ports. Over — the container is recreated.",
       "compose": "A copy is a <project>-<name> directory next to it with its own volumes. Over — the stack is stopped, the directory and volumes are replaced, then compose up."
     }
+  },
+  "console": {
+    "action": "console",
+    "title": "Console: {{name}}",
+    "open": "Open",
+    "userPlaceholder": "user (empty — as in the image)",
+    "userHint": "Which user to enter the container as (docker exec -u). Empty — the image user, usually root.",
+    "hint": {
+      "docker": "docker exec: bash if the image has it, otherwise sh. The web terminal must be enabled (NKT_TERMINAL_ENABLED).",
+      "podman": "podman exec: bash or sh. The web terminal must be enabled.",
+      "lxd": "lxc exec: bash or sh inside the instance. The web terminal must be enabled.",
+      "vm": "virsh console — the guest's serial console; exit with Ctrl+]. If the screen is empty, press Enter; if the console does not answer, the guest has no getty on ttyS0: systemctl enable --now serial-getty@ttyS0."
+    }
+  },
+  "commandModal": {
+    "connectError": "Could not open the session on the host. Common causes: the web terminal is disabled (NKT_TERMINAL_ENABLED), demo (fixtures) mode, the object is not running, or no permission."
   }
 }

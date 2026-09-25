@@ -13,6 +13,7 @@ import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 import CommandModal from '../components/CommandModal'
 import { EngineInstallBanner } from '../components/EngineInstallBanner'
 import ContainerLogsModal from '../components/ContainerLogsModal'
+import { ConsoleModal } from '../components/ConsoleModal'
 import { BackupModal } from '../components/BackupModal'
 
 export default function Podman({ me }: { me: Me }) {
@@ -37,6 +38,7 @@ export default function Podman({ me }: { me: Me }) {
 
   const [run, setRun] = useState<{ name: string; action: 'start' | 'restart'; outcome?: { ok: boolean; exitCode?: number } | null } | null>(null)
   const [logsFor, setLogsFor] = useState<string | null>(null)
+  const [consoleFor, setConsoleFor] = useState<string | null>(null)
   const [backupFor, setBackupFor] = useState<string | null>(null)
 
   async function runFinished() {
@@ -148,6 +150,9 @@ export default function Podman({ me }: { me: Me }) {
             />
           )}
           <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(c.name)} />
+          {canControl && containerPowerState(c.state) === 'running' && (
+            <RowAction action="console" label={t('console.action')} onClick={() => setConsoleFor(c.name)} />
+          )}
           <RowAction action="backup" label={t('backups.action')} onClick={() => setBackupFor(c.name)} />
           {canControl && (
             <RowAction
@@ -251,6 +256,7 @@ export default function Podman({ me }: { me: Me }) {
         />
       )}
       {logsFor && <ContainerLogsModal name={logsFor} base="/podman/containers" onClose={() => setLogsFor(null)} />}
+      {consoleFor && <ConsoleModal kind="podman" name={consoleFor} onClose={() => setConsoleFor(null)} />}
       {backupFor && (
         <BackupModal kind="podman" name={backupFor} canControl={canControl} onClose={() => setBackupFor(null)} onRestored={() => containers.reload()} />
       )}

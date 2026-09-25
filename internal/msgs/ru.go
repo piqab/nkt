@@ -402,6 +402,7 @@ var ruCatalog = map[string]string{
 	"api.backgroundJobsAreUnavailable":                    "фоновые задания недоступны",
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",
+	"api.consoleBadTarget":                                "нельзя открыть консоль: %s %q",
 	"api.fileNameSpecified":                               "не указано имя файла",
 	"api.hostStateReadingUnavailable":                     "чтение состояния хоста недоступно",
 	"api.imageManagementUnavailable":                      "работа с образами недоступна",

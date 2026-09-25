@@ -33,6 +33,10 @@ stop, delete.
 
 - libvirt domains: start, shut down, force off, reboot, autostart, delete
   with or without disks; machine addresses.
+- **Console** — an icon in the row of a running container (Docker,
+  Podman: `exec`, bash or sh, a user can be set), LXD instance (`lxc
+  exec`) and machine (serial console `virsh console`, exit with Ctrl+]).
+  The web terminal must be enabled.
 - **Backup** — an icon in the row of a machine and a container (Docker,
   Podman; a compose container — the whole stack): archives on the host in
   `/var/lib/netknownsthat/backups`, creation as a background job,

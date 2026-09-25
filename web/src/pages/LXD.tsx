@@ -11,6 +11,7 @@ import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 import { EngineInstallBanner } from '../components/EngineInstallBanner'
+import { ConsoleModal } from '../components/ConsoleModal'
 import { LXDImagePicker } from '../components/LXDImagePicker'
 
 export default function LXD({ me }: { me: Me }) {
@@ -19,6 +20,7 @@ export default function LXD({ me }: { me: Me }) {
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [creating, setCreating] = useState(false)
+  const [consoleFor, setConsoleFor] = useState<string | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
   // Раздел показывает снимок инвентаря: при входе он пересобирается сам,
@@ -100,6 +102,9 @@ export default function LXD({ me }: { me: Me }) {
                 onClick={() => act(i.name, a)}
               />
             ))}
+          {canControl && containerPowerState(i.status) === 'running' && (
+            <RowAction action="console" label={t('console.action')} onClick={() => setConsoleFor(i.name)} />
+          )}
           {canControl && (
             <RowAction
               action="delete"
@@ -189,6 +194,7 @@ export default function LXD({ me }: { me: Me }) {
           }}
         />
       )}
+      {consoleFor && <ConsoleModal kind="lxd" name={consoleFor} onClose={() => setConsoleFor(null)} />}
     </>
   )
 }
