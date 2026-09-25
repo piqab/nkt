@@ -41,6 +41,14 @@ window: text, quick `limits.cpu` and `limits.memory` fields, a diff
 before writing and version history with rollback. Next to it — the
 effective configuration with profiles (`--expanded`), read-only.
 
+**Port forwarding** (a `proxy` device) is added with "+" in the ports
+column and removed with the bin next to a port: a form builds the
+device, and it is written through the same configuration window — with
+a diff and a version in history. Below the instance list are LXD
+**networks** (create a bridge, delete a managed network), **images on
+the host** (delete, download in advance from `images:` or `ubuntu:` with
+live output) and **storage pools** (read-only).
+
 ## Libvirt (KVM virtual machines)
 
 ![Virtual machines](/screens/en/vms.png)

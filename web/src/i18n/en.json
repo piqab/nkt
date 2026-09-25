@@ -2570,6 +2570,47 @@
     "editNote": "configuration edit",
     "expanded": "with profiles",
     "expandedTitle": "{{name}} with profiles",
-    "expandedHint": "lxc config show --expanded: the effective configuration including keys and devices from profiles. Read-only — profile values are edited in the profile."
+    "expandedHint": "lxc config show --expanded: the effective configuration including keys and devices from profiles. Read-only — profile values are edited in the profile.",
+    "editNoop": "The instance's own configuration does not have it — the device probably comes from a profile (see \"with profiles\"). Edit it in the profile."
+  },
+  "lxdPort": {
+    "add": "Forward a port",
+    "title": "Forward a port into {{name}}",
+    "hint": "A proxy device: LXD listens on a host port and passes connections to a port inside the instance. The configuration with this device opens next — it is written after you review the diff.",
+    "protocol": "Protocol",
+    "listenAddr": "Host address",
+    "listenPort": "Host port",
+    "connectPort": "Instance port",
+    "continue": "Next — to the diff",
+    "remove": "Remove forwarding {{device}}",
+    "addIntro": "A proxy device was added to the configuration. Check it and press Save — a diff comes before writing.",
+    "removeIntro": "Device {{device}} was removed from the configuration. Press Save — a diff comes before writing."
+  },
+  "lxdRes": {
+    "networks": "LXD networks",
+    "newNetwork": "New network",
+    "loading": "Loading…",
+    "colName": "Name",
+    "colType": "Type",
+    "unmanaged": "not managed by LXD",
+    "colUsedBy": "Used by",
+    "netDeleteConfirm": "Delete network {{name}}? LXD refuses if instances or profiles use it.",
+    "netHint": "An LXD bridge with its own DHCP and NAT. auto lets LXD pick a free subnet, none means no address.",
+    "addrHint": "auto, none or the bridge address with a mask, e.g. 10.10.0.1/24",
+    "create": "Create",
+    "images": "Images on the host",
+    "downloadImage": "Download image",
+    "noImages": "No images on the host — they are downloaded on the first instance launch or here in advance.",
+    "colAlias": "Alias",
+    "colDescription": "Description",
+    "colSize": "Size",
+    "colFingerprint": "Fingerprint",
+    "imageDeleteConfirm": "Delete image {{name}} from the host? Instances created from it are not affected.",
+    "downloadHint": "The image is downloaded to the host in advance (lxc image copy … local: --auto-update) and keeps itself updated: a new instance starts from it without waiting for a download.",
+    "download": "Download",
+    "downloadTitle": "Downloading {{ref}}",
+    "storage": "Storage pools",
+    "colDriver": "Driver",
+    "colSource": "Source"
   }
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Button, Input } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -17,10 +17,17 @@ export default function LXDConfigModal({
   canControl,
   onClose,
   onSaved,
+  edit,
+  intro,
 }: {
   name: string
   me: Me
   canControl: boolean
+  /** Заготовка черновика из сохранённого текста (добавить/убрать порт) —
+   * запись всё равно через дифф. */
+  edit?: (saved: string) => string
+  /** Пояснение над редактором вместо общего. */
+  intro?: ReactNode
   onClose: () => void
   onSaved: () => void
 }) {
@@ -41,7 +48,7 @@ export default function LXDConfigModal({
     )
   }
   const saved = cfg.data.config.content
-  const text = draft ?? saved
+  const text = draft ?? (edit ? edit(saved) : saved)
 
   async function save(): Promise<boolean> {
     setBusy(true)
@@ -74,7 +81,8 @@ export default function LXDConfigModal({
         onClose={onClose}
         fields={
           <>
-            <p className="small muted">{t('lxdConfig.hint')}</p>
+            {intro ?? <p className="small muted">{t('lxdConfig.hint')}</p>}
+            {edit && draft === null && edit(saved) === saved && <Banner kind="warn">{t('lxdConfig.editNoop')}</Banner>}
             <div className="row" style={{ gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
               <span className="small">limits.cpu</span>
               <Input size="small" style={{ width: '7rem' }} value={limit('limits.cpu')} placeholder="2" onChange={(e) => setLimit('limits.cpu', e.target.value)} />
@@ -168,4 +176,63 @@ function configBlock(text: string): { start: number; end: number; body: string }
     end = lineEnd
   }
   return { start: m.index, end, body: text.slice(bodyStart, end) }
+}
+
+/** Блок devices: — как configBlock, для устройств. */
+function devicesBlock(text: string): { start: number; end: number; body: string } {
+  const m = /^devices:[ \t]*(\{\})?[ \t]*\n/m.exec(text)
+  if (!m) return { start: -1, end: -1, body: '' }
+  const bodyStart = m.index + m[0].length
+  if (m[1]) return { start: m.index, end: bodyStart, body: '' }
+  let end = bodyStart
+  while (end < text.length && text.startsWith('  ', end)) {
+    const nl = text.indexOf('\n', end)
+    end = nl < 0 ? text.length : nl + 1
+  }
+  return { start: m.index, end, body: text.slice(bodyStart, end) }
+}
+
+/** Устройства из блока devices: имя → строки (с отступом). */
+function splitDevices(body: string): [string, string[]][] {
+  const out: [string, string[]][] = []
+  for (const l of body.split('\n')) {
+    if (l === '') continue
+    const m = /^  (\S[^:]*):\s*$/.exec(l)
+    if (m) out.push([m[1], []])
+    else if (out.length) out[out.length - 1][1].push(l)
+  }
+  return out
+}
+
+function joinDevices(text: string, start: number, end: number, devs: [string, string[]][]): string {
+  const body = devs.map(([n, ls]) => `  ${n}:\n` + ls.map((l) => l + '\n').join('')).join('')
+  return text.slice(0, start) + (devs.length ? 'devices:\n' : 'devices: {}\n') + body + text.slice(end)
+}
+
+/** Добавляет (или заменяет) устройство; ключи — по алфавиту, как у lxc. */
+export function setYamlDevice(text: string, name: string, fields: Record<string, string>): string {
+  const b = devicesBlock(text)
+  if (b.start < 0) return text
+  const devs = splitDevices(b.body).filter(([n]) => n !== name)
+  const lines = Object.keys(fields)
+    .sort()
+    .map((k) => `    ${k}: ${fields[k]}`)
+  devs.push([name, lines])
+  devs.sort((a, c) => a[0].localeCompare(c[0]))
+  return joinDevices(text, b.start, b.end, devs)
+}
+
+/** Убирает устройство из блока devices:. */
+export function removeYamlDevice(text: string, name: string): string {
+  const b = devicesBlock(text)
+  if (b.start < 0) return text
+  const devs = splitDevices(b.body)
+  const left = devs.filter(([n]) => n !== name)
+  if (left.length === devs.length) return text
+  return joinDevices(text, b.start, b.end, left)
+}
+
+/** Имена устройств — чтобы не занять существующее. */
+export function yamlDeviceNames(text: string): string[] {
+  return splitDevices(devicesBlock(text).body).map(([n]) => n)
 }

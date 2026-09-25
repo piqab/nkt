@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.113 — 2026-09-25
+
+- **LXD port forwarding.** "+" in the ports column opens a form (tcp/udp,
+  host address and port, instance port), the bin next to a port removes
+  it. Writing goes through the configuration window: you see the added
+  or removed `proxy` device, a diff before writing, a version in history.
+  If the device comes from a profile, the window says so.
+- **LXD networks** — a card below the instances: bridges with addresses,
+  NAT and who uses them; creating a bridge (`auto`, `none` or your own
+  CIDR), deleting a managed network.
+- **Images on the host** — a list with size and fingerprint, delete and
+  download in advance (`lxc image copy … local: --auto-update`) with live
+  output: a new instance from such an image starts without waiting for a
+  download.
+- **LXD storage pools** — driver, source, size, who uses them.
+
 ## v1.10.112 — 2026-09-25
 
 - **LXD instance configuration in a window.** The "edit" icon in the row

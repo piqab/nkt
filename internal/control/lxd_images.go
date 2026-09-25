@@ -26,6 +26,8 @@ type LXDImage struct {
 	Size        int64  `json:"size"`
 	OS          string `json:"os"`
 	Release     string `json:"release"`
+	// Fingerprint — у локальных: для удаления (lxc image delete).
+	Fingerprint string `json:"fingerprint,omitempty"`
 }
 
 // LXDImageRemotes — откуда брать образы: «local» — уже скачанные на хост,
@@ -154,6 +156,7 @@ func parseLXDImages(out, remote, arch string) ([]LXDImage, error) {
 		list = append(list, LXDImage{
 			Ref: ref, Alias: alias, Remote: remote, Description: im.Properties["description"],
 			Type: t, Arch: im.Architecture, Size: im.Size, OS: im.Properties["os"], Release: im.Properties["release"],
+			Fingerprint: localFingerprint(remote, im.Fingerprint),
 		})
 	}
 	sort.Slice(list, func(i, j int) bool {

@@ -6,6 +6,7 @@ import (
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
 
@@ -224,4 +225,90 @@ func (s *Server) handleLXDConfigWrite(w http.ResponseWriter, r *http.Request) {
 	}
 	s.rescanLater()
 	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version_id": id})
+}
+
+// handleLXDNetworks — GET /lxd/networks.
+func (s *Server) handleLXDNetworks(w http.ResponseWriter, r *http.Request) {
+	list, err := s.lxd.ListNetworks(r.Context())
+	if err != nil {
+		writeErr(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"networks": list})
+}
+
+// handleLXDStorage — GET /lxd/storage.
+func (s *Server) handleLXDStorage(w http.ResponseWriter, r *http.Request) {
+	list, err := s.lxd.ListStoragePools(r.Context())
+	if err != nil {
+		writeErr(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"pools": list})
+}
+
+// handleLXDNetworkCreate — POST /lxd/networks {name, ipv4, ipv6}.
+func (s *Server) handleLXDNetworkCreate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+		IPv4 string `json:"ipv4"`
+		IPv6 string `json:"ipv6"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.lxd.CreateNetwork(r.Context(), auth.Username(r.Context()), req.Name, req.IPv4, req.IPv6); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleLXDNetworkDelete — DELETE /lxd/networks/{name}.
+func (s *Server) handleLXDNetworkDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.lxd.DeleteNetwork(r.Context(), auth.Username(r.Context()), chi.URLParam(r, "name")); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleLXDImageDelete — DELETE /lxd/images/{fp}.
+func (s *Server) handleLXDImageDelete(w http.ResponseWriter, r *http.Request) {
+	if err := s.lxd.DeleteImage(r.Context(), auth.Username(r.Context()), chi.URLParam(r, "fp")); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleLXDImageCopyWS — GET /lxd/images/copy/ws?ref=images:debian/12:
+// скачивание образа на хост заранее (lxc image copy … local:) с выводом
+// прогресса; разрыв соединения скачивание не прерывает.
+func (s *Server) handleLXDImageCopyWS(w http.ResponseWriter, r *http.Request) {
+	ref := r.URL.Query().Get("ref")
+	if !control.ValidLXDImageRef(ref) {
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "control.lxdBadImageRef", ref))
+		return
+	}
+	if s.cfg.Mode == config.ModeFixtures {
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "terminal.fixturesDisabled"))
+		return
+	}
+	lxc := "lxc"
+	if p, err := exec.LookPath("lxc"); err == nil {
+		lxc = p
+	} else if _, err := os.Stat("/snap/bin/lxc"); err == nil {
+		lxc = "/snap/bin/lxc"
+	}
+	argv := []string{lxc, "image", "copy", ref, "local:", "--copy-aliases", "--auto-update"}
+	// Образ машины — с --vm: без флага lxc берёт контейнерный вариант.
+	if r.URL.Query().Get("vm") == "1" {
+		argv = append(argv, "--vm")
+	}
+	build := func() *exec.Cmd {
+		return unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, argv...)
+	}
+	s.runUpdateSession(w, r, "lxd-image-copy:"+ref, build, "lxd.imageCopy", ref, s.cfg.TerminalIdleTimeout)
 }
