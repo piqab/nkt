@@ -15,10 +15,12 @@ import { EngineInstallBanner } from '../components/EngineInstallBanner'
 import ContainerLogsModal from '../components/ContainerLogsModal'
 import { ConsoleModal } from '../components/ConsoleModal'
 import { BackupModal } from '../components/BackupModal'
+import { useJobLauncher } from '../components/useJobLauncher'
 
 export default function Podman({ me }: { me: Me }) {
   const { t } = useTranslation()
   const containers = useApi<{ containers: PodmanContainer[] }>('/podman/containers', 30_000)
+  const launcher = useJobLauncher(() => void api('/inventory/refresh', { method: 'POST' }).then(() => containers.reload()))
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [creating, setCreating] = useState(false)
@@ -239,12 +241,13 @@ export default function Podman({ me }: { me: Me }) {
       {creating && (
         <CreateContainerForm
           onClose={() => setCreating(false)}
-          onCreated={() => {
+          onSubmit={async (values) => {
+            await launcher.start('/podman/containers', values)
             setCreating(false)
-            containers.reload()
           }}
         />
       )}
+      {launcher.modal}
       {run && (
         <CommandModal
           title={t('docker.runTitle', { action: t(`docker.action.${run.action}`, { defaultValue: run.action }), name: run.name })}
@@ -266,7 +269,7 @@ export default function Podman({ me }: { me: Me }) {
 
 type CreateContainerValues = { image: string; name: string }
 
-function CreateContainerForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateContainerForm({ onClose, onSubmit }: { onClose: () => void; onSubmit: (values: CreateContainerValues) => Promise<void> }) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -275,8 +278,7 @@ function CreateContainerForm({ onClose, onCreated }: { onClose: () => void; onCr
     setBusy(true)
     setError(null)
     try {
-      await api('/podman/containers', { method: 'POST', body: values })
-      onCreated()
+      await onSubmit(values)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

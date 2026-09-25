@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.118 — 2026-09-25
+
+- **Creating an LXD instance or a Podman container is a background job.**
+  The standard job log window opens right away: the command, its output,
+  image download percentages. Closing the window does not stop the
+  creation; the job is visible in "Jobs" (with retry). Before, the window
+  just spun, and a long image download could hit the command timeout.
+- **A shared "run commands" job** — the base that package and engine
+  installs move to next.
+- **The job log through the hub** is now a live stream, not polling.
+
 ## v1.10.117 — 2026-09-25
 
 - **Windows can be resized.** Every window has a corner at the bottom

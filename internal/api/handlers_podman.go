@@ -1,6 +1,8 @@
 package api
 
 import (
+	"github.com/piqab/nkt/internal/cmdjob"
+	"github.com/piqab/nkt/internal/control"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -26,6 +28,20 @@ func (s *Server) handlePodmanContainerCreate(w http.ResponseWriter, r *http.Requ
 	var req podmanCreateRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if wantsJob(r) {
+		steps, err := control.PodmanCreateCommands(req.Image, req.Name)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		podman := hostTool("podman")
+		cmds := []cmdjob.Command{
+			{Argv: append([]string{podman}, steps[0]...), StepKey: "podman.stepPull", StepArgs: []any{req.Image}},
+			{Argv: append([]string{podman}, steps[1]...), StepKey: "podman.stepRun", StepArgs: []any{req.Name}},
+		}
+		s.startCmdJob(w, r, "podman.jobCreate", []any{req.Name}, "podman:create:"+req.Name, cmdjob.Params{Commands: cmds, Refresh: true}, "podman.create", req.Name)
 		return
 	}
 	user := auth.Username(r.Context())

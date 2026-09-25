@@ -657,7 +657,7 @@
         "lxc",
         "launch"
       ],
-      "stdout": "Creating instance\nStarting instance\n",
+      "stdout": "Creating instance\nRetrieving image: rootfs: 35% (8.2MB/s)\nRetrieving image: rootfs: 100% (9.1MB/s)\nStarting instance\n",
       "exit_code": 0,
       "simulated": true
     },
@@ -1091,6 +1091,24 @@
         "restore"
       ],
       "stdout": "",
+      "exit_code": 0,
+      "simulated": true
+    },
+    {
+      "match": [
+        "podman",
+        "pull"
+      ],
+      "stdout": "Trying to pull docker.io/library/nginx:latest...\nGetting image source signatures\nCopying blob 8a1e25ce7c4f done\nWriting manifest to image destination\n",
+      "exit_code": 0,
+      "simulated": true
+    },
+    {
+      "match": [
+        "podman",
+        "run"
+      ],
+      "stdout": "4f1c2d3e5a6b\n",
       "exit_code": 0,
       "simulated": true
     }

@@ -27,6 +27,11 @@ Podman — containers through its own socket, the same lifecycle as Docker.
 LXD — containers and virtual machines with one tool: `launch`, start,
 stop, delete.
 
+Creating an LXD instance or a Podman container runs as a background job:
+the job log window opens right away with image download percentages,
+closing it does not stop the creation, and the job stays in "Jobs" — on
+the host and through the hub.
+
 LXD instance rows show memory and limits (`limits.memory`,
 `limits.cpu`), disk, forwarded ports (`proxy` devices) with "probe
 port", autostart as one button (`boot.autostart`), **logs** (the journal

@@ -18,6 +18,7 @@ import LXDSnapshotsModal from '../components/LXDSnapshotsModal'
 import LXDConfigModal, { removeYamlDevice } from '../components/LXDConfigModal'
 import LXDPortModal from '../components/LXDPortModal'
 import { SpiceModal } from '../components/SpiceModal'
+import { useJobLauncher } from '../components/useJobLauncher'
 import { LXDResources } from '../components/LXDResources'
 import { ProbeLink } from '../components/PortProbe'
 import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
@@ -36,6 +37,9 @@ export default function LXD({ me }: { me: Me }) {
   const [configFor, setConfigFor] = useState<{ name: string; edit?: (saved: string) => string; intro?: string } | null>(null)
   const [portFor, setPortFor] = useState<string | null>(null)
   const [screenFor, setScreenFor] = useState<string | null>(null)
+  // Создание — фоновым заданием: окно журнала живёт на странице, а не в
+  // форме, чтобы пережить её закрытие.
+  const launcher = useJobLauncher(() => void api('/inventory/refresh', { method: 'POST' }).then(() => instances.reload()))
 
   async function toggleAutostart(name: string, on: boolean) {
     setBusy(`${name}:autostart`)
@@ -291,14 +295,15 @@ export default function LXD({ me }: { me: Me }) {
       {creating && (
         <CreateInstanceForm
           onClose={() => setCreating(false)}
-          onCreated={() => {
+          onSubmit={async (values) => {
+            await launcher.start('/lxd/instances', values)
             setCreating(false)
-            instances.reload()
           }}
         />
       )}
       {consoleFor && <ConsoleModal kind="lxd" name={consoleFor} onClose={() => setConsoleFor(null)} />}
       {logsFor && <LXDLogsModal name={logsFor} onClose={() => setLogsFor(null)} />}
+      {launcher.modal}
       {configFor && (
         <LXDConfigModal
           key={configFor.name + (configFor.intro ?? '')}
@@ -346,7 +351,7 @@ export default function LXD({ me }: { me: Me }) {
 
 type CreateInstanceValues = { image: string; name: string; vm?: boolean }
 
-function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+function CreateInstanceForm({ onClose, onSubmit }: { onClose: () => void; onSubmit: (values: CreateInstanceValues & { vm: boolean }) => Promise<void> }) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -357,8 +362,7 @@ function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCre
     setBusy(true)
     setError(null)
     try {
-      await api('/lxd/instances', { method: 'POST', body: { ...values, vm } })
-      onCreated()
+      await onSubmit({ ...values, vm })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

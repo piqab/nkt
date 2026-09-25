@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"regexp"
 	"strings"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -116,4 +117,20 @@ func (m *PodmanManager) DeleteContainer(ctx context.Context, user, name string, 
 		return fmt.Errorf("podman delete %s: HTTP %d", name, code)
 	}
 	return nil
+}
+
+var podmanImageRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,254}$`)
+var podmanNameRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$`)
+
+// PodmanCreateCommands — задание создания контейнера: скачать образ и
+// запустить (podman run -d), с проверкой имени и ссылки на образ.
+func PodmanCreateCommands(image, name string) ([][]string, error) {
+	image = strings.TrimSpace(image)
+	if !podmanImageRe.MatchString(image) {
+		return nil, msgs.Errorf("control.specifyImage")
+	}
+	if !podmanNameRe.MatchString(name) {
+		return nil, msgs.Errorf("control.invalidContainerName", name)
+	}
+	return [][]string{{"pull", image}, {"run", "-d", "--name", name, image}}, nil
 }
