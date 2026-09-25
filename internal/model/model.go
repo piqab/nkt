@@ -386,6 +386,8 @@ type VirtualMachine struct {
 	MemoryKB   int64        `json:"memory_kb,omitempty"`
 	Disks      []VMDisk     `json:"disks,omitempty"`
 	Networks   []VMNetIface `json:"networks,omitempty"`
+	// Graphics — типы экранов машины из XML: vnc, spice (порядок как в XML).
+	Graphics []string `json:"graphics,omitempty"`
 }
 
 // FirewallPolicy is a chain's default policy plus its counters.

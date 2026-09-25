@@ -115,6 +115,8 @@ func (s *Server) Handler() http.Handler {
 			"/lxd/instances/{name}/logs/ws",
 			"/lxd/images/copy/ws",
 			"/vms/{name}/vnc/ws",
+			"/vms/{name}/spice/ws",
+			"/lxd/instances/{name}/spice/ws",
 			"/terminal/btop/ws",
 			"/updates/ws",
 			"/firewall/ufw-install/ws",

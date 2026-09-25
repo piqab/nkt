@@ -403,6 +403,8 @@ var ruCatalog = map[string]string{
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",
 	"api.consoleBadTarget":                                "нельзя открыть консоль: %s %q",
+	"api.spiceUnavailable":                                "SPICE машины %s недоступен: %s — нужна графика spice с обычным (не только TLS) портом, машина должна работать",
+	"api.lxdSpiceMissing":                                 "у %s нет SPICE-сокета — экран есть только у работающей виртуальной машины LXD",
 	"api.vncUnavailable":                                  "экран машины %s недоступен: %s — у машины должна быть графика VNC (graphics type=vnc)",
 	"api.fileNameSpecified":                               "не указано имя файла",
 	"api.hostStateReadingUnavailable":                     "чтение состояния хоста недоступно",

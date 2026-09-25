@@ -404,6 +404,8 @@ var enCatalog = map[string]string{
 	"api.curlInstalledHost":                               "curl is not installed on the host",
 	"api.emptyCommand":                                    "empty command",
 	"api.consoleBadTarget":                                "cannot open a console: %s %q",
+	"api.spiceUnavailable":                                "SPICE of machine %s is unavailable: %s — it needs spice graphics with a plain (not TLS-only) port, and the machine must be running",
+	"api.lxdSpiceMissing":                                 "%s has no SPICE socket — only a running LXD virtual machine has a screen",
 	"api.vncUnavailable":                                  "the screen of machine %s is unavailable: %s — the machine needs VNC graphics (graphics type=vnc)",
 	"api.fileNameSpecified":                               "file name not specified",
 	"api.hostStateReadingUnavailable":                     "host state reading is unavailable",

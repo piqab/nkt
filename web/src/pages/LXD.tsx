@@ -17,6 +17,7 @@ import { BackupModal } from '../components/BackupModal'
 import LXDSnapshotsModal from '../components/LXDSnapshotsModal'
 import LXDConfigModal, { removeYamlDevice } from '../components/LXDConfigModal'
 import LXDPortModal from '../components/LXDPortModal'
+import { SpiceModal } from '../components/SpiceModal'
 import { LXDResources } from '../components/LXDResources'
 import { ProbeLink } from '../components/PortProbe'
 import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
@@ -34,6 +35,7 @@ export default function LXD({ me }: { me: Me }) {
   const [snapsFor, setSnapsFor] = useState<LXDInstance | null>(null)
   const [configFor, setConfigFor] = useState<{ name: string; edit?: (saved: string) => string; intro?: string } | null>(null)
   const [portFor, setPortFor] = useState<string | null>(null)
+  const [screenFor, setScreenFor] = useState<string | null>(null)
 
   async function toggleAutostart(name: string, on: boolean) {
     setBusy(`${name}:autostart`)
@@ -201,6 +203,9 @@ export default function LXD({ me }: { me: Me }) {
           {canControl && containerPowerState(i.status) === 'running' && (
             <RowAction action="console" label={t('console.action')} onClick={() => setConsoleFor(i.name)} />
           )}
+          {canControl && i.type === 'virtual-machine' && containerPowerState(i.status) === 'running' && (
+            <RowAction action="screen" label={t('screen.action')} onClick={() => setScreenFor(i.name)} />
+          )}
           {canControl && (
             <RowAction
               action="delete"
@@ -304,6 +309,13 @@ export default function LXD({ me }: { me: Me }) {
           canControl={canControl}
           onClose={() => setConfigFor(null)}
           onSaved={() => void api('/inventory/refresh', { method: 'POST' }).then(() => instances.reload())}
+        />
+      )}
+      {screenFor && (
+        <SpiceModal
+          title={t('vnc.title', { name: screenFor })}
+          wsPath={`/lxd/instances/${encodeURIComponent(screenFor)}/spice/ws`}
+          onClose={() => setScreenFor(null)}
         />
       )}
       {portFor && (

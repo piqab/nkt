@@ -2612,5 +2612,17 @@
     "storage": "Storage pools",
     "colDriver": "Driver",
     "colSource": "Source"
+  },
+  "screen": {
+    "action": "Screen (SPICE)",
+    "addVNC": "Add VNC",
+    "addVNCIntro": "VNC graphics on 127.0.0.1 were added to the machine XML — check and save (a diff comes before writing). The new graphics appear after a full shutdown and start of the machine: a reboot from inside is not enough.",
+    "noGraphics": "The machine has no graphics (neither VNC nor SPICE) — there is no screen to show. You can add VNC: the XML editor opens with a diff."
+  },
+  "spice": {
+    "noConnect": "Could not connect within 15 seconds. The machine must be running; for libvirt it needs spice graphics with a plain port, for LXD it must be a virtual machine. Details are in the nkt log.",
+    "lost": "the SPICE connection was lost",
+    "loadFailed": "could not load the spice-html5 client: {{error}}",
+    "hint": "The spice-html5 client (LGPL-3.0). The keyboard works after a click on the screen. The screen has the machine's size; the rest scrolls."
   }
 }

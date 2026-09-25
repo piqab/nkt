@@ -74,8 +74,13 @@ func (s *Server) handleVMVNCWS(w http.ResponseWriter, r *http.Request) {
 // proxyWSToTCP принимает WebSocket и пересылает байты в обе стороны до
 // addr; закрытие любой стороны или бездействие дольше idle — конец.
 func proxyWSToTCP(w http.ResponseWriter, r *http.Request, addr string, idle time.Duration) {
+	proxyWSTo(w, r, "tcp", addr, idle)
+}
+
+// proxyWSTo — то же для любой сети: tcp или unix (сокет SPICE машины LXD).
+func proxyWSTo(w http.ResponseWriter, r *http.Request, network, addr string, idle time.Duration) {
 	var d net.Dialer
-	tcp, err := d.DialContext(r.Context(), "tcp", addr)
+	tcp, err := d.DialContext(r.Context(), network, addr)
 	if err != nil {
 		writeError(w, http.StatusBadGateway, err.Error())
 		return

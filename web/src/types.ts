@@ -306,6 +306,7 @@ export interface VirtualMachine {
   memory_kb?: number
   disks?: VMDisk[]
   networks?: VMNetIface[]
+  graphics?: string[]
 }
 
 export interface DockerNetwork {

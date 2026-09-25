@@ -7,7 +7,7 @@ import BlockTree from '../components/BlockTree'
 import { VersionHistory } from '../components/VersionHistory'
 import { BackupModal } from '../components/BackupModal'
 import { ConsoleModal } from '../components/ConsoleModal'
-import { VNCModal } from '../components/VNCModal'
+import { VMScreenModal, addVNCGraphics } from '../components/VMScreenModal'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
@@ -226,6 +226,8 @@ export default function Virtualization({ me }: { me: Me }) {
   const [backupFor, setBackupFor] = useState<string | null>(null)
   const [consoleFor, setConsoleFor] = useState<string | null>(null)
   const [screenFor, setScreenFor] = useState<string | null>(null)
+  // Заготовка правки XML (добавить VNC) — запись всё равно через дифф.
+  const [editPrefill, setEditPrefill] = useState<{ edit: (s: string) => string; intro: string } | null>(null)
   const [chooserOpen, setChooserOpen] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
@@ -366,7 +368,18 @@ export default function Virtualization({ me }: { me: Me }) {
       <VMImagesSection me={me} />
 
       {consoleFor && <ConsoleModal kind="vm" name={consoleFor} onClose={() => setConsoleFor(null)} />}
-      {screenFor && <VNCModal name={screenFor} onClose={() => setScreenFor(null)} />}
+      {screenFor && (
+        <VMScreenModal
+          name={screenFor}
+          graphics={vms.data?.vms.find((v) => v.name === screenFor)?.graphics}
+          onClose={() => setScreenFor(null)}
+          onAddVNC={() => {
+            setEditPrefill({ edit: addVNCGraphics, intro: t('screen.addVNCIntro') })
+            setEditing(screenFor)
+            setScreenFor(null)
+          }}
+        />
+      )}
       {backupFor && (
         <BackupModal kind="vm" name={backupFor} canControl={canControl} onClose={() => setBackupFor(null)} onRestored={() => vms.reload()} />
       )}
@@ -374,9 +387,15 @@ export default function Virtualization({ me }: { me: Me }) {
         <VMEditor
           name={editing}
           me={me}
-          onClose={() => setEditing(null)}
+          edit={editPrefill?.edit}
+          intro={editPrefill?.intro}
+          onClose={() => {
+            setEditing(null)
+            setEditPrefill(null)
+          }}
           onSaved={() => {
             setEditing(null)
+            setEditPrefill(null)
             vms.reload()
           }}
         />
@@ -523,9 +542,14 @@ function VMEditor({
   me,
   onClose,
   onSaved,
+  edit,
+  intro,
 }: {
   name: string
   me: Me
+  /** Заготовка черновика из текущего XML (добавить VNC). */
+  edit?: (xml: string) => string
+  intro?: string
   /** Pre-filled by the wizard; falls back to the plain skeleton when the
    * operator went the raw-XML route instead. */
   initialContent?: string
@@ -551,7 +575,7 @@ function VMEditor({
   // текст.
   const [tab, setTab] = useState<'text' | 'blocks' | 'history'>('text')
 
-  const content = draft ?? existing.data?.content ?? (isNew ? initialContent ?? domainXMLSkeleton(name) : '')
+  const content = draft ?? (existing.data ? (edit ? edit(existing.data.content) : existing.data.content) : isNew ? initialContent ?? domainXMLSkeleton(name) : '')
 
   async function save() {
     // Новой машине сравнивать не с чем — сразу запись.
@@ -638,6 +662,7 @@ function VMEditor({
             />
           ) : (
             <>
+          {intro && <Banner kind="info">{intro}</Banner>}
           {error && (
             <Banner kind="error">
               {error}
