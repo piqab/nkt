@@ -172,6 +172,8 @@ NAME=%s
 mkdir -p "$DIR"
 rm -rf "$WORK"; mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT
+TARCP=(--checkpoint=100 "--checkpoint-action=echo=@@tarcp %%u")
+total() { local label=$1; shift; echo "@@total $(du -sbc "$@" 2>/dev/null | tail -1 | cut -f1) $label"; }
 manifest() { printf '{"kind":"%%s","name":"%%s","created":"%%s","files":[%%s]}\n' "$1" "$NAME" "$(date -u +%%Y-%%m-%%dT%%H:%%M:%%SZ)" "$2" > "$WORK/manifest.json"; }
 `, sh(dir), base, sh(out), sh(p.Name))
 	var body string
@@ -194,7 +196,8 @@ manifest() { printf '{"kind":"%%s","name":"%%s","created":"%%s","files":[%%s]}\n
 	}
 	tail := `
 echo "--- tar: $OUT"
-tar -C "$WORK" -cf "$OUT.tmp" .
+total "archive $(basename "$OUT")" "$WORK"
+tar -C "$WORK" "${TARCP[@]}" -cf "$OUT.tmp" .
 mv "$OUT.tmp" "$OUT"
 ls -l "$OUT"
 echo "--- done"
@@ -266,7 +269,7 @@ IMG="nkt-backup/$NAME:$(date +%Y%m%d%H%M%S)"
 IMG=$(echo "$IMG" | tr 'A-Z' 'a-z')
 echo "--- commit $NAME -> $IMG"
 ENGINE commit "$NAME" "$IMG" >/dev/null
-echo "--- save image"
+echo "@@phase save image $IMG"
 ENGINE save -o "$WORK/image.tar" "$IMG"
 ENGINE rmi "$IMG" >/dev/null || true
 echo "$IMG" > "$WORK/image.ref"
@@ -275,7 +278,8 @@ mkdir -p "$WORK/volumes"
 for vol in $(ENGINE inspect -f '{{range .Mounts}}{{if eq .Type "volume"}}{{.Name}} {{end}}{{end}}' "$NAME"); do
   mp=$(ENGINE volume inspect -f '{{.Mountpoint}}' "$vol")
   echo "--- volume $vol ($mp)"
-  tar -C "$mp" -czf "$WORK/volumes/$vol.tgz" .
+  total "volume $vol" "$mp"
+  tar -C "$mp" "${TARCP[@]}" -czf "$WORK/volumes/$vol.tgz" .
   files="$files\"volumes/$vol.tgz\","
 done
 manifest ENGINE "${files%,}"
@@ -287,20 +291,22 @@ const composeBackupScript = `
 command -v docker >/dev/null || { echo "docker is missing"; exit 1; }
 [ -d "$PROJECT_DIR" ] || { echo "no such directory: $PROJECT_DIR"; exit 1; }
 echo "--- project dir $PROJECT_DIR"
-tar -C "$(dirname "$PROJECT_DIR")" -czf "$WORK/project.tgz" "$(basename "$PROJECT_DIR")"
+total "project $PROJECT_DIR" "$PROJECT_DIR"
+tar "${TARCP[@]}" -C "$(dirname "$PROJECT_DIR")" -czf "$WORK/project.tgz" "$(basename "$PROJECT_DIR")"
 echo "$PROJECT_DIR" > "$WORK/project.path"
 files="\"project.tgz\","
 mkdir -p "$WORK/volumes"
 for vol in $(docker volume ls -q --filter "label=com.docker.compose.project=$NAME"); do
   mp=$(docker volume inspect -f '{{.Mountpoint}}' "$vol")
   echo "--- volume $vol ($mp)"
-  tar -C "$mp" -czf "$WORK/volumes/$vol.tgz" .
+  total "volume $vol" "$mp"
+  tar -C "$mp" "${TARCP[@]}" -czf "$WORK/volumes/$vol.tgz" .
   files="$files\"volumes/$vol.tgz\","
 done
 if [ "$WITH_IMAGES" = 1 ]; then
   imgs=$(docker ps -a --filter "label=com.docker.compose.project=$NAME" --format '{{.Image}}' | sort -u)
   if [ -n "$imgs" ]; then
-    echo "--- save images: $imgs"
+    echo "@@phase save images: $imgs"
     docker save -o "$WORK/images.tar" $imgs
     files="$files\"images.tar\","
   fi
@@ -330,8 +336,10 @@ ORIG=%s
 NAME=%s
 WORK=$(mktemp -d /var/tmp/nkt-restore.XXXXXX)
 trap 'rm -rf "$WORK"' EXIT
+TARCP=(--checkpoint=100 "--checkpoint-action=echo=@@tarcp %%u")
 echo "--- unpack $ARCHIVE"
-tar -C "$WORK" -xf "$ARCHIVE"
+echo "@@total $(stat -c %%s "$ARCHIVE") unpack $(basename "$ARCHIVE")"
+tar -C "$WORK" "${TARCP[@]}" -xf "$ARCHIVE"
 cat "$WORK/manifest.json"; echo
 `, sh(path), sh(orig), sh(name))
 	switch kind {
@@ -369,8 +377,8 @@ for f in "$WORK"/*.qcow2; do
   dst="$IMAGES/$NAME-$t.qcow2"
   old=$(virsh domblklist "$NAME" --details 2>/dev/null | awk -v t="$t" '$3==t {print $4}' || true)
   [ "$NAME" = "$ORIG" ] && [ -n "$old" ] && dst="$old"
-  echo "--- disk $t -> $dst"
-  cp --sparse=always "$f" "$dst"
+  echo "--- copy $t -> $dst"
+  qemu-img convert -p -O qcow2 "$f" "$dst"
   # путь диска в XML — на восстановленный файл
   python3 - "$XML" "$t" "$dst" <<'PY'
 import re, sys
@@ -385,7 +393,7 @@ s = re.sub(r"<disk[^>]*>.*?</disk>", fix, s, flags=re.S)
 open(xml, 'w').write(s)
 PY
 done
-echo "--- virsh define"
+echo "@@phase virsh define"
 virsh define "$XML"
 echo "--- done"
 `
@@ -396,7 +404,7 @@ echo "--- done"
 const containerRestoreScript = `
 command -v ENGINE >/dev/null || { echo "ENGINE is missing"; exit 1; }
 command -v python3 >/dev/null || { echo "python3 is required to rebuild the run options"; exit 1; }
-echo "--- load image"
+echo "@@phase load image"
 ENGINE load -i "$WORK/image.tar"
 IMG=$(cat "$WORK/image.ref")
 for t in "$WORK"/volumes/*.tgz; do
@@ -406,7 +414,8 @@ for t in "$WORK"/volumes/*.tgz; do
   ENGINE volume create "$newvol" >/dev/null
   mp=$(ENGINE volume inspect -f '{{.Mountpoint}}' "$newvol")
   echo "--- volume $newvol"
-  tar -C "$mp" -xzf "$t"
+  echo "@@total $(gzip -l "$t" | awk 'NR==2 {print $2}') volume $newvol"
+  tar -C "$mp" "${TARCP[@]}" -xzf "$t"
 done
 if ENGINE inspect "$NAME" >/dev/null 2>&1; then
   [ "$NAME" = "$ORIG" ] || { echo "container $NAME already exists"; exit 1; }
@@ -470,7 +479,8 @@ for t in "$WORK"/volumes/*.tgz; do
   docker volume create --label "com.docker.compose.project=$NAME" "$newvol" >/dev/null
   mp=$(docker volume inspect -f '{{.Mountpoint}}' "$newvol")
   echo "--- volume $newvol"
-  tar -C "$mp" -xzf "$t"
+  echo "@@total $(gzip -l "$t" | awk 'NR==2 {print $2}') volume $newvol"
+  tar -C "$mp" "${TARCP[@]}" -xzf "$t"
 done
 echo "--- compose up"
 cd "$TARGET" && docker compose -p "$NAME" up -d

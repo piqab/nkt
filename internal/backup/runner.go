@@ -69,7 +69,23 @@ func (r *Runner) Run(ctx context.Context, jc *jobs.Context) error {
 		return err
 	}
 	defer os.Remove(path)
-	code, err := r.exec(ctx, jc.Logf, "bash", path)
+	// Прогресс: служебные строки сценария и проценты qemu-img/tar уходят
+	// в шаг задания (N из 100) — окно журнала рисует по нему полосу.
+	prog := NewProgress(func(step int, name string) {
+		if step < 0 {
+			jc.Step(0, 0, name)
+			return
+		}
+		jc.Step(step, 100, name)
+	})
+	logf := func(format string, args ...any) {
+		line := fmt.Sprintf(format, args...)
+		if prog.Line(line) {
+			return
+		}
+		jc.Logf("%s", line)
+	}
+	code, err := r.exec(ctx, logf, "bash", path)
 	if err != nil {
 		return err
 	}
