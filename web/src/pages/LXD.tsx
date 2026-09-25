@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
 import { api, useApi } from '../api'
 import type { LXDInstance, Me } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
@@ -211,18 +211,16 @@ function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCre
   }
 
   return (
-    <Card
+    <Modal
       title={
         <>
           {t('lxd.newInstanceTitle')}
           <InfoHint>{t('lxd.newInstanceHint')}</InfoHint>
         </>
       }
-      actions={
-        <Button type="link" onClick={onClose}>
-          {t('common.close')}
-        </Button>
-      }
+      onClose={onClose}
+      width={760}
+      maskClosable={false}
     >
       <Form<CreateInstanceValues> layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
@@ -240,6 +238,6 @@ function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCre
           </Button>
         </Form.Item>
       </Form>
-    </Card>
+    </Modal>
   )
 }

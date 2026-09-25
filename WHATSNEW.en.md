@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.101 — 2026-09-25
+
+- **Creation happens in modal windows**: a new virtual machine, a new
+  Podman container, a new LXD instance.
+- **Clicking a block opens the edit window** (machine XML, compose,
+  nginx, haproxy, caddy): the block text in the editor, "Save" through
+  the diff, "delete" right there — instead of a card under the tree.
+- **"+ new file" in "Configs"** shows only with a category selected:
+  without one the window had nothing to start the path from and spun
+  forever. A category with no directory for new files now says so
+  instead of spinning.
+
 ## v1.10.100 — 2026-09-25
 
 - **Every edit happens in a window, with a diff before writing and the

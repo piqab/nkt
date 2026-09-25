@@ -1071,7 +1071,8 @@
     "noChanges": "No changes — the draft matches the file.",
     "edit": "Edit",
     "editTitle": "Editing {{path}}",
-    "editTab": "Edit"
+    "editTab": "Edit",
+    "newFileNoRoot": "This category has no directory where a file can be created."
   },
   "charts": {
     "seconds": "{{value}} s",

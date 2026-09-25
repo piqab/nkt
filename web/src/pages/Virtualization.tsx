@@ -428,18 +428,16 @@ function VMCreateChooser({
   }
 
   return (
-    <Card
+    <Modal
       title={
         <>
           {t('virt.newVmTitle')}
           <InfoHint>{t('virt.newVmHint')}</InfoHint>
         </>
       }
-      actions={
-        <Button type="link" onClick={onClose}>
-          {t('common.close')}
-        </Button>
-      }
+      onClose={onClose}
+      width={760}
+      maskClosable={false}
     >
       <Form layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
@@ -489,7 +487,7 @@ function VMCreateChooser({
           </Button>
         </Form.Item>
       </Form>
-    </Card>
+    </Modal>
   )
 }
 
