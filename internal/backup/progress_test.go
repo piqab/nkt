@@ -42,3 +42,14 @@ func TestProgress(t *testing.T) {
 		}
 	}
 }
+
+// lxc export печатает проценты своей строкой — они тоже идут в шаг.
+func TestProgressLXC(t *testing.T) {
+	var last int
+	var name string
+	p := NewProgress(func(step int, n string) { last, name = step, n })
+	p.Line("--- lxc export c1")
+	if !p.Line("Exporting the backup: 45% (12.3MB/s)") || last != 45 || name != "lxc export c1" {
+		t.Errorf("last=%d name=%q", last, name)
+	}
+}

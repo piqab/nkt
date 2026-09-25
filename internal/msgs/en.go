@@ -549,6 +549,7 @@ var enCatalog = map[string]string{
 	"control.lineageParsingCertificate":                   "lineage %s: parsing certificate: %v",
 	"control.localeGeneratedGenerateFirst":                "locale %s is not generated — generate it first",
 	"control.localesPackageInstalledNothingGenerate":      "the locales package is not installed — nothing to generate a locale with",
+	"control.invalidSnapshotName":                         "invalid snapshot name: %q",
 	"control.lxcCode":                                     "lxc %s %s: code %d: %s",
 	"control.lxcDeleteCode":                               "lxc delete %s: code %d: %s",
 	"control.lxcLaunchCode":                               "lxc launch %s %s: code %d: %s",

@@ -19,6 +19,7 @@ func TestScriptsAreValidBash(t *testing.T) {
 		{Kind: KindDocker, Name: "acme-api"},
 		{Kind: KindPodman, Name: "db"},
 		{Kind: KindCompose, Name: "acme", ProjectDir: "/srv/docker", IncludeImages: true},
+		{Kind: KindLXD, Name: "build-runner"},
 	} {
 		sc, out, err := Script(root, p, now)
 		if err != nil {

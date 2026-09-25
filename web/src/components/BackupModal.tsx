@@ -10,7 +10,7 @@ import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
 
-export type BackupKind = 'vm' | 'docker' | 'podman' | 'compose'
+export type BackupKind = 'vm' | 'docker' | 'podman' | 'compose' | 'lxd'
 
 interface Entry {
   kind: BackupKind

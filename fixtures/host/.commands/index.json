@@ -3,6 +3,30 @@
   "commands": [
     {
       "match": [
+        "lxc",
+        "query",
+        "/1.0/instances/build-runner/snapshots?recursion=1"
+      ],
+      "stdout_file": "lxc_snapshots_build-runner.json"
+    },
+    {
+      "match": [
+        "lxc",
+        "query",
+        "/1.0/instances/win-testbed/snapshots?recursion=1"
+      ],
+      "stdout": "[]\n"
+    },
+    {
+      "match": [
+        "lxc",
+        "query",
+        "/1.0/instances/dns-cache/snapshots?recursion=1"
+      ],
+      "stdout": "[]\n"
+    },
+    {
+      "match": [
         "sh",
         "-c",
         "command -v snap"
@@ -911,6 +935,24 @@
         "kill"
       ],
       "stdout": ""
+    },
+    {
+      "match": [
+        "lxc",
+        "snapshot"
+      ],
+      "stdout": "",
+      "exit_code": 0,
+      "simulated": true
+    },
+    {
+      "match": [
+        "lxc",
+        "restore"
+      ],
+      "stdout": "",
+      "exit_code": 0,
+      "simulated": true
     }
   ]
 }

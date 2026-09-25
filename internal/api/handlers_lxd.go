@@ -147,3 +147,45 @@ func (s *Server) handleLXDLogsWS(w http.ResponseWriter, r *http.Request) {
 	cmd := unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, argv...)
 	s.runPTYSession(w, r, cmd, "lxd-logs", name, s.cfg.TerminalIdleTimeout)
 }
+
+// handleLXDSnapshots — GET /lxd/instances/{name}/snapshots.
+func (s *Server) handleLXDSnapshots(w http.ResponseWriter, r *http.Request) {
+	list, err := s.lxd.ListSnapshots(r.Context(), chi.URLParam(r, "name"))
+	if err != nil {
+		writeErr(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"snapshots": list})
+}
+
+// handleLXDSnapshotCreate — POST /lxd/instances/{name}/snapshots {name, stateful}.
+func (s *Server) handleLXDSnapshotCreate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name     string `json:"name"`
+		Stateful bool   `json:"stateful"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.lxdSnapshotAction(w, r, req.Name, "create", req.Stateful)
+}
+
+// handleLXDSnapshotRestore — POST /lxd/instances/{name}/snapshots/{snap}/restore.
+func (s *Server) handleLXDSnapshotRestore(w http.ResponseWriter, r *http.Request) {
+	s.lxdSnapshotAction(w, r, chi.URLParam(r, "snap"), "restore", false)
+}
+
+// handleLXDSnapshotDelete — DELETE /lxd/instances/{name}/snapshots/{snap}.
+func (s *Server) handleLXDSnapshotDelete(w http.ResponseWriter, r *http.Request) {
+	s.lxdSnapshotAction(w, r, chi.URLParam(r, "snap"), "delete", false)
+}
+
+func (s *Server) lxdSnapshotAction(w http.ResponseWriter, r *http.Request, snap, action string, stateful bool) {
+	if err := s.lxd.SnapshotAction(r.Context(), auth.Username(r.Context()), chi.URLParam(r, "name"), snap, action, stateful); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}

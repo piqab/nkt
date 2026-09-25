@@ -32,6 +32,10 @@ LXD instance rows show memory and limits (`limits.memory`,
 port", autostart as one button (`boot.autostart`), **logs** (the journal
 inside the instance or LXD's own log) and the console.
 
+Instance **snapshots** open in their own window from the row: take one
+(optionally with memory), restore (`lxc restore`), delete. A snapshot
+lives on the same storage pool; moving to another host needs a backup.
+
 ## Libvirt (KVM virtual machines)
 
 ![Virtual machines](/screens/en/vms.png)
@@ -46,7 +50,8 @@ inside the instance or LXD's own log) and the console.
   exec`) and machine (serial console `virsh console`, exit with Ctrl+]).
   The web terminal must be enabled.
 - **Backup** — an icon in the row of a machine and a container (Docker,
-  Podman; a compose container — the whole stack): archives on the host in
+  Podman, LXD via `lxc export`/`lxc import`; a compose container — the
+  whole stack): archives on the host in
   `/var/lib/netknownsthat/backups`, creation as a background job,
   download, restore as a copy or over the original. A running machine is
   not stopped — disks move to a snapshot while copying.

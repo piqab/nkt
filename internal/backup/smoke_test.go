@@ -84,3 +84,54 @@ func TestVMBackupSmoke(t *testing.T) {
 		t.Errorf("архив:\n%s", list)
 	}
 }
+
+// Бэкап и восстановление инстанса LXD с поддельным lxc: export кладёт
+// архив, восстановление поверх работающего отказывает, копия — import.
+func TestLXDBackupSmoke(t *testing.T) {
+	bin := t.TempDir()
+	fake := `#!/bin/sh
+case "$1" in
+  export) echo "Exporting the backup: 50%"; echo fake > "$3" ;;
+  info) exit 0 ;;
+  list) echo "${STATE:-RUNNING}" ;;
+  delete) echo "deleted $2" ;;
+  import) echo "imported $3 from $2" ;;
+esac
+`
+	if err := os.WriteFile(filepath.Join(bin, "lxc"), []byte(fake), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	env := append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"))
+	root := t.TempDir()
+	sc, out, err := Script(root, Params{Kind: KindLXD, Name: "c1"}, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("bash", "-c", sc)
+	cmd.Env = env
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("%v\n%s", err, b)
+	}
+	if list, _ := exec.Command("tar", "-tf", out).Output(); !strings.Contains(string(list), "./instance.tar.gz") {
+		t.Fatalf("нет instance.tar.gz:\n%s", list)
+	}
+	run := func(newName, state string) (string, error) {
+		rs, err := RestoreScript(root, RestoreParams{Path: out, NewName: newName})
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := exec.Command("bash", "-c", rs)
+		c.Env = append(env, "STATE="+state)
+		b, err := c.CombinedOutput()
+		return string(b), err
+	}
+	if b, err := run("", "RUNNING"); err == nil || !strings.Contains(b, "stop it before") {
+		t.Errorf("поверх работающего: %v\n%s", err, b)
+	}
+	if b, err := run("", "STOPPED"); err != nil || !strings.Contains(b, "deleted c1") || !strings.Contains(b, "imported c1") {
+		t.Errorf("поверх остановленного: %v\n%s", err, b)
+	}
+	if b, err := run("c2", "RUNNING"); err != nil || strings.Contains(b, "deleted") || !strings.Contains(b, "imported c2") {
+		t.Errorf("копией: %v\n%s", err, b)
+	}
+}

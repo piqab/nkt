@@ -26,6 +26,8 @@ import {
   SafetyOutlined,
   CodeOutlined,
   DesktopOutlined,
+  CameraOutlined,
+  RollbackOutlined,
 } from '@ant-design/icons'
 
 /**
@@ -78,6 +80,8 @@ export const ACTION_ICON: Record<string, ReactNode> = {
   backup: <SafetyOutlined />,
   console: <CodeOutlined />,
   screen: <DesktopOutlined />,
+  snapshot: <CameraOutlined />,
+  restore: <RollbackOutlined />,
 }
 
 export function RowAction({

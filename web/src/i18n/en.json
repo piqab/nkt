@@ -2493,13 +2493,15 @@
       "vm": "The archive holds the machine's XML and its disks (compressed qcow2). A running machine is not stopped: disks move to a snapshot while copying, then the changes are merged back (consistent with qemu-guest-agent). Stored on the host:",
       "docker": "The archive holds an image of the container's current state (commit + save), its run options and named volumes. Stored on the host:",
       "podman": "The archive holds an image of the container's current state, its run options and named volumes. Stored on the host:",
-      "compose": "The whole stack: the project directory (compose file, .env, configs), the named volumes of the project and, if checked, the images. Stored on the host:"
+      "compose": "The whole stack: the project directory (compose file, .env, configs), the named volumes of the project and, if checked, the images. Stored on the host:",
+      "lxd": "The archive holds the whole instance (lxc export): root filesystem or VM disk, configuration and snapshots. A running instance is not stopped. Stored on the host at:"
     },
     "restoreHint": {
       "vm": "A copy gets new UUID and MACs, disks <name>-<disk>.qcow2. Over the original — only when the machine is shut off: its disks are replaced.",
       "docker": "A copy gets its own volumes (<name>-<volume>) and publishes no ports — so as not to clash with the original. Over — the container is recreated.",
       "podman": "A copy gets its own volumes and publishes no ports. Over — the container is recreated.",
-      "compose": "A copy is a <project>-<name> directory next to it with its own volumes. Over — the stack is stopped, the directory and volumes are replaced, then compose up."
+      "compose": "A copy is a <project>-<name> directory next to it with its own volumes. Over — the stack is stopped, the directory and volumes are replaced, then compose up.",
+      "lxd": "A copy is imported with lxc import under a new name. Over the original — only when the instance is stopped: it is deleted and imported again."
     }
   },
   "console": {
@@ -2538,5 +2540,25 @@
   "lxdLogs": {
     "journal": "journal inside",
     "lxd": "LXD log"
+  },
+  "lxdSnap": {
+    "action": "Snapshots",
+    "title": "Snapshots of {{name}}",
+    "hint": "A snapshot is an instant copy of the instance on the same storage pool (lxc snapshot). Restoring brings the filesystem and configuration back to the snapshot moment; later snapshots are kept. To move to another host you need a backup, not a snapshot.",
+    "namePlaceholder": "snapshot name",
+    "stateful": "include memory",
+    "statefulCT": "A stateful container snapshot needs CRIU on the host; without it lxc returns an error.",
+    "statefulVM": "A stateful VM snapshot needs migration.stateful=true in its configuration.",
+    "create": "Take snapshot",
+    "loading": "Loading snapshots…",
+    "none": "No snapshots.",
+    "colName": "Snapshot",
+    "colCreated": "Created",
+    "colExpires": "Expires",
+    "colSize": "Size",
+    "colStateful": "Memory",
+    "restore": "Restore",
+    "restoreConfirm": "Restore {{name}} to snapshot {{snap}}? All changes made after the snapshot will be lost. A running container restarts with the snapshot state.",
+    "deleteConfirm": "Delete snapshot {{snap}} of {{name}}? It cannot be recovered."
   }
 }
