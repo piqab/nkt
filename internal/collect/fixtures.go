@@ -412,9 +412,14 @@ func (f *Fixtures) PodmanAPI(_ context.Context, method, apiPath string, _ []byte
 	}
 
 	slug := strings.ReplaceAll(clean, "/", "_")
-	raw, err := os.ReadFile(filepath.Join(f.root, ".podman", slug+".json"))
-	if err == nil {
-		return raw, 200, nil
+	candidates := []string{slug + ".json"}
+	if strings.HasSuffix(slug, "_stats") {
+		candidates = append(candidates, "stats.json")
+	}
+	for _, c := range candidates {
+		if raw, err := os.ReadFile(filepath.Join(f.root, ".podman", c)); err == nil {
+			return raw, 200, nil
+		}
 	}
 	return []byte(`{"message":"no such fixture"}`), 404, nil
 }

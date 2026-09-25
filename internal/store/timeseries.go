@@ -13,7 +13,7 @@ type Target struct {
 	ID         int64  `json:"id"`
 	Key        string `json:"key"`
 	Label      string `json:"label"`
-	Kind       string `json:"kind"` // http | https | tcp
+	Kind       string `json:"kind"` // http | https | tcp | icmp
 	Host       string `json:"host"`
 	Port       int    `json:"port"`
 	Path       string `json:"path"`
@@ -119,6 +119,19 @@ func (d *DB) SetTargetEnabled(ctx context.Context, id int64, enabled bool) error
 // DeleteTarget removes a target and its history.
 func (d *DB) DeleteTarget(ctx context.Context, id int64) error {
 	res, err := d.ExecContext(ctx, `DELETE FROM targets WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// DeleteManualTarget удаляет цель, добавленную вручную, вместе с её
+// историей; найденные сканом не трогает — их снова создал бы скан.
+func (d *DB) DeleteManualTarget(ctx context.Context, id int64) error {
+	res, err := d.ExecContext(ctx, `DELETE FROM targets WHERE id = ? AND source = 'manual'`, id)
 	if err != nil {
 		return err
 	}

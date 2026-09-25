@@ -1,9 +1,11 @@
 import { useMemo, useState } from 'react'
 import { Sensitive, blurText } from '../privacy'
-import { Button, Modal, Select, type TableColumnsType } from 'antd'
+import { Button, Form, Input, InputNumber, Modal, Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, tzOffsetMinutes, useApi } from '../api'
-import type { Bucket, HeatCell, Outage, TargetStatus } from '../types'
+import type { Bucket, HeatCell, Me, Outage, TargetStatus } from '../types'
+import { confirmAction } from '../components/confirm'
+import { Modal as UIModal } from '../components/ui'
 import { Heatmap, LineChart, StatTile, formatMs, formatNumber } from '../components/charts'
 import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime } from '../components/ui'
 import i18n from '../i18n'
@@ -26,11 +28,18 @@ const RANGES = [
 // Module-level column builders take t() as an argument rather than calling
 // useTranslation() themselves — see Overview.tsx's serviceColumns for the
 // same pattern.
+/** Адрес цели: у ping — только хост. */
+function targetAddr(tgt: TargetStatus): string {
+  if (tgt.kind === 'icmp') return `ping ${tgt.host}`
+  return `${tgt.kind}://${tgt.host}:${tgt.port}${tgt.kind.startsWith('http') ? tgt.path ?? '' : ''}`
+}
+
 function targetColumns(
   t: typeof i18n.t,
   checking: number | null,
   checkNow: (id: number) => void,
   toggle: (id: number, enabled: boolean) => void,
+  remove: ((tgt: TargetStatus) => void) | null,
 ): TableColumnsType<TargetStatus> {
   return [
     {
@@ -48,7 +57,7 @@ function targetColumns(
       key: 'addr',
       render: (_, tgt) => (
         <span className="mono small nowrap">
-          {tgt.kind}://{tgt.host}:{tgt.port}
+          {targetAddr(tgt)}
           {tgt.host_header ? ` (Host: ${tgt.host_header})` : ''}
         </span>
       ),
@@ -93,6 +102,9 @@ function targetColumns(
             label={tgt.enabled ? t('availability.pause') : t('availability.enable')}
             onClick={() => toggle(tgt.id, !tgt.enabled)}
           />
+          {remove && tgt.source === 'manual' && (
+            <RowAction action="delete" danger label={t('common.delete')} onClick={() => remove(tgt)} />
+          )}
         </div>
       ),
     },
@@ -109,8 +121,10 @@ function outageColumns(t: typeof i18n.t): TableColumnsType<Outage> {
   ]
 }
 
-export default function Availability() {
+export default function Availability({ me }: { me?: Me }) {
   const { t } = useTranslation()
+  const canControl = !!me?.is_admin && !!me?.allow_mutations
+  const [adding, setAdding] = useState(false)
   const [range, setRange] = useState('7d')
   const [selected, setSelected] = useState<number | null>(null)
   const [checking, setChecking] = useState<number | null>(null)
@@ -192,6 +206,12 @@ export default function Availability() {
     targets.reload()
   }
 
+  async function remove(tgt: TargetStatus) {
+    if (!(await confirmAction(t('availability.deleteConfirm', { name: tgt.label }), { okText: t('common.delete') }))) return
+    await api(`/monitor/targets/${tgt.id}`, { method: 'DELETE' })
+    targets.reload()
+  }
+
   if (targets.loading && !targets.data) return <Loading what={t('availability.what')} />
 
   const selectedTarget = sorted.find((t) => t.id === selected) ?? null
@@ -265,7 +285,7 @@ export default function Availability() {
             <div>
               <div>{blurText(t('availability.availabilityAndLatencyFor', { label: selectedTarget.label }))}</div>
               <div className="small secondary mono">
-                <Sensitive>{`${selectedTarget.kind}://${selectedTarget.host}:${selectedTarget.port}${selectedTarget.path ?? ''}`}</Sensitive>
+                <Sensitive>{targetAddr(selectedTarget)}</Sensitive>
               </div>
             </div>
           )
@@ -374,6 +394,13 @@ export default function Availability() {
             <InfoHint>{t('availability.resourcesHint')}</InfoHint>
           </>
         }
+        actions={
+          canControl && (
+            <Button type="link" onClick={() => setAdding(true)}>
+              {t('availability.addTarget')}
+            </Button>
+          )
+        }
       >
         <div className="table-wrap">
           <DataTable<TargetStatus>             dataSource={sorted}
@@ -385,7 +412,7 @@ export default function Availability() {
               onClick: () => setSelected(tgt.id),
               style: { cursor: 'pointer', opacity: tgt.enabled ? 1 : 0.5 },
             })}
-            columns={targetColumns(t, checking, checkNow, toggle)}
+            columns={targetColumns(t, checking, checkNow, toggle, canControl ? (tgt) => void remove(tgt) : null)}
           />
         </div>
       </Card>
@@ -409,6 +436,15 @@ export default function Availability() {
           <div className="chart-empty">{t('availability.noOutagesForPeriod')}</div>
         )}
       </Card>
+      {adding && (
+        <AddTargetModal
+          onClose={() => setAdding(false)}
+          onAdded={() => {
+            setAdding(false)
+            targets.reload()
+          }}
+        />
+      )}
     </>
   )
 }
@@ -417,4 +453,76 @@ function shortTime(iso: string): string {
   const d = new Date(iso.length === 13 ? `${iso}:00Z` : iso)
   if (Number.isNaN(d.getTime())) return iso
   return d.toLocaleString(i18n.language === 'en' ? 'en-US' : 'ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit' })
+}
+
+/** Ручная цель: адрес, которого нет в конфигурациях хоста. */
+function AddTargetModal({ onClose, onAdded }: { onClose: () => void; onAdded: () => void }) {
+  const { t } = useTranslation()
+  const [kind, setKind] = useState<'icmp' | 'tcp' | 'http' | 'https'>('icmp')
+  const [host, setHost] = useState('')
+  const [port, setPort] = useState<number | null>(null)
+  const [path, setPath] = useState('/')
+  const [label, setLabel] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const needPort = kind !== 'icmp'
+  const ok = host.trim() !== '' && (!needPort || !!port)
+
+  async function add() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api('/monitor/targets', { method: 'POST', body: { label, kind, host: host.trim(), port: port ?? 0, path } })
+      onAdded()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <UIModal title={t('availability.addTarget')} onClose={onClose}>
+      <p className="small muted">{t('availability.addTargetHint')}</p>
+      {error && <Banner kind="error">{error}</Banner>}
+      <Form layout="vertical" onFinish={() => void add()}>
+        <Form.Item label={t('availability.kind')}>
+          <Select
+            value={kind}
+            onChange={(v) => {
+              setKind(v)
+              if (!port) setPort(v === 'https' ? 443 : v === 'http' ? 80 : null)
+            }}
+            options={[
+              { value: 'icmp', label: t('availability.kindIcmp') },
+              { value: 'tcp', label: 'TCP' },
+              { value: 'http', label: 'HTTP' },
+              { value: 'https', label: 'HTTPS' },
+            ]}
+          />
+        </Form.Item>
+        <div className="row" style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Form.Item label={t('availability.host')}>
+            <Input value={host} onChange={(e) => setHost(e.target.value)} placeholder="192.168.1.10" style={{ width: '16rem' }} />
+          </Form.Item>
+          {needPort && (
+            <Form.Item label={t('availability.port')}>
+              <InputNumber min={1} max={65535} value={port} onChange={(v) => setPort(v)} style={{ width: '8rem' }} />
+            </Form.Item>
+          )}
+          {kind.startsWith('http') && (
+            <Form.Item label={t('availability.path')}>
+              <Input value={path} onChange={(e) => setPath(e.target.value)} style={{ width: '10rem' }} />
+            </Form.Item>
+          )}
+        </div>
+        <Form.Item label={t('availability.label')}>
+          <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder={t('availability.labelPlaceholder')} />
+        </Form.Item>
+        <Button type="primary" htmlType="submit" disabled={!ok} loading={busy}>
+          {t('availability.add')}
+        </Button>
+      </Form>
+    </UIModal>
+  )
 }

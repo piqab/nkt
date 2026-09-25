@@ -8,6 +8,26 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.116 — 2026-09-25
+
+- **Container and machine load.** For the network, CPU and memory charts
+  you pick the source next to the metric: Docker, Podman, LXD or Libvirt.
+  LXD is measured from instance state, libvirt machines from `virsh
+  domstats`: CPU time, the qemu process memory on the host, network. A
+  chart of sent traffic was added.
+- **Machine and port availability.** Found and checked automatically:
+  published Podman ports, forwarded LXD ports, running LXD instances and
+  libvirt machines — ping at their address (a machine's address comes
+  from the libvirt DHCP lease or ARP).
+- **Your own availability targets** — the "+ target" button: ping, TCP,
+  HTTP or HTTPS to any address; deleted from the list, scans never touch
+  them.
+- **Vulnerabilities inside guests.** The scan checks Debian/Ubuntu
+  packages inside LXD instances (via lxd-agent for LXD VMs) and libvirt
+  machines (via qemu-guest-agent) — locally and on the hub. A finding's
+  origin is "LXD name" or "VM name"; without an agent the scan says so in
+  its warnings.
+
 ## v1.10.115 — 2026-09-25
 
 - **Container and machine console on hosts under a hub.** It used to run

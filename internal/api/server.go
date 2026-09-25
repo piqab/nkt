@@ -437,6 +437,8 @@ func (s *Server) Handler() http.Handler {
 
 				r.Post("/monitor/targets/{id}/check", s.handleTargetCheck)
 				r.Patch("/monitor/targets/{id}", s.handleTargetPatch)
+				r.Post("/monitor/targets", s.handleTargetCreate)
+				r.Delete("/monitor/targets/{id}", s.handleTargetDelete)
 
 				// Отчёт об ошибке интерфейса: принимается от любого вошедшего,
 				// а не только от администратора — упасть может у кого угодно.

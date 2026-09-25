@@ -21,6 +21,9 @@ import (
 const (
 	SourceIptables = "iptables"
 	SourceDocker   = "docker"
+	SourcePodman   = "podman"
+	SourceLXD      = "lxd"
+	SourceLibvirt  = "libvirt"
 )
 
 // MetricsCollector samples resource usage: firewall counters and container stats.
@@ -52,6 +55,19 @@ func (m *MetricsCollector) RunOnce(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	samples = append(samples, docker...)
+
+	// Podman, LXD и машины libvirt — те же ряды (cpu_pct, mem_bytes,
+	// net_rx/tx_bytes) под своими источниками; отсутствие движка — не
+	// ошибка, его и так показывает скан.
+	for _, fn := range []func(context.Context, string, time.Time) ([]store.MetricSample, error){
+		m.podmanSamples, m.lxdSamples, m.libvirtSamples,
+	} {
+		more, err := fn(ctx, ts, now)
+		if err != nil {
+			return 0, err
+		}
+		samples = append(samples, more...)
+	}
 
 	if err := m.db.InsertMetrics(ctx, samples); err != nil {
 		return 0, msgs.Errorf("monitor.savingMetrics", err)
@@ -165,7 +181,18 @@ type dockerStats struct {
 }
 
 func (m *MetricsCollector) dockerSamples(ctx context.Context, ts string, now time.Time) ([]store.MetricSample, error) {
-	raw, code, err := m.c.DockerAPI(ctx, "GET", "/containers/json", nil)
+	return m.engineSamples(ctx, ts, now, SourceDocker, m.c.DockerAPI, "/containers/json")
+}
+
+// podmanSamples — то же через совместимый с Docker API сокета Podman.
+func (m *MetricsCollector) podmanSamples(ctx context.Context, ts string, now time.Time) ([]store.MetricSample, error) {
+	return m.engineSamples(ctx, ts, now, SourcePodman, m.c.PodmanAPI, "/libpod/containers/json")
+}
+
+type engineAPI func(ctx context.Context, method, apiPath string, body []byte) ([]byte, int, error)
+
+func (m *MetricsCollector) engineSamples(ctx context.Context, ts string, now time.Time, source string, apiFn engineAPI, listPath string) ([]store.MetricSample, error) {
+	raw, code, err := apiFn(ctx, "GET", listPath, nil)
 	if err != nil || code != 200 {
 		return nil, nil // docker is optional; its absence is reported by the scan, not here
 	}
@@ -184,7 +211,7 @@ func (m *MetricsCollector) dockerSamples(ctx context.Context, ts string, now tim
 		}
 		name := strings.TrimPrefix(item.Names[0], "/")
 
-		statsRaw, statsCode, err := m.c.DockerAPI(ctx, "GET",
+		statsRaw, statsCode, err := apiFn(ctx, "GET",
 			"/containers/"+name+"/stats?stream=false&one-shot=true", nil)
 		if err != nil || statsCode != 200 {
 			continue
@@ -221,25 +248,25 @@ func (m *MetricsCollector) dockerSamples(ctx context.Context, ts string, now tim
 			cpuPct = math.Round(shape*float64(6+hashRange(name, 20))*10) / 10
 			memUsage = memUsage * (0.6 + 0.5*shape)
 			out = append(out,
-				sample(ts, SourceDocker, name, "net_rx_bytes", shape*float64(40_000+hashRange(name, 900_000))),
-				sample(ts, SourceDocker, name, "net_tx_bytes", shape*float64(25_000+hashRange(name, 600_000))),
+				sample(ts, source, name, "net_rx_bytes", shape*float64(40_000+hashRange(name, 900_000))),
+				sample(ts, source, name, "net_tx_bytes", shape*float64(25_000+hashRange(name, 600_000))),
 			)
 		} else {
-			if delta, ok, err := m.db.CounterDelta(ctx, "docker:"+name+":rx", rx); err != nil {
+			if delta, ok, err := m.db.CounterDelta(ctx, source+":"+name+":rx", rx); err != nil {
 				return nil, err
 			} else if ok {
-				out = append(out, sample(ts, SourceDocker, name, "net_rx_bytes", delta))
+				out = append(out, sample(ts, source, name, "net_rx_bytes", delta))
 			}
-			if delta, ok, err := m.db.CounterDelta(ctx, "docker:"+name+":tx", tx); err != nil {
+			if delta, ok, err := m.db.CounterDelta(ctx, source+":"+name+":tx", tx); err != nil {
 				return nil, err
 			} else if ok {
-				out = append(out, sample(ts, SourceDocker, name, "net_tx_bytes", delta))
+				out = append(out, sample(ts, source, name, "net_tx_bytes", delta))
 			}
 		}
 
 		out = append(out,
-			sample(ts, SourceDocker, name, "cpu_pct", cpuPct),
-			sample(ts, SourceDocker, name, "mem_bytes", memUsage),
+			sample(ts, source, name, "cpu_pct", cpuPct),
+			sample(ts, source, name, "mem_bytes", memUsage),
 		)
 	}
 	return out, nil

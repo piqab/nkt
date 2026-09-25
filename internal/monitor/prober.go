@@ -105,6 +105,8 @@ func (p *Prober) probe(ctx context.Context, t store.Target) store.ProbeResult {
 	switch t.Kind {
 	case "http", "https":
 		res.StatusCode, res.Error = p.probeHTTP(ctx, t)
+	case "icmp":
+		res.Error = p.probeICMP(ctx, t)
 	default:
 		res.Error = p.probeTCP(ctx, t)
 	}

@@ -368,6 +368,9 @@ type VMNetIface struct {
 	Source string `json:"source,omitempty"` // bridge/network name
 	MAC    string `json:"mac,omitempty"`
 	Model  string `json:"model,omitempty"`
+	// IP — адрес работающей машины на этом интерфейсе (virsh domifaddr:
+	// аренда DHCP libvirt, иначе ARP хоста).
+	IP string `json:"ip,omitempty"`
 }
 
 // VirtualMachine is a libvirt/QEMU domain, whether running or only defined.
@@ -860,6 +863,13 @@ type PackageManifest struct {
 	OSRelease     string `json:"os_release,omitempty"`
 	DebianVersion string `json:"debian_version,omitempty"`
 	DpkgStatus    string `json:"dpkg_status,omitempty"`
+}
+
+// InstanceManifest — манифест пакетов внутри гостя: инстанса LXD или
+// машины libvirt. Target — подпись источника находок («LXD имя», «VM имя»).
+type InstanceManifest struct {
+	Target   string          `json:"target"`
+	Manifest PackageManifest `json:"manifest"`
 }
 
 // VulnFinding is one vulnerability trivy reported for an installed package —

@@ -3,6 +3,28 @@
   "commands": [
     {
       "match": [
+        "virsh",
+        "-c",
+        "qemu:///system",
+        "domifaddr",
+        "web-vm",
+        "--source",
+        "lease"
+      ],
+      "stdout": " Name       MAC address          Protocol     Address\n-------------------------------------------------------------------------------\n vnet0      52:54:00:12:34:56    ipv4         192.168.122.45/24\n\n"
+    },
+    {
+      "match": [
+        "virsh",
+        "-c",
+        "qemu:///system",
+        "domstats",
+        "--list-active"
+      ],
+      "stdout": "Domain: 'web-vm'\n  cpu.time=982233000000\n  balloon.current=2097152\n  balloon.rss=1462312\n  net.count=1\n  net.0.name=vnet0\n  net.0.rx.bytes=88213344\n  net.0.tx.bytes=12733920\n\n"
+    },
+    {
+      "match": [
         "lxc",
         "network",
         "list",
