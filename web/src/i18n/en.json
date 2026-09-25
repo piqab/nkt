@@ -1752,7 +1752,10 @@
     "updateSnap": "Update snap",
     "updateFlatpak": "Update flatpak",
     "installSnap": "Install snap",
-    "installFlatpak": "Install flatpak"
+    "installFlatpak": "Install flatpak",
+    "removeTitle": "Removing: {{names}}",
+    "doneOk": "Done.",
+    "doneFailed": "The command exited with code {{code}} — the reason is in the output above."
   },
   "errorBoundary": {
     "title": "This section failed to render",

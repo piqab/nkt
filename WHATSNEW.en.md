@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.107 — 2026-09-25
+
+- **snap and flatpak packages work like "Installed packages".** A filter,
+  a grid with checkboxes (the package kind as a tag, channel and origin
+  in a tooltip), "Remove selected (N)" and "Clear selection". Removing
+  and updating snap/flatpak runs in the command window with live output
+  instead of silently.
+
 ## v1.10.106 — 2026-09-25
 
 - **LXD from snap now works from nkt.** After installing LXD, the image

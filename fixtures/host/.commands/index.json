@@ -3,6 +3,36 @@
   "commands": [
     {
       "match": [
+        "sh",
+        "-c",
+        "command -v snap"
+      ],
+      "stdout": "/usr/bin/snap\n"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "command -v flatpak"
+      ],
+      "stdout": "/usr/bin/flatpak\n"
+    },
+    {
+      "match": [
+        "snap",
+        "list"
+      ],
+      "stdout": "Name      Version        Rev    Tracking         Publisher   Notes\ncore22    20240904       1621   latest/stable    canonical✓  base\nfirefox   131.0-1        4955   latest/stable    mozilla✓    -\nlxd       5.21.2-2f4ba6b 30131  5.21/stable      canonical✓  -\nsnapd     2.65.3         22991  latest/stable    canonical✓  snapd\n"
+    },
+    {
+      "match": [
+        "flatpak",
+        "list"
+      ],
+      "stdout": "org.gimp.GIMP\tGNU Image Manipulation Program\t2.10.38\tstable\tflathub\norg.videolan.VLC\tVLC\t3.0.21\tstable\tflathub\n"
+    },
+    {
+      "match": [
         "lxc",
         "image",
         "list",

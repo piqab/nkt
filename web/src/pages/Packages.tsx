@@ -39,7 +39,7 @@ const SEARCH_DEBOUNCE_MS = 400
  * place for everything package-related.
  */
 /** Общая строка пакета — для поиска и для установленных одна и та же. */
-interface PackageRow {
+export interface PackageRow {
   name: string
   version?: string
   description?: string
@@ -79,7 +79,7 @@ const GRID_PAGE = 120
  * (описание по наведению), версия, действие иконкой. Фон ячейки —
  * группа совпадения, как у строк поиска.
  */
-function PackageGrid({
+export function PackageGrid({
   rows,
   picked,
   onPick,

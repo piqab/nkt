@@ -129,6 +129,7 @@ func (s *Server) Handler() http.Handler {
 			"/system/apt/packages/{name}/remove/ws",
 			"/system/apt/install/ws",
 			"/system/apt/remove/ws",
+			"/system/sandbox-packages/ws",
 		}
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.RequireAuth)
