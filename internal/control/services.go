@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
 	"strings"
@@ -278,7 +279,7 @@ func (s *ServiceManager) ContainerAction(ctx context.Context, user, name, action
 		return msgs.Errorf("control.invalidContainerName", name)
 	}
 
-	_, code, err := s.c.DockerAPI(ctx, "POST", "/containers/"+name+"/"+action, nil)
+	body, code, err := s.c.DockerAPI(ctx, "POST", "/containers/"+name+"/"+action, nil)
 	outcome := "ok"
 	if err != nil || (code != 204 && code != 304) {
 		outcome = "error"
@@ -288,9 +289,38 @@ func (s *ServiceManager) ContainerAction(ctx context.Context, user, name, action
 		return fmt.Errorf("docker %s %s: %w", action, name, err)
 	}
 	if code != 204 && code != 304 {
-		return fmt.Errorf("docker %s %s: HTTP %d", action, name, code)
+		// Причина — в теле ответа ({"message": "…"}): «port is already
+		// allocated», «no such image», «OCI runtime create failed…». Без
+		// неё «HTTP 500» ничего не объясняет.
+		return fmt.Errorf("docker %s %s: HTTP %d: %s", action, name, code, EngineAPIMessage(body))
 	}
 	return nil
+}
+
+// EngineAPIMessage достаёт текст ошибки из ответа Docker/Podman API:
+// JSON {"message": "…"} или первая строка тела как есть.
+func EngineAPIMessage(body []byte) string {
+	var m struct {
+		Message string `json:"message"`
+		Cause   string `json:"cause"`
+	}
+	if json.Unmarshal(body, &m) == nil && strings.TrimSpace(m.Message) != "" {
+		if m.Cause != "" && !strings.Contains(m.Message, m.Cause) {
+			return strings.TrimSpace(m.Message) + " (" + m.Cause + ")"
+		}
+		return strings.TrimSpace(m.Message)
+	}
+	line := strings.TrimSpace(string(body))
+	if i := strings.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
+	}
+	if len(line) > 300 {
+		line = line[:300] + "…"
+	}
+	if line == "" {
+		return "no details"
+	}
+	return line
 }
 
 // DeleteContainer убирает контейнер docker.

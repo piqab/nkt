@@ -75,3 +75,32 @@ func TestLibvirtBlocks(t *testing.T) {
 		t.Errorf("удаление диска:\n%s", out)
 	}
 }
+
+// Разделы compose кроме services — блоками; новый элемент раздела, которого
+// ещё нет, создаёт раздел в конце файла.
+func TestComposeSections(t *testing.T) {
+	text := "services:\n  web:\n    image: nginx\n\nnetworks:\n  backend:\n    driver: bridge\n  frontend: {}\n\nvolumes:\n  data:\n"
+	lines := strings.Split(text, "\n")
+	nets := composeSectionBlocks(lines, "networks", BlockNetwork)
+	if len(nets) != 2 || nets[0].Name != "backend" || nets[0].StartLine != 6 || nets[0].EndLine != 7 || nets[1].Name != "frontend" {
+		t.Fatalf("networks = %+v", nets)
+	}
+	vols := composeSectionBlocks(lines, "volumes", BlockVolume)
+	if len(vols) != 1 || vols[0].Name != "data" || vols[0].StartLine != 11 {
+		t.Fatalf("volumes = %+v", vols)
+	}
+	out, err := InsertBlockAtEnd(text, BlockSecret, "db_password:\n  file: ./db_password.txt", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasSuffix(strings.TrimRight(out, "\n"), "secrets:\n  db_password:\n    file: ./db_password.txt") {
+		t.Errorf("раздел secrets не создан в конце:\n%s", out)
+	}
+	out, err = InsertBlockAtEnd(text, BlockNetwork, "public:\n  external: true", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out, "  frontend: {}\n  public:\n    external: true\n\nvolumes:") {
+		t.Errorf("сеть не после последней:\n%s", out)
+	}
+}

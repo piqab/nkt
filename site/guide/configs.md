@@ -35,7 +35,10 @@ cron, sshd, netplan, libvirt — по категориям; из находки 
 
 ## Блочный режим
 
-Для nginx и haproxy есть **блоки**: дерево `server`, `location`,
-`frontend`, `backend`. Блок добавляется, правится и удаляется отдельно —
-без риска сломать соседние. Тот же режим используется для compose-файлов
-и XML машин.
+Для nginx, haproxy, caddy, compose-файлов и XML машин есть **блоки**:
+дерево `server`/`location`/`upstream`, `frontend`/`backend`/`listen`,
+`site`, у compose — `service`, `network`, `volume`, `secret`, `config`,
+у машины — настройки и устройства (`disk`, `interface`, `graphics`).
+Блок добавляется (`+` с шаблоном), правится и удаляется отдельно — без
+риска сломать соседние; перед записью показывается дифф «на диске →
+после правки», запись — с проверкой и откатом.

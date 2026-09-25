@@ -9,6 +9,8 @@ import { InactiveSummary } from '../components/InactiveSummary'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import CommandModal from '../components/CommandModal'
+import ContainerLogsModal from '../components/ContainerLogsModal'
 
 export default function Podman({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -30,8 +32,22 @@ export default function Podman({ me }: { me: Me }) {
   const inactiveContainers = allContainers.filter((c) => c.state !== 'running')
 
 
+  const [run, setRun] = useState<{ name: string; action: 'start' | 'restart'; outcome?: { ok: boolean; exitCode?: number } | null } | null>(null)
+  const [logsFor, setLogsFor] = useState<string | null>(null)
+
+  async function runFinished() {
+    if (!run) return
+    const st = await api<{ succeeded?: boolean; exit_code?: number }>(`/podman/containers/${encodeURIComponent(run.name)}/run/status`).catch(() => null)
+    setRun((r) => (r ? { ...r, outcome: { ok: !!st?.succeeded, exitCode: st?.exit_code } } : r))
+    containers.reload()
+  }
+
   async function act(name: string, action: string) {
     if (!(await confirmAction(t('podman.confirmAction', { action, name })))) return
+    if (action === 'start' || action === 'restart') {
+      setRun({ name, action })
+      return
+    }
     setBusy(`${name}:${action}`)
     setNotice(null)
     try {
@@ -121,6 +137,7 @@ export default function Podman({ me }: { me: Me }) {
               onClick={() => act(c.name, a)}
             />
           ))}
+          <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(c.name)} />
           {canControl && (
             <RowAction
               action="delete"
@@ -211,6 +228,17 @@ export default function Podman({ me }: { me: Me }) {
           }}
         />
       )}
+      {run && (
+        <CommandModal
+          title={t('docker.runTitle', { action: t(`docker.action.${run.action}`, { defaultValue: run.action }), name: run.name })}
+          description={t('docker.runHint')}
+          wsPath={`/podman/containers/${encodeURIComponent(run.name)}/run/ws?action=${run.action}`}
+          outcome={run.outcome === undefined ? null : run.outcome ? { ...run.outcome, okText: t('docker.runOk', { name: run.name }), failText: t('docker.runFailed', { name: run.name }) } : null}
+          onFinished={() => void runFinished()}
+          onClose={() => setRun(null)}
+        />
+      )}
+      {logsFor && <ContainerLogsModal name={logsFor} base="/podman/containers" onClose={() => setLogsFor(null)} />}
     </>
   )
 }

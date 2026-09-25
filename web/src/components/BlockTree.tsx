@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { AIConfigError } from './AIConfigError'
 import { api, qs, useApi } from '../api'
 import type { BlockKind, ConfigBlock, Me, WriteResult } from '../types'
-import { Banner, CodeEditor, Modal, Spinner } from './ui'
+import { Banner, CodeEditor, DiffView, Modal, Spinner } from './ui'
+import { Button } from 'antd'
 import { confirmAction } from './confirm'
 
 const KIND_LABEL: Record<BlockKind, string> = {
@@ -23,11 +24,21 @@ const KIND_LABEL: Record<BlockKind, string> = {
   interface: 'interface',
   graphics: 'graphics',
   device: 'device',
+  network: 'network',
+  volume: 'volume',
+  secret: 'secret',
+  config: 'config',
 }
 
 // Шаблон нового устройства libvirt: пустая форма заставляла бы вспоминать
 // схему XML наизусть; значения в шаблоне — самые обычные (virtio, qcow2).
 const LIBVIRT_TEMPLATE: Partial<Record<BlockKind, string>> = {
+  // Имена в шаблонах — заведомо новые: «backend»/«data» часто уже есть,
+  // и повтор ключа в YAML тихо перетёр бы существующий элемент.
+  network: "my_network:\n  driver: bridge",
+  volume: "my_volume:\n  driver: local",
+  secret: "my_secret:\n  file: ./my_secret.txt",
+  config: "my_config:\n  file: ./my_config.conf",
   disk: "<disk type='file' device='disk'>\n  <driver name='qemu' type='qcow2'/>\n  <source file='/var/lib/libvirt/images/NAME.qcow2'/>\n  <target dev='vdb' bus='virtio'/>\n</disk>",
   interface: "<interface type='bridge'>\n  <source bridge='br0'/>\n  <model type='virtio'/>\n</interface>",
   graphics: "<graphics type='vnc' port='-1' autoport='yes' listen='127.0.0.1'/>",
@@ -42,7 +53,7 @@ const LIBVIRT_TEMPLATE: Partial<Record<BlockKind, string>> = {
 function creatableKinds(service: string): BlockKind[] {
   if (service === 'nginx') return ['server', 'upstream']
   if (service === 'haproxy') return ['frontend', 'backend', 'listen']
-  if (service === 'docker') return ['service']
+  if (service === 'docker') return ['service', 'network', 'volume', 'secret', 'config']
   if (service === 'caddy') return ['site']
   if (service === 'libvirt') return ['disk', 'interface', 'graphics']
   return []
@@ -152,28 +163,54 @@ export default function BlockTree({
     }
   }
 
+  // Дифф перед записью: тот же путь с dry_run возвращает «на диске →
+  // после правки» без записи; «Записать» шлёт ту же правку по-настоящему.
+  const [preview, setPreview] = useState<{ body: Record<string, unknown>; diff: string; after: () => void } | null>(null)
+
+  async function previewThen(body: Record<string, unknown>, after: () => void) {
+    setBusy(true)
+    setNotice(null)
+    try {
+      const res = await api<WriteResult>('/configs/blocks', { method: 'POST', body: { path, expected_sha256: sha256, ...body, dry_run: true } })
+      setPreview({ body, diff: res.diff ?? '', after })
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err), snippet: String(body.content ?? '') })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function confirmPreview() {
+    if (!preview) return
+    const { body, after } = preview
+    setPreview(null)
+    if (await writeBlock(body)) after()
+  }
+
   async function submitModal() {
     if (!modal) return
-    const ok = await writeBlock({
-      op: modal.mode,
-      kind: modal.kind,
-      start_line: modal.block?.start_line,
-      end_line: modal.block?.end_line,
-      parent_end_line: modal.parentEndLine,
-      content: draft,
-      note,
-      apply,
-    })
-    if (ok) setModal(null)
+    await previewThen(
+      {
+        op: modal.mode,
+        kind: modal.kind,
+        start_line: modal.block?.start_line,
+        end_line: modal.block?.end_line,
+        parent_end_line: modal.parentEndLine,
+        content: draft,
+        note,
+        apply,
+      },
+      () => setModal(null),
+    )
   }
 
   async function remove(block: ConfigBlock) {
     const label = `${KIND_LABEL[block.kind]}${block.name ? ' ' + block.name : ''}`
     if (!(await confirmAction(t('blocks.confirmDelete', { label })))) return
-    const ok = await writeBlock({
-      op: 'delete', kind: block.kind, start_line: block.start_line, end_line: block.end_line, apply: false,
-    })
-    if (ok) setSelected(null)
+    await previewThen(
+      { op: 'delete', kind: block.kind, start_line: block.start_line, end_line: block.end_line, apply: false },
+      () => setSelected(null),
+    )
   }
 
   if (blocks.loading && !blocks.data) return <div className="chart-empty">{t('blocks.loadingStructure')}</div>
@@ -181,6 +218,17 @@ export default function BlockTree({
 
   return (
     <div className="col">
+      {preview && (
+        <Modal title={t('blocks.previewTitle')} onClose={() => setPreview(null)} width={900} maskClosable={false}>
+          {preview.diff === '' ? <p className="small muted">{t('configs.noChanges')}</p> : <DiffView text={preview.diff} />}
+          <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
+            <Button type="primary" disabled={preview.diff === ''} loading={busy} onClick={() => void confirmPreview()}>
+              {t('virt.applyChanges')}
+            </Button>
+            <Button onClick={() => setPreview(null)}>{t('common.cancel')}</Button>
+          </div>
+        </Modal>
+      )}
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'}>
           {notice.text}

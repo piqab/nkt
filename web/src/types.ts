@@ -458,6 +458,10 @@ export type BlockKind =
   | 'interface'
   | 'graphics'
   | 'device'
+  | 'network'
+  | 'volume'
+  | 'secret'
+  | 'config'
 
 /** One structural block of a single config file — nginx server{}/location{}/
  * upstream{} or a haproxy frontend/backend/listen/global/defaults section —
@@ -485,6 +489,9 @@ export interface WriteResult {
   rolled_back: boolean
   message: string
   applied: boolean
+  /** dry_run: дифф «на диске → после правки», записи не было. */
+  diff?: string
+  dry_run?: boolean
 }
 
 export interface ConfigVersion {

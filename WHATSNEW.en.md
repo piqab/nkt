@@ -8,6 +8,27 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.97 — 2026-09-25
+
+- **Starting a container runs in nkt's command window, with the reason.**
+  A failure used to show "HTTP 500" with no explanation (the Docker API
+  answers with a code and puts the reason in the body). The reason is
+  now in the message ("port is already allocated", "no such image"…),
+  and start/restart run in the standard window: the `docker start`
+  output, the state a few seconds later and, if the container is not
+  running, the tail of its logs where the cause usually is. Same for
+  Podman.
+- **Container logs** — an icon in the row (Docker and Podman): live
+  `docker logs` in a window, tail 200/1000/5000 lines, "follow",
+  "timestamps".
+- **Docker compose as blocks: not only services.** The `networks`,
+  `volumes`, `secrets` and `configs` sections as entries: edit, delete,
+  `+ network`/`+ volume`/`+ secret`/`+ config` with a template; a missing
+  section is created together with its first entry.
+- **A diff before writing a block** for every service (nginx, haproxy,
+  caddy, compose, libvirt): "Save" shows "on disk → after the edit",
+  "Write" applies — as in the machine XML editor.
+
 ## v1.10.96 — 2026-09-25
 
 - **AI help with a configuration.** In "Configs" a bulb sits in the header

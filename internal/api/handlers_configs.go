@@ -221,6 +221,11 @@ func (s *Server) handleConfigBlockWrite(w http.ResponseWriter, r *http.Request) 
 	user := auth.Username(r.Context())
 
 	res, err := s.configs.WriteBlock(r.Context(), msgs.LangFromRequest(r), user, req.Path, req.BlockWriteRequest)
+	if err == nil && req.DryRun {
+		// Предпросмотр — ни записи, ни аудита.
+		writeJSON(w, http.StatusOK, res)
+		return
+	}
 	if err != nil {
 		status := http.StatusBadRequest
 		if errors.Is(err, control.ErrStaleContent) {

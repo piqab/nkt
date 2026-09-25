@@ -244,6 +244,9 @@ func TestListBlocksDocker(t *testing.T) {
 		t.Fatalf("ListBlocks: %v", err)
 	}
 	want := []string{"app", "api", "redis", "postgres", "grafana", "prometheus", "minio"}
+	// Кроме сервисов в списке теперь и элементы networks/volumes — здесь
+	// проверяются только сервисы.
+	blocks = onlyServices(blocks)
 	if len(blocks) != len(want) {
 		t.Fatalf("сервисов = %d, ожидалось %d", len(blocks), len(want))
 	}
@@ -321,9 +324,20 @@ func TestWriteBlockCreateDockerServiceLandsBeforeVolumes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListBlocks после создания: %v", err)
 	}
+	blocks = onlyServices(blocks)
 	if blocks[len(blocks)-1].Name != "worker" {
 		t.Errorf("последний сервис = %q, ожидался worker", blocks[len(blocks)-1].Name)
 	}
+}
+
+func onlyServices(blocks []parse.Block) []parse.Block {
+	var out []parse.Block
+	for _, b := range blocks {
+		if b.Kind == parse.BlockService {
+			out = append(out, b)
+		}
+	}
+	return out
 }
 
 func TestWriteBlockDeleteDockerService(t *testing.T) {
