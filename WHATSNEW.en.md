@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.4 — 2026-09-25
+
+- **Code scanning: the last three findings are closed.** A string from the
+  request no longer reaches a command or a path — only the inventory or
+  on-disk value it matched:
+  - the container and machine console takes the object name from the
+    inventory snapshot, the program is a constant, and the user for
+    `docker exec -u` is passed as an environment variable to a fixed
+    script;
+  - starting a container takes the name from the inventory; removing snap
+    and flatpak packages takes names from the installed list (an unknown
+    name is an error);
+  - the backup list and the Podman fixtures in demo mode use directories
+    and files from the disk listing.
+  Checked with a local CodeQL run of the same rule set as CI: nothing new,
+  only the long-dismissed places remain.
+
 ## v1.11.3 — 2026-09-25
 
 - **The site screenshots were retaken in both languages.** The "Libvirt"
