@@ -334,6 +334,26 @@ type LXDInstance struct {
 	Status       string   `json:"status"`
 	Architecture string   `json:"architecture,omitempty"`
 	IPv4         []string `json:"ipv4,omitempty"`
+	// Autostart — boot.autostart: запускается ли вместе с хостом.
+	Autostart bool `json:"autostart"`
+	// Лимиты из конфигурации (limits.cpu, limits.memory) — как записаны.
+	LimitCPU    string `json:"limit_cpu,omitempty"`
+	LimitMemory string `json:"limit_memory,omitempty"`
+	// Текущее потребление из состояния инстанса.
+	MemoryBytes int64 `json:"memory_bytes,omitempty"`
+	DiskBytes   int64 `json:"disk_bytes,omitempty"`
+	Processes   int   `json:"processes,omitempty"`
+	// Ports — проброшенные порты (устройства proxy).
+	Ports     []LXDPort `json:"ports,omitempty"`
+	Snapshots int       `json:"snapshots,omitempty"`
+	Profiles  []string  `json:"profiles,omitempty"`
+}
+
+// LXDPort — устройство proxy: listen tcp:0.0.0.0:8080 → connect tcp:127.0.0.1:80.
+type LXDPort struct {
+	Device  string `json:"device"`
+	Listen  string `json:"listen"`
+	Connect string `json:"connect"`
 }
 
 // VMDisk is one storage device attached to a libvirt/QEMU domain.

@@ -273,6 +273,15 @@ export interface LXDInstance {
   status: string
   architecture?: string
   ipv4?: string[]
+  autostart?: boolean
+  limit_cpu?: string
+  limit_memory?: string
+  memory_bytes?: number
+  disk_bytes?: number
+  processes?: number
+  ports?: { device: string; listen: string; connect: string }[]
+  snapshots?: number
+  profiles?: string[]
 }
 
 export interface VMDisk {

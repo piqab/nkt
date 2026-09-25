@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
 import { api, useApi } from '../api'
 import type { LXDInstance, Me } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
@@ -12,6 +12,9 @@ import { RowAction } from '../components/RowAction'
 import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 import { EngineInstallBanner } from '../components/EngineInstallBanner'
 import { ConsoleModal } from '../components/ConsoleModal'
+import LXDLogsModal from '../components/LXDLogsModal'
+import { ProbeLink } from '../components/PortProbe'
+import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
 import { LXDImagePicker } from '../components/LXDImagePicker'
 
 export default function LXD({ me }: { me: Me }) {
@@ -21,6 +24,21 @@ export default function LXD({ me }: { me: Me }) {
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [creating, setCreating] = useState(false)
   const [consoleFor, setConsoleFor] = useState<string | null>(null)
+  const [logsFor, setLogsFor] = useState<string | null>(null)
+
+  async function toggleAutostart(name: string, on: boolean) {
+    setBusy(`${name}:autostart`)
+    setNotice(null)
+    try {
+      await api(`/lxd/instances/${name}/autostart`, { method: 'POST', body: { on } })
+      await api('/inventory/refresh', { method: 'POST' })
+      await instances.reload()
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    } finally {
+      setBusy(null)
+    }
+  }
 
   const canControl = me.is_admin && me.allow_mutations
   // Раздел показывает снимок инвентаря: при входе он пересобирается сам,
@@ -78,6 +96,52 @@ export default function LXD({ me }: { me: Me }) {
     { title: t('lxd.colArch'), key: 'architecture', render: (_, i) => <span className="small mono">{i.architecture || '—'}</span> },
     { title: 'IPv4', key: 'ipv4', render: (_, i) => <span className="small mono">{(i.ipv4 ?? []).join(', ') || '—'}</span> },
     {
+      // Потребление — сейчас; лимиты — из конфигурации (с учётом профилей).
+      title: t('lxd.colResources'),
+      key: 'resources',
+      render: (_, i) => (
+        <span className="small nowrap">
+          {i.memory_bytes ? `${formatBytesShort(i.memory_bytes)}${i.limit_memory ? ` / ${i.limit_memory}` : ''}` : i.limit_memory ? `— / ${i.limit_memory}` : '—'}
+          <div className="muted">
+            {i.limit_cpu ? `CPU ${i.limit_cpu}` : 'CPU —'}
+            {i.disk_bytes ? ` · ${t('lxd.disk')} ${formatBytesShort(i.disk_bytes)}` : ''}
+          </div>
+        </span>
+      ),
+    },
+    {
+      title: t('lxd.colPorts'),
+      key: 'ports',
+      render: (_, i) => (
+        <span className="small mono">
+          {(i.ports ?? []).length === 0
+            ? '—'
+            : (i.ports ?? []).map((p) => {
+                const [, host, port] = /^tcp:(.*):(\d+)$/.exec(p.listen) ?? []
+                return (
+                  <div key={p.device}>
+                    {p.listen.replace(/^tcp:/, '')} → {p.connect.replace(/^tcp:/, '')}
+                    {port && <ProbeLink address={host || '0.0.0.0'} port={Number(port)} protocol="tcp" />}
+                  </div>
+                )
+              })}
+        </span>
+      ),
+    },
+    {
+      title: t('virt.colAutostart'),
+      key: 'autostart',
+      render: (_, i) => (
+        <RowAction
+          icon={i.autostart ? <CheckCircleFilled style={{ color: 'var(--status-good)' }} /> : <CloseCircleOutlined style={{ color: 'var(--text-muted)' }} />}
+          label={`${t('virt.colAutostart')}: ${i.autostart ? t('virt.autostartOn') : t('virt.autostartOff')} — ${i.autostart ? t('vmnet.autostartOff') : t('vmnet.autostartOn')}`}
+          disabled={!canControl}
+          loading={busy === `${i.name}:autostart`}
+          onClick={() => void toggleAutostart(i.name, !i.autostart)}
+        />
+      ),
+    },
+    {
       title: t('common.actions'),
       key: 'actions',
       render: (_, i) => (
@@ -102,6 +166,7 @@ export default function LXD({ me }: { me: Me }) {
                 onClick={() => act(i.name, a)}
               />
             ))}
+          <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(i.name)} />
           {canControl && containerPowerState(i.status) === 'running' && (
             <RowAction action="console" label={t('console.action')} onClick={() => setConsoleFor(i.name)} />
           )}
@@ -195,6 +260,7 @@ export default function LXD({ me }: { me: Me }) {
         />
       )}
       {consoleFor && <ConsoleModal kind="lxd" name={consoleFor} onClose={() => setConsoleFor(null)} />}
+      {logsFor && <LXDLogsModal name={logsFor} onClose={() => setLogsFor(null)} />}
     </>
   )
 }

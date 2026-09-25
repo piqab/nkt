@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.110 — 2026-09-25
+
+- **The "Virtual machines" tab is renamed to "Libvirt"**: LXD has virtual
+  machines too, and the old name was confusing. The section title is
+  "Libvirt — KVM virtual machines".
+- **LXD gets closer to Docker and Libvirt.** An instance row shows memory
+  and limits (`limits.memory`, `limits.cpu`), used disk, forwarded ports
+  (`proxy` devices) with "probe port", autostart as one button
+  (`boot.autostart`) and **logs** — the journal inside the instance
+  (`journalctl`, syslog when absent) or LXD's own log.
+
 ## v1.10.109 — 2026-09-25
 
 - **A virtual machine's screen in the browser (VNC).** A "screen" icon in

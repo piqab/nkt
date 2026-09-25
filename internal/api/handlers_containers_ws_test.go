@@ -139,3 +139,18 @@ func TestProxyWSToTCP(t *testing.T) {
 		t.Fatalf("эхо: %q %v", msg, err)
 	}
 }
+
+// Логи инстанса LXD: журнал внутри или лог LXD, без ${…}.
+func TestLXDLogsArgv(t *testing.T) {
+	argv, ok := lxdLogsArgv("c1", "journal", 500, true)
+	j := strings.Join(argv, " ")
+	if !ok || !strings.Contains(j, "exec c1 -- sh -c journalctl --no-pager -n 500 -f") || strings.Contains(j, "${") {
+		t.Errorf("journal: %v", argv)
+	}
+	if argv, _ := lxdLogsArgv("c1", "lxd", 200, false); !strings.HasSuffix(strings.Join(argv, " "), "info c1 --show-log") {
+		t.Errorf("lxd: %v", argv)
+	}
+	if _, ok := lxdLogsArgv("a;b", "lxd", 200, false); ok {
+		t.Error("плохое имя принято")
+	}
+}

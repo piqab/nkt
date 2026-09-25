@@ -27,7 +27,12 @@ Podman — containers through its own socket, the same lifecycle as Docker.
 LXD — containers and virtual machines with one tool: `launch`, start,
 stop, delete.
 
-## Virtual machines
+LXD instance rows show memory and limits (`limits.memory`,
+`limits.cpu`), disk, forwarded ports (`proxy` devices) with "probe
+port", autostart as one button (`boot.autostart`), **logs** (the journal
+inside the instance or LXD's own log) and the console.
+
+## Libvirt (KVM virtual machines)
 
 ![Virtual machines](/screens/en/vms.png)
 
