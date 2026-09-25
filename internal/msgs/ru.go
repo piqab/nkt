@@ -549,6 +549,7 @@ var ruCatalog = map[string]string{
 	"control.localeGeneratedGenerateFirst":                "локаль %s не сгенерирована — сначала сгенерируйте её",
 	"control.localesPackageInstalledNothingGenerate":      "пакет locales не установлен — сгенерировать локаль нечем",
 	"control.invalidSnapshotName":                         "недопустимое имя снимка: %q",
+	"control.lxdConfigYAML":                               "конфигурация не разобрана как YAML: %v",
 	"control.lxcCode":                                     "lxc %s %s: код %d: %s",
 	"control.lxcDeleteCode":                               "lxc delete %s: код %d: %s",
 	"control.lxcLaunchCode":                               "lxc launch %s %s: код %d: %s",

@@ -550,6 +550,7 @@ var enCatalog = map[string]string{
 	"control.localeGeneratedGenerateFirst":                "locale %s is not generated — generate it first",
 	"control.localesPackageInstalledNothingGenerate":      "the locales package is not installed — nothing to generate a locale with",
 	"control.invalidSnapshotName":                         "invalid snapshot name: %q",
+	"control.lxdConfigYAML":                               "configuration is not valid YAML: %v",
 	"control.lxcCode":                                     "lxc %s %s: code %d: %s",
 	"control.lxcDeleteCode":                               "lxc delete %s: code %d: %s",
 	"control.lxcLaunchCode":                               "lxc launch %s %s: code %d: %s",

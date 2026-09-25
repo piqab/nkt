@@ -43,6 +43,8 @@ type ConfigManager struct {
 	scanner *inventory.Scanner
 	hist    *history
 	svc     *ServiceManager
+	// lxd — для версий конфигураций инстансов (пути lxd://имя).
+	lxd *LXDManager
 }
 
 // NewConfigManager builds the config editor.
@@ -783,6 +785,11 @@ func (m *ConfigManager) recordVersion(ctx context.Context, path, service, user, 
 
 // Versions lists the revision history of a file.
 func (m *ConfigManager) Versions(ctx context.Context, path string, limit int) ([]store.ConfigVersion, error) {
+	if _, ok := lxdPathName(path); ok {
+		return m.db.ListVersions(ctx, path, limit)
+	} else if strings.HasPrefix(path, "lxd://") {
+		return nil, ErrPathNotAllowed
+	}
 	if path != "" {
 		if _, err := m.checkPath(path); err != nil {
 			return nil, err
@@ -824,6 +831,19 @@ func (m *ConfigManager) Rollback(ctx context.Context, lang msgs.Lang, user strin
 		return WriteResult{}, err
 	}
 	note := msgs.Tc(ctx, "control.rollbackVersion", v.ID, v.TS)
+	if name, ok := lxdPathName(v.Path); ok {
+		if m.lxd == nil {
+			return WriteResult{}, ErrPathNotAllowed
+		}
+		id, err := m.lxd.WriteConfig(ctx, m, user, name, content, note, "")
+		if err != nil {
+			return WriteResult{}, err
+		}
+		if id > 0 {
+			_, _ = m.db.ExecContext(ctx, `UPDATE config_versions SET action = ? WHERE id = ?`, store.ActionRollback, id)
+		}
+		return WriteResult{Path: v.Path, VersionID: id, Applied: true, Message: msgs.T(lang, "configs.versionRestored", v.ID)}, nil
+	}
 	res, err := m.Write(ctx, lang, user, v.Path, content, note, apply)
 	if err != nil {
 		return res, err
@@ -843,12 +863,25 @@ func (m *ConfigManager) Diff(ctx context.Context, id int64) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	current, err := m.Read(v.Path)
-	if err != nil {
-		return "", err
+	var cur string
+	if name, ok := lxdPathName(v.Path); ok {
+		if m.lxd == nil {
+			return "", ErrPathNotAllowed
+		}
+		c, err := m.lxd.ReadConfig(ctx, name)
+		if err != nil {
+			return "", err
+		}
+		cur = c.Content
+	} else {
+		current, err := m.Read(v.Path)
+		if err != nil {
+			return "", err
+		}
+		cur = current.Content
 	}
 	return UnifiedDiff(ctx, msgs.Tc(ctx, "control.version", v.ID, v.TS), msgs.Tc(ctx, "control.currentFile"),
-		old, current.Content), nil
+		old, cur), nil
 }
 
 func normaliseNewlines(s string) string {

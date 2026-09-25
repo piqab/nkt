@@ -2560,5 +2560,16 @@
     "restore": "Restore",
     "restoreConfirm": "Restore {{name}} to snapshot {{snap}}? All changes made after the snapshot will be lost. A running container restarts with the snapshot state.",
     "deleteConfirm": "Delete snapshot {{snap}} of {{name}}? It cannot be recovered."
+  },
+  "lxdConfig": {
+    "action": "Configuration",
+    "title": "Configuration of {{name}}",
+    "loading": "Loading configuration…",
+    "hint": "The same as lxc config edit: config (limits, autostart, cloud-init), devices (disks, network, ports), profiles. The limits.cpu and limits.memory fields edit the text below — the changes show in the diff before writing. A running instance picks up some keys immediately, others after a restart.",
+    "notePlaceholder": "version note",
+    "editNote": "configuration edit",
+    "expanded": "with profiles",
+    "expandedTitle": "{{name}} with profiles",
+    "expandedHint": "lxc config show --expanded: the effective configuration including keys and devices from profiles. Read-only — profile values are edited in the profile."
   }
 }

@@ -121,6 +121,9 @@ type Deps struct {
 
 // New builds the HTTP server.
 func New(d Deps) *Server {
+	if d.Configs != nil && d.LXD != nil {
+		d.Configs.AttachLXD(d.LXD)
+	}
 	return &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, osusers: d.OSUsers, disks: d.Disks, hardware: d.Hardware, sysconfig: d.SysConfig,
@@ -216,6 +219,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/lxd/instances", s.handleLXDInstances)
 			r.Get("/lxd/images", s.handleLXDImages)
 			r.Get("/lxd/instances/{name}/snapshots", s.handleLXDSnapshots)
+			r.Get("/lxd/instances/{name}/config", s.handleLXDConfig)
 			r.Get("/backups", s.handleBackupsList)
 			r.Get("/vms", s.handleVMs)
 			r.Get("/misc", s.handleMisc)
@@ -362,6 +366,7 @@ func (s *Server) Handler() http.Handler {
 				r.Delete("/podman/containers/{name}", s.handlePodmanContainerDelete)
 				r.Post("/lxd/instances", s.handleLXDInstanceCreate)
 				r.Post("/lxd/instances/{name}/autostart", s.handleLXDAutostart)
+				r.Put("/lxd/instances/{name}/config", s.handleLXDConfigWrite)
 				r.Post("/lxd/instances/{name}/snapshots", s.handleLXDSnapshotCreate)
 				r.Post("/lxd/instances/{name}/snapshots/{snap}/restore", s.handleLXDSnapshotRestore)
 				r.Delete("/lxd/instances/{name}/snapshots/{snap}", s.handleLXDSnapshotDelete)

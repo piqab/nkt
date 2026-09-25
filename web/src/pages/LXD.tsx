@@ -15,6 +15,7 @@ import { ConsoleModal } from '../components/ConsoleModal'
 import LXDLogsModal from '../components/LXDLogsModal'
 import { BackupModal } from '../components/BackupModal'
 import LXDSnapshotsModal from '../components/LXDSnapshotsModal'
+import LXDConfigModal from '../components/LXDConfigModal'
 import { ProbeLink } from '../components/PortProbe'
 import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
 import { LXDImagePicker } from '../components/LXDImagePicker'
@@ -29,6 +30,7 @@ export default function LXD({ me }: { me: Me }) {
   const [logsFor, setLogsFor] = useState<string | null>(null)
   const [backupFor, setBackupFor] = useState<string | null>(null)
   const [snapsFor, setSnapsFor] = useState<LXDInstance | null>(null)
+  const [configFor, setConfigFor] = useState<string | null>(null)
 
   async function toggleAutostart(name: string, on: boolean) {
     setBusy(`${name}:autostart`)
@@ -171,6 +173,7 @@ export default function LXD({ me }: { me: Me }) {
               />
             ))}
           <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(i.name)} />
+          <RowAction action="edit" label={t('lxdConfig.action')} onClick={() => setConfigFor(i.name)} />
           <RowAction
             action="snapshot"
             label={`${t('lxdSnap.action')}${i.snapshots ? ` (${i.snapshots})` : ''}`}
@@ -271,6 +274,15 @@ export default function LXD({ me }: { me: Me }) {
       )}
       {consoleFor && <ConsoleModal kind="lxd" name={consoleFor} onClose={() => setConsoleFor(null)} />}
       {logsFor && <LXDLogsModal name={logsFor} onClose={() => setLogsFor(null)} />}
+      {configFor && (
+        <LXDConfigModal
+          name={configFor}
+          me={me}
+          canControl={canControl}
+          onClose={() => setConfigFor(null)}
+          onSaved={() => void api('/inventory/refresh', { method: 'POST' }).then(() => instances.reload())}
+        />
+      )}
       {snapsFor && (
         <LXDSnapshotsModal
           name={snapsFor.name}

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/msgs"
@@ -188,4 +189,39 @@ func (s *Server) lxdSnapshotAction(w http.ResponseWriter, r *http.Request, snap,
 	}
 	s.rescanLater()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleLXDConfig — GET /lxd/instances/{name}/config: lxc config show
+// (правится) и --expanded (с профилями, для справки).
+func (s *Server) handleLXDConfig(w http.ResponseWriter, r *http.Request) {
+	cfg, err := s.lxd.ReadConfig(r.Context(), chi.URLParam(r, "name"))
+	if err != nil {
+		writeErr(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"config": cfg, "history_path": control.LXDConfigPath(chi.URLParam(r, "name"))})
+}
+
+// handleLXDConfigWrite — PUT /lxd/instances/{name}/config {content, note, expected_sha256}.
+func (s *Server) handleLXDConfigWrite(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Content  string `json:"content"`
+		Note     string `json:"note"`
+		Expected string `json:"expected_sha256"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	id, err := s.lxd.WriteConfig(r.Context(), s.configs, auth.Username(r.Context()), chi.URLParam(r, "name"), req.Content, req.Note, req.Expected)
+	if errors.Is(err, control.ErrLXDConfigStale) {
+		writeError(w, http.StatusConflict, msgs.T(msgs.LangFromRequest(r), "configs.staleContent"))
+		return
+	}
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, map[string]any{"status": "ok", "version_id": id})
 }
