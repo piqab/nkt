@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.106 — 2026-09-25
+
+- **LXD from snap now works from nkt.** After installing LXD, the image
+  list and instances failed with "exec: "lxc": executable file not found
+  in $PATH": snap puts `lxc` into `/snap/bin`, which is not in the
+  service PATH, and the snap wrapper itself runs through a setuid helper
+  that does not work inside the unit sandbox (NoNewPrivileges). Now
+  `/snap/bin` is in the service PATH and `lxc` runs outside the sandbox
+  by its full path, like `virsh`. Update nkt on the host.
+
 ## v1.10.105 — 2026-09-25
 
 - **Backup and restore progress as a bar.** The job window (and the

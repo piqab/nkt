@@ -79,6 +79,8 @@ const usage = `NetKnownsThat %s — карта сетевых ресурсов �
 `
 
 func main() {
+	// Программы из snap (lxc) — в /snap/bin, которого нет в PATH службы.
+	collect.EnsureSnapPath()
 	command := "serve"
 	args := os.Args[1:]
 	if len(args) > 0 && len(args[0]) > 0 && args[0][0] != '-' {
@@ -707,6 +709,14 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 	firewalld *control.FirewalldManager, osusers *control.OSUserManager,
 	sysconf *control.SysConfigManager, collector collect.Collector, images *vmimage.Store,
 	scanner *inventory.Scanner) {
+
+	// lxc из snap не запускается из песочницы юнита (snap-confine —
+	// setuid, а у юнита NoNewPrivileges): выполняется снаружи, как virsh.
+	if cfg.Mode != config.ModeFixtures {
+		collect.SetEscape([]string{"lxc"}, func(ctx context.Context, argv ...string) (collect.CommandResult, error) {
+			return api.RunTooling(ctx, argv...)
+		})
+	}
 
 	m.Register(profile.KindApply, profile.NewApplyRunner(func(user string) profile.Applier {
 		return profile.NewHostApplier(user, services, configs, firewall, firewalld,
