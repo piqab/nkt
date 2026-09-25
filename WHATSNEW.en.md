@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.0 — 2026-09-25
+
+- Minor version: 1.10.x brought LXD on par with Docker and Libvirt (backup,
+  snapshots, configuration, ports, networks, images), the SPICE machine
+  screen, long operations as background jobs, guest passwords, load,
+  availability and vulnerabilities of machines and containers, machines
+  on the resource map and resizable windows — enough changes for a new
+  line. No code in this release, only the number.
+
 ## v1.10.123 — 2026-09-25
 
 - **The libvirt machine console shows "login:" right away.** On connect nkt
