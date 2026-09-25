@@ -39,7 +39,9 @@ SCREENS = [
     ('audit', 'host', '/audit', ''),
     ('services', 'host', '/services', ''),
     ('containers', 'host', '/containers', ''),
-    ('vms', 'host', '/containers', "tab({ru: 'Виртуальные машины', en: 'Virtual machines'})"),
+    ('vms', 'host', '/containers', "tabStart('Libvirt')"),
+    ('lxd', 'host', '/containers', "tabStart('LXD')"),
+    ('lxd-config', 'host', '/containers', "tabStart('LXD'); await sleep(1200); document.querySelector('tr button[aria-label=\"' + pick({ru: 'Конфигурация', en: 'Configuration'}) + '\"]')?.click()"),
     ('kubernetes', 'host', '/containers', "tabStart('Kubernetes')"),
     ('profiles', 'host', '/profiles', ''),
     ('configs', 'host', '/configs', ''),
@@ -48,6 +50,9 @@ SCREENS = [
     ('firewall', 'host', '/firewall', ''),
     ('certificates', 'host', '/certificates', ''),
     ('users', 'host', '/users', ''),
+    # Окно задания: перед снимком на стенде должно быть хоть одно задание
+    # (например, создание инстанса LXD — POST /api/lxd/instances?job=1).
+    ('job', 'host', '/jobs', "document.querySelector('button[aria-label=\"' + pick({ru: 'журнал', en: 'log'}) + '\"]')?.click()"),
     ('hub-hosts', 'hub', '/', ''),
     ('hub-alerts', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'})"),
     ('hub-profiles', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); clickText('button', /^web-base/)"),
@@ -75,7 +80,7 @@ const tabStart = (m) => clickText('.ant-tabs-tab-btn', new RegExp('^' + pick(m))
 # интерфейс, а не оговорки стенда — и снять фокус с поля ввода.
 CLEANUP = """
 (() => {
-  const re = /fixture|снапшот|симуляци|simulat|snapshot mode|заготовленного вывода|no canned output/i;
+  const re = /fixture|снапшот|симуляци|simulat|synthetic|синтетическ|snapshot mode|заготовленного вывода|no canned output/i;
   for (const el of document.querySelectorAll('.ant-alert, .banner, [class*="banner"]')) {
     if (re.test(el.textContent)) el.remove();
   }

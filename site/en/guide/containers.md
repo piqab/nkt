@@ -40,6 +40,8 @@ new one as a background job: via lxc exec and chpasswd in LXD, via
 qemu-guest-agent in libvirt. The password is stored in nkt encrypted and
 never goes into job parameters or a command line.
 
+![LXD: instances, networks, images, pools](/screens/en/lxd.png)
+
 LXD instance rows show memory and limits (`limits.memory`,
 `limits.cpu`), disk, forwarded ports (`proxy` devices) with "probe
 port", autostart as one button (`boot.autostart`), **logs** (the journal
@@ -48,6 +50,8 @@ inside the instance or LXD's own log) and the console.
 Instance **snapshots** open in their own window from the row: take one
 (optionally with memory), restore (`lxc restore`), delete. A snapshot
 lives on the same storage pool; moving to another host needs a backup.
+
+![LXD instance configuration](/screens/en/lxd-config.png)
 
 The instance **configuration** (`lxc config show`/`edit`) is edited in a
 window: text, quick `limits.cpu` and `limits.memory` fields, a diff

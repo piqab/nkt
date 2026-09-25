@@ -107,6 +107,24 @@ func BackfillDemoHistory(ctx context.Context, db *store.DB, days int) (int, erro
 						math.Round(s*float64(20_000+hashRange(name+":tx", 500_000)))),
 				)
 			}
+			// Те же ряды у Podman, инстансов LXD и машин libvirt — выбор
+			// источника на «Нагрузке» показывает их историю и в демо.
+			for _, w := range []struct{ source, name string }{
+				{SourcePodman, "monitoring-grafana"}, {SourcePodman, "monitoring-prometheus"},
+				{SourceLXD, "build-runner"}, {SourceLXD, "dns-cache"}, {SourceLibvirt, "web-vm"},
+			} {
+				s := dailyShape(ts, w.source+w.name)
+				samples = append(samples,
+					sample(store.FormatTime(ts), w.source, w.name, "cpu_pct",
+						math.Round(s*float64(5+hashRange(w.name, 45))*10)/10),
+					sample(store.FormatTime(ts), w.source, w.name, "mem_bytes",
+						float64(128<<20+hashRange(w.name, 900<<20))*(0.7+0.4*s)),
+					sample(store.FormatTime(ts), w.source, w.name, "net_rx_bytes",
+						math.Round(s*float64(20_000+hashRange(w.name, 600_000)))),
+					sample(store.FormatTime(ts), w.source, w.name, "net_tx_bytes",
+						math.Round(s*float64(10_000+hashRange(w.name+":tx", 300_000)))),
+				)
+			}
 		}
 	}
 
