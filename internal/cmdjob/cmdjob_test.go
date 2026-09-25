@@ -21,3 +21,9 @@ func TestParsePercent(t *testing.T) {
 		}
 	}
 }
+
+func TestShellQuote(t *testing.T) {
+	if shellQuote("a'b c") != `'a'\''b c'` {
+		t.Error(shellQuote("a'b c"))
+	}
+}

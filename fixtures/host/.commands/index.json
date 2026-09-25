@@ -1111,6 +1111,14 @@
       "stdout": "4f1c2d3e5a6b\n",
       "exit_code": 0,
       "simulated": true
+    },
+    {
+      "match": [
+        "bash"
+      ],
+      "stdout": "password set\n",
+      "exit_code": 0,
+      "simulated": true
     }
   ]
 }

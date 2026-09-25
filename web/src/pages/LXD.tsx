@@ -19,6 +19,7 @@ import LXDConfigModal, { removeYamlDevice } from '../components/LXDConfigModal'
 import LXDPortModal from '../components/LXDPortModal'
 import { SpiceModal } from '../components/SpiceModal'
 import { useJobLauncher } from '../components/useJobLauncher'
+import { GuestLoginBar, GuestPasswordFields } from '../components/GuestLogin'
 import { LXDResources } from '../components/LXDResources'
 import { ProbeLink } from '../components/PortProbe'
 import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
@@ -321,6 +322,7 @@ export default function LXD({ me }: { me: Me }) {
           title={t('vnc.title', { name: screenFor })}
           wsPath={`/lxd/instances/${encodeURIComponent(screenFor)}/spice/ws`}
           onClose={() => setScreenFor(null)}
+          below={<GuestLoginBar kind="lxd" name={screenFor} canControl={canControl} />}
         />
       )}
       {portFor && (
@@ -351,18 +353,27 @@ export default function LXD({ me }: { me: Me }) {
 
 type CreateInstanceValues = { image: string; name: string; vm?: boolean }
 
-function CreateInstanceForm({ onClose, onSubmit }: { onClose: () => void; onSubmit: (values: CreateInstanceValues & { vm: boolean }) => Promise<void> }) {
+function CreateInstanceForm({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void
+  onSubmit: (values: CreateInstanceValues & { vm: boolean; user?: string; password?: string; generate?: boolean }) => Promise<void>
+}) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [vm, setVM] = useState(false)
+  const [user, setUser] = useState('')
+  const [password, setPassword] = useState('')
+  const [generate, setGenerate] = useState(false)
   const [form] = Form.useForm<CreateInstanceValues>()
 
   async function submit(values: CreateInstanceValues) {
     setBusy(true)
     setError(null)
     try {
-      await onSubmit({ ...values, vm })
+      await onSubmit({ ...values, vm, user: user || undefined, password: generate ? undefined : password || undefined, generate })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -397,7 +408,19 @@ function CreateInstanceForm({ onClose, onSubmit }: { onClose: () => void; onSubm
             <Input placeholder="my-instance" />
           </Form.Item>
         </div>
-        <Form.Item style={{ marginBottom: 0 }}>
+        <p className="small muted" style={{ marginBottom: '0.25rem' }}>
+          {t('guestLogin.createHint')}
+        </p>
+        <GuestPasswordFields
+          user={user}
+          onUser={setUser}
+          password={password}
+          onPassword={setPassword}
+          generate={generate}
+          onGenerate={setGenerate}
+          userPlaceholder="root"
+        />
+        <Form.Item style={{ marginBottom: 0, marginTop: '0.75rem' }}>
           <Button type="primary" htmlType="submit" loading={busy}>
             {busy ? t('lxd.launching') : t('lxd.createAndStart')}
           </Button>

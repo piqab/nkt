@@ -5,11 +5,13 @@ import (
 	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/guestcred"
 	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
 	"os"
 	"os/exec"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -30,6 +32,11 @@ type lxdCreateRequest struct {
 	Name  string `json:"name"`
 	// VM — образ виртуальной машины (lxc launch --vm).
 	VM bool `json:"vm"`
+	// User/Password/Generate — необязательный вход на экран и в консоль:
+	// пароль сохраняется в хранилище гостей и ставится шагом задания.
+	User     string `json:"user,omitempty"`
+	Password string `json:"password,omitempty"`
+	Generate bool   `json:"generate,omitempty"`
 }
 
 func (s *Server) handleLXDInstanceCreate(w http.ResponseWriter, r *http.Request) {
@@ -45,6 +52,25 @@ func (s *Server) handleLXDInstanceCreate(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		cmds := []cmdjob.Command{{Argv: append([]string{hostTool("lxc")}, args...), StepKey: "lxd.stepLaunch", StepArgs: []any{req.Image}}}
+		if req.Generate || req.Password != "" {
+			user := strings.TrimSpace(req.User)
+			if user == "" {
+				user = "root"
+			}
+			pass := req.Password
+			if req.Generate {
+				pass = guestcred.Generate()
+			}
+			if s.guestCreds == nil {
+				writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "cmdjob.noSecrets"))
+				return
+			}
+			if err := s.guestCreds.Put(r.Context(), "lxd", req.Name, user, pass, auth.Username(r.Context())); err != nil {
+				writeErr(w, r, http.StatusBadRequest, err)
+				return
+			}
+			cmds = append(cmds, guestPasswordCommand("lxd", req.Name, user))
+		}
 		s.startCmdJob(w, r, "lxd.jobCreate", []any{req.Name}, "lxd:create:"+req.Name, cmdjob.Params{Commands: cmds, Refresh: true}, "lxd.create", req.Name)
 		return
 	}
@@ -78,6 +104,9 @@ func (s *Server) handleLXDInstanceDelete(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	s.rescanLater()
+	if s.guestCreds != nil {
+		_ = s.guestCreds.Delete(r.Context(), "lxd", name)
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

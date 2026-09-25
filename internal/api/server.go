@@ -5,6 +5,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"github.com/piqab/nkt/internal/guestcred"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -62,6 +63,7 @@ type Server struct {
 	// время задания.
 	files       *files.Manager
 	cloneRunner *files.CloneRunner
+	guestCreds  *guestcred.Store
 	ui          fs.FS
 	log         *slog.Logger
 	version     string
@@ -111,8 +113,10 @@ type Deps struct {
 	VMImages    *vmimage.Store
 	Files       *files.Manager
 	CloneRunner *files.CloneRunner
-	UI          fs.FS
-	Log         *slog.Logger
+	// GuestCreds — пароли гостей (LXD, libvirt), заданные через nkt.
+	GuestCreds *guestcred.Store
+	UI         fs.FS
+	Log        *slog.Logger
 	// Version is this binary's own version, reported by /api/health so
 	// the hub can show what is actually running on a host rather than
 	// what it recorded having installed there.
@@ -121,6 +125,9 @@ type Deps struct {
 
 // New builds the HTTP server.
 func New(d Deps) *Server {
+	if d.GuestCreds == nil && d.DB != nil && d.Cfg != nil {
+		d.GuestCreds = guestcred.New(d.DB, d.Cfg.DataDir)
+	}
 	if d.Configs != nil && d.LXD != nil {
 		d.Configs.AttachLXD(d.LXD)
 	}
@@ -128,7 +135,7 @@ func New(d Deps) *Server {
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, osusers: d.OSUsers, disks: d.Disks, hardware: d.Hardware, sysconfig: d.SysConfig,
 		netmanager: d.NetManager, sandboxpkg: d.SandboxPkg, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
-		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images, jobs: d.Jobs, vmimages: d.VMImages, files: d.Files, cloneRunner: d.CloneRunner,
+		podman: d.Podman, lxd: d.LXD, libvirt: d.Libvirt, logs: d.Logs, images: d.Images, jobs: d.Jobs, vmimages: d.VMImages, files: d.Files, cloneRunner: d.CloneRunner, guestCreds: d.GuestCreds,
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
 	}
@@ -224,6 +231,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/lxd/instances/{name}/snapshots", s.handleLXDSnapshots)
 			r.Get("/lxd/instances/{name}/config", s.handleLXDConfig)
 			r.Get("/lxd/networks", s.handleLXDNetworks)
+			r.Get("/guests/{kind}/{name}/credentials", s.handleGuestCredInfo)
 			r.Get("/lxd/storage", s.handleLXDStorage)
 			r.Get("/backups", s.handleBackupsList)
 			r.Get("/vms", s.handleVMs)
@@ -344,6 +352,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/inventory/refresh", s.handleRefresh)
 				// Проверка порта делает соединение от имени хоста — админам.
 				r.Post("/ports/probe", s.handlePortProbe)
+				// Пароль гостя — администратору, с записью в аудит.
+				r.Post("/guests/{kind}/{name}/credentials/reveal", s.handleGuestCredReveal)
 				r.Post("/files/mkdir", s.handleFilesMkdir)
 				r.Post("/files/rename", s.handleFilesRename)
 				r.Post("/files/delete", s.handleFilesDelete)
@@ -372,6 +382,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/lxd/instances", s.handleLXDInstanceCreate)
 				r.Post("/lxd/instances/{name}/autostart", s.handleLXDAutostart)
 				r.Put("/lxd/instances/{name}/config", s.handleLXDConfigWrite)
+				r.Post("/guests/{kind}/{name}/password", s.handleGuestPassword)
 				r.Post("/lxd/networks", s.handleLXDNetworkCreate)
 				r.Delete("/lxd/networks/{name}", s.handleLXDNetworkDelete)
 				r.Delete("/lxd/images/{fp}", s.handleLXDImageDelete)

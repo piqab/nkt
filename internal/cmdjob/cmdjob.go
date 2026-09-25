@@ -11,6 +11,8 @@ package cmdjob
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -31,8 +33,12 @@ type Command struct {
 	StepArgs []any  `json:"step_args,omitempty"`
 	// Optional — неудача не валит задание, а пишется в журнал.
 	Optional bool `json:"optional,omitempty"`
-	// SecretRef — ключ секрета, который подставляется вместо «{secret}» в
-	// argv прямо перед запуском; в журнал argv не пишется.
+	// Script — вместо Argv: сценарий bash, где «{secret}» заменяется
+	// паролем по SecretRef (в одинарных кавычках sh) прямо перед запуском.
+	// Сценарий пишется во временный файл 0700 и удаляется после запуска:
+	// пароль не попадает ни в параметры задания, ни в командную строку
+	// systemd-run (её пишет журнал), ни в журнал задания.
+	Script    string `json:"script,omitempty"`
 	SecretRef string `json:"secret_ref,omitempty"`
 }
 
@@ -55,11 +61,13 @@ type Runner struct {
 	collector collect.Collector
 	secrets   Secrets
 	refresh   func(ctx context.Context)
+	// runDir — где лежат временные сценарии; виден и вне песочницы.
+	runDir string
 }
 
 // New — exec nil (демо-режим) — команды идут через заготовки сборщика.
-func New(exec Exec, c collect.Collector, secrets Secrets, refresh func(context.Context)) *Runner {
-	return &Runner{exec: exec, collector: c, secrets: secrets, refresh: refresh}
+func New(exec Exec, c collect.Collector, secrets Secrets, refresh func(context.Context), runDir string) *Runner {
+	return &Runner{exec: exec, collector: c, secrets: secrets, refresh: refresh, runDir: runDir}
 }
 
 // Resumable — нет: команду с середины не продолжить.
@@ -91,7 +99,7 @@ func (r *Runner) Run(ctx context.Context, jc *jobs.Context) error {
 		return msgs.Errorf("cmdjob.empty")
 	}
 	for i, c := range p.Commands {
-		if len(c.Argv) == 0 {
+		if len(c.Argv) == 0 && c.Script == "" {
 			continue
 		}
 		stepName := ""
@@ -102,21 +110,19 @@ func (r *Runner) Run(ctx context.Context, jc *jobs.Context) error {
 			jc.Step(i+1, len(p.Commands), strings.Join(c.Argv, " "))
 		}
 		argv := append([]string{}, c.Argv...)
-		if c.SecretRef != "" {
-			if r.secrets == nil {
-				return msgs.Errorf("cmdjob.noSecrets")
-			}
-			secret, err := r.secrets(ctx, c.SecretRef)
+		cleanup := func() {}
+		if c.Script != "" {
+			path, err := r.writeScript(ctx, jc.Job.ID, i, c)
 			if err != nil {
 				return err
 			}
-			for j := range argv {
-				argv[j] = strings.ReplaceAll(argv[j], "{secret}", secret)
-			}
+			cleanup = func() { _ = os.Remove(path) }
+			argv = []string{"bash", path}
 		} else {
 			jc.Logf("$ %s", strings.Join(argv, " "))
 		}
 		code, err := r.run(ctx, jc, stepName, i, len(p.Commands), argv)
+		cleanup()
 		if err == nil && code != 0 {
 			err = msgs.Errorf("cmdjob.exitCode", code)
 		}
@@ -166,3 +172,32 @@ func (r *Runner) run(ctx context.Context, jc *jobs.Context, stepName string, i, 
 	}
 	return res.ExitCode, nil
 }
+
+// writeScript кладёт сценарий команды (с паролем, если нужен) в runDir.
+func (r *Runner) writeScript(ctx context.Context, jobID int64, i int, c Command) (string, error) {
+	script := c.Script
+	if c.SecretRef != "" {
+		if r.secrets == nil {
+			return "", msgs.Errorf("cmdjob.noSecrets")
+		}
+		secret, err := r.secrets(ctx, c.SecretRef)
+		if err != nil {
+			return "", err
+		}
+		script = strings.ReplaceAll(script, "{secret}", shellQuote(secret))
+	}
+	dir := r.runDir
+	if dir == "" {
+		dir = os.TempDir()
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, fmt.Sprintf("cmdjob-%d-%d.sh", jobID, i))
+	if err := os.WriteFile(path, []byte("set -e\n"+script+"\n"), 0o700); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }

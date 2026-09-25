@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { VNCModal } from './VNCModal'
 import { SpiceModal } from './SpiceModal'
 import { Modal } from './ui'
+import { GuestLoginBar } from './GuestLogin'
 
 /** Экран машины libvirt: VNC (noVNC), если он есть, иначе SPICE
  * (spice-html5); без VNC — кнопка «добавить VNC» через правку XML. */
@@ -57,10 +58,11 @@ export function VMScreenModal({
             {addVNC}
           </>
         }
+        below={<GuestLoginBar kind="vm" name={name} canControl />}
       />
     )
   }
-  return <VNCModal key="vnc" name={name} onClose={onClose} extra={switcher} />
+  return <VNCModal key="vnc" name={name} onClose={onClose} extra={switcher} below={<GuestLoginBar kind="vm" name={name} canControl />} />
 }
 
 /** Добавляет в XML домена графику VNC на 127.0.0.1 (перед </devices>). */
