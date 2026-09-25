@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -343,6 +344,21 @@ func (l *Local) RunTimeout(ctx context.Context, timeout time.Duration, name stri
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
+	// Программы, которые из песочницы юнита не запустить (см. SetEscape),
+	// — снаружи, по полному пути: у транзитного юнита systemd-run свой PATH.
+	escapeMu.RLock()
+	run, escaped := escapeRunner, escapeNames[name]
+	escapeMu.RUnlock()
+	if run != nil && escaped {
+		full := name
+		if p, err := exec.LookPath(name); err == nil {
+			full = p
+		}
+		res, err := run(ctx, append([]string{full}, args...)...)
+		res.Argv = append([]string{name}, args...)
+		return res, err
+	}
+
 	started := time.Now()
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = cEnv()
@@ -484,4 +500,45 @@ func writeInPlace(path string, data []byte, mode fs.FileMode) error {
 		return errors.Join(err, f.Close())
 	}
 	return f.Close()
+}
+
+// EscapeRunner выполняет команду вне песочницы юнита (см. api.RunTooling).
+type EscapeRunner func(ctx context.Context, argv ...string) (CommandResult, error)
+
+var (
+	escapeMu     sync.RWMutex
+	escapeRunner EscapeRunner
+	escapeNames  = map[string]bool{}
+)
+
+// SetEscape направляет перечисленные программы в обход песочницы. Нужно
+// для snap-программ (lxc): /snap/bin/lxc — обёртка, которая идёт через
+// setuid-помощник snap-confine, а с NoNewPrivileges=yes он не
+// запускается.
+func SetEscape(names []string, run EscapeRunner) {
+	escapeMu.Lock()
+	defer escapeMu.Unlock()
+	escapeRunner = run
+	escapeNames = map[string]bool{}
+	for _, n := range names {
+		escapeNames[n] = true
+	}
+}
+
+// EnsureSnapPath добавляет /snap/bin в PATH процесса: у службы его нет
+// (systemd даёт свой короткий PATH), и программа из snap (lxc) не
+// находилась — «executable file not found in $PATH», а наличие LXD
+// определялось как «не установлен».
+func EnsureSnapPath() {
+	const snapBin = "/snap/bin"
+	path := os.Getenv("PATH")
+	for _, p := range filepath.SplitList(path) {
+		if p == snapBin {
+			return
+		}
+	}
+	if path == "" {
+		path = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	}
+	_ = os.Setenv("PATH", path+string(os.PathListSeparator)+snapBin)
 }
