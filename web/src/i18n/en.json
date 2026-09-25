@@ -2071,7 +2071,8 @@
     "download": "download",
     "truncated": "truncated",
     "received": "Received over the connection: {{bytes}} B",
-    "silent": "The connection opened but the server sent nothing — it waits for you to speak first."
+    "silent": "The connection opened but the server sent nothing — it waits for you to speak first.",
+    "renderSPA": "This page is a JavaScript application: its content is drawn by scripts and assets from the real address, and both are deliberately off in this window (a sandbox with no network and no JS). An empty frame is expected: the port answers and the HTML arrived; see the \"text\" tab and the response headers."
   },
   "standalone": {
     "intro": "certbot --standalone runs its own server on ports 80/443, so they must be free for the check. This is what holds them now and what will happen to it:",
