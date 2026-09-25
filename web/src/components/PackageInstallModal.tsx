@@ -4,6 +4,7 @@ import { Trans, useTranslation } from 'react-i18next'
 import { Banner } from './ui'
 import { PtyToolbar } from './PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
+import { JobFirst } from './useJobLauncher'
 
 /**
  * Runs `apt-get install -y <packageName>` live, the same PTY/WebSocket
@@ -15,7 +16,7 @@ import { usePty, wsURL } from '../hooks/usePty'
  * for. One component for every such install button (ufw, firewalld, ...)
  * — they differ only in which package and which session/ws path.
  */
-export default function PackageInstallModal({
+function PackageInstallLive({
   packageName,
   wsPath,
   onClose,
@@ -104,5 +105,20 @@ export default function PackageInstallModal({
           </Banner>
         ))}
     </AntModal>
+  )
+}
+
+/** Установка или удаление — фоновым заданием (JobFirst), на старом хосте
+ * или для операций без задания — прежним живым выводом. */
+export default function PackageInstallModal(props: Parameters<typeof PackageInstallLive>[0]) {
+  const { t } = useTranslation()
+  return (
+    <JobFirst
+      path={props.wsPath}
+      title={t(props.action === 'remove' ? 'packageInstall.titleRemove' : 'packageInstall.title', { packageName: props.packageName })}
+      onClose={props.onClose}
+      onDone={props.onFinished}
+      live={() => <PackageInstallLive {...props} />}
+    />
   )
 }

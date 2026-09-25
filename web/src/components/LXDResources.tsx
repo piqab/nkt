@@ -187,6 +187,7 @@ export function LXDResources({ canControl }: { canControl: boolean }) {
       {copying && (
         <CommandModal
           title={t('lxdRes.downloadTitle', { ref: copying.ref })}
+          asJob
           wsPath={`/lxd/images/copy/ws?ref=${encodeURIComponent(copying.ref)}${copying.vm ? '&vm=1' : ''}`}
           onClose={() => setCopying(null)}
           onFinished={() => void images.reload()}

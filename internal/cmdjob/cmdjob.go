@@ -75,8 +75,19 @@ func (r *Runner) Resumable() bool { return false }
 
 var percentRe = regexp.MustCompile(`^(.*?)[\s:\[(]*(\d{1,3})(?:\.\d+)?%`)
 
+// aptStatusRe — строки APT::Status-Fd: «pmstatus:curl:45.4545:Unpacking
+// curl», «dlstatus:3:62.5:Retrieving file 3 of 8».
+var aptStatusRe = regexp.MustCompile(`^(?:pm|dl)status:[^:]*:(\d{1,3})(?:\.\d+)?:(.*)$`)
+
 // ParsePercent — процент и подпись из строки прогресса; ok=false — не она.
 func ParsePercent(line string) (label string, pct int, ok bool) {
+	if m := aptStatusRe.FindStringSubmatch(strings.TrimSpace(line)); m != nil {
+		n, _ := strconv.Atoi(m[1])
+		if n > 100 {
+			n = 100
+		}
+		return strings.TrimSpace(m[2]), n, true
+	}
 	m := percentRe.FindStringSubmatch(strings.TrimSpace(line))
 	if m == nil {
 		return "", 0, false
@@ -118,6 +129,13 @@ func (r *Runner) Run(ctx context.Context, jc *jobs.Context) error {
 			}
 			cleanup = func() { _ = os.Remove(path) }
 			argv = []string{"bash", path}
+			if c.SecretRef == "" {
+				for _, l := range strings.Split(strings.TrimSpace(c.Script), "\n") {
+					if !strings.HasPrefix(l, "export ") {
+						jc.Logf("$ %s", l)
+					}
+				}
+			}
 		} else {
 			jc.Logf("$ %s", strings.Join(argv, " "))
 		}

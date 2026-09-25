@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.120 — 2026-09-25
+
+- **Installs and upgrades run as jobs.** Installing and removing apt,
+  snap and flatpak packages, the system upgrade, installing engines (LXD,
+  Podman), btop, tmux, ufw and firewalld, and downloading LXD images now
+  run as a host background job: the standard job log window opens right
+  away with percentages (apt's come from its status), the job shows in
+  "Jobs", closing the window stops nothing. Through the hub — the same.
+- **The system upgrade as a job** runs with `-y` and keeps local
+  configuration files: nobody can answer prompts in the background.
+- **Compatibility.** An older host does not know these jobs — the UI falls
+  back to the previous live output by itself. Installing dbus still uses
+  live output: jobs cannot start without dbus.
+
 ## v1.10.119 — 2026-09-25
 
 - **Guest login and password.** When creating an LXD instance or a

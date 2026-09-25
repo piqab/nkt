@@ -5,6 +5,7 @@ import type { PackageUpdate } from '../types'
 import { Banner } from './ui'
 import { PtyToolbar } from './PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
+import { JobFirst } from './useJobLauncher'
 
 /**
  * Runs `apt-get update && apt-get dist-upgrade` on this host live —
@@ -16,7 +17,7 @@ import { usePty, wsURL } from '../hooks/usePty'
  * "обновить" button on Overview), this dialog IS the thing that was
  * confirmed, not another gate in front of it.
  */
-export default function UpdateModal({
+function UpdateLive({
   packages,
   onClose,
   onFinished,
@@ -108,5 +109,19 @@ export default function UpdateModal({
           </Banner>
         ))}
     </AntModal>
+  )
+}
+
+/** Обновление системы — фоновым заданием, на старом хосте — живым выводом. */
+export default function UpdateModal(props: Parameters<typeof UpdateLive>[0]) {
+  const { t } = useTranslation()
+  return (
+    <JobFirst
+      path="/updates/ws"
+      title={t('updateModal.title')}
+      onClose={props.onClose}
+      onDone={props.onFinished}
+      live={() => <UpdateLive {...props} />}
+    />
   )
 }

@@ -53,6 +53,14 @@ and cancellation. The host job list: kind, step, status, author,
 duration; the log is live. A job interrupted by a service restart resumes
 or is honestly marked interrupted.
 
+Jobs also cover installing and removing apt, snap and flatpak packages,
+the system upgrade, installing engines (LXD, Podman), btop, tmux, ufw and
+firewalld, creating LXD instances and Podman containers, downloading LXD
+images and changing guest passwords. The button opens the job log window
+right away with percentages (apt's come from its status); a closed window
+reopens from "Jobs". Through the hub it is the same: these are the host's
+own jobs.
+
 ## Audit log
 
 ![Audit log](/screens/en/audit.png)
