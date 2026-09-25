@@ -36,9 +36,12 @@ type unitDirectives struct {
 	// ProtectHome — значение директивы (последнее): «yes» прячет /home
 	// от юнита целиком, проводник файлов там пуст.
 	ProtectHome string
-	Found       bool
-	Path        string
-	ModTime     time.Time
+	// PrivateTmp — «yes»/«true»: у юнита свой /tmp, проводнику его не
+	// показывать.
+	PrivateTmp string
+	Found      bool
+	Path       string
+	ModTime    time.Time
 }
 
 // SandboxProblem — одна найденная причина с готовым способом починки.
@@ -134,6 +137,8 @@ func parseUnitDirectives(content string) unitDirectives {
 			}
 		case "ProtectHome":
 			d.ProtectHome = strings.ToLower(value)
+		case "PrivateTmp":
+			d.PrivateTmp = strings.ToLower(value)
 		case "RestrictNamespaces":
 			switch {
 			case strings.EqualFold(value, "no") || strings.EqualFold(value, "false"):

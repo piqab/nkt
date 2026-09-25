@@ -231,3 +231,23 @@ func TestUploadInvisibleFromSandbox(t *testing.T) {
 		t.Errorf("ждали ошибку о невидимом файле, получили %v", err)
 	}
 }
+
+// В списке корней — только существующие каталоги.
+func TestExistingRoots(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "srv"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "notdir"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m := NewManager([]string{filepath.Join(root, "srv"), filepath.Join(root, "missing"), filepath.Join(root, "notdir")},
+		collect.NewLocal("", "", 0), nil, nil, filepath.Join(root, ".nkt-tmp"))
+	got := m.ExistingRoots()
+	if len(got) != 1 || got[0] != filepath.Join(root, "srv") {
+		t.Fatalf("ExistingRoots = %v, ожидался только srv", got)
+	}
+	if len(m.Roots()) != 3 {
+		t.Fatalf("Roots не должен фильтровать: %v", m.Roots())
+	}
+}
