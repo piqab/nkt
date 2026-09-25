@@ -171,12 +171,13 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 	client := tunnelHTTPClientNoTimeout(dial, addr)
 
 	report(msgs.Tc(ctx, "hub.vulnFetchingPackages"))
-	manifest, err := fetchHostManifest(ctx, client, addr, cookie)
+	hm, err := fetchHostManifest(ctx, client, addr, cookie)
 	if err != nil {
 		onFail()
 		fail(err)
 		return
 	}
+	manifest := hm.Manifest
 
 	report(msgs.Tc(ctx, "hub.vulnAskingImages"))
 	imgFindings, imgWarnings, imgDBUpdated, err := fetchHostImageScan(ctx, client, addr, cookie)
@@ -189,9 +190,10 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 		imgWarnings = append(imgWarnings, msgs.Tc(ctx, "hub.vulnImageScanFailed", err))
 	}
 
+	imgWarnings = append(imgWarnings, hm.InstanceWarnings...)
 	var findings []model.VulnFinding
 	dbUpdated := imgDBUpdated
-	if manifest.Available {
+	if manifest.Available || len(hm.Instances) > 0 {
 		dir := m.vulnDir()
 		trivyBin, err := vuln.EnsureTrivy(ctx, filepath.Join(dir, "bin"), report)
 		if err != nil {
@@ -204,13 +206,20 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 			return
 		}
 
-		report(msgs.Tc(ctx, "hub.vulnScanningOS"))
-		osFindings, err := vuln.Scan(ctx, trivyBin, dbDir, manifest)
-		if err != nil {
-			fail(err)
-			return
+		if manifest.Available {
+			report(msgs.Tc(ctx, "hub.vulnScanningOS"))
+			osFindings, err := vuln.Scan(ctx, trivyBin, dbDir, manifest)
+			if err != nil {
+				fail(err)
+				return
+			}
+			findings = append(findings, osFindings...)
 		}
-		findings = append(findings, osFindings...)
+		guestFindings, gw := vuln.ScanInstances(ctx, trivyBin, dbDir, hm.Instances, func(target string) {
+			report(msgs.Tc(ctx, "api.vulnScanningGuest", target))
+		})
+		findings = append(findings, guestFindings...)
+		imgWarnings = append(imgWarnings, gw...)
 
 		hubDBUpdated := vuln.DBUpdatedAt(dbDir)
 		// The older of the two DB freshness timestamps is the honest
@@ -223,7 +232,7 @@ func (m *Manager) runHostVulnScan(ctx context.Context, hostID int64) {
 	}
 	findings = append(findings, imgFindings...)
 
-	if !manifest.Available && len(imgFindings) == 0 && len(imgWarnings) == 0 {
+	if !manifest.Available && len(hm.Instances) == 0 && len(imgFindings) == 0 && len(imgWarnings) == 0 {
 		state.mu.Lock()
 		state.result = &model.VulnScan{Available: false, ScannedAt: time.Now()}
 		state.scanning = false
@@ -320,27 +329,32 @@ func (m *Manager) dropVulnScan(hostID int64) {
 // new, cheap GET handleVulnManifest (internal/api/handlers_vulnerabilities.go)
 // exists specifically so a hub never has to run trivy on the host's own
 // filesystem to get this.
-func fetchHostManifest(ctx context.Context, client *http.Client, addr, cookie string) (model.PackageManifest, error) {
+func fetchHostManifest(ctx context.Context, client *http.Client, addr, cookie string) (hostManifest, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/api/vulnerabilities/manifest", nil)
 	if err != nil {
-		return model.PackageManifest{}, err
+		return hostManifest{}, err
 	}
 	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
 	resp, err := client.Do(req)
 	if err != nil {
-		return model.PackageManifest{}, err
+		return hostManifest{}, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return model.PackageManifest{}, msgs.Errorf("hub.hostReturnedCodeVulnerabilitiesManifest", resp.StatusCode)
+		return hostManifest{}, msgs.Errorf("hub.hostReturnedCodeVulnerabilitiesManifest", resp.StatusCode)
 	}
-	var body struct {
-		Manifest model.PackageManifest `json:"manifest"`
-	}
+	var body hostManifest
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
-		return model.PackageManifest{}, err
+		return hostManifest{}, err
 	}
-	return body.Manifest, nil
+	return body, nil
+}
+
+// hostManifest — ответ /vulnerabilities/manifest: пакеты хоста и гостей.
+type hostManifest struct {
+	Manifest         model.PackageManifest    `json:"manifest"`
+	Instances        []model.InstanceManifest `json:"instances"`
+	InstanceWarnings []string                 `json:"instance_warnings"`
 }
 
 // fetchHostImageScan asks hostID's own nkt to scan whatever container

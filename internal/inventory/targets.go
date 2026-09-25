@@ -3,6 +3,7 @@ package inventory
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/piqab/nkt/internal/model"
@@ -29,7 +30,7 @@ func DeriveTargets(snap *model.Snapshot) []store.Target {
 	var out []store.Target
 
 	add := func(t store.Target) {
-		if t.Port <= 0 || seen[t.Key] {
+		if (t.Port <= 0 && t.Kind != "icmp") || seen[t.Key] {
 			return
 		}
 		seen[t.Key] = true
@@ -85,7 +86,82 @@ func DeriveTargets(snap *model.Snapshot) []store.Target {
 			})
 		}
 	}
+	deriveWorkloadTargets(snap, add)
 	return out
+}
+
+// deriveWorkloadTargets — опубликованные порты Podman, проброшенные порты
+// LXD (устройства proxy) и сами работающие машины: инстансы LXD и машины
+// libvirt проверяются ping по их адресу.
+func deriveWorkloadTargets(snap *model.Snapshot, add func(store.Target)) {
+	for _, ct := range snap.Podman {
+		if ct.State != "running" {
+			continue
+		}
+		for _, p := range ct.Ports {
+			if !p.Published() || (p.Protocol != "" && p.Protocol != "tcp") {
+				continue
+			}
+			host := probeHost(p.HostIP)
+			add(store.Target{
+				Key:   fmt.Sprintf("podman:%s:%s:%d", ct.Name, host, p.HostPort),
+				Label: fmt.Sprintf("podman · %s %d→%d", ct.Name, p.HostPort, p.ContainerPort),
+				Kind:  "tcp", Host: host, Port: p.HostPort,
+				Source: model.ServicePodman, Service: model.ServicePodman, NodeID: "podman:" + ct.Name,
+			})
+		}
+	}
+	for _, in := range snap.LXD {
+		if !strings.EqualFold(in.Status, "running") {
+			continue
+		}
+		for _, p := range in.Ports {
+			proto, rest, ok := strings.Cut(p.Listen, ":")
+			if !ok || proto != "tcp" {
+				continue
+			}
+			i := strings.LastIndex(rest, ":")
+			if i < 0 {
+				continue
+			}
+			port, err := strconv.Atoi(rest[i+1:])
+			if err != nil {
+				continue
+			}
+			host := probeHost(strings.Trim(rest[:i], "[]"))
+			add(store.Target{
+				Key:   fmt.Sprintf("lxd-port:%s:%s:%s:%d", in.Name, p.Device, host, port),
+				Label: fmt.Sprintf("lxd · %s %d (%s)", in.Name, port, p.Device),
+				Kind:  "tcp", Host: host, Port: port,
+				Source: model.ServiceLXD, Service: model.ServiceLXD, NodeID: "lxd:" + in.Name,
+			})
+		}
+		if len(in.IPv4) > 0 {
+			add(store.Target{
+				Key:   "lxd-ip:" + in.Name,
+				Label: fmt.Sprintf("lxd · %s", in.Name),
+				Kind:  "icmp", Host: in.IPv4[0],
+				Source: model.ServiceLXD, Service: model.ServiceLXD, NodeID: "lxd:" + in.Name,
+			})
+		}
+	}
+	for _, vm := range snap.VMs {
+		if vm.State != "running" {
+			continue
+		}
+		for _, n := range vm.Networks {
+			if n.IP == "" {
+				continue
+			}
+			add(store.Target{
+				Key:   "vm-ip:" + vm.Name,
+				Label: fmt.Sprintf("libvirt · %s", vm.Name),
+				Kind:  "icmp", Host: n.IP,
+				Source: model.ServiceLibvirt, Service: model.ServiceLibvirt, NodeID: "vm:" + vm.Name,
+			})
+			break
+		}
+	}
 }
 
 // probeHost turns a bind address into something dialable from the host itself.

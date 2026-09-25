@@ -20,7 +20,18 @@ const SERIES = [
     id: 'docker-net',
     labelKey: 'usage.series.dockerNet',
     source: 'docker',
+    workload: true,
     metric: 'net_rx_bytes',
+    agg: 'sum',
+    unitKey: 'usage.unit.bytes',
+    format: formatBytes,
+  },
+  {
+    id: 'docker-net-tx',
+    labelKey: 'usage.series.netTx',
+    source: 'docker',
+    workload: true,
+    metric: 'net_tx_bytes',
     agg: 'sum',
     unitKey: 'usage.unit.bytes',
     format: formatBytes,
@@ -29,6 +40,7 @@ const SERIES = [
     id: 'docker-cpu',
     labelKey: 'usage.series.dockerCpu',
     source: 'docker',
+    workload: true,
     metric: 'cpu_pct',
     agg: 'avg',
     unitKey: 'usage.unit.percent',
@@ -38,6 +50,7 @@ const SERIES = [
     id: 'docker-mem',
     labelKey: 'usage.series.dockerMem',
     source: 'docker',
+    workload: true,
     metric: 'mem_bytes',
     agg: 'avg',
     unitKey: 'usage.unit.bytes',
@@ -80,6 +93,14 @@ const SERIES = [
     format: (n: number) => formatNumber(n),
   },
 ] as const
+
+/** Чьи ряды показывать у сети, процессора и памяти. */
+const WORKLOADS = [
+  { value: 'docker', label: 'Docker' },
+  { value: 'podman', label: 'Podman' },
+  { value: 'lxd', label: 'LXD' },
+  { value: 'libvirt', label: 'Libvirt' },
+]
 
 const RANGES = [
   { value: '24h', labelKey: 'availability.range.day', granularity: 'hour' },
@@ -126,9 +147,12 @@ function UsageCharts() {
   const { t } = useTranslation()
   const [seriesId, setSeriesId] = useState<string>(SERIES[0].id)
   const [range, setRange] = useState('7d')
+  const [workload, setWorkload] = useState('docker')
   const tz = tzOffsetMinutes()
 
-  const spec = SERIES.find((s) => s.id === seriesId)!
+  const base = SERIES.find((s) => s.id === seriesId)!
+  const isWorkload = 'workload' in base && base.workload
+  const spec = { ...base, source: isWorkload ? workload : base.source }
   const rangeSpec = RANGES.find((r) => r.value === range)!
 
   const usage = useApi<{ points: MetricPoint[]; simulated: boolean; total: number | null }>(
@@ -190,6 +214,12 @@ function UsageCharts() {
             options={SERIES.map((s) => ({ value: s.id, label: t(s.labelKey) }))}
           />
         </label>
+        {isWorkload && (
+          <label>
+            {t('usage.source')}
+            <Select value={workload} onChange={setWorkload} style={{ minWidth: '9rem' }} options={WORKLOADS} />
+          </label>
+        )}
         <label>
           {t('common.period')}
           <Select

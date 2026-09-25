@@ -201,8 +201,10 @@ func (s *Server) runVulnScan(ctx context.Context) {
 	report(msgs.Tc(ctx, "api.vulnCollectingPackages"))
 	manifest := parse.Manifest(s.scanner.Collector())
 	images := s.runningImages(ctx)
+	report(msgs.Tc(ctx, "api.vulnCollectingGuests"))
+	guests, guestWarnings := parse.InstanceManifests(ctx, s.scanner.Collector(), s.scanner.Latest())
 
-	if !manifest.Available && len(images) == 0 {
+	if !manifest.Available && len(images) == 0 && len(guests) == 0 && len(guestWarnings) == 0 {
 		// Not a dpkg-based host and no Docker/Podman containers running —
 		// nothing trivy could scan here at all, and no point downloading a
 		// ~1GB database to learn that. Same "not applicable, not an error"
@@ -238,7 +240,13 @@ func (s *Server) runVulnScan(ctx context.Context) {
 		findings = append(findings, osFindings...)
 	}
 
-	var warnings []string
+	warnings := append([]string{}, guestWarnings...)
+	guestFindings, gw := vuln.ScanInstances(ctx, trivyBin, dbDir, guests, func(target string) {
+		report(msgs.Tc(ctx, "api.vulnScanningGuest", target))
+	})
+	findings = append(findings, guestFindings...)
+	warnings = append(warnings, gw...)
+
 	for _, image := range images {
 		report(msgs.Tc(ctx, "api.scanningImage", image))
 		imageFindings, err := vuln.ScanImage(ctx, trivyBin, dbDir, image, s.cfg.DockerSocket, s.cfg.PodmanSocket)
@@ -302,7 +310,10 @@ func (s *Server) runVulnScan(ctx context.Context) {
 // downloads anything.
 func (s *Server) handleVulnManifest(w http.ResponseWriter, r *http.Request) {
 	manifest := parse.Manifest(s.scanner.Collector())
-	writeJSON(w, http.StatusOK, map[string]any{"manifest": manifest})
+	// Пакеты гостей (LXD, libvirt) — тем же ответом: хаб сканирует их у
+	// себя, как и пакеты хоста. Старый хаб лишние поля просто не читает.
+	guests, warnings := parse.InstanceManifests(r.Context(), s.scanner.Collector(), s.scanner.Latest())
+	writeJSON(w, http.StatusOK, map[string]any{"manifest": manifest, "instances": guests, "instance_warnings": warnings})
 }
 
 // vulnScanImagesResponse is handleVulnScanImages' own response shape —

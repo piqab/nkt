@@ -1,0 +1,26 @@
+{
+  "read": "2026-07-28T10:12:03.123456789Z",
+  "preread": "2026-07-28T10:12:02.123456789Z",
+  "cpu_stats": {
+    "cpu_usage": { "total_usage": 123456789000, "usage_in_kernelmode": 41000000000, "usage_in_usermode": 82456789000 },
+    "system_cpu_usage": 9876543210000,
+    "online_cpus": 4,
+    "throttling_data": { "periods": 0, "throttled_periods": 0, "throttled_time": 0 }
+  },
+  "precpu_stats": {
+    "cpu_usage": { "total_usage": 123400000000, "usage_in_kernelmode": 40980000000, "usage_in_usermode": 82420000000 },
+    "system_cpu_usage": 9872543210000,
+    "online_cpus": 4,
+    "throttling_data": { "periods": 0, "throttled_periods": 0, "throttled_time": 0 }
+  },
+  "memory_stats": {
+    "usage": 268435456,
+    "limit": 2147483648,
+    "stats": { "cache": 33554432, "inactive_file": 16777216 }
+  },
+  "networks": {
+    "eth0": { "rx_bytes": 1284736512, "tx_bytes": 894736512, "rx_packets": 4821003, "tx_packets": 3910284, "rx_errors": 0, "tx_errors": 0, "rx_dropped": 0, "tx_dropped": 0 }
+  },
+  "blkio_stats": { "io_service_bytes_recursive": [] },
+  "pids_stats": { "current": 12 }
+}

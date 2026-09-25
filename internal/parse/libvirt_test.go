@@ -113,3 +113,10 @@ func TestToKB(t *testing.T) {
 		}
 	}
 }
+
+func TestParseDomIfAddr(t *testing.T) {
+	got := parseDomIfAddr(" Name       MAC address          Protocol     Address\n-------------------------------------------------------------------------------\n vnet0      52:54:00:AA:bb:cc    ipv4         192.168.122.45/24\n vnet0      52:54:00:aa:bb:cc    ipv6         fe80::1/64\n")
+	if len(got) != 1 || got["52:54:00:aa:bb:cc"] != "192.168.122.45" {
+		t.Fatalf("%v", got)
+	}
+}

@@ -8,24 +8,30 @@ title: Monitoring
 
 ![Availability](/screens/en/availability.png)
 
-Every declared listener and every pool backend is probed on a schedule
-(`NKT_PROBE_INTERVAL`, once a minute by default): a TCP connection or an
-HTTP request with the right `Host` header. The history turns into:
+On a schedule (`NKT_PROBE_INTERVAL`, once a minute by default) nkt probes
+web server listeners and pool backends, published Docker and Podman ports,
+forwarded LXD ports, and running LXD instances and libvirt machines by
+ping at their address. A probe is a TCP connection, an HTTP request with
+the right `Host` header, or a ping. The history turns into:
 
 - a “weekday hour × downtime” heatmap — you see when a service fails
   regularly;
 - availability and latency graphs for a period;
 - a list of outages with start, end and the error text.
 
-Besides the auto-discovered ones you can add **your own targets** — any
-address and port, internal or external.
+Besides the auto-discovered ones you can add **your own targets** with
+"+ target": ping, TCP, HTTP or HTTPS to any address, internal or
+external. Scans never touch your own targets; you delete them from the
+list.
 
 ## Load
 
 ![Load](/screens/en/usage.png)
 
-- Load graphs from iptables counters, `docker stats` and nginx/haproxy
-  access logs for the chosen period; log entries are sorted by their own
+- Load graphs from iptables counters, nginx/haproxy access logs and the
+  load of containers and machines for the chosen period: for network, CPU
+  and memory you pick the source next to the metric — Docker, Podman, LXD
+  or Libvirt (`virsh domstats`); log entries are sorted by their own
   timestamp, so the graph shows when the load happened, not when it was
   collected.
 - A ranking of the busiest resources and a load schedule by hour.

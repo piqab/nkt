@@ -44,6 +44,7 @@ var enCatalog = map[string]string{
 
 	"job.notFound": "Job not found",
 
+	"monitor.badManualTarget":     "target rejected: kind must be http, https, tcp or icmp; the address a name or IP; port 1–65535 (not needed for icmp); the path starts with /",
 	"monitor.invalidTargetId":     "Invalid target ID",
 	"monitor.schedulerNotRunning": "The scheduler isn't running",
 	"monitor.nothingToChange":     "Nothing to change",
@@ -557,6 +558,8 @@ var enCatalog = map[string]string{
 	"control.lxdBadNetworkAddr":                           "network address must be auto, none or a CIDR: %q",
 	"control.lxdBadImage":                                 "invalid image fingerprint: %q",
 	"control.lxdBadImageRef":                              "image to download must be images:… or ubuntu:…: %q",
+	"parse.guestManifestLXD":                              "LXD %s: packages inside were not read (%v) — an LXD VM needs a running lxd-agent",
+	"parse.guestManifestVM":                               "VM %s: packages inside were not read (%v) — the guest needs qemu-guest-agent and the machine the org.qemu.guest_agent.0 channel",
 	"control.lxcCode":                                     "lxc %s %s: code %d: %s",
 	"control.lxcDeleteCode":                               "lxc delete %s: code %d: %s",
 	"control.lxcLaunchCode":                               "lxc launch %s %s: code %d: %s",
@@ -1074,6 +1077,8 @@ var enCatalog = map[string]string{
 	"api.machineJobTitle":                           "machine %s",
 	"api.vulnStarting":                              "Starting...",
 	"api.vulnCollectingPackages":                    "Collecting the list of installed packages...",
+	"api.vulnCollectingGuests":                      "reading packages inside LXD instances and libvirt machines…",
+	"api.vulnScanningGuest":                         "checking packages of %s…",
 	"api.vulnScanningOS":                            "Scanning OS packages for vulnerabilities...",
 	"api.diagNoCapSysAdmin":                         "the process lacks CAP_SYS_ADMIN — without it the kernel refuses entering PID 1's namespace",
 	"api.diagUnitNotFound":                          "unit file %s not found — its contents cannot be checked from here",

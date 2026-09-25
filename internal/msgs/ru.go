@@ -43,6 +43,7 @@ var ruCatalog = map[string]string{
 
 	"job.notFound": "Задача не найдена",
 
+	"monitor.badManualTarget":     "цель не принята: вид http, https, tcp или icmp; адрес — имя или IP; порт 1–65535 (у icmp не нужен); путь начинается с /",
 	"monitor.invalidTargetId":     "Некорректный идентификатор цели",
 	"monitor.schedulerNotRunning": "Планировщик не запущен",
 	"monitor.nothingToChange":     "Нечего менять",
@@ -556,6 +557,8 @@ var ruCatalog = map[string]string{
 	"control.lxdBadNetworkAddr":                           "адрес сети — auto, none или CIDR: %q",
 	"control.lxdBadImage":                                 "недопустимый отпечаток образа: %q",
 	"control.lxdBadImageRef":                              "образ для скачивания — images:… или ubuntu:…: %q",
+	"parse.guestManifestLXD":                              "LXD %s: пакеты внутри не прочитаны (%v) — у VM LXD нужен работающий lxd-agent",
+	"parse.guestManifestVM":                               "VM %s: пакеты внутри не прочитаны (%v) — нужен qemu-guest-agent в госте и канал org.qemu.guest_agent.0 у машины",
 	"control.lxcCode":                                     "lxc %s %s: код %d: %s",
 	"control.lxcDeleteCode":                               "lxc delete %s: код %d: %s",
 	"control.lxcLaunchCode":                               "lxc launch %s %s: код %d: %s",
@@ -1073,6 +1076,8 @@ var ruCatalog = map[string]string{
 	"api.machineJobTitle":                           "машина %s",
 	"api.vulnStarting":                              "Запуск...",
 	"api.vulnCollectingPackages":                    "Собираю список установленных пакетов...",
+	"api.vulnCollectingGuests":                      "чтение пакетов внутри инстансов LXD и машин libvirt…",
+	"api.vulnScanningGuest":                         "проверка пакетов %s…",
 	"api.vulnScanningOS":                            "Сканирую пакеты ОС на уязвимости...",
 	"api.diagNoCapSysAdmin":                         "у процесса нет CAP_SYS_ADMIN — без неё ядро отклоняет вход в пространство имён PID 1",
 	"api.diagUnitNotFound":                          "файл юнита %s не найден — проверить его содержимое отсюда невозможно",

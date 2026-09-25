@@ -103,11 +103,12 @@ func (s *Server) usageTotal(q store.MetricQuery) *float64 {
 	if snap == nil {
 		return nil
 	}
+	workload := q.Source == "docker" || q.Source == "podman" || q.Source == "lxd" || q.Source == "libvirt"
 	switch {
-	case q.Source == "docker" && q.Metric == "cpu_pct" && snap.Capacity.CPUCores > 0:
+	case workload && q.Metric == "cpu_pct" && snap.Capacity.CPUCores > 0:
 		total := float64(snap.Capacity.CPUCores) * 100
 		return &total
-	case q.Source == "docker" && q.Metric == "mem_bytes" && snap.Capacity.MemTotalBytes > 0:
+	case workload && q.Metric == "mem_bytes" && snap.Capacity.MemTotalBytes > 0:
 		total := float64(snap.Capacity.MemTotalBytes)
 		return &total
 	default:

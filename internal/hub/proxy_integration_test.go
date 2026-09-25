@@ -358,7 +358,7 @@ func TestFetchHostManifestOverRealTunnel(t *testing.T) {
 	// response through the whole tunnel+cookie chain, reporting honestly
 	// that there is nothing to scan, not a connection/auth failure that
 	// happens to also decode as a zero value.
-	if manifest.Available {
+	if manifest.Manifest.Available {
 		t.Errorf("manifest.Available = true, want false (fixtures host has no dpkg fixture): %+v", manifest)
 	}
 }

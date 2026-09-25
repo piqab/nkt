@@ -167,6 +167,12 @@ func readDomain(ctx context.Context, c collect.Collector, uri, name string) (mod
 			Source: src, MAC: i.MAC.Address, Model: i.Model.Type,
 		})
 	}
+	if vm.State == "running" && len(vm.Networks) > 0 {
+		addrs := domIfAddrs(ctx, c, uri, name)
+		for i := range vm.Networks {
+			vm.Networks[i].IP = addrs[strings.ToLower(vm.Networks[i].MAC)]
+		}
+	}
 	for _, g := range dom.Devices.Graphics {
 		if g.Type != "" {
 			vm.Graphics = append(vm.Graphics, g.Type)
@@ -218,4 +224,40 @@ func toKB(value int64, unit string) int64 {
 	default: // KiB, or unspecified — dumpxml defaults to KiB
 		return value
 	}
+}
+
+// domIfAddrs — MAC → IPv4 работающей машины: сначала аренды DHCP сети
+// libvirt, для мостов без них — таблица ARP хоста.
+func domIfAddrs(ctx context.Context, c collect.Collector, uri, name string) map[string]string {
+	out := map[string]string{}
+	for _, src := range []string{"lease", "arp"} {
+		res, err := c.Run(ctx, "virsh", "-c", uri, "domifaddr", name, "--source", src)
+		if err != nil || !res.OK() {
+			continue
+		}
+		for mac, ip := range parseDomIfAddr(res.Stdout) {
+			if out[mac] == "" {
+				out[mac] = ip
+			}
+		}
+		if len(out) > 0 {
+			break
+		}
+	}
+	return out
+}
+
+// parseDomIfAddr разбирает таблицу `virsh domifaddr`:
+// « vnet0  52:54:00:12:34:56  ipv4  192.168.122.45/24».
+func parseDomIfAddr(text string) map[string]string {
+	out := map[string]string{}
+	for _, line := range strings.Split(text, "\n") {
+		f := strings.Fields(line)
+		if len(f) < 4 || f[2] != "ipv4" {
+			continue
+		}
+		ip, _, _ := strings.Cut(f[3], "/")
+		out[strings.ToLower(f[1])] = ip
+	}
+	return out
 }

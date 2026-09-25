@@ -409,3 +409,26 @@ func parseTrivyReport(out []byte) ([]model.VulnFinding, error) {
 	}
 	return findings, nil
 }
+
+// ScanInstances — пакеты внутри гостей (LXD, libvirt) тем же Scan, что у
+// хоста; Target находок — подпись гостя. Ошибка одного гостя не рушит
+// остальных: она уходит в предупреждения. progress — перед каждым гостем.
+func ScanInstances(ctx context.Context, trivyBin, dbDir string, list []model.InstanceManifest, progress func(target string)) ([]model.VulnFinding, []string) {
+	var findings []model.VulnFinding
+	var warnings []string
+	for _, in := range list {
+		if progress != nil {
+			progress(in.Target)
+		}
+		f, err := Scan(ctx, trivyBin, dbDir, in.Manifest)
+		if err != nil {
+			warnings = append(warnings, in.Target+": "+err.Error())
+			continue
+		}
+		for i := range f {
+			f[i].Target = in.Target
+		}
+		findings = append(findings, f...)
+	}
+	return findings, warnings
+}

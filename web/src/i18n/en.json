@@ -1322,7 +1322,7 @@
   },
   "vulns": {
     "title": "Vulnerabilities",
-    "hint": "Known CVEs for installed OS packages (Debian/Ubuntu) and for the images of already-running Docker/Podman containers — checked against a fresh trivy database. LXD isn't supported yet — it has no OCI images in the usual sense, that needs a separate mechanism.",
+    "hint": "Known CVEs for installed OS packages (Debian/Ubuntu) of the host, LXD instances and libvirt machines, and for images of running Docker and Podman containers — matched against a fresh trivy database. Guest packages are read from inside: directly for LXD containers, via lxd-agent for LXD VMs, via qemu-guest-agent for libvirt machines. The finding's origin is in the Source column.",
     "scan": "Scan",
     "scanStatus": "scan status",
     "neverScanned": "No scan has been run on this host yet. The first run may need to download trivy and the vulnerability database (about 1 GB) — this can take a few minutes.",
@@ -1336,7 +1336,7 @@
     "severity": "Severity",
     "source": "Source",
     "osHost": "host OS",
-    "searchPlaceholder": "CVE, package, or image…",
+    "searchPlaceholder": "CVE, package, image or machine…",
     "notFound": "No vulnerabilities found.",
     "new": "new",
     "noFixYet": "not yet",
@@ -1357,7 +1357,7 @@
   "availability": {
     "what": "monitoring targets",
     "title": "Availability schedule",
-    "hint": "Every declared listener and every pool backend is checked on a schedule (interval {{interval}}). Below is when resources were actually available, not just their current state.",
+    "hint": "On a schedule (interval {{interval}}) nkt checks web server listeners and their backends, published Docker and Podman ports, forwarded LXD ports, running LXD instances and libvirt machines (ping by address) and manually added targets. Below is when resources were actually available, not just their current state.",
     "range": {
       "day": "24h",
       "week": "7 days",
@@ -1400,11 +1400,22 @@
       "end": "End",
       "error": "Error"
     },
-    "uptime24hShort": "24h uptime: {{value}}%"
+    "uptime24hShort": "24h uptime: {{value}}%",
+    "addTarget": "+ target",
+    "addTargetHint": "An address that is not in the host's configuration: a machine on the network, an external site, a port without a web server. It is checked from this host on the same schedule. Web server ports, container ports, forwarded LXD ports and running machines are added automatically.",
+    "kind": "Check",
+    "kindIcmp": "ping (ICMP)",
+    "host": "Address",
+    "port": "Port",
+    "path": "Path",
+    "label": "Name",
+    "labelPlaceholder": "optional",
+    "add": "Add",
+    "deleteConfirm": "Delete target “{{name}}” along with its check history?"
   },
   "usage": {
     "title": "Network resource usage",
-    "hint": "Firewall counters, container stats, and parsed nginx/haproxy access logs. Logs are parsed by their record timestamp, so the chart shows when the load actually happened, not when it was collected.",
+    "hint": "Firewall counters, the load of Docker and Podman containers, LXD instances and libvirt machines, and parsed nginx/haproxy access logs. For network, CPU and memory, pick the source next to the metric. Logs are parsed by their record timestamp, so the chart shows when the load actually happened, not when it was collected.",
     "metric": "Metric",
     "simulated": "Metrics are synthetic: the host snapshot is static, so counters are simulated against a daily load profile. On a real host these would be increments of iptables counters and docker stats.",
     "unitLabel": "Unit: {{unit}}",
@@ -1444,20 +1455,22 @@
     "btopSelect": "select multiple processes",
     "btopKill": "terminate the selected process",
     "series": {
-      "dockerNet": "Container network traffic",
-      "dockerCpu": "Container CPU",
-      "dockerMem": "Container memory",
+      "dockerNet": "Network: received",
+      "dockerCpu": "CPU",
+      "dockerMem": "Memory",
       "firewallBytes": "Firewall rule traffic",
       "nginxRequests": "nginx requests (from access logs)",
       "nginxErrors": "nginx 5xx errors",
-      "haproxyRequests": "haproxy requests"
+      "haproxyRequests": "haproxy requests",
+      "netTx": "Network: sent"
     },
     "unit": {
       "bytes": "bytes",
       "percent": "%",
       "requests": "requests",
       "responses": "responses"
-    }
+    },
+    "source": "Source"
   },
   "blocks": {
     "loadingStructure": "Loading file structure…",
