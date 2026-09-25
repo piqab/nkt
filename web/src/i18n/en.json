@@ -2421,6 +2421,10 @@
     "promptApply": "Apply",
     "promptToDefault": "The text matches the default instruction — the edit will be removed.",
     "explainConfigError": "explain the error and suggest a fix (AI)",
-    "reviewScope": "Reviewing {{shown}} of {{total}} nodes — as shown on the map with the current filters."
+    "reviewScope": "Reviewing {{shown}} of {{total}} nodes — as shown on the map with the current filters.",
+    "promptConfig": "configuration help (what is configured, what to fix, example)",
+    "askFirstHint": "What do you need? For example: \"a reverse proxy to :3000 with TLS and caching\". Empty — an overview and a typical example.",
+    "askFirstPlaceholder": "task or question (optional)",
+    "askFirstGo": "ask"
   }
 }

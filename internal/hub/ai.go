@@ -203,7 +203,12 @@ func (m *Manager) AIExplain(ctx context.Context, kind string, fc ai.FindingConte
 	if err != nil {
 		return AIAnswer{}, err
 	}
-	key := ai.FindingKey(kind, fc.Title, fc.Object, fc.File)
+	object := fc.Object
+	if kind == ai.KindConfig && strings.TrimSpace(fc.Question) != "" {
+		// Разные вопросы про одну программу — разные ответы.
+		object += "?" + strings.TrimSpace(fc.Question)
+	}
+	key := ai.FindingKey(kind, fc.Title, object, fc.File)
 	if !force {
 		if own, ok, err := m.db.AIAnswerGet(ctx, key, hostID); err == nil && ok {
 			out := m.aiAnswer(own.Answer, own.Prompt, set, false)
@@ -235,7 +240,7 @@ func (m *Manager) AIExplain(ctx context.Context, kind string, fc ai.FindingConte
 	_ = m.db.AIUsageAdd(ctx)
 	revealed := mapper.Reveal(answer)
 	if err := m.db.AIAnswerPut(ctx, store.AIAnswer{
-		Key: key, HostID: hostID, Kind: kind, Title: fc.Title, Object: fc.Object, File: fc.File,
+		Key: key, HostID: hostID, Kind: kind, Title: fc.Title, Object: object, File: fc.File,
 		Model: set.Model, Lang: string(lang), Prompt: user, Answer: revealed,
 	}); err != nil {
 		m.log.Warn("ai answer not saved", "err", err)

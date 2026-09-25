@@ -452,6 +452,12 @@ export type BlockKind =
   | 'defaults'
   | 'service'
   | 'site'
+  | 'setting'
+  | 'devices'
+  | 'disk'
+  | 'interface'
+  | 'graphics'
+  | 'device'
 
 /** One structural block of a single config file — nginx server{}/location{}/
  * upstream{} or a haproxy frontend/backend/listen/global/defaults section —

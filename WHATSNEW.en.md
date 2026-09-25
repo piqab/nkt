@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.96 — 2026-09-25
+
+- **AI help with a configuration.** In "Configs" a bulb sits in the header
+  of every open file (any service) and next to the selected program with
+  a "what do you need?" field: the answer is "what is configured / what
+  to fix / example" with a fragment for the task. The instruction is the
+  third editable one in "About". Passwords, keys, tokens and password
+  hashes (WireGuard, kubeconfig, htpasswd, shadow…) are cut from the
+  text; with "hide addresses and names" on, so are addresses and names.
+- **Block mode for a machine's XML.** The virtual machine configuration
+  editor gets a "blocks" tab: domain elements (`name`, `memory`, `vcpu`,
+  `os`…) and devices one by one (disk, network interface, graphics…) —
+  edit, delete, `+ disk`/`+ interface`/`+ graphics` with a template;
+  writes go through `virt-xml-validate` and version history. The same
+  mode is available for the machine XML in "Configs".
+
 ## v1.10.95 — 2026-09-25
 
 - **Disks → Files: `/tmp` is back, and only existing folders are

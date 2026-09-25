@@ -28,8 +28,11 @@ const (
 	// KindConfigError — правка конфигурации не прошла проверку или apply:
 	// модели даются вывод проверки и дифф правки.
 	KindConfigError = "config-error"
-	KindMap         = "map"
-	KindHubReview   = "hub-review"
+	// KindConfig — помощь по конфигурации: что настроено в файле, что
+	// поправить, пример под задачу.
+	KindConfig    = "config"
+	KindMap       = "map"
+	KindHubReview = "hub-review"
 )
 
 // systemPrompt — общая инструкция для разбора одной находки.
@@ -101,27 +104,65 @@ func SystemFor(kind string, lang msgs.Lang) string {
 const (
 	PromptFinding = "finding"
 	PromptMap     = "map"
+	PromptConfig  = "config"
 )
 
 // PromptKinds — в порядке показа в настройках.
-var PromptKinds = []string{PromptFinding, PromptMap}
+var PromptKinds = []string{PromptFinding, PromptMap, PromptConfig}
 
 // PromptKindFor — какая инструкция нужна виду разбора.
 func PromptKindFor(kind string) string {
 	switch kind {
 	case KindMap, KindHubReview:
 		return PromptMap
+	case KindConfig:
+		return PromptConfig
 	default:
 		return PromptFinding
 	}
 }
 
 func systemPromptFor(promptKind string, lang msgs.Lang) string {
-	if promptKind == PromptMap {
+	switch promptKind {
+	case PromptMap:
 		return mapSystemPrompt(lang)
+	case PromptConfig:
+		return configSystemPrompt(lang)
+	default:
+		return systemPrompt(lang)
 	}
-	return systemPrompt(lang)
 }
+
+// configSystemPrompt — инструкция помощи по конфигурации: файл или
+// программа целиком, а не одна находка.
+func configSystemPrompt(lang msgs.Lang) string {
+	if lang != msgs.EN {
+		return strings.Join([]string{
+			"Ты помогаешь системному администратору с конфигурацией сервиса на его Linux-сервере (nginx, haproxy, caddy, sshd, systemd, netplan, sysctl, cron, docker compose, libvirt и т. п.).",
+			"Отвечай по-русски, коротко и по делу. Опирайся на приведённый текст конфигурации и контекст хоста; не придумывай директив, которых в этой программе нет.",
+			"Пароли и ключи в тексте заменены на <secret> — не проси их и не подставляй.",
+			"Структура ответа — ровно три раздела, каждый начинается со строки «## »:",
+			"## Что настроено — по сути, 3–6 предложений: за что отвечает файл и что в нём главное.",
+			"## Что стоит поправить — небезопасное, устаревшее, противоречивое, с номерами строк, если они есть; если замечаний нет — так и напиши.",
+			"## Пример — готовый фрагмент конфигурации под вопрос оператора (если вопроса нет — типовой улучшенный вариант), в блоке ```, который можно вставить как есть.",
+			"Не советуй действий, которые уронят доступ к серверу, без явного предупреждения.",
+		}, "\n")
+	}
+	return strings.Join([]string{
+		"You help a system administrator with a service configuration on their Linux server (nginx, haproxy, caddy, sshd, systemd, netplan, sysctl, cron, docker compose, libvirt and the like).",
+		"Answer in English, briefly and to the point. Rely on the given configuration text and host context; do not invent directives this program does not have.",
+		"Passwords and keys in the text are replaced with <secret> — do not ask for them and do not fill them in.",
+		"Structure: exactly three sections, each starting with a '## ' line:",
+		"## What is configured — the essence, 3-6 sentences: what the file is responsible for and what matters in it.",
+		"## What to fix — insecure, deprecated, contradictory, with line numbers where available; if nothing, say so.",
+		"## Example — a ready configuration fragment for the operator's question (a typical improved variant if there is no question), in a ``` block that can be pasted as is.",
+		"Never suggest actions that would cut off access to the server without an explicit warning.",
+	}, "\n")
+}
+
+// MaxConfigContent — сколько текста конфигурации уходит модели; дальше
+// обрезка с пометкой: контекст не резиновый, а суть файла обычно в начале.
+const MaxConfigContent = 32 << 10
 
 // SystemWith — инструкция с учётом правок оператора: overrides хранит
 // текст по ключу PromptKey; пусто — стандартная.
@@ -177,6 +218,12 @@ type FindingContext struct {
 	Diff string
 	// Output — вывод проверки (валидатора, apply) — сама ошибка.
 	Output string
+	// Content — текст конфигурации для KindConfig (секреты вырезаются в
+	// Mapper.Hide, обрезка — в UserPrompt).
+	Content string
+	// Question — что нужно оператору от примера (KindConfig); пусто —
+	// обзор и типовой пример.
+	Question string
 }
 
 // UserPrompt собирает текст запроса. Пустые поля пропускаются: строка
@@ -223,6 +270,25 @@ func UserPrompt(c FindingContext, lang msgs.Lang) string {
 				continue
 			}
 			fmt.Fprintf(&b, "- %s\n", strings.TrimSpace(line))
+		}
+	}
+	if c.Kind == KindConfig {
+		content := c.Content
+		truncated := false
+		if len(content) > MaxConfigContent {
+			content = content[:MaxConfigContent]
+			truncated = true
+		}
+		if strings.TrimSpace(content) != "" {
+			fmt.Fprintf(&b, "%s:\n```\n%s\n```\n", label("Конфигурация", "Configuration"), strings.TrimSpace(content))
+			if truncated {
+				b.WriteString(label("(файл обрезан: показано начало)\n", "(file truncated: the beginning is shown)\n"))
+			}
+		}
+		if q := strings.TrimSpace(c.Question); q != "" {
+			fmt.Fprintf(&b, "%s: %s\n", label("Вопрос оператора", "Operator's question"), q)
+		} else {
+			b.WriteString(label("Вопроса нет: дай обзор и типовой улучшенный пример.\n", "No question: give an overview and a typical improved example.\n"))
 		}
 	}
 	if c.Kind == KindConfigError {

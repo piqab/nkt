@@ -29,7 +29,7 @@ interface AIStatus {
 }
 
 interface AIPrompt {
-  kind: 'finding' | 'map'
+  kind: 'finding' | 'map' | 'config'
   lang: 'ru' | 'en'
   text: string
   default: string
@@ -310,6 +310,7 @@ export function AISettingsCard() {
                     options={[
                       { value: 'finding', label: t('ai.promptFinding') },
                       { value: 'map', label: t('ai.promptMap') },
+                      { value: 'config', label: t('ai.promptConfig') },
                     ]}
                   />
                 </label>

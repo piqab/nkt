@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Button, Spin, Tooltip } from 'antd'
+import { Button, Input, Spin, Tooltip } from 'antd'
 import { BulbFilled, BulbOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api } from '../api'
@@ -28,7 +28,7 @@ import { aiAnswerState, currentAIHostID, invalidateAIAnswers, useAIAnswers } fro
  */
 
 export interface AIContext {
-  kind: 'finding' | 'vuln' | 'malware' | 'event' | 'job-error' | 'config-error'
+  kind: 'finding' | 'vuln' | 'malware' | 'event' | 'job-error' | 'config-error' | 'config'
   title: string
   detail?: string
   suggestion?: string
@@ -41,6 +41,10 @@ export interface AIContext {
    * проверки. Секреты из них хаб вырезает до отправки (ai.RedactSecrets). */
   diff?: string
   output?: string
+  /** Помощь по конфигурации: текст файла (хаб обрежет до 32 КБ и
+   * вырежет секреты) и вопрос оператора. */
+  content?: string
+  question?: string
 }
 
 interface AISection {
@@ -60,8 +64,20 @@ interface AIAnswer {
   similar?: { host_id: number; host_name: string; created_at: string }
 }
 
-export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolean }) {
+export function AIExplain({
+  ctx,
+  disabled,
+  askFirst,
+}: {
+  ctx: AIContext
+  disabled?: boolean
+  /** Перед первым запросом спросить, что нужно (поле вопроса): для
+   * помощи по программе, где без задачи ответ — общий обзор. */
+  askFirst?: boolean
+}) {
   const { t } = useTranslation()
+  const [question, setQuestion] = useState('')
+  const [asked, setAsked] = useState(false)
   const refs = useAIAnswers()
   const hostID = currentAIHostID()
   const state = aiAnswerState(refs, ctx, hostID)
@@ -74,6 +90,8 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
 
   async function ask(force = false) {
     setOpen(true)
+    if (askFirst && !asked && !force) return
+    setAsked(true)
     if (!force && (answer || busy)) return
     setBusy(true)
     setError(null)
@@ -87,6 +105,7 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
         timeoutMs: AI_REQUEST_TIMEOUT_MS,
         body: {
           ...ctx,
+          question: question.trim() || ctx.question,
           // Какому хосту принадлежит находка — по нему хаб добавит в
           // запрос, что там рядом (порты, контейнеры, firewall).
           host_id: hostID,
@@ -135,7 +154,17 @@ export function AIExplain({ ctx, disabled }: { ctx: AIContext; disabled?: boolea
       </Tooltip>
       {open && (
         <Modal title={blurText(ctx.title)} onClose={() => setOpen(false)} width={760}>
-          {busy && !answer ? (
+          {askFirst && !asked ? (
+            <div className="col">
+              <div className="small muted">{t('ai.askFirstHint')}</div>
+              <Input.TextArea rows={2} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder={t('ai.askFirstPlaceholder')} autoFocus />
+              <div>
+                <Button type="primary" onClick={() => void ask(true)}>
+                  {t('ai.askFirstGo')}
+                </Button>
+              </div>
+            </div>
+          ) : busy && !answer ? (
             <Thinking seconds={elapsed} />
           ) : error ? (
             <Banner kind="error">{error}</Banner>
