@@ -935,3 +935,21 @@ span.vm-toggle {
 /* Метка режима — бейдж «nkt» в шапке сайдбара и хаба становится оранжевым. */
 .privacy .brand-name, .privacy .hub-topbar-brand { background: var(--series-4); }
 .privacy .brand-collapsed .ant-btn { background: var(--series-4); color: #fff; }
+
+/* Окна: размер уголком, «развернуть», содержимое тянется за окном. */
+.modal-title-row { display: flex; align-items: center; gap: 0.5rem; }
+.modal-title-text { flex: 1 1 auto; min-width: 0; }
+.nkt-modal-frame { position: relative; }
+.nkt-modal-frame.sized .ant-modal-container,
+.nkt-modal-frame.sized .ant-modal-content { height: 100%; display: flex; flex-direction: column; box-sizing: border-box; }
+.nkt-modal-frame.sized .ant-modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.nkt-modal-frame.sized .modal-fill { flex: 1 1 auto; min-height: 8rem; max-height: none !important; height: auto !important; }
+.modal-resize-handle {
+  position: absolute; right: 3px; bottom: 3px; width: 14px; height: 14px; z-index: 2;
+  cursor: nwse-resize; touch-action: none; opacity: 0.55;
+  background: linear-gradient(135deg, transparent 45%, var(--border-strong) 45%, var(--border-strong) 55%, transparent 55%, transparent 70%, var(--border-strong) 70%, var(--border-strong) 80%, transparent 80%);
+}
+.modal-resize-handle:hover { opacity: 1; }
+@media (max-width: 767px) {
+  .modal-resize-handle, .modal-max-btn { display: none !important; }
+}

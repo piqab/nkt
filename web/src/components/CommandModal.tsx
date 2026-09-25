@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Button, Modal as AntModal } from 'antd'
+import { Modal } from './ui'
 import { useTranslation } from 'react-i18next'
 import { usePty, wsURL } from '../hooks/usePty'
 import { Banner } from './ui'
@@ -51,12 +51,12 @@ export default function CommandModal({
   }
 
   return (
-    <AntModal title={title} open onCancel={handleClose} width={860} footer={<Button onClick={handleClose}>{t('common.close')}</Button>} destroyOnHidden>
+    <Modal title={title} onClose={handleClose} maskClosable={false} width={860} sizeKey="command">
       {description && <p className="small muted">{description}</p>}
       {extra}
       {status === 'error' && <Banner kind="error">{t('commandModal.connectError')}</Banner>}
       {status === 'connected' && <PtyToolbar onCopy={copySelection} onClear={clear} onFontSize={changeFontSize} onSearch={search} />}
-      <div ref={containerRef} style={{ height: '45vh', background: '#141414', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }} />
+      <div ref={containerRef} className="modal-fill" style={{ height: '45vh', background: '#141414', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }} />
       {status === 'closed' &&
         (outcome === null || outcome === undefined ? (
           <Banner kind="info">{t('packageInstall.sessionEnded')}</Banner>
@@ -70,6 +70,6 @@ export default function CommandModal({
               })}
           </Banner>
         ))}
-    </AntModal>
+    </Modal>
   )
 }

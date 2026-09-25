@@ -508,7 +508,7 @@ function ServiceLogsModal({ service, onClose }: { service: ServiceUnit; onClose:
   const logs = useApi<{ output: string }>(`/services/${service.name}/logs?lines=200`)
 
   return (
-    <Modal title={t('services.logsTitle', { name: service.name })} onClose={onClose}>
+    <Modal title={t('services.logsTitle', { name: service.name })} onClose={onClose} width={960} sizeKey="logs">
       <div className="row" style={{ justifyContent: 'flex-end', marginBottom: '0.5rem' }}>
         <Button size="small" onClick={() => logs.reload()} loading={logs.loading}>
           {t('services.refresh')}
@@ -518,7 +518,7 @@ function ServiceLogsModal({ service, onClose }: { service: ServiceUnit; onClose:
       {logs.loading && !logs.data ? (
         <Loading what={t('services.loadingLogs')} />
       ) : (
-        <pre className="diff sensitive-area" style={{ maxHeight: '28rem' }}>
+        <pre className="diff sensitive-area modal-fill" style={{ maxHeight: '60vh' }}>
           {logs.data?.output?.trim() || t('services.empty')}
         </pre>
       )}

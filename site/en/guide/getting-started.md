@@ -82,6 +82,13 @@ It edits configs, controls services and changes the firewall. Do not expose
 it to the internet without a separate authentication layer.
 :::
 
+::: tip UI windows
+Resize any window with the corner at the bottom right; a double-click on
+it restores the normal size. The button in the title maximizes the
+window. The size of log, job, editor, terminal and machine screen
+windows is remembered in the browser.
+:::
+
 ## Next
 
 - [Hub](/en/guide/hub) — for more than one host.
