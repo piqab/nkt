@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.114 — 2026-09-25
+
+- **Screen over SPICE.** For a libvirt machine with SPICE graphics only,
+  the "Screen" window uses the spice-html5 client, with Ctrl+Alt+Del. A
+  machine with both VNC and SPICE can switch between them.
+- **"Add VNC"** for machines without VNC: the machine XML editor opens
+  with VNC graphics on 127.0.0.1 already added, and writing goes through
+  a diff. The new graphics work after a full shutdown and start.
+- **LXD virtual machine screen** — a "screen" icon on a running LXD VM,
+  also over SPICE.
+- **Third-party licenses** are in `THIRD_PARTY_NOTICES.md` and
+  `THIRD_PARTY_NOTICES.en.md`. spice-html5 (LGPL-3.0) ships as separate
+  unmodified files with the license texts and loads only when a SPICE
+  window opens.
+
 ## v1.10.113 — 2026-09-25
 
 - **LXD port forwarding.** "+" in the ports column opens a form (tcp/udp,

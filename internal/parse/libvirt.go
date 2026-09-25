@@ -62,6 +62,9 @@ type domainXML struct {
 				Type string `xml:"type,attr"`
 			} `xml:"model"`
 		} `xml:"interface"`
+		Graphics []struct {
+			Type string `xml:"type,attr"`
+		} `xml:"graphics"`
 	} `xml:"devices"`
 }
 
@@ -163,6 +166,11 @@ func readDomain(ctx context.Context, c collect.Collector, uri, name string) (mod
 		vm.Networks = append(vm.Networks, model.VMNetIface{
 			Source: src, MAC: i.MAC.Address, Model: i.Model.Type,
 		})
+	}
+	for _, g := range dom.Devices.Graphics {
+		if g.Type != "" {
+			vm.Graphics = append(vm.Graphics, g.Type)
+		}
 	}
 	return vm, "", model.TextRef{}
 }

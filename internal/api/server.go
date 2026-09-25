@@ -165,6 +165,8 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/lxd/instances/{name}/logs/ws", s.handleLXDLogsWS)
 			r.Get("/lxd/images/copy/ws", s.handleLXDImageCopyWS)
 			r.Get("/vms/{name}/vnc/ws", s.handleVMVNCWS)
+			r.Get("/vms/{name}/spice/ws", s.handleVMSpiceWS)
+			r.Get("/lxd/instances/{name}/spice/ws", s.handleLXDSpiceWS)
 			r.Get("/terminal/btop/ws", s.handleBtopWS)
 			r.Get("/updates/ws", s.handleUpdatesWS)
 			r.Get("/logs/ws", s.handleLogStream)

@@ -57,7 +57,10 @@ live output) and **storage pools** (read-only).
   with or without disks; machine addresses.
 - **Machine screen** — a "screen" icon on a running machine: VNC right in
   the browser (noVNC), with Ctrl+Alt+Del and a "view only" mode, through
-  the hub too. The machine needs VNC graphics.
+  the hub too. A machine with SPICE graphics only opens over SPICE
+  (spice-html5), and the window offers "Add VNC" — an XML edit with a
+  diff. A running LXD virtual machine gets the same SPICE screen. Client
+  licenses are in `THIRD_PARTY_NOTICES.en.md`.
 - **Console** — an icon in the row of a running container (Docker,
   Podman: `exec`, bash or sh, a user can be set), LXD instance (`lxc
   exec`) and machine (serial console `virsh console`, exit with Ctrl+]).
