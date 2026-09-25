@@ -2,6 +2,9 @@ package backup
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/piqab/nkt/internal/jobs"
@@ -57,7 +60,16 @@ func (r *Runner) Run(ctx context.Context, jc *jobs.Context) error {
 		script = sc
 		jc.StepKey(1, 1, "backup.stepCreate", p.Kind, p.Name, out)
 	}
-	code, err := r.exec(ctx, jc.Logf, "bash", "-c", script)
+	// Сценарий — файлом, а не «bash -c <текст>»: вне песочницы команда
+	// идёт через systemd-run, а systemd сам подставляет ${…} в аргументах
+	// ExecStart — ${#DISKS[@]}, ${d%% *} и "${specs[@]}" доходили до bash
+	// пустыми. Файл в каталоге данных виден и снаружи песочницы.
+	path, err := writeScript(r.root, jc.Job.ID, script)
+	if err != nil {
+		return err
+	}
+	defer os.Remove(path)
+	code, err := r.exec(ctx, jc.Logf, "bash", path)
 	if err != nil {
 		return err
 	}
@@ -65,4 +77,17 @@ func (r *Runner) Run(ctx context.Context, jc *jobs.Context) error {
 		return msgs.Errorf("backup.failed", code)
 	}
 	return nil
+}
+
+// writeScript кладёт сценарий в <root>/.run/<id>.sh (0700).
+func writeScript(root string, id int64, script string) (string, error) {
+	dir := filepath.Join(root, ".run")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	path := filepath.Join(dir, fmt.Sprintf("job-%d.sh", id))
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		return "", err
+	}
+	return path, nil
 }

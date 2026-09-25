@@ -91,3 +91,17 @@ func TestResolveAndList(t *testing.T) {
 		}
 	}
 }
+
+// Сценарий уходит файлом: runner пишет его в <root>/.run и запускает
+// «bash <файл>» — без ${…}-подстановки systemd.
+func TestRunnerWritesScriptFile(t *testing.T) {
+	root := t.TempDir()
+	path, err := writeScript(root, 7, "echo ${#X[@]}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(path)
+	if string(b) != "echo ${#X[@]}" || filepath.Dir(path) != filepath.Join(root, ".run") {
+		t.Errorf("path=%s content=%q", path, b)
+	}
+}

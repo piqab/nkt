@@ -39,3 +39,17 @@ func TestSnapInstallScript(t *testing.T) {
 		t.Error("lxd init только для lxd")
 	}
 }
+
+// Сценарии, уходящие одной строкой «bash -c» через systemd-run, не должны
+// содержать ${…}: systemd подставляет такие выражения в аргументах
+// ExecStart сам, и до bash они доходят пустыми (так ломался бэкап).
+func TestInlineScriptsHaveNoBraceExpansion(t *testing.T) {
+	for name, sc := range map[string]string{
+		"containerRun": containerRunScript("docker", "start", "web"),
+		"snapInstall":  snapInstallScript("lxd"),
+	} {
+		if strings.Contains(sc, "${") {
+			t.Errorf("%s содержит ${…} — systemd-run его съест", name)
+		}
+	}
+}
