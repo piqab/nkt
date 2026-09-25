@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/piqab/nkt/internal/control"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -20,6 +21,8 @@ func (s *Server) handleLXDInstances(w http.ResponseWriter, r *http.Request) {
 type lxdCreateRequest struct {
 	Image string `json:"image"`
 	Name  string `json:"name"`
+	// VM — образ виртуальной машины (lxc launch --vm).
+	VM bool `json:"vm"`
 }
 
 func (s *Server) handleLXDInstanceCreate(w http.ResponseWriter, r *http.Request) {
@@ -29,7 +32,7 @@ func (s *Server) handleLXDInstanceCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	user := auth.Username(r.Context())
-	if err := s.lxd.CreateInstance(r.Context(), user, req.Image, req.Name); err != nil {
+	if err := s.lxd.CreateInstance(r.Context(), user, req.Image, req.Name, req.VM); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
@@ -59,4 +62,22 @@ func (s *Server) handleLXDInstanceDelete(w http.ResponseWriter, r *http.Request)
 	}
 	s.rescanLater()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// handleLXDImages — GET /lxd/images?remote=local|images|ubuntu: образы для
+// «Новый инстанс LXD».
+func (s *Server) handleLXDImages(w http.ResponseWriter, r *http.Request) {
+	remote := r.URL.Query().Get("remote")
+	if remote == "" {
+		remote = "local"
+	}
+	list, err := s.lxd.ListImages(r.Context(), remote)
+	if err != nil {
+		writeErr(w, r, http.StatusBadGateway, err)
+		return
+	}
+	if list == nil {
+		list = []control.LXDImage{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"remote": remote, "images": list})
 }

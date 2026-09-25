@@ -1,0 +1,194 @@
+[
+ {
+  "aliases": [
+   {
+    "name": "alpine/3.20"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "container",
+  "size": 3000000,
+  "fingerprint": "f0c",
+  "properties": {
+   "description": "Alpine 3.20 amd64",
+   "os": "Alpine",
+   "release": "3.20"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "alpine/3.20"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "virtual-machine",
+  "size": 3000000,
+  "fingerprint": "f0v",
+  "properties": {
+   "description": "Alpine 3.20 amd64",
+   "os": "Alpine",
+   "release": "3.20"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "archlinux"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "container",
+  "size": 180000000,
+  "fingerprint": "f1c",
+  "properties": {
+   "description": "Archlinux current amd64",
+   "os": "Archlinux",
+   "release": "current"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "archlinux"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "virtual-machine",
+  "size": 180000000,
+  "fingerprint": "f1v",
+  "properties": {
+   "description": "Archlinux current amd64",
+   "os": "Archlinux",
+   "release": "current"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "debian/12"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "container",
+  "size": 95000000,
+  "fingerprint": "f2c",
+  "properties": {
+   "description": "Debian bookworm amd64",
+   "os": "Debian",
+   "release": "bookworm"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "debian/12"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "virtual-machine",
+  "size": 95000000,
+  "fingerprint": "f2v",
+  "properties": {
+   "description": "Debian bookworm amd64",
+   "os": "Debian",
+   "release": "bookworm"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "debian/13"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "container",
+  "size": 98000000,
+  "fingerprint": "f3c",
+  "properties": {
+   "description": "Debian trixie amd64",
+   "os": "Debian",
+   "release": "trixie"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "debian/13"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "virtual-machine",
+  "size": 98000000,
+  "fingerprint": "f3v",
+  "properties": {
+   "description": "Debian trixie amd64",
+   "os": "Debian",
+   "release": "trixie"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "fedora/40"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "container",
+  "size": 110000000,
+  "fingerprint": "f4c",
+  "properties": {
+   "description": "Fedora 40 amd64",
+   "os": "Fedora",
+   "release": "40"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "fedora/40"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "virtual-machine",
+  "size": 110000000,
+  "fingerprint": "f4v",
+  "properties": {
+   "description": "Fedora 40 amd64",
+   "os": "Fedora",
+   "release": "40"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "rockylinux/9"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "container",
+  "size": 120000000,
+  "fingerprint": "f5c",
+  "properties": {
+   "description": "Rockylinux 9 amd64",
+   "os": "Rockylinux",
+   "release": "9"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "rockylinux/9"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "virtual-machine",
+  "size": 120000000,
+  "fingerprint": "f5v",
+  "properties": {
+   "description": "Rockylinux 9 amd64",
+   "os": "Rockylinux",
+   "release": "9"
+  }
+ }
+]

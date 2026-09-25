@@ -25,3 +25,17 @@ func TestContainerRunScriptAndLogsArgs(t *testing.T) {
 		t.Errorf("argv = %q", argv)
 	}
 }
+
+// Установка через snap: snapd ставится, если его нет, ждётся его
+// готовность; LXD после установки инициализируется.
+func TestSnapInstallScript(t *testing.T) {
+	sc := snapInstallScript("lxd")
+	for _, want := range []string{"command -v snap", "apt-get install -y snapd", "snap wait system seed.loaded", "snap install lxd", "lxd init --auto"} {
+		if !strings.Contains(sc, want) {
+			t.Errorf("нет %q:\n%s", want, sc)
+		}
+	}
+	if strings.Contains(snapInstallScript("other"), "lxd init") {
+		t.Error("lxd init только для lxd")
+	}
+}

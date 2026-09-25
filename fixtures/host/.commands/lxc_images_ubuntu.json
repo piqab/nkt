@@ -1,0 +1,66 @@
+[
+ {
+  "aliases": [
+   {
+    "name": "22.04"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "container",
+  "size": 250000000,
+  "fingerprint": "u22.04c",
+  "properties": {
+   "description": "ubuntu 22.04 LTS amd64 (release)",
+   "os": "ubuntu",
+   "release": "jammy"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "22.04"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "virtual-machine",
+  "size": 250000000,
+  "fingerprint": "u22.04v",
+  "properties": {
+   "description": "ubuntu 22.04 LTS amd64 (release)",
+   "os": "ubuntu",
+   "release": "jammy"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "24.04"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "container",
+  "size": 250000000,
+  "fingerprint": "u24.04c",
+  "properties": {
+   "description": "ubuntu 24.04 LTS amd64 (release)",
+   "os": "ubuntu",
+   "release": "noble"
+  }
+ },
+ {
+  "aliases": [
+   {
+    "name": "24.04"
+   }
+  ],
+  "architecture": "x86_64",
+  "type": "virtual-machine",
+  "size": 250000000,
+  "fingerprint": "u24.04v",
+  "properties": {
+   "description": "ubuntu 24.04 LTS amd64 (release)",
+   "os": "ubuntu",
+   "release": "noble"
+  }
+ }
+]

@@ -33,6 +33,10 @@ stop, delete.
 
 - libvirt domains: start, shut down, force off, reboot, autostart, delete
   with or without disks; machine addresses.
+- **LXD and Podman** install from their tabs when missing: Podman — apt,
+  LXD — snap (snapd is installed first) and `lxd init --auto`. The image
+  for a new LXD instance is picked from a list: `images:`, `ubuntu:` or
+  those already on the host; container or VM.
 - Each row has **one power button** by state (running — "stop",
   stopped — "start", paused — "resume"); restart and pause only on a
   running one.

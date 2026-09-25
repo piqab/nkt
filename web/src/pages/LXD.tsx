@@ -10,6 +10,8 @@ import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { PowerToggle, containerPowerState } from '../components/PowerToggle'
+import { EngineInstallBanner } from '../components/EngineInstallBanner'
+import { LXDImagePicker } from '../components/LXDImagePicker'
 
 export default function LXD({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -130,6 +132,7 @@ export default function LXD({ me }: { me: Me }) {
         </div>
       </div>
 
+      <EngineInstallBanner service="lxd" canControl={canControl} onInstalled={() => instances.reload()} />
       <ErrorNote error={instances.error} />
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
@@ -190,18 +193,20 @@ export default function LXD({ me }: { me: Me }) {
   )
 }
 
-type CreateInstanceValues = { image: string; name: string }
+type CreateInstanceValues = { image: string; name: string; vm?: boolean }
 
 function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const { t } = useTranslation()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [vm, setVM] = useState(false)
+  const [form] = Form.useForm<CreateInstanceValues>()
 
   async function submit(values: CreateInstanceValues) {
     setBusy(true)
     setError(null)
     try {
-      await api('/lxd/instances', { method: 'POST', body: values })
+      await api('/lxd/instances', { method: 'POST', body: { ...values, vm } })
       onCreated()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -222,11 +227,16 @@ function CreateInstanceForm({ onClose, onCreated }: { onClose: () => void; onCre
       width={760}
       maskClosable={false}
     >
-      <Form<CreateInstanceValues> layout="vertical" onFinish={submit}>
+      <Form<CreateInstanceValues> form={form} layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
         <div className="filters">
-          <Form.Item name="image" label={t('lxd.image')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '16rem' }}>
-            <Input placeholder="ubuntu:24.04" />
+          <Form.Item name="image" label={t('lxd.image')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '100%' }}>
+            <LXDImagePicker
+              onChange={(ref, isVM) => {
+                form.setFieldValue('image', ref)
+                setVM(isVM)
+              }}
+            />
           </Form.Item>
           <Form.Item name="name" label={t('lxd.instanceName')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '12rem' }}>
             <Input placeholder="my-instance" />
