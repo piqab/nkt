@@ -2527,7 +2527,7 @@
       "docker": "docker exec: bash if the image has it, otherwise sh. The web terminal must be enabled (NKT_TERMINAL_ENABLED).",
       "podman": "podman exec: bash or sh. The web terminal must be enabled.",
       "lxd": "lxc exec: bash or sh inside the instance. The web terminal must be enabled.",
-      "vm": "virsh console — the guest's serial console; exit with Ctrl+]. If the screen is empty, press Enter; if the console does not answer, the guest has no getty on ttyS0: systemctl enable --now serial-getty@ttyS0."
+      "vm": "virsh console — the guest's serial console; exit with Ctrl+]. nkt presses Enter itself on connect, and getty shows the “login:” prompt. If it does not appear, the guest has no getty on ttyS0: systemctl enable --now serial-getty@ttyS0."
     }
   },
   "commandModal": {

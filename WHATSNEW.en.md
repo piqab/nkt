@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.123 — 2026-09-25
+
+- **The libvirt machine console shows "login:" right away.** On connect nkt
+  presses Enter itself — before, the screen stayed empty after "Connected
+  to domain" until you pressed Enter by hand.
+- **Windows resize with the corner.** The antd window wrapper disabled
+  clicks (`pointer-events: none`), so the bottom-right corner did not
+  drag — only the "maximize" button worked. The corner is a bit larger.
+
 ## v1.10.122 — 2026-09-25
 
 - **Fixed the 32-bit ARM build.** A constant in the demo load metrics did
