@@ -76,7 +76,8 @@ live output) and **storage pools** (read-only).
   licenses are in `THIRD_PARTY_NOTICES.en.md`.
 - **Console** — an icon in the row of a running container (Docker,
   Podman: `exec`, bash or sh, a user can be set), LXD instance (`lxc
-  exec`) and machine (serial console `virsh console`, exit with Ctrl+]).
+  exec`) and machine (serial console `virsh console`, exit with Ctrl+]; on connect
+  nkt presses Enter itself, and the "login:" prompt appears).
   The web terminal must be enabled. The console runs as root, even when
   the host terminal under a hub runs as the SSH user.
 - **Backup** — an icon in the row of a machine and a container (Docker,

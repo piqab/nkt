@@ -437,7 +437,16 @@ export function usePty(wsUrl: string, idleTimeoutMs?: number) {
     else addon.findNext(query)
   }, [])
 
-  return { containerRef, status, start, stop, focus, copySelection, clear, changeFontSize, search, getIdleRemainingMs }
+  /** Отправить ввод в сессию так, будто его набрали (например, Enter). */
+  const sendInput = useCallback((data: string) => {
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      lastActivityRef.current = Date.now()
+      ws.send(new TextEncoder().encode(data))
+    }
+  }, [])
+
+  return { containerRef, status, start, stop, focus, copySelection, clear, changeFontSize, search, getIdleRemainingMs, sendInput }
 }
 
 /** Mirrors api.ts's own hostScope-aware prefixing — WebSocket needs its own

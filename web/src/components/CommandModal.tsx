@@ -21,6 +21,7 @@ function CommandLive({
   onFinished,
   outcome,
   extra,
+  sendOnConnect,
 }: {
   title: string
   description?: string
@@ -31,9 +32,19 @@ function CommandLive({
   outcome?: { ok: boolean; exitCode?: number; okText?: string; failText?: string } | null
   /** Дополнительные элементы управления над выводом (переключатели логов). */
   extra?: React.ReactNode
+  /** Отправить в сессию сразу после подключения. */
+  sendOnConnect?: string
 }) {
   const { t } = useTranslation()
-  const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search } = usePty(wsURL(wsPath))
+  const { containerRef, status, start, stop, copySelection, clear, changeFontSize, search, sendInput } = usePty(wsURL(wsPath))
+  // Ввод сразу после подключения: последовательной консоли машины — Enter,
+  // чтобы getty заново показал приглашение «login:», а не пустой экран.
+  useEffect(() => {
+    if (status !== 'connected' || !sendOnConnect) return
+    const timer = window.setTimeout(() => sendInput(sendOnConnect), 700)
+    return () => window.clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- один раз на подключение
+  }, [status])
 
   useEffect(() => {
     start()

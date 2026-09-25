@@ -38,6 +38,7 @@ export function ConsoleModal({ kind, name, onClose, canControl = true }: { kind:
       description={t(`console.hint.${kind}`)}
       wsPath={`/console/ws${qs({ kind, name, user: session || undefined })}`}
       onClose={onClose}
+      sendOnConnect={kind === 'vm' ? '\r' : undefined}
       extra={kind === 'lxd' || kind === 'vm' ? <GuestLoginBar kind={kind} name={name} canControl={canControl} /> : undefined}
     />
   )

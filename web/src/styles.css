@@ -945,8 +945,11 @@ span.vm-toggle {
 .nkt-modal-frame.sized .ant-modal-body { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
 .nkt-modal-frame.sized .modal-fill { flex: 1 1 auto; min-height: 8rem; max-height: none !important; height: auto !important; }
 .modal-resize-handle {
-  position: absolute; right: 3px; bottom: 3px; width: 14px; height: 14px; z-index: 2;
+  position: absolute; right: 2px; bottom: 2px; width: 16px; height: 16px;
   cursor: nwse-resize; touch-action: none; opacity: 0.55;
+  /* antd ставит обёртке окна pointer-events: none — без этого щелчок
+     проходил сквозь уголок. */
+  pointer-events: auto; z-index: 10;
   background: linear-gradient(135deg, transparent 45%, var(--border-strong) 45%, var(--border-strong) 55%, transparent 55%, transparent 70%, var(--border-strong) 70%, var(--border-strong) 80%, transparent 80%);
 }
 .modal-resize-handle:hover { opacity: 1; }
