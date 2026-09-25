@@ -56,6 +56,9 @@ func (s *Server) handleVMDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.rescanLater()
+	if s.guestCreds != nil {
+		_ = s.guestCreds.Delete(r.Context(), "vm", chi.URLParam(r, "name"))
+	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 

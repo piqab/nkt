@@ -2642,5 +2642,27 @@
     "maximize": "Maximize",
     "restore": "Normal size",
     "resizeHint": "Drag to resize; double-click for the normal size"
+  },
+  "guestLogin": {
+    "login": "Login",
+    "passwordSet": "password set via nkt {{at}} ({{by}})",
+    "show": "show",
+    "copy": "copy",
+    "change": "change password",
+    "set": "set password",
+    "notSet": {
+      "lxd": "No login password was set via nkt. The nkt console enters as root without a password; set a password for a VM screen.",
+      "vm": "No password was set via nkt. Machines from the nkt wizard log in with an SSH key; set a password for the screen and console (qemu-guest-agent is required in the guest)."
+    },
+    "setTitle": "Password for {{name}}",
+    "setHint": {
+      "lxd": "The password is set inside the instance via lxc exec and chpasswd; a missing user is created (with sudo rights). For an LXD VM this waits for lxd-agent. The password is stored in nkt encrypted and shown to an administrator with the “show” button.",
+      "vm": "The password is set via qemu-guest-agent (virsh set-user-password): the agent must run in the guest and the user must exist. The password is stored in nkt encrypted and shown to an administrator with the “show” button."
+    },
+    "user": "User",
+    "password": "Password",
+    "generate": "generate",
+    "apply": "Set",
+    "createHint": "Optional: log in to the screen and console with a password. Empty — as before."
   }
 }

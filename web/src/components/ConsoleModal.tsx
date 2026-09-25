@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { qs } from '../api'
 import CommandModal from './CommandModal'
 import { Modal } from './ui'
+import { GuestLoginBar } from './GuestLogin'
 
 export type ConsoleKind = 'docker' | 'podman' | 'lxd' | 'vm'
 
@@ -13,7 +14,7 @@ export type ConsoleKind = 'docker' | 'podman' | 'lxd' | 'vm'
  * задать пользователя (docker exec -u); у машины — последовательная
  * консоль гостя (virsh console), выход — Ctrl+].
  */
-export function ConsoleModal({ kind, name, onClose }: { kind: ConsoleKind; name: string; onClose: () => void }) {
+export function ConsoleModal({ kind, name, onClose, canControl = true }: { kind: ConsoleKind; name: string; onClose: () => void; canControl?: boolean }) {
   const { t } = useTranslation()
   const [user, setUser] = useState('')
   const [session, setSession] = useState<string | null>(kind === 'docker' || kind === 'podman' ? null : '')
@@ -37,6 +38,7 @@ export function ConsoleModal({ kind, name, onClose }: { kind: ConsoleKind; name:
       description={t(`console.hint.${kind}`)}
       wsPath={`/console/ws${qs({ kind, name, user: session || undefined })}`}
       onClose={onClose}
+      extra={kind === 'lxd' || kind === 'vm' ? <GuestLoginBar kind={kind} name={name} canControl={canControl} /> : undefined}
     />
   )
 }

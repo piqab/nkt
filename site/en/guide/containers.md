@@ -32,6 +32,14 @@ the job log window opens right away with image download percentages,
 closing it does not stop the creation, and the job stays in "Jobs" — on
 the host and through the hub.
 
+**Password login.** When creating an LXD instance or a libvirt machine
+you can set a user and password or generate one. In console and screen
+windows the "Login" line shows the login and whether a password is set.
+The "show" button reveals it to an administrator, "set password" sets a
+new one as a background job: via lxc exec and chpasswd in LXD, via
+qemu-guest-agent in libvirt. The password is stored in nkt encrypted and
+never goes into job parameters or a command line.
+
 LXD instance rows show memory and limits (`limits.memory`,
 `limits.cpu`), disk, forwarded ports (`proxy` devices) with "probe
 port", autostart as one button (`boot.autostart`), **logs** (the journal

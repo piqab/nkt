@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/piqab/nkt/internal/guestcred"
 	"github.com/piqab/nkt/internal/msgs"
 	"net"
 	"net/http"
@@ -328,6 +329,17 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 	// машина без единого ключа осталась бы доступной только через
 	// консоль; приватная половина уйдёт в ответ и больше нигде не
 	// сохранится.
+	// Пароль — только хэшем в cloud-init и зашифрованным в хранилище
+	// паролей гостей; в параметры задания он не попадает.
+	password := spec.Password
+	spec.Password = ""
+	if password != "" {
+		if !guestcred.ValidPassword(password) || !guestcred.ValidUser(spec.User) {
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "guestcred.invalid"))
+			return
+		}
+		spec.PasswordHash = vmcreate.HashPassword(password)
+	}
 	var generatedKey string
 	if strings.TrimSpace(spec.SSHKey) == "" {
 		priv, pub, err := vmcreate.GenerateKeyPair(spec.Name)
@@ -362,6 +374,11 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.db.Audit(r.Context(), user, "vm.create", spec.Name, "ok", spec.ImageID)
+	if password != "" && s.guestCreds != nil {
+		if err := s.guestCreds.Put(r.Context(), "vm", spec.Name, spec.User, password, user); err != nil {
+			s.log.Warn("could not store guest password", "vm", spec.Name, "error", err)
+		}
+	}
 	// Приватный ключ отдаётся ровно здесь и больше нигде: хранить его в
 	// базе значило бы держать ключ от всех созданных машин рядом с ними.
 	out := map[string]any{"job_id": id}
@@ -401,6 +418,8 @@ func (s *Server) handleVMTemplateSave(w http.ResponseWriter, r *http.Request) {
 	}
 	// Имя машины в шаблоне не хранится: шаблон описывает, какая машина, а
 	// не какая именно — имя вводят при создании.
+	// Пароль в шаблон не сохраняется.
+	req.Spec.Password, req.Spec.PasswordHash = "", ""
 	req.Spec.Name = "template"
 	if err := req.Spec.Validate(); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)

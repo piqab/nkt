@@ -11,7 +11,7 @@ import { Banner, Modal } from './ui'
  * (api.handleVMVNCWS). Установщик, BIOS, рабочий стол, машина без сети —
  * всё, что последовательная консоль не покажет.
  */
-export function VNCModal({ name, onClose, extra }: { name: string; onClose: () => void; extra?: React.ReactNode }) {
+export function VNCModal({ name, onClose, extra, below }: { name: string; onClose: () => void; extra?: React.ReactNode; below?: React.ReactNode }) {
   const { t } = useTranslation()
   // Элемент экрана — через callback-ref: окно antd рисует содержимое
   // после открытия, и в момент первого эффекта обычный ref ещё пуст —
@@ -87,6 +87,7 @@ export function VNCModal({ name, onClose, extra }: { name: string; onClose: () =
         </Checkbox>
         {extra}
       </div>
+      {below}
       {reason && <Banner kind="error">{reason}</Banner>}
       {state === 'password' && (
         <div className="row" style={{ gap: '0.5rem', marginBottom: '0.5rem' }}>

@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.119 — 2026-09-25
+
+- **Guest login and password.** When creating an LXD instance or a
+  machine in the libvirt wizard you can set a user and password or
+  generate one — for logging in to the VNC/SPICE screen and the console.
+  Empty — as before, key login.
+- **The "Login" line** in console and screen windows: the login, when and
+  by whom the password was set; "show" reveals it to an administrator
+  (audited); "set password" runs a background job: via `lxc exec` and
+  `chpasswd` in LXD (a missing user is created with sudo), via
+  qemu-guest-agent in libvirt.
+- **Storage.** The password is encrypted with a key in the host's data
+  directory; it never goes into job parameters, a command line or a log —
+  the job takes it from the store into a temporary script. A machine's
+  cloud-init gets only a SHA-512 hash. Deleting a guest forgets its
+  password.
+
 ## v1.10.118 — 2026-09-25
 
 - **Creating an LXD instance or a Podman container is a background job.**

@@ -391,6 +391,10 @@ function CreateVMModal({
   const [name, setName] = useState('')
   const [user, setUser] = useState('deploy')
   const [sshKey, setSSHKey] = useState('')
+  // Пароль — необязательный вход на экран и в консоль; уходит в cloud-init
+  // хэшем и хранится в nkt зашифрованным, в шаблон не попадает.
+  const [vmPassword, setVMPassword] = useState('')
+  const [vmGenerate, setVMGenerate] = useState(false)
   const [diskGB, setDiskGB] = useState(20)
   const [memoryMB, setMemoryMB] = useState(2048)
   const [vcpus, setVCPUs] = useState(2)
@@ -467,6 +471,7 @@ function CreateVMModal({
           bridge: bridge.trim(),
           user,
           ssh_key: sshKey.trim(),
+          password: vmGenerate ? generatePassword() : vmPassword || undefined,
           autostart,
         },
       })
@@ -549,6 +554,15 @@ function CreateVMModal({
         {t('vmimages.sshKey')}
         <Input.TextArea rows={3} value={sshKey} onChange={(e) => setSSHKey(e.target.value)} placeholder="ssh-ed25519 AAAA..." />
       </label>
+      <div>
+        <div className="small muted">{t('guestLogin.createHint')}</div>
+        <div className="row" style={{ gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <Input.Password value={vmPassword} onChange={(e) => setVMPassword(e.target.value)} disabled={vmGenerate} placeholder={t('guestLogin.password')} style={{ width: '14rem' }} autoComplete="new-password" />
+          <Checkbox checked={vmGenerate} onChange={(e) => setVMGenerate(e.target.checked)}>
+            {t('guestLogin.generate')}
+          </Checkbox>
+        </div>
+      </div>
 
       <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', marginBottom: '0.6rem' }}>
         <Checkbox checked={autostart} onChange={(e) => setAutostart(e.target.checked)} />
@@ -764,4 +778,12 @@ function hostColumns(
         ),
     },
   ]
+}
+
+/** Случайный пароль для машины (16 знаков без похожих символов). */
+function generatePassword(): string {
+  const alphabet = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const buf = new Uint32Array(16)
+  crypto.getRandomValues(buf)
+  return Array.from(buf, (n) => alphabet[n % alphabet.length]).join('')
 }

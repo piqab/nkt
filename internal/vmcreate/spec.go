@@ -108,6 +108,12 @@ type Spec struct {
 	Packages []string `json:"packages,omitempty"`
 	// Autostart — поднимать машину вместе с хостом.
 	Autostart bool `json:"autostart,omitempty"`
+	// Password — только во входящем запросе: обработчик превращает его в
+	// PasswordHash и стирает, в параметры задания пароль не попадает.
+	Password string `json:"password,omitempty"`
+	// PasswordHash — $6$-хэш для входа на экран и в консоль машины (по
+	// SSH всё равно только ключ: ssh_pwauth выключен).
+	PasswordHash string `json:"password_hash,omitempty"`
 }
 
 // Validate проверяет то, что уйдёт в команды и в XML.
@@ -178,7 +184,12 @@ func UserData(s Spec) string {
 	fmt.Fprintf(&b, "  - name: %s\n", s.User)
 	b.WriteString("    sudo: 'ALL=(ALL) NOPASSWD:ALL'\n")
 	b.WriteString("    shell: /bin/bash\n")
-	b.WriteString("    lock_passwd: true\n")
+	if s.PasswordHash != "" {
+		b.WriteString("    lock_passwd: false\n")
+		fmt.Fprintf(&b, "    passwd: %q\n", s.PasswordHash)
+	} else {
+		b.WriteString("    lock_passwd: true\n")
+	}
 	keys := make([]string, 0, 1+len(s.ExtraKeys))
 	for _, key := range append([]string{s.SSHKey}, s.ExtraKeys...) {
 		if key = strings.TrimSpace(key); key != "" {

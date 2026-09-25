@@ -26,6 +26,7 @@ import (
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/files"
+	"github.com/piqab/nkt/internal/guestcred"
 	"github.com/piqab/nkt/internal/hub"
 	"github.com/piqab/nkt/internal/inventory"
 	"github.com/piqab/nkt/internal/jobs"
@@ -240,6 +241,7 @@ type runtime struct {
 	vmimages   *vmimage.Store
 	files      *files.Manager
 	cloneRun   *files.CloneRunner
+	guestCreds *guestcred.Store
 }
 
 func newRuntime() (*runtime, error) {
@@ -292,6 +294,7 @@ func newRuntime() (*runtime, error) {
 		vmimages:   vmimageStore(cfg),
 		files:      filesManager,
 		cloneRun:   files.NewCloneRunner(filesManager),
+		guestCreds: guestcred.New(db, cfg.DataDir),
 	}, nil
 }
 
@@ -422,10 +425,11 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
 		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
 		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages, Files: r.files, CloneRunner: r.cloneRun,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages, Files: r.files, CloneRunner: r.cloneRun, GuestCreds: r.guestCreds,
 		UI: ui, Log: log, Version: version,
 	})
 
+	cmdjobSecrets = r.guestCreds.Secret
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
 		r.sysconfig, r.collector, r.vmimages, r.scanner)
 	r.jobs.Register(files.KindClone, r.cloneRun)
@@ -596,6 +600,7 @@ type hubRuntime struct {
 	vmimages   *vmimage.Store
 	files      *files.Manager
 	cloneRun   *files.CloneRunner
+	guestCreds *guestcred.Store
 }
 
 func newHubRuntime() (*hubRuntime, error) {
@@ -632,13 +637,14 @@ func newHubRuntime() (*hubRuntime, error) {
 		filepath.Join(cfg.DataDir, "files"))
 	return &hubRuntime{
 		cfg: cfg, db: db, jobs: jobs.New(db, slog.Default()),
-		vmimages:  vmimageStore(cfg),
-		files:     filesManager,
-		cloneRun:  files.NewCloneRunner(filesManager),
-		collector: collector,
-		scanner:   scanner,
-		services:  services,
-		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
+		vmimages:   vmimageStore(cfg),
+		files:      filesManager,
+		cloneRun:   files.NewCloneRunner(filesManager),
+		guestCreds: guestcred.New(db, cfg.DataDir),
+		collector:  collector,
+		scanner:    scanner,
+		services:   services,
+		configs:    control.NewConfigManager(cfg, collector, db, scanner, services),
 		// В fixtures-режиме выхода из песочницы не даём: команды там должны
 		// оставаться поддельными, а не править настоящую систему.
 		osusers:    control.NewOSUserManager(collector, privilegedRunner(cfg)),
@@ -753,7 +759,7 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 	}
 	m.Register(cmdjob.Kind, cmdjob.New(cmdExec, collector, cmdjobSecrets, func(ctx context.Context) {
 		_, _ = scanner.Scan(ctx)
-	}))
+	}, filepath.Join(cfg.DataDir, ".run")))
 	m.Register(backup.JobKindBackup, backup.NewRunner(filepath.Join(cfg.DataDir, "backups"), backupExec, false))
 	m.Register(backup.JobKindRestore, backup.NewRunner(filepath.Join(cfg.DataDir, "backups"), backupExec, true))
 }
@@ -845,7 +851,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner,
 		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
 		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages, Files: r.files, CloneRunner: r.cloneRun,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages, Files: r.files, CloneRunner: r.cloneRun, GuestCreds: r.guestCreds,
 		Log: log, Version: version,
 	})
 
@@ -888,6 +894,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 
 	// Хаб ведёт задания собственной машины — той самой строки
 	// «localhost» в списке хостов.
+	cmdjobSecrets = r.guestCreds.Secret
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
 		r.sysconfig, r.collector, r.vmimages, r.scanner)
 	r.jobs.Register(files.KindClone, r.cloneRun)
