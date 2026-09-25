@@ -528,6 +528,11 @@ var singletonHAProxySections = map[parse.BlockKind]bool{
 // automatic rollback on failure, versioning and audit logging all come from
 // there, so none of that safety logic is duplicated here.
 func (m *ConfigManager) WriteBlock(ctx context.Context, lang msgs.Lang, user, path string, req BlockWriteRequest) (WriteResult, error) {
+	// «edit» — так окно правки блока называло операцию до v1.10.98;
+	// старая открытая вкладка шлёт его до сих пор.
+	if req.Op == "edit" {
+		req.Op = "update"
+	}
 	if (req.Op == "create" || req.Op == "delete") && singletonHAProxySections[req.Kind] {
 		return WriteResult{}, msgs.Errorf("control.creatingDeletingAreUnavailableSection", req.Kind)
 	}

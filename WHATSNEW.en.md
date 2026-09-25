@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.98 — 2026-09-25
+
+- **Editing a block works again.** The block edit window (machine XML,
+  docker compose, nginx, haproxy, caddy) sent the operation "edit", which
+  the server did not know — "unknown operation \"edit\"". Fixed.
+
 ## v1.10.97 — 2026-09-25
 
 - **Starting a container runs in nkt's command window, with the reason.**
