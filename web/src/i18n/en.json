@@ -434,7 +434,7 @@
     "confirmAction": "Run \"{{action}}\" on the VM {{name}}?",
     "actionDone": "{{name}}: {{action}} done.",
     "confirmDeleteWithDisks": "Delete the VM {{name}} together with its disks? Disk images will be permanently deleted.",
-    "confirmDeleteDefinition": "Delete the VM {{name}}'s definition? Disks stay in place.",
+    "confirmDeleteDefinition": "Delete machine {{name}}? Its libvirt definition will be removed.",
     "definitionDeleted": "{{name}}: definition deleted.",
     "title": "Virtual machines",
     "hint": "libvirt/QEMU domains — managed via virsh. Created and edited through the XML definition.",
@@ -479,7 +479,9 @@
     "reviewChanges": "Configuration changes for {{name}}",
     "reviewChangesApply": "After writing, virsh define runs — the machine configuration is updated.",
     "reviewChangesNoApply": "Write the file only, without virsh define.",
-    "applyChanges": "Write"
+    "applyChanges": "Write",
+    "deleteDisksOption": "delete the machine's disks too",
+    "deleteDisksHint": "Disk images will be deleted permanently. Unchecked, the disks stay in place."
   },
   "hosts": {
     "notPasswordEncrypted": "This file doesn't look like a password-encrypted export",
@@ -1066,7 +1068,10 @@
     "newFileRoot": "Root",
     "showChanges": "show changes",
     "changesTitle": "Changes: {{path}}",
-    "noChanges": "No changes — the draft matches the file."
+    "noChanges": "No changes — the draft matches the file.",
+    "edit": "Edit",
+    "editTitle": "Editing {{path}}",
+    "editTab": "Edit"
   },
   "charts": {
     "seconds": "{{value}} s",
@@ -2436,5 +2441,11 @@
     "askFirstHint": "What do you need? For example: \"a reverse proxy to :3000 with TLS and caching\". Empty — an overview and a typical example.",
     "askFirstPlaceholder": "task or question (optional)",
     "askFirstGo": "ask"
+  },
+  "editModal": {
+    "saved": "saved",
+    "draft": "draft",
+    "changes": "Changes",
+    "noChanges": "The text has not changed."
   }
 }

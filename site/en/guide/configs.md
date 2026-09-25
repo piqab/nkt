@@ -35,6 +35,14 @@ Every save is a version with an author and a note. Any one can be viewed,
 compared with the current one (unified diff) and rolled back to; the
 rollback is checked by the service as well.
 
+## Editing
+
+The file on the page is read-only. "Edit" opens a window: the editor, a
+note for the edit, "apply" (reload the service), "show changes" and a
+"History" tab — versions, a diff of any of them against the current one,
+rollback. "Save" first shows the diff "on disk → draft"; only "Write"
+writes, with the configuration check and a rollback on failure.
+
 ## Block mode
 
 nginx, haproxy, caddy, compose files and machine XML have **blocks**: a

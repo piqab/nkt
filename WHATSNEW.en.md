@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.100 — 2026-09-25
+
+- **Every edit happens in a window, with a diff before writing and the
+  history.** "Configs": the page shows the file, "Edit" opens a window
+  with the editor, a note, "show changes" and a "History" tab (versions,
+  diff, rollback); "Save" shows the diff first and only "Write" writes.
+  The same for profiles, hub scripts, model instructions (prompts) and
+  the file editor in the browser. The machine configuration window and
+  the compose window on the Docker page get a "History" tab.
+- **Deleting a machine is one button.** The separate "delete with disks"
+  icon is gone: the confirmation window has a "delete the machine's disks
+  too" checkbox, off by default.
+
 ## v1.10.99 — 2026-09-25
 
 - **One button instead of a "start / stop" pair.** Services, Docker,

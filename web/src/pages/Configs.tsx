@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AIConfigError } from '../components/AIConfigError'
 import { AIExplain } from '../components/AIExplain'
-import { Button, Checkbox, Input, Segmented, Select, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, Segmented, Select, Tabs, type TableColumnsType } from 'antd'
 import { Trans, useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { ConfigVersion, FileContent, ManagedFile, Me, WriteResult } from '../types'
@@ -101,9 +101,8 @@ export default function Configs({ me }: { me: Me }) {
   const versions = useApi<{ versions: ConfigVersion[] }>(path ? `/configs/versions${qs({ path })}` : null)
 
   useEffect(() => {
-    if (file.data) {
+    if (file.data && !editing) {
       setDraft(file.data.content)
-      setResult(null)
       setError(null)
       setDiff(null)
     }
@@ -202,6 +201,19 @@ export default function Configs({ me }: { me: Me }) {
   const dirty = file.data !== null && draft !== file.data.content
   // Предпросмотр правки: дифф «на диске → черновик» до сохранения.
   const [preview, setPreview] = useState<string | null>(null)
+  // Окно правки и «сохранить через дифф»: сначала предпросмотр, запись —
+  // только по «Записать».
+  const [editing, setEditing] = useState(false)
+  const [pendingSave, setPendingSave] = useState(false)
+  async function reviewThenSave() {
+    setPendingSave(true)
+    await showChanges()
+  }
+  async function confirmSave() {
+    setPreview(null)
+    setPendingSave(false)
+    await save()
+  }
   async function showChanges() {
     if (!file.data) return
     try {
@@ -236,6 +248,7 @@ export default function Configs({ me }: { me: Me }) {
       })
       setResult(res)
       setNote('')
+      if (!res.rolled_back) setEditing(false)
       file.reload()
       versions.reload()
       // Show what was just written. The endpoint compares a version against
@@ -433,39 +446,14 @@ export default function Configs({ me }: { me: Me }) {
                         ]}
                       />
                     )}
-                    {view === 'text' && (
+                    {view === 'text' && me.is_admin && me.allow_mutations && (
                       <>
-                        {dirty && <span className="small" style={{ color: 'var(--status-warning)' }}>{t('configs.unsavedChanges')}</span>}
-                        <Button onClick={() => setDraft(file.data!.content)} disabled={!dirty}>
-                          {t('configs.reset')}
+                        <Button onClick={() => setNewFileModal({ cloneFrom: file.data!.path, cloneService: file.data!.service, initialContent: file.data!.content })}>
+                          {t('configs.clone')}
                         </Button>
-                        <Button onClick={() => void showChanges()} disabled={!dirty}>
-                          {t('configs.showChanges')}
+                        <Button type="primary" onClick={() => { setDraft(file.data!.content); setResult(null); setError(null); setEditing(true) }}>
+                          {t('configs.edit')}
                         </Button>
-                        {preview !== null && (
-                          <Modal title={t('configs.changesTitle', { path: file.data!.path })} onClose={() => setPreview(null)} width={900}>
-                            {preview === '' ? <p className="small muted">{t('configs.noChanges')}</p> : <DiffView text={preview} />}
-                          </Modal>
-                        )}
-                        {me.is_admin && me.allow_mutations && (
-                          <>
-                            <Button
-                              onClick={() => {
-                                setNewFileModal({ cloneFrom: file.data!.path, cloneService: file.data!.service, initialContent: draft })
-                              }}
-                            >
-                              {t('configs.clone')}
-                            </Button>
-                            <Button
-                              type="primary"
-                              onClick={save}
-                              loading={busy}
-                              disabled={!dirty || sshBlocked || file.data?.editable === false}
-                            >
-                              {busy ? t('configs.saving') : t('configs.validateAndSave')}
-                            </Button>
-                          </>
-                        )}
                       </>
                     )}
                   </>
@@ -483,6 +471,71 @@ export default function Configs({ me }: { me: Me }) {
                     }}
                   />
                 ) : (
+                  <>
+                    {/* Итог последней записи — и на странице: окно правки
+                        закрывается после «Записать». */}
+                    {!editing && result && (
+                      <Banner kind={result.rolled_back ? 'error' : 'info'}>
+                        <div>
+                          {result.message}
+                          {result.rolled_back && <AIConfigError path={file.data.path} service={file.data.service} content={draft} result={result} />}
+                        </div>
+                        {result.validation && (
+                          <div className="small mono" style={{ marginTop: '0.25rem' }}>
+                            {t('configs.validation', { output: result.validation.stdout || result.validation.stderr || t('configs.noOutput') })}
+                          </div>
+                        )}
+                      </Banner>
+                    )}
+                    {/* Просмотр: правка — только в окне, с диффом перед
+                        записью и историей версий рядом. */}
+                    <CodeEditor value={file.data.content} onChange={() => undefined} rows={22} readOnly />
+                  </>
+                )}
+              </Card>
+
+              <Card
+                title={
+                  <>
+                    {t('configs.versionHistoryTitle')}
+                    <InfoHint>{t('configs.versionHistoryHint')}</InfoHint>
+                  </>
+                }
+              >
+                {versions.data?.versions.length ? (
+                  <div className="table-wrap">
+                    <DataTable<ConfigVersion>                       dataSource={versions.data.versions}
+                      rowKey="id"
+                      columns={versionColumns(diff, showDiff, rollback, busy, me, versions.data.versions[0]?.id)}
+                    />
+                  </div>
+                ) : (
+                  <div className="chart-empty">{t('configs.emptyHistory')}</div>
+                )}
+
+                {diff && (
+                  <>
+                    <div className="small secondary" style={{ marginTop: '0.75rem' }}>
+                      {t('configs.diffCaption', { id: diff.id })}
+                    </div>
+                    <DiffView text={diff.text} />
+                  </>
+                )}
+              </Card>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+
+      {editing && file.data && (
+        <Modal title={t('configs.editTitle', { path: file.data.path })} onClose={() => setEditing(false)} width={1100} maskClosable={false}>
+          <Tabs
+            items={[
+              {
+                key: 'edit',
+                label: t('configs.editTab'),
+                children: (
                   <>
                     {error && (
                       <Banner kind="error">
@@ -585,43 +638,68 @@ export default function Configs({ me }: { me: Me }) {
                       rows={22}
                       readOnly={!me.is_admin || !me.allow_mutations || file.data?.editable === false}
                     />
+                    <div className="row" style={{ gap: '0.5rem', marginTop: '0.6rem', alignItems: 'center' }}>
+                      {dirty && <span className="small" style={{ color: 'var(--status-warning)' }}>{t('configs.unsavedChanges')}</span>}
+                      <Button onClick={() => setDraft(file.data!.content)} disabled={!dirty}>
+                        {t('configs.reset')}
+                      </Button>
+                      <Button onClick={() => void showChanges()} disabled={!dirty}>
+                        {t('configs.showChanges')}
+                      </Button>
+                      <Button
+                        type="primary"
+                        onClick={() => void reviewThenSave()}
+                        loading={busy}
+                        disabled={!dirty || sshBlocked || file.data?.editable === false}
+                      >
+                        {busy ? t('configs.saving') : t('configs.validateAndSave')}
+                      </Button>
+                    </div>
                   </>
-                )}
-              </Card>
-
-              <Card
-                title={
+                ),
+              },
+              {
+                key: 'history',
+                label: t('configs.versionHistoryTitle'),
+                children: versions.data?.versions.length ? (
                   <>
-                    {t('configs.versionHistoryTitle')}
-                    <InfoHint>{t('configs.versionHistoryHint')}</InfoHint>
+                    <div className="table-wrap">
+                      <DataTable<ConfigVersion>
+                        dataSource={versions.data.versions}
+                        rowKey="id"
+                        columns={versionColumns(diff, showDiff, rollback, busy, me, versions.data.versions[0]?.id)}
+                      />
+                    </div>
+                    {diff && (
+                      <>
+                        <div className="small secondary" style={{ marginTop: '0.75rem' }}>
+                          {t('configs.diffCaption', { id: diff.id })}
+                        </div>
+                        <DiffView text={diff.text} />
+                      </>
+                    )}
                   </>
-                }
-              >
-                {versions.data?.versions.length ? (
-                  <div className="table-wrap">
-                    <DataTable<ConfigVersion>                       dataSource={versions.data.versions}
-                      rowKey="id"
-                      columns={versionColumns(diff, showDiff, rollback, busy, me, versions.data.versions[0]?.id)}
-                    />
-                  </div>
                 ) : (
                   <div className="chart-empty">{t('configs.emptyHistory')}</div>
-                )}
-
-                {diff && (
-                  <>
-                    <div className="small secondary" style={{ marginTop: '0.75rem' }}>
-                      {t('configs.diffCaption', { id: diff.id })}
-                    </div>
-                    <DiffView text={diff.text} />
-                  </>
-                )}
-              </Card>
-            </>
-          ) : null}
-        </div>
-      </div>
-
+                ),
+              },
+            ]}
+          />
+          {preview !== null && (
+            <Modal title={t(pendingSave ? 'blocks.previewTitle' : 'configs.changesTitle', { path: file.data.path })} onClose={() => { setPreview(null); setPendingSave(false) }} width={900} maskClosable={false}>
+              {preview === '' ? <p className="small muted">{t('configs.noChanges')}</p> : <DiffView text={preview} />}
+              {pendingSave && (
+                <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
+                  <Button type="primary" disabled={preview === ''} loading={busy} onClick={() => void confirmSave()}>
+                    {t('virt.applyChanges')}
+                  </Button>
+                  <Button onClick={() => { setPreview(null); setPendingSave(false) }}>{t('common.cancel')}</Button>
+                </div>
+              )}
+            </Modal>
+          )}
+        </Modal>
+      )}
       {newFileModal && (
         <Modal title={t(newFileModal.cloneFrom ? 'configs.cloneTitle' : 'configs.newFileTitle')} onClose={() => setNewFileModal(null)} width={680}>
           <div className="col">
