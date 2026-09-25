@@ -47,6 +47,8 @@ separate browser window.
 
 ## Jobs
 
+![Job window](/screens/en/job.png)
+
 Everything long — installing packages, renewing a certificate, applying a
 profile, creating a machine — runs as a background job with a log, steps
 and cancellation. The host job list: kind, step, status, author,

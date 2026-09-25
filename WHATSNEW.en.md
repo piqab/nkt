@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.3 — 2026-09-25
+
+- **The site screenshots were retaken in both languages.** The "Libvirt"
+  tab, usage with the source picker, availability with "+ target" and
+  machine targets, the resource map with machines and networks. New
+  screens: LXD with networks, images and pools, the LXD configuration
+  window and the job window — they are placed in the guide.
+- **Demo mode** fills load history for Podman, LXD and libvirt, not only
+  Docker: the source picker on "Usage" shows data in fixtures too.
+- **The screenshot script** knows the "Libvirt" tab and the new screens and
+  removes the synthetic metrics banner. DEVELOPMENT.md explains when the
+  stand needs a fresh database and where the job for the screenshot comes
+  from.
+
 ## v1.11.2 — 2026-09-25
 
 - **The documentation caught up with the code.** README in both languages:
