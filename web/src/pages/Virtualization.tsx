@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { AIConfigError } from '../components/AIConfigError'
 import BlockTree from '../components/BlockTree'
 import { VersionHistory } from '../components/VersionHistory'
+import { BackupModal } from '../components/BackupModal'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { FileContent, Me, VirtualMachine, WriteResult } from '../types'
@@ -58,6 +59,7 @@ function vmColumns(
   act: (name: string, action: string) => void,
   toggleAutostart: (name: string, on: boolean) => void,
   del: (name: string) => Promise<void>,
+  openBackup: (name: string) => void,
   editXML: (name: string) => void,
 ): TableColumnsType<VirtualMachine> {
   const t = i18n.t.bind(i18n)
@@ -183,6 +185,7 @@ function vmColumns(
               onClick={() => editXML(vm.name)}
             />
           )}
+          <RowAction action="backup" label={t('backups.action')} onClick={() => openBackup(vm.name)} />
           {canControl && vm.persistent && (
             <>
               {/* Одна кнопка удаления; «вместе с дисками» — галочка в окне
@@ -210,6 +213,7 @@ export default function Virtualization({ me }: { me: Me }) {
   const [creating, setCreating] = useState<{ name: string; initialContent?: string } | null>(null)
   // Правка XML существующей машины — тот же VMEditor, что и создание.
   const [editing, setEditing] = useState<string | null>(null)
+  const [backupFor, setBackupFor] = useState<string | null>(null)
   const [chooserOpen, setChooserOpen] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
@@ -327,7 +331,7 @@ export default function Virtualization({ me }: { me: Me }) {
             <DataTable<VirtualMachine>
               dataSource={allVMs}
               rowKey="name"
-              columns={vmColumns(canControl, busy, act, toggleAutostart, del, (name) => setEditing(name))}
+              columns={vmColumns(canControl, busy, act, toggleAutostart, del, (name) => setBackupFor(name), (name) => setEditing(name))}
             />
           </div>
         )}
@@ -349,6 +353,9 @@ export default function Virtualization({ me }: { me: Me }) {
           имеют. */}
       <VMImagesSection me={me} />
 
+      {backupFor && (
+        <BackupModal kind="vm" name={backupFor} canControl={canControl} onClose={() => setBackupFor(null)} onRestored={() => vms.reload()} />
+      )}
       {editing && (
         <VMEditor
           name={editing}

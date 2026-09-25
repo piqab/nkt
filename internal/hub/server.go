@@ -159,6 +159,8 @@ func (s *Server) Handler() http.Handler {
 			r.Use(s.auth.RequireAdmin)
 			r.Post("/hub/cluster-images/upload", s.handleClusterImageUpload)
 			r.Post("/hosts/{id}/vm/images/upload", s.proxyHost)
+			r.Get("/hosts/{id}/backups/download", s.proxyHost)
+			r.Get("/hosts/local/backups/download", s.proxyLocal)
 		})
 
 		r.Group(func(r chi.Router) {

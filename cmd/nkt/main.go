@@ -9,6 +9,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/piqab/nkt/internal/backup"
 	"log/slog"
 	"net/http"
 	"os"
@@ -723,6 +724,14 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 	m.Register(vmcreate.KindCreate, vmcreate.NewCreateRunner(images, collector, api.RunTooling))
 	m.Register(k8s.KindInstall, k8s.NewInstallRunner(k8s.New(collector, privilegedRunner(cfg))))
 	m.Register(vmcreate.KindTools, vmcreate.NewToolsRunner(api.RunTooling))
+	// Бэкапы: в режиме fixtures выполнять нечего — исполнитель без exec
+	// отвечает понятным отказом.
+	var backupExec backup.Exec
+	if cfg.Mode != config.ModeFixtures {
+		backupExec = api.RunToolingStream
+	}
+	m.Register(backup.JobKindBackup, backup.NewRunner(filepath.Join(cfg.DataDir, "backups"), backupExec, false))
+	m.Register(backup.JobKindRestore, backup.NewRunner(filepath.Join(cfg.DataDir, "backups"), backupExec, true))
 }
 
 // filesRunner — команды проводника (mkdir, mv, rm, tar, install) вне

@@ -33,6 +33,11 @@ stop, delete.
 
 - libvirt domains: start, shut down, force off, reboot, autostart, delete
   with or without disks; machine addresses.
+- **Backup** — an icon in the row of a machine and a container (Docker,
+  Podman; a compose container — the whole stack): archives on the host in
+  `/var/lib/netknownsthat/backups`, creation as a background job,
+  download, restore as a copy or over the original. A running machine is
+  not stopped — disks move to a snapshot while copying.
 - **LXD and Podman** install from their tabs when missing: Podman — apt,
   LXD — snap (snapd is installed first) and `lxd init --auto`. The image
   for a new LXD instance is picked from a list: `images:`, `ubuntu:` or

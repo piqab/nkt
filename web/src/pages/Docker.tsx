@@ -16,6 +16,7 @@ import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 import { ProbeLink } from '../components/PortProbe'
 import CommandModal from '../components/CommandModal'
 import ContainerLogsModal from '../components/ContainerLogsModal'
+import { BackupModal, type BackupKind } from '../components/BackupModal'
 
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -155,6 +156,19 @@ export default function Docker({ me }: { me: Me }) {
             />
           )}
           <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(c.name)} />
+          {/* Бэкап: контейнер из compose — стеком целиком (каталог проекта
+              и тома), одиночный — образом, конфигурацией и томами. */}
+          <RowAction
+            action="backup"
+            label={t('backups.action')}
+            onClick={() =>
+              setBackupFor(
+                c.project && c.compose_file
+                  ? { kind: 'compose', name: c.project, projectDir: c.compose_file.slice(0, c.compose_file.lastIndexOf('/')) }
+                  : { kind: 'docker', name: c.name },
+              )
+            }
+          />
           {canControl && c.compose_file && c.service_name && (
             <RowAction
               action="edit"
@@ -225,6 +239,7 @@ export default function Docker({ me }: { me: Me }) {
   // состояние через несколько секунд и хвост логов, если не running.
   const [run, setRun] = useState<{ name: string; action: 'start' | 'restart'; outcome?: { ok: boolean; exitCode?: number } | null } | null>(null)
   const [logsFor, setLogsFor] = useState<string | null>(null)
+  const [backupFor, setBackupFor] = useState<{ kind: BackupKind; name: string; projectDir?: string } | null>(null)
 
   async function runFinished() {
     if (!run) return
@@ -372,6 +387,16 @@ export default function Docker({ me }: { me: Me }) {
         />
       )}
       {logsFor && <ContainerLogsModal name={logsFor} base="/containers" onClose={() => setLogsFor(null)} />}
+      {backupFor && (
+        <BackupModal
+          kind={backupFor.kind}
+          name={backupFor.name}
+          projectDir={backupFor.projectDir}
+          canControl={canControl}
+          onClose={() => setBackupFor(null)}
+          onRestored={() => void docker.reload()}
+        />
+      )}
     </>
   )
 }
