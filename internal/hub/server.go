@@ -113,6 +113,7 @@ func (s *Server) Handler() http.Handler {
 			"/terminal/ws",
 			"/console/ws",
 			"/lxd/instances/{name}/logs/ws",
+			"/jobs/{jobID}/ws",
 			"/lxd/images/copy/ws",
 			"/vms/{name}/vnc/ws",
 			"/vms/{name}/spice/ws",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"regexp"
 	"strings"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -138,4 +139,24 @@ func (m *LXDManager) SetAutostart(ctx context.Context, user, name string, on boo
 		return fmt.Errorf("lxc config set: %s", strings.TrimSpace(res.Output()))
 	}
 	return nil
+}
+
+// lxdImageRefRe — ссылка на образ для lxc launch: «images:debian/12»,
+// «ubuntu:24.04», алиас или отпечаток локального образа.
+var lxdLaunchImageRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/:@-]{0,200}$`)
+var lxdInstanceNameRe = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9-]{0,62}$`)
+
+// LXDLaunchArgs — проверенные аргументы lxc launch для задания создания.
+func LXDLaunchArgs(image, name string, vm bool) ([]string, error) {
+	if !lxdLaunchImageRe.MatchString(strings.TrimSpace(image)) {
+		return nil, msgs.Errorf("control.specifyImage")
+	}
+	if !lxdInstanceNameRe.MatchString(name) {
+		return nil, msgs.Errorf("control.invalidInstanceName", name)
+	}
+	args := []string{"launch", strings.TrimSpace(image), name}
+	if vm {
+		args = append(args, "--vm")
+	}
+	return args, nil
 }

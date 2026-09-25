@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/msgs"
@@ -35,6 +36,16 @@ func (s *Server) handleLXDInstanceCreate(w http.ResponseWriter, r *http.Request)
 	var req lxdCreateRequest
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if wantsJob(r) {
+		args, err := control.LXDLaunchArgs(req.Image, req.Name, req.VM)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		cmds := []cmdjob.Command{{Argv: append([]string{hostTool("lxc")}, args...), StepKey: "lxd.stepLaunch", StepArgs: []any{req.Image}}}
+		s.startCmdJob(w, r, "lxd.jobCreate", []any{req.Name}, "lxd:create:"+req.Name, cmdjob.Params{Commands: cmds, Refresh: true}, "lxd.create", req.Name)
 		return
 	}
 	user := auth.Username(r.Context())

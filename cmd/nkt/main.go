@@ -21,6 +21,7 @@ import (
 
 	"github.com/piqab/nkt/internal/api"
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
@@ -744,6 +745,15 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 	if cfg.Mode != config.ModeFixtures {
 		backupExec = api.RunToolingStream
 	}
+	// Общее задание «выполнить команды»: установка, создание инстансов,
+	// скачивание образов — с журналом и процентами в «Заданиях».
+	var cmdExec cmdjob.Exec
+	if cfg.Mode != config.ModeFixtures {
+		cmdExec = api.RunToolingStream
+	}
+	m.Register(cmdjob.Kind, cmdjob.New(cmdExec, collector, cmdjobSecrets, func(ctx context.Context) {
+		_, _ = scanner.Scan(ctx)
+	}))
 	m.Register(backup.JobKindBackup, backup.NewRunner(filepath.Join(cfg.DataDir, "backups"), backupExec, false))
 	m.Register(backup.JobKindRestore, backup.NewRunner(filepath.Join(cfg.DataDir, "backups"), backupExec, true))
 }
@@ -959,3 +969,7 @@ func checkDataDirWritable(dir string) error {
 	_ = os.Remove(probe)
 	return nil
 }
+
+// cmdjobSecrets — откуда задание «выполнить команды» берёт секреты
+// (пароль гостя); задаётся при запуске службы, когда открыта база.
+var cmdjobSecrets cmdjob.Secrets
