@@ -66,7 +66,7 @@ func TestConsoleArgv(t *testing.T) {
 	for kind, want := range map[string]string{
 		"docker": "docker exec -it -e TERM=xterm-256color -u app web sh -c",
 		"podman": "podman exec -it -e TERM=xterm-256color -u app web sh -c",
-		"vm":     "virsh console web --force",
+		"vm":     "virsh -c qemu:///system console web --force",
 	} {
 		argv, ok := consoleArgv(kind, "web", map[bool]string{true: "app", false: ""}[kind != "vm"])
 		if !ok || !strings.HasPrefix(strings.Join(argv, " "), want) {
