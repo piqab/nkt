@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.122 — 2026-09-25
+
+- **Fixed the 32-bit ARM build.** A constant in the demo load metrics did
+  not fit into int, and the linux/arm release build failed.
+
 ## v1.10.121 — 2026-09-25
 
 - **Machines on the resource map.** An nginx/HAProxy/Caddy backend that
