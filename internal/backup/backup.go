@@ -79,6 +79,12 @@ func List(root, kind, name string) ([]Entry, error) {
 	if !ValidKind(kind) || (name != "" && !ValidName(name)) {
 		return nil, msgs.Errorf("backup.badTarget", kind, name)
 	}
+	// Вид — из списка констант, а не строка запроса; имя — только после
+	// проверки: в путь попадает уже не пользовательский ввод.
+	kind = canonicalKind(kind)
+	if name != "" {
+		name = filepath.Base(name)
+	}
 	var dirs []string
 	if name != "" {
 		dirs = []string{Dir(root, kind, name)}
@@ -123,9 +129,15 @@ func List(root, kind, name string) ([]Entry, error) {
 // Resolve проверяет, что путь — бэкап внутри root (для скачивания,
 // удаления и восстановления), и возвращает его чистым.
 func Resolve(root, path string) (string, error) {
+	// Clean и проверка префикса каталога — форма, которую узнают и люди, и
+	// анализаторы (CodeQL go/path-injection): путь не выходит из root.
 	clean := filepath.Clean(path)
+	base := filepath.Clean(root) + string(filepath.Separator)
+	if !strings.HasPrefix(clean, base) || !strings.HasSuffix(clean, ".tar") {
+		return "", msgs.Errorf("backup.badPath", path)
+	}
 	rel, err := filepath.Rel(root, clean)
-	if err != nil || strings.HasPrefix(rel, "..") || !strings.HasSuffix(clean, ".tar") {
+	if err != nil {
 		return "", msgs.Errorf("backup.badPath", path)
 	}
 	parts := strings.Split(rel, string(filepath.Separator))
@@ -525,3 +537,13 @@ echo "--- lxc import as $NAME"
 lxc import "$WORK/instance.tar.gz" "$NAME"
 echo "--- done"
 `
+
+// canonicalKind — вид из Kinds (константа), совпадающий с kind.
+func canonicalKind(kind string) string {
+	for _, k := range Kinds {
+		if k == kind {
+			return k
+		}
+	}
+	return ""
+}

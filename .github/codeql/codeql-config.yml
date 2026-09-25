@@ -1,0 +1,10 @@
+# Настройка CodeQL. Сторонний spice-html5 (LGPL-3.0) лежит неизменённым —
+# его замечания о стиле кода не про nkt и править их нельзя (файлы
+# поставляются как есть, см. THIRD_PARTY_NOTICES.md). Сборка интерфейса
+# (internal/webui/dist) — вывод npm run build, её исходники проверяются
+# в web/src.
+name: nkt CodeQL config
+paths-ignore:
+  - web/public/vendor/**
+  - internal/webui/dist/**
+  - site/node_modules/**

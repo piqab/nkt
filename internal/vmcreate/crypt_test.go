@@ -3,21 +3,19 @@ package vmcreate
 import (
 	"strings"
 	"testing"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
-// Эталоны — от openssl passwd -6 (и из описания алгоритма для первой).
-func TestSHA512Crypt(t *testing.T) {
-	cases := map[[2]string]string{
-		{"Hello world!", "saltstring"}: "$6$saltstring$svn8UoSVapNtMuq1ukKS4tPQd8iKwSMHWjl/O817G3uBnIFNjnQJuesI68u4OTLiBFdcbYEdFCoEOfaS35inz1",
-		{"пароль с пробелом и длинный-длинный-длинный-длинный-длинный-длинный-длинный-длинный", "abcdefgh"}: "$6$abcdefgh$XV17cgd9tNRg0gWVzmQAMFfBqxiqKq.MuOo55GyO8ieUddJ/KAbTRi4od1dbrl2KHdfFgoK2sIxL2/NBdZH5K/",
+func TestHashPassword(t *testing.T) {
+	h, err := HashPassword("Very$ecret1")
+	if err != nil {
+		t.Fatal(err)
 	}
-	for in, want := range cases {
-		if got := sha512Crypt(in[0], in[1]); got != want {
-			t.Errorf("%q: %s, want %s", in[0], got, want)
-		}
+	if !strings.HasPrefix(h, "$2a$12$") || bcrypt.CompareHashAndPassword([]byte(h), []byte("Very$ecret1")) != nil {
+		t.Fatalf("%s", h)
 	}
-	h := HashPassword("x")
-	if !strings.HasPrefix(h, "$6$") || len(h) != 3+16+1+86 {
-		t.Errorf("%s", h)
+	if bcrypt.CompareHashAndPassword([]byte(h), []byte("nope")) == nil {
+		t.Fatal("чужой пароль подошёл")
 	}
 }

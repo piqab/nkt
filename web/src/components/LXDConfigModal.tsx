@@ -131,20 +131,29 @@ export default function LXDConfigModal({
   )
 }
 
-const keyRe = (key: string) => new RegExp(`^  ${key.replace(/\./g, '\\.')}:[ \\t]*(.*)$`, 'm')
+/** Строка как литерал в регулярном выражении: все спецсимволы экранированы. */
+const escapeRe = (s: string) => s.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')
+
+const keyRe = (key: string) => new RegExp(`^  ${escapeRe(key)}:[ \\t]*(.*)$`, 'm')
+
+/** Значение в двойных кавычках YAML: сначала обратная косая, потом кавычки. */
+const yamlQuote = (v: string) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`
 
 /** Значение ключа из блока config: (простой YAML lxc config show). */
 export function yamlConfigValue(text: string, key: string): string {
   const m = keyRe(key).exec(configBlock(text).body)
   if (!m) return ''
-  return m[1].trim().replace(/^"(.*)"$/, '$1').replace(/^'(.*)'$/, '$1')
+  const v = m[1].trim()
+  const dq = /^"(.*)"$/.exec(v)
+  if (dq) return dq[1].replace(/\\(["\\])/g, '$1')
+  return v.replace(/^'(.*)'$/, '$1')
 }
 
 /** Ставит (или убирает при пустом значении) ключ в блоке config:. */
 export function setYamlConfigValue(text: string, key: string, value: string): string {
   const { start, end, body } = configBlock(text)
   if (start < 0) return text
-  const line = `  ${key}: "${value.replace(/"/g, '\\"')}"`
+  const line = `  ${key}: ${yamlQuote(value)}`
   const lines = body.split('\n').filter((l) => l !== '')
   const i = lines.findIndex((l) => keyRe(key).test(l))
   if (i >= 0) {

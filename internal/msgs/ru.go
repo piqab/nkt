@@ -568,7 +568,7 @@ var ruCatalog = map[string]string{
 	"podman.jobCreate":                                    "создание контейнера Podman %s",
 	"podman.stepPull":                                     "скачивание образа %s",
 	"podman.stepRun":                                      "запуск контейнера %s",
-	"guestcred.invalid":                                   "логин или пароль не приняты: имя пользователя Linux (строчные буквы, цифры, _ и -), пароль 8–128 символов в одну строку",
+	"guestcred.invalid":                                   "логин или пароль не приняты: имя пользователя Linux (строчные буквы, цифры, _ и -), пароль 8–72 байта в одну строку",
 	"guestcred.notSet":                                    "пароль для %s в nkt не задан",
 	"guest.jobPassword":                                   "пароль %s для %s",
 	"guest.stepPassword":                                  "установка пароля %s в %s",
