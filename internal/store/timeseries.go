@@ -682,3 +682,25 @@ func (d *DB) CounterDelta(ctx context.Context, key string, value float64) (delta
 		key, value, Now())
 	return delta, ok, err
 }
+
+// LatestMetrics — последние значения рядов одного объекта не старше since:
+// метрика → значение (для сведений об узле на карте ресурсов).
+func (d *DB) LatestMetrics(ctx context.Context, source, subject, since string) (map[string]float64, error) {
+	rows, err := d.QueryContext(ctx,
+		`SELECT metric, value FROM metric_samples WHERE source = ? AND subject = ? AND ts >= ? ORDER BY ts ASC`,
+		source, subject, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]float64{}
+	for rows.Next() {
+		var m string
+		var v float64
+		if err := rows.Scan(&m, &v); err != nil {
+			return nil, err
+		}
+		out[m] = v
+	}
+	return out, rows.Err()
+}

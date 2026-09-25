@@ -87,10 +87,18 @@ quarantine.
 A graph where traffic reads left to right:
 
 ```
-external network → service → listener → pool → backend → container → docker network
+external network → service → listener → pool → backend → container or machine → network
 ```
 
 Edges come from the configs (`proxy_pass`, `upstream`, `use_backend`,
 published ports), node state from live listeners, containers and
 findings. The column layout stays stable between scans; zoom and drag
 with the mouse, node details on hover.
+
+libvirt machines and LXD instances are linked to their networks (a
+libvirt bridge, an LXD network) and to backends pointing at their
+address — you see which site lives on which machine. Forwarded LXD ports
+are an entry from the host into the instance. A machine node's details
+show its address, ping, current CPU and memory and the vulnerabilities of
+its packages; no ping reply turns the node red, critical vulnerabilities
+turn it yellow.
