@@ -95,7 +95,7 @@ export function SpiceModal({ title, wsPath, onClose, extra }: { title: string; w
   }, [wsPath, screen])
 
   return (
-    <Modal title={title} onClose={onClose} width="min(96vw, 1280px)" maskClosable={false}>
+    <Modal title={title} onClose={onClose} width="min(96vw, 1280px)" maskClosable={false} sizeKey="screen">
       <div className="row" style={{ gap: '0.75rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
         <span className="small muted">{t(`vnc.state.${state}`)}</span>
         <Button
@@ -108,7 +108,7 @@ export function SpiceModal({ title, wsPath, onClose, extra }: { title: string; w
         {extra}
       </div>
       {reason && <Banner kind="error">{reason}</Banner>}
-      <div style={{ width: '100%', height: '70vh', background: '#000', borderRadius: 'var(--radius-sm)', overflow: 'auto' }}>
+      <div className="modal-fill" style={{ width: '100%', height: '70vh', background: '#000', borderRadius: 'var(--radius-sm)', overflow: 'auto' }}>
         <div id={screenId} ref={setScreen} tabIndex={0} style={{ display: 'inline-block', minWidth: '100%', minHeight: '100%', outline: 'none' }} />
       </div>
       <div className="small muted" style={{ marginTop: '0.4rem' }}>

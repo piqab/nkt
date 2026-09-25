@@ -2637,5 +2637,10 @@
     "lost": "the SPICE connection was lost",
     "loadFailed": "could not load the spice-html5 client: {{error}}",
     "hint": "The spice-html5 client (LGPL-3.0). The keyboard works after a click on the screen. The screen has the machine's size; the rest scrolls."
+  },
+  "modal": {
+    "maximize": "Maximize",
+    "restore": "Normal size",
+    "resizeHint": "Drag to resize; double-click for the normal size"
   }
 }

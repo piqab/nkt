@@ -628,7 +628,7 @@ function VMEditor({
   // каталогом образов, и после нажатия карандаша казалось, что ничего не
   // открылось.
   return (
-    <Modal title={t(isNew ? 'virt.newVmName' : 'virt.editVmName', { name })} onClose={onClose} width={960} maskClosable={false}>
+    <Modal title={t(isNew ? 'virt.newVmName' : 'virt.editVmName', { name })} onClose={onClose} width={960} maskClosable={false} sizeKey="edit">
       <div className="small muted mono" style={{ marginBottom: '0.5rem' }}>
         {path}
       </div>
@@ -675,7 +675,7 @@ function VMEditor({
               {result.rolled_back && <AIConfigError path={path} service="libvirt" content={content} result={result} />}
             </Banner>
           )}
-          <CodeEditor value={content} onChange={(e) => setDraft(e.target.value)} rows={20} />
+          <CodeEditor value={content} onChange={(e) => setDraft(e.target.value)} rows={20} fill />
           <label>
             {t('virt.note')}
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('virt.optional')} />

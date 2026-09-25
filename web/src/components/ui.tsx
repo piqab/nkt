@@ -1,6 +1,6 @@
-import { useRef, type ChangeEvent, type ReactNode } from 'react'
+import { useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Alert, Badge, Button, Card as AntCard, Modal as AntModal, Spin, Tooltip } from 'antd'
-import { InfoCircleOutlined } from '@ant-design/icons'
+import { CompressOutlined, ExpandOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { blurText } from '../privacy'
 import i18n from '../i18n'
@@ -188,6 +188,7 @@ export function Modal({
   closeLabel,
   maskClosable,
   width,
+  sizeKey,
   children,
 }: {
   title: ReactNode
@@ -202,24 +203,119 @@ export function Modal({
   // Ширина окна. По умолчанию антовская (520px) — её хватает почти
   // везде; форма с несколькими полями в строке просит больше.
   width?: number | string
+  /** Вид окна для запоминания размера («logs», «job», «edit»…): окна
+   * одного вида открываются тем размером, до которого их растянули. */
+  sizeKey?: string
   children: ReactNode
 }) {
   const { t } = useTranslation()
+  // Размер меняется уголком справа внизу, «развернуть» — кнопкой в
+  // заголовке; содержимое с классом modal-fill (логи, редакторы, терминал,
+  // экран машины) занимает всю высоту окна.
+  const [size, setSize] = useState<ModalSize | null>(() => loadModalSize(sizeKey))
+  const [maxed, setMaxed] = useState(false)
+  const frameRef = useRef<HTMLDivElement>(null)
+
+  function startResize(e: ReactPointerEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    const frame = frameRef.current
+    if (!frame) return
+    const r = frame.getBoundingClientRect()
+    const sx = e.clientX
+    const sy = e.clientY
+    let last: ModalSize = { w: Math.round(r.width), h: Math.round(r.height) }
+    setMaxed(false)
+    const move = (ev: PointerEvent) => {
+      // Окно по центру: правый край идёт за курсором, если ширина растёт
+      // вдвое быстрее; верх окна на месте — высота растёт как есть.
+      const w = Math.max(360, Math.min(window.innerWidth - 16, r.width + 2 * (ev.clientX - sx)))
+      const h = Math.max(200, Math.min(window.innerHeight - r.top - 8, r.height + (ev.clientY - sy)))
+      last = { w: Math.round(w), h: Math.round(h) }
+      setSize(last)
+    }
+    const up = () => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      saveModalSize(sizeKey, last)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
+  }
+
+  const sized = maxed || size !== null
   return (
     <AntModal
       // Заголовок с именем хоста/машины/домена — в приватном режиме размыт.
-      title={blurText(title)}
+      title={
+        <div className="modal-title-row">
+          <span className="modal-title-text">{blurText(title)}</span>
+          <Tooltip title={maxed ? t('modal.restore') : t('modal.maximize')}>
+            <Button
+              type="text"
+              size="small"
+              className="modal-max-btn"
+              aria-label={maxed ? t('modal.restore') : t('modal.maximize')}
+              icon={maxed ? <CompressOutlined /> : <ExpandOutlined />}
+              onClick={() => setMaxed((m) => !m)}
+            />
+          </Tooltip>
+        </div>
+      }
       open
       closable={false}
       maskClosable={maskClosable ?? !!onClose}
       onCancel={onClose}
-      width={width}
+      width={maxed ? 'calc(100vw - 16px)' : size ? size.w : width}
+      style={maxed ? { top: 8, paddingBottom: 0, maxWidth: 'none' } : undefined}
       footer={onClose ? <Button onClick={onClose}>{closeLabel ?? t('common.close')}</Button> : null}
       destroyOnHidden
+      modalRender={(node) => (
+        <div
+          ref={frameRef}
+          className={'nkt-modal-frame' + (sized ? ' sized' : '')}
+          style={sized ? { height: maxed ? 'calc(100vh - 16px)' : size?.h } : undefined}
+        >
+          {node}
+          <div
+            className="modal-resize-handle"
+            title={t('modal.resizeHint')}
+            onPointerDown={startResize}
+            onDoubleClick={() => {
+              setSize(null)
+              setMaxed(false)
+              saveModalSize(sizeKey, null)
+            }}
+          />
+        </div>
+      )}
     >
       {children}
     </AntModal>
   )
+}
+
+type ModalSize = { w: number; h: number }
+
+function loadModalSize(key?: string): ModalSize | null {
+  if (!key) return null
+  try {
+    const v = JSON.parse(localStorage.getItem('nkt.modal.' + key) ?? 'null') as ModalSize | null
+    if (v && v.w >= 360 && v.h >= 200) return { w: Math.min(v.w, window.innerWidth - 16), h: Math.min(v.h, window.innerHeight - 40) }
+  } catch {
+    // хранилище недоступно — окно просто откроется обычным размером
+  }
+  return null
+}
+
+function saveModalSize(key: string | undefined, v: ModalSize | null) {
+  if (!key) return
+  try {
+    if (v) localStorage.setItem('nkt.modal.' + key, JSON.stringify(v))
+    else localStorage.removeItem('nkt.modal.' + key)
+  } catch {
+    // не запомнилось — не страшно
+  }
 }
 
 /**
@@ -262,18 +358,21 @@ export function CodeEditor({
   rows = 16,
   readOnly,
   autoFocus,
+  fill,
 }: {
   value: string
   onChange?: (e: ChangeEvent<HTMLTextAreaElement>) => void
   rows?: number
   readOnly?: boolean
   autoFocus?: boolean
+  /** Занять всю высоту растянутого окна. */
+  fill?: boolean
 }) {
   const gutterRef = useRef<HTMLDivElement>(null)
   const lineCount = value === '' ? 1 : value.split('\n').length
 
   return (
-    <div className="code-editor">
+    <div className={fill ? 'code-editor modal-fill' : 'code-editor'}>
       <div className="code-gutter" ref={gutterRef} aria-hidden="true">
         {Array.from({ length: lineCount }, (_, i) => (
           <div key={i}>{i + 1}</div>

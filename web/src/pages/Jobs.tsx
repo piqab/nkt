@@ -319,7 +319,7 @@ export function JobLogModal({
   const canRetry = isJobDone(current) && current.status !== 'succeeded' && current.resumable
 
   return (
-    <Modal title={blurText(current.title || current.kind)} onClose={onClose} maskClosable={false} width={860}>
+    <Modal title={blurText(current.title || current.kind)} onClose={onClose} maskClosable={false} width={860} sizeKey="job">
       <div className="row" style={{ marginBottom: '0.5rem' }}>
         <Tag color={STATUS_COLOR[current.status] ?? 'default'}>{t(`jobs.status.${current.status}`)}</Tag>
         {current.steps > 0 && current.steps !== 100 && (
@@ -366,7 +366,7 @@ export function JobLogModal({
       )}
       <ErrorNote error={retryError} />
 
-      <pre ref={bodyRef} className="diff mono" style={{ maxHeight: '26rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
+      <pre ref={bodyRef} className="diff mono modal-fill" style={{ maxHeight: '26rem', overflow: 'auto', whiteSpace: 'pre-wrap' }}>
         {lines.length === 0 ? t('jobs.noOutput') : lines.map((l, i) => <LogLine key={l.seq ?? i} text={l.text} last={i === lines.length - 1} />)}
       </pre>
     </Modal>

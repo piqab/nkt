@@ -76,7 +76,7 @@ export function VNCModal({ name, onClose, extra }: { name: string; onClose: () =
   }, [viewOnly])
 
   return (
-    <Modal title={t('vnc.title', { name })} onClose={onClose} width="min(96vw, 1280px)" maskClosable={false}>
+    <Modal title={t('vnc.title', { name })} onClose={onClose} width="min(96vw, 1280px)" maskClosable={false} sizeKey="screen">
       <div className="row" style={{ gap: '0.75rem', alignItems: 'center', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
         <span className="small muted">{t(`vnc.state.${state}`)}</span>
         <Button size="small" disabled={state !== 'connected'} onClick={() => rfbRef.current?.sendCtrlAltDel()}>
@@ -102,7 +102,7 @@ export function VNCModal({ name, onClose, extra }: { name: string; onClose: () =
           </Button>
         </div>
       )}
-      <div ref={setScreen} style={{ width: '100%', height: '70vh', background: '#000', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }} />
+      <div ref={setScreen} className="modal-fill" style={{ width: '100%', height: '70vh', background: '#000', borderRadius: 'var(--radius-sm)', overflow: 'hidden' }} />
       <div className="small muted" style={{ marginTop: '0.4rem' }}>
         {t('vnc.hint')}
       </div>

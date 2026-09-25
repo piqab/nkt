@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.117 — 2026-09-25
+
+- **Windows can be resized.** Every window has a corner at the bottom
+  right: drag it to change width and height, double-click for the normal
+  size. The button in the title maximizes the window. Logs, the job log,
+  editors, the terminal and the machine screen stretch with the window,
+  and the size of these kinds of windows is remembered in the browser.
+- **The service log window** is wider and taller by default.
+
 ## v1.10.116 — 2026-09-25
 
 - **Container and machine load.** For the network, CPU and memory charts

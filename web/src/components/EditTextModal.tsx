@@ -50,9 +50,9 @@ export function EditTextModal({
   }
 
   return (
-    <Modal title={title} onClose={onClose} width={1100} maskClosable={false}>
+    <Modal title={title} onClose={onClose} width={1100} maskClosable={false} sizeKey="edit">
       {fields}
-      <CodeEditor value={draft} onChange={(e) => onDraft(e.target.value)} rows={rows} />
+      <CodeEditor value={draft} onChange={(e) => onDraft(e.target.value)} rows={rows} fill />
       {below}
       <div className="row" style={{ gap: '0.5rem', marginTop: '0.6rem', alignItems: 'center' }}>
         {dirty && <span className="small" style={{ color: 'var(--status-warning)' }}>{t('configs.unsavedChanges')}</span>}
@@ -68,7 +68,7 @@ export function EditTextModal({
         </Button>
       </div>
       {preview && (
-        <Modal title={t(preview.confirm ? 'blocks.previewTitle' : 'editModal.changes')} onClose={() => setPreview(null)} width={900} maskClosable={false}>
+        <Modal title={t(preview.confirm ? 'blocks.previewTitle' : 'editModal.changes')} onClose={() => setPreview(null)} width={900} maskClosable={false} sizeKey="diff">
           {preview.diff === '' ? <p className="small muted">{t('editModal.noChanges')}</p> : <DiffView text={preview.diff} />}
           {preview.confirm && (
             <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
