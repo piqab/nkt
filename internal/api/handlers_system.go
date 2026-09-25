@@ -1,7 +1,11 @@
 package api
 
 import (
+	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
+	"os/exec"
 	"strings"
 
 	"github.com/piqab/nkt/internal/auth"
@@ -241,4 +245,46 @@ func (s *Server) handleTimeSyncUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, http.StatusOK, s.sysconfig.TimeSync(r.Context()))
+}
+
+// handleSandboxPackagesWS — GET /system/sandbox-packages/ws?op=remove&snap=a,b&flatpak=c
+// (или op=update&snap=1&flatpak=1): удаление или обновление в окне
+// выполнения с живым выводом, как у apt.
+func (s *Server) handleSandboxPackagesWS(w http.ResponseWriter, r *http.Request) {
+	if s.cfg.Mode == config.ModeFixtures {
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.fixturesDisabled"))
+		return
+	}
+	q := r.URL.Query()
+	op := q.Get("op")
+	split := func(v string) []string {
+		var out []string
+		for _, p := range strings.Split(v, ",") {
+			if p = strings.TrimSpace(p); p != "" {
+				out = append(out, p)
+			}
+		}
+		return out
+	}
+	var script string
+	var err error
+	if op == "update" {
+		script, err = control.SandboxScript(op, nil, nil, q.Get("snap") == "1", q.Get("flatpak") == "1")
+	} else {
+		script, err = control.SandboxScript(op, split(q.Get("snap")), split(q.Get("flatpak")), false, false)
+	}
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	buildCmd := func() *exec.Cmd {
+		return unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, "bash", "-c", script)
+	}
+	s.runUpdateSession(w, r, "sandbox-pkg", buildCmd, "sandbox_pkg."+op, q.Get("snap")+" "+q.Get("flatpak"), s.cfg.TerminalIdleTimeout)
+}
+
+// handleSandboxPackagesStatus — итог последней сессии для окна.
+func (s *Server) handleSandboxPackagesStatus(w http.ResponseWriter, r *http.Request) {
+	active, finished, exitCode := s.sessionStatus("sandbox-pkg")
+	writeSessionStatus(w, active, finished, exitCode)
 }

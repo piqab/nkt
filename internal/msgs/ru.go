@@ -501,6 +501,7 @@ var ruCatalog = map[string]string{
 	"control.invalidAction":                               "недопустимое действие: %q",
 	"control.invalidActionContainer":                      "недопустимое действие для контейнера: %q",
 	"control.invalidActionInstance":                       "недопустимое действие для инстанса: %q",
+	"control.nothingToDo":                                 "нечего делать: ничего не выбрано",
 	"backup.badTarget":                                    "недопустимый объект бэкапа: %s %q",
 	"backup.badPath":                                      "недопустимый путь бэкапа: %s",
 	"backup.composeNeedsDir":                              "для бэкапа compose-стека нужен абсолютный путь к каталогу проекта",

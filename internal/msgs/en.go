@@ -502,6 +502,7 @@ var enCatalog = map[string]string{
 	"control.invalidAction":                               "invalid action: %q",
 	"control.invalidActionContainer":                      "invalid action for container: %q",
 	"control.invalidActionInstance":                       "invalid action for instance: %q",
+	"control.nothingToDo":                                 "nothing to do: nothing selected",
 	"backup.badTarget":                                    "invalid backup target: %s %q",
 	"backup.badPath":                                      "invalid backup path: %s",
 	"backup.composeNeedsDir":                              "a compose stack backup needs the absolute path of the project directory",

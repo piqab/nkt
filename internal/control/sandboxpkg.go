@@ -176,3 +176,42 @@ func (m *SandboxPkgManager) Update(ctx context.Context, kind string) (string, er
 	}
 	return strings.TrimSpace(res.Output()), nil
 }
+
+// ValidSandboxName — имя пакета snap или идентификатор flatpak, пригодный
+// для командной строки.
+func ValidSandboxName(name string) bool { return sandboxNameRe.MatchString(name) }
+
+// SandboxScript — команда для окна выполнения: op «remove» — удалить
+// перечисленные snap и flatpak, «update» — обновить всё в выбранных
+// системах. Без ${…}: строка уходит через systemd-run, который такие
+// выражения подставляет сам. Имена проверены ValidSandboxName.
+func SandboxScript(op string, snaps, flatpaks []string, updateSnap, updateFlatpak bool) (string, error) {
+	for _, n := range append(append([]string{}, snaps...), flatpaks...) {
+		if !ValidSandboxName(n) {
+			return "", msgs.Errorf("control.invalidPackageName", n)
+		}
+	}
+	var parts []string
+	switch op {
+	case "remove":
+		if len(snaps) > 0 {
+			parts = append(parts, "echo '--- snap remove "+strings.Join(snaps, " ")+"'", "snap remove "+strings.Join(snaps, " "))
+		}
+		if len(flatpaks) > 0 {
+			parts = append(parts, "echo '--- flatpak uninstall "+strings.Join(flatpaks, " ")+"'", "flatpak uninstall -y "+strings.Join(flatpaks, " "))
+		}
+	case "update":
+		if updateSnap {
+			parts = append(parts, "echo '--- snap refresh'", "snap refresh")
+		}
+		if updateFlatpak {
+			parts = append(parts, "echo '--- flatpak update'", "flatpak update -y")
+		}
+	default:
+		return "", msgs.Errorf("control.unknownOperation", op)
+	}
+	if len(parts) == 0 {
+		return "", msgs.Errorf("control.nothingToDo")
+	}
+	return "set -e\n" + strings.Join(parts, "\n"), nil
+}

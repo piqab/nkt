@@ -1,11 +1,12 @@
-import { useState } from 'react'
-import { Button, Popconfirm, Tag, type TableColumnsType } from 'antd'
+import { useMemo, useState } from 'react'
+import { Button, Input, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { api, useApi } from '../api'
+import { api, qs, useApi } from '../api'
 import type { Me } from '../types'
-import { Banner, Card, Loading } from './ui'
+import { Card, Loading } from './ui'
 import PackageInstallModal from './PackageInstallModal'
-import { DataTable } from './DataTable'
+import CommandModal from './CommandModal'
+import { PackageGrid, type PackageRow } from '../pages/Packages'
 
 interface SandboxPackage {
   kind: 'snap' | 'flatpak'
@@ -24,86 +25,78 @@ interface SandboxPackages {
 }
 
 /**
- * Пакеты snap и flatpak рядом с apt. На сервере их обычно нет вовсе, и
- * тогда карточка честно об этом говорит; на рабочей машине оттуда
- * приходит половина софта, и без них список установленного просто врёт.
+ * Пакеты snap и flatpak рядом с apt — так же, как «Установленные пакеты»:
+ * фильтр, сетка с галочками, «удалить выбранные» и обновление — в окне
+ * выполнения с живым выводом. Ключ строки — «вид/имя»: имя snap и
+ * идентификатор flatpak (удаление flatpak идёт по нему).
  */
 export default function SandboxPackagesCard({ me }: { me: Me }) {
   const { t } = useTranslation()
   const data = useApi<SandboxPackages>('/system/sandbox-packages', 120_000)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [output, setOutput] = useState<string | null>(null)
-  // Установка самой системы пакетов идёт обычным apt — тем же окном с
-  // живым логом, что и остальные установки: snapd и flatpak ставятся
-  // минуты и тянут зависимости, показывать это надо, а не крутить спиннер.
+  const [query, setQuery] = useState('')
+  const [picked, setPicked] = useState<string[]>([])
+  const [running, setRunning] = useState<{
+    title: string
+    wsPath: string
+    outcome?: { ok: boolean; exitCode?: number; okText?: string; failText?: string } | null
+  } | null>(null)
+  // Установка самой системы пакетов — apt в том же окне с живым логом.
   const [installing, setInstalling] = useState<string | null>(null)
-
   const canUse = me.is_admin && me.allow_mutations
 
-  async function run(path: string, body: Record<string, unknown>) {
-    setBusy(true)
-    setError(null)
-    setOutput(null)
-    try {
-      // snap refresh и flatpak update ходят в сеть и легко идут минуту:
-      // на сервере у них потолок 90 секунд, клиент ждёт с запасом.
-      const res = await api<{ output?: string }>(path, { method: 'POST', body, timeoutMs: 120_000 })
-      if (res.output) setOutput(res.output)
-      await data.reload()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
+  const rows: (PackageRow & { kind: SandboxPackage['kind']; ref: string })[] = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return (data.data?.packages ?? [])
+      // Имя в сетке — как его понимает команда удаления: у snap имя, у
+      // flatpak идентификатор (reverse-DNS, с именами snap не совпадает);
+      // вид — меткой рядом, канал и источник — в подсказке.
+      .map((p) => ({
+        name: p.id || p.name,
+        ref: p.id || p.name,
+        kind: p.kind,
+        version: p.version,
+        description: [p.name !== (p.id || p.name) ? p.name : '', p.channel, p.origin].filter(Boolean).join(' · ') || undefined,
+      }))
+      .filter((p) => !q || p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q))
+  }, [data.data, query])
+
+  function removeSelected() {
+    const kindOf = new Map((data.data?.packages ?? []).map((p) => [p.id || p.name, p.kind]))
+    const snaps = picked.filter((n) => kindOf.get(n) === 'snap')
+    const flatpaks = picked.filter((n) => kindOf.get(n) === 'flatpak')
+    setRunning({
+      title: t('sandboxPkg.removeTitle', { names: [...snaps, ...flatpaks].join(', ') }),
+      wsPath: `/system/sandbox-packages/ws${qs({ op: 'remove', snap: snaps.join(','), flatpak: flatpaks.join(',') })}`,
+    })
   }
 
-  const columns: TableColumnsType<SandboxPackage> = [
-    {
-      title: t('sandboxPkg.colName'),
-      key: 'name',
-      render: (_, p) => (
-        <div className="col">
-          <code className="mono">{p.name}</code>
-          {p.id && p.id !== p.name && <span className="small muted mono">{p.id}</span>}
-        </div>
-      ),
-    },
-    { title: t('sandboxPkg.colKind'), key: 'kind', width: '7rem', render: (_, p) => <Tag>{p.kind}</Tag> },
-    {
-      title: t('sandboxPkg.colVersion'),
-      key: 'version',
-      render: (_, p) => <span className="small mono">{p.version ?? '—'}</span>,
-    },
-    {
-      title: t('sandboxPkg.colChannel'),
-      key: 'channel',
-      render: (_, p) => (
-        <span className="small muted">
-          {p.channel ?? '—'}
-          {p.origin && ` · ${p.origin}`}
-        </span>
-      ),
-    },
-    {
-      title: '',
-      key: 'actions',
-      width: '8rem',
-      render: (_, p) =>
-        canUse ? (
-          <Popconfirm
-            title={t('sandboxPkg.removeConfirm', { name: p.name })}
-            onConfirm={() => run('/system/sandbox-packages/remove', { kind: p.kind, name: p.id || p.name })}
-          >
-            <Button size="small" danger disabled={busy}>
-              {t('sandboxPkg.remove')}
-            </Button>
-          </Popconfirm>
-        ) : null,
-    },
-  ]
+  function update(kind: 'snap' | 'flatpak') {
+    setRunning({
+      title: t(kind === 'snap' ? 'sandboxPkg.updateSnap' : 'sandboxPkg.updateFlatpak'),
+      wsPath: `/system/sandbox-packages/ws${qs({ op: 'update', [kind]: 1 })}`,
+    })
+  }
 
-  if (!data.data) return null
+  async function finished() {
+    const st = await api<{ succeeded?: boolean; exit_code?: number }>('/system/sandbox-packages/status').catch(() => null)
+    setRunning((r) =>
+      r
+        ? {
+            ...r,
+            outcome: {
+              ok: !!st?.succeeded,
+              exitCode: st?.exit_code,
+              okText: t('sandboxPkg.doneOk'),
+              failText: t('sandboxPkg.doneFailed', { code: st?.exit_code ?? '?' }),
+            },
+          }
+        : r,
+    )
+    setPicked([])
+    await data.reload()
+  }
+
+  if (!data.data) return data.loading ? <Loading what={t('sandboxPkg.title')} /> : null
   const { snap_available, flatpak_available, packages } = data.data
 
   return (
@@ -114,15 +107,12 @@ export default function SandboxPackagesCard({ me }: { me: Me }) {
         canUse && (
           <div className="row" style={{ gap: '0.5rem' }}>
             {snap_available && (
-              <Button size="small" loading={busy} onClick={() => run('/system/sandbox-packages/update', { kind: 'snap' })}>
+              <Button size="small" onClick={() => update('snap')}>
                 {t('sandboxPkg.updateSnap')}
               </Button>
             )}
             {flatpak_available && (
-              <Button
-                loading={busy}
-                onClick={() => run('/system/sandbox-packages/update', { kind: 'flatpak' })}
-              >
+              <Button size="small" onClick={() => update('flatpak')}>
                 {t('sandboxPkg.updateFlatpak')}
               </Button>
             )}
@@ -130,17 +120,13 @@ export default function SandboxPackagesCard({ me }: { me: Me }) {
         )
       }
     >
-      {error && <Banner kind="error">{error}</Banner>}
-      {output && <pre className="small mono" style={{ whiteSpace: 'pre-wrap' }}>{output}</pre>}
-      {data.loading && !data.data && <Loading what={t('sandboxPkg.title')} />}
       {data.data.notes?.map((n) => (
         <p key={n} className="small muted">
           {n}
         </p>
       ))}
-
       {canUse && (!snap_available || !flatpak_available) && (
-        <div className="row" style={{ gap: '0.5rem', marginTop: '0.4rem' }}>
+        <div className="row" style={{ gap: '0.5rem', marginBottom: '0.6rem' }}>
           {!snap_available && (
             <Button size="small" onClick={() => setInstalling('snapd')}>
               {t('sandboxPkg.installSnap')}
@@ -153,7 +139,40 @@ export default function SandboxPackagesCard({ me }: { me: Me }) {
           )}
         </div>
       )}
-
+      {packages.length > 0 && (
+        <>
+          <Input
+            placeholder={t('packages.filterPlaceholder')}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            allowClear
+            style={{ maxWidth: '20rem', marginBottom: '0.75rem' }}
+          />
+          {/* Та же строка кнопок, что у «Установленных»: выбранные — одним действием. */}
+          <div className="row" style={{ gap: '0.5rem', marginBottom: '0.5rem', alignItems: 'center' }}>
+            <Button danger disabled={!canUse || picked.length === 0} onClick={removeSelected}>
+              {t('packages.removeSelected', { count: picked.length })}
+            </Button>
+            {picked.length > 0 && (
+              <>
+                <Button size="small" onClick={() => setPicked([])}>
+                  {t('packages.clearSelection')}
+                </Button>
+                <span className="small secondary mono">{picked.join(', ')}</span>
+              </>
+            )}
+          </div>
+          <PackageGrid
+            rows={rows}
+            picked={picked}
+            onPick={setPicked}
+            canPick={() => canUse}
+            action={(p) => <Tag>{(p as (typeof rows)[number]).kind}</Tag>}
+            showVersion
+            showState={false}
+          />
+        </>
+      )}
       {installing && (
         <PackageInstallModal
           packageName={installing}
@@ -164,13 +183,14 @@ export default function SandboxPackagesCard({ me }: { me: Me }) {
           action="install"
         />
       )}
-      {packages.length > 0 && (
-        <div className="table-wrap">
-          <DataTable<SandboxPackage>             dataSource={packages}
-            rowKey={(p) => `${p.kind}/${p.id || p.name}`}
-            columns={columns}
-          />
-        </div>
+      {running && (
+        <CommandModal
+          title={running.title}
+          wsPath={running.wsPath}
+          outcome={running.outcome ?? null}
+          onFinished={() => void finished()}
+          onClose={() => setRunning(null)}
+        />
       )}
     </Card>
   )

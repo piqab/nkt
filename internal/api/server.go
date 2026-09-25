@@ -171,6 +171,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/packages/remove/ws", s.handleCommonPackagesRemoveWS)
 			r.Get("/system/apt/install/ws", s.handleAptBatchInstallWS)
 			r.Get("/system/apt/remove/ws", s.handleAptBatchRemoveWS)
+			r.Get("/system/sandbox-packages/ws", s.handleSandboxPackagesWS)
 			r.Get("/system/apt/packages/{name}/install/ws", s.handleAptInstallWS)
 			r.Get("/system/apt/packages/{name}/remove/ws", s.handleAptRemoveWS)
 			// Ordinary REST, not itself long-lived — grouped here anyway
@@ -426,6 +427,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/system/timesync", s.handleTimeSync)
 				r.Get("/network/manager", s.handleNetworkManager)
 				r.Get("/system/sandbox-packages", s.handleSandboxPackages)
+				r.Get("/system/sandbox-packages/status", s.handleSandboxPackagesStatus)
 				r.Get("/disks", s.handleDisks)
 				r.Get("/disks/usage", s.handleDiskUsage)
 				r.Get("/os-users", s.handleOSUserList)

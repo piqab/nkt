@@ -1,6 +1,9 @@
 package control
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // Вывод lscpu -J снят с этой машины: плоский список пар, где имя поля
 // включает двоеточие.
@@ -149,5 +152,22 @@ func TestParseSnapAndFlatpak(t *testing.T) {
 	// поэтому оба поля хранятся отдельно.
 	if flats[0].ID != "org.gimp.GIMP" || flats[0].Name != "GNU Image Manipulation Program" {
 		t.Errorf("разбор дал %+v", flats[0])
+	}
+}
+
+// Сценарий snap/flatpak: имена проверены, без ${…}, пустой выбор — отказ.
+func TestSandboxScript(t *testing.T) {
+	sc, err := SandboxScript("remove", []string{"firefox", "core22"}, []string{"org.gimp.GIMP"}, false, false)
+	if err != nil || !strings.Contains(sc, "snap remove firefox core22") || !strings.Contains(sc, "flatpak uninstall -y org.gimp.GIMP") || strings.Contains(sc, "${") {
+		t.Fatalf("%q %v", sc, err)
+	}
+	if _, err := SandboxScript("remove", []string{"a;rm -rf /"}, nil, false, false); err == nil {
+		t.Error("опасное имя принято")
+	}
+	if _, err := SandboxScript("remove", nil, nil, false, false); err == nil {
+		t.Error("пустой выбор принят")
+	}
+	if sc, _ := SandboxScript("update", nil, nil, true, false); !strings.Contains(sc, "snap refresh") || strings.Contains(sc, "flatpak") {
+		t.Errorf("update: %q", sc)
 	}
 }
