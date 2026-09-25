@@ -316,8 +316,13 @@ export default function Configs({ me }: { me: Me }) {
           title={t('configs.filesTitle')}
           subtitle={t('configs.filesCount', { count: visibleFiles.length })}
           actions={
+            // Новый файл — только в выбранной категории: путь начинается с
+            // её корня, а без категории окну не из чего его начать.
             me.is_admin &&
-            me.allow_mutations && (
+            me.allow_mutations &&
+            category !== 'all' &&
+            category !== 'unused' &&
+            (roots.data?.roots[category]?.length ?? 0) > 0 && (
               <Button type="link" onClick={() => setNewFileModal({})}>
                 {t('configs.newFile')}
               </Button>
@@ -758,6 +763,9 @@ export default function Configs({ me }: { me: Me }) {
                 }}
                 onCancel={() => setNewFileModal(null)}
               />
+            ) : roots.data ? (
+              // Корней у категории нет — не «загрузка навсегда», а объяснение.
+              <Banner kind="warn">{t('configs.newFileNoRoot')}</Banner>
             ) : (
               <Loading what={t('configs.newFileRoot')} />
             )}

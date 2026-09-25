@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
 import { api, useApi } from '../api'
 import type { Me, PodmanContainer } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge } from '../components/ui'
+import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
@@ -271,18 +271,16 @@ function CreateContainerForm({ onClose, onCreated }: { onClose: () => void; onCr
   }
 
   return (
-    <Card
+    <Modal
       title={
         <>
           {t('podman.newContainerTitle')}
           <InfoHint>{t('podman.newContainerHint')}</InfoHint>
         </>
       }
-      actions={
-        <Button type="link" onClick={onClose}>
-          {t('common.close')}
-        </Button>
-      }
+      onClose={onClose}
+      width={760}
+      maskClosable={false}
     >
       <Form<CreateContainerValues> layout="vertical" onFinish={submit}>
         {error && <Banner kind="error">{error}</Banner>}
@@ -300,6 +298,6 @@ function CreateContainerForm({ onClose, onCreated }: { onClose: () => void; onCr
           </Button>
         </Form.Item>
       </Form>
-    </Card>
+    </Modal>
   )
 }

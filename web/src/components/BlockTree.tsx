@@ -257,7 +257,14 @@ export default function BlockTree({
               block={b}
               depth={0}
               selected={selected}
-              onSelect={setSelected}
+              onSelect={(id) => {
+                // Клик по блоку — сразу окно: текст блока в редакторе,
+                // «сохранить» через дифф, «удалить» там же.
+                const b = findBlock(list, id)
+                if (!b) return
+                setSelected(id)
+                if (canControl) openEdit(b)
+              }}
               canControl={canControl}
               onAddLocation={service === 'nginx' ? (parent) => openCreate('location', parent.end_line) : undefined}
             />
@@ -265,42 +272,21 @@ export default function BlockTree({
         </div>
       )}
 
-      {selectedBlock && (
-        <div className="card" style={{ marginTop: '0.6rem' }}>
-          <div className="card-head">
-            <div>
-              <h2>
-                {KIND_LABEL[selectedBlock.kind]}
-                {selectedBlock.name ? ` ${selectedBlock.name}` : ''}
-              </h2>
-              <p>{t('blocks.lines', { start: selectedBlock.start_line, end: selectedBlock.end_line })}</p>
-            </div>
-            <div className="row">
-              {canControl && (
-                <button onClick={() => openEdit(selectedBlock)} disabled={busy}>
-                  {t('blocks.edit')}
-                </button>
-              )}
-              {canControl && selectedBlock.editable && (
-                <button className="ghost" onClick={() => remove(selectedBlock)} disabled={busy}>
-                  {busy && <Spinner />}
-                  {t('blocks.delete')}
-                </button>
-              )}
-              <button className="ghost" onClick={() => setSelected(null)}>
-                {t('blocks.close')}
-              </button>
-            </div>
-          </div>
-          {!selectedBlock.editable && <p className="small muted">{t('blocks.notEditableNote')}</p>}
+      {selectedBlock && !canControl && (
+        <Modal title={`${KIND_LABEL[selectedBlock.kind]}${selectedBlock.name ? ' ' + selectedBlock.name : ''}`} onClose={() => setSelected(null)} width={760}>
+          <p className="small muted">{t('blocks.lines', { start: selectedBlock.start_line, end: selectedBlock.end_line })}</p>
           <pre className="diff">{selectedBlock.raw}</pre>
-        </div>
+        </Modal>
       )}
 
       {modal && (
         <Modal
           title={t(modal.mode === 'create' ? 'blocks.newBlock' : 'blocks.editBlock', { kind: KIND_LABEL[modal.kind] })}
-          onClose={() => setModal(null)}
+          onClose={() => {
+            setModal(null)
+            setSelected(null)
+          }}
+          width={900}
         >
           <div className="col">
             <CodeEditor value={draft} onChange={(e) => setDraft(e.target.value)} rows={12} />
@@ -324,10 +310,21 @@ export default function BlockTree({
                 {busy && <Spinner />}
                 {busy ? t('blocks.saving') : t('blocks.save')}
               </button>
-              <button className="ghost" onClick={() => setModal(null)} disabled={busy}>
+              <button className="ghost" onClick={() => { setModal(null); setSelected(null) }} disabled={busy}>
                 {t('blocks.cancel')}
               </button>
+              {modal.mode === 'edit' && modal.block?.editable && (
+                <button className="ghost danger" style={{ marginLeft: 'auto' }} onClick={() => { const b = modal.block!; setModal(null); void remove(b) }} disabled={busy}>
+                  {t('blocks.delete')}
+                </button>
+              )}
             </div>
+            {modal.mode === 'edit' && modal.block && (
+              <div className="small muted">{t('blocks.lines', { start: modal.block.start_line, end: modal.block.end_line })}</div>
+            )}
+            {modal.mode === 'edit' && modal.block && !modal.block.editable && (
+              <div className="small muted">{t('blocks.notEditableNote')}</div>
+            )}
           </div>
         </Modal>
       )}
