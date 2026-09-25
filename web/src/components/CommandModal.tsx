@@ -54,7 +54,7 @@ export default function CommandModal({
     <AntModal title={title} open onCancel={handleClose} width={860} footer={<Button onClick={handleClose}>{t('common.close')}</Button>} destroyOnHidden>
       {description && <p className="small muted">{description}</p>}
       {extra}
-      {status === 'error' && <Banner kind="error">{t('packageInstall.connectError')}</Banner>}
+      {status === 'error' && <Banner kind="error">{t('commandModal.connectError')}</Banner>}
       {status === 'connected' && <PtyToolbar onCopy={copySelection} onClear={clear} onFontSize={changeFontSize} onSearch={search} />}
       <div ref={containerRef} style={{ height: '45vh', background: '#141414', borderRadius: 'var(--radius-sm)', padding: '0.5rem' }} />
       {status === 'closed' &&

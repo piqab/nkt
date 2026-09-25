@@ -16,6 +16,7 @@ import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 import { ProbeLink } from '../components/PortProbe'
 import CommandModal from '../components/CommandModal'
 import ContainerLogsModal from '../components/ContainerLogsModal'
+import { ConsoleModal, type ConsoleKind } from '../components/ConsoleModal'
 import { BackupModal, type BackupKind } from '../components/BackupModal'
 
 export default function Docker({ me }: { me: Me }) {
@@ -156,6 +157,9 @@ export default function Docker({ me }: { me: Me }) {
             />
           )}
           <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(c.name)} />
+          {canControl && containerPowerState(c.state) === 'running' && (
+            <RowAction action="console" label={t('console.action')} onClick={() => setConsoleFor({ kind: 'docker', name: c.name })} />
+          )}
           {/* Бэкап: контейнер из compose — стеком целиком (каталог проекта
               и тома), одиночный — образом, конфигурацией и томами. */}
           <RowAction
@@ -239,6 +243,7 @@ export default function Docker({ me }: { me: Me }) {
   // состояние через несколько секунд и хвост логов, если не running.
   const [run, setRun] = useState<{ name: string; action: 'start' | 'restart'; outcome?: { ok: boolean; exitCode?: number } | null } | null>(null)
   const [logsFor, setLogsFor] = useState<string | null>(null)
+  const [consoleFor, setConsoleFor] = useState<{ kind: ConsoleKind; name: string } | null>(null)
   const [backupFor, setBackupFor] = useState<{ kind: BackupKind; name: string; projectDir?: string } | null>(null)
 
   async function runFinished() {
@@ -387,6 +392,7 @@ export default function Docker({ me }: { me: Me }) {
         />
       )}
       {logsFor && <ContainerLogsModal name={logsFor} base="/containers" onClose={() => setLogsFor(null)} />}
+      {consoleFor && <ConsoleModal kind={consoleFor.kind} name={consoleFor.name} onClose={() => setConsoleFor(null)} />}
       {backupFor && (
         <BackupModal
           kind={backupFor.kind}

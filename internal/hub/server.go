@@ -111,6 +111,7 @@ func (s *Server) Handler() http.Handler {
 		// of which group registered it.
 		hubWSPaths := []string{
 			"/terminal/ws",
+			"/console/ws",
 			"/terminal/btop/ws",
 			"/updates/ws",
 			"/firewall/ufw-install/ws",

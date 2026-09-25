@@ -403,6 +403,7 @@ var enCatalog = map[string]string{
 	"api.backgroundJobsAreUnavailable":                    "background jobs are unavailable",
 	"api.curlInstalledHost":                               "curl is not installed on the host",
 	"api.emptyCommand":                                    "empty command",
+	"api.consoleBadTarget":                                "cannot open a console: %s %q",
 	"api.fileNameSpecified":                               "file name not specified",
 	"api.hostStateReadingUnavailable":                     "host state reading is unavailable",
 	"api.imageManagementUnavailable":                      "image management is unavailable",

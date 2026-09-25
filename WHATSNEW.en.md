@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.108 — 2026-09-25
+
+- **A console inside containers and machines.** A "console" icon in the
+  row of a running object opens a live terminal in a window (the same as
+  "Terminal": resize, copy, search, through the hub too):
+  - **Docker / Podman** — `exec` into the container: bash if the image has
+    it, otherwise sh; a user can be set (`-u`);
+  - **LXD** — `lxc exec` into the instance;
+  - **virtual machine** — the guest's serial console (`virsh console`),
+    exit with Ctrl+]; if it stays silent, the guest needs a getty on ttyS0
+    (the window shows how).
+  The web terminal must be enabled (NKT_TERMINAL_ENABLED); on a host under
+  the hub the console opens as the host user — it needs the docker/lxd/
+  libvirt groups.
+
 ## v1.10.107 — 2026-09-25
 
 - **snap and flatpak packages work like "Installed packages".** A filter,
