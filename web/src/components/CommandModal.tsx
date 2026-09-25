@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { usePty, wsURL } from '../hooks/usePty'
 import { Banner } from './ui'
 import { PtyToolbar } from './PtyToolbar'
+import { JobFirst } from './useJobLauncher'
 
 /**
  * Стандартное окно выполнения команды nkt — тот же PTY-мост, что у
@@ -12,7 +13,7 @@ import { PtyToolbar } from './PtyToolbar'
  * вызывающего: у сессий обновления он читается из /…/status после
  * закрытия сокета, у логов итога нет — окно просто следит.
  */
-export default function CommandModal({
+function CommandLive({
   title,
   description,
   wsPath,
@@ -72,4 +73,15 @@ export default function CommandModal({
         ))}
     </Modal>
   )
+}
+
+type CommandModalProps = Parameters<typeof CommandLive>[0] & {
+  /** Долгая операция (установка, скачивание) — сначала фоновым заданием;
+   * логи и консоль остаются живым выводом. */
+  asJob?: boolean
+}
+
+export default function CommandModal({ asJob, ...props }: CommandModalProps) {
+  if (!asJob) return <CommandLive {...props} />
+  return <JobFirst path={props.wsPath} title={props.title} onClose={props.onClose} onDone={props.onFinished} live={() => <CommandLive {...props} />} />
 }

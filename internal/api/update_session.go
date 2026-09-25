@@ -158,6 +158,10 @@ func (s *updateSession) outcome() (done bool, exitCode int) {
 // key namespaces this from every other long-running command using the same
 // mechanism (e.g. "packages" vs "ufw-install") so they never collide.
 func (s *Server) runUpdateSession(w http.ResponseWriter, r *http.Request, key string, buildCmd func() *exec.Cmd, auditAction, auditTarget string, idleTimeout time.Duration) {
+	if wantsJob(r) {
+		s.startUpdateJob(w, r, key, buildCmd, auditAction, auditTarget)
+		return
+	}
 	conn, err := websocket.Accept(w, r, nil)
 	if err != nil {
 		return // Accept already wrote the response.

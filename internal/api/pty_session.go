@@ -50,6 +50,12 @@ import (
 // is commonly used for: escaping a hardened unit's sandbox for one
 // interactive command, from inside that very unit.
 func unrestrictedCommand(env map[string]string, argv ...string) *exec.Cmd {
+	cmd := buildUnrestricted(env, argv...)
+	rememberOrigin(cmd, env, argv)
+	return cmd
+}
+
+func buildUnrestricted(env map[string]string, argv ...string) *exec.Cmd {
 	if usingSystemdSandbox() {
 		return exec.Command("systemd-run", systemdRunArgs(env, argv...)...)
 	}

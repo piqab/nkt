@@ -1116,7 +1116,7 @@
       "match": [
         "bash"
       ],
-      "stdout": "password set\n",
+      "stdout": "dlstatus:1:40:Retrieving file 1 of 2\npmstatus:pkg:80:Unpacking\n(demo) script finished\n",
       "exit_code": 0,
       "simulated": true
     }

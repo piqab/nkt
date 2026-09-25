@@ -190,6 +190,21 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/sandbox-packages/ws", s.handleSandboxPackagesWS)
 			r.Get("/system/apt/packages/{name}/install/ws", s.handleAptInstallWS)
 			r.Get("/system/apt/packages/{name}/remove/ws", s.handleAptRemoveWS)
+			// Те же операции фоновым заданием: POST ?job=1 (см. update_job.go).
+			r.Post("/lxd/images/copy/ws", s.handleLXDImageCopyWS)
+			r.Post("/updates/ws", s.handleUpdatesWS)
+			r.Post("/firewall/ufw-install/ws", s.handleUFWInstallWS)
+			r.Post("/firewall/firewalld-install/ws", s.handleFirewalldInstallWS)
+			r.Post("/system/tmux-install/ws", s.handleTmuxInstallWS)
+			r.Post("/system/btop-install/ws", s.handleBtopInstallWS)
+			r.Post("/services/{name}/install/ws", s.handleServiceInstallWS)
+			r.Post("/system/packages/install/ws", s.handleCommonPackagesInstallWS)
+			r.Post("/system/packages/remove/ws", s.handleCommonPackagesRemoveWS)
+			r.Post("/system/apt/install/ws", s.handleAptBatchInstallWS)
+			r.Post("/system/apt/remove/ws", s.handleAptBatchRemoveWS)
+			r.Post("/system/sandbox-packages/ws", s.handleSandboxPackagesWS)
+			r.Post("/system/apt/packages/{name}/install/ws", s.handleAptInstallWS)
+			r.Post("/system/apt/packages/{name}/remove/ws", s.handleAptRemoveWS)
 			// Ordinary REST, not itself long-lived — grouped here anyway
 			// since it shares the exact same admin-only gating and exists
 			// only for the WS sessions just above (the frontend's idle
