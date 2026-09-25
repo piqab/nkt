@@ -23,6 +23,7 @@ import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '.
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { PowerToggle } from '../components/PowerToggle'
 import { JobLogModal } from './Jobs'
 import { ClustersCard, NewClusterModal } from '../components/Clusters'
 
@@ -985,20 +986,15 @@ export default function Hosts({
         )}
         {h.status !== 'new' && h.status !== 'installing' && (
           <>
-            <RowAction
-              action="start"
-              label={t('hosts.start')}
+            {/* Служба nkt на хосте: отвечает — «остановить», не
+                отвечает — «запустить» (по SSH, как и раньше). */}
+            <PowerToggle
+              state={h.reachable === false ? 'stopped' : 'running'}
+              labels={{ start: t('hosts.start'), stop: t('hosts.stop') }}
               loading={busyServiceIds.has(h.id) || busy}
               disabled={busy}
-              onClick={() => startHost(h)}
-            />
-            <RowAction
-              action="stop"
-              label={t('hosts.stop')}
-              danger
-              loading={busyServiceIds.has(h.id) || busy}
-              disabled={busy}
-              onClick={() => stopHost(h)}
+              onStart={() => startHost(h)}
+              onStop={() => stopHost(h)}
             />
           </>
         )}

@@ -33,6 +33,9 @@ stop, delete.
 
 - libvirt domains: start, shut down, force off, reboot, autostart, delete
   with or without disks; machine addresses.
+- Each row has **one power button** by state (running — "stop",
+  stopped — "start", paused — "resume"); restart and pause only on a
+  running one.
 - **Starting and restarting a container** runs in nkt's command window:
   the `docker start` output, the state a few seconds later and, if the
   container is not running, the tail of its logs with the reason.
