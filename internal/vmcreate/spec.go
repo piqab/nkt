@@ -108,10 +108,7 @@ type Spec struct {
 	Packages []string `json:"packages,omitempty"`
 	// Autostart — поднимать машину вместе с хостом.
 	Autostart bool `json:"autostart,omitempty"`
-	// Password — только во входящем запросе: обработчик превращает его в
-	// PasswordHash и стирает, в параметры задания пароль не попадает.
-	Password string `json:"password,omitempty"`
-	// PasswordHash — $6$-хэш для входа на экран и в консоль машины (по
+	// PasswordHash — bcrypt-хэш пароля для входа на экран и в консоль машины (по
 	// SSH всё равно только ключ: ssh_pwauth выключен).
 	PasswordHash string `json:"password_hash,omitempty"`
 }

@@ -417,7 +417,7 @@ func (f *Fixtures) PodmanAPI(_ context.Context, method, apiPath string, _ []byte
 		candidates = append(candidates, "stats.json")
 	}
 	for _, c := range candidates {
-		if raw, err := os.ReadFile(filepath.Join(f.root, ".podman", c)); err == nil {
+		if raw, err := os.ReadFile(filepath.Join(f.root, ".podman", filepath.Base(c))); err == nil {
 			return raw, 200, nil
 		}
 	}

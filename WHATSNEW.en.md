@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.1 — 2026-09-25
+
+- **Code scanning review.**
+  - The libvirt machine password hash for cloud-init is bcrypt instead of
+    SHA-512-crypt.
+  - The password is no longer a field of the shared machine description:
+    it exists only in the incoming request and can never reach templates
+    or job parameters.
+  - The backup path check is `Clean` plus a directory prefix; the backup
+    kind comes from the list of constants.
+  - The LXD configuration editor escapes a backslash in a value and every
+    special character of a key.
+  - A machine name is stripped of line breaks before it goes to the log.
+- **A guest password** is now 8 to 72 bytes: that is the bcrypt limit.
+- **CodeQL skips the third-party spice-html5 and the UI build.** The
+  spice-html5 files ship unmodified under the LGPL, and the build is
+  checked through its sources in `web/src`.
+
 ## v1.11.0 — 2026-09-25
 
 - Minor version: 1.10.x brought LXD on par with Docker and Libvirt (backup,

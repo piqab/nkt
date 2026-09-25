@@ -64,10 +64,11 @@ func ValidTarget(kind, name string) bool {
 // ValidUser — имя учётной записи Linux.
 func ValidUser(user string) bool { return userRe.MatchString(user) }
 
-// ValidPassword — 8–128 печатных символов без перевода строки (chpasswd
-// читает построчно, «:» внутри пароля он понимает).
+// ValidPassword — 8–72 байта без перевода строки (chpasswd читает
+// построчно, «:» внутри пароля он понимает; 72 байта — предел bcrypt, им
+// хэшируется пароль машины libvirt в cloud-init).
 func ValidPassword(p string) bool {
-	return len(p) >= 8 && len(p) <= 128 && !strings.ContainsAny(p, "\r\n\x00")
+	return len(p) >= 8 && len(p) <= 72 && !strings.ContainsAny(p, "\r\n\x00")
 }
 
 func kvKey(kind, name string) string { return "guestcred:" + kind + ":" + name }

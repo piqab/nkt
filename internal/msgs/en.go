@@ -569,7 +569,7 @@ var enCatalog = map[string]string{
 	"podman.jobCreate":                                    "creating Podman container %s",
 	"podman.stepPull":                                     "pulling image %s",
 	"podman.stepRun":                                      "starting container %s",
-	"guestcred.invalid":                                   "login or password rejected: a Linux user name (lowercase letters, digits, _ and -), a password of 8–128 characters on one line",
+	"guestcred.invalid":                                   "login or password rejected: a Linux user name (lowercase letters, digits, _ and -), a password of 8–72 bytes on one line",
 	"guestcred.notSet":                                    "no password for %s is set in nkt",
 	"guest.jobPassword":                                   "password of %s for %s",
 	"guest.stepPassword":                                  "setting the password of %s in %s",

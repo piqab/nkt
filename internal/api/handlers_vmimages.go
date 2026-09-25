@@ -319,26 +319,39 @@ func firstLineOf(s string) string {
 	return line
 }
 
+// vmCreateRequest — описание машины и необязательный пароль. Пароль —
+// только здесь, во входящем запросе: в vmcreate.Spec (он уходит в
+// параметры задания и в шаблоны) его нет вовсе.
+type vmCreateRequest struct {
+	vmcreate.Spec
+	Password string `json:"password,omitempty"`
+}
+
 func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
-	var spec vmcreate.Spec
-	if err := decodeJSON(r, &spec); err != nil {
+	var req vmCreateRequest
+	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	spec := req.Spec
 	// Ключа нет — заводим свой. Облачный образ приходит без пароля, и
 	// машина без единого ключа осталась бы доступной только через
 	// консоль; приватная половина уйдёт в ответ и больше нигде не
 	// сохранится.
 	// Пароль — только хэшем в cloud-init и зашифрованным в хранилище
 	// паролей гостей; в параметры задания он не попадает.
-	password := spec.Password
-	spec.Password = ""
+	password := req.Password
 	if password != "" {
 		if !guestcred.ValidPassword(password) || !guestcred.ValidUser(spec.User) {
 			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "guestcred.invalid"))
 			return
 		}
-		spec.PasswordHash = vmcreate.HashPassword(password)
+		hash, err := vmcreate.HashPassword(password)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		spec.PasswordHash = hash
 	}
 	var generatedKey string
 	if strings.TrimSpace(spec.SSHKey) == "" {
@@ -376,7 +389,9 @@ func (s *Server) handleVMCreate(w http.ResponseWriter, r *http.Request) {
 	s.db.Audit(r.Context(), user, "vm.create", spec.Name, "ok", spec.ImageID)
 	if password != "" && s.guestCreds != nil {
 		if err := s.guestCreds.Put(r.Context(), "vm", spec.Name, spec.User, password, user); err != nil {
-			s.log.Warn("could not store guest password", "vm", spec.Name, "error", err)
+			// Имя уже прошло Validate; переводы строк убираются на всякий случай —
+			// запись журнала не должна распадаться на строки.
+			s.log.Warn("could not store guest password", "vm", strings.ReplaceAll(strings.ReplaceAll(spec.Name, "\n", ""), "\r", ""), "error", err)
 		}
 	}
 	// Приватный ключ отдаётся ровно здесь и больше нигде: хранить его в
@@ -419,7 +434,7 @@ func (s *Server) handleVMTemplateSave(w http.ResponseWriter, r *http.Request) {
 	// Имя машины в шаблоне не хранится: шаблон описывает, какая машина, а
 	// не какая именно — имя вводят при создании.
 	// Пароль в шаблон не сохраняется.
-	req.Spec.Password, req.Spec.PasswordHash = "", ""
+	req.Spec.PasswordHash = ""
 	req.Spec.Name = "template"
 	if err := req.Spec.Validate(); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
