@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.10.104 — 2026-09-25
+
+- **A machine backup failed right away** ("unary operator expected",
+  "Option argument is empty"): the script went as a string through
+  systemd-run, and systemd substitutes `${…}` in arguments itself — the
+  disk list and snapshot options arrived empty. The script now runs from
+  a file. The failed attempt did not touch the machine: no snapshot had
+  been created.
+- **A safety net for a running machine's backup**: if copying fails after
+  the snapshot, the changes are still merged back into the disks
+  (`blockcommit`), so the machine is not left on temporary overlay files.
+
 ## v1.10.103 — 2026-09-25
 
 - **Backup and restore of machines and containers.** A "backup" icon in

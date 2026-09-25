@@ -223,6 +223,18 @@ if [ "$state" = "running" ] || [ "$state" = "paused" ]; then
   echo "--- external disk-only snapshot $SNAP"
   virsh snapshot-create-as "$NAME" "$SNAP" --disk-only --atomic --no-metadata --quiesce "${specs[@]}" 2>/dev/null \
     || virsh snapshot-create-as "$NAME" "$SNAP" --disk-only --atomic --no-metadata "${specs[@]}"
+  # Страховка: упади сценарий после снимка — машина осталась бы на
+  # overlay-файлах. При выходе с ошибкой изменения возвращаются в диски.
+  PENDING=()
+  for d in "${DISKS[@]}"; do PENDING+=("${d%% *}"); done
+  commit_pending() {
+    for t in "${PENDING[@]}"; do
+      [ -n "$t" ] || continue
+      echo "--- recovery: blockcommit $t"
+      virsh blockcommit "$NAME" "$t" --active --pivot --wait || echo "!!! blockcommit $t failed: the machine still runs on /var/lib/libvirt/images/$NAME-$t.$SNAP.overlay"
+    done
+  }
+  trap 'rc=$?; [ $rc -ne 0 ] && commit_pending; rm -rf "$WORK"' EXIT
   for d in "${DISKS[@]}"; do
     t=${d%% *}; src=${d#* }
     echo "--- copy $t: $src"
@@ -230,6 +242,7 @@ if [ "$state" = "running" ] || [ "$state" = "paused" ]; then
     files="$files\"$t.qcow2\","
     echo "--- blockcommit $t"
     virsh blockcommit "$NAME" "$t" --active --pivot --wait --verbose
+    PENDING=("${PENDING[@]/$t}")
     rm -f "/var/lib/libvirt/images/$NAME-$t.$SNAP.overlay"
   done
 else
