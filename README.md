@@ -6,8 +6,8 @@ Looks at a Linux host and answers the question that's usually answered by
 hand through half a dozen commands: **what's actually listening on the
 network here, does it match the configuration, and what's broken.**
 
-Parses **nginx**, **haproxy**, **docker/compose**, **podman**, **LXD**,
-**libvirt**, **iptables**, and **ufw** — and cross-checks what it read
+Parses **nginx**, **haproxy**, **Caddy**, **docker/compose**, **podman**,
+**LXD**, **libvirt**, **iptables**, **ufw**, and **firewalld** — and cross-checks what it read
 against what's actually happening on the machine: `ss` output, packet
 counters, live containers, a real TLS connection to the service's own
 socket. Discrepancies become a list of problems, the connections between
@@ -16,7 +16,7 @@ availability schedule. And it fixes all of this right there: a config
 editor with validation and auto-rollback, service and container
 management, firewall rules, certificate issuance and renewal.
 
-One static binary (~16 MB), three interfaces:
+One static binary (~25 MB), four modes:
 
 ```
 nkt          web dashboard and background data collection
@@ -481,27 +481,35 @@ link to the file and line, and a concrete action to fix it.
 A graph where traffic reads left to right:
 
 ```
-external network → service → listener → pool → backend address → container → docker network
+external network → service → listener → pool → backend address → container or machine → network
 ```
 
 Connections come from configs (`proxy_pass`, `upstream`, `use_backend`,
 `default_backend`, published ports); node state comes from real listeners,
-container states, and findings. Laid out by column rather than a
-force-directed layout: it stays stable between scans and reads like a
-diagram of request flow. The terminal interface shows the same map as a
-tree.
+container states, and findings. A backend pointing at a libvirt machine's
+or an LXD instance's address is linked to it — you see which site lives on
+which machine; machines are linked to their networks, and forwarded LXD
+ports are an entry from the host into the instance. A machine node shows
+its address, ping, current CPU and memory and the vulnerabilities of its
+packages. Laid out by column rather than a force-directed layout: it stays
+stable between scans and reads like a diagram of request flow. The
+terminal interface shows the same map as a tree.
 
 ### Availability and usage
 
-**Availability.** Every declared listener and every pool backend is
-checked on a schedule — a TCP connect or an HTTP request with the correct
-`Host` header. History becomes an "hour of week × downtime" heatmap,
+**Availability.** On a schedule nkt checks web server listeners and pool
+backends, published Docker and Podman ports, forwarded LXD ports, and
+running libvirt machines and LXD instances (ping by address) — a TCP
+connect, an HTTP request with the correct `Host` header, or a ping. Your
+own targets (any address, internal or external) are added with
+"+ target". History becomes an "hour of week × downtime" heatmap,
 availability and latency graphs, and an outage list.
 
-**Usage.** Increments of iptables counters, `docker stats`, and parsed
-nginx/haproxy access logs. Log entries are sorted by their own record
-timestamp, so the chart shows when the load actually happened, not when
-it was collected.
+**Usage.** Increments of iptables counters, parsed nginx/haproxy access
+logs, and the load of containers and machines: network, CPU and memory of
+Docker, Podman, LXD instances and libvirt machines (`virsh domstats`). Log
+entries are sorted by their own record timestamp, so the chart shows when
+the load actually happened, not when it was collected.
 
 ### Certificates: more than expiry dates
 
@@ -560,32 +568,43 @@ service.
 
 ### Management
 
-* **systemd**: `start` / `stop` / `restart` / `reload`, config validation.
-* **docker** and **Podman**: container lifecycle, create and remove — via
-  the Engine API and its own unix socket respectively, on separate pages.
-* **LXD**: containers and virtual machines with one tool
-  (`lxc list --format json`), including `lxc launch` and removal.
-* **libvirt/QEMU**: VM lifecycle via `virsh`, an autostart toggle, removing
-  a definition (disks separately). Creating and editing VMs deliberately
-  didn't get their own API: a domain is defined through the same config
-  editor — the path `/etc/libvirt/qemu/<name>.xml` is recognized
-  automatically, the XML is validated with `virt-xml-validate`, and saving
-  with the "apply" flag registers the domain via `virsh define`.
-* **Configs**: an editor with versioning. Before writing, content is
-  validated by the service itself (`nginx -t`, `haproxy -c -f`,
-  `docker compose config -q`); **if validation fails, the file is
-  automatically restored to its previous state**. Any version can be
-  viewed, compared (unified diff), and rolled back to.
-* **firewall**: adding and removing rules via `ufw`. Editing iptables
-  directly from the UI is deliberately not supported.
+* **systemd**: `start` / `stop` / `restart` / `reload`, config validation,
+  installing missing services.
+* **Docker** and **Podman**: container lifecycle, create, delete, logs, a
+  console inside, backup and restore; a compose stack as a whole.
+* **LXD**: containers and virtual machines — create (with an image
+  picker and, optionally, a login password), lifecycle, resources and
+  limits, autostart, logs, console, the VM screen over SPICE, snapshots,
+  backup (`lxc export`/`lxc import`), configuration (`lxc config edit`)
+  with a diff and version history, port forwarding, networks, images on
+  the host, storage pools.
+* **libvirt/QEMU**: a wizard that creates machines from cloud images
+  (cloud-init, SSH key, optional password), lifecycle, autostart, the
+  machine XML in the editor with a diff and history, the screen in the
+  browser (VNC or SPICE), the serial console, backup with disks without
+  stopping the machine, libvirt networks.
+* **Long operations** — installing packages and engines, the system
+  upgrade, creating instances, downloading images, backups, changing guest
+  passwords — run as background jobs: a log with percentages, cancel,
+  retry, the "Jobs" section; the same through the hub.
+* **Configs**: an editor with versioning. Before saving, the content is
+  checked by the service itself (`nginx -t`, `haproxy -c -f`,
+  `caddy validate`, `docker compose config -q`); **if validation fails,
+  the file is automatically restored to its previous state**. Any version
+  can be viewed, compared (unified diff), and rolled back to.
+* **firewall**: `ufw` and `firewalld` rules — add, delete, install the
+  firewall itself. Editing iptables directly is intentionally not
+  supported.
 * **Web terminal** (`NKT_TERMINAL_ENABLED=true`): a full interactive shell
-  on the host, right in the browser. Off by default — this is direct shell
-  access, not a bounded action.
-* **OS package updates**: a live `apt-get update && apt-get upgrade` in a
-  terminal window, deliberately without `-y`.
+  on the host right in the browser. Off by default — it's direct shell
+  access, not a limited action.
+* **OS package updates**: `apt-get update && apt-get dist-upgrade` as a
+  background job (with `-y`, keeping local config files); on an older
+  host — live output in a terminal window.
 
-Every change is logged with the user, the outcome, and the command's
-output.
+Every change is logged together with the user, the result, and the
+command output. UI windows resize with a corner and maximize to the full
+screen.
 
 ---
 
@@ -645,6 +664,8 @@ essentials:
 | `NKT_CERTBOT_TIMEOUT` | How long to wait for `certbot renew` — separate from `NKT_COMMAND_TIMEOUT`, since this is a network call to Let's Encrypt, not a quick command. Defaults to `3m` |
 | `NKT_TERMINAL_ENABLED` | `true` turns on the web terminal — a full shell on the host in the browser, on top of the already-required admin role and `NKT_ALLOW_MUTATIONS=true`. `false` by default for a plain `nkt` and for hub-managed hosts (a separate checkbox per host — see HUB.md); `true` by default for the hub itself (`NKT_MODE=hub`) — that's the same terminal for the "localhost" row, i.e. the same machine the hub is already running on, so it isn't extra access |
 | `NKT_TERMINAL_IDLE_TIMEOUT` | Close the terminal after this long with no input/output — a forgotten tab doesn't hold a shell open forever. Defaults to `30m` |
+| `NKT_TERMINAL_USER` | Who the host's own terminal opens as; the hub sets its SSH user here at install time. Empty — as the service. Container and machine consoles always run as root |
+| `NKT_CERTBOT_EMAIL` | Email for Let's Encrypt when issuing a certificate (expiry warnings). Empty — no email |
 
 ---
 
@@ -736,57 +757,64 @@ package are covered in [DEVELOPMENT.md](DEVELOPMENT.md).
 
 ## API
 
-Everything is under `/api`, authenticated by a cookie session. On the hub,
-the same paths are also available prefixed with `/api/hosts/{id}/...` —
-they're proxied to the matching host over SSH.
+Everything is under `/api`, authenticated by a cookie session. On the hub
+the same paths are also available with the `/api/hosts/{id}/...` prefix —
+they're proxied to the corresponding host over SSH. Below are the path
+groups; reading is open to any role, changes need the admin role with
+`NKT_ALLOW_MUTATIONS=true`.
 
-| Method | Path | Role | Purpose |
-|---|---|---|---|
-| POST | `/auth/login`, `/auth/logout`, `/auth/password` | — / any | Log in, log out, change your own password |
-| GET | `/overview` | viewer | Dashboard summary in one request |
-| GET | `/inventory`, `/findings`, `/topology` | viewer | Full snapshot, findings, graph |
-| GET | `/services`, `/containers`, `/firewall` | viewer | Service, container, and rule state |
-| GET | `/podman/containers`, `/lxd/instances`, `/vms` | viewer | Podman, LXD, libvirt/QEMU |
-| GET | `/certificates` | viewer | Certificates, expiry, and auto-renewal state |
-| GET | `/configs`, `/configs/file`, `/configs/versions*` | viewer | Files, content, history, diff |
-| GET | `/monitor/targets`, `/monitor/heatmap`, `/monitor/outages`, `/monitor/usage*` | viewer | Availability and usage |
-| GET | `/audit`, `/monitor/jobs`, `/snapshots` | viewer | Audit log, background jobs, scan history |
-| GET | `/updates/status` | viewer | Whether an OS package update is currently running |
-| POST | `/inventory/refresh` | admin | Rescan the host |
-| POST | `/services/{name}/{action}` | admin | start / stop / restart / reload |
-| POST | `/containers/{name}/{action}` | admin | Manage a docker container |
-| POST/DELETE | `/podman/containers*`, `/lxd/instances*`, `/vms/{name}/*` | admin | Podman, LXD, libvirt |
-| PUT | `/configs/file` | admin | Edit, with validation and auto-rollback |
-| POST | `/configs/versions/{id}/rollback` | admin | Roll back to a version |
-| POST/DELETE | `/firewall/rules` | admin | Add / remove a ufw rule |
-| POST | `/certificates/self-signed`, `/certificates/issue` | admin | Issue a certificate |
-| GET/POST/PATCH/DELETE | `/users*` | admin | Account management |
-| WS | `/terminal/ws`, `/updates/ws` | admin | Web terminal and OS package updates |
+| Group | Paths | What |
+|---|---|---|
+| Auth | `/auth/*` | Login, logout, changing your own password |
+| Summary and inventory | `/overview`, `/inventory*`, `/findings`, `/topology`, `/snapshots`, `/changes` | Dashboard, host snapshot, findings, map, scan history |
+| Services | `/services*` | State, start/stop/restart/reload, validation, install |
+| Containers | `/containers*`, `/podman/*`, `/images*`, `/k8s/*` | Docker, Podman, images, Kubernetes |
+| LXD | `/lxd/*` | Instances, snapshots, configuration, networks, images, pools, logs, screen |
+| libvirt | `/vms/*`, `/vm/*` | Machines, creation wizard, images, networks, VNC/SPICE screen |
+| Guests | `/guests/{kind}/{name}/*` | Guest login and password: info, reveal, change |
+| Backups | `/backups*` | List, create, restore, download, delete |
+| Jobs | `/jobs*` | List, log, log stream, cancel, retry |
+| Configs | `/configs/*` | Files, blocks, validated writes, versions, diff, rollback |
+| Firewall | `/firewall/*` | ufw and firewalld rules, install |
+| Certificates | `/certificates*` | Certificates, issuing, renewal |
+| Monitoring | `/monitor/*` | Availability targets (and your own), usage, heatmaps, outages |
+| Security | `/vulnerabilities*`, `/malware`, `/clamav/*` | Vulnerabilities, malware, ClamAV |
+| System | `/system/*`, `/updates*`, `/disks*`, `/hardware`, `/network*`, `/interfaces` | Packages, updates, disks, hardware, network |
+| Accounts | `/users*`, `/os-users*`, `/audit` | nkt and OS users, audit log |
+| WebSocket | `/terminal/ws`, `/console/ws`, `/jobs/{id}/ws`, `/vms/{name}/vnc/ws`, `*/spice/ws`, `*/logs/ws` | Terminal, consoles, job log, screen, logs |
 
 ---
 
 ## Limitations
 
 * Each `nkt` manages one host: its own map, its own configs, its own
-  database. Multiple hosts from one place only happens through the hub,
-  by proxying to each one separately, not a shared data model.
-* Only `ufw` rules are written; editing iptables directly isn't
-  supported, deliberately. Supported backends are iptables/ip6tables and
-  ufw — plain `nftables` (with no iptables-nft layer) isn't parsed.
-* The `declared-not-listening` rule needs `ss` to be available. It stays
-  silent if the socket table doesn't confirm even one declared port —
-  that means it's reading a different network namespace. Published
-  container ports aren't checked by this rule at all: with
-  `userland-proxy: false`, docker forwards them via plain DNAT, and no
-  listener exists on the host at all.
+  database. Several hosts from one place only through the hub, proxying
+  to each separately rather than through a shared data model.
+* `ufw` and `firewalld` rules are written; editing iptables directly is
+  intentionally not supported. iptables/ip6tables, ufw and firewalld are
+  read — pure `nftables` (without the iptables-nft layer) isn't parsed.
+* The `declared-not-listening` rule needs `ss` available. It stays silent
+  if the socket table doesn't confirm a single declared port — that means
+  a different network namespace is being read. It doesn't check
+  published container ports at all: with `userland-proxy: false` docker
+  forwards them via plain DNAT, and no listener exists on the host at all.
 * Config validation in `fixtures` mode always "succeeds" — the failure
-  path is tested on the test rig or a real host.
-* Supported web servers and load balancers are nginx and haproxy. Caddy,
-  Traefik, Envoy — would need a new file in `internal/parse`.
-* Of virtualization tools: classic LXC (`lxc-ls`/`lxc-info`, no JSON) isn't
-  supported — only LXD. Podman Quadlet isn't parsed — only the runtime
-  container list is visible.
-* Cross-checking "what the socket actually serves" is one TLS dial per
+  path is tested on the test stand or on a real host.
+* Supported web servers and load balancers are nginx, haproxy and Caddy.
+  Traefik and Envoy would need a new file in `internal/parse`.
+* Among virtualization tools: classic LXC (`lxc-ls`/`lxc-info`, no JSON)
+  isn't supported — only LXD. Podman Quadlet isn't parsed — only the list
+  of running containers is visible.
+* Vulnerabilities inside guests cover Debian/Ubuntu packages (dpkg) only.
+  LXD VM packages are read via lxd-agent, libvirt machine packages via
+  qemu-guest-agent; without an agent the guest is skipped with a warning.
+  A machine node on the resource map shows the host's own last scan; a
+  scan run by the hub isn't reflected there.
+* The SPICE screen needs a plain (not TLS-only) port; a machine's serial
+  console does not carry the window size, so the guest assumes 80×24.
+* A libvirt guest password is set via qemu-guest-agent, and the user must
+  already exist; in LXD a missing user is created.
+* The "what the socket actually serves" check is one TLS connection per
   certificate, to its first known address. If several certificates are
   multiplexed by SNI on one port, only the primary one is checked
   (`Sites[0]`). Not run at all in `fixtures` mode.
@@ -796,3 +824,11 @@ they're proxied to the matching host over SSH.
   editor, where the edit goes through the service's own validation with
   auto-rollback.
 * OS package updates are only supported for Debian/Ubuntu (`apt-get`).
+
+---
+
+## License
+
+MIT — [LICENSE](LICENSE). Third-party components keep their own licenses
+(noVNC — MPL-2.0, spice-html5 — LGPL-3.0 and others), see
+[THIRD_PARTY_NOTICES.en.md](THIRD_PARTY_NOTICES.en.md).

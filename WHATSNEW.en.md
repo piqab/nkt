@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.2 — 2026-09-25
+
+- **The documentation caught up with the code.** README in both languages:
+  rewrote the resource map, availability and usage, management (LXD,
+  libvirt, jobs, firewalld, Caddy), the API table (by group, with jobs,
+  backups, LXD, guests, the screen) and the limitations (dropped the wrong
+  "only nginx and haproxy" and "only ufw", added the limits of guests,
+  SPICE and the serial console); a license section linking
+  THIRD_PARTY_NOTICES.
+- **FEATURES and the site's features page** — everything from 1.10.x: LXD,
+  the machine screen, guest passwords, jobs, machine load, availability
+  and vulnerabilities, machines on the map, window size.
+- **Every environment variable is documented:** Caddy and config
+  directories, `NKT_CERTBOT_EMAIL`, `NKT_TERMINAL_USER`, the hub tunnel
+  variables — in `deploy/nkt.env.example`, the live test variables — in
+  DEVELOPMENT.md. The unused `NKT_DEV_PROXY_UI` was removed.
+
 ## v1.11.1 — 2026-09-25
 
 - **Code scanning review.**

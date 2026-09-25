@@ -20,6 +20,8 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - "Allow writing" button opens a directory to the unit (a `ReadWritePaths` drop-in) and restarts the service when a config lives outside the allowed paths.
 - Sandbox diagnostics: why the terminal or the sandbox escape does not work, with commands to fix it.
 - Background jobs with a log, steps, cancellation and resumption after a service restart; the "Jobs" section.
+- Long operations — installing packages and engines, the system upgrade, creating LXD instances and Podman containers, downloading images, backups, changing guest passwords — run as jobs: the log window opens right away with percentages, closing it stops nothing; on the host and through the hub.
+- UI windows resize with a corner and maximize to the full screen; the size of log, job, editor, terminal and machine screen windows is remembered.
 - Scheduler for background checks and metric collection (`NKT_SCHEDULER_ENABLED`).
 - Host self-update through the hub or with a manually uploaded binary.
 - Own TLS for the web UI (`NKT_TLS_*`) with an automatic self-signed certificate.
@@ -46,6 +48,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 ### Vulnerabilities
 - Scan of installed OS packages for CVEs with trivy (the database downloads automatically or comes from the hub).
 - Scan of Docker/Podman container images on the host.
+- Packages inside guests: LXD instances (via lxd-agent for LXD VMs) and libvirt machines (via qemu-guest-agent) — locally and on the hub; a finding's origin is "LXD name" or "VM name".
 - trivy is installed automatically on the first scan.
 - Vulnerability list with severity, package, fixed version and links; filters.
 - Scan progress in real time.
@@ -53,19 +56,23 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - ClamAV: package install, signature database updates, scans of chosen host directories and container images (one, selected or all) with a live log, quarantine of infected files with restore and purge.
 
 ### Resource map
-- Graph "external network → service → listener → pool → backend → container → docker network" built from configs and the real state.
+- Graph "external network → service → listener → pool → backend → container or machine → network" built from configs and the real state.
+- libvirt machines and LXD instances are linked to their networks and to backends pointing at their address; forwarded LXD ports are an entry from the host into the instance.
+- A machine node shows its address, ping, current CPU and memory and the vulnerabilities of its packages; no ping reply turns it red, critical vulnerabilities yellow.
 - Node status from live listeners, containers and findings.
 - Stable column layout, zoom and drag with the mouse, node details on hover.
 
 ## Monitoring
 
 ### Availability
-- Every declared listener and pool backend is checked on a schedule: a TCP connection or an HTTP request with the right Host header.
+- Web server listeners and backends, published Docker and Podman ports and forwarded LXD ports are checked on a schedule: a TCP connection or an HTTP request with the right Host header.
+- Running LXD instances and libvirt machines are checked by ping at their address.
 - "Hour of week × downtime" heatmap, availability and latency charts, outage list.
-- Custom check targets in addition to the discovered ones.
+- Your own targets with "+ target": ping, TCP, HTTP or HTTPS to any address; deleted from the list, scans never touch them.
 
 ### Load
-- Load charts from iptables counters, `docker stats` and nginx/haproxy access logs for a chosen period, a rating of the busiest resources, a load schedule by hour.
+- Load charts from iptables counters and nginx/haproxy access logs for a chosen period, a rating of the busiest resources, a load schedule by hour.
+- Network, CPU and memory of containers and machines with a source picker: Docker, Podman, LXD, Libvirt (`virsh domstats`).
 - Live `btop` in a terminal window, installed if missing, with key hints.
 
 ### Logs
@@ -92,17 +99,22 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Open port probe: TCP, HTTP/HTTPS, TLS handshake, arbitrary `curl` — with body, headers, rendering of the received page and response download.
 
 ### Containers & VMs
-- **Docker**: containers (state, image, ports, networks), start/stop/restart/remove, logs, container creation, compose stack scanning.
+- **Docker**: containers (state, image, ports, networks), start/stop/restart/remove, logs, a console inside, container creation, compose stack scanning; container backup and restore (a compose stack as a whole).
 - **Docker → images**: list with size, date and usage, removal, saving to a tar on the host, pruning dangling layers.
 - **Docker → stacks**: the host's compose files, `up`/`down`/`restart`, compose editing through the config editor, a new stack from a template.
 - Docker installation from the official docker.com repository (or the get.docker.com script) with a live log; when only the client is missing (Debian 13: docker.io without docker-cli) — just docker-cli and the compose plugin are installed, with a finding pointing it out.
-- **Podman**: containers over its own socket, the same lifecycle.
-- **LXD**: containers and virtual machines, `launch`, start/stop, removal.
-- **Virtual machines (libvirt/QEMU)**: domain list, start/shutdown/force-off/reboot, autostart, removal with or without disks, machine addresses.
-- Machine creation from a cloud image: name, cores, memory, disk, network, user and SSH key via cloud-init; missing tools are installed automatically; machine templates for repeat creation.
+- **Podman**: containers over its own socket, the same lifecycle, console, backup; creation as a background job.
+- **LXD**: containers and virtual machines — creation as a background job with an image picker (`images:`, `ubuntu:`, local) and an optional login password, start/stop/pause, resources and limits, autostart, logs, console, the VM screen over SPICE.
+- **LXD → snapshots and backup**: take/restore/delete a snapshot, backup via `lxc export` and restore as a copy or over the original.
+- **LXD → configuration**: `lxc config edit` in a window with limit fields, a diff and version history; port forwarding (proxy devices) through the same edit; the configuration with profiles for reference.
+- **LXD → host resources**: networks (create a bridge, delete), images on the host (delete, download in advance), storage pools.
+- **Libvirt (KVM virtual machines)**: domain list, start/shutdown/force-off/reboot, autostart, removal with or without disks, machine addresses, backup with disks without stopping the machine.
+- The machine screen in the browser: VNC (noVNC) or SPICE (spice-html5), Ctrl+Alt+Del; a SPICE-only machine gets an "Add VNC" button — an XML edit with a diff. The serial console (`virsh console`); on connect nkt presses Enter itself.
+- Guest login and password: a "Login" line in console and screen windows, "show" (to an administrator, audited), "set password" as a job (LXD — `chpasswd`, libvirt — qemu-guest-agent); the password is stored in nkt encrypted.
+- Machine creation from a cloud image: name, cores, memory, disk, network, user, SSH key and an optional password (cloud-init gets only a bcrypt hash); missing tools are installed automatically; machine templates for repeat creation.
 - Cloud image catalog (Ubuntu, Debian, …) and own images: download with checksum verification, upload of an own file, move into the disk directory.
 - libvirt networks: list, NAT network creation with DHCP and autostart, subnet overlap check against host networks and interfaces, bridge onto a host interface.
-- Domain XML editing through the config editor with `virt-xml-validate` and `virsh define` on apply.
+- Domain XML editing in a window (text and blocks) with a diff, version history, `virt-xml-validate` and `virsh define` on apply.
 - **Profiles**: the host's desired state in YAML — packages, services, files, firewall rules, accounts, system settings, compose stacks.
 - Apply plan with risky items marked, application as a job with a log, scheduled drift check.
 - Profile export and import, profile versions, a format guide in both languages right in the UI.

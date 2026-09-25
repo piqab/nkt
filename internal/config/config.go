@@ -120,7 +120,6 @@ type Config struct {
 	// HTTP.
 	Addr        string
 	CORSOrigins []string
-	DevProxyUI  bool
 
 	// TLS. Off by default — nkt keeps listening plain HTTP and expects an
 	// external reverse proxy for HTTPS in front of it (see README's
@@ -386,7 +385,6 @@ func Load() (*Config, error) {
 
 		Addr:        envStr("NKT_ADDR", "127.0.0.1:8077"),
 		CORSOrigins: envList("NKT_CORS_ORIGINS", "http://localhost:5173"),
-		DevProxyUI:  envBool("NKT_DEV_PROXY_UI", false),
 
 		TLSEnabled: envBool("NKT_TLS_ENABLED", false),
 		TLSCert:    envStr("NKT_TLS_CERT", ""),
