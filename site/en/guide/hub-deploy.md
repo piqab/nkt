@@ -79,4 +79,44 @@ an office behind NAT:
 - enable repository or registry polling — nothing needs to be opened;
 - or put **nkt-edge** on a VPS — a small separate program with a Let's
   Encrypt certificate that accepts only webhooks and hands them to the hub
-  over a tunnel the hub itself keeps to it (see below).
+  over a tunnel the hub itself keeps to it.
+
+## nkt-edge: webhooks without exposing the hub
+
+**nkt-edge** is a separate small program (about 8 MB) for a VPS with a
+public address:
+
+```
+GitHub / GitLab / CI ──HTTPS (Let's Encrypt)──▶ VPS: nkt-edge
+                                                  ▲
+                                  tunnel from the hub (TLS, token)
+                                                  │
+                                    hub behind NAT, no open ports
+```
+
+- The hub connects to edge itself and keeps the connection; the hub's
+  address may change, it needs no public IP.
+- Edge accepts only `POST /hooks/{id}` (body up to 1 MB, a rate limit,
+  optionally GitHub addresses only) and hands the request to the hub.
+  Through the tunnel the hub serves just this one route: the hub's UI and
+  API are not reachable via edge.
+- Edge holds no database, no pipeline secrets and no access to hosts: the
+  hub checks the signature. A compromised VPS can only send requests the
+  hub rejects without a valid signature.
+- The tunnel is TLS 1.3 with a pinned edge certificate fingerprint plus a
+  token.
+
+**Installing from the hub:** add the VPS as an ordinary host, point a
+domain's A record (e.g. `hooks.example.com`) at it, then "Deployments" →
+nkt-edge → "Install on a host". The job uploads the program for the host's
+architecture, installs a least-privilege service (a dedicated user, only
+binding to 80 and 443), opens 80, 443 and 8444 in ufw, pins the tunnel
+certificate fingerprint and connects the hub. The pipeline's "Webhook"
+window then shows `https://hooks.example.com/hooks/…`.
+
+**Manually:** the `nkt-edge-linux-<arch>` binary from a release into
+`/usr/local/bin/nkt-edge`, the unit
+[`deploy/nkt-edge.service`](https://github.com/piqab/nkt/blob/main/deploy/nkt-edge.service),
+the settings [`deploy/edge.env.example`](https://github.com/piqab/nkt/blob/main/deploy/edge.env.example)
+into `/etc/nkt-edge/edge.env` (0600), then "Configure manually" in the hub:
+the address `host:8444`, the domain and the same `EDGE_TOKEN`.

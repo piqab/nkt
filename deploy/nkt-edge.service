@@ -1,0 +1,31 @@
+[Unit]
+Description=nkt-edge — webhooks for the nkt hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/nkt-edge
+EnvironmentFile=/etc/nkt-edge/edge.env
+DynamicUser=yes
+StateDirectory=nkt-edge
+Environment=EDGE_DATA_DIR=/var/lib/nkt-edge
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallFilter=@system-service
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

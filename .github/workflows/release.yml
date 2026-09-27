@@ -132,10 +132,17 @@ jobs:
           out="dist/nkt-linux-${{ matrix.goarch }}"
           go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=$version" -o "$out" ./cmd/nkt
           chmod +x "$out"
+          # nkt-edge — отдельная маленькая программа для VPS (вебхуки
+          # выкладок): хаб берёт её отсюда, когда ставит edge на хост.
+          edge="dist/nkt-edge-linux-${{ matrix.goarch }}"
+          go build -buildvcs=false -trimpath -ldflags "-s -w -X main.version=$version" -o "$edge" ./cmd/nkt-edge
+          chmod +x "$edge"
       - uses: actions/upload-artifact@v4
         with:
           name: nkt-linux-${{ matrix.goarch }}
-          path: dist/nkt-linux-${{ matrix.goarch }}
+          path: |
+            dist/nkt-linux-${{ matrix.goarch }}
+            dist/nkt-edge-linux-${{ matrix.goarch }}
           retention-days: 1
 
   # Собирает и публикует образ ХАБА (Dockerfile.hub) в GitHub Container
@@ -221,10 +228,10 @@ jobs:
       - name: Контрольные суммы
         working-directory: dist
         run: |
-          chmod +x nkt-linux-*
+          chmod +x nkt-linux-* nkt-edge-linux-*
           # Манифесты тоже: они лежат рядом с бинарниками и их так же
           # скачивают по ссылке из README.
-          sha256sum nkt-linux-* docker-compose.hub.release.yml k8s-hub.yaml > SHA256SUMS
+          sha256sum nkt-linux-* nkt-edge-linux-* docker-compose.hub.release.yml k8s-hub.yaml > SHA256SUMS
       # Описание релиза — то, что хаб показывает в «О системе», когда видит
       # новую версию (internal/hub/versioncheck.go читает body этого релиза).
       # Поэтому оно должно быть написанным текстом из WHATSNEW.md, а не

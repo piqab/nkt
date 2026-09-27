@@ -40,6 +40,8 @@ type Server struct {
 	// идёт здесь, а не на хостах. nil допустим (тесты, которым это
 	// незачем): обработчик тогда отвечает, что задания недоступны.
 	jobs *jobs.Manager
+	// edge — соединение с nkt-edge (edge.go); nil — не запущено.
+	edge *edgeClient
 	// scripts — исполнитель сценариев (см. scriptrun.go); хранит пароли
 	// запуска в памяти, поэтому один на сервер.
 	scripts *ScriptRunner
@@ -293,6 +295,10 @@ func (s *Server) Handler() http.Handler {
 					r.Delete("/hub/k8s/manifests/{id}", s.handleManifestDelete)
 					r.Post("/hub/k8s/manifests/diff", s.handleManifestDiff)
 					r.Get("/hub/k8s/findings", s.handleClustersFindings)
+					r.Get("/hub/edge", s.handleEdgeStatus)
+					r.Put("/hub/edge", s.handleEdgeUpdate)
+					r.Delete("/hub/edge", s.handleEdgeDelete)
+					r.Post("/hub/edge/install", s.handleEdgeInstall)
 					r.Get("/hub/pipelines", s.handlePipelines)
 					r.Get("/hub/pipelines/template", s.handlePipelineTemplate)
 					r.Get("/hub/pipelines/versions/{version}", s.handlePipelineVersion)

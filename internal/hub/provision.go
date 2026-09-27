@@ -95,7 +95,13 @@ func (m *Manager) resolveSourceRoot(report func(key string, args ...any)) (strin
 // needs to know cross-compiling wasn't even attempted for a source-tree
 // reason, not because the download itself is what's broken.
 func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report, progress func(key string, args ...any)) (string, error) {
-	name := fmt.Sprintf("nkt-%s-%s-%s", goos, goarch, m.version)
+	return m.ensureProgram(ctx, "nkt", goos, goarch, report, progress)
+}
+
+// ensureProgram — ensureBinary для любой программы из cmd/ (prefix —
+// «nkt» или «nkt-edge»): кэш, сборка из исходников или загрузка релиза.
+func (m *Manager) ensureProgram(ctx context.Context, prefix, goos, goarch string, report, progress func(key string, args ...any)) (string, error) {
+	name := fmt.Sprintf("%s-%s-%s-%s", prefix, goos, goarch, m.version)
 	path := filepath.Join(m.cfg.HubBinCacheDir(), name)
 	if _, err := os.Stat(path); err == nil {
 		report("hub.usingCachedBinary", goos, goarch)
@@ -104,7 +110,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report,
 
 	sourceRoot, srcErr := m.resolveSourceRoot(report)
 	if srcErr != nil {
-		if dlErr := m.downloadReleaseBinary(ctx, goos, goarch, m.version, path, report, progress); dlErr != nil {
+		if dlErr := m.downloadReleaseAsset(ctx, prefix, goos, goarch, m.version, path, report, progress); dlErr != nil {
 			return "", msgs.Errorf("hub.downloadingPrebuiltBinaryGitHubReleases", srcErr, dlErr)
 		}
 		return path, nil
@@ -132,7 +138,7 @@ func (m *Manager) ensureBinary(ctx context.Context, goos, goarch string, report,
 		// with no indication it was ever about git ownership at all.
 		"-buildvcs=false",
 		"-trimpath", "-ldflags", "-s -w -X main.version="+m.version,
-		"-o", path, "./cmd/nkt")
+		"-o", path, "./cmd/"+prefix)
 	cmd.Dir = sourceRoot
 	cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch, "CGO_ENABLED=0")
 	if goarch == "arm" {

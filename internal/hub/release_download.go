@@ -43,7 +43,13 @@ import (
 // — той же строкой-заменой, что и заливка на хост: иначе между
 // «скачиваю…» и «скачан» журнал молчит всё время загрузки.
 func (m *Manager) downloadReleaseBinary(ctx context.Context, goos, goarch, version, destPath string, report, progress func(key string, args ...any)) error {
-	assetName := fmt.Sprintf("nkt-%s-%s", goos, goarch)
+	return m.downloadReleaseAsset(ctx, "nkt", goos, goarch, version, destPath, report, progress)
+}
+
+// downloadReleaseAsset — то же для любой программы релиза (prefix —
+// «nkt» или «nkt-edge»): файл <prefix>-<os>-<arch> со сверкой SHA256SUMS.
+func (m *Manager) downloadReleaseAsset(ctx context.Context, prefix, goos, goarch, version, destPath string, report, progress func(key string, args ...any)) error {
+	assetName := fmt.Sprintf("%s-%s-%s", prefix, goos, goarch)
 	base := fmt.Sprintf("https://github.com/%s/releases/download/v%s", m.cfg.HubReleaseRepo, version)
 
 	report("hub.downloadingReleaseBinary", goos, goarch, version)
