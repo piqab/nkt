@@ -19,6 +19,9 @@ import (
 // k8sStuckAfter — сколько ждать, прежде чем Pending считать зависшим.
 const k8sStuckAfter = 15 * time.Minute
 
+// k8sRecentRestart — рестарт свежее этого — находка (и оповещение хаба).
+const k8sRecentRestart = time.Hour
+
 // k8sBadReasons — причины ожидания контейнера, которые сами не пройдут.
 var k8sBadReasons = map[string]bool{
 	"CrashLoopBackOff": true, "ImagePullBackOff": true, "ErrImagePull": true,
@@ -59,6 +62,16 @@ func ruleKubernetes(c *collector, s *model.Snapshot, idx *index) {
 				DetailKey: "finding.k8sPodFailing.detail", DetailArgs: []any{p.Reason, p.Restarts, p.Node},
 				Suggestion:    "Откройте журнал пода с галочкой «предыдущий запуск» и «Описание» (Kubernetes → Поды): там причина падения или ошибки загрузки образа.",
 				SuggestionKey: "finding.k8sPodFailing.suggestion",
+			})
+		case p.Restarts > 0 && p.LastRestart != "" && k8sAge(s, p.LastRestart) >= 0 && k8sAge(s, p.LastRestart) < k8sRecentRestart:
+			c.add(model.Finding{
+				Rule: "k8s-pod-restarted", ID: "k8s-pod-restarted:" + obj, Severity: model.SeverityHigh, Service: model.ServiceK8s, Object: obj,
+				Title:    fmt.Sprintf("Под %s перезапускался (всего %d, последний — %s)", obj, p.Restarts, p.LastRestart),
+				TitleKey: "finding.k8sPodRestarted.title", TitleArgs: []any{obj, p.Restarts, p.LastRestart},
+				Detail:        "Контейнер пода завершился и был перезапущен за последний час: падение приложения, нехватка памяти (OOMKilled) или проба liveness.",
+				DetailKey:     "finding.k8sPodRestarted.detail",
+				Suggestion:    "Журнал пода с галочкой «предыдущий запуск» и «Описание» (Last State: причина и код выхода).",
+				SuggestionKey: "finding.k8sPodRestarted.suggestion",
 			})
 		case p.Phase == "Pending" && k8sAge(s, p.Created) > k8sStuckAfter:
 			c.add(model.Finding{

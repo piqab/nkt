@@ -301,6 +301,11 @@ func k8sPod(it k8sItem) model.K8sPod {
 					Reason string `json:"reason"`
 				} `json:"waiting"`
 			} `json:"state"`
+			LastState struct {
+				Terminated *struct {
+					FinishedAt string `json:"finishedAt"`
+				} `json:"terminated"`
+			} `json:"lastState"`
 		} `json:"containerStatuses"`
 	}
 	_ = json.Unmarshal(it.Spec, &spec)
@@ -314,6 +319,9 @@ func k8sPod(it k8sItem) model.K8sPod {
 		p.Restarts += cs.RestartCount
 		if !cs.Ready {
 			p.Ready = false
+		}
+		if t := cs.LastState.Terminated; t != nil && t.FinishedAt > p.LastRestart {
+			p.LastRestart = t.FinishedAt
 		}
 		if cs.State.Waiting != nil && cs.State.Waiting.Reason != "" && p.Reason == "" {
 			p.Reason = cs.State.Waiting.Reason

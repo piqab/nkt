@@ -112,6 +112,7 @@ func BackfillDemoHistory(ctx context.Context, db *store.DB, days int) (int, erro
 			for _, w := range []struct{ source, name string }{
 				{SourcePodman, "monitoring-grafana"}, {SourcePodman, "monitoring-prometheus"},
 				{SourceLXD, "build-runner"}, {SourceLXD, "dns-cache"}, {SourceLibvirt, "web-vm"},
+				{SourceK8s, "shop/api-7c9d8-a1b2c"}, {SourceK8s, "shop/api-7c9d8-d3e4f"}, {SourceK8s, "kube-system/traefik-5d45f7b9d-abcde"},
 			} {
 				s := dailyShape(ts, w.source+w.name)
 				samples = append(samples,

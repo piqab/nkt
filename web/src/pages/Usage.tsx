@@ -100,6 +100,7 @@ const WORKLOADS = [
   { value: 'podman', label: 'Podman' },
   { value: 'lxd', label: 'LXD' },
   { value: 'libvirt', label: 'Libvirt' },
+  { value: 'k8s', label: 'Kubernetes' },
 ]
 
 const RANGES = [

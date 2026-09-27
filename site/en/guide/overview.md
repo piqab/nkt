@@ -55,7 +55,7 @@ What is checked:
   restart policy, the haproxy stats page without a password, a docker
   daemon without the client (Debian 13: docker.io without docker-cli).
 - **Kubernetes** (on a control plane) — a pod in CrashLoopBackOff or
-  ImagePullBackOff, a long Pending, a NotReady node, a Deployment or
+  ImagePullBackOff, a pod restarted within the last hour, a long Pending, a NotReady node, a Deployment or
   StatefulSet missing replicas, a stuck PVC, an expiring API server
   certificate, pods with privileged/hostNetwork, NodePort and
   LoadBalancer ports past the firewall; containers without limits, images

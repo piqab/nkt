@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.19 — 2026-09-27
+
+- **Kubernetes in "Load".** On a control plane the usage collector takes
+  `kubectl top pods` (needs metrics-server, k3s ships it), and pod CPU and
+  memory build up a history like containers and machines. "Load" has a
+  "Kubernetes" source: charts, top pods and the heatmap.
+- **Pod restart alerts.** A new finding: a pod restarted within the last
+  hour (high severity). Together with NotReady and CrashLoopBackOff it
+  arrives as the hub's "problems" alert; after an hour without restarts
+  the finding goes away and the hub records "resolved".
+
 ## v1.11.18 — 2026-09-27
 
 - **Kubernetes: a pod's or service's application in the browser.** The pod
