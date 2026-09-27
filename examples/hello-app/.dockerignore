@@ -1,5 +1,8 @@
 .git
 .github
+.gitea
+.gitlab-ci.yml
 deploy
+scripts
 test_app.py
 README*.md

@@ -14,7 +14,7 @@ hero:
       link: /en/guide/getting-started
     - theme: alt
       text: Guide
-      link: /en/guide/hub
+      link: /en/guide/intro
     - theme: alt
       text: GitHub
       link: https://github.com/piqab/nkt
@@ -39,7 +39,10 @@ features:
     details: Availability of listeners, container ports and machines on a schedule, a downtime heatmap, container and machine load, live logs, a terminal and btop in the browser.
   - icon: 🖧
     title: Hub — many hosts
-    details: Hosts over SSH, groups, alerts, jobs, desired-state profiles, virtual machines from the hub, deployment scripts, export and import of everything.
+    details: Hosts over SSH, groups, alerts, jobs, desired-state profiles, virtual machines and Kubernetes clusters from the hub, deployment scripts, export and import of everything.
+  - icon: 🚀
+    title: Deployments from Git
+    details: Applications from a repository — as a manifest, a Helm release or a script — on a button, a CI webhook, polling or a new image tag; history and rollback, nkt-edge for webhooks without exposing the hub, examples for GitHub, GitLab and Gitea.
   - icon: 🌍
     title: Two languages, three themes
     details: UI and server messages in English and Russian, light, dark and system themes, a terminal UI and a JSON API to everything.

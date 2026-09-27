@@ -1,8 +1,8 @@
 ---
-title: Alerts, jobs, updates
+title: Alerts, jobs, AI
 ---
 
-# Alerts, jobs, export, updates
+# Alerts, jobs, model analysis
 
 ## Alerts
 
@@ -31,53 +31,19 @@ old log stays. Job logs, titles and errors, like alerts, are shown **in
 the reader's language** — a job started from a Russian UI reads in
 English for an English user; raw tool output stays as is.
 
-## Export and import
+A job that resumes after a service restart remembers how many times it
+was resumed: if the service restarted in the middle of it more than
+three times, it stops with an error instead of looping. An error inside
+a job runner doesn't crash the service — the job ends with "internal
+runner error".
 
-“Export” in the host list saves everything the hub knows and that takes
-long to set up again: hosts with SSH and admin secrets, groups, machines
-with parents, Kubernetes clusters with their nodes and kubeconfig,
-profiles and scripts with history, machine templates, settings. Cluster
-images (qcow2) are not in the file — the import lists the ones to copy by
-hand. The file is encrypted with a password — “import” on a new hub
-asks for the same one. `nkt hub import` does the same from the command The export also carries the AI
-settings (including the API key and edited instructions) and the beta
-update channel.
-line.
+## Export, updates, cache
 
-## About
+- Hub export and import — on the [Hosts](/en/guide/hub-hosts#export-and-import) page.
+- Updating the hub and hosts, the beta channel, the vulnerability and
+  ClamAV databases — [Updates](/en/guide/hub-updates).
+- The package, file and image cache — [Package cache](/en/guide/hub-cache).
 
-![About](/screens/en/hub-about.png)
-
-- The hub version, a check of GitHub releases, **update to the latest** —
-  the hub downloads the binary, verifies the checksum and restarts;
-  **rollback** to the previous version if something went wrong. The new
-  version's notes are shown before installing — in the UI language; while
-  no update is out, the installed version's notes stay in that spot. The
-  **"use beta versions"** checkbox makes betas (tag `vX.Y.Z-beta`) count
-  as updates; a beta hub carries a "beta" badge in the header and hands
-  the beta to its hosts.
-- Hosts whose version differs from the hub's are brought to the hub's
-  version when opened; “update all” in the host list — for the ones
-  behind (no more than three at once, the rest wait in a queue; a
-  transient SSH error is retried). While nkt on a host restarts (package
-  upgrade, self-update) the hub waits up to 20 s instead of failing; if
-  the service does not come back, it says so with a diagnosis taken over
-  SSH (unit state, who listens on the port, the journal), and “update”
-  from the hub reinstalls and restarts it over SSH.
-- The trivy **vulnerability database** is shared by all hosts: updated on a
-  schedule and by a button, hosts take it from the hub instead of
-  downloading their own.
-- **Kubernetes clusters** — on one host or across several, with
-  WireGuard between hosts, Cilium, your own images and saved form
-  presets: a separate page, [Kubernetes clusters](/en/guide/hub-clusters).
-- **Package cache** — hosts download `.deb` files through the hub over a
-  reverse SSH forward, every package leaves for the internet once; without
-  the hub apt goes direct. A checkbox in the host form, the limit and
-  clearing — in “About”. The same port serves files by URL (installers,
-  binaries, machine images) and a registry mirror for container images —
-  a host without internet gets everything from the hub.
-- **ClamAV database** — a copy of the signature database on the hub; on a
-  host page, in the “Malware” tab, “database from hub” uploads it over SSH.
 ## Model analysis (AI)
 
 A card in "About" — one setting for the whole installation: the provider

@@ -5,124 +5,58 @@ title: Hub — many hosts
 # Hub: many hosts from one place
 
 A regular `nkt` manages one host. `nkt hub` is the same binary in another
-mode: it lives on a separate machine and manages the others **over SSH**,
-showing for each of them the same panel a standalone nkt would — with a
-host picker in the UI instead of a separate install on every host.
+mode: it sits on a separate machine and manages the others **over SSH**,
+showing for each the same panel a regular nkt would — with a host picker
+in the UI instead of a separate installation on each.
 
 ![Hosts on the hub](/screens/en/hub-hosts.png)
 
-The icon before the name is reachability: green — the host answered the
-hub's last poll, red — unreachable (the tooltip says when it last
-answered), grey — not polled yet. For an unreachable host the "Problems"
-column shows the counts from the last successful poll (dimmed) or "no
-data".
+The hub installs nkt on the hosts itself (a binary for the host's
+architecture, the unit, `nkt.env`), keeps SSH connections to them and
+proxies requests to each one's API. The hub needs no public address, and
+the hosts expose nothing except SSH for the hub.
 
-## 1. Install
+## Getting started
 
-The same binary as for a host ([how to get it](/en/guide/getting-started#_1-the-binary)),
-a different unit and env file:
+1. [Install the hub](/en/guide/install-hub) — systemd, Docker Compose or
+   Kubernetes.
+2. [Add hosts](/en/guide/hub-hosts) — with a key the hub generates, or
+   preparing a fresh server with a password.
+3. Open a host — from there it's the same panel as a standalone nkt.
 
-```bash
-sudo install -d -m 0750 /etc/netknownsthat
-curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/hub.env.example \
-  | sudo install -m 0640 /dev/stdin /etc/netknownsthat/hub.env
-curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/netknownsthat-hub.service \
-  | sudo install -m 0644 /dev/stdin /etc/systemd/system/netknownsthat-hub.service
-sudo $EDITOR /etc/netknownsthat/hub.env
-sudo systemctl daemon-reload
-sudo systemctl enable --now netknownsthat-hub
-```
+## What the hub has
 
-From a clone of the repository `sudo make hub-install` does the same. There
-is also a prebuilt image for Docker Compose and Kubernetes — manifests in
-[`deploy/`](https://github.com/piqab/nkt/tree/main/deploy), details in
-[HUB.md](https://github.com/piqab/nkt/blob/main/HUB.md).
+- **[Hosts](/en/guide/hub-hosts)** — installing and updating nkt,
+  availability and findings of all hosts, groups, a fallback channel for
+  when SSH fails, machines inside hosts, export and import.
+- **Profiles** — a host's desired state in YAML (packages, services,
+  files, firewall, accounts, compose stacks) with a plan and apply;
+  drift shows as findings. A group can have a profile for new machines.
+- **[Scripts](/en/guide/hub-scripts)** (experimental) — a line-based
+  deployment language with a dry run, help and a diagram.
+- **[Kubernetes clusters](/en/guide/hub-clusters)** — on machines of one
+  or several hosts, with WireGuard, Cilium, manifests and Helm into
+  several clusters at once.
+- **[Deployments](/en/guide/hub-deploy)** — applications from Git to
+  clusters and hosts on a button, webhook, polling or a new image tag;
+  [nkt-edge](/en/guide/edge) for webhooks without exposing the hub,
+  [CI/CD examples](/en/guide/cicd-examples).
+- **[Alerts, jobs, AI](/en/guide/hub-operations)** — host unreachable,
+  findings, failed jobs; the job log; model analysis of findings; privacy
+  mode.
+- **[Updates](/en/guide/hub-updates)** — of the hub and hosts, the beta
+  channel, the shared vulnerability and ClamAV databases.
+- **[Package cache](/en/guide/hub-cache)** — `.deb` files, downloads and
+  container images through the hub; hosts without internet.
 
-Check that it is up:
+The full list of features is on the [features](/en/features#hub) page.
 
-```bash
-curl -s http://127.0.0.1:8077/api/health
-journalctl -u netknownsthat-hub -f
-```
+## Hub limitations
 
-Like nkt, the hub listens on `127.0.0.1` only — from outside use an SSH
-tunnel, `NKT_TLS_ENABLED=true` or a reverse proxy with TLS (see
-[install on a host](/en/guide/getting-started#_4-open-it-in-the-browser)).
-
-## 2. First login
-
-On the first start the hub creates an administrator and prints the password
-to the journal:
-
-```
-=== Hub administrator account created ===
-  login:    admin
-  password: <string>
-```
-
-It is shown nowhere else — save it. The first row of the host list is always
-**localhost** — the hub machine itself, without SSH or an install: it can be
-opened right away.
-
-## 3. Add a host
-
-“Add host” → name, address, SSH port and user (`root` or a user with
-passwordless `sudo`, the way typical VPS images are set up). Login method:
-
-- **the hub generates a key** (recommended) — after saving, the hub shows the
-  public key; add it to `~/.ssh/authorized_keys` on the host and only then
-  click “install”. The private half never leaves the hub.
-- **your own private key** — the contents of `id_ed25519`/`id_rsa` (not
-  `.pub`).
-- **password** — the plain SSH password. For a fresh server with only root
-  and a password, enable **“Prepare a new host”**: the hub installs helper
-  packages, creates a user with `NOPASSWD`, switches the login to a key and
-  optionally disables password login — every step checked and reverted on
-  failure.
-
-Then “install”: the hub delivers the binary for the right architecture the
-fastest way — on every delivery it measures a download from GitHub
-Releases on the host itself against an SFTP upload from the hub and takes
-whichever is faster and available (the checksum is verified; on failure
-SFTP in the same job) — puts the unit in place and starts the service; progress
-is in a live log. The
-host shows up in the list with its version, findings and availability —
-“open” leads to the same panel a standalone nkt has.
-
-Useful switches in the host form:
-
-- **API port** — where the host's own nkt listens (localhost only); empty
-  means the hub's shared one (`NKT_HUB_HOST_API_PORT`, 8077 by default).
-  Set your own when 8077 is taken on the host; changing it restarts the
-  install;
-- **web terminal** — a root shell in the browser, off by default;
-- **fallback channel** — a reverse TLS tunnel for when SSH gets firewalled:
-  the panel, the terminal and updates keep working through it.
-
-## 4. What the hub offers
-
-- **Groups** — hosts are grouped by drag and drop; a group may have a
-  profile: machines created in it are built from it.
-- **Machines inside a host** — a virtual machine is created on the host
-  straight from the hub, nkt is installed into it automatically, a profile
-  is applied. “Find machines on host” lists the existing machines with all
-  their addresses, each with its own SSH credentials and a “check access”
-  from the host and from the hub. The hub connects to a machine directly
-  when its SSH port answers the hub without the host, otherwise through
-  the host (“auto” mode; the machine form can set it explicitly) — this
-  matters for machines on macvtap, which the host itself cannot see.
-- **Profiles** — the desired state of a host in YAML (packages, services,
-  files, firewall, accounts, compose stacks) with a plan and application as
-  a job; drift shows up as findings.
-- **Scripts** (experimental) — a line-based deployment language: create a
-  group and hosts, install nkt, packages, Docker, stacks, machines; dry run,
-  reference and a scheme right in the UI.
-- **Alerts** — host down / back / serious findings / job failed; settings for
-  what to record and what to notify about via the browser.
-- Hub **jobs** with logs; **export and import** of the whole hub (an
-  encrypted file); **update** and **rollback** of the hub and all hosts from
-  “About”; a central trivy vulnerability database.
-
-Every feature is covered in detail in
-[HUB.md](https://github.com/piqab/nkt/blob/main/HUB.md); the full list is
-on the [features](/en/features#hub) page.
+- SSH secrets are stored on the hub, encrypted with the master key. The
+  hub is the single point of access to all hosts: treat it like a machine
+  with production access.
+- Management operations go through the host's own API, which applies
+  its own rules (`NKT_ALLOW_MUTATIONS`, role); the hub doesn't bypass
+  them.
+- One replica: the registry is SQLite.

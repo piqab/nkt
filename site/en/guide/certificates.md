@@ -16,7 +16,9 @@ original's status.
 
 - **Comparison with the real socket**: nkt opens a real TLS connection to
   the service address and compares fingerprints — the file on disk may be
-  fresh while the service never did a `reload`.
+  fresh while the service never did a `reload`. A connection error is
+  not counted as a mismatch — it's marked "not checked", so a network
+  problem doesn't turn into a false accusation of the service.
 - **Auto-renewal state**: whether certbot knows the certificate, whether
   `certbot.timer` or cron is active. An expired certificate is almost
   always broken automation, not forgetfulness.
@@ -38,4 +40,6 @@ original's status.
 
 Everything long runs as a job with a live log — the window can be closed,
 nothing stops on the host. Scheduled auto-renewal —
-`NKT_AUTO_RENEW_CERTS=true`.
+`NKT_AUTO_RENEW_CERTS=true` (interval and margin — `NKT_AUTO_RENEW_INTERVAL`,
+`NKT_AUTO_RENEW_WITHIN`): on every renewal the background job briefly
+stops the site by itself.
