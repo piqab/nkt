@@ -648,3 +648,4 @@
 - `9a32e44` Хаб: значок хоста показывает доступность, «нет данных» вместо «нет проблем» у недоступного
 - `4e0d154` Kubernetes: блочный режим в редакторах YAML — объекты, контейнеры, порты, правила, ключи, values Helm
 - `ed79615` Kubernetes: находки о гигиене — контейнеры без limits, образы :latest, cluster-admin, namespace без NetworkPolicy
+- `29831e7` Kubernetes: разделы RBAC (роли ServiceAccount), NetworkPolicy и HPA с границами
