@@ -2551,6 +2551,33 @@
         "cronjob": "CronJob",
         "empty": "empty manifest"
       }
+    },
+    "helm": {
+      "missing": "Helm is not installed on the host. Installing puts the official {{version}} archive into /usr/local/bin, as a background job.",
+      "setup": "Install Helm",
+      "chart": "Chart",
+      "appVersion": "App version",
+      "status": "Status",
+      "revision": "Revision",
+      "updated": "Updated",
+      "history": "History and rollback",
+      "upgrade": "Values and upgrade",
+      "uninstall": "Uninstall release",
+      "uninstallConfirm": "Uninstall release {{name}} with all its objects? Runs as a job.",
+      "historyTitle": "Release history {{name}}",
+      "rollback": "Roll back",
+      "rollbackConfirm": "Roll {{name}} back to revision {{rev}}? Runs as a job.",
+      "description": "Description",
+      "install": "Install chart",
+      "installTitle": "Install a Helm chart",
+      "upgradeTitle": "Upgrade release {{name}}",
+      "installHint": "The repository is one already added or a new one (name and URL), or an oci:// address. Values are the YAML below; an empty version means the latest. Installing runs helm upgrade --install as a background job.",
+      "upgradeHint": "Below are the release's current values (helm get values): edits go through a diff. The repository and chart are the ones nkt installed the release from; for other releases enter them yourself.",
+      "repoName": "repository",
+      "repoURL": "https://… or oci://…",
+      "versionLatest": "version",
+      "release": "Release",
+      "valuesLabel": "values (values.yaml):"
     }
   },
   "ai": {

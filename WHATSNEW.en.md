@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.11 — 2026-09-27
+
+- **Helm** — a new section in the cluster objects. Releases (with the
+  shared namespace filter): chart, app version, status, revision.
+  Actions: revision history and rollback to any of them, "values and
+  upgrade" — the release's current values are edited in a window with a
+  diff and go to `helm upgrade`, release uninstall. "Install chart" — a
+  repository already added or a new one (or an `oci://` address), chart,
+  version, release, namespace and values.
+- Everything that changes the cluster runs as a background host job with
+  the standard log window (`helm upgrade --install --wait`, `rollback`,
+  `uninstall`), and the audit log records who did what. Viewing a
+  release's values is audited too: they may contain passwords.
+- No helm on the host — the "Install Helm" button puts the official
+  archive into `/usr/local/bin` as a job. nkt keeps the Helm settings
+  (repositories, cache) in its data directory; the values of a release
+  installed from nkt are kept there too (0600) for the next upgrade.
+
 ## v1.11.10 — 2026-09-27
 
 - **Kubernetes: findings.** On a control plane the scan takes a cluster

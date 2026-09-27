@@ -10,6 +10,7 @@ import { confirmAction } from './confirm'
 import { CreateNamespaceButton, K8sRowActions } from './K8sActions'
 import { K8sNewObjectModal } from './K8sYAML'
 import { AIExplain } from './AIExplain'
+import { K8sHelm } from './K8sHelm'
 
 interface Column {
   key: string
@@ -104,6 +105,7 @@ export function K8sObjects({ me }: { me: Me }) {
           { key: 'namespaces', label: 'Namespaces', children: table('namespaces') },
           { key: 'events', label: t('k8s.tab.events'), children: table('events') },
           { key: 'crd', label: 'Custom Resources', children: <CustomResources render={table} /> },
+          { key: 'helm', label: 'Helm', children: <K8sHelm me={me} namespace={namespace} namespaces={namespaces} /> },
         ]}
       />
     </Card>

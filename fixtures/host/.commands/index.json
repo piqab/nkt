@@ -1485,6 +1485,94 @@
         "nodes"
       ],
       "stdout": "lab-cp-1   412m   20%   1874Mi   48%\nlab-w-1    236m   11%   1210Mi   31%\n"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "command -v helm"
+      ],
+      "stdout": "/usr/local/bin/helm\n"
+    },
+    {
+      "match": [
+        "helm",
+        "version",
+        "--short"
+      ],
+      "stdout": "v3.16.3+gcfd0749\n"
+    },
+    {
+      "match": [
+        "helm",
+        "list",
+        "-A",
+        "-o",
+        "json"
+      ],
+      "stdout": "[{\"name\": \"traefik\", \"namespace\": \"kube-system\", \"revision\": \"1\", \"updated\": \"2026-09-10 08:02:11.123456 +0000 UTC\", \"status\": \"deployed\", \"chart\": \"traefik-27.0.201+up27.0.2\", \"app_version\": \"v2.11.10\"}, {\"name\": \"traefik-crd\", \"namespace\": \"kube-system\", \"revision\": \"1\", \"updated\": \"2026-09-10 08:02:05.1 +0000 UTC\", \"status\": \"deployed\", \"chart\": \"traefik-crd-27.0.201+up27.0.2\", \"app_version\": \"v2.11.10\"}, {\"name\": \"cert-manager\", \"namespace\": \"cert-manager\", \"revision\": \"3\", \"updated\": \"2026-09-20 14:31:02.5 +0000 UTC\", \"status\": \"deployed\", \"chart\": \"cert-manager-v1.15.3\", \"app_version\": \"v1.15.3\"}, {\"name\": \"shop-redis\", \"namespace\": \"shop\", \"revision\": \"2\", \"updated\": \"2026-09-25 09:12:40.2 +0000 UTC\", \"status\": \"failed\", \"chart\": \"redis-20.1.4\", \"app_version\": \"7.4.0\"}]"
+    },
+    {
+      "match": [
+        "helm",
+        "repo",
+        "list",
+        "-o",
+        "json"
+      ],
+      "stdout": "[{\"name\": \"jetstack\", \"url\": \"https://charts.jetstack.io\"}, {\"name\": \"bitnami\", \"url\": \"https://charts.bitnami.com/bitnami\"}]"
+    },
+    {
+      "match": [
+        "helm",
+        "history"
+      ],
+      "stdout": "[{\"revision\": 1, \"updated\": \"2026-09-18T10:00:00Z\", \"status\": \"superseded\", \"chart\": \"cert-manager-v1.15.1\", \"app_version\": \"v1.15.1\", \"description\": \"Install complete\"}, {\"revision\": 2, \"updated\": \"2026-09-19T11:00:00Z\", \"status\": \"superseded\", \"chart\": \"cert-manager-v1.15.2\", \"app_version\": \"v1.15.2\", \"description\": \"Upgrade complete\"}, {\"revision\": 3, \"updated\": \"2026-09-20T14:31:02Z\", \"status\": \"deployed\", \"chart\": \"cert-manager-v1.15.3\", \"app_version\": \"v1.15.3\", \"description\": \"Upgrade complete\"}]"
+    },
+    {
+      "match": [
+        "helm",
+        "get",
+        "values"
+      ],
+      "stdout": "crds:\n  enabled: true\nprometheus:\n  enabled: false\nreplicaCount: 2\n"
+    },
+    {
+      "match": [
+        "helm",
+        "repo",
+        "add"
+      ],
+      "stdout": "\"repo\" has been added to your repositories (simulated)\n"
+    },
+    {
+      "match": [
+        "helm",
+        "repo",
+        "update"
+      ],
+      "stdout": "Hang tight while we grab the latest from your chart repositories...\nUpdate Complete. ⎈Happy Helming!⎈ (simulated)\n"
+    },
+    {
+      "match": [
+        "helm",
+        "upgrade"
+      ],
+      "stdout": "Release has been upgraded. Happy Helming! (simulated)\nSTATUS: deployed\n"
+    },
+    {
+      "match": [
+        "helm",
+        "rollback"
+      ],
+      "stdout": "Rollback was a success! Happy Helming! (simulated)\n"
+    },
+    {
+      "match": [
+        "helm",
+        "uninstall"
+      ],
+      "stdout": "release uninstalled (simulated)\n"
     }
   ]
 }
