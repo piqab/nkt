@@ -41,6 +41,13 @@ clusters: [prod]          # hub clusters
 Manifests and values get `{{nkt.tag}}`, `{{nkt.commit}}` and
 `{{nkt.ref}}` substituted.
 
+## Example
+
+A ready example is [`examples/hello-app`](https://github.com/piqab/nkt/tree/main/examples/hello-app):
+a Python application, a Dockerfile, a GitHub Actions workflow (tests, the
+image into GHCR, the hub webhook) and three deployment variants — manifest,
+Helm, Docker Compose host — with a step-by-step guide.
+
 ## When to deploy
 
 - **The "Deploy" button** — the branch head or a given tag.

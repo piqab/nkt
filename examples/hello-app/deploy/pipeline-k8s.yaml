@@ -1,0 +1,9 @@
+# Вариант 1 — конвейер «манифест в Kubernetes». Вставьте в «Выкладки» →
+# «Новый конвейер» и поправьте repo и clusters.
+repo: https://github.com/OWNER/hello-app.git
+ref: main
+tags: "v*"
+action: manifest
+manifests:
+  - deploy/k8s.yaml
+clusters: [prod]

@@ -1,0 +1,6 @@
+# Вариант 3 — конвейер «сценарий на хосте с Docker».
+repo: https://github.com/OWNER/hello-app.git
+ref: main
+tags: "v*"
+action: script
+script: deploy/deploy.nkt

@@ -254,3 +254,15 @@ func TestLocalize(t *testing.T) {
 		t.Errorf("Localize: %q", got)
 	}
 }
+
+func TestBlockExpandsOnlyScriptVars(t *testing.T) {
+	text := "param TAG \"тег\"\non web1 docker stack /srv/hello/docker-compose.yml up\nservices:\n  web:\n    image: ghcr.io/o/hello:${TAG}\n    environment:\n      HOME_DIR: ${HOME}\nend\n"
+	sc, issues := Parse(text, map[string]string{"param:TAG": "1.2.3"})
+	if len(issues) > 0 {
+		t.Fatal(issues)
+	}
+	b := sc.Steps[0].Block
+	if !strings.Contains(b, "ghcr.io/o/hello:1.2.3") || !strings.Contains(b, "${HOME}") {
+		t.Errorf("блок:\n%s", b)
+	}
+}
