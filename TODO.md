@@ -179,7 +179,7 @@ CI не собирается; интерфейс только на русско�
       apply`, история версий в nkt (путь `k8s://ns/kind/name`) с откатом;
       «новый объект» из шаблонов (Deployment+Service, Ingress, ConfigMap,
       CronJob).
-- [ ] Находки: CrashLoopBackOff/ImagePullBackOff, долгий Pending, узел
+- [x] Находки (1.11.10): CrashLoopBackOff/ImagePullBackOff, долгий Pending, узел
       NotReady, Deployment без доступных реплик, висящий PVC, истекающие
       сертификаты kubeadm, привилегированные поды и hostNetwork,
       NodePort/LoadBalancer мимо файрвола; карта ресурсов Ingress → Service

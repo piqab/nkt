@@ -191,6 +191,9 @@ func (m *Manager) Resources(ctx context.Context, kind, namespace string) (Resour
 		}
 		return res.Rows[i].Name < res.Rows[j].Name
 	})
+	if kind == "pods" || kind == "nodes" {
+		m.addTop(ctx, kind, &res)
+	}
 	if kind == "events" {
 		// События — свежие сверху.
 		sort.SliceStable(res.Rows, func(i, j int) bool { return res.Rows[i].Cols["last_seen"] > res.Rows[j].Cols["last_seen"] })
@@ -554,4 +557,44 @@ func (m *Manager) Data(ctx context.Context, kind, namespace, name string) (map[s
 		return out, nil
 	}
 	return nil, msgs.Errorf("k8s.notFound", namespace+"/"+name)
+}
+
+// addTop — колонки CPU и памяти из kubectl top (есть metrics-server —
+// есть колонки; нет — таблица без них, без ошибки).
+func (m *Manager) addTop(ctx context.Context, kind string, res *ResourceList) {
+	args := []string{"top", "pods", "-A", "--no-headers"}
+	if kind == "nodes" {
+		args = []string{"top", "nodes", "--no-headers"}
+	}
+	out, err := m.kubectl(ctx, args...)
+	if err != nil || !out.OK() {
+		return
+	}
+	usage := ParseTop(kind, out.Stdout)
+	if len(usage) == 0 {
+		return
+	}
+	res.Columns = append(res.Columns, Column{Key: "cpu"}, Column{Key: "memory"})
+	for i := range res.Rows {
+		r := &res.Rows[i]
+		if u, ok := usage[r.Namespace+"/"+r.Name]; ok {
+			r.Cols["cpu"], r.Cols["memory"] = u[0], u[1]
+		}
+	}
+}
+
+// ParseTop — kubectl top … --no-headers: «ns/имя» (у узлов — «/имя») →
+// CPU и память; у узлов с долей от ёмкости в скобках.
+func ParseTop(kind, text string) map[string][2]string {
+	out := map[string][2]string{}
+	for _, line := range strings.Split(text, "\n") {
+		f := strings.Fields(line)
+		switch {
+		case kind == "pods" && len(f) >= 4:
+			out[f[0]+"/"+f[1]] = [2]string{f[2], f[3]}
+		case kind == "nodes" && len(f) >= 5:
+			out["/"+f[0]] = [2]string{f[1] + " (" + f[2] + ")", f[3] + " (" + f[4] + ")"}
+		}
+	}
+	return out
 }

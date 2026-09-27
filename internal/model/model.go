@@ -18,6 +18,7 @@ const (
 	ServicePodman    = "podman"
 	ServiceLXD       = "lxd"
 	ServiceLibvirt   = "libvirt"
+	ServiceK8s       = "kubernetes"
 	ServiceIptables  = "iptables"
 	ServiceUFW       = "ufw"
 	ServiceFirewalld = "firewalld"
@@ -740,20 +741,22 @@ type Snapshot struct {
 	Networks  []DockerNetwork `json:"networks"`
 	// DockerCLIMissing — движок docker работает, а команды docker на хосте
 	// нет (Debian 13: docker.io без docker-cli).
-	DockerCLIMissing bool               `json:"docker_cli_missing,omitempty"`
-	Malware          MalwareReport      `json:"malware"`
-	Podman           []PodmanContainer  `json:"podman_containers,omitempty"`
-	LXD              []LXDInstance      `json:"lxd_instances,omitempty"`
-	VMs              []VirtualMachine   `json:"vms,omitempty"`
-	Firewall         FirewallState      `json:"firewall"`
-	Listeners        []Listener         `json:"listeners"`
-	Interfaces       []NetworkInterface `json:"interfaces"`
-	Certs            []Certificate      `json:"certificates"`
-	Packages         PackageUpdates     `json:"package_updates"`
-	Capacity         HostCapacity       `json:"capacity"`
-	Findings         []Finding          `json:"findings"`
-	Digest           string             `json:"digest"`
-	ScanMS           int64              `json:"scan_ms"`
+	DockerCLIMissing bool              `json:"docker_cli_missing,omitempty"`
+	Malware          MalwareReport     `json:"malware"`
+	Podman           []PodmanContainer `json:"podman_containers,omitempty"`
+	LXD              []LXDInstance     `json:"lxd_instances,omitempty"`
+	VMs              []VirtualMachine  `json:"vms,omitempty"`
+	// K8s — сводка кластера на control plane (для находок и карты).
+	K8s        *K8sState          `json:"k8s,omitempty"`
+	Firewall   FirewallState      `json:"firewall"`
+	Listeners  []Listener         `json:"listeners"`
+	Interfaces []NetworkInterface `json:"interfaces"`
+	Certs      []Certificate      `json:"certificates"`
+	Packages   PackageUpdates     `json:"package_updates"`
+	Capacity   HostCapacity       `json:"capacity"`
+	Findings   []Finding          `json:"findings"`
+	Digest     string             `json:"digest"`
+	ScanMS     int64              `json:"scan_ms"`
 }
 
 // MalwareHit — один признак вредоносного на хосте: см. internal/malware.
@@ -980,4 +983,92 @@ func (s *Snapshot) ContainerByPort(port int) *Container {
 		}
 	}
 	return nil
+}
+
+// K8sState — сводка кластера Kubernetes, снятая со control plane при
+// скане: ровно то, что нужно находкам и карте ресурсов. Полный обзор
+// объектов — отдельно, по запросу (internal/k8s).
+type K8sState struct {
+	Flavor    string        `json:"flavor"`
+	Pods      []K8sPod      `json:"pods"`
+	Workloads []K8sWorkload `json:"workloads"`
+	Nodes     []K8sNode     `json:"nodes"`
+	PVCs      []K8sPVC      `json:"pvcs"`
+	Services  []K8sService  `json:"services"`
+	Ingresses []K8sIngress  `json:"ingresses"`
+	Certs     []K8sCert     `json:"certs,omitempty"`
+}
+
+// K8sPod — под: где, в каком состоянии, с какими правами.
+type K8sPod struct {
+	Namespace   string            `json:"namespace"`
+	Name        string            `json:"name"`
+	Node        string            `json:"node,omitempty"`
+	IP          string            `json:"ip,omitempty"`
+	Phase       string            `json:"phase"`
+	Reason      string            `json:"reason,omitempty"` // CrashLoopBackOff, ImagePullBackOff…
+	Restarts    int               `json:"restarts"`
+	Ready       bool              `json:"ready"`
+	Created     string            `json:"created,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Owner       string            `json:"owner,omitempty"`
+	Privileged  []string          `json:"privileged,omitempty"` // контейнеры privileged
+	HostNetwork bool              `json:"host_network,omitempty"`
+}
+
+// K8sWorkload — Deployment или StatefulSet: желаемые и доступные реплики.
+type K8sWorkload struct {
+	Kind      string            `json:"kind"`
+	Namespace string            `json:"namespace"`
+	Name      string            `json:"name"`
+	Desired   int               `json:"desired"`
+	Available int               `json:"available"`
+	Selector  map[string]string `json:"selector,omitempty"`
+}
+
+// K8sNode — узел кластера.
+type K8sNode struct {
+	Name          string `json:"name"`
+	Ready         bool   `json:"ready"`
+	IP            string `json:"ip,omitempty"`
+	Unschedulable bool   `json:"unschedulable,omitempty"`
+}
+
+// K8sPVC — заявка на том.
+type K8sPVC struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Phase     string `json:"phase"`
+	Created   string `json:"created,omitempty"`
+}
+
+// K8sService — сервис: тип, селектор, порты (NodePort — порт узла).
+type K8sService struct {
+	Namespace string            `json:"namespace"`
+	Name      string            `json:"name"`
+	Type      string            `json:"type"`
+	Selector  map[string]string `json:"selector,omitempty"`
+	Ports     []K8sServicePort  `json:"ports,omitempty"`
+	External  []string          `json:"external,omitempty"`
+}
+
+// K8sServicePort — порт сервиса.
+type K8sServicePort struct {
+	Port     int    `json:"port"`
+	NodePort int    `json:"node_port,omitempty"`
+	Protocol string `json:"protocol,omitempty"`
+}
+
+// K8sIngress — Ingress: имена хостов и сервисы, куда он ведёт.
+type K8sIngress struct {
+	Namespace string   `json:"namespace"`
+	Name      string   `json:"name"`
+	Hosts     []string `json:"hosts,omitempty"`
+	Services  []string `json:"services,omitempty"`
+}
+
+// K8sCert — сертификат компонента control plane и его срок.
+type K8sCert struct {
+	Path     string `json:"path"`
+	NotAfter string `json:"not_after"`
 }

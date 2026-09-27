@@ -997,7 +997,11 @@
     "zoomOut": "Zoom out",
     "resetView": "Reset view",
     "loadingMap": "resource map",
-    "hideInactive": "Hide stopped services"
+    "hideInactive": "Hide stopped services",
+    "colK8sIngress": "Ingress",
+    "colK8sService": "k8s services",
+    "colK8sPod": "Pods",
+    "colK8sNode": "k8s nodes"
   },
   "configs": {
     "colTs": "When",
@@ -2467,7 +2471,9 @@
       "object": "Object",
       "message": "Message",
       "count": "Count",
-      "last_seen": "Last seen"
+      "last_seen": "Last seen",
+      "cpu": "CPU",
+      "memory": "Memory"
     },
     "noCRDs": "The cluster has no custom resource kinds (CRDs).",
     "revealConfirm": "Show the values of secret {{name}}? Revealing is recorded in the audit log.",

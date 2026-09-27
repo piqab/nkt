@@ -75,6 +75,7 @@ func Run(s *model.Snapshot) []model.Finding {
 	ruleUpstreams(c, s, idx)
 	ruleHealthChecks(c, s)
 	ruleContainers(c, s)
+	ruleKubernetes(c, s, idx)
 	ruleMalware(c, s)
 	ruleAdminInterfaces(c, s)
 

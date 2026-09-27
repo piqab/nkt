@@ -8,6 +8,26 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.10 — 2026-09-27
+
+- **Kubernetes: findings.** On a control plane the scan takes a cluster
+  summary, and "Findings" gets: a pod in CrashLoopBackOff/ImagePullBackOff,
+  a pod Pending for more than 15 minutes, a NotReady node, a Deployment or
+  StatefulSet missing replicas (all of them — high severity), a PVC
+  Pending for more than 15 minutes, an expiring (under 30 days) or
+  expired API server certificate, pods with privileged or hostNetwork,
+  and NodePort and LoadBalancer ports open past the firewall: kube-proxy
+  publishes them with nat rules, like Docker, and a ufw deny does not
+  close them. Every finding has an AI bulb, like the others.
+- **Kubernetes on the resource map:** Ingress → Service → pods → cluster
+  node → the host machine the node runs on (by name or address). A
+  service with no pods under its selector and an Ingress pointing at a
+  missing service are highlighted.
+- **CPU and memory** in the pod and node tables — from `kubectl top` when
+  the cluster has metrics-server (k3s ships it by default).
+- **An AI bulb on Warning events** in the "Events" section: what it means
+  and what to do.
+
 ## v1.11.9 — 2026-09-27
 
 - **Kubernetes: YAML with diff and history.** The row menu has "YAML":

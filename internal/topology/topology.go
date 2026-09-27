@@ -295,6 +295,8 @@ func Build(ctx context.Context, s *model.Snapshot) *Graph {
 		}
 	}
 
+	buildK8s(b, s)
+
 	for _, n := range s.Networks {
 		netID := "net:" + n.Name
 		sub := strings.Join(n.Subnets, ", ")
@@ -783,7 +785,15 @@ func kindRank(kind string) int {
 		return 10
 	case KindNetwork:
 		return 11
-	default:
+	case KindK8sIngress:
 		return 12
+	case KindK8sService:
+		return 13
+	case KindK8sPod:
+		return 14
+	case KindK8sNode:
+		return 15
+	default:
+		return 16
 	}
 }

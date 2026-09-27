@@ -54,6 +54,11 @@ What is checked:
   a container in a restart loop, not running, not declared, without a
   restart policy, the haproxy stats page without a password, a docker
   daemon without the client (Debian 13: docker.io without docker-cli).
+- **Kubernetes** (on a control plane) — a pod in CrashLoopBackOff or
+  ImagePullBackOff, a long Pending, a NotReady node, a Deployment or
+  StatefulSet missing replicas, a stuck PVC, an expiring API server
+  certificate, pods with privileged/hostNetwork, NodePort and
+  LoadBalancer ports past the firewall.
 - **Profile drift** — when a [profile](/en/guide/profiles) is applied to
   the host, deviations from it show up here too.
 
@@ -102,3 +107,8 @@ are an entry from the host into the instance. A machine node's details
 show its address, ping, current CPU and memory and the vulnerabilities of
 its packages; no ping reply turns the node red, critical vulnerabilities
 turn it yellow.
+
+A Kubernetes cluster (on a control plane) has its own columns: Ingress →
+Service → pods → cluster node, and the node is linked to the host machine
+it runs on. A service with no pods and an Ingress pointing at a missing
+service are highlighted.
