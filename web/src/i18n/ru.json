@@ -2555,7 +2555,8 @@
         "ingress": "Ingress",
         "configmap": "ConfigMap",
         "cronjob": "CronJob",
-        "empty": "пустой манифест"
+        "empty": "пустой манифест",
+        "networkpolicy": "NetworkPolicy (запрет входящих)"
       }
     },
     "helm": {

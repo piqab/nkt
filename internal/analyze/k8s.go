@@ -2,6 +2,8 @@ package analyze
 
 import (
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -92,6 +94,7 @@ func ruleKubernetes(c *collector, s *model.Snapshot, idx *index) {
 			})
 		}
 	}
+	ruleK8sHygiene(c, k)
 	for _, n := range k.Nodes {
 		if !n.Ready {
 			c.add(model.Finding{
@@ -198,5 +201,142 @@ func ruleKubernetes(c *collector, s *model.Snapshot, idx *index) {
 				})
 			}
 		}
+	}
+}
+
+// k8sWorkload — владелец пода для группировки находок: у подов
+// Deployment владелец — ReplicaSet «имя-хэш», находка — на «имя».
+func k8sWorkload(p model.K8sPod) string {
+	kind, name, ok := strings.Cut(p.Owner, "/")
+	if !ok {
+		return p.Name
+	}
+	if kind == "ReplicaSet" {
+		if i := strings.LastIndex(name, "-"); i > 0 {
+			return name[:i]
+		}
+	}
+	return name
+}
+
+func k8sSystemNS(ns string) bool { return strings.HasPrefix(ns, "kube-") }
+
+// latestTag — образ без тега или с тегом latest (не по дайджесту).
+func latestTag(image string) bool {
+	if strings.Contains(image, "@") {
+		return false
+	}
+	last := image[strings.LastIndex(image, "/")+1:]
+	tag := ""
+	if i := strings.LastIndex(last, ":"); i >= 0 {
+		tag = last[i+1:]
+	}
+	return tag == "" || tag == "latest"
+}
+
+// ruleK8sHygiene — гигиена кластера: контейнеры без limits, образы
+// :latest, cluster-admin у ServiceAccount и людей, namespace без
+// NetworkPolicy. Системные namespace (kube-*) не проверяются.
+func ruleK8sHygiene(c *collector, k *model.K8sState) {
+	type group struct {
+		ns, workload string
+		items        map[string]bool
+	}
+	noLimits, latest := map[string]*group{}, map[string]*group{}
+	add := func(m map[string]*group, p model.K8sPod, item string) {
+		key := p.Namespace + "/" + k8sWorkload(p)
+		g := m[key]
+		if g == nil {
+			g = &group{ns: p.Namespace, workload: k8sWorkload(p), items: map[string]bool{}}
+			m[key] = g
+		}
+		g.items[item] = true
+	}
+	podNS := map[string]bool{}
+	for _, p := range k.Pods {
+		if k8sSystemNS(p.Namespace) {
+			continue
+		}
+		podNS[p.Namespace] = true
+		for _, n := range p.NoLimits {
+			add(noLimits, p, n)
+		}
+		for _, img := range p.Images {
+			if latestTag(img) {
+				add(latest, p, img)
+			}
+		}
+	}
+	keys := func(m map[string]bool) string {
+		out := make([]string, 0, len(m))
+		for k := range m {
+			out = append(out, k)
+		}
+		sort.Strings(out)
+		return strings.Join(out, ", ")
+	}
+	for key, g := range noLimits {
+		list := keys(g.items)
+		c.add(model.Finding{
+			Rule: "k8s-no-limits", ID: "k8s-no-limits:" + key, Severity: model.SeverityLow, Service: model.ServiceK8s, Object: key,
+			Title:    fmt.Sprintf("%s: контейнеры без ограничения памяти (%s)", key, list),
+			TitleKey: "finding.k8sNoLimits.title", TitleArgs: []any{key, list},
+			Detail:        "Без limits.memory контейнер может занять всю память узла, и ядро начнёт убивать соседние поды.",
+			DetailKey:     "finding.k8sNoLimits.detail",
+			Suggestion:    "Задайте resources.limits.memory (и requests) — в YAML объекта или блоком «контейнер».",
+			SuggestionKey: "finding.k8sNoLimits.suggestion",
+		})
+	}
+	for key, g := range latest {
+		list := keys(g.items)
+		c.add(model.Finding{
+			Rule: "k8s-image-latest", ID: "k8s-image-latest:" + key, Severity: model.SeverityLow, Service: model.ServiceK8s, Object: key,
+			Title:    fmt.Sprintf("%s: образ без версии (%s)", key, list),
+			TitleKey: "finding.k8sImageLatest.title", TitleArgs: []any{key, list},
+			Detail:        "Тег latest (или его отсутствие) — каждый перезапуск может поднять другую версию, а откат на прежнюю ревизию ничего не откатит.",
+			DetailKey:     "finding.k8sImageLatest.detail",
+			Suggestion:    "Укажите конкретную версию образа или дайджест (@sha256:…).",
+			SuggestionKey: "finding.k8sImageLatest.suggestion",
+		})
+	}
+	for _, b := range k.AdminBindings {
+		for _, sub := range b.Subjects {
+			kind, who, _ := strings.Cut(sub, ":")
+			if who == "system:masters" || (kind == "ServiceAccount" && strings.HasPrefix(who, "kube-")) {
+				continue
+			}
+			sev := model.SeverityMedium
+			if kind == "ServiceAccount" {
+				sev = model.SeverityHigh
+			}
+			c.add(model.Finding{
+				Rule: "k8s-cluster-admin", ID: "k8s-cluster-admin:" + b.Name + ":" + sub, Severity: sev, Service: model.ServiceK8s, Object: who,
+				Title:    fmt.Sprintf("%s %s — администратор кластера (%s)", kind, who, b.Name),
+				TitleKey: "finding.k8sClusterAdmin.title", TitleArgs: []any{kind, who, b.Name},
+				Detail:        "ClusterRoleBinding на cluster-admin даёт полный доступ ко всему кластеру, включая секреты всех namespace. У ServiceAccount это значит: любой, кто попал в под с этим аккаунтом, — администратор кластера.",
+				DetailKey:     "finding.k8sClusterAdmin.detail",
+				Suggestion:    "Замените на Role/RoleBinding с нужными правами в своём namespace (раздел RBAC).",
+				SuggestionKey: "finding.k8sClusterAdmin.suggestion",
+			})
+		}
+	}
+	nsList := make([]string, 0, len(podNS))
+	for ns := range podNS {
+		nsList = append(nsList, ns)
+	}
+	sort.Strings(nsList)
+	for _, ns := range nsList {
+		if slices.Contains(k.NetPolNamespaces, ns) {
+			continue
+		}
+		c.add(model.Finding{
+			Rule: "k8s-no-networkpolicy", ID: "k8s-no-networkpolicy:" + ns, Severity: model.SeverityLow, Service: model.ServiceK8s, Object: ns,
+			Title:    fmt.Sprintf("В namespace %s нет NetworkPolicy", ns),
+			TitleKey: "finding.k8sNoNetworkPolicy.title", TitleArgs: []any{ns},
+			Detail:        "Без NetworkPolicy любой под кластера может подключиться к любому поду этого namespace — взлом одного приложения открывает остальные.",
+			DetailKey:     "finding.k8sNoNetworkPolicy.detail",
+			Suggestion:    "Добавьте политику «запрет входящих по умолчанию» и разрешения для нужных связей (шаблон — в «Новом объекте»).",
+			SuggestionKey: "finding.k8sNoNetworkPolicy.suggestion",
+		})
 	}
 }

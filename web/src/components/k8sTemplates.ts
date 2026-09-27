@@ -85,6 +85,19 @@ spec:
               image: busybox:1.36
               command: ["sh", "-c", "date; echo hello"]
 `,
+  networkpolicy: (name, ns) => `apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ${name}-default-deny
+  namespace: ${ns}
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+`,
   empty: () => '',
 }
 

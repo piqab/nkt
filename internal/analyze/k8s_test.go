@@ -46,3 +46,35 @@ func TestRuleKubernetes(t *testing.T) {
 		}
 	}
 }
+
+func TestRuleK8sHygiene(t *testing.T) {
+	s := &model.Snapshot{TS: "2026-09-27T12:00:00Z", K8s: &model.K8sState{
+		Pods: []model.K8sPod{
+			{Namespace: "shop", Name: "web-abc-1", Owner: "ReplicaSet/web-abc", NoLimits: []string{"web"}, Images: []string{"nginx"}},
+			{Namespace: "shop", Name: "web-abc-2", Owner: "ReplicaSet/web-abc", NoLimits: []string{"web"}, Images: []string{"nginx"}},
+			{Namespace: "sec", Name: "db-0", Owner: "StatefulSet/db", Images: []string{"postgres:16@sha256:abc", "registry:5000/app:1.2"}},
+			{Namespace: "kube-system", Name: "x", NoLimits: []string{"x"}},
+		},
+		AdminBindings:    []model.K8sBinding{{Name: "ci", Subjects: []string{"ServiceAccount:shop/ci", "Group:system:masters", "ServiceAccount:kube-system/helm"}}},
+		NetPolNamespaces: []string{"sec"},
+	}}
+	got := map[string]string{}
+	for _, f := range Run(s) {
+		got[f.ID] = f.Severity
+	}
+	for id, sev := range map[string]string{
+		"k8s-no-limits:shop/web":                      model.SeverityLow,
+		"k8s-image-latest:shop/web":                   model.SeverityLow,
+		"k8s-cluster-admin:ci:ServiceAccount:shop/ci": model.SeverityHigh,
+		"k8s-no-networkpolicy:shop":                   model.SeverityLow,
+	} {
+		if got[id] != sev {
+			t.Errorf("%s: %q", id, got[id])
+		}
+	}
+	for _, id := range []string{"k8s-image-latest:sec/db", "k8s-no-networkpolicy:sec", "k8s-no-limits:kube-system/x", "k8s-cluster-admin:ci:Group:system:masters", "k8s-cluster-admin:ci:ServiceAccount:kube-system/helm"} {
+		if _, ok := got[id]; ok {
+			t.Errorf("лишняя %s", id)
+		}
+	}
+}

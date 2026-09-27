@@ -59,7 +59,8 @@ compose, firewall и сертификаты разбираются и сверя
   ImagePullBackOff, долгий Pending, узел NotReady, Deployment или
   StatefulSet без части реплик, висящий PVC, истекающий сертификат
   API-сервера, поды с privileged/hostNetwork, NodePort и LoadBalancer
-  мимо файрвола.
+  мимо файрвола; контейнеры без limits, образы без версии, cluster-admin
+  у ServiceAccount и людей, namespace без NetworkPolicy.
 - **Расхождение с профилем** — если к хосту применён
   [профиль](/guide/profiles), отклонения от него тоже показываются
   здесь.

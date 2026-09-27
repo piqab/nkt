@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -25,7 +26,7 @@ type K8sResult struct {
 }
 
 // K8sSummaryResources — виды одного kubectl get для сводки.
-const K8sSummaryResources = "pods,deployments.apps,statefulsets.apps,nodes,persistentvolumeclaims,services,ingresses.networking.k8s.io"
+const K8sSummaryResources = "pods,deployments.apps,statefulsets.apps,nodes,persistentvolumeclaims,services,ingresses.networking.k8s.io,clusterrolebindings.rbac.authorization.k8s.io,networkpolicies.networking.k8s.io"
 
 // k8sCertPaths — сертификат API-сервера у kubeadm и k3s.
 var k8sCertPaths = []string{
@@ -98,19 +99,29 @@ type k8sItem struct {
 	Metadata k8sMeta         `json:"metadata"`
 	Spec     json.RawMessage `json:"spec"`
 	Status   json.RawMessage `json:"status"`
+	// Raw — элемент целиком (у RBAC поля не в spec).
+	Raw json.RawMessage `json:"-"`
 }
 
 // ParseK8sSummary разбирает список kubectl get <несколько видов> -o json.
 func ParseK8sSummary(raw []byte) (*model.K8sState, error) {
 	var l struct {
-		Items []k8sItem `json:"items"`
+		Items []json.RawMessage `json:"items"`
 	}
 	if err := json.Unmarshal(raw, &l); err != nil {
 		return nil, err
 	}
+	items := make([]k8sItem, 0, len(l.Items))
+	for _, r := range l.Items {
+		var it k8sItem
+		if json.Unmarshal(r, &it) == nil {
+			it.Raw = r
+			items = append(items, it)
+		}
+	}
 	st := &model.K8sState{Pods: []model.K8sPod{}, Workloads: []model.K8sWorkload{}, Nodes: []model.K8sNode{},
 		PVCs: []model.K8sPVC{}, Services: []model.K8sService{}, Ingresses: []model.K8sIngress{}}
-	for _, it := range l.Items {
+	for _, it := range items {
 		md := it.Metadata
 		switch it.Kind {
 		case "Pod":
@@ -143,7 +154,7 @@ func ParseK8sSummary(raw []byte) (*model.K8sState, error) {
 				Unschedulable bool `json:"unschedulable"`
 			}
 			var status struct {
-				Conditions []struct{ Type, Status string } `json:"conditions"`
+				Conditions []struct{ Type, Status string }  `json:"conditions"`
 				Addresses  []struct{ Type, Address string } `json:"addresses"`
 			}
 			_ = json.Unmarshal(it.Spec, &spec)
@@ -196,6 +207,30 @@ func ParseK8sSummary(raw []byte) (*model.K8sState, error) {
 				}
 			}
 			st.Services = append(st.Services, svc)
+		case "ClusterRoleBinding":
+			var full struct {
+				RoleRef struct {
+					Kind string `json:"kind"`
+					Name string `json:"name"`
+				} `json:"roleRef"`
+				Subjects []struct {
+					Kind      string `json:"kind"`
+					Name      string `json:"name"`
+					Namespace string `json:"namespace"`
+				} `json:"subjects"`
+			}
+			_ = json.Unmarshal(it.Raw, &full)
+			if full.RoleRef.Kind == "ClusterRole" && full.RoleRef.Name == "cluster-admin" {
+				b := model.K8sBinding{Name: md.Name, Role: full.RoleRef.Name}
+				for _, sub := range full.Subjects {
+					b.Subjects = append(b.Subjects, sub.Kind+":"+strings.TrimPrefix(sub.Namespace+"/"+sub.Name, "/"))
+				}
+				st.AdminBindings = append(st.AdminBindings, b)
+			}
+		case "NetworkPolicy":
+			if !slices.Contains(st.NetPolNamespaces, md.Namespace) {
+				st.NetPolNamespaces = append(st.NetPolNamespaces, md.Namespace)
+			}
 		case "Ingress":
 			var spec struct {
 				DefaultBackend *struct {
@@ -246,9 +281,13 @@ func k8sPod(it k8sItem) model.K8sPod {
 		HostNetwork bool   `json:"hostNetwork"`
 		Containers  []struct {
 			Name            string `json:"name"`
+			Image           string `json:"image"`
 			SecurityContext *struct {
 				Privileged *bool `json:"privileged"`
 			} `json:"securityContext"`
+			Resources struct {
+				Limits map[string]any `json:"limits"`
+			} `json:"resources"`
 		} `json:"containers"`
 	}
 	var status struct {
@@ -283,6 +322,12 @@ func k8sPod(it k8sItem) model.K8sPod {
 	for _, c := range spec.Containers {
 		if c.SecurityContext != nil && c.SecurityContext.Privileged != nil && *c.SecurityContext.Privileged {
 			p.Privileged = append(p.Privileged, c.Name)
+		}
+		if _, ok := c.Resources.Limits["memory"]; !ok {
+			p.NoLimits = append(p.NoLimits, c.Name)
+		}
+		if c.Image != "" {
+			p.Images = append(p.Images, c.Image)
 		}
 	}
 	return p
