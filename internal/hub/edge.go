@@ -2,9 +2,7 @@ package hub
 
 import (
 	"context"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"net"
@@ -39,8 +37,10 @@ type EdgeSettings struct {
 	// Address — куда подключаться (хост:8444).
 	Address string `json:"address"`
 	// Domain — имя с сертификатом Let's Encrypt (адрес вебхуков).
-	Domain      string `json:"domain"`
-	TokenEnc    []byte `json:"token_enc,omitempty"`
+	Domain   string `json:"domain"`
+	TokenEnc []byte `json:"token_enc,omitempty"`
+	// CertPEM — сертификат туннеля edge: хаб доверяет ровно ему.
+	CertPEM     string `json:"cert_pem,omitempty"`
 	Fingerprint string `json:"fingerprint,omitempty"`
 	// HostID — хост хаба, на который edge поставлен (0 — вручную).
 	HostID int64 `json:"host_id,omitempty"`
@@ -142,14 +142,12 @@ func (s *Server) runEdge(ctx context.Context, st EdgeSettings) error {
 	if err != nil {
 		return err
 	}
-	conn, seen, err := edge.Dial(st.Address, string(token), st.Fingerprint, 15*time.Second)
+	if st.CertPEM == "" {
+		return msgs.Errorf("edge.noCert")
+	}
+	conn, _, err := edge.Dial(st.Address, string(token), st.CertPEM, 15*time.Second)
 	if err != nil {
 		return err
-	}
-	if st.Fingerprint == "" {
-		// Отпечаток не закреплён (настроено вручную) — запоминаем первый.
-		st.Fingerprint = seen
-		_ = s.saveEdgeSettings(ctx, st)
 	}
 	sess, err := yamux.Client(conn, yamux.DefaultConfig())
 	if err != nil {
@@ -202,7 +200,7 @@ type edgeStatusJSON struct {
 // handleEdgeStatus — GET /hub/edge.
 func (s *Server) handleEdgeStatus(w http.ResponseWriter, r *http.Request) {
 	st := s.edgeSettings(r.Context())
-	out := edgeStatusJSON{Configured: st.Address != "" && len(st.TokenEnc) > 0, Enabled: st.Enabled, Address: st.Address, Domain: st.Domain,
+	out := edgeStatusJSON{Configured: st.Address != "" && len(st.TokenEnc) > 0 && st.CertPEM != "", Enabled: st.Enabled, Address: st.Address, Domain: st.Domain,
 		Fingerprint: st.Fingerprint, HostID: st.HostID}
 	if s.edge != nil {
 		s.edge.mu.Lock()
@@ -224,11 +222,11 @@ var (
 // reset_fingerprint}: настройка вручную (edge поставлен не из хаба).
 func (s *Server) handleEdgeUpdate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Enabled          bool   `json:"enabled"`
-		Address          string `json:"address"`
-		Domain           string `json:"domain"`
-		Token            string `json:"token"`
-		ResetFingerprint bool   `json:"reset_fingerprint"`
+		Enabled bool   `json:"enabled"`
+		Address string `json:"address"`
+		Domain  string `json:"domain"`
+		Token   string `json:"token"`
+		CertPEM string `json:"cert_pem"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -261,8 +259,13 @@ func (s *Server) handleEdgeUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 		st.TokenEnc = enc
 	}
-	if req.ResetFingerprint {
-		st.Fingerprint = ""
+	if strings.TrimSpace(req.CertPEM) != "" {
+		fp, err := edge.CertInfo(strings.TrimSpace(req.CertPEM))
+		if err != nil {
+			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.badCert"))
+			return
+		}
+		st.CertPEM, st.Fingerprint = strings.TrimSpace(req.CertPEM)+"\n", fp
 	}
 	st.Enabled = req.Enabled
 	err := s.saveEdgeSettings(r.Context(), st)
@@ -461,12 +464,14 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	// Файрвол хоста: открыть 80, 443 и порт туннеля, если ufw включён.
 	_, _ = runRemote(client, "if command -v ufw >/dev/null && "+sudo+"ufw status | grep -q 'Status: active'; then "+sudo+"ufw allow 80/tcp; "+sudo+"ufw allow 443/tcp; "+sudo+"ufw allow "+EdgeTunnelPort+"/tcp; fi")
-	// Отпечаток сертификата туннеля — прямо с хоста: хаб доверяет ровно ему.
-	var fp string
+	// Сертификат туннеля — прямо с хоста по SSH: хаб доверяет ровно ему.
+	var fp, certPEM string
 	for i := 0; i < 15 && fp == ""; i++ {
 		out, err := runRemote(client, sudo+"cat /var/lib/nkt-edge/tunnel/tunnel.crt")
 		if err == nil {
-			fp = edgeFingerprintFromPEM(out)
+			if f, err := edge.CertInfo(out); err == nil {
+				fp, certPEM = f, out
+			}
 		}
 		if fp == "" && !sleepCtx(ctx, 2*time.Second) {
 			return ctx.Err()
@@ -482,7 +487,7 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil {
 		return err
 	}
-	st = EdgeSettings{Enabled: true, Address: net.JoinHostPort(host.Addr, EdgeTunnelPort), Domain: p.Domain, TokenEnc: enc, Fingerprint: fp, HostID: host.ID}
+	st = EdgeSettings{Enabled: true, Address: net.JoinHostPort(host.Addr, EdgeTunnelPort), Domain: p.Domain, TokenEnc: enc, CertPEM: certPEM, Fingerprint: fp, HostID: host.ID}
 	if err := s.saveEdgeSettings(ctx, st); err != nil {
 		return err
 	}
@@ -505,16 +510,4 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 	}
 	return msgs.Errorf("edge.notConnected", "timeout")
-}
-
-// edgeFingerprintFromPEM — отпечаток сертификата из PEM (как у edge.Fingerprint).
-func edgeFingerprintFromPEM(text string) string {
-	b, _ := pem.Decode([]byte(text))
-	if b == nil || b.Type != "CERTIFICATE" {
-		return ""
-	}
-	if _, err := x509.ParseCertificate(b.Bytes); err != nil {
-		return ""
-	}
-	return edge.Fingerprint(b.Bytes)
 }

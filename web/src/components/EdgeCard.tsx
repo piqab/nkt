@@ -160,7 +160,7 @@ function ManualModal({ st, onClose, onSaved }: { st: EdgeStatus; onClose: () => 
   const [domain, setDomain] = useState(st.domain ?? '')
   const [token, setToken] = useState('')
   const [enabled, setEnabled] = useState(st.configured ? st.enabled : true)
-  const [reset, setReset] = useState(false)
+  const [certPEM, setCertPEM] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   return (
@@ -174,11 +174,13 @@ function ManualModal({ st, onClose, onSaved }: { st: EdgeStatus; onClose: () => 
         <Checkbox checked={enabled} onChange={(ev) => setEnabled(ev.target.checked)}>
           {t('edge.enabled')}
         </Checkbox>
-        {st.fingerprint && (
-          <Checkbox checked={reset} onChange={(ev) => setReset(ev.target.checked)}>
-            {t('edge.resetFingerprint')}
-          </Checkbox>
-        )}
+        <Input.TextArea
+          rows={5}
+          className="mono small"
+          placeholder={st.fingerprint ? t('edge.certKeep') : '-----BEGIN CERTIFICATE-----'}
+          value={certPEM}
+          onChange={(ev) => setCertPEM(ev.target.value)}
+        />
         <div>
           <Button
             type="primary"
@@ -187,7 +189,7 @@ function ManualModal({ st, onClose, onSaved }: { st: EdgeStatus; onClose: () => 
               setBusy(true)
               setError(null)
               try {
-                await api('/hub/edge', { method: 'PUT', body: { enabled, address, domain, token, reset_fingerprint: reset } })
+                await api('/hub/edge', { method: 'PUT', body: { enabled, address, domain, token, cert_pem: certPEM } })
                 onSaved()
                 onClose()
               } catch (err) {

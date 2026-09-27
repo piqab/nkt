@@ -26,6 +26,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -77,6 +78,7 @@ func main() {
 		return
 	}
 	log.SetFlags(log.LstdFlags | log.LUTC)
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, nil)))
 	token := os.Getenv("EDGE_TOKEN")
 	if len(token) < 32 {
 		log.Fatal("EDGE_TOKEN must be at least 32 characters")
@@ -100,7 +102,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("tunnel certificate: %v", err)
 	}
-	log.Printf("nkt-edge %s, tunnel certificate fingerprint %s", version, fp)
+	log.Printf("nkt-edge %s, tunnel certificate fingerprint %s (for the hub: %s)", version, fp, filepath.Join(dataDir, "tunnel", "tunnel.crt"))
 	tl, err := tls.Listen("tcp", env("EDGE_TUNNEL_ADDR", ":8444"), &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13})
 	if err != nil {
 		log.Fatalf("tunnel listener: %v", err)
@@ -218,7 +220,9 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (s *server) handleHook(w http.ResponseWriter, r *http.Request) {
 	ip := clientIP(r)
 	status := http.StatusOK
-	defer func() { log.Printf("%s %s %s %d", ip, r.Method, r.URL.Path, status) }()
+	// Поля — атрибутами slog: значения из запроса журнал экранирует сам
+	// (переводы строк не подделают соседние записи).
+	defer func() { slog.Info("hook", "ip", ip, "method", r.Method, "path", r.URL.Path, "status", status) }()
 	if r.Method != http.MethodPost || !hookPath.MatchString(r.URL.Path) {
 		status = http.StatusNotFound
 		http.NotFound(w, r)

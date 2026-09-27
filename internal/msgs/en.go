@@ -646,6 +646,8 @@ var enCatalog = map[string]string{
 	"deploy.scriptFailed":                                 "script: %s",
 	"deploy.busy":                                         "a deployment of this pipeline is already running",
 	"edge.badAddress":                                     "the edge address is host:port (%q)",
+	"edge.noCert":                                         "no edge tunnel certificate — paste it in “Configure manually”",
+	"edge.badCert":                                        "this is not an nkt-edge tunnel certificate (the PEM from /var/lib/nkt-edge/tunnel/tunnel.crt is needed)",
 	"edge.badDomain":                                      "invalid domain name: %q",
 	"edge.badEmail":                                       "invalid e-mail: %q",
 	"edge.shortToken":                                     "the edge token must be at least 32 characters",

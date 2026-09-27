@@ -110,15 +110,16 @@ GitHub / GitLab / CI ──HTTPS (Let's Encrypt)──▶ VPS: nkt-edge
 - Edge holds no database, no pipeline secrets and no access to hosts: the
   hub checks the signature. A compromised VPS can only send requests the
   hub rejects without a valid signature.
-- The tunnel is TLS 1.3 with a pinned edge certificate fingerprint plus a
-  token.
+- The tunnel is TLS 1.3 plus a token; the hub trusts exactly its edge's
+  tunnel certificate (the only root of the check).
 
 **Installing from the hub:** add the VPS as an ordinary host, point a
 domain's A record (e.g. `hooks.example.com`) at it, then "Deployments" →
 nkt-edge → "Install on a host". The job uploads the program for the host's
 architecture, installs a least-privilege service (a dedicated user, only
-binding to 80 and 443), opens 80, 443 and 8444 in ufw, pins the tunnel
-certificate fingerprint and connects the hub. The pipeline's "Webhook"
+binding to 80 and 443), opens 80, 443 and 8444 in ufw, fetches the
+tunnel certificate over SSH (the hub trusts exactly it) and connects the
+hub. The pipeline's "Webhook"
 window then shows `https://hooks.example.com/hooks/…`.
 
 **Manually:** the `nkt-edge-linux-<arch>` binary from a release into
@@ -126,4 +127,6 @@ window then shows `https://hooks.example.com/hooks/…`.
 [`deploy/nkt-edge.service`](https://github.com/piqab/nkt/blob/main/deploy/nkt-edge.service),
 the settings [`deploy/edge.env.example`](https://github.com/piqab/nkt/blob/main/deploy/edge.env.example)
 into `/etc/nkt-edge/edge.env` (0600), then "Configure manually" in the hub:
-the address `host:8444`, the domain and the same `EDGE_TOKEN`.
+the address `host:8444`, the domain, the same `EDGE_TOKEN` and the tunnel
+certificate — the output of `sudo cat /var/lib/nkt-edge/tunnel/tunnel.crt`
+on the VPS.

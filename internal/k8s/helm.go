@@ -306,15 +306,22 @@ func (r HelmInstallRequest) ChartRef() string {
 	return r.RepoName + "/" + r.Chart
 }
 
-// ValuesPath — файл значений релиза в каталоге Helm nkt (остаётся для
-// следующего обновления).
-func (m *Manager) ValuesPath(namespace, release string) string {
-	return filepath.Join(m.helmDir(), "values", namespace+"__"+release+".yaml")
+// releaseFile — файл релиза в каталоге Helm nkt (values остаются для
+// следующего обновления, источник чарта — для формы обновления). Имена проверяются здесь
+// же, по правилам DNS-1123: в путь не попадёт ни «/», ни «..».
+func (m *Manager) releaseFile(sub, namespace, release, ext string) (string, bool) {
+	if !dnsLabelRe.MatchString(namespace) || !dnsLabelRe.MatchString(release) {
+		return "", false
+	}
+	return filepath.Join(m.helmDir(), sub, namespace+"__"+release+ext), true
 }
 
 // WriteValues кладёт значения релиза в файл 0600 (пусто — файл убирается).
 func (m *Manager) WriteValues(namespace, release, values string) (string, error) {
-	p := m.ValuesPath(namespace, release)
+	p, ok := m.releaseFile("values", namespace, release, ".yaml")
+	if !ok {
+		return "", msgs.Errorf("k8s.badName", namespace+"/"+release)
+	}
 	if strings.TrimSpace(values) == "" {
 		_ = os.Remove(p)
 		return "", nil
@@ -396,13 +403,12 @@ type HelmSource struct {
 	Version  string `json:"version,omitempty"`
 }
 
-func (m *Manager) sourcePath(namespace, release string) string {
-	return filepath.Join(m.helmDir(), "releases", namespace+"__"+release+".json")
-}
-
 // SaveSource запоминает репозиторий и чарт релиза.
 func (m *Manager) SaveSource(r HelmInstallRequest) {
-	p := m.sourcePath(r.Namespace, r.Release)
+	p, ok := m.releaseFile("releases", r.Namespace, r.Release, ".json")
+	if !ok {
+		return
+	}
 	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return
 	}
@@ -413,8 +419,10 @@ func (m *Manager) SaveSource(r HelmInstallRequest) {
 // Source — сохранённый источник релиза; нет — чарт из helm list.
 func (m *Manager) Source(r HelmRelease) HelmSource {
 	var src HelmSource
-	if raw, err := os.ReadFile(m.sourcePath(r.Namespace, r.Name)); err == nil && json.Unmarshal(raw, &src) == nil {
-		return src
+	if p, ok := m.releaseFile("releases", r.Namespace, r.Name, ".json"); ok {
+		if raw, err := os.ReadFile(p); err == nil && json.Unmarshal(raw, &src) == nil {
+			return src
+		}
 	}
 	return HelmSource{Chart: ChartName(r.Chart)}
 }
