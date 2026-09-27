@@ -5,6 +5,7 @@ package analyze
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -375,7 +376,7 @@ func ruleDeclaredNotListening(c *collector, s *model.Snapshot, idx *index) {
 func undeclaredListeners(s *model.Snapshot, idx *index) []model.Listener {
 	var out []model.Listener
 	for _, l := range s.Listeners {
-		if len(idx.endpointsByPort[l.Port]) > 0 {
+		if slices.ContainsFunc(idx.endpointsByPort[l.Port], func(e model.Endpoint) bool { return endpointOwns(e, l) }) {
 			continue
 		}
 		if l.Process == "docker-proxy" {
@@ -384,6 +385,34 @@ func undeclaredListeners(s *model.Snapshot, idx *index) []model.Listener {
 		out = append(out, l)
 	}
 	return out
+}
+
+// endpointOwns — сокет описан этим конфигом: порт тот же, и слушает его
+// программа того же сервиса. Иначе чужая программа на порту из конфига
+// nginx (скажем, nkt-edge на 443, пока nginx остановлен) пряталась бы как
+// «описанная». Процесс неизвестен (нет данных ss -p) — считаем описанным.
+func endpointOwns(e model.Endpoint, l model.Listener) bool {
+	if l.Process == "" {
+		return true
+	}
+	var procs []string
+	switch e.Service {
+	case model.ServiceNginx:
+		procs = []string{"nginx"}
+	case model.ServiceHAProxy:
+		procs = []string{"haproxy"}
+	case model.ServiceCaddy:
+		procs = []string{"caddy"}
+	case model.ServiceDocker:
+		procs = []string{"docker-proxy", "dockerd", "containerd"}
+	case model.ServicePodman:
+		procs = []string{"conmon", "podman", "rootlessport", "pasta", "slirp4netns"}
+	case model.ServiceLXD:
+		procs = []string{"lxd", "forkproxy"}
+	default:
+		return true
+	}
+	return slices.ContainsFunc(procs, func(p string) bool { return strings.HasPrefix(l.Process, p) })
 }
 
 // UndeclaredListeners is undeclaredListeners for callers outside this

@@ -1,7 +1,9 @@
 package api
 
 import (
+	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -269,9 +271,47 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"services":        snap.Services,
+		"services":        servicesWithPorts(snap.Services, snap.Listeners),
 		"allow_mutations": s.cfg.AllowMutations,
 	})
+}
+
+// serviceWithPorts — служба и сокеты, которые она слушает.
+type serviceWithPorts struct {
+	model.ServiceUnit
+	Ports []string `json:"ports,omitempty"`
+}
+
+// servicesWithPorts — какие порты держит каждая служба: слушатель
+// принадлежит ей по systemd-юниту процесса (так находятся и рабочие
+// процессы nginx) или по главному PID. «Остальные сервисы» показывают
+// только сокеты, которых нет в конфигах, — порт nginx на 443 виден здесь.
+func servicesWithPorts(services []model.ServiceUnit, listeners []model.Listener) []serviceWithPorts {
+	out := make([]serviceWithPorts, len(services))
+	for i, svc := range services {
+		out[i].ServiceUnit = svc
+		seen := map[string]bool{}
+		for _, l := range listeners {
+			// Известен юнит сокета — решает он; по главному PID — только
+			// сокеты без юнита.
+			var owned bool
+			if l.Unit != "" {
+				u := strings.TrimSuffix(l.Unit, ".service")
+				owned = u == strings.TrimSuffix(svc.Unit, ".service") || u == svc.Name
+			} else {
+				owned = svc.MainPID > 0 && l.PID == svc.MainPID
+			}
+			if !owned {
+				continue
+			}
+			key := l.Protocol + " " + net.JoinHostPort(l.Address, strconv.Itoa(l.Port))
+			if !seen[key] {
+				seen[key] = true
+				out[i].Ports = append(out[i].Ports, key)
+			}
+		}
+	}
+	return out
 }
 
 func (s *Server) handleContainers(w http.ResponseWriter, r *http.Request) {

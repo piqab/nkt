@@ -6,6 +6,16 @@ import type { HubHost } from '../types'
 import { Banner, Card, Modal, formatRelative } from './ui'
 import { confirmAction } from './confirm'
 
+interface DNSCheck {
+  domain: string
+  domain_ips?: string[]
+  host_ips?: string[]
+  match: boolean
+}
+
+/** Адрес хоста годится именем вебхуков, если это DNS-имя, а не IP. */
+const hostName = (addr: string) => (/^[a-z0-9.-]+\.[a-z]{2,63}$/i.test(addr) && !/^[\d.]+$/.test(addr) ? addr.toLowerCase() : '')
+
 interface EdgeStatus {
   configured: boolean
   enabled: boolean
@@ -133,6 +143,8 @@ function InstallModal({ onClose, onStarted }: { onClose: () => void; onStarted: 
   const [email, setEmail] = useState('')
   const [github, setGithub] = useState(false)
   const [proxyPort, setProxyPort] = useState('')
+  const [check, setCheck] = useState<DNSCheck | null>(null)
+  const [checking, setChecking] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const list = (hosts.data ?? []).filter((h) => h.id > 0)
@@ -141,8 +153,57 @@ function InstallModal({ onClose, onStarted }: { onClose: () => void; onStarted: 
       <p className="small muted">{t('edge.installHint')}</p>
       {error && <Banner kind="error">{error}</Banner>}
       <div className="col" style={{ gap: '0.5rem' }}>
-        <Select size="small" showSearch placeholder={t('edge.host')} value={hostID} onChange={setHostID} options={list.map((h) => ({ value: h.id, label: `${h.name} (${h.addr})` }))} />
-        <Input size="small" placeholder="hooks.example.com" value={domain} onChange={(ev) => setDomain(ev.target.value.trim())} />
+        <Select
+          size="small"
+          showSearch
+          placeholder={t('edge.host')}
+          value={hostID}
+          onChange={(id: number) => {
+            setHostID(id)
+            setCheck(null)
+            const h = list.find((x) => x.id === id)
+            if (h && hostName(h.addr)) setDomain(hostName(h.addr))
+          }}
+          options={list.map((h) => ({ value: h.id, label: `${h.name} (${h.addr})` }))}
+        />
+        <Space.Compact size="small">
+          <Input
+            size="small"
+            placeholder="hooks.example.com"
+            value={domain}
+            onChange={(ev) => {
+              setDomain(ev.target.value.trim().toLowerCase())
+              setCheck(null)
+            }}
+          />
+          <Button
+            size="small"
+            loading={checking}
+            disabled={!hostID || !domain}
+            onClick={async () => {
+              setChecking(true)
+              setError(null)
+              try {
+                setCheck(await api<DNSCheck>('/hub/edge/check', { method: 'POST', body: { host_id: hostID, domain } }))
+              } catch (err) {
+                setError(errText(err))
+              } finally {
+                setChecking(false)
+              }
+            }}
+          >
+            {t('edge.check')}
+          </Button>
+        </Space.Compact>
+        {check && (
+          <Banner kind={check.match ? 'info' : 'error'}>
+            {check.match
+              ? t('edge.dnsMatch', { domain: check.domain, ips: (check.domain_ips ?? []).join(', ') })
+              : (check.domain_ips ?? []).length === 0
+                ? t('edge.dnsMissing', { domain: check.domain })
+                : t('edge.dnsMismatch', { domain: check.domain, ips: (check.domain_ips ?? []).join(', '), host: (check.host_ips ?? []).join(', ') || '—' })}
+          </Banner>
+        )}
         <Input size="small" placeholder={t('edge.email')} value={email} onChange={(ev) => setEmail(ev.target.value.trim())} />
         <Checkbox checked={github} onChange={(ev) => setGithub(ev.target.checked)}>
           {t('edge.githubOnly')}

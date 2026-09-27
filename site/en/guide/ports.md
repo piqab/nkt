@@ -19,7 +19,7 @@ internet.
 | `22/tcp` | managed hosts | the hub | from the hub's address |
 | `8078/tcp` | managed hosts (fallback channel) | the hub | from the hub's address |
 | `3142/tcp` | managed hosts, `127.0.0.1` | apt and containerd on the host (reverse SSH forward from the hub) | no |
-| `443/tcp`, `80/tcp` | the VPS with [nkt-edge](/en/guide/edge) | GitHub, GitLab, CI | yes — that's their purpose |
+| `443/tcp`, `80/tcp` | the VPS with [nkt-edge](/en/guide/edge) | GitHub, GitLab, CI; 80 — certbot (Let's Encrypt) | yes — that's their purpose |
 | `8444/tcp` | the VPS with nkt-edge | the hub (tunnel) | from the hub's address; may be open to all — login by token |
 | `51820/udp` | cluster hosts on WireGuard | neighboring cluster hosts | between the cluster hosts |
 | `6443`, `80`, `443` | a host with a cluster (DNAT) | cluster clients | optional, "expose" |

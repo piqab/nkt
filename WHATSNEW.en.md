@@ -8,6 +8,32 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.31 — 2026-09-27
+
+- **nkt-edge: certbot issues the certificate during installation.**
+  Instead of issuing "on the first request", the install job installs
+  certbot and issues a Let's Encrypt certificate in standalone mode (no
+  nginx needed). If port 80 is held by a service (e.g. nginx), certbot
+  stops it for a few seconds during issuance and renewal. `certbot.timer`
+  renews it, and edge picks up the new certificate by itself without a
+  restart; it is also visible on the host's "Certificates" page.
+- **Name ↔ IP check.** The webhook name is taken from the host address in
+  the hub; the "check the name" button and the job itself compare the A
+  record with the VPS addresses. On a mismatch the installation stops with
+  an explanation instead of failing at certificate issuance.
+- **A check at the end of installation:** the hub requests
+  `https://name/healthz` the way GitHub will and logs the result.
+- A stray nkt-edge instance (started by hand, left from an earlier
+  install) holding the ports is now found before installing — with its
+  PID and how to stop it. The nkt-edge service runs as the `nkt-edge`
+  system user; "Remove from VPS" removes it and the certificate too.
+- **"Services": a "Ports" column.** Every service shows the sockets it
+  listens on — now you can see who holds 80 or 443.
+- **"Other services"** no longer hide another program on a port from the
+  nginx config: a socket counts as described only if nginx itself
+  (haproxy, Caddy, containers) holds it. Before, e.g. nkt-edge on 443 with
+  nginx installed showed only as port 8444.
+
 ## v1.11.30 — 2026-09-27
 
 - **nkt-edge on a VPS that already runs a web server.** If 443 was taken

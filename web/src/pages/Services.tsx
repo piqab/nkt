@@ -296,6 +296,22 @@ export default function Services({ me }: { me: Me }) {
       ),
     },
     { title: t('services.colAutostart'), key: 'enabled', render: (_, s) => <span className="small">{s.enabled || '—'}</span> },
+    {
+      title: t('services.colPorts'),
+      key: 'ports',
+      render: (_, s) =>
+        s.ports?.length ? (
+          <div className="small mono">
+            {s.ports.map((p) => (
+              <div key={p}>
+                <Sensitive>{p}</Sensitive>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <span className="small muted">—</span>
+        ),
+    },
     { title: 'PID', key: 'main_pid', align: 'right', render: (_, s) => <span className="small">{s.main_pid || '—'}</span> },
     {
       title: t('services.colMemory'),
