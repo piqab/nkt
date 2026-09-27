@@ -642,3 +642,4 @@
 - `9b6517b` Kubernetes: объекты кластера по разделам, Custom Resources, общий фильтр namespace, секреты с аудитом
 - `28bf67c` Kubernetes: действия с объектами — describe, журнал и консоль пода, масштабирование, rollout, CronJob, cordon/drain, namespaces
 - `50efaae` Kubernetes: YAML объектов — kubectl diff и apply, история версий k8s:// с откатом, новый объект из шаблонов
+- `829a747` Kubernetes: находки по кластеру, Kubernetes на карте ресурсов, kubectl top в таблицах, ИИ у событий
