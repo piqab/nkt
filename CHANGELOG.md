@@ -641,3 +641,4 @@
 - `9222fec` TODO: план Android-приложения до паритета с вебом и отложенное из обсуждений
 - `9b6517b` Kubernetes: объекты кластера по разделам, Custom Resources, общий фильтр namespace, секреты с аудитом
 - `28bf67c` Kubernetes: действия с объектами — describe, журнал и консоль пода, масштабирование, rollout, CronJob, cordon/drain, namespaces
+- `50efaae` Kubernetes: YAML объектов — kubectl diff и apply, история версий k8s:// с откатом, новый объект из шаблонов
