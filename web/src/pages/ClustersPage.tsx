@@ -5,6 +5,7 @@ import { DeleteOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { HubManifestsCard } from '../components/HubManifests'
+import { ClustersFindingsCard, HelmMultiModal } from '../components/HubClustersMulti'
 import type { HubHost, Job, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Modal, formatBytesShort, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
@@ -54,6 +55,7 @@ const cell: CSSProperties = { display: 'flex', flexDirection: 'column', gap: '0.
 export default function ClustersPage({ me }: { me: Me }) {
   const { t } = useTranslation()
   const [creating, setCreating] = useState(false)
+  const [helmMulti, setHelmMulti] = useState(false)
   const [hubJob, setHubJob] = useState<Job | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [tick, setTick] = useState(0)
@@ -75,9 +77,12 @@ export default function ClustersPage({ me }: { me: Me }) {
           <InfoHint>{t('clusters.pageHint')}</InfoHint>
         </h1>
         {me.is_admin && (
-          <Button type="primary" onClick={() => setCreating(true)}>
-            {t('clusters.newMulti')}
-          </Button>
+          <div className="row" style={{ gap: '0.5rem' }}>
+            <Button onClick={() => setHelmMulti(true)}>{t('helmMulti.button')}</Button>
+            <Button type="primary" onClick={() => setCreating(true)}>
+              {t('clusters.newMulti')}
+            </Button>
+          </div>
         )}
       </div>
       <Banner kind="warn">{t('clusters.experimental')}</Banner>
@@ -88,7 +93,17 @@ export default function ClustersPage({ me }: { me: Me }) {
       )}
       <ClustersCard key={tick} onOpenJob={(id) => void openHubJob(id)} onChanged={() => setTick((n) => n + 1)} showEmpty />
       <ClusterImagesCard canEdit={me.is_admin} />
+      {me.is_admin && <ClustersFindingsCard />}
       {me.is_admin && <HubManifestsCard />}
+      {helmMulti && (
+        <HelmMultiModal
+          onClose={() => setHelmMulti(false)}
+          onStarted={(id) => {
+            setHelmMulti(false)
+            void openHubJob(id)
+          }}
+        />
+      )}
       {creating && (
         <MultiClusterModal
           onClose={() => setCreating(false)}

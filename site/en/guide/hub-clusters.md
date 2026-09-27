@@ -62,6 +62,11 @@ into the cache and brings up the libvirt network right away.
 
 ## What else the section does
 
+- **Kubernetes findings across clusters** — a summary from every control
+  plane.
+- **Helm to clusters** — one release into the chosen clusters (or the
+  clusters of a host group) by a hub job, in turn, with a per-cluster
+  outcome.
 - **Cluster upgrade** — "Upgrade" on a cluster: a version, then node by
   node (control planes first) cordon, drain, the upgrade, waiting for
   Ready, uncordon; on an error the job stops and continues from the same

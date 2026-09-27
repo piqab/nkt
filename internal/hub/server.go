@@ -290,6 +290,8 @@ func (s *Server) Handler() http.Handler {
 					r.Get("/hub/k8s/manifests/{id}/versions", s.handleManifestVersions)
 					r.Delete("/hub/k8s/manifests/{id}", s.handleManifestDelete)
 					r.Post("/hub/k8s/manifests/diff", s.handleManifestDiff)
+					r.Get("/hub/k8s/findings", s.handleClustersFindings)
+					r.Post("/hub/k8s/helm/install", s.handleHelmMulti)
 					r.Post("/hub/k8s/manifests/blocks", s.handleManifestBlocks)
 					r.Post("/hub/k8s/manifests/apply", s.handleManifestApply)
 
