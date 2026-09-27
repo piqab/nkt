@@ -162,3 +162,57 @@ func (s *Server) handlePortForwardDelete(w http.ResponseWriter, r *http.Request)
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// handleK8sResources — GET /k8s/resources?kind=deployments&namespace=…:
+// объекты вида (в том числе cr:<plural>.<group>) в строках таблицы.
+func (s *Server) handleK8sResources(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	res, err := s.k8sManager().Resources(r.Context(), q.Get("kind"), q.Get("namespace"))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
+// handleK8sCRDs — GET /k8s/crds: пользовательские виды кластера.
+func (s *Server) handleK8sCRDs(w http.ResponseWriter, r *http.Request) {
+	list, err := s.k8sManager().CRDs(r.Context())
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"crds": list})
+}
+
+// handleK8sConfigMapData — GET /k8s/configmaps/data?namespace=&name=.
+func (s *Server) handleK8sConfigMapData(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	data, err := s.k8sManager().Data(r.Context(), "configmaps", q.Get("namespace"), q.Get("name"))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data})
+}
+
+// handleK8sSecretReveal — POST /k8s/secrets/reveal {namespace, name}:
+// значения секрета администратору, с записью в аудит.
+func (s *Server) handleK8sSecretReveal(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Namespace string `json:"namespace"`
+		Name      string `json:"name"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	data, err := s.k8sManager().Data(r.Context(), "secrets", req.Namespace, req.Name)
+	user := auth.Username(r.Context())
+	s.db.Audit(r.Context(), user, "k8s.secret.reveal", req.Namespace+"/"+req.Name, auditResult(err), errText(err))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"data": data})
+}

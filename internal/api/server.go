@@ -279,6 +279,9 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/k8s/join", s.handleK8sJoin)
 			r.Get("/k8s/kubeconfig", s.handleK8sKubeconfig)
 			r.Get("/k8s/pods", s.handleK8sPods)
+			r.Get("/k8s/resources", s.handleK8sResources)
+			r.Get("/k8s/crds", s.handleK8sCRDs)
+			r.Get("/k8s/configmaps/data", s.handleK8sConfigMapData)
 			r.Get("/vm/portforward", s.handlePortForwardList)
 			r.Get("/clamav", s.handleClamStatus)
 			r.Get("/certificates", s.handleCertificates)
@@ -367,6 +370,8 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/inventory/refresh", s.handleRefresh)
 				// Проверка порта делает соединение от имени хоста — админам.
 				r.Post("/ports/probe", s.handlePortProbe)
+				// Значения секрета Kubernetes — администратору, с записью в аудит.
+				r.Post("/k8s/secrets/reveal", s.handleK8sSecretReveal)
 				// Пароль гостя — администратору, с записью в аудит.
 				r.Post("/guests/{kind}/{name}/credentials/reveal", s.handleGuestCredReveal)
 				r.Post("/files/mkdir", s.handleFilesMkdir)

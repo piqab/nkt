@@ -581,6 +581,8 @@ var enCatalog = map[string]string{
 	"cmdjob.titleContainer":                               "container %s: %s",
 	"cmdjob.titleLXDImage":                                "downloading LXD image %s",
 	"cmdjob.titleGeneric":                                 "%s: %s",
+	"k8s.badKind":                                         "unknown Kubernetes object kind: %q",
+	"k8s.notFound":                                        "Kubernetes object %s not found",
 	"control.lxcCode":                                     "lxc %s %s: code %d: %s",
 	"control.lxcDeleteCode":                               "lxc delete %s: code %d: %s",
 	"control.lxcLaunchCode":                               "lxc launch %s %s: code %d: %s",

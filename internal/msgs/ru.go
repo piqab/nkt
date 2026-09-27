@@ -580,6 +580,8 @@ var ruCatalog = map[string]string{
 	"cmdjob.titleContainer":                               "контейнер %s: %s",
 	"cmdjob.titleLXDImage":                                "скачивание образа LXD %s",
 	"cmdjob.titleGeneric":                                 "%s: %s",
+	"k8s.badKind":                                         "неизвестный вид объектов Kubernetes: %q",
+	"k8s.notFound":                                        "объект Kubernetes %s не найден",
 	"control.lxcCode":                                     "lxc %s %s: код %d: %s",
 	"control.lxcDeleteCode":                               "lxc delete %s: код %d: %s",
 	"control.lxcLaunchCode":                               "lxc launch %s %s: код %d: %s",

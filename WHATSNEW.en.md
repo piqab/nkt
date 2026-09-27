@@ -8,6 +8,25 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.7 — 2026-09-27
+
+- **Kubernetes: cluster objects.** On a control plane the Kubernetes tab
+  got sections: Workloads (Deployments, StatefulSets, DaemonSets, Jobs,
+  CronJobs), pods, network (Services, Ingress), configuration (ConfigMaps,
+  Secrets), storage (PVC, PV, StorageClass), nodes, namespaces and events.
+  Every row has the key columns of its kind and a state color: replica
+  readiness, pod phase, PVC status, node Ready, event type.
+- **Custom Resources** — pick a kind from the cluster's CRDs; columns come
+  from its own `additionalPrinterColumns`, state from the Ready condition.
+- **Namespace filter** — in every section, shared by all and remembered;
+  it does not apply to cluster-scoped kinds (nodes, PV, StorageClass).
+  Plus a search by name and fields.
+- **Secrets**: the list shows key names only; values come from the
+  "reveal" button for an administrator and are recorded in the audit log.
+  ConfigMaps — via the "data" button.
+- Object actions, YAML with a diff, Helm and YAML from the hub are planned
+  (TODO.md).
+
 ## v1.11.6 — 2026-09-27
 
 - **The Android app plan is in TODO.md.** Today's assessment: the app
