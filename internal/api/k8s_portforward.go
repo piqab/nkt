@@ -310,7 +310,9 @@ func (s *Server) serveForward(w http.ResponseWriter, r *http.Request, token, res
 	}
 	if rest == "" {
 		// Без завершающей косой относительные ссылки страницы уйдут мимо.
-		http.Redirect(w, r, r.URL.Path+"/", http.StatusFound)
+		// Интерфейс даёт адреса с косой; перенаправлять сюда не станем —
+		// адрес ответа тогда зависел бы от адреса запроса.
+		http.Error(w, "add a trailing slash: /", http.StatusNotFound)
 		return
 	}
 	// Токен в адресе не должен уходить наружу даже в пределах сайта

@@ -22,9 +22,26 @@ spec:
       labels:
         app: hello-app
     spec:
+      # Без прав: не root, без повышения привилегий, seccomp по умолчанию.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: web
           image: ghcr.io/OWNER/hello-app:{{nkt.tag}}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
           ports:
             - containerPort: 8000
           readinessProbe:
@@ -36,6 +53,7 @@ spec:
               cpu: 20m
               memory: 32Mi
             limits:
+              cpu: 200m
               memory: 128Mi
 ---
 apiVersion: v1

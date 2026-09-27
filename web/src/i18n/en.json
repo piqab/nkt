@@ -3062,9 +3062,9 @@
     "email": "e-mail for Let's Encrypt (optional)",
     "githubOnly": "accept webhooks from GitHub addresses only",
     "manualTitle": "nkt-edge manually",
-    "manualHint": "Edge installed outside the hub: the tunnel address (host:8444), the webhook domain and EDGE_TOKEN from /etc/nkt-edge/edge.env. The hub pins the certificate fingerprint on the first connection — compare it with the “tunnel certificate fingerprint” line in the edge log.",
+    "manualHint": "Edge installed outside the hub: the tunnel address (host:8444), the webhook domain, EDGE_TOKEN from /etc/nkt-edge/edge.env and the tunnel certificate — the output of sudo cat /var/lib/nkt-edge/tunnel/tunnel.crt on the VPS. The hub trusts exactly this certificate.",
     "tokenKeep": "token (empty — keep)",
     "enabled": "connect to edge",
-    "resetFingerprint": "forget the fingerprint (edge reinstalled)"
+    "certKeep": "tunnel certificate (empty — keep)"
   }
 }

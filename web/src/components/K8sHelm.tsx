@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { AutoComplete, Button, Dropdown, Input, Space, Tag } from 'antd'
+import { AutoComplete, Button, Dropdown, Input, Select, Space, Tag, Tooltip } from 'antd'
 import { MoreOutlined, PlusOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { qs, useApi } from '../api'
@@ -62,7 +62,7 @@ const STATUS_COLOR: Record<string, string> = { deployed: 'success', failed: 'err
  * установка чарта из репозитория. Всё, что меняет кластер, — фоновыми
  * заданиями хоста.
  */
-export function K8sHelm({ me, namespace, namespaces }: { me: Me; namespace: string; namespaces: string[] }) {
+export function K8sHelm({ me, namespace, namespaces, onNamespace }: { me: Me; namespace: string; namespaces: string[]; onNamespace: (ns: string) => void }) {
   const { t } = useTranslation()
   const res = useApi<HelmStatus>('/k8s/helm', 30_000)
   const job = useJobLauncher(() => void res.reload())
@@ -148,9 +148,18 @@ export function K8sHelm({ me, namespace, namespaces }: { me: Me; namespace: stri
   return (
     <div className="col" style={{ gap: '0.5rem' }}>
       <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <Tooltip title={t('k8s.nsHint')}>
+          <Select
+            size="small"
+            showSearch
+            style={{ minWidth: '13rem' }}
+            value={namespace}
+            onChange={onNamespace}
+            options={[{ value: '', label: t('k8s.allNamespaces') }, ...namespaces.map((n) => ({ value: n, label: n }))]}
+          />
+        </Tooltip>
         <span className="small muted">
           {st.version} · {t('k8s.count', { count: rows.length })}
-          {namespace ? ` · ${namespace}` : ''}
         </span>
         {canMutate && (
           <Button size="small" icon={<PlusOutlined />} onClick={() => setDialog({ type: 'install' })}>

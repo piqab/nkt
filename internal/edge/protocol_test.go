@@ -4,16 +4,20 @@ import (
 	"crypto/tls"
 	"errors"
 	"net"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
 
 func startEdge(t *testing.T, token string) (string, string) {
 	t.Helper()
-	cert, fp, err := TunnelCert(t.TempDir())
+	dir := t.TempDir()
+	cert, _, err := TunnelCert(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
+	pemBytes, _ := os.ReadFile(filepath.Join(dir, "tunnel.crt"))
 	l, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13})
 	if err != nil {
 		t.Fatal(err)
@@ -32,25 +36,30 @@ func startEdge(t *testing.T, token string) (string, string) {
 			}(c)
 		}
 	}()
-	return l.Addr().String(), fp
+	return l.Addr().String(), string(pemBytes)
 }
 
 func TestHandshake(t *testing.T) {
 	token := "t0123456789abcdef0123456789abcdef"
-	addr, fp := startEdge(t, token)
-	conn, seen, err := Dial(addr, token, fp, 5*time.Second)
+	addr, certPEM := startEdge(t, token)
+	fp, err := CertInfo(certPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn, seen, err := Dial(addr, token, certPEM, 5*time.Second)
 	if err != nil || seen != fp {
-		t.Fatalf("свой токен и отпечаток: %v %s", err, seen)
+		t.Fatalf("свой сертификат: %v %s", err, seen)
 	}
 	conn.Close()
-	if _, _, err := Dial(addr, token+"x", fp, 5*time.Second); !errors.Is(err, ErrRejected) {
+	if _, _, err := Dial(addr, token+"x", certPEM, 5*time.Second); !errors.Is(err, ErrRejected) {
 		t.Errorf("чужой токен: %v", err)
 	}
-	if _, _, err := Dial(addr, token, "00"+fp[2:], 5*time.Second); !errors.Is(err, ErrFingerprint) {
-		t.Errorf("подменённый сертификат: %v", err)
+	_, otherPEM := startEdge(t, token)
+	if _, _, err := Dial(addr, token, otherPEM, 5*time.Second); err == nil {
+		t.Error("чужой сертификат принят")
 	}
-	if _, seen, err := Dial(addr, token, "", 5*time.Second); err != nil || seen != fp {
-		t.Errorf("без закреплённого отпечатка: %v", err)
+	if _, _, err := Dial(addr, token, "", 5*time.Second); err == nil {
+		t.Error("без сертификата принят")
 	}
 }
 
@@ -63,5 +72,11 @@ func TestTunnelCertStable(t *testing.T) {
 	_, b, _ := TunnelCert(dir)
 	if a != b {
 		t.Error("отпечаток меняется между запусками")
+	}
+	// Сертификат прежнего вида (не PEM с именем nkt-edge) пересоздаётся.
+	_ = os.WriteFile(filepath.Join(dir, "tunnel.crt"), []byte("old"), 0o644)
+	_, c, err := TunnelCert(dir)
+	if err != nil || c == a {
+		t.Errorf("пересоздание: %v", err)
 	}
 }

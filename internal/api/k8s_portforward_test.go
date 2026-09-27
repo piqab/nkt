@@ -25,12 +25,12 @@ func TestPortForwardProxy(t *testing.T) {
 	local, _ := strconv.Atoi(u.Port())
 
 	s := &Server{}
-	s.pf.sessions = map[string]*pfSession{"tok": {Token: "tok", cmd: &exec.Cmd{}, LastUsed: time.Now(), proxy: pfProxy(local, 80)}}
+	s.pf.sessions = map[string]*pfSession{"0123456789abcdef0123456789abcdef": {Token: "0123456789abcdef0123456789abcdef", cmd: &exec.Cmd{}, LastUsed: time.Now(), proxy: pfProxy(local, 80)}}
 	r := chi.NewRouter()
 	r.HandleFunc("/api/k8s/pf/{token}", s.handleK8sPortForwardProxy)
 	r.HandleFunc("/api/k8s/pf/{token}/*", s.handleK8sPortForwardProxy)
 
-	req := httptest.NewRequest("GET", "/api/k8s/pf/tok/static/app.js?v=1", nil)
+	req := httptest.NewRequest("GET", "/api/k8s/pf/0123456789abcdef0123456789abcdef/static/app.js?v=1", nil)
 	req.AddCookie(&http.Cookie{Name: "nkt_session", Value: "secret"})
 	rec := httptest.NewRecorder()
 	r.ServeHTTP(rec, req)
@@ -41,9 +41,9 @@ func TestPortForwardProxy(t *testing.T) {
 		t.Errorf("заголовки: %v", rec.Header())
 	}
 	rec = httptest.NewRecorder()
-	r.ServeHTTP(rec, httptest.NewRequest("GET", "/api/k8s/pf/tok", nil))
-	if rec.Code != http.StatusFound || rec.Header().Get("Location") != "/api/k8s/pf/tok/" {
-		t.Errorf("редирект: %d %v", rec.Code, rec.Header())
+	r.ServeHTTP(rec, httptest.NewRequest("GET", "/api/k8s/pf/0123456789abcdef0123456789abcdef", nil))
+	if rec.Code != http.StatusNotFound || rec.Header().Get("Location") != "" {
+		t.Errorf("без косой: %d %v", rec.Code, rec.Header())
 	}
 	rec = httptest.NewRecorder()
 	r.ServeHTTP(rec, httptest.NewRequest("GET", "/api/k8s/pf/other/", nil))
@@ -64,20 +64,20 @@ func TestPortForwardOwnOrigin(t *testing.T) {
 	u, _ := url.Parse(up.URL)
 	local, _ := strconv.Atoi(u.Port())
 	s := &Server{}
-	s.pf.sessions = map[string]*pfSession{"tok": {Token: "tok", cmd: &exec.Cmd{}, LastUsed: time.Now(), proxy: pfProxy(local, 80)}}
+	s.pf.sessions = map[string]*pfSession{"0123456789abcdef0123456789abcdef": {Token: "0123456789abcdef0123456789abcdef", cmd: &exec.Cmd{}, LastUsed: time.Now(), proxy: pfProxy(local, 80)}}
 	h := s.ForwardHandler()
-	req := httptest.NewRequest("GET", "/f/tok/app/", nil)
+	req := httptest.NewRequest("GET", "/f/0123456789abcdef0123456789abcdef/app/", nil)
 	req.Header.Set("Cookie", "nkt_session=admin; sid=1")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, req)
-	if rec.Code != 200 || gotCookie != "sid=1" || gotPrefix != "/f/tok" {
+	if rec.Code != 200 || gotCookie != "sid=1" || gotPrefix != "/f/0123456789abcdef0123456789abcdef" {
 		t.Fatalf("code %d cookie %q prefix %q", rec.Code, gotCookie, gotPrefix)
 	}
 	if rec.Header().Get("Content-Security-Policy") != "" {
 		t.Error("песочница на своём origin")
 	}
 	sc := rec.Header().Values("Set-Cookie")
-	if len(sc) != 1 || sc[0] != "sid=1; HttpOnly; Path=/f/tok/" {
+	if len(sc) != 1 || sc[0] != "sid=1; HttpOnly; Path=/f/0123456789abcdef0123456789abcdef/" {
 		t.Errorf("Set-Cookie: %v", sc)
 	}
 }

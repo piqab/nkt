@@ -645,6 +645,8 @@ var ruCatalog = map[string]string{
 	"deploy.scriptFailed":                                 "сценарий: %s",
 	"deploy.busy":                                         "выкладка этого конвейера уже идёт",
 	"edge.badAddress":                                     "адрес edge — хост:порт (%q)",
+	"edge.noCert":                                         "нет сертификата туннеля edge — вставьте его в «Настроить вручную»",
+	"edge.badCert":                                        "это не сертификат туннеля nkt-edge (нужен PEM из /var/lib/nkt-edge/tunnel/tunnel.crt)",
 	"edge.badDomain":                                      "недопустимое доменное имя: %q",
 	"edge.badEmail":                                       "недопустимый e-mail: %q",
 	"edge.shortToken":                                     "токен edge — не короче 32 знаков",

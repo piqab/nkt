@@ -3,7 +3,7 @@
 // передаёт их хабу, когда сам хаб за NAT и открывать его наружу не нужно.
 //
 // Соединение устанавливает хаб: TLS до edge (сертификат edge самоподписан,
-// хаб запоминает его отпечаток при первом подключении и дальше сверяет),
+// хаб доверяет ровно ему — он единственный корень в проверке),
 // затем строка «NKTEDGE <версия> <токен>», ответ «OK <версия>», и поверх —
 // yamux. Запросы идут в обратную сторону: edge открывает поток на каждый
 // вебхук, хаб отвечает на нём обычным HTTP. Через туннель хаб обслуживает
@@ -38,7 +38,7 @@ import (
 // Version — версия протокола туннеля.
 const Version = 1
 
-// ErrFingerprint — сертификат edge не тот, что запомнил хаб.
+// ErrFingerprint — сертификат edge не тот, которому доверяет хаб.
 var ErrFingerprint = errors.New("edge certificate fingerprint mismatch")
 
 // ErrRejected — edge отверг токен или версию.
@@ -50,28 +50,29 @@ func Fingerprint(der []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// Dial — сторона хаба: TLS, сверка отпечатка (пусто — принять и вернуть
-// увиденный), рукопожатие. Возвращает соединение, готовое к yamux.
-func Dial(addr, token, fingerprint string, timeout time.Duration) (net.Conn, string, error) {
+// TunnelName — имя в сертификате туннеля edge: хаб проверяет его штатно,
+// доверяя ровно этому сертификату (он — единственный корень).
+const TunnelName = "nkt-edge"
+
+// Dial — сторона хаба: TLS с проверкой сертификата edge по переданному
+// PEM (самоподписанный сертификат — единственный доверенный корень, имя —
+// TunnelName), затем рукопожатие. Возвращает соединение, готовое к yamux,
+// и отпечаток сертификата.
+func Dial(addr, token, certPEM string, timeout time.Duration) (net.Conn, string, error) {
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM([]byte(certPEM)) {
+		return nil, "", ErrFingerprint
+	}
 	d := &net.Dialer{Timeout: timeout}
 	conn, err := tls.DialWithDialer(d, "tcp", addr, &tls.Config{
-		// Доверие — отпечатком, а не цепочкой: сертификат самоподписан.
-		InsecureSkipVerify: true, //nolint:gosec // проверка отпечатка ниже
-		MinVersion:         tls.VersionTLS13,
+		RootCAs:    pool,
+		ServerName: TunnelName,
+		MinVersion: tls.VersionTLS13,
 	})
 	if err != nil {
 		return nil, "", err
 	}
-	certs := conn.ConnectionState().PeerCertificates
-	if len(certs) == 0 {
-		conn.Close()
-		return nil, "", ErrFingerprint
-	}
-	seen := Fingerprint(certs[0].Raw)
-	if fingerprint != "" && subtle.ConstantTimeCompare([]byte(seen), []byte(strings.ToLower(fingerprint))) != 1 {
-		conn.Close()
-		return nil, seen, ErrFingerprint
-	}
+	seen := Fingerprint(conn.ConnectionState().PeerCertificates[0].Raw)
 	_ = conn.SetDeadline(time.Now().Add(timeout))
 	if _, err := fmt.Fprintf(conn, "NKTEDGE %d %s\n", Version, token); err != nil {
 		conn.Close()
@@ -88,6 +89,23 @@ func Dial(addr, token, fingerprint string, timeout time.Duration) (net.Conn, str
 	}
 	_ = conn.SetDeadline(time.Time{})
 	return conn, seen, nil
+}
+
+// CertInfo — отпечаток сертификата туннеля из PEM; ошибка — не сертификат
+// или не тот (без имени TunnelName).
+func CertInfo(certPEM string) (string, error) {
+	b, _ := pem.Decode([]byte(certPEM))
+	if b == nil || b.Type != "CERTIFICATE" {
+		return "", ErrFingerprint
+	}
+	cert, err := x509.ParseCertificate(b.Bytes)
+	if err != nil {
+		return "", err
+	}
+	if err := cert.VerifyHostname(TunnelName); err != nil {
+		return "", err
+	}
+	return Fingerprint(cert.Raw), nil
 }
 
 // Accept — сторона edge: проверка строки хаба. Ответ пишется здесь же.
@@ -139,6 +157,12 @@ func readLine(conn net.Conn) (string, error) {
 // перезапусками — иначе хаб перестал бы ему доверять).
 func TunnelCert(dir string) (tls.Certificate, string, error) {
 	certPath, keyPath := filepath.Join(dir, "tunnel.crt"), filepath.Join(dir, "tunnel.key")
+	if raw, err := os.ReadFile(certPath); err == nil {
+		if _, err := CertInfo(string(raw)); err != nil {
+			// Сертификат прежнего вида (без имени TunnelName) — новый.
+			_ = os.Remove(certPath)
+		}
+	}
 	if _, err := os.Stat(certPath); err != nil {
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return tls.Certificate{}, "", err
@@ -150,11 +174,15 @@ func TunnelCert(dir string) (tls.Certificate, string, error) {
 		serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
 		tmpl := &x509.Certificate{
 			SerialNumber: serial,
-			Subject:      pkix.Name{CommonName: "nkt-edge tunnel"},
-			NotBefore:    time.Now().Add(-time.Hour),
-			NotAfter:     time.Now().AddDate(20, 0, 0),
-			KeyUsage:     x509.KeyUsageDigitalSignature,
-			ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+			Subject:      pkix.Name{CommonName: TunnelName},
+			DNSNames:     []string{TunnelName},
+			// Сам себе корень: хаб кладёт его в RootCAs.
+			IsCA:                  true,
+			BasicConstraintsValid: true,
+			NotBefore:             time.Now().Add(-time.Hour),
+			NotAfter:              time.Now().AddDate(20, 0, 0),
+			KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
+			ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
 		}
 		der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
 		if err != nil {

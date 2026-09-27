@@ -8,6 +8,30 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.27 — 2026-09-27
+
+- **Helm:** the tab got a namespace selector — the same shared filter as in
+  the other cluster object sections.
+- **The nkt-edge tunnel without disabling TLS verification.** The hub
+  trusts exactly its edge's tunnel certificate — it goes in as the only
+  root of the check. When installing from the hub the certificate is
+  fetched over SSH; for a manual setup it is pasted into the window
+  (`sudo cat /var/lib/nkt-edge/tunnel/tunnel.crt`). There is no more
+  trust on first connection. An edge installed by version 1.11.24
+  recreates its certificate on restart — reinstall it from the hub or
+  paste the new certificate into "Configure manually".
+- **The nkt-edge log** is written as fields (`log/slog`): values from the
+  request are escaped, a fake log line cannot be planted through the
+  path.
+- **Helm values and source files** are named after validated namespace and
+  release names (DNS-1123) — the path cannot leave nkt's Helm directory.
+- **Port forward:** an address without the trailing slash gets a 404 with
+  a hint instead of a redirect (the UI links have the slash anyway).
+- **The `examples/hello-app` example:** a manifest with a `securityContext`
+  (non-root, no privilege escalation, all capabilities dropped, read-only
+  root filesystem, seccomp) and a CPU limit — trivy is clean on the
+  example.
+
 ## v1.11.26 — 2026-09-27
 
 - **The `examples/hello-app` deployment example.** A small Python

@@ -3064,9 +3064,9 @@
     "email": "e-mail для Let's Encrypt (необязательно)",
     "githubOnly": "принимать вебхуки только с адресов GitHub",
     "manualTitle": "nkt-edge вручную",
-    "manualHint": "Edge поставлен не из хаба: адрес туннеля (хост:8444), домен вебхуков и EDGE_TOKEN из /etc/nkt-edge/edge.env. Отпечаток сертификата хаб запомнит при первом подключении — сверьте его со строкой «tunnel certificate fingerprint» в журнале edge.",
+    "manualHint": "Edge поставлен не из хаба: адрес туннеля (хост:8444), домен вебхуков, EDGE_TOKEN из /etc/nkt-edge/edge.env и сертификат туннеля — вывод sudo cat /var/lib/nkt-edge/tunnel/tunnel.crt на VPS. Хаб доверяет ровно этому сертификату.",
     "tokenKeep": "токен (пусто — не менять)",
     "enabled": "подключаться к edge",
-    "resetFingerprint": "забыть отпечаток (edge переустановлен)"
+    "certKeep": "сертификат туннеля (пусто — не менять)"
   }
 }
