@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.21 — 2026-09-27
+
+- For developers: the job cancellation test sometimes hung in a full
+  `go test ./...` run — the "job started" signal was lost when the runner
+  got there before the test. It did not affect nkt itself.
+
 ## v1.11.20 — 2026-09-27
 
 - **Kubernetes upgrades.** The host's Kubernetes card has "Upgrade": the
