@@ -29,7 +29,7 @@ const (
 	remoteDataDir     = "/var/lib/netknownsthat"
 )
 
-// sudoersDropIn is the sudoers file HUB.md tells an operator to create by
+// sudoersDropIn is the sudoers file the docs tell an operator to create by
 // hand for a non-root SSH user's NOPASSWD access — the one file
 // RemoveSudoAccess is willing to delete. A NOPASSWD rule set up any other
 // way (a different file, a direct /etc/sudoers edit) is left alone: this

@@ -43,6 +43,8 @@ SCREENS = [
     ('lxd', 'host', '/containers', "tabStart('LXD')"),
     ('lxd-config', 'host', '/containers', "tabStart('LXD'); await sleep(1200); document.querySelector('tr button[aria-label=\"' + pick({ru: 'Конфигурация', en: 'Configuration'}) + '\"]')?.click()"),
     ('kubernetes', 'host', '/containers', "tabStart('Kubernetes')"),
+    ('k8s-helm', 'host', '/containers', "tabStart('Kubernetes'); await sleep(2500); tab('Helm'); await sleep(1500); document.querySelector('.ant-tabs-tab-active')?.scrollIntoView({block: 'start'})"),
+    ('k8s-forward', 'host', '/containers', "tabStart('Kubernetes'); await sleep(2500); tab(pick({ru: 'Сеть', en: 'Network'})); await sleep(1500); document.querySelector('button[aria-label=\"' + pick({ru: 'Действия', en: 'Actions'}) + '\"]')?.click(); await sleep(700); clickText('.ant-dropdown:not(.ant-dropdown-hidden) [role=menuitem]', new RegExp('^' + pick({ru: 'Открыть в браузере', en: 'Open in the browser'})))"),
     ('profiles', 'host', '/profiles', ''),
     ('configs', 'host', '/configs', ''),
     ('configs-editor', 'host', '/configs', "clickText('button', /^\\/etc\\/nginx\\/nginx\\.conf/)"),
@@ -59,6 +61,8 @@ SCREENS = [
     ('hub-scripts', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/)"),
     ('hub-script-scheme', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/); await sleep(800); tab({ru: 'Схема', en: 'Scheme'})"),
     ('hub-about', 'hub', '/', "menu({ru: 'О системе', en: 'About'})"),
+    ('deployments', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'})"),
+    ('deploy-edge', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Вебхук', en: 'Webhook'}) + '$')); await sleep(1200); clickText('.ant-modal .ant-tabs-tab-btn, .ant-modal .ant-segmented-item-label, .ant-modal button', new RegExp('^' + pick({ru: 'Через edge', en: 'Via edge'})))"),
 ]
 
 # Помощники, доступные действию: клик по пункту меню/вкладке/тексту.

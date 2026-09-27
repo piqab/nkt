@@ -27,14 +27,14 @@ title: Командная строка и настройка
 Всё, что видно в интерфейсе, доступно как JSON API с той же
 авторизацией: `POST /api/auth/login` → cookie сессии, дальше
 `GET /api/overview`, `/api/findings`, `/api/services`… Через хаб — те же
-пути с приставкой `/api/hosts/{id}/`.
+пути с приставкой `/api/hosts/{id}/`. Все группы путей и пример на curl —
+в [справочнике API](/guide/reference-api).
 
 ## Настройка
 
 Каждая настройка — переменная окружения `NKT_*` в
-`/etc/netknownsthat/nkt.env`; полный список с пояснениями — в
-[deploy/nkt.env.example](https://github.com/piqab/nkt/blob/main/deploy/nkt.env.example).
-Главное:
+`/etc/netknownsthat/nkt.env`; полный список с умолчаниями — в
+[справочнике настройки](/guide/reference-config). Главное:
 
 | Переменная | Значение |
 |---|---|
@@ -50,5 +50,5 @@ title: Командная строка и настройка
 | `NKT_AUTO_RENEW_CERTS` | автопродление сертификатов certbot |
 | `NKT_SCHEDULER_ENABLED` | фоновые проверки и сбор метрик |
 
-Хаб настраивается так же — через `hub.env`, переменные `NKT_HUB_*`
-описаны в [HUB.md](https://github.com/piqab/nkt/blob/main/HUB.md#6-настройка-переменные-окружения).
+Хаб настраивается так же — через `hub.env`, переменные `NKT_HUB_*` —
+в [справочнике](/guide/reference-config#хаб).

@@ -64,8 +64,7 @@ What is checked:
 - **Profile drift** — when a [profile](/en/guide/profiles) is applied to
   the host, deviations from it show up here too.
 
-The full list of rules with their codes is in the
-[README](https://github.com/piqab/nkt/blob/main/README.md).
+The full list of rules with their codes is [below](#rules-and-codes).
 
 ## Vulnerabilities
 
@@ -117,3 +116,53 @@ A Kubernetes cluster (on a control plane) has its own columns: Ingress →
 Service → pods → cluster node, and the node is linked to the host machine
 it runs on. A service with no pods and an Ingress pointing at a missing
 service are highlighted.
+
+## Rules and codes
+
+Every finding comes with an explanation, a link to the file and line and
+a concrete action. The codes are visible in the API (`/api/findings`) and
+in `nkt scan`.
+
+**Network and firewall**
+
+| Rule | Severity | What it finds |
+|---|---|---|
+| `port-conflict` | high | Two services declare the same port on overlapping addresses |
+| `declared-not-listening` | high | A port is described in a config, but nothing is listening on it |
+| `listening-not-declared` | medium/info | A process listens on a port not described in any config |
+| `no-default-deny` | high | The INPUT policy is ACCEPT and ufw is off |
+| `public-port-blocked` | medium | A service listens on 0.0.0.0, but the firewall blocks it |
+| `docker-bypasses-firewall` | critical/high | A container publishes a port on 0.0.0.0 — DNAT bypasses INPUT and ufw |
+| `stale-firewall-rule` | low | A rule allows a port nothing is listening on |
+| `sensitive-port-public` | critical/high | Redis, PostgreSQL, MongoDB, etc. listening on all interfaces |
+
+**TLS and certificates**
+
+| Rule | Severity | What it finds |
+|---|---|---|
+| `weak-tls` | medium | TLSv1 / TLSv1.1 left in `ssl_protocols` |
+| `missing-hsts` | low | A TLS server doesn't send Strict-Transport-Security |
+| `tls-cert-missing` | high | `listen ... ssl` with no `ssl_certificate` |
+| `tls-cert-expired` / `-expiring` | critical / high-medium | Expired, or expiring within 7–30 days |
+| `tls-cert-not-yet-valid` | high | Not yet valid — usually the host's clock is wrong |
+| `tls-cert-unreadable` | high | The file a config points to can't be read |
+| `tls-cert-name-mismatch` | high | The certificate doesn't cover the name the server answers as |
+| `tls-cert-renewal-not-automatic` | medium | certbot knows about the certificate, but neither a timer nor cron will renew it |
+| `tls-cert-orphan-lineage` | high | Sits in `/etc/letsencrypt/live`, but has no renewal config |
+| `tls-cert-self-signed` / `-weak-key` / `-weak-signature` | low / medium | Self-signed, RSA shorter than 2048, or a SHA-1/MD5 signature |
+| `tls-cert-not-reloaded` | high | The socket serves a different certificate than the one in the config — the service hasn't reread the file |
+| `public-plaintext-proxy` | medium | A public HTTP listener proxies traffic with no encryption |
+
+**Pools and containers**
+
+| Rule | Severity | What it finds |
+|---|---|---|
+| `upstream-undefined` / `-orphan` | high / low | A route references a pool that doesn't exist; a pool is declared but never used |
+| `upstream-member-down` | high | A pool's local backend isn't listening on its own port |
+| `all-backends-disabled` | critical | Every server in a pool is marked down/backup |
+| `single-backend` / `backend-no-healthcheck` | info / medium | No redundancy; no health check with multiple servers |
+| `container-restarting` | high | A container stuck in a restart loop |
+| `container-not-running` / `-undeclared` / `-no-restart-policy` | medium / low / low | Declared but not running; running but not declared; no restart policy |
+| `admin-interface-open` | high/medium | haproxy's stats panel is reachable with no password |
+| `malware-*` | critical–medium | A miner in processes or a container, a pool connection, a deleted/temporary binary, ld.so.preload, cron “curl \| sh”, a unit from /tmp, a foreign SUID, blocks in /etc/hosts |
+| `docker-cli-missing` | medium | The docker daemon runs but there is no `docker` command (Debian 13: docker.io without docker-cli) |

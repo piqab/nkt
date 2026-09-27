@@ -27,14 +27,14 @@ renewal, config rollback. In English and Russian.
 Everything visible in the UI is available as a JSON API with the same
 authorization: `POST /api/auth/login` → a session cookie, then
 `GET /api/overview`, `/api/findings`, `/api/services`… Through the hub —
-the same paths prefixed with `/api/hosts/{id}/`.
+the same paths prefixed with `/api/hosts/{id}/`. All path groups and a
+curl example — in the [API reference](/en/guide/reference-api).
 
 ## Configuration
 
 Every setting is an `NKT_*` environment variable in
-`/etc/netknownsthat/nkt.env`; the full annotated list is in
-[deploy/nkt.env.example](https://github.com/piqab/nkt/blob/main/deploy/nkt.env.example).
-The essentials:
+`/etc/netknownsthat/nkt.env`; the full list with defaults is in the
+[configuration reference](/en/guide/reference-config). The essentials:
 
 | Variable | Meaning |
 |---|---|
@@ -51,5 +51,4 @@ The essentials:
 | `NKT_SCHEDULER_ENABLED` | background checks and metrics collection |
 
 The hub is configured the same way through `hub.env`; the `NKT_HUB_*`
-variables are described in
-[HUB.md](https://github.com/piqab/nkt/blob/main/HUB.md).
+variables — in the [reference](/en/guide/reference-config#hub).

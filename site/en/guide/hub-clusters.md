@@ -103,6 +103,37 @@ into the cache and brings up the libvirt network right away.
 
 Scripts do the same — `k8s create` with `nodes "hv1: cp 1, w 2; hv2: w 2;
 hv3: host w"`, `network nat|bridge|wireguard`, `version 1.34`, `image
-hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)). The
-details are in section 11 of
-[HUB.md](https://github.com/piqab/nkt/blob/main/HUB.md).
+hub:<file>`, `endpoint ADDRESS` ([Scripts](/en/guide/hub-scripts)).
+
+## Installation details
+
+- **kubeadm** installs packages from `pkgs.k8s.io` of the chosen branch;
+  the branch is recorded in the cluster, and workers added later get the
+  same one. Old branches like v1.31 don't work on Debian 13: `sqv`
+  rejects their signature as outdated.
+- **containerd** on a machine from a cloud image is installed as a
+  distribution package; an existing one on a "bare-metal" host (e.g.
+  Docker's `containerd.io`) isn't reinstalled — CRI and `SystemdCgroup`
+  are enabled on it, the previous config stays in `config.toml.nkt-bak`,
+  Docker containers are not stopped.
+- **Cilium** — after the control plane starts, the `cilium` CLI (latest
+  stable, checksum-verified) is installed and `cilium install` runs;
+  "replace kube-proxy" — `--disable-kube-proxy` for k3s,
+  `--skip-phases=addon/kube-proxy` for kubeadm.
+- **Expose** — DNAT from host ports (`6443`, `80`, `443`, any can be
+  changed or cleared) to the control plane: its own `NKT-PF` chains, the
+  `nkt-portforward.service` unit restores them on boot. The kubeconfig
+  then points to the host and the chosen API port.
+- **WireGuard**: interface `nktwg<N>` with address `10.200.<N>.<i>/24`,
+  machine network `10.<100+N>.<i>.0/24`; `PostUp` opens the UDP port,
+  allows FORWARD through the tunnel and removes libvirt masquerading
+  between machine subnets — nodes see each other by their real
+  addresses. Before creating machines the hub checks every pair of hosts
+  over the tunnel; without a handshake the log says "UDP 51820 is closed
+  or the address is wrong".
+- **Bridge**: a machine's address is found through `qemu-guest-agent`,
+  which cloud-init installs on first boot.
+- The creation job is a hub job: machines are created the same way as
+  "New machine", then the role install, the token, joining the other
+  nodes, waiting for `Ready`, the port forward and the kubeconfig. Retry
+  API: `POST /api/jobs/{id}/retry`, `POST /api/hub/clusters/{id}/retry`.

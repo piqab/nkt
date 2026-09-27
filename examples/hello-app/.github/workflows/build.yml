@@ -2,7 +2,7 @@
 #
 # push в main  → тесты → образ ghcr.io/<владелец>/hello-app:<короткий коммит>
 # тег v1.2.3   → тесты → образ ghcr.io/<владелец>/hello-app:v1.2.3
-# затем — вебхук конвейера хаба с этим тегом (подпись nkt, см. README).
+# затем — вебхук конвейера хаба с этим тегом (подпись nkt, scripts/nkt-hook.sh).
 #
 # Секреты репозитория (Settings → Secrets and variables → Actions):
 #   NKT_HOOK_URL     адрес вебхука из окна «Вебхук» конвейера
@@ -54,13 +54,5 @@ jobs:
         if: ${{ env.NKT_HOOK_URL != '' }}
         env:
           NKT_HOOK_SECRET: ${{ secrets.NKT_HOOK_SECRET }}
-          TAG: ${{ steps.tag.outputs.tag }}
-        run: |
-          # Ветка конвейера и тег образа; коммит — тот, что собран.
-          BODY=$(printf '{"ref":"refs/heads/main","commit":"%s","tag":"%s"}' "$GITHUB_SHA" "$TAG")
-          TS=$(date +%s)
-          SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$NKT_HOOK_SECRET" -hex | sed 's/^.* //')
-          curl -fsS -X POST "$NKT_HOOK_URL" \
-            -H "Content-Type: application/json" \
-            -H "X-NKT-Timestamp: $TS" -H "X-NKT-Signature: $SIG" \
-            -d "$BODY"
+        # Ветка конвейера и тег образа; коммит — тот, что собран.
+        run: sh scripts/nkt-hook.sh "${{ steps.tag.outputs.tag }}" "$GITHUB_SHA" main

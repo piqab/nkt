@@ -1,236 +1,31 @@
 # Разработка
 
-Установка и продакшен-развёртывание — в [README.md](README.md). Здесь —
-сборка из исходников, проверочный стенд, тесты и внутреннее устройство.
+Руководство разработчика переехало на сайт —
+[piqab.github.io/nkt/guide/development](https://piqab.github.io/nkt/guide/development)
+([English](https://piqab.github.io/nkt/en/guide/development)).
 
-## Команды сборки
-
-`make` без аргументов печатает список целей.
-
-| Команда | Что делает |
+| Раздел | Ссылка |
 |---|---|
-| `make build` | **Основная цель.** Продакшен-бинарник `dist/nkt` (статический ELF ~16 МБ, версия из `git describe`). С Docker — в контейнерах, без — через `native-build`. Другая архитектура: `make build GOARCH=arm64` |
-| `make web` | Только веб-интерфейс в `internal/webui/dist`, откуда его вшивает `go:embed`. Отдельно нужен редко — `make build` вызывает сам |
-| `make native-build` | Сборка без Docker: при нехватке Go (1.25+) или Node (20+) спрашивает и ставит их в `$HOME/.local`, без sudo |
-| `make build-dev` | Нативный бинарник для текущей ОС. **Только для режима fixtures**, в продакшен такой артефакт не отправляют |
-| `make test` | `go test ./...` и проверка типов фронтенда |
-| `make check` | То же плюс `go vet` и `gofmt`. Это то, что стоит гонять перед коммитом |
-| `make stand` / `make stand-down` | Проверочный стенд (ниже) |
-| `make install` | Ставит на **этот** Linux-хост. Существующий `nkt.env` не перезаписывает |
-| `make clean` | Удаляет `dist/` и локальные бинарники |
+| Что нужно, команды сборки (`make build`, `make native-build`, `make edge`…) | [Команды сборки](https://piqab.github.io/nkt/guide/development#команды-сборки) |
+| Релизы, беты, `WHATSNEW.md` | [Релизы](https://piqab.github.io/nkt/guide/development#релизы) |
+| Проверочный стенд (`make stand`) | [Проверочный стенд](https://piqab.github.io/nkt/guide/development#проверочныи-стенд) |
+| Фронтенд с горячей перезагрузкой | [Фронтенд](https://piqab.github.io/nkt/guide/development#фронтенд-с-горячеи-перезагрузкои) |
+| Тесты, живые тесты `NKT_TEST_LIVE_*`, пример `hello-app` | [Тесты](https://piqab.github.io/nkt/guide/development#тесты) |
+| govulncheck, gosec, trivy | [Проверки безопасности](https://piqab.github.io/nkt/guide/development#проверки-безопасности) |
+| Устройство пакетов, новый парсер | [Устройство](https://piqab.github.io/nkt/guide/development#устроиство) |
+| Сообщения `internal/msgs` и переводы | [Сообщения и переводы](https://piqab.github.io/nkt/guide/development#сообщения-и-переводы) |
+| Сайт и скриншоты | [Сайт и скриншоты](https://piqab.github.io/nkt/guide/development#саит-и-скриншоты) |
 
-Кэш Go и npm живёт в именованных docker-томах, поэтому повторная сборка не
-тянет зависимости заново. Сбросить, если испортился:
-`docker volume rm nkt-gomod nkt-gocache nkt-npm`.
-
-Под Windows `make` обычно отсутствует, а `native-build` рассчитана на
-Linux-хост — там нужен именно Docker:
-
-```powershell
-docker run --rm -v "${PWD}:/src" -w /src/web node:22-alpine sh -c "npm ci && npm run build"
-docker run --rm -v "${PWD}:/src" -w /src -e CGO_ENABLED=0 -e GOOS=linux golang:1.26-alpine `
-  go build -trimpath -ldflags "-s -w" -o dist/nkt ./cmd/nkt
-```
-
-Что нужно установить: Docker 29.6 (сборка релиза и стенд), Go 1.26
-(минимум 1.25 — требует `modernc.org/sqlite`), Node 24 / npm 11 (достаточно
-Node 20). На целевом хосте — ничего, кроме самого бинарника.
-
-Готовые Linux-бинарники (amd64/arm64/arm) под каждый тег `vX.Y.Z`
-собирает и публикует `.github/workflows/release.yml` — см. README,
-раздел «Установка из бинарника GitHub». Тег `vX.Y.Z-beta` (тот же
-`VERSION`, `git tag v$(cat VERSION)-beta`) собирает бету: релиз
-pre-release, бинарник с версией `X.Y.Z-beta`, образ `:X.Y.Z-beta` и
-`:beta`; хаб предлагает её только с галочкой «использовать
-бета-версии» в «О системе» (`internal/hub/versioncheck.go`).
-
-Описание релиза берётся не из коммитов, а из `WHATSNEW.md`: раздел
-`## vX.Y.Z` пишется тем же коммитом, что и бамп `VERSION`, а при выпуске
-тега `scripts/release-notes.sh` собирает все разделы, накопившиеся с
-прошлого тега, в тело GitHub Release. Оттуда его читает проверка версий
-хаба (`internal/hub/versioncheck.go`) и показывает в разделе «О системе»,
-когда появляется новая версия, — поэтому текст пишется для пользователя,
-а не для разработчика. Забытый раздел не ломает релиз: workflow
-предупреждает и откатывается на автосписок коммитов.
-
-Новая возможность — это ещё и строка в `FEATURES.ru.md` и `FEATURES.md`
-(полный список по разделам, одна строка на возможность): они
-дополняются тем же коммитом, что и `WHATSNEW.md`.
-
-## Проверочный стенд
-
-Настоящие nginx и haproxy с настоящими бэкендами, рядом — NetKnownsThat в
-режиме `local`, читающий те же файлы и работающий с настоящим демоном
-docker.
+Коротко:
 
 ```bash
-make stand              # docker compose -f stand/docker-compose.yml up -d --build
-docker logs nkt         # пароль администратора
-make stand-down         # остановить и удалить тома
+make build        # dist/nkt
+make check        # go vet, gofmt, go test ./..., проверка типов фронтенда
+make stand        # nginx, haproxy, docker и nkt на 127.0.0.1:8077
+cd site && npm ci && npm run build   # сайт
 ```
 
-| Адрес | Что это |
-|---|---|
-| <http://127.0.0.1:8077> | NetKnownsThat |
-| <http://127.0.0.1:8081> | nginx, проксирует на два бэкенда |
-| <http://127.0.0.1:8082> | haproxy, балансирует те же бэкенды |
-| <http://127.0.0.1:8404> | панель статистики haproxy (намеренно без пароля) |
-| `127.0.0.1:6380` | redis, намеренно опубликован на всех интерфейсах |
+Перед `go test ./...` остановите локальный nkt на `127.0.0.1:8077` —
+тесты хаба поднимают свои процессы.
 
-Стенд проверяет по-настоящему: разбор живых конфигов, Docker Engine API,
-управление контейнерами и цикл правки конфигурации с настоящим `nginx -t`,
-включая ветку отказа с автооткатом.
-
-Не покрывает: systemd и firewall хоста (внутри контейнера их нет), а также
-сравнение «объявлено против слушается» для nginx и haproxy — они в своих
-сетевых пространствах имён, и `ss` их сокетов не видит. Приложение это
-распознаёт и молчит, вместо того чтобы объявить весь хост мёртвым.
-
-`make stand-down` удаляет тома обязательно: учётная запись живёт в томе, и
-без его удаления пересозданный стенд не напечатает новый пароль.
-
-## Фронтенд с горячей перезагрузкой
-
-Два процесса:
-
-```bash
-./nkt                        # API на :8077
-cd web && npm run dev        # интерфейс на :5173, проксирует /api
-```
-
-## Тесты
-
-Тесты работают против `fixtures/host` — снапшота с намеренно заложенными
-проблемами; `TestScanFindsPlantedProblems` проверяет, что анализатор
-находит каждую с ожидаемой серьёзностью.
-
-Терминальный интерфейс тестируется headless: `tcell` отдаёт симулированный
-экран, тест поднимает приложение целиком, нажимает клавиши и проверяет
-отрисованные кадры.
-
-Хаб тестируется против **настоящего** `sshd` и настоящего субпроцесса
-`nkt` — включая установку по SSH, проксирование API и WebSocket-сессии
-терминала через SSH-туннель. Моков в этом слое намеренно нет: слишком
-многое здесь ломается именно на стыке с реальностью.
-
-Живые тесты, которые ходят в сеть (скачивание trivy и его базы, релизы
-GitHub, установка Go, реестр образов), по умолчанию пропускаются и
-включаются переменными:
-
-| Переменная | Что включает |
-|---|---|
-| `NKT_TEST_LIVE_VULN=1` | Скачивание trivy и его базы, настоящий скан (`internal/vuln`) |
-| `NKT_TEST_LIVE_REGISTRY=1` | Запросы к реестру образов (`internal/aptcache`) |
-| `NKT_TEST_LIVE_GO_INSTALL=1` | Установка Go на хост при сборке из исходников (`internal/hub`) |
-| `NKT_TEST_LIVE_RELEASE_DOWNLOAD=1` | Скачивание бинарника релиза с GitHub (`internal/hub`) |
-| `NKT_TEST_LIVE_RELEASE_VERSION` | Какую версию релиза качать в этом тесте |
-| `NKT_TEST_LIVE_VERSION_CHECK=1` | Проверка последней версии через API GitHub (`internal/hub`) |
-
-Добавление нового парсера: новый файл в `internal/parse`, возвращающий
-`model.Endpoint` / `model.Upstream` / `model.SourceStatus`, и вызов в
-`internal/inventory/scan.go`. Всё остальное — карта, анализ, мониторинг,
-оба интерфейса — подхватит его автоматически.
-
-## Архитектура
-
-```
-cmd/nkt                 подкоманды: serve, tui, scan, hub
-internal/config         все настройки из NKT_* переменных
-internal/collect        ЕДИНСТВЕННОЕ место, где расходятся fixtures и реальный хост
-  ├── local.go          настоящая ФС, exec, unix-сокеты docker/podman (только Linux)
-  └── fixtures.go       снапшот на диске, заготовленные ответы команд
-internal/parse          nginx (crossplane), haproxy (config-parser), docker,
-                        podman, lxd, libvirt, iptables, ufw, ss, systemd
-internal/model          вендор-нейтральное описание найденного
-internal/analyze        правила поиска проблем
-internal/topology       построение графа ресурсов
-internal/inventory      оркестрация скана, снапшоты, цели мониторинга
-internal/monitor        пробы, метрики, access-логи, планировщик
-internal/tlscheck       живой TLS-дозвон: что сокет отдаёт на самом деле
-internal/control        сервисы, правка конфигов с версиями, firewall,
-                        сертификаты, podman/lxd/libvirt
-internal/store          SQLite (modernc, чистый Go — статическая сборка)
-internal/secretbox      шифрование секретов at-rest (AES-256-GCM) для хаба
-internal/hub            управляющий центр: установка nkt по SSH и проксирование
-internal/api            HTTP API на chi
-internal/webui          вшитый веб-интерфейс
-internal/tui            терминальный интерфейс на tview
-web/                    React + TypeScript + antd, графики на голом SVG
-```
-
-Ключевое решение — интерфейс `collect.Collector`. Всё остальное приложение
-работает с POSIX-путями хоста и не знает, читает оно настоящий сервер или
-снапшот, поэтому парсеры и правила ведут себя одинаково везде.
-
-Веб-интерфейс и терминальный — два равноправных потребителя одних и тех же
-пакетов: оба вызывают `inventory`, `analyze`, `topology` и `control`
-напрямую, ни один не ходит через другой. Исправление в правилах или в
-построителе карты одинаково видно и там, и там.
-
-Каждый обнаруживаемый рантайм (docker, podman, lxd, libvirt) — отдельный
-модуль по образцу первого: своя модель, свой парсер, своя страница. Общей
-абстракции «workload» между ними намеренно нет — осознанный выбор в пользу
-простоты и меньшего риска регрессий, а не упущение.
-
-Внешние зависимости: `nginx-go-crossplane` (официальный парсер nginx),
-`haproxytech/config-parser` (из HAProxy Dataplane API), `modernc.org/sqlite`,
-`go-chi/chi`, `rivo/tview`, `golang.org/x/crypto` (argon2id и SSH для хаба),
-`github.com/pkg/sftp`, `coder/websocket` и `creack/pty` (веб-терминал),
-`gopkg.in/yaml.v3`. Docker и Podman опрашиваются собственным минимальным
-клиентом Engine API — вместо трёхсот пакетов официального SDK; LXD и
-libvirt — через их собственные CLI (`lxc`, `virsh`).
-
-## Сайт и скриншоты
-
-Сайт (лендинг и руководство на двух языках) лежит в `site/` — VitePress,
-отдельный `package.json`, на основную сборку не влияет:
-
-```bash
-cd site && npm ci && npm run dev      # локально, http://localhost:5173/nkt/
-npm run build                         # site/.vitepress/dist
-```
-
-Публикуется на GitHub Pages workflow'ом `.github/workflows/pages.yml` при
-push в `main` (в настройках репозитория Pages → Source: GitHub Actions).
-Русский — корень сайта, английский — `/en/`; первый заход на корень
-перебрасывает по языку браузера, дальше выбор посетителя запоминается.
-
-Скриншоты для сайта (`site/public/screens/{ru,en}`) снимаются скриптом
-`scripts/screenshots.py` с двух стендов: nkt в режиме fixtures
-(`NKT_MODE=fixtures`, слушает `127.0.0.1:8077`; `NKT_DATA_DIR` — нейтральный каталог вроде `/tmp/nkt-demo/host`, он виден на экране образов машин) и демо-хаба, чьи хосты
-через локальный sshd ведут на тот же fixtures-инстанс — так хаб
-показывает их «в сети» с настоящими данными. Демо-хаб заполняется
-`go run scripts/demo/seed.go` (хосты в группах, профиль, сценарий), sshd
-поднимается по образцу `startTestSSHD` из `internal/hub`. Браузер —
-headless Chrome с `--remote-debugging-port`; после правок интерфейса
-скриншоты пересобираются одной командой из шапки скрипта.
-
-Демо-история доступности и нагрузки заполняется один раз на базу, на 14
-дней назад, и только при включённом планировщике
-(`NKT_SCHEDULER_ENABLED=true`): если графики на скриншотах опустели,
-стенд запускается на свежей базе. Для экрана `job` на стенде должно быть
-хоть одно задание — например, `POST /api/lxd/instances?job=1`.
-
-## Сообщения для пользователя и переводы
-
-Интерфейс двуязычный: язык выбирается по браузеру (русский → русский,
-любой другой → английский), переключатель запоминает выбор. Фронтенд
-берёт строки из `web/src/i18n/{ru,en}.json`; запасной язык — английский.
-
-Серверный текст, который доходит до интерфейса (ошибки API, журналы
-заданий, заметки в сводках), пишется не строкой, а ключом каталога
-`internal/msgs` с двумя переводами в `ru.go` и `en.go`:
-
-- ошибка — `msgs.Errorf("pkg.key", args...)` вместо `fmt.Errorf`; в
-  каталоге вместо `%w` пишется `%v`, аргумент-ошибка всё равно
-  разворачивается `errors.Is/As` и переводится вместе с внешней;
-- текст по месту — `msgs.Tc(ctx, "pkg.key", args...)`: язык запроса
-  кладёт в контекст `msgs.LangMiddleware`, а у задания он берётся из
-  языка автора (`jc.Log("pkg.key", …)`, `jc.Lang()`);
-- на границе API ошибка отдаётся через `writeErr(w, r, status, err)` —
-  он рендерит каталожную ошибку на языке запроса, а чужую (из `os`,
-  `exec`) показывает как есть.
-
-Ключ именуется `<пакет>.<смысл>` (`files.pathOutsideAllowed`), русский
-текст в `ru.go` — то, что раньше стояло в `fmt.Errorf`. Вывод внешних
-программ (nginx -t, apt, certbot, git) не переводится.
+Исходник страницы — [`site/guide/development.md`](site/guide/development.md).

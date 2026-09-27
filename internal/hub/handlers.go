@@ -914,7 +914,7 @@ func (s *Server) handleHostPubKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"authorized_key": line})
 }
 
-// handleRemoveSudoAccess deletes the sudoers drop-in HUB.md tells an
+// handleRemoveSudoAccess deletes the sudoers drop-in the docs tell an
 // operator to create for a non-root SSH user — a deliberate, admin-only
 // cleanup action, not something a viewer should ever be able to trigger on
 // someone else's managed host.

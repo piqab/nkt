@@ -174,10 +174,38 @@ a **block mode**, like the configs: objects, containers, ports, rules and
 keys as blocks with editing, deletion and "+ item"; writing goes through
 the same diffs.
 
-The **Helm** section lists the cluster's releases: history and rollback,
-values editing with a diff and upgrade, uninstall, installing a chart
-from a repository or `oci://`. Everything runs as background jobs; if
-helm is missing on the host, the "Install Helm" button installs it.
+The **Helm** section lists the cluster's releases with a namespace
+filter: history and rollback to a revision, values editing with a diff
+and upgrade, uninstall, installing a chart from a repository or
+`oci://`. The release window shows the user-supplied values (`helm get
+values`), **all values** of the release and the **chart default
+values** — any of them can be taken "to draft". Everything runs as
+background jobs; if helm is missing on the host, the "Install Helm"
+button installs it (the official archive into `/usr/local/bin`).
+
+![Helm](/screens/en/k8s-helm.png)
+
+### Open in browser (port forward)
+
+"Open in browser" on a pod or service: pick a port, `kubectl
+port-forward` on the node and a new tab with a one-time link. Links of
+open forwards stay in the same window — they can be opened again or
+closed.
+
+![Port forward](/screens/en/k8s-forward.png)
+
+- The application is served from a **separate forward port** — 8446 on
+  the same host as the UI (`NKT_FORWARD_ADDR`). A different origin: the
+  application's scripts work as usual but can't see the nkt session.
+- Through an **SSH tunnel**, forward this port too:
+  `ssh -L 8077:127.0.0.1:8077 -L 8446:127.0.0.1:8446 …`.
+- Behind a **reverse proxy**, set up a separate name or port and set
+  `NKT_FORWARD_PUBLIC_URL`.
+- `NKT_FORWARD_ADDR=off` — forwards go through the UI's path in a
+  sandbox: simple pages work, applications relying on JavaScript and
+  cookies don't.
+
+More — [Ports and access](/en/guide/ports#_8446-kubernetes-port-forwards).
 
 "Upgrade" on the Kubernetes card upgrades this node to the chosen minor
 version as a job (k3s by replacing the binary, kubeadm with `kubeadm

@@ -2,7 +2,7 @@
 
 Полный список того, что умеет nkt, — по разделам интерфейса, в порядке
 меню. Одна строка — одна возможность. Как это установить и запустить —
-в [README.ru.md](README.ru.md), про хаб подробно — в [HUB.md](HUB.md),
+про хаб подробно и справочник — на [сайте](https://piqab.github.io/nkt/),
 что менялось от версии к версии — в [WHATSNEW.md](WHATSNEW.md).
 English version: [FEATURES.md](FEATURES.md).
 

@@ -8,13 +8,18 @@
 - `Dockerfile` — образ;
 - `.github/workflows/build.yml` — GitHub Actions: тесты, сборка образа в
   GHCR, вызов вебхука хаба с тегом образа;
-- `deploy/` — три варианта выкладки:
+- `.gitlab-ci.yml` — то же для GitLab CI (образ во встроенном registry
+  GitLab), `.gitea/workflows/build.yml` — для Gitea и Forgejo Actions;
+- `scripts/nkt-hook.sh` — подписанный вызов вебхука хаба из любого CI или
+  вручную после локальной сборки;
+- `deploy/` — четыре варианта выкладки:
 
 | Вариант | Файлы | Куда |
 |---|---|---|
 | 1. Манифест | `pipeline-k8s.yaml`, `k8s.yaml` | кластер Kubernetes (`kubectl apply`) |
 | 2. Helm | `pipeline-helm.yaml`, `values.yaml` | кластер, Helm-релиз на чарте onechart |
 | 3. Хост с Docker | `pipeline-host.yaml`, `deploy.nkt` | хост без кластера, `docker compose` |
+| 4. Без вебхука | `pipeline-registry.yaml`, `k8s.yaml` | кластер; хаб сам следит за тегами образа в registry |
 
 Сборку делает CI, хаб выкладывает готовый образ: ключи доступа к хостам и
 кластерам остаются на хабе, CI получает только право «дёрнуть» вебхук.
@@ -55,6 +60,11 @@
 4. Выпуск версии: `git tag v1.0.0 && git push origin v1.0.0` — образ
    `hello-app:v1.0.0` и выкладка с этим тегом.
 
+GitLab CI и Gitea Actions — так же: переменные `NKT_HOOK_URL` и
+`NKT_HOOK_SECRET` в настройках CI проекта (подробности — в шапке
+`.gitlab-ci.yml` и `.gitea/workflows/build.yml`). Разбор всех вариантов —
+на сайте, страница «Примеры CI/CD».
+
 Вебхук подписан (`X-NKT-Signature`, HMAC-SHA256 от «отметка времени.тело»):
 без секрета или с устаревшей отметкой хаб его отвергнет, повтор той же
 подписи — тоже.
@@ -80,6 +90,11 @@
 на хосте `web1` с образом `hello-app:${TAG}` (TAG — тег из вебхука) и ждёт
 ответа `/healthz`. Кластер не нужен, достаточно хоста с Docker в хабе.
 
+**4. Без вебхука** — `deploy/pipeline-registry.yaml`: хаб раз в 5 минут
+смотрит теги образа в registry и выкладывает новый тег-версию. CI нужен
+только чтобы собрать и запушить образ по тегу репозитория; секретов хаба
+в CI нет, хаб наружу не открывается.
+
 ## Локально
 
 ```bash
@@ -87,3 +102,13 @@ python -m unittest -v test_app
 APP_VERSION=local python app.py      # http://127.0.0.1:8000
 docker build -t hello-app --build-arg VERSION=local . && docker run -p 8000:8000 hello-app
 ```
+
+Без CI — собрать, запушить и выложить с рабочей машины:
+
+```bash
+TAG=$(git rev-parse --short=12 HEAD)
+docker build --build-arg VERSION=$TAG -t ghcr.io/OWNER/hello-app:$TAG . && docker push ghcr.io/OWNER/hello-app:$TAG
+NKT_HOOK_URL=… NKT_HOOK_SECRET=… sh scripts/nkt-hook.sh "$TAG" "$(git rev-parse HEAD)" main
+```
+
+(или «Выложить» в хабе с этим тегом).

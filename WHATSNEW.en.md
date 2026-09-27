@@ -8,6 +8,34 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.29 — 2026-09-27
+
+- **All documentation is on the site.** Everything from README, HUB.md and
+  DEVELOPMENT.md has moved to the [site](https://piqab.github.io/nkt/en/)
+  and is now in English too; the menu has "Installation", "Hub",
+  "Deployments (CI/CD)", "Reference" and "Development" sections. The
+  README is short now: what it is, a quick start and links; HUB.md and
+  DEVELOPMENT.md point to the site pages.
+- **New pages:** installing the hub (systemd, Docker Compose, Kubernetes,
+  removal), "Ports and access" (what to expose, proxies, an SSH tunnel with
+  the 8446 forward port), hub hosts, updates and the vulnerability
+  database, the package cache, nkt-edge (layout, security model, install,
+  checks, an "if it doesn't work" table), a reference of every `NKT_*` and
+  `EDGE_*` variable with defaults, security, API, limitations,
+  troubleshooting.
+- **Deployments:** every pipeline field, GitHub, Gitea/Forgejo, GitLab and
+  nkt webhook signatures, polling, registry, rollback and an "if nothing
+  deploys" table. The "Deployments" page on the site opens again — the
+  `{{nkt.tag}}` substitution used to break it.
+- **CI/CD examples:** `examples/hello-app` gains GitLab CI
+  (`.gitlab-ci.yml`), Gitea/Forgejo Actions (`.gitea/workflows/build.yml`),
+  a signed webhook call script `scripts/nkt-hook.sh` (the GitHub workflow
+  uses it too) and a no-webhook variant where the hub watches the image
+  tags in the registry itself. Every file of the example is checked by
+  tests, the signing script with a real request.
+- New screenshots: deployments, the webhook via nkt-edge, Helm, port
+  forwarding.
+
 ## v1.11.28 — 2026-09-27
 
 - **Installing nkt-edge crashed the hub.** Uploading the program to the VPS

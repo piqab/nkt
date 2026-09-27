@@ -1,9 +1,9 @@
 # NetKnownsThat features
 
 Everything nkt can do — by UI section, in menu order. One line, one
-feature. How to install and run it is in [README.md](README.md), the hub
-in detail is in [HUB.md](HUB.md), version-by-version changes are in
-[WHATSNEW.md](WHATSNEW.md). Русская версия: [FEATURES.ru.md](FEATURES.ru.md).
+feature. How to install and run it, the hub in detail and the reference —
+on the [site](https://piqab.github.io/nkt/en/), version-by-version changes
+are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.ru.md](FEATURES.ru.md).
 
 ## General
 
