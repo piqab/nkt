@@ -649,3 +649,4 @@
 - `4e0d154` Kubernetes: блочный режим в редакторах YAML — объекты, контейнеры, порты, правила, ключи, values Helm
 - `ed79615` Kubernetes: находки о гигиене — контейнеры без limits, образы :latest, cluster-admin, namespace без NetworkPolicy
 - `29831e7` Kubernetes: разделы RBAC (роли ServiceAccount), NetworkPolicy и HPA с границами
+- `a2b1364` Уязвимости: образы подов Kubernetes — из containerd узла или registry, с подами в источнике
