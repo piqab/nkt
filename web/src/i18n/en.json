@@ -2851,5 +2851,33 @@
     "generate": "generate",
     "apply": "Set",
     "createHint": "Optional: log in to the screen and console with a password. Empty — as before."
+  },
+  "manifests": {
+    "title": "Manifests: YAML to several clusters",
+    "subtitle": "One manifest into the chosen clusters at once: kubectl diff in each before writing, every application is kept with its outcome.",
+    "new": "New manifest",
+    "name": "Name",
+    "note": "Note",
+    "author": "Author",
+    "updated": "Applied",
+    "open": "Open",
+    "history": "History",
+    "delete": "Delete",
+    "deleteConfirm": "Delete manifest “{{name}}” from the hub library? The objects in the clusters stay.",
+    "empty": "No manifests yet.",
+    "applyTitle": "Manifest “{{name}}”",
+    "newTitle": "New manifest",
+    "hint": "The YAML (several objects separated by --- are fine) is applied with kubectl apply on the first control plane of every chosen cluster. “Save” shows the text diff and kubectl diff for each cluster.",
+    "notePlaceholder": "application note",
+    "clusters": "clusters",
+    "pickClusters": "Choose at least one cluster.",
+    "noClusters": "No ready clusters with nodes.",
+    "clusterDiff": "kubectl diff per cluster",
+    "applied": "“{{name}}” applied: {{ok}} of {{total}}.",
+    "appliedPartly": "“{{name}}”: applied in {{ok}} of {{total}} clusters.",
+    "historyTitle": "Manifest history “{{name}}”",
+    "diffWithCurrent": "diff with current",
+    "loadVersion": "to the editor",
+    "current": "current"
   }
 }

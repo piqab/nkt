@@ -4,6 +4,7 @@ import { Button, Checkbox, Input, InputNumber, Progress, Select, Tooltip } from 
 import { DeleteOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
+import { HubManifestsCard } from '../components/HubManifests'
 import type { HubHost, Job, Me } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Modal, formatBytesShort, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
@@ -87,6 +88,7 @@ export default function ClustersPage({ me }: { me: Me }) {
       )}
       <ClustersCard key={tick} onOpenJob={(id) => void openHubJob(id)} onChanged={() => setTick((n) => n + 1)} showEmpty />
       <ClusterImagesCard canEdit={me.is_admin} />
+      {me.is_admin && <HubManifestsCard />}
       {creating && (
         <MultiClusterModal
           onClose={() => setCreating(false)}

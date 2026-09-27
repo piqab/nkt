@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.12 — 2026-09-27
+
+- **Hub: one YAML into several clusters.** The "Clusters" section has a
+  "Manifests" card: a manifest (several objects separated by `---` are
+  fine) and a choice of clusters. "Save" shows the text diff against the
+  previous revision and `kubectl diff` for each cluster separately;
+  writing runs `kubectl apply` on the first control plane of each, with
+  the outcome per cluster (what was applied, where it failed).
+- Manifests are kept on the hub with history: every application is a
+  revision with the author, note and per-cluster outcome; a revision has
+  a diff with the current one and "to the editor" to apply the earlier
+  variant again (the rollback goes through the same diffs). In the
+  clusters the object versions also enter the node's history
+  (`k8s://…`), noting which hub manifest and who.
+
 ## v1.11.11 — 2026-09-27
 
 - **Helm** — a new section in the cluster objects. Releases (with the

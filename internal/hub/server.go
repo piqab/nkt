@@ -277,6 +277,13 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/clusters/{id}/workers", s.handleClusterAddWorkers)
 					r.Post("/hub/clusters/{id}/retry", s.handleClusterRetry)
 					r.Delete("/hub/clusters/{id}", s.handleClusterDelete)
+					r.Get("/hub/k8s/manifests", s.handleManifestList)
+					r.Get("/hub/k8s/manifests/versions/{version}", s.handleManifestVersion)
+					r.Get("/hub/k8s/manifests/{id}", s.handleManifestGet)
+					r.Get("/hub/k8s/manifests/{id}/versions", s.handleManifestVersions)
+					r.Delete("/hub/k8s/manifests/{id}", s.handleManifestDelete)
+					r.Post("/hub/k8s/manifests/diff", s.handleManifestDiff)
+					r.Post("/hub/k8s/manifests/apply", s.handleManifestApply)
 
 					r.Get("/hub/bootstrap/defaults", s.handleBootstrapDefaults)
 					r.Put("/hub/bootstrap/defaults", s.handleBootstrapDefaults)

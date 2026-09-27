@@ -357,6 +357,27 @@ CREATE TABLE IF NOT EXISTS script_versions (
     content   TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_script_versions ON script_versions(script_id, id DESC);
+-- Манифесты Kubernetes хаба (раздел «Кластеры» → «Применить YAML»):
+-- каждое применение — редакция с итогом по каждому кластеру.
+CREATE TABLE IF NOT EXISTS k8s_manifests (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    name       TEXT NOT NULL UNIQUE,
+    content    TEXT NOT NULL,
+    note       TEXT NOT NULL DEFAULT '',
+    author     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS k8s_manifest_versions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    manifest_id INTEGER NOT NULL REFERENCES k8s_manifests(id) ON DELETE CASCADE,
+    ts          TEXT NOT NULL,
+    author      TEXT NOT NULL DEFAULT '',
+    note        TEXT NOT NULL DEFAULT '',
+    content     TEXT NOT NULL,
+    results     TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_k8s_manifest_versions ON k8s_manifest_versions(manifest_id, id DESC);
 
 CREATE TABLE IF NOT EXISTS host_groups (
     name       TEXT PRIMARY KEY,
