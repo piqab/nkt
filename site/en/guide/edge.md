@@ -134,6 +134,42 @@ From source: `make edge` puts the binaries into `dist/`.
 | `EDGE_RATE` | `60` | Requests per minute from one address |
 | `EDGE_GITHUB_ONLY` | `false` | Accept webhooks from GitHub addresses only |
 | `EDGE_SELF_SIGNED` | `false` | No Let's Encrypt, the tunnel certificate instead — for testing and internal networks |
+| `EDGE_PROXY_ADDR` | empty | Behind a reverse proxy: webhooks over HTTP on this loopback address (`127.0.0.1:8445`), 80 and 443 are not taken |
+
+## If 80 and 443 on the VPS are taken
+
+The VPS already runs nginx, Caddy or another web server — then edge can't
+take 443. It goes **behind that server**: it takes webhooks over HTTP on
+loopback only, and TLS and the certificate stay with your server.
+
+1. "Install on a host" → the **"proxy port"** field, e.g. `8445`.
+   `edge.env` gets `EDGE_PROXY_ADDR=127.0.0.1:8445`; ufw opens only 8444.
+2. On the server, forward `/hooks/` of the webhook domain to that port
+   (a ready snippet is in the install log):
+
+   ```nginx
+   location /hooks/ {
+       proxy_pass http://127.0.0.1:8445;
+       proxy_set_header X-Real-IP $remote_addr;
+       client_max_body_size 1m;
+   }
+   ```
+
+   ```
+   hooks.example.com {
+       handle /hooks/* {
+           reverse_proxy 127.0.0.1:8445
+       }
+   }
+   ```
+
+Edge takes the sender's address from `X-Real-IP` (or the last
+`X-Forwarded-For` address) — only when the request comes from loopback,
+so the rate limit and "GitHub addresses only" work behind a proxy too.
+
+Installing from the hub checks the ports beforehand: a taken 443 without a
+proxy port is an error naming the program holding it; after starting, the
+job makes sure the service isn't restarting in a loop.
 
 ## Updating
 
@@ -144,9 +180,27 @@ From source: `make edge` puts the binaries into `dist/`.
   `sudo systemctl restart nkt-edge`. The tunnel certificate doesn't
   change, nothing to do in the hub.
 
-"Forget" on the card disconnects the hub from the edge and erases its
-settings; the service on the VPS stays — remove it there
-(`systemctl disable --now nkt-edge`).
+## Removal
+
+- **"Remove from VPS"** on the card (if the hub installed edge) — a hub
+  job: stops and disables the service, deletes `/usr/local/bin/nkt-edge`,
+  the unit, `/etc/nkt-edge`, the data with certificates
+  (`/var/lib/nkt-edge`, with `DynamicUser` — `/var/lib/private/nkt-edge`)
+  and the ufw rule for 8444, then the hub forgets edge. The ufw rules for
+  80 and 443 stay — another server on the VPS may use them.
+- **"Forget"** only disconnects the hub from edge and erases its settings;
+  the service on the VPS stays.
+- **By hand** (edge installed manually):
+
+  ```bash
+  sudo systemctl disable --now nkt-edge
+  sudo rm -f /usr/local/bin/nkt-edge /etc/systemd/system/nkt-edge.service
+  sudo rm -rf /etc/nkt-edge /var/lib/nkt-edge /var/lib/private/nkt-edge
+  sudo systemctl daemon-reload
+  sudo ufw delete allow 8444/tcp
+  ```
+
+  and "Forget" in the hub.
 
 ## Log and checks
 
@@ -164,6 +218,7 @@ sender's address and an `(edge)` mark.
 | Symptom | Cause and fix |
 |---|---|
 | The card says "disconnected", error `x509: …` | The hub doesn't trust the certificate: a wrong PEM pasted or the edge created a new one (an old-format certificate without the `nkt-edge` name is replaced automatically). Copy `tunnel.crt` into "Configure manually" again or reinstall from the hub |
+| "edge accepts the connection and closes it right away" (before — just `EOF`) | The service on the VPS is crashing and restarting: `journalctl -u nkt-edge`. If it says `listen tcp :443: bind: address already in use`, 443 is taken by another server — put edge behind it (section above) |
 | "edge rejected the hub: ERR token" | The token in the hub and `EDGE_TOKEN` on the VPS differ |
 | "disconnected", timeout | Port 8444 on the VPS is closed (ufw, the provider's security group) or the tunnel address is wrong |
 | The webhook answers 503 `hub not connected` | The hub isn't holding the tunnel right now — see the card status and the hub log |
@@ -172,4 +227,5 @@ sender's address and an `(edge)` mark.
 | 404 | Not a `POST` or the path isn't `/hooks/<id>` — check the address in the "Webhook" window |
 | 401 from the hub | Wrong signature or secret, a replayed delivery, a stale timestamp (nkt signature) — see [Deployments](/en/guide/hub-deploy#if-nothing-deploys) |
 | Browser or curl: certificate error on 443 | Let's Encrypt didn't issue a certificate: the A record isn't on the VPS, port 80 is closed, an issuance limit. Details — in `journalctl -u nkt-edge` |
-| The service doesn't start | `EDGE_TOKEN` shorter than 32 characters or no `EDGE_DOMAIN` — the message is in the service log |
+| The service doesn't start | `EDGE_TOKEN` shorter than 32 characters, no `EDGE_DOMAIN`, port 443 or 8444 taken — the message is in the service log |
+| 403 behind a proxy with "GitHub only" on | The proxy doesn't pass `X-Real-IP` — add `proxy_set_header X-Real-IP $remote_addr;` |

@@ -79,7 +79,7 @@ cookie. Чтение доступно любой роли, изменения �
 | Манифесты и Helm | `/hub/k8s/manifests*`, `/hub/k8s/helm/install`, `/hub/k8s/findings` | Один YAML или релиз в несколько кластеров, находки по кластерам |
 | Выкладки | `/hub/pipelines*` | Конвейеры, доступы, секрет вебхука, выкладка, откат, история |
 | Вебхук | `POST /hub/hooks/{id}` | Без сессии, доступ по подписи |
-| nkt-edge | `/hub/edge`, `/hub/edge/install` | Состояние, настройка, установка |
+| nkt-edge | `/hub/edge`, `/hub/edge/install`, `/hub/edge/uninstall` | Состояние, настройка, установка, удаление с VPS |
 | Оповещения | `/hub/events*` | Журнал, прочитано, настройки |
 | О системе | `/hub/version*`, `/hub/update`, `/hub/rollback`, `/hub/vulndb*`, `/hub/clamdb*`, `/hub/aptcache*` | Версия, обновление, откат, базы, кэш |
 | ИИ | `/hub/ai*` | Настройки, проверка, разбор, ответы, инструкции |

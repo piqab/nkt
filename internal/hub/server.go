@@ -304,6 +304,7 @@ func (s *Server) Handler() http.Handler {
 					r.Put("/hub/edge", s.handleEdgeUpdate)
 					r.Delete("/hub/edge", s.handleEdgeDelete)
 					r.Post("/hub/edge/install", s.handleEdgeInstall)
+					r.Post("/hub/edge/uninstall", s.handleEdgeUninstall)
 					r.Get("/hub/pipelines", s.handlePipelines)
 					r.Get("/hub/pipelines/template", s.handlePipelineTemplate)
 					r.Get("/hub/pipelines/versions/{version}", s.handlePipelineVersion)

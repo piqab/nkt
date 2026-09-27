@@ -3048,6 +3048,8 @@
     "install": "Install on a host",
     "manual": "Configure manually",
     "forget": "Forget",
+    "uninstall": "Remove from VPS",
+    "uninstallConfirm": "Remove nkt-edge from the VPS completely? The service stops; the program, settings, certificates and the ufw rule for 8444 are deleted, and the hub forgets edge. The 80 and 443 rules stay. Webhooks through edge will stop being accepted.",
     "forgetConfirm": "The hub disconnects from edge and forgets its settings. The nkt-edge service stays on the VPS — remove it there.",
     "none": "Edge is not configured: webhooks are accepted only by the hub directly.",
     "connected": "connected",
@@ -3065,6 +3067,8 @@
     "manualHint": "Edge installed outside the hub: the tunnel address (host:8444), the webhook domain, EDGE_TOKEN from /etc/nkt-edge/edge.env and the tunnel certificate — the output of sudo cat /var/lib/nkt-edge/tunnel/tunnel.crt on the VPS. The hub trusts exactly this certificate.",
     "tokenKeep": "token (empty — keep)",
     "enabled": "connect to edge",
-    "certKeep": "tunnel certificate (empty — keep)"
+    "certKeep": "tunnel certificate (empty — keep)",
+    "proxyPort": "proxy port (empty — edge itself on 80 and 443)",
+    "proxyHint": "If 80 and 443 on the VPS are already taken by nginx or Caddy, give a free port (e.g. 8445): edge will take webhooks over HTTP on 127.0.0.1:port, and your server forwards /hooks/ of the webhook domain to it; a ready config snippet appears in the install log. Busy ports are checked before installing."
   }
 }

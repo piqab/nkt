@@ -16,6 +16,10 @@
 //	EDGE_RATE          запросов в минуту с одного адреса (60)
 //	EDGE_GITHUB_ONLY   true — принимать вебхуки только с адресов GitHub
 //	EDGE_SELF_SIGNED   true — без Let's Encrypt (проверка, внутренняя сеть)
+//	EDGE_PROXY_ADDR    127.0.0.1:8445 — за обратным прокси (nginx, Caddy),
+//	                   когда 80 и 443 на VPS уже заняты: вебхуки по HTTP
+//	                   только на loopback, TLS и сертификат — у прокси,
+//	                   адрес отправителя — из X-Real-IP / X-Forwarded-For
 package main
 
 import (
@@ -55,6 +59,9 @@ var hookPath = regexp.MustCompile(`^/hooks/[A-Za-z0-9_-]{1,64}$`)
 type server struct {
 	token string
 	rate  int
+	// behindProxy — вебхуки приходят от обратного прокси на loopback:
+	// адрес отправителя берётся из его заголовков.
+	behindProxy bool
 
 	mu      sync.Mutex
 	session *yamux.Session
@@ -98,62 +105,93 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Туннель для хаба.
 	cert, fp, err := edge.TunnelCert(filepath.Join(dataDir, "tunnel"))
 	if err != nil {
 		log.Fatalf("tunnel certificate: %v", err)
 	}
 	log.Printf("nkt-edge %s, tunnel certificate fingerprint %s (for the hub: %s)", version, fp, filepath.Join(dataDir, "tunnel", "tunnel.crt"))
+
+	// Вебхуки из интернета. Порты занимаются до туннеля: если порт занят
+	// (скажем, 443 держит nginx), служба выходит сразу с понятной ошибкой,
+	// а хаб видит закрытый порт туннеля, а не обрыв посреди рукопожатия.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/hooks/", s.handleHook)
+	mux.HandleFunc("/healthz", s.handleHealth)
+	hookSrv := &http.Server{
+		Handler:           mux,
+		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 90 * time.Second, IdleTimeout: 60 * time.Second,
+		MaxHeaderBytes: 32 << 10,
+	}
+	var httpSrv *http.Server
+	var serveHooks func() error
+	if proxyAddr := os.Getenv("EDGE_PROXY_ADDR"); proxyAddr != "" {
+		host, _, err := net.SplitHostPort(proxyAddr)
+		if ip := net.ParseIP(host); err != nil || ip == nil || !ip.IsLoopback() {
+			log.Fatalf("EDGE_PROXY_ADDR must be a loopback address with a port (127.0.0.1:8445), got %q", proxyAddr)
+		}
+		ln, err := net.Listen("tcp", proxyAddr)
+		if err != nil {
+			log.Fatalf("webhooks (behind proxy): %v", err)
+		}
+		s.behindProxy = true
+		log.Printf("webhooks over HTTP on %s, behind a reverse proxy", proxyAddr)
+		serveHooks = func() error { return hookSrv.Serve(ln) }
+	} else {
+		if env("EDGE_SELF_SIGNED", "false") == "true" {
+			hookSrv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+		} else {
+			domain := os.Getenv("EDGE_DOMAIN")
+			if domain == "" {
+				log.Fatal("EDGE_DOMAIN is required (or EDGE_SELF_SIGNED=true, or EDGE_PROXY_ADDR)")
+			}
+			m := &autocert.Manager{
+				Prompt:     autocert.AcceptTOS,
+				HostPolicy: autocert.HostWhitelist(domain),
+				Cache:      autocert.DirCache(filepath.Join(dataDir, "acme")),
+				Email:      os.Getenv("EDGE_EMAIL"),
+			}
+			hookSrv.TLSConfig = m.TLSConfig()
+			hookSrv.TLSConfig.MinVersion = tls.VersionTLS12
+			if addr := env("EDGE_HTTP_ADDR", ":80"); addr != "" {
+				// Порт 80 — только для выпуска сертификата (HTTP-01); без
+				// него Let's Encrypt проверяет через 443 (TLS-ALPN-01).
+				httpSrv = &http.Server{Addr: addr, Handler: m.HTTPHandler(http.NotFoundHandler()), ReadHeaderTimeout: 10 * time.Second}
+				ln, err := net.Listen("tcp", addr)
+				if err != nil {
+					log.Printf("http: %v (certificates are issued through 443)", err)
+					httpSrv = nil
+				} else {
+					go func() {
+						if err := httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+							log.Printf("http: %v", err)
+						}
+					}()
+				}
+			}
+		}
+		addr := env("EDGE_HTTPS_ADDR", ":443")
+		ln, err := net.Listen("tcp", addr)
+		if err != nil {
+			log.Fatalf("https: %v — the port is taken by another program; stop it or run nkt-edge behind it with EDGE_PROXY_ADDR", err)
+		}
+		serveHooks = func() error { return hookSrv.ServeTLS(ln, "", "") }
+	}
+
+	// Туннель для хаба.
 	tl, err := tls.Listen("tcp", env("EDGE_TUNNEL_ADDR", ":8444"), &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13})
 	if err != nil {
 		log.Fatalf("tunnel listener: %v", err)
 	}
 	go s.acceptHubs(tl)
-
-	// Вебхуки из интернета.
-	mux := http.NewServeMux()
-	mux.HandleFunc("/hooks/", s.handleHook)
-	mux.HandleFunc("/healthz", s.handleHealth)
-	httpsSrv := &http.Server{
-		Addr: env("EDGE_HTTPS_ADDR", ":443"), Handler: mux,
-		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 90 * time.Second, IdleTimeout: 60 * time.Second,
-		MaxHeaderBytes: 32 << 10,
-	}
-	var httpSrv *http.Server
-	if env("EDGE_SELF_SIGNED", "false") == "true" {
-		httpsSrv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
-	} else {
-		domain := os.Getenv("EDGE_DOMAIN")
-		if domain == "" {
-			log.Fatal("EDGE_DOMAIN is required (or EDGE_SELF_SIGNED=true)")
-		}
-		m := &autocert.Manager{
-			Prompt:     autocert.AcceptTOS,
-			HostPolicy: autocert.HostWhitelist(domain),
-			Cache:      autocert.DirCache(filepath.Join(dataDir, "acme")),
-			Email:      os.Getenv("EDGE_EMAIL"),
-		}
-		httpsSrv.TLSConfig = m.TLSConfig()
-		httpsSrv.TLSConfig.MinVersion = tls.VersionTLS12
-		if addr := env("EDGE_HTTP_ADDR", ":80"); addr != "" {
-			// Порт 80 — только для выпуска сертификата (HTTP-01).
-			httpSrv = &http.Server{Addr: addr, Handler: m.HTTPHandler(http.NotFoundHandler()), ReadHeaderTimeout: 10 * time.Second}
-			go func() {
-				if err := httpSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-					log.Printf("http: %v", err)
-				}
-			}()
-		}
-	}
 	go func() {
-		if err := httpsSrv.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Fatalf("https: %v", err)
+		if err := serveHooks(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatalf("webhooks: %v", err)
 		}
 	}()
 	<-ctx.Done()
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	_ = httpsSrv.Shutdown(shutdown)
+	_ = hookSrv.Shutdown(shutdown)
 	if httpSrv != nil {
 		_ = httpSrv.Shutdown(shutdown)
 	}
@@ -200,10 +238,29 @@ func (s *server) acceptHubs(l net.Listener) {
 	}
 }
 
-func clientIP(r *http.Request) string {
+// clientIP — адрес отправителя: для ограничения частоты, фильтра GitHub
+// и журнала. За обратным прокси (и только если запрос пришёл с loopback)
+// — из X-Real-IP или последнего адреса X-Forwarded-For, который дописал
+// сам прокси; чужому заголовку от прямого клиента не верим.
+func (s *server) clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
+	}
+	if !s.behindProxy {
+		return host
+	}
+	if peer := net.ParseIP(host); peer == nil || !peer.IsLoopback() {
+		return host
+	}
+	if ip := net.ParseIP(strings.TrimSpace(r.Header.Get("X-Real-IP"))); ip != nil {
+		return ip.String()
+	}
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		if ip := net.ParseIP(strings.TrimSpace(parts[len(parts)-1])); ip != nil {
+			return ip.String()
+		}
 	}
 	return host
 }
@@ -219,7 +276,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 // handleHook — фильтры и передача хабу. Всё, что не POST на
 // /hooks/{id}, — 404; сверх частоты — 429; хаб не подключён — 503.
 func (s *server) handleHook(w http.ResponseWriter, r *http.Request) {
-	ip := clientIP(r)
+	ip := s.clientIP(r)
 	status := http.StatusOK
 	// Поля — атрибутами slog: значения из запроса журнал экранирует сам
 	// (переводы строк не подделают соседние записи).
