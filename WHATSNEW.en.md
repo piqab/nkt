@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.6 — 2026-09-27
+
+- **The Android app plan is in TODO.md.** Today's assessment: the app
+  builds and its models parse the current API, but it has none of the
+  1.10–1.11 features. Five stages to parity with the web UI: the base
+  (languages, jobs, APK in CI, emulator), containers and machines, host
+  system, hub level, machine screen. Also deferred items from discussions:
+  RDP via Guacamole, the machine console and screen size, hub scan
+  vulnerabilities on the map.
+
 ## v1.11.5 — 2026-09-25
 
 - **The AI answer window no longer opens empty.**
