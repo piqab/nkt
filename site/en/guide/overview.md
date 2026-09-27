@@ -72,7 +72,10 @@ The full list of rules with their codes is in the
 CVE scans via trivy: the host's installed OS packages, packages inside LXD
 instances and libvirt machines (directly for LXD containers, via lxd-agent
 for LXD VMs, via qemu-guest-agent for libvirt machines) and Docker/Podman
-container images. Each finding shows its origin in the list. trivy installs itself on the first scan, the vulnerability
+container images, and on a Kubernetes control plane the images of every pod
+in the cluster (from the node's containerd or straight from the registry).
+Each finding shows its origin in the list, a pod image also the pods it runs
+in. trivy installs itself on the first scan, the vulnerability
 database is downloaded automatically (or taken from the hub, which keeps
 one for all hosts). The list: severity, package, fixed version, links; the
 scan progress is live.

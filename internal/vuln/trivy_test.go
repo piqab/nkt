@@ -298,3 +298,15 @@ func TestEnsureTrivyAndScanLive(t *testing.T) {
 		t.Logf("scanned local image %s: %d findings", image, len(findings))
 	})
 }
+
+func TestK8sImageArgs(t *testing.T) {
+	args, env := k8sImageArgs("/db", "nginx:1.27", K8sImageSource{ContainerdSocket: "/run/k3s/containerd/containerd.sock"})
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--image-src containerd,remote") || args[len(args)-1] != "nginx:1.27" || len(env) != 2 || env[1] != "CONTAINERD_NAMESPACE=k8s.io" {
+		t.Errorf("%v %v", args, env)
+	}
+	args, env = k8sImageArgs("/db", "nginx", K8sImageSource{})
+	if !strings.Contains(strings.Join(args, " "), "--image-src remote") || env != nil {
+		t.Errorf("%v %v", args, env)
+	}
+}

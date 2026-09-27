@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.17 — 2026-09-27
+
+- **Vulnerabilities of Kubernetes pod images.** On a control plane the
+  vulnerability check (both the full one and "images only") scans the
+  images of every pod in the cluster. The image comes from the node's
+  containerd (the k3s or kubeadm socket, namespace `k8s.io`), or straight
+  from the registry when it is not there. The "source" column shows the
+  image and the pods it runs in; an image already scanned as a Docker or
+  Podman image is not checked twice.
+
 ## v1.11.16 — 2026-09-27
 
 - **Kubernetes: access (RBAC).** A new tab: ServiceAccounts, Roles,

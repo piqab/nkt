@@ -5,7 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
+	"slices"
+	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -204,7 +208,7 @@ func (s *Server) runVulnScan(ctx context.Context) {
 	report(msgs.Tc(ctx, "api.vulnCollectingGuests"))
 	guests, guestWarnings := parse.InstanceManifests(ctx, s.scanner.Collector(), s.scanner.Latest())
 
-	if !manifest.Available && len(images) == 0 && len(guests) == 0 && len(guestWarnings) == 0 {
+	if !manifest.Available && len(images) == 0 && len(guests) == 0 && len(guestWarnings) == 0 && len(s.k8sImages(ctx, images)) == 0 {
 		// Not a dpkg-based host and no Docker/Podman containers running —
 		// nothing trivy could scan here at all, and no point downloading a
 		// ~1GB database to learn that. Same "not applicable, not an error"
@@ -246,6 +250,19 @@ func (s *Server) runVulnScan(ctx context.Context) {
 	})
 	findings = append(findings, guestFindings...)
 	warnings = append(warnings, gw...)
+
+	for _, ki := range s.k8sImages(ctx, images) {
+		report(msgs.Tc(ctx, "api.scanningImage", ki.ref))
+		imageFindings, err := vuln.ScanK8sImage(ctx, trivyBin, dbDir, ki.ref, s.k8sImageSource())
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s: %s", ki.ref, err.Error()))
+			continue
+		}
+		for i := range imageFindings {
+			imageFindings[i].Target = ki.target()
+		}
+		findings = append(findings, imageFindings...)
+	}
 
 	for _, image := range images {
 		report(msgs.Tc(ctx, "api.scanningImage", image))
@@ -341,7 +358,8 @@ type vulnScanImagesResponse struct {
 func (s *Server) handleVulnScanImages(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	images := s.runningImages(ctx)
-	if len(images) == 0 {
+	k8sImgs := s.k8sImages(ctx, images)
+	if len(images) == 0 && len(k8sImgs) == 0 {
 		writeJSON(w, http.StatusOK, vulnScanImagesResponse{})
 		return
 	}
@@ -360,6 +378,17 @@ func (s *Server) handleVulnScanImages(w http.ResponseWriter, r *http.Request) {
 
 	var findings []model.VulnFinding
 	var warnings []string
+	for _, ki := range k8sImgs {
+		imageFindings, err := vuln.ScanK8sImage(ctx, trivyBin, dbDir, ki.ref, s.k8sImageSource())
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s: %s", ki.ref, err.Error()))
+			continue
+		}
+		for i := range imageFindings {
+			imageFindings[i].Target = ki.target()
+		}
+		findings = append(findings, imageFindings...)
+	}
 	for _, image := range images {
 		imageFindings, err := vuln.ScanImage(ctx, trivyBin, dbDir, image, s.cfg.DockerSocket, s.cfg.PodmanSocket)
 		if err != nil {
@@ -404,4 +433,65 @@ func (s *Server) runningImages(ctx context.Context) []string {
 		add(c.Image)
 	}
 	return images
+}
+
+// k8sImage — образ пода кластера и поды, где он работает.
+type k8sImage struct {
+	ref  string
+	pods []string
+}
+
+// target — цель находок: образ и поды (первые три).
+func (k k8sImage) target() string {
+	pods := k.pods
+	more := ""
+	if len(pods) > 3 {
+		more = fmt.Sprintf(" +%d", len(pods)-3)
+		pods = pods[:3]
+	}
+	return k.ref + " — k8s: " + strings.Join(pods, ", ") + more
+}
+
+// k8sImages — образы подов из сводки кластера (на control plane), кроме
+// тех, что уже сканируются как образы Docker/Podman.
+func (s *Server) k8sImages(ctx context.Context, skip []string) []k8sImage {
+	snap, err := s.scanner.LatestOrScan(ctx)
+	if err != nil || snap == nil || snap.K8s == nil {
+		return nil
+	}
+	byRef := map[string]*k8sImage{}
+	var order []string
+	for _, p := range snap.K8s.Pods {
+		for _, img := range p.Images {
+			if img == "" || slices.Contains(skip, img) {
+				continue
+			}
+			ki := byRef[img]
+			if ki == nil {
+				ki = &k8sImage{ref: img}
+				byRef[img] = ki
+				order = append(order, img)
+			}
+			pod := p.Namespace + "/" + p.Name
+			if !slices.Contains(ki.pods, pod) {
+				ki.pods = append(ki.pods, pod)
+			}
+		}
+	}
+	sort.Strings(order)
+	out := make([]k8sImage, 0, len(order))
+	for _, ref := range order {
+		out = append(out, *byRef[ref])
+	}
+	return out
+}
+
+// k8sImageSource — сокет containerd кластера на этом узле, если есть.
+func (s *Server) k8sImageSource() vuln.K8sImageSource {
+	for _, sock := range []string{"/run/k3s/containerd/containerd.sock", "/run/containerd/containerd.sock"} {
+		if _, err := os.Stat(sock); err == nil {
+			return vuln.K8sImageSource{ContainerdSocket: sock}
+		}
+	}
+	return vuln.K8sImageSource{}
 }
