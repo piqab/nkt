@@ -2413,7 +2413,8 @@
       "config": "Конфигурация",
       "storage": "Хранилище",
       "nodes": "Узлы",
-      "events": "События"
+      "events": "События",
+      "rbac": "Доступ (RBAC)"
     },
     "kind": {
       "deployments": "Deployments",
@@ -2431,7 +2432,14 @@
       "storageclasses": "StorageClass",
       "nodes": "Узлы",
       "namespaces": "Namespaces",
-      "events": "События"
+      "events": "События",
+      "hpa": "HPA",
+      "networkpolicies": "NetworkPolicy",
+      "serviceaccounts": "ServiceAccounts",
+      "roles": "Roles",
+      "rolebindings": "RoleBindings",
+      "clusterroles": "ClusterRoles",
+      "clusterrolebindings": "ClusterRoleBindings"
     },
     "col": {
       "name": "Имя",
@@ -2441,7 +2449,7 @@
       "available": "Доступно",
       "images": "Образы",
       "desired": "Нужно",
-      "current": "Сейчас",
+      "current": "Сейчас → нужно",
       "completions": "Выполнено",
       "duration": "Длительность",
       "state": "Состояние",
@@ -2479,7 +2487,19 @@
       "count": "Раз",
       "last_seen": "Последний раз",
       "cpu": "CPU",
-      "memory": "Память"
+      "memory": "Память",
+      "bound_roles": "Привязанные роли",
+      "rules": "Правила (ресурсы: глаголы)",
+      "role": "Роль",
+      "subjects": "Кому",
+      "pod_selector": "Поды",
+      "policy_types": "Типы",
+      "ingress_rules": "Входящих правил",
+      "egress_rules": "Исходящих правил",
+      "target": "Цель",
+      "min": "Мин.",
+      "max": "Макс.",
+      "metrics": "Метрики (сейчас/цель)"
     },
     "noCRDs": "В кластере нет пользовательских видов (CRD).",
     "revealConfirm": "Показать значения секрета {{name}}? Показ записывается в журнал действий.",
@@ -2537,7 +2557,10 @@
       "openConsole": "Открыть консоль",
       "createNs": "Создать namespace",
       "nsNameHint": "Строчные латинские буквы, цифры и дефис, до 63 символов.",
-      "create": "Создать"
+      "create": "Создать",
+      "bounds": "Границы",
+      "boundsTitle": "Границы HPA: {{name}}",
+      "boundsHint": "Сейчас реплик: {{current}}, метрики: {{metrics}}."
     },
     "yaml": {
       "title": "YAML: {{name}}",
@@ -2585,7 +2608,8 @@
       "versionLatest": "версия",
       "release": "Релиз",
       "valuesLabel": "значения (values.yaml):"
-    }
+    },
+    "allPods": "все поды namespace"
   },
   "ai": {
     "explainHint": "объяснить и предложить решение (ИИ)",

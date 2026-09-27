@@ -619,6 +619,7 @@ var enCatalog = map[string]string{
 	"cmdjob.titleGeneric":                                 "%s: %s",
 	"k8s.badKind":                                         "unknown Kubernetes object kind: %q",
 	"k8s.notFound":                                        "Kubernetes object %s not found",
+	"k8s.badBounds":                                       "HPA bounds: minimum from 1, maximum not below the minimum and at most %d",
 	"k8s.helm":                                            "helm: %s",
 	"k8s.helmMissing":                                     "Helm is not installed on the host",
 	"k8s.helmNoRelease":                                   "Helm release %s not found",

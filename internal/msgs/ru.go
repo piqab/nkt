@@ -618,6 +618,7 @@ var ruCatalog = map[string]string{
 	"cmdjob.titleGeneric":                                 "%s: %s",
 	"k8s.badKind":                                         "неизвестный вид объектов Kubernetes: %q",
 	"k8s.notFound":                                        "объект Kubernetes %s не найден",
+	"k8s.badBounds":                                       "границы HPA: минимум от 1, максимум не меньше минимума и не больше %d",
 	"k8s.helm":                                            "helm: %s",
 	"k8s.helmMissing":                                     "Helm на хосте не установлен",
 	"k8s.helmNoRelease":                                   "релиз Helm %s не найден",

@@ -142,7 +142,9 @@ pods by namespace, kubeconfig and removing the node from the cluster.
 On a control plane, **cluster objects** follow by section: Workloads
 (Deployments, StatefulSets, DaemonSets, Jobs, CronJobs), pods, network
 (Services, Ingress), configuration (ConfigMaps, Secrets), storage (PVC,
-PV, StorageClass), nodes, namespaces, events and **Custom Resources** —
+PV, StorageClass), access (ServiceAccounts, Roles, bindings — a
+ServiceAccount shows which roles are bound to it), NetworkPolicy, HPA,
+nodes, namespaces, events and **Custom Resources** —
 kinds from the cluster's CRDs with their own columns. Every section has a
 namespace filter shared by all sections and a search; the dot color is
 the object's state. Secrets list only key names; values come from the

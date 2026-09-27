@@ -2411,7 +2411,8 @@
       "config": "Configuration",
       "storage": "Storage",
       "nodes": "Nodes",
-      "events": "Events"
+      "events": "Events",
+      "rbac": "Access (RBAC)"
     },
     "kind": {
       "deployments": "Deployments",
@@ -2429,7 +2430,14 @@
       "storageclasses": "StorageClass",
       "nodes": "Nodes",
       "namespaces": "Namespaces",
-      "events": "Events"
+      "events": "Events",
+      "hpa": "HPA",
+      "networkpolicies": "NetworkPolicy",
+      "serviceaccounts": "ServiceAccounts",
+      "roles": "Roles",
+      "rolebindings": "RoleBindings",
+      "clusterroles": "ClusterRoles",
+      "clusterrolebindings": "ClusterRoleBindings"
     },
     "col": {
       "name": "Name",
@@ -2439,7 +2447,7 @@
       "available": "Available",
       "images": "Images",
       "desired": "Desired",
-      "current": "Current",
+      "current": "Now → desired",
       "completions": "Completions",
       "duration": "Duration",
       "state": "State",
@@ -2477,7 +2485,19 @@
       "count": "Count",
       "last_seen": "Last seen",
       "cpu": "CPU",
-      "memory": "Memory"
+      "memory": "Memory",
+      "bound_roles": "Bound roles",
+      "rules": "Rules (resources: verbs)",
+      "role": "Role",
+      "subjects": "Subjects",
+      "pod_selector": "Pods",
+      "policy_types": "Types",
+      "ingress_rules": "Ingress rules",
+      "egress_rules": "Egress rules",
+      "target": "Target",
+      "min": "Min",
+      "max": "Max",
+      "metrics": "Metrics (now/target)"
     },
     "noCRDs": "The cluster has no custom resource kinds (CRDs).",
     "revealConfirm": "Show the values of secret {{name}}? Revealing is recorded in the audit log.",
@@ -2535,7 +2555,10 @@
       "openConsole": "Open console",
       "createNs": "Create namespace",
       "nsNameHint": "Lowercase letters, digits and hyphens, up to 63 characters.",
-      "create": "Create"
+      "create": "Create",
+      "bounds": "Bounds",
+      "boundsTitle": "HPA bounds: {{name}}",
+      "boundsHint": "Replicas now: {{current}}, metrics: {{metrics}}."
     },
     "yaml": {
       "title": "YAML: {{name}}",
@@ -2583,7 +2606,8 @@
       "versionLatest": "version",
       "release": "Release",
       "valuesLabel": "values (values.yaml):"
-    }
+    },
+    "allPods": "all pods of the namespace"
   },
   "ai": {
     "explainHint": "explain and suggest a fix (AI)",

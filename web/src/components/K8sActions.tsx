@@ -31,9 +31,16 @@ const ACTIONS: Record<string, string[]> = {
   pvc: ['delete'],
   nodes: ['cordon', 'uncordon', 'drain'],
   namespaces: ['delete'],
+  serviceaccounts: ['delete'],
+  roles: ['delete'],
+  rolebindings: ['delete'],
+  clusterroles: ['delete'],
+  clusterrolebindings: ['delete'],
+  networkpolicies: ['delete'],
+  hpa: ['bounds', 'delete'],
 }
 
-type Dialog = { type: 'describe' | 'yaml' | 'scale' | 'history' | 'logs' | 'exec' | 'result'; text?: string }
+type Dialog = { type: 'describe' | 'yaml' | 'bounds' | 'scale' | 'history' | 'logs' | 'exec' | 'result'; text?: string }
 
 /**
  * Меню действий строки объекта: описание (kubectl describe) — всем,
@@ -65,6 +72,7 @@ export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: str
     switch (action) {
       case 'describe':
       case 'yaml':
+      case 'bounds':
       case 'scale':
       case 'history':
       case 'logs':
@@ -124,6 +132,7 @@ export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: str
           </pre>
         </Modal>
       )}
+      {dialog?.type === 'bounds' && <BoundsModal row={row} id={id} onClose={() => setDialog(null)} onSave={(min, max) => act('bounds', { min, max })} />}
       {dialog?.type === 'scale' && <ScaleModal row={row} id={id} onClose={() => setDialog(null)} onScale={(n) => act('scale', { replicas: n })} />}
       {dialog?.type === 'history' && <HistoryModal kind={kind} row={row} id={id} canMutate={canMutate} onClose={() => setDialog(null)} onUndo={(rev) => act('undo', { revision: rev })} />}
       {(dialog?.type === 'logs' || dialog?.type === 'exec') && <PodSessionModal row={row} mode={dialog.type} onClose={() => setDialog(null)} />}
@@ -329,5 +338,37 @@ export function CreateNamespaceButton({ onCreated, onError }: { onCreated: () =>
         </Modal>
       )}
     </>
+  )
+}
+
+/** Границы HPA: минимум и максимум реплик (kubectl patch). */
+function BoundsModal({ row, id, onClose, onSave }: { row: K8sRow; id: string; onClose: () => void; onSave: (min: number, max: number) => Promise<boolean> }) {
+  const { t } = useTranslation()
+  const [min, setMin] = useState(Number(row.cols.min) || 1)
+  const [max, setMax] = useState(Number(row.cols.max) || 1)
+  const [busy, setBusy] = useState(false)
+  return (
+    <Modal title={t('k8s.act.boundsTitle', { name: id })} onClose={onClose} width={460}>
+      <p className="small muted">{t('k8s.act.boundsHint', { current: row.cols.current ?? '—', metrics: row.cols.metrics || '—' })}</p>
+      <Space wrap>
+        <span className="small">min</span>
+        <InputNumber min={1} max={1000} value={min} onChange={(v) => setMin(v ?? 1)} />
+        <span className="small">max</span>
+        <InputNumber min={1} max={1000} value={max} onChange={(v) => setMax(v ?? 1)} />
+        <Button
+          type="primary"
+          loading={busy}
+          disabled={max < min}
+          onClick={async () => {
+            setBusy(true)
+            const ok = await onSave(min, max)
+            setBusy(false)
+            if (ok) onClose()
+          }}
+        >
+          {t('k8s.act.bounds')}
+        </Button>
+      </Space>
+    </Modal>
   )
 }

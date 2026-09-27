@@ -44,6 +44,14 @@ var Kinds = map[string]KindDef{
 	"namespaces":     {"namespaces", false, []string{"phase"}},
 	"nodes":          {"nodes", false, []string{"ready", "roles", "version", "ip"}},
 	"events":         {"events", true, []string{"type", "reason", "object", "message", "count", "last_seen"}},
+	// Доступ (RBAC): у ServiceAccount — привязанные роли («кто что может»).
+	"serviceaccounts":     {"serviceaccounts", true, []string{"bound_roles"}},
+	"roles":               {"roles.rbac.authorization.k8s.io", true, []string{"rules"}},
+	"rolebindings":        {"rolebindings.rbac.authorization.k8s.io", true, []string{"role", "subjects"}},
+	"clusterroles":        {"clusterroles.rbac.authorization.k8s.io", false, []string{"rules"}},
+	"clusterrolebindings": {"clusterrolebindings.rbac.authorization.k8s.io", false, []string{"role", "subjects"}},
+	"networkpolicies":     {"networkpolicies.networking.k8s.io", true, []string{"pod_selector", "policy_types", "ingress_rules", "egress_rules"}},
+	"hpa":                 {"horizontalpodautoscalers.autoscaling", true, []string{"target", "min", "max", "current", "metrics"}},
 }
 
 // Column — колонка таблицы: ключ перевода или готовая подпись (у CRD).
@@ -193,6 +201,9 @@ func (m *Manager) Resources(ctx context.Context, kind, namespace string) (Resour
 	})
 	if kind == "pods" || kind == "nodes" {
 		m.addTop(ctx, kind, &res)
+	}
+	if kind == "serviceaccounts" {
+		m.addBoundRoles(ctx, &res)
 	}
 	if kind == "events" {
 		// События — свежие сверху.
@@ -402,7 +413,106 @@ func fillRow(kind string, it object, row *Row) {
 			c["last_seen"] = str(it, "eventTime")
 		}
 		row.Status = map[string]string{"Normal": "ok", "Warning": "warn"}[c["type"]]
+	case "roles", "clusterroles":
+		c["rules"] = rulesSummary(it)
+		if strings.Contains(c["rules"], "*: *") {
+			row.Status = "warn"
+		}
+	case "rolebindings", "clusterrolebindings":
+		c["role"] = str(it, "roleRef", "kind") + "/" + str(it, "roleRef", "name")
+		c["subjects"] = strings.Join(subjects(it), ", ")
+		if str(it, "roleRef", "name") == "cluster-admin" {
+			row.Status = "warn"
+		}
+	case "networkpolicies":
+		c["pod_selector"] = labelsText(get(it, "spec", "podSelector", "matchLabels"))
+		var types []string
+		for _, t := range list(it, "spec", "policyTypes") {
+			if s, ok := t.(string); ok {
+				types = append(types, s)
+			}
+		}
+		c["policy_types"] = strings.Join(types, ", ")
+		c["ingress_rules"] = strconv.Itoa(len(list(it, "spec", "ingress")))
+		c["egress_rules"] = strconv.Itoa(len(list(it, "spec", "egress")))
+	case "hpa":
+		c["target"] = str(it, "spec", "scaleTargetRef", "kind") + "/" + str(it, "spec", "scaleTargetRef", "name")
+		c["min"] = strconv.Itoa(max(num(it, "spec", "minReplicas"), 1))
+		c["max"] = strconv.Itoa(num(it, "spec", "maxReplicas"))
+		c["current"] = fmt.Sprintf("%d → %d", num(it, "status", "currentReplicas"), num(it, "status", "desiredReplicas"))
+		var ms []string
+		cur := list(it, "status", "currentMetrics")
+		for i, m := range list(it, "spec", "metrics") {
+			name := str(m, "resource", "name")
+			target := str(m, "resource", "target", "averageUtilization")
+			now := ""
+			if i < len(cur) {
+				now = str(cur[i], "resource", "current", "averageUtilization")
+			}
+			if name != "" {
+				ms = append(ms, fmt.Sprintf("%s %s%%/%s%%", name, orDash(now), target))
+			}
+		}
+		c["metrics"] = strings.Join(ms, "; ")
+		if num(it, "status", "currentReplicas") >= num(it, "spec", "maxReplicas") && num(it, "spec", "maxReplicas") > 0 {
+			row.Status = "warn"
+		}
 	}
+}
+
+func orDash(s string) string {
+	if s == "" {
+		return "—"
+	}
+	return s
+}
+
+// rulesSummary — правила роли кратко: «ресурсы: глаголы; …».
+func rulesSummary(it object) string {
+	var parts []string
+	for _, r := range list(it, "rules") {
+		var res, verbs []string
+		for _, x := range list(r, "resources") {
+			if s, ok := x.(string); ok {
+				res = append(res, s)
+			}
+		}
+		for _, x := range list(r, "nonResourceURLs") {
+			if s, ok := x.(string); ok {
+				res = append(res, s)
+			}
+		}
+		for _, x := range list(r, "verbs") {
+			if s, ok := x.(string); ok {
+				verbs = append(verbs, s)
+			}
+		}
+		parts = append(parts, strings.Join(res, ",")+": "+strings.Join(verbs, ","))
+	}
+	return strings.Join(parts, "; ")
+}
+
+// subjects — «вид:ns/имя» субъектов привязки.
+func subjects(it object) []string {
+	var out []string
+	for _, sub := range list(it, "subjects") {
+		out = append(out, str(sub, "kind")+":"+strings.TrimPrefix(str(sub, "namespace")+"/"+str(sub, "name"), "/"))
+	}
+	return out
+}
+
+func labelsText(v any) string {
+	m, _ := v.(map[string]any)
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, m[k]))
+	}
+	return strings.Join(parts, ",")
 }
 
 // ---------------------------------------------------------- Custom Resources
@@ -597,4 +707,45 @@ func ParseTop(kind, text string) map[string][2]string {
 		}
 	}
 	return out
+}
+
+// addBoundRoles — у ServiceAccount: роли из RoleBinding и
+// ClusterRoleBinding, где он субъект («кто что может»).
+func (m *Manager) addBoundRoles(ctx context.Context, res *ResourceList) {
+	bound := map[string][]string{}
+	for _, resource := range []string{"rolebindings.rbac.authorization.k8s.io", "clusterrolebindings.rbac.authorization.k8s.io"} {
+		items, err := m.kubectlJSON(ctx, resource)
+		if err != nil {
+			continue
+		}
+		for _, it := range items {
+			role := str(it, "roleRef", "name")
+			where := str(it, "metadata", "namespace")
+			if where == "" {
+				role += " (cluster)"
+			}
+			for _, sub := range list(it, "subjects") {
+				if str(sub, "kind") != "ServiceAccount" {
+					continue
+				}
+				ns := str(sub, "namespace")
+				if ns == "" {
+					ns = where
+				}
+				key := ns + "/" + str(sub, "name")
+				bound[key] = append(bound[key], role)
+			}
+		}
+	}
+	for i := range res.Rows {
+		r := &res.Rows[i]
+		roles := bound[r.Namespace+"/"+r.Name]
+		sort.Strings(roles)
+		r.Cols["bound_roles"] = strings.Join(roles, ", ")
+		for _, role := range roles {
+			if strings.HasPrefix(role, "cluster-admin") {
+				r.Status = "warn"
+			}
+		}
+	}
 }

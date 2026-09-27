@@ -96,11 +96,12 @@ export function K8sObjects({ me }: { me: Me }) {
         size="small"
         destroyOnHidden
         items={[
-          { key: 'workloads', label: t('k8s.tab.workloads'), children: group(['deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs']) },
+          { key: 'workloads', label: t('k8s.tab.workloads'), children: group(['deployments', 'statefulsets', 'daemonsets', 'jobs', 'cronjobs', 'hpa']) },
           { key: 'pods', label: t('k8s.tab.pods'), children: table('pods') },
-          { key: 'network', label: t('k8s.tab.network'), children: group(['services', 'ingresses']) },
+          { key: 'network', label: t('k8s.tab.network'), children: group(['services', 'ingresses', 'networkpolicies']) },
           { key: 'config', label: t('k8s.tab.config'), children: group(['configmaps', 'secrets']) },
           { key: 'storage', label: t('k8s.tab.storage'), children: group(['pvc', 'pv', 'storageclasses']) },
+          { key: 'rbac', label: t('k8s.tab.rbac'), children: group(['serviceaccounts', 'roles', 'rolebindings', 'clusterroles', 'clusterrolebindings']) },
           { key: 'nodes', label: t('k8s.tab.nodes'), children: table('nodes') },
           { key: 'namespaces', label: 'Namespaces', children: table('namespaces') },
           { key: 'events', label: t('k8s.tab.events'), children: table('events') },
@@ -219,6 +220,7 @@ function ResourceTable({
               <AIExplain ctx={{ kind: 'event', title: `Kubernetes ${r.cols.reason}: ${r.cols.object}`, detail: v, service: 'kubernetes', object: `${r.namespace ?? ''}/${r.cols.object}`, severity: 'medium' }} />
             </span>
           )
+        if (c.key === 'pod_selector' && !v) return <span className="small muted">{t('k8s.allPods')}</span>
         return <span className={c.key === 'message' ? 'small' : 'small mono'}>{v || '—'}</span>
       },
     })),
