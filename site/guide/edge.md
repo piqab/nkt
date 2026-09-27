@@ -16,7 +16,7 @@ title: nkt-edge
 ## Схема
 
 ```
-GitHub / GitLab / CI ──HTTPS 443 (Let's Encrypt)──▶ VPS: nkt-edge
+GitHub / GitLab / CI ──HTTPS 443 (certbot)─────────▶ VPS: nkt-edge
                                                       ▲
                                     туннель 8444: TLS 1.3 + токен,
                                     соединение открывает хаб
@@ -49,107 +49,91 @@ GitHub / GitLab / CI ──HTTPS 443 (Let's Encrypt)──▶ VPS: nkt-edge
   единственным корнем проверки — подменить edge по пути нельзя. Затем
   рукопожатие с токеном (не короче 32 знаков, сравнение за постоянное
   время) и поверх — мультиплексор потоков.
-- **Служба на VPS** — отдельный динамический пользователь
-  (`DynamicUser=yes`), единственная capability — привязка к 80 и 443,
-  `ProtectSystem=strict`, фильтр системных вызовов.
+- **Служба на VPS** — системный пользователь `nkt-edge` без входа,
+  единственная capability — привязка к 443, `ProtectSystem=strict`,
+  фильтр системных вызовов. Ключ сертификата ей доступен только копией
+  в `/etc/nkt-edge/tls` (группа `nkt-edge`, 0640).
 - **Журнал** edge — одна строка на запрос: адрес, метод, путь, статус.
   Значения из запроса без переводов строк — подделать соседние записи
   нельзя.
 
 ## Что нужно
 
-- VPS с белым адресом, Linux amd64/arm64/arm.
-- Домен (например `hooks.example.com`) с A/AAAA-записью на VPS.
-- Открытые на VPS: **80** (выпуск сертификата Let's Encrypt, HTTP-01),
-  **443** (вебхуки), **8444** (туннель от хаба; можно разрешить только
-  адресу хаба, если он постоянный).
+- VPS с белым адресом, Linux (Debian/Ubuntu — certbot ставится через
+  apt), amd64/arm64/arm.
+- Имя (например `hooks.example.com` или имя самого VPS) с A/AAAA-записью
+  на VPS.
+- Открытые на VPS: **80** (certbot выпускает и продлевает сертификат,
+  проверка HTTP-01), **443** (вебхуки), **8444** (туннель от хаба; можно
+  разрешить только адресу хаба, если он постоянный).
 
 ## Установка из хаба
 
 1. Добавьте VPS в хаб как обычный хост (nkt на него ставить не
    обязательно — нужен только SSH).
 2. «Выкладки» → карточка **nkt-edge** → **«Установить на хост»**: хост,
-   домен, e-mail для Let's Encrypt (необязательно), «только адреса
-   GitHub».
+   имя, e-mail для Let's Encrypt (необязательно), «только адреса GitHub».
+   Имя подставляется из адреса хоста в хабе, если это DNS-имя; кнопка
+   **«проверить имя»** сразу скажет, указывает ли оно на этот хост.
 3. Задание хаба (журнал — как у остальных заданий):
-   1. подключение по SSH, архитектура;
+   1. подключение по SSH; **имя ↔ IP**: имя резолвится и сравнивается с
+      адресами VPS (тот, по которому хаб ходит по SSH, и адреса на его
+      интерфейсах) — не совпало, установка останавливается; **порты**:
+      8444 и 443 свободны, а кто держит 80 — запоминается;
    2. программа `nkt-edge` — собирается из исходников хаба или
       скачивается из релиза с проверкой суммы;
-   3. `/usr/local/bin/nkt-edge`, `/etc/nkt-edge/edge.env` (0600, со
-      сгенерированным токеном) и юнит `nkt-edge.service`;
-   4. служба запускается; если ufw включён — открываются 80, 443 и 8444;
-   5. хаб забирает по SSH сертификат туннеля
-      (`sudo cat /var/lib/nkt-edge/tunnel/tunnel.crt`), запоминает его и
-      подключается.
+   3. пользователь `nkt-edge`, `/usr/local/bin/nkt-edge`,
+      `/etc/nkt-edge/edge.env` (0600, со сгенерированным токеном), юнит и
+      deploy-hook certbot `/etc/nkt-edge/certbot-deploy.sh`;
+   4. **сертификат**: certbot ставится, если его нет, и выпускает
+      сертификат в режиме **standalone** — сам поднимает временный сервер
+      на 80, nginx ему не нужен. Если 80 занят службой systemd (например
+      nginx), certbot останавливает её на несколько секунд на время
+      выпуска и запускает снова — эти хуки он запоминает и для продлений.
+      Копию для службы кладёт deploy-hook; в журнал пишется срок действия;
+   5. служба запускается и проверяется, что она не перезапускается по
+      кругу; если ufw включён — открываются 80, 443 и 8444;
+   6. хаб забирает по SSH сертификат туннеля, запоминает его и
+      подключается;
+   7. **проверка** `https://имя/healthz` с хаба — так, как придёт GitHub;
+      если хаб сам не выходит в интернет — с VPS.
 4. Карточка покажет «подключён», адрес вебхуков и отпечаток сертификата
    туннеля. В окне «Вебхук» каждого конвейера появится строка **«Через
    edge»** с адресом `https://hooks.example.com/hooks/…` — рядом с адресом
    «Напрямую к хабу».
 
-Сертификат Let's Encrypt выпускается при первом HTTPS-запросе к домену.
+**Продление** — таймер `certbot.timer` пакета certbot; после продления
+deploy-hook обновляет копию, и edge перечитывает сертификат сам, без
+перезапуска и обрыва туннеля. Если на хосте стоит nkt, сертификат виден и
+на странице «Сертификаты» этого хоста.
 
-## Установка вручную
+## Если 443 на VPS уже занят
 
-Если VPS не хочется добавлять в хаб:
-
-```bash
-V=$(curl -fsSL https://api.github.com/repos/piqab/nkt/releases/latest | sed -n 's/.*"tag_name": *"\(.*\)".*/\1/p')
-curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/nkt-edge-linux-amd64
-curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/SHA256SUMS
-sha256sum -c SHA256SUMS --ignore-missing
-sudo install -m 0755 nkt-edge-linux-amd64 /usr/local/bin/nkt-edge
-
-sudo install -d -m 0700 /etc/nkt-edge
-curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/edge.env.example \
-  | sudo install -m 0600 /dev/stdin /etc/nkt-edge/edge.env
-curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/nkt-edge.service \
-  | sudo install -m 0644 /dev/stdin /etc/systemd/system/nkt-edge.service
-openssl rand -base64 33          # токен → EDGE_TOKEN
-sudo $EDITOR /etc/nkt-edge/edge.env   # EDGE_DOMAIN, EDGE_TOKEN
-sudo systemctl daemon-reload
-sudo systemctl enable --now nkt-edge
-sudo cat /var/lib/nkt-edge/tunnel/tunnel.crt
-```
-
-Затем в хабе «Выкладки» → nkt-edge → **«Настроить вручную»**: адрес
-туннеля `vps.example.com:8444`, домен вебхуков, тот же `EDGE_TOKEN` и
-сертификат туннеля (вывод последней команды целиком, с `BEGIN` и `END`).
-
-Из исходников: `make edge` кладёт бинарники в `dist/`.
-
-## Настройки edge
-
-| Переменная | По умолчанию | Смысл |
-|---|---|---|
-| `EDGE_DOMAIN` | — | Имя для сертификата Let's Encrypt; обязательно, если не `EDGE_SELF_SIGNED` |
-| `EDGE_EMAIL` | пусто | E-mail для Let's Encrypt |
-| `EDGE_TOKEN` | — | Общий секрет с хабом, не короче 32 знаков |
-| `EDGE_DATA_DIR` | `/var/lib/nkt-edge` | Сертификаты Let's Encrypt и туннеля |
-| `EDGE_HTTPS_ADDR` | `:443` | Вебхуки |
-| `EDGE_HTTP_ADDR` | `:80` | Только выпуск сертификата; пусто — не слушать |
-| `EDGE_TUNNEL_ADDR` | `:8444` | Сюда подключается хаб |
-| `EDGE_RATE` | `60` | Запросов в минуту с одного адреса |
-| `EDGE_GITHUB_ONLY` | `false` | Принимать вебхуки только с адресов GitHub |
-| `EDGE_SELF_SIGNED` | `false` | Без Let's Encrypt, сертификатом туннеля — для проверки и внутренней сети |
-| `EDGE_PROXY_ADDR` | пусто | За обратным прокси: вебхуки по HTTP на этом loopback-адресе (`127.0.0.1:8445`), 80 и 443 не занимаются |
-
-## Если 80 и 443 на VPS уже заняты
-
-На VPS уже работает nginx, Caddy или другой веб-сервер — тогда edge не
-может занять 443. Он встаёт **за этим сервером**: принимает вебхуки по
-HTTP только на loopback, а TLS и сертификат остаются у вашего сервера.
+На VPS уже работает nginx, Caddy или другой веб-сервер на 443 — тогда
+edge встаёт **за этим сервером**: принимает вебхуки по HTTP только на
+loopback, а TLS остаётся у вашего сервера.
 
 1. «Установить на хост» → поле **«порт для прокси»**, например `8445`.
    В `edge.env` появится `EDGE_PROXY_ADDR=127.0.0.1:8445`; ufw откроет
-   только 8444.
-2. На сервере перенаправьте `/hooks/` с домена вебхуков на этот порт
-   (готовый фрагмент — в журнале установки):
+   только 8444. Сертификат certbot для имени всё равно выпускается
+   (`/etc/letsencrypt/live/имя/`), после продления deploy-hook
+   перезагружает nginx.
+2. В своём сервере перенаправьте `/hooks/` и `/healthz` с этого имени на
+   порт edge (фрагмент — в журнале установки; хаб чужой веб-сервер не
+   правит):
 
    ```nginx
-   location /hooks/ {
-       proxy_pass http://127.0.0.1:8445;
-       proxy_set_header X-Real-IP $remote_addr;
-       client_max_body_size 1m;
+   server {
+       listen 443 ssl;
+       server_name hooks.example.com;
+       ssl_certificate     /etc/letsencrypt/live/hooks.example.com/fullchain.pem;
+       ssl_certificate_key /etc/letsencrypt/live/hooks.example.com/privkey.pem;
+       location /hooks/ {
+           proxy_pass http://127.0.0.1:8445;
+           proxy_set_header X-Real-IP $remote_addr;
+           client_max_body_size 1m;
+       }
+       location = /healthz { proxy_pass http://127.0.0.1:8445; }
    }
    ```
 
@@ -165,14 +149,67 @@ HTTP только на loopback, а TLS и сертификат остаются
 `X-Forwarded-For`) — только если запрос пришёл с loopback, поэтому
 ограничение частоты и «только адреса GitHub» работают и за прокси.
 
-Установка из хаба сама проверяет порты до установки: занятый 443 без
-порта для прокси — ошибка с именем программы, которая его держит; после
-запуска задание убеждается, что служба не перезапускается по кругу.
+## Установка вручную
+
+Если VPS не хочется добавлять в хаб:
+
+```bash
+V=$(curl -fsSL https://api.github.com/repos/piqab/nkt/releases/latest | sed -n 's/.*"tag_name": *"\(.*\)".*/\1/p')
+curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/nkt-edge-linux-amd64
+curl -fsSLO https://github.com/piqab/nkt/releases/download/$V/SHA256SUMS
+sha256sum -c SHA256SUMS --ignore-missing
+sudo install -m 0755 nkt-edge-linux-amd64 /usr/local/bin/nkt-edge
+sudo useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin nkt-edge
+
+sudo install -d -m 0750 -g nkt-edge /etc/nkt-edge /etc/nkt-edge/tls
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/edge.env.example \
+  | sudo install -m 0600 /dev/stdin /etc/nkt-edge/edge.env
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/nkt-edge-certbot-hook.sh \
+  | sudo install -m 0755 /dev/stdin /etc/nkt-edge/certbot-deploy.sh
+curl -fsSL https://raw.githubusercontent.com/piqab/nkt/main/deploy/nkt-edge.service \
+  | sudo install -m 0644 /dev/stdin /etc/systemd/system/nkt-edge.service
+openssl rand -base64 33                   # токен → EDGE_TOKEN
+sudo $EDITOR /etc/nkt-edge/edge.env       # EDGE_DOMAIN, EDGE_TOKEN
+
+sudo apt-get install -y certbot
+sudo certbot certonly --standalone -d hooks.example.com --cert-name hooks.example.com \
+  --deploy-hook /etc/nkt-edge/certbot-deploy.sh
+sudo env RENEWED_LINEAGE=/etc/letsencrypt/live/hooks.example.com /etc/nkt-edge/certbot-deploy.sh
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now nkt-edge
+sudo cat /var/lib/nkt-edge/tunnel/tunnel.crt
+```
+
+Если 80 занят (скажем, nginx), добавьте к `certbot` `--pre-hook
+"systemctl stop nginx" --post-hook "systemctl start nginx"`.
+
+Затем в хабе «Выкладки» → nkt-edge → **«Настроить вручную»**: адрес
+туннеля `vps.example.com:8444`, имя вебхуков, тот же `EDGE_TOKEN` и
+сертификат туннеля (вывод последней команды целиком, с `BEGIN` и `END`).
+
+Из исходников: `make edge` кладёт бинарники в `dist/`.
+
+## Настройки edge
+
+| Переменная | По умолчанию | Смысл |
+|---|---|---|
+| `EDGE_DOMAIN` | — | Имя вебхуков (для журнала и deploy-hook) |
+| `EDGE_TOKEN` | — | Общий секрет с хабом, не короче 32 знаков |
+| `EDGE_CERT_FILE`, `EDGE_KEY_FILE` | `/etc/nkt-edge/tls/fullchain.pem`, `…/privkey.pem` | Копия сертификата certbot; edge перечитывает её после продления |
+| `EDGE_DATA_DIR` | `/var/lib/nkt-edge` | Сертификат туннеля |
+| `EDGE_HTTPS_ADDR` | `:443` | Вебхуки |
+| `EDGE_TUNNEL_ADDR` | `:8444` | Сюда подключается хаб |
+| `EDGE_RATE` | `60` | Запросов в минуту с одного адреса |
+| `EDGE_GITHUB_ONLY` | `false` | Принимать вебхуки только с адресов GitHub |
+| `EDGE_SELF_SIGNED` | `false` | Без certbot, сертификатом туннеля — для проверки и внутренней сети |
+| `EDGE_PROXY_ADDR` | пусто | За обратным прокси: вебхуки по HTTP на этом loopback-адресе (`127.0.0.1:8445`), 443 не занимается |
 
 ## Обновление
 
-- **Из хаба** — ещё раз «Установить на хост» на тот же хост: программа и
-  юнит заменятся, токен останется прежним, хаб переподключится.
+- **Из хаба** — ещё раз «Установить на хост» на тот же хост: программа,
+  юнит и hook заменятся, токен и действующий сертификат останутся, хаб
+  переподключится.
 - **Вручную** — новый бинарник поверх `/usr/local/bin/nkt-edge` и
   `sudo systemctl restart nkt-edge`. Сертификат туннеля не меняется, в
   хабе ничего делать не нужно.
@@ -181,19 +218,22 @@ HTTP только на loopback, а TLS и сертификат остаются
 
 - **«Удалить с VPS»** в карточке (если edge ставил хаб) — задание хаба:
   останавливает и отключает службу, удаляет `/usr/local/bin/nkt-edge`,
-  юнит, `/etc/nkt-edge`, данные с сертификатами (`/var/lib/nkt-edge`,
-  при `DynamicUser` — `/var/lib/private/nkt-edge`) и правило ufw для
-  8444, затем хаб забывает edge. Правила ufw для 80 и 443 остаются — их
-  может использовать другой сервер на VPS.
+  юнит, `/etc/nkt-edge`, данные (`/var/lib/nkt-edge`), пользователя
+  `nkt-edge`, правило ufw для 8444 и сертификат certbot этого имени (если
+  его выпускал edge — в его конфиге продления стоит hook edge), затем хаб
+  забывает edge. Правила ufw для 80 и 443 остаются — их может
+  использовать другой сервер на VPS.
 - **«Забыть»** только отключает хаб от edge и стирает его настройки;
   служба на VPS остаётся.
-- **Вручную** (edge ставили руками):
+- **Вручную**:
 
   ```bash
   sudo systemctl disable --now nkt-edge
+  sudo certbot delete --cert-name hooks.example.com
   sudo rm -f /usr/local/bin/nkt-edge /etc/systemd/system/nkt-edge.service
   sudo rm -rf /etc/nkt-edge /var/lib/nkt-edge /var/lib/private/nkt-edge
   sudo systemctl daemon-reload
+  sudo userdel nkt-edge
   sudo ufw delete allow 8444/tcp
   ```
 
@@ -216,13 +256,18 @@ curl -s https://hooks.example.com/healthz     # {"ok":true,"hub":true,"version":
 |---|---|
 | Карточка «нет связи», ошибка `x509: …` | Хаб не доверяет сертификату: вставлен не тот PEM или edge создал новый (старый формат без имени `nkt-edge` заменяется сам). Скопируйте заново `tunnel.crt` в «Настроить вручную» или переустановите из хаба |
 | «edge принимает соединение и сразу закрывает его» (раньше — просто `EOF`) | Служба на VPS падает и перезапускается: `journalctl -u nkt-edge`. Если там `listen tcp :443: bind: address already in use` — 443 занят другим сервером, поставьте edge за ним (раздел выше) |
+| Установка: «порт … держит посторонний процесс nkt-edge (pid …)» | Кроме службы работает ещё один nkt-edge (запущен вручную или остался от прежней установки) и занимает порты — служба из-за него падает. `sudo kill <pid>` и повторите |
 | «edge rejected the hub: ERR token» | Токен в хабе и `EDGE_TOKEN` на VPS разные |
 | «нет связи», таймаут | Порт 8444 на VPS закрыт (ufw, security group провайдера) или неверный адрес туннеля |
+| В журнале `TLS handshake error … missing server name` или `… not configured` с чужих адресов | Сканеры интернета стучатся по IP или чужим именам — это отказ, а не проблема |
 | Вебхук отвечает 503 `hub not connected` | Хаб сейчас не держит туннель — смотрите статус карточки и журнал хаба |
 | 429 | Превышен `EDGE_RATE` с одного адреса |
 | 403 | Включён `EDGE_GITHUB_ONLY`, а запрос не с адресов GitHub (например, из GitLab или curl) |
 | 404 | Не `POST` или путь не `/hooks/<id>` — проверьте адрес из окна «Вебхук» |
 | 401 от хаба | Неверная подпись или секрет, повтор доставки, устаревшая отметка времени (подпись nkt) — см. [Выкладки](/guide/hub-deploy#если-не-выкладывается) |
-| Браузер или curl: ошибка сертификата на 443 | Let's Encrypt не выпустил сертификат: A-запись не на VPS, порт 80 закрыт, лимит выпусков. Подробности — в `journalctl -u nkt-edge` |
-| Служба не стартует | `EDGE_TOKEN` короче 32 знаков, нет `EDGE_DOMAIN`, порт 443 или 8444 занят — сообщение в журнале службы |
+| Установка: «имя … указывает на …, а у VPS адреса …» | A-запись имени смотрит не на этот VPS — исправьте её (или выберите другое имя) и повторите; «проверить имя» в форме показывает то же самое заранее |
+| Установка: «certbot не выпустил сертификат» | Порт 80 закрыт снаружи (файрвол провайдера), A-запись ещё не разошлась, лимит выпусков Let's Encrypt; вывод certbot — в сообщении |
+| Установка: «порт 80 занят …, но это не служба systemd» | 80 держит программа, запущенная вручную или в контейнере, — certbot standalone не может её остановить; освободите 80 на время установки |
+| `certificate: … no such file` в журнале службы | Нет копии сертификата в `/etc/nkt-edge/tls` — выполните deploy-hook (раздел «Установка вручную») или переустановите из хаба |
+| Служба не стартует | `EDGE_TOKEN` короче 32 знаков, нет сертификата, порт 443 или 8444 занят — сообщение в журнале службы |
 | 403 за прокси при включённом «только GitHub» | Прокси не передаёт `X-Real-IP` — добавьте `proxy_set_header X-Real-IP $remote_addr;` |

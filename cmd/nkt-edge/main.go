@@ -1,21 +1,23 @@
 // nkt-edge — входной сервис для вебхуков выкладок хаба nkt. Ставится на
-// VPS с белым адресом: принимает по HTTPS (сертификат Let's Encrypt)
+// VPS с белым адресом: принимает по HTTPS (сертификат Let's Encrypt,
+// выпущенный certbot)
 // только POST /hooks/{id} и передаёт их хабу по туннелю, который хаб сам
 // держит к edge. У edge нет ни базы, ни секретов конвейеров, ни доступа к
 // хостам: подпись вебхука проверяет хаб.
 //
 // Настройка — переменные окружения (файл /etc/nkt-edge/edge.env):
 //
-//	EDGE_DOMAIN        имя для сертификата (hooks.example.com)
-//	EDGE_EMAIL         e-mail для Let's Encrypt
+//	EDGE_DOMAIN        имя вебхуков (hooks.example.com), для журнала
 //	EDGE_TOKEN         общий секрет с хабом (не короче 32 знаков)
-//	EDGE_DATA_DIR      каталог сертификатов (/var/lib/nkt-edge)
+//	EDGE_DATA_DIR      каталог сертификата туннеля (/var/lib/nkt-edge)
+//	EDGE_CERT_FILE     сертификат (/etc/nkt-edge/tls/fullchain.pem) —
+//	EDGE_KEY_FILE      и ключ (/etc/nkt-edge/tls/privkey.pem): копия
+//	                   сертификата certbot, её обновляет deploy-hook
 //	EDGE_HTTPS_ADDR    :443
-//	EDGE_HTTP_ADDR     :80 (выпуск сертификата; пусто — не слушать)
 //	EDGE_TUNNEL_ADDR   :8444 (сюда подключается хаб)
 //	EDGE_RATE          запросов в минуту с одного адреса (60)
 //	EDGE_GITHUB_ONLY   true — принимать вебхуки только с адресов GitHub
-//	EDGE_SELF_SIGNED   true — без Let's Encrypt (проверка, внутренняя сеть)
+//	EDGE_SELF_SIGNED   true — сертификатом туннеля (проверка, внутренняя сеть)
 //	EDGE_PROXY_ADDR    127.0.0.1:8445 — за обратным прокси (nginx, Caddy),
 //	                   когда 80 и 443 на VPS уже заняты: вебхуки по HTTP
 //	                   только на loopback, TLS и сертификат — у прокси,
@@ -45,7 +47,6 @@ import (
 	"time"
 
 	"github.com/hashicorp/yamux"
-	"golang.org/x/crypto/acme/autocert"
 
 	"github.com/piqab/nkt/internal/edge"
 )
@@ -122,7 +123,6 @@ func main() {
 		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second, WriteTimeout: 90 * time.Second, IdleTimeout: 60 * time.Second,
 		MaxHeaderBytes: 32 << 10,
 	}
-	var httpSrv *http.Server
 	var serveHooks func() error
 	if proxyAddr := os.Getenv("EDGE_PROXY_ADDR"); proxyAddr != "" {
 		host, _, err := net.SplitHostPort(proxyAddr)
@@ -140,34 +140,11 @@ func main() {
 		if env("EDGE_SELF_SIGNED", "false") == "true" {
 			hookSrv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 		} else {
-			domain := os.Getenv("EDGE_DOMAIN")
-			if domain == "" {
-				log.Fatal("EDGE_DOMAIN is required (or EDGE_SELF_SIGNED=true, or EDGE_PROXY_ADDR)")
+			cf := &certFile{certPath: env("EDGE_CERT_FILE", "/etc/nkt-edge/tls/fullchain.pem"), keyPath: env("EDGE_KEY_FILE", "/etc/nkt-edge/tls/privkey.pem")}
+			if err := cf.load(); err != nil {
+				log.Fatalf("certificate: %v — issue it with certbot (see site: nkt-edge), or set EDGE_SELF_SIGNED=true", err)
 			}
-			m := &autocert.Manager{
-				Prompt:     autocert.AcceptTOS,
-				HostPolicy: autocert.HostWhitelist(domain),
-				Cache:      autocert.DirCache(filepath.Join(dataDir, "acme")),
-				Email:      os.Getenv("EDGE_EMAIL"),
-			}
-			hookSrv.TLSConfig = m.TLSConfig()
-			hookSrv.TLSConfig.MinVersion = tls.VersionTLS12
-			if addr := env("EDGE_HTTP_ADDR", ":80"); addr != "" {
-				// Порт 80 — только для выпуска сертификата (HTTP-01); без
-				// него Let's Encrypt проверяет через 443 (TLS-ALPN-01).
-				httpSrv = &http.Server{Addr: addr, Handler: m.HTTPHandler(http.NotFoundHandler()), ReadHeaderTimeout: 10 * time.Second}
-				ln, err := net.Listen("tcp", addr)
-				if err != nil {
-					log.Printf("http: %v (certificates are issued through 443)", err)
-					httpSrv = nil
-				} else {
-					go func() {
-						if err := httpSrv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-							log.Printf("http: %v", err)
-						}
-					}()
-				}
-			}
+			hookSrv.TLSConfig = &tls.Config{GetCertificate: cf.GetCertificate, MinVersion: tls.VersionTLS12}
 		}
 		addr := env("EDGE_HTTPS_ADDR", ":443")
 		ln, err := net.Listen("tcp", addr)
@@ -192,9 +169,6 @@ func main() {
 	shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	_ = hookSrv.Shutdown(shutdown)
-	if httpSrv != nil {
-		_ = httpSrv.Shutdown(shutdown)
-	}
 	_ = tl.Close()
 }
 

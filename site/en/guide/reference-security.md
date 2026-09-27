@@ -132,8 +132,8 @@ a hub has its own checkbox in its form.
   edge's certificate (the only verification root), then a token.
 - One route is available through the tunnel — `POST /hooks/{id}`. The
   hub's UI and API are not reachable via the edge.
-- The service on the VPS — `DynamicUser`, the only capability is binding
-  80/443.
+- The service on the VPS — a system user `nkt-edge`, the only capability
+  is binding 443; certbot issues the certificate.
 
 Details — [nkt-edge](/en/guide/edge#security-model).
 

@@ -231,6 +231,8 @@ export interface ServiceUnit {
   installed: boolean
   config_files?: string[]
   actions?: string[]
+  /** Слушаемые сокеты службы: «tcp 0.0.0.0:443». */
+  ports?: string[]
 }
 
 export interface PortMapping {

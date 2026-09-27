@@ -1168,7 +1168,8 @@
     "refresh": "refresh",
     "loadingLogs": "logs",
     "empty": "(empty)",
-    "stateUnknown": "State could not be read: systemctl did not answer. Usually that means the dbus system bus is unavailable — see the Terminal section."
+    "stateUnknown": "State could not be read: systemctl did not answer. Usually that means the dbus system bus is unavailable — see the Terminal section.",
+    "colPorts": "Ports"
   },
   "terminal": {
     "popoutTitle": "Terminal: {{name}}",
@@ -3059,7 +3060,7 @@
     "tunnel": "Tunnel",
     "fingerprint": "Tunnel certificate fingerprint",
     "installTitle": "Install nkt-edge",
-    "installHint": "A hub host with a public address (a VPS): the job uploads the nkt-edge program for its architecture, a least-privilege service and an env file with the token, opens 80, 443 and 8444 in ufw, pins the tunnel certificate fingerprint and connects the hub. The domain needs an A record pointing to the host — the Let's Encrypt certificate is issued on the first request.",
+    "installHint": "A hub host with a public address (a VPS). The job checks that the webhook name points to this host and that the ports are free, uploads nkt-edge for its architecture, issues a Let's Encrypt certificate with certbot (standalone; a service on port 80, if any, is stopped for a few seconds), starts a least-privilege service, opens the ports in ufw, connects the hub and checks https://name/healthz. The name is taken from the host address if it is a DNS name.",
     "host": "host",
     "email": "e-mail for Let's Encrypt (optional)",
     "githubOnly": "accept webhooks from GitHub addresses only",
@@ -3069,6 +3070,10 @@
     "enabled": "connect to edge",
     "certKeep": "tunnel certificate (empty — keep)",
     "proxyPort": "proxy port (empty — edge itself on 80 and 443)",
-    "proxyHint": "If 80 and 443 on the VPS are already taken by nginx or Caddy, give a free port (e.g. 8445): edge will take webhooks over HTTP on 127.0.0.1:port, and your server forwards /hooks/ of the webhook domain to it; a ready config snippet appears in the install log. Busy ports are checked before installing."
+    "proxyHint": "If 443 on the VPS is already taken by nginx or Caddy, give a free port (e.g. 8445): edge will take webhooks over HTTP on 127.0.0.1:port, and your server forwards /hooks/ to it (an nginx and Caddy snippet is in the install log; the certbot certificate is in /etc/letsencrypt/live/name/).",
+    "check": "check the name",
+    "dnsMatch": "{{domain}} points to this host ({{ips}}) — the certificate will be issued",
+    "dnsMissing": "{{domain}} is not in DNS — create an A record pointing to the host",
+    "dnsMismatch": "{{domain}} points to {{ips}}, while the host has {{host}} — Let's Encrypt won't issue a certificate"
   }
 }
