@@ -432,3 +432,43 @@ func ScanInstances(ctx context.Context, trivyBin, dbDir string, list []model.Ins
 	}
 	return findings, warnings
 }
+
+// K8sImageSource — откуда брать образ пода: containerd узла (сокет k3s
+// или kubeadm, namespace k8s.io), иначе прямо из registry.
+type K8sImageSource struct {
+	ContainerdSocket string
+}
+
+// ScanK8sImage — trivy image для образа пода кластера.
+func ScanK8sImage(ctx context.Context, trivyBin, dbDir, ref string, src K8sImageSource) ([]model.VulnFinding, error) {
+	args, env := k8sImageArgs(dbDir, ref, src)
+	cmd := exec.CommandContext(ctx, trivyBin, args...)
+	cmd.Env = append(os.Environ(), env...)
+	out, err := cmd.Output()
+	if err != nil {
+		stderr := ""
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			stderr = strings.TrimSpace(string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("trivy image %s: %w: %s", ref, err, stderr)
+	}
+	return parseTrivyReport(out)
+}
+
+func k8sImageArgs(dbDir, ref string, src K8sImageSource) ([]string, []string) {
+	sources := "remote"
+	var env []string
+	if src.ContainerdSocket != "" {
+		sources = "containerd,remote"
+		env = []string{"CONTAINERD_ADDRESS=" + src.ContainerdSocket, "CONTAINERD_NAMESPACE=k8s.io"}
+	}
+	return []string{"image",
+		"--cache-dir", dbDir,
+		"--skip-db-update",
+		"--scanners", "vuln",
+		"--image-src", sources,
+		"--format", "json",
+		"--quiet",
+		ref,
+	}, env
+}
