@@ -6,6 +6,7 @@ import type { Me } from '../types'
 import { Banner, Loading, Modal } from './ui'
 import { EditTextModal } from './EditTextModal'
 import { VersionHistory } from './VersionHistory'
+import { K8S_TEMPLATES as TEMPLATES } from './k8sTemplates'
 
 type Doc = { content: string; sha256: string; history_path: string }
 
@@ -65,6 +66,7 @@ export function K8sYAMLModal({ kind, namespace, name, me, onClose, onSaved }: { 
         onSave={canMutate ? save : async () => false}
         onHistory={() => setHistory(true)}
         onClose={onClose}
+        blocksEndpoint="/k8s/yaml/blocks"
         serverDiff={canMutate ? { title: t('k8s.yaml.serverDiff'), load: async () => (await api<{ diff: string }>('/k8s/yaml/diff', { method: 'POST', body })).diff } : undefined}
         fields={
           <>
@@ -100,94 +102,6 @@ export function K8sYAMLModal({ kind, namespace, name, me, onClose, onSaved }: { 
   )
 }
 
-const TEMPLATES: Record<string, (name: string, ns: string) => string> = {
-  deployment: (name, ns) => `apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ${name}
-  namespace: ${ns}
-  labels:
-    app: ${name}
-spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: ${name}
-  template:
-    metadata:
-      labels:
-        app: ${name}
-    spec:
-      containers:
-        - name: ${name}
-          image: nginx:1.27
-          ports:
-            - containerPort: 80
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              memory: 256Mi
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: ${name}
-  namespace: ${ns}
-spec:
-  selector:
-    app: ${name}
-  ports:
-    - port: 80
-      targetPort: 80
-`,
-  ingress: (name, ns) => `apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: ${name}
-  namespace: ${ns}
-spec:
-  rules:
-    - host: ${name}.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: ${name}
-                port:
-                  number: 80
-`,
-  configmap: (name, ns) => `apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ${name}
-  namespace: ${ns}
-data:
-  key: value
-`,
-  cronjob: (name, ns) => `apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: ${name}
-  namespace: ${ns}
-spec:
-  schedule: "0 3 * * *"
-  concurrencyPolicy: Forbid
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          restartPolicy: OnFailure
-          containers:
-            - name: ${name}
-              image: busybox:1.36
-              command: ["sh", "-c", "date; echo hello"]
-`,
-  empty: () => '',
-}
 
 /** «Новый объект»: манифест из шаблона, дифф с кластером, kubectl apply. */
 export function K8sNewObjectModal({ namespace, namespaces, me, onClose, onCreated }: { namespace: string; namespaces: string[]; me: Me; onClose: () => void; onCreated: () => void }) {
@@ -225,6 +139,7 @@ export function K8sNewObjectModal({ namespace, namespaces, me, onClose, onCreate
       busy={busy}
       onSave={me.is_admin && me.allow_mutations ? save : async () => false}
       onClose={onClose}
+      blocksEndpoint="/k8s/yaml/blocks"
       serverDiff={{ title: t('k8s.yaml.serverDiff'), load: async () => (await api<{ diff: string }>('/k8s/yaml/diff', { method: 'POST', body: { content: draft } })).diff }}
       fields={
         <>

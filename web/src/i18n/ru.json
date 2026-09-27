@@ -2885,5 +2885,24 @@
     "diffWithCurrent": "дифф с текущим",
     "loadVersion": "в редактор",
     "current": "текущий"
+  },
+  "yamlBlocks": {
+    "title": "Блоки",
+    "text": "Текст",
+    "addObject": "Объект",
+    "deleteConfirm": "Удалить блок {{name}} из черновика?",
+    "parseError": "Блоки не разобраны — поправьте текст: {{error}}",
+    "editTitle": "Блок {{name}}",
+    "addTitle": "Новый элемент: {{kind}}",
+    "editHint": "Правка меняет только черновик — запись по «Сохранить» окна, через дифф и kubectl diff.",
+    "apply": "В черновик",
+    "delete": "Удалить",
+    "item": {
+      "container": "контейнер",
+      "volume": "том",
+      "port": "порт",
+      "rule": "правило",
+      "key": "ключ"
+    }
   }
 }

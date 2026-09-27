@@ -283,6 +283,7 @@ func (s *Server) Handler() http.Handler {
 					r.Get("/hub/k8s/manifests/{id}/versions", s.handleManifestVersions)
 					r.Delete("/hub/k8s/manifests/{id}", s.handleManifestDelete)
 					r.Post("/hub/k8s/manifests/diff", s.handleManifestDiff)
+					r.Post("/hub/k8s/manifests/blocks", s.handleManifestBlocks)
 					r.Post("/hub/k8s/manifests/apply", s.handleManifestApply)
 
 					r.Get("/hub/bootstrap/defaults", s.handleBootstrapDefaults)

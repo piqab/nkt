@@ -292,6 +292,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/k8s/rollout/history", s.handleK8sRolloutHistory)
 			r.Get("/k8s/pods/containers", s.handleK8sPodContainers)
 			r.Get("/k8s/yaml", s.handleK8sYAML)
+			r.Post("/k8s/yaml/blocks", s.handleK8sYAMLBlocks)
 			r.Get("/k8s/helm", s.handleHelm)
 			r.Get("/k8s/helm/history", s.handleHelmHistory)
 			r.Get("/vm/portforward", s.handlePortForwardList)

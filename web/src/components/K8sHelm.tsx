@@ -288,6 +288,7 @@ function InstallModal({
       onDraft={setDraft}
       busy={busy}
       rows={14}
+      blocksEndpoint="/k8s/yaml/blocks"
       onSave={me.is_admin && me.allow_mutations ? save : async () => false}
       onClose={onClose}
       fields={

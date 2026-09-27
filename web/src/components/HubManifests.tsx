@@ -227,6 +227,7 @@ function ApplyModal({ manifest, initial, onClose, onApplied }: { manifest?: Mani
       busy={busy}
       onSave={apply}
       onClose={onClose}
+      blocksEndpoint="/hub/k8s/manifests/blocks"
       serverDiff={{ title: t('manifests.clusterDiff'), load: clusterDiff }}
       fields={
         <>

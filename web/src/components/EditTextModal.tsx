@@ -1,8 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Button } from 'antd'
+import { Button, Segmented } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { Banner, CodeEditor, DiffView, Loading, Modal } from './ui'
 import { unifiedDiff } from './textDiff'
+import { YamlBlocks } from './YamlBlocks'
 
 /**
  * Окно правки текста — общий шаблон для всего, что правится в nkt:
@@ -23,6 +24,7 @@ export function EditTextModal({
   rows = 22,
   below,
   serverDiff,
+  blocksEndpoint,
 }: {
   title: string
   /** Текст до правки — с ним сравнивается черновик. Для нового — ''. */
@@ -42,9 +44,13 @@ export function EditTextModal({
   /** Дифф от самой системы (kubectl diff) — в окне изменений под
    * текстовым: что получится после записи с учётом значений по умолчанию. */
   serverDiff?: { title: string; load: () => Promise<string> }
+  /** Блочный режим YAML Kubernetes: адрес разбора на блоки (POST
+   * {content}); задан — над редактором переключатель «Текст / Блоки». */
+  blocksEndpoint?: string
 }) {
   const { t } = useTranslation()
   const [preview, setPreview] = useState<{ diff: string; confirm: boolean } | null>(null)
+  const [mode, setMode] = useState<'text' | 'blocks'>('text')
   const dirty = draft !== saved
   const diff = () => unifiedDiff(saved, draft, t('editModal.saved'), t('editModal.draft'))
 
@@ -56,7 +62,23 @@ export function EditTextModal({
   return (
     <Modal title={title} onClose={onClose} width={1100} maskClosable={false} sizeKey="edit">
       {fields}
-      <CodeEditor value={draft} onChange={(e) => onDraft(e.target.value)} rows={rows} fill />
+      {blocksEndpoint && (
+        <Segmented
+          size="small"
+          style={{ marginBottom: '0.4rem' }}
+          value={mode}
+          onChange={(v) => setMode(v as 'text' | 'blocks')}
+          options={[
+            { value: 'text', label: t('yamlBlocks.text') },
+            { value: 'blocks', label: t('yamlBlocks.title') },
+          ]}
+        />
+      )}
+      {blocksEndpoint && mode === 'blocks' ? (
+        <YamlBlocks text={draft} onChange={onDraft} endpoint={blocksEndpoint} />
+      ) : (
+        <CodeEditor value={draft} onChange={(e) => onDraft(e.target.value)} rows={rows} fill />
+      )}
       {below}
       <div className="row" style={{ gap: '0.5rem', marginTop: '0.6rem', alignItems: 'center' }}>
         {dirty && <span className="small" style={{ color: 'var(--status-warning)' }}>{t('configs.unsavedChanges')}</span>}

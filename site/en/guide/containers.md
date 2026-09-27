@@ -162,7 +162,10 @@ The **YAML** of any object (except secrets) opens from the same menu:
 before saving — a text diff and `kubectl diff` from the cluster, saving
 runs `kubectl apply`, every edit is a version in the history with
 rollback. The **"New object"** button creates objects from templates
-(Deployment + Service, Ingress, ConfigMap, CronJob).
+(Deployment + Service, Ingress, ConfigMap, CronJob). The YAML windows have
+a **block mode**, like the configs: objects, containers, ports, rules and
+keys as blocks with editing, deletion and "+ item"; writing goes through
+the same diffs.
 
 The **Helm** section lists the cluster's releases: history and rollback,
 values editing with a diff and upgrade, uninstall, installing a chart
