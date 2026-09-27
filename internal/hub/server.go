@@ -140,6 +140,11 @@ func (s *Server) Handler() http.Handler {
 			"/system/apt/remove/ws",
 			"/system/sandbox-packages/ws",
 		}
+		// Проброс порта Kubernetes: доступ по токену, его проверяет хост.
+		r.HandleFunc("/hosts/local/k8s/pf/{token}", s.proxyLocal)
+		r.HandleFunc("/hosts/local/k8s/pf/{token}/*", s.proxyLocal)
+		r.HandleFunc("/hosts/{id}/k8s/pf/{token}", s.proxyHost)
+		r.HandleFunc("/hosts/{id}/k8s/pf/{token}/*", s.proxyHost)
 		r.Group(func(r chi.Router) {
 			r.Use(s.auth.RequireAuth)
 			for _, p := range hubWSPaths {

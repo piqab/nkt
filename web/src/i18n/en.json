@@ -2558,7 +2558,16 @@
       "create": "Create",
       "bounds": "Bounds",
       "boundsTitle": "HPA bounds: {{name}}",
-      "boundsHint": "Replicas now: {{current}}, metrics: {{metrics}}."
+      "boundsHint": "Replicas now: {{current}}, metrics: {{metrics}}.",
+      "forward": "Open in the browser (port forward)",
+      "forwardTitle": "Port forward: {{name}}",
+      "forwardHint": "kubectl port-forward on the host plus the nkt proxy: the application opens in a new tab via a one-off link. The link lives while it is used (closed after 30 minutes idle). The page opens sandboxed with no access to nkt; applications that reference their files from the site root (/static/…) may open only partially.",
+      "forwardNoPorts": "The object declares no ports.",
+      "port": "Port",
+      "forwardOpen": "Open",
+      "forwardLink": "Link:",
+      "forwardsOpen": "Open port forwards:",
+      "forwardClose": "close"
     },
     "yaml": {
       "title": "YAML: {{name}}",
