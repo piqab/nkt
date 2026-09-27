@@ -337,3 +337,45 @@ func TestRetryResumesFromState(t *testing.T) {
 		t.Error("retry of a non-resumable job must fail")
 	}
 }
+
+// Паника исполнителя — ошибка задания, а не падение службы.
+func TestRunnerPanicFailsJob(t *testing.T) {
+	m, db := newTestManager(t)
+	m.Register("boom", runnerFunc{fn: func(context.Context, *Context) error {
+		var f func()
+		f()
+		return nil
+	}})
+	id, _ := m.Start(context.Background(), Spec{Kind: "boom", Queue: "q"})
+	waitFor(t, "задание упало", func() bool { return jobStatus(t, db, id) == store.JobFailed })
+	job, _ := db.JobByID(context.Background(), id)
+	if !strings.Contains(job.Error, "nil") {
+		t.Errorf("ошибка: %q", job.Error)
+	}
+}
+
+// Задание, которое после каждого продолжения снова «роняет» службу,
+// останавливается после maxResumes продолжений.
+func TestResumeLoopStops(t *testing.T) {
+	ctx := context.Background()
+	m, db := newTestManager(t)
+	m.Register("loop", runnerFunc{resumable: true, fn: func(ctx context.Context, _ *Context) error {
+		<-ctx.Done()
+		return ctx.Err()
+	}})
+	id, err := db.CreateJob(ctx, store.Job{Kind: "loop", Status: store.JobRunning, Queue: "loop", Title: "t"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < maxResumes; i++ {
+		if n := m.countResume(ctx, id); n != i+1 {
+			t.Fatalf("счётчик %d", n)
+		}
+	}
+	if err := m.Recover(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if got := jobStatus(t, db, id); got != store.JobInterrupted {
+		t.Errorf("статус %q", got)
+	}
+}

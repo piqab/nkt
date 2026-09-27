@@ -35,6 +35,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -222,7 +223,9 @@ func (s *server) handleHook(w http.ResponseWriter, r *http.Request) {
 	status := http.StatusOK
 	// Поля — атрибутами slog: значения из запроса журнал экранирует сам
 	// (переводы строк не подделают соседние записи).
-	defer func() { slog.Info("hook", "ip", ip, "method", r.Method, "path", r.URL.Path, "status", status) }()
+	defer func() {
+		slog.Info("hook", "ip", noNewlines(ip), "method", noNewlines(r.Method), "path", noNewlines(r.URL.Path), "status", status)
+	}()
 	if r.Method != http.MethodPost || !hookPath.MatchString(r.URL.Path) {
 		status = http.StatusNotFound
 		http.NotFound(w, r)
@@ -277,4 +280,10 @@ type statusWriter struct {
 func (w *statusWriter) WriteHeader(code int) {
 	w.status = code
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// noNewlines — значение из запроса для журнала: без переводов строк.
+// slog и так берёт такие значения в кавычки; это — вторая линия.
+func noNewlines(v string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(v, "\n", ""), "\r", "")
 }

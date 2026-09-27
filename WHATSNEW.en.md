@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.28 — 2026-09-27
+
+- **Installing nkt-edge crashed the hub.** Uploading the program to the VPS
+  called a missing progress handler, the hub crashed and after the restart
+  resumed the same job — and crashed again. Fixed: the upload progress
+  goes into the job log.
+- **Jobs can no longer crash the service.** An internal runner error (a
+  panic) now fails the job with an entry in the service log instead of
+  stopping the hub or host.
+- **A limit on resuming after restarts.** If the service restarted in the
+  middle of a job more than three times, the job is interrupted instead of
+  resuming in a loop.
+- **The nkt-edge log:** values from the request are additionally stripped
+  of newlines (a CodeQL warning).
+
 ## v1.11.27 — 2026-09-27
 
 - **Helm:** the tab got a namespace selector — the same shared filter as in

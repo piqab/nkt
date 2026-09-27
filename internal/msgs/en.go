@@ -1006,6 +1006,8 @@ var enCatalog = map[string]string{
 	"hub.writing":                                         "writing %s: %v: %s",
 	"inventory.savingSnapshot":                            "saving snapshot: %v",
 	"jobs.jobAlreadyFinished":                             "the job is already finished",
+	"jobs.panicked":                                       "internal runner error: %s",
+	"jobs.resumeLoop":                                     "the job was stopped: the service restarted in the middle of it more than %d times",
 	"jobs.jobRunningProcess":                              "the job is not running in this process",
 	"jobs.unknownJobKind":                                 "unknown job kind %q",
 	"monitor.demoMetricsHistory":                          "demo metrics history: %v",

@@ -546,6 +546,9 @@ func (p *progressReader) Read(b []byte) (int, error) {
 func (p *progressReader) Size() int64 { return p.total }
 
 func (p *progressReader) reportNow() {
+	if p.report == nil {
+		return
+	}
 	p.last = time.Now()
 	pct := int(p.read * 100 / p.total)
 	// Byte counts travel as plain numbers, not pre-formatted "X МБ" strings
