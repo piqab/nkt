@@ -79,7 +79,7 @@ Under `/api/hub/`:
 | Manifests and Helm | `/hub/k8s/manifests*`, `/hub/k8s/helm/install`, `/hub/k8s/findings` | One YAML or release into several clusters, findings across clusters |
 | Deployments | `/hub/pipelines*` | Pipelines, access, webhook secret, deploy, rollback, history |
 | Webhook | `POST /hub/hooks/{id}` | No session, access by signature |
-| nkt-edge | `/hub/edge`, `/hub/edge/install` | State, configuration, installation |
+| nkt-edge | `/hub/edge`, `/hub/edge/install`, `/hub/edge/uninstall` | State, configuration, installation, removal from the VPS |
 | Alerts | `/hub/events*` | Log, mark seen, settings |
 | About | `/hub/version*`, `/hub/update`, `/hub/rollback`, `/hub/vulndb*`, `/hub/clamdb*`, `/hub/aptcache*` | Version, update, rollback, databases, cache |
 | AI | `/hub/ai*` | Settings, test, analysis, answers, instructions |

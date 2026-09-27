@@ -43,6 +43,24 @@ export function EdgeCard({ onOpenJob }: { onOpenJob: (id: number) => void }) {
           <Button size="small" onClick={() => setDialog('manual')}>
             {t('edge.manual')}
           </Button>
+          {e?.configured && !!e.host_id && (
+            <Button
+              size="small"
+              danger
+              onClick={async () => {
+                if (!(await confirmAction(t('edge.uninstallConfirm')))) return
+                try {
+                  const res = await api<{ job_id: number }>('/hub/edge/uninstall', { method: 'POST' })
+                  onOpenJob(res.job_id)
+                  void st.reload()
+                } catch (err) {
+                  setError(errText(err))
+                }
+              }}
+            >
+              {t('edge.uninstall')}
+            </Button>
+          )}
           {e?.configured && (
             <Button
               size="small"
@@ -114,6 +132,7 @@ function InstallModal({ onClose, onStarted }: { onClose: () => void; onStarted: 
   const [domain, setDomain] = useState('')
   const [email, setEmail] = useState('')
   const [github, setGithub] = useState(false)
+  const [proxyPort, setProxyPort] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const list = (hosts.data ?? []).filter((h) => h.id > 0)
@@ -128,6 +147,8 @@ function InstallModal({ onClose, onStarted }: { onClose: () => void; onStarted: 
         <Checkbox checked={github} onChange={(ev) => setGithub(ev.target.checked)}>
           {t('edge.githubOnly')}
         </Checkbox>
+        <Input size="small" inputMode="numeric" placeholder={t('edge.proxyPort')} value={proxyPort} onChange={(ev) => setProxyPort(ev.target.value.replace(/\D/g, ''))} />
+        <p className="small muted">{t('edge.proxyHint')}</p>
         <div>
           <Button
             type="primary"
@@ -137,7 +158,7 @@ function InstallModal({ onClose, onStarted }: { onClose: () => void; onStarted: 
               setBusy(true)
               setError(null)
               try {
-                const res = await api<{ job_id: number }>('/hub/edge/install', { method: 'POST', body: { host_id: hostID, domain, email, github_only: github } })
+                const res = await api<{ job_id: number }>('/hub/edge/install', { method: 'POST', body: { host_id: hostID, domain, email, github_only: github, proxy_port: proxyPort ? Number(proxyPort) : 0 } })
                 onStarted(res.job_id)
               } catch (err) {
                 setError(errText(err))

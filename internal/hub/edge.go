@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hashicorp/yamux"
 	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/edge"
@@ -50,7 +54,7 @@ type edgeClient struct {
 	mu        sync.Mutex
 	connected bool
 	since     time.Time
-	lastErr   string
+	lastErr   error
 	reload    chan struct{}
 	cancel    context.CancelFunc
 }
@@ -92,7 +96,7 @@ func (s *Server) StartEdge(ctx context.Context) {
 		for ctx.Err() == nil {
 			st := s.edgeSettings(ctx)
 			if !st.Enabled || st.Address == "" {
-				s.setEdgeStatus(false, "")
+				s.setEdgeStatus(false, nil)
 				select {
 				case <-ctx.Done():
 				case <-s.edge.reload:
@@ -101,7 +105,7 @@ func (s *Server) StartEdge(ctx context.Context) {
 				continue
 			}
 			err := s.runEdge(ctx, st)
-			s.setEdgeStatus(false, errText(err))
+			s.setEdgeStatus(false, err)
 			if err == nil {
 				backoff = 5 * time.Second
 			} else if backoff < time.Minute {
@@ -117,21 +121,14 @@ func (s *Server) StartEdge(ctx context.Context) {
 	}()
 }
 
-func errText(err error) string {
-	if err == nil {
-		return ""
-	}
-	return err.Error()
-}
-
-func (s *Server) setEdgeStatus(connected bool, lastErr string) {
+func (s *Server) setEdgeStatus(connected bool, lastErr error) {
 	s.edge.mu.Lock()
 	defer s.edge.mu.Unlock()
 	if connected && !s.edge.connected {
 		s.edge.since = time.Now()
 	}
 	s.edge.connected = connected
-	if lastErr != "" || connected {
+	if lastErr != nil || connected {
 		s.edge.lastErr = lastErr
 	}
 }
@@ -147,6 +144,11 @@ func (s *Server) runEdge(ctx context.Context, st EdgeSettings) error {
 	}
 	conn, _, err := edge.Dial(st.Address, string(token), st.CertPEM, 15*time.Second)
 	if err != nil {
+		if errors.Is(err, io.EOF) {
+			// Порт туннеля принял соединение и закрыл его без ответа:
+			// обычно служба edge падает и перезапускается по кругу.
+			return msgs.Errorf("edge.closedByEdge", st.Address)
+		}
 		return err
 	}
 	sess, err := yamux.Client(conn, yamux.DefaultConfig())
@@ -163,7 +165,7 @@ func (s *Server) runEdge(ctx context.Context, st EdgeSettings) error {
 		<-cctx.Done()
 		sess.Close()
 	}()
-	s.setEdgeStatus(true, "")
+	s.setEdgeStatus(true, nil)
 	srv := &http.Server{Handler: s.edgeHandler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second}
 	err = srv.Serve(sess)
 	if cctx.Err() != nil || errors.Is(err, net.ErrClosed) || sess.IsClosed() {
@@ -204,7 +206,10 @@ func (s *Server) handleEdgeStatus(w http.ResponseWriter, r *http.Request) {
 		Fingerprint: st.Fingerprint, HostID: st.HostID}
 	if s.edge != nil {
 		s.edge.mu.Lock()
-		out.Connected, out.LastError = s.edge.connected, s.edge.lastErr
+		out.Connected = s.edge.connected
+		if s.edge.lastErr != nil {
+			out.LastError = msgs.Localize(msgs.LangFromRequest(r), s.edge.lastErr)
+		}
 		if s.edge.connected {
 			out.Since = s.edge.since.UTC().Format(time.RFC3339)
 		}
@@ -299,6 +304,10 @@ type EdgeInstallParams struct {
 	Domain     string `json:"domain"`
 	Email      string `json:"email"`
 	GitHubOnly bool   `json:"github_only"`
+	// ProxyPort — edge за обратным прокси на VPS (80 и 443 заняты nginx
+	// или Caddy): вебхуки по HTTP на 127.0.0.1:ProxyPort; 0 — edge сам
+	// на 80 и 443.
+	ProxyPort int `json:"proxy_port,omitempty"`
 }
 
 // handleEdgeInstall — POST /hub/edge/install {host_id, domain, email, github_only}.
@@ -315,6 +324,10 @@ func (s *Server) handleEdgeInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Email != "" && !edgeEmailRe.MatchString(req.Email) {
 		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.badEmail", req.Email))
+		return
+	}
+	if req.ProxyPort != 0 && (req.ProxyPort < 1024 || req.ProxyPort > 65535 || strconv.Itoa(req.ProxyPort) == EdgeTunnelPort) {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.badProxyPort", req.ProxyPort))
 		return
 	}
 	host, err := s.db.HostByID(r.Context(), req.HostID)
@@ -405,6 +418,9 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil {
 		return err
 	}
+	if err := edgePortsFree(client, host.SSHUser, p.ProxyPort, jc); err != nil {
+		return err
+	}
 	jc.StepKey(2, 5, "edge.stepBinary", goos, goarch)
 	bin, err := s.hub.ensureProgram(ctx, "nkt-edge", goos, goarch, report, report)
 	if err != nil {
@@ -423,6 +439,9 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		token = randomToken(32)
 	}
 	envFile := fmt.Sprintf("EDGE_DOMAIN=%s\nEDGE_EMAIL=%s\nEDGE_TOKEN=%s\nEDGE_TUNNEL_ADDR=:%s\nEDGE_GITHUB_ONLY=%t\n", p.Domain, p.Email, token, EdgeTunnelPort, p.GitHubOnly)
+	if p.ProxyPort > 0 {
+		envFile += fmt.Sprintf("EDGE_PROXY_ADDR=127.0.0.1:%d\n", p.ProxyPort)
+	}
 	sc, err := sftp.NewClient(client)
 	if err != nil {
 		return err
@@ -462,8 +481,18 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if out, err := runRemote(client, script); err != nil {
 		return msgs.Errorf("edge.serviceFailed", strings.TrimSpace(out))
 	}
-	// Файрвол хоста: открыть 80, 443 и порт туннеля, если ufw включён.
-	_, _ = runRemote(client, "if command -v ufw >/dev/null && "+sudo+"ufw status | grep -q 'Status: active'; then "+sudo+"ufw allow 80/tcp; "+sudo+"ufw allow 443/tcp; "+sudo+"ufw allow "+EdgeTunnelPort+"/tcp; fi")
+	// restart проходит, даже если процесс падает через долю секунды, —
+	// служба должна прожить несколько секунд тем же процессом.
+	if err := edgeServiceStable(ctx, client, sudo); err != nil {
+		return err
+	}
+	// Файрвол хоста: порт туннеля, а без прокси — ещё 80 и 443, если ufw
+	// включён (за прокси они уже открыты для него).
+	allow := sudo + "ufw allow " + EdgeTunnelPort + "/tcp; "
+	if p.ProxyPort == 0 {
+		allow = sudo + "ufw allow 80/tcp; " + sudo + "ufw allow 443/tcp; " + allow
+	}
+	_, _ = runRemote(client, "if command -v ufw >/dev/null && "+sudo+"ufw status | grep -q 'Status: active'; then "+allow+"fi")
 	// Сертификат туннеля — прямо с хоста по SSH: хаб доверяет ровно ему.
 	var fp, certPEM string
 	for i := 0; i < 15 && fp == ""; i++ {
@@ -499,9 +528,12 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			s.edge.mu.Unlock()
 			if ok {
 				jc.Log("edge.connected", p.Domain)
+				if p.ProxyPort > 0 {
+					jc.Log("edge.proxySnippet", p.Domain, p.ProxyPort)
+				}
 				return nil
 			}
-			if i == 19 && last != "" {
+			if i == 19 && last != nil {
 				return msgs.Errorf("edge.notConnected", last)
 			}
 		}
@@ -510,4 +542,152 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 	}
 	return msgs.Errorf("edge.notConnected", "timeout")
+}
+
+var ssProcRe = regexp.MustCompile(`\("([^"]+)",pid=`)
+
+// edgePortsFree — до установки: порты, которые займёт edge, не держит
+// другая программа. Иначе служба падала бы по кругу, а хаб видел бы
+// только обрыв соединения. 80 — предупреждение: без него сертификат
+// выпускается через 443.
+func edgePortsFree(client *ssh.Client, user string, proxyPort int, jc *jobs.Context) error {
+	sudo := sudoPrefix(user)
+	holder := func(port int) string {
+		out, err := runRemote(client, sudo+"ss -ltnpH 'sport = :"+strconv.Itoa(port)+"'")
+		if err != nil || strings.TrimSpace(out) == "" {
+			return ""
+		}
+		names := []string{}
+		for _, m := range ssProcRe.FindAllStringSubmatch(out, -1) {
+			if m[1] != "nkt-edge" && !slices.Contains(names, m[1]) {
+				names = append(names, m[1])
+			}
+		}
+		if len(names) == 0 && !strings.Contains(out, "nkt-edge") {
+			return "?"
+		}
+		return strings.Join(names, ", ")
+	}
+	tunnel, _ := strconv.Atoi(EdgeTunnelPort)
+	if who := holder(tunnel); who != "" {
+		return msgs.Errorf("edge.portBusy", tunnel, who)
+	}
+	if proxyPort > 0 {
+		if who := holder(proxyPort); who != "" {
+			return msgs.Errorf("edge.portBusy", proxyPort, who)
+		}
+		return nil
+	}
+	if who := holder(443); who != "" {
+		return msgs.Errorf("edge.port443Busy", who)
+	}
+	if who := holder(80); who != "" {
+		jc.Log("edge.port80Busy", who)
+	}
+	return nil
+}
+
+// edgeServiceStable — служба nkt-edge активна и не перезапускается:
+// тот же MainPID через несколько секунд. Иначе — хвост её журнала.
+func edgeServiceStable(ctx context.Context, client *ssh.Client, sudo string) error {
+	pid := func() string {
+		out, _ := runRemote(client, sudo+"systemctl show -p MainPID --value nkt-edge")
+		return strings.TrimSpace(out)
+	}
+	if !sleepCtx(ctx, time.Second) {
+		return ctx.Err()
+	}
+	first := pid()
+	if !sleepCtx(ctx, 4*time.Second) {
+		return ctx.Err()
+	}
+	if first != "" && first != "0" && pid() == first {
+		return nil
+	}
+	out, _ := runRemote(client, sudo+"journalctl -u nkt-edge -n 8 --no-pager -o cat")
+	return msgs.Errorf("edge.serviceCrashing", strings.TrimSpace(out))
+}
+
+// KindEdgeUninstall — задание «удалить nkt-edge с хоста».
+const KindEdgeUninstall = "edge.uninstall"
+
+// EdgeUninstallParams — вход задания: хост, на который edge ставил хаб.
+type EdgeUninstallParams struct {
+	HostID int64 `json:"host_id"`
+}
+
+// handleEdgeUninstall — POST /hub/edge/uninstall: снять edge с VPS, на
+// который его поставил хаб, и забыть настройки. Edge, поставленный
+// вручную, хаб не трогает — только «Забыть».
+func (s *Server) handleEdgeUninstall(w http.ResponseWriter, r *http.Request) {
+	st := s.edgeSettings(r.Context())
+	if st.HostID == 0 {
+		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.uninstallManual"))
+		return
+	}
+	host, err := s.db.HostByID(r.Context(), st.HostID)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	user := auth.Username(r.Context())
+	id, err := s.jobs.Start(r.Context(), jobs.Spec{
+		Kind: KindEdgeUninstall, TitleKey: "edge.uninstallTitle", TitleArgs: []any{host.Name},
+		Queue: fmt.Sprintf("host:%d", host.ID), Author: user, Steps: 3, Params: EdgeUninstallParams{HostID: host.ID},
+	})
+	s.db.Audit(r.Context(), user, "edge.uninstall", host.Name, auditOutcome(err), "")
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
+}
+
+// EdgeUninstallRunner снимает nkt-edge с хоста по SSH.
+type EdgeUninstallRunner struct{ s *Server }
+
+// NewEdgeUninstallRunner строит исполнителя.
+func NewEdgeUninstallRunner(s *Server) *EdgeUninstallRunner { return &EdgeUninstallRunner{s: s} }
+
+// Resumable — да: удаление повторяемо.
+func (r *EdgeUninstallRunner) Resumable() bool { return true }
+
+// Run: служба, файлы, данные (DynamicUser хранит их в /var/lib/private),
+// правило ufw для порта туннеля; затем хаб забывает edge. Правила 80 и 443
+// не трогаются — их может использовать другой сервер на этом VPS.
+func (r *EdgeUninstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
+	s := r.s
+	var p EdgeUninstallParams
+	if err := jc.Params(&p); err != nil {
+		return msgs.Errorf("hub.parsingJob", err)
+	}
+	host, err := s.db.HostByID(ctx, p.HostID)
+	if err != nil {
+		return err
+	}
+	jc.StepKey(1, 3, "edge.stepConnect", host.Name)
+	link, err := s.hub.dialHost(ctx, host)
+	if err != nil {
+		return err
+	}
+	defer link.Close()
+	sudo := sudoPrefix(host.SSHUser)
+	jc.StepKey(2, 3, "edge.stepRemove")
+	script := sudo + "systemctl disable --now nkt-edge 2>/dev/null; " +
+		sudo + "rm -f /usr/local/bin/nkt-edge /etc/systemd/system/nkt-edge.service && " +
+		sudo + "rm -rf /etc/nkt-edge /var/lib/nkt-edge /var/lib/private/nkt-edge && " +
+		sudo + "systemctl daemon-reload && " + sudo + "systemctl reset-failed nkt-edge 2>/dev/null; " +
+		"if command -v ufw >/dev/null && " + sudo + "ufw status | grep -q 'Status: active'; then " + sudo + "ufw delete allow " + EdgeTunnelPort + "/tcp >/dev/null 2>&1; fi; " +
+		"test ! -e /usr/local/bin/nkt-edge"
+	if out, err := runRemote(link.client, script); err != nil {
+		return msgs.Errorf("edge.removeFailed", strings.TrimSpace(out))
+	}
+	jc.Log("edge.removed")
+	jc.StepKey(3, 3, "edge.stepForget")
+	if err := s.db.KVSet(ctx, edgeSettingsKey, "{}"); err != nil {
+		return err
+	}
+	s.kickEdge()
+	jc.Log("edge.portsKept")
+	return nil
 }

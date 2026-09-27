@@ -8,6 +8,27 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.30 — 2026-09-27
+
+- **nkt-edge on a VPS that already runs a web server.** If 443 was taken
+  by nginx or Caddy, edge crashed and restarted in a loop while the hub
+  showed only "EOF". The install window now has a **proxy port**: edge
+  takes webhooks over HTTP on `127.0.0.1:port`, and your server forwards
+  `/hooks/` to it (ready nginx and Caddy snippets are in the install log).
+  The rate limit and "GitHub addresses only" work behind the proxy using
+  the address from `X-Real-IP`.
+- **Edge installation checks the ports beforehand** and names the program
+  holding 443 or 8444; a taken 80 is only a warning (the certificate is
+  issued through 443). After starting, the job makes sure the service
+  isn't restarting in a loop and shows its log otherwise.
+- **A clear connection error:** instead of "EOF" — "edge accepts the
+  connection and closes it right away", with a hint where to look.
+- **"Remove from VPS"** on the nkt-edge card — a job that removes edge
+  from the VPS completely (service, program, settings, certificates, the
+  ufw rule for 8444) and forgets it in the hub.
+- nkt-edge binds the webhook ports before the tunnel port: with a port
+  taken, the service exits right away with an explanation.
+
 ## v1.11.29 — 2026-09-27
 
 - **All documentation is on the site.** Everything from README, HUB.md and
