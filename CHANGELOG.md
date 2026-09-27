@@ -643,3 +643,4 @@
 - `28bf67c` Kubernetes: действия с объектами — describe, журнал и консоль пода, масштабирование, rollout, CronJob, cordon/drain, namespaces
 - `50efaae` Kubernetes: YAML объектов — kubectl diff и apply, история версий k8s:// с откатом, новый объект из шаблонов
 - `829a747` Kubernetes: находки по кластеру, Kubernetes на карте ресурсов, kubectl top в таблицах, ИИ у событий
+- `375a400` Kubernetes: Helm — релизы, история и откат, values с диффом и обновление, удаление, установка чарта и самого helm заданиями
