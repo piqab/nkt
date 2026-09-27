@@ -31,6 +31,8 @@ import (
 
 // Server holds everything the handlers need.
 type Server struct {
+	// pf — пробросы портов Kubernetes в браузер (k8s_portforward.go).
+	pf         pfManager
 	cfg        *config.Config
 	db         *store.DB
 	auth       *auth.Service
@@ -159,6 +161,10 @@ func (s *Server) Handler() http.Handler {
 	r.Route("/api", func(r chi.Router) {
 		r.Get("/health", s.handleHealth)
 		r.Post("/auth/login", s.handleLogin)
+		// Проброс порта Kubernetes: доступ по токену в пути, не по сессии
+		// (страница — в песочнице CSP, см. k8s_portforward.go).
+		r.HandleFunc("/k8s/pf/{token}", s.handleK8sPortForwardProxy)
+		r.HandleFunc("/k8s/pf/{token}/*", s.handleK8sPortForwardProxy)
 
 		// The terminal WebSocket is long-lived by design and registered on
 		// its own group specifically so it never inherits the blanket
@@ -370,6 +376,10 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/k8s/objects/action", s.handleK8sAction)
 				r.Post("/k8s/namespaces", s.handleK8sNamespaceCreate)
 				r.Post("/k8s/nodes/drain", s.handleK8sDrain)
+				r.Post("/k8s/portforward", s.handleK8sPortForwardStart)
+				r.Get("/k8s/portforward", s.handleK8sPortForwardList)
+				r.Get("/k8s/portforward/ports", s.handleK8sPortForwardPorts)
+				r.Delete("/k8s/portforward/{token}", s.handleK8sPortForwardStop)
 				r.Post("/k8s/yaml/diff", s.handleK8sYAMLDiff)
 				r.Put("/k8s/yaml", s.handleK8sYAMLWrite)
 				r.Post("/k8s/apply", s.handleK8sApply)

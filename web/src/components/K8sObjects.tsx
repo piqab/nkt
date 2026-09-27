@@ -7,7 +7,7 @@ import type { Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, formatRelative } from './ui'
 import { DataTable } from './DataTable'
 import { confirmAction } from './confirm'
-import { CreateNamespaceButton, K8sRowActions } from './K8sActions'
+import { CreateNamespaceButton, ForwardsBar, K8sRowActions } from './K8sActions'
 import { K8sNewObjectModal } from './K8sYAML'
 import { AIExplain } from './AIExplain'
 import { K8sHelm } from './K8sHelm'
@@ -91,6 +91,7 @@ export function K8sObjects({ me }: { me: Me }) {
         ) : undefined
       }
     >
+      {me.is_admin && <ForwardsBar />}
       {creating && <K8sNewObjectModal namespace={namespace} namespaces={namespaces} me={me} onClose={() => setCreating(false)} onCreated={() => setGen((g) => g + 1)} />}
       <Tabs
         size="small"

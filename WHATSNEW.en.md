@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.18 — 2026-09-27
+
+- **Kubernetes: a pod's or service's application in the browser.** The pod
+  and service menus have "Open in the browser": a port from the object's
+  spec, `kubectl port-forward` on the host and the nkt proxy. The
+  application opens in a new tab, through the hub too, with no Ingress or
+  NodePort.
+- The link is one-off (a random token), lives while it is used and closes
+  after 30 minutes idle; open forwards are listed above the cluster
+  objects with a "close" button. The page opens sandboxed with no access
+  to the nkt session; every forward is recorded in the audit log.
+  Applications that reference their files from the site root
+  (`/static/…`) may open only partially.
+
 ## v1.11.17 — 2026-09-27
 
 - **Vulnerabilities of Kubernetes pod images.** On a control plane the

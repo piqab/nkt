@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button, Checkbox, Dropdown, Input, InputNumber, Select, Space } from 'antd'
 import { MoreOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-import { api, qs, useApi } from '../api'
+import { LOCAL_HOST_ID, api, hostScope, qs, useApi } from '../api'
 import type { Me } from '../types'
 import { Banner, CodeEditor, Loading, Modal } from './ui'
 import { confirmAction } from './confirm'
@@ -23,8 +23,8 @@ const ACTIONS: Record<string, string[]> = {
   daemonsets: ['restart', 'history', 'delete'],
   jobs: ['delete'],
   cronjobs: ['trigger', 'suspend', 'resume', 'delete'],
-  pods: ['logs', 'exec', 'delete'],
-  services: ['delete'],
+  pods: ['logs', 'exec', 'forward', 'delete'],
+  services: ['forward', 'delete'],
   ingresses: ['delete'],
   configmaps: ['delete'],
   secrets: ['delete'],
@@ -40,7 +40,7 @@ const ACTIONS: Record<string, string[]> = {
   hpa: ['bounds', 'delete'],
 }
 
-type Dialog = { type: 'describe' | 'yaml' | 'bounds' | 'scale' | 'history' | 'logs' | 'exec' | 'result'; text?: string }
+type Dialog = { type: 'describe' | 'yaml' | 'bounds' | 'forward' | 'scale' | 'history' | 'logs' | 'exec' | 'result'; text?: string }
 
 /**
  * Меню действий строки объекта: описание (kubectl describe) — всем,
@@ -73,6 +73,7 @@ export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: str
       case 'describe':
       case 'yaml':
       case 'bounds':
+      case 'forward':
       case 'scale':
       case 'history':
       case 'logs':
@@ -108,7 +109,7 @@ export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: str
     if (a === 'suspend') return !suspended
     if (a === 'resume') return suspended
     // Журнал и консоль пода — PTY-сессии, как у контейнеров: администратору.
-    if (a === 'logs' || a === 'exec') return me.is_admin
+    if (a === 'logs' || a === 'exec' || a === 'forward') return me.is_admin
     return canMutate
   })
   const items = [
@@ -132,6 +133,7 @@ export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: str
           </pre>
         </Modal>
       )}
+      {dialog?.type === 'forward' && <ForwardModal kind={kind} row={row} id={id} onClose={() => setDialog(null)} />}
       {dialog?.type === 'bounds' && <BoundsModal row={row} id={id} onClose={() => setDialog(null)} onSave={(min, max) => act('bounds', { min, max })} />}
       {dialog?.type === 'scale' && <ScaleModal row={row} id={id} onClose={() => setDialog(null)} onScale={(n) => act('scale', { replicas: n })} />}
       {dialog?.type === 'history' && <HistoryModal kind={kind} row={row} id={id} canMutate={canMutate} onClose={() => setDialog(null)} onUndo={(rev) => act('undo', { revision: rev })} />}
@@ -370,5 +372,108 @@ function BoundsModal({ row, id, onClose, onSave }: { row: K8sRow; id: string; on
         </Button>
       </Space>
     </Modal>
+  )
+}
+
+/** Адрес API с учётом хоста за хабом (как у WebSocket). */
+function apiHref(path: string): string {
+  const prefix = hostScope.id !== null ? `/hosts/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}` : ''
+  return `/api${prefix}${path}`
+}
+
+/** Проброс порта пода или сервиса в браузер (kubectl port-forward). */
+function ForwardModal({ kind, row, id, onClose }: { kind: string; row: K8sRow; id: string; onClose: () => void }) {
+  const { t } = useTranslation()
+  const ports = useApi<{ ports: number[] }>(`/k8s/portforward/ports${qs({ kind, namespace: row.namespace, name: row.name })}`)
+  const [port, setPort] = useState<number | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [link, setLink] = useState<string | null>(null)
+  const list = ports.data?.ports ?? []
+  const chosen = port ?? list[0] ?? null
+  async function start() {
+    if (chosen === null) return
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await api<{ path: string }>('/k8s/portforward', { method: 'POST', body: { kind, namespace: row.namespace, name: row.name, port: chosen } })
+      const href = apiHref(res.path)
+      setLink(href)
+      window.open(href, '_blank', 'noopener,noreferrer')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal title={t('k8s.act.forwardTitle', { name: id })} onClose={onClose} width={560}>
+      <p className="small muted">{t('k8s.act.forwardHint')}</p>
+      {ports.error && <Banner kind="error">{ports.error}</Banner>}
+      {error && <Banner kind="error">{error}</Banner>}
+      {!ports.data && !ports.error ? (
+        <Loading what="ports" />
+      ) : list.length === 0 ? (
+        <p className="small muted">{t('k8s.act.forwardNoPorts')}</p>
+      ) : (
+        <Space wrap>
+          <span className="small">{t('k8s.act.port')}</span>
+          <Select size="small" style={{ width: '8rem' }} value={chosen} onChange={setPort} options={list.map((p) => ({ value: p, label: String(p) }))} />
+          <Button type="primary" loading={busy} onClick={() => void start()}>
+            {t('k8s.act.forwardOpen')}
+          </Button>
+        </Space>
+      )}
+      {link && (
+        <p className="small" style={{ marginTop: '0.6rem' }}>
+          {t('k8s.act.forwardLink')}{' '}
+          <a href={link} target="_blank" rel="noopener noreferrer" className="mono">
+            {link}
+          </a>
+        </p>
+      )}
+    </Modal>
+  )
+}
+
+interface Forward {
+  token: string
+  kind: string
+  namespace: string
+  name: string
+  port: number
+  user: string
+  last_used: string
+}
+
+/** Открытые пробросы портов: ссылка и «закрыть». */
+export function ForwardsBar() {
+  const { t } = useTranslation()
+  const res = useApi<{ forwards: Forward[] }>('/k8s/portforward', 15_000)
+  const list = res.data?.forwards ?? []
+  if (list.length === 0) return null
+  return (
+    <Banner kind="info">
+      <div className="small">{t('k8s.act.forwardsOpen')}</div>
+      {list.map((f) => (
+        <div key={f.token} className="row small" style={{ gap: '0.5rem', alignItems: 'center' }}>
+          <a href={apiHref(`/k8s/pf/${f.token}/`)} target="_blank" rel="noopener noreferrer" className="mono">
+            {f.kind === 'services' ? 'svc' : 'pod'}/{f.namespace}/{f.name}:{f.port}
+          </a>
+          <span className="muted">{f.user}</span>
+          <Button
+            size="small"
+            type="link"
+            danger
+            onClick={async () => {
+              await api(`/k8s/portforward/${f.token}`, { method: 'DELETE' })
+              void res.reload()
+            }}
+          >
+            {t('k8s.act.forwardClose')}
+          </Button>
+        </div>
+      ))}
+    </Banner>
   )
 }

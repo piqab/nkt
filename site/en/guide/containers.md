@@ -158,7 +158,9 @@ Deployments and StatefulSets — scaling, restart (`rollout restart`),
 rollout history and rollback to a revision; CronJobs — "run now" and
 suspend; nodes — cordon/uncordon and drain as a background job; a
 namespace can be created and deleted, any object deleted. Every action is
-recorded in the host audit log.
+recorded in the host audit log. "Open in the browser" on a pod or service
+forwards its port (`kubectl port-forward`) and opens the application in a
+new tab via a one-off link, sandboxed.
 
 The **YAML** of any object (except secrets) opens from the same menu:
 before saving — a text diff and `kubectl diff` from the cluster, saving
