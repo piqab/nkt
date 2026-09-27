@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import { Sensitive, blurText, setKnownNames } from '../privacy'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AutoComplete, Badge, Button, Checkbox, Form, Input, InputNumber, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { AutoComplete, Button, Checkbox, Form, Input, InputNumber, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import {
   InfoCircleOutlined,
   CheckCircleFilled,
@@ -128,13 +128,30 @@ function SudoBadge({ status }: { status: HubHost['sudo_status'] }) {
   )
 }
 
-/** Состояние хоста одной иконкой; слово и текст ошибки — в подсказке. */
+/** Доступность хоста одной иконкой: для установленного хоста — ответил ли
+ * он на последний опрос хаба (зелёная — отвечает, красная — недоступен,
+ * серая — ещё не опрашивался); иначе — ход установки. Слово, время
+ * последнего ответа и текст ошибки — в подсказке. */
 function HostStatusIcon({ host }: { host: HubHost }) {
   const { t } = useTranslation()
-  const label = t(STATUS_LABEL_KEY[host.status]) + (host.status === 'error' && host.error_msg ? `: ${host.error_msg}` : '')
+  let label = t(STATUS_LABEL_KEY[host.status]) + (host.status === 'error' && host.error_msg ? `: ${host.error_msg}` : '')
+  if (host.status === 'online') {
+    label =
+      host.reachable === true
+        ? t('hosts.statusReachable')
+        : host.reachable === false
+          ? t('hosts.statusUnreachable', { time: host.last_polled_at ? formatRelative(host.last_polled_at) : t('hosts.never') })
+          : t('hosts.statusNotPolled')
+  }
   const icon =
     host.status === 'online' ? (
-      <CheckCircleFilled style={{ color: STATUS_COLOR.online }} />
+      host.reachable === true ? (
+        <CheckCircleFilled style={{ color: STATUS_COLOR.online }} />
+      ) : host.reachable === false ? (
+        <CloseCircleFilled style={{ color: 'var(--status-critical)' }} />
+      ) : (
+        <QuestionCircleOutlined style={{ color: 'var(--text-muted)' }} />
+      )
     ) : host.status === 'installing' ? (
       <SyncOutlined spin style={{ color: 'var(--seq-300)' }} />
     ) : host.status === 'error' ? (
@@ -147,11 +164,6 @@ function HostStatusIcon({ host }: { host: HubHost }) {
       <span aria-label={label}>{icon}</span>
     </Tooltip>
   )
-}
-
-function HostStatusBadge({ status }: { status: HubHost['status'] }) {
-  const { t } = useTranslation()
-  return <Badge color={STATUS_COLOR[status]} text={t(STATUS_LABEL_KEY[status])} />
 }
 
 /**
@@ -238,9 +250,25 @@ function ProblemsCell({ host }: { host: HubHost }) {
   }
   const findings = host.findings ?? {}
   const present = SEVERITIES.filter((s) => (findings[s] ?? 0) > 0)
+  // Недоступен: числа — от последнего удачного опроса (приглушённо, с
+  // пометкой «данные от …»), а если его не было — «нет данных», а не
+  // «нет проблем»: пустой список здесь значит «не знаем».
+  const stale = host.reachable === false
+  if (stale && !host.last_polled_at) {
+    return (
+      <div className="col" style={{ gap: '0.25rem' }}>
+        <span className="small muted row" style={{ gap: '0.3rem', flexWrap: 'nowrap' }}>
+          <QuestionCircleOutlined /> {t('hosts.noData')}
+        </span>
+        <span className="small" style={{ color: 'var(--status-critical)' }}>
+          {t('hosts.unreachable', { stale: '' })}
+        </span>
+      </div>
+    )
+  }
   return (
     <div className="col" style={{ gap: '0.25rem' }}>
-      <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap' }}>
+      <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap', opacity: stale ? 0.55 : 1 }}>
         {present.length === 0 ? (
           <span className="row small" style={{ gap: '0.3rem', color: 'var(--status-good)', flexWrap: 'nowrap' }}>
             <CheckCircleFilled /> {t('hosts.noProblems')}
@@ -1091,7 +1119,7 @@ export default function Hosts({
                         {vm.vm_state === 'running' ? t('hosts.vmRunning') : t('hosts.vmOff', { state: vm.vm_state })}
                       </Tag>
                     )}
-                    <HostStatusBadge status={vm.status} />
+                    <HostStatusIcon host={vm} />
                   </span>
                 </div>
                 {renderActions(vm)}

@@ -11,6 +11,12 @@ host picker in the UI instead of a separate install on every host.
 
 ![Hosts on the hub](/screens/en/hub-hosts.png)
 
+The icon before the name is reachability: green — the host answered the
+hub's last poll, red — unreachable (the tooltip says when it last
+answered), grey — not polled yet. For an unreachable host the "Problems"
+column shows the counts from the last successful poll (dimmed) or "no
+data".
+
 ## 1. Install
 
 The same binary as for a host ([how to get it](/en/guide/getting-started#_1-the-binary)),
