@@ -2883,5 +2883,24 @@
     "diffWithCurrent": "diff with current",
     "loadVersion": "to the editor",
     "current": "current"
+  },
+  "yamlBlocks": {
+    "title": "Blocks",
+    "text": "Text",
+    "addObject": "Object",
+    "deleteConfirm": "Remove block {{name}} from the draft?",
+    "parseError": "Could not split into blocks — fix the text: {{error}}",
+    "editTitle": "Block {{name}}",
+    "addTitle": "New item: {{kind}}",
+    "editHint": "Edits change the draft only — writing happens with the window's “Save”, through the diff and kubectl diff.",
+    "apply": "To the draft",
+    "delete": "Delete",
+    "item": {
+      "container": "container",
+      "volume": "volume",
+      "port": "port",
+      "rule": "rule",
+      "key": "key"
+    }
   }
 }

@@ -237,3 +237,19 @@ func (s *Server) handleManifestDelete(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
+
+// handleManifestBlocks — POST /hub/k8s/manifests/blocks {content}: блоки
+// манифеста для блочного режима редактора.
+func (s *Server) handleManifestBlocks(w http.ResponseWriter, r *http.Request) {
+	var req manifestRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	blocks, err := k8s.ManifestBlocks(req.Content)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"blocks": blocks})
+}

@@ -573,3 +573,19 @@ func (s *Server) handleK8sApply(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"output": out})
 }
+
+// handleK8sYAMLBlocks — POST /k8s/yaml/blocks {content}: блоки манифеста
+// для блочного режима редактора (только разбор, ничего не меняет).
+func (s *Server) handleK8sYAMLBlocks(w http.ResponseWriter, r *http.Request) {
+	var req k8sYAMLRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	blocks, err := k8s.ManifestBlocks(req.Content)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"blocks": blocks})
+}

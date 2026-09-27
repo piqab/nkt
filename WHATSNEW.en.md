@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.14 — 2026-09-27
+
+- **Block mode in the Kubernetes YAML editors** — like the nginx, compose
+  and libvirt configs. A "Text / Blocks" switch in the object YAML, "New
+  object", Helm values and hub manifest windows. Blocks are the
+  manifest's objects (between `---`), and inside them containers and init
+  containers, volumes, Service ports, Ingress rules, ConfigMap keys; Helm
+  values show their top-level keys.
+- Clicking a block opens its text; "To the draft" replaces the block,
+  "Delete" removes it. "+ container", "+ port", "+ rule", "+ key" insert
+  a snippet with the right indentation, "+ Object" appends an object from
+  a template after `---`. All of this changes the draft only: writing is
+  the usual "Save", through the diff and `kubectl diff`.
+
 ## v1.11.13 — 2026-09-27
 
 - **Hub: the first-column icon shows whether the host is reachable.**
