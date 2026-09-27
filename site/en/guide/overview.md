@@ -58,7 +58,9 @@ What is checked:
   ImagePullBackOff, a long Pending, a NotReady node, a Deployment or
   StatefulSet missing replicas, a stuck PVC, an expiring API server
   certificate, pods with privileged/hostNetwork, NodePort and
-  LoadBalancer ports past the firewall.
+  LoadBalancer ports past the firewall; containers without limits, images
+  without a version, cluster-admin for ServiceAccounts and people,
+  namespaces without a NetworkPolicy.
 - **Profile drift** — when a [profile](/en/guide/profiles) is applied to
   the host, deviations from it show up here too.
 

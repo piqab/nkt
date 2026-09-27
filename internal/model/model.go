@@ -997,6 +997,17 @@ type K8sState struct {
 	Services  []K8sService  `json:"services"`
 	Ingresses []K8sIngress  `json:"ingresses"`
 	Certs     []K8sCert     `json:"certs,omitempty"`
+	// AdminBindings — ClusterRoleBinding на cluster-admin.
+	AdminBindings []K8sBinding `json:"admin_bindings,omitempty"`
+	// NetPolNamespaces — namespace, где есть хоть одна NetworkPolicy.
+	NetPolNamespaces []string `json:"netpol_namespaces,omitempty"`
+}
+
+// K8sBinding — привязка к роли: кому (вид:namespace/имя).
+type K8sBinding struct {
+	Name     string   `json:"name"`
+	Role     string   `json:"role"`
+	Subjects []string `json:"subjects"`
 }
 
 // K8sPod — под: где, в каком состоянии, с какими правами.
@@ -1014,6 +1025,9 @@ type K8sPod struct {
 	Owner       string            `json:"owner,omitempty"`
 	Privileged  []string          `json:"privileged,omitempty"` // контейнеры privileged
 	HostNetwork bool              `json:"host_network,omitempty"`
+	// NoLimits — контейнеры без limits.memory; Images — образы контейнеров.
+	NoLimits []string `json:"no_limits,omitempty"`
+	Images   []string `json:"images,omitempty"`
 }
 
 // K8sWorkload — Deployment или StatefulSet: желаемые и доступные реплики.

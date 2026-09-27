@@ -2553,7 +2553,8 @@
         "ingress": "Ingress",
         "configmap": "ConfigMap",
         "cronjob": "CronJob",
-        "empty": "empty manifest"
+        "empty": "empty manifest",
+        "networkpolicy": "NetworkPolicy (default deny)"
       }
     },
     "helm": {
