@@ -622,6 +622,7 @@ var enCatalog = map[string]string{
 	"cmdjob.titleGeneric":                                 "%s: %s",
 	"k8s.badKind":                                         "unknown Kubernetes object kind: %q",
 	"k8s.notFound":                                        "Kubernetes object %s not found",
+	"k8s.helmNoChartSource":                               "the repository of chart %s is unknown: the release was not installed from nkt — set the repository and chart in the upgrade form",
 	"deploy.specYAML":                                     "pipeline description: YAML error: %s",
 	"deploy.specNoRef":                                    "a branch (ref) or a tag pattern (tags) is required",
 	"deploy.specBad":                                      "invalid %s value: %q",

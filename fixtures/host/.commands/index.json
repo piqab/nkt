@@ -1521,6 +1521,15 @@
       "match": [
         "helm",
         "get",
+        "values",
+        "traefik"
+      ],
+      "stdout": "null\n"
+    },
+    {
+      "match": [
+        "helm",
+        "get",
         "values"
       ],
       "stdout": "crds:\n  enabled: true\nprometheus:\n  enabled: false\nreplicaCount: 2\n"
@@ -1667,6 +1676,14 @@
         "https://update.k3s.io/v1-release/channels"
       ],
       "stdout": "{\"data\":[{\"id\":\"stable\",\"name\":\"stable\",\"latest\":\"v1.31.4+k3s1\"},{\"id\":\"latest\",\"latest\":\"v1.33.1+k3s1\"},{\"id\":\"v1.30\",\"latest\":\"v1.30.8+k3s1\"},{\"id\":\"v1.31\",\"latest\":\"v1.31.4+k3s1\"},{\"id\":\"v1.32\",\"latest\":\"v1.32.5+k3s1\"},{\"id\":\"v1.33\",\"latest\":\"v1.33.1+k3s1\"}]}"
+    },
+    {
+      "match": [
+        "helm",
+        "show",
+        "values"
+      ],
+      "stdout": "# Default values for the chart\nreplicaCount: 1\nimage:\n  repository: nginx\n  tag: \"\"\nservice:\n  type: ClusterIP\n  port: 80\n"
     }
   ]
 }

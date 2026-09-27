@@ -8,6 +8,29 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.25 — 2026-09-27
+
+- **Port forward to the browser — on a separate address.** The pod's
+  application no longer opens sandboxed under the nkt address but on its
+  own port (8446 by default, `NKT_FORWARD_ADDR`; behind a reverse proxy —
+  `NKT_FORWARD_PUBLIC_URL`) — it gets its own origin: module scripts
+  (Vite, React, Vue), `localStorage` and the app's cookies (under the
+  forward path) work. The nkt session is not passed to the application
+  and cannot be overwritten by it. The hub keeps such an address itself
+  and hands the request to the host; port 8446 is published in the Docker
+  Compose and Kubernetes manifests.
+- **Cross-site request protection.** The nkt and hub API accept changing
+  requests only from their own address (`Sec-Fetch-Site`, `Origin`) — a
+  page on a neighbouring port of the same host cannot change anything on
+  behalf of a logged-in administrator.
+- **The forward window** lists the links already open for this pod or
+  service: open, copy, close (the kubectl process stops and the link
+  stops working).
+- **Helm: release values.** When no values were set at install time the
+  window says so instead of showing emptiness; "All values"
+  (`helm get values --all`) and "Chart default values"
+  (`helm show values`) buttons with "To the draft".
+
 ## v1.11.24 — 2026-09-27
 
 - **nkt-edge — webhooks without exposing the hub.** A separate small

@@ -183,11 +183,70 @@ func (m *Manager) HelmValues(ctx context.Context, namespace, name string) (strin
 	if err != nil {
 		return "", err
 	}
-	out, err := m.helmRead(ctx, "get", "values", r.Name, "-n", r.Namespace, "-o", "yaml")
-	if strings.TrimSpace(out) == "null" {
+	return m.helmValues(ctx, r, false)
+}
+
+// helmValues — helm get values: заданные при установке или (all) все,
+// с умолчаниями чарта. Пустой ответ helm («null», «{}») — пустая строка.
+func (m *Manager) helmValues(ctx context.Context, r HelmRelease, all bool) (string, error) {
+	args := []string{"get", "values", r.Name, "-n", r.Namespace, "-o", "yaml"}
+	if all {
+		args = append(args, "--all")
+	}
+	out, err := m.helmRead(ctx, args...)
+	if t := strings.TrimSpace(out); t == "null" || t == "{}" {
 		out = ""
 	}
 	return out, err
+}
+
+// HelmAllValues — все значения релиза (заданные поверх умолчаний чарта).
+func (m *Manager) HelmAllValues(ctx context.Context, namespace, name string) (string, error) {
+	r, err := m.FindRelease(ctx, namespace, name)
+	if err != nil {
+		return "", err
+	}
+	return m.helmValues(ctx, r, true)
+}
+
+// HelmChartDefaults — values.yaml чарта релиза (helm show values): по
+// источнику, с которого релиз ставился из nkt. Репозиторий должен быть в
+// списке helm repo list — имя берётся оттуда.
+func (m *Manager) HelmChartDefaults(ctx context.Context, namespace, name string) (string, error) {
+	r, err := m.FindRelease(ctx, namespace, name)
+	if err != nil {
+		return "", err
+	}
+	src := m.Source(r)
+	ref := ""
+	switch {
+	case strings.HasPrefix(src.RepoURL, "oci://") && helmChartRe.MatchString(src.Chart):
+		if validRepoURL(src.RepoURL) == nil {
+			ref = strings.TrimRight(src.RepoURL, "/") + "/" + src.Chart
+		}
+	case src.RepoName != "" && helmChartRe.MatchString(src.Chart):
+		for _, repo := range m.Helm(ctx).Repos {
+			if repo.Name == src.RepoName {
+				ref = repo.Name + "/" + src.Chart
+			}
+		}
+	}
+	if ref == "" {
+		return "", msgs.Errorf("k8s.helmNoChartSource", r.Chart)
+	}
+	args := []string{"show", "values", ref}
+	if v := chartVersion(r.Chart, src.Chart); v != "" && helmVersionRe.MatchString(v) {
+		args = append(args, "--version", v)
+	}
+	return m.helmRead(ctx, args...)
+}
+
+// chartVersion — версия из «имя-версия» helm list.
+func chartVersion(full, name string) string {
+	if v, ok := strings.CutPrefix(full, name+"-"); ok {
+		return v
+	}
+	return ""
 }
 
 var (

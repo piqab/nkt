@@ -140,6 +140,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"is_admin":        user.IsAdmin(),
 		"mode":            "hub",
 		"allow_mutations": s.cfg.AllowMutations,
+		"forward_base":    s.cfg.ForwardBase(),
 		"simulated":       false,
 		"hub_version":     s.hub.Version(),
 	})

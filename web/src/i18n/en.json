@@ -2562,13 +2562,15 @@
       "boundsHint": "Replicas now: {{current}}, metrics: {{metrics}}.",
       "forward": "Open in the browser (port forward)",
       "forwardTitle": "Port forward: {{name}}",
-      "forwardHint": "kubectl port-forward on the host plus the nkt proxy: the application opens in a new tab via a one-off link. The link lives while it is used (closed after 30 minutes idle). The page opens sandboxed with no access to nkt; applications that reference their files from the site root (/static/…) may open only partially.",
+      "forwardHint": "kubectl port-forward on the host plus the nkt proxy: the application opens in a new tab via a one-off link on a separate forward address (its own origin — scripts, localStorage and the app's cookies work, while the nkt session is out of its reach). The link lives while it is used (closed after 30 minutes idle). Applications that reference their files from the site root (/static/…) may open only partially — they need a base path setting (X-Forwarded-Prefix is passed).",
       "forwardNoPorts": "The object declares no ports.",
       "port": "Port",
       "forwardOpen": "Open",
       "forwardLink": "Link:",
       "forwardsOpen": "Open port forwards:",
-      "forwardClose": "close"
+      "forwardClose": "close",
+      "forwardActive": "Open forwards of this object:",
+      "forwardUsed": "used {{when}}"
     },
     "yaml": {
       "title": "YAML: {{name}}",
@@ -2615,7 +2617,12 @@
       "repoURL": "https://… or oci://…",
       "versionLatest": "version",
       "release": "Release",
-      "valuesLabel": "values (values.yaml):"
+      "valuesLabel": "values (values.yaml):",
+      "noUserValues": "no values were set — the release runs on the chart defaults",
+      "allValues": "All values",
+      "chartDefaults": "Chart default values",
+      "valuesEmpty": "No values.",
+      "useAsDraft": "To the draft"
     },
     "allPods": "all pods of the namespace",
     "upgrade": {

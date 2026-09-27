@@ -106,6 +106,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"mode":            s.cfg.Mode,
 		"allow_mutations": s.cfg.AllowMutations,
 		"simulated":       s.cfg.IsFixtures(),
+		"forward_base":    s.cfg.ForwardBase(),
 	})
 }
 

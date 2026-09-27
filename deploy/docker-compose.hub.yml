@@ -25,6 +25,8 @@ services:
         VERSION: ${VERSION:-docker}
     ports:
       - "8443:8077"
+      # Пробросы портов Kubernetes в браузер (свой origin, NKT_FORWARD_ADDR).
+      - "8446:8446"
     environment:
       NKT_MODE: hub
       NKT_ADDR: 0.0.0.0:8077

@@ -6,6 +6,7 @@ package config
 import (
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -120,6 +121,16 @@ type Config struct {
 	// HTTP.
 	Addr        string
 	CORSOrigins []string
+	// ForwardAddr — отдельный адрес для пробросов портов Kubernetes в
+	// браузер: другой порт — другой origin, и приложение пода работает без
+	// песочницы, не видя сессии nkt. Пусто («off») — пробросы только по
+	// пути /api/k8s/pf/ в песочнице. По умолчанию — тот же хост, что Addr,
+	// порт 8446.
+	ForwardAddr string
+	// ForwardPublicURL — как браузер видит адрес пробросов, если между ним
+	// и nkt обратный прокси (https://fwd.example.com); пусто — тот же хост,
+	// что у интерфейса, и порт ForwardAddr.
+	ForwardPublicURL string
 
 	// TLS. Off by default — nkt keeps listening plain HTTP and expects an
 	// external reverse proxy for HTTPS in front of it (see README's
@@ -383,8 +394,10 @@ func Load() (*Config, error) {
 		BootstrapAdminPassword: envStr("NKT_BOOTSTRAP_ADMIN_PASSWORD", ""),
 		CookieSecure:           envBool("NKT_COOKIE_SECURE", true),
 
-		Addr:        envStr("NKT_ADDR", "127.0.0.1:8077"),
-		CORSOrigins: envList("NKT_CORS_ORIGINS", "http://localhost:5173"),
+		Addr:             envStr("NKT_ADDR", "127.0.0.1:8077"),
+		CORSOrigins:      envList("NKT_CORS_ORIGINS", "http://localhost:5173"),
+		ForwardAddr:      envStr("NKT_FORWARD_ADDR", ""),
+		ForwardPublicURL: strings.TrimRight(envStr("NKT_FORWARD_PUBLIC_URL", ""), "/"),
 
 		TLSEnabled: envBool("NKT_TLS_ENABLED", false),
 		TLSCert:    envStr("NKT_TLS_CERT", ""),
@@ -509,4 +522,37 @@ func envInt(key string, def int) int {
 		return def
 	}
 	return n
+}
+
+// ForwardListen — адрес слушателя пробросов: NKT_FORWARD_ADDR, «off» —
+// выключен, пусто — хост из Addr и порт 8446.
+func (c *Config) ForwardListen() string {
+	switch c.ForwardAddr {
+	case "off", "false", "0":
+		return ""
+	case "":
+		host, _, err := net.SplitHostPort(c.Addr)
+		if err != nil {
+			return ""
+		}
+		return net.JoinHostPort(host, "8446")
+	}
+	return c.ForwardAddr
+}
+
+// ForwardBase — адрес пробросов для браузера: полный URL или «:порт»
+// (тогда хост — тот же, что у интерфейса). Пусто — пробросы по пути.
+func (c *Config) ForwardBase() string {
+	if c.ForwardPublicURL != "" {
+		return c.ForwardPublicURL
+	}
+	l := c.ForwardListen()
+	if l == "" {
+		return ""
+	}
+	_, port, err := net.SplitHostPort(l)
+	if err != nil {
+		return ""
+	}
+	return ":" + port
 }
