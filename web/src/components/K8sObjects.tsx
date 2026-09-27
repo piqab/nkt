@@ -7,6 +7,7 @@ import type { Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, formatRelative } from './ui'
 import { DataTable } from './DataTable'
 import { confirmAction } from './confirm'
+import { CreateNamespaceButton, K8sRowActions } from './K8sActions'
 
 interface Column {
   key: string
@@ -204,6 +205,16 @@ function ResourceTable({
           },
         ]
       : []),
+    ...(kind !== 'events'
+      ? [
+          {
+            title: '',
+            key: 'actions',
+            width: 40,
+            render: (_: unknown, r: Row) => <K8sRowActions kind={kind} row={r} me={me} onChanged={() => void res.reload()} onError={setError} />,
+          },
+        ]
+      : []),
   ]
 
   return (
@@ -222,6 +233,7 @@ function ResourceTable({
         </Tooltip>
         <Input.Search size="small" allowClear placeholder={t('k8s.search')} value={filter} onChange={(e) => setFilter(e.target.value)} style={{ maxWidth: '18rem' }} />
         <span className="small muted">{res.data ? t('k8s.count', { count: rows.length }) : ''}</span>
+        {kind === 'namespaces' && me.is_admin && me.allow_mutations && <CreateNamespaceButton onCreated={() => void res.reload()} onError={setError} />}
       </div>
       <ErrorNote error={res.error} />
       {error && (

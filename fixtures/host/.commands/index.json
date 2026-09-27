@@ -499,7 +499,7 @@
         "json",
         "-A"
       ],
-      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"coredns-7b98449c4-x9k2p\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:01:00Z\"}, \"spec\": {\"nodeName\": \"lab-cp-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"coredns\", \"ready\": true, \"restartCount\": 0}]}}, {\"metadata\": {\"name\": \"traefik-5d45f7b9d-abcde\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"traefik\", \"ready\": true, \"restartCount\": 1}]}}, {\"metadata\": {\"name\": \"metrics-server-6f7c9d-zz\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"metrics-server\", \"ready\": true, \"restartCount\": 0}]}}, {\"metadata\": {\"name\": \"web-6c9d8f-qwert\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-12T09:00:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"web\", \"ready\": true, \"restartCount\": 0}]}}, {\"metadata\": {\"name\": \"web-6c9d8f-asdfg\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-13T09:00:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-2\"}, \"status\": {\"phase\": \"Pending\", \"containerStatuses\": []}}]}"
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"coredns-7b98449c4-x9k2p\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:01:00Z\", \"labels\": {\"k8s-app\": \"kube-dns\"}}, \"spec\": {\"nodeName\": \"lab-cp-1\", \"containers\": [{\"name\": \"coredns\", \"image\": \"rancher/mirrored-coredns-coredns:1.11.3\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"coredns\", \"ready\": true, \"restartCount\": 0, \"image\": \"rancher/mirrored-coredns-coredns:1.11.3\", \"state\": {\"running\": {\"startedAt\": \"2026-09-10T08:01:00Z\"}}}], \"startTime\": \"2026-09-10T08:01:00Z\", \"podIP\": \"10.42.0.3\"}}, {\"metadata\": {\"name\": \"traefik-5d45f7b9d-abcde\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\", \"labels\": {\"app.kubernetes.io/name\": \"traefik\"}}, \"spec\": {\"nodeName\": \"lab-w-1\", \"containers\": [{\"name\": \"traefik\", \"image\": \"rancher/mirrored-library-traefik:2.11.10\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"traefik\", \"ready\": true, \"restartCount\": 1, \"image\": \"rancher/mirrored-library-traefik:2.11.10\", \"state\": {\"running\": {\"startedAt\": \"2026-09-10T08:02:00Z\"}}}], \"startTime\": \"2026-09-10T08:02:00Z\", \"podIP\": \"10.42.1.4\"}}, {\"metadata\": {\"name\": \"metrics-server-6f7c9d-zz\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\", \"labels\": {\"k8s-app\": \"metrics-server\"}}, \"spec\": {\"nodeName\": \"lab-w-1\", \"containers\": [{\"name\": \"metrics-server\", \"image\": \"rancher/mirrored-metrics-server:v0.7.2\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"metrics-server\", \"ready\": true, \"restartCount\": 0, \"image\": \"rancher/mirrored-metrics-server:v0.7.2\", \"state\": {\"running\": {\"startedAt\": \"2026-09-10T08:02:00Z\"}}}], \"startTime\": \"2026-09-10T08:02:00Z\", \"podIP\": \"10.42.1.5\"}}, {\"metadata\": {\"name\": \"node-exporter-lab-cp-1\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:03:00Z\", \"labels\": {\"app\": \"node-exporter\"}}, \"spec\": {\"nodeName\": \"lab-cp-1\", \"containers\": [{\"name\": \"node-exporter\", \"image\": \"quay.io/prometheus/node-exporter:v1.8.2\", \"securityContext\": {\"privileged\": true}}], \"hostNetwork\": true}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"node-exporter\", \"ready\": true, \"restartCount\": 0, \"image\": \"quay.io/prometheus/node-exporter:v1.8.2\", \"state\": {\"running\": {\"startedAt\": \"2026-09-10T08:03:00Z\"}}}], \"startTime\": \"2026-09-10T08:03:00Z\", \"podIP\": \"192.168.122.10\"}}, {\"metadata\": {\"name\": \"web-6c9d8f-qwert\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-12T09:00:00Z\", \"labels\": {\"app\": \"web\"}}, \"spec\": {\"nodeName\": \"lab-w-1\", \"containers\": [{\"name\": \"web\", \"image\": \"nginx:1.27\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"web\", \"ready\": true, \"restartCount\": 0, \"image\": \"nginx:1.27\", \"state\": {\"running\": {\"startedAt\": \"2026-09-12T09:00:00Z\"}}}], \"startTime\": \"2026-09-12T09:00:00Z\", \"podIP\": \"10.42.1.10\"}}, {\"metadata\": {\"name\": \"web-6c9d8f-asdfg\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-13T09:00:00Z\", \"labels\": {\"app\": \"web\"}}, \"spec\": {\"nodeName\": \"lab-w-2\", \"containers\": [{\"name\": \"web\", \"image\": \"nginx:1.27\"}]}, \"status\": {\"phase\": \"Pending\", \"containerStatuses\": [], \"startTime\": \"2026-09-13T09:00:00Z\", \"conditions\": [{\"type\": \"PodScheduled\", \"status\": \"False\", \"reason\": \"Unschedulable\"}]}}, {\"metadata\": {\"name\": \"api-7c9d8-a1b2c\", \"namespace\": \"shop\", \"creationTimestamp\": \"2026-09-14T10:00:00Z\", \"labels\": {\"app\": \"api\"}}, \"spec\": {\"nodeName\": \"lab-w-1\", \"containers\": [{\"name\": \"api\", \"image\": \"ghcr.io/acme/api:2.1.0\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"api\", \"ready\": true, \"restartCount\": 0, \"image\": \"ghcr.io/acme/api:2.1.0\", \"state\": {\"running\": {\"startedAt\": \"2026-09-14T10:00:00Z\"}}}], \"startTime\": \"2026-09-14T10:00:00Z\", \"podIP\": \"10.42.1.20\"}}, {\"metadata\": {\"name\": \"api-7c9d8-d3e4f\", \"namespace\": \"shop\", \"creationTimestamp\": \"2026-09-14T10:00:00Z\", \"labels\": {\"app\": \"api\"}}, \"spec\": {\"nodeName\": \"lab-cp-1\", \"containers\": [{\"name\": \"api\", \"image\": \"ghcr.io/acme/api:2.1.0\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"api\", \"ready\": true, \"restartCount\": 0, \"image\": \"ghcr.io/acme/api:2.1.0\", \"state\": {\"running\": {\"startedAt\": \"2026-09-14T10:00:00Z\"}}}], \"startTime\": \"2026-09-14T10:00:00Z\", \"podIP\": \"10.42.0.21\"}}, {\"metadata\": {\"name\": \"api-7c9d8-x2kq1\", \"namespace\": \"shop\", \"creationTimestamp\": \"2026-09-14T10:00:00Z\", \"labels\": {\"app\": \"api\"}}, \"spec\": {\"nodeName\": \"lab-w-1\", \"containers\": [{\"name\": \"api\", \"image\": \"ghcr.io/acme/api:2.1.0\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"api\", \"ready\": false, \"restartCount\": 14, \"image\": \"ghcr.io/acme/api:2.1.0\", \"state\": {\"waiting\": {\"reason\": \"CrashLoopBackOff\"}}}], \"startTime\": \"2026-09-14T10:00:00Z\", \"podIP\": \"10.42.1.22\"}}]}"
     },
     {
       "match": [
@@ -512,7 +512,7 @@
         "-n",
         "default"
       ],
-      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"web-6c9d8f-qwert\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-12T09:00:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"web\", \"ready\": true, \"restartCount\": 0}]}}, {\"metadata\": {\"name\": \"web-6c9d8f-asdfg\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-13T09:00:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-2\"}, \"status\": {\"phase\": \"Pending\", \"containerStatuses\": []}}]}"
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"web-6c9d8f-qwert\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-12T09:00:00Z\", \"labels\": {\"app\": \"web\"}}, \"spec\": {\"nodeName\": \"lab-w-1\", \"containers\": [{\"name\": \"web\", \"image\": \"nginx:1.27\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"web\", \"ready\": true, \"restartCount\": 0, \"image\": \"nginx:1.27\", \"state\": {\"running\": {\"startedAt\": \"2026-09-12T09:00:00Z\"}}}], \"startTime\": \"2026-09-12T09:00:00Z\", \"podIP\": \"10.42.1.10\"}}, {\"metadata\": {\"name\": \"web-6c9d8f-asdfg\", \"namespace\": \"default\", \"creationTimestamp\": \"2026-09-13T09:00:00Z\", \"labels\": {\"app\": \"web\"}}, \"spec\": {\"nodeName\": \"lab-w-2\", \"containers\": [{\"name\": \"web\", \"image\": \"nginx:1.27\"}]}, \"status\": {\"phase\": \"Pending\", \"containerStatuses\": [], \"startTime\": \"2026-09-13T09:00:00Z\", \"conditions\": [{\"type\": \"PodScheduled\", \"status\": \"False\", \"reason\": \"Unschedulable\"}]}}]}"
     },
     {
       "match": [
@@ -525,7 +525,7 @@
         "-n",
         "kube-system"
       ],
-      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"coredns-7b98449c4-x9k2p\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:01:00Z\"}, \"spec\": {\"nodeName\": \"lab-cp-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"coredns\", \"ready\": true, \"restartCount\": 0}]}}, {\"metadata\": {\"name\": \"traefik-5d45f7b9d-abcde\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"traefik\", \"ready\": true, \"restartCount\": 1}]}}, {\"metadata\": {\"name\": \"metrics-server-6f7c9d-zz\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\"}, \"spec\": {\"nodeName\": \"lab-w-1\"}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"metrics-server\", \"ready\": true, \"restartCount\": 0}]}}]}"
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"coredns-7b98449c4-x9k2p\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:01:00Z\", \"labels\": {\"k8s-app\": \"kube-dns\"}}, \"spec\": {\"nodeName\": \"lab-cp-1\", \"containers\": [{\"name\": \"coredns\", \"image\": \"rancher/mirrored-coredns-coredns:1.11.3\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"coredns\", \"ready\": true, \"restartCount\": 0, \"image\": \"rancher/mirrored-coredns-coredns:1.11.3\", \"state\": {\"running\": {\"startedAt\": \"2026-09-10T08:01:00Z\"}}}], \"startTime\": \"2026-09-10T08:01:00Z\", \"podIP\": \"10.42.0.3\"}}, {\"metadata\": {\"name\": \"traefik-5d45f7b9d-abcde\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\", \"labels\": {\"app.kubernetes.io/name\": \"traefik\"}}, \"spec\": {\"nodeName\": \"lab-w-1\", \"containers\": [{\"name\": \"traefik\", \"image\": \"rancher/mirrored-library-traefik:2.11.10\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"traefik\", \"ready\": true, \"restartCount\": 1, \"image\": \"rancher/mirrored-library-traefik:2.11.10\", \"state\": {\"running\": {\"startedAt\": \"2026-09-10T08:02:00Z\"}}}], \"startTime\": \"2026-09-10T08:02:00Z\", \"podIP\": \"10.42.1.4\"}}, {\"metadata\": {\"name\": \"metrics-server-6f7c9d-zz\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:02:00Z\", \"labels\": {\"k8s-app\": \"metrics-server\"}}, \"spec\": {\"nodeName\": \"lab-w-1\", \"containers\": [{\"name\": \"metrics-server\", \"image\": \"rancher/mirrored-metrics-server:v0.7.2\"}]}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"metrics-server\", \"ready\": true, \"restartCount\": 0, \"image\": \"rancher/mirrored-metrics-server:v0.7.2\", \"state\": {\"running\": {\"startedAt\": \"2026-09-10T08:02:00Z\"}}}], \"startTime\": \"2026-09-10T08:02:00Z\", \"podIP\": \"10.42.1.5\"}}, {\"metadata\": {\"name\": \"node-exporter-lab-cp-1\", \"namespace\": \"kube-system\", \"creationTimestamp\": \"2026-09-10T08:03:00Z\", \"labels\": {\"app\": \"node-exporter\"}}, \"spec\": {\"nodeName\": \"lab-cp-1\", \"containers\": [{\"name\": \"node-exporter\", \"image\": \"quay.io/prometheus/node-exporter:v1.8.2\", \"securityContext\": {\"privileged\": true}}], \"hostNetwork\": true}, \"status\": {\"phase\": \"Running\", \"containerStatuses\": [{\"name\": \"node-exporter\", \"ready\": true, \"restartCount\": 0, \"image\": \"quay.io/prometheus/node-exporter:v1.8.2\", \"state\": {\"running\": {\"startedAt\": \"2026-09-10T08:03:00Z\"}}}], \"startTime\": \"2026-09-10T08:03:00Z\", \"podIP\": \"192.168.122.10\"}}]}"
     },
     {
       "match": [
@@ -1347,6 +1347,97 @@
       "stdout": "dlstatus:1:40:Retrieving file 1 of 2\npmstatus:pkg:80:Unpacking\n(demo) script finished\n",
       "exit_code": 0,
       "simulated": true
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "describe"
+      ],
+      "stdout": "Name:                   api\nNamespace:              shop\nCreationTimestamp:      Wed, 10 Sep 2026 08:20:00 +0000\nLabels:                 app=api\nSelector:               app=api\nReplicas:               3 desired | 3 updated | 3 total | 2 available | 1 unavailable\nStrategyType:           RollingUpdate\nPod Template:\n  Labels:  app=api\n  Containers:\n   api:\n    Image:        ghcr.io/acme/api:2.1.0\n    Port:         8080/TCP\n    Limits:\n      memory:  256Mi\nConditions:\n  Type           Status  Reason\n  ----           ------  ------\n  Available      False   MinimumReplicasUnavailable\n  Progressing    True    NewReplicaSetAvailable\nEvents:\n  Type     Reason             Age   From                   Message\n  ----     ------             ----  ----                   -------\n  Normal   ScalingReplicaSet  12m   deployment-controller  Scaled up replica set api-7c9d8 to 3\n  Warning  BackOff            3m    kubelet                Back-off restarting failed container api in pod api-7c9d8-x2kq1\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "rollout",
+        "history"
+      ],
+      "stdout": "deployment.apps/api\nREVISION  CHANGE-CAUSE\n1         <none>\n2         <none>\n3         <none>\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "rollout",
+        "restart"
+      ],
+      "stdout": "deployment.apps/api restarted\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "rollout",
+        "undo"
+      ],
+      "stdout": "deployment.apps/api rolled back\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "scale"
+      ],
+      "stdout": "deployment.apps/api scaled\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "delete"
+      ],
+      "stdout": "deleted (simulated)\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "cordon"
+      ],
+      "stdout": "node cordoned\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "uncordon"
+      ],
+      "stdout": "node uncordoned\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "drain"
+      ],
+      "stdout": "node cordoned\nevicting pod shop/api-7c9d8-x2kq1\npod/api-7c9d8-x2kq1 evicted\nnode drained\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "create"
+      ],
+      "stdout": "created (simulated)\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "patch"
+      ],
+      "stdout": "patched (simulated)\n"
     }
   ]
 }

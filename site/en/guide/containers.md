@@ -149,5 +149,14 @@ the object's state. Secrets list only key names; values come from the
 "reveal" button for an administrator, and every reveal is recorded in the
 audit log.
 
+Every row has an **actions menu**. "Describe" (`kubectl describe` with
+events) is available to everyone, the rest to an administrator: pods have
+logs (tail, follow, previous run) and a `kubectl exec` console;
+Deployments and StatefulSets — scaling, restart (`rollout restart`),
+rollout history and rollback to a revision; CronJobs — "run now" and
+suspend; nodes — cordon/uncordon and drain as a background job; a
+namespace can be created and deleted, any object deleted. Every action is
+recorded in the host audit log.
+
 ![Kubernetes](/screens/en/kubernetes.png)
 
