@@ -1,0 +1,17 @@
+# Вариант 3 — хост с Docker без кластера: сценарий хаба поднимает compose
+# со свежим образом из CI. web1 — имя хоста в хабе; TAG приходит от
+# конвейера (тег образа).
+param TAG "тег образа"
+
+on web1 docker stack /srv/hello-app/docker-compose.yml up
+services:
+  web:
+    image: ghcr.io/OWNER/hello-app:${TAG}
+    restart: unless-stopped
+    ports:
+      - "8080:8000"
+    environment:
+      APP_VERSION: ${TAG}
+end
+
+wait web1 http http://127.0.0.1:8080/healthz 200 60s

@@ -1,0 +1,66 @@
+# Сборка hello-app и выкладка через хаб nkt.
+#
+# push в main  → тесты → образ ghcr.io/<владелец>/hello-app:<короткий коммит>
+# тег v1.2.3   → тесты → образ ghcr.io/<владелец>/hello-app:v1.2.3
+# затем — вебхук конвейера хаба с этим тегом (подпись nkt, см. README).
+#
+# Секреты репозитория (Settings → Secrets and variables → Actions):
+#   NKT_HOOK_URL     адрес вебхука из окна «Вебхук» конвейера
+#   NKT_HOOK_SECRET  секрет подписи оттуда же
+name: build
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Пусто — вебхук не вызывается (только сборка образа).
+      NKT_HOOK_URL: ${{ secrets.NKT_HOOK_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Тесты
+        run: python -m unittest -v test_app
+
+      - name: Тег образа
+        id: tag
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then tag="${GITHUB_REF_NAME}"; else tag="$(echo "$GITHUB_SHA" | cut -c1-12)"; fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "image=ghcr.io/$(echo "$GITHUB_REPOSITORY_OWNER" | tr 'A-Z' 'a-z')/hello-app" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          build-args: VERSION=${{ steps.tag.outputs.tag }}
+          tags: ${{ steps.tag.outputs.image }}:${{ steps.tag.outputs.tag }}
+
+      - name: Выложить через хаб nkt
+        if: ${{ env.NKT_HOOK_URL != '' }}
+        env:
+          NKT_HOOK_SECRET: ${{ secrets.NKT_HOOK_SECRET }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          # Ветка конвейера и тег образа; коммит — тот, что собран.
+          BODY=$(printf '{"ref":"refs/heads/main","commit":"%s","tag":"%s"}' "$GITHUB_SHA" "$TAG")
+          TS=$(date +%s)
+          SIG=$(printf '%s.%s' "$TS" "$BODY" | openssl dgst -sha256 -hmac "$NKT_HOOK_SECRET" -hex | sed 's/^.* //')
+          curl -fsS -X POST "$NKT_HOOK_URL" \
+            -H "Content-Type: application/json" \
+            -H "X-NKT-Timestamp: $TS" -H "X-NKT-Signature: $SIG" \
+            -d "$BODY"

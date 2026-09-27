@@ -158,7 +158,7 @@ func Parse(text string, values map[string]string) (Script, []Issue) {
 			if !closed {
 				fail(step.Line, "script.blockNotClosed")
 			}
-			step.Block = strings.Join(block, "\n")
+			step.Block = expandKnown(strings.Join(block, "\n"), sc.Vars)
 			if len(block) > 0 {
 				step.Block += "\n"
 			}
@@ -693,4 +693,14 @@ func parseWait(toks []string) (Step, error) {
 		args["timeout"] = rest[0]
 	}
 	return st, nil
+}
+
+// expandKnown подставляет в текст блока только переменные сценария
+// (param, set): прочие ${…} — синтаксис самого файла (compose берёт так
+// переменные окружения) и остаются как есть.
+func expandKnown(text string, vars map[string]string) string {
+	for name, v := range vars {
+		text = strings.ReplaceAll(text, "${"+name+"}", v)
+	}
+	return text
 }

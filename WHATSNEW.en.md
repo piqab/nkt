@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.26 — 2026-09-27
+
+- **The `examples/hello-app` deployment example.** A small Python
+  application with tests, a Dockerfile and a GitHub Actions workflow
+  (tests, the image into GHCR, a signed hub webhook with the image tag) —
+  and three ready deployment variants: a manifest into Kubernetes, a Helm
+  release on the generic onechart chart, a Docker Compose host through a
+  hub script. A step-by-step guide is in the example's README (ru and
+  en); nkt's tests check the example files with the same checks the hub
+  uses.
+- **Hub scripts:** blocks (a compose file, a file) now get the script's
+  variables (`param`, `set`) substituted — e.g. `${TAG}` in the image
+  name. Other `${…}` stay as they are: that is compose's own syntax.
+
 ## v1.11.25 — 2026-09-27
 
 - **Port forward to the browser — on a separate address.** The pod's

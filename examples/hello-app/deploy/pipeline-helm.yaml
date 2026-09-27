@@ -1,0 +1,16 @@
+# Вариант 2 — конвейер «Helm-релиз». Чарт — универсальный onechart из
+# публичного репозитория, values — из этого репозитория, тег образа —
+# в image.tag.
+repo: https://github.com/OWNER/hello-app.git
+ref: main
+tags: "v*"
+action: helm
+clusters: [prod]
+helm:
+  repo_name: onechart
+  repo_url: https://chart.onechart.dev
+  chart: onechart
+  release: hello-app
+  namespace: hello
+  values: deploy/values.yaml
+  tag_key: image.tag

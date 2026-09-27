@@ -40,6 +40,13 @@ clusters: [prod]          # кластеры хаба
 В манифестах и values подставляются `{{nkt.tag}}`, `{{nkt.commit}}` и
 `{{nkt.ref}}`.
 
+## Пример
+
+Готовый пример — [`examples/hello-app`](https://github.com/piqab/nkt/tree/main/examples/hello-app):
+приложение на Python, Dockerfile, workflow GitHub Actions (тесты, образ в
+GHCR, вебхук хаба) и три варианта выкладки — манифест, Helm, хост с Docker
+Compose — с пошаговой инструкцией.
+
 ## Когда выкладывать
 
 - **Кнопка «Выложить»** — вершина ветки или указанный тег.

@@ -1,0 +1,18 @@
+# Вариант 2 — values универсального чарта onechart (https://chart.onechart.dev).
+# Сверьте ключи с «Значениями чарта по умолчанию» в окне релиза.
+image:
+  repository: ghcr.io/OWNER/hello-app
+  tag: latest            # хаб заменит тегом из CI (tag_key: image.tag)
+containerPort: 8000
+replicas: 2
+probe:
+  enabled: true
+  path: /healthz
+ingress:
+  host: hello.example.com
+resources:
+  requests:
+    cpu: 20m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
