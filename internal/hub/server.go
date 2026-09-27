@@ -141,6 +141,8 @@ func (s *Server) Handler() http.Handler {
 			"/system/sandbox-packages/ws",
 		}
 		// Проброс порта Kubernetes: доступ по токену, его проверяет хост.
+		// Вебхук выкладки: без сессии, доступ — подписью (deploy_triggers.go).
+		r.Post("/hub/hooks/{hook}", s.handleHook)
 		r.HandleFunc("/hosts/local/k8s/pf/{token}", s.proxyLocal)
 		r.HandleFunc("/hosts/local/k8s/pf/{token}/*", s.proxyLocal)
 		r.HandleFunc("/hosts/{id}/k8s/pf/{token}", s.proxyHost)
@@ -291,6 +293,20 @@ func (s *Server) Handler() http.Handler {
 					r.Delete("/hub/k8s/manifests/{id}", s.handleManifestDelete)
 					r.Post("/hub/k8s/manifests/diff", s.handleManifestDiff)
 					r.Get("/hub/k8s/findings", s.handleClustersFindings)
+					r.Get("/hub/pipelines", s.handlePipelines)
+					r.Get("/hub/pipelines/template", s.handlePipelineTemplate)
+					r.Get("/hub/pipelines/versions/{version}", s.handlePipelineVersion)
+					r.Post("/hub/pipelines", s.handlePipelineCreate)
+					r.Get("/hub/pipelines/{id}", s.handlePipelineGet)
+					r.Put("/hub/pipelines/{id}", s.handlePipelineUpdate)
+					r.Delete("/hub/pipelines/{id}", s.handlePipelineDelete)
+					r.Post("/hub/pipelines/{id}/enabled", s.handlePipelineEnabled)
+					r.Get("/hub/pipelines/{id}/versions", s.handlePipelineVersions)
+					r.Post("/hub/pipelines/{id}/credentials", s.handlePipelineCredentials)
+					r.Post("/hub/pipelines/{id}/hook-secret", s.handlePipelineHookSecret)
+					r.Post("/hub/pipelines/{id}/deploy", s.handlePipelineDeploy)
+					r.Post("/hub/pipelines/{id}/rollback", s.handlePipelineRollback)
+					r.Get("/hub/pipelines/{id}/deployments", s.handlePipelineDeployments)
 					r.Post("/hub/k8s/helm/install", s.handleHelmMulti)
 					r.Post("/hub/k8s/manifests/blocks", s.handleManifestBlocks)
 					r.Post("/hub/k8s/manifests/apply", s.handleManifestApply)

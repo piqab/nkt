@@ -8,6 +8,7 @@ import {
   BellOutlined,
   BugOutlined,
   ClusterOutlined,
+  RocketOutlined,
   CodeOutlined,
   DashboardOutlined,
   DesktopOutlined,
@@ -54,6 +55,7 @@ import LogsPage from './pages/Logs'
 import JobsPage from './pages/Jobs'
 import HostEvents from './pages/HostEvents'
 import ClustersPage from './pages/ClustersPage'
+import Deployments from './pages/Deployments'
 import Services from './pages/Services'
 import Containers from './pages/Containers'
 import Packages from './pages/Packages'
@@ -408,7 +410,7 @@ function Shell({
   // depends on the address bar staying whatever it was from a previous
   // host session — introducing routing here would have to interact with
   // that, for no real benefit (this is not something worth bookmarking).
-  const [hubView, setHubView] = useState<'hosts' | 'events' | 'jobs' | 'profiles' | 'clusters' | 'about'>('hosts')
+  const [hubView, setHubView] = useState<'hosts' | 'events' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'about'>('hosts')
   // Polled independently of whichever section is actually showing, so the
   // sidebar's own "доступно обновление" badge stays current even while
   // looking at the host list — matches how criticalCount/certAlerts below
@@ -452,7 +454,7 @@ function Shell({
   // бы в API хаба, где раздела заданий нет вовсе.
   // Задания и профили хаба — это задания и профили его собственной машины:
   // раздел работает через /hosts/local без выбранного хоста.
-  if (isHub && !selectedHost && (hubView === 'jobs' || hubView === 'profiles' || hubView === 'clusters')) hostScope.id = LOCAL_HOST_ID
+  if (isHub && !selectedHost && (hubView === 'jobs' || hubView === 'profiles' || hubView === 'clusters' || hubView === 'deploy')) hostScope.id = LOCAL_HOST_ID
 
   function selectHost(host: SelectedHost | null) {
     setSelectedHost(host)
@@ -575,6 +577,7 @@ function Shell({
       },
       { key: 'profiles', icon: <ProfileOutlined />, label: t('nav.profiles') },
       { key: 'clusters', icon: <ClusterOutlined />, label: t('nav.clusters') },
+      { key: 'deploy', icon: <RocketOutlined />, label: t('nav.deploy') },
       {
         key: 'about',
         icon: navIcon(<InfoCircleOutlined />, hubUpdate.data?.update_available ? 1 : 0, false, collapsed),
@@ -628,6 +631,8 @@ function Shell({
               />
             ) : hubView === 'clusters' ? (
               <ClustersPage me={me} />
+            ) : hubView === 'deploy' ? (
+              <Deployments me={me} />
             ) : (
               <About />
             )}
