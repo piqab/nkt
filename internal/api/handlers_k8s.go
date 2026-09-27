@@ -1,11 +1,15 @@
 package api
 
 import (
+	"context"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/cmdjob"
 	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/control"
 	"github.com/piqab/nkt/internal/jobs"
@@ -215,4 +219,172 @@ func (s *Server) handleK8sSecretReveal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": data})
+}
+
+// ------------------------------------------------------- действия с объектами
+
+// k8sObjectText — GET-обработчик текста об объекте (describe, history).
+func (s *Server) k8sObjectText(w http.ResponseWriter, r *http.Request, read func(ctx context.Context, kind, ns, name string) (string, error)) {
+	q := r.URL.Query()
+	text, err := read(r.Context(), q.Get("kind"), q.Get("namespace"), q.Get("name"))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"text": text})
+}
+
+// handleK8sDescribe — GET /k8s/describe?kind=&namespace=&name=.
+func (s *Server) handleK8sDescribe(w http.ResponseWriter, r *http.Request) {
+	s.k8sObjectText(w, r, s.k8sManager().Describe)
+}
+
+// handleK8sRolloutHistory — GET /k8s/rollout/history?kind=&namespace=&name=.
+func (s *Server) handleK8sRolloutHistory(w http.ResponseWriter, r *http.Request) {
+	s.k8sObjectText(w, r, s.k8sManager().RolloutHistory)
+}
+
+// handleK8sPodContainers — GET /k8s/pods/containers?namespace=&name=.
+func (s *Server) handleK8sPodContainers(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	t, err := s.k8sManager().Find(r.Context(), "pods", q.Get("namespace"), q.Get("name"))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"containers": t.Containers()})
+}
+
+// handleK8sAction — POST /k8s/objects/action {kind, namespace, name,
+// action, replicas, revision}: удалить, масштабировать, перезапустить,
+// откатить, cordon, запустить CronJob сейчас, приостановить.
+func (s *Server) handleK8sAction(w http.ResponseWriter, r *http.Request) {
+	var req k8s.ActionRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	out, err := s.k8sManager().Act(r.Context(), req)
+	target := req.Kind + " " + strings.TrimPrefix(req.Namespace+"/"+req.Name, "/")
+	detail := map[string]any{}
+	if req.Action == "scale" {
+		detail["replicas"] = req.Replicas
+	}
+	if req.Action == "undo" && req.Revision > 0 {
+		detail["revision"] = req.Revision
+	}
+	if err != nil {
+		detail["error"] = errText(err)
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "k8s."+req.Action, target, auditResult(err), detail)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"output": out})
+}
+
+// handleK8sNamespaceCreate — POST /k8s/namespaces {name}.
+func (s *Server) handleK8sNamespaceCreate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	out, err := s.k8sManager().CreateNamespace(r.Context(), req.Name)
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "k8s.namespace.create", req.Name, auditResult(err), errText(err))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"output": out})
+}
+
+// handleK8sDrain — POST /k8s/nodes/drain {name}: вывод узла заданием
+// (выселение подов идёт минутами).
+func (s *Server) handleK8sDrain(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	m := s.k8sManager()
+	t, err := m.Find(r.Context(), "nodes", "", req.Name)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	argv, err := m.KubectlArgv(r.Context(), k8s.DrainArgs(t.Name)...)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.startCmdJob(w, r, "k8s.drainJobTitle", []any{t.Name}, "k8s:drain:"+t.Name,
+		cmdjob.Params{Commands: []cmdjob.Command{{Argv: argv}}}, "k8s.drain", t.Name)
+}
+
+// k8sPodSession — под и контейнер из листинга для PTY-сессии.
+func (s *Server) k8sPodSession(w http.ResponseWriter, r *http.Request) (*k8s.Manager, k8s.Target, string, bool) {
+	if s.cfg.Mode == config.ModeFixtures {
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "terminal.fixturesDisabled"))
+		return nil, k8s.Target{}, "", false
+	}
+	q := r.URL.Query()
+	m := s.k8sManager()
+	t, err := m.Find(r.Context(), "pods", q.Get("namespace"), q.Get("name"))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return nil, k8s.Target{}, "", false
+	}
+	c, ok := t.Container(q.Get("container"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "k8s.badContainer", q.Get("container")))
+		return nil, k8s.Target{}, "", false
+	}
+	return m, t, c, true
+}
+
+// handleK8sPodLogsWS — GET /k8s/pods/logs/ws?namespace=&name=&container=&tail=&follow=1&previous=1.
+func (s *Server) handleK8sPodLogsWS(w http.ResponseWriter, r *http.Request) {
+	m, t, c, ok := s.k8sPodSession(w, r)
+	if !ok {
+		return
+	}
+	q := r.URL.Query()
+	tail, _ := strconv.Atoi(q.Get("tail"))
+	if tail <= 0 || tail > 10000 {
+		tail = 200
+	}
+	argv, err := m.KubectlArgv(r.Context(), k8s.LogsArgs(t, c, tail, q.Get("follow") == "1", q.Get("previous") == "1")...)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	cmd := unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, argv...)
+	s.runPTYSession(w, r, cmd, "k8s-logs", t.Namespace+"/"+t.Name+"/"+c, s.cfg.TerminalIdleTimeout)
+}
+
+// handleK8sPodExecWS — GET /k8s/pods/exec/ws?namespace=&name=&container=:
+// консоль в контейнере пода, те же ворота, что у консоли контейнеров.
+func (s *Server) handleK8sPodExecWS(w http.ResponseWriter, r *http.Request) {
+	if !s.cfg.TerminalEnabled {
+		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "terminal.disabled"))
+		return
+	}
+	m, t, c, ok := s.k8sPodSession(w, r)
+	if !ok {
+		return
+	}
+	argv, err := m.KubectlArgv(r.Context(), k8s.ExecArgs(t, c)...)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "k8s.exec", t.Namespace+"/"+t.Name+"/"+c, "ok", "")
+	cmd := unrestrictedCommand(map[string]string{"TERM": "xterm-256color"}, argv...)
+	s.runPTYSession(w, r, cmd, "console", "k8s:"+t.Namespace+"/"+t.Name+"/"+c, s.cfg.TerminalIdleTimeout)
 }

@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.8 — 2026-09-27
+
+- **Kubernetes: object actions.** Every cluster object row has an actions
+  menu. For everyone — "Describe" (`kubectl describe` with events at the
+  end). For an administrator: pods — logs (tail, follow, previous run,
+  container choice) and a `kubectl exec` console, deletion; Deployments
+  and StatefulSets — scaling, restart (`rollout restart`), rollout
+  history and rollback to a revision; DaemonSets — restart and rollback;
+  CronJobs — "run now", suspend and resume; nodes — cordon/uncordon and
+  drain as a background job; namespaces — creation and deletion; the
+  other kinds, Custom Resources included, can be deleted.
+- Every action and every pod console login is recorded in the host audit
+  log. The object's name and namespace are taken from the cluster
+  listing — the request is only compared against them; deletion,
+  rollback, 0 replicas and drain ask for confirmation.
+
 ## v1.11.7 — 2026-09-27
 
 - **Kubernetes: cluster objects.** On a control plane the Kubernetes tab

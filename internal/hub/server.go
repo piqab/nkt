@@ -112,6 +112,8 @@ func (s *Server) Handler() http.Handler {
 		hubWSPaths := []string{
 			"/terminal/ws",
 			"/console/ws",
+			"/k8s/pods/logs/ws",
+			"/k8s/pods/exec/ws",
 			"/lxd/instances/{name}/logs/ws",
 			"/jobs/{jobID}/ws",
 			"/lxd/images/copy/ws",
