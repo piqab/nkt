@@ -722,7 +722,11 @@
     "apiPortDefault": "hub default",
     "keyCmdLocal": "Add the key with one command on the host itself (logged in as {{user}}):",
     "keyCmdRemote": "Or from your machine — ssh will ask for the password of {{user}}:",
-    "keyCmdAfter": "Then press \"install\" in the host row."
+    "keyCmdAfter": "Then press \"install\" in the host row.",
+    "statusReachable": "reachable",
+    "statusUnreachable": "unreachable — last reply: {{time}}",
+    "statusNotPolled": "not polled yet",
+    "noData": "no data"
   },
   "events": {
     "title": "Alerts",

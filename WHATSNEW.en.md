@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.13 — 2026-09-27
+
+- **Hub: the first-column icon shows whether the host is reachable.**
+  Green — the host answered the last poll, red — unreachable (the tooltip
+  says when it last answered), grey — not polled yet. Before, the green
+  check only meant "nkt is installed" and stayed green for an unreachable
+  host. Nested machines too.
+- **An unreachable host with no data no longer shows "no problems"** — it
+  shows "no data". When data from an earlier successful poll exists, the
+  finding counts are shown dimmed, marked "unreachable (data from …)".
+
 ## v1.11.12 — 2026-09-27
 
 - **Hub: one YAML into several clusters.** The "Clusters" section has a
