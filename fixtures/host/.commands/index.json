@@ -3,6 +3,234 @@
   "commands": [
     {
       "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "nodes",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"lab-cp-1\", \"labels\": {\"node-role.kubernetes.io/control-plane\": \"true\"}, \"creationTimestamp\": \"2026-09-10T08:00:00Z\"}, \"status\": {\"conditions\": [{\"type\": \"Ready\", \"status\": \"True\"}], \"addresses\": [{\"type\": \"InternalIP\", \"address\": \"192.168.122.10\"}], \"nodeInfo\": {\"kubeletVersion\": \"v1.31.4+k3s1\"}}}, {\"metadata\": {\"name\": \"lab-w-1\", \"labels\": {}, \"creationTimestamp\": \"2026-09-10T08:05:00Z\"}, \"status\": {\"conditions\": [{\"type\": \"Ready\", \"status\": \"True\"}], \"addresses\": [{\"type\": \"InternalIP\", \"address\": \"192.168.122.11\"}], \"nodeInfo\": {\"kubeletVersion\": \"v1.31.4+k3s1\"}}}, {\"metadata\": {\"name\": \"lab-w-2\", \"labels\": {}, \"creationTimestamp\": \"2026-09-10T08:05:00Z\"}, \"status\": {\"conditions\": [{\"type\": \"Ready\", \"status\": \"False\"}], \"addresses\": [{\"type\": \"InternalIP\", \"address\": \"192.168.122.12\"}], \"nodeInfo\": {\"kubeletVersion\": \"v1.31.4+k3s1\"}}}]}"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "clusterissuers.cert-manager.io",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"letsencrypt\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\"}, \"status\": {\"conditions\": [{\"type\": \"Ready\", \"status\": \"True\"}]}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "helmcharts.helm.cattle.io",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"traefik\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"kube-system\"}, \"spec\": {\"chart\": \"https://%{KUBERNETES_API}%/static/charts/traefik-27.0.201+up27.0.2.tgz\", \"targetNamespace\": \"kube-system\"}, \"status\": {\"jobName\": \"helm-install-traefik\"}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "certificates.cert-manager.io",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"web-tls\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"default\"}, \"spec\": {\"secretName\": \"web-tls\", \"dnsNames\": [\"shop.example.com\"]}, \"status\": {\"conditions\": [{\"type\": \"Ready\", \"status\": \"True\"}]}}, {\"metadata\": {\"name\": \"api-tls\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"spec\": {\"secretName\": \"api-tls\"}, \"status\": {\"conditions\": [{\"type\": \"Ready\", \"status\": \"False\"}]}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "customresourcedefinitions.apiextensions.k8s.io",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"certificates.cert-manager.io\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\"}, \"spec\": {\"group\": \"cert-manager.io\", \"scope\": \"Namespaced\", \"names\": {\"kind\": \"Certificate\", \"plural\": \"certificates\"}, \"versions\": [{\"name\": \"v1\", \"storage\": true, \"additionalPrinterColumns\": [{\"name\": \"Ready\", \"jsonPath\": \".status.conditions[?(@.type==\\\"Ready\\\")].status\"}, {\"name\": \"Secret\", \"jsonPath\": \".spec.secretName\"}, {\"name\": \"Age\", \"jsonPath\": \".metadata.creationTimestamp\"}]}]}}, {\"metadata\": {\"name\": \"helmcharts.helm.cattle.io\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\"}, \"spec\": {\"group\": \"helm.cattle.io\", \"scope\": \"Namespaced\", \"names\": {\"kind\": \"HelmChart\", \"plural\": \"helmcharts\"}, \"versions\": [{\"name\": \"v1\", \"storage\": true, \"additionalPrinterColumns\": [{\"name\": \"Job\", \"jsonPath\": \".status.jobName\"}, {\"name\": \"Chart\", \"jsonPath\": \".spec.chart\"}, {\"name\": \"TargetNamespace\", \"jsonPath\": \".spec.targetNamespace\"}, {\"name\": \"Version\", \"jsonPath\": \".spec.version\"}]}]}}, {\"metadata\": {\"name\": \"clusterissuers.cert-manager.io\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\"}, \"spec\": {\"group\": \"cert-manager.io\", \"scope\": \"Cluster\", \"names\": {\"kind\": \"ClusterIssuer\", \"plural\": \"clusterissuers\"}, \"versions\": [{\"name\": \"v1\", \"storage\": true}]}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "events",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"web-6c9d8f-asdfg.1\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"default\"}, \"type\": \"Warning\", \"reason\": \"FailedScheduling\", \"involvedObject\": {\"kind\": \"Pod\", \"name\": \"web-6c9d8f-asdfg\"}, \"message\": \"0/3 nodes are available: 3 Insufficient memory.\", \"count\": 14, \"lastTimestamp\": \"2026-09-27T06:58:00Z\"}, {\"metadata\": {\"name\": \"api-7f9c.1\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"type\": \"Warning\", \"reason\": \"BackOff\", \"involvedObject\": {\"kind\": \"Pod\", \"name\": \"api-7f9c8d-k2k2k\"}, \"message\": \"Back-off restarting failed container api\", \"count\": 37, \"lastTimestamp\": \"2026-09-27T07:01:00Z\"}, {\"metadata\": {\"name\": \"web.1\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"default\"}, \"type\": \"Normal\", \"reason\": \"ScalingReplicaSet\", \"involvedObject\": {\"kind\": \"Deployment\", \"name\": \"web\"}, \"message\": \"Scaled up replica set web-6c9d8f to 2\", \"count\": 1, \"lastTimestamp\": \"2026-09-27T06:40:00Z\"}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "namespaces",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"default\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\"}, \"status\": {\"phase\": \"Active\"}}, {\"metadata\": {\"name\": \"kube-system\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\"}, \"status\": {\"phase\": \"Active\"}}, {\"metadata\": {\"name\": \"kube-public\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\"}, \"status\": {\"phase\": \"Active\"}}, {\"metadata\": {\"name\": \"shop\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\"}, \"status\": {\"phase\": \"Active\"}}, {\"metadata\": {\"name\": \"cert-manager\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\"}, \"status\": {\"phase\": \"Active\"}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "storageclasses.storage.k8s.io",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"local-path\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"annotations\": {\"storageclass.kubernetes.io/is-default-class\": \"true\"}}, \"provisioner\": \"rancher.io/local-path\", \"reclaimPolicy\": \"Delete\", \"volumeBindingMode\": \"WaitForFirstConsumer\"}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "persistentvolumes",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"pvc-5c1d9e\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\"}, \"spec\": {\"capacity\": {\"storage\": \"10Gi\"}, \"accessModes\": [\"ReadWriteOnce\"], \"persistentVolumeReclaimPolicy\": \"Delete\", \"claimRef\": {\"namespace\": \"shop\", \"name\": \"postgres-data\"}, \"storageClassName\": \"local-path\"}, \"status\": {\"phase\": \"Bound\"}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "persistentvolumeclaims",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"postgres-data\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"spec\": {\"volumeName\": \"pvc-5c1d9e\", \"accessModes\": [\"ReadWriteOnce\"], \"storageClassName\": \"local-path\"}, \"status\": {\"phase\": \"Bound\", \"capacity\": {\"storage\": \"10Gi\"}}}, {\"metadata\": {\"name\": \"uploads\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"spec\": {\"accessModes\": [\"ReadWriteMany\"], \"storageClassName\": \"nfs\"}, \"status\": {\"phase\": \"Pending\"}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "secrets",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"web-tls\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"default\"}, \"type\": \"kubernetes.io/tls\", \"data\": {\"tls.crt\": \"LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIuLi5kZW1vLi4uCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0K\", \"tls.key\": \"LS0tLS1CRUdJTiBQUklWQVRFIEtFWS0tLS0tCk1JSUUuLi5kZW1vLi4uCi0tLS0tRU5EIFBSSVZBVEUgS0VZLS0tLS0K\"}}, {\"metadata\": {\"name\": \"db-credentials\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"type\": \"Opaque\", \"data\": {\"username\": \"c2hvcA==\", \"password\": \"ZGVtby1TM2NyZXQh\"}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "configmaps",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"coredns\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"kube-system\"}, \"data\": {\"Corefile\": \".:53 {\\n    errors\\n    health\\n    kubernetes cluster.local in-addr.arpa ip6.arpa\\n    forward . /etc/resolv.conf\\n    cache 30\\n}\\n\", \"NodeHosts\": \"192.168.122.31 lab-cp-1\\n\"}}, {\"metadata\": {\"name\": \"web-config\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"default\"}, \"data\": {\"nginx.conf\": \"server { listen 80; root /usr/share/nginx/html; }\\n\"}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "ingresses.networking.k8s.io",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"web\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"default\"}, \"spec\": {\"ingressClassName\": \"traefik\", \"rules\": [{\"host\": \"shop.example.com\"}], \"tls\": [{\"secretName\": \"web-tls\"}]}, \"status\": {\"loadBalancer\": {\"ingress\": [{\"ip\": \"192.168.122.31\"}]}}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "services",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"kubernetes\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"default\"}, \"spec\": {\"type\": \"ClusterIP\", \"clusterIP\": \"10.43.0.1\", \"ports\": [{\"port\": 443, \"protocol\": \"TCP\"}]}}, {\"metadata\": {\"name\": \"web\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"default\"}, \"spec\": {\"type\": \"ClusterIP\", \"clusterIP\": \"10.43.12.7\", \"ports\": [{\"port\": 80, \"protocol\": \"TCP\"}]}}, {\"metadata\": {\"name\": \"api\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"spec\": {\"type\": \"NodePort\", \"clusterIP\": \"10.43.55.2\", \"ports\": [{\"port\": 8080, \"nodePort\": 30080, \"protocol\": \"TCP\"}]}}, {\"metadata\": {\"name\": \"postgres\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"spec\": {\"type\": \"ClusterIP\", \"clusterIP\": \"None\", \"ports\": [{\"port\": 5432, \"protocol\": \"TCP\"}]}}, {\"metadata\": {\"name\": \"traefik\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"kube-system\"}, \"spec\": {\"type\": \"LoadBalancer\", \"clusterIP\": \"10.43.90.11\", \"ports\": [{\"port\": 80, \"nodePort\": 31080, \"protocol\": \"TCP\"}, {\"port\": 443, \"nodePort\": 31443, \"protocol\": \"TCP\"}]}, \"status\": {\"loadBalancer\": {\"ingress\": [{\"ip\": \"192.168.122.31\"}]}}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "cronjobs.batch",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"nightly-backup\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"spec\": {\"schedule\": \"0 3 * * *\", \"suspend\": false}, \"status\": {\"lastScheduleTime\": \"2026-09-26T03:00:00Z\"}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "jobs.batch",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"db-migrate-42\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"spec\": {\"completions\": 1}, \"status\": {\"succeeded\": 1, \"startTime\": \"2026-09-20T03:00:00Z\", \"completionTime\": \"2026-09-20T03:00:41Z\"}}, {\"metadata\": {\"name\": \"nightly-backup-29297\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"spec\": {\"completions\": 1}, \"status\": {\"failed\": 1, \"startTime\": \"2026-09-26T03:00:00Z\"}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "daemonsets.apps",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"svclb-traefik\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"kube-system\"}, \"spec\": {\"template\": {\"spec\": {\"containers\": [{\"name\": \"klipper-lb\", \"image\": \"rancher/klipper-lb:v0.4.9\"}]}}}, \"status\": {\"desiredNumberScheduled\": 3, \"currentNumberScheduled\": 3, \"numberReady\": 3}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "statefulsets.apps",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"postgres\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"spec\": {\"replicas\": 1, \"template\": {\"spec\": {\"containers\": [{\"name\": \"postgres\", \"image\": \"postgres:16-alpine\"}]}}}, \"status\": {\"readyReplicas\": 1}}]}\n"
+    },
+    {
+      "match": [
+        "k3s",
+        "kubectl",
+        "get",
+        "deployments.apps",
+        "-o",
+        "json",
+        "-A"
+      ],
+      "stdout": "{\"items\": [{\"metadata\": {\"name\": \"coredns\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"kube-system\"}, \"spec\": {\"replicas\": 1, \"template\": {\"spec\": {\"containers\": [{\"name\": \"mirrored-coredns-coredns\", \"image\": \"rancher/mirrored-coredns-coredns:1.11.3\"}]}}}, \"status\": {\"readyReplicas\": 1, \"updatedReplicas\": 1, \"availableReplicas\": 1}}, {\"metadata\": {\"name\": \"traefik\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"kube-system\"}, \"spec\": {\"replicas\": 1, \"template\": {\"spec\": {\"containers\": [{\"name\": \"mirrored-library-traefik\", \"image\": \"rancher/mirrored-library-traefik:3.1.2\"}]}}}, \"status\": {\"readyReplicas\": 1, \"updatedReplicas\": 1, \"availableReplicas\": 1}}, {\"metadata\": {\"name\": \"metrics-server\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"kube-system\"}, \"spec\": {\"replicas\": 1, \"template\": {\"spec\": {\"containers\": [{\"name\": \"mirrored-metrics-server\", \"image\": \"rancher/mirrored-metrics-server:v0.7.2\"}]}}}, \"status\": {\"readyReplicas\": 1, \"updatedReplicas\": 1, \"availableReplicas\": 1}}, {\"metadata\": {\"name\": \"web\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"default\"}, \"spec\": {\"replicas\": 2, \"template\": {\"spec\": {\"containers\": [{\"name\": \"nginx\", \"image\": \"nginx:1.27\"}]}}}, \"status\": {\"readyReplicas\": 1, \"updatedReplicas\": 2, \"availableReplicas\": 1}}, {\"metadata\": {\"name\": \"api\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"shop\"}, \"spec\": {\"replicas\": 3, \"template\": {\"spec\": {\"containers\": [{\"name\": \"api\", \"image\": \"ghcr.io/acme/api:2.1.0\"}]}}}, \"status\": {\"readyReplicas\": 2, \"updatedReplicas\": 3, \"availableReplicas\": 2}}, {\"metadata\": {\"name\": \"cert-manager\", \"creationTimestamp\": \"2026-09-01T10:00:00Z\", \"namespace\": \"cert-manager\"}, \"spec\": {\"replicas\": 1, \"template\": {\"spec\": {\"containers\": [{\"name\": \"cert-manager-controller\", \"image\": \"quay.io/jetstack/cert-manager-controller:v1.15.3\"}]}}}, \"status\": {\"readyReplicas\": 1, \"updatedReplicas\": 1, \"availableReplicas\": 1}}]}\n"
+    },
+    {
+      "match": [
         "virsh",
         "-c",
         "qemu:///system",
