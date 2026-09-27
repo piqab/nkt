@@ -20,6 +20,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
+	"strconv"
 	"sync"
 
 	"github.com/piqab/nkt/internal/msgs"
@@ -302,7 +304,7 @@ func (m *Manager) run(ctx context.Context, id int64, queue string) {
 
 	job, _ = m.db.JobByID(context.Background(), id)
 	jc := &Context{Job: job, m: m}
-	runErr := runner.Run(msgs.WithLang(ctx, jc.Lang()), jc)
+	runErr := m.runSafely(ctx, runner, jc)
 
 	m.mu.Lock()
 	byUser := m.userCanceled[id]
@@ -415,6 +417,13 @@ func (m *Manager) Recover(ctx context.Context) error {
 		if runner == nil || !resumable {
 			m.appendLog(job.ID, msgs.T(msgs.ParseLang(job.Lang), "jobs.interruptedByRestart"))
 			_ = m.db.FinishJob(ctx, job.ID, store.JobInterrupted, msgs.T(msgs.ParseLang(job.Lang), "jobs.interruptedByRestartShort"))
+			continue
+		}
+		// Задание, которое после каждого продолжения снова роняет службу,
+		// иначе крутилось бы вечно: после нескольких продолжений — стоп.
+		if n := m.countResume(ctx, job.ID); n > maxResumes {
+			m.appendLog(job.ID, msgs.T(msgs.ParseLang(job.Lang), "jobs.resumeLoop", maxResumes))
+			_ = m.db.FinishJob(ctx, job.ID, store.JobInterrupted, msgs.T(msgs.ParseLang(job.Lang), "jobs.resumeLoop", maxResumes))
 			continue
 		}
 		m.appendLog(job.ID, msgs.T(msgs.ParseLang(job.Lang), "jobs.resumedAfterRestart"))
@@ -546,4 +555,31 @@ func (m *Manager) closeWatchers(id int64) {
 	for _, ch := range list {
 		close(ch)
 	}
+}
+
+// maxResumes — сколько раз задание продолжается после перезапуска службы.
+const maxResumes = 3
+
+// countResume — номер продолжения задания после перезапуска.
+func (m *Manager) countResume(ctx context.Context, id int64) int {
+	key := fmt.Sprintf("jobs.resumes.%d", id)
+	n := 0
+	if raw, ok, err := m.db.KVGet(ctx, key); err == nil && ok {
+		n, _ = strconv.Atoi(raw)
+	}
+	n++
+	_ = m.db.KVSet(ctx, key, strconv.Itoa(n))
+	return n
+}
+
+// runSafely выполняет задание; паника исполнителя становится ошибкой
+// задания — служба не падает (и не продолжает то же задание по кругу).
+func (m *Manager) runSafely(ctx context.Context, runner Runner, jc *Context) (err error) {
+	defer func() {
+		if p := recover(); p != nil {
+			m.log.Error("задание упало", "id", jc.Job.ID, "kind", jc.Job.Kind, "panic", p, "stack", string(debug.Stack()))
+			err = msgs.Errorf("jobs.panicked", fmt.Sprint(p))
+		}
+	}()
+	return runner.Run(msgs.WithLang(ctx, jc.Lang()), jc)
 }

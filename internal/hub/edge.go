@@ -434,7 +434,7 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	_ = sc.Chmod(stage, 0o700)
 	defer func() { _, _ = runRemote(client, "rm -rf "+stage) }()
-	if err := uploadFile(sc, bin, stage+"/nkt-edge", 0o755, nil); err != nil {
+	if err := uploadFile(sc, bin, stage+"/nkt-edge", 0o755, report); err != nil {
 		return err
 	}
 	if err := uploadBytes(sc, []byte(envFile), stage+"/edge.env", 0o600); err != nil {

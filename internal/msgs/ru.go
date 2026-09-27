@@ -1005,6 +1005,8 @@ var ruCatalog = map[string]string{
 	"hub.writing":                                         "запись %s: %v: %s",
 	"inventory.savingSnapshot":                            "сохранение снапшота: %v",
 	"jobs.jobAlreadyFinished":                             "задание уже завершено",
+	"jobs.panicked":                                       "внутренняя ошибка исполнителя: %s",
+	"jobs.resumeLoop":                                     "задание прервано: служба перезапускалась посреди него больше %d раз",
 	"jobs.jobRunningProcess":                              "задание не выполняется в этом процессе",
 	"jobs.unknownJobKind":                                 "неизвестный вид задания %q",
 	"monitor.demoMetricsHistory":                          "демо-история метрик: %v",
