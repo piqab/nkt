@@ -71,3 +71,34 @@ func TestManualJobName(t *testing.T) {
 		t.Errorf("длина %d", len(got))
 	}
 }
+
+func TestRBACAndHPA(t *testing.T) {
+	m := fixtureManager()
+	ctx := context.Background()
+	sa, err := m.Resources(ctx, "serviceaccounts", "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ci, def bool
+	for _, r := range sa.Rows {
+		if r.Name == "ci-deployer" && r.Cols["bound_roles"] == "cluster-admin (cluster)" && r.Status == "warn" {
+			ci = true
+		}
+		if r.Name == "default" && r.Cols["bound_roles"] == "app-reader" {
+			def = true
+		}
+	}
+	if !ci || !def {
+		t.Errorf("роли SA: %+v", sa.Rows)
+	}
+	hpa, _ := m.Resources(ctx, "hpa", "shop")
+	if len(hpa.Rows) != 1 || hpa.Rows[0].Cols["metrics"] != "cpu 41%/70%" || hpa.Rows[0].Cols["target"] != "Deployment/api" {
+		t.Errorf("hpa: %+v", hpa.Rows)
+	}
+	if _, err := m.Act(ctx, ActionRequest{Kind: "hpa", Namespace: "shop", Name: "api", Action: "bounds", Min: 2, Max: 8}); err != nil {
+		t.Errorf("bounds: %v", err)
+	}
+	if _, err := m.Act(ctx, ActionRequest{Kind: "hpa", Namespace: "shop", Name: "api", Action: "bounds", Min: 5, Max: 2}); err == nil {
+		t.Error("max < min принят")
+	}
+}

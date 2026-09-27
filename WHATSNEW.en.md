@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.16 — 2026-09-27
+
+- **Kubernetes: access (RBAC).** A new tab: ServiceAccounts, Roles,
+  RoleBindings, ClusterRoles, ClusterRoleBindings. A ServiceAccount shows
+  "who can do what": every role bound to it in its namespace and
+  cluster-wide; a binding to `cluster-admin` is highlighted. Roles show
+  their rules briefly ("resources: verbs"), bindings the role and whom it
+  is granted to.
+- **NetworkPolicy** in the "Network" section: which pods it covers, types,
+  the number of ingress and egress rules.
+- **HPA** in Workloads: target, min/max, replicas "now → desired", metrics
+  "now/target"; one stuck at its maximum is highlighted. The "Bounds"
+  action changes min and max; YAML and block mode work as for other
+  objects.
+
 ## v1.11.15 — 2026-09-27
 
 - **Kubernetes: new cluster hygiene findings** (system namespaces `kube-*`

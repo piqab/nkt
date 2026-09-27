@@ -151,19 +151,26 @@ func (m *Manager) read(ctx context.Context, args ...string) (string, error) {
 
 // Actions — какие действия доступны виду (в интерфейсе — те же).
 var Actions = map[string][]string{
-	"deployments":  {"scale", "restart", "undo", "delete"},
-	"statefulsets": {"scale", "restart", "undo", "delete"},
-	"daemonsets":   {"restart", "undo", "delete"},
-	"jobs":         {"delete"},
-	"cronjobs":     {"trigger", "suspend", "resume", "delete"},
-	"pods":         {"delete"},
-	"services":     {"delete"},
-	"ingresses":    {"delete"},
-	"configmaps":   {"delete"},
-	"secrets":      {"delete"},
-	"pvc":          {"delete"},
-	"nodes":        {"cordon", "uncordon"},
-	"namespaces":   {"delete"},
+	"deployments":         {"scale", "restart", "undo", "delete"},
+	"statefulsets":        {"scale", "restart", "undo", "delete"},
+	"daemonsets":          {"restart", "undo", "delete"},
+	"jobs":                {"delete"},
+	"cronjobs":            {"trigger", "suspend", "resume", "delete"},
+	"pods":                {"delete"},
+	"services":            {"delete"},
+	"ingresses":           {"delete"},
+	"configmaps":          {"delete"},
+	"secrets":             {"delete"},
+	"pvc":                 {"delete"},
+	"nodes":               {"cordon", "uncordon"},
+	"namespaces":          {"delete"},
+	"serviceaccounts":     {"delete"},
+	"roles":               {"delete"},
+	"rolebindings":        {"delete"},
+	"clusterroles":        {"delete"},
+	"clusterrolebindings": {"delete"},
+	"networkpolicies":     {"delete"},
+	"hpa":                 {"bounds", "delete"},
 }
 
 // ActionRequest — POST /k8s/objects/action.
@@ -174,6 +181,9 @@ type ActionRequest struct {
 	Action    string `json:"action"`
 	Replicas  int    `json:"replicas"`
 	Revision  int    `json:"revision"`
+	// Min, Max — границы HPA.
+	Min int `json:"min"`
+	Max int `json:"max"`
 }
 
 // MaxReplicas — предел масштабирования из интерфейса.
@@ -213,6 +223,12 @@ func (m *Manager) Act(ctx context.Context, req ActionRequest) (string, error) {
 		return m.mutate(ctx, req.Action, t.Name)
 	case "trigger":
 		return m.mutate(ctx, append([]string{"create", "job", ManualJobName(t.Name, time.Now()), "--from=cronjob/" + t.Name}, ns...)...)
+	case "bounds":
+		if req.Min < 1 || req.Max < req.Min || req.Max > MaxReplicas {
+			return "", msgs.Errorf("k8s.badBounds", MaxReplicas)
+		}
+		patch := fmt.Sprintf(`{"spec":{"minReplicas":%d,"maxReplicas":%d}}`, req.Min, req.Max)
+		return m.mutate(ctx, append([]string{"patch", t.Resource, t.Name, "--type=merge", "-p", patch}, ns...)...)
 	case "suspend", "resume":
 		patch := fmt.Sprintf(`{"spec":{"suspend":%t}}`, req.Action == "suspend")
 		return m.mutate(ctx, append([]string{"patch", t.Resource, t.Name, "--type=merge", "-p", patch}, ns...)...)

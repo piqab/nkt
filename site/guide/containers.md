@@ -142,7 +142,9 @@ libvirt через qemu-guest-agent. Пароль хранится в nkt заш
 На control plane ниже — **объекты кластера** по разделам: Workloads
 (Deployments, StatefulSets, DaemonSets, Jobs, CronJobs), поды, сеть
 (Services, Ingress), конфигурация (ConfigMaps, Secrets), хранилище (PVC,
-PV, StorageClass), узлы, namespaces, события и **Custom Resources** —
+PV, StorageClass), доступ (ServiceAccounts, Roles, привязки — у
+ServiceAccount видно, какие роли к нему привязаны), NetworkPolicy, HPA,
+узлы, namespaces, события и **Custom Resources** —
 виды из CRD кластера с их собственными колонками. В каждом разделе —
 фильтр по namespace, общий для всех разделов, и поиск; цвет точки —
 состояние объекта. У секретов в списке только имена ключей, значения —
