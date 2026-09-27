@@ -37,7 +37,14 @@ func (s *Server) handleHelmValues(w http.ResponseWriter, r *http.Request) {
 	rel, err := m.FindRelease(r.Context(), q.Get("namespace"), q.Get("release"))
 	var values string
 	if err == nil {
-		values, err = m.HelmValues(r.Context(), rel.Namespace, rel.Name)
+		switch q.Get("view") {
+		case "all":
+			values, err = m.HelmAllValues(r.Context(), rel.Namespace, rel.Name)
+		case "defaults":
+			values, err = m.HelmChartDefaults(r.Context(), rel.Namespace, rel.Name)
+		default:
+			values, err = m.HelmValues(r.Context(), rel.Namespace, rel.Name)
+		}
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "k8s.helm.values", q.Get("namespace")+"/"+q.Get("release"), auditResult(err), errText(err))
 	if err != nil {

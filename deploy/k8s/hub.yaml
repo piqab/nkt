@@ -86,6 +86,9 @@ spec:
               memory: 2Gi
           ports:
             - containerPort: 8077
+            # Пробросы портов Kubernetes в браузер (NKT_FORWARD_ADDR); за
+            # Ingress задайте NKT_FORWARD_PUBLIC_URL — адрес, как его видит браузер.
+            - containerPort: 8446
           env:
             - name: NKT_MODE
               value: hub
@@ -140,3 +143,7 @@ spec:
   ports:
     - port: 8077
       targetPort: 8077
+      name: http
+    - port: 8446
+      targetPort: 8446
+      name: forward

@@ -9,6 +9,8 @@ export interface Me {
   is_admin: boolean
   mode: string
   allow_mutations: boolean
+  /** Адрес пробросов портов: «:8446» или полный URL; пусто — по пути /api. */
+  forward_base?: string
   simulated: boolean
   /** Hub only: the hub's own build version, for comparing against each
    * host's nkt_version to tell "переустановить" and "обновить" apart. */

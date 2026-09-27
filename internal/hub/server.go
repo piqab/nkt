@@ -6,9 +6,11 @@
 package hub
 
 import (
+	"context"
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -90,6 +92,9 @@ func (s *Server) Handler() http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(s.requestLogger)
 	r.Use(middleware.Recoverer)
+	r.Use(auth.SameOrigin(s.cfg.CORSOrigins, func(p string) bool {
+		return strings.Contains(p, "/k8s/pf/") || strings.HasPrefix(p, "/api/hub/hooks/")
+	}))
 	r.Use(securityHeaders)
 	r.Use(msgs.LangMiddleware)
 
@@ -479,4 +484,38 @@ func (s *Server) ScriptRunner() *ScriptRunner {
 		s.scripts = NewScriptRunner(s)
 	}
 	return s.scripts
+}
+
+// ForwardHandler — адрес пробросов хаба (NKT_FORWARD_ADDR):
+// /f/{host}/{token}/… → /api/k8s/pf/{token}/… на хосте (local — на машине
+// самого хаба). Сессии не нужно: доступ по токену проверяет хост; хост
+// видит префикс и отдаёт страницу без песочницы — у неё свой origin.
+func (s *Server) ForwardHandler() http.Handler {
+	r := chi.NewRouter()
+	h := func(w http.ResponseWriter, r *http.Request) {
+		host, token := chi.URLParam(r, "host"), chi.URLParam(r, "token")
+		prefix := "/f/" + host + "/" + token
+		rest := strings.TrimPrefix(r.URL.Path, prefix)
+		r2 := r.Clone(context.WithValue(r.Context(), chi.RouteCtxKey, (*chi.Context)(nil)))
+		r2.URL.Path = "/api/k8s/pf/" + token + rest
+		r2.URL.RawPath = ""
+		r2.Header.Set("X-NKT-Forward-Prefix", prefix)
+		if host == "local" {
+			if s.local == nil {
+				http.NotFound(w, r)
+				return
+			}
+			s.local.ServeHTTP(w, r2)
+			return
+		}
+		id, err := strconv.ParseInt(host, 10, 64)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		s.hub.Proxy(id).ServeHTTP(w, r2)
+	}
+	r.HandleFunc("/f/{host}/{token}", h)
+	r.HandleFunc("/f/{host}/{token}/*", h)
+	return r
 }

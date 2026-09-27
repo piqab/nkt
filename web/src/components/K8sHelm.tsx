@@ -4,7 +4,7 @@ import { MoreOutlined, PlusOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { qs, useApi } from '../api'
 import type { Me } from '../types'
-import { Banner, ErrorNote, Loading, Modal, formatRelative } from './ui'
+import { Banner, CodeEditor, ErrorNote, Loading, Modal, formatRelative } from './ui'
 import { DataTable } from './DataTable'
 import { EditTextModal } from './EditTextModal'
 import { confirmAction } from './confirm'
@@ -250,6 +250,7 @@ function InstallModal({
   const [form, setForm] = useState<{ repo_name: string; repo_url: string; chart: string; version: string; release: string; namespace: string } | null>(null)
   const [draft, setDraft] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [view, setView] = useState<'all' | 'defaults' | null>(null)
 
   if (upgrade && !cur.data) {
     return (
@@ -294,6 +295,28 @@ function InstallModal({
       fields={
         <>
           <p className="small muted">{upgrade ? t('k8s.helm.upgradeHint') : t('k8s.helm.installHint')}</p>
+          {upgrade && (
+            <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
+              {saved === '' && <span className="small" style={{ color: 'var(--status-warning)' }}>{t('k8s.helm.noUserValues')}</span>}
+              <Button size="small" onClick={() => setView('all')}>
+                {t('k8s.helm.allValues')}
+              </Button>
+              <Button size="small" onClick={() => setView('defaults')}>
+                {t('k8s.helm.chartDefaults')}
+              </Button>
+            </div>
+          )}
+          {upgrade && view && (
+            <ValuesView
+              release={release}
+              view={view}
+              onClose={() => setView(null)}
+              onUse={(text) => {
+                setDraft(text)
+                setView(null)
+              }}
+            />
+          )}
           <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.5rem' }}>
             <AutoComplete
               size="small"
@@ -322,5 +345,32 @@ function InstallModal({
         </>
       }
     />
+  )
+}
+
+/** Значения релиза только для чтения: все (с умолчаниями) или
+ * values.yaml чарта; «в черновик» — взять за основу правки. */
+function ValuesView({ release, view, onClose, onUse }: { release: Release; view: 'all' | 'defaults'; onClose: () => void; onUse: (text: string) => void }) {
+  const { t } = useTranslation()
+  const res = useApi<{ values: string }>(`/k8s/helm/values${qs({ namespace: release.namespace, release: release.name, view })}`)
+  return (
+    <Modal title={t(view === 'all' ? 'k8s.helm.allValues' : 'k8s.helm.chartDefaults')} onClose={onClose} width={900} sizeKey="helm-values">
+      {res.error ? (
+        <Banner kind="error">{res.error}</Banner>
+      ) : !res.data ? (
+        <Loading what="values" />
+      ) : res.data.values === '' ? (
+        <p className="small muted">{t('k8s.helm.valuesEmpty')}</p>
+      ) : (
+        <>
+          <CodeEditor value={res.data.values} readOnly rows={22} fill />
+          <div style={{ marginTop: '0.5rem' }}>
+            <Button type="primary" size="small" onClick={() => onUse(res.data?.values ?? '')}>
+              {t('k8s.helm.useAsDraft')}
+            </Button>
+          </div>
+        </>
+      )}
+    </Modal>
   )
 }

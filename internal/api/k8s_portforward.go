@@ -2,6 +2,7 @@ package api
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
@@ -258,54 +259,142 @@ func (s *Server) handleK8sPortForwardStop(w http.ResponseWriter, r *http.Request
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// handleK8sPortForwardProxy — /k8s/pf/{token}/*: прокси на проброс.
-// Без сессии: доступ — по токену (см. комментарий в начале файла).
+// handleK8sPortForwardProxy — /api/k8s/pf/{token}/*: прокси на проброс.
+// Без сессии: доступ — по токену (см. комментарий в начале файла). Если
+// запрос пришёл с отдельного адреса пробросов хаба (X-NKT-Forward-Prefix),
+// песочница не нужна: у страницы и так свой origin.
 func (s *Server) handleK8sPortForwardProxy(w http.ResponseWriter, r *http.Request) {
 	token := chi.URLParam(r, "token")
-	sess := s.pf.get(token)
-	if sess == nil {
-		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "k8s.pfNotFound"))
-		return
-	}
 	marker := "/k8s/pf/" + token
 	i := strings.Index(r.URL.Path, marker)
 	if i < 0 {
 		http.NotFound(w, r)
 		return
 	}
-	rest := r.URL.Path[i+len(marker):]
+	prefix := r.Header.Get("X-NKT-Forward-Prefix")
+	if prefix != "" && !(strings.HasPrefix(prefix, "/f/") && strings.HasSuffix(prefix, "/"+token)) {
+		prefix = ""
+	}
+	s.serveForward(w, r, token, r.URL.Path[i+len(marker):], prefix)
+}
+
+// ForwardHandler — отдельный адрес пробросов (NKT_FORWARD_ADDR):
+// /f/{token}/… без песочницы — другой порт, другой origin.
+func (s *Server) ForwardHandler() http.Handler {
+	r := chi.NewRouter()
+	h := func(w http.ResponseWriter, r *http.Request) {
+		token := chi.URLParam(r, "token")
+		prefix := "/f/" + token
+		s.serveForward(w, r, token, strings.TrimPrefix(r.URL.Path, prefix), prefix)
+	}
+	r.HandleFunc("/f/{token}", h)
+	r.HandleFunc("/f/{token}/*", h)
+	return r
+}
+
+type pfModeKey struct{}
+
+// pfMode — как отдавать ответ: sandbox — в песочнице по пути /api (без
+// cookie приложения); иначе — с адреса пробросов, cookie приложения
+// живут под префиксом проброса.
+type pfMode struct {
+	sandbox bool
+	prefix  string
+}
+
+func (s *Server) serveForward(w http.ResponseWriter, r *http.Request, token, rest, prefix string) {
+	sess := s.pf.get(token)
+	if sess == nil {
+		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "k8s.pfNotFound"))
+		return
+	}
 	if rest == "" {
 		// Без завершающей косой относительные ссылки страницы уйдут мимо.
 		http.Redirect(w, r, r.URL.Path+"/", http.StatusFound)
 		return
 	}
-	// Общий заголовок nkt (same-origin) — заменяется: токен в адресе не
-	// должен уходить наружу даже в пределах сайта приложения.
+	// Токен в адресе не должен уходить наружу даже в пределах сайта
+	// приложения — общий заголовок nkt (same-origin) заменяется.
 	w.Header().Set("Referrer-Policy", "no-referrer")
-	r2 := r.Clone(r.Context())
+	mode := pfMode{sandbox: prefix == "", prefix: prefix}
+	r2 := r.Clone(context.WithValue(r.Context(), pfModeKey{}, mode))
 	r2.URL.Path = rest
 	r2.URL.RawPath = ""
+	r2.Header.Del("X-NKT-Forward-Prefix")
 	sess.proxy.ServeHTTP(w, r2)
 }
 
-// pfProxy — обратный прокси на локальный порт проброса: без cookie и
-// заголовков входа nkt, ответ — в песочнице CSP и без Set-Cookie.
+// appCookies — cookie браузера без cookie nkt: cookie не различают порты,
+// и сессия nkt пришла бы и на адрес пробросов.
+func appCookies(h string) string {
+	var keep []string
+	for _, part := range strings.Split(h, ";") {
+		name, _, _ := strings.Cut(strings.TrimSpace(part), "=")
+		if name != "" && !strings.HasPrefix(strings.ToLower(name), "nkt") {
+			keep = append(keep, strings.TrimSpace(part))
+		}
+	}
+	return strings.Join(keep, "; ")
+}
+
+// pfProxy — обратный прокси на локальный порт проброса.
 func pfProxy(local, port int) *httputil.ReverseProxy {
 	target, _ := url.Parse("http://127.0.0.1:" + strconv.Itoa(local))
 	return &httputil.ReverseProxy{
 		Rewrite: func(pr *httputil.ProxyRequest) {
+			mode, _ := pr.In.Context().Value(pfModeKey{}).(pfMode)
 			pr.SetURL(target)
 			pr.Out.Host = "127.0.0.1:" + strconv.Itoa(port)
-			pr.Out.Header.Del("Cookie")
 			pr.Out.Header.Del("Authorization")
+			if c := appCookies(pr.In.Header.Get("Cookie")); c != "" && !mode.sandbox {
+				pr.Out.Header.Set("Cookie", c)
+			} else {
+				pr.Out.Header.Del("Cookie")
+			}
+			if mode.prefix != "" {
+				pr.Out.Header.Set("X-Forwarded-Prefix", mode.prefix)
+			}
 		},
 		ModifyResponse: func(resp *http.Response) error {
-			resp.Header.Set("Content-Security-Policy", "sandbox allow-scripts allow-forms allow-popups allow-downloads allow-modals")
+			mode, _ := resp.Request.Context().Value(pfModeKey{}).(pfMode)
 			resp.Header.Del("Referrer-Policy")
+			if mode.sandbox {
+				resp.Header.Set("Content-Security-Policy", "sandbox allow-scripts allow-forms allow-popups allow-downloads allow-modals")
+				resp.Header.Del("Set-Cookie")
+				return nil
+			}
+			// Cookie приложения — только под префиксом проброса и не с
+			// именами nkt (иначе приложение подменило бы сессию nkt).
+			var keep []string
+			for _, c := range resp.Header.Values("Set-Cookie") {
+				name, _, _ := strings.Cut(c, "=")
+				if strings.HasPrefix(strings.ToLower(strings.TrimSpace(name)), "nkt") {
+					continue
+				}
+				keep = append(keep, withCookiePath(c, mode.prefix+"/"))
+			}
 			resp.Header.Del("Set-Cookie")
+			for _, c := range keep {
+				resp.Header.Add("Set-Cookie", c)
+			}
 			return nil
 		},
 	}
+}
+
+// withCookiePath заменяет (или добавляет) Path у Set-Cookie и убирает Domain.
+func withCookiePath(c, path string) string {
+	parts := strings.Split(c, ";")
+	out := []string{strings.TrimSpace(parts[0])}
+	for _, p := range parts[1:] {
+		k, _, _ := strings.Cut(strings.TrimSpace(p), "=")
+		switch strings.ToLower(k) {
+		case "path", "domain":
+			continue
+		}
+		out = append(out, strings.TrimSpace(p))
+	}
+	return strings.Join(append(out, "Path="+path), "; ")
 }
 
 // handleK8sPortForwardPorts — GET /k8s/portforward/ports?kind=&namespace=&name=:

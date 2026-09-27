@@ -155,6 +155,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(s.requestLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(s.cors)
+	r.Use(auth.SameOrigin(s.cfg.CORSOrigins, func(p string) bool { return strings.Contains(p, "/k8s/pf/") }))
 	r.Use(securityHeaders)
 	r.Use(msgs.LangMiddleware)
 

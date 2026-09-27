@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Button, Checkbox, Dropdown, Input, InputNumber, Select, Space } from 'antd'
-import { MoreOutlined } from '@ant-design/icons'
+import { CopyOutlined, MoreOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { LOCAL_HOST_ID, api, hostScope, qs, useApi } from '../api'
 import type { Me } from '../types'
-import { Banner, CodeEditor, Loading, Modal } from './ui'
+import { Banner, CodeEditor, Loading, Modal, formatRelative } from './ui'
 import { confirmAction } from './confirm'
 import CommandModal from './CommandModal'
 import { useJobLauncher } from './useJobLauncher'
@@ -381,6 +381,20 @@ function apiHref(path: string): string {
   return `/api${prefix}${path}`
 }
 
+/** Ссылка на проброс: с отдельного адреса пробросов (свой origin — без
+ * песочницы), если сервер его держит; иначе — по пути /api в песочнице. */
+function forwardHref(token: string, base?: string): string {
+  if (!base) return apiHref(`/k8s/pf/${token}/`)
+  const origin = base.startsWith(':') ? `${location.protocol}//${location.hostname}${base}` : base
+  const path = hostScope.id !== null ? `/f/${hostScope.id === LOCAL_HOST_ID ? 'local' : hostScope.id}/${token}/` : `/f/${token}/`
+  return origin + path
+}
+
+/** forward_base из /auth/me (у хаба — его собственный адрес пробросов). */
+function useForwardBase(): string | undefined {
+  return useApi<{ forward_base?: string }>('/auth/me').data?.forward_base
+}
+
 /** Проброс порта пода или сервиса в браузер (kubectl port-forward). */
 function ForwardModal({ kind, row, id, onClose }: { kind: string; row: K8sRow; id: string; onClose: () => void }) {
   const { t } = useTranslation()
@@ -388,7 +402,9 @@ function ForwardModal({ kind, row, id, onClose }: { kind: string; row: K8sRow; i
   const [port, setPort] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [link, setLink] = useState<string | null>(null)
+  const active = useApi<{ forwards: Forward[] }>('/k8s/portforward', 10_000)
+  const fwdBase = useForwardBase()
+  const mine = (active.data?.forwards ?? []).filter((f) => f.kind === kind && f.namespace === (row.namespace ?? '') && f.name === row.name)
   const list = ports.data?.ports ?? []
   const chosen = port ?? list[0] ?? null
   async function start() {
@@ -396,10 +412,9 @@ function ForwardModal({ kind, row, id, onClose }: { kind: string; row: K8sRow; i
     setBusy(true)
     setError(null)
     try {
-      const res = await api<{ path: string }>('/k8s/portforward', { method: 'POST', body: { kind, namespace: row.namespace, name: row.name, port: chosen } })
-      const href = apiHref(res.path)
-      setLink(href)
-      window.open(href, '_blank', 'noopener,noreferrer')
+      const res = await api<{ token: string }>('/k8s/portforward', { method: 'POST', body: { kind, namespace: row.namespace, name: row.name, port: chosen } })
+      window.open(forwardHref(res.token, fwdBase), '_blank', 'noopener,noreferrer')
+      void active.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -424,13 +439,13 @@ function ForwardModal({ kind, row, id, onClose }: { kind: string; row: K8sRow; i
           </Button>
         </Space>
       )}
-      {link && (
-        <p className="small" style={{ marginTop: '0.6rem' }}>
-          {t('k8s.act.forwardLink')}{' '}
-          <a href={link} target="_blank" rel="noopener noreferrer" className="mono">
-            {link}
-          </a>
-        </p>
+      {mine.length > 0 && (
+        <div style={{ marginTop: '0.75rem' }}>
+          <strong className="small">{t('k8s.act.forwardActive')}</strong>
+          {mine.map((f) => (
+            <ForwardRow key={f.token} f={f} onClosed={() => void active.reload()} />
+          ))}
+        </div>
       )}
     </Modal>
   )
@@ -446,6 +461,37 @@ interface Forward {
   last_used: string
 }
 
+/** Один открытый проброс: ссылка (открыть, скопировать), кем и когда
+ * использовался, «закрыть» — процесс kubectl останавливается, ссылка
+ * перестаёт работать. */
+function ForwardRow({ f, onClosed }: { f: Forward; onClosed: () => void }) {
+  const { t } = useTranslation()
+  const href = forwardHref(f.token, useForwardBase())
+  const full = new URL(href, location.origin).href
+  return (
+    <div className="row small" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+      <a href={href} target="_blank" rel="noopener noreferrer" className="mono">
+        {f.kind === 'services' ? 'svc' : 'pod'}/{f.namespace}/{f.name}:{f.port}
+      </a>
+      <Button size="small" type="text" icon={<CopyOutlined />} onClick={() => void navigator.clipboard?.writeText(full)} />
+      <span className="muted">
+        {f.user} · {t('k8s.act.forwardUsed', { when: formatRelative(f.last_used) })}
+      </span>
+      <Button
+        size="small"
+        type="link"
+        danger
+        onClick={async () => {
+          await api(`/k8s/portforward/${f.token}`, { method: 'DELETE' })
+          onClosed()
+        }}
+      >
+        {t('k8s.act.forwardClose')}
+      </Button>
+    </div>
+  )
+}
+
 /** Открытые пробросы портов: ссылка и «закрыть». */
 export function ForwardsBar() {
   const { t } = useTranslation()
@@ -456,23 +502,7 @@ export function ForwardsBar() {
     <Banner kind="info">
       <div className="small">{t('k8s.act.forwardsOpen')}</div>
       {list.map((f) => (
-        <div key={f.token} className="row small" style={{ gap: '0.5rem', alignItems: 'center' }}>
-          <a href={apiHref(`/k8s/pf/${f.token}/`)} target="_blank" rel="noopener noreferrer" className="mono">
-            {f.kind === 'services' ? 'svc' : 'pod'}/{f.namespace}/{f.name}:{f.port}
-          </a>
-          <span className="muted">{f.user}</span>
-          <Button
-            size="small"
-            type="link"
-            danger
-            onClick={async () => {
-              await api(`/k8s/portforward/${f.token}`, { method: 'DELETE' })
-              void res.reload()
-            }}
-          >
-            {t('k8s.act.forwardClose')}
-          </Button>
-        </div>
+        <ForwardRow key={f.token} f={f} onClosed={() => void res.reload()} />
       ))}
     </Banner>
   )

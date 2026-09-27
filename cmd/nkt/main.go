@@ -456,6 +456,25 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		IdleTimeout:       120 * time.Second,
 	}
 
+	// Адрес пробросов портов Kubernetes (NKT_FORWARD_ADDR): другой порт —
+	// другой origin, приложения пода работают без песочницы. Не занялся —
+	// не повод не стартовать: пробросы останутся по пути /api/k8s/pf/.
+	if addr := r.cfg.ForwardListen(); addr != "" {
+		fwd := &http.Server{Addr: addr, Handler: server.ForwardHandler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second}
+		go func() {
+			var err error
+			if tlsCert != "" {
+				err = fwd.ListenAndServeTLS(tlsCert, tlsKey)
+			} else {
+				err = fwd.ListenAndServe()
+			}
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Warn("forward listener", "addr", addr, "err", err)
+			}
+		}()
+		defer fwd.Close()
+	}
+
 	errCh := make(chan error, 1)
 	go func() {
 		log.Info("server started",
@@ -925,6 +944,25 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      120 * time.Second,
 		IdleTimeout:       120 * time.Second,
+	}
+
+	// Адрес пробросов портов Kubernetes (NKT_FORWARD_ADDR): другой порт —
+	// другой origin, приложения пода работают без песочницы. Не занялся —
+	// не повод не стартовать: пробросы останутся по пути /api/k8s/pf/.
+	if addr := r.cfg.ForwardListen(); addr != "" {
+		fwd := &http.Server{Addr: addr, Handler: server.ForwardHandler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second}
+		go func() {
+			var err error
+			if tlsCert != "" {
+				err = fwd.ListenAndServeTLS(tlsCert, tlsKey)
+			} else {
+				err = fwd.ListenAndServe()
+			}
+			if err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Warn("forward listener", "addr", addr, "err", err)
+			}
+		}()
+		defer fwd.Close()
 	}
 
 	errCh := make(chan error, 1)

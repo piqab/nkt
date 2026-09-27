@@ -51,3 +51,33 @@ func TestPortForwardProxy(t *testing.T) {
 		t.Errorf("чужой токен: %d", rec.Code)
 	}
 }
+
+func TestPortForwardOwnOrigin(t *testing.T) {
+	var gotCookie, gotPrefix string
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotCookie, gotPrefix = r.Header.Get("Cookie"), r.Header.Get("X-Forwarded-Prefix")
+		w.Header().Add("Set-Cookie", "sid=1; Path=/; HttpOnly")
+		w.Header().Add("Set-Cookie", "nkt_session=evil; Path=/")
+		_, _ = io.WriteString(w, "ok")
+	}))
+	defer up.Close()
+	u, _ := url.Parse(up.URL)
+	local, _ := strconv.Atoi(u.Port())
+	s := &Server{}
+	s.pf.sessions = map[string]*pfSession{"tok": {Token: "tok", cmd: &exec.Cmd{}, LastUsed: time.Now(), proxy: pfProxy(local, 80)}}
+	h := s.ForwardHandler()
+	req := httptest.NewRequest("GET", "/f/tok/app/", nil)
+	req.Header.Set("Cookie", "nkt_session=admin; sid=1")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != 200 || gotCookie != "sid=1" || gotPrefix != "/f/tok" {
+		t.Fatalf("code %d cookie %q prefix %q", rec.Code, gotCookie, gotPrefix)
+	}
+	if rec.Header().Get("Content-Security-Policy") != "" {
+		t.Error("песочница на своём origin")
+	}
+	sc := rec.Header().Values("Set-Cookie")
+	if len(sc) != 1 || sc[0] != "sid=1; HttpOnly; Path=/f/tok/" {
+		t.Errorf("Set-Cookie: %v", sc)
+	}
+}

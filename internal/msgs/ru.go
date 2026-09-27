@@ -621,6 +621,7 @@ var ruCatalog = map[string]string{
 	"cmdjob.titleGeneric":                                 "%s: %s",
 	"k8s.badKind":                                         "неизвестный вид объектов Kubernetes: %q",
 	"k8s.notFound":                                        "объект Kubernetes %s не найден",
+	"k8s.helmNoChartSource":                               "для чарта %s неизвестен репозиторий: релиз ставился не из nkt — укажите репозиторий и чарт в форме обновления",
 	"deploy.specYAML":                                     "описание конвейера: ошибка YAML: %s",
 	"deploy.specNoRef":                                    "нужна ветка (ref) или шаблон тегов (tags)",
 	"deploy.specBad":                                      "недопустимое значение %s: %q",
