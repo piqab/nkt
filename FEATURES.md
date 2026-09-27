@@ -40,6 +40,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - Network and firewall rules: port conflicts, declared-but-not-listening, listening-but-not-declared, no default deny, public port blocked by the firewall, Docker bypassing the firewall, stale rules, sensitive services on all interfaces.
 - TLS rules: weak protocols, missing HSTS, certificate not set, expired, expiring, not yet valid, unreadable, name mismatch, not renewed automatically, orphan certbot lineage, self-signed, weak key or signature, service did not reload the certificate, public plaintext proxy.
 - Pool and container rules: undefined or orphan upstream, backend down, all backends disabled, single backend, no health check, container restarting, not running, undeclared, no restart policy, haproxy stats panel without a password.
+- Kubernetes rules (on a control plane): pod in CrashLoopBackOff/ImagePullBackOff, long Pending, NotReady node, Deployment/StatefulSet missing replicas, stuck PVC, expiring API server certificate, privileged/hostNetwork pods, NodePort/LoadBalancer bypassing the firewall.
 - Host drift from an applied profile — as a finding.
 - Search and filters by severity, service and text; findings that appeared since the last review are tagged “new”, with an “only new” filter.
 
@@ -57,6 +58,7 @@ in detail is in [HUB.md](HUB.md), version-by-version changes are in
 - Graph "external network → service → listener → pool → backend → container or machine → network" built from configs and the real state.
 - libvirt machines and LXD instances are linked to their networks and to backends pointing at their address; forwarded LXD ports are an entry from the host into the instance.
 - A machine node shows its address, ping, current CPU and memory and the vulnerabilities of its packages; no ping reply turns it red, critical vulnerabilities yellow.
+- Kubernetes: Ingress → Service → pods → cluster node → the host machine it runs on.
 - Node status from live listeners, containers and findings.
 - Stable column layout, zoom and drag with the mouse, node details on hover.
 

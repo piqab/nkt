@@ -999,7 +999,11 @@
     "zoomOut": "Отдалить",
     "resetView": "Сбросить вид",
     "loadingMap": "карту ресурсов",
-    "hideInactive": "Скрыть остановленные службы"
+    "hideInactive": "Скрыть остановленные службы",
+    "colK8sIngress": "Ingress",
+    "colK8sService": "Сервисы k8s",
+    "colK8sPod": "Поды",
+    "colK8sNode": "Узлы k8s"
   },
   "configs": {
     "colTs": "Когда",
@@ -2469,7 +2473,9 @@
       "object": "Объект",
       "message": "Сообщение",
       "count": "Раз",
-      "last_seen": "Последний раз"
+      "last_seen": "Последний раз",
+      "cpu": "CPU",
+      "memory": "Память"
     },
     "noCRDs": "В кластере нет пользовательских видов (CRD).",
     "revealConfirm": "Показать значения секрета {{name}}? Показ записывается в журнал действий.",

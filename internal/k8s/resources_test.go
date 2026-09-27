@@ -93,3 +93,26 @@ func TestSecretData(t *testing.T) {
 		t.Error("вид не проверен")
 	}
 }
+
+func TestTopColumns(t *testing.T) {
+	m := fixtureManager()
+	pods, err := m.Resources(context.Background(), "pods", "shop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, r := range pods.Rows {
+		if r.Name == "api-7c9d8-a1b2c" && r.Cols["cpu"] == "48m" && r.Cols["memory"] == "182Mi" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("нет top у подов: %+v", pods.Rows)
+	}
+	nodes, _ := m.Resources(context.Background(), "nodes", "")
+	for _, r := range nodes.Rows {
+		if r.Name == "lab-cp-1" && r.Cols["cpu"] != "412m (20%)" {
+			t.Errorf("top узла: %q", r.Cols["cpu"])
+		}
+	}
+}

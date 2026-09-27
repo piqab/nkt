@@ -9,6 +9,7 @@ import { DataTable } from './DataTable'
 import { confirmAction } from './confirm'
 import { CreateNamespaceButton, K8sRowActions } from './K8sActions'
 import { K8sNewObjectModal } from './K8sYAML'
+import { AIExplain } from './AIExplain'
 
 interface Column {
   key: string
@@ -208,6 +209,14 @@ function ResourceTable({
         const v = r.cols[c.key] ?? ''
         if (v === 'true' || v === 'false') return <Tag color={v === 'true' ? 'success' : 'default'}>{v}</Tag>
         if (c.key === 'last_seen' || c.key === 'last_schedule') return <span className="small nowrap">{v ? formatRelative(v) : '—'}</span>
+        // Предупреждение кластера — с лампочкой ИИ: что значит и что делать.
+        if (kind === 'events' && c.key === 'message' && r.cols.type === 'Warning')
+          return (
+            <span className="row row-nowrap" style={{ gap: '0.3rem', alignItems: 'center' }}>
+              <span className="small">{v || '—'}</span>
+              <AIExplain ctx={{ kind: 'event', title: `Kubernetes ${r.cols.reason}: ${r.cols.object}`, detail: v, service: 'kubernetes', object: `${r.namespace ?? ''}/${r.cols.object}`, severity: 'medium' }} />
+            </span>
+          )
         return <span className={c.key === 'message' ? 'small' : 'small mono'}>{v || '—'}</span>
       },
     })),

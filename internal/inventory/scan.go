@@ -87,6 +87,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 		podmanRes   parse.PodmanResult
 		lxdRes      parse.LXDResult
 		libvirtRes  parse.LibvirtResult
+		k8sRes      parse.K8sResult
 		fwRes       parse.FirewallResult
 		listeners   []model.Listener
 		lisStatus   model.SourceStatus
@@ -98,7 +99,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 		capStatus   model.SourceStatus
 	)
 	var malwareRep model.MalwareReport
-	wg.Add(13)
+	wg.Add(14)
 	go func() { defer wg.Done(); malwareRep = malware.Scan(ctx, s.c) }()
 	go func() { defer wg.Done(); nginxRes = parse.Nginx(ctx, s.c, s.cfg.NginxMainConfig) }()
 	go func() { defer wg.Done(); hapRes = parse.HAProxy(ctx, s.c, s.cfg.HAProxyMainConf) }()
@@ -107,6 +108,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	go func() { defer wg.Done(); podmanRes = parse.Podman(ctx, s.c) }()
 	go func() { defer wg.Done(); lxdRes = parse.LXD(ctx, s.c) }()
 	go func() { defer wg.Done(); libvirtRes = parse.Libvirt(ctx, s.c, s.cfg.LibvirtURI) }()
+	go func() { defer wg.Done(); k8sRes = parse.Kubernetes(ctx, s.c) }()
 	go func() { defer wg.Done(); fwRes = parse.Firewall(ctx, s.c) }()
 	go func() { defer wg.Done(); listeners, lisStatus = parse.Listeners(ctx, s.c) }()
 	go func() { defer wg.Done(); pkgRes, pkgStatus = parse.Packages(ctx, s.c) }()
@@ -137,6 +139,10 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	snap.Malware = malwareRep
 	snap.LXD = lxdRes.Instances
 	snap.VMs = libvirtRes.VMs
+	snap.K8s = k8sRes.State
+	if k8sRes.Status.Name != "" {
+		snap.Sources = append(snap.Sources, k8sRes.Status)
+	}
 	snap.Podman = podmanRes.Containers
 	snap.Firewall = fwRes.State
 	snap.Listeners = listeners
