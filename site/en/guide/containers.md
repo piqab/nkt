@@ -164,5 +164,10 @@ runs `kubectl apply`, every edit is a version in the history with
 rollback. The **"New object"** button creates objects from templates
 (Deployment + Service, Ingress, ConfigMap, CronJob).
 
+The **Helm** section lists the cluster's releases: history and rollback,
+values editing with a diff and upgrade, uninstall, installing a chart
+from a repository or `oci://`. Everything runs as background jobs; if
+helm is missing on the host, the "Install Helm" button installs it.
+
 ![Kubernetes](/screens/en/kubernetes.png)
 
