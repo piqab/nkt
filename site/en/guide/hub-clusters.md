@@ -62,6 +62,12 @@ into the cache and brings up the libvirt network right away.
 
 ## What else the section does
 
+- **Manifests: one YAML into several clusters** — a manifest and a choice
+  of clusters; before writing — the text diff against the previous
+  revision and `kubectl diff` for each cluster, writing runs `kubectl
+  apply` on the first control plane of each, with the outcome per
+  cluster. Every application is kept on the hub as a revision; an earlier
+  one can be opened in the editor and applied again.
 - **Cluster images** — your own qcow2/img/raw is uploaded to the hub once
   (up to 10 GB) and chosen in the placement as “from hub: …”; on creation
   the hub uploads it to every host that lacks it.
