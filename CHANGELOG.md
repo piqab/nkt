@@ -651,3 +651,4 @@
 - `29831e7` Kubernetes: разделы RBAC (роли ServiceAccount), NetworkPolicy и HPA с границами
 - `a2b1364` Уязвимости: образы подов Kubernetes — из containerd узла или registry, с подами в источнике
 - `553ca58` Kubernetes: приложение пода или сервиса в браузере — port-forward с прокси nkt по одноразовой ссылке, в песочнице
+- `4b0d1a4` Kubernetes: нагрузка подов в «Нагрузке» (kubectl top), находка и оповещение о рестарте пода
