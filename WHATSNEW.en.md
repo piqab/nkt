@@ -8,6 +8,30 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.23 — 2026-09-27
+
+- **Hub: deployments from Git.** A new "Deployments" section: a pipeline
+  takes a repository and deploys it as a manifest into clusters
+  (`kubectl apply`), a Helm release (values from Git, the image tag into
+  `tag_key`) or a hub script (`git pull`, `docker compose up`, migrations —
+  parameters `TAG`, `COMMIT`, `REF`). Manifests get `{{nkt.tag}}`,
+  `{{nkt.commit}}`, `{{nkt.ref}}` substituted. Images are built by your CI
+  or by you — nkt deploys what is ready.
+- **When:** the "Deploy" button (a branch or tag); a **webhook** from
+  GitHub, Gitea/Forgejo, GitLab or a CI step — signed only, a repeated
+  delivery is rejected, the webhook chooses nothing itself; repository
+  **polling** (`poll`); **registry watching** (`registry`) — a new image
+  tag is deployed on its own (GHCR, Docker Hub, GitLab, Harbor — the token
+  is obtained through the standard challenge).
+- The pipeline description is YAML with validation, diff-based editing
+  and a revision history. Access to a private repository (token or key)
+  and registry is kept encrypted on the hub and never shown; the webhook
+  secret is shown to an administrator with an audit log entry.
+- Every deployment is a hub job with a log; "History" shows what, the
+  trigger and the outcome; "Roll back" deploys an earlier successful
+  commit. Polling and registry switch on after the first deployment by
+  the button.
+
 ## v1.11.22 — 2026-09-27
 
 - **Hub: Kubernetes findings across all clusters.** The "Clusters" section

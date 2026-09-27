@@ -378,6 +378,52 @@ CREATE TABLE IF NOT EXISTS k8s_manifest_versions (
     results     TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_k8s_manifest_versions ON k8s_manifest_versions(manifest_id, id DESC);
+-- Конвейеры выкладки хаба (internal/deploy): описание в YAML с
+-- историей правок, секреты — зашифрованными, выкладки — с итогом.
+CREATE TABLE IF NOT EXISTS pipelines (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT NOT NULL UNIQUE,
+    content       TEXT NOT NULL,
+    hook_id       TEXT NOT NULL UNIQUE,     -- адрес вебхука /hooks/<hook_id>
+    hook_secret   BLOB,                     -- секрет подписи (зашифрован)
+    git_cred      BLOB,                     -- токен или ключ git (зашифрован)
+    registry_cred BLOB,                     -- логин:токен registry (зашифрован)
+    enabled       INTEGER NOT NULL DEFAULT 1,
+    last_commit   TEXT NOT NULL DEFAULT '',
+    last_tag      TEXT NOT NULL DEFAULT '',
+    author        TEXT NOT NULL DEFAULT '',
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS pipeline_versions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+    ts          TEXT NOT NULL,
+    author      TEXT NOT NULL DEFAULT '',
+    note        TEXT NOT NULL DEFAULT '',
+    content     TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_versions ON pipeline_versions(pipeline_id, id DESC);
+CREATE TABLE IF NOT EXISTS deployments (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+    ref         TEXT NOT NULL DEFAULT '',
+    commit_sha  TEXT NOT NULL DEFAULT '',
+    tag         TEXT NOT NULL DEFAULT '',
+    trigger     TEXT NOT NULL,              -- manual | webhook | poll | registry | rollback
+    author      TEXT NOT NULL DEFAULT '',
+    job_id      INTEGER NOT NULL DEFAULT 0,
+    status      TEXT NOT NULL,              -- queued | running | succeeded | failed
+    error       TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    finished_at TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_deployments ON deployments(pipeline_id, id DESC);
+-- Принятые доставки вебхуков — повтор той же доставки отвергается.
+CREATE TABLE IF NOT EXISTS hook_deliveries (
+    id TEXT PRIMARY KEY,
+    ts TEXT NOT NULL
+);
 
 CREATE TABLE IF NOT EXISTS host_groups (
     name       TEXT PRIMARY KEY,

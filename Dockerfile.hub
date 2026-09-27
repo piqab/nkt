@@ -23,7 +23,7 @@ RUN npm run build
 
 # ---- runtime --------------------------------------------------------------
 FROM golang:1.26-alpine
-RUN apk add --no-cache ca-certificates tzdata \
+RUN apk add --no-cache ca-certificates tzdata git openssh-client \
     && addgroup -g 1000 nkt && adduser -D -u 1000 -G nkt nkt \
     && mkdir -p /src /var/lib/netknownsthat \
     && chown -R nkt:nkt /src /go /var/lib/netknownsthat

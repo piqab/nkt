@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"context"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -189,19 +190,22 @@ func issuesJSON(lang msgs.Lang, issues []script.Issue) []scriptIssueJSON {
 }
 
 // refsNow — что известно хабу для проверки ссылок сценария.
-func (s *Server) refsNow(r *http.Request) script.Refs {
+func (s *Server) refsNow(r *http.Request) script.Refs { return s.refsNowCtx(r.Context()) }
+
+// refsNowCtx — имена хостов, групп и профилей для проверки сценария.
+func (s *Server) refsNowCtx(ctx context.Context) script.Refs {
 	refs := script.Refs{Hosts: map[string]bool{}, Groups: map[string]bool{}, Profiles: map[string]bool{}}
-	if hosts, err := s.db.ListHosts(r.Context()); err == nil {
+	if hosts, err := s.db.ListHosts(ctx); err == nil {
 		for _, h := range hosts {
 			refs.Hosts[h.Name] = true
 		}
 	}
-	if groups, err := s.hub.HostGroups(r.Context()); err == nil {
+	if groups, err := s.hub.HostGroups(ctx); err == nil {
 		for _, g := range groups {
 			refs.Groups[g] = true
 		}
 	}
-	if profiles, err := s.db.ListProfiles(r.Context()); err == nil {
+	if profiles, err := s.db.ListProfiles(ctx); err == nil {
 		for _, p := range profiles {
 			refs.Profiles[p.Name] = true
 		}
