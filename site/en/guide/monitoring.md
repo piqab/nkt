@@ -30,8 +30,8 @@ list.
 
 - Load graphs from iptables counters, nginx/haproxy access logs and the
   load of containers and machines for the chosen period: for network, CPU
-  and memory you pick the source next to the metric — Docker, Podman, LXD
-  or Libvirt (`virsh domstats`); log entries are sorted by their own
+  and memory you pick the source next to the metric — Docker, Podman, LXD,
+  Libvirt (`virsh domstats`) or Kubernetes (pods, `kubectl top`); log entries are sorted by their own
   timestamp, so the graph shows when the load happened, not when it was
   collected.
 - A ranking of the busiest resources and a load schedule by hour.

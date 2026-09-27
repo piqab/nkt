@@ -78,3 +78,18 @@ func TestRuleK8sHygiene(t *testing.T) {
 		}
 	}
 }
+
+func TestRuleK8sRestarted(t *testing.T) {
+	s := &model.Snapshot{TS: "2026-09-27T12:00:00Z", K8s: &model.K8sState{Pods: []model.K8sPod{
+		{Namespace: "a", Name: "fresh", Phase: "Running", Restarts: 2, LastRestart: "2026-09-27T11:40:00Z"},
+		{Namespace: "a", Name: "old", Phase: "Running", Restarts: 5, LastRestart: "2026-09-27T09:00:00Z"},
+		{Namespace: "a", Name: "loop", Phase: "Running", Reason: "CrashLoopBackOff", Restarts: 9, LastRestart: "2026-09-27T11:59:00Z"},
+	}}}
+	got := map[string]bool{}
+	for _, f := range Run(s) {
+		got[f.ID] = true
+	}
+	if !got["k8s-pod-restarted:a/fresh"] || got["k8s-pod-restarted:a/old"] || got["k8s-pod-restarted:a/loop"] || !got["k8s-pod-failing:a/loop"] {
+		t.Errorf("%v", got)
+	}
+}

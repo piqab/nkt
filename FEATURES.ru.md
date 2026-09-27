@@ -42,7 +42,7 @@ English version: [FEATURES.md](FEATURES.md).
 - Правила по TLS: слабые протоколы, отсутствие HSTS, сертификат не указан, просрочен, истекает, ещё не действителен, не читается, не покрывает имя, не продлевается автоматически, осиротевшая линейка certbot, самоподписанный, слабый ключ или подпись, сервис не перечитал сертификат, публичный HTTP-прокси без шифрования.
 - Правила по пулам и контейнерам: несуществующий или неиспользуемый upstream, бэкенд не слушает, все бэкенды выключены, единственный бэкенд, нет health-check, контейнер в цикле перезапуска, не запущен, не объявлен, без политики перезапуска, панель статистики haproxy без пароля.
 - Уязвимости образов подов Kubernetes (из containerd узла или registry), с подами, где работает образ.
-- Правила по Kubernetes (на control plane): под в CrashLoopBackOff/ImagePullBackOff, долгий Pending, узел NotReady, Deployment/StatefulSet без части реплик, висящий PVC, истекающий сертификат API-сервера, поды с privileged/hostNetwork, NodePort/LoadBalancer мимо файрвола, контейнеры без limits, образы без версии, привязки к cluster-admin, namespace без NetworkPolicy.
+- Правила по Kubernetes (на control plane): под в CrashLoopBackOff/ImagePullBackOff, рестарт пода за последний час, долгий Pending, узел NotReady, Deployment/StatefulSet без части реплик, висящий PVC, истекающий сертификат API-сервера, поды с privileged/hostNetwork, NodePort/LoadBalancer мимо файрвола, контейнеры без limits, образы без версии, привязки к cluster-admin, namespace без NetworkPolicy.
 - Расхождение хоста с применённым профилем — как находка.
 - Поиск и фильтр по серьёзности, сервису и тексту; находки, появившиеся с прошлого просмотра, помечены «новая», фильтр «только новые».
 

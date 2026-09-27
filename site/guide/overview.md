@@ -56,7 +56,7 @@ compose, firewall и сертификаты разбираются и сверя
   без политики перезапуска, панель haproxy без пароля, демон docker без
   клиента (Debian 13: docker.io без docker-cli).
 - **Kubernetes** (на control plane) — под в CrashLoopBackOff или
-  ImagePullBackOff, долгий Pending, узел NotReady, Deployment или
+  ImagePullBackOff, рестарт пода за последний час, долгий Pending, узел NotReady, Deployment или
   StatefulSet без части реплик, висящий PVC, истекающий сертификат
   API-сервера, поды с privileged/hostNetwork, NodePort и LoadBalancer
   мимо файрвола; контейнеры без limits, образы без версии, cluster-admin

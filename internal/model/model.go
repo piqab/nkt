@@ -1028,6 +1028,9 @@ type K8sPod struct {
 	// NoLimits — контейнеры без limits.memory; Images — образы контейнеров.
 	NoLimits []string `json:"no_limits,omitempty"`
 	Images   []string `json:"images,omitempty"`
+	// LastRestart — когда контейнер пода завершился в последний раз
+	// (lastState.terminated.finishedAt), RFC3339.
+	LastRestart string `json:"last_restart,omitempty"`
 }
 
 // K8sWorkload — Deployment или StatefulSet: желаемые и доступные реплики.
