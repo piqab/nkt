@@ -131,7 +131,7 @@ func New(d Deps) *Server {
 	if d.Configs != nil && d.LXD != nil {
 		d.Configs.AttachLXD(d.LXD)
 	}
-	return &Server{
+	s := &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, scanner: d.Scanner, scheduler: d.Scheduler,
 		services: d.Services, configs: d.Configs, osusers: d.OSUsers, disks: d.Disks, hardware: d.Hardware, sysconfig: d.SysConfig,
 		netmanager: d.NetManager, sandboxpkg: d.SandboxPkg, firewall: d.Firewall, firewalld: d.Firewalld, certs: d.Certs,
@@ -139,6 +139,10 @@ func New(d Deps) *Server {
 		ui: d.UI, log: d.Log, version: d.Version,
 		sessions: map[string]*updateSession{},
 	}
+	if s.configs != nil && s.scanner != nil && s.cfg != nil {
+		s.configs.AttachK8s(k8sDocs{s})
+	}
+	return s
 }
 
 // Handler builds the complete routing tree.
@@ -287,6 +291,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/k8s/describe", s.handleK8sDescribe)
 			r.Get("/k8s/rollout/history", s.handleK8sRolloutHistory)
 			r.Get("/k8s/pods/containers", s.handleK8sPodContainers)
+			r.Get("/k8s/yaml", s.handleK8sYAML)
 			r.Get("/vm/portforward", s.handlePortForwardList)
 			r.Get("/clamav", s.handleClamStatus)
 			r.Get("/certificates", s.handleCertificates)
@@ -362,6 +367,9 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/k8s/objects/action", s.handleK8sAction)
 				r.Post("/k8s/namespaces", s.handleK8sNamespaceCreate)
 				r.Post("/k8s/nodes/drain", s.handleK8sDrain)
+				r.Post("/k8s/yaml/diff", s.handleK8sYAMLDiff)
+				r.Put("/k8s/yaml", s.handleK8sYAMLWrite)
+				r.Post("/k8s/apply", s.handleK8sApply)
 				r.Post("/vm/portforward", s.handlePortForwardSet)
 				r.Delete("/vm/portforward/{name}", s.handlePortForwardDelete)
 				r.Post("/vm/wgmesh", s.handleWGApply)

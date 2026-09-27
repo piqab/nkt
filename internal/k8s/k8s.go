@@ -157,8 +157,9 @@ type JoinInfo struct {
 
 // Manager — операции на хосте.
 type Manager struct {
-	c   collect.Collector
-	run control.PrivilegedRunner
+	c      collect.Collector
+	run    control.PrivilegedRunner
+	runDir string
 }
 
 func New(c collect.Collector, run control.PrivilegedRunner) *Manager { return &Manager{c: c, run: run} }

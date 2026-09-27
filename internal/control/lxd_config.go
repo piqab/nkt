@@ -146,3 +146,24 @@ func lxdPathName(path string) (string, bool) {
 	name, ok := strings.CutPrefix(path, "lxd://")
 	return name, ok && validLXDInstance(name)
 }
+
+// K8sDocs — YAML объектов Kubernetes для истории версий (k8s://…):
+// текущий текст для диффа и запись версии при откате.
+type K8sDocs interface {
+	ValidDocPath(path string) bool
+	CurrentDoc(ctx context.Context, path string) (string, error)
+	// RestoreDoc применяет текст и возвращает то, что стало в кластере.
+	RestoreDoc(ctx context.Context, user, path, content string) (string, error)
+}
+
+// AttachK8s — версии YAML объектов Kubernetes.
+func (m *ConfigManager) AttachK8s(d K8sDocs) { m.k8s = d }
+
+// RecordDoc — версия документа не-файла после записи: при первой правке
+// сначала исходное состояние (before), затем новое (after).
+func (m *ConfigManager) RecordDoc(ctx context.Context, path, service, user, action, note string, before, after []byte) (int64, error) {
+	if before != nil {
+		m.recordBaseline(ctx, path, service, user, before)
+	}
+	return m.recordVersion(ctx, path, service, user, action, note, after)
+}

@@ -8,6 +8,7 @@ import { Banner, CodeEditor, Loading, Modal } from './ui'
 import { confirmAction } from './confirm'
 import CommandModal from './CommandModal'
 import { useJobLauncher } from './useJobLauncher'
+import { K8sYAMLModal } from './K8sYAML'
 
 export interface K8sRow {
   name: string
@@ -32,7 +33,7 @@ const ACTIONS: Record<string, string[]> = {
   namespaces: ['delete'],
 }
 
-type Dialog = { type: 'describe' | 'scale' | 'history' | 'logs' | 'exec' | 'result'; text?: string }
+type Dialog = { type: 'describe' | 'yaml' | 'scale' | 'history' | 'logs' | 'exec' | 'result'; text?: string }
 
 /**
  * Меню действий строки объекта: описание (kubectl describe) — всем,
@@ -63,6 +64,7 @@ export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: str
   async function run(action: string) {
     switch (action) {
       case 'describe':
+      case 'yaml':
       case 'scale':
       case 'history':
       case 'logs':
@@ -103,6 +105,7 @@ export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: str
   })
   const items = [
     { key: 'describe', label: t('k8s.act.describe') },
+    ...(kind !== 'secrets' && kind !== 'events' ? [{ key: 'yaml', label: 'YAML' }] : []),
     ...visible.map((a) => ({ key: a, label: t(`k8s.act.${a}`), danger: a === 'delete' || a === 'drain' })),
   ]
 
@@ -113,6 +116,7 @@ export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: str
       </Dropdown>
       {job.modal}
       {dialog?.type === 'describe' && <DescribeModal kind={kind} row={row} onClose={() => setDialog(null)} />}
+      {dialog?.type === 'yaml' && <K8sYAMLModal kind={kind} namespace={row.namespace} name={row.name} me={me} onClose={() => setDialog(null)} onSaved={onChanged} />}
       {dialog?.type === 'result' && (
         <Modal title={id} onClose={() => setDialog(null)} width={640}>
           <pre className="diff mono small" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>

@@ -174,7 +174,7 @@ CI не собирается; интерфейс только на русско�
       масштабирование, `rollout restart`, история и откат ревизии; узлы —
       cordon/uncordon, drain заданием; CronJobs — запуск сейчас, пауза;
       namespaces — создание и удаление с подтверждением.
-- [ ] YAML любого объекта в окне: `kubectl get -o yaml` (без
+- [x] YAML любого объекта (1.11.9) в окне: `kubectl get -o yaml` (без
       managedFields), дифф от сервера (`kubectl diff`), запись `kubectl
       apply`, история версий в nkt (путь `k8s://ns/kind/name`) с откатом;
       «новый объект» из шаблонов (Deployment+Service, Ingress, ConfigMap,

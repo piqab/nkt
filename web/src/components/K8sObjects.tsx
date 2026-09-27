@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Button, Input, Segmented, Select, Tabs, Tag, Tooltip } from 'antd'
-import { CopyOutlined } from '@ant-design/icons'
+import { CopyOutlined, PlusOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { Me } from '../types'
@@ -8,6 +8,7 @@ import { Banner, Card, ErrorNote, Loading, Modal, formatRelative } from './ui'
 import { DataTable } from './DataTable'
 import { confirmAction } from './confirm'
 import { CreateNamespaceButton, K8sRowActions } from './K8sActions'
+import { K8sNewObjectModal } from './K8sYAML'
 
 interface Column {
   key: string
@@ -71,11 +72,24 @@ export function K8sObjects({ me }: { me: Me }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [namespaces])
 
-  const table = (kind: string) => <ResourceTable kind={kind} namespace={namespace} namespaces={namespaces} onNamespace={setNamespace} me={me} />
+  // Новый объект создан — таблицы перечитываются сразу, не ждут опроса.
+  const [gen, setGen] = useState(0)
+  const [creating, setCreating] = useState(false)
+  const table = (kind: string) => <ResourceTable kind={kind} namespace={namespace} namespaces={namespaces} onNamespace={setNamespace} me={me} gen={gen} />
   const group = (kinds: string[]) => <KindGroup kinds={kinds} render={table} />
 
   return (
-    <Card title={t('k8s.objects')}>
+    <Card
+      title={t('k8s.objects')}
+      actions={
+        me.is_admin && me.allow_mutations ? (
+          <Button size="small" icon={<PlusOutlined />} onClick={() => setCreating(true)}>
+            {t('k8s.yaml.new')}
+          </Button>
+        ) : undefined
+      }
+    >
+      {creating && <K8sNewObjectModal namespace={namespace} namespaces={namespaces} me={me} onClose={() => setCreating(false)} onCreated={() => setGen((g) => g + 1)} />}
       <Tabs
         size="small"
         destroyOnHidden
@@ -136,15 +150,21 @@ function ResourceTable({
   namespaces,
   onNamespace,
   me,
+  gen,
 }: {
   kind: string
   namespace: string
   namespaces: string[]
   onNamespace: (ns: string) => void
   me: Me
+  gen: number
 }) {
   const { t } = useTranslation()
   const res = useApi<ResourceList>(`/k8s/resources${qs({ kind, namespace: namespace || undefined })}`, 30_000)
+  useEffect(() => {
+    if (gen > 0) void res.reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- только по новому объекту
+  }, [gen])
   const [filter, setFilter] = useState('')
   const [data, setData] = useState<{ title: string; values: Record<string, string>; secret: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
