@@ -2616,7 +2616,20 @@
       "release": "Release",
       "valuesLabel": "values (values.yaml):"
     },
-    "allPods": "all pods of the namespace"
+    "allPods": "all pods of the namespace",
+    "upgrade": {
+      "button": "Upgrade",
+      "title": "Upgrade Kubernetes on the node",
+      "clusterTitle": "Upgrade cluster {{name}}",
+      "current": "Now: {{version}} ({{flavor}}).",
+      "target": "Version:",
+      "patch": "the latest release of this branch",
+      "start": "Upgrade",
+      "confirm": "Upgrade Kubernetes to {{version}}? Runs as a job; an upgrade cannot be rolled back.",
+      "kubeadmStep": "kubeadm upgrades by at most one minor version at a time.",
+      "hostHint": "Only this node is upgraded: k3s by replacing the binary and restarting the service, kubeadm with kubeadm upgrade and the kubelet. Nodes of a cluster created by the hub are upgraded from the “Clusters” section — one by one, with draining.",
+      "clusterHint": "Nodes one by one, control planes first: cordon and drain, the upgrade on the node, waiting for Ready, uncordon. The job stops at the first error; “continue” resumes from the same node."
+    }
   },
   "ai": {
     "explainHint": "explain and suggest a fix (AI)",

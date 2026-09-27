@@ -62,6 +62,10 @@ into the cache and brings up the libvirt network right away.
 
 ## What else the section does
 
+- **Cluster upgrade** — "Upgrade" on a cluster: a version, then node by
+  node (control planes first) cordon, drain, the upgrade, waiting for
+  Ready, uncordon; on an error the job stops and continues from the same
+  node.
 - **Manifests: one YAML into several clusters** — a manifest and a choice
   of clusters; before writing — the text diff against the previous
   revision and `kubectl diff` for each cluster, writing runs `kubectl

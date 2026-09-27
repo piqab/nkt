@@ -176,5 +176,10 @@ values editing with a diff and upgrade, uninstall, installing a chart
 from a repository or `oci://`. Everything runs as background jobs; if
 helm is missing on the host, the "Install Helm" button installs it.
 
+"Upgrade" on the Kubernetes card upgrades this node to the chosen minor
+version as a job (k3s by replacing the binary, kubeadm with `kubeadm
+upgrade`); a cluster created by the hub is upgraded as a whole from the
+"Clusters" section — node by node, with drain and uncordon.
+
 ![Kubernetes](/screens/en/kubernetes.png)
 

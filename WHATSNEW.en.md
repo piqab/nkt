@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.20 — 2026-09-27
+
+- **Kubernetes upgrades.** The host's Kubernetes card has "Upgrade": the
+  current version and a choice of minor version (k3s — the update.k3s.io
+  channels, kubeadm — at most the next minor, as kubeadm requires). The
+  node is upgraded by a job: k3s gets the chosen branch's binary (checksum
+  verified) and a service restart, keeping its install flags; kubeadm
+  gets the pkgs.k8s.io branch, `kubeadm upgrade apply` on the control
+  plane (`upgrade node` on the rest), kubelet and kubectl.
+- **A hub cluster as a whole.** A cluster in the "Clusters" section has
+  "Upgrade": a hub job walks the nodes, control planes first; on each —
+  cordon and drain, the upgrade, waiting for Ready, uncordon (a single
+  node skips draining). It stops at the first error, "continue" resumes
+  from the same node. Downgrades are refused.
+
 ## v1.11.19 — 2026-09-27
 
 - **Kubernetes in "Load".** On a control plane the usage collector takes

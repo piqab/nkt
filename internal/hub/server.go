@@ -281,6 +281,8 @@ func (s *Server) Handler() http.Handler {
 					r.Get("/hub/clusters/{id}/kubeconfig", s.handleClusterKubeconfig)
 					r.Post("/hub/clusters/{id}/workers", s.handleClusterAddWorkers)
 					r.Post("/hub/clusters/{id}/retry", s.handleClusterRetry)
+					r.Get("/hub/clusters/{id}/upgrade", s.handleClusterUpgradeInfo)
+					r.Post("/hub/clusters/{id}/upgrade", s.handleClusterUpgrade)
 					r.Delete("/hub/clusters/{id}", s.handleClusterDelete)
 					r.Get("/hub/k8s/manifests", s.handleManifestList)
 					r.Get("/hub/k8s/manifests/versions/{version}", s.handleManifestVersion)

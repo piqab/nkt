@@ -9,6 +9,7 @@ import { JobLogModal } from '../pages/Jobs'
 import { Banner, Card, ErrorNote, Modal, formatBytesShort, formatRelative } from '../components/ui'
 import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
+import { K8sUpgradeModal } from './K8sUpgrade'
 import { confirmAction } from './confirm'
 
 /**
@@ -268,6 +269,7 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
   const { t } = useTranslation()
   const [pollMs, setPollMs] = useState(15_000)
   const list = useApi<Cluster[]>('/hub/clusters', pollMs)
+  const [upgrade, setUpgrade] = useState<Cluster | null>(null)
   const clusters = list.data ?? []
   const anyBusy = clusters.some((c) => c.status === 'creating' || c.status === 'deleting')
   if (anyBusy && pollMs !== 4_000) setPollMs(4_000)
@@ -301,6 +303,24 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
   if (clusters.length === 0 && !showEmpty) return null
   return (
     <Card title={t('clusters.title')} subtitle={t('clusters.subtitle', { count: clusters.length })}>
+      {upgrade && (
+        <K8sUpgradeModal
+          title={t('k8s.upgrade.clusterTitle', { name: upgrade.name })}
+          infoPath={`/hub/clusters/${upgrade.id}/upgrade`}
+          hint={t('k8s.upgrade.clusterHint')}
+          onClose={() => setUpgrade(null)}
+          onStart={async (version) => {
+            try {
+              const res = await api<{ job_id: number }>(`/hub/clusters/${upgrade.id}/upgrade`, { method: 'POST', body: { version } })
+              onOpenJob(res.job_id)
+              return true
+            } catch (err) {
+              setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+              return false
+            }
+          }}
+        />
+      )}
       {clusters.length === 0 && <p className="small muted">{t('clusters.none')}</p>}
       <ErrorNote error={list.error} />
       {notice && (
@@ -346,6 +366,11 @@ export function ClustersCard({ onOpenJob, onChanged, showEmpty }: { onOpenJob: (
                     {t('clusters.retry')}
                   </Button>
                 </Tooltip>
+              )}
+              {c.status === 'ready' && c.nodes.length > 0 && (
+                <Button size="small" onClick={() => setUpgrade(c)}>
+                  {t('k8s.upgrade.button')}
+                </Button>
               )}
               {c.status === 'ready' && c.topology !== 'single' && (
                 <Button size="small" loading={busy === `add:${c.id}`} onClick={() => void call(`add:${c.id}`, `/hub/clusters/${c.id}/workers`, 'POST', { count: 1 })}>

@@ -24,6 +24,51 @@ import (
 // control plane (nkt в fixtures) kubectl diff и делает kubectl apply,
 // применение сохраняется редакцией с итогом по кластерам.
 func TestManifestApplyRoundTrip(t *testing.T) {
+	db, key, _, clusterID, ctx := fixtureClusterHub(t, "cp1")
+	m := NewManager(&config.Config{}, db, key, "test", slog.New(slog.DiscardHandler))
+	s := &Server{hub: m, db: db}
+	call := func(h http.HandlerFunc, body any, out any) int {
+		raw, _ := json.Marshal(body)
+		req := httptest.NewRequest("POST", "/", bytes.NewReader(raw)).WithContext(ctx)
+		rec := httptest.NewRecorder()
+		h(rec, req)
+		if out != nil {
+			_ = json.Unmarshal(rec.Body.Bytes(), out)
+		}
+		return rec.Code
+	}
+	manifest := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cluster-info\n  namespace: shop\ndata:\n  owner: ops\n"
+	var diff struct {
+		Results []ManifestResult `json:"results"`
+	}
+	if code := call(s.handleManifestDiff, map[string]any{"content": manifest, "clusters": []int64{clusterID, 9999}}, &diff); code != 200 {
+		t.Fatalf("diff: %d", code)
+	}
+	if len(diff.Results) != 2 || diff.Results[0].Error != "" || !strings.Contains(diff.Results[0].Diff, "replicas") || diff.Results[1].Error == "" {
+		t.Fatalf("diff: %+v", diff.Results)
+	}
+	var applied struct {
+		Results   []ManifestResult `json:"results"`
+		VersionID int64            `json:"version_id"`
+	}
+	if code := call(s.handleManifestApply, map[string]any{"name": "cluster-info", "content": manifest, "clusters": []int64{clusterID}}, &applied); code != 200 {
+		t.Fatalf("apply: %d", code)
+	}
+	if len(applied.Results) != 1 || applied.Results[0].Error != "" || !strings.Contains(applied.Results[0].Output, "configured") || applied.VersionID == 0 {
+		t.Fatalf("apply: %+v", applied)
+	}
+	v, err := db.ManifestVersion(ctx, applied.VersionID)
+	if err != nil || v.Content != manifest || !strings.Contains(v.Results, `"cluster":"lab"`) {
+		t.Fatalf("версия: %+v %v", v, err)
+	}
+	if code := call(s.handleManifestApply, map[string]any{"name": "x", "content": "kind: Broken\n", "clusters": []int64{clusterID}}, nil); code != 400 {
+		t.Errorf("битый манифест: %d", code)
+	}
+}
+
+// fixtureClusterHub — хаб с кластером из одного узла: nkt в fixtures за
+// настоящим SSH-туннелем (control plane с именем name).
+func fixtureClusterHub(t *testing.T, name string) (*store.DB, []byte, int64, int64, context.Context) {
 	sshAddr, sshPort, clientKeyPEM := startTestSSHD(t)
 
 	repoRoot := findRepoRoot(t)
@@ -68,9 +113,9 @@ func TestManifestApplyRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	secretEnc, _ := secretbox.Encrypt(key, clientKeyPEM)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	hostID, err := db.CreateHost(ctx, "cp1", sshAddr, sshPort, me.Username, store.HostAuthKey, secretEnc)
+	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+	t.Cleanup(cancel)
+	hostID, err := db.CreateHost(ctx, name, sshAddr, sshPort, me.Username, store.HostAuthKey, secretEnc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,43 +134,5 @@ func TestManifestApplyRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m := NewManager(&config.Config{}, db, key, "test", slog.New(slog.DiscardHandler))
-	s := &Server{hub: m, db: db}
-	call := func(h http.HandlerFunc, body any, out any) int {
-		raw, _ := json.Marshal(body)
-		req := httptest.NewRequest("POST", "/", bytes.NewReader(raw)).WithContext(ctx)
-		rec := httptest.NewRecorder()
-		h(rec, req)
-		if out != nil {
-			_ = json.Unmarshal(rec.Body.Bytes(), out)
-		}
-		return rec.Code
-	}
-	manifest := "apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: cluster-info\n  namespace: shop\ndata:\n  owner: ops\n"
-	var diff struct {
-		Results []ManifestResult `json:"results"`
-	}
-	if code := call(s.handleManifestDiff, map[string]any{"content": manifest, "clusters": []int64{clusterID, 9999}}, &diff); code != 200 {
-		t.Fatalf("diff: %d", code)
-	}
-	if len(diff.Results) != 2 || diff.Results[0].Error != "" || !strings.Contains(diff.Results[0].Diff, "replicas") || diff.Results[1].Error == "" {
-		t.Fatalf("diff: %+v", diff.Results)
-	}
-	var applied struct {
-		Results   []ManifestResult `json:"results"`
-		VersionID int64            `json:"version_id"`
-	}
-	if code := call(s.handleManifestApply, map[string]any{"name": "cluster-info", "content": manifest, "clusters": []int64{clusterID}}, &applied); code != 200 {
-		t.Fatalf("apply: %d", code)
-	}
-	if len(applied.Results) != 1 || applied.Results[0].Error != "" || !strings.Contains(applied.Results[0].Output, "configured") || applied.VersionID == 0 {
-		t.Fatalf("apply: %+v", applied)
-	}
-	v, err := db.ManifestVersion(ctx, applied.VersionID)
-	if err != nil || v.Content != manifest || !strings.Contains(v.Results, `"cluster":"lab"`) {
-		t.Fatalf("версия: %+v %v", v, err)
-	}
-	if code := call(s.handleManifestApply, map[string]any{"name": "x", "content": "kind: Broken\n", "clusters": []int64{clusterID}}, nil); code != 400 {
-		t.Errorf("битый манифест: %d", code)
-	}
+	return db, key, hostID, clusterID, ctx
 }

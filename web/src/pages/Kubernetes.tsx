@@ -8,6 +8,8 @@ import { Banner, Card, ErrorNote, Loading } from '../components/ui'
 import { K8sObjects } from '../components/K8sObjects'
 import { DataTable } from '../components/DataTable'
 import { confirmAction } from '../components/confirm'
+import { K8sUpgradeModal } from '../components/K8sUpgrade'
+import { useJobLauncher } from '../components/useJobLauncher'
 
 /**
  * Вкладка Kubernetes на хосте (internal/k8s): что стоит, узлы кластера и
@@ -39,6 +41,8 @@ export default function Kubernetes({ me }: { me: Me }) {
   const isServer = !!st?.installed && st.role === 'server' && st.active
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [upgrading, setUpgrading] = useState(false)
+  const upgradeJob = useJobLauncher(() => void status.reload())
 
   if (status.loading && !status.data) return <Loading what="Kubernetes" />
   if (!st?.installed) return <p className="small muted">{t('k8s.notInstalled')}</p>
@@ -87,6 +91,11 @@ export default function Kubernetes({ me }: { me: Me }) {
               </Button>
             )}
             {me.is_admin && me.allow_mutations && (
+              <Button size="small" onClick={() => setUpgrading(true)}>
+                {t('k8s.upgrade.button')}
+              </Button>
+            )}
+            {me.is_admin && me.allow_mutations && (
               <Button size="small" danger loading={busy} onClick={() => void uninstall()}>
                 {t('k8s.uninstall')}
               </Button>
@@ -95,6 +104,24 @@ export default function Kubernetes({ me }: { me: Me }) {
         }
       >
         {notice && <Banner kind="info" onClose={() => setNotice(null)}>{notice}</Banner>}
+        {upgradeJob.modal}
+        {upgrading && (
+          <K8sUpgradeModal
+            title={t('k8s.upgrade.title')}
+            infoPath="/k8s/upgrade"
+            hint={t('k8s.upgrade.hostHint')}
+            onClose={() => setUpgrading(false)}
+            onStart={async (version, info) => {
+              try {
+                await upgradeJob.start('/k8s/upgrade/node', { version, first: info.role === 'server' })
+                return true
+              } catch (err) {
+                setNotice(err instanceof Error ? err.message : String(err))
+                return false
+              }
+            }}
+          />
+        )}
         <ErrorNote error={status.error} />
         {!st.active && <Banner kind="warn">{t('k8s.inactive')}</Banner>}
         {status.data?.nodes_error && <Banner kind="error">{status.data.nodes_error}</Banner>}
