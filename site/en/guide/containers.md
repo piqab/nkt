@@ -158,5 +158,11 @@ suspend; nodes — cordon/uncordon and drain as a background job; a
 namespace can be created and deleted, any object deleted. Every action is
 recorded in the host audit log.
 
+The **YAML** of any object (except secrets) opens from the same menu:
+before saving — a text diff and `kubectl diff` from the cluster, saving
+runs `kubectl apply`, every edit is a version in the history with
+rollback. The **"New object"** button creates objects from templates
+(Deployment + Service, Ingress, ConfigMap, CronJob).
+
 ![Kubernetes](/screens/en/kubernetes.png)
 

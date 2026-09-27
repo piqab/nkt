@@ -2526,6 +2526,25 @@
       "createNs": "Create namespace",
       "nsNameHint": "Lowercase letters, digits and hyphens, up to 63 characters.",
       "create": "Create"
+    },
+    "yaml": {
+      "title": "YAML: {{name}}",
+      "hint": "Service fields (managedFields, resourceVersion, status) are removed. Saving runs kubectl apply; before that — a text diff and kubectl diff against the cluster.",
+      "editNote": "YAML edit",
+      "createNote": "new object",
+      "notePlaceholder": "version note",
+      "serverDiff": "kubectl diff — what will change in the cluster",
+      "new": "New object",
+      "newTitle": "New Kubernetes object",
+      "newHint": "A manifest from a template — adjust and save; several objects separated by --- are fine. Saving runs kubectl apply.",
+      "name": "name",
+      "tpl": {
+        "deployment": "Deployment + Service",
+        "ingress": "Ingress",
+        "configmap": "ConfigMap",
+        "cronjob": "CronJob",
+        "empty": "empty manifest"
+      }
     }
   },
   "ai": {

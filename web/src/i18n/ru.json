@@ -2528,6 +2528,25 @@
       "createNs": "Создать namespace",
       "nsNameHint": "Строчные латинские буквы, цифры и дефис, до 63 символов.",
       "create": "Создать"
+    },
+    "yaml": {
+      "title": "YAML: {{name}}",
+      "hint": "Служебные поля (managedFields, resourceVersion, status) убраны. Запись — kubectl apply; перед ней — дифф текста и kubectl diff с кластера.",
+      "editNote": "правка YAML",
+      "createNote": "новый объект",
+      "notePlaceholder": "заметка к версии",
+      "serverDiff": "kubectl diff — что изменится в кластере",
+      "new": "Новый объект",
+      "newTitle": "Новый объект Kubernetes",
+      "newHint": "Манифест из шаблона — поправьте и запишите; можно несколько объектов через ---. Запись — kubectl apply.",
+      "name": "имя",
+      "tpl": {
+        "deployment": "Deployment + Service",
+        "ingress": "Ingress",
+        "configmap": "ConfigMap",
+        "cronjob": "CronJob",
+        "empty": "пустой манифест"
+      }
     }
   },
   "ai": {

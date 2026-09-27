@@ -1,7 +1,7 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Button } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { CodeEditor, DiffView, Modal } from './ui'
+import { Banner, CodeEditor, DiffView, Loading, Modal } from './ui'
 import { unifiedDiff } from './textDiff'
 
 /**
@@ -22,6 +22,7 @@ export function EditTextModal({
   onClose,
   rows = 22,
   below,
+  serverDiff,
 }: {
   title: string
   /** Текст до правки — с ним сравнивается черновик. Для нового — ''. */
@@ -38,6 +39,9 @@ export function EditTextModal({
   rows?: number
   /** Под редактором: итог проверки, подсказки. */
   below?: ReactNode
+  /** Дифф от самой системы (kubectl diff) — в окне изменений под
+   * текстовым: что получится после записи с учётом значений по умолчанию. */
+  serverDiff?: { title: string; load: () => Promise<string> }
 }) {
   const { t } = useTranslation()
   const [preview, setPreview] = useState<{ diff: string; confirm: boolean } | null>(null)
@@ -70,6 +74,7 @@ export function EditTextModal({
       {preview && (
         <Modal title={t(preview.confirm ? 'blocks.previewTitle' : 'editModal.changes')} onClose={() => setPreview(null)} width={900} maskClosable={false} sizeKey="diff">
           {preview.diff === '' ? <p className="small muted">{t('editModal.noChanges')}</p> : <DiffView text={preview.diff} />}
+          {serverDiff && <ServerDiff title={serverDiff.title} load={serverDiff.load} />}
           {preview.confirm && (
             <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
               {/* Сохранить без изменений можно — у нового профиля или при
@@ -83,5 +88,34 @@ export function EditTextModal({
         </Modal>
       )}
     </Modal>
+  )
+}
+
+function ServerDiff({ title, load }: { title: string; load: () => Promise<string> }) {
+  const { t } = useTranslation()
+  const [state, setState] = useState<{ text?: string; error?: string } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    load()
+      .then((text) => !cancelled && setState({ text }))
+      .catch((err) => !cancelled && setState({ error: err instanceof Error ? err.message : String(err) }))
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- один раз на открытие окна
+  }, [])
+  return (
+    <div style={{ marginTop: '0.75rem' }}>
+      <strong className="small">{title}</strong>
+      {!state ? (
+        <Loading what={title} />
+      ) : state.error ? (
+        <Banner kind="error">{state.error}</Banner>
+      ) : state.text ? (
+        <DiffView text={state.text} />
+      ) : (
+        <p className="small muted">{t('editModal.noChanges')}</p>
+      )}
+    </div>
   )
 }

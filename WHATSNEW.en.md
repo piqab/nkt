@@ -8,6 +8,25 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.9 — 2026-09-27
+
+- **Kubernetes: YAML with diff and history.** The row menu has "YAML":
+  the object in an editor without service fields (managedFields,
+  resourceVersion, status). Before saving the window shows two diffs — a
+  text one and `kubectl diff` from the cluster (what will really change,
+  defaults included); saving runs `kubectl apply`. Every edit is a
+  version in the history (`k8s://namespace/kind/name`) with a diff
+  against the current state and rollback, like configuration files and
+  LXD.
+- **"New object"** above the sections — a manifest from a template
+  (Deployment + Service, Ingress, ConfigMap, CronJob or empty) with a
+  name and namespace choice, the same cluster diff before saving; several
+  objects separated by `---` are fine.
+- Editing an object accepts a manifest of that object only (kind, name,
+  namespace), and if the object changed while you were editing, the save
+  is rejected. Secret YAML is not shown and never enters the history —
+  values only via "reveal" with audit.
+
 ## v1.11.8 — 2026-09-27
 
 - **Kubernetes: object actions.** Every cluster object row has an actions

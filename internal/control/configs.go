@@ -45,6 +45,8 @@ type ConfigManager struct {
 	svc     *ServiceManager
 	// lxd — для версий конфигураций инстансов (пути lxd://имя).
 	lxd *LXDManager
+	// k8s — версии YAML объектов Kubernetes (пути k8s://…).
+	k8s K8sDocs
 }
 
 // NewConfigManager builds the config editor.
@@ -790,6 +792,12 @@ func (m *ConfigManager) Versions(ctx context.Context, path string, limit int) ([
 	} else if strings.HasPrefix(path, "lxd://") {
 		return nil, ErrPathNotAllowed
 	}
+	if strings.HasPrefix(path, "k8s://") {
+		if m.k8s == nil || !m.k8s.ValidDocPath(path) {
+			return nil, ErrPathNotAllowed
+		}
+		return m.db.ListVersions(ctx, path, limit)
+	}
 	if path != "" {
 		if _, err := m.checkPath(path); err != nil {
 			return nil, err
@@ -844,6 +852,24 @@ func (m *ConfigManager) Rollback(ctx context.Context, lang msgs.Lang, user strin
 		}
 		return WriteResult{Path: v.Path, VersionID: id, Applied: true, Message: msgs.T(lang, "configs.versionRestored", v.ID)}, nil
 	}
+	if strings.HasPrefix(v.Path, "k8s://") {
+		if m.k8s == nil || !m.k8s.ValidDocPath(v.Path) {
+			return WriteResult{}, ErrPathNotAllowed
+		}
+		before, err := m.k8s.CurrentDoc(ctx, v.Path)
+		if err != nil {
+			return WriteResult{}, err
+		}
+		after, err := m.k8s.RestoreDoc(ctx, user, v.Path, content)
+		if err != nil {
+			return WriteResult{}, err
+		}
+		id, err := m.RecordDoc(ctx, v.Path, "k8s", user, store.ActionRollback, note, []byte(before), []byte(after))
+		if err != nil {
+			return WriteResult{}, err
+		}
+		return WriteResult{Path: v.Path, VersionID: id, Applied: true, Message: msgs.T(lang, "configs.versionRestored", v.ID)}, nil
+	}
 	res, err := m.Write(ctx, lang, user, v.Path, content, note, apply)
 	if err != nil {
 		return res, err
@@ -873,6 +899,13 @@ func (m *ConfigManager) Diff(ctx context.Context, id int64) (string, error) {
 			return "", err
 		}
 		cur = c.Content
+	} else if strings.HasPrefix(v.Path, "k8s://") {
+		if m.k8s == nil || !m.k8s.ValidDocPath(v.Path) {
+			return "", ErrPathNotAllowed
+		}
+		if cur, err = m.k8s.CurrentDoc(ctx, v.Path); err != nil {
+			return "", err
+		}
 	} else {
 		current, err := m.Read(v.Path)
 		if err != nil {
