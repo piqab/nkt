@@ -159,7 +159,10 @@ func TestQueueRunsOneAtATime(t *testing.T) {
 
 func TestCancelRunningAndQueued(t *testing.T) {
 	m, db := newTestManager(t)
-	started := make(chan struct{})
+	// Буфер на один сигнал: отправка ниже неблокирующая, и без буфера
+	// исполнитель, успевший раньше теста (под нагрузкой полного прогона),
+	// терял сигнал — тест ждал его вечно, а исполнитель — отмены.
+	started := make(chan struct{}, 1)
 	m.Register("wait", runnerFunc{fn: func(ctx context.Context, _ *Context) error {
 		select {
 		case started <- struct{}{}:
