@@ -589,3 +589,39 @@ func (s *Server) handleK8sYAMLBlocks(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"blocks": blocks})
 }
+
+// handleK8sUpgradeInfo — GET /k8s/upgrade: версия узла и куда можно
+// обновиться.
+func (s *Server) handleK8sUpgradeInfo(w http.ResponseWriter, r *http.Request) {
+	info, err := s.k8sManager().Upgrade(r.Context())
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, info)
+}
+
+// handleK8sUpgradeNode — POST /k8s/upgrade/node {version, first}:
+// обновление Kubernetes на этом узле заданием.
+func (s *Server) handleK8sUpgradeNode(w http.ResponseWriter, r *http.Request) {
+	var req k8s.UpgradeSpec
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	st := s.k8sManager().Status(r.Context())
+	if !st.Installed {
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "k8s.notInstalled"))
+		return
+	}
+	if err := req.Validate(st.Flavor, st.Version); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if req.HubCache == "" {
+		req.HubCache = s.hubCacheURL()
+	}
+	s.startCmdJob(w, r, "k8s.upgradeJobTitle", []any{req.Version}, "k8s:upgrade",
+		cmdjob.Params{Commands: []cmdjob.Command{{Script: k8s.UpgradeScript(st.Flavor, st.Role, req), StepKey: "k8s.upgradeStep", StepArgs: []any{req.Version}}}, Refresh: true},
+		"k8s.upgrade", st.Version+" → "+req.Version)
+}
