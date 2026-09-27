@@ -2931,7 +2931,9 @@
     "historyTitle": "История манифеста «{{name}}»",
     "diffWithCurrent": "дифф с текущим",
     "loadVersion": "в редактор",
-    "current": "текущий"
+    "current": "текущий",
+    "pick": "выбрать:",
+    "pickAll": "все"
   },
   "yamlBlocks": {
     "title": "Блоки",
@@ -2951,5 +2953,15 @@
       "rule": "правило",
       "key": "ключ"
     }
+  },
+  "clustersFindings": {
+    "title": "Находки Kubernetes по кластерам",
+    "subtitle": "Со всех control plane: поды, узлы, реплики, доступ, порты мимо файрвола.",
+    "count": "находок: {{count}}"
+  },
+  "helmMulti": {
+    "button": "Helm в кластеры",
+    "title": "Helm-релиз в несколько кластеров",
+    "hint": "Один чарт и одни values — в выбранные кластеры: задание хаба ставит релиз на control plane каждого (helm upgrade --install) по очереди; ошибка в одном кластере не останавливает остальные."
   }
 }

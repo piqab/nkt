@@ -2929,7 +2929,9 @@
     "historyTitle": "Manifest history “{{name}}”",
     "diffWithCurrent": "diff with current",
     "loadVersion": "to the editor",
-    "current": "current"
+    "current": "current",
+    "pick": "pick:",
+    "pickAll": "all"
   },
   "yamlBlocks": {
     "title": "Blocks",
@@ -2949,5 +2951,15 @@
       "rule": "rule",
       "key": "key"
     }
+  },
+  "clustersFindings": {
+    "title": "Kubernetes findings across clusters",
+    "subtitle": "From every control plane: pods, nodes, replicas, access, ports past the firewall.",
+    "count": "findings: {{count}}"
+  },
+  "helmMulti": {
+    "button": "Helm to clusters",
+    "title": "A Helm release into several clusters",
+    "hint": "One chart and one set of values into the chosen clusters: a hub job installs the release on each control plane (helm upgrade --install) in turn; an error in one cluster does not stop the others."
   }
 }

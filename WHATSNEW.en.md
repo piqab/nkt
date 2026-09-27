@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.22 — 2026-09-27
+
+- **Hub: Kubernetes findings across all clusters.** The "Clusters" section
+  has a card with Kubernetes findings from every control plane at once
+  (polled in parallel), by cluster and severity, each with an AI bulb.
+- **A Helm release into several clusters.** The "Helm to clusters" button:
+  chart, version, release, namespace and values (with block mode) — and
+  the clusters. A hub job installs the release on each control plane in
+  turn, with each job's log; an error in one cluster does not stop the
+  others, and the outcome lists the failed ones.
+- **Picking clusters by group.** Manifests and Helm have a quick pick:
+  every ready cluster or the clusters of one host group.
+
 ## v1.11.21 — 2026-09-27
 
 - For developers: the job cancellation test sometimes hung in a full

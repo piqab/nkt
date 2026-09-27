@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Select, Space, Tag } from 'antd'
+import { Button, Input, Space, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { Banner, Card, DiffView, ErrorNote, Loading, Modal, formatRelative } from './ui'
@@ -7,6 +7,7 @@ import { DataTable } from './DataTable'
 import { EditTextModal } from './EditTextModal'
 import { confirmAction } from './confirm'
 import { unifiedDiff } from './textDiff'
+import { ClusterPicker } from './HubClustersMulti'
 
 interface Manifest {
   id: number
@@ -30,12 +31,6 @@ interface Result {
   diff?: string
   output?: string
   error?: string
-}
-interface ClusterRow {
-  id: number
-  name: string
-  status: string
-  nodes: unknown[]
 }
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
@@ -182,7 +177,6 @@ function ResultsBanner({ name, results, onClose }: { name: string; results: Resu
 
 function ApplyModal({ manifest, initial, onClose, onApplied }: { manifest?: Manifest; initial?: string; onClose: () => void; onApplied: (name: string, res: Result[]) => void }) {
   const { t } = useTranslation()
-  const clusters = useApi<ClusterRow[]>('/hub/clusters')
   const [name, setName] = useState(manifest?.name ?? '')
   const [note, setNote] = useState('')
   const [selected, setSelected] = useState<number[]>([])
@@ -190,7 +184,6 @@ function ApplyModal({ manifest, initial, onClose, onApplied }: { manifest?: Mani
   const [draft, setDraft] = useState(initial ?? (manifest ? saved : SAMPLE))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const ready = (clusters.data ?? []).filter((c) => c.status === 'ready' && c.nodes.length > 0)
 
   async function clusterDiff(): Promise<string> {
     if (selected.length === 0) throw new Error(t('manifests.pickClusters'))
@@ -235,18 +228,10 @@ function ApplyModal({ manifest, initial, onClose, onApplied }: { manifest?: Mani
           <Space wrap style={{ marginBottom: '0.5rem' }}>
             <Input size="small" style={{ width: '16rem' }} value={name} disabled={!!manifest} placeholder={t('manifests.name')} onChange={(e) => setName(e.target.value)} />
             <Input size="small" style={{ width: '18rem' }} value={note} placeholder={t('manifests.notePlaceholder')} onChange={(e) => setNote(e.target.value)} />
-            <Select
-              mode="multiple"
-              size="small"
-              style={{ minWidth: '22rem' }}
-              placeholder={t('manifests.clusters')}
-              value={selected}
-              onChange={setSelected}
-              loading={clusters.loading}
-              options={ready.map((c) => ({ value: c.id, label: c.name }))}
-            />
           </Space>
-          {clusters.data && ready.length === 0 && <Banner kind="warn">{t('manifests.noClusters')}</Banner>}
+          <div style={{ marginBottom: '0.5rem' }}>
+            <ClusterPicker value={selected} onChange={setSelected} />
+          </div>
         </>
       }
       below={
