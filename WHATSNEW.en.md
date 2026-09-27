@@ -8,6 +8,26 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.24 — 2026-09-27
+
+- **nkt-edge — webhooks without exposing the hub.** A separate small
+  program (about 8 MB) for a VPS: a Let's Encrypt certificate, it accepts
+  only `POST /hooks/{id}` (body up to 1 MB, a rate limit, optionally
+  GitHub addresses only) and hands the webhook to the hub over a tunnel
+  the hub itself keeps to it. The hub may sit behind NAT with no open
+  ports; only the webhook is reachable through the tunnel, and edge holds
+  no database, no secrets and no access to hosts — the hub checks the
+  signature.
+- The tunnel is TLS 1.3 with a pinned edge certificate fingerprint and a
+  token; the hub reconnects on its own.
+- **Installing from the hub:** "Deployments" → nkt-edge → "Install on a
+  host" — the job installs the program for the host's architecture and a
+  least-privilege service, opens the ports in ufw, pins the fingerprint
+  and connects the hub. The webhook address via edge appears in the
+  pipeline's "Webhook" window. Manual installation is there too:
+  `deploy/nkt-edge.service`, `deploy/edge.env.example`, the
+  `nkt-edge-linux-*` binaries in the release, `make edge`.
+
 ## v1.11.23 — 2026-09-27
 
 - **Hub: deployments from Git.** A new "Deployments" section: a pipeline

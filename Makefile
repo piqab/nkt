@@ -110,6 +110,11 @@ build: ## собрать продакшен-бинарник для Linux (Docke
 # (она больше не бампается тут — см. bump-version) — а потому что `build`
 # нужно выбирать РОВНО один из двух путей (Docker или native), и делать это
 # веткой в самом build проще, чем дублировать логику выбора в обеих целях.
+.PHONY: edge
+edge: ## собрать nkt-edge (вебхуки выкладок для VPS) в dist/
+	@mkdir -p dist
+	CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w -X main.version=$$(cat VERSION)" -o dist/nkt-edge ./cmd/nkt-edge
+
 .PHONY: build-docker
 build-docker: web
 	@mkdir -p dist; \

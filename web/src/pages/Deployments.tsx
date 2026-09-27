@@ -10,6 +10,7 @@ import { EditTextModal } from '../components/EditTextModal'
 import { confirmAction } from '../components/confirm'
 import { unifiedDiff } from '../components/textDiff'
 import { JobLogModal } from './Jobs'
+import { EdgeCard } from '../components/EdgeCard'
 
 interface Deployment {
   id: number
@@ -196,6 +197,7 @@ export default function Deployments({ me }: { me: Me }) {
           </div>
         )}
       </Card>
+      {me.is_admin && <EdgeCard onOpenJob={(id) => void openJob(id)} />}
       {edit && <PipelineEditor pipeline={edit.pipeline} onClose={() => setEdit(null)} onSaved={() => void list.reload()} />}
       {dialog?.type === 'deploy' && (
         <DeployModal

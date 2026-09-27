@@ -896,6 +896,9 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	r.jobs.Register(hub.KindDeploy, hub.NewDeployRunner(server))
 	// Опрос репозиториев и registry у конвейеров выкладки.
 	server.StartPipelineWatch(ctx)
+	// Соединение с nkt-edge (вебхуки из интернета без открытого хаба).
+	r.jobs.Register(hub.KindEdgeInstall, hub.NewEdgeInstallRunner(server))
+	server.StartEdge(ctx)
 
 	// Хаб ведёт задания собственной машины — той самой строки
 	// «localhost» в списке хостов.
