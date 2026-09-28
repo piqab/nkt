@@ -7,6 +7,7 @@ import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
 import { LXDImagePicker, type LXDImage } from './LXDImagePicker'
 import CommandModal from './CommandModal'
+import { BulkDeleteBar } from './useDeletions'
 
 type Network = { name: string; type: string; managed: boolean; status: string; ipv4: string; ipv6: string; nat: boolean; used_by: string[] }
 type Pool = { name: string; driver: string; status: string; source: string; size: string; used_by: string[] }
@@ -24,6 +25,10 @@ export function LXDResources({ canControl }: { canControl: boolean }) {
   const [creatingNet, setCreatingNet] = useState(false)
   const [picking, setPicking] = useState(false)
   const [copying, setCopying] = useState<{ ref: string; vm: boolean } | null>(null)
+  // Выбор галочками: удаление сетей и образов — быстрое, без задания, по
+  // одному подряд; кнопки заблокированы, пока идёт.
+  const [selNets, setSelNets] = useState<string[]>([])
+  const [selImages, setSelImages] = useState<string[]>([])
 
   async function run(key: string, fn: () => Promise<unknown>, reload: () => Promise<void>) {
     setBusy(key)
@@ -41,6 +46,24 @@ export function LXDResources({ canControl }: { canControl: boolean }) {
   async function delNet(n: Network) {
     if (!(await confirmAction(t('lxdRes.netDeleteConfirm', { name: n.name }), { okText: t('common.delete') }))) return
     await run(`net:${n.name}`, () => api(`/lxd/networks/${encodeURIComponent(n.name)}`, { method: 'DELETE' }), nets.reload)
+  }
+
+  async function delMany(kind: 'net' | 'img', keys: string[], names: string[], del: (key: string) => Promise<unknown>, reload: () => Promise<void>) {
+    if (keys.length === 0) return
+    if (!(await confirmAction(t('bulk.confirmDelete', { count: keys.length, names: names.join(', ') }), { okText: t('common.delete') }))) return
+    await run(`${kind}:bulk`, async () => {
+      const failed: string[] = []
+      for (const k of keys) {
+        try {
+          await del(k)
+        } catch (err) {
+          failed.push(`${k}: ${err instanceof Error ? err.message : String(err)}`)
+        }
+      }
+      if (failed.length > 0) throw new Error(failed.join('\n'))
+    }, reload)
+    if (kind === 'net') setSelNets([])
+    else setSelImages([])
   }
 
   async function delImage(im: LXDImage) {
@@ -72,11 +95,22 @@ export function LXDResources({ canControl }: { canControl: boolean }) {
           <Loading what={t('lxdRes.loading')} />
         ) : (
           <div className="table-wrap">
+            <BulkDeleteBar
+              count={selNets.length}
+              disabled={busy !== null}
+              onClear={() => setSelNets([])}
+              onDelete={() => void delMany('net', selNets, selNets, (n) => api(`/lxd/networks/${encodeURIComponent(n)}`, { method: 'DELETE' }), nets.reload)}
+            />
             <Table<Network>
               size="small"
               pagination={false}
               rowKey="name"
               dataSource={nets.data.networks}
+              rowSelection={
+                canControl
+                  ? { selectedRowKeys: selNets, onChange: (k) => setSelNets(k as string[]), getCheckboxProps: (n) => ({ disabled: !n.managed || busy !== null }) }
+                  : undefined
+              }
               columns={[
                 { title: t('lxdRes.colName'), key: 'name', render: (_, n) => <span className="mono">{n.name}</span> },
                 { title: t('lxdRes.colType'), key: 'type', render: (_, n) => `${n.type}${n.managed ? '' : ` (${t('lxdRes.unmanaged')})`}` },
@@ -89,7 +123,7 @@ export function LXDResources({ canControl }: { canControl: boolean }) {
                   render: (_, n) =>
                     canControl &&
                     n.managed && (
-                      <RowAction action="delete" danger label={t('common.delete')} loading={busy === `net:${n.name}`} onClick={() => void delNet(n)} />
+                      <RowAction action="delete" danger label={t('common.delete')} disabled={busy !== null} loading={busy === `net:${n.name}`} onClick={() => void delNet(n)} />
                     ),
                 },
               ]}
@@ -116,11 +150,34 @@ export function LXDResources({ canControl }: { canControl: boolean }) {
           <p className="small muted">{t('lxdRes.noImages')}</p>
         ) : (
           <div className="table-wrap">
+            <BulkDeleteBar
+              count={selImages.length}
+              disabled={busy !== null}
+              onClear={() => setSelImages([])}
+              onDelete={() =>
+                void delMany(
+                  'img',
+                  selImages,
+                  images.data!.images.filter((i) => selImages.includes(i.fingerprint ?? '')).map((i) => i.alias || (i.fingerprint ?? '').slice(0, 12)),
+                  (fp) => api(`/lxd/images/${fp}`, { method: 'DELETE' }),
+                  images.reload,
+                )
+              }
+            />
             <Table<LXDImage>
               size="small"
               pagination={false}
               rowKey={(i) => i.fingerprint ?? i.ref}
               dataSource={images.data.images}
+              rowSelection={
+                canControl
+                  ? {
+                      selectedRowKeys: selImages,
+                      onChange: (k) => setSelImages(k as string[]),
+                      getCheckboxProps: (i) => ({ disabled: !i.fingerprint || busy !== null }),
+                    }
+                  : undefined
+              }
               columns={[
                 { title: t('lxdRes.colAlias'), key: 'alias', render: (_, i) => <span className="mono">{i.alias || '—'}</span> },
                 { title: t('lxdRes.colDescription'), key: 'desc', render: (_, i) => <span className="small">{i.description}</span> },
@@ -133,7 +190,7 @@ export function LXDResources({ canControl }: { canControl: boolean }) {
                   render: (_, i) =>
                     canControl &&
                     i.fingerprint && (
-                      <RowAction action="delete" danger label={t('common.delete')} loading={busy === `img:${i.fingerprint}`} onClick={() => void delImage(i)} />
+                      <RowAction action="delete" danger label={t('common.delete')} disabled={busy !== null} loading={busy === `img:${i.fingerprint}`} onClick={() => void delImage(i)} />
                     ),
                 },
               ]}

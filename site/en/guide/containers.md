@@ -7,6 +7,19 @@ title: Containers and VMs
 One section with tabs: Docker, Podman, LXD and libvirt/QEMU virtual
 machines.
 
+::: tip Deleting
+Docker and Podman containers, LXD instances and their snapshots, libvirt
+machines, container images, machine images and disk files, LXD networks
+and images and Kubernetes objects have checkboxes — the selected ones are
+deleted at once. Potentially long deletions (containers, instances,
+snapshots, machines, container images, Kubernetes objects) run as a
+background job with a log: while an object is being deleted, its row is
+locked — even after a page reload — and clicking again opens the same
+job. When it finishes, the host is rescanned and the tables are rebuilt,
+related ones included: after deleting a machine with its disks, the disk
+file list too.
+:::
+
 ## Docker
 
 ![Docker containers](/screens/en/containers.png)

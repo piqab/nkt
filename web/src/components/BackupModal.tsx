@@ -47,6 +47,8 @@ export function BackupModal({
   const list = useApi<{ backups: Entry[]; root: string }>(`/backups${qs({ kind, name })}`)
   const [job, setJob] = useState<Job | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Пока файл удаляется, кнопки удаления заблокированы.
+  const [deleting, setDeleting] = useState<string | null>(null)
   const [withImages, setWithImages] = useState(false)
   const [restoring, setRestoring] = useState<Entry | null>(null)
 
@@ -62,11 +64,14 @@ export function BackupModal({
 
   async function remove(e: Entry) {
     if (!(await confirmAction(t('backups.confirmDelete', { file: e.file })))) return
+    setDeleting(e.path)
     try {
       await api('/backups/delete', { method: 'POST', body: { path: e.path } })
-      list.reload()
+      await list.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDeleting(null)
     }
   }
 
@@ -108,7 +113,9 @@ export function BackupModal({
                       <RowAction action="download" label={t('backups.download')} onClick={() => window.open(apiURL(`/backups/download${qs({ path: e.path })}`), '_blank')} />
                     )}
                     {canControl && <RowAction action="history" label={t('backups.restore')} onClick={() => setRestoring(e)} />}
-                    {canControl && <RowAction action="delete" label={t('common.delete')} danger onClick={() => void remove(e)} />}
+                    {canControl && (
+                      <RowAction action="delete" label={t('common.delete')} danger disabled={deleting !== null} loading={deleting === e.path} onClick={() => void remove(e)} />
+                    )}
                   </div>
                 ),
               },

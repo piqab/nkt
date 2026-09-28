@@ -66,7 +66,9 @@ type Server struct {
 	files       *files.Manager
 	cloneRunner *files.CloneRunner
 	// uploads — сколько больших файлов ушло в историю в рамках загрузки.
-	uploads    uploadBudget
+	uploads uploadBudget
+	// dels — какие объекты сейчас удаляются заданием.
+	dels       deletions
 	guestCreds *guestcred.Store
 	ui         fs.FS
 	log        *slog.Logger
@@ -145,6 +147,9 @@ func New(d Deps) *Server {
 	}
 	if s.configs != nil && s.scanner != nil && s.cfg != nil {
 		s.configs.AttachK8s(k8sDocs{s})
+	}
+	if s.jobs != nil {
+		s.jobs.Register(KindDelete, &deleteRunner{s})
 	}
 	return s
 }
@@ -349,6 +354,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/files/uploads/{id}", s.handleFilesUploadItems)
 			r.Get("/files/protect", s.handleFilesProtect)
 			r.Get("/files/history", s.handleFilesHistory)
+			r.Get("/deletions", s.handleDeletions)
 			r.Get("/files/deploy-key", s.handleFilesDeployKey)
 			r.Get("/configs/blocks", s.handleConfigBlocks)
 			r.Get("/configs/versions", s.handleConfigVersions)
@@ -446,6 +452,7 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/podman/containers/{name}/run/status", s.handleContainerRunStatus)
 				r.Get("/podman/containers/{name}/logs/ws", s.handleContainerLogsWS)
 				r.Post("/containers/{name}/{action}", s.handleContainerAction)
+				r.Post("/deletions", s.handleDelete)
 				r.Delete("/containers/{name}", s.handleContainerDelete)
 				r.Post("/images/remove", s.handleImagesRemove)
 				r.Post("/images/save", s.handleImagesSave)

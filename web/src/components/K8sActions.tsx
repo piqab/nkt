@@ -9,6 +9,7 @@ import { confirmAction } from './confirm'
 import CommandModal from './CommandModal'
 import { useJobLauncher } from './useJobLauncher'
 import { K8sYAMLModal } from './K8sYAML'
+import { type DeleteItem } from './useDeletions'
 
 export interface K8sRow {
   name: string
@@ -47,7 +48,31 @@ type Dialog = { type: 'describe' | 'yaml' | 'bounds' | 'forward' | 'scale' | 'hi
  * изменения — администратору при разрешённых изменениях; каждое уходит
  * в аудит хоста. Долгий вывод узла (drain) — заданием.
  */
-export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: string; row: K8sRow; me: Me; onChanged: () => void; onError: (e: string) => void }) {
+/** Удаление заданием (уровня таблицы: один опрос на таблицу). */
+export interface K8sDeleter {
+  remove: (items: DeleteItem[], legacy?: (it: DeleteItem) => Promise<void>) => Promise<void>
+  isDeleting: (it: DeleteItem) => boolean
+}
+
+export function k8sDeleteItem(kind: string, row: K8sRow): DeleteItem {
+  return { kind: 'k8s', k8s_kind: kind, namespace: row.namespace ?? '', name: row.name }
+}
+
+export function K8sRowActions({
+  kind,
+  row,
+  me,
+  onChanged,
+  onError,
+  deleter,
+}: {
+  kind: string
+  row: K8sRow
+  me: Me
+  onChanged: () => void
+  onError: (e: string) => void
+  deleter?: K8sDeleter
+}) {
   const { t } = useTranslation()
   const [dialog, setDialog] = useState<Dialog | null>(null)
   const job = useJobLauncher(() => onChanged())
@@ -90,6 +115,15 @@ export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: str
         return
       case 'delete':
         if (!(await confirmAction(t(kind === 'namespaces' ? 'k8s.act.deleteNsConfirm' : 'k8s.act.deleteConfirm', { name: id }), { okText: t('k8s.act.delete') }))) return
+        // kubectl delete ждёт финализаторов (namespace — минуты): заданием.
+        if (deleter) {
+          try {
+            await deleter.remove([k8sDeleteItem(kind, row)], async () => void (await act('delete')))
+          } catch (err) {
+            onError(err instanceof Error ? err.message : String(err))
+          }
+          return
+        }
         break
       case 'restart':
         if (!(await confirmAction(t('k8s.act.restartConfirm', { name: id }), { okText: t('k8s.act.restart'), danger: false }))) return
@@ -120,8 +154,14 @@ export function K8sRowActions({ kind, row, me, onChanged, onError }: { kind: str
 
   return (
     <>
-      <Dropdown trigger={['click']} menu={{ items, onClick: ({ key }) => void run(key) }}>
-        <Button size="small" type="text" icon={<MoreOutlined />} aria-label={t('k8s.act.menu')} />
+      <Dropdown trigger={['click']} disabled={!!deleter?.isDeleting(k8sDeleteItem(kind, row))} menu={{ items, onClick: ({ key }) => void run(key) }}>
+        <Button
+          size="small"
+          type="text"
+          icon={<MoreOutlined />}
+          loading={!!deleter?.isDeleting(k8sDeleteItem(kind, row))}
+          aria-label={deleter?.isDeleting(k8sDeleteItem(kind, row)) ? t('bulk.deleting') : t('k8s.act.menu')}
+        />
       </Dropdown>
       {job.modal}
       {dialog?.type === 'describe' && <DescribeModal kind={kind} row={row} onClose={() => setDialog(null)} />}

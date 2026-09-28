@@ -5,6 +5,7 @@ import { api, useApi } from '../api'
 import { Banner, Loading, Modal, formatBytesShort, formatDateTime } from './ui'
 import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
+import { BulkDeleteBar, useDeletions, type DeleteItem } from './useDeletions'
 
 type Snapshot = { name: string; created_at: string; expires_at?: string; stateful: boolean; size: number }
 
@@ -25,6 +26,14 @@ export default function LXDSnapshotsModal({
   const { t } = useTranslation()
   const base = `/lxd/instances/${encodeURIComponent(name)}/snapshots`
   const list = useApi<{ snapshots: Snapshot[] }>(base)
+  // Удаление снимка (на ZFS/LVM может идти минуты) — заданием.
+  const dels = useDeletions(async () => {
+    await list.reload()
+    onChanged()
+  })
+  const [selected, setSelected] = useState<string[]>([])
+  const delItem = (snap: string): DeleteItem => ({ kind: 'lxd-snapshot', name, snapshot: snap })
+  const legacyDelete = (it: DeleteItem) => api(`${base}/${encodeURIComponent(it.snapshot ?? '')}`, { method: 'DELETE' }).then(() => undefined)
   const [snapName, setSnapName] = useState(() => defaultSnapName())
   const [stateful, setStateful] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
@@ -58,7 +67,15 @@ export default function LXDSnapshotsModal({
 
   async function del(s: string) {
     if (!(await confirmAction(t('lxdSnap.deleteConfirm', { name, snap: s }), { okText: t('common.delete') }))) return
-    await run(`${s}:delete`, () => api(`${base}/${encodeURIComponent(s)}`, { method: 'DELETE' }))
+    await run(`${s}:delete`, () => dels.remove([delItem(s)], legacyDelete))
+  }
+
+  async function delSelected() {
+    const list = selected.filter((s) => !dels.isDeleting(delItem(s)))
+    if (list.length === 0) return
+    if (!(await confirmAction(t('bulk.confirmDelete', { count: list.length, names: list.join(', ') })))) return
+    await run('bulk:delete', () => dels.remove(list.map(delItem), legacyDelete))
+    setSelected([])
   }
 
   const snaps = list.data?.snapshots ?? []
@@ -96,11 +113,22 @@ export default function LXDSnapshotsModal({
       ) : snaps.length === 0 ? (
         <p className="small muted">{t('lxdSnap.none')}</p>
       ) : (
+        <>
+        <BulkDeleteBar count={selected.length} onDelete={() => void delSelected()} onClear={() => setSelected([])} />
         <Table<Snapshot>
           size="small"
           pagination={false}
           rowKey="name"
           dataSource={snaps}
+          rowSelection={
+            canControl
+              ? {
+                  selectedRowKeys: selected,
+                  onChange: (keys) => setSelected(keys as string[]),
+                  getCheckboxProps: (s) => ({ disabled: dels.isDeleting(delItem(s.name)) }),
+                }
+              : undefined
+          }
           columns={[
             { title: t('lxdSnap.colName'), key: 'name', render: (_, s) => <span className="mono">{s.name}</span> },
             { title: t('lxdSnap.colCreated'), key: 'created', render: (_, s) => <span className="small nowrap">{formatDateTime(s.created_at)}</span> },
@@ -118,13 +146,22 @@ export default function LXDSnapshotsModal({
                 canControl && (
                   <div className="row">
                     <RowAction action="restore" label={t('lxdSnap.restore')} loading={busy === `${s.name}:restore`} onClick={() => void restore(s.name)} />
-                    <RowAction action="delete" danger label={t('common.delete')} loading={busy === `${s.name}:delete`} onClick={() => void del(s.name)} />
+                    <RowAction
+                      action="delete"
+                      danger
+                      label={dels.isDeleting(delItem(s.name)) ? t('bulk.deleting') : t('common.delete')}
+                      disabled={dels.isDeleting(delItem(s.name))}
+                      loading={busy === `${s.name}:delete` || dels.isDeleting(delItem(s.name))}
+                      onClick={() => void del(s.name)}
+                    />
                   </div>
                 ),
             },
           ]}
         />
+        </>
       )}
+      {dels.modal}
     </Modal>
   )
 }

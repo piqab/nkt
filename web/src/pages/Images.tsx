@@ -6,6 +6,7 @@ import type { Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, formatDateTime } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import { DataTable } from '../components/DataTable'
+import { useDeletions, type DeleteItem } from '../components/useDeletions'
 
 export interface DockerImage {
   id: string
@@ -41,6 +42,27 @@ export default function Images({ me }: { me: Me }) {
   const [note, setNote] = useState<string | null>(null)
 
   const canAct = me.is_admin && me.allow_mutations
+  // Удаление образов (большие слои — не мгновенно) — заданием; пока образ
+  // удаляется, его галочка заблокирована.
+  const dels = useDeletions(async () => {
+    await api('/inventory/refresh', { method: 'POST' }).catch(() => {})
+    await images.reload()
+  })
+  const delItem = (image: DockerImage): DeleteItem => ({ kind: 'image', name: refOf(image), force })
+  const legacyDelete = (it: DeleteItem) => api('/images/remove', { method: 'POST', body: { refs: [it.name], force: it.force } }).then(() => undefined)
+
+  async function removeSelected() {
+    const list = selectedImages.filter((i) => !dels.isDeleting(delItem(i)))
+    if (list.length === 0) return
+    setError(null)
+    setOutcomes(null)
+    try {
+      await dels.remove(list.map(delItem), legacyDelete)
+      setSelected([])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
 
   /** Prefer a tag over the bare id: it is what the operator recognises, and
    * Docker accepts either. */
@@ -166,7 +188,7 @@ export default function Images({ me }: { me: Me }) {
                 }
                 okText={t('images.remove', { count: selected.length })}
                 disabled={selected.length === 0 || busy}
-                onConfirm={() => run('/images/remove', { refs: selectedImages.map(refOf), force })}
+                onConfirm={() => void removeSelected()}
               >
                 <Button size="small" danger disabled={selected.length === 0 || busy}>
                   {t('images.remove', { count: selected.length })}
@@ -199,10 +221,12 @@ export default function Images({ me }: { me: Me }) {
                 ? {
                     selectedRowKeys: selected,
                     onChange: (keys) => setSelected(keys as string[]),
+                    getCheckboxProps: (image) => ({ disabled: dels.isDeleting(delItem(image)) }),
                   }
                 : undefined
             }
           />
+          {dels.modal}
         </div>
       </Card>
     </>

@@ -24,6 +24,7 @@ import { LXDResources } from '../components/LXDResources'
 import { ProbeLink } from '../components/PortProbe'
 import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
 import { LXDImagePicker } from '../components/LXDImagePicker'
+import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 
 export default function LXD({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -57,6 +58,13 @@ export default function LXD({ me }: { me: Me }) {
   }
 
   const canControl = me.is_admin && me.allow_mutations
+  const dels = useDeletions(async () => {
+    await api('/inventory/refresh', { method: 'POST' }).catch(() => {})
+    await instances.reload()
+  })
+  const [selected, setSelected] = useState<string[]>([])
+  const delItem = (i: LXDInstance): DeleteItem => ({ kind: 'lxd', name: i.name })
+  const legacyDelete = (it: DeleteItem) => api(`/lxd/instances/${it.name}`, { method: 'DELETE' }).then(() => undefined)
   // Раздел показывает снимок инвентаря: при входе он пересобирается сам,
   // иначе только что поднятого контейнера в списке не окажется.
   const { rescanning, rescan } = useHostRescan({
@@ -89,19 +97,26 @@ export default function LXD({ me }: { me: Me }) {
     }
   }
 
-  async function del(name: string) {
-    if (!(await confirmAction(t('common.confirmDelete', { what: t('lxd.instance'), name })))) return
-    setBusy(`${name}:delete`)
+  async function del(i: LXDInstance) {
+    if (!(await confirmAction(t('common.confirmDelete', { what: t('lxd.instance'), name: i.name })))) return
     setNotice(null)
     try {
-      await api(`/lxd/instances/${name}`, { method: 'DELETE' })
-      setNotice({ kind: 'info', text: t('common.deleted', { name }) })
-      await api('/inventory/refresh', { method: 'POST' })
-      await instances.reload()
+      await dels.remove([delItem(i)], legacyDelete)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setBusy(null)
+    }
+  }
+
+  async function delSelected() {
+    const list = (instances.data?.instances ?? []).filter((i) => selected.includes(i.name) && !dels.isDeleting(delItem(i)))
+    if (list.length === 0) return
+    if (!(await confirmAction(t('bulk.confirmDelete', { count: list.length, names: list.map((i) => i.name).join(', ') })))) return
+    setNotice(null)
+    try {
+      await dels.remove(list.map(delItem), legacyDelete)
+      setSelected([])
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
   }
 
@@ -214,10 +229,11 @@ export default function LXD({ me }: { me: Me }) {
           {canControl && (
             <RowAction
               action="delete"
-              label={t('common.delete')}
+              label={dels.isDeleting(delItem(i)) ? t('bulk.deleting') : t('common.delete')}
               danger
-              loading={busy === `${i.name}:delete`}
-              onClick={() => del(i.name)}
+              disabled={dels.isDeleting(delItem(i))}
+              loading={dels.isDeleting(delItem(i))}
+              onClick={() => void del(i)}
             />
           )}
         </div>
@@ -281,12 +297,23 @@ export default function LXD({ me }: { me: Me }) {
               onRescan={rescan}
               rescanning={rescanning}
             />
+            <BulkDeleteBar count={selected.length} onDelete={() => void delSelected()} onClear={() => setSelected([])} />
             <div className="table-wrap">
               <DataTable<LXDInstance>                 dataSource={activeInstances}
                 columns={columns}
                 rowKey="name"
+                rowSelection={
+                  canControl
+                    ? {
+                        selectedRowKeys: selected,
+                        onChange: (keys) => setSelected(keys as string[]),
+                        getCheckboxProps: (i) => ({ disabled: dels.isDeleting(delItem(i)) }),
+                      }
+                    : undefined
+                }
               />
             </div>
+            {dels.modal}
           </>
         )}
       </Card>

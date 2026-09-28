@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Checkbox, Input, InputNumber, Select, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, useApi } from '../api'
@@ -10,6 +10,7 @@ import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
 import { JobLogModal } from '../pages/Jobs'
 import VMNetworksCard from './VMNetworksCard'
+import { BulkDeleteBar } from './useDeletions'
 
 /** Пока идёт скачивание, список надо перечитывать: недокачанный кусок
  * растёт, и оператор должен видеть, что дело движется. */
@@ -23,9 +24,13 @@ const POLL_MS = 5_000
  * держать их в разных разделах значило бы разводить по углам то, чем
  * пользуются вместе.
  */
-export default function VMImagesSection({ me }: { me: Me }) {
+export default function VMImagesSection({ me, reloadKey = 0 }: { me: Me; reloadKey?: number }) {
   const { t } = useTranslation()
   const canEdit = me.is_admin && me.allow_mutations
+  // Удаление — быстрое, без задания; пока идёт, кнопки удаления заблокированы.
+  const [delBusy, setDelBusy] = useState<string | null>(null)
+  const [selImg, setSelImg] = useState<string[]>([])
+  const [selHost, setSelHost] = useState<string[]>([])
   const images = useApi<{
     catalog: VMImage[]
     local: VMImageLocal[]
@@ -36,6 +41,11 @@ export default function VMImagesSection({ me }: { me: Me }) {
     tools: VMTool[]
     missing: VMTool[] | null
   }>('/vm/images', POLL_MS)
+  // Машину удалили вместе с дисками — список файлов перестроить.
+  useEffect(() => {
+    if (reloadKey > 0) void images.reload()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- по сигналу страницы
+  }, [reloadKey])
   const [adding, setAdding] = useState(false)
   const [creatingHost, setCreatingHost] = useState<VMHostImage | null>(null)
 
@@ -47,12 +57,36 @@ export default function VMImagesSection({ me }: { me: Me }) {
       : t('vmimages.confirmDeleteHost', { name: img.name })
     if (!(await confirmAction(question, { danger: true }))) return
     setError(null)
+    setDelBusy(`host:${img.path}`)
     try {
       await api('/vm/images/host-delete', { method: 'POST', body: { name: img.name } })
-      images.reload()
+      await images.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setDelBusy(null)
     }
+  }
+
+  // Удалить выбранное подряд; ошибки собираются, остальное удаляется.
+  async function deleteMany(kind: 'img' | 'host', labels: string[], dels: (() => Promise<unknown>)[], question: string) {
+    if (dels.length === 0) return
+    if (!(await confirmAction(question, { danger: true }))) return
+    setError(null)
+    setDelBusy(`${kind}:bulk`)
+    const failed: string[] = []
+    for (let i = 0; i < dels.length; i++) {
+      try {
+        await dels[i]()
+      } catch (err) {
+        failed.push(`${labels[i]}: ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+    setDelBusy(null)
+    if (kind === 'img') setSelImg([])
+    else setSelHost([])
+    if (failed.length > 0) setError(failed.join('\n'))
+    await images.reload()
   }
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [creating, setCreating] = useState<VMImage | null>(null)
@@ -138,10 +172,19 @@ export default function VMImagesSection({ me }: { me: Me }) {
                 action="delete"
                 label={t('common.delete')}
                 danger
+                disabled={delBusy !== null}
+                loading={delBusy === `img:${img.id}`}
                 onClick={async () => {
                   if (!(await confirmAction(t('vmimages.confirmDelete', { name: img.name })))) return
-                  await api('/vm/images/delete', { method: 'POST', body: { image_id: img.id } })
-                  images.reload()
+                  setDelBusy(`img:${img.id}`)
+                  try {
+                    await api('/vm/images/delete', { method: 'POST', body: { image_id: img.id } })
+                    await images.reload()
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : String(err))
+                  } finally {
+                    setDelBusy(null)
+                  }
                 }}
               />
             )}
@@ -196,11 +239,37 @@ export default function VMImagesSection({ me }: { me: Me }) {
           <Loading what={t('vmimages.loading')} />
         ) : (
           <div className="table-wrap">
+            <BulkDeleteBar
+              count={selImg.length}
+              disabled={delBusy !== null}
+              onClear={() => setSelImg([])}
+              onDelete={() => {
+                const list = allImages.filter((img) => selImg.includes(img.id))
+                void deleteMany(
+                  'img',
+                  list.map((img) => img.name),
+                  list.map((img) => () => api('/vm/images/delete', { method: 'POST', body: { image_id: img.id } })),
+                  t('bulk.confirmDelete', { count: list.length, names: list.map((img) => img.name).join(', ') }),
+                )
+              }}
+            />
             <DataTable<VMImage>
               dataSource={allImages}
               columns={columns}
               rowKey="id"
               tableLayout="auto"
+              rowSelection={
+                canEdit
+                  ? {
+                      selectedRowKeys: selImg,
+                      onChange: (k) => setSelImg(k as string[]),
+                      getCheckboxProps: (img) => {
+                        const l = local.get(img.id)
+                        return { disabled: delBusy !== null || !(l?.downloaded || l?.partial) }
+                      },
+                    }
+                  : undefined
+              }
             />
           </div>
         )}
@@ -224,11 +293,32 @@ export default function VMImagesSection({ me }: { me: Me }) {
           <p className="small muted">{t('vmimages.hostEmpty')}</p>
         ) : (
           <div className="table-wrap">
+            <BulkDeleteBar
+              count={selHost.length}
+              disabled={delBusy !== null}
+              onClear={() => setSelHost([])}
+              onDelete={() => {
+                const list = (images.data?.host_images ?? []).filter((img) => selHost.includes(img.path))
+                const busy = list.filter((img) => img.used_by).map((img) => `${img.name} (${img.used_by})`)
+                void deleteMany(
+                  'host',
+                  list.map((img) => img.name),
+                  list.map((img) => () => api('/vm/images/host-delete', { method: 'POST', body: { name: img.name } })),
+                  t('bulk.confirmDelete', { count: list.length, names: list.map((img) => img.name).join(', ') }) +
+                    (busy.length > 0 ? ' ' + t('vmimages.bulkBusyDisks', { list: busy.join(', ') }) : ''),
+                )
+              }}
+            />
             <DataTable<VMHostImage>
               dataSource={images.data?.host_images ?? []}
-              columns={hostColumns(t, canEdit, (img) => setCreatingHost(img), deleteHostImage)}
+              columns={hostColumns(t, canEdit, (img) => setCreatingHost(img), deleteHostImage, delBusy)}
               rowKey="path"
               tableLayout="auto"
+              rowSelection={
+                canEdit
+                  ? { selectedRowKeys: selHost, onChange: (k) => setSelHost(k as string[]), getCheckboxProps: () => ({ disabled: delBusy !== null }) }
+                  : undefined
+              }
             />
           </div>
         )}
@@ -264,10 +354,19 @@ export default function VMImagesSection({ me }: { me: Me }) {
                       action="delete"
                       label={t('common.delete')}
                       danger
+                      disabled={delBusy !== null}
+                      loading={delBusy === `tpl:${tpl.id}`}
                       onClick={async () => {
                         if (!(await confirmAction(t('vmimages.confirmDeleteTemplate', { name: tpl.name })))) return
-                        await api(`/vm/templates/${tpl.id}`, { method: 'DELETE' })
-                        templates.reload()
+                        setDelBusy(`tpl:${tpl.id}`)
+                        try {
+                          await api(`/vm/templates/${tpl.id}`, { method: 'DELETE' })
+                          await templates.reload()
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : String(err))
+                        } finally {
+                          setDelBusy(null)
+                        }
                       }}
                     />
                   )}
@@ -740,6 +839,7 @@ function hostColumns(
   canEdit: boolean,
   onCreate: (img: VMHostImage) => void,
   onDelete: (img: VMHostImage) => void,
+  delBusy: string | null = null,
 ): TableColumnsType<VMHostImage> {
   return [
     {
@@ -773,7 +873,7 @@ function hostColumns(
         canEdit && (
           <div className="row row-nowrap">
             <RowAction action="create" label={t('vmimages.createVM')} onClick={() => onCreate(img)} />
-            <RowAction action="delete" label={t('common.delete')} danger onClick={() => onDelete(img)} />
+            <RowAction action="delete" label={t('common.delete')} danger disabled={delBusy !== null} loading={delBusy === `host:${img.path}`} onClick={() => onDelete(img)} />
           </div>
         ),
     },

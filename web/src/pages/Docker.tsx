@@ -18,6 +18,7 @@ import CommandModal from '../components/CommandModal'
 import ContainerLogsModal from '../components/ContainerLogsModal'
 import { ConsoleModal, type ConsoleKind } from '../components/ConsoleModal'
 import { BackupModal, type BackupKind } from '../components/BackupModal'
+import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -28,6 +29,16 @@ export default function Docker({ me }: { me: Me }) {
   const [pickingPath, setPickingPath] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
+  // Удаление — заданием хоста; по окончании хост пересканируется и таблицы
+  // перестраиваются.
+  const dels = useDeletions(async () => {
+    await api('/inventory/refresh', { method: 'POST' }).catch(() => {})
+    await docker.reload()
+  })
+  const [selected, setSelected] = useState<string[]>([])
+  const delItem = (c: Container): DeleteItem => ({ kind: 'docker', name: c.name, force: c.running })
+  const legacyDelete = (it: DeleteItem) =>
+    api(`/containers/${encodeURIComponent(it.name)}${qs({ force: it.force ? 'true' : '' })}`, { method: 'DELETE' }).then(() => undefined)
   // Раздел показывает снимок инвентаря: при входе он пересобирается сам,
   // иначе только что поднятого контейнера в списке не окажется.
   const { rescanning, rescan } = useHostRescan({
@@ -182,10 +193,10 @@ export default function Docker({ me }: { me: Me }) {
           )}
           <RowAction
             action="delete"
-            label={t('common.delete')}
+            label={dels.isDeleting(delItem(c)) ? t('bulk.deleting') : t('common.delete')}
             danger
-            disabled={!canControl}
-            loading={busy === `${c.name}:delete`}
+            disabled={!canControl || dels.isDeleting(delItem(c))}
+            loading={dels.isDeleting(delItem(c))}
             onClick={() => void del(c)}
           />
         </div>
@@ -224,17 +235,24 @@ export default function Docker({ me }: { me: Me }) {
       ? t('docker.confirmDeleteRunning', { name: c.name })
       : t('common.confirmDelete', { what: t('docker.container'), name: c.name })
     if (!(await confirmAction(question))) return
-    setBusy(`${c.name}:delete`)
     setNotice(null)
     try {
-      await api(`/containers/${encodeURIComponent(c.name)}${qs({ force: running ? 'true' : '' })}`, { method: 'DELETE' })
-      setNotice({ kind: 'info', text: t('common.deleted', { name: c.name }) })
-      await api('/inventory/refresh', { method: 'POST' })
-      await docker.reload()
+      await dels.remove([delItem(c)], legacyDelete)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setBusy(null)
+    }
+  }
+
+  async function delSelected() {
+    const list = (docker.data?.containers ?? []).filter((c) => selected.includes(c.name) && !dels.isDeleting(delItem(c)))
+    if (list.length === 0) return
+    if (!(await confirmAction(t('bulk.confirmDelete', { count: list.length, names: list.map((c) => c.name).join(', ') })))) return
+    setNotice(null)
+    try {
+      await dels.remove(list.map(delItem), legacyDelete)
+      setSelected([])
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
   }
 
@@ -339,16 +357,27 @@ export default function Docker({ me }: { me: Me }) {
               onRescan={rescan}
               rescanning={rescanning}
             />
+            <BulkDeleteBar count={selected.length} onDelete={() => void delSelected()} onClear={() => setSelected([])} />
             <div className="table-wrap">
               <DataTable<Container>                 dataSource={activeContainers}
                 columns={containerColumns}
                 rowKey="name"
+                rowSelection={
+                  canControl
+                    ? {
+                        selectedRowKeys: selected,
+                        onChange: (keys) => setSelected(keys as string[]),
+                        getCheckboxProps: (c) => ({ disabled: dels.isDeleting(delItem(c)) }),
+                      }
+                    : undefined
+                }
               />
             </div>
           </>
         )}
       </Card>
 
+      {dels.modal}
       <Card title={t('docker.networks')}>
         <div className="table-wrap">
           <DataTable<DockerNetwork>             dataSource={docker.data?.networks ?? []}

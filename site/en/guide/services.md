@@ -11,6 +11,11 @@ one listens on (by the process's unit — nginx shows its worker processes'
 sockets too). So you can see who holds 80 or 443 even when the port is
 described in a config.
 
+The table has every installed service from nkt's catalogue: running ones
+on top, stopped and failed ones below, with a "start" button and the
+journal. Services that aren't installed are not shown — install them in
+the "Packages" section.
+
 - **Actions**: one power button by state (running — "stop", stopped —
   "start"), restart, reload, one autostart button by state, the unit's
   journal.
@@ -22,7 +27,6 @@ described in a config.
   the outside; terminate with SIGTERM/SIGKILL. A port described in the
   nginx or haproxy config doesn't show up here — it is in its service's
   "Ports" column.
-- **Installing a missing service** as a package with a live apt log.
 - **Port check**: TCP, HTTP/HTTPS, TLS handshake, an arbitrary `curl` —
   with the response body, headers, a rendering of the page and a download
   of the response. The same is available from “Network interfaces” for
