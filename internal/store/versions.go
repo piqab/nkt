@@ -11,6 +11,7 @@ const (
 	ActionObserved = "observed" // captured by a scan, not written by us
 	ActionEdit     = "edit"
 	ActionRollback = "rollback"
+	ActionUpload   = "upload" // перезаписано загрузкой в «Файлах»: прежнее содержимое
 )
 
 // ConfigVersion indexes one stored revision of a managed config file. The bytes

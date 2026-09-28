@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
 	"io"
@@ -150,7 +151,16 @@ func (s *Server) handleFilesUpload(w http.ResponseWriter, r *http.Request) {
 	dir := r.URL.Query().Get("dir")
 	name := strings.TrimSpace(r.URL.Query().Get("name"))
 	user := auth.Username(r.Context())
-	target, err := m.Upload(r.Context(), dir, name, http.MaxBytesReader(w, r.Body, files.MaxUploadBytes+1))
+	body := http.MaxBytesReader(w, r.Body, files.MaxUploadBytes+1)
+	var target string
+	var err error
+	// Под номером загрузки — с историей и защитой (см. uploadWithHistory);
+	// без номера — как раньше.
+	if uploadID, perr := strconv.ParseInt(r.URL.Query().Get("upload"), 10, 64); perr == nil && uploadID > 0 && s.configs != nil {
+		target, err = s.uploadWithHistory(r, m, uploadID, dir, name, r.URL.Query().Get("force") == "1", body)
+	} else {
+		target, err = m.Upload(r.Context(), dir, name, body)
+	}
 	if err != nil {
 		s.db.Audit(r.Context(), user, "files.upload", gopath.Join(dir, name), "error", err.Error())
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -328,7 +338,14 @@ func (s *Server) recordFileVersion(r *http.Request, path, action, note string, b
 	if svc, err := s.configs.ServiceForPath(path); err == nil {
 		service = svc
 	}
-	_, _ = s.configs.RecordDoc(r.Context(), path, service, auth.Username(r.Context()), action, note, before, after)
+	user := auth.Username(r.Context())
+	// Прежнее содержимое — версией, если его ещё нет последней в истории
+	// (файл мог поменяться загрузкой или снаружи).
+	if before != nil {
+		_, _, _ = s.configs.RecordFileSnapshot(r.Context(), path, service, user, store.ActionObserved,
+			msgs.Tc(r.Context(), "control.stateBeforeFirstEdit"), bytes.NewReader(before))
+	}
+	_, _ = s.configs.RecordDoc(r.Context(), path, service, user, action, note, nil, after)
 }
 
 // fileVersion — версия, путь которой проводник вообще разрешает.
@@ -343,7 +360,7 @@ func (s *Server) fileVersion(w http.ResponseWriter, r *http.Request, m *files.Ma
 		fail(w, r, err)
 		return v, "", false
 	}
-	if _, err := m.Check(v.Path); err != nil {
+	if err := fileVersionPath(m, v.Path); err != nil {
 		writeErr(w, r, http.StatusForbidden, err)
 		return v, "", false
 	}
@@ -361,8 +378,8 @@ func (s *Server) handleFilesVersions(w http.ResponseWriter, r *http.Request) {
 	if m == nil || s.configs == nil {
 		return
 	}
-	p, err := m.Check(r.URL.Query().Get("path"))
-	if err != nil {
+	p := r.URL.Query().Get("path")
+	if err := fileVersionPath(m, p); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
@@ -386,7 +403,9 @@ func (s *Server) handleFilesVersionDiff(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	cur := ""
-	if txt, err := m.Read(v.Path); err == nil {
+	if dir, ok := strings.CutPrefix(v.Path, protectPathPrefix); ok {
+		cur = strings.Join(s.protectPatterns(r.Context(), dir), "\n") + "\n"
+	} else if txt, err := m.Read(v.Path); err == nil {
 		cur = txt.Content
 	}
 	diff := control.UnifiedDiff(r.Context(), msgs.Tc(r.Context(), "control.version", v.ID, v.TS), msgs.Tc(r.Context(), "control.currentFile"), old, cur)
@@ -405,6 +424,18 @@ func (s *Server) handleFilesVersionRollback(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	user := auth.Username(r.Context())
+	if dir, ok := strings.CutPrefix(v.Path, protectPathPrefix); ok {
+		before := strings.Join(s.protectPatterns(r.Context(), dir), "\n") + "\n"
+		after := strings.Join(splitPatterns(content), "\n") + "\n"
+		if err := s.db.KVSet(r.Context(), protectKeyPrefix+dir, after); err != nil {
+			fail(w, r, err)
+			return
+		}
+		_, _ = s.configs.RecordDoc(r.Context(), v.Path, "files", user, store.ActionRollback, msgs.Tc(r.Context(), "control.rollbackVersion", v.ID, v.TS), []byte(before), []byte(after))
+		s.db.Audit(r.Context(), user, "files.protect", dir, "ok", map[string]any{"rollback": v.ID})
+		writeJSON(w, http.StatusOK, map[string]any{"path": v.Path, "message": msgs.Tc(r.Context(), "configs.versionRestored", v.ID)})
+		return
+	}
 	expected := ""
 	var before []byte
 	if cur, err := m.Read(v.Path); err == nil {

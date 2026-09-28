@@ -2965,7 +2965,7 @@ function UpdateAllModal({ plan, onClose, onStart }: { plan: ReturnType<typeof pl
   const names = (list: HubHost[]) => list.map((h) => h.name).join(', ')
   const count = plan.ready.length + (retry ? plan.failed.length : 0)
   return (
-    <Modal title={t('hosts.updateAllTitle')} onClose={onClose} width={560}>
+    <Modal title={t('hosts.updateAllTitle')} onClose={onClose} closeLabel={t('common.cancel')} width={560}>
       <div className="col small" style={{ gap: '0.5rem' }}>
         <div>
           {t('hosts.updateAllReady', { count: plan.ready.length })}
@@ -2979,7 +2979,6 @@ function UpdateAllModal({ plan, onClose, onStart }: { plan: ReturnType<typeof pl
         {plan.active.length > 0 && <div className="muted">{t('hosts.updateAllActive', { names: names(plan.active) })}</div>}
         {plan.unreachable.length > 0 && <div className="muted">{t('hosts.updateAllUnreachable', { names: names(plan.unreachable) })}</div>}
         <div className="row" style={{ justifyContent: 'flex-end' }}>
-          <Button onClick={onClose}>{t('common.cancel')}</Button>
           <Button type="primary" disabled={count === 0} onClick={() => onStart(retry)}>
             {t('hosts.updateAllStart', { count })}
           </Button>

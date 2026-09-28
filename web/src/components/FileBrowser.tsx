@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import { Button, Checkbox, Input, Progress, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
-import { FolderOutlined, FolderAddOutlined, FileOutlined, FileZipOutlined, BranchesOutlined, DownloadOutlined, UploadOutlined, ReloadOutlined } from '@ant-design/icons'
+import { FolderOutlined, FolderAddOutlined, FileOutlined, FileZipOutlined, BranchesOutlined, DownloadOutlined, UploadOutlined, ReloadOutlined, HistoryOutlined, LockOutlined, DatabaseOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, qs, useApi } from '../api'
 import type { Job, Me, WriteResult } from '../types'
 import { VersionHistory } from './VersionHistory'
+import { FileHistoryModal, HistoryStorageModal, ProtectModal, UploadPlanModal, UploadsModal, sha256Of, type UploadPlan } from './FileUploadHistory'
 import { Banner, Card, CodeEditor, DiffView, Modal, Spinner } from './ui'
 import { unifiedDiff } from './textDiff'
 import { formatBytes } from './charts'
@@ -176,6 +177,14 @@ export default function FileBrowser() {
   const [upload, setUpload] = useState<UploadSummary | null>(null)
   const [skipHidden, setSkipHidden] = useState(readSkipHidden)
   const [dragging, setDragging] = useState(false)
+  const me = useApi<Me>('/auth/me')
+  // План загрузки: очередь, ответ сервера и сколько отсеяно «без скрытых».
+  const [plan, setPlan] = useState<{ pending: Pending[]; plan: UploadPlan; skipped: number } | null>(null)
+  const [planning, setPlanning] = useState<string | null>(null)
+  const [uploadsModal, setUploadsModal] = useState(false)
+  const [protectModal, setProtectModal] = useState(false)
+  const [storageModal, setStorageModal] = useState(false)
+  const [historyTarget, setHistoryTarget] = useState<Entry | null>(null)
   const fileInput = useRef<HTMLInputElement | null>(null)
   const dirInput = useRef<HTMLInputElement | null>(null)
 
@@ -213,6 +222,8 @@ export default function FileBrowser() {
   // Загрузка идёт по одному файлу за запрос: серверу так проще — тело и
   // есть файл, без разбора multipart, — а папка отличается от файлов
   // только тем, что в имени есть путь: каталоги хост создаёт по дороге.
+  // Сначала — план: что новое, что изменится, что совпадает и что
+  // защищено; грузится только выбранное в окне плана.
   async function uploadPending(list: Pending[]) {
     if (!dir || list.length === 0) return
     let skipped = 0
@@ -224,6 +235,34 @@ export default function FileBrowser() {
     }
     if (list.length === 0) {
       setUpload({ total: 0, done: 0, bytesTotal: 0, bytesDone: 0, current: '', errors: [], finished: true, skipped, failed: [] })
+      return
+    }
+    setError(null)
+    try {
+      const entries = []
+      for (let i = 0; i < list.length; i++) {
+        setPlanning(t('files.plan.hashing', { done: i, total: list.length }))
+        entries.push({ rel: list[i].rel, size: list[i].file.size, sha256: await sha256Of(list[i].file) })
+      }
+      setPlanning(t('files.plan.comparing'))
+      const res = await api<UploadPlan>('/files/upload/plan', { method: 'POST', body: { dir, entries } })
+      setPlan({ pending: list, plan: res, skipped })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setPlanning(null)
+    }
+  }
+
+  // Загрузка выбранного под номером: прежние версии перезаписанных файлов
+  // уходят в историю, защищённые — только отмеченные в плане (force).
+  async function runUpload(list: Pending[], force: Set<string>, note: string, skipped: number) {
+    if (!dir || list.length === 0) return
+    let uploadID = 0
+    try {
+      uploadID = (await api<{ id: number }>('/files/upload/begin', { method: 'POST', body: { dir, note } })).id
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
       return
     }
     const max = info.data?.max_upload ?? 0
@@ -240,7 +279,7 @@ export default function FileBrowser() {
       new Promise<string | null>((resolve) => {
         let sent = 0
         const xhr = new XMLHttpRequest()
-        xhr.open('PUT', apiURL(`/files/upload${qs({ dir, name: p.rel })}`))
+        xhr.open('PUT', apiURL(`/files/upload${qs({ dir, name: p.rel, upload: uploadID, force: force.has(p.rel) ? '1' : undefined })}`))
         xhr.upload.onprogress = (ev) => {
           if (!ev.lengthComputable) return
           onBytes(ev.loaded - sent)
@@ -310,6 +349,7 @@ export default function FileBrowser() {
       }
     }
     await Promise.all(Array.from({ length: Math.min(UPLOAD_PARALLEL, list.length) }, worker))
+    await api(`/files/upload/${uploadID}/finish`, { method: 'POST' }).catch(() => {})
     summary.finished = true
     summary.current = ''
     publish()
@@ -393,6 +433,7 @@ export default function FileBrowser() {
           {/* У файла «изменить» — редактор с именем наверху; у папки менять
               нечего, кроме имени. */}
           <RowAction action="edit" label={t('files.edit')} onClick={() => (e.is_dir ? setRenameTarget(e) : setEditTarget(e))} />
+          {!e.is_dir && <RowAction action="history" label={t('configs.versionHistoryTitle')} onClick={() => setHistoryTarget(e)} />}
           <RowAction action="delete" label={t('files.delete')} danger loading={busy === `rm:${e.path}`} onClick={() => remove(e)} />
         </span>
       ),
@@ -488,9 +529,23 @@ export default function FileBrowser() {
         <Button size="small" icon={<BranchesOutlined />} disabled={!dir} onClick={() => setCloneModal(true)}>
           {t('files.clone')}
         </Button>
+        <Button size="small" icon={<HistoryOutlined />} disabled={!dir} onClick={() => setUploadsModal(true)}>
+          {t('files.uploads.button')}
+        </Button>
+        <Button size="small" icon={<LockOutlined />} disabled={!dir} onClick={() => setProtectModal(true)}>
+          {t('files.protect.button')}
+        </Button>
+        <Button size="small" icon={<DatabaseOutlined />} onClick={() => setStorageModal(true)}>
+          {t('files.history.button')}
+        </Button>
         <RowAction action="restart" label={t('common.refresh')} loading={listing.loading && !!listing.data} onClick={reload} />
       </div>
 
+      {planning && (
+        <div className="small muted" style={{ margin: '0.4rem 0' }}>
+          <Spinner /> {planning}
+        </div>
+      )}
       {upload && (
         <div className="col" style={{ gap: '0.2rem', margin: '0.4rem 0' }}>
           <div className="row small" style={{ gap: '0.5rem', alignItems: 'center' }}>
@@ -611,6 +666,49 @@ export default function FileBrowser() {
             setOpenJob(job)
           }}
         />
+      )}
+      {plan && dir && (
+        <UploadPlanModal
+          dir={dir}
+          pending={plan.pending}
+          plan={plan.plan}
+          onClose={() => setPlan(null)}
+          onEditProtect={() => setProtectModal(true)}
+          onStart={(list, force, note) => {
+            const skipped = plan.skipped
+            setPlan(null)
+            void runUpload(list, force, note, skipped)
+          }}
+        />
+      )}
+      {uploadsModal && dir && (
+        <UploadsModal
+          dir={dir}
+          onClose={() => setUploadsModal(false)}
+          onJob={async (id) => {
+            try {
+              setOpenJob(await api<Job>(`/jobs/${id}`))
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err))
+            }
+          }}
+        />
+      )}
+      {protectModal && dir && me.data && (
+        <ProtectModal
+          dir={dir}
+          me={me.data}
+          onClose={() => setProtectModal(false)}
+          onSaved={() => {
+            setProtectModal(false)
+            // План пересчитывается с новыми шаблонами.
+            if (plan) void uploadPending(plan.pending)
+          }}
+        />
+      )}
+      {storageModal && <HistoryStorageModal onClose={() => setStorageModal(false)} />}
+      {historyTarget && me.data && (
+        <FileHistoryModal path={historyTarget.path} me={me.data} onClose={() => setHistoryTarget(null)} onChanged={() => void reload()} />
       )}
       {openJob && (
         <JobLogModal
