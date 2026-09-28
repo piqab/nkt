@@ -2110,7 +2110,8 @@
     "addOwnBody": "Образ ляжет в каталог дисков libvirt (/var/lib/libvirt/images) — туда же, где лежат диски машин, и оттуда его видно в списке ниже.",
     "confirmDeleteHost": "Удалить файл «{{name}}» из каталога дисков libvirt? Это необратимо.",
     "confirmDeleteHostBusy": "Файл «{{name}}» — диск машины «{{vm}}». Удалить его? Машина останется без диска и перестанет запускаться.",
-    "networkWillCreate": "default — будет создана при запуске"
+    "networkWillCreate": "default — будет создана при запуске",
+    "bulkBusyDisks": "Среди них диски машин: {{list}} — машины останутся без них."
   },
   "vmnet": {
     "title": "Сети машин",
@@ -3156,5 +3157,15 @@
     "dnsMatch": "{{domain}} указывает на этот хост ({{ips}}) — сертификат выпустится",
     "dnsMissing": "{{domain}} не найдено в DNS — заведите A-запись на адрес хоста",
     "dnsMismatch": "{{domain}} указывает на {{ips}}, а у хоста адреса {{host}} — Let's Encrypt не выдаст сертификат"
+  },
+  "bulk": {
+    "selected_one": "Выбран {{count}}",
+    "selected_few": "Выбрано {{count}}",
+    "selected_many": "Выбрано {{count}}",
+    "selected_other": "Выбрано {{count}}",
+    "deleteSelected": "Удалить выбранные ({{count}})",
+    "clear": "снять выбор",
+    "deleting": "удаляется…",
+    "confirmDelete": "Удалить выбранные ({{count}}): {{names}}?"
   }
 }

@@ -97,6 +97,15 @@ export default function Configs({ me }: { me: Me }) {
   // для остальных проверять нечего.
   const [sshForce, setSSHForce] = useState(false)
 
+  // Другой файл — сообщение о записи прошлого («Файл сохранён…»), ошибка и
+  // открытый дифф версии к нему уже не относятся.
+  function openFile(p: string | null) {
+    setPath(p)
+    setResult(null)
+    setError(null)
+    setDiff(null)
+  }
+
   const file = useApi<FileContent>(path ? `/configs/file${qs({ path })}` : null)
   const versions = useApi<{ versions: ConfigVersion[] }>(path ? `/configs/versions${qs({ path })}` : null)
 
@@ -356,7 +365,7 @@ export default function Configs({ me }: { me: Me }) {
                   type="text"
                   onClick={() => {
                     setCreatingPath(null)
-                    setPath(f.path)
+                    openFile(f.path)
                     setView('text')
                   }}
                   style={{
@@ -758,7 +767,7 @@ export default function Configs({ me }: { me: Me }) {
                   if (newFileModal.cloneFrom && p === newFileModal.cloneFrom) return
                   setCreatingPath(p)
                   setCreatingInitialContent(newFileModal.initialContent ?? '')
-                  setPath(null)
+                  openFile(null)
                   setNewFileModal(null)
                 }}
                 onCancel={() => setNewFileModal(null)}

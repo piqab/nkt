@@ -96,10 +96,12 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - Actions: start, stop, restart, reload, enable/disable autostart, unit log.
 - Service configuration check (`nginx -t`, `haproxy -c`, …) before an action.
 - "Other services": processes started by hand or from a container, with their sockets and exposure; terminate with SIGTERM/SIGKILL.
-- Install a missing service as a package with a live apt log.
+- The table shows every installed service, running and stopped (with "start"); services that aren't installed are installed via Packages.
 - Open port probe: TCP, HTTP/HTTPS, TLS handshake, arbitrary `curl` — with body, headers, rendering of the received page and response download.
 
 ### Containers & VMs
+
+- Deleting in bulk by checkboxes (containers, instances, snapshots, machines, images, disk files, LXD networks, Kubernetes objects); long deletions run as a job with the row locked until done and related tables rebuilt afterwards.
 - **Docker**: containers (state, image, ports, networks), start/stop/restart/remove, logs, a console inside, container creation, compose stack scanning; container backup and restore (a compose stack as a whole).
 - **Docker → images**: list with size, date and usage, removal, saving to a tar on the host, pruning dangling layers.
 - **Docker → stacks**: the host's compose files, `up`/`down`/`restart`, compose editing through the config editor, a new stack from a template.

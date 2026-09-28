@@ -18,6 +18,7 @@ import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { PowerToggle, vmPowerState } from '../components/PowerToggle'
 import VMImagesSection from '../components/VMImagesSection'
+import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 
 function domainXMLSkeleton(name: string): string {
   return domainXMLFromWizard(name, { memoryMB: 2048, vcpus: 2, diskPath: defaultDiskPath(name), bridge: 'br0' })
@@ -65,6 +66,7 @@ function vmColumns(
   openConsole: (name: string) => void,
   openScreen: (name: string) => void,
   editXML: (name: string) => void,
+  deleting: (name: string) => boolean = () => false,
 ): TableColumnsType<VirtualMachine> {
   const t = i18n.t.bind(i18n)
   return [
@@ -202,9 +204,10 @@ function vmColumns(
                   подтверждения, по умолчанию выключена. */}
               <RowAction
                 action="delete"
-                label={t('common.delete')}
+                label={deleting(vm.name) ? t('bulk.deleting') : t('common.delete')}
                 danger
-                loading={busy === `${vm.name}:delete`}
+                disabled={deleting(vm.name)}
+                loading={busy === `${vm.name}:delete` || deleting(vm.name)}
                 onClick={() => void del(vm.name)}
               />
             </>
@@ -231,6 +234,18 @@ export default function Virtualization({ me }: { me: Me }) {
   const [chooserOpen, setChooserOpen] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
+  // Удаление машины (с дисками — минуты) — заданием; по окончании
+  // перестраиваются и машины, и файлы дисков ниже.
+  const [imagesReload, setImagesReload] = useState(0)
+  const dels = useDeletions(async () => {
+    await api('/inventory/refresh', { method: 'POST' }).catch(() => {})
+    await vms.reload()
+    setImagesReload((n) => n + 1)
+  })
+  const [selected, setSelected] = useState<string[]>([])
+  const delKeyOf = (name: string): DeleteItem => ({ kind: 'vm', name })
+  const legacyDelete = (it: DeleteItem) =>
+    api(`/vms/${it.name}${qs({ remove_storage: it.remove_storage ? 'true' : '' })}`, { method: 'DELETE' }).then(() => undefined)
   // Раздел показывает снимок инвентаря: при входе он пересобирается сам,
   // иначе только что поднятого контейнера в списке не окажется.
   const { rescanning, rescan } = useHostRescan({
@@ -281,18 +296,29 @@ export default function Virtualization({ me }: { me: Me }) {
       optionHint: t('virt.deleteDisksHint'),
     })
     if (!answer) return
-    const removeStorage = answer.checked
-    setBusy(`${name}:delete`)
     setNotice(null)
     try {
-      await api(`/vms/${name}${qs({ remove_storage: removeStorage ? 'true' : '' })}`, { method: 'DELETE' })
-      setNotice({ kind: 'info', text: t('virt.definitionDeleted', { name }) })
-      await api('/inventory/refresh', { method: 'POST' })
-      await vms.reload()
+      await dels.remove([{ kind: 'vm', name, remove_storage: answer.checked }], legacyDelete)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setBusy(null)
+    }
+  }
+
+  async function delSelected() {
+    const list = allVMs.filter((vm) => selected.includes(vm.name) && vm.persistent && !dels.isDeleting(delKeyOf(vm.name)))
+    if (list.length === 0) return
+    const answer = await confirmWithOption(
+      t('bulk.confirmDelete', { count: list.length, names: list.map((vm) => vm.name).join(', ') }),
+      t('virt.deleteDisksOption'),
+      { optionHint: t('virt.deleteDisksHint') },
+    )
+    if (!answer) return
+    setNotice(null)
+    try {
+      await dels.remove(list.map((vm) => ({ kind: 'vm' as const, name: vm.name, remove_storage: answer.checked })), legacyDelete)
+      setSelected([])
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
   }
 
@@ -342,10 +368,20 @@ export default function Virtualization({ me }: { me: Me }) {
           // и надо запустить, переименовать или удалить. Чипсами она
           // теряла и состояние, и все действия над собой.
           <div className="table-wrap">
+            <BulkDeleteBar count={selected.length} onDelete={() => void delSelected()} onClear={() => setSelected([])} />
             <DataTable<VirtualMachine>
               dataSource={allVMs}
               rowKey="name"
-              columns={vmColumns(canControl, busy, act, toggleAutostart, del, (name) => setBackupFor(name), (name) => setConsoleFor(name), (name) => setScreenFor(name), (name) => setEditing(name))}
+              columns={vmColumns(canControl, busy, act, toggleAutostart, del, (name) => setBackupFor(name), (name) => setConsoleFor(name), (name) => setScreenFor(name), (name) => setEditing(name), (name) => dels.isDeleting(delKeyOf(name)))}
+              rowSelection={
+                canControl
+                  ? {
+                      selectedRowKeys: selected,
+                      onChange: (keys) => setSelected(keys as string[]),
+                      getCheckboxProps: (vm) => ({ disabled: !vm.persistent || dels.isDeleting(delKeyOf(vm.name)) }),
+                    }
+                  : undefined
+              }
             />
           </div>
         )}
@@ -365,7 +401,8 @@ export default function Virtualization({ me }: { me: Me }) {
           файлы дисков хоста и его сети. Раньше они жили в «Профилях» —
           рядом с описаниями желаемого состояния, к которым отношения не
           имеют. */}
-      <VMImagesSection me={me} />
+      <VMImagesSection me={me} reloadKey={imagesReload} />
+      {dels.modal}
 
       {consoleFor && <ConsoleModal kind="vm" name={consoleFor} onClose={() => setConsoleFor(null)} />}
       {screenFor && (

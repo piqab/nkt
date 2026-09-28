@@ -8,6 +8,27 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.34 — 2026-09-28
+
+- **Deleting in "Containers & VMs" — by checkboxes and without repeats.**
+  Docker and Podman containers, LXD instances and snapshots, libvirt
+  machines, container images, machine images and disk files, LXD networks
+  and images and Kubernetes objects can be selected and deleted at once.
+  Potentially long deletions (containers, instances, snapshots, machines,
+  container images, Kubernetes objects) run as a background job with a
+  log: while an object is being deleted its row is locked — even after a
+  page reload — and clicking again opens the same job. Afterwards the host
+  is rescanned and the tables are rebuilt, related ones included (delete a
+  machine with its disks and the disk list refreshes too). Quick deletions
+  (LXD networks and images, machine images and templates, backups) happen
+  right away, with the buttons locked meanwhile.
+- **"Services":** no more chips above the table — it lists every installed
+  service, running ones on top, stopped and failed ones below with a
+  "start" button. Services that aren't installed are not shown: install
+  them in "Packages".
+- **"Configs":** the "File saved and configuration reloaded" message no
+  longer stays when you switch to another file.
+
 ## v1.11.33 — 2026-09-28
 
 - **Uploads to "Disks → Files" with a plan and a diff.** Before writing —

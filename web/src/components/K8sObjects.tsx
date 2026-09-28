@@ -7,7 +7,8 @@ import type { Me } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, formatRelative } from './ui'
 import { DataTable } from './DataTable'
 import { confirmAction } from './confirm'
-import { CreateNamespaceButton, ForwardsBar, K8sRowActions } from './K8sActions'
+import { CreateNamespaceButton, ForwardsBar, K8sRowActions, k8sDeleteItem } from './K8sActions'
+import { BulkDeleteBar, useDeletions } from './useDeletions'
 import { K8sNewObjectModal } from './K8sYAML'
 import { AIExplain } from './AIExplain'
 import { K8sHelm } from './K8sHelm'
@@ -171,6 +172,10 @@ function ResourceTable({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- только по новому объекту
   }, [gen])
   const [filter, setFilter] = useState('')
+  // Удаление — заданием: одно на таблицу, выбранные строки разом.
+  const dels = useDeletions(() => res.reload())
+  const [selected, setSelected] = useState<string[]>([])
+  const canDelete = me.is_admin && me.allow_mutations && kind !== 'events' && kind !== 'nodes'
   const [data, setData] = useState<{ title: string; values: Record<string, string>; secret: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const namespaced = res.data?.namespaced ?? true
@@ -245,7 +250,7 @@ function ResourceTable({
             title: '',
             key: 'actions',
             width: 40,
-            render: (_: unknown, r: Row) => <K8sRowActions kind={kind} row={r} me={me} onChanged={() => void res.reload()} onError={setError} />,
+            render: (_: unknown, r: Row) => <K8sRowActions kind={kind} row={r} me={me} onChanged={() => void res.reload()} onError={setError} deleter={dels} />,
           },
         ]
       : []),
@@ -279,7 +284,37 @@ function ResourceTable({
         <Loading what={t(`k8s.kind.${kind}`, { defaultValue: kind })} />
       ) : (
         <div className="table-wrap">
-          <DataTable<Row> dataSource={rows} rowKey={(r) => `${r.namespace ?? ''}/${r.name}`} size="small" columns={columns} />
+          <BulkDeleteBar
+            count={selected.length}
+            onClear={() => setSelected([])}
+            onDelete={async () => {
+              const list = rows.filter((r) => selected.includes(`${r.namespace ?? ''}/${r.name}`) && !dels.isDeleting(k8sDeleteItem(kind, r)))
+              if (list.length === 0) return
+              if (!(await confirmAction(t('bulk.confirmDelete', { count: list.length, names: list.map((r) => (r.namespace ? `${r.namespace}/${r.name}` : r.name)).join(', ') })))) return
+              try {
+                await dels.remove(list.map((r) => k8sDeleteItem(kind, r)))
+                setSelected([])
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err))
+              }
+            }}
+          />
+          <DataTable<Row>
+            dataSource={rows}
+            rowKey={(r) => `${r.namespace ?? ''}/${r.name}`}
+            size="small"
+            columns={columns}
+            rowSelection={
+              canDelete
+                ? {
+                    selectedRowKeys: selected,
+                    onChange: (keys) => setSelected(keys as string[]),
+                    getCheckboxProps: (r) => ({ disabled: dels.isDeleting(k8sDeleteItem(kind, r)) }),
+                  }
+                : undefined
+            }
+          />
+          {dels.modal}
         </div>
       )}
       {data && (

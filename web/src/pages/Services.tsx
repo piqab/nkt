@@ -6,8 +6,6 @@ import { useHostRescan } from '../rescan'
 import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
 import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
-import { InactiveSummary } from '../components/InactiveSummary'
-import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
@@ -169,13 +167,6 @@ export default function Services({ me }: { me: Me }) {
   // straight to it: TERM first always, KILL only on request.
   const [killEscalation, setKillEscalation] = useState<Listener | null>(null)
   const [logsFor, setLogsFor] = useState<ServiceUnit | null>(null)
-  // Set when the operator clicks a not-installed service's chip in the
-  // inactive summary below — opens PackageInstallModal against
-  // /services/{name}/install/ws, the same shared apt-get-install-live
-  // component tmux/dbus already use, just pointed at this
-  // service's own install route.
-  const [installTarget, setInstallTarget] = useState<string | null>(null)
-  const [installOutcome, setInstallOutcome] = useState<{ ok: boolean; exitCode?: number } | null>(null)
 
   const canControl = me.is_admin && me.allow_mutations
   // Раздел показывает снимок инвентаря: при входе он пересобирается сам,
@@ -186,8 +177,11 @@ export default function Services({ me }: { me: Me }) {
     onNotice: (kind, text) => setNotice({ kind, text }),
   })
   const allServices = services.data?.services ?? []
-  const activeServices = allServices.filter((s) => s.active_state === 'active')
-  const inactiveServices = allServices.filter((s) => s.active_state !== 'active')
+  // В таблице — установленные службы: работающие сверху, остановленные и
+  // упавшие ниже (у них — «запустить» и журнал). Неустановленные не
+  // показываются: ставятся они через «Пакеты».
+  const stateOrder = (s: ServiceUnit) => (s.active_state === 'active' ? 0 : s.active_state === 'failed' ? 1 : 2)
+  const installedServices = allServices.filter((s) => s.installed).sort((a, b) => stateOrder(a) - stateOrder(b) || a.name.localeCompare(b.name))
   const miscListeners = misc.data?.listeners ?? []
   const manual = miscListeners.filter((l) => l.origin === 'manual').length
 
@@ -220,16 +214,6 @@ export default function Services({ me }: { me: Me }) {
     } finally {
       setBusy(null)
     }
-  }
-
-  async function handleInstallFinished() {
-    if (!installTarget) return
-    const fresh = await api<{ succeeded?: boolean; exit_code?: number }>(
-      `/services/${installTarget}/install/status`,
-    ).catch(() => null)
-    setInstallOutcome(fresh?.succeeded ? { ok: true } : { ok: false, exitCode: fresh?.exit_code })
-    await api('/inventory/refresh', { method: 'POST' }).catch(() => {})
-    await services.reload()
   }
 
   /**
@@ -416,46 +400,9 @@ export default function Services({ me }: { me: Me }) {
           <Loading what={t('services.loadingServiceState')} />
         ) : (
           <>
-            <InactiveSummary
-              items={inactiveServices}
-              getKey={(s) => s.name}
-              getLabel={(s) => s.name}
-              getTooltip={(s) => (
-                <>
-                  <div>{s.description || s.unit}</div>
-                  <div>{t('services.state', { state: s.active_state, sub: s.sub_state ? ` (${s.sub_state})` : '' })}</div>
-                  {s.active_state === 'unknown' && <div>{t('services.stateUnknown')}</div>}
-                  {!canControl ? (
-                    !s.installed && <div>{t('services.notInstalled')}</div>
-                  ) : (
-                    <div>{s.installed ? t('services.clickToStart') : t('services.clickToInstall')}</div>
-                  )}
-                </>
-              )}
-              onRescan={rescan}
-              rescanning={rescanning}
-              onItemClick={(s) => {
-                if (!s.installed) {
-                  setInstallOutcome(null)
-                  setInstallTarget(s.name)
-                  return
-                }
-                // Already installed, just not active — no table row of its
-                // own to offer a Start button (activeServices filters it
-                // out), so the chip that already tells you it's stopped is
-                // the only place left to act on that.
-                void act(s.name, 'start')
-              }}
-              isClickable={() => canControl}
-              // Жёлтый — «не установлен», серый — «состояние неизвестно»
-              // (systemctl не ответил, обычно из-за недоступной шины).
-              // Раньше оба случая выглядели одинаково, и работающая служба
-              // с непрочитанным состоянием читалась как неустановленная.
-              getColor={(s) => (s.installed ? (s.active_state === 'unknown' ? 'default' : undefined) : 'gold')}
-            />
             <div className="table-wrap">
               <DataTable<ServiceUnit>
-                dataSource={activeServices}
+                dataSource={installedServices}
                 columns={columns}
                 rowKey="name"
                 // Ширина по содержимому: при делении поровну колонке
@@ -502,15 +449,6 @@ export default function Services({ me }: { me: Me }) {
 
       {logsFor && <ServiceLogsModal service={logsFor} onClose={() => setLogsFor(null)} />}
 
-      {installTarget && (
-        <PackageInstallModal
-          packageName={installTarget}
-          wsPath={`/services/${installTarget}/install/ws`}
-          onClose={() => setInstallTarget(null)}
-          onFinished={handleInstallFinished}
-          outcome={installOutcome}
-        />
-      )}
     </>
   )
 }

@@ -16,6 +16,7 @@ import ContainerLogsModal from '../components/ContainerLogsModal'
 import { ConsoleModal } from '../components/ConsoleModal'
 import { BackupModal } from '../components/BackupModal'
 import { useJobLauncher } from '../components/useJobLauncher'
+import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 
 export default function Podman({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -26,6 +27,13 @@ export default function Podman({ me }: { me: Me }) {
   const [creating, setCreating] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
+  const dels = useDeletions(async () => {
+    await api('/inventory/refresh', { method: 'POST' }).catch(() => {})
+    await containers.reload()
+  })
+  const [selected, setSelected] = useState<string[]>([])
+  const delItem = (c: PodmanContainer): DeleteItem => ({ kind: 'podman', name: c.name, force: c.state === 'running' })
+  const legacyDelete = (it: DeleteItem) => api(`/podman/containers/${it.name}`, { method: 'DELETE' }).then(() => undefined)
   // Раздел показывает снимок инвентаря: при входе он пересобирается сам,
   // иначе только что поднятого контейнера в списке не окажется.
   const { rescanning, rescan } = useHostRescan({
@@ -74,19 +82,26 @@ export default function Podman({ me }: { me: Me }) {
     }
   }
 
-  async function del(name: string) {
-    if (!(await confirmAction(t('common.confirmDelete', { what: t('podman.container'), name })))) return
-    setBusy(`${name}:delete`)
+  async function del(c: PodmanContainer) {
+    if (!(await confirmAction(t('common.confirmDelete', { what: t('podman.container'), name: c.name })))) return
     setNotice(null)
     try {
-      await api(`/podman/containers/${name}`, { method: 'DELETE' })
-      setNotice({ kind: 'info', text: t('common.deleted', { name }) })
-      await api('/inventory/refresh', { method: 'POST' })
-      await containers.reload()
+      await dels.remove([delItem(c)], legacyDelete)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setBusy(null)
+    }
+  }
+
+  async function delSelected() {
+    const list = allContainers.filter((c) => selected.includes(c.id) && !dels.isDeleting(delItem(c)))
+    if (list.length === 0) return
+    if (!(await confirmAction(t('bulk.confirmDelete', { count: list.length, names: list.map((c) => c.name).join(', ') })))) return
+    setNotice(null)
+    try {
+      await dels.remove(list.map(delItem), legacyDelete)
+      setSelected([])
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
   }
 
@@ -159,10 +174,11 @@ export default function Podman({ me }: { me: Me }) {
           {canControl && (
             <RowAction
               action="delete"
-              label={t('common.delete')}
+              label={dels.isDeleting(delItem(c)) ? t('bulk.deleting') : t('common.delete')}
               danger
-              loading={busy === `${c.name}:delete`}
-              onClick={() => del(c.name)}
+              disabled={dels.isDeleting(delItem(c))}
+              loading={dels.isDeleting(delItem(c))}
+              onClick={() => void del(c)}
             />
           )}
         </div>
@@ -228,12 +244,23 @@ export default function Podman({ me }: { me: Me }) {
               onRescan={rescan}
               rescanning={rescanning}
             />
+            <BulkDeleteBar count={selected.length} onDelete={() => void delSelected()} onClear={() => setSelected([])} />
             <div className="table-wrap">
               <DataTable<PodmanContainer>                 dataSource={activeContainers}
                 columns={columns}
                 rowKey="id"
+                rowSelection={
+                  canControl
+                    ? {
+                        selectedRowKeys: selected,
+                        onChange: (keys) => setSelected(keys as string[]),
+                        getCheckboxProps: (c) => ({ disabled: dels.isDeleting(delItem(c)) }),
+                      }
+                    : undefined
+                }
               />
             </div>
+            {dels.modal}
           </>
         )}
       </Card>
