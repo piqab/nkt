@@ -493,6 +493,9 @@ type hostWithOverview struct {
 	// since every page keeps working, just without whatever the new
 	// version added.
 	RunningVersion string `json:"running_version,omitempty"`
+	// InstallActive — установка или обновление nkt на хосте идёт или ждёт
+	// очереди: «обновить всё» такие хосты не трогает.
+	InstallActive bool `json:"install_active,omitempty"`
 	// HubVersion — версия самого хаба на момент ответа. Интерфейс
 	// сравнивает с ней nkt_version хоста; раньше он брал версию хаба из
 	// /auth/me, загруженного при открытии вкладки, и после самообновления
@@ -578,6 +581,7 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 				row.LastPolledAt = store.FormatTime(ov.LastPolledAt)
 			}
 		}
+		row.InstallActive = s.hub.InstallActive(h.ID)
 		row.TunnelConnected = s.hub.TunnelConnected(h.ID)
 		row.AptProxyConnected = s.hub.AptProxyConnected(h.ID)
 		if h.ParentID != 0 {

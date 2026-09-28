@@ -118,7 +118,11 @@ entries into "error" on start — the buttons are available again.
   doesn't reinstall hosts in a loop after the hub is updated.
 - **"Update all"** — a job for each outdated host, at most three at a
   time (otherwise dozens of SSH connections hit sshd's `MaxStartups` or a
-  jump host).
+  jump host). The confirmation window shows who gets updated and who
+  doesn't: hosts where an update is already running or queued are left
+  alone ("updating: N" next to the button), unreachable ones are skipped,
+  and ones that failed last time only with the "retry failed" checkbox.
+  While updates run, the host list refreshes every few seconds.
 - **Sudo** — what the last installation found: "passwordless", "password
   required" or "unknown". With "passwordless" there is a **"remove
   NOPASSWD"** button — it deletes `/etc/sudoers.d/nkt-hub` when permanent

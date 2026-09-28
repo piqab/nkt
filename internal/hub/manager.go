@@ -878,6 +878,15 @@ func (m *Manager) StartInstall(ctx context.Context, hostID int64, force bool, bo
 	return id, nil
 }
 
+// InstallActive — у хоста есть незавершённое задание установки (идёт или
+// ждёт своей очереди).
+func (m *Manager) InstallActive(hostID int64) bool {
+	m.jobsMu.Lock()
+	job := m.jobByHost[hostID]
+	m.jobsMu.Unlock()
+	return job != nil && !job.isDone()
+}
+
 // CancelInstall stops host's in-flight install, if the hub still has a live
 // goroutine running it, and marks the host as errored either way. When
 // there is no job to cancel — most often because the hub itself restarted

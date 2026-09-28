@@ -516,7 +516,6 @@
     "confirmBulkStart": "Start nkt on every host at once ({{count}})?",
     "confirmBulkStop": "Stop nkt on every host at once ({{count}})? They'll all become unreachable through the hub until you start them again.",
     "bulkFailed": "Failed on {{failed}} of {{total}} hosts.",
-    "confirmUpdateAll": "Bring nkt to the hub's version on {{count}} hosts with a different version? This runs sequentially, one host at a time.",
     "confirmImport": "Import hosts from this file? Hosts are added alongside existing ones (the file doesn't replace or dedupe by name/address). Secrets in the file only decrypt if it was exported with this same hub's NKT_HUB_MASTER_KEY.",
     "imported": "Imported hosts: {{count}}.{{errors}}",
     "importedErrors": " Errors: {{errors}}.",
@@ -727,7 +726,15 @@
     "statusReachable": "reachable",
     "statusUnreachable": "unreachable — last reply: {{time}}",
     "statusNotPolled": "not polled yet",
-    "noData": "no data"
+    "noData": "no data",
+    "updatingNow": "updating: {{count}}",
+    "updateSkippedUnreachable": "unreachable, skipped: {{count}}",
+    "updateAllTitle": "Update nkt on hosts",
+    "updateAllReady": "Will be brought to the hub version: {{count}}",
+    "updateAllRetryFailed": "retry failed ({{count}}):",
+    "updateAllActive": "Already updating, left alone: {{names}}",
+    "updateAllUnreachable": "Unreachable, skipped: {{names}}",
+    "updateAllStart": "Update ({{count}})"
   },
   "events": {
     "title": "Alerts",
@@ -1674,7 +1681,8 @@
     "skipHidden": "skip hidden",
     "skipHiddenHint": "Do not upload hidden files and folders (starting with a dot: .git, .env) and whatever the uploaded folder's .gitignore lists. Uncheck to upload everything as is.",
     "uploadSkipped": "skipped: {{count}} (hidden and .gitignore)",
-    "retryFailed": "retry failed ({{count}})"
+    "retryFailed": "retry failed ({{count}})",
+    "configHint": "This is a {{service}} configuration: it is written as in \"Configs\", checked by the service and rolled back on error; the version history is shared."
   },
   "hardware": {
     "title": "Hardware",

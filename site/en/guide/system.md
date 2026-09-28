@@ -27,8 +27,15 @@ title: Packages, disks, files, system
   uploaded folder's `.gitignore` lists; a failed file is retried up to
   three times, the rest with the "retry failed" button); unpacking zip/tar in place; `git
   clone` as a job, private repositories included (a token over HTTPS or
-  the host's deploy key over SSH); a file editor with line numbers and
-  protection against overwriting someone else's change.
+  the host's deploy key over SSH).
+- **Editing text files — as in "Configs"**: line numbers, an edit
+  comment, a "on disk → draft" diff before writing, protection against
+  overwriting someone else's change and a **"Version history"** tab — who
+  changed what, when and why, a diff of any version against the current
+  file, rollback (also as a version). If the file is a configuration of a
+  known service (say, a compose file in `/srv`), it is written with the
+  service's check and a rollback on error, and the history is shared with
+  "Configs".
 
 ## Hardware
 

@@ -123,6 +123,8 @@ export interface HubHost {
    * wire (see internal/hub/handlers.go's hostWithOverview). Stale findings
    * from an earlier successful poll are kept even while this is false. */
   reachable?: boolean
+  /** Установка или обновление nkt идёт или ждёт очереди. */
+  install_active?: boolean
   last_polled_at?: string
   /** У машины — состояние её домена libvirt по данным опроса хоста:
    * «running», «shut off»… Пусто у обычных хостов и пока хост не

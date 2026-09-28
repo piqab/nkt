@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type React from 'react'
-import { Button, Checkbox, Input, Progress, Select, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, Progress, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { FolderOutlined, FolderAddOutlined, FileOutlined, FileZipOutlined, BranchesOutlined, DownloadOutlined, UploadOutlined, ReloadOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, apiURL, qs, useApi } from '../api'
-import type { Job } from '../types'
+import type { Job, Me, WriteResult } from '../types'
+import { VersionHistory } from './VersionHistory'
 import { Banner, Card, CodeEditor, DiffView, Modal, Spinner } from './ui'
 import { unifiedDiff } from './textDiff'
 import { formatBytes } from './charts'
@@ -674,6 +675,8 @@ interface FileText {
   size: number
   sha256: string
   mode: string
+  /** Файл — конфигурация этого сервиса («nginx»…): запись через «Конфигурации». */
+  config_service?: string
 }
 
 /**
@@ -683,9 +686,13 @@ interface FileText {
  */
 function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: () => void; onSaved: () => void }) {
   const { t } = useTranslation()
+  const me = useApi<Me>('/auth/me')
   const text = useApi<FileText>(`/files/read${qs({ path: entry.path })}`)
   const [name, setName] = useState(entry.name)
   const [content, setContent] = useState<string | null>(null)
+  const [note, setNote] = useState('')
+  const [apply, setApply] = useState(true)
+  const [tab, setTab] = useState<'edit' | 'history'>('edit')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
@@ -696,6 +703,9 @@ function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: (
   // Файл не прочитался (двоичный, нет прав) — содержимое не править, но
   // переименовать всё равно можно: имя не зависит от того, что внутри.
   const unreadable = !!text.error && !text.data
+  // Файл — конфигурация известного сервиса: запись как в «Конфигурациях»
+  // (проверка сервисом, откат при ошибке), переименование — нет.
+  const configService = text.data?.config_service
   const renamed = trimmed !== entry.name
   const dirty = unreadable ? renamed : content !== null && text.data !== null && (content !== text.data.content || renamed)
   const canSave = dirty && !badName(trimmed) && !busy
@@ -714,12 +724,22 @@ function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: (
     try {
       if (unreadable) {
         await api('/files/rename', { method: 'POST', body: { path: entry.path, to: joinPath(parentOf(entry.path), trimmed) } })
-      } else {
-        if (content === null || !text.data) return
-        await api('/files/write', {
-          method: 'POST',
-          body: { path: entry.path, content, expected_sha256: text.data.sha256, name: trimmed },
-        })
+      } else if (content !== null && text.data) {
+        if (configService) {
+          const res = await api<WriteResult>('/configs/file', {
+            method: 'PUT',
+            body: { path: entry.path, content, note: note.trim(), apply, expected_sha256: text.data.sha256 },
+          })
+          if (res.rolled_back) {
+            setError([res.message, res.validation?.stderr || res.validation?.stdout].filter(Boolean).join('\n'))
+            return
+          }
+        } else {
+          await api('/files/write', {
+            method: 'POST',
+            body: { path: entry.path, content, expected_sha256: text.data.sha256, name: trimmed, note: note.trim() },
+          })
+        }
       }
       onSaved()
     } catch (err) {
@@ -729,37 +749,90 @@ function FileEditorModal({ entry, onClose, onSaved }: { entry: Entry; onClose: (
     }
   }
 
-  return (
-    <Modal title={t('files.editTitle')} onClose={onClose} closeLabel={t('common.cancel')} width="min(96vw, 1100px)">
-      <div className="col" style={{ gap: '0.6rem' }}>
-        {error && <Banner kind="error">{error}</Banner>}
-        {text.error && <Banner kind="error">{text.error}</Banner>}
-        {unreadable && <p className="small muted" style={{ margin: 0 }}>{t('files.renameOnly')}</p>}
-        <div className="filters" style={{ alignItems: 'flex-end' }}>
-          <label className="col" style={{ gap: '0.2rem', flex: 1 }}>
-            {t('files.fileName')}
-            <Input value={name} onChange={(e) => setName(e.target.value)} className="mono" />
-          </label>
-          <span className="small muted mono">{parentOf(entry.path)}/</span>
-          {text.data && (
-            <span className="small muted">
-              {formatBytes(text.data.size)} · {text.data.mode}
-            </span>
-          )}
-          <Button type="primary" disabled={!canSave} loading={busy} onClick={review}>
-            {unreadable ? t('files.rename') : t('common.save')}
-          </Button>
-        </div>
-        {unreadable ? null : content === null ? (
-          !text.error && (
-            <div className="small muted">
-              <Spinner /> {t('files.loadingFile')}
-            </div>
-          )
-        ) : (
-          <CodeEditor value={content} onChange={(e) => setContent(e.target.value)} rows={26} autoFocus />
+  const editor = (
+    <div className="col" style={{ gap: '0.6rem' }}>
+      {unreadable && <p className="small muted" style={{ margin: 0 }}>{t('files.renameOnly')}</p>}
+      {configService && <Banner kind="info">{t('files.configHint', { service: configService })}</Banner>}
+      <div className="filters" style={{ alignItems: 'flex-end' }}>
+        <label className="col" style={{ gap: '0.2rem', flex: 1 }}>
+          {t('files.fileName')}
+          <Input value={name} onChange={(e) => setName(e.target.value)} className="mono" disabled={!!configService} />
+        </label>
+        <span className="small muted mono">{parentOf(entry.path)}/</span>
+        {text.data && (
+          <span className="small muted">
+            {formatBytes(text.data.size)} · {text.data.mode}
+          </span>
         )}
       </div>
+      {!unreadable && (
+        <div className="filters" style={{ alignItems: 'center' }}>
+          <Input
+            size="small"
+            style={{ flex: 1, minWidth: 220 }}
+            placeholder={t('configs.editNotePlaceholder')}
+            addonBefore={t('configs.editNote')}
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+          />
+          {configService && (
+            <Checkbox checked={apply} onChange={(e) => setApply(e.target.checked)}>
+              {t('configs.reloadAfterSave')}
+            </Checkbox>
+          )}
+        </div>
+      )}
+      <div>
+        <Button type="primary" disabled={!canSave} loading={busy} onClick={review}>
+          {unreadable ? t('files.rename') : t('common.save')}
+        </Button>
+      </div>
+      {unreadable ? null : content === null ? (
+        !text.error && (
+          <div className="small muted">
+            <Spinner /> {t('files.loadingFile')}
+          </div>
+        )
+      ) : (
+        <CodeEditor value={content} onChange={(e) => setContent(e.target.value)} rows={24} autoFocus />
+      )}
+    </div>
+  )
+
+  return (
+    <Modal title={t('files.editTitle')} onClose={onClose} closeLabel={t('common.cancel')} width="min(96vw, 1100px)">
+      {error && <Banner kind="error"><pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>{error}</pre></Banner>}
+      {text.error && <Banner kind="error">{text.error}</Banner>}
+      {unreadable || !me.data ? (
+        editor
+      ) : (
+        <Tabs
+          activeKey={tab}
+          onChange={(k) => setTab(k as 'edit' | 'history')}
+          items={[
+            { key: 'edit', label: t('configs.editTab'), children: editor },
+            {
+              key: 'history',
+              label: t('configs.versionHistoryTitle'),
+              children: (
+                <>
+                  <p className="small muted" style={{ marginTop: 0 }}>{t('configs.versionHistoryHint')}</p>
+                  <VersionHistory
+                    path={entry.path}
+                    me={me.data}
+                    base={configService ? '/configs' : '/files'}
+                    apply={!!configService && apply}
+                    onChanged={() => {
+                      setContent(null)
+                      void text.reload()
+                    }}
+                  />
+                </>
+              ),
+            },
+          ]}
+        />
+      )}
       {preview !== null && (
         <Modal title={t('blocks.previewTitle')} onClose={() => setPreview(null)} width={900} maskClosable={false}>
           <DiffView text={preview} />
