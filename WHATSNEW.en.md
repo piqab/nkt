@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.32 — 2026-09-28
+
+- **"Update all" no longer starts updates twice.** While updates run, the
+  button doesn't count hosts whose installation is already running or
+  queued ("updating: N" next to it). Unreachable hosts are skipped, and
+  ones that failed last time are updated only with the "retry failed"
+  checkbox in the confirmation window — which also shows who gets updated,
+  who doesn't and why. While updates run, the host list refreshes every
+  few seconds.
+- **Editing files in "Disks" works as in "Configs".** An edit comment, a
+  diff before writing and a "Version history" tab: who changed what, when
+  and why, a diff of any version against the current file, rollback. If
+  the file is a configuration of a known service (e.g. a compose file in
+  `/srv`), it is written with the service's check and a rollback on error,
+  and the history is shared with "Configs".
+
 ## v1.11.31 — 2026-09-27
 
 - **nkt-edge: certbot issues the certificate during installation.**

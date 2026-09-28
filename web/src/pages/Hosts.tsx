@@ -72,6 +72,22 @@ function isOutdated(h: HubHost, hubVersion?: string): boolean {
   return h.status !== 'new' && !!hubVersion && !!h.nkt_version && h.nkt_version !== hubVersion
 }
 
+/** Кого трогает «обновить всё»: ready — отставшие и доступные; failed —
+ * отставшие, у которых прошлое обновление упало (только по галочке);
+ * active — установка уже идёт или ждёт очереди (их не трогаем);
+ * unreachable — хаб до них сейчас не достаёт (пропускаются). */
+function planUpdateAll(hosts: HubHost[], hubVersion?: string) {
+  const plan = { ready: [] as HubHost[], failed: [] as HubHost[], active: [] as HubHost[], unreachable: [] as HubHost[] }
+  for (const h of hosts) {
+    if (h.id === LOCAL_HOST_ID || !isOutdated(h, hubVersion)) continue
+    if (h.install_active || h.status === 'installing') plan.active.push(h)
+    else if (h.reachable === false) plan.unreachable.push(h)
+    else if (h.status === 'error') plan.failed.push(h)
+    else plan.ready.push(h)
+  }
+  return plan
+}
+
 /** Хост новее хаба: словами это не «обновить», а «привести к версии хаба». */
 function isAhead(h: HubHost, hubVersion?: string): boolean {
   return isOutdated(h, hubVersion) && !isOlderVersion(h.nkt_version ?? '', hubVersion ?? '')
@@ -315,6 +331,14 @@ export default function Hosts({
   // открытии вкладки, и после самообновления хаба в старой вкладке все
   // хосты «отставали», а каждое «открыть» переустанавливало ту же версию.
   const hubVersion = (hosts ?? []).find((h) => h.hub_version)?.hub_version ?? hubVersionProp
+  // Пока где-то идёт установка, список обновляется часто: закончившийся
+  // хост сразу получает новую версию в таблице, а не через полминуты.
+  const anyInstalling = (hosts ?? []).some((h) => h.install_active || h.status === 'installing')
+  useEffect(() => {
+    if (!anyInstalling) return
+    const id = window.setInterval(() => reload(), 4000)
+    return () => window.clearInterval(id)
+  }, [anyInstalling, reload])
   // Имена хостов — в размывку свободного текста (журналы, оповещения).
   useEffect(() => {
     setKnownNames((hosts ?? []).map((h) => h.name))
@@ -327,6 +351,7 @@ export default function Hosts({
   const [bulkBusy, setBulkBusy] = useState<'stop' | 'start' | null>(null)
   // «Обновить всё»: пока запускаются задания по хостам.
   const [bulkUpdating, setBulkUpdating] = useState(false)
+  const [updateAllDialog, setUpdateAllDialog] = useState(false)
   const [importing, setImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
   // Set when "экспорт с ключом" is clicked — opens ExportPasswordModal
@@ -637,11 +662,13 @@ export default function Hosts({
 
   /** «Обновить всё»: на каждый отставший хост заводится задание хаба
    * (очередь — по хосту, так что они идут параллельно), ход — в
-   * «Заданиях» и в статусах строк таблицы. */
-  async function updateAllOutdated() {
-    const targets = (hosts ?? []).filter((h) => h.id !== LOCAL_HOST_ID && isOutdated(h, hubVersion))
+   * «Заданиях» и в статусах строк таблицы. Хосты, у которых установка уже
+   * идёт или ждёт, недоступные и упавшие в прошлый раз в цели не входят —
+   * упавшие только по галочке «повторить неудачные». */
+  async function updateAllOutdated(retryFailed: boolean) {
+    const targets = [...updatePlan.ready, ...(retryFailed ? updatePlan.failed : [])]
+    setUpdateAllDialog(false)
     if (targets.length === 0) return
-    if (!(await confirmAction(t('hosts.confirmUpdateAll', { count: targets.length })))) return
     setNotice(null)
     setBulkUpdating(true)
     let started = 0
@@ -1271,10 +1298,14 @@ export default function Hosts({
     },
   ]
 
-  const outdatedCount = (hosts ?? []).filter((h) => h.id !== LOCAL_HOST_ID && isOutdated(h, hubVersion)).length
+  const updatePlan = planUpdateAll(hosts ?? [], hubVersion)
+  const outdatedCount = updatePlan.ready.length + updatePlan.failed.length
 
   return (
     <>
+      {updateAllDialog && (
+        <UpdateAllModal plan={updatePlan} onClose={() => setUpdateAllDialog(false)} onStart={(retry) => void updateAllOutdated(retry)} />
+      )}
       {provisionOn && (
         <ProvisionVMModal
           host={provisionOn}
@@ -1393,10 +1424,16 @@ export default function Hosts({
               type={outdatedCount > 0 ? 'primary' : 'default'}
               loading={bulkUpdating}
               disabled={outdatedCount === 0 || bulkBusy !== null}
-              onClick={updateAllOutdated}
+              onClick={() => setUpdateAllDialog(true)}
             >
               {outdatedCount > 0 ? t('hosts.updateAllCount', { count: outdatedCount }) : t('hosts.updateAllNone')}
             </Button>
+            {updatePlan.active.length > 0 && <span className="small muted">{t('hosts.updatingNow', { count: updatePlan.active.length })}</span>}
+            {updatePlan.unreachable.length > 0 && (
+              <Tooltip title={updatePlan.unreachable.map((h) => h.name).join(', ')}>
+                <span className="small muted">{t('hosts.updateSkippedUnreachable', { count: updatePlan.unreachable.length })}</span>
+              </Tooltip>
+            )}
             <Button
               size="small"
               loading={bulkBusy === 'start'}
@@ -2917,5 +2954,37 @@ function DiscoverVMsPanel({ host, active, onImported }: { host: HubHost; active:
           </div>
         )}
       </div>
+  )
+}
+
+/** Подтверждение «обновить всё»: кого обновим, кого пропустим и почему;
+ * упавшие в прошлый раз — только по галочке. */
+function UpdateAllModal({ plan, onClose, onStart }: { plan: ReturnType<typeof planUpdateAll>; onClose: () => void; onStart: (retryFailed: boolean) => void }) {
+  const { t } = useTranslation()
+  const [retry, setRetry] = useState(false)
+  const names = (list: HubHost[]) => list.map((h) => h.name).join(', ')
+  const count = plan.ready.length + (retry ? plan.failed.length : 0)
+  return (
+    <Modal title={t('hosts.updateAllTitle')} onClose={onClose} width={560}>
+      <div className="col small" style={{ gap: '0.5rem' }}>
+        <div>
+          {t('hosts.updateAllReady', { count: plan.ready.length })}
+          {plan.ready.length > 0 && <div className="muted"><Sensitive>{names(plan.ready)}</Sensitive></div>}
+        </div>
+        {plan.failed.length > 0 && (
+          <Checkbox checked={retry} onChange={(e) => setRetry(e.target.checked)}>
+            {t('hosts.updateAllRetryFailed', { count: plan.failed.length })} <span className="muted"><Sensitive>{names(plan.failed)}</Sensitive></span>
+          </Checkbox>
+        )}
+        {plan.active.length > 0 && <div className="muted">{t('hosts.updateAllActive', { names: names(plan.active) })}</div>}
+        {plan.unreachable.length > 0 && <div className="muted">{t('hosts.updateAllUnreachable', { names: names(plan.unreachable) })}</div>}
+        <div className="row" style={{ justifyContent: 'flex-end' }}>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+          <Button type="primary" disabled={count === 0} onClick={() => onStart(retry)}>
+            {t('hosts.updateAllStart', { count })}
+          </Button>
+        </div>
+      </div>
+    </Modal>
   )
 }

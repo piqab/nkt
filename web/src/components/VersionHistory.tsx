@@ -11,11 +11,25 @@ import { confirmAction } from './confirm'
 /**
  * История версий файла конфигурации — для окон правки (XML машины и
  * др.): список версий, дифф выбранной с текущим файлом, откат. Та же
- * таблица, что на странице «Конфигурации», но самодостаточная.
+ * таблица, что на странице «Конфигурации», но самодостаточная. base —
+ * чьи это версии: «/configs» или «/files» (проводник «Дисков»: та же
+ * история по пути, но в границах корней проводника).
  */
-export function VersionHistory({ path, me, apply, onChanged }: { path: string; me: Me; apply?: boolean; onChanged?: () => void }) {
+export function VersionHistory({
+  path,
+  me,
+  apply,
+  onChanged,
+  base = '/configs',
+}: {
+  path: string
+  me: Me
+  apply?: boolean
+  onChanged?: () => void
+  base?: '/configs' | '/files'
+}) {
   const { t } = useTranslation()
-  const versions = useApi<{ versions: ConfigVersion[] }>(`/configs/versions${qs({ path })}`)
+  const versions = useApi<{ versions: ConfigVersion[] }>(`${base}/versions${qs({ path })}`)
   const [diff, setDiff] = useState<{ id: number; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
@@ -24,7 +38,7 @@ export function VersionHistory({ path, me, apply, onChanged }: { path: string; m
 
   async function showDiff(id: number) {
     if (diff?.id === id) return setDiff(null)
-    const res = await api<{ diff: string }>(`/configs/versions/${id}/diff`)
+    const res = await api<{ diff: string }>(`${base}/versions/${id}/diff`)
     setDiff({ id, text: res.diff || t('configs.noDiff') })
   }
 
@@ -33,7 +47,7 @@ export function VersionHistory({ path, me, apply, onChanged }: { path: string; m
     setBusy(true)
     setNotice(null)
     try {
-      const res = await api<WriteResult>(`/configs/versions/${id}/rollback`, { method: 'POST', body: { apply: !!apply } })
+      const res = await api<Partial<WriteResult> & { message: string }>(`${base}/versions/${id}/rollback`, { method: 'POST', body: { apply: !!apply } })
       setNotice({ kind: res.rolled_back ? 'error' : 'info', text: res.message })
       versions.reload()
       onChanged?.()
