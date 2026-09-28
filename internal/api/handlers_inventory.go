@@ -131,7 +131,14 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	top := snap.Findings
+	// Находка о заполнении истории файлов — в счётчиках и верхушке тоже:
+	// по ним хаб присылает оповещение о серьёзных проблемах.
+	extra := s.hostFindings(r)
+	counts := snap.FindingCounts()
+	for _, f := range extra {
+		counts[f.Severity]++
+	}
+	top := append(append([]model.Finding(nil), extra...), snap.Findings...)
 	if len(top) > 12 {
 		top = top[:12]
 	}
@@ -166,7 +173,7 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		// from here to show what is really running on a host, as opposed
 		// to what it recorded having installed there.
 		"version":      s.version,
-		"findings":     snap.FindingCounts(),
+		"findings":     counts,
 		"top_findings": top,
 		"services":     snap.Services,
 		"sources":      snap.Sources,
@@ -227,7 +234,7 @@ func (s *Server) handleFindings(w http.ResponseWriter, r *http.Request) {
 	// порт, и место ей в том же списке: заводить профилям собственный
 	// механизм оповещений значило бы просить оператора смотреть в два
 	// места вместо одного.
-	findings := snap.Findings
+	findings := append(append([]model.Finding(nil), snap.Findings...), s.hostFindings(r)...)
 	if report, ok := profile.LastDrift(r.Context(), s.db); ok {
 		drift := model.LocalizeFindings(msgs.LangFromRequest(r), profile.DriftFindings(report))
 		findings = append(append([]model.Finding(nil), findings...), drift...)
@@ -569,4 +576,12 @@ func (s *Server) handleContainerAction(w http.ResponseWriter, r *http.Request) {
 	}
 	s.rescanLater()
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+// hostFindings — находки не из скана: заполнение истории файлов.
+func (s *Server) hostFindings(r *http.Request) []model.Finding {
+	if s.configs == nil || s.db == nil {
+		return nil
+	}
+	return model.LocalizeFindings(msgs.LangFromRequest(r), s.configs.FileHistoryFindings(r.Context()))
 }

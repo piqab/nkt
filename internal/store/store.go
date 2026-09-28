@@ -111,6 +111,28 @@ CREATE TABLE IF NOT EXISTS config_versions (
 );
 CREATE INDEX IF NOT EXISTS idx_versions_path ON config_versions(path, ts DESC);
 
+-- Загрузки в «Диски → Файлы»: что легло, что было перезаписано (прежняя
+-- версия — в config_versions) — для истории и отката загрузки целиком.
+CREATE TABLE IF NOT EXISTS file_uploads (
+    id       INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts       TEXT NOT NULL,
+    author   TEXT NOT NULL,
+    dir      TEXT NOT NULL,
+    note     TEXT NOT NULL DEFAULT '',
+    status   TEXT NOT NULL              -- open | done | rolled_back
+);
+CREATE INDEX IF NOT EXISTS idx_file_uploads_dir ON file_uploads(dir, id DESC);
+CREATE TABLE IF NOT EXISTS file_upload_items (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    upload_id  INTEGER NOT NULL REFERENCES file_uploads(id) ON DELETE CASCADE,
+    path       TEXT NOT NULL,
+    existed    INTEGER NOT NULL,        -- 1 — файл был и перезаписан
+    version_id INTEGER NOT NULL DEFAULT 0, -- прежнее содержимое (0 — не вошло в историю)
+    size       INTEGER NOT NULL DEFAULT 0,
+    sha_after  TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_file_upload_items ON file_upload_items(upload_id);
+
 -- Inventory snapshots, kept so the UI can show what changed on the host.
 CREATE TABLE IF NOT EXISTS snapshots (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -65,10 +65,12 @@ type Server struct {
 	// время задания.
 	files       *files.Manager
 	cloneRunner *files.CloneRunner
-	guestCreds  *guestcred.Store
-	ui          fs.FS
-	log         *slog.Logger
-	version     string
+	// uploads — сколько больших файлов ушло в историю в рамках загрузки.
+	uploads    uploadBudget
+	guestCreds *guestcred.Store
+	ui         fs.FS
+	log        *slog.Logger
+	version    string
 
 	// Keyed sessions ("packages", "ufw-install", ...) each outlive any one
 	// WebSocket connection to them — see runUpdateSession. A single shared
@@ -343,6 +345,10 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/files/read", s.handleFilesRead)
 			r.Get("/files/versions", s.handleFilesVersions)
 			r.Get("/files/versions/{id}/diff", s.handleFilesVersionDiff)
+			r.Get("/files/uploads", s.handleFilesUploads)
+			r.Get("/files/uploads/{id}", s.handleFilesUploadItems)
+			r.Get("/files/protect", s.handleFilesProtect)
+			r.Get("/files/history", s.handleFilesHistory)
 			r.Get("/files/deploy-key", s.handleFilesDeployKey)
 			r.Get("/configs/blocks", s.handleConfigBlocks)
 			r.Get("/configs/versions", s.handleConfigVersions)
@@ -423,6 +429,13 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/system/apt/remove", s.handleAptRemoveSync)
 				r.Post("/files/write", s.handleFilesWrite)
 				r.Post("/files/versions/{id}/rollback", s.handleFilesVersionRollback)
+				r.Post("/files/upload/plan", s.handleFilesUploadPlan)
+				r.Post("/files/upload/begin", s.handleFilesUploadBegin)
+				r.Post("/files/upload/{id}/finish", s.handleFilesUploadFinish)
+				r.Post("/files/uploads/{id}/rollback", s.handleFilesUploadRollback)
+				r.Put("/files/protect", s.handleFilesProtectWrite)
+				r.Put("/files/history/settings", s.handleFilesHistorySettings)
+				r.Post("/files/history/delete", s.handleFilesHistoryDelete)
 				r.Post("/services/{name}/validate", s.handleServiceValidate)
 				r.Post("/services/{name}/{action}", s.handleServiceAction)
 				r.Post("/misc/kill", s.handleKillProcess)

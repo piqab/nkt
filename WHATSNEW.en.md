@@ -8,6 +8,27 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.33 — 2026-09-28
+
+- **Uploads to "Disks → Files" with a plan and a diff.** Before writing —
+  a "What will change" window: new, changed (text files get a "on the host
+  → uploaded" diff), identical (not uploaded) and protected files, each
+  with a checkbox. An upload deletes nothing on the host.
+- **A folder's protected files.** Server settings and data — `.env`,
+  `wp-config.php`, `*.local.*`, the `uploads/`, `storage/`, `media/`,
+  `data/` folders and others — are not overwritten by an upload by
+  default; the list is edited with a diff and history, and overwriting
+  takes an explicit checkbox.
+- **Upload history and rollback.** Every upload is a record with its
+  author, comment and contents; previous versions of replaced files are
+  kept, and "Roll back" restores them as a job and removes what was added.
+  Any file has a "Version history" with a diff and rollback.
+- **History storage with limits.** 200 MB of large files per upload (text
+  files always), 1 GB total, 30 days; beyond that the oldest is evicted.
+  Manual cleanup: a version, a file's whole history, an upload, everything
+  older than a chosen age. From 80% full — a finding in "Findings" and a
+  hub alert.
+
 ## v1.11.32 — 2026-09-28
 
 - **"Update all" no longer starts updates twice.** While updates run, the

@@ -433,6 +433,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
 		r.sysconfig, r.collector, r.vmimages, r.scanner)
 	r.jobs.Register(files.KindClone, r.cloneRun)
+	r.jobs.Register(api.KindUploadRollback, &api.UploadRollbackRunner{DB: r.db, Configs: r.configs, Files: r.files})
 	// Задания, оставшиеся идущими от прошлого запуска, разбираются до
 	// приёма запросов: продолжаемые встают в очередь заново, остальные
 	// честно помечаются прерванными. Иначе список показывал бы вечно
@@ -926,6 +927,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
 		r.sysconfig, r.collector, r.vmimages, r.scanner)
 	r.jobs.Register(files.KindClone, r.cloneRun)
+	r.jobs.Register(api.KindUploadRollback, &api.UploadRollbackRunner{DB: r.db, Configs: r.configs, Files: r.files})
 	// То же, что в runServer: незавершённые задания разбираются до
 	// приёма запросов.
 	if err := r.jobs.Recover(ctx); err != nil {

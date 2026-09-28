@@ -28,6 +28,27 @@ title: Packages, disks, files, system
   three times, the rest with the "retry failed" button); unpacking zip/tar in place; `git
   clone` as a job, private repositories included (a token over HTTPS or
   the host's deploy key over SSH).
+- **Upload with a plan.** Before writing — a "What will change" window:
+  which files are new, which replace existing ones (text files get a "on
+  the host → uploaded" diff), which are identical (not uploaded), which
+  are protected. Every file has a checkbox. An upload deletes nothing on
+  the host.
+- **A folder's protected files** — patterns an upload doesn't overwrite by
+  default: `.env`, `.env.*`, `*.local.*`, `local_settings.*`,
+  `wp-config.php`, `config.local.*`, folders `uploads/`, `storage/`,
+  `media/`, `data/`. The list is edited with the "Protected" button (with
+  a diff and history); a protected file can be overwritten only with an
+  explicit checkbox in the plan.
+- **Upload history.** Every upload is a record: who, when, where, a
+  comment, which files were added and replaced. Previous versions of
+  replaced files are kept; **"Roll back"** restores them as a job and
+  removes what was added (files changed after the upload are left alone).
+  Any file has a "Version history" with a diff and rollback.
+- **History storage** — usage and limits: 200 MB of large files per
+  upload (text files are always kept), 1 GB total, 30 days; beyond that
+  the oldest is evicted. Versions are deleted by hand: one at a time, a
+  file's whole history, an upload as a whole, everything older than a
+  chosen age. From 80% full — a finding in "Findings" and a hub alert.
 - **Editing text files — as in "Configs"**: line numbers, an edit
   comment, a "on disk → draft" diff before writing, protection against
   overwriting someone else's change and a **"Version history"** tab — who

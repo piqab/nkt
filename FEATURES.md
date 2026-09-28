@@ -147,6 +147,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - zip/tar archive extraction in place with protection against escaping paths.
 - `git clone` as a job with a log, private repositories included: a token over HTTPS or the host's deploy key over SSH.
 - File editor with line numbers, renaming, mode preservation and protection against overwriting someone else's edit.
+- Uploads with a plan (new / changed with a diff / identical / protected, a checkbox per file), a folder's protected files, upload history with rollback as a job, version history of any file; history storage with limits, manual cleanup and an alert at 80%.
 - File edits as in Configs: an edit comment, a diff before writing, version history with a diff against the current file and rollback; a file that is a service config is written with the service's check, sharing the history with Configs.
 
 ### Hardware
