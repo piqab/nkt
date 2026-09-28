@@ -127,14 +127,18 @@ func main() {
 	if proxyAddr := os.Getenv("EDGE_PROXY_ADDR"); proxyAddr != "" {
 		host, _, err := net.SplitHostPort(proxyAddr)
 		if ip := net.ParseIP(host); err != nil || ip == nil || !ip.IsLoopback() {
-			log.Fatalf("EDGE_PROXY_ADDR must be a loopback address with a port (127.0.0.1:8445), got %q", proxyAddr)
+			// Само значение в журнал не пишется: оно из окружения, и в нём
+			// могут быть переводы строк (подделка соседних записей).
+			log.Fatal("EDGE_PROXY_ADDR must be a loopback address with a port, like 127.0.0.1:8445")
 		}
 		ln, err := net.Listen("tcp", proxyAddr)
 		if err != nil {
 			log.Fatalf("webhooks (behind proxy): %v", err)
 		}
 		s.behindProxy = true
-		log.Printf("webhooks over HTTP on %s, behind a reverse proxy", proxyAddr)
+		// Адрес не пишется: он из окружения (EDGE_PROXY_ADDR), оператор его
+		// и так знает, а непроверенная строка в журнале — подделка записей.
+		log.Print("webhooks over HTTP on EDGE_PROXY_ADDR (loopback), behind a reverse proxy")
 		serveHooks = func() error { return hookSrv.Serve(ln) }
 	} else {
 		if env("EDGE_SELF_SIGNED", "false") == "true" {

@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.35 — 2026-09-28
+
+- **nkt-edge:** the `EDGE_PROXY_ADDR` value is no longer written to the
+  service log, neither on an error nor at startup — a string from the
+  environment with line breaks could forge neighboring entries (gosec
+  "Log injection via taint analysis" warnings).
+
 ## v1.11.34 — 2026-09-28
 
 - **Deleting in "Containers & VMs" — by checkboxes and without repeats.**
