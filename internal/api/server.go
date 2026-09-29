@@ -151,7 +151,7 @@ func New(d Deps) *Server {
 		s.configs.AttachK8s(k8sDocs{s})
 	}
 	if s.configs != nil && s.db != nil {
-		s.configs.AttachDocs(f2bTemplatePrefix, &f2bTemplateDocs{s})
+		s.configs.AttachDocs(F2BTemplatePrefix, &f2bTemplateDocs{s})
 	}
 	if s.jobs != nil {
 		s.jobs.Register(KindDelete, &deleteRunner{s})

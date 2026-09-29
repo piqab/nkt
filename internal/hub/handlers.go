@@ -998,7 +998,8 @@ func (s *Server) handleStartHost(w http.ResponseWriter, r *http.Request) {
 // the file alone is enough to decrypt every secret in it.
 func (s *Server) handleExportHosts(w http.ResponseWriter, r *http.Request) {
 	includeKey := r.URL.Query().Get("include_key") == "1"
-	export, err := s.hub.ExportHosts(r.Context(), includeKey)
+	includeUsers := r.URL.Query().Get("include_users") == "1"
+	export, err := s.hub.ExportHub(r.Context(), includeKey, includeUsers)
 	if err != nil {
 		fail(w, r, err)
 		return
@@ -1008,25 +1009,75 @@ func (s *Server) handleExportHosts(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, export)
 }
 
-// handleImportHosts adds every host in an uploaded export as a brand-new
-// row — additive, never replacing or merging into what's already
-// registered (see store.ImportHosts) — and reports per-host failures
-// instead of aborting the whole file over one bad entry. An embedded
-// master key (see handleExportHosts) is consumed and re-encrypted away by
-// Manager.ImportHosts before anything reaches the database.
+// handleImportHosts переносит загруженный файл экспорта: совпадения по
+// имени пропускаются, если в resolutions не выбрано «заменить» (см.
+// store.ImportHosts), ошибки — по объектам, а не отказом на весь файл.
+// Встроенный мастер-ключ (см. handleExportHosts) используется
+// Manager.ImportHosts для перешифровки и в базу не попадает.
 func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(io.LimitReader(r.Body, 16<<20)) // 16 MiB — generous for a host list, not unbounded
+	body, err := io.ReadAll(io.LimitReader(r.Body, 64<<20)) // 64 MiB: с историей версий файл больше, но не безграничен
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
+	}
+	export, res, err := decodeImportBody(body)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	rep := s.hub.ImportHosts(r.Context(), export, res)
+	if c := rep.Sections[store.SectionEdge]; c != nil && c.Added+c.Replaced > 0 {
+		s.kickEdge()
+	}
+	added := 0
+	if c := rep.Sections[store.SectionHosts]; c != nil {
+		added = c.Added + c.Replaced
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "hub.import", fmt.Sprintf("v%d", export.Version), auditOK(len(rep.Errors) == 0), rep)
+	if rep.Errors == nil {
+		rep.Errors = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"imported": added, "errors": rep.Errors, "report": rep})
+}
+
+// decodeImportBody — тело POST /hub/import и /hub/import/plan: файл
+// экспорта как есть (прежний вид) или {"export": файл, "resolutions":
+// {раздел: {имя: "replace"}}}.
+func decodeImportBody(body []byte) (store.HubExport, store.ImportResolutions, error) {
+	var wrap struct {
+		Export      json.RawMessage         `json:"export"`
+		Resolutions store.ImportResolutions `json:"resolutions"`
+	}
+	if err := json.Unmarshal(body, &wrap); err == nil && len(wrap.Export) > 0 {
+		export, err := store.DecodeHubExport(wrap.Export)
+		return export, wrap.Resolutions, err
 	}
 	export, err := store.DecodeHubExport(body)
+	return export, nil, err
+}
+
+// handleImportPlan — POST /hub/import/plan: что в файле по разделам и что
+// из этого уже есть в хабе — окно импорта спрашивает по совпадениям
+// «пропустить или заменить». Ничего не меняет.
+func (s *Server) handleImportPlan(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(io.LimitReader(r.Body, 64<<20))
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	imported, errs := s.hub.ImportHosts(r.Context(), export)
-	writeJSON(w, http.StatusOK, map[string]any{"imported": imported, "errors": errs})
+	export, _, err := decodeImportBody(body)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	plan, err := s.hub.ImportPlan(r.Context(), export)
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"version": export.Version, "exported_at": export.ExportedAt, "has_key": export.MasterKey != "", "sections": plan,
+	})
 }
 
 // handleHostProbe проверяет порт хоста с хаба — то есть снаружи.

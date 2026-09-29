@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"sort"
 
 	"golang.org/x/term"
 
@@ -67,13 +68,23 @@ func runHubImport(opts commandOptions, log *slog.Logger) error {
 		return err
 	}
 
-	imported, errs := manager.ImportHosts(context.Background(), export)
-	fmt.Printf("Импортировано хостов: %d из %d.\n", imported, len(export.Hosts))
-	for _, e := range errs {
+	// Из командной строки совпадения по имени пропускаются: заменить
+	// существующее можно в окне импорта хаба, там выбор поштучный.
+	rep := manager.ImportHosts(context.Background(), export, nil)
+	sections := make([]string, 0, len(rep.Sections))
+	for name := range rep.Sections {
+		sections = append(sections, name)
+	}
+	sort.Strings(sections)
+	for _, name := range sections {
+		c := rep.Sections[name]
+		fmt.Printf("%s: добавлено %d, заменено %d, пропущено (уже есть) %d\n", name, c.Added, c.Replaced, c.Skipped)
+	}
+	for _, e := range rep.Errors {
 		fmt.Printf("  ошибка: %s\n", e)
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("%d хостов не удалось импортировать", len(errs))
+	if len(rep.Errors) > 0 {
+		return fmt.Errorf("ошибок при импорте: %d", len(rep.Errors))
 	}
 	return nil
 }

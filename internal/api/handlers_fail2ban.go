@@ -38,10 +38,12 @@ import (
 // которого пришёл сам запрос, нельзя.
 
 const (
-	f2bHubAddrKey   = "fail2ban.hub_addr"
-	f2bTemplatesKey = "fail2ban.templates"
-	// f2bTemplatePrefix — путь версий шаблона в истории.
-	f2bTemplatePrefix = "nkt-f2b-tpl:"
+	f2bHubAddrKey = "fail2ban.hub_addr"
+	// F2BTemplatesKey — свои шаблоны в kv (на хабе — общие для хостов;
+	// экспорт хаба переносит их с историей).
+	F2BTemplatesKey = "fail2ban.templates"
+	// F2BTemplatePrefix — путь версий шаблона в истории.
+	F2BTemplatePrefix = "nkt-f2b-tpl:"
 	// f2bBansTTL — сколько живёт облегчённое состояние для /overview:
 	// хаб опрашивает раз в минуту, чаще спрашивать fail2ban незачем.
 	f2bBansTTL = 50 * time.Second
@@ -650,7 +652,7 @@ func (s *Server) handleF2BHubAddr(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) f2bCustomTemplates(ctx context.Context) []fail2ban.Template {
 	var list []fail2ban.Template
-	if raw, ok, err := s.db.KVGet(ctx, f2bTemplatesKey); err == nil && ok {
+	if raw, ok, err := s.db.KVGet(ctx, F2BTemplatesKey); err == nil && ok {
 		_ = json.Unmarshal([]byte(raw), &list)
 	}
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
@@ -665,11 +667,12 @@ func (s *Server) f2bSaveTemplates(ctx context.Context, list []fail2ban.Template)
 	if err != nil {
 		return err
 	}
-	return s.db.KVSet(ctx, f2bTemplatesKey, string(b))
+	return s.db.KVSet(ctx, F2BTemplatesKey, string(b))
 }
 
-// f2bTemplateDoc — шаблон одним текстом для истории версий.
-func f2bTemplateDoc(t fail2ban.Template) string {
+// F2BTemplateDoc — шаблон одним текстом для истории версий (и для
+// экспорта хаба).
+func F2BTemplateDoc(t fail2ban.Template) string {
 	return "## description: " + strings.TrimSpace(t.Description) + "\n## jail\n" + strings.TrimRight(t.Jail, "\n") + "\n## filter\n" + strings.TrimRight(t.Filter, "\n") + "\n"
 }
 
@@ -708,27 +711,27 @@ func parseTemplateDoc(name, doc string) fail2ban.Template {
 type f2bTemplateDocs struct{ s *Server }
 
 func (d *f2bTemplateDocs) ValidDocPath(p string) bool {
-	return fail2ban.ValidTemplateName(strings.TrimPrefix(p, f2bTemplatePrefix))
+	return fail2ban.ValidTemplateName(strings.TrimPrefix(p, F2BTemplatePrefix))
 }
 
 func (d *f2bTemplateDocs) CurrentDoc(ctx context.Context, p string) (string, error) {
-	name := strings.TrimPrefix(p, f2bTemplatePrefix)
+	name := strings.TrimPrefix(p, F2BTemplatePrefix)
 	for _, t := range d.s.f2bCustomTemplates(ctx) {
 		if t.Name == name {
-			return f2bTemplateDoc(t), nil
+			return F2BTemplateDoc(t), nil
 		}
 	}
 	return "", nil
 }
 
 func (d *f2bTemplateDocs) RestoreDoc(ctx context.Context, user, p, content string) (string, error) {
-	name := strings.TrimPrefix(p, f2bTemplatePrefix)
+	name := strings.TrimPrefix(p, F2BTemplatePrefix)
 	t := parseTemplateDoc(name, content)
 	if err := d.s.f2bPutTemplate(ctx, t); err != nil {
 		return "", err
 	}
 	d.s.db.Audit(ctx, user, "fail2ban.template_rollback", name, "ok", nil)
-	return f2bTemplateDoc(t), nil
+	return F2BTemplateDoc(t), nil
 }
 
 func (s *Server) f2bPutTemplate(ctx context.Context, t fail2ban.Template) error {
@@ -760,7 +763,7 @@ func (s *Server) handleF2BTemplates(w http.ResponseWriter, r *http.Request) {
 	if custom == nil {
 		custom = []fail2ban.Template{}
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"builtin": builtin, "custom": custom, "version_prefix": f2bTemplatePrefix})
+	writeJSON(w, http.StatusOK, map[string]any{"builtin": builtin, "custom": custom, "version_prefix": F2BTemplatePrefix})
 }
 
 type f2bTemplateRequest struct {
@@ -809,7 +812,7 @@ func (s *Server) handleF2BTemplateSave(w http.ResponseWriter, r *http.Request) {
 	var before []byte
 	for _, old := range s.f2bCustomTemplates(ctx) {
 		if old.Name == t.Name {
-			before = []byte(f2bTemplateDoc(old))
+			before = []byte(F2BTemplateDoc(old))
 		}
 	}
 	// Нового шаблона до правки не было — исходной версии не нужно.
@@ -818,8 +821,8 @@ func (s *Server) handleF2BTemplateSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.configs != nil {
-		_, _ = s.configs.RecordDoc(ctx, f2bTemplatePrefix+t.Name, model.ServiceFail2ban, user, store.ActionEdit,
-			strings.TrimSpace(req.Note), before, []byte(f2bTemplateDoc(t)))
+		_, _ = s.configs.RecordDoc(ctx, F2BTemplatePrefix+t.Name, model.ServiceFail2ban, user, store.ActionEdit,
+			strings.TrimSpace(req.Note), before, []byte(F2BTemplateDoc(t)))
 	}
 	s.db.Audit(ctx, user, "fail2ban.template_save", t.Name, "ok", nil)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "template": t})
@@ -855,8 +858,8 @@ func (s *Server) handleF2BTemplateDelete(w http.ResponseWriter, r *http.Request)
 	user := auth.Username(ctx)
 	if s.configs != nil {
 		// Удаление — тоже версия (пустая): из истории шаблон можно вернуть.
-		_, _ = s.configs.RecordDoc(ctx, f2bTemplatePrefix+name, model.ServiceFail2ban, user, store.ActionEdit,
-			msgs.Tc(ctx, "f2b.templateDeletedNote"), []byte(f2bTemplateDoc(*removed)), []byte(f2bTemplateDoc(fail2ban.Template{Name: name})))
+		_, _ = s.configs.RecordDoc(ctx, F2BTemplatePrefix+name, model.ServiceFail2ban, user, store.ActionEdit,
+			msgs.Tc(ctx, "f2b.templateDeletedNote"), []byte(F2BTemplateDoc(*removed)), []byte(F2BTemplateDoc(fail2ban.Template{Name: name})))
 	}
 	s.db.Audit(ctx, user, "fail2ban.template_delete", name, "ok", nil)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
