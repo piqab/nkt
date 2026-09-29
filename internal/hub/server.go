@@ -279,6 +279,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/ai/settings", s.handleAISettings)
 					r.Post("/hub/ai/cache/clear", s.handleAICacheClear)
 					r.Post("/hub/ai/test", s.handleAITest)
+					r.Post("/hub/ai/models", s.handleAIModels)
 					r.Post("/hub/ai/answers/delete", s.handleAIAnswerDelete)
 					r.Post("/hub/ai/prompts", s.handleAIPromptSet)
 					r.Post("/hub/ai/prompts/diff", s.handleAIPromptDiff)

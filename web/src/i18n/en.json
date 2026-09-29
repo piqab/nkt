@@ -2827,7 +2827,13 @@
     "priorQuestions": "Earlier questions:",
     "emptyAnswer": "The model returned an empty answer. Ask again — perhaps with another model or a longer timeout in the AI settings.",
     "askOther": "ask another question",
-    "promptIp": "external address check (the bulb next to an IP in alerts and fail2ban)"
+    "promptIp": "external address check (the bulb next to an IP in alerts and fail2ban)",
+    "fetchModels": "Get models",
+    "fetchModelsHint": "The provider's model list with the address and key currently in the form; the request is free and does not use the limit",
+    "modelsFound": "Models in the list: {{count}}; pick one in the field or type a name yourself",
+    "modelsShowAll": "show all ({{count}} more: embeddings, speech, images)",
+    "modelNotListed": "{{model}} is not in the provider's list",
+    "modelPickedHint": "{{model}} selected; test its answer now?"
   },
   "editModal": {
     "saved": "saved",

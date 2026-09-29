@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { Button, Checkbox, Input, InputNumber, Select, Tag } from 'antd'
+import { AutoComplete, Button, Checkbox, Input, InputNumber, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import { Banner, Card, DiffView, ErrorNote, Loading, Modal } from './ui'
+import { Banner, Card, DiffView, ErrorNote, Loading, Modal, formatBytesShort } from './ui'
 import { invalidateAIAnswers } from '../aiAnswers'
 import { EditTextModal } from './EditTextModal'
 
@@ -15,6 +15,16 @@ import { EditTextModal } from './EditTextModal'
  * нельзя отдавать ничего: «OpenAI-совместимый» плюс адрес вида
  * http://127.0.0.1:11434 (Ollama) — и запрос не покидает машину.
  */
+
+/** Модель из списка провайдера (POST /hub/ai/models). */
+interface AIModel {
+  id: string
+  name?: string
+  created?: string
+  size?: number
+  /** Годится для разбора (у OpenAI в списке есть эмбеддинги, речь…). */
+  chat: boolean
+}
 
 interface AIStatus {
   enabled: boolean
@@ -103,6 +113,18 @@ export function AISettingsCard() {
   // форме, — иначе неверный ключ обнаружится только при первом разборе.
   const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null)
 
+  // Список моделей провайдера — только по кнопке и только на время
+  // выбора: при смене провайдера или адреса он устаревает.
+  const [models, setModels] = useState<AIModel[] | null>(null)
+  const [modelsBusy, setModelsBusy] = useState(false)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+  const [showAllModels, setShowAllModels] = useState(false)
+  // Модель только что выбрана из списка — предложить проверить её.
+  const [picked, setPicked] = useState(false)
+  // Что набрано в поле после загрузки списка: фильтр только по нему —
+  // иначе открытый список показывал бы одну уже выбранную модель.
+  const [modelQuery, setModelQuery] = useState('')
+
   const cur = draft ?? status.data
   const local = cur?.provider === 'openai' && /^https?:\/\/(127\.0\.0\.1|localhost|\[::1\]|10\.|192\.168\.|172\.)/.test(cur?.base_url ?? '')
 
@@ -110,7 +132,54 @@ export function AISettingsCard() {
     if (!cur) return
     setDraft({ ...cur, ...patch })
     setSaved(false)
+    if (patch.provider !== undefined || patch.base_url !== undefined) {
+      setModels(null)
+      setModelsError(null)
+    }
+    if (patch.model !== undefined) setPicked(false)
   }
+
+  async function fetchModels() {
+    if (!cur) return
+    setModelsBusy(true)
+    setModelsError(null)
+    try {
+      const res = await api<{ models: AIModel[] }>('/hub/ai/models', {
+        method: 'POST',
+        timeoutMs: 90_000,
+        body: {
+          provider: cur.provider,
+          base_url: cur.base_url,
+          model: cur.model,
+          timeout_s: cur.timeout_s,
+          api_key: apiKey === '' ? null : apiKey,
+        },
+      })
+      setModels(res.models)
+      setModelQuery('')
+    } catch (err) {
+      setModels(null)
+      setModelsError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setModelsBusy(false)
+    }
+  }
+
+  const hiddenModels = (models ?? []).filter((m) => !m.chat).length
+  const shownModels = (models ?? []).filter((m) => showAllModels || m.chat)
+  const q = modelQuery.trim().toLowerCase()
+  const matchedModels = q ? shownModels.filter((m) => m.id.toLowerCase().includes(q) || (m.name ?? '').toLowerCase().includes(q)) : shownModels
+  const modelLabel = (m: AIModel) => (
+    <div className="spread" style={{ gap: '0.6rem' }}>
+      <span>
+        <span className="mono">{m.id}</span>
+        {m.name && m.name !== m.id && <span className="muted"> · {m.name}</span>}
+      </span>
+      <span className="small muted nowrap">
+        {[m.created?.slice(0, 10), m.size ? formatBytesShort(m.size) : ''].filter(Boolean).join(' · ')}
+      </span>
+    </div>
+  )
 
   async function save() {
     if (!cur) return
@@ -225,11 +294,60 @@ export function AISettingsCard() {
               {t('ai.baseUrl')}
               <Input className="sensitive" value={cur.base_url} onChange={(e) => edit({ base_url: e.target.value })} />
             </label>
-            <label style={{ flex: 1, minWidth: '12rem' }}>
+            <label style={{ flex: 1, minWidth: '16rem' }}>
               {t('ai.model')}
-              <Input value={cur.model} onChange={(e) => edit({ model: e.target.value })} placeholder="claude-sonnet-5" />
+              <div className="row row-nowrap" style={{ gap: '0.4rem' }}>
+                <AutoComplete
+                  style={{ flex: 1 }}
+                  value={cur.model}
+                  onChange={(v: string) => edit({ model: v })}
+                  onSearch={setModelQuery}
+                  onSelect={(v: string) => {
+                    edit({ model: v })
+                    setModelQuery('')
+                    setPicked(true)
+                  }}
+                  options={matchedModels.map((m) => ({ value: m.id, label: modelLabel(m) }))}
+                  filterOption={false}
+                  popupMatchSelectWidth={420}
+                  placeholder="claude-sonnet-5"
+                />
+                <Button loading={modelsBusy} onClick={() => void fetchModels()} title={t('ai.fetchModelsHint')}>
+                  {t('ai.fetchModels')}
+                </Button>
+              </div>
             </label>
           </div>
+          {modelsError && <Banner kind="error">{modelsError}</Banner>}
+          {models && (
+            <div className="row small" style={{ gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span className="muted">{t('ai.modelsFound', { count: shownModels.length })}</span>
+              {hiddenModels > 0 && (
+                <Checkbox checked={showAllModels} onChange={(e) => setShowAllModels(e.target.checked)}>
+                  {t('ai.modelsShowAll', { count: hiddenModels })}
+                </Checkbox>
+              )}
+              {cur.model && !models.some((m) => m.id === cur.model) && (
+                <Tag color="orange">{t('ai.modelNotListed', { model: cur.model })}</Tag>
+              )}
+            </div>
+          )}
+          {picked && (
+            <div className="row small" style={{ gap: '0.5rem', alignItems: 'center' }}>
+              <span>{t('ai.modelPickedHint', { model: cur.model })}</span>
+              <Button
+                size="small"
+                type="primary"
+                loading={busy}
+                onClick={() => {
+                  setPicked(false)
+                  void runTest()
+                }}
+              >
+                {t('ai.test')}
+              </Button>
+            </div>
+          )}
           <label>
             {t('ai.apiKey')}
             <Input.Password
