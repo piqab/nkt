@@ -400,6 +400,7 @@ func (r *F2BFleetRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		body = map[string]any{"ips": p.IPs}
 	}
 	failed := 0
+	var touched []int64
 	for i, id := range p.HostIDs {
 		if ctx.Err() != nil {
 			return ctx.Err()
@@ -424,6 +425,7 @@ func (r *F2BFleetRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 		switch {
 		case err == nil:
+			touched = append(touched, id)
 			jc.Log("hub.f2bHostDone", name)
 		case code == http.StatusNotFound || code == http.StatusMethodNotAllowed:
 			jc.Log("hub.f2bHostOld", name)
@@ -435,11 +437,37 @@ func (r *F2BFleetRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 	}
 	s := r.s
+	// Список забаненных на хабе берётся из опроса хостов по таймеру —
+	// без этого новый бан появлялся в нём только через интервал опроса.
+	s.refreshF2B(ctx, touched)
 	s.db.Audit(ctx, jc.Job.Author, "fail2ban.fleet_"+p.Action, strings.Join(p.IPs, " "), auditOK(failed == 0), nil)
 	if failed > 0 {
 		return msgs.Errorf("hub.f2bFailedCount", failed, len(p.HostIDs))
 	}
 	return nil
+}
+
+// refreshF2B — сводки fail2ban хостов сейчас, а не к следующему опросу:
+// хостов — переопросом, машины хаба — сканом.
+func (s *Server) refreshF2B(ctx context.Context, ids []int64) {
+	sem := make(chan struct{}, pollHostConcurrency)
+	var wg sync.WaitGroup
+	for _, id := range ids {
+		if id == localHostID {
+			if s.localScanner != nil {
+				_, _ = s.localScanner.Scan(ctx)
+			}
+			continue
+		}
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(id int64) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			s.hub.pollHost(ctx, id)
+		}(id)
+	}
+	wg.Wait()
 }
 
 func auditOK(ok bool) string {
