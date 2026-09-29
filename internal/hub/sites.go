@@ -124,6 +124,8 @@ func (s *Server) siteTarget(ctx context.Context, hostID int64) (targetHost, erro
 type siteJSON struct {
 	store.Site
 	HostName string `json:"host_name"`
+	// PipelineName — конвейер, чей блок site: описывает сайт.
+	PipelineName string `json:"pipeline_name,omitempty"`
 }
 
 // handleSites — GET /hub/sites.
@@ -143,7 +145,13 @@ func (s *Server) handleSites(w http.ResponseWriter, r *http.Request) {
 				name = "#" + strconv.FormatInt(st.HostID, 10)
 			}
 		}
-		out = append(out, siteJSON{Site: st, HostName: name})
+		item := siteJSON{Site: st, HostName: name}
+		if st.PipelineID > 0 {
+			if pl, err := s.db.PipelineByID(r.Context(), st.PipelineID); err == nil {
+				item.PipelineName = pl.Name
+			}
+		}
+		out = append(out, item)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"sites": out})
 }
@@ -227,13 +235,16 @@ func (s *Server) handleSiteSave(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	var id int64
+	var id, pipelineID int64
 	if raw := chi.URLParam(r, "id"); raw != "" {
 		id, _ = strconv.ParseInt(raw, 10, 64)
-		if _, err := s.db.SiteByID(ctx, id); err != nil {
+		prev, err := s.db.SiteByID(ctx, id)
+		if err != nil {
 			writeErr(w, r, http.StatusNotFound, err)
 			return
 		}
+		// Правка в мастере не отвязывает сайт от конвейера.
+		pipelineID = prev.PipelineID
 	} else {
 		// Имя уже занято другим сайтом хаба — второй на то же имя не
 		// заводится.
@@ -248,7 +259,7 @@ func (s *Server) handleSiteSave(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(ctx)
 	id, err = s.db.SaveSite(ctx, store.Site{ID: id, Domains: domains, HostID: req.HostID, Proxy: req.Proxy, Stack: req.Stack,
-		Service: req.Service, ContainerPort: req.ContainerPort, Upstream: req.Upstream, OpenFirewall: req.OpenFirewall, Author: user})
+		Service: req.Service, ContainerPort: req.ContainerPort, Upstream: req.Upstream, OpenFirewall: req.OpenFirewall, PipelineID: pipelineID, Author: user})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
@@ -361,21 +372,35 @@ func (r *SiteSetupRunner) Run(ctx context.Context, jc *jobs.Context) (err error)
 	if err != nil {
 		return err
 	}
+	return s.setupSite(ctx, jc, jc.Job.Author, st, p.InstallProxy, true)
+}
+
+// setupSite — настройка сайта: DNS и порты снаружи → прокси (поставить,
+// если можно) → задание хоста → HTTPS снаружи. steps — шаги задания
+// (своё задание сайта); иначе — строки журнала (шаг выкладки конвейера).
+// Состояние сайта (ok или ошибка) записывается в любом случае.
+func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, st store.Site, installProxy, steps bool) (err error) {
 	defer func() {
 		status, text := store.SiteOK, ""
 		if err != nil {
 			status, text = store.SiteFailed, msgs.Localize(jc.Lang(), err)
 		}
-		_ = s.db.SetSiteState(context.WithoutCancel(ctx), st.ID, status, text, 0)
+		_ = s.db.SetSiteState(context.WithoutCancel(ctx), st.ID, status, text, jc.Job.ID)
 	}()
+	step := func(i int, key string, args ...any) {
+		if steps {
+			jc.StepKey(i, 5, key, args...)
+		} else {
+			jc.Log(key, args...)
+		}
+	}
 	t, err := s.siteTarget(ctx, st.HostID)
 	if err != nil {
 		return err
 	}
-	user := jc.Job.Author
 
 	// 1. DNS.
-	jc.StepKey(1, 5, "hub.siteStepDNS", strings.Join(st.Domains, ", "))
+	step(1, "hub.siteStepDNS", strings.Join(st.Domains, ", "))
 	chk := s.siteOutside(ctx, t, st.Domains, false)
 	force := true
 	for _, d := range chk.DNS {
@@ -388,7 +413,7 @@ func (r *SiteSetupRunner) Run(ctx context.Context, jc *jobs.Context) (err error)
 	}
 
 	// 2. Порты снаружи.
-	jc.StepKey(2, 5, "hub.siteStepPorts")
+	step(2, "hub.siteStepPorts")
 	for _, port := range []string{"80", "443"} {
 		jc.Log("hub.sitePort", port, chk.Ports[port])
 	}
@@ -400,7 +425,7 @@ func (r *SiteSetupRunner) Run(ctx context.Context, jc *jobs.Context) (err error)
 	}
 
 	// 3. Прокси на хосте.
-	jc.StepKey(3, 5, "hub.siteStepProxy", st.Proxy)
+	step(3, "hub.siteStepProxy", st.Proxy)
 	var pre struct {
 		Proxies []struct {
 			Name      string `json:"name"`
@@ -417,7 +442,7 @@ func (r *SiteSetupRunner) Run(ctx context.Context, jc *jobs.Context) (err error)
 		}
 	}
 	if !installed {
-		if !p.InstallProxy {
+		if !installProxy {
 			return msgs.Errorf("site.proxyMissing", st.Proxy)
 		}
 		jc.Log("hub.siteInstallingProxy", st.Proxy)
@@ -436,7 +461,7 @@ func (r *SiteSetupRunner) Run(ctx context.Context, jc *jobs.Context) (err error)
 	}
 
 	// 4. Хост: файрвол, публикация, сертификат, прокси.
-	jc.StepKey(4, 5, "hub.siteStepHost", t.Name)
+	step(4, "hub.siteStepHost", t.Name)
 	var started struct {
 		JobID int64 `json:"job_id"`
 	}
@@ -451,7 +476,7 @@ func (r *SiteSetupRunner) Run(ctx context.Context, jc *jobs.Context) (err error)
 	}
 
 	// 5. HTTPS снаружи.
-	jc.StepKey(5, 5, "hub.siteStepHTTPS", st.Domains[0])
+	step(5, "hub.siteStepHTTPS", st.Domains[0])
 	chk.HTTPS = httpsCheck(ctx, st.Domains[0])
 	raw, _ := json.Marshal(chk)
 	_ = s.db.SetSiteCheck(ctx, st.ID, raw)

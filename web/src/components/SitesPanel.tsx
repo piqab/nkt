@@ -61,6 +61,8 @@ interface Site {
   container_port?: number
   upstream?: string
   open_firewall: boolean
+  pipeline_id?: number
+  pipeline_name?: string
   status: string
   error?: string
   check?: Outside
@@ -147,6 +149,11 @@ export function SitesPanel({ me }: { me: Me }) {
                       {s.domains[0]}
                     </a>
                     {s.domains.length > 1 && <div className="small muted mono">{s.domains.slice(1).join(', ')}</div>}
+                    {s.pipeline_id ? (
+                      <Tooltip title={t('sites.fromPipelineHint')}>
+                        <Tag color="blue">{t('sites.fromPipeline', { name: s.pipeline_name ?? `#${s.pipeline_id}` })}</Tag>
+                      </Tooltip>
+                    ) : null}
                   </div>
                 ),
               },
@@ -334,6 +341,7 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
     <Modal title={site ? t('sites.editTitle', { name: site.domains[0] }) : t('sites.newTitle')} onClose={onClose} width={860} maskClosable={false}>
       <div className="col">
         <p className="small muted">{t('sites.wizardHint')}</p>
+        {site?.pipeline_id ? <Banner kind="info">{t('sites.pipelineManaged', { name: site.pipeline_name ?? `#${site.pipeline_id}` })}</Banner> : null}
         <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label style={{ minWidth: 200 }}>
             {t('sites.host')}

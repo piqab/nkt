@@ -114,7 +114,7 @@ compose:
   hosts: [web1, web2]               # or group: prod; the hub machine is localhost
   files: [deploy/nginx.conf, deploy/conf/]  # what else the stack needs
   wait_timeout: 5m                  # wait for startup and healthchecks
-  site: shop.example.com            # check over HTTPS after the deployment
+  site: shop.example.com            # check over HTTPS after the deployment (or a block, see below)
 ```
 
 - [Substitutions](#substitutions) apply to the compose file and the files
@@ -185,8 +185,11 @@ a [go-httpbin](https://github.com/mccutchen/go-httpbin) stack on the ready
 image `mccutchen/go-httpbin:2.25.0` and a pipeline for it. It deploys
 straight from the link
 `https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml`
-(stack name `httpbin`), then "Sites" → target: stack `httpbin`, service
-`httpbin`, port 8080. The original's compose file,
+(stack name `httpbin`) or with the **"Example: httpbin"** button in the new
+pipeline window: it fills in the link and the names, leaving you to pick a
+host. The site goes in the pipeline's `site:` block (commented out in the
+description) or by hand in "Sites": stack `httpbin`, service `httpbin`,
+port 8080. The original's compose file,
 [postmanlabs/httpbin](https://github.com/postmanlabs/httpbin), builds the
 image from source (`build: '.'`); the hub rejects it with an explanation.
 
@@ -239,6 +242,43 @@ Encrypt certificate:
 "Delete" removes the site from the hub and, if ticked, the proxy
 configuration on the host (with a history record); the certificate and the
 service publication stay.
+
+### A site in the pipeline
+
+A site can be described right in an `action: compose` pipeline, with a
+`site:` block instead of a string:
+
+```yaml
+compose:
+  file: deploy/docker-compose.yml
+  project: shop
+  hosts: [web1]                  # a site needs exactly one host
+  site:
+    domains: [shop.example.com, www.shop.example.com]
+    service: web                 # the stack service
+    port: 80                     # the container port
+    proxy: nginx                 # optional: otherwise whichever the host has, with none — nginx
+    firewall: true               # open 80/443 (yes by default)
+```
+
+- **First deployment:** the stack, then the site, the same way as "Set up"
+  in the wizard (DNS and ports from outside, proxy, publishing on
+  127.0.0.1, certificate, config, HTTPS). The site shows up in the "Sites"
+  tab marked "pipeline …".
+- **Later deployments:** if the site is set up and nothing in `site:`
+  changed, only an HTTPS check runs and no new certificate is issued. If the
+  names, service, port, proxy or host changed, the site is set up again
+  (the proxy config is removed from the old host).
+- **If the site fails** (DNS does not point at the host yet, port 80 is
+  closed), the deployment still succeeds: the stack is updated. The reason
+  is in the deployment log and on the site in the "Sites" tab.
+- **A dry run** shows what would happen to the site: the proxy (or that it
+  will be installed), DNS and ports from outside, and whether the stack has
+  that service.
+- A `site: name` string still means only an HTTPS check after the
+  deployment.
+- Editing such a site in the wizard works, but the next deployment restores
+  the settings from `site:` if they differ.
 
 ## When to deploy
 
@@ -315,7 +355,9 @@ A pipeline's "Access":
 They are stored on the hub encrypted and never get into the description,
 logs or command lines (git gets them through the environment); they
 can't be shown — only replaced or removed. The hub needs the `git`
-program (the hub image has it).
+program (the hub image has it); without it, the "Pipelines" tab shows a
+banner and an **"Install git"** button (the package from the distribution's
+repository, as a background job on the hub machine).
 
 ## History and rollback
 
@@ -349,6 +391,7 @@ Docker Compose. Step by step — [CI/CD examples](/en/guide/cicd-examples).
 | Webhook `401` | Wrong secret or signature; a replayed delivery ("Redeliver" in GitHub sends the same ID); for the nkt signature — CI and hub clocks differ by more than 5 minutes. The reason is in the hub's audit log (`pipeline.hook.rejected`) |
 | `200 ignored: another branch` | The push wasn't to `ref`; the tag doesn't match `tags` |
 | `no cluster matches` | Names in `clusters` don't match the "Clusters" section, the group has no clusters or the cluster isn't "ready" |
+| `git is not installed on the hub` | The "Install git" button on the "Pipelines" tab, or `apt install git` on the hub machine |
 | `the repository has no branch or tag …` | A typo in `ref`, the tag isn't pushed yet (`git push origin v1.0.0`) |
 | `git …: Authentication failed` / `Permission denied (publickey)` | A private repository without "Access", the token can't read, the key isn't added as a deploy key |
 | `the repository has no file …` | Paths in `manifests`, `helm.values` or `script` are from the repository root |

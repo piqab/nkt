@@ -317,6 +317,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/sites/{id}/check", s.handleSiteCheck)
 					r.Delete("/hub/sites/{id}", s.handleSiteDelete)
 					r.Get("/hub/pipelines", s.handlePipelines)
+					r.Get("/hub/deploy/git", s.handleDeployGit)
 					r.Get("/hub/pipelines/template", s.handlePipelineTemplate)
 					r.Get("/hub/pipelines/versions/{version}", s.handlePipelineVersion)
 					r.Post("/hub/pipelines", s.handlePipelineCreate)

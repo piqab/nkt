@@ -29,31 +29,51 @@ v2.16.1, hence Docker Hub).
 
 ## 1. Pipeline
 
-"Deployments" → "New pipeline" → "Compose from a link":
+"Deployments" → "New pipeline" → the **"Example: httpbin"** button fills in
+the compose file link and the stack and pipeline names; pick a host (the hub
+shows right away whether it has docker with compose and offers to install
+it if not) and the description is ready. Without the button, use "Compose
+from a link":
 
 ```
 https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml
 ```
 
-pick a host, set the stack name to `httpbin` (otherwise the stack is
-named after the repository, `nkt`), and "Fill in the description" (or paste
-`deploy/pipeline.yaml` and adjust `hosts`). "Save", then "Deploy". The job
-log shows the files written to `/srv/compose/httpbin`, `pull`, and
-`up -d --wait`, which waits until the container runs (the image has no
-healthcheck of its own: it is built on distroless, with no shell or curl
-inside).
+a host, the stack name `httpbin` (otherwise the stack is named after the
+repository, `nkt`), "Fill in the description". Or paste
+`deploy/pipeline.yaml` and adjust `hosts`.
+
+**"Dry run"** checks without changing anything: docker and compose on the
+host, `compose config`, whether the image is in the registry. Then "Save"
+and "Deploy". The job log shows the files written to `/srv/compose/httpbin`,
+`pull`, and `up -d --wait`, which waits until the container runs (the image
+has no healthcheck of its own: it is built on distroless, with no shell or
+curl inside).
 
 ## 2. Site
 
-"Deployments" → "Sites" → "New site":
+The simplest way is in the pipeline itself: uncomment the `site:` block
+and put your name there (its A record must point at the host):
 
-1. the same host, the name `httpbin.example.com` (its A record already
-   points at the host) → "Check";
-2. the proxy that the host has (with none, nginx is installed);
-3. the target: stack `httpbin`, service `httpbin`, port `8080`; nkt
-   publishes it on `127.0.0.1` through a `compose.nkt.yml` file next to the
-   stack;
-4. "Set up": certificate, proxy configuration, HTTPS check.
+```yaml
+  site:
+    domains: [httpbin.example.com]
+    service: httpbin
+    port: 8080
+```
+
+After deploying the stack, the hub sets the site up by itself: checks DNS
+and ports 80/443 from outside, installs a proxy if there is none (nginx),
+publishes the service on `127.0.0.1`, issues a certificate, writes the proxy
+config and checks HTTPS. The site shows up in the "Sites" tab marked with the
+pipeline. Later deployments only check the site over HTTPS; they set it up
+again if something in `site:` changed. If the site fails (DNS does not point
+at the host yet), the deployment still succeeds, and the reason is in the
+log and on the site; a dry run shows DNS and ports in advance.
+
+By hand: "Deployments" → "Sites" → "New site" (after deploying the stack):
+host, name, "Check", proxy, target: stack `httpbin`, service `httpbin`, port
+`8080`, "Set up".
 
 Check:
 
@@ -61,9 +81,6 @@ Check:
 curl https://httpbin.example.com/get
 curl -i https://httpbin.example.com/status/418
 ```
-
-Uncomment `site:` in the pipeline and the hub will check the site over
-HTTPS after every deployment.
 
 ## Without a proxy
 

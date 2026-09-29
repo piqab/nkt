@@ -150,12 +150,20 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 		}
 		jc.Log("deploy.composeHostDone", t.Name)
 	}
-	if c.Site != "" {
-		chk := httpsCheck(ctx, strings.ToLower(c.Site))
+	switch {
+	case c.Site.Managed():
+		// Сайт — после стека, на единственном хосте; не настроился — в
+		// журнале и у сайта, а выкладка удалась: стек уже обновлён.
+		if err := s.pipelineSite(ctx, jc, user, pl, c, targets[0]); err != nil {
+			jc.Log("deploy.siteSetupFailed", c.Site.Domains[0], msgs.Localize(lang, err))
+		}
+	case c.Site.CheckDomain() != "":
+		d := c.Site.CheckDomain()
+		chk := httpsCheck(ctx, d)
 		if chk.OK {
-			jc.Log("deploy.siteOK", c.Site, chk.Status, chk.CertDaysLeft)
+			jc.Log("deploy.siteOK", d, chk.Status, chk.CertDaysLeft)
 		} else {
-			jc.Log("deploy.siteFailed", c.Site, chk.Error)
+			jc.Log("deploy.siteFailed", d, chk.Error)
 		}
 	}
 	return nil

@@ -9,6 +9,11 @@ compose:
   project: httpbin
   hosts: [web1]                 # или group: prod; машина хаба — localhost
   wait_timeout: 3m
-  # site: httpbin.example.com   # после настройки сайта: проверка HTTPS
+  # Сайт: хаб после выкладки сам настроит прокси и сертификат (A-запись
+  # имени должна указывать на хост):
+  # site:
+  #   domains: [httpbin.example.com]
+  #   service: httpbin
+  #   port: 8080
 
 # poll: 1h   # подхватывать правки примера

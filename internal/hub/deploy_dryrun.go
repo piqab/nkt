@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/deploy"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
@@ -100,6 +102,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	jc.StepKey(2, 3, "deploy.stepDryHosts", len(targets))
 	jc.Log("deploy.dryFiles", len(files), c.Project, len(targets), vars.Tag)
 	problems := 0
+	var services []string
 	for _, t := range targets {
 		var res composeCheck
 		body := composeBody(c, main, files, env, "")
@@ -114,14 +117,21 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			continue
 		}
 		problems += logComposeCheck(jc, t.Name, c.Project, res)
+		if res.ConfigOK && !res.Simulated {
+			services = res.Services
+		}
 	}
 	jc.StepKey(3, 3, "deploy.stepDryResult")
-	if c.Site != "" {
-		chk := httpsCheck(ctx, strings.ToLower(c.Site))
+	switch {
+	case c.Site.Managed():
+		s.dryRunSite(ctx, jc, user, pl, c, targets[0], services)
+	case c.Site.CheckDomain() != "":
+		d := c.Site.CheckDomain()
+		chk := httpsCheck(ctx, d)
 		if chk.OK {
-			jc.Log("deploy.siteOK", c.Site, chk.Status, chk.CertDaysLeft)
+			jc.Log("deploy.siteOK", d, chk.Status, chk.CertDaysLeft)
 		} else {
-			jc.Log("deploy.siteFailed", c.Site, chk.Error)
+			jc.Log("deploy.siteFailed", d, chk.Error)
 		}
 	}
 	if problems > 0 {
@@ -244,4 +254,20 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 	}
 	s.db.Audit(ctx, user, "pipeline.dryrun", name, "ok", map[string]any{"job_id": id})
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
+}
+
+// handleDeployGit — GET /hub/deploy/git: есть ли на хабе git (без него
+// выкладки и сухой прогон не работают) и можно ли поставить его отсюда
+// (apt-get на машине хаба, встроенный API машины хаба).
+func (s *Server) handleDeployGit(w http.ResponseWriter, r *http.Request) {
+	out := map[string]any{"installed": false}
+	if p, err := exec.LookPath("git"); err == nil {
+		out["installed"] = true
+		if v, err := exec.CommandContext(r.Context(), p, "--version").Output(); err == nil {
+			out["version"] = strings.TrimSpace(string(v))
+		}
+	}
+	_, aptErr := exec.LookPath("apt-get")
+	out["installable"] = aptErr == nil && s.local != nil && s.hub.cfg.Mode != config.ModeFixtures
+	writeJSON(w, http.StatusOK, out)
 }

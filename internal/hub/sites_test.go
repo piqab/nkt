@@ -267,3 +267,75 @@ func TestF2BFleetRefreshesSummary(t *testing.T) {
 		t.Fatal("summary not refreshed")
 	}
 }
+
+// Сайт из блока site: конвейера — после стека, привязан к конвейеру;
+// повторная выкладка без изменений сайта его не перенастраивает.
+func TestDeployComposeWithSite(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git не установлен")
+	}
+	deploy.AllowLocalReposForTest(true)
+	defer deploy.AllowLocalReposForTest(false)
+	srv, db, root := localFixtureHub(t)
+	ctx := context.Background()
+	repo := t.TempDir()
+	testGit(t, repo, "init", "-q", "-b", "main")
+	_ = os.WriteFile(filepath.Join(repo, "compose.yaml"), []byte("services:\n  web:\n    image: nginx\n"), 0o644)
+	testGit(t, repo, "add", ".")
+	testGit(t, repo, "commit", "-q", "-m", "one")
+	content := "repo: " + repo + "\nref: main\naction: compose\ncompose:\n  file: compose.yaml\n  project: shop\n  hosts: [localhost]\n" +
+		"  site:\n    domains: [shop.example.com]\n    service: web\n    port: 80\n    proxy: nginx\n"
+	secret, _ := secretbox.Encrypt(srv.hub.key, []byte("s"))
+	pid, err := db.CreatePipeline(ctx, store.Pipeline{Name: "shop", Content: content, HookID: "hook-site-1", HookSecret: secret, Author: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	pl, _ := db.PipelineByID(ctx, pid)
+	deployOnce := func() string {
+		t.Helper()
+		d, err := srv.startDeployment(ctx, pl, store.Deployment{Trigger: "manual", Author: "admin"}, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		wctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+		defer cancel()
+		got := waitDeployment(t, wctx, db, d.ID)
+		log := jobLogText(t, ctx, db, d.JobID)
+		if got.Status != store.DeploySucceeded {
+			t.Fatalf("deployment: %+v\n%s", got, log)
+		}
+		return log
+	}
+	log := deployOnce()
+	sites, _ := db.ListSites(ctx)
+	if len(sites) != 1 || sites[0].PipelineID != pid || sites[0].Status != store.SiteOK || sites[0].Stack != "shop" {
+		t.Fatalf("site: %+v\n%s", sites, log)
+	}
+	if conf, err := os.ReadFile(filepath.Join(root, "etc", "nginx", "conf.d", "nkt-shop.example.com.conf")); err != nil || !strings.Contains(string(conf), "proxy_pass") {
+		t.Fatalf("nginx conf: %v\n%s", err, log)
+	}
+	before := sites[0].UpdatedAt
+	time.Sleep(1100 * time.Millisecond)
+	log = deployOnce()
+	sites, _ = db.ListSites(ctx)
+	if len(sites) != 1 || sites[0].UpdatedAt != before || strings.Contains(log, "127.0.0.1:18000") {
+		t.Fatalf("unchanged site was set up again: %+v\n%s", sites, log)
+	}
+
+	// Сухой прогон сайта: настроенный — «только проверка HTTPS».
+	id, err := srv.jobs.Start(ctx, jobs.Spec{Kind: KindDeploy, Queue: "deploy:dryrun", Author: "admin", Steps: 3,
+		Params: DeployParams{DryRun: true, PipelineID: pid, Content: content}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(60 * time.Second)
+	for time.Now().Before(deadline) {
+		if j, _ := db.JobByID(ctx, id); j.Status == store.JobSucceeded || j.Status == store.JobFailed {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if dl := jobLogText(t, ctx, db, id); !strings.Contains(dl, "shop.example.com") || !strings.Contains(dl, "HTTPS") {
+		t.Fatalf("dry run site:\n%s", dl)
+	}
+}
