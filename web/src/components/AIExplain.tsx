@@ -52,12 +52,104 @@ interface AISection {
   body: string
 }
 
+/** Запрос к модели целиком (hub.AIRequest). */
+export interface AIRequest {
+  provider: string
+  model: string
+  base_url: string
+  timeout_s: number
+  anonymize: boolean
+  system: string
+  system_modified: boolean
+  user: string
+  /** Что на что заменено — только администратору. */
+  aliases?: { alias: string; real: string }[]
+}
+
+/**
+ * «Показать запрос» — весь запрос, как он ушёл модели: кому (провайдер,
+ * модель, адрес), инструкция (стандартная или правленая), сообщение с
+ * псевдонимами вместо адресов и имён, таблица замен (администратору).
+ * У ответа, сохранённого до v1.11.41, есть только сообщение.
+ */
+export function AIRequestView({ request, prompt, missing }: { request?: AIRequest | null; prompt?: string; missing?: boolean }) {
+  const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+  const pre = (text: string) => (
+    <pre className="diff mono small" style={{ whiteSpace: 'pre-wrap', margin: 0, maxHeight: 320, overflow: 'auto' }}>
+      {text}
+    </pre>
+  )
+  if (!request) {
+    return (
+      <div className="col" style={{ gap: '0.3rem' }}>
+        {missing && <div className="small muted">{t('ai.requestMissing')}</div>}
+        {prompt && pre(prompt)}
+      </div>
+    )
+  }
+  const full = `# ${request.provider} · ${request.model} · ${request.base_url}\n\n## system\n${request.system}\n\n## user\n${request.user}\n`
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(full)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // буфер обмена недоступен (не https) — текст всё равно на экране
+    }
+  }
+  return (
+    <div className="col" style={{ gap: '0.4rem' }}>
+      <div className="small">
+        {t('ai.requestMeta', {
+          provider: request.provider === 'anthropic' ? 'Anthropic' : t('ai.providerOpenAI'),
+          model: request.model,
+          url: request.base_url,
+          timeout: request.timeout_s,
+        })}{' '}
+        · {request.anonymize ? t('ai.requestAnonymized', { count: request.aliases?.length ?? 0 }) : t('ai.requestNotAnonymized')}
+        <Button size="small" type="link" onClick={() => void copy()}>
+          {copied ? t('ai.requestCopied') : t('ai.requestCopy')}
+        </Button>
+      </div>
+      <div className="small">
+        <strong>{t('ai.requestSystem')}</strong>{' '}
+        <span className="muted">{request.system_modified ? t('ai.requestSystemModified') : t('ai.requestSystemDefault')}</span>
+      </div>
+      {pre(request.system)}
+      <div className="small">
+        <strong>{t('ai.requestUser')}</strong>
+      </div>
+      {pre(request.user)}
+      {request.aliases && request.aliases.length > 0 && (
+        <>
+          <div className="small">
+            <strong>{t('ai.requestAliases')}</strong> <span className="muted">{t('ai.requestAliasesHint')}</span>
+          </div>
+          <table className="small mono" style={{ borderCollapse: 'collapse' }}>
+            <tbody>
+              {request.aliases.map((a) => (
+                <tr key={a.alias}>
+                  <td style={{ padding: '0.1rem 0.8rem 0.1rem 0' }}>{a.alias}</td>
+                  <td style={{ padding: '0.1rem 0' }}>{blurText(a.real)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </div>
+  )
+}
+
 interface AIAnswer {
   answer: string
   sections: AISection[]
   model: string
   prompt: string
   notice: string
+  request?: AIRequest
+  request_missing?: boolean
   /** Ответ сохранён раньше для этой находки на этом хосте. */
   stored_at?: string
   /** Ответ той же находки на другом хосте — своего ещё нет. */
@@ -259,11 +351,7 @@ export function AIExplain({
                   </>
                 )}
               </div>
-              {showPrompt && (
-                <pre className="diff mono small" style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
-                  {answer.prompt}
-                </pre>
-              )}
+              {showPrompt && <AIRequestView request={answer.request} prompt={answer.prompt} missing={answer.request_missing} />}
               {actions && <div className="row">{actions(() => setOpen(false))}</div>}
             </div>
           ) : null}

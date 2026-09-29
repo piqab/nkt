@@ -188,6 +188,56 @@ type AIAnswer struct {
 	Prompt string `json:"prompt"`
 	// Notice — приписка «сгенерировано моделью, проверьте команды».
 	Notice string `json:"notice"`
+	// Request — запрос целиком, как ушёл модели; RequestMissing — ответ
+	// сохранён до того, как запрос стали хранить (есть только Prompt).
+	Request        *AIRequest `json:"request,omitempty"`
+	RequestMissing bool       `json:"request_missing,omitempty"`
+}
+
+// AIRequest — запрос к модели целиком: кому, чем, что ушло.
+type AIRequest struct {
+	Provider  string `json:"provider"`
+	Model     string `json:"model"`
+	BaseURL   string `json:"base_url"`
+	TimeoutS  int    `json:"timeout_s"`
+	Anonymize bool   `json:"anonymize"`
+	// System — инструкция; SystemModified — правленая оператором.
+	System         string `json:"system"`
+	SystemModified bool   `json:"system_modified"`
+	// User — сообщение, как ушло (псевдонимы, секреты вырезаны).
+	User string `json:"user"`
+	// Aliases — что на что заменено; наружу — только администратору.
+	Aliases []ai.Alias `json:"aliases,omitempty"`
+}
+
+// newAIRequest — запрос для показа и хранения.
+func (m *Manager) newAIRequest(ctx context.Context, set ai.Settings, kind, system, user string, mapper *ai.Mapper) *AIRequest {
+	lang := msgs.FromContext(ctx)
+	_, modified := m.aiPromptOverrides(ctx)[ai.PromptKey(ai.PromptKindFor(kind), lang)]
+	return &AIRequest{
+		Provider: set.Provider, Model: set.Model, BaseURL: ai.NormalizeBaseURL(set.BaseURL), TimeoutS: set.TimeoutS,
+		Anonymize: set.Anonymize, System: system, SystemModified: modified, User: user, Aliases: mapper.Aliases(user),
+	}
+}
+
+func encodeAIRequest(r *AIRequest) string {
+	b, err := json.Marshal(r)
+	if err != nil {
+		return ""
+	}
+	return string(b)
+}
+
+// storedAnswer — сохранённый ответ с его запросом.
+func (m *Manager) storedAnswer(ctx context.Context, a store.AIAnswer) AIAnswer {
+	out := m.aiAnswer(ctx, a.Answer, a.Model, a.Prompt, nil)
+	var req AIRequest
+	if a.Request != "" && json.Unmarshal([]byte(a.Request), &req) == nil {
+		out.Request = &req
+	} else {
+		out.RequestMissing = true
+	}
+	return out
 }
 
 // AIExplain объясняет одну находку. hostNames — имена, которые надо
@@ -212,13 +262,12 @@ func (m *Manager) AIExplain(ctx context.Context, kind string, fc ai.FindingConte
 	key := ai.FindingKey(kind, fc.Title, object, fc.File)
 	if !force {
 		if own, ok, err := m.db.AIAnswerGet(ctx, key, hostID); err == nil && ok {
-			out := m.aiAnswer(own.Answer, own.Prompt, set, false)
-			out.Model, out.StoredAt = own.Model, own.CreatedAt
+			out := m.storedAnswer(ctx, own)
+			out.StoredAt = own.CreatedAt
 			return out, nil
 		}
 		if other, ok, err := m.db.AIAnswerOther(ctx, key, hostID); err == nil && ok {
-			out := m.aiAnswer(other.Answer, other.Prompt, set, false)
-			out.Model = other.Model
+			out := m.storedAnswer(ctx, other)
 			out.Similar = &AISimilar{HostID: other.HostID, HostName: m.aiHostName(ctx, other.HostID), CreatedAt: other.CreatedAt}
 			return out, nil
 		}
@@ -244,13 +293,14 @@ func (m *Manager) AIExplain(ctx context.Context, kind string, fc ai.FindingConte
 	}
 	_ = m.db.AIUsageAdd(ctx)
 	revealed := mapper.Reveal(answer)
+	req := m.newAIRequest(ctx, set, kind, system, user, mapper)
 	if err := m.db.AIAnswerPut(ctx, store.AIAnswer{
 		Key: key, HostID: hostID, Kind: kind, Title: fc.Title, Object: object, File: fc.File,
-		Model: set.Model, Lang: string(lang), Prompt: user, Answer: revealed,
+		Model: set.Model, Lang: string(lang), Prompt: user, Answer: revealed, Request: encodeAIRequest(req),
 	}); err != nil {
 		m.log.Warn("ai answer not saved", "err", err)
 	}
-	return m.aiAnswer(revealed, user, set, false), nil
+	return m.aiAnswer(ctx, revealed, set.Model, user, req), nil
 }
 
 // aiHostName — имя хоста для пометки «уже разбиралась»; 0 — сам хаб.
@@ -381,15 +431,18 @@ func (m *Manager) AIReviewMap(ctx context.Context, scope string, lines []string,
 	}
 	_ = m.db.AIUsageAdd(ctx)
 	revealed := mapper.Reveal(answer)
+	req := m.newAIRequest(ctx, set, kind, system, user, mapper)
 	if _, err := m.db.AIReviewAdd(ctx, store.AIReview{
-		Scope: scope, Model: set.Model, Lang: string(lang), Answer: revealed, Author: author,
+		Scope: scope, Model: set.Model, Lang: string(lang), Answer: revealed, Author: author, Request: encodeAIRequest(req),
 	}); err != nil {
 		m.log.Warn("ai review not saved", "scope", scope, "err", err)
 	}
-	return m.aiAnswer(revealed, user, set, false), nil
+	return m.aiAnswer(ctx, revealed, set.Model, user, req), nil
 }
 
-func (m *Manager) aiAnswer(answer, prompt string, set ai.Settings, cached bool) AIAnswer {
+// aiAnswer — ответ для интерфейса. model — модель, которая его дала (у
+// сохранённого — своя, а не текущая из настроек).
+func (m *Manager) aiAnswer(ctx context.Context, answer, model, prompt string, req *AIRequest) AIAnswer {
 	sections := ai.ParseSections(answer)
 	if sections == nil {
 		// Пустой список, а не null: интерфейс перебирает разделы.
@@ -398,10 +451,11 @@ func (m *Manager) aiAnswer(answer, prompt string, set ai.Settings, cached bool) 
 	return AIAnswer{
 		Answer:   answer,
 		Sections: sections,
-		Model:    set.Model,
-		Cached:   cached,
+		Model:    model,
 		Prompt:   prompt,
-		Notice:   fmt.Sprintf(msgs.T(msgs.DefaultLang, "ai.generated"), ai.Describe(set)),
+		// Только имя модели: провайдер и адрес — в «показать запрос».
+		Notice:  msgs.Tc(ctx, "ai.generated", model),
+		Request: req,
 	}
 }
 

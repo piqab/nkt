@@ -2843,7 +2843,19 @@
     "modelsShowAll": "show all ({{count}} more: embeddings, speech, images)",
     "modelNotListed": "{{model}} is not in the provider's list",
     "modelPickedHint": "{{model}} selected; test its answer now?",
-    "baseUrlHint": "The API address as the provider gives it: http://127.0.0.1:11434, http://server:8080/v1 or https://api.anthropic.com; the hub handles a trailing “/v1” itself."
+    "baseUrlHint": "The API address as the provider gives it: http://127.0.0.1:11434, http://server:8080/v1 or https://api.anthropic.com; the hub handles a trailing “/v1” itself.",
+    "requestMeta": "To: {{provider}}, model {{model}}, address {{url}}, wait {{timeout}} s",
+    "requestAnonymized": "addresses and names replaced with aliases ({{count}})",
+    "requestNotAnonymized": "anonymization is off: addresses and names were sent as is",
+    "requestCopy": "copy the request",
+    "requestCopied": "copied",
+    "requestSystem": "Instruction (system)",
+    "requestSystemDefault": "default",
+    "requestSystemModified": "edited, from “About → AI”",
+    "requestUser": "Message (user), as sent to the model",
+    "requestAliases": "What was replaced",
+    "requestAliasesHint": "(visible to admins only; the model got the aliases on the left)",
+    "requestMissing": "This answer predates v1.11.41: only the message was saved, not the instruction or request settings."
   },
   "editModal": {
     "saved": "saved",

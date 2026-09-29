@@ -58,6 +58,9 @@ type AIAnswer struct {
 	Prompt    string `json:"prompt"`
 	Answer    string `json:"answer"`
 	CreatedAt string `json:"created_at"`
+	// Request — запрос целиком (JSON hub.AIRequest); пусто у ответов,
+	// полученных до v1.11.41.
+	Request string `json:"-"`
 }
 
 // AIAnswerRef — ссылка на сохранённый ответ без текста: интерфейс по ней
@@ -79,21 +82,21 @@ func (d *DB) AIAnswerPut(ctx context.Context, a AIAnswer) error {
 		a.CreatedAt = Now()
 	}
 	_, err := d.ExecContext(ctx,
-		`INSERT INTO ai_answers(key, host_id, kind, title, object, file, model, lang, prompt, answer, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO ai_answers(key, host_id, kind, title, object, file, model, lang, prompt, answer, created_at, request)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(key, host_id) DO UPDATE SET
 		   kind = excluded.kind, title = excluded.title, object = excluded.object, file = excluded.file,
 		   model = excluded.model, lang = excluded.lang, prompt = excluded.prompt, answer = excluded.answer,
-		   created_at = excluded.created_at`,
-		a.Key, a.HostID, a.Kind, a.Title, a.Object, a.File, a.Model, a.Lang, a.Prompt, a.Answer, a.CreatedAt)
+		   created_at = excluded.created_at, request = excluded.request`,
+		a.Key, a.HostID, a.Kind, a.Title, a.Object, a.File, a.Model, a.Lang, a.Prompt, a.Answer, a.CreatedAt, a.Request)
 	return err
 }
 
-const aiAnswerCols = `key, host_id, kind, title, object, file, model, lang, prompt, answer, created_at`
+const aiAnswerCols = `key, host_id, kind, title, object, file, model, lang, prompt, answer, created_at, request`
 
 func scanAIAnswer(row interface{ Scan(dest ...any) error }) (AIAnswer, error) {
 	var a AIAnswer
-	err := row.Scan(&a.Key, &a.HostID, &a.Kind, &a.Title, &a.Object, &a.File, &a.Model, &a.Lang, &a.Prompt, &a.Answer, &a.CreatedAt)
+	err := row.Scan(&a.Key, &a.HostID, &a.Kind, &a.Title, &a.Object, &a.File, &a.Model, &a.Lang, &a.Prompt, &a.Answer, &a.CreatedAt, &a.Request)
 	return a, err
 }
 
@@ -192,14 +195,16 @@ type AIReview struct {
 	Answer    string `json:"answer"`
 	CreatedAt string `json:"created_at"`
 	Author    string `json:"author"`
+	// Request — запрос целиком (JSON hub.AIRequest).
+	Request string `json:"-"`
 }
 
 // AIReviewAdd сохраняет разбор: по ним видно, что изменилось с прошлого
 // раза, — ради этого они и хранятся, а не только показываются.
 func (d *DB) AIReviewAdd(ctx context.Context, r AIReview) (int64, error) {
 	res, err := d.ExecContext(ctx,
-		`INSERT INTO ai_reviews(scope, model, lang, answer, created_at, author) VALUES(?, ?, ?, ?, ?, ?)`,
-		r.Scope, r.Model, r.Lang, r.Answer, Now(), r.Author)
+		`INSERT INTO ai_reviews(scope, model, lang, answer, created_at, author, request) VALUES(?, ?, ?, ?, ?, ?, ?)`,
+		r.Scope, r.Model, r.Lang, r.Answer, Now(), r.Author, r.Request)
 	if err != nil {
 		return 0, err
 	}
@@ -212,7 +217,7 @@ func (d *DB) AIReviews(ctx context.Context, scope string, limit int) ([]AIReview
 		limit = 10
 	}
 	rows, err := d.QueryContext(ctx,
-		`SELECT id, scope, model, lang, answer, created_at, author FROM ai_reviews
+		`SELECT id, scope, model, lang, answer, created_at, author, request FROM ai_reviews
 		 WHERE scope = ? ORDER BY id DESC LIMIT ?`, scope, limit)
 	if err != nil {
 		return nil, err
@@ -221,7 +226,7 @@ func (d *DB) AIReviews(ctx context.Context, scope string, limit int) ([]AIReview
 	out := []AIReview{}
 	for rows.Next() {
 		var r AIReview
-		if err := rows.Scan(&r.ID, &r.Scope, &r.Model, &r.Lang, &r.Answer, &r.CreatedAt, &r.Author); err != nil {
+		if err := rows.Scan(&r.ID, &r.Scope, &r.Model, &r.Lang, &r.Answer, &r.CreatedAt, &r.Author, &r.Request); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

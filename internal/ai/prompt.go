@@ -286,7 +286,9 @@ func UserPrompt(c FindingContext, lang msgs.Lang) string {
 	add(label("Подробности", "Details"), c.Detail)
 	add(label("Серьёзность", "Severity"), c.Severity)
 	add(label("Сервис", "Service"), c.Service)
-	add(label("Объект", "Object"), c.Object)
+	if c.Kind != KindIP {
+		add(label("Объект", "Object"), c.Object)
+	}
 	if c.File != "" {
 		if c.Line > 0 {
 			add(label("Файл", "File"), fmt.Sprintf("%s:%d", c.File, c.Line))
@@ -303,7 +305,11 @@ func UserPrompt(c FindingContext, lang msgs.Lang) string {
 		fmt.Fprintf(&b, "%s:\n```diff\n%s\n```\n", label("Дифф правки", "Diff of the edit"), strings.TrimSpace(c.Diff))
 	}
 	if len(c.Around) > 0 {
-		fmt.Fprintf(&b, "%s:\n", label("Рядом на хосте", "Nearby on the host"))
+		around := label("Рядом на хосте", "Nearby on the host")
+		if c.Kind == KindIP {
+			around = label("Что известно об адресе", "What is known about the address")
+		}
+		fmt.Fprintf(&b, "%s:\n", around)
 		for _, line := range c.Around {
 			if strings.TrimSpace(line) == "" {
 				continue

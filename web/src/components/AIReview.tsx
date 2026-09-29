@@ -3,7 +3,7 @@ import { Button } from 'antd'
 import { BulbOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import { AI_REQUEST_TIMEOUT_MS, Thinking, useElapsed } from './AIExplain'
+import { AI_REQUEST_TIMEOUT_MS, AIRequestView, Thinking, useElapsed, type AIRequest } from './AIExplain'
 import { Banner, Card, formatDateTime } from './ui'
 import { blurText } from '../privacy'
 import type { Graph } from '../types'
@@ -25,6 +25,7 @@ interface AIAnswer {
   model: string
   prompt: string
   notice: string
+  request?: AIRequest
 }
 
 interface Review {
@@ -34,6 +35,22 @@ interface Review {
   answer: string
   created_at: string
   author: string
+  request?: AIRequest
+}
+
+/** «Показать запрос» у разбора (у разборов до v1.11.41 его нет). */
+function ShowRequest({ request }: { request?: AIRequest }) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  if (!request) return null
+  return (
+    <div>
+      <Button type="link" size="small" style={{ padding: 0 }} onClick={() => setOpen((v) => !v)}>
+        {open ? t('ai.hidePrompt') : t('ai.showPrompt')}
+      </Button>
+      {open && <AIRequestView request={request} />}
+    </div>
+  )
 }
 
 /** Карта → строки для модели. Берётся то, что важно для архитектуры:
@@ -131,6 +148,7 @@ export function AIReviewCard({
             {blurText(shown)}
           </div>
           {answer && <div className="small muted">{answer.notice}</div>}
+          <ShowRequest request={answer ? answer.request : history.data?.reviews?.[0]?.request} />
         </div>
       )}
       {(history.data?.reviews?.length ?? 0) > 1 && (
@@ -145,6 +163,7 @@ export function AIReviewCard({
                 <div className="small" style={{ whiteSpace: 'pre-wrap' }}>
                   {blurText(r.answer)}
                 </div>
+                <ShowRequest request={r.request} />
               </details>
             ))}
           </div>
