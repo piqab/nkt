@@ -59,6 +59,7 @@ var ruSitesCatalog = map[string]string{
 	"site.stepTarget":          "Цель сайта",
 	"site.tooManyDomains":      "Слишком много имён: %d (до 20)",
 	"site.upstream":            "Прокси будет смотреть на %s",
+	"compose.buildOnly":        "сервис %s собирается из исходников (build:) — укажите готовый образ (image:): выкладка берёт только готовые образы, сборка — дело CI",
 	"deploy.composeBinary":     "%s — двоичный файл: файлы стека едут на хост текстом, двоичному место в образе",
 	"deploy.composeFiles":      "Файлов стека: %d, стек %s, хостов: %d",
 	"deploy.composeHostDone":   "%s: стек поднят",

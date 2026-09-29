@@ -115,6 +115,10 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("compose.tooLarge"))
 		return
 	}
+	if names := deploy.BuildOnlyServices(req.Files[req.File]); len(names) > 0 {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("compose.buildOnly", strings.Join(names, ", ")))
+		return
+	}
 	engine := composeEngine(ctx, c)
 	if engine == "" {
 		writeErr(w, r, http.StatusConflict, msgs.Errorf("compose.noEngine"))

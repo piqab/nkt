@@ -69,6 +69,11 @@ func collectComposeFiles(src string, c *deploy.ComposeSpec, vars deploy.Vars) (m
 		return nil, "", err
 	}
 	main, _ := rel(c.File)
+	if names := deploy.BuildOnlyServices(files[main]); len(names) > 0 {
+		// Ловим до хостов: там up попытался бы собрать образ без
+		// Dockerfile и упал бы с невнятной ошибкой.
+		return nil, "", msgs.Errorf("compose.buildOnly", strings.Join(names, ", "))
+	}
 	for _, f := range c.Files {
 		f = strings.TrimSuffix(f, "/")
 		full := filepath.Join(src, filepath.FromSlash(f))

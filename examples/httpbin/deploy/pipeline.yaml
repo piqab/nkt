@@ -1,0 +1,14 @@
+# Конвейер «Выкладок» хаба nkt: httpbin прямо из репозитория nkt.
+# Для своего репозитория замените repo и путь в file.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/httpbin/deploy/docker-compose.yml
+  project: httpbin
+  hosts: [web1]                 # или group: prod; машина хаба — localhost
+  wait_timeout: 3m
+  # site: httpbin.example.com   # после настройки сайта: проверка HTTPS
+
+# poll: 1h   # подхватывать правки примера
