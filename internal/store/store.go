@@ -459,6 +459,16 @@ CREATE TABLE IF NOT EXISTS deployments (
     finished_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_deployments ON deployments(pipeline_id, id DESC);
+-- Версии .env compose-стека конвейера (зашифрованы; NULL — .env убран).
+CREATE TABLE IF NOT EXISTS pipeline_env_versions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+    ts          TEXT NOT NULL,
+    author      TEXT NOT NULL DEFAULT '',
+    note        TEXT NOT NULL DEFAULT '',
+    env_enc     BLOB
+);
+CREATE INDEX IF NOT EXISTS idx_pipeline_env_versions ON pipeline_env_versions(pipeline_id, id DESC);
 -- Принятые доставки вебхуков — повтор той же доставки отвергается.
 CREATE TABLE IF NOT EXISTS hook_deliveries (
     id TEXT PRIMARY KEY,
@@ -549,6 +559,13 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"pipelines", "env_enc", `ALTER TABLE pipelines ADD COLUMN env_enc BLOB`},
 	// pipeline_id — сайт описан блоком site: конвейера (0 — заведён вручную).
 	{"sites", "pipeline_id", `ALTER TABLE sites ADD COLUMN pipeline_id INTEGER NOT NULL DEFAULT 0`},
+	// failed_commit / failed_tag — на чём упала выкладка (опрос не повторяет).
+	{"pipelines", "failed_commit", `ALTER TABLE pipelines ADD COLUMN failed_commit TEXT NOT NULL DEFAULT ''`},
+	{"pipelines", "failed_tag", `ALTER TABLE pipelines ADD COLUMN failed_tag TEXT NOT NULL DEFAULT ''`},
+	// env_sha — sha256 .env, записанного на хосты последней выкладкой.
+	{"pipelines", "env_sha", `ALTER TABLE pipelines ADD COLUMN env_sha TEXT NOT NULL DEFAULT ''`},
+	// env_version — версия .env конвейера на момент выкладки.
+	{"deployments", "env_version", `ALTER TABLE deployments ADD COLUMN env_version INTEGER NOT NULL DEFAULT 0`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

@@ -188,6 +188,9 @@ func TestDeployComposeOnLocal(t *testing.T) {
 	if !strings.Contains(string(compose), "app:v2.0.0") || string(ini) != "x=1\n" || string(env) != "TOKEN=abc\n" {
 		t.Fatalf("stack files: %q %q %q", compose, ini, env)
 	}
+	if pl, _ := db.PipelineByID(ctx, pid); pl.EnvSHA != envSHA("TOKEN=abc\n") {
+		t.Fatalf("env sha not remembered: %q", pl.EnvSHA)
+	}
 }
 
 // Сухой прогон: журнал говорит, что было бы, а стек на хосте не тронут.
@@ -337,5 +340,106 @@ func TestDeployComposeWithSite(t *testing.T) {
 	}
 	if dl := jobLogText(t, ctx, db, id); !strings.Contains(dl, "shop.example.com") || !strings.Contains(dl, "HTTPS") {
 		t.Fatalf("dry run site:\n%s", dl)
+	}
+}
+
+// Упавшая выкладка не повторяется опросом: ждёт нового коммита.
+func TestPollSkipsFailedCommit(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git не установлен")
+	}
+	deploy.AllowLocalReposForTest(true)
+	defer deploy.AllowLocalReposForTest(false)
+	srv, db, _ := localFixtureHub(t)
+	ctx := context.Background()
+	repo := t.TempDir()
+	testGit(t, repo, "init", "-q", "-b", "main")
+	_ = os.WriteFile(filepath.Join(repo, "compose.yaml"), []byte("services:\n  web:\n    image: nginx\n"), 0o644)
+	testGit(t, repo, "add", ".")
+	testGit(t, repo, "commit", "-q", "-m", "one")
+	// Хост, которого нет, — выкладка падает.
+	content := "repo: " + repo + "\nref: main\npoll: 1m\naction: compose\ncompose:\n  file: compose.yaml\n  project: app\n  hosts: [nope]\n"
+	secret, _ := secretbox.Encrypt(srv.hub.key, []byte("s"))
+	pid, err := db.CreatePipeline(ctx, store.Pipeline{Name: "app", Content: content, HookID: "hook-poll-1", HookSecret: secret, Author: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.SetPipelineDeployed(ctx, pid, strings.Repeat("a", 40), "")
+	pl, _ := db.PipelineByID(ctx, pid)
+	spec, _ := deploy.ParseSpec(content)
+	count := func() int {
+		ds, _ := db.Deployments(ctx, pid, 50)
+		return len(ds)
+	}
+	wait := func() store.Deployment {
+		ds, _ := db.Deployments(ctx, pid, 1)
+		wctx, cancel := context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+		return waitDeployment(t, wctx, db, ds[0].ID)
+	}
+	srv.pollRepo(ctx, pl, spec)
+	if count() != 1 {
+		t.Fatal("poll did not deploy the new commit")
+	}
+	d := wait()
+	if d.Status != store.DeployFailed || !strings.Contains(jobLogText(t, ctx, db, d.JobID), "poll") && !strings.Contains(jobLogText(t, ctx, db, d.JobID), "Опрос") {
+		t.Fatalf("expected a failure with the no-retry note: %+v\n%s", d, jobLogText(t, ctx, db, d.JobID))
+	}
+	pl, _ = db.PipelineByID(ctx, pid)
+	if pl.FailedCommit != d.Commit || pl.FailedCommit == "" {
+		t.Fatalf("failed commit not remembered: %+v", pl)
+	}
+	srv.pollRepo(ctx, pl, spec)
+	if count() != 1 {
+		t.Fatal("poll retried the failed commit")
+	}
+	testGit(t, repo, "commit", "-q", "--allow-empty", "-m", "two")
+	srv.pollRepo(ctx, pl, spec)
+	if count() != 2 {
+		t.Fatal("poll ignored a new commit")
+	}
+	wait()
+}
+
+// Версии .env: каждая смена — версия, разница — по именам, возврат.
+func TestPipelineEnvVersions(t *testing.T) {
+	srv, db, _ := localFixtureHub(t)
+	ctx := context.Background()
+	secret, _ := secretbox.Encrypt(srv.hub.key, []byte("s"))
+	old, _ := secretbox.Encrypt(srv.hub.key, []byte("A=1\n"))
+	pid, _ := db.CreatePipeline(ctx, store.Pipeline{Name: "env", Content: "x", HookID: "hook-env-1", HookSecret: secret, Author: "admin"})
+	_ = db.SetPipelineEnv(ctx, pid, old) // заданный до истории
+	pl, _ := db.PipelineByID(ctx, pid)
+	env := "A=1\nB=2\n"
+	if err := srv.setPipelineEnv(ctx, pl, "admin", "edit", &env); err != nil {
+		t.Fatal(err)
+	}
+	env2 := "# c\nexport B=3\nC=4\n"
+	pl, _ = db.PipelineByID(ctx, pid)
+	if err := srv.setPipelineEnv(ctx, pl, "admin", "edit", &env2); err != nil {
+		t.Fatal(err)
+	}
+	vs, _ := db.EnvVersions(ctx, pid, 10)
+	if len(vs) != 3 {
+		t.Fatalf("versions: %d", len(vs))
+	}
+	cur, _ := srv.decryptEnv(vs[0].EnvEnc)
+	prev, _ := srv.decryptEnv(vs[1].EnvEnc)
+	added, removed, changed := envNameDiff(prev, cur)
+	if strings.Join(added, ",") != "C" || strings.Join(removed, ",") != "A" || strings.Join(changed, ",") != "B" {
+		t.Fatalf("diff: %v %v %v", added, removed, changed)
+	}
+	// Выкладка помнит версию; возврат первой версии — новая версия.
+	pl, _ = db.PipelineByID(ctx, pid)
+	if got := srv.ensureEnvVersion(ctx, pl); got != vs[0].ID {
+		t.Fatalf("current version %d, want %d", got, vs[0].ID)
+	}
+	if err := srv.restoreEnvVersion(ctx, pl, vs[2], "admin", "back"); err != nil {
+		t.Fatal(err)
+	}
+	pl, _ = db.PipelineByID(ctx, pid)
+	raw, _ := secretbox.Decrypt(srv.hub.key, pl.EnvEnc)
+	if string(raw) != "A=1\n" || db.LatestEnvVersion(ctx, pid) <= vs[0].ID {
+		t.Fatalf("restore: %q", raw)
 	}
 }

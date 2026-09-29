@@ -266,13 +266,13 @@ func (s *Server) handlePipelineCredentials(w http.ResponseWriter, r *http.Reques
 	}
 	err := s.db.SetPipelineSecrets(r.Context(), p.ID, nil, gitEnc, regEnc)
 	if err == nil && (req.ClearEnv || req.Env != "") {
-		var envEnc []byte
+		// Каждая смена .env — версия: откат выкладки может вернуть и её.
+		var env *string
+		note := msgs.Tc(r.Context(), "deploy.envVersionCleared")
 		if !req.ClearEnv {
-			envEnc, err = secretbox.Encrypt(s.hub.key, []byte(req.Env))
+			env, note = &req.Env, msgs.Tc(r.Context(), "deploy.envVersionEdited")
 		}
-		if err == nil {
-			err = s.db.SetPipelineEnv(r.Context(), p.ID, envEnc)
-		}
+		err = s.setPipelineEnv(r.Context(), p, auth.Username(r.Context()), note, env)
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "pipeline.credentials", p.Name, auditOutcome(err), "")
 	if err != nil {
@@ -353,6 +353,8 @@ func (s *Server) handlePipelineRollback(w http.ResponseWriter, r *http.Request) 
 	}
 	var req struct {
 		DeploymentID int64 `json:"deployment_id"`
+		// WithEnv — вернуть и .env, с которым шла та выкладка.
+		WithEnv bool `json:"with_env"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -364,8 +366,24 @@ func (s *Server) handlePipelineRollback(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	user := auth.Username(r.Context())
+	envRestored := false
+	if req.WithEnv && prev.EnvVersion > 0 && prev.EnvVersion != s.db.LatestEnvVersion(r.Context(), p.ID) {
+		v, err := s.db.EnvVersionByID(r.Context(), prev.EnvVersion)
+		if err == nil {
+			err = s.restoreEnvVersion(r.Context(), p, v, user, msgs.Tc(r.Context(), "deploy.envVersionRollback", prev.ID))
+		}
+		if err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+		envRestored = true
+		if p, err = s.db.PipelineByID(r.Context(), p.ID); err != nil {
+			writeErr(w, r, http.StatusInternalServerError, err)
+			return
+		}
+	}
 	d, err := s.startDeployment(r.Context(), p, store.Deployment{Ref: prev.Ref, Commit: prev.Commit, Tag: prev.Tag, Trigger: "rollback", Author: user}, false)
-	s.db.Audit(r.Context(), user, "pipeline.rollback", p.Name, auditOutcome(err), map[string]any{"to": prev.ID, "commit": prev.Commit})
+	s.db.Audit(r.Context(), user, "pipeline.rollback", p.Name, auditOutcome(err), map[string]any{"to": prev.ID, "commit": prev.Commit, "env_restored": envRestored})
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return

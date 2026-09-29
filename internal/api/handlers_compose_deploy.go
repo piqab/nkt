@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io/fs"
 	"net/http"
@@ -41,6 +43,9 @@ type composeDeployRequest struct {
 	Files map[string]string `json:"files"`
 	// Env — содержимое .env стека (секреты; права 0600, в историю не идёт).
 	Env *string `json:"env,omitempty"`
+	// EnvSHA — sha256 .env, записанного прошлой выкладкой хаба: другой на
+	// хосте — значит, его правили вручную (ответ env_edited).
+	EnvSHA string `json:"env_sha,omitempty"`
 	// Pull — скачать образы перед подъёмом.
 	Pull bool `json:"pull"`
 	// WaitTimeout — сколько ждать, пока контейнеры поднимутся и пройдут
@@ -164,7 +169,9 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	envEdited := false
 	if req.Env != nil {
+		envEdited = envEditedOnHost(c, dir, req.EnvSHA)
 		if err := write(dir+"/.env", []byte(*req.Env), 0o600); err != nil {
 			restore()
 			writeErr(w, r, http.StatusBadRequest, err)
@@ -208,7 +215,21 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.db.Audit(ctx, user, "compose.deploy", req.Project, "ok", map[string]any{"files": len(req.Files), "job": id})
-	writeJSON(w, http.StatusOK, map[string]any{"job_id": id, "engine": engine})
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": id, "engine": engine, "env_edited": envEdited})
+}
+
+// envEditedOnHost — .env стека на хосте не тот, что записала прошлая
+// выкладка (sha — его sha256 от хаба; пусто — сравнивать не с чем).
+func envEditedOnHost(c collect.Collector, dir, sha string) bool {
+	if sha == "" {
+		return false
+	}
+	cur, err := c.ReadFile(dir + "/.env")
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(cur)
+	return hex.EncodeToString(sum[:]) != sha
 }
 
 // composeDeployRunner поднимает стек.

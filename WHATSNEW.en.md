@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.49 — 2026-09-29
+
+- **A failed deployment is not retried** by polling and the registry every
+  interval: the hub remembers the commit or tag it failed on and waits for
+  a new one; the pipeline shows "waits for a new commit". The "Deploy"
+  button works as before.
+- **Stack `.env` history** in "Access": every change is a version
+  (encrypted), differences by variable name only, values behind a button
+  for administrators with an audit log entry, restoring a version. Saving
+  a new `.env` first shows which names appear and disappear.
+- **Rollback with `.env`:** a tick in "History" restores the `.env`
+  version that deployment used.
+- **A hand-edited `.env` on a host** is visible: the deployment log and the
+  dry run warn that the file was edited after the last deployment and will
+  be overwritten.
+
 ## v1.11.48 — 2026-09-29
 
 - **A site in the pipeline:** in `action: compose`, a `site:` block
