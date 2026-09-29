@@ -16,15 +16,18 @@ type Pipeline struct {
 	HookSecret   []byte `json:"-"`
 	GitCred      []byte `json:"-"`
 	RegistryCred []byte `json:"-"`
-	Enabled      bool   `json:"enabled"`
-	LastCommit   string `json:"last_commit,omitempty"`
-	LastTag      string `json:"last_tag,omitempty"`
-	Author       string `json:"author,omitempty"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	// EnvEnc — .env compose-стека (action: compose), зашифрован.
+	EnvEnc     []byte `json:"-"`
+	Enabled    bool   `json:"enabled"`
+	LastCommit string `json:"last_commit,omitempty"`
+	LastTag    string `json:"last_tag,omitempty"`
+	Author     string `json:"author,omitempty"`
+	CreatedAt  string `json:"created_at"`
+	UpdatedAt  string `json:"updated_at"`
 	// HasGitCred / HasRegistryCred — для интерфейса: задан ли доступ.
 	HasGitCred      bool `json:"has_git_cred"`
 	HasRegistryCred bool `json:"has_registry_cred"`
+	HasEnv          bool `json:"has_env"`
 }
 
 // PipelineVersion — прошлая редакция описания.
@@ -61,13 +64,13 @@ const (
 	DeployFailed    = "failed"
 )
 
-const pipelineColumns = `id, name, content, hook_id, hook_secret, git_cred, registry_cred, enabled, last_commit, last_tag, author, created_at, updated_at`
+const pipelineColumns = `id, name, content, hook_id, hook_secret, git_cred, registry_cred, env_enc, enabled, last_commit, last_tag, author, created_at, updated_at`
 
 func scanPipeline(row interface{ Scan(...any) error }) (Pipeline, error) {
 	var p Pipeline
-	err := row.Scan(&p.ID, &p.Name, &p.Content, &p.HookID, &p.HookSecret, &p.GitCred, &p.RegistryCred, &p.Enabled,
+	err := row.Scan(&p.ID, &p.Name, &p.Content, &p.HookID, &p.HookSecret, &p.GitCred, &p.RegistryCred, &p.EnvEnc, &p.Enabled,
 		&p.LastCommit, &p.LastTag, &p.Author, &p.CreatedAt, &p.UpdatedAt)
-	p.HasGitCred, p.HasRegistryCred = len(p.GitCred) > 0, len(p.RegistryCred) > 0
+	p.HasGitCred, p.HasRegistryCred, p.HasEnv = len(p.GitCred) > 0, len(p.RegistryCred) > 0, len(p.EnvEnc) > 0
 	return p, err
 }
 
@@ -135,6 +138,16 @@ func (db *DB) SetPipelineSecrets(ctx context.Context, id int64, hookSecret, gitC
 		}
 	}
 	return nil
+}
+
+// SetPipelineEnv — .env compose-стека (зашифрованный; пусто — убрать).
+func (db *DB) SetPipelineEnv(ctx context.Context, id int64, envEnc []byte) error {
+	v := any(envEnc)
+	if len(envEnc) == 0 {
+		v = nil
+	}
+	_, err := db.ExecContext(ctx, `UPDATE pipelines SET env_enc = ? WHERE id = ?`, v, id)
+	return err
 }
 
 // SetPipelineEnabled включает и выключает конвейер.

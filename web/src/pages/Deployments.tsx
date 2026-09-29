@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Button, Input, Space, Switch, Tag, Tooltip } from 'antd'
+import { Button, Input, Select, Space, Switch, Tabs, Tag, Tooltip } from 'antd'
 import { CopyOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import type { Job, Me } from '../types'
+import type { HubHost, Job, Me } from '../types'
 import { Banner, Card, DiffView, ErrorNote, InfoHint, Loading, Modal, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { EditTextModal } from '../components/EditTextModal'
@@ -11,6 +11,7 @@ import { confirmAction } from '../components/confirm'
 import { unifiedDiff } from '../components/textDiff'
 import { JobLogModal } from './Jobs'
 import { EdgeCard } from '../components/EdgeCard'
+import { SitesPanel } from '../components/SitesPanel'
 
 interface Deployment {
   id: number
@@ -35,6 +36,7 @@ interface Pipeline {
   last_tag?: string
   has_git_cred: boolean
   has_registry_cred: boolean
+  has_env?: boolean
   updated_at: string
   last?: Deployment
 }
@@ -185,19 +187,32 @@ export default function Deployments({ me }: { me: Me }) {
           {error}
         </Banner>
       )}
-      <Card title={t('deploy.pipelines')} subtitle={t('deploy.subtitle')}>
-        <ErrorNote error={list.error} />
-        {list.loading && !list.data ? (
-          <Loading what={t('deploy.pipelines')} />
-        ) : (list.data?.pipelines ?? []).length === 0 ? (
-          <p className="small muted">{t('deploy.empty')}</p>
-        ) : (
-          <div className="table-wrap">
-            <DataTable<Pipeline> dataSource={list.data?.pipelines ?? []} rowKey={(p) => String(p.id)} size="small" columns={columns} />
-          </div>
-        )}
-      </Card>
-      {me.is_admin && <EdgeCard onOpenJob={(id) => void openJob(id)} />}
+      <Tabs
+        items={[
+          {
+            key: 'pipelines',
+            label: t('deploy.tabPipelines'),
+            children: (
+              <>
+                <Card title={t('deploy.pipelines')} subtitle={t('deploy.subtitle')}>
+                  <ErrorNote error={list.error} />
+                  {list.loading && !list.data ? (
+                    <Loading what={t('deploy.pipelines')} />
+                  ) : (list.data?.pipelines ?? []).length === 0 ? (
+                    <p className="small muted">{t('deploy.empty')}</p>
+                  ) : (
+                    <div className="table-wrap">
+                      <DataTable<Pipeline> dataSource={list.data?.pipelines ?? []} rowKey={(p) => String(p.id)} size="small" columns={columns} />
+                    </div>
+                  )}
+                </Card>
+                {me.is_admin && <EdgeCard onOpenJob={(id) => void openJob(id)} />}
+              </>
+            ),
+          },
+          { key: 'sites', label: t('deploy.tabSites'), children: <SitesPanel me={me} /> },
+        ]}
+      />
       {edit && <PipelineEditor pipeline={edit.pipeline} onClose={() => setEdit(null)} onSaved={() => void list.reload()} />}
       {dialog?.type === 'deploy' && (
         <DeployModal
@@ -261,6 +276,14 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
         fields={
           <>
             <p className="small muted">{t('deploy.editHint')}</p>
+            {!pipeline && (
+              <ComposeFromLink
+                onFill={(yaml, suggested) => {
+                  setDraft(yaml)
+                  if (!name) setName(suggested)
+                }}
+              />
+            )}
             <Space wrap style={{ marginBottom: '0.5rem' }}>
               {!pipeline && <Input size="small" style={{ width: '16rem' }} value={name} placeholder={t('deploy.name')} onChange={(e) => setName(e.target.value)} />}
               {pipeline && <Input size="small" style={{ width: '20rem' }} value={note} placeholder={t('deploy.notePlaceholder')} onChange={(e) => setNote(e.target.value)} />}
@@ -280,6 +303,89 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
         />
       )}
     </>
+  )
+}
+
+/** Ссылка на compose-файл в веб-интерфейсе Git → репозиторий, ветка,
+ * путь. GitHub (blob/raw), GitLab (-/blob, -/raw), Codeberg/Gitea/Forgejo
+ * (src/branch, raw/branch, src/tag). Ветка со слешем в имени по ссылке
+ * неотличима от каталога — берётся первый сегмент, поправить можно в
+ * описании. */
+export function parseComposeLink(link: string): { repo: string; ref: string; file: string; name: string } | null {
+  let u: URL
+  try {
+    u = new URL(link.trim())
+  } catch {
+    return null
+  }
+  const parts = u.pathname.split('/').filter(Boolean)
+  const make = (owner: string[], ref: string, rest: string[], host = u.host) => {
+    const repoName = owner[owner.length - 1].replace(/\.git$/, '')
+    return { repo: `https://${host}/${owner.join('/')}.git`.replace(/\.git\.git$/, '.git'), ref, file: rest.join('/'), name: repoName }
+  }
+  if (u.host === 'raw.githubusercontent.com' && parts.length >= 4) {
+    return make(parts.slice(0, 2), parts[2], parts.slice(3), 'github.com')
+  }
+  const dash = parts.indexOf('-')
+  if (dash > 0 && (parts[dash + 1] === 'blob' || parts[dash + 1] === 'raw') && parts.length > dash + 3) {
+    return make(parts.slice(0, dash), parts[dash + 2], parts.slice(dash + 3))
+  }
+  const blob = parts.findIndex((p, i) => i >= 2 && (p === 'blob' || p === 'raw'))
+  if (u.host === 'github.com' && blob === 2 && parts.length > 4) {
+    return make(parts.slice(0, 2), parts[3], parts.slice(4))
+  }
+  const src = parts.findIndex((p, i) => i >= 2 && (p === 'src' || p === 'raw'))
+  if (src === 2 && ['branch', 'tag', 'commit'].includes(parts[3]) && parts.length > 5) {
+    return make(parts.slice(0, 2), parts[4], parts.slice(5))
+  }
+  return null
+}
+
+/** «Compose по ссылке»: ссылка на compose-файл, хосты, имя стека →
+ * описание конвейера action: compose (дальше — обычная правка с диффом). */
+function ComposeFromLink({ onFill }: { onFill: (yaml: string, name: string) => void }) {
+  const { t } = useTranslation()
+  const hosts = useApi<HubHost[]>('/hub/hosts')
+  const [link, setLink] = useState('')
+  const [picked, setPicked] = useState<string[]>([])
+  const [project, setProject] = useState('')
+  const [bad, setBad] = useState(false)
+  function fill() {
+    const p = parseComposeLink(link)
+    if (!p) {
+      setBad(true)
+      return
+    }
+    setBad(false)
+    const proj = (project || p.name).toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^[-_]+/, '').slice(0, 63) || 'app'
+    const yaml =
+      `repo: ${p.repo}\nref: ${p.ref}\n\naction: compose\ncompose:\n  file: ${p.file}\n  project: ${proj}\n` +
+      `  hosts: [${picked.join(', ')}]\n  # files: [${p.file.includes('/') ? p.file.slice(0, p.file.lastIndexOf('/') + 1) : ''}nginx.conf]  # ${t('deploy.fromLinkFilesComment')}\n` +
+      `  wait_timeout: 5m\n  # site: app.example.com\n\n# poll: 5m   # ${t('deploy.fromLinkPollComment')}\n`
+    onFill(yaml, proj)
+  }
+  return (
+    <div className="col" style={{ gap: '0.3rem', marginBottom: '0.6rem', padding: '0.5rem', border: '1px solid var(--border)', borderRadius: 6 }}>
+      <strong className="small">{t('deploy.fromLink')}</strong>
+      <span className="small muted">{t('deploy.fromLinkHint')}</span>
+      <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <Input size="small" style={{ flex: 1, minWidth: 280 }} value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://github.com/org/app/blob/main/deploy/docker-compose.yml" className="mono" />
+        <Select
+          size="small"
+          mode="multiple"
+          style={{ minWidth: 200 }}
+          placeholder={t('deploy.fromLinkHosts')}
+          value={picked}
+          onChange={setPicked}
+          options={(hosts.data ?? []).map((h) => ({ value: h.name, label: h.name }))}
+        />
+        <Input size="small" style={{ width: 140 }} value={project} onChange={(e) => setProject(e.target.value)} placeholder={t('deploy.fromLinkProject')} />
+        <Button size="small" disabled={!link || picked.length === 0} onClick={fill}>
+          {t('deploy.fromLinkFill')}
+        </Button>
+      </div>
+      {bad && <span className="small" style={{ color: 'var(--status-error)' }}>{t('deploy.fromLinkBad')}</span>}
+    </div>
   )
 }
 
@@ -419,6 +525,7 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
   const [token, setToken] = useState('')
   const [key, setKey] = useState('')
   const [registry, setRegistry] = useState('')
+  const [env, setEnv] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   async function send(body: Record<string, unknown>) {
@@ -442,13 +549,16 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
         {t('deploy.gitCred')}: <Tag color={p.has_git_cred ? 'success' : 'default'}>{p.has_git_cred ? t('deploy.set') : t('deploy.notSet')}</Tag>
         {' · '}
         {t('deploy.registryCred')}: <Tag color={p.has_registry_cred ? 'success' : 'default'}>{p.has_registry_cred ? t('deploy.set') : t('deploy.notSet')}</Tag>
+        {' · '}
+        {t('deploy.envCred')}: <Tag color={p.has_env ? 'success' : 'default'}>{p.has_env ? t('deploy.set') : t('deploy.notSet')}</Tag>
       </p>
       <div className="col" style={{ gap: '0.5rem' }}>
         <Input.Password size="small" value={token} placeholder={t('deploy.tokenPlaceholder')} onChange={(e) => setToken(e.target.value)} autoComplete="new-password" />
         <Input.TextArea rows={4} className="mono sensitive-area" value={key} placeholder={t('deploy.keyPlaceholder')} onChange={(e) => setKey(e.target.value)} />
         <Input.Password size="small" value={registry} placeholder={t('deploy.registryPlaceholder')} onChange={(e) => setRegistry(e.target.value)} autoComplete="new-password" />
+        <Input.TextArea rows={4} className="mono sensitive-area" value={env} placeholder={t('deploy.envPlaceholder')} onChange={(e) => setEnv(e.target.value)} />
         <Space wrap>
-          <Button type="primary" loading={busy} disabled={!token && !key && !registry} onClick={() => void send({ git_token: token, ssh_key: key, registry })}>
+          <Button type="primary" loading={busy} disabled={!token && !key && !registry && !env} onClick={() => void send({ git_token: token, ssh_key: key, registry, env })}>
             {t('deploy.saveAccess')}
           </Button>
           {p.has_git_cred && (
@@ -459,6 +569,11 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
           {p.has_registry_cred && (
             <Button danger size="small" onClick={() => void send({ clear_registry: true })}>
               {t('deploy.clearRegistry')}
+            </Button>
+          )}
+          {p.has_env && (
+            <Button danger size="small" onClick={() => void send({ clear_env: true })}>
+              {t('deploy.clearEnv')}
             </Button>
           )}
         </Space>

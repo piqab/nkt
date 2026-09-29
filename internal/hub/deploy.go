@@ -113,6 +113,9 @@ func (r *DeployRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 			commit = refs["refs/tags/"+d.Tag]
 		case refs["refs/heads/"+ref] != "":
 			commit = refs["refs/heads/"+ref]
+		case refs["refs/tags/"+ref] != "":
+			// ref — тег (ссылка на файл в теге): выкладывается он.
+			commit = refs["refs/tags/"+ref]
 		default:
 			return msgs.Errorf("deploy.refNotFound", ref)
 		}
@@ -134,6 +137,8 @@ func (r *DeployRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 		err = r.installHelm(ctx, jc, spec, src, vars)
 	case deploy.ActionScript:
 		err = r.runScript(ctx, jc, pl, spec, src, vars)
+	case deploy.ActionCompose:
+		err = r.deployCompose(ctx, jc, pl, spec, src, vars)
 	}
 	if err != nil {
 		return err

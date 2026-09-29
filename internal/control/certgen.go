@@ -1122,6 +1122,16 @@ func (m *CertManager) runCertbotCertonly(ctx context.Context, user string, domai
 	return res, nil
 }
 
+// IssueCertbotSync — выпуск в текущем задании (настройка сайта): ход —
+// в журнал задания через msg/raw. force — имя может указывать не на
+// интерфейсы хоста (NAT): хаб уже проверил его снаружи.
+func (m *CertManager) IssueCertbotSync(ctx context.Context, user string, domains []string, force bool,
+	msg func(key string, args ...any), raw func(text string)) error {
+	_, err := m.issueCertbot(ctx, user, domains, map[int]bool{}, force, &certProgress{msg: msg, raw: raw})
+	_, _ = m.scanner.Scan(context.Background())
+	return err
+}
+
 // StartIssueCertbot launches certbot certonly in the background for one or
 // more domains certbot does not manage yet, and returns a job ID
 // immediately — same progress-polling pattern as StartRenewCertbot, and the

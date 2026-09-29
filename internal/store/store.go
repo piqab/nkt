@@ -417,6 +417,24 @@ CREATE TABLE IF NOT EXISTS pipelines (
     created_at    TEXT NOT NULL,
     updated_at    TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS sites (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    domains        TEXT NOT NULL,             -- JSON-список имён, первое — имя сайта
+    host_id        INTEGER NOT NULL,
+    proxy          TEXT NOT NULL,             -- nginx | haproxy | caddy
+    stack          TEXT NOT NULL DEFAULT '',
+    service        TEXT NOT NULL DEFAULT '',
+    container_port INTEGER NOT NULL DEFAULT 0,
+    upstream       TEXT NOT NULL DEFAULT '',  -- адрес:порт, если цель не стек
+    open_firewall  INTEGER NOT NULL DEFAULT 1,
+    status         TEXT NOT NULL DEFAULT '',  -- setting-up | ok | failed
+    error          TEXT NOT NULL DEFAULT '',
+    check_json     TEXT NOT NULL DEFAULT '',  -- последняя проверка снаружи
+    job_id         INTEGER NOT NULL DEFAULT 0,
+    author         TEXT NOT NULL DEFAULT '',
+    created_at     TEXT NOT NULL,
+    updated_at     TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS pipeline_versions (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     pipeline_id INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
@@ -527,6 +545,8 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	// псевдонимы) в JSON: «показать запрос» у сохранённого ответа.
 	{"ai_answers", "request", `ALTER TABLE ai_answers ADD COLUMN request TEXT NOT NULL DEFAULT ''`},
 	{"ai_reviews", "request", `ALTER TABLE ai_reviews ADD COLUMN request TEXT NOT NULL DEFAULT ''`},
+	// env_enc — .env compose-стека конвейера (action: compose), зашифрован.
+	{"pipelines", "env_enc", `ALTER TABLE pipelines ADD COLUMN env_enc BLOB`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

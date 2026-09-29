@@ -155,6 +155,8 @@ func New(d Deps) *Server {
 	}
 	if s.jobs != nil {
 		s.jobs.Register(KindDelete, &deleteRunner{s})
+		s.jobs.Register(KindComposeDeploy, &composeDeployRunner{s})
+		s.jobs.Register(KindSiteApply, &siteRunner{s})
 	}
 	return s
 }
@@ -287,6 +289,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/fail2ban/log", s.handleF2BLog)
 			r.Get("/fail2ban/templates", s.handleF2BTemplates)
 			r.Get("/fail2ban/install/status", s.handleF2BInstallStatus)
+			r.Get("/sites/preflight", s.handleSitePreflight)
 			r.Get("/system/dbus-status", s.handleDbusStatus)
 			r.Get("/system/dbus-install/status", s.handleDbusInstallStatus)
 			r.Get("/system/tmux-status", s.handleTmuxStatus)
@@ -474,6 +477,9 @@ func (s *Server) Handler() http.Handler {
 				r.Delete("/fail2ban/templates/{name}", s.handleF2BTemplateDelete)
 				r.Post("/fail2ban/templates/apply", s.handleF2BTemplateApply)
 				r.Post("/fail2ban/regex-test", s.handleF2BRegexTest)
+				r.Post("/compose/stacks/deploy", s.handleComposeDeploy)
+				r.Post("/sites/apply", s.handleSiteApply)
+				r.Post("/sites/remove", s.handleSiteRemove)
 				r.Delete("/containers/{name}", s.handleContainerDelete)
 				r.Post("/images/remove", s.handleImagesRemove)
 				r.Post("/images/save", s.handleImagesSave)
@@ -724,7 +730,12 @@ func fail(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 func decodeJSON(r *http.Request, dst any) error {
-	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, 4<<20))
+	return decodeJSONLimit(r, dst, 4<<20)
+}
+
+// decodeJSONLimit — decodeJSON со своим пределом тела (файлы стека).
+func decodeJSONLimit(r *http.Request, dst any, limit int64) error {
+	dec := json.NewDecoder(http.MaxBytesReader(nil, r.Body, limit))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		return msgs.Errorf("api.badRequestBody", err)
