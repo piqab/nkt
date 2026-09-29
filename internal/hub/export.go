@@ -218,11 +218,12 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 				okp = append(okp, p)
 				continue
 			}
-			var e1, e2, e3 error
+			var e1, e2, e3, e4 error
 			p.HookSecret, e1 = reenc(p.HookSecret)
 			p.GitCred, e2 = reenc(p.GitCred)
 			p.RegistryCred, e3 = reenc(p.RegistryCred)
-			if err := errors.Join(e1, e2, e3); err != nil {
+			p.EnvEnc, e4 = reenc(p.EnvEnc)
+			if err := errors.Join(e1, e2, e3, e4); err != nil {
 				pre = append(pre, fmt.Sprintf("%s: %v", p.Name, err))
 				continue
 			}

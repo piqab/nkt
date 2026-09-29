@@ -228,6 +228,9 @@ func (s *Server) handlePipelineCredentials(w http.ResponseWriter, r *http.Reques
 		Registry      string `json:"registry"`
 		ClearGit      bool   `json:"clear_git"`
 		ClearRegistry bool   `json:"clear_registry"`
+		// Env — .env compose-стека (action: compose); пусто — не менять.
+		Env      string `json:"env"`
+		ClearEnv bool   `json:"clear_env"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -262,6 +265,15 @@ func (s *Server) handlePipelineCredentials(w http.ResponseWriter, r *http.Reques
 		regEnc = enc
 	}
 	err := s.db.SetPipelineSecrets(r.Context(), p.ID, nil, gitEnc, regEnc)
+	if err == nil && (req.ClearEnv || req.Env != "") {
+		var envEnc []byte
+		if !req.ClearEnv {
+			envEnc, err = secretbox.Encrypt(s.hub.key, []byte(req.Env))
+		}
+		if err == nil {
+			err = s.db.SetPipelineEnv(r.Context(), p.ID, envEnc)
+		}
+	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "pipeline.credentials", p.Name, auditOutcome(err), "")
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)

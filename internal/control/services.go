@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/site"
+	"path/filepath"
 	"strings"
 
 	"github.com/piqab/nkt/internal/collect"
@@ -106,7 +108,7 @@ func (s *ServiceManager) Action(ctx context.Context, user, service, action strin
 // unlike systemd's reload there is no single "the config" to reread; the
 // file itself is the source of truth and this reconciles the stack to it.
 func (s *ServiceManager) ApplyCompose(ctx context.Context, user, path string) (collect.CommandResult, error) {
-	res, err := s.c.Run(ctx, "docker", "compose", "-f", path, "up", "-d")
+	res, err := s.c.Run(ctx, "docker", append(append([]string{"compose"}, s.ComposeFiles(path)...), "up", "-d")...)
 	outcome := "ok"
 	if err != nil || !res.OK() {
 		outcome = "error"
@@ -123,6 +125,17 @@ func (s *ServiceManager) ApplyCompose(ctx context.Context, user, path string) (c
 	return res, nil
 }
 
+// ComposeFiles — «-f» для стека: сам файл и, если рядом есть, файл
+// публикации nkt (site.OverrideFile) — иначе пересоздание стека теряло бы
+// порт, на который смотрит прокси сайта.
+func (s *ServiceManager) ComposeFiles(path string) []string {
+	args := []string{"-f", path}
+	if ov := filepath.Join(filepath.Dir(path), site.OverrideFile); s.c.Exists(ov) {
+		args = append(args, "-f", ov)
+	}
+	return args
+}
+
 // ComposeDown останавливает стек и убирает его контейнеры.
 //
 // Именно down, а не stop: профиль говорит «этого стека здесь быть не
@@ -130,7 +143,7 @@ func (s *ServiceManager) ApplyCompose(ctx context.Context, user, path string) (c
 // половину стека в списке навсегда. Тома не трогаются — данные удаляются
 // только по отдельной просьбе, а не применением профиля.
 func (s *ServiceManager) ComposeDown(ctx context.Context, user, path string) (collect.CommandResult, error) {
-	res, err := s.c.Run(ctx, "docker", "compose", "-f", path, "down")
+	res, err := s.c.Run(ctx, "docker", append(append([]string{"compose"}, s.ComposeFiles(path)...), "down")...)
 	outcome := "ok"
 	if err != nil || !res.OK() {
 		outcome = "error"

@@ -99,6 +99,102 @@ Only clusters in the "ready" state are used. If the deployment fails in
 some clusters, the job ends with "failed in N of M", and the log shows
 where and why.
 
+## Compose stack
+
+The **compose** action deploys a docker compose stack from the repository
+to hub hosts, **one after another**:
+
+```yaml
+repo: https://codeberg.org/me/shop.git
+ref: main
+action: compose
+compose:
+  file: deploy/docker-compose.yml   # the compose file in the repository
+  project: shop                     # the stack on the host: /srv/compose/shop
+  hosts: [web1, web2]               # or group: prod; the hub machine is localhost
+  files: [deploy/nginx.conf, deploy/conf/]  # what else the stack needs
+  wait_timeout: 5m                  # wait for startup and healthchecks
+  site: shop.example.com            # check over HTTPS after the deployment
+```
+
+- [Substitutions](#substitutions) apply to the compose file and the files
+  next to it: <code v-pre>image: ghcr.io/org/shop:{{nkt.tag}}</code>.
+- Files from `files` (directories as a whole) must lie **inside the
+  compose file's directory**: on the host the stack is that directory, and
+  compose's relative references (`./nginx.conf`) must stay valid. Text
+  files only; binaries belong in the image.
+- On each host the files are written to `/srv/compose/<project>` with a
+  version history, then `docker compose config` checks the stack; if it is
+  rejected, the files are put back. Then a host job runs `pull` and
+  `up -d --remove-orphans --wait`: the job waits until the containers are
+  up and their healthchecks pass. **The next host starts only after the
+  previous one succeeded**; the first failure stops the deployment.
+- Without Docker, Podman (`podman compose`) is used; the wait lasts until
+  every container of the project runs and is healthy.
+- Ready images only: a service with `build:` will not build on the host;
+  building is CI's job.
+- **The stack's `.env`** is set in the pipeline's "Access": stored on the
+  hub encrypted, written to the host with 0600 permissions, never in the
+  version history or logs.
+
+**Compose from a link.** In the new pipeline window, paste a link to a
+compose file (GitHub `…/blob/<branch>/<path>`, GitLab `…/-/blob/…`,
+Codeberg/Gitea/Forgejo `…/src/branch/…`, or their raw variants) and pick
+hosts; the description fills itself in: repository, branch, path, stack
+name. Then it is an ordinary edit with a diff.
+
+![Compose from a link](/screens/en/deploy-compose.png)
+
+## Sites
+
+The **"Sites"** tab puts a domain on a host behind a proxy with a Let's
+Encrypt certificate:
+
+![New site](/screens/en/deploy-sites.png)
+
+1. **Host and names → "Check".** From the hub (that is, from outside):
+   whether each name points at the host and whether ports 80 and 443
+   answer. "Free" (connection refused) means the path is open and certbot
+   will bind the port itself; "no answer" means the port is most likely
+   closed by the provider's firewall or NAT, and Let's Encrypt will not
+   reach the host. A name pointing into a private network is marked: the
+   hub sees the ports from inside. From the host: which proxies are
+   installed and running, who holds 80/443, the stacks in `/srv/compose`
+   with their services and ports, the firewall.
+2. **Proxy:** nginx, HAProxy or Caddy, showing what is installed and what
+   runs. If nothing is installed, nginx is installed. If 80/443 are held
+   by a container (Traefik, a Caddy of your own), there is a warning: nkt
+   does not configure such a proxy.
+3. **Target:** a compose stack service (stack, service, container port) or
+   `address:port` (an app outside compose). An unpublished service port is
+   published by nkt **on 127.0.0.1 only**, through a `compose.nkt.yml` file
+   next to the stack (deployments and profiles take it into account), so
+   the service is reachable from outside only through the proxy. A port
+   already published on all addresses is used as is, with a warning.
+4. **"Set up"** is a hub job: DNS and ports, the proxy (installed if
+   needed), then a host job: open 80/443 in ufw/firewalld (if ticked),
+   publish the service, the **certificate** (one valid for more than 20
+   days is reused, otherwise `certbot certonly --standalone`: the proxy
+   stops for the issuance and starts again; nkt renews the same way), and
+   the **proxy configuration** through "Configs" with a check
+   (`nginx -t`, `haproxy -c`, `caddy validate`), rollback on error and a
+   version history:
+   - nginx: `conf.d/nkt-<domain>.conf` with 80 → HTTPS redirect, 443 with
+     HTTP/2, WebSocket and `X-Forwarded-*` headers;
+   - HAProxy: an `nkt-sites` block in `haproxy.cfg` (all nkt sites of the
+     host: frontends 80/443 with SNI and a backend per site), the
+     certificate as a combined PEM in `/etc/haproxy/nkt-certs`; if another
+     frontend already listens on 80/443, it refuses with an explanation;
+   - Caddy: `/etc/caddy/nkt/<domain>.caddy` imported from the Caddyfile;
+     Caddy obtains and renews the certificate itself (it runs as a
+     non-root user and cannot read certbot's keys).
+5. **HTTPS check from outside**: the response code and the certificate's
+   expiry; "Check" in the site row repeats it at any time.
+
+"Delete" removes the site from the hub and, if ticked, the proxy
+configuration on the host (with a history record); the certificate and the
+service publication stay.
+
 ## When to deploy
 
 - **The "Deploy" button** — the head of the branch from the description;
@@ -109,6 +205,8 @@ where and why.
 - **Registry** (`registry`) — the hub notices a new image tag newer than
   the previous one (compared by numbers: `v1.10.0` is newer than
   `v1.9.3`) and deploys the `ref` branch with that tag.
+- **Stack .env** — for `action: compose`: the stack's environment
+  variables (`KEY=value` per line).
 
 Polling and registry start working **after the first deployment with
 the button** — a freshly saved pipeline deploys nothing by itself. A

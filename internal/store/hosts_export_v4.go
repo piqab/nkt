@@ -23,6 +23,7 @@ type PipelineExport struct {
 	HookSecret   []byte                 `json:"hook_secret,omitempty"`
 	GitCred      []byte                 `json:"git_cred,omitempty"`
 	RegistryCred []byte                 `json:"registry_cred,omitempty"`
+	EnvEnc       []byte                 `json:"env_enc,omitempty"`
 	Enabled      bool                   `json:"enabled"`
 	Author       string                 `json:"author,omitempty"`
 	CreatedAt    string                 `json:"created_at,omitempty"`
@@ -71,7 +72,7 @@ func (db *DB) ExportPipelines(ctx context.Context) ([]PipelineExport, error) {
 	var out []PipelineExport
 	for _, p := range list {
 		pe := PipelineExport{Name: p.Name, Content: p.Content, HookID: p.HookID, HookSecret: p.HookSecret,
-			GitCred: p.GitCred, RegistryCred: p.RegistryCred, Enabled: p.Enabled, Author: p.Author, CreatedAt: p.CreatedAt}
+			GitCred: p.GitCred, RegistryCred: p.RegistryCred, EnvEnc: p.EnvEnc, Enabled: p.Enabled, Author: p.Author, CreatedAt: p.CreatedAt}
 		versions, err := db.PipelineVersions(ctx, p.ID)
 		if err != nil {
 			return nil, err
@@ -182,6 +183,11 @@ func (db *DB) importPipelines(ctx context.Context, pipelines []PipelineExport, r
 		}
 		if err := db.SetPipelineSecrets(ctx, id, empty(p.HookSecret), empty(p.GitCred), empty(p.RegistryCred)); err != nil {
 			rep.Err("%s: %v", p.Name, err)
+		}
+		if len(p.EnvEnc) > 0 {
+			if err := db.SetPipelineEnv(ctx, id, p.EnvEnc); err != nil {
+				rep.Err("%s: %v", p.Name, err)
+			}
 		}
 		if err := db.SetPipelineEnabled(ctx, id, p.Enabled); err != nil {
 			rep.Err("%s: %v", p.Name, err)

@@ -22,6 +22,8 @@ const (
 	ActionManifest = "manifest"
 	ActionHelm     = "helm"
 	ActionScript   = "script"
+	// ActionCompose — compose-стек из репозитория на хосты хаба.
+	ActionCompose = "compose"
 )
 
 // Spec — описание конвейера.
@@ -45,6 +47,8 @@ type Spec struct {
 	Helm *HelmSpec `yaml:"helm,omitempty"`
 	// Script — сценарий хаба в репозитории (script).
 	Script string `yaml:"script,omitempty"`
+	// Compose — стек (compose).
+	Compose *ComposeSpec `yaml:"compose,omitempty"`
 
 	// Poll — опрашивать репозиторий с этим интервалом (5m); пусто — нет.
 	Poll string `yaml:"poll,omitempty"`
@@ -54,6 +58,45 @@ type Spec struct {
 	RegistryTags string `yaml:"registry_tags,omitempty"`
 	RegistryPoll string `yaml:"registry_poll,omitempty"`
 }
+
+// ComposeSpec — compose-стек конвейера: файл из репозитория (и то, на
+// что он ссылается) — в /srv/compose/<project> на каждом хосте по
+// очереди, docker compose pull и up --wait; следующий хост — только когда
+// стек на предыдущем поднялся.
+type ComposeSpec struct {
+	// File — compose-файл в репозитории.
+	File string `yaml:"file"`
+	// Project — имя стека на хосте.
+	Project string `yaml:"project"`
+	// Hosts / Group — куда: имена хостов хаба или группа.
+	Hosts []string `yaml:"hosts,omitempty"`
+	Group string   `yaml:"group,omitempty"`
+	// Files — файлы и каталоги рядом (конфиги, на которые ссылается
+	// compose); пути в репозитории, внутри каталога compose-файла.
+	Files []string `yaml:"files,omitempty"`
+	// Pull — скачивать образы перед подъёмом (по умолчанию да).
+	Pull *bool `yaml:"pull,omitempty"`
+	// WaitTimeout — сколько ждать подъёма и healthcheck на хосте (5m).
+	WaitTimeout string `yaml:"wait_timeout,omitempty"`
+	// Site — после выкладки проверить сайт по HTTPS.
+	Site string `yaml:"site,omitempty"`
+}
+
+// PullImages — pull перед up (по умолчанию да).
+func (c ComposeSpec) PullImages() bool { return c.Pull == nil || *c.Pull }
+
+// Wait — время ожидания подъёма стека.
+func (c ComposeSpec) Wait() time.Duration {
+	if d, err := time.ParseDuration(c.WaitTimeout); err == nil && d > 0 {
+		return d
+	}
+	return 5 * time.Minute
+}
+
+var (
+	composeProjectRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
+	composeDomainRe  = regexp.MustCompile(`^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$`)
+)
 
 // HelmSpec — Helm-релиз конвейера.
 type HelmSpec struct {
@@ -133,6 +176,34 @@ func (s Spec) Validate() error {
 	case ActionScript:
 		if !ValidPath(s.Script) {
 			return msgs.Errorf("deploy.specBad", "script", s.Script)
+		}
+	case ActionCompose:
+		c := s.Compose
+		if c == nil {
+			return msgs.Errorf("deploy.specNeeds", "compose")
+		}
+		if !ValidPath(c.File) {
+			return msgs.Errorf("deploy.specBad", "compose.file", c.File)
+		}
+		if !composeProjectRe.MatchString(c.Project) {
+			return msgs.Errorf("deploy.specBad", "compose.project", c.Project)
+		}
+		if len(c.Hosts) == 0 && c.Group == "" {
+			return msgs.Errorf("deploy.specNeeds", "compose.hosts / compose.group")
+		}
+		for _, f := range c.Files {
+			if !ValidPath(strings.TrimSuffix(f, "/")) {
+				return msgs.Errorf("deploy.specBad", "compose.files", f)
+			}
+		}
+		if c.WaitTimeout != "" {
+			d, err := time.ParseDuration(c.WaitTimeout)
+			if err != nil || d < 10*time.Second || d > time.Hour {
+				return msgs.Errorf("deploy.specBad", "compose.wait_timeout", c.WaitTimeout)
+			}
+		}
+		if c.Site != "" && !composeDomainRe.MatchString(strings.ToLower(c.Site)) {
+			return msgs.Errorf("deploy.specBad", "compose.site", c.Site)
 		}
 	default:
 		return msgs.Errorf("deploy.specBad", "action", s.Action)
@@ -227,7 +298,7 @@ repo: https://github.com/org/app.git
 ref: main
 # tags: "v*"            # или выкладывать теги по шаблону
 
-# Что делать: manifest | helm | script
+# Что делать: manifest | helm | script | compose
 action: manifest
 manifests:
   - deploy/k8s.yaml     # {{nkt.tag}}, {{nkt.commit}}, {{nkt.ref}} подставляются
@@ -245,6 +316,15 @@ clusters: [prod]        # кластеры хаба
 
 # script: deploy/deploy.nkt   # сценарий хаба; параметры TAG, COMMIT, REF
 
+# compose:                     # action: compose — стек на хосты по очереди
+#   file: deploy/docker-compose.yml
+#   project: app               # /srv/compose/app на хосте
+#   hosts: [web1, web2]        # или group: prod
+#   files: [deploy/nginx.conf] # что ещё нужно стеку (внутри каталога compose-файла)
+#   wait_timeout: 5m           # ждать подъёма и healthcheck
+#   site: app.example.com      # после выкладки проверить сайт по HTTPS
+#   # .env стека — в «Доступ» конвейера, хранится зашифрованным
+
 # Когда ещё выкладывать, кроме вебхука и кнопки:
 # poll: 5m                     # новый коммит в ветке
 # registry: ghcr.io/org/app    # новый тег образа
@@ -257,7 +337,7 @@ repo: https://github.com/org/app.git
 ref: main
 # tags: "v*"            # or deploy tags matching a pattern
 
-# What to do: manifest | helm | script
+# What to do: manifest | helm | script | compose
 action: manifest
 manifests:
   - deploy/k8s.yaml     # {{nkt.tag}}, {{nkt.commit}}, {{nkt.ref}} are substituted
@@ -274,6 +354,15 @@ clusters: [prod]        # hub clusters
 #   tag_key: image.tag
 
 # script: deploy/deploy.nkt   # a hub script; parameters TAG, COMMIT, REF
+
+# compose:                     # action: compose — a stack to hosts one by one
+#   file: deploy/docker-compose.yml
+#   project: app               # /srv/compose/app on the host
+#   hosts: [web1, web2]        # or group: prod
+#   files: [deploy/nginx.conf] # what else the stack needs (inside the compose file's directory)
+#   wait_timeout: 5m           # wait for startup and healthchecks
+#   site: app.example.com      # check the site over HTTPS after the deployment
+#   # the stack's .env goes into the pipeline's "Access", stored encrypted
 
 # When else to deploy, besides the webhook and the button:
 # poll: 5m                     # a new commit in the branch
