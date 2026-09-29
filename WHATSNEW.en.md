@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.47 — 2026-09-29
+
+- **fail2ban on the hub, ban and unban on all hosts:** a banned address
+  shows up in "Banned addresses" right away (and disappears after an
+  unban): the hub re-polls the affected hosts when the job ends instead of
+  waiting for the next timed poll.
+
 ## v1.11.46 — 2026-09-29
 
 - **Dry run of a compose stack deployment**: a button in the "Deploy"

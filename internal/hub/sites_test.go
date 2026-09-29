@@ -239,3 +239,31 @@ func TestDryRunComposeOnLocal(t *testing.T) {
 		t.Fatal("non-compose dry run accepted")
 	}
 }
+
+// После бана на всех хостах сводка машины хаба — свежая: список
+// забаненных на хабе не ждёт следующего опроса.
+func TestF2BFleetRefreshesSummary(t *testing.T) {
+	srv, db, _ := localFixtureHub(t)
+	srv.jobs.Register(KindF2BFleet, NewF2BFleetRunner(srv))
+	ctx := context.Background()
+	before := srv.localScanner.Latest()
+	id, err := srv.jobs.Start(ctx, jobs.Spec{Kind: KindF2BFleet, Queue: "f2b", Author: "admin", Steps: 1,
+		Params: F2BFleetParams{Action: "ban", IPs: []string{"203.0.113.9"}, HostIDs: []int64{localHostID}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	var j store.Job
+	for time.Now().Before(deadline) {
+		if j, _ = db.JobByID(ctx, id); j.Status == store.JobSucceeded || j.Status == store.JobFailed {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if j.Status != store.JobSucceeded {
+		t.Fatalf("fleet: %+v\n%s", j, jobLogText(t, ctx, db, id))
+	}
+	if srv.localScanner.Latest() == before {
+		t.Fatal("summary not refreshed")
+	}
+}
