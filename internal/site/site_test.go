@@ -88,3 +88,19 @@ func TestOverride(t *testing.T) {
 		t.Fatal("broken yaml accepted")
 	}
 }
+
+func TestRemoveOverride(t *testing.T) {
+	one, _ := Override("", "web", 18000, 80)
+	two, _ := Override(one, "api", 18001, 8080)
+	out, changed, err := RemoveOverride(two, "web", 18000, 80)
+	if err != nil || !changed || strings.Contains(out, "18000") || !strings.Contains(out, "127.0.0.1:18001:8080") {
+		t.Fatalf("remove one: %v %v\n%s", changed, err, out)
+	}
+	out, changed, _ = RemoveOverride(out, "api", 18001, 8080)
+	if !changed || out != "" {
+		t.Fatalf("remove last: %q", out)
+	}
+	if _, changed, _ := RemoveOverride(one, "web", 18999, 80); changed {
+		t.Fatal("removed a mapping nkt did not add")
+	}
+}

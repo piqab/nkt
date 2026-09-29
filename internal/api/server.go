@@ -156,6 +156,7 @@ func New(d Deps) *Server {
 	if s.jobs != nil {
 		s.jobs.Register(KindDelete, &deleteRunner{s})
 		s.jobs.Register(KindComposeDeploy, &composeDeployRunner{s})
+		s.jobs.Register(KindComposeRemove, &composeRemoveRunner{s})
 		s.jobs.Register(KindSiteApply, &siteRunner{s})
 	}
 	return s
@@ -483,6 +484,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/fail2ban/regex-test", s.handleF2BRegexTest)
 				r.Post("/compose/stacks/deploy", s.handleComposeDeploy)
 				r.Post("/compose/stacks/check", s.handleComposeCheck)
+				r.Post("/compose/stacks/remove", s.handleComposeRemove)
 				r.Post("/sites/apply", s.handleSiteApply)
 				r.Post("/sites/remove", s.handleSiteRemove)
 				r.Delete("/containers/{name}", s.handleContainerDelete)

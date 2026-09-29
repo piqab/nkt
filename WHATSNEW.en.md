@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.50 — 2026-09-29
+
+- **Deleting a compose pipeline is a job that cleans the hosts:** the
+  pipeline's site, then `compose down` and the stack directory on each
+  host, then the hub record. Without the "volumes" tick the directory is
+  not wiped but moved to `/srv/compose/.nkt-removed` (data kept); volumes,
+  images and the certificate are behind ticks, off by default. If it fails:
+  "deletion unfinished" and "Retry deletion" with the same ticks.
+- **Deleting a site is a job:** the proxy config, the service's 127.0.0.1
+  publication and, if ticked, the certificate; if it fails, "Retry
+  deletion".
+- `manifest`, `helm` and `script` pipelines are still deleted from the hub
+  only.
+
 ## v1.11.49 — 2026-09-29
 
 - **A failed deployment is not retried** by polling and the registry every

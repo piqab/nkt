@@ -70,7 +70,7 @@ interface Site {
   updated_at: string
 }
 
-const STATUS_COLOR: Record<string, string> = { ok: 'success', failed: 'error', 'setting-up': 'processing' }
+const STATUS_COLOR: Record<string, string> = { ok: 'success', failed: 'error', 'setting-up': 'processing', removing: 'processing', 'remove-failed': 'error' }
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
 function portTag(t: (k: string) => string, v?: string) {
@@ -107,11 +107,13 @@ export function SitesPanel({ me }: { me: Me }) {
         const res = await api<{ job_id: number }>(`/hub/sites/${s.id}/apply`, { method: 'POST', body: { install_proxy: true } })
         void openJob(res.job_id)
       } else {
-        const choice = await confirmWithOption(t('sites.deleteConfirm', { name: s.domains[0] }), t('sites.deleteRemoveConfig'), {
-          optionHint: t('sites.deleteRemoveHint'),
-        })
+        // Удаление — заданием: прокси, публикация сервиса, по галочке —
+        // сертификат; не вышло — сайт остаётся с «Повторить».
+        const text = t('sites.deleteConfirm', { name: s.domains[0] }) + (s.pipeline_id ? ' ' + t('sites.deleteFromPipeline', { name: s.pipeline_name ?? `#${s.pipeline_id}` }) : '')
+        const choice = await confirmWithOption(text, t('sites.deleteCert'), { optionHint: t('sites.deleteCertHint') })
         if (!choice) return
-        await api(`/hub/sites/${s.id}${choice.checked ? '?remove=1' : ''}`, { method: 'DELETE' })
+        const res = await api<{ job_id: number }>(`/hub/sites/${s.id}/remove`, { method: 'POST', body: { cert: choice.checked } })
+        void openJob(res.job_id)
       }
       list.reload()
     } catch (err) {
@@ -229,7 +231,7 @@ export function SitesPanel({ me }: { me: Me }) {
                           {t('sites.reapply')}
                         </Button>
                         <Button size="small" danger onClick={() => void act(s, 'delete')}>
-                          {t('sites.delete')}
+                          {s.status === 'remove-failed' || s.status === 'removing' ? t('sites.deleteRetry') : t('sites.delete')}
                         </Button>
                       </>
                     )}

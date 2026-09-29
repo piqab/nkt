@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -294,5 +295,33 @@ func TestComposeCheckCopyCleanup(t *testing.T) {
 	composeCheckCleanup(c, work, rels)
 	if _, err := os.Stat(filepath.Join(root, "srv", "compose", ".nkt-check")); !os.IsNotExist(err) {
 		t.Fatalf("temp dir left: %v", err)
+	}
+}
+
+// Каталог убранного стека: без томов — перенос, с томами — удаление.
+func TestComposeRemoveScript(t *testing.T) {
+	root := t.TempDir()
+	stack := filepath.Join(root, "compose", "app")
+	_ = os.MkdirAll(filepath.Join(stack, "data"), 0o755)
+	_ = os.WriteFile(filepath.Join(stack, "data", "db"), []byte("x"), 0o644)
+	dest := filepath.Join(root, "compose", ".nkt-removed", "app-1")
+	if out, err := exec.Command("sh", "-c", composeRemoveScript, "sh", stack, dest).CombinedOutput(); err != nil {
+		t.Fatalf("move: %v %s", err, out)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dest, "data", "db")); string(b) != "x" {
+		t.Fatal("data not kept")
+	}
+	if _, err := os.Stat(stack); !os.IsNotExist(err) {
+		t.Fatal("stack dir left")
+	}
+	if out, err := exec.Command("sh", "-c", composeRemoveScript, "sh", dest, "").CombinedOutput(); err != nil {
+		t.Fatalf("delete: %v %s", err, out)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Fatal("dir not deleted")
+	}
+	// Уже убранный — не ошибка.
+	if out, err := exec.Command("sh", "-c", composeRemoveScript, "sh", stack, dest).CombinedOutput(); err != nil {
+		t.Fatalf("absent: %v %s", err, out)
 	}
 }

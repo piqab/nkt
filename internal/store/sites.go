@@ -36,6 +36,10 @@ const (
 	SiteSettingUp = "setting-up"
 	SiteOK        = "ok"
 	SiteFailed    = "failed"
+	// SiteRemoving / SiteRemoveFailed — удаление с хоста идёт или не
+	// завершилось (сайт остаётся на хабе, «Повторить»).
+	SiteRemoving     = "removing"
+	SiteRemoveFailed = "remove-failed"
 )
 
 const siteColumns = `id, domains, host_id, proxy, stack, service, container_port, upstream, open_firewall, pipeline_id, status, error, check_json, job_id, author, created_at, updated_at`

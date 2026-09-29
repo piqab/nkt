@@ -239,9 +239,13 @@ Encrypt certificate:
 5. **HTTPS check from outside**: the response code and the certificate's
    expiry; "Check" in the site row repeats it at any time.
 
-"Delete" removes the site from the hub and, if ticked, the proxy
-configuration on the host (with a history record); the certificate and the
-service publication stay.
+**"Delete"** is a hub job: on the host the proxy configuration is removed
+(with a history record), the service's 127.0.0.1 publication is removed
+(the service is recreated without it) and, if ticked, the certificate is
+deleted (unless another site needs it); then the site is removed from the
+hub. If it fails, the site stays marked "deletion unfinished" with a "Retry
+deletion" button. A site from a pipeline comes back with the next
+deployment unless the `site:` block is removed.
 
 ### A site in the pipeline
 
@@ -385,8 +389,21 @@ commit and tag again — the image is already in the registry, no rebuild.
 The **"also restore that deployment's .env"** tick brings back the `.env`
 version that deployment used; without it `.env` stays current.
 
-Deleting a pipeline deletes its history; what was deployed to clusters
-and hosts stays.
+**Deleting a compose pipeline** is a hub job: the pipeline's site, then on
+each host `compose down` (containers and network) and the stack directory,
+then the hub record with its history. Without the "volumes" tick the stack
+directory is not wiped but moved to
+`/srv/compose/.nkt-removed/<stack>-<time>`, so bind-mount data (`./data`)
+and docker volumes are kept; with it, `down -v` runs and the directory is
+deleted entirely. Images and the certificate are also behind ticks. A host
+that is no longer on the hub is skipped; a host that is not running is an
+error: the pipeline stays marked "deletion unfinished" (and disabled), and
+"Retry deletion" repeats it with the same ticks.
+
+![Deleting a pipeline](/screens/en/deploy-remove.png)
+
+`manifest`, `helm` and `script` pipelines are deleted from the hub only;
+what was deployed to clusters stays.
 
 ## Example
 

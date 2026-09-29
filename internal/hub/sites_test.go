@@ -98,6 +98,8 @@ func localFixtureHub(t *testing.T) (*Server, *store.DB, string) {
 		Log: slog.New(slog.DiscardHandler), Jobs: jm})
 	jm.Register(KindSiteSetup, NewSiteSetupRunner(srv))
 	jm.Register(KindDeploy, NewDeployRunner(srv))
+	jm.Register(KindSiteRemove, NewSiteRemoveRunner(srv))
+	jm.Register(KindPipelineRemove, NewPipelineRemoveRunner(srv))
 
 	return srv, db, root
 }
@@ -441,5 +443,103 @@ func TestPipelineEnvVersions(t *testing.T) {
 	raw, _ := secretbox.Decrypt(srv.hub.key, pl.EnvEnc)
 	if string(raw) != "A=1\n" || db.LatestEnvVersion(ctx, pid) <= vs[0].ID {
 		t.Fatalf("restore: %q", raw)
+	}
+}
+
+// waitJobDone — задание хаба завершилось (любым исходом).
+func waitJobDone(t *testing.T, db *store.DB, id int64) store.Job {
+	t.Helper()
+	deadline := time.Now().Add(90 * time.Second)
+	for time.Now().Before(deadline) {
+		j, _ := db.JobByID(context.Background(), id)
+		if j.Status != store.JobQueued && j.Status != store.JobRunning {
+			return j
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatal("job did not finish")
+	return store.Job{}
+}
+
+// Удаление сайта — заданием: прокси, публикация сервиса, запись.
+func TestSiteRemoveJob(t *testing.T) {
+	srv, db, root := localFixtureHub(t)
+	ctx := context.Background()
+	id, _ := db.SaveSite(ctx, store.Site{Domains: []string{"shop.example.com"}, HostID: localHostID, Proxy: "nginx",
+		Stack: "shop", Service: "web", ContainerPort: 80, OpenFirewall: true, Author: "admin"})
+	jobID, _ := srv.startSiteSetup(ctx, "admin", id, "shop.example.com", false)
+	if j := waitJobDone(t, db, jobID); j.Status != store.JobSucceeded {
+		t.Fatalf("setup: %+v", j)
+	}
+	ov := filepath.Join(root, "srv", "compose", "shop", "compose.nkt.yml")
+	if b, _ := os.ReadFile(ov); !strings.Contains(string(b), "18000") {
+		t.Fatalf("override: %s", b)
+	}
+	jid, err := srv.jobs.Start(ctx, jobs.Spec{Kind: KindSiteRemove, Queue: "site:x", Author: "admin", Steps: 1, Params: SiteRemoveParams{SiteID: id}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if j := waitJobDone(t, db, jid); j.Status != store.JobSucceeded {
+		t.Fatalf("remove: %+v\n%s", j, jobLogText(t, ctx, db, jid))
+	}
+	if _, err := db.SiteByID(ctx, id); err == nil {
+		t.Fatal("site record left")
+	}
+	if _, err := os.Stat(filepath.Join(root, "etc", "nginx", "conf.d", "nkt-shop.example.com.conf")); !os.IsNotExist(err) {
+		t.Fatal("nginx conf left")
+	}
+	if _, err := os.Stat(ov); !os.IsNotExist(err) {
+		b, _ := os.ReadFile(ov)
+		t.Fatalf("publication left: %s", b)
+	}
+}
+
+// Удаление конвейера compose: сайт, стек, запись; сбой — «не завершено».
+func TestPipelineRemoveJob(t *testing.T) {
+	srv, db, root := localFixtureHub(t)
+	ctx := context.Background()
+	content := "repo: https://codeberg.org/me/shop.git\nref: main\naction: compose\ncompose:\n  file: compose.yaml\n  project: shop\n  hosts: [localhost, gone]\n"
+	secret, _ := secretbox.Encrypt(srv.hub.key, []byte("s"))
+	pid, err := db.CreatePipeline(ctx, store.Pipeline{Name: "shop", Content: content, HookID: "hook-rm-1", HookSecret: secret, Author: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	sid, _ := db.SaveSite(ctx, store.Site{Domains: []string{"shop.example.com"}, HostID: localHostID, Proxy: "nginx",
+		Stack: "shop", Service: "web", ContainerPort: 80, PipelineID: pid, Author: "admin"})
+	jobID, _ := srv.startSiteSetup(ctx, "admin", sid, "shop.example.com", false)
+	waitJobDone(t, db, jobID)
+	jid, err := srv.jobs.Start(ctx, jobs.Spec{Kind: KindPipelineRemove, Queue: "deploy:x", Author: "admin", Steps: 3,
+		Params: PipelineRemoveParams{PipelineID: pid}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := waitJobDone(t, db, jid)
+	log := jobLogText(t, ctx, db, jid)
+	if j.Status != store.JobSucceeded || !strings.Contains(log, "gone") {
+		t.Fatalf("remove: %+v\n%s", j, log)
+	}
+	if _, err := db.PipelineByID(ctx, pid); err == nil {
+		t.Fatal("pipeline record left")
+	}
+	if _, err := db.SiteByID(ctx, sid); err == nil {
+		t.Fatal("site record left")
+	}
+	if _, err := os.Stat(filepath.Join(root, "etc", "nginx", "conf.d", "nkt-shop.example.com.conf")); !os.IsNotExist(err) {
+		t.Fatal("nginx conf left")
+	}
+
+	// Хост не работает — удаление не завершено, конвейер остаётся.
+	if _, err := db.CreateHost(ctx, "down1", "192.0.2.1", 22, "root", "password", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	pid2, _ := db.CreatePipeline(ctx, store.Pipeline{Name: "shop2", Content: strings.Replace(content, "[localhost, gone]", "[down1]", 1), HookID: "hook-rm-2", HookSecret: secret, Author: "admin"})
+	jid, _ = srv.jobs.Start(ctx, jobs.Spec{Kind: KindPipelineRemove, Queue: "deploy:y", Author: "admin", Steps: 3,
+		Params: PipelineRemoveParams{PipelineID: pid2}})
+	if j := waitJobDone(t, db, jid); j.Status != store.JobFailed {
+		t.Fatalf("offline host accepted: %+v\n%s", j, jobLogText(t, ctx, db, jid))
+	}
+	pl, err := db.PipelineByID(ctx, pid2)
+	if err != nil || !strings.Contains(pl.Removal, "error") {
+		t.Fatalf("removal state: %+v %v", pl.Removal, err)
 	}
 }

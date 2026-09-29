@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Input, Select, Space, Switch, Tabs, Tag, Tooltip } from 'antd'
+import { Button, Checkbox, Input, Select, Space, Switch, Tabs, Tag, Tooltip } from 'antd'
 import { CopyOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -43,6 +43,9 @@ interface Pipeline {
   has_env?: boolean
   updated_at: string
   last?: Deployment
+  action?: string
+  /** JSON: что удалять и ошибка, если удаление с хостов не завершилось. */
+  removal?: string
 }
 interface PipelineVersion {
   id: number
@@ -85,6 +88,7 @@ export default function Deployments({ me }: { me: Me }) {
   const [dialog, setDialog] = useState<{ type: 'deploy' | 'access' | 'hook' | 'history'; p: Pipeline } | null>(null)
   const [job, setJob] = useState<Job | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [remove, setRemove] = useState<Pipeline | null>(null)
 
   async function openJob(id?: number) {
     if (!id) return
@@ -103,6 +107,13 @@ export default function Deployments({ me }: { me: Me }) {
         <Space size={4}>
           <strong>{p.name}</strong>
           {!p.enabled && <Tag>{t('deploy.disabled')}</Tag>}
+          {removalOf(p)?.error ? (
+            <Tooltip title={removalOf(p)?.error}>
+              <Tag color="error">{t('deploy.removeUnfinished')}</Tag>
+            </Tooltip>
+          ) : removalOf(p) ? (
+            <Tag color="processing">{t('deploy.removing')}</Tag>
+          ) : null}
         </Space>
       ),
     },
@@ -170,21 +181,27 @@ export default function Deployments({ me }: { me: Me }) {
           <Button size="small" onClick={() => setDialog({ type: 'hook', p })}>
             {t('deploy.hook')}
           </Button>
-          <Button
-            size="small"
-            danger
-            onClick={async () => {
-              if (!(await confirmAction(t('deploy.deleteConfirm', { name: p.name })))) return
-              try {
-                await api(`/hub/pipelines/${p.id}`, { method: 'DELETE' })
-                void list.reload()
-              } catch (err) {
-                setError(errText(err))
-              }
-            }}
-          >
-            {t('deploy.delete')}
-          </Button>
+          {p.action === 'compose' ? (
+            <Button size="small" danger onClick={() => setRemove(p)}>
+              {removalOf(p) ? t('deploy.deleteRetry') : t('deploy.delete')}
+            </Button>
+          ) : (
+            <Button
+              size="small"
+              danger
+              onClick={async () => {
+                if (!(await confirmAction(t('deploy.deleteConfirm', { name: p.name })))) return
+                try {
+                  await api(`/hub/pipelines/${p.id}`, { method: 'DELETE' })
+                  void list.reload()
+                } catch (err) {
+                  setError(errText(err))
+                }
+              }}
+            >
+              {t('deploy.delete')}
+            </Button>
+          )}
         </Space>
       ),
     },
@@ -250,8 +267,92 @@ export default function Deployments({ me }: { me: Me }) {
       {dialog?.type === 'history' && <HistoryModal p={dialog.p} onClose={() => setDialog(null)} onOpenJob={(id) => void openJob(id)} onChanged={() => void list.reload()} />}
       {dialog?.type === 'access' && <AccessModal p={dialog.p} onClose={() => setDialog(null)} onSaved={() => void list.reload()} />}
       {dialog?.type === 'hook' && <HookModal p={dialog.p} onClose={() => setDialog(null)} />}
+      {remove && (
+        <RemoveModal
+          p={remove}
+          onClose={() => setRemove(null)}
+          onStarted={(jobID) => {
+            setRemove(null)
+            void list.reload()
+            void openJob(jobID)
+          }}
+        />
+      )}
       {job && <JobLogModal job={job} scope="/hosts/local" onClose={() => setJob(null)} onDone={() => void list.reload()} />}
     </>
+  )
+}
+
+/** Состояние удаления конвейера с хостов (pipelines.removal). */
+interface Removal {
+  volumes?: boolean
+  images?: boolean
+  cert?: boolean
+  job_id?: number
+  error?: string
+  running?: boolean
+}
+function removalOf(p: Pipeline): Removal | null {
+  if (!p.removal) return null
+  try {
+    const r = JSON.parse(p.removal) as Removal
+    return { ...r, running: !r.error }
+  } catch {
+    return null
+  }
+}
+
+/** Удаление конвейера compose: задание хаба — сайт, стек на хостах
+ * (compose down, каталог стека), запись. Тома, образы и сертификат — по
+ * галочкам, по умолчанию нет. Повтор — с прежними галочками. */
+function RemoveModal({ p, onClose, onStarted }: { p: Pipeline; onClose: () => void; onStarted: (jobID: number) => void }) {
+  const { t } = useTranslation()
+  const prev = removalOf(p)
+  const [volumes, setVolumes] = useState(prev?.volumes ?? false)
+  const [images, setImages] = useState(prev?.images ?? false)
+  const [cert, setCert] = useState(prev?.cert ?? false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <Modal title={t('deploy.removeTitle', { name: p.name })} onClose={onClose} width={640}>
+      <p className="small">{t('deploy.removeHint')}</p>
+      {prev?.error && <Banner kind="error">{t('deploy.removeUnfinishedText', { error: prev.error })}</Banner>}
+      {error && <Banner kind="error">{error}</Banner>}
+      <div className="col" style={{ gap: '0.4rem', margin: '0.5rem 0' }}>
+        <Checkbox checked={volumes} onChange={(e) => setVolumes(e.target.checked)}>
+          <span style={{ color: volumes ? 'var(--status-error)' : undefined }}>{t('deploy.removeVolumes')}</span>
+          <div className="small muted">{t('deploy.removeVolumesHint')}</div>
+        </Checkbox>
+        <Checkbox checked={images} onChange={(e) => setImages(e.target.checked)}>
+          {t('deploy.removeImages')}
+        </Checkbox>
+        <Checkbox checked={cert} onChange={(e) => setCert(e.target.checked)}>
+          {t('deploy.removeCert')}
+        </Checkbox>
+      </div>
+      <Space>
+        <Button
+          danger
+          type="primary"
+          loading={busy}
+          onClick={async () => {
+            setBusy(true)
+            setError(null)
+            try {
+              const r = await api<{ job_id: number }>(`/hub/pipelines/${p.id}/remove`, { method: 'POST', body: { volumes, images, cert } })
+              onStarted(r.job_id)
+            } catch (err) {
+              setError(errText(err))
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {prev?.error ? t('deploy.deleteRetry') : t('deploy.removeStart')}
+        </Button>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+      </Space>
+    </Modal>
   )
 }
 

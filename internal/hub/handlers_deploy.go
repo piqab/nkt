@@ -27,6 +27,8 @@ func pipelineIDParam(r *http.Request, name string) (int64, error) {
 type pipelineJSON struct {
 	store.Pipeline
 	Last *store.Deployment `json:"last,omitempty"`
+	// Action — действие из описания (compose удаляется заданием с хостов).
+	Action string `json:"action,omitempty"`
 }
 
 // handlePipelines — GET /hub/pipelines: конвейеры с последней выкладкой.
@@ -38,8 +40,12 @@ func (s *Server) handlePipelines(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]pipelineJSON, 0, len(list))
 	for _, p := range list {
-		p.Content = ""
 		row := pipelineJSON{Pipeline: p}
+		if spec, err := deploy.ParseSpec(p.Content); err == nil {
+			// Как удалять: compose — заданием с хостов, прочие — с хаба.
+			row.Action = spec.Action
+		}
+		row.Content = ""
 		if ds, err := s.db.Deployments(r.Context(), p.ID, 1); err == nil && len(ds) > 0 {
 			row.Last = &ds[0]
 		}
@@ -152,6 +158,12 @@ func (s *Server) handlePipelineUpdate(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePipelineDelete(w http.ResponseWriter, r *http.Request) {
 	p, ok := s.pipelineFromReq(w, r)
 	if !ok {
+		return
+	}
+	// Стек compose живёт на хостах — его убирает задание удаления, а не
+	// строка в базе хаба (иначе на хостах остался бы «сирота»).
+	if spec, err := deploy.ParseSpec(p.Content); err == nil && spec.Action == deploy.ActionCompose {
+		writeErr(w, r, http.StatusConflict, msgs.Errorf("deploy.useRemove"))
 		return
 	}
 	err := s.db.DeletePipeline(r.Context(), p.ID)

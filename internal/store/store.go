@@ -566,6 +566,8 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"pipelines", "env_sha", `ALTER TABLE pipelines ADD COLUMN env_sha TEXT NOT NULL DEFAULT ''`},
 	// env_version — версия .env конвейера на момент выкладки.
 	{"deployments", "env_version", `ALTER TABLE deployments ADD COLUMN env_version INTEGER NOT NULL DEFAULT 0`},
+	// removal — удаление конвейера с хостов (JSON: что удалять, ошибка).
+	{"pipelines", "removal", `ALTER TABLE pipelines ADD COLUMN removal TEXT NOT NULL DEFAULT ''`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

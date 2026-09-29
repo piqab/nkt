@@ -248,6 +248,51 @@ type Port struct {
 
 // Override — файл публикации: сервис на 127.0.0.1:<hostPort>. Прежние
 // записи файла сохраняются (другие сервисы, другие сайты).
+// RemoveOverride убирает из файла публикации сайта порт сервиса
+// (127.0.0.1:hostPort:containerPort). changed — что-то убрано; пустой
+// результат — в файле ничего не осталось (его можно удалить).
+func RemoveOverride(existing, service string, hostPort, containerPort int) (string, bool, error) {
+	doc := map[string]any{}
+	if err := yaml.Unmarshal([]byte(existing), &doc); err != nil {
+		return existing, false, msgs.Errorf("site.badOverride", err)
+	}
+	services, _ := doc["services"].(map[string]any)
+	svc, _ := services[service].(map[string]any)
+	list, _ := svc["ports"].([]any)
+	mapping := fmt.Sprintf("127.0.0.1:%d:%d", hostPort, containerPort)
+	var kept []any
+	changed := false
+	for _, p := range list {
+		if s, ok := p.(string); ok && s == mapping {
+			changed = true
+			continue
+		}
+		kept = append(kept, p)
+	}
+	if !changed {
+		return existing, false, nil
+	}
+	if len(kept) > 0 {
+		svc["ports"] = kept
+	} else {
+		delete(svc, "ports")
+	}
+	if len(svc) == 0 {
+		delete(services, service)
+	}
+	if len(services) == 0 {
+		delete(doc, "services")
+	}
+	if len(doc) == 0 {
+		return "", true, nil
+	}
+	out, err := yaml.Marshal(doc)
+	if err != nil {
+		return existing, false, err
+	}
+	return "# Managed by nkt: services published on 127.0.0.1 for the site proxy\n" + string(out), true, nil
+}
+
 func Override(existing, service string, hostPort, containerPort int) (string, error) {
 	doc := map[string]any{}
 	if strings.TrimSpace(existing) != "" {
