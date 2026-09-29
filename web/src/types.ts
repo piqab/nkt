@@ -54,6 +54,8 @@ export interface HubHost {
    * хостов. Машина показывается внутри своего хоста и переезжает между
    * группами только вместе с ним. */
   parent_id?: number
+  /** fail2ban по данным опроса; нет — неизвестно. */
+  fail2ban?: { installed: boolean; running: boolean; banned: number }
   id: number
   name: string
   addr: string
@@ -893,7 +895,7 @@ export interface HostEvent {
   /** Имя и адрес на момент события: хост могли переименовать или удалить. */
   host_name: string
   host_addr: string
-  kind: 'unreachable' | 'recovered' | 'problems' | 'resolved' | 'job-failed'
+  kind: 'unreachable' | 'recovered' | 'problems' | 'resolved' | 'job-failed' | 'rebooted' | 'bans'
   severity?: string
   detail?: string
 }
@@ -1038,4 +1040,78 @@ export interface VMHostImage {
   size: number
   used_by?: string
   running?: boolean
+}
+
+/** Забаненный адрес fail2ban. */
+export interface Fail2banBan {
+  ip: string
+  jail: string
+  since?: string
+  until?: string
+}
+
+/** Запущенный джейл fail2ban. */
+export interface Fail2banJail {
+  name: string
+  log_paths?: string[]
+  journal?: string
+  max_retry: number
+  find_time: number
+  ban_time: number
+  failed: number
+  total_failed: number
+  banned: number
+  total_banned: number
+  ignore_ip?: string[]
+  missing_logs?: string[]
+  bans: Fail2banBan[]
+}
+
+export interface Fail2banState {
+  installed: boolean
+  running: boolean
+  version?: string
+  jails: Fail2banJail[]
+  banned_now: number
+  error?: string
+}
+
+/** GET /fail2ban. */
+export interface Fail2banStatus {
+  state: Fail2banState
+  root: string
+  manual_jail: string
+  manual_ready: boolean
+  hub_file: string
+  hub_addr?: string
+  client_ip?: string
+  default_ignore: string[]
+  log_path: string
+  actions: string[]
+  simulated: boolean
+  nkt_jails: Fail2banNktJail[]
+}
+
+export interface Fail2banEvent {
+  ts: string
+  jail: string
+  action: string
+  ip: string
+  line: string
+}
+
+export interface Fail2banTemplate {
+  name: string
+  description?: string
+  service?: string
+  jail: string
+  filter?: string
+  builtin: boolean
+  available: boolean
+}
+
+export interface Fail2banNktJail {
+  jail: string
+  path: string
+  enabled: boolean
 }

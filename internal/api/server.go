@@ -68,7 +68,9 @@ type Server struct {
 	// uploads — сколько больших файлов ушло в историю в рамках загрузки.
 	uploads uploadBudget
 	// dels — какие объекты сейчас удаляются заданием.
-	dels       deletions
+	dels deletions
+	// f2b — облегчённое состояние fail2ban для сводки хабу.
+	f2b        f2bCache
 	guestCreds *guestcred.Store
 	ui         fs.FS
 	log        *slog.Logger
@@ -148,6 +150,9 @@ func New(d Deps) *Server {
 	if s.configs != nil && s.scanner != nil && s.cfg != nil {
 		s.configs.AttachK8s(k8sDocs{s})
 	}
+	if s.configs != nil && s.db != nil {
+		s.configs.AttachDocs(f2bTemplatePrefix, &f2bTemplateDocs{s})
+	}
 	if s.jobs != nil {
 		s.jobs.Register(KindDelete, &deleteRunner{s})
 	}
@@ -199,6 +204,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/logs/ws", s.handleLogStream)
 			r.Get("/firewall/ufw-install/ws", s.handleUFWInstallWS)
 			r.Get("/firewall/firewalld-install/ws", s.handleFirewalldInstallWS)
+			r.Get("/fail2ban/install/ws", s.handleF2BInstallWS)
 			r.Get("/system/dbus-install/ws", s.handleDbusInstallWS)
 			r.Get("/system/tmux-install/ws", s.handleTmuxInstallWS)
 			r.Get("/system/btop-install/ws", s.handleBtopInstallWS)
@@ -215,6 +221,7 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/updates/ws", s.handleUpdatesWS)
 			r.Post("/firewall/ufw-install/ws", s.handleUFWInstallWS)
 			r.Post("/firewall/firewalld-install/ws", s.handleFirewalldInstallWS)
+			r.Post("/fail2ban/install/ws", s.handleF2BInstallWS)
 			r.Post("/system/tmux-install/ws", s.handleTmuxInstallWS)
 			r.Post("/system/btop-install/ws", s.handleBtopInstallWS)
 			r.Post("/services/{name}/install/ws", s.handleServiceInstallWS)
@@ -276,6 +283,10 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/firewall/rules", s.handleFirewallNumbered)
 			r.Get("/firewall/ufw-install/status", s.handleUFWInstallStatus)
 			r.Get("/firewall/firewalld-install/status", s.handleFirewalldInstallStatus)
+			r.Get("/fail2ban", s.handleF2BStatus)
+			r.Get("/fail2ban/log", s.handleF2BLog)
+			r.Get("/fail2ban/templates", s.handleF2BTemplates)
+			r.Get("/fail2ban/install/status", s.handleF2BInstallStatus)
 			r.Get("/system/dbus-status", s.handleDbusStatus)
 			r.Get("/system/dbus-install/status", s.handleDbusInstallStatus)
 			r.Get("/system/tmux-status", s.handleTmuxStatus)
@@ -453,6 +464,15 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/podman/containers/{name}/logs/ws", s.handleContainerLogsWS)
 				r.Post("/containers/{name}/{action}", s.handleContainerAction)
 				r.Post("/deletions", s.handleDelete)
+				r.Post("/fail2ban/ban", s.handleF2BBan)
+				r.Post("/fail2ban/unban", s.handleF2BUnban)
+				r.Post("/fail2ban/reload", s.handleF2BReload)
+				r.Post("/fail2ban/setup", s.handleF2BSetup)
+				r.Put("/fail2ban/hub-addr", s.handleF2BHubAddr)
+				r.Put("/fail2ban/templates", s.handleF2BTemplateSave)
+				r.Delete("/fail2ban/templates/{name}", s.handleF2BTemplateDelete)
+				r.Post("/fail2ban/templates/apply", s.handleF2BTemplateApply)
+				r.Post("/fail2ban/regex-test", s.handleF2BRegexTest)
 				r.Delete("/containers/{name}", s.handleContainerDelete)
 				r.Post("/images/remove", s.handleImagesRemove)
 				r.Post("/images/save", s.handleImagesSave)

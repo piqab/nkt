@@ -1,0 +1,7 @@
+Sep 29 11:20:00 edge-01 sshd[4100]: Failed password for invalid user root from 203.0.113.45 port 50000 ssh2
+Sep 29 11:23:00 edge-01 sshd[4101]: Failed password for invalid user admin from 203.0.113.45 port 50017 ssh2
+Sep 29 11:26:00 edge-01 sshd[4102]: Failed password for invalid user ubuntu from 198.51.100.23 port 50034 ssh2
+Sep 29 11:29:00 edge-01 sshd[4103]: Failed password for invalid user root from 192.0.2.77 port 50051 ssh2
+Sep 29 11:32:00 edge-01 sshd[4104]: Failed password for invalid user test from 192.0.2.77 port 50068 ssh2
+Sep 29 11:35:00 edge-01 sshd[4105]: Failed password for invalid user oracle from 198.51.100.61 port 50085 ssh2
+Sep 29 11:40:00 edge-01 sshd[4200]: Accepted publickey for deploy from 10.0.0.5 port 51022 ssh2: ED25519 SHA256:q1w2e3

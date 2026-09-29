@@ -526,6 +526,23 @@ type hostWithOverview struct {
 	// HostKeyFP — SHA256-отпечаток запомненного ключа SSH хоста (пусто,
 	// пока хаб ни разу не подключался); «забыть ключ хоста» сбрасывает.
 	HostKeyFP string `json:"host_key_fp,omitempty"`
+	// Fail2ban — установлен ли, работает ли и сколько забанено сейчас
+	// (из опроса); nil — неизвестно (хост старой версии, не опрошен).
+	Fail2ban *F2BRow `json:"fail2ban,omitempty"`
+}
+
+// F2BRow — fail2ban в строке хоста.
+type F2BRow struct {
+	Installed bool `json:"installed"`
+	Running   bool `json:"running"`
+	Banned    int  `json:"banned"`
+}
+
+func f2bRow(sum *f2bSummary) *F2BRow {
+	if sum == nil {
+		return nil
+	}
+	return &F2BRow{Installed: sum.Installed, Running: sum.Running, Banned: sum.Banned}
 }
 
 // localHostID is the sentinel Host.ID for the synthetic "localhost" row —
@@ -581,6 +598,9 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 				row.LastPolledAt = store.FormatTime(ov.LastPolledAt)
 			}
 		}
+		if sum, ok := s.hub.F2BOf(h.ID); ok {
+			row.Fail2ban = f2bRow(sum)
+		}
 		row.InstallActive = s.hub.InstallActive(h.ID)
 		row.TunnelConnected = s.hub.TunnelConnected(h.ID)
 		row.AptProxyConnected = s.hub.AptProxyConnected(h.ID)
@@ -621,6 +641,7 @@ func (s *Server) localHostEntry(ctx context.Context) *hostWithOverview {
 		if snap := s.localScanner.Latest(); snap != nil {
 			row.Findings = snap.FindingCounts()
 			row.LastPolledAt = snap.TS
+			row.Fail2ban = f2bRow(f2bLocalState(snap))
 		}
 	}
 	return row

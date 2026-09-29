@@ -24,6 +24,7 @@ import {
   ProfileOutlined,
   SafetyCertificateOutlined,
   SafetyOutlined,
+  SecurityScanOutlined,
   SettingOutlined,
   ShareAltOutlined,
   TeamOutlined,
@@ -61,6 +62,8 @@ import Containers from './pages/Containers'
 import Packages from './pages/Packages'
 import TerminalPage from './pages/Terminal'
 import Firewall from './pages/Firewall'
+import Fail2ban from './pages/Fail2ban'
+import HubFail2ban from './pages/HubFail2ban'
 import Interfaces from './pages/Interfaces'
 import Certificates from './pages/Certificates'
 import Availability from './pages/Availability'
@@ -172,6 +175,7 @@ const NAV_ITEMS: {
   { to: '/terminal', labelKey: 'nav.terminal', icon: <CodeOutlined />, adminOnly: true },
   { to: '/interfaces', labelKey: 'nav.interfaces', icon: <WifiOutlined /> },
   { to: '/firewall', labelKey: 'nav.firewall', icon: <ShareAltOutlined /> },
+  { to: '/fail2ban', labelKey: 'nav.fail2ban', icon: <SecurityScanOutlined /> },
   { to: '/certificates', labelKey: 'nav.certificates', icon: <SafetyCertificateOutlined />, badge: 'certs' },
   // Учётки веб-интерфейса и учётки самой машины рядом, но по-прежнему
   // раздельно: путать их нельзя, вторые дают вход на сам сервер.
@@ -410,7 +414,7 @@ function Shell({
   // depends on the address bar staying whatever it was from a previous
   // host session — introducing routing here would have to interact with
   // that, for no real benefit (this is not something worth bookmarking).
-  const [hubView, setHubView] = useState<'hosts' | 'events' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'about'>('hosts')
+  const [hubView, setHubView] = useState<'hosts' | 'events' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'about'>('hosts')
   // Polled independently of whichever section is actually showing, so the
   // sidebar's own "доступно обновление" badge stays current even while
   // looking at the host list — matches how criticalCount/certAlerts below
@@ -565,6 +569,7 @@ function Shell({
           </span>
         ),
       },
+      { key: 'fail2ban', icon: <SecurityScanOutlined />, label: t('nav.fail2ban') },
       {
         key: 'jobs',
         icon: navIcon(<PlayCircleOutlined />, hubJobs.data?.active ?? 0, true, collapsed),
@@ -619,7 +624,9 @@ function Shell({
             {hubView === 'hosts' ? (
               <Hosts onSelect={selectHost} hubVersion={me.hub_version} onOpenProfiles={() => setHubView('profiles')} />
             ) : hubView === 'events' ? (
-              <HostEvents />
+              <HostEvents me={me} />
+            ) : hubView === 'fail2ban' ? (
+              <HubFail2ban me={me} />
             ) : hubView === 'jobs' ? (
               <JobsPage me={me} />
             ) : hubView === 'profiles' ? (
@@ -757,6 +764,7 @@ function Shell({
               <Route path="/vms" element={<Navigate to="/containers" replace />} />
               {me.is_admin && <Route path="/terminal" element={null} />}
               <Route path="/firewall" element={<Firewall me={me} />} />
+              <Route path="/fail2ban" element={<Fail2ban me={me} />} />
               <Route path="/interfaces" element={<Interfaces />} />
               <Route path="/certificates" element={<Certificates me={me} />} />
               <Route path="/audit" element={<Audit />} />

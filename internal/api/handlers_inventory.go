@@ -175,8 +175,11 @@ func (s *Server) handleOverview(w http.ResponseWriter, r *http.Request) {
 		"version":      s.version,
 		"findings":     counts,
 		"top_findings": top,
-		"services":     snap.Services,
-		"sources":      snap.Sources,
+		// Сводка fail2ban: хаб по ней показывает, сколько забанено, и
+		// замечает новые баны (оповещение).
+		"fail2ban": s.f2bSummary(r.Context()),
+		"services": snap.Services,
+		"sources":  snap.Sources,
 		"firewall": map[string]any{
 			"managers": snap.Firewall.Managers,
 			"backends": snap.Firewall.Backends,
@@ -578,10 +581,12 @@ func (s *Server) handleContainerAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// hostFindings — находки не из скана: заполнение истории файлов.
+// hostFindings — находки не из скана: заполнение истории файлов и
+// fail2ban (ему нужен адрес хаба, а он не часть снимка).
 func (s *Server) hostFindings(r *http.Request) []model.Finding {
 	if s.configs == nil || s.db == nil {
 		return nil
 	}
-	return model.LocalizeFindings(msgs.LangFromRequest(r), s.configs.FileHistoryFindings(r.Context()))
+	list := append(s.configs.FileHistoryFindings(r.Context()), s.f2bFindings(r.Context())...)
+	return model.LocalizeFindings(msgs.LangFromRequest(r), list)
 }

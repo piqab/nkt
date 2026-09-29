@@ -754,9 +754,11 @@ type Snapshot struct {
 	Certs      []Certificate      `json:"certificates"`
 	Packages   PackageUpdates     `json:"package_updates"`
 	Capacity   HostCapacity       `json:"capacity"`
-	Findings   []Finding          `json:"findings"`
-	Digest     string             `json:"digest"`
-	ScanMS     int64              `json:"scan_ms"`
+	// Fail2ban — состояние fail2ban (nil — не установлен или не опрошен).
+	Fail2ban *Fail2banState `json:"fail2ban,omitempty"`
+	Findings []Finding      `json:"findings"`
+	Digest   string         `json:"digest"`
+	ScanMS   int64          `json:"scan_ms"`
 }
 
 // MalwareHit — один признак вредоносного на хосте: см. internal/malware.
@@ -1088,4 +1090,48 @@ type K8sIngress struct {
 type K8sCert struct {
 	Path     string `json:"path"`
 	NotAfter string `json:"not_after"`
+}
+
+// Fail2banState — что сейчас делает fail2ban на хосте.
+type Fail2banState struct {
+	// Installed — есть fail2ban-client; Running — сервер отвечает.
+	Installed bool           `json:"installed"`
+	Running   bool           `json:"running"`
+	Version   string         `json:"version,omitempty"`
+	Jails     []Fail2banJail `json:"jails"`
+	// BannedNow — сколько адресов забанено сейчас (по всем джейлам).
+	BannedNow int `json:"banned_now"`
+	// Error — почему состояние не прочитано (сервер не отвечает и т. п.).
+	Error string `json:"error,omitempty"`
+}
+
+// Fail2banJail — один запущенный джейл.
+type Fail2banJail struct {
+	Name     string   `json:"name"`
+	LogPaths []string `json:"log_paths,omitempty"`
+	// Journal — джейл читает journald (backend systemd): совпадения
+	// вместо файлов журнала.
+	Journal     string   `json:"journal,omitempty"`
+	MaxRetry    int      `json:"max_retry"`
+	FindTime    int64    `json:"find_time"`
+	BanTime     int64    `json:"ban_time"`
+	Failed      int      `json:"failed"`
+	TotalFailed int      `json:"total_failed"`
+	Banned      int      `json:"banned"`
+	TotalBanned int      `json:"total_banned"`
+	IgnoreIP    []string `json:"ignore_ip,omitempty"`
+	// MissingLogs — файлы журнала джейла, которых нет на диске: такой
+	// джейл запущен, но ничего не видит.
+	MissingLogs []string      `json:"missing_logs,omitempty"`
+	Bans        []Fail2banBan `json:"bans"`
+}
+
+// Fail2banBan — забаненный адрес.
+type Fail2banBan struct {
+	IP   string `json:"ip"`
+	Jail string `json:"jail"`
+	// Since/Until — начало и конец бана (RFC 3339), если fail2ban их
+	// сообщает (0.11+); Until пусто — бессрочно или неизвестно.
+	Since string `json:"since,omitempty"`
+	Until string `json:"until,omitempty"`
 }

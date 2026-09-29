@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Button, Input, Spin, Tooltip } from 'antd'
 import { BulbFilled, BulbOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -28,7 +28,7 @@ import { aiAnswerState, currentAIHostID, invalidateAIAnswers, useAIAnswers } fro
  */
 
 export interface AIContext {
-  kind: 'finding' | 'vuln' | 'malware' | 'event' | 'job-error' | 'config-error' | 'config'
+  kind: 'finding' | 'vuln' | 'malware' | 'event' | 'job-error' | 'config-error' | 'config' | 'ip'
   title: string
   detail?: string
   suggestion?: string
@@ -68,12 +68,19 @@ export function AIExplain({
   ctx,
   disabled,
   askFirst,
+  actions,
+  hint: hintOverride,
 }: {
   ctx: AIContext
   disabled?: boolean
   /** Перед первым запросом спросить, что нужно (поле вопроса): для
    * помощи по программе, где без задачи ответ — общий обзор. */
   askFirst?: boolean
+  /** Кнопки действий под ответом (например, «забанить на всех хостах»
+   * у проверки адреса); close — закрыть окно разбора. */
+  actions?: (close: () => void) => ReactNode
+  /** Своя подсказка у лампочки без ответа. */
+  hint?: string
 }) {
   const { t } = useTranslation()
   const [question, setQuestion] = useState('')
@@ -155,7 +162,7 @@ export function AIExplain({
     ) : (
       <BulbOutlined style={{ color: 'var(--series-1)' }} />
     )
-  const hint = state === 'own' ? t('ai.hasAnswer') : state === 'similar' ? t('ai.hasSimilar') : t('ai.explainHint')
+  const hint = state === 'own' ? t('ai.hasAnswer') : state === 'similar' ? t('ai.hasSimilar') : (hintOverride ?? t('ai.explainHint'))
 
   return (
     <>
@@ -194,7 +201,12 @@ export function AIExplain({
           ) : busy && !answer ? (
             <Thinking seconds={elapsed} />
           ) : error ? (
-            <Banner kind="error">{error}</Banner>
+            <div className="col">
+              <Banner kind="error">{error}</Banner>
+              {/* Действие не зависит от ответа модели: ИИ не настроен или
+                  не ответил — «забанить на всех» всё равно под рукой. */}
+              {actions && <div className="row">{actions(() => setOpen(false))}</div>}
+            </div>
           ) : answer ? (
             <div className="col">
               {answer.similar && (
@@ -252,6 +264,7 @@ export function AIExplain({
                   {answer.prompt}
                 </pre>
               )}
+              {actions && <div className="row">{actions(() => setOpen(false))}</div>}
             </div>
           ) : null}
         </Modal>

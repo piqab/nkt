@@ -61,6 +61,8 @@ type hostOverview struct {
 	// хостов, под которыми в списке есть машины: по нему в строке машины
 	// видно, работает ли она вообще, а не только отвечает ли nkt внутри.
 	vmStates map[string]string
+	// f2b — сводка fail2ban (баны сейчас); nil — хост старой версии.
+	f2b *f2bSummary
 }
 
 // pollOverviews periodically refreshes every online host's findings/
@@ -189,6 +191,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 			Severity string `json:"severity"`
 			Title    string `json:"title"`
 		} `json:"top_findings"`
+		Fail2ban *f2bSummary `json:"fail2ban"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		m.recordUnreachable(ctx, hostID, err)
@@ -206,6 +209,8 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	}
 	m.noteFindings(ctx, hostID, body.Findings, severeNow)
 	m.noteUptime(ctx, hostID, body.UptimeS)
+	m.noteBans(ctx, hostID, body.Fail2ban)
+	m.maybePushHubAddr(hostID, channel)
 
 	// Машины внутри хоста: их состояние знает только он. Спрашиваем
 	// вторым запросом и только когда есть кого спрашивать — у хоста без
@@ -238,6 +243,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 		lastPolledAt:  now,
 		lastCheckedAt: now,
 		vmStates:      vmStates,
+		f2b:           body.Fail2ban,
 	}
 	m.overviewMu.Unlock()
 }

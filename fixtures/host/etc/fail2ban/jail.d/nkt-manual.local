@@ -1,0 +1,9 @@
+# Managed by nkt: manual bans (from the UI and "Ban on all hosts").
+[nkt-manual]
+enabled = true
+filter = nkt-manual
+backend = polling
+logpath = /dev/null
+maxretry = 1
+bantime = 604800
+banaction = %(banaction_allports)s

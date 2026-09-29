@@ -50,6 +50,10 @@ SCREENS = [
     ('configs-editor', 'host', '/configs', "clickText('button', /^\\/etc\\/nginx\\/nginx\\.conf/)"),
     ('interfaces', 'host', '/interfaces', ''),
     ('firewall', 'host', '/firewall', ''),
+    ('fail2ban', 'host', '/fail2ban', ''),
+    ('fail2ban-jail', 'host', '/fail2ban', "await sleep(800); document.querySelector('button[aria-label=\"' + pick({ru: 'Править джейл', en: 'Edit jail'}) + '\"]')?.click()"),
+    ('fail2ban-templates', 'host', '/fail2ban', "clickText('button', /^(Шаблоны|Templates)$/)"),
+    ('fail2ban-log', 'host', '/fail2ban', "await sleep(800); [...document.querySelectorAll('.ant-card-head-title')].find((e) => e.textContent.startsWith(pick({ru: 'Журнал событий', en: 'Event log'})))?.scrollIntoView({block: 'start'})"),
     ('certificates', 'host', '/certificates', ''),
     ('users', 'host', '/users', ''),
     # Окно задания: перед снимком на стенде должно быть хоть одно задание
@@ -60,6 +64,7 @@ SCREENS = [
     ('hub-profiles', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); clickText('button', /^web-base/)"),
     ('hub-scripts', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/)"),
     ('hub-script-scheme', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/); await sleep(800); tab({ru: 'Схема', en: 'Scheme'})"),
+    ('hub-fail2ban', 'hub', '/', "menu('fail2ban')"),
     ('hub-about', 'hub', '/', "menu({ru: 'О системе', en: 'About'})"),
     ('deployments', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'})"),
     ('deploy-edge', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Вебхук', en: 'Webhook'}) + '$')); await sleep(1200); clickText('.ant-modal .ant-tabs-tab-btn, .ant-modal .ant-segmented-item-label, .ant-modal button', new RegExp('^' + pick({ru: 'Через edge', en: 'Via edge'})))"),

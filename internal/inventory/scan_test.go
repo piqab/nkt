@@ -70,8 +70,11 @@ func TestScanBuildsCompleteSnapshot(t *testing.T) {
 	if services["nginx"].ActiveState != "active" {
 		t.Errorf("nginx: state=%q", services["nginx"].ActiveState)
 	}
-	if services["fail2ban"].ActiveState != "inactive" {
+	if services["fail2ban"].ActiveState != "active" {
 		t.Errorf("fail2ban: state=%q", services["fail2ban"].ActiveState)
+	}
+	if snap.Fail2ban == nil || !snap.Fail2ban.Running || snap.Fail2ban.BannedNow != 5 {
+		t.Errorf("fail2ban: %+v", snap.Fail2ban)
 	}
 	if services["haproxy"].MainPID != 933 {
 		t.Errorf("haproxy: pid=%d", services["haproxy"].MainPID)

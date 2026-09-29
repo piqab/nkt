@@ -1208,6 +1208,26 @@ export default function Hosts({
     },
     { title: t('hosts.colProblems'), key: 'problems', render: (_, h) => <ProblemsCell host={h} /> },
     {
+      // Сколько адресов fail2ban держит забаненными сейчас (из опроса).
+      title: t('hosts.colBanned'),
+      key: 'banned',
+      align: 'right',
+      render: (_, h) =>
+        !h.fail2ban ? (
+          <span className="muted small">—</span>
+        ) : !h.fail2ban.installed ? (
+          <Tooltip title={t('hosts.f2bMissing')}>
+            <span className="muted small">—</span>
+          </Tooltip>
+        ) : !h.fail2ban.running ? (
+          <Tag color="red">{t('hosts.f2bStopped')}</Tag>
+        ) : (
+          <Tooltip title={t('hosts.f2bBannedHint')}>
+            <span className="num">{h.fail2ban.banned}</span>
+          </Tooltip>
+        ),
+    },
+    {
       title: t('hosts.colArch'),
       key: 'arch',
       render: (_, h) => <span className="small">{h.id === LOCAL_HOST_ID ? '—' : h.arch || '—'}</span>,

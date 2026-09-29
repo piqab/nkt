@@ -10,10 +10,15 @@ title: Alerts, jobs, AI
 
 The hub notices transitions itself: a host is **down** / **back**,
 **rebooted** (its uptime dropped, which only happens after a boot),
-**serious findings** appeared / **were fixed**, **a job failed**. An alert
+**serious findings** appeared / **were fixed**, **a job failed**, fail2ban
+**banned new addresses**. An alert
 log with settings for what to record and what to notify about; short
 episodes (“down” → “back” a couple of minutes later) collapse into one
 line “was down for N min”.
+
+Every external IP in an alert's text gets its own bulb: an AI check of
+the address and a **“Ban on all hosts”** button in the answer window,
+see [fail2ban](/en/guide/fail2ban#alerts-and-address-checks).
 
 The **“Notify on problems”** switch turns on browser notifications — they
 arrive in any hub section while the tab is open. The unread counter is on
@@ -76,9 +81,9 @@ answer). The same finding already analysed on another host is **filled
 blue**: that answer is shown first with a note where it
 came from, and a request for this host is a separate button.
 
-**Model instructions** (prompts) are edited in the same card: one for
-finding analysis and one for the architecture review, in Russian and
-English; saving goes through a window with a diff against the default,
+**Model instructions** (prompts) are edited in the same card: for
+finding analysis, the architecture review, configuration help and the
+external address check, in Russian and English; saving goes through a window with a diff against the default,
 "restore default" removes the edit.
 
 In "Configs" every open file (any service) and the selected program have

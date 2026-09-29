@@ -4,10 +4,12 @@ import { Sensitive, blurText } from '../privacy'
 import { Button, Checkbox, InputNumber, Switch, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import type { HostEvent } from '../types'
+import type { HostEvent, Me } from '../types'
 import { Card, ErrorNote, InfoHint, Loading, formatDateTime, formatRelative } from '../components/ui'
 import { notificationsEnabled, requestNotificationPermission, setNotificationsEnabled } from '../notifications'
 import { DataTable } from '../components/DataTable'
+import { IPWithCheck } from '../components/Fail2banParts'
+import { ipsInText, isExternalIP } from '../fail2ban'
 
 const POLL_MS = 30_000
 
@@ -147,6 +149,7 @@ const KIND_COLOR: Record<string, string> = {
   problems: 'warning',
   resolved: 'success',
   'job-failed': 'error',
+  bans: 'volcano',
 }
 
 /**
@@ -161,10 +164,15 @@ const KIND_COLOR: Record<string, string> = {
  * текущего списка: хост переименуют, переедет или будет удалён, а строка
  * журнала должна остаться понятной.
  */
-export default function HostEvents() {
+export default function HostEvents({ me }: { me?: Me }) {
   const { t } = useTranslation()
   const events = useApi<{ events: HostEvent[]; unread: number }>('/hub/events?limit=200', POLL_MS)
   const list = events.data?.events ?? []
+  // Адреса своих хостов — не «внешние»: проверять и банить их незачем.
+  const hosts = useApi<{ addr: string }[]>('/hub/hosts', 120_000)
+  const own = new Set((hosts.data ?? []).map((h) => h.addr))
+  const externalIPs = (e: HostEvent) =>
+    ipsInText(e.detail ?? '').filter((ip) => isExternalIP(ip) && ip !== e.host_addr && !own.has(ip))
 
   // Открытый раздел и есть «прочитано»: счётчик в меню гаснет, как только
   // на события посмотрели, а не по отдельной кнопке, которую ещё надо
@@ -208,16 +216,30 @@ export default function HostEvents() {
     {
       title: t('events.colDetail'),
       key: 'detail',
-      render: (_, e) => (
-        <span className="row row-nowrap" style={{ gap: '0.3rem', alignItems: 'center' }}>
-          <span className="small">{e.detail ? blurText(e.detail) : '—'}</span>
-          {e.detail && (
-            <AIExplain
-              ctx={{ kind: 'event', title: `${e.kind}: ${e.host_name}`, detail: e.detail, severity: e.severity }}
-            />
-          )}
-        </span>
-      ),
+      render: (_, e) => {
+        // Внешние адреса из текста — отдельно, у каждого своя лампочка
+        // (проверка адреса) и «забанить на всех хостах» в окне ответа.
+        const ips = externalIPs(e)
+        return (
+          <div>
+            <span className="row row-nowrap" style={{ gap: '0.3rem', alignItems: 'center' }}>
+              <span className="small">{e.detail ? blurText(e.detail) : '—'}</span>
+              {e.detail && (
+                <AIExplain
+                  ctx={{ kind: 'event', title: `${e.kind}: ${e.host_name}`, detail: e.detail, severity: e.severity }}
+                />
+              )}
+            </span>
+            {ips.length > 0 && (
+              <div className="row" style={{ flexWrap: 'wrap', gap: '0.1rem 0.6rem', marginTop: '0.15rem' }}>
+                {ips.map((ip) => (
+                  <IPWithCheck key={ip} ip={ip} hubLevel me={me} />
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      },
     },
   ]
 

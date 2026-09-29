@@ -1,0 +1,5 @@
+# Managed by nkt: template nginx-http-auth
+[nginx-http-auth]
+enabled = true
+port = http,https
+logpath = /var/log/nginx/error.log

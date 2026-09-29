@@ -26,7 +26,9 @@ export function VersionHistory({
   me: Me
   apply?: boolean
   onChanged?: () => void
-  base?: '/configs' | '/files'
+  /** «/configs», «/files» или с приставкой хаба («/hosts/local/configs» —
+   * история шаблонов, которые живут на хабе). */
+  base?: string
 }) {
   const { t } = useTranslation()
   const versions = useApi<{ versions: ConfigVersion[] }>(`${base}/versions${qs({ path })}`)
