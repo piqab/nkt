@@ -115,14 +115,9 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	if err != nil {
 		return err
 	}
-	var env *string
-	if len(pl.EnvEnc) > 0 {
-		raw, err := secretbox.Decrypt(s.hub.key, pl.EnvEnc)
-		if err != nil {
-			return err
-		}
-		e := string(raw)
-		env = &e
+	env, err := s.pipelineEnv(pl)
+	if err != nil {
+		return err
 	}
 	targets, err := s.resolveHosts(ctx, c.Hosts, c.Group)
 	if err != nil {
@@ -133,17 +128,15 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	// запись; тогда — автор конвейера.
 	user := s.actingUser(ctx, jc.Job.Author, pl.Author)
 	lang := jc.Lang()
+	// Движок — до первого хоста: без docker или compose где-то в конце
+	// списка выкладка иначе оставила бы хосты в разных версиях.
+	if bad := s.composeEngineProblems(ctx, jc, user, targets); len(bad) > 0 {
+		return msgs.Errorf("deploy.composeEngines", strings.Join(bad, "; "))
+	}
 	jc.Log("deploy.composeFiles", len(files), c.Project, len(targets))
 	for i, t := range targets {
 		jc.StepKey(2+i, 2+len(targets), "deploy.stepCompose", t.Name)
-		body := map[string]any{
-			"project": c.Project, "file": main, "files": files, "pull": c.PullImages(),
-			"wait_timeout": int(c.Wait().Seconds()),
-			"note":         msgs.T(lang, "deploy.composeNote", pl.Name, deploy.ShortSHA(vars.Commit)),
-		}
-		if env != nil {
-			body["env"] = *env
-		}
+		body := composeBody(c, main, files, env, msgs.T(lang, "deploy.composeNote", pl.Name, deploy.ShortSHA(vars.Commit)))
 		var started struct {
 			JobID  int64  `json:"job_id"`
 			Engine string `json:"engine"`
@@ -166,6 +159,64 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 		}
 	}
 	return nil
+}
+
+// pipelineEnv — расшифрованный .env стека конвейера (nil — не задан).
+func (s *Server) pipelineEnv(pl store.Pipeline) (*string, error) {
+	if len(pl.EnvEnc) == 0 {
+		return nil, nil
+	}
+	raw, err := secretbox.Decrypt(s.hub.key, pl.EnvEnc)
+	if err != nil {
+		return nil, err
+	}
+	e := string(raw)
+	return &e, nil
+}
+
+// composeBody — запрос выкладки (и сухого прогона) стека к хосту.
+func composeBody(c *deploy.ComposeSpec, main string, files map[string]string, env *string, note string) map[string]any {
+	body := map[string]any{
+		"project": c.Project, "file": main, "files": files, "pull": c.PullImages(),
+		"wait_timeout": int(c.Wait().Seconds()), "note": note,
+	}
+	if env != nil {
+		body["env"] = *env
+	}
+	return body
+}
+
+// composeEngine — ответ хоста GET /api/compose/engine.
+type composeEngine struct {
+	Engine         string `json:"engine"`
+	Version        string `json:"version"`
+	Compose        bool   `json:"compose"`
+	ComposeVersion string `json:"compose_version"`
+	ComposeError   string `json:"compose_error"`
+	Installable    bool   `json:"installable"`
+}
+
+// composeEngineProblems — хосты, где стек не поднять: нет docker/podman
+// или не работает compose. Хост старой версии (нет маршрута) не
+// проверяется — выкладка на нём скажет сама.
+func (s *Server) composeEngineProblems(ctx context.Context, jc *jobs.Context, user string, targets []targetHost) []string {
+	lang := jc.Lang()
+	var bad []string
+	for _, t := range targets {
+		var e composeEngine
+		code, err := s.hostCall(ctx, user, t.ID, "GET", "/api/compose/engine", nil, &e)
+		switch {
+		case code == http.StatusNotFound || code == http.StatusMethodNotAllowed:
+			continue
+		case err != nil:
+			bad = append(bad, t.Name+": "+msgs.Localize(lang, err))
+		case e.Engine == "":
+			bad = append(bad, msgs.T(lang, "deploy.hostNoEngine", t.Name))
+		case !e.Compose:
+			bad = append(bad, msgs.T(lang, "deploy.hostNoCompose", t.Name, e.Version, e.ComposeError))
+		}
+	}
+	return bad
 }
 
 // HTTPSCheck — ответ сайта снаружи (с хаба).

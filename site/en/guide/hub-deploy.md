@@ -131,6 +131,10 @@ compose:
   previous one succeeded**; the first failure stops the deployment.
 - Without Docker, Podman (`podman compose`) is used; the wait lasts until
   every container of the project runs and is healthy.
+- Before the first host, the hub asks every host whether it has docker
+  (or podman) and a working compose. If one does not, the deployment does
+  not start and no host is touched; otherwise some hosts would be updated
+  while the rest kept the old stack.
 - Ready images only: the hub rejects a service with `build:` and no
   `image:` before touching any host; building is CI's job.
 - **The stack's `.env`** is set in the pipeline's "Access": stored on the
@@ -144,6 +148,36 @@ hosts; the description fills itself in: repository, branch, path, stack
 name. Then it is an ordinary edit with a diff.
 
 ![Compose from a link](/screens/en/deploy-compose.png)
+
+Hosts are checked **as soon as they are picked**: next to the name it
+says "docker with compose, ready", "no docker or podman" or "docker without
+compose". Where something is missing there is an **"Install Docker"** (or
+"Install compose") button: `docker.io` and the compose plugin from the
+distribution's repository, as a background host job in the standard job
+log window. An existing docker (including `docker-ce` from Docker's
+repository) is left alone; only compose is added. The "Sites" wizard runs
+the same check when the target is a stack service.
+
+**Dry run** is a button in the "Deploy" window and in the pipeline editor
+(there it checks the current text, unsaved included). It does everything a
+deployment would do except the changes: it takes the repository, applies
+substitutions, collects the stack files and, on each host, checks:
+
+- docker or podman and the compose version;
+- whether the stack is new or exists: which files would appear, change or
+  stay, and what happens to `.env`;
+- `compose config` on a copy of the stack in a temporary directory next to
+  the stacks (the stack and containers are left alone; the copy is
+  removed);
+- services and images: whether each image is in the registry (manifest
+  only, no pull) and whether it is already pulled on the host. "Not in the
+  registry" is an error; "could not check" (a private registry without a
+  login, podman without skopeo) is a warning.
+
+The result is a hub job with a log: "the deployment would succeed" or the
+number of problems. Nothing is recorded in the deployment history.
+
+![Dry run](/screens/en/deploy-dryrun.png)
 
 **Example: httpbin.** The nkt repository has
 [`examples/httpbin`](https://github.com/piqab/nkt/tree/main/examples/httpbin):

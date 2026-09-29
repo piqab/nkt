@@ -3207,7 +3207,9 @@
     "fromLinkPollComment": "выкладывать новые коммиты ветки",
     "fromLinkProject": "имя стека",
     "tabPipelines": "Конвейеры",
-    "tabSites": "Сайты"
+    "tabSites": "Сайты",
+    "dryRun": "Сухой прогон",
+    "dryRunHint": "Всё, что сделала бы выкладка, кроме изменений: репозиторий, подстановки, на каждом хосте — docker и compose, compose config на копии стека, что изменится, есть ли образы в registry. Стек и контейнеры не трогаются."
   },
   "edge": {
     "subtitle": "Вебхуки из интернета без открытого хаба: edge на VPS принимает только их, хаб сам держит к нему туннель.",
@@ -3483,5 +3485,17 @@
       "timeout": "нет ответа",
       "error": "ошибка"
     }
+  },
+  "composeEngine": {
+    "checking": "проверка…",
+    "old": "старая версия nkt — не проверить",
+    "unreachable": "недоступен",
+    "ok": "{{engine}} с compose — готов",
+    "none": "нет docker и podman",
+    "noCompose": "{{engine}} без compose",
+    "install": "Установить Docker",
+    "installCompose": "Установить compose",
+    "installHint": "docker.io и плагин compose из репозитория дистрибутива — фоновым заданием хоста",
+    "notInstallable": "Установка отсюда — только на хостах с apt-get"
   }
 }

@@ -38,6 +38,13 @@ const KindDeploy = "deploy.run"
 type DeployParams struct {
 	DeploymentID int64  `json:"deployment_id"`
 	Content      string `json:"content"`
+	// DryRun — сухой прогон: без записи выкладки и без изменений на
+	// хостах; конвейер (для доступа и .env) — PipelineID (0 — новый,
+	// ещё не сохранённый), ветка и тег — Ref и Tag.
+	DryRun     bool   `json:"dry_run,omitempty"`
+	PipelineID int64  `json:"pipeline_id,omitempty"`
+	Ref        string `json:"ref,omitempty"`
+	Tag        string `json:"tag,omitempty"`
 }
 
 // DeployRunner — исполнитель выкладки.
@@ -73,6 +80,9 @@ func (r *DeployRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 	if err := jc.Params(&p); err != nil {
 		return msgs.Errorf("hub.parsingJob", err)
 	}
+	if p.DryRun {
+		return r.dryRun(ctx, jc, p)
+	}
 	d, err := s.db.DeploymentByID(ctx, p.DeploymentID)
 	if err != nil {
 		return err
@@ -103,21 +113,8 @@ func (r *DeployRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 		ref = spec.Ref
 	}
 	if commit == "" {
-		refs, err := g.Remote(ctx, spec.Repo)
-		if err != nil {
+		if ref, commit, err = resolveRef(ctx, g, spec.Repo, ref, d.Tag); err != nil {
 			return err
-		}
-		switch {
-		case d.Tag != "" && refs["refs/tags/"+d.Tag] != "":
-			ref = d.Tag
-			commit = refs["refs/tags/"+d.Tag]
-		case refs["refs/heads/"+ref] != "":
-			commit = refs["refs/heads/"+ref]
-		case refs["refs/tags/"+ref] != "":
-			// ref — тег (ссылка на файл в теге): выкладывается он.
-			commit = refs["refs/tags/"+ref]
-		default:
-			return msgs.Errorf("deploy.refNotFound", ref)
 		}
 	}
 	vars := deploy.Vars{Tag: d.Tag, Commit: commit, Ref: ref}
@@ -146,6 +143,24 @@ func (r *DeployRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 	_ = s.db.SetPipelineDeployed(ctx, pl.ID, commit, d.Tag)
 	jc.Log("deploy.done", deploy.ShortSHA(commit)+" "+d.Tag)
 	return nil
+}
+
+// resolveRef — коммит ветки или тега: заданный тег, иначе ветка ref, а
+// если такой ветки нет — тег с этим именем (ссылка на файл в теге).
+func resolveRef(ctx context.Context, g deploy.Git, repo, ref, tag string) (string, string, error) {
+	refs, err := g.Remote(ctx, repo)
+	if err != nil {
+		return ref, "", err
+	}
+	switch {
+	case tag != "" && refs["refs/tags/"+tag] != "":
+		return tag, refs["refs/tags/"+tag], nil
+	case refs["refs/heads/"+ref] != "":
+		return ref, refs["refs/heads/"+ref], nil
+	case refs["refs/tags/"+ref] != "":
+		return ref, refs["refs/tags/"+ref], nil
+	}
+	return ref, "", msgs.Errorf("deploy.refNotFound", ref)
 }
 
 // pipelineClusters — кластеры по именам и по группе хоста кластера.

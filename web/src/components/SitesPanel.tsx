@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HubHost, Job, Me } from '../types'
 import { JobLogModal } from '../pages/Jobs'
+import { ComposeEngineStatus } from './ComposeEngineStatus'
 import { Banner, Card, ErrorNote, Loading, Modal, formatRelative } from './ui'
 import { DataTable } from './DataTable'
 import { confirmWithOption } from './confirm'
@@ -354,6 +355,9 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
             {t('sites.checkBtn')}
           </Button>
         </div>
+        {hostID !== null && targetKind === 'stack' && (
+          <ComposeEngineStatus hostId={hostID} name={hosts.data?.find((h) => h.id === hostID)?.name ?? ''} admin />
+        )}
 
         {pre?.outside && (
           <div className="col" style={{ gap: '0.2rem' }}>

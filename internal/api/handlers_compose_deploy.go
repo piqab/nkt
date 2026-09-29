@@ -60,6 +60,31 @@ type ComposeDeployParams struct {
 
 func composeStackDir(project string) string { return parse.ComposeStacksDir + "/" + project }
 
+// validate — проверки запроса, общие для выкладки и сухого прогона.
+func (req *composeDeployRequest) validate() error {
+	if !site.ValidName(req.Project) {
+		return msgs.Errorf("compose.badProject", req.Project)
+	}
+	if _, ok := req.Files[req.File]; !ok || !deploy.ValidPath(req.File) {
+		return msgs.Errorf("compose.noFile", req.File)
+	}
+	total := 0
+	for rel, content := range req.Files {
+		base := path.Base(rel)
+		if !deploy.ValidPath(rel) || base == ".env" || base == site.OverrideFile {
+			return msgs.Errorf("compose.badPath", rel)
+		}
+		total += len(content)
+	}
+	if total > composeDeployMaxBytes || len(req.Files) > 200 {
+		return msgs.Errorf("compose.tooLarge")
+	}
+	if names := deploy.BuildOnlyServices(req.Files[req.File]); len(names) > 0 {
+		return msgs.Errorf("compose.buildOnly", strings.Join(names, ", "))
+	}
+	return nil
+}
+
 // composeEngine — docker, а без него podman.
 func composeEngine(ctx context.Context, c collect.Collector) string {
 	if collect.Which(ctx, c, "docker") {
@@ -73,8 +98,13 @@ func composeEngine(ctx context.Context, c collect.Collector) string {
 
 // composeArgs — «compose -p <стек> -f <файл> [-f compose.nkt.yml]».
 func composeArgs(c collect.Collector, project, file string) []string {
-	dir := composeStackDir(project)
-	args := []string{"compose", "-p", project, "-f", dir + "/" + file}
+	return composeArgsIn(c, composeStackDir(project), project, file)
+}
+
+// composeArgsIn — то же для стека в каталоге dir (сухой прогон — во
+// временном каталоге, под именем настоящего стека).
+func composeArgsIn(c collect.Collector, dir, project, file string) []string {
+	args := []string{"compose", "-p", project, "--project-directory", dir, "-f", dir + "/" + file}
 	if ov := dir + "/" + site.OverrideFile; c.Exists(ov) {
 		args = append(args, "-f", ov)
 	}
@@ -94,29 +124,8 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := r.Context()
 	c := s.scanner.Collector()
-	if !site.ValidName(req.Project) {
-		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("compose.badProject", req.Project))
-		return
-	}
-	if _, ok := req.Files[req.File]; !ok || !deploy.ValidPath(req.File) {
-		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("compose.noFile", req.File))
-		return
-	}
-	total := 0
-	for rel, content := range req.Files {
-		base := path.Base(rel)
-		if !deploy.ValidPath(rel) || base == ".env" || base == site.OverrideFile {
-			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("compose.badPath", rel))
-			return
-		}
-		total += len(content)
-	}
-	if total > composeDeployMaxBytes || len(req.Files) > 200 {
-		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("compose.tooLarge"))
-		return
-	}
-	if names := deploy.BuildOnlyServices(req.Files[req.File]); len(names) > 0 {
-		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("compose.buildOnly", strings.Join(names, ", ")))
+	if err := req.validate(); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
 	engine := composeEngine(ctx, c)

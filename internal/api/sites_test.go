@@ -195,3 +195,85 @@ func TestComposeDeployAndSite(t *testing.T) {
 		t.Fatal("nginx conf not removed")
 	}
 }
+
+// Сухой прогон на хосте: что изменится, compose config, стек не тронут.
+func TestComposeCheck(t *testing.T) {
+	s, root := sitesServer(t)
+	stack := filepath.Join(root, "srv", "compose", "shop")
+	_ = os.MkdirAll(filepath.Join(stack, "conf"), 0o755)
+	_ = os.WriteFile(filepath.Join(stack, "compose.yaml"), []byte("services:\n  web:\n    image: nginx\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(stack, "conf", "app.ini"), []byte("a=1\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(stack, ".env"), []byte("A=1\n"), 0o600)
+
+	rec := httptest.NewRecorder()
+	s.handleComposeEngine(rec, adminReq("GET", "/compose/engine", nil))
+	var eng ComposeEngineInfo
+	_ = json.Unmarshal(rec.Body.Bytes(), &eng)
+	if rec.Code != 200 || eng.Engine == "" || !eng.Compose || eng.Installable {
+		t.Fatalf("engine: %d %s", rec.Code, rec.Body)
+	}
+
+	env := "A=2\n"
+	rec = httptest.NewRecorder()
+	s.handleComposeCheck(rec, adminReq("POST", "/compose/stacks/check", map[string]any{
+		"project": "shop", "file": "compose.yaml", "env": env,
+		"files": map[string]string{"compose.yaml": "services:\n  web:\n    image: nginx\n", "conf/app.ini": "a=2\n", "conf/new.ini": "n=1\n"},
+	}))
+	var res ComposeCheckResult
+	_ = json.Unmarshal(rec.Body.Bytes(), &res)
+	states := map[string]string{}
+	for _, f := range res.Files {
+		states[f.Path] = f.State
+	}
+	if rec.Code != 200 || !res.StackExists || !res.ConfigOK || res.Env != "changed" ||
+		states["compose.yaml"] != "same" || states["conf/app.ini"] != "changed" || states["conf/new.ini"] != "new" {
+		t.Fatalf("check: %d %s", rec.Code, rec.Body)
+	}
+	if b, _ := os.ReadFile(filepath.Join(stack, "conf", "app.ini")); string(b) != "a=1\n" {
+		t.Fatalf("dry run changed the stack: %q", b)
+	}
+	if _, err := os.Stat(filepath.Join(stack, "conf", "new.ini")); !os.IsNotExist(err) {
+		t.Fatal("dry run wrote a file")
+	}
+	// Сборка из исходников — отказ сразу.
+	rec = httptest.NewRecorder()
+	s.handleComposeCheck(rec, adminReq("POST", "/compose/stacks/check", map[string]any{
+		"project": "shop", "file": "compose.yaml", "files": map[string]string{"compose.yaml": "services:\n  web:\n    build: .\n"},
+	}))
+	if rec.Code != 400 {
+		t.Fatalf("build: accepted: %d", rec.Code)
+	}
+	// На фикстурах Docker не ставится.
+	rec = httptest.NewRecorder()
+	s.handleDockerInstallWS(rec, adminReq("POST", "/system/docker-install/ws?job=1", nil))
+	if rec.Code != 403 {
+		t.Fatalf("docker install on fixtures: %d", rec.Code)
+	}
+}
+
+// Копия стека для сухого прогона и её уборка (на коллекторе фикстур —
+// так же, как на настоящем: те же WriteFile/ListDir/DeleteFile).
+func TestComposeCheckCopyCleanup(t *testing.T) {
+	s, root := sitesServer(t)
+	c := s.scanner.Collector()
+	stack := filepath.Join(root, "srv", "compose", "shop")
+	_ = os.MkdirAll(stack, 0o755)
+	_ = os.WriteFile(filepath.Join(stack, "compose.nkt.yml"), []byte("services: {}\n"), 0o644)
+	env := "A=1\n"
+	req := composeDeployRequest{Project: "shop", File: "compose.yaml", Env: &env,
+		Files: map[string]string{"compose.yaml": "services: {}\n", "conf/deep/x.ini": "x\n"}}
+	work, rels, err := s.composeCheckCopy(c, req, nil, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	local := filepath.Join(root, filepath.FromSlash(strings.TrimPrefix(work, "/")))
+	for _, f := range []string{"compose.yaml", "conf/deep/x.ini", ".env", "compose.nkt.yml"} {
+		if _, err := os.Stat(filepath.Join(local, f)); err != nil {
+			t.Fatalf("copy: %s: %v", f, err)
+		}
+	}
+	composeCheckCleanup(c, work, rels)
+	if _, err := os.Stat(filepath.Join(root, "srv", "compose", ".nkt-check")); !os.IsNotExist(err) {
+		t.Fatalf("temp dir left: %v", err)
+	}
+}

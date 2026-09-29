@@ -189,3 +189,53 @@ func TestDeployComposeOnLocal(t *testing.T) {
 		t.Fatalf("stack files: %q %q %q", compose, ini, env)
 	}
 }
+
+// Сухой прогон: журнал говорит, что было бы, а стек на хосте не тронут.
+func TestDryRunComposeOnLocal(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git не установлен")
+	}
+	deploy.AllowLocalReposForTest(true)
+	defer deploy.AllowLocalReposForTest(false)
+	srv, db, root := localFixtureHub(t)
+	ctx := context.Background()
+	repo := t.TempDir()
+	testGit(t, repo, "init", "-q", "-b", "main")
+	_ = os.MkdirAll(filepath.Join(repo, "deploy"), 0o755)
+	_ = os.WriteFile(filepath.Join(repo, "deploy", "docker-compose.yml"), []byte("services:\n  web:\n    image: ghcr.io/org/app:{{nkt.tag}}\n"), 0o644)
+	testGit(t, repo, "add", ".")
+	testGit(t, repo, "commit", "-q", "-m", "one")
+	content := "repo: " + repo + "\nref: main\naction: compose\ncompose:\n  file: deploy/docker-compose.yml\n  project: dry\n  hosts: [localhost]\n"
+	run := func(content string) (store.Job, string) {
+		t.Helper()
+		id, err := srv.jobs.Start(ctx, jobs.Spec{Kind: KindDeploy, Queue: "deploy:dryrun", Author: "admin", Steps: 3,
+			Params: DeployParams{DryRun: true, Content: content}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(60 * time.Second)
+		for time.Now().Before(deadline) {
+			j, _ := db.JobByID(ctx, id)
+			if j.Status == store.JobSucceeded || j.Status == store.JobFailed {
+				return j, jobLogText(t, ctx, db, id)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Fatal("dry run did not finish")
+		return store.Job{}, ""
+	}
+	j, log := run(content)
+	if j.Status != store.JobSucceeded || !strings.Contains(log, "dry") {
+		t.Fatalf("dry run: %+v\n%s", j, log)
+	}
+	if _, err := os.Stat(filepath.Join(root, "srv", "compose", "dry")); !os.IsNotExist(err) {
+		t.Fatalf("dry run touched the host: %v", err)
+	}
+	// Неизвестный хост — ошибка до хостов; не compose — отказ.
+	if j, log := run(strings.Replace(content, "[localhost]", "[nope]", 1)); j.Status != store.JobFailed {
+		t.Fatalf("unknown host accepted:\n%s", log)
+	}
+	if j, _ := run("repo: " + repo + "\nref: main\naction: script\nscript: {run: 'true'}\n"); j.Status != store.JobFailed {
+		t.Fatal("non-compose dry run accepted")
+	}
+}
