@@ -631,7 +631,7 @@ var enCatalog = map[string]string{
 	"deploy.specNeeds":                                    "this action needs the %s field",
 	"deploy.specInterval":                                 "%s: the interval must be at least a minute (%q)",
 	"deploy.specRepoCreds":                                "a login and password do not go into the repository URL — set a token or key in “Repository access”",
-	"deploy.noGit":                                        "git is not installed on the hub",
+	"deploy.noGit":                                        "git is not installed on the hub; use \"Install git\" on the \"Pipelines\" tab of \"Deployments\"",
 	"deploy.git":                                          "git %s: %s",
 	"deploy.badCommit":                                    "invalid commit: %q",
 	"deploy.fileMissing":                                  "the repository has no file %s",

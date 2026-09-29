@@ -547,6 +547,8 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"ai_reviews", "request", `ALTER TABLE ai_reviews ADD COLUMN request TEXT NOT NULL DEFAULT ''`},
 	// env_enc — .env compose-стека конвейера (action: compose), зашифрован.
 	{"pipelines", "env_enc", `ALTER TABLE pipelines ADD COLUMN env_enc BLOB`},
+	// pipeline_id — сайт описан блоком site: конвейера (0 — заведён вручную).
+	{"sites", "pipeline_id", `ALTER TABLE sites ADD COLUMN pipeline_id INTEGER NOT NULL DEFAULT 0`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

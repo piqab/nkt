@@ -195,6 +195,7 @@ export default function Deployments({ me }: { me: Me }) {
             label: t('deploy.tabPipelines'),
             children: (
               <>
+                <HubGitBanner admin={me.is_admin} />
                 <Card title={t('deploy.pipelines')} subtitle={t('deploy.subtitle')}>
                   <ErrorNote error={list.error} />
                   {list.loading && !list.data ? (
@@ -230,6 +231,45 @@ export default function Deployments({ me }: { me: Me }) {
       {dialog?.type === 'access' && <AccessModal p={dialog.p} onClose={() => setDialog(null)} onSaved={() => void list.reload()} />}
       {dialog?.type === 'hook' && <HookModal p={dialog.p} onClose={() => setDialog(null)} />}
       {job && <JobLogModal job={job} scope="/hosts/local" onClose={() => setJob(null)} onDone={() => void list.reload()} />}
+    </>
+  )
+}
+
+/** На хабе нет git — выкладки и сухой прогон не работают: плашка и
+ * установка пакета git на машине хаба (фоновое задание, стандартное окно). */
+function HubGitBanner({ admin }: { admin: boolean }) {
+  const { t } = useTranslation()
+  const git = useApi<{ installed: boolean; version?: string; installable: boolean }>('/hub/deploy/git')
+  const [job, setJob] = useState<Job | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  async function install() {
+    setError(null)
+    try {
+      const res = await api<{ job_id?: number }>('/hosts/local/system/apt/packages/git/install/ws?job=1', { method: 'POST' })
+      if (typeof res.job_id === 'number') setJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
+      else void git.reload()
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+  return (
+    <>
+      {git.data && !git.data.installed && (
+        <Banner kind="error">
+          <Space wrap>
+            <span>{t('deploy.noGit')}</span>
+            {admin && git.data.installable ? (
+              <Button size="small" type="primary" onClick={() => void install()}>
+                {t('deploy.installGit')}
+              </Button>
+            ) : (
+              <span className="small">{t('deploy.noGitManual')}</span>
+            )}
+            {error && <span className="small">{error}</span>}
+          </Space>
+        </Banner>
+      )}
+      {job && <JobLogModal job={job} scope="/hosts/local" onClose={() => setJob(null)} onDone={() => void git.reload()} />}
     </>
   )
 }
@@ -295,6 +335,9 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
                 onFill={(yaml, suggested) => {
                   setDraft(yaml)
                   if (!name) setName(suggested)
+                }}
+                onName={(n) => {
+                  if (!name) setName(n)
                 }}
               />
             )}
@@ -365,14 +408,18 @@ export function parseComposeLink(link: string): { repo: string; ref: string; fil
 
 /** «Compose по ссылке»: ссылка на compose-файл, хосты, имя стека →
  * описание конвейера action: compose (дальше — обычная правка с диффом). */
-function ComposeFromLink({ onFill }: { onFill: (yaml: string, name: string) => void }) {
+/** Пример выкладки: httpbin из репозитория nkt (examples/httpbin). */
+const HTTPBIN_LINK = 'https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml'
+const HTTPBIN_README = 'https://github.com/piqab/nkt/tree/main/examples/httpbin'
+
+function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: string) => void; onName: (name: string) => void }) {
   const { t } = useTranslation()
   const hosts = useApi<HubHost[]>('/hub/hosts')
   const [link, setLink] = useState('')
   const [picked, setPicked] = useState<string[]>([])
   const [project, setProject] = useState('')
   const [bad, setBad] = useState(false)
-  function fill() {
+  function fill(link: string, project: string) {
     const p = parseComposeLink(link)
     if (!p) {
       setBad(true)
@@ -380,11 +427,25 @@ function ComposeFromLink({ onFill }: { onFill: (yaml: string, name: string) => v
     }
     setBad(false)
     const proj = (project || p.name).toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^[-_]+/, '').slice(0, 63) || 'app'
+    const example = link === HTTPBIN_LINK
     const yaml =
+      (example ? `# ${t('deploy.exampleComment')}: ${HTTPBIN_README}\n` : '') +
       `repo: ${p.repo}\nref: ${p.ref}\n\naction: compose\ncompose:\n  file: ${p.file}\n  project: ${proj}\n` +
-      `  hosts: [${picked.join(', ')}]\n  # files: [${p.file.includes('/') ? p.file.slice(0, p.file.lastIndexOf('/') + 1) : ''}nginx.conf]  # ${t('deploy.fromLinkFilesComment')}\n` +
-      `  wait_timeout: 5m\n  # site: app.example.com\n\n# poll: 5m   # ${t('deploy.fromLinkPollComment')}\n`
+      `  hosts: [${picked.join(', ')}]\n` +
+      (example ? '' : `  # files: [${p.file.includes('/') ? p.file.slice(0, p.file.lastIndexOf('/') + 1) : ''}nginx.conf]  # ${t('deploy.fromLinkFilesComment')}\n`) +
+      `  wait_timeout: 5m\n` +
+      `  # site:                          # ${t('deploy.fromLinkSiteComment')}\n` +
+      `  #   domains: [${example ? 'httpbin' : proj}.example.com]\n` +
+      `  #   service: ${example ? 'httpbin' : 'web'}\n` +
+      `  #   port: ${example ? 8080 : 80}\n` +
+      `\n# poll: 5m   # ${t('deploy.fromLinkPollComment')}\n`
     onFill(yaml, proj)
+  }
+  function example() {
+    setLink(HTTPBIN_LINK)
+    setProject('httpbin')
+    onName('httpbin')
+    if (picked.length > 0) fill(HTTPBIN_LINK, 'httpbin')
   }
   return (
     <div className="col" style={{ gap: '0.3rem', marginBottom: '0.6rem', padding: '0.5rem', border: '1px solid var(--border)', borderRadius: 6 }}>
@@ -402,9 +463,14 @@ function ComposeFromLink({ onFill }: { onFill: (yaml: string, name: string) => v
           options={(hosts.data ?? []).map((h) => ({ value: h.name, label: h.name }))}
         />
         <Input size="small" style={{ width: 140 }} value={project} onChange={(e) => setProject(e.target.value)} placeholder={t('deploy.fromLinkProject')} />
-        <Button size="small" disabled={!link || picked.length === 0} onClick={fill}>
+        <Button size="small" disabled={!link || picked.length === 0} onClick={() => fill(link, project)}>
           {t('deploy.fromLinkFill')}
         </Button>
+        <Tooltip title={t('deploy.exampleHint')}>
+          <Button size="small" type="dashed" onClick={example}>
+            {t('deploy.exampleHttpbin')}
+          </Button>
+        </Tooltip>
       </div>
       {picked.length > 0 && (
         <div className="row" style={{ gap: '0.9rem', flexWrap: 'wrap' }}>

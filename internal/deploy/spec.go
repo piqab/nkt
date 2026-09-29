@@ -78,8 +78,9 @@ type ComposeSpec struct {
 	Pull *bool `yaml:"pull,omitempty"`
 	// WaitTimeout — сколько ждать подъёма и healthcheck на хосте (5m).
 	WaitTimeout string `yaml:"wait_timeout,omitempty"`
-	// Site — после выкладки проверить сайт по HTTPS.
-	Site string `yaml:"site,omitempty"`
+	// Site — сайт стека: строкой — проверить по HTTPS после выкладки,
+	// блоком — настроить (прокси, сертификат); см. SiteSpec.
+	Site *SiteSpec `yaml:"site,omitempty"`
 }
 
 // PullImages — pull перед up (по умолчанию да).
@@ -202,8 +203,8 @@ func (s Spec) Validate() error {
 				return msgs.Errorf("deploy.specBad", "compose.wait_timeout", c.WaitTimeout)
 			}
 		}
-		if c.Site != "" && !composeDomainRe.MatchString(strings.ToLower(c.Site)) {
-			return msgs.Errorf("deploy.specBad", "compose.site", c.Site)
+		if err := c.Site.validate(c); err != nil {
+			return err
 		}
 	default:
 		return msgs.Errorf("deploy.specBad", "action", s.Action)
@@ -322,7 +323,13 @@ clusters: [prod]        # кластеры хаба
 #   hosts: [web1, web2]        # или group: prod
 #   files: [deploy/nginx.conf] # что ещё нужно стеку (внутри каталога compose-файла)
 #   wait_timeout: 5m           # ждать подъёма и healthcheck
-#   site: app.example.com      # после выкладки проверить сайт по HTTPS
+#   site: app.example.com      # после выкладки проверить сайт по HTTPS, или блоком —
+#   # сайт настроит хаб (прокси, сертификат; стек — на одном хосте):
+#   # site:
+#   #   domains: [app.example.com]
+#   #   service: web             # сервис стека
+#   #   port: 80                 # порт контейнера
+#   #   proxy: nginx             # необязательно: иначе какой есть, нет ни одного — nginx
 #   # .env стека — в «Доступ» конвейера, хранится зашифрованным
 
 # Когда ещё выкладывать, кроме вебхука и кнопки:
@@ -361,7 +368,13 @@ clusters: [prod]        # hub clusters
 #   hosts: [web1, web2]        # or group: prod
 #   files: [deploy/nginx.conf] # what else the stack needs (inside the compose file's directory)
 #   wait_timeout: 5m           # wait for startup and healthchecks
-#   site: app.example.com      # check the site over HTTPS after the deployment
+#   site: app.example.com      # check the site over HTTPS after the deployment, or as a
+#   # block the hub sets the site up (proxy, certificate; the stack on one host):
+#   # site:
+#   #   domains: [app.example.com]
+#   #   service: web             # the stack service
+#   #   port: 80                 # the container port
+#   #   proxy: nginx             # optional: otherwise whichever is there, with none — nginx
 #   # the stack's .env goes into the pipeline's "Access", stored encrypted
 
 # When else to deploy, besides the webhook and the button:

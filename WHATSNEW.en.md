@@ -8,6 +8,25 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.48 — 2026-09-29
+
+- **A site in the pipeline:** in `action: compose`, a `site:` block
+  (names, service, port, proxy) makes the hub set the site up after
+  deploying the stack, the way the "Sites" wizard does: DNS and ports from
+  outside, proxy, publishing on 127.0.0.1, certificate, config, HTTPS.
+  Later deployments only check HTTPS and set it up again if the block
+  changed. A site needs exactly one host; if it fails, the deployment
+  still succeeds, with the reason in the log and on the site. A dry run
+  shows what would happen to the site. The "Sites" tab marks such a site
+  with its pipeline. A `site: name` string still means only an HTTPS
+  check.
+- **An "Example: httpbin" button** in the new pipeline window: the link to
+  the example in the nkt repository and the stack and pipeline names; with
+  hosts picked, the description is ready at once.
+- **git missing on the hub:** the "Pipelines" tab shows a banner and an
+  "Install git" button (a background job on the hub machine); the
+  deployment error points to it.
+
 ## v1.11.47 — 2026-09-29
 
 - **fail2ban on the hub, ban and unban on all hosts:** a banned address

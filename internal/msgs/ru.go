@@ -630,7 +630,7 @@ var ruCatalog = map[string]string{
 	"deploy.specNeeds":                                    "для этого действия нужно поле %s",
 	"deploy.specInterval":                                 "%s: интервал не короче минуты (%q)",
 	"deploy.specRepoCreds":                                "логин и пароль не пишутся в адрес репозитория — задайте токен или ключ в «Доступе к репозиторию»",
-	"deploy.noGit":                                        "на хабе нет программы git",
+	"deploy.noGit":                                        "на хабе нет программы git — «Установить git» на вкладке «Конвейеры» в «Выкладках»",
 	"deploy.git":                                          "git %s: %s",
 	"deploy.badCommit":                                    "недопустимый коммит: %q",
 	"deploy.fileMissing":                                  "в репозитории нет файла %s",
