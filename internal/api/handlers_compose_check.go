@@ -98,7 +98,9 @@ type ComposeCheckResult struct {
 	StackExists bool                `json:"stack_exists"`
 	Files       []ComposeFileChange `json:"files"`
 	// Env — new, changed, same, keep (останется прежний) или none.
-	Env         string              `json:"env"`
+	Env string `json:"env"`
+	// EnvEdited — .env на хосте правили вручную (выкладка перезапишет).
+	EnvEdited   bool                `json:"env_edited,omitempty"`
 	ConfigOK    bool                `json:"config_ok"`
 	ConfigError string              `json:"config_error,omitempty"`
 	Services    []string            `json:"services,omitempty"`
@@ -152,6 +154,9 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 		res.Env = "changed"
 	case envErr == nil:
 		res.Env = "keep"
+	}
+	if req.Env != nil {
+		res.EnvEdited = envEditedOnHost(c, dir, req.EnvSHA)
 	}
 	if res.Engine == "" || !res.Compose {
 		writeJSON(w, http.StatusOK, res)

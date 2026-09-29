@@ -30,6 +30,7 @@ type composeCheck struct {
 		State string `json:"state"`
 	} `json:"files"`
 	Env         string   `json:"env"`
+	EnvEdited   bool     `json:"env_edited"`
 	ConfigOK    bool     `json:"config_ok"`
 	ConfigError string   `json:"config_error"`
 	Services    []string `json:"services"`
@@ -105,7 +106,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	var services []string
 	for _, t := range targets {
 		var res composeCheck
-		body := composeBody(c, main, files, env, "")
+		body := composeBody(c, main, files, env, pl.EnvSHA, "")
 		code, err := s.hostCall(ctx, user, t.ID, "POST", "/api/compose/stacks/check", body, &res)
 		switch {
 		case code == http.StatusNotFound || code == http.StatusMethodNotAllowed:
@@ -171,6 +172,9 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck) i
 	}
 	if res.Env != "none" && res.Env != "" {
 		jc.Log("deploy.dryEnv." + res.Env)
+	}
+	if res.EnvEdited {
+		jc.Log("deploy.dryEnvEdited")
 	}
 	problems := 0
 	if !res.ConfigOK {

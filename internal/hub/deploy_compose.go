@@ -136,13 +136,21 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	jc.Log("deploy.composeFiles", len(files), c.Project, len(targets))
 	for i, t := range targets {
 		jc.StepKey(2+i, 2+len(targets), "deploy.stepCompose", t.Name)
-		body := composeBody(c, main, files, env, msgs.T(lang, "deploy.composeNote", pl.Name, deploy.ShortSHA(vars.Commit)))
+		body := composeBody(c, main, files, env, pl.EnvSHA, msgs.T(lang, "deploy.composeNote", pl.Name, deploy.ShortSHA(vars.Commit)))
 		var started struct {
-			JobID  int64  `json:"job_id"`
-			Engine string `json:"engine"`
+			JobID     int64  `json:"job_id"`
+			Engine    string `json:"engine"`
+			EnvEdited bool   `json:"env_edited"`
 		}
 		if _, err := s.hostCall(ctx, user, t.ID, "POST", "/api/compose/stacks/deploy", body, &started); err != nil {
 			return msgs.Errorf("deploy.composeHostFailed", t.Name, msgs.Localize(lang, err))
+		}
+		if started.EnvEdited {
+			jc.Log("deploy.envEditedOverwritten", t.Name)
+		}
+		if env != nil {
+			// .env на хосте теперь этот: с ним сравнит следующая выкладка.
+			_ = s.db.SetPipelineEnvSHA(ctx, pl.ID, envSHA(*env))
 		}
 		if err := s.waitHostJobVia(ctx, jc, user, t.ID, started.JobID); err != nil {
 			// Следующие хосты не трогаем: сломанное не должно расползтись.
@@ -183,13 +191,15 @@ func (s *Server) pipelineEnv(pl store.Pipeline) (*string, error) {
 }
 
 // composeBody — запрос выкладки (и сухого прогона) стека к хосту.
-func composeBody(c *deploy.ComposeSpec, main string, files map[string]string, env *string, note string) map[string]any {
+func composeBody(c *deploy.ComposeSpec, main string, files map[string]string, env *string, envSHA, note string) map[string]any {
 	body := map[string]any{
 		"project": c.Project, "file": main, "files": files, "pull": c.PullImages(),
 		"wait_timeout": int(c.Wait().Seconds()), "note": note,
 	}
 	if env != nil {
 		body["env"] = *env
+		// По нему хост узнаёт, что .env правили вручную.
+		body["env_sha"] = envSHA
 	}
 	return body
 }

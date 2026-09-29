@@ -21,9 +21,16 @@ type Pipeline struct {
 	Enabled    bool   `json:"enabled"`
 	LastCommit string `json:"last_commit,omitempty"`
 	LastTag    string `json:"last_tag,omitempty"`
-	Author     string `json:"author,omitempty"`
-	CreatedAt  string `json:"created_at"`
-	UpdatedAt  string `json:"updated_at"`
+	// FailedCommit / FailedTag — на чём упала последняя выкладка: опрос и
+	// registry их не повторяют (ждут нового коммита или тега, или кнопки).
+	FailedCommit string `json:"failed_commit,omitempty"`
+	FailedTag    string `json:"failed_tag,omitempty"`
+	// EnvSHA — sha256 .env, записанного на хосты последней выкладкой: по
+	// нему хост видит, что .env правили вручную.
+	EnvSHA    string `json:"-"`
+	Author    string `json:"author,omitempty"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
 	// HasGitCred / HasRegistryCred — для интерфейса: задан ли доступ.
 	HasGitCred      bool `json:"has_git_cred"`
 	HasRegistryCred bool `json:"has_registry_cred"`
@@ -50,6 +57,9 @@ type Deployment struct {
 	Trigger    string `json:"trigger"`
 	Author     string `json:"author,omitempty"`
 	JobID      int64  `json:"job_id,omitempty"`
+	// EnvVersion — версия .env конвейера на момент выкладки (0 — не было):
+	// откат по галочке возвращает и её.
+	EnvVersion int64  `json:"env_version,omitempty"`
 	Status     string `json:"status"`
 	Error      string `json:"error,omitempty"`
 	CreatedAt  string `json:"created_at"`
@@ -64,12 +74,12 @@ const (
 	DeployFailed    = "failed"
 )
 
-const pipelineColumns = `id, name, content, hook_id, hook_secret, git_cred, registry_cred, env_enc, enabled, last_commit, last_tag, author, created_at, updated_at`
+const pipelineColumns = `id, name, content, hook_id, hook_secret, git_cred, registry_cred, env_enc, enabled, last_commit, last_tag, failed_commit, failed_tag, env_sha, author, created_at, updated_at`
 
 func scanPipeline(row interface{ Scan(...any) error }) (Pipeline, error) {
 	var p Pipeline
 	err := row.Scan(&p.ID, &p.Name, &p.Content, &p.HookID, &p.HookSecret, &p.GitCred, &p.RegistryCred, &p.EnvEnc, &p.Enabled,
-		&p.LastCommit, &p.LastTag, &p.Author, &p.CreatedAt, &p.UpdatedAt)
+		&p.LastCommit, &p.LastTag, &p.FailedCommit, &p.FailedTag, &p.EnvSHA, &p.Author, &p.CreatedAt, &p.UpdatedAt)
 	p.HasGitCred, p.HasRegistryCred, p.HasEnv = len(p.GitCred) > 0, len(p.RegistryCred) > 0, len(p.EnvEnc) > 0
 	return p, err
 }
@@ -158,8 +168,82 @@ func (db *DB) SetPipelineEnabled(ctx context.Context, id int64, enabled bool) er
 
 // SetPipelineDeployed запоминает последнее выложенное.
 func (db *DB) SetPipelineDeployed(ctx context.Context, id int64, commit, tag string) error {
-	_, err := db.ExecContext(ctx, `UPDATE pipelines SET last_commit = ?, last_tag = ? WHERE id = ?`, commit, tag, id)
+	_, err := db.ExecContext(ctx, `UPDATE pipelines SET last_commit = ?, last_tag = ?, failed_commit = '', failed_tag = '' WHERE id = ?`, commit, tag, id)
 	return err
+}
+
+// SetPipelineFailed запоминает, на чём упала выкладка.
+func (db *DB) SetPipelineFailed(ctx context.Context, id int64, commit, tag string) error {
+	_, err := db.ExecContext(ctx, `UPDATE pipelines SET failed_commit = ?, failed_tag = ? WHERE id = ?`, commit, tag, id)
+	return err
+}
+
+// SetPipelineEnvSHA — sha256 .env, записанного на хосты.
+func (db *DB) SetPipelineEnvSHA(ctx context.Context, id int64, sha string) error {
+	_, err := db.ExecContext(ctx, `UPDATE pipelines SET env_sha = ? WHERE id = ?`, sha, id)
+	return err
+}
+
+// EnvVersion — версия .env конвейера (зашифрованное содержимое; пусто —
+// .env убран).
+type EnvVersion struct {
+	ID         int64  `json:"id"`
+	PipelineID int64  `json:"pipeline_id"`
+	TS         string `json:"ts"`
+	Author     string `json:"author,omitempty"`
+	Note       string `json:"note,omitempty"`
+	EnvEnc     []byte `json:"-"`
+}
+
+// AddEnvVersion записывает версию .env (после каждой смены в «Доступе»).
+func (db *DB) AddEnvVersion(ctx context.Context, v EnvVersion) (int64, error) {
+	enc := any(v.EnvEnc)
+	if len(v.EnvEnc) == 0 {
+		enc = nil
+	}
+	res, err := db.ExecContext(ctx, `INSERT INTO pipeline_env_versions (pipeline_id, ts, author, note, env_enc) VALUES (?, ?, ?, ?, ?)`,
+		v.PipelineID, FormatTime(time.Now()), v.Author, v.Note, enc)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// EnvVersions — версии .env конвейера, новые сверху.
+func (db *DB) EnvVersions(ctx context.Context, pipelineID int64, limit int) ([]EnvVersion, error) {
+	rows, err := db.QueryContext(ctx, `SELECT id, pipeline_id, ts, author, note, env_enc FROM pipeline_env_versions
+		WHERE pipeline_id = ? ORDER BY id DESC LIMIT ?`, pipelineID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []EnvVersion{}
+	for rows.Next() {
+		var v EnvVersion
+		if err := rows.Scan(&v.ID, &v.PipelineID, &v.TS, &v.Author, &v.Note, &v.EnvEnc); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+
+// EnvVersionByID — одна версия .env.
+func (db *DB) EnvVersionByID(ctx context.Context, id int64) (EnvVersion, error) {
+	var v EnvVersion
+	err := db.QueryRowContext(ctx, `SELECT id, pipeline_id, ts, author, note, env_enc FROM pipeline_env_versions WHERE id = ?`, id).
+		Scan(&v.ID, &v.PipelineID, &v.TS, &v.Author, &v.Note, &v.EnvEnc)
+	if errors.Is(err, sql.ErrNoRows) {
+		return v, ErrNotFound
+	}
+	return v, err
+}
+
+// LatestEnvVersion — номер последней версии .env конвейера (0 — нет).
+func (db *DB) LatestEnvVersion(ctx context.Context, pipelineID int64) int64 {
+	var id int64
+	_ = db.QueryRowContext(ctx, `SELECT COALESCE(MAX(id), 0) FROM pipeline_env_versions WHERE pipeline_id = ?`, pipelineID).Scan(&id)
+	return id
 }
 
 // DeletePipeline убирает конвейер с историей и выкладками.
@@ -233,18 +317,18 @@ func (db *DB) PipelineVersion(ctx context.Context, id int64) (PipelineVersion, e
 	return v, err
 }
 
-const deploymentColumns = `id, pipeline_id, ref, commit_sha, tag, trigger, author, job_id, status, error, created_at, finished_at`
+const deploymentColumns = `id, pipeline_id, ref, commit_sha, tag, trigger, author, job_id, env_version, status, error, created_at, finished_at`
 
 func scanDeployment(row interface{ Scan(...any) error }) (Deployment, error) {
 	var d Deployment
-	err := row.Scan(&d.ID, &d.PipelineID, &d.Ref, &d.Commit, &d.Tag, &d.Trigger, &d.Author, &d.JobID, &d.Status, &d.Error, &d.CreatedAt, &d.FinishedAt)
+	err := row.Scan(&d.ID, &d.PipelineID, &d.Ref, &d.Commit, &d.Tag, &d.Trigger, &d.Author, &d.JobID, &d.EnvVersion, &d.Status, &d.Error, &d.CreatedAt, &d.FinishedAt)
 	return d, err
 }
 
 // CreateDeployment заводит выкладку в очереди.
 func (db *DB) CreateDeployment(ctx context.Context, d Deployment) (int64, error) {
-	res, err := db.ExecContext(ctx, `INSERT INTO deployments (pipeline_id, ref, commit_sha, tag, trigger, author, status, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, d.PipelineID, d.Ref, d.Commit, d.Tag, d.Trigger, d.Author, DeployQueued, FormatTime(time.Now()))
+	res, err := db.ExecContext(ctx, `INSERT INTO deployments (pipeline_id, ref, commit_sha, tag, trigger, author, env_version, status, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`, d.PipelineID, d.Ref, d.Commit, d.Tag, d.Trigger, d.Author, d.EnvVersion, DeployQueued, FormatTime(time.Now()))
 	if err != nil {
 		return 0, err
 	}

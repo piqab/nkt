@@ -178,7 +178,8 @@ func (s *Server) pollRepo(ctx context.Context, pl store.Pipeline, spec deploy.Sp
 		return
 	}
 	commit := refs["refs/heads/"+spec.Ref]
-	if commit == "" || commit == pl.LastCommit {
+	if commit == "" || commit == pl.LastCommit || commit == pl.FailedCommit {
+		// Упавший коммит не повторяется — ждём нового или кнопки.
 		return
 	}
 	_, _ = s.startDeployment(ctx, pl, store.Deployment{Ref: spec.Ref, Commit: commit, Tag: pl.LastTag, Trigger: "poll", Author: "poll"}, true)
@@ -197,7 +198,7 @@ func (s *Server) pollRegistry(ctx context.Context, pl store.Pipeline, spec deplo
 		return
 	}
 	newest := deploy.NewestTag(tags, spec.RegistryTags)
-	if newest == "" || newest == pl.LastTag || (pl.LastTag != "" && deploy.CompareVersions(newest, pl.LastTag) <= 0) {
+	if newest == "" || newest == pl.LastTag || newest == pl.FailedTag || (pl.LastTag != "" && deploy.CompareVersions(newest, pl.LastTag) <= 0) {
 		return
 	}
 	_, _ = s.startDeployment(ctx, pl, store.Deployment{Ref: spec.Ref, Tag: newest, Trigger: "registry", Author: "registry"}, true)

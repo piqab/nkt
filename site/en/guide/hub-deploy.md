@@ -290,13 +290,15 @@ compose:
 - **Registry** (`registry`) — the hub notices a new image tag newer than
   the previous one (compared by numbers: `v1.10.0` is newer than
   `v1.9.3`) and deploys the `ref` branch with that tag.
-- **Stack .env** — for `action: compose`: the stack's environment
-  variables (`KEY=value` per line).
 
 Polling and registry start working **after the first deployment with
 the button** — a freshly saved pipeline deploys nothing by itself. A
 disabled pipeline ("Enabled" unchecked) reacts to nothing but the button.
 While a pipeline's deployment is running, polling doesn't start another.
+**A failed deployment is not retried** by polling or the registry: the hub
+remembers the failed commit (or tag) and waits for a new one; the pipeline
+row shows "waits for a new commit", and the failed job's log says so. The
+"Deploy" button still runs it at any time.
 
 ## Webhook
 
@@ -351,6 +353,8 @@ A pipeline's "Access":
 - **Repository** — a token (for `https://`, e.g. a GitHub fine-grained
   token with Contents: read) or a private deploy key (for `ssh`/`git@`).
 - **Registry** — `login:token` for a private registry (for tag watching).
+- **Stack .env** — for `action: compose`: the stack's environment
+  variables (`KEY=value` per line).
 
 They are stored on the hub encrypted and never get into the description,
 logs or command lines (git gets them through the environment); they
@@ -359,12 +363,27 @@ program (the hub image has it); without it, the "Pipelines" tab shows a
 banner and an **"Install git"** button (the package from the distribution's
 repository, as a background job on the hub machine).
 
+**Stack `.env`.** Each deployment writes it to `/srv/compose/<stack>/.env`
+(0600) and replaces what is on the host; a pipeline without `.env` leaves
+the host's file alone. Saving a new `.env` first shows which variable names
+appear and disappear. **".env history"** in "Access": every change is a
+version (encrypted); differences show names only (+ added, − removed,
+~ changed value); **"Show values"** is for administrators and is written
+to the audit log; **"Restore"** makes a version current (hosts get it with
+the next deployment). If the `.env` on a host was edited by hand since the
+last deployment, the deployment log and the dry run say so: the hub
+compares the file with a hash of what it wrote last.
+
+![.env history](/screens/en/deploy-env-history.png)
+
 ## History and rollback
 
 Every deployment is a hub job with a log: what (commit, branch, tag), who
 started it (button, webhook, polling, registry, rollback), when and how
 it ended. **"Roll back"** on an earlier successful deployment deploys its
 commit and tag again — the image is already in the registry, no rebuild.
+The **"also restore that deployment's .env"** tick brings back the `.env`
+version that deployment used; without it `.env` stays current.
 
 Deleting a pipeline deletes its history; what was deployed to clusters
 and hosts stays.

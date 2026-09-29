@@ -92,10 +92,17 @@ func (r *DeployRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 		return err
 	}
 	commit := d.Commit
+	var autoRetry bool
 	defer func() {
 		status, text := store.DeploySucceeded, ""
 		if err != nil {
 			status, text = store.DeployFailed, msgs.Localize(jc.Lang(), err)
+			// Опрос и registry сравнивают с последним удачным: без этого
+			// упавший коммит выкладывался бы заново каждый интервал.
+			_ = s.db.SetPipelineFailed(context.WithoutCancel(ctx), pl.ID, commit, d.Tag)
+			if autoRetry && commit != "" {
+				jc.Log("deploy.failedRemembered", deploy.ShortSHA(commit)+" "+d.Tag)
+			}
 		}
 		_ = s.db.UpdateDeployment(context.WithoutCancel(ctx), d.ID, status, commit, text)
 	}()
@@ -105,6 +112,7 @@ func (r *DeployRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	autoRetry = spec.Poll != "" || spec.Registry != ""
 	g := deploy.Git{Dir: s.pipelineDir(pl.ID), Cred: s.pipelineCred(pl)}
 
 	// Коммит: заданный (откат), иначе вершина тега или ветки.
@@ -377,6 +385,7 @@ func (s *Server) startDeployment(ctx context.Context, pl store.Pipeline, d store
 		}
 	}
 	d.PipelineID = pl.ID
+	d.EnvVersion = s.ensureEnvVersion(ctx, pl)
 	id, err := s.db.CreateDeployment(ctx, d)
 	if err != nil {
 		return d, err

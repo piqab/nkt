@@ -7,7 +7,7 @@ import type { HubHost, Job, Me } from '../types'
 import { Banner, Card, DiffView, ErrorNote, InfoHint, Loading, Modal, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { EditTextModal } from '../components/EditTextModal'
-import { confirmAction } from '../components/confirm'
+import { confirmAction, confirmWithOption } from '../components/confirm'
 import { unifiedDiff } from '../components/textDiff'
 import { JobLogModal } from './Jobs'
 import { EdgeCard } from '../components/EdgeCard'
@@ -22,6 +22,7 @@ interface Deployment {
   trigger: string
   author?: string
   job_id?: number
+  env_version?: number
   status: string
   error?: string
   created_at: string
@@ -35,6 +36,8 @@ interface Pipeline {
   enabled: boolean
   last_commit?: string
   last_tag?: string
+  failed_commit?: string
+  failed_tag?: string
   has_git_cred: boolean
   has_registry_cred: boolean
   has_env?: boolean
@@ -47,6 +50,18 @@ interface PipelineVersion {
   author?: string
   note?: string
   content?: string
+}
+interface EnvVersion {
+  id: number
+  ts: string
+  author?: string
+  note?: string
+  cleared?: boolean
+  names?: string[]
+  added?: string[]
+  removed?: string[]
+  changed?: string[]
+  current?: boolean
 }
 interface EdgeStatus {
   configured: boolean
@@ -107,6 +122,11 @@ export default function Deployments({ me }: { me: Me }) {
                 {t('deploy.log')}
               </Button>
             ) : null}
+            {p.failed_commit && p.last.status === 'failed' && (
+              <Tooltip title={t('deploy.waitsNewHint', { what: [p.failed_tag, short(p.failed_commit)].filter(Boolean).join(' ') })}>
+                <Tag>{t('deploy.waitsNew')}</Tag>
+              </Tooltip>
+            )}
           </Space>
         ) : (
           <span className="small muted">{t('deploy.never')}</span>
@@ -607,9 +627,15 @@ function HistoryModal({ p, onClose, onOpenJob, onChanged }: { p: Pipeline; onClo
               size="small"
               danger
               onClick={async () => {
-                if (!(await confirmAction(t('deploy.rollbackConfirm', { what: d.tag || short(d.commit) })))) return
+                const text = t('deploy.rollbackConfirm', { what: d.tag || short(d.commit) })
+                let withEnv = false
+                if (d.env_version) {
+                  const ok = await confirmWithOption(text, t('deploy.rollbackWithEnv', { version: d.env_version }), { optionHint: t('deploy.rollbackWithEnvHint') })
+                  if (!ok) return
+                  withEnv = ok.checked
+                } else if (!(await confirmAction(text))) return
                 try {
-                  const r = await api<{ job_id: number }>(`/hub/pipelines/${p.id}/rollback`, { method: 'POST', body: { deployment_id: d.id } })
+                  const r = await api<{ job_id: number }>(`/hub/pipelines/${p.id}/rollback`, { method: 'POST', body: { deployment_id: d.id, with_env: withEnv } })
                   onChanged()
                   void res.reload()
                   onOpenJob(r.job_id)
@@ -643,6 +669,25 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
   const [env, setEnv] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [envHistory, setEnvHistory] = useState(false)
+  // Новый .env — сначала разница по именам с текущим (значения — секреты).
+  async function save() {
+    if (env) {
+      let current: string[] = []
+      try {
+        const vs = await api<{ versions: EnvVersion[] }>(`/hub/pipelines/${p.id}/env/versions`)
+        current = vs.versions.find((v) => v.current && !v.cleared)?.names ?? []
+      } catch {
+        // без истории — сравнивать не с чем
+      }
+      const next = envNames(env)
+      const appear = next.filter((n) => !current.includes(n))
+      const vanish = current.filter((n) => !next.includes(n))
+      const text = t('deploy.envSaveConfirm', { appear: appear.join(', ') || '—', vanish: vanish.join(', ') || '—', count: next.length })
+      if (!(await confirmAction(text))) return
+    }
+    await send({ git_token: token, ssh_key: key, registry, env })
+  }
   async function send(body: Record<string, unknown>) {
     setBusy(true)
     setError(null)
@@ -673,7 +718,7 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
         <Input.Password size="small" value={registry} placeholder={t('deploy.registryPlaceholder')} onChange={(e) => setRegistry(e.target.value)} autoComplete="new-password" />
         <Input.TextArea rows={4} className="mono sensitive-area" value={env} placeholder={t('deploy.envPlaceholder')} onChange={(e) => setEnv(e.target.value)} />
         <Space wrap>
-          <Button type="primary" loading={busy} disabled={!token && !key && !registry && !env} onClick={() => void send({ git_token: token, ssh_key: key, registry, env })}>
+          <Button type="primary" loading={busy} disabled={!token && !key && !registry && !env} onClick={() => void save()}>
             {t('deploy.saveAccess')}
           </Button>
           {p.has_git_cred && (
@@ -691,8 +736,143 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
               {t('deploy.clearEnv')}
             </Button>
           )}
+          <Button size="small" onClick={() => setEnvHistory(true)}>
+            {t('deploy.envHistory')}
+          </Button>
         </Space>
       </div>
+      {envHistory && <EnvHistoryModal p={p} onClose={() => setEnvHistory(false)} onChanged={onSaved} />}
+    </Modal>
+  )
+}
+
+/** Имена переменных .env (как их читает docker compose). */
+function envNames(text: string): string[] {
+  const out = new Set<string>()
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim().replace(/^export\s+/, '')
+    if (!line || line.startsWith('#')) continue
+    const k = line.split('=')[0].trim()
+    if (k) out.add(k)
+  }
+  return [...out].sort()
+}
+
+/** История .env: разница — только по именам переменных (значения —
+ * секреты); значения — по кнопке, с записью в журнал действий; возврат
+ * версии — новой версией, на хосты — со следующей выкладкой. */
+function EnvHistoryModal({ p, onClose, onChanged }: { p: Pipeline; onClose: () => void; onChanged: () => void }) {
+  const { t } = useTranslation()
+  const list = useApi<{ versions: EnvVersion[] }>(`/hub/pipelines/${p.id}/env/versions`)
+  const [shown, setShown] = useState<{ id: number; content: string; cleared: boolean } | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const current = list.data?.versions.find((v) => v.current)
+  const names = (items: string[] | undefined, color: string, sign: string) =>
+    (items ?? []).map((n) => (
+      <Tag key={sign + n} color={color} className="mono">
+        {sign}
+        {n}
+      </Tag>
+    ))
+  async function reveal(v: EnvVersion) {
+    if (!(await confirmAction(t('deploy.envRevealConfirm', { id: v.id })))) return
+    setError(null)
+    try {
+      const r = await api<{ content: string; cleared: boolean }>(`/hub/pipelines/${p.id}/env/versions/${v.id}/reveal`, { method: 'POST' })
+      setShown({ id: v.id, ...r })
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+  async function restore(v: EnvVersion) {
+    const now = new Set(current?.names ?? [])
+    const then = new Set(v.names ?? [])
+    const appear = [...then].filter((n) => !now.has(n))
+    const vanish = [...now].filter((n) => !then.has(n))
+    const text = v.cleared
+      ? t('deploy.envRestoreClearedConfirm', { id: v.id })
+      : t('deploy.envRestoreConfirm', {
+          id: v.id,
+          appear: appear.join(', ') || '—',
+          vanish: vanish.join(', ') || '—',
+        })
+    if (!(await confirmAction(text))) return
+    setError(null)
+    try {
+      await api(`/hub/pipelines/${p.id}/env/versions/${v.id}/restore`, { method: 'POST' })
+      setShown(null)
+      void list.reload()
+      onChanged()
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
+  return (
+    <Modal title={t('deploy.envHistoryTitle', { name: p.name })} onClose={onClose} width={860}>
+      <p className="small muted">{t('deploy.envHistoryHint')}</p>
+      {error && <Banner kind="error">{error}</Banner>}
+      <ErrorNote error={list.error} />
+      {!list.data ? (
+        <Loading what={t('deploy.envHistory')} />
+      ) : list.data.versions.length === 0 ? (
+        <p className="small muted">{t('deploy.envHistoryEmpty')}</p>
+      ) : (
+        list.data.versions.map((v) => (
+          <div key={v.id} style={{ borderBottom: '1px solid var(--border)', padding: '0.4rem 0' }}>
+            <div className="row" style={{ gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <strong className="small">#{v.id}</strong>
+              {v.current && <Tag color="blue">{t('deploy.envCurrent')}</Tag>}
+              <span className="small">{formatRelative(v.ts)}</span>
+              <span className="small">{v.author}</span>
+              <span className="small muted">{v.note}</span>
+              <span style={{ flex: 1 }} />
+              <Button size="small" onClick={() => void reveal(v)}>
+                {t('deploy.envReveal')}
+              </Button>
+              {!v.current && (
+                <Button size="small" onClick={() => void restore(v)}>
+                  {t('deploy.envRestore')}
+                </Button>
+              )}
+            </div>
+            <div style={{ marginTop: '0.25rem' }}>
+              {v.cleared ? (
+                <Tag>{t('deploy.envCleared')}</Tag>
+              ) : (
+                <>
+                  {names(v.added, 'success', '+')}
+                  {names(v.removed, 'error', '−')}
+                  {names(v.changed, 'warning', '~')}
+                  {!v.added?.length && !v.removed?.length && !v.changed?.length && (
+                    <span className="small muted">{t('deploy.envNoChange', { names: (v.names ?? []).join(', ') || '—' })}</span>
+                  )}
+                </>
+              )}
+            </div>
+            {shown?.id === v.id && (
+              <div style={{ marginTop: '0.35rem' }}>
+                {shown.cleared ? (
+                  <span className="small muted">{t('deploy.envCleared')}</span>
+                ) : (
+                  <pre className="mono small sensitive-area" style={{ margin: 0, padding: '0.4rem', background: 'var(--bg-subtle, #f6f6f6)', borderRadius: 4, whiteSpace: 'pre-wrap' }}>
+                    {shown.content}
+                  </pre>
+                )}
+                <Space style={{ marginTop: '0.25rem' }}>
+                  {!shown.cleared && (
+                    <Button size="small" icon={<CopyOutlined />} onClick={() => void navigator.clipboard?.writeText(shown.content)}>
+                      {t('deploy.envCopy')}
+                    </Button>
+                  )}
+                  <Button size="small" onClick={() => setShown(null)}>
+                    {t('deploy.envHide')}
+                  </Button>
+                </Space>
+              </div>
+            )}
+          </div>
+        ))
+      )}
     </Modal>
   )
 }

@@ -6,8 +6,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
 	"log/slog"
@@ -138,6 +140,23 @@ func TestComposeDeployAndSite(t *testing.T) {
 	}
 	if st, err := os.Stat(filepath.Join(root, "srv", "compose", "shop", ".env")); err != nil || st.Mode().Perm() != 0o600 {
 		t.Fatalf(".env: %v %v", st, err)
+	}
+	// Ручная правка .env: sha прошлой выкладки не совпадает с файлом.
+	sum := sha256.Sum256([]byte(env))
+	for _, tc := range []struct {
+		sha    string
+		edited bool
+	}{{hex.EncodeToString(sum[:]), false}, {strings.Repeat("0", 64), true}} {
+		rec := httptest.NewRecorder()
+		s.handleComposeCheck(rec, adminReq("POST", "/compose/stacks/check", map[string]any{
+			"project": "shop", "file": "compose.yaml", "env": env, "env_sha": tc.sha,
+			"files": map[string]string{"compose.yaml": "services:\n  web:\n    image: nginx\n"},
+		}))
+		var res ComposeCheckResult
+		_ = json.Unmarshal(rec.Body.Bytes(), &res)
+		if res.EnvEdited != tc.edited {
+			t.Fatalf("env_edited with sha %s: %s", tc.sha[:8], rec.Body)
+		}
 	}
 	for _, bad := range []map[string]string{{"compose.yaml": "x", "../evil": "x"}, {"compose.yaml": "x", ".env": "x"}} {
 		rec := httptest.NewRecorder()
