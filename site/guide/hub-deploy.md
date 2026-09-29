@@ -127,8 +127,8 @@ compose:
   успеха предыдущего**; первая неудача останавливает выкладку.
 - Без Docker — Podman (`podman compose`): ожидание — пока все
   контейнеры проекта работают и здоровы.
-- Только готовые образы: сервис с `build:` на хосте не соберётся —
-  сборку делает CI.
+- Только готовые образы: сервис с `build:` без `image:` хаб отвергнет
+  до обращения к хостам — сборку делает CI.
 - **`.env` стека** задаётся в «Доступе» конвейера: хранится на хабе
   зашифрованным, на хост пишется с правами 0600, в историю версий и
   журналы не попадает.
@@ -140,6 +140,16 @@ Codeberg/Gitea/Forgejo `…/src/branch/…`, их raw-варианты), выб�
 Дальше — обычная правка с диффом.
 
 ![Compose по ссылке](/screens/ru/deploy-compose.png)
+
+**Пример: httpbin.** В репозитории nkt —
+[`examples/httpbin`](https://github.com/piqab/nkt/tree/main/examples/httpbin):
+стек [go-httpbin](https://github.com/mccutchen/go-httpbin) на готовом образе
+`ghcr.io/mccutchen/go-httpbin` и конвейер к нему. Выкладывается прямо по
+ссылке `https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml`
+(имя стека — `httpbin`), затем «Сайты» → цель — стек `httpbin`, сервис
+`httpbin`, порт 8080. Compose-файл оригинала,
+[postmanlabs/httpbin](https://github.com/postmanlabs/httpbin), собирает
+образ из исходников (`build: '.'`) — его хаб отвергнет с объяснением.
 
 ## Сайты
 

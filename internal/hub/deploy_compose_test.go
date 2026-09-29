@@ -39,6 +39,32 @@ func TestCollectComposeFiles(t *testing.T) {
 	if _, _, err := collectComposeFiles(src, c, deploy.Vars{}); err == nil {
 		t.Fatal("binary file accepted")
 	}
+	// Как в postmanlabs/httpbin: образ собирается из исходников.
+	write("deploy/docker-compose.yml", "services:\n  httpbin:\n    build: '.'\n")
+	c.Files = nil
+	if _, _, err := collectComposeFiles(src, c, deploy.Vars{}); err == nil || !strings.Contains(err.Error(), "httpbin") {
+		t.Fatalf("build-only service accepted: %v", err)
+	}
+}
+
+// Пример из examples/httpbin должен оставаться выкладываемым.
+func TestHTTPBinExample(t *testing.T) {
+	c := &deploy.ComposeSpec{File: "deploy/docker-compose.yml", Project: "httpbin", Hosts: []string{"h"}}
+	files, main, err := collectComposeFiles("../../examples/httpbin", c, deploy.Vars{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(files[main], "go-httpbin:latest") {
+		t.Fatal(files[main])
+	}
+	pl, err := os.ReadFile("../../examples/httpbin/deploy/pipeline.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := deploy.ParseSpec(string(pl))
+	if err != nil || spec.Compose == nil || spec.Compose.File != "examples/httpbin/deploy/docker-compose.yml" {
+		t.Fatalf("%+v %v", spec, err)
+	}
 }
 
 func TestComposeSpecValidation(t *testing.T) {

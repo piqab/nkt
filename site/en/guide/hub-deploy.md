@@ -131,8 +131,8 @@ compose:
   previous one succeeded**; the first failure stops the deployment.
 - Without Docker, Podman (`podman compose`) is used; the wait lasts until
   every container of the project runs and is healthy.
-- Ready images only: a service with `build:` will not build on the host;
-  building is CI's job.
+- Ready images only: the hub rejects a service with `build:` and no
+  `image:` before touching any host; building is CI's job.
 - **The stack's `.env`** is set in the pipeline's "Access": stored on the
   hub encrypted, written to the host with 0600 permissions, never in the
   version history or logs.
@@ -144,6 +144,17 @@ hosts; the description fills itself in: repository, branch, path, stack
 name. Then it is an ordinary edit with a diff.
 
 ![Compose from a link](/screens/en/deploy-compose.png)
+
+**Example: httpbin.** The nkt repository has
+[`examples/httpbin`](https://github.com/piqab/nkt/tree/main/examples/httpbin):
+a [go-httpbin](https://github.com/mccutchen/go-httpbin) stack on the ready
+image `ghcr.io/mccutchen/go-httpbin` and a pipeline for it. It deploys
+straight from the link
+`https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml`
+(stack name `httpbin`), then "Sites" → target: stack `httpbin`, service
+`httpbin`, port 8080. The original's compose file,
+[postmanlabs/httpbin](https://github.com/postmanlabs/httpbin), builds the
+image from source (`build: '.'`); the hub rejects it with an explanation.
 
 ## Sites
 

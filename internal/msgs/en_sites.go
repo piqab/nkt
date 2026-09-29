@@ -59,6 +59,7 @@ var enSitesCatalog = map[string]string{
 	"site.stepTarget":          "Site target",
 	"site.tooManyDomains":      "Too many names: %d (20 at most)",
 	"site.upstream":            "The proxy will point at %s",
+	"compose.buildOnly":        "service %s is built from source (build:) — specify a ready image (image:): deployments take ready images only; building is the job of CI",
 	"deploy.composeBinary":     "%s is a binary file: stack files travel to the host as text; binaries belong in the image",
 	"deploy.composeFiles":      "Stack files: %d, stack %s, hosts: %d",
 	"deploy.composeHostDone":   "%s: the stack is up",
