@@ -8,6 +8,43 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.36 — 2026-09-29
+
+- **fail2ban gets its own host section, right below “Firewall”.** State
+  and version, running jails (where they read from, rules, failures and
+  bans), banned addresses with ban times: unban per row, with checkboxes
+  or all at once, and a manual ban into the `nkt-manual` jail for a
+  chosen time. A Ban/Unban/Found event log over 1, 3 or 7 days from
+  `fail2ban.log` (with rotations) or journald, with search and filters.
+- **Editing jails in a window with a form, a diff and history.** nkt
+  writes its own `jail.d/nkt-<jail>.local` on top of `jail.conf`; before
+  writing, `fail2ban-client -t` runs and a configuration with errors is
+  rolled back. Jails are enabled and disabled the same way. fail2ban
+  files in “Configs” are now checked with `fail2ban-client -t` too.
+- **Jail templates:** sshd, nginx (auth, bots, limit_req), HAProxy,
+  Postfix, Dovecot, recidive, marked by whether the program is on the
+  host; applying goes through a diff of every file. Custom templates with
+  a filter, a `fail2ban-regex` test against a host log and version
+  history are stored on the hub.
+- **Installation with a button**, as a package in the standard job
+  window, followed by setup: the hub's address in `ignoreip`, the manual
+  bans jail, sshd via journald where there is no log file (Debian 12+).
+- **The hub never bans itself:** it learns its external address as the
+  host sees it (`SSH_CONNECTION`) and passes it to the host, which keeps
+  it in `[DEFAULT] ignoreip`. Banning the hub's address or your own is
+  refused.
+- **Findings:** SSH exposed without fail2ban, fail2ban not running, no
+  sshd jail, a jail without logs, the hub not in `ignoreip`.
+- **A “fail2ban” section on the hub:** where it is installed and how many
+  are banned, which addresses are banned and where, banning and unbanning
+  on all hosts as a job with a per-host log, custom templates. The host
+  list gets a “Banned” column.
+- **Alerts about new bans** and **address checks:** every external IP in
+  an alert gets its own bulb, an AI review with its own instruction (bans
+  and logs of all hosts, reverse DNS), and a “Ban on all hosts” button in
+  the answer window, available even without AI configured.
+- Fixed: an edited AI instruction for configuration help was not saved.
+
 ## v1.11.35 — 2026-09-28
 
 - **nkt-edge:** the `EDGE_PROXY_ADDR` value is no longer written to the

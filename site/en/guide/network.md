@@ -26,3 +26,6 @@ title: Network and firewall
 - Nothing installed — ufw or firewalld is installed as a package with a
   live log.
 - iptables is shown as is — no editing, on purpose.
+
+Brute-force protection is a separate [fail2ban](/en/guide/fail2ban)
+section right below “Firewall”.

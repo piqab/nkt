@@ -15,6 +15,7 @@ import (
 	"github.com/piqab/nkt/internal/analyze"
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/fail2ban"
 	"github.com/piqab/nkt/internal/malware"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/parse"
@@ -99,7 +100,9 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 		capStatus   model.SourceStatus
 	)
 	var malwareRep model.MalwareReport
-	wg.Add(14)
+	var f2b *model.Fail2banState
+	wg.Add(15)
+	go func() { defer wg.Done(); f2b = fail2ban.Collect(ctx, s.c) }()
 	go func() { defer wg.Done(); malwareRep = malware.Scan(ctx, s.c) }()
 	go func() { defer wg.Done(); nginxRes = parse.Nginx(ctx, s.c, s.cfg.NginxMainConfig) }()
 	go func() { defer wg.Done(); hapRes = parse.HAProxy(ctx, s.c, s.cfg.HAProxyMainConf) }()
@@ -117,6 +120,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 	wg.Wait()
 
 	snap.Packages = pkgRes
+	snap.Fail2ban = f2b
 	snap.Interfaces = ifaces
 	snap.Capacity = capRes
 	snap.Sources = []model.SourceStatus{

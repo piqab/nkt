@@ -47,6 +47,9 @@ type ConfigManager struct {
 	lxd *LXDManager
 	// k8s — версии YAML объектов Kubernetes (пути k8s://…).
 	k8s K8sDocs
+	// docs — прочие документы не-файлы с историей по префиксу пути
+	// (шаблоны джейлов fail2ban: nkt-f2b-tpl:имя).
+	docs map[string]K8sDocs
 }
 
 // NewConfigManager builds the config editor.
@@ -798,6 +801,12 @@ func (m *ConfigManager) Versions(ctx context.Context, path string, limit int) ([
 		}
 		return m.db.ListVersions(ctx, path, limit)
 	}
+	if d, ok := m.docFor(path); ok {
+		if !d.ValidDocPath(path) {
+			return nil, ErrPathNotAllowed
+		}
+		return m.db.ListVersions(ctx, path, limit)
+	}
 	if path != "" {
 		if _, err := m.checkPath(path); err != nil {
 			return nil, err
@@ -870,6 +879,21 @@ func (m *ConfigManager) Rollback(ctx context.Context, lang msgs.Lang, user strin
 		}
 		return WriteResult{Path: v.Path, VersionID: id, Applied: true, Message: msgs.T(lang, "configs.versionRestored", v.ID)}, nil
 	}
+	if d, ok := m.docFor(v.Path); ok {
+		if !d.ValidDocPath(v.Path) {
+			return WriteResult{}, ErrPathNotAllowed
+		}
+		before, _ := d.CurrentDoc(ctx, v.Path)
+		after, err := d.RestoreDoc(ctx, user, v.Path, content)
+		if err != nil {
+			return WriteResult{}, err
+		}
+		id, err := m.RecordDoc(ctx, v.Path, "nkt", user, store.ActionRollback, note, []byte(before), []byte(after))
+		if err != nil {
+			return WriteResult{}, err
+		}
+		return WriteResult{Path: v.Path, VersionID: id, Applied: true, Message: msgs.T(lang, "configs.versionRestored", v.ID)}, nil
+	}
 	res, err := m.Write(ctx, lang, user, v.Path, content, note, apply)
 	if err != nil {
 		return res, err
@@ -904,6 +928,13 @@ func (m *ConfigManager) Diff(ctx context.Context, id int64) (string, error) {
 			return "", ErrPathNotAllowed
 		}
 		if cur, err = m.k8s.CurrentDoc(ctx, v.Path); err != nil {
+			return "", err
+		}
+	} else if d, ok := m.docFor(v.Path); ok {
+		if !d.ValidDocPath(v.Path) {
+			return "", ErrPathNotAllowed
+		}
+		if cur, err = d.CurrentDoc(ctx, v.Path); err != nil {
 			return "", err
 		}
 	} else {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/piqab/nkt/internal/ai"
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/fail2ban"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
@@ -136,7 +137,7 @@ func (s *Server) handleAIExplain(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := req.Kind
 	switch kind {
-	case ai.KindFinding, ai.KindVuln, ai.KindMalware, ai.KindEvent, ai.KindJobError, ai.KindConfigError, ai.KindConfig:
+	case ai.KindFinding, ai.KindVuln, ai.KindMalware, ai.KindEvent, ai.KindJobError, ai.KindConfigError, ai.KindConfig, ai.KindIP:
 	default:
 		kind = ai.KindFinding
 	}
@@ -145,7 +146,19 @@ func (s *Server) handleAIExplain(w http.ResponseWriter, r *http.Request) {
 		Severity: req.Severity, Service: req.Service, Object: req.Object, File: req.File, Line: req.Line,
 		Diff: req.Diff, Output: req.Output, Content: req.Content, Question: req.Question,
 	}
-	fc.Host, fc.Around = s.aiHostContext(r.Context(), req.HostID)
+	if kind == ai.KindIP {
+		// Проверка адреса: объект — сам адрес, контекст — не хост, а то,
+		// что хаб знает об адресе по всем хостам.
+		ip, err := fail2ban.ParseIP(req.Object)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		fc.Object = ip.String()
+		fc.Around = s.f2bIPFacts(r.Context(), auth.Username(r.Context()), ip)
+	} else {
+		fc.Host, fc.Around = s.aiHostContext(r.Context(), req.HostID)
+	}
 	s.aiExtendDeadline(w, s.hub.AISettings(r.Context()).TimeoutS)
 	answer, err := s.hub.AIExplain(r.Context(), kind, fc, s.aiKnownNames(r.Context()), req.HostID, req.Force)
 	if err != nil {

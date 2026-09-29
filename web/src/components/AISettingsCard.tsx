@@ -30,7 +30,7 @@ interface AIStatus {
 }
 
 interface AIPrompt {
-  kind: 'finding' | 'map' | 'config'
+  kind: 'finding' | 'map' | 'config' | 'ip'
   lang: 'ru' | 'en'
   text: string
   default: string
@@ -316,6 +316,7 @@ export function AISettingsCard() {
                       { value: 'finding', label: t('ai.promptFinding') },
                       { value: 'map', label: t('ai.promptMap') },
                       { value: 'config', label: t('ai.promptConfig') },
+                      { value: 'ip', label: t('ai.promptIp') },
                     ]}
                   />
                 </label>
@@ -355,7 +356,7 @@ export function AISettingsCard() {
           </details>
           {editingPrompt && currentPrompt && (
             <EditTextModal
-              title={`${t('ai.prompts')}: ${promptKind === 'finding' ? t('ai.promptFinding') : promptKind === 'map' ? t('ai.promptMap') : t('ai.promptConfig')} (${promptLang})`}
+              title={`${t('ai.prompts')}: ${promptKind === 'finding' ? t('ai.promptFinding') : promptKind === 'map' ? t('ai.promptMap') : promptKind === 'ip' ? t('ai.promptIp') : t('ai.promptConfig')} (${promptLang})`}
               saved={currentPrompt.text}
               draft={promptText}
               onDraft={(v) => setPromptDrafts((d) => ({ ...d, [promptKey]: v }))}

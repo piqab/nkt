@@ -241,6 +241,15 @@ func (s *ServiceManager) Validate(ctx context.Context, service string, paths ...
 			return collect.CommandResult{}, false
 		}
 		res, err = s.c.Run(ctx, "netplan", "generate")
+	case model.ServiceFail2ban:
+		// -t читает всю конфигурацию (jail.conf, jail.d, фильтры) так же,
+		// как сервер при запуске, ничего не применяя.
+		res, err = s.c.Run(ctx, "fail2ban-client", "-t")
+		if err == nil && res.ExitCode != 0 && strings.Contains(strings.ToLower(res.Output()), "usage") {
+			// Старый fail2ban без -t: проверить нечем — это не ошибка
+			// конфигурации и не повод откатывать правку.
+			return res, false
+		}
 	default:
 		return collect.CommandResult{}, false
 	}

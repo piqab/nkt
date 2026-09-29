@@ -30,6 +30,8 @@ const (
 	// EventRebooted — аптайм хоста стал меньше прежнего: машина
 	// перезагрузилась между опросами.
 	EventRebooted = "rebooted"
+	// EventBans — fail2ban на хосте забанил новые адреса.
+	EventBans = "bans"
 )
 
 // HostEvent — одно оповещение.

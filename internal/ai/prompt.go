@@ -33,6 +33,10 @@ const (
 	KindConfig    = "config"
 	KindMap       = "map"
 	KindHubReview = "hub-review"
+	// KindIP — проверка внешнего адреса из оповещения: кто это, чем
+	// опасен, стоит ли банить на всех хостах. Контекст собирает хаб:
+	// баны на хостах, события журналов fail2ban, обратный DNS.
+	KindIP = "ip"
 )
 
 // systemPrompt — общая инструкция для разбора одной находки.
@@ -105,10 +109,11 @@ const (
 	PromptFinding = "finding"
 	PromptMap     = "map"
 	PromptConfig  = "config"
+	PromptIP      = "ip"
 )
 
 // PromptKinds — в порядке показа в настройках.
-var PromptKinds = []string{PromptFinding, PromptMap, PromptConfig}
+var PromptKinds = []string{PromptFinding, PromptMap, PromptConfig, PromptIP}
 
 // PromptKindFor — какая инструкция нужна виду разбора.
 func PromptKindFor(kind string) string {
@@ -117,6 +122,8 @@ func PromptKindFor(kind string) string {
 		return PromptMap
 	case KindConfig:
 		return PromptConfig
+	case KindIP:
+		return PromptIP
 	default:
 		return PromptFinding
 	}
@@ -128,6 +135,8 @@ func systemPromptFor(promptKind string, lang msgs.Lang) string {
 		return mapSystemPrompt(lang)
 	case PromptConfig:
 		return configSystemPrompt(lang)
+	case PromptIP:
+		return ipSystemPrompt(lang)
 	default:
 		return systemPrompt(lang)
 	}
@@ -157,6 +166,32 @@ func configSystemPrompt(lang msgs.Lang) string {
 		"## What to fix — insecure, deprecated, contradictory, with line numbers where available; if nothing, say so.",
 		"## Example — a ready configuration fragment for the operator's question (a typical improved variant if there is no question), in a ``` block that can be pasted as is.",
 		"Never suggest actions that would cut off access to the server without an explicit warning.",
+	}, "\n")
+}
+
+// ipSystemPrompt — инструкция проверки внешнего адреса.
+func ipSystemPrompt(lang msgs.Lang) string {
+	if lang != msgs.EN {
+		return strings.Join([]string{
+			"Ты помогаешь системному администратору оценить внешний IP-адрес, который появился в оповещениях о его серверах (баны fail2ban, попытки входа).",
+			"Отвечай по-русски, коротко и по делу. Опирайся на приведённые факты: где и за что адрес банили, строки журналов, обратный DNS, тип адреса.",
+			"Ты не можешь сам проверить адрес во внешних базах — не выдумывай владельца, страну и репутацию, если их нет в фактах; можно назвать, где это посмотреть.",
+			"Структура ответа — ровно три раздела, каждый начинается со строки «## »:",
+			"## Кто это — что видно по фактам: сканер, перебор паролей, бот, похоже на легитимного клиента или на свой адрес.",
+			"## Насколько опасен — насколько настойчив, на сколько хостов ходил, есть ли признаки успешного входа.",
+			"## Что сделать — банить ли на всех хостах и на какой срок, что ещё проверить; команды — в блоке ```bash```.",
+			"Если адрес похож на свой (адрес хаба, офиса, мониторинга) — прямо предупреди, что бан отрежет доступ.",
+		}, "\n")
+	}
+	return strings.Join([]string{
+		"You help a system administrator assess an external IP address that showed up in alerts about their servers (fail2ban bans, login attempts).",
+		"Answer in English, briefly and to the point. Rely on the given facts: where and why the address was banned, log lines, reverse DNS, the kind of address.",
+		"You cannot look the address up in external databases yourself — do not invent the owner, country or reputation if the facts do not have them; you may name where to look.",
+		"Structure: exactly three sections, each starting with a '## ' line:",
+		"## Who this is — what the facts show: a scanner, password guessing, a bot, something that looks like a legitimate client or one's own address.",
+		"## How dangerous — how persistent, how many hosts it went after, any signs of a successful login.",
+		"## What to do — whether to ban it on all hosts and for how long, what else to check; commands in a ```bash``` block.",
+		"If the address looks like one's own (the hub, an office, monitoring), warn explicitly that a ban would cut off access.",
 	}, "\n")
 }
 
@@ -243,7 +278,11 @@ func UserPrompt(c FindingContext, lang msgs.Lang) string {
 		}
 		fmt.Fprintf(&b, "%s: %s\n", name, strings.TrimSpace(value))
 	}
-	add(label("Находка", "Finding"), c.Title)
+	if c.Kind == KindIP {
+		add(label("Адрес", "Address"), c.Object)
+	} else {
+		add(label("Находка", "Finding"), c.Title)
+	}
 	add(label("Подробности", "Details"), c.Detail)
 	add(label("Серьёзность", "Severity"), c.Severity)
 	add(label("Сервис", "Service"), c.Service)
@@ -290,6 +329,10 @@ func UserPrompt(c FindingContext, lang msgs.Lang) string {
 		} else {
 			b.WriteString(label("Вопроса нет: дай обзор и типовой улучшенный пример.\n", "No question: give an overview and a typical improved example.\n"))
 		}
+	}
+	if c.Kind == KindIP {
+		b.WriteString(label("Задача: оцени этот адрес и скажи, банить ли его на всех хостах.\n",
+			"Task: assess this address and say whether to ban it on all hosts.\n"))
 	}
 	if c.Kind == KindConfigError {
 		// Своя постановка задачи: это не находка сканера, а отказ при

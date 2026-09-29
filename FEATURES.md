@@ -178,6 +178,15 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - Installation of ufw or firewalld as a package with a live log when the host has neither.
 - iptables view as is (no editing).
 
+### fail2ban
+- A section right below Firewall: state and version, running jails (log files or journald, rules, failures and bans now/total, a missing log highlighted), banned addresses with ban times, unbanning per row, with checkboxes or all at once, a manual ban into the `nkt-manual` jail with a chosen time.
+- Editing a jail in a window with a form (enabled, maxretry, findtime, bantime, bantime.increment, backend, logpath, ignoreip) and the text: the nkt file `jail.d/nkt-<jail>.local`, a diff before writing, a `fail2ban-client -t` check with rollback, reload, version history; enabling and disabling a jail the same way.
+- Event log for 1/3/7 days from `fail2ban.log` and its rotations (including `.gz`) or journald: search, filters by jail and event.
+- Templates: sshd, nginx-http-auth, nginx-botsearch, nginx-limit-req, haproxy-http-auth, postfix, dovecot, recidive, offered when the program is on the host; custom templates with a jail, a filter, a `fail2ban-regex` test against a host log and version history, stored on the hub; applying through a diff of every file.
+- Installation as a package in the standard job window and setup: the hub's address in `[DEFAULT] ignoreip`, the manual bans jail, sshd via journald where there is no log file.
+- Lock-out protection: the hub passes the host its external address as the host sees it (`SSH_CONNECTION`), the host keeps it in `ignoreip`; banning the hub's address or your own is refused.
+- Findings: SSH exposed without fail2ban, fail2ban not running, no sshd jail, a jail without logs, the hub not in `ignoreip`.
+
 ### Certificates
 - Every certificate from nginx, haproxy, caddy configs and `/etc/letsencrypt`: expiry, names, issuer, algorithm, key, self-signed or not.
 - haproxy `crt` directories expand by SNI, derived copies are found by fingerprint.
@@ -215,7 +224,8 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - nkt-edge: a separate small webhook receiver for a VPS (Let's Encrypt via certbot standalone, issued during installation with a name ↔ IP check; filters, rate limit) connected to the hub by a tunnel the hub keeps (pinned TLS, token) — webhooks without exposing the hub; installed from the hub as a job with a busy-port check, can run behind an existing nginx/Caddy on the VPS and be removed from the VPS completely.
 - Scripts (experimental): a line-based deployment language (group, hosts, nkt install, packages, services, firewall, Docker and compose stacks, machines, profiles, files, user accounts, system settings, certificates, git clone, k8s clusters; several hosts in one command) with run-time parameters, waiting for a port/HTTP/service, a check, a dry run, a reference and execution as a hub job.
 - A "Profiles" section on the hub, each profile has a color; a profile is set on a group at creation: machines created in the group are built from it and their rows are tinted with its color; moving a host into a group applies nothing.
-- Alerts: unreachable, responding again, serious problems appeared, resolved, job failed; an alert journal with settings for what to record and what to notify about, collapsing short episodes; browser notifications.
+- Alerts: unreachable, responding again, serious problems appeared, resolved, job failed, new fail2ban bans; an AI check with its own instruction for every external IP in an alert, with “Ban on all hosts” in the answer window; an alert journal with settings for what to record and what to notify about, collapsing short episodes; browser notifications.
+- fail2ban across hosts: where it is installed and how many are banned, banned addresses and where (on how many hosts, in which jails), banning and unbanning on all hosts as a hub job with a per-host log, custom jail templates, a “Banned” column in the host list.
 - Hub jobs with a log.
 - Whole-hub export and import: hosts with secrets, groups, machines with parents, profiles with history, machine templates, settings; the file is password-encrypted.
 - A centralized trivy vulnerability database for all hosts, refreshed on a schedule and by button.

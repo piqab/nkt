@@ -1207,14 +1207,6 @@
       "match": [
         "sh",
         "-c",
-        "command -v fail2ban-client"
-      ],
-      "exit_code": 1
-    },
-    {
-      "match": [
-        "sh",
-        "-c",
         "command -v apt-get"
       ],
       "stdout": "/usr/bin/apt-get\n"
@@ -1684,6 +1676,237 @@
         "values"
       ],
       "stdout": "# Default values for the chart\nreplicaCount: 1\nimage:\n  repository: nginx\n  tag: \"\"\nservice:\n  type: ClusterIP\n  port: 80\n"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "command -v fail2ban-client"
+      ],
+      "stdout": "/usr/bin/fail2ban-client\n"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "command -v fail2ban-regex"
+      ],
+      "stdout": "/usr/bin/fail2ban-regex\n"
+    },
+    {
+      "match": [
+        "sh",
+        "-c",
+        "command -v sshd"
+      ],
+      "stdout": "/usr/sbin/sshd\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "version"
+      ],
+      "stdout": "1.0.2\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "status"
+      ],
+      "stdout": "Status\n|- Number of jail:\t3\n`- Jail list:\tnginx-http-auth, nkt-manual, sshd\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "status",
+        "sshd"
+      ],
+      "stdout": "Status for the jail: sshd\n|- Filter\n|  |- Currently failed:\t2\n|  |- Total failed:\t148\n|  `- File list:\t/var/log/auth.log\n`- Actions\n   |- Currently banned:\t3\n   |- Total banned:\t41\n   `- Banned IP list:\t203.0.113.45 198.51.100.23 192.0.2.77\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "sshd",
+        "banip"
+      ],
+      "stdout": "203.0.113.45 \t2026-09-29 11:05:00 + 3600 = 2026-09-29 12:05:00\n198.51.100.23 \t2026-09-29 11:28:00 + 3600 = 2026-09-29 12:28:00\n192.0.2.77 \t2026-09-29 11:36:00 + 3600 = 2026-09-29 12:36:00\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "sshd",
+        "maxretry"
+      ],
+      "stdout": "5\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "sshd",
+        "findtime"
+      ],
+      "stdout": "600\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "sshd",
+        "bantime"
+      ],
+      "stdout": "3600\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "sshd",
+        "ignoreip"
+      ],
+      "stdout": "These IP addresses/networks are ignored:\n|- 127.0.0.0/8\n|- ::1\n`- 10.0.0.0/8\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "status",
+        "nginx-http-auth"
+      ],
+      "stdout": "Status for the jail: nginx-http-auth\n|- Filter\n|  |- Currently failed:\t0\n|  |- Total failed:\t17\n|  `- File list:\t/var/log/nginx/error.log\n`- Actions\n   |- Currently banned:\t1\n   |- Total banned:\t6\n   `- Banned IP list:\t203.0.113.99\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "nginx-http-auth",
+        "banip"
+      ],
+      "stdout": "203.0.113.99 \t2026-09-29 11:20:00 + 3600 = 2026-09-29 12:20:00\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "nginx-http-auth",
+        "maxretry"
+      ],
+      "stdout": "5\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "nginx-http-auth",
+        "findtime"
+      ],
+      "stdout": "600\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "nginx-http-auth",
+        "bantime"
+      ],
+      "stdout": "3600\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "nginx-http-auth",
+        "ignoreip"
+      ],
+      "stdout": "These IP addresses/networks are ignored:\n|- 127.0.0.0/8\n|- ::1\n`- 10.0.0.0/8\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "status",
+        "nkt-manual"
+      ],
+      "stdout": "Status for the jail: nkt-manual\n|- Filter\n|  |- Currently failed:\t0\n|  |- Total failed:\t0\n|  `- File list:\t/dev/null\n`- Actions\n   |- Currently banned:\t1\n   |- Total banned:\t2\n   `- Banned IP list:\t198.51.100.200\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "nkt-manual",
+        "banip"
+      ],
+      "stdout": "198.51.100.200 \t2026-09-27 11:40:00 + 604800 = 2026-10-04 11:40:00\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "nkt-manual",
+        "maxretry"
+      ],
+      "stdout": "1\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "nkt-manual",
+        "findtime"
+      ],
+      "stdout": "600\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "nkt-manual",
+        "bantime"
+      ],
+      "stdout": "604800\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "get",
+        "nkt-manual",
+        "ignoreip"
+      ],
+      "stdout": "These IP addresses/networks are ignored:\n|- 127.0.0.0/8\n|- ::1\n`- 10.0.0.0/8\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "set"
+      ],
+      "stdout": "1\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "unban"
+      ],
+      "stdout": "1\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "reload"
+      ],
+      "stdout": "OK\n"
+    },
+    {
+      "match": [
+        "fail2ban-client",
+        "-t"
+      ],
+      "stdout": "OK: configuration test is successful\n"
+    },
+    {
+      "match": [
+        "fail2ban-regex"
+      ],
+      "stdout": "Running tests\n=============\n\nResults\n=======\n\nLines: 1204 lines, 0 ignored, 37 matched, 1167 missed\n"
     }
   ]
 }

@@ -276,6 +276,10 @@ type Manager struct {
 	// online host's findings/reachability — see overview_poll.go.
 	overviewMu sync.Mutex
 	overview   map[int64]hostOverview
+	// f2bMu/f2bPushed — когда и какой свой адрес хаб передал хосту для
+	// ignoreip fail2ban (fail2ban.go).
+	f2bMu     sync.Mutex
+	f2bPushed map[int64]f2bPushState
 
 	// vulnMu/vulnScans track each host's in-flight/last vulnerability scan —
 	// see vulnscan.go. Keyed by hostID like overview above, for the same

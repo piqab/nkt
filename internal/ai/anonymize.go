@@ -22,9 +22,12 @@ import (
 // Mapper — словарь замен одного запроса.
 type Mapper struct {
 	enabled bool
-	to      map[string]string // настоящее → псевдоним
-	back    map[string]string // псевдоним → настоящее
-	counts  map[string]int
+	// keep — значения, которые остаются как есть: проверяемый внешний
+	// адрес (KindIP) — чужой, и без него разбор теряет смысл.
+	keep   map[string]bool
+	to     map[string]string // настоящее → псевдоним
+	back   map[string]string // псевдоним → настоящее
+	counts map[string]int
 }
 
 // NewMapper — словарь; enabled=false делает все методы прозрачными.
@@ -64,6 +67,16 @@ var (
 	domainRe = regexp.MustCompile(`\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24}\b`)
 	emailRe  = regexp.MustCompile(`[\w.+-]+@[\w-]+(?:\.[\w-]+)+`)
 )
+
+// Keep — не прятать эти значения.
+func (m *Mapper) Keep(values ...string) {
+	if m.keep == nil {
+		m.keep = map[string]bool{}
+	}
+	for _, v := range values {
+		m.keep[v] = true
+	}
+}
 
 // Learn добавляет в словарь то, что известно заранее: имена хостов и
 // машин из списка хаба. Они не похожи ни на адрес, ни на домен —
@@ -119,7 +132,7 @@ func (m *Mapper) Hide(text string) string {
 	text = ipv4Re.ReplaceAllStringFunc(text, func(s string) string {
 		// Адреса документации и loopback оставляем как есть: они ничего
 		// не выдают, а в тексте помогают понять, о чём речь.
-		if strings.HasPrefix(s, "127.") || s == "0.0.0.0" {
+		if strings.HasPrefix(s, "127.") || s == "0.0.0.0" || m.keep[s] {
 			return s
 		}
 		return m.alias("ip", s)

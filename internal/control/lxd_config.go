@@ -159,6 +159,24 @@ type K8sDocs interface {
 // AttachK8s — версии YAML объектов Kubernetes.
 func (m *ConfigManager) AttachK8s(d K8sDocs) { m.k8s = d }
 
+// AttachDocs — история документов не-файлов с путями prefix+имя.
+func (m *ConfigManager) AttachDocs(prefix string, d K8sDocs) {
+	if m.docs == nil {
+		m.docs = map[string]K8sDocs{}
+	}
+	m.docs[prefix] = d
+}
+
+// docFor — документ по префиксу пути.
+func (m *ConfigManager) docFor(path string) (K8sDocs, bool) {
+	for prefix, d := range m.docs {
+		if strings.HasPrefix(path, prefix) {
+			return d, true
+		}
+	}
+	return nil, false
+}
+
 // RecordDoc — версия документа не-файла после записи: при первой правке
 // сначала исходное состояние (before), затем новое (after).
 func (m *ConfigManager) RecordDoc(ctx context.Context, path, service, user, action, note string, before, after []byte) (int64, error) {

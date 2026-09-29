@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -224,6 +225,10 @@ func (m *Manager) AIExplain(ctx context.Context, kind string, fc ai.FindingConte
 	}
 
 	mapper := ai.NewMapper(set.Anonymize)
+	if kind == ai.KindIP {
+		// Проверяемый адрес чужой — он и есть предмет разбора.
+		mapper.Keep(fc.Object)
+	}
 	mapper.Learn("host", hostNames)
 	user := mapper.Hide(ai.UserPrompt(fc, lang))
 	system := ai.SystemWith(m.aiPromptOverrides(ctx), kind, lang)
@@ -322,7 +327,7 @@ func aiPromptLang(lang string) msgs.Lang {
 // равный стандартному, — возврат к стандартной. Сохранённые ответы
 // чистятся: они получены другой инструкцией.
 func (m *Manager) SetAIPrompt(ctx context.Context, promptKind, lang, text string) error {
-	if promptKind != ai.PromptFinding && promptKind != ai.PromptMap {
+	if !slices.Contains(ai.PromptKinds, promptKind) {
 		return msgs.Errorf("ai.badPromptKind", promptKind)
 	}
 	l := aiPromptLang(lang)
