@@ -313,6 +313,12 @@ func readOnlyBySandbox(p string) bool {
 const wOK = 0x2
 
 func (l *Local) DeleteFile(p string) error {
+	// Как у WriteFile: удалять по относительному пути или пути с «..»
+	// нельзя ни при каких обстоятельствах — проверка здесь, а не только
+	// у вызывающих.
+	if !filepath.IsAbs(p) || strings.Contains(p, "..") || filepath.Clean(p) != p {
+		return msgs.Errorf("collect.badWritePath", p)
+	}
 	err := os.Remove(p)
 	if err == nil || errors.Is(err, fs.ErrNotExist) {
 		return err
@@ -322,9 +328,6 @@ func (l *Local) DeleteFile(p string) error {
 	// наружу), а удалить при откате не мог, и на хосте оставался новый
 	// файл, не прошедший проверку.
 	if !errors.Is(err, syscall.EROFS) && !errors.Is(err, fs.ErrPermission) {
-		return err
-	}
-	if !filepath.IsAbs(p) || strings.Contains(p, "..") || filepath.Clean(p) != p {
 		return err
 	}
 	if escErr := l.removeUnrestricted(p); escErr == nil {
