@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.39 — 2026-09-29
+
+- **The AI model comes from the provider's list.** In “About → Model
+  analysis” a “Get models” button next to the model field asks the
+  provider (Anthropic, OpenAI, Ollama, vLLM, LM Studio) for its list using
+  the address and key currently in the form. The list is searchable, shows
+  the release date or model size, newest first; embedding, speech and
+  image models are hidden (“show all” brings them back). A model missing
+  from the list gets a mark; after picking one you are offered to “Test”
+  it right away. Typing a name by hand still works. The list does not use
+  the daily limit.
+
 ## v1.11.38 — 2026-09-29
 
 - **Hub export carries everything.** The file (format version 4) now

@@ -57,6 +57,18 @@ vLLM, LM Studio), address, model, key. The key is stored encrypted on
 the hub and never handed out; requests go from the hub — hosts need no
 internet. Off by default.
 
+**The model is picked from the provider's list**: the **Get models**
+button next to the field asks the provider for its list using the address
+and key currently in the form (Anthropic: `/v1/models`; OpenAI-compatible:
+`/v1/models`, plus `/api/tags` with the model size for Ollama). The field
+turns into a searchable list: name, release date or size, newest first.
+OpenAI's embedding, speech and image models are hidden; the "show all"
+checkbox brings them back. You can still type a name by hand; if the
+current model is not in the provider's list, a mark appears next to it.
+After picking from the list the window offers to **Test** right away. The
+list is free: it does not use the daily limit, and the request is written
+to the audit log.
+
 The **Test** button sends the model a short probe using whatever is in
 the form right now: a wrong address or key shows up immediately.
 **Answer wait time** is how long to wait for the model (90 s by default;

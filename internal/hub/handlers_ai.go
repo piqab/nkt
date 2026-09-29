@@ -82,6 +82,31 @@ func (s *Server) handleAITest(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+// handleAIModels — «получить модели»: список моделей провайдера с теми
+// настройками, что сейчас в форме. Запрос уходит наружу — в журнал.
+func (s *Server) handleAIModels(w http.ResponseWriter, r *http.Request) {
+	var req aiSettingsRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	set := ai.Settings{
+		Provider: req.Provider, BaseURL: strings.TrimSpace(req.BaseURL), Model: strings.TrimSpace(req.Model),
+		Anonymize: req.Anonymize, DailyLimit: req.DailyLimit, TimeoutS: req.TimeoutS,
+	}
+	list, err := s.hub.AIModels(r.Context(), set, req.APIKey)
+	var detail any
+	if err != nil {
+		detail = err.Error()
+	}
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "ai.models", ai.Describe(set), auditOK(err == nil), detail)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": list})
+}
+
 func (s *Server) handleAICacheClear(w http.ResponseWriter, r *http.Request) {
 	if err := s.db.AICacheClear(r.Context()); err != nil {
 		fail(w, r, err)

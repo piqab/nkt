@@ -423,26 +423,12 @@ type AITestResult struct {
 // Суточный лимит здесь не действует: невозможность проверить настройку
 // в конце дня — худшее, чем один лишний запрос.
 func (m *Manager) AITest(ctx context.Context, set ai.Settings, apiKey *string) (AITestResult, error) {
-	if set.BaseURL == "" || set.Model == "" {
+	if set.Model == "" {
 		return AITestResult{}, msgs.Errorf("ai.badURL")
 	}
-	switch set.Provider {
-	case ai.ProviderAnthropic, ai.ProviderOpenAI:
-	default:
-		return AITestResult{}, msgs.Errorf("ai.badProvider", set.Provider)
-	}
-	set.TimeoutS = normalizeAITimeout(set.TimeoutS)
-	if apiKey != nil && *apiKey != "" {
-		set.APIKey = *apiKey
-	} else if enc, ok, err := m.db.KVGet(ctx, aiKeyKVKey); err == nil && ok && enc != "" {
-		key, err := secretbox.Decrypt(m.key, []byte(enc))
-		if err != nil {
-			return AITestResult{}, err
-		}
-		set.APIKey = string(key)
-	}
-	if set.APIKey == "" && !isLocalURL(set.BaseURL) {
-		return AITestResult{}, msgs.Errorf("ai.noKey")
+	set, err := m.aiFormSettings(ctx, set, apiKey)
+	if err != nil {
+		return AITestResult{}, err
 	}
 	// Короткий вопрос без контекста: проверяется доступность и ключ, а не
 	// качество ответа, и платить за длинный разбор здесь незачем.
@@ -458,6 +444,56 @@ func (m *Manager) AITest(ctx context.Context, set ai.Settings, apiKey *string) (
 		reply = reply[:200] + "…"
 	}
 	return AITestResult{OK: true, Model: set.Model, TookMS: took, Reply: reply}, nil
+}
+
+// aiFormSettings — настройки из формы, готовые к запросу: провайдер
+// проверен, пустой ключ — сохранённый (заново набирать его ради проверки
+// не нужно).
+func (m *Manager) aiFormSettings(ctx context.Context, set ai.Settings, apiKey *string) (ai.Settings, error) {
+	if set.BaseURL == "" {
+		return set, msgs.Errorf("ai.badURL")
+	}
+	switch set.Provider {
+	case ai.ProviderAnthropic, ai.ProviderOpenAI:
+	default:
+		return set, msgs.Errorf("ai.badProvider", set.Provider)
+	}
+	set.TimeoutS = normalizeAITimeout(set.TimeoutS)
+	if apiKey != nil && *apiKey != "" {
+		set.APIKey = *apiKey
+	} else if enc, ok, err := m.db.KVGet(ctx, aiKeyKVKey); err == nil && ok && enc != "" {
+		key, err := secretbox.Decrypt(m.key, []byte(enc))
+		if err != nil {
+			return set, err
+		}
+		set.APIKey = string(key)
+	}
+	if set.APIKey == "" && !isLocalURL(set.BaseURL) {
+		return set, msgs.Errorf("ai.noKey")
+	}
+	return set, nil
+}
+
+// AIModels — модели провайдера с настройками из формы (для выбора
+// вместо ручного ввода). Суточный лимит не тратит: список бесплатный.
+func (m *Manager) AIModels(ctx context.Context, set ai.Settings, apiKey *string) ([]ai.ModelInfo, error) {
+	set, err := m.aiFormSettings(ctx, set, apiKey)
+	if err != nil {
+		return nil, err
+	}
+	// Список — быстрый запрос: минута с запасом и для медленного
+	// локального сервера.
+	if set.TimeoutS > 60 {
+		set.TimeoutS = 60
+	}
+	list, err := ai.New(set).ListModels(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if list == nil {
+		list = []ai.ModelInfo{}
+	}
+	return list, nil
 }
 
 // AIStatus — что показать в «О системе».
