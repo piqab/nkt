@@ -22,10 +22,10 @@ service httpbin is built from source (build:) — specify a ready image (image:)
 
 and port 80 belongs to the proxy. This example uses
 [go-httpbin](https://github.com/mccutchen/go-httpbin), an API-compatible Go
-clone with a ready image `ghcr.io/mccutchen/go-httpbin` for amd64 and arm64.
-On ghcr.io the versioned tags end at v2.16.1 and newer versions are only
-`latest` (a deployment pulls every time); to pin a version, use the same
-author's Docker Hub image, `mccutchen/go-httpbin:2.25.0`.
+clone with a ready image `mccutchen/go-httpbin:2.25.0` from Docker Hub for
+amd64 and arm64. The version is pinned; a new one is deployed by editing the
+tag in `docker-compose.yml` (on ghcr.io go-httpbin's versioned tags end at
+v2.16.1, hence Docker Hub).
 
 ## 1. Pipeline
 

@@ -144,7 +144,7 @@ Codeberg/Gitea/Forgejo `…/src/branch/…`, их raw-варианты), выб�
 **Пример: httpbin.** В репозитории nkt —
 [`examples/httpbin`](https://github.com/piqab/nkt/tree/main/examples/httpbin):
 стек [go-httpbin](https://github.com/mccutchen/go-httpbin) на готовом образе
-`ghcr.io/mccutchen/go-httpbin` и конвейер к нему. Выкладывается прямо по
+`mccutchen/go-httpbin:2.25.0` и конвейер к нему. Выкладывается прямо по
 ссылке `https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml`
 (имя стека — `httpbin`), затем «Сайты» → цель — стек `httpbin`, сервис
 `httpbin`, порт 8080. Compose-файл оригинала,

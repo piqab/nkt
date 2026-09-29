@@ -148,7 +148,7 @@ name. Then it is an ordinary edit with a diff.
 **Example: httpbin.** The nkt repository has
 [`examples/httpbin`](https://github.com/piqab/nkt/tree/main/examples/httpbin):
 a [go-httpbin](https://github.com/mccutchen/go-httpbin) stack on the ready
-image `ghcr.io/mccutchen/go-httpbin` and a pipeline for it. It deploys
+image `mccutchen/go-httpbin:2.25.0` and a pipeline for it. It deploys
 straight from the link
 `https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml`
 (stack name `httpbin`), then "Sites" → target: stack `httpbin`, service
