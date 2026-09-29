@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -190,7 +191,7 @@ func (s *Server) handleAIExplain(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, answer)
+	writeJSON(w, http.StatusOK, aiForViewer(r, answer))
 }
 
 // handleAIAnswers — ссылки на все сохранённые ответы: страница красит по
@@ -374,7 +375,25 @@ func (s *Server) handleAIReview(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, answer)
+	writeJSON(w, http.StatusOK, aiForViewer(r, answer))
+}
+
+// aiIsAdmin — смотрит администратор (ему видны настоящие значения
+// псевдонимов в «показать запрос»).
+func aiIsAdmin(r *http.Request) bool {
+	u, ok := auth.UserFromContext(r.Context())
+	return ok && u.IsAdmin()
+}
+
+// aiForViewer — ответ без таблицы псевдонимов для не-администратора:
+// псевдонимизация и нужна, чтобы настоящие адреса не расходились.
+func aiForViewer(r *http.Request, a AIAnswer) AIAnswer {
+	if a.Request != nil && !aiIsAdmin(r) {
+		req := *a.Request
+		req.Aliases = nil
+		a.Request = &req
+	}
+	return a
 }
 
 // aiHubLines — карта уровня хаба: хосты, их роли и состояние. Строится
@@ -416,7 +435,25 @@ func (s *Server) handleAIReviews(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"reviews": list})
+	// Запрос каждого разбора — для «показать запрос» (у старых его нет).
+	type reviewOut struct {
+		store.AIReview
+		Request *AIRequest `json:"request,omitempty"`
+	}
+	out := make([]reviewOut, 0, len(list))
+	admin := aiIsAdmin(r)
+	for _, rv := range list {
+		o := reviewOut{AIReview: rv}
+		var req AIRequest
+		if rv.Request != "" && json.Unmarshal([]byte(rv.Request), &req) == nil {
+			if !admin {
+				req.Aliases = nil
+			}
+			o.Request = &req
+		}
+		out = append(out, o)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"reviews": out})
 }
 
 func intQuery(r *http.Request, name string, def int) int {

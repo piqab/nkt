@@ -523,6 +523,10 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"host_groups", "profile_id", `ALTER TABLE host_groups ADD COLUMN profile_id INTEGER NOT NULL DEFAULT 0`},
 	{"profiles", "color", `ALTER TABLE profiles ADD COLUMN color TEXT NOT NULL DEFAULT ''`},
 	{"hosts", "profile_id", `ALTER TABLE hosts ADD COLUMN profile_id INTEGER NOT NULL DEFAULT 0`},
+	// request — запрос к модели целиком (инструкция, сообщение, провайдер,
+	// псевдонимы) в JSON: «показать запрос» у сохранённого ответа.
+	{"ai_answers", "request", `ALTER TABLE ai_answers ADD COLUMN request TEXT NOT NULL DEFAULT ''`},
+	{"ai_reviews", "request", `ALTER TABLE ai_reviews ADD COLUMN request TEXT NOT NULL DEFAULT ''`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

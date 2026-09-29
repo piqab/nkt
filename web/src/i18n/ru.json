@@ -2847,7 +2847,19 @@
     "modelsShowAll": "показать все (ещё {{count}}: эмбеддинги, речь, картинки)",
     "modelNotListed": "{{model}} нет в списке провайдера",
     "modelPickedHint": "Выбрана {{model}} — проверить её ответ сейчас?",
-    "baseUrlHint": "Адрес API — как у провайдера: http://127.0.0.1:11434, http://сервер:8080/v1 или https://api.anthropic.com; «/v1» на конце хаб учитывает сам."
+    "baseUrlHint": "Адрес API — как у провайдера: http://127.0.0.1:11434, http://сервер:8080/v1 или https://api.anthropic.com; «/v1» на конце хаб учитывает сам.",
+    "requestMeta": "Кому: {{provider}}, модель {{model}}, адрес {{url}}, ожидание {{timeout}} с",
+    "requestAnonymized": "адреса и имена заменены псевдонимами ({{count}})",
+    "requestNotAnonymized": "псевдонимизация выключена — адреса и имена ушли как есть",
+    "requestCopy": "скопировать запрос",
+    "requestCopied": "скопировано",
+    "requestSystem": "Инструкция (system)",
+    "requestSystemDefault": "стандартная",
+    "requestSystemModified": "правленая — из «О системе → ИИ»",
+    "requestUser": "Сообщение (user) — как ушло модели",
+    "requestAliases": "Что заменено",
+    "requestAliasesHint": "(видно только администратору; модели ушли псевдонимы слева)",
+    "requestMissing": "Ответ получен до v1.11.41 — сохранено только сообщение, инструкция и настройки запроса не сохранялись."
   },
   "editModal": {
     "saved": "сохранено",

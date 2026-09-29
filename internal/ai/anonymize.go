@@ -168,3 +168,22 @@ func (m *Mapper) Reveal(text string) string {
 
 // Size — сколько значений спрятано (для «показать запрос» в интерфейсе).
 func (m *Mapper) Size() int { return len(m.to) }
+
+// Alias — псевдоним и настоящее значение.
+type Alias struct {
+	Alias string `json:"alias"`
+	Real  string `json:"real"`
+}
+
+// Aliases — что на что заменено в этом запросе (по псевдониму). Выученные
+// заранее имена, которых в тексте не оказалось, не входят.
+func (m *Mapper) Aliases(sent string) []Alias {
+	var out []Alias
+	for real, alias := range m.to {
+		if strings.Contains(sent, alias) {
+			out = append(out, Alias{Alias: alias, Real: real})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Alias < out[j].Alias })
+	return out
+}

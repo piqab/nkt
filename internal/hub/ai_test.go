@@ -219,3 +219,51 @@ func TestAIExplainStoredAndSimilar(t *testing.T) {
 		t.Error("неизвестный вид инструкции принят")
 	}
 }
+
+// «Показать запрос»: у нового и у сохранённого ответа — запрос целиком
+// (инструкция, сообщение, провайдер, псевдонимы); в приписке — только имя
+// модели; у ответа до хранения запросов — пометка.
+func TestAIRequestShown(t *testing.T) {
+	ctx := context.Background()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"## Что это значит\nответ"}}]}`)
+	}))
+	defer srv.Close()
+	m, db := newTestManager(t)
+	if err := m.SetAISettings(ctx, ai.Settings{Enabled: true, Provider: ai.ProviderOpenAI, BaseURL: srv.URL + "/v1", Model: "qwen2.5:14b", Anonymize: true}, nil); err != nil {
+		t.Fatal(err)
+	}
+	fc := ai.FindingContext{Title: "Порт открыт", Object: "10.0.0.7:6379"}
+	a, err := m.AIExplain(ctx, ai.KindFinding, fc, nil, 0, false)
+	if err != nil || a.Request == nil {
+		t.Fatalf("%+v %v", a, err)
+	}
+	r := a.Request
+	if r.Provider != ai.ProviderOpenAI || r.Model != "qwen2.5:14b" || r.BaseURL != srv.URL || !strings.Contains(r.System, "##") || r.SystemModified {
+		t.Fatalf("request: %+v", r)
+	}
+	if strings.Contains(r.User, "10.0.0.7") || len(r.Aliases) != 1 || r.Aliases[0].Real != "10.0.0.7" {
+		t.Fatalf("aliases: %q %+v", r.User, r.Aliases)
+	}
+	if strings.Contains(a.Notice, "openai") || !strings.Contains(a.Notice, "qwen2.5:14b") || strings.Contains(a.Notice, srv.URL) {
+		t.Fatalf("notice: %q", a.Notice)
+	}
+	stored, _ := m.AIExplain(ctx, ai.KindFinding, fc, nil, 0, false)
+	if stored.StoredAt == "" || stored.Request == nil || stored.Request.System != r.System || stored.RequestMissing {
+		t.Fatalf("stored: %+v", stored)
+	}
+	// Ответ, сохранённый до хранения запросов.
+	_, _ = db.ExecContext(ctx, `UPDATE ai_answers SET request = ''`)
+	old, _ := m.AIExplain(ctx, ai.KindFinding, fc, nil, 0, false)
+	if !old.RequestMissing || old.Request != nil || old.Prompt == "" {
+		t.Fatalf("old: %+v", old)
+	}
+	// Правленая инструкция помечается.
+	if err := m.SetAIPrompt(ctx, ai.PromptFinding, "ru", "Своя инструкция."); err != nil {
+		t.Fatal(err)
+	}
+	b, _ := m.AIExplain(ctx, ai.KindFinding, fc, nil, 0, true)
+	if b.Request == nil || !b.Request.SystemModified || b.Request.System != "Своя инструкция." {
+		t.Fatalf("modified: %+v", b.Request)
+	}
+}
