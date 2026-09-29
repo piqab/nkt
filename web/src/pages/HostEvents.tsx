@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { AIExplain } from '../components/AIExplain'
 import { Sensitive, blurText } from '../privacy'
-import { Button, Checkbox, InputNumber, Switch, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, InputNumber, Select, Switch, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
-import { api, useApi } from '../api'
+import { api, qs, useApi } from '../api'
 import type { HostEvent, Me } from '../types'
 import { Card, ErrorNote, InfoHint, Loading, formatDateTime, formatRelative } from '../components/ui'
 import { notificationsEnabled, requestNotificationPermission, setNotificationsEnabled } from '../notifications'
@@ -16,6 +16,8 @@ const POLL_MS = 30_000
 interface EventSettings {
   record: Record<string, boolean>
   notify: Record<string, boolean>
+  /** Записывать, но не показывать в журнале и не считать непрочитанным. */
+  hide?: Record<string, boolean>
   collapse_minutes: number
 }
 
@@ -27,7 +29,7 @@ interface EventSettings {
  * сколько хост лежал; а чтобы моргнувшая сеть не оставляла две строки,
  * короткий эпизод сворачивается в одну — «был недоступен N мин».
  */
-function EventSettingsCard() {
+function EventSettingsCard({ onSaved }: { onSaved?: () => void }) {
   const { t } = useTranslation()
   const data = useApi<{ settings: EventSettings; kinds: string[] }>('/hub/events/settings')
   const [draft, setDraft] = useState<EventSettings | null>(null)
@@ -56,7 +58,7 @@ function EventSettingsCard() {
   function update(patch: (s: EventSettings) => EventSettings) {
     if (!settings) return
     setSaved(false)
-    setDraft(patch({ ...settings, record: { ...settings.record }, notify: { ...settings.notify } }))
+    setDraft(patch({ ...settings, record: { ...settings.record }, notify: { ...settings.notify }, hide: { ...(settings.hide ?? {}) } }))
   }
 
   async function save() {
@@ -67,6 +69,7 @@ function EventSettingsCard() {
       setDraft(null)
       setSaved(true)
       await data.reload()
+      onSaved?.()
     } finally {
       setSaving(false)
     }
@@ -95,6 +98,9 @@ function EventSettingsCard() {
                   <th style={{ textAlign: 'left', padding: '0.25rem 0.75rem 0.25rem 0' }}>{t('events.colWhat')}</th>
                   <th style={{ padding: '0.25rem 0.75rem' }}>{t('events.settingRecord')}</th>
                   <th style={{ padding: '0.25rem 0.75rem' }}>{t('events.settingNotify')}</th>
+                  <th style={{ padding: '0.25rem 0.75rem' }}>
+                    <Tooltip title={t('events.settingHideHint')}>{t('events.settingHide')}</Tooltip>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -111,9 +117,23 @@ function EventSettingsCard() {
                     </td>
                     <td style={{ textAlign: 'center' }}>
                       <Checkbox
-                        checked={!!settings.notify[k]}
-                        disabled={settings.record[k] === false}
+                        checked={!!settings.notify[k] && !settings.hide?.[k]}
+                        disabled={settings.record[k] === false || !!settings.hide?.[k]}
                         onChange={(e) => update((s) => ({ ...s, notify: { ...s.notify, [k]: e.target.checked } }))}
+                      />
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <Checkbox
+                        checked={!!settings.hide?.[k]}
+                        disabled={settings.record[k] === false}
+                        onChange={(e) =>
+                          update((s) => ({
+                            ...s,
+                            hide: { ...(s.hide ?? {}), [k]: e.target.checked },
+                            // Скрытое не всплывает.
+                            notify: e.target.checked ? { ...s.notify, [k]: false } : s.notify,
+                          }))
+                        }
                       />
                     </td>
                   </tr>
@@ -164,10 +184,46 @@ const KIND_COLOR: Record<string, string> = {
  * текущего списка: хост переименуют, переедет или будет удалён, а строка
  * журнала должна остаться понятной.
  */
+/** Фильтр журнала — запоминается в этом браузере. */
+interface EventFilter {
+  kinds: string[]
+  host: string
+  q: string
+  hidden: boolean
+}
+
+const FILTER_KEY = 'nkt-events-filter'
+
+function loadFilter(): EventFilter {
+  try {
+    const raw = localStorage.getItem(FILTER_KEY)
+    if (raw) return { kinds: [], host: '', q: '', hidden: false, ...JSON.parse(raw) }
+  } catch {
+    // нет хранилища — фильтр по умолчанию
+  }
+  return { kinds: [], host: '', q: '', hidden: false }
+}
+
 export default function HostEvents({ me }: { me?: Me }) {
   const { t } = useTranslation()
-  const events = useApi<{ events: HostEvent[]; unread: number }>('/hub/events?limit=200', POLL_MS)
+  const [filter, setFilterState] = useState<EventFilter>(loadFilter)
+  const [text, setText] = useState(filter.q)
+  const setFilter = (patch: Partial<EventFilter>) =>
+    setFilterState((f) => {
+      const next = { ...f, ...patch }
+      try {
+        localStorage.setItem(FILTER_KEY, JSON.stringify(next))
+      } catch {
+        // не запомнится — не страшно
+      }
+      return next
+    })
+  const events = useApi<{ events: HostEvent[]; unread: number; total: number; hosts: string[]; hidden: number; hide?: Record<string, boolean> }>(
+    `/hub/events${qs({ limit: 200, kind: filter.kinds.join(','), host: filter.host, q: filter.q, hidden: filter.hidden ? 1 : '' })}`,
+    POLL_MS,
+  )
   const list = events.data?.events ?? []
+  const filtered = filter.kinds.length > 0 || !!filter.host || !!filter.q
   // Адреса своих хостов — не «внешние»: проверять и банить их незачем.
   const hosts = useApi<{ addr: string }[]>('/hub/hosts', 120_000)
   const own = new Set((hosts.data ?? []).map((h) => h.addr))
@@ -257,13 +313,71 @@ export default function HostEvents({ me }: { me?: Me }) {
 
       <ErrorNote error={events.error} />
 
-      <EventSettingsCard />
+      <EventSettingsCard onSaved={() => events.reload()} />
 
-      <Card title={t('events.listTitle')} subtitle={t('events.listSubtitle', { count: list.length })}>
+      <Card
+        title={t('events.listTitle')}
+        subtitle={
+          filtered
+            ? t('events.listFiltered', { shown: list.length, total: events.data?.total ?? 0 })
+            : t('events.listSubtitle', { count: list.length })
+        }
+      >
+        <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <Select
+            mode="multiple"
+            allowClear
+            style={{ minWidth: 220 }}
+            placeholder={t('events.filterKinds')}
+            value={filter.kinds}
+            onChange={(v: string[]) => setFilter({ kinds: v })}
+            options={Object.keys(KIND_COLOR)
+              .concat(['rebooted'])
+              .filter((k, i, a) => a.indexOf(k) === i)
+              .map((k) => ({ value: k, label: t(`events.kind.${k}`, { defaultValue: k }) }))}
+          />
+          <Select
+            allowClear
+            showSearch
+            style={{ minWidth: 180 }}
+            placeholder={t('events.filterHost')}
+            value={filter.host || undefined}
+            onChange={(v?: string) => setFilter({ host: v ?? '' })}
+            options={(events.data?.hosts ?? []).map((h) => ({ value: h, label: h }))}
+          />
+          <Input.Search
+            allowClear
+            style={{ maxWidth: 300 }}
+            placeholder={t('events.filterText')}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value)
+              if (!e.target.value) setFilter({ q: '' })
+            }}
+            onSearch={(v) => setFilter({ q: v.trim() })}
+          />
+          {(filter.hidden || (events.data?.hidden ?? 0) > 0 || Object.values(events.data?.hide ?? {}).some(Boolean)) && (
+            <Checkbox checked={filter.hidden} onChange={(e) => setFilter({ hidden: e.target.checked })}>
+              {t('events.showHidden', { count: events.data?.hidden ?? 0 })}
+            </Checkbox>
+          )}
+          {filtered && (
+            <Button
+              size="small"
+              type="link"
+              onClick={() => {
+                setText('')
+                setFilter({ kinds: [], host: '', q: '' })
+              }}
+            >
+              {t('events.filterReset')}
+            </Button>
+          )}
+        </div>
         {events.loading && !events.data ? (
           <Loading what={t('events.title')} />
         ) : list.length === 0 ? (
-          <p className="small muted">{t('events.empty')}</p>
+          <p className="small muted">{filtered ? t('events.emptyFiltered') : t('events.empty')}</p>
         ) : (
           <div className="table-wrap">
             <DataTable<HostEvent> dataSource={list} columns={columns} rowKey="id" />

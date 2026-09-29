@@ -805,7 +805,16 @@
     "collapseLabel": "Collapse short outages, min",
     "collapseHint": "An “answering again” no later than this many minutes after “not answering” is folded into one line, “was down for N min”. 0 — never collapse.",
     "save": "Save",
-    "savedNote": "saved"
+    "savedNote": "saved",
+    "settingHide": "hide",
+    "settingHideHint": "Record, but do not show in the log and do not count as unread; hidden kinds cannot notify. To see them, tick “show hidden” above the log",
+    "listFiltered": "shown: {{shown}} of {{total}} found",
+    "filterKinds": "all kinds",
+    "filterHost": "all hosts",
+    "filterText": "search: host, address, text",
+    "showHidden": "show hidden ({{count}})",
+    "filterReset": "reset the filter",
+    "emptyFiltered": "Nothing found; change the filter."
   },
   "changes": {
     "title": "What changed",
@@ -2833,7 +2842,8 @@
     "modelsFound": "Models in the list: {{count}}; pick one in the field or type a name yourself",
     "modelsShowAll": "show all ({{count}} more: embeddings, speech, images)",
     "modelNotListed": "{{model}} is not in the provider's list",
-    "modelPickedHint": "{{model}} selected; test its answer now?"
+    "modelPickedHint": "{{model}} selected; test its answer now?",
+    "baseUrlHint": "The API address as the provider gives it: http://127.0.0.1:11434, http://server:8080/v1 or https://api.anthropic.com; the hub handles a trailing “/v1” itself."
   },
   "editModal": {
     "saved": "saved",

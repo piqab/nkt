@@ -432,6 +432,8 @@ var enCatalog = map[string]string{
 	"ai.providerCode":                                     "the model replied %d: %s",
 	"ai.disabled":                                         "AI analysis is off: enable it in \"About\" and set a model",
 	"ai.limitReached":                                     "the daily model request limit is reached (%d)",
+	"ai.providerCodeAt":                                   "the provider replied %d to %s %s: %s",
+	"ai.noModel":                                          "no model given; type one or pick it with “Get models”",
 	"ai.noKey":                                            "this provider needs an API key",
 	"ai.badProvider":                                      "unknown provider: %s",
 	"ai.badURL":                                           "the model address must start with http:// or https://",

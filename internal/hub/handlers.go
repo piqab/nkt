@@ -1185,15 +1185,23 @@ func (s *Server) handleVMDomainAction(w http.ResponseWriter, r *http.Request) {
 
 // handleEvents отдаёт журнал оповещений и число непоказанных.
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	events, unread, err := s.hub.Events(r.Context(), limit)
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	var kinds []string
+	if k := strings.TrimSpace(q.Get("kind")); k != "" {
+		kinds = strings.Split(k, ",")
+	}
+	res, err := s.hub.QueryEvents(r.Context(), EventQuery{
+		Limit: limit, Kinds: kinds, Host: q.Get("host"), Text: q.Get("q"), ShowHidden: q.Get("hidden") == "1",
+	})
 	if err != nil {
 		fail(w, r, err)
 		return
 	}
+	settings := s.hub.EventSettings(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{
-		"events": events, "unread": unread,
-		"notify": s.hub.EventSettings(r.Context()).Notify,
+		"events": res.Events, "unread": res.Unread, "total": res.Total, "hosts": res.Hosts, "hidden": res.Hidden,
+		"notify": settings.Notify, "hide": settings.Hide,
 	})
 }
 

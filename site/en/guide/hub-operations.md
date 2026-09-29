@@ -16,6 +16,14 @@ log with settings for what to record and what to notify about; short
 episodes (“down” → “back” a couple of minutes later) collapse into one
 line “was down for N min”.
 
+The third settings column is **"hide"**: the kind is recorded but not
+shown in the log and not counted as unread; hidden kinds cannot notify.
+Above the log are **filters**: by kind (several at once), by host, and a
+**search** by host name, address and event text, run over the whole log
+(the latest 2000 events) rather than the page on screen; the **"show
+hidden"** checkbox brings hidden kinds back. The filter is remembered in
+this browser.
+
 Every external IP in an alert's text gets its own bulb: an AI check of
 the address and a **“Ban on all hosts”** button in the answer window,
 see [fail2ban](/en/guide/fail2ban#alerts-and-address-checks).
@@ -68,6 +76,12 @@ current model is not in the provider's list, a mark appears next to it.
 After picking from the list the window offers to **Test** right away. The
 list is free: it does not use the daily limit, and the request is written
 to the audit log.
+
+Enter the API address the way the provider gives it: with `/v1` at the
+end (`http://server:8080/v1` for llama.cpp and LM Studio,
+`https://openrouter.ai/api/v1`) or without; the hub appends the paths
+itself and does not double `/v1`. A provider error names the request
+address, so a wrong address is obvious right away.
 
 The **Test** button sends the model a short probe using whatever is in
 the form right now: a wrong address or key shows up immediately.
