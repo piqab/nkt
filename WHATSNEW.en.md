@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.40 — 2026-09-29
+
+- **A local model with an “…/v1” address works.** An address like
+  `http://server:8080/v1` (llama.cpp, LM Studio, OpenRouter) no longer
+  turns into `…/v1/v1/…`, where “Get models” and “Test” answered 404
+  “File Not Found”. A provider error now names the request address.
+- “Test” with an empty model field said “the address must start with
+  http://”; now it says the model is missing.
+- **Alerts:** a third settings column, “hide”: the kind is recorded but
+  not shown in the log and not counted as unread. The log gets filters by
+  kind and host, a text search over the whole log and a “show hidden”
+  checkbox; the filter is remembered in the browser.
+
 ## v1.11.39 — 2026-09-29
 
 - **The AI model comes from the provider's list.** In “About → Model

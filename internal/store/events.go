@@ -70,7 +70,7 @@ func (d *DB) AddHostEvent(ctx context.Context, e HostEvent) (int64, error) {
 
 // ListHostEvents отдаёт последние оповещения, новые первыми.
 func (d *DB) ListHostEvents(ctx context.Context, limit int) ([]HostEvent, error) {
-	if limit <= 0 || limit > 1000 {
+	if limit <= 0 || limit > 5000 {
 		limit = 200
 	}
 	rows, err := d.QueryContext(ctx, `

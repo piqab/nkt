@@ -126,7 +126,7 @@ func (c *Client) askAnthropic(ctx context.Context, system, user string) (string,
 		"system":     system,
 		"messages":   []map[string]string{{"role": "user", "content": user}},
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.set.BaseURL, "/")+"/v1/messages", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base()+"/v1/messages", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -169,7 +169,7 @@ func (c *Client) askOpenAI(ctx context.Context, system, user string) (string, er
 		},
 		"stream": false,
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.set.BaseURL, "/")+"/v1/chat/completions", bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base()+"/v1/chat/completions", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
@@ -218,7 +218,9 @@ func (c *Client) do(req *http.Request) ([]byte, error) {
 		return nil, msgs.Errorf("ai.requestFailed", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, msgs.Errorf("ai.providerCode", resp.StatusCode, firstLine(string(raw)))
+		// Адрес запроса — в ошибке: 404 чаще всего значит «не тот адрес»,
+		// и видно это только по нему.
+		return nil, msgs.Errorf("ai.providerCodeAt", resp.StatusCode, req.Method, req.URL.Redacted(), firstLine(string(raw)))
 	}
 	return raw, nil
 }

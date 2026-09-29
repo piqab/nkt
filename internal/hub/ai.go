@@ -423,8 +423,8 @@ type AITestResult struct {
 // Суточный лимит здесь не действует: невозможность проверить настройку
 // в конце дня — худшее, чем один лишний запрос.
 func (m *Manager) AITest(ctx context.Context, set ai.Settings, apiKey *string) (AITestResult, error) {
-	if set.Model == "" {
-		return AITestResult{}, msgs.Errorf("ai.badURL")
+	if strings.TrimSpace(set.Model) == "" {
+		return AITestResult{}, msgs.Errorf("ai.noModel")
 	}
 	set, err := m.aiFormSettings(ctx, set, apiKey)
 	if err != nil {
@@ -450,7 +450,7 @@ func (m *Manager) AITest(ctx context.Context, set ai.Settings, apiKey *string) (
 // проверен, пустой ключ — сохранённый (заново набирать его ради проверки
 // не нужно).
 func (m *Manager) aiFormSettings(ctx context.Context, set ai.Settings, apiKey *string) (ai.Settings, error) {
-	if set.BaseURL == "" {
+	if !strings.HasPrefix(set.BaseURL, "http://") && !strings.HasPrefix(set.BaseURL, "https://") {
 		return set, msgs.Errorf("ai.badURL")
 	}
 	switch set.Provider {

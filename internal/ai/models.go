@@ -63,7 +63,16 @@ func (c *Client) ListModels(ctx context.Context) ([]ModelInfo, error) {
 	return list, nil
 }
 
-func (c *Client) base() string { return strings.TrimRight(c.set.BaseURL, "/") }
+func (c *Client) base() string { return NormalizeBaseURL(c.set.BaseURL) }
+
+// NormalizeBaseURL — адрес провайдера без хвостового «/v1»: пути хаб
+// дописывает сам, а провайдеры в документации часто дают адрес уже с ним
+// (http://127.0.0.1:8080/v1, https://openrouter.ai/api/v1) — иначе
+// получалось …/v1/v1/… и 404.
+func NormalizeBaseURL(u string) string {
+	u = strings.TrimRight(strings.TrimSpace(u), "/")
+	return strings.TrimRight(strings.TrimSuffix(u, "/v1"), "/")
+}
 
 // listAnthropic — GET /v1/models постранично (after_id).
 func (c *Client) listAnthropic(ctx context.Context) ([]ModelInfo, error) {

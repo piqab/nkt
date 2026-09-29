@@ -250,3 +250,42 @@ func TestEventRebootedOnUptimeDrop(t *testing.T) {
 		t.Errorf("английский текст: %q", en[0].Detail)
 	}
 }
+
+// Скрытый вид записывается, но в журнале и в непрочитанных его нет, пока
+// не попросят; фильтры по виду, хосту и тексту ищут по всему журналу.
+func TestEventQueryHideAndFilters(t *testing.T) {
+	m, id := eventTestManager(t)
+	ctx := context.Background()
+	host, _ := m.db.HostByID(ctx, id)
+	m.recordEvent(ctx, host, store.EventBans, "", "fail2ban: 203.0.113.5 (sshd)")
+	m.recordEvent(ctx, host, store.EventUnreachable, "", "таймаут")
+	m.recordEvent(ctx, host, store.EventRecovered, "", "снова")
+	s := m.EventSettings(ctx)
+	s.Hide[store.EventBans] = true
+	s.Notify[store.EventBans] = true
+	if err := m.SaveEventSettings(ctx, s); err != nil {
+		t.Fatal(err)
+	}
+	if got := m.EventSettings(ctx); got.Notify[store.EventBans] {
+		t.Fatal("hidden kind still notifies")
+	}
+	res, err := m.QueryEvents(ctx, EventQuery{})
+	if err != nil || res.Total != 2 || res.Unread != 2 || res.Hidden != 1 {
+		t.Fatalf("default: %+v %v", res, err)
+	}
+	if res, _ := m.QueryEvents(ctx, EventQuery{ShowHidden: true}); res.Total != 3 || res.Unread != 2 {
+		t.Fatalf("show hidden: %+v", res)
+	}
+	if res, _ := m.QueryEvents(ctx, EventQuery{Kinds: []string{store.EventUnreachable}}); res.Total != 1 || res.Events[0].Kind != store.EventUnreachable {
+		t.Fatalf("kind: %+v", res)
+	}
+	if res, _ := m.QueryEvents(ctx, EventQuery{Text: "ТАЙМ"}); res.Total != 1 {
+		t.Fatalf("text: %+v", res)
+	}
+	if res, _ := m.QueryEvents(ctx, EventQuery{Host: "nope"}); res.Total != 0 || len(res.Hosts) != 1 || res.Hosts[0] != "web-1" {
+		t.Fatalf("host: %+v", res)
+	}
+	if res, _ := m.QueryEvents(ctx, EventQuery{Text: "203.0.113.5", ShowHidden: true}); res.Total != 1 {
+		t.Fatalf("text in hidden: %+v", res)
+	}
+}

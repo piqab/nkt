@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -73,5 +74,36 @@ func TestListModelsOllamaFallback(t *testing.T) {
 	defer bad.Close()
 	if _, err := New(Settings{Provider: ProviderOpenAI, BaseURL: bad.URL}).ListModels(context.Background()); err == nil {
 		t.Fatal("no error for a server without a model list")
+	}
+}
+
+// Адрес с «/v1» на конце (как его дают llama.cpp, LM Studio, OpenRouter)
+// не превращается в …/v1/v1/…; 404 называет адрес запроса.
+func TestBaseURLWithV1(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/models":
+			_, _ = w.Write([]byte(`{"data":[{"id":"local-model"}]}`))
+		case "/v1/chat/completions":
+			_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"ok"}}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"error":{"message":"File Not Found","type":"not_found_error","code":404}}`))
+		}
+	}))
+	defer srv.Close()
+	c := New(Settings{Provider: ProviderOpenAI, BaseURL: srv.URL + "/v1/", Model: "local-model"})
+	if list, err := c.ListModels(context.Background()); err != nil || len(list) != 1 {
+		t.Fatalf("%+v %v", list, err)
+	}
+	if out, err := c.Ask(context.Background(), "s", "u"); err != nil || out != "ok" {
+		t.Fatalf("%q %v", out, err)
+	}
+	if got := NormalizeBaseURL(" https://openrouter.ai/api/v1/ "); got != "https://openrouter.ai/api" {
+		t.Fatal(got)
+	}
+	bad := New(Settings{Provider: ProviderOpenAI, BaseURL: srv.URL + "/nope", Model: "m"})
+	if _, err := bad.Ask(context.Background(), "s", "u"); err == nil || !strings.Contains(err.Error(), "/nope/v1/chat/completions") {
+		t.Fatalf("error must name the URL: %v", err)
 	}
 }

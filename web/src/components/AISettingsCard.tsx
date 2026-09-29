@@ -318,6 +318,7 @@ export function AISettingsCard() {
               </div>
             </label>
           </div>
+          <div className="small muted" style={{ marginTop: '-0.3rem' }}>{t('ai.baseUrlHint')}</div>
           {modelsError && <Banner kind="error">{modelsError}</Banner>}
           {models && (
             <div className="row small" style={{ gap: '0.8rem', alignItems: 'center', flexWrap: 'wrap' }}>

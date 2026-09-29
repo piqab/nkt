@@ -228,25 +228,85 @@ func (m *Manager) NoteJobFailed(ctx context.Context, hostID int64, title, reason
 	m.recordEvent(ctx, host, store.EventJobFailed, "", reason)
 }
 
-// Events отдаёт журнал и число непоказанных событий.
+// Events отдаёт журнал (все виды, включая скрытые) и число непоказанных
+// событий.
 func (m *Manager) Events(ctx context.Context, limit int) ([]store.HostEvent, int, error) {
-	events, err := m.db.ListHostEvents(ctx, limit)
+	res, err := m.QueryEvents(ctx, EventQuery{Limit: limit, ShowHidden: true})
+	return res.Events, res.Unread, err
+}
+
+// EventQuery — выборка журнала: виды, хост (по имени — хост могли
+// удалить), текст (имя, адрес, подробности), скрытые виды.
+type EventQuery struct {
+	Limit      int
+	Kinds      []string
+	Host       string
+	Text       string
+	ShowHidden bool
+}
+
+// EventsResult — выборка, сколько совпало всего, непрочитанные (без
+// скрытых видов) и имена хостов журнала для фильтра.
+type EventsResult struct {
+	Events []store.HostEvent `json:"events"`
+	Total  int               `json:"total"`
+	Unread int               `json:"unread"`
+	Hosts  []string          `json:"hosts"`
+	Hidden int               `json:"hidden"`
+}
+
+// QueryEvents — журнал с фильтрами. Ищется по всему журналу (он и так
+// ограничен eventKeep), а не только по отданной странице.
+func (m *Manager) QueryEvents(ctx context.Context, q EventQuery) (EventsResult, error) {
+	all, err := m.db.ListHostEvents(ctx, eventKeep)
 	if err != nil {
-		return nil, 0, err
+		return EventsResult{Events: []store.HostEvent{}}, err
+	}
+	if q.Limit <= 0 || q.Limit > eventKeep {
+		q.Limit = 200
 	}
 	lang := msgs.FromContext(ctx)
-	for i := range events {
-		events[i].Detail = msgs.Render(lang, events[i].DetailKey, events[i].DetailArgs, events[i].Detail)
+	hide := m.EventSettings(ctx).Hide
+	seen, _ := m.seenEventID(ctx)
+	kinds := map[string]bool{}
+	for _, k := range q.Kinds {
+		if k != "" {
+			kinds[k] = true
+		}
 	}
-	seen, err := m.seenEventID(ctx)
-	if err != nil {
-		return events, 0, nil
+	text := strings.ToLower(strings.TrimSpace(q.Text))
+	res := EventsResult{Events: []store.HostEvent{}, Hosts: []string{}}
+	hostSet := map[string]bool{}
+	for _, e := range all {
+		if !hostSet[e.HostName] {
+			hostSet[e.HostName] = true
+			res.Hosts = append(res.Hosts, e.HostName)
+		}
+		hidden := hide[e.Kind]
+		if e.ID > seen && !hidden {
+			res.Unread++
+		}
+		if hidden && !q.ShowHidden {
+			res.Hidden++
+			continue
+		}
+		if len(kinds) > 0 && !kinds[e.Kind] {
+			continue
+		}
+		if q.Host != "" && e.HostName != q.Host {
+			continue
+		}
+		e.Detail = msgs.Render(lang, e.DetailKey, e.DetailArgs, e.Detail)
+		if text != "" && !strings.Contains(strings.ToLower(e.HostName+" "+e.HostAddr+" "+e.Detail), text) {
+			continue
+		}
+		res.Total++
+		if len(res.Events) < q.Limit {
+			res.Events = append(res.Events, e)
+		}
 	}
-	unread, err := m.db.CountHostEventsAfter(ctx, seen)
-	if err != nil {
-		return events, 0, nil
-	}
-	return events, unread, nil
+	sort.Strings(res.Hosts)
+	return res, nil
 }
 
 // MarkEventsSeen помечает журнал прочитанным до самого свежего события.
@@ -287,6 +347,10 @@ type EventSettings struct {
 	// а будят только тем, что требует действия.
 	Record map[string]bool `json:"record"`
 	Notify map[string]bool `json:"notify"`
+	// Hide — записывать, но не показывать в журнале (пока не включено
+	// «показать скрытые») и не считать в непрочитанных; всплывающих
+	// уведомлений о скрытом виде не бывает.
+	Hide map[string]bool `json:"hide"`
 	// CollapseMinutes — «снова отвечает» не позже чем через столько минут
 	// после «не отвечает» сворачивается с ним в одну строку «был
 	// недоступен N мин»: моргнувшая сеть не должна оставлять две записи.
@@ -300,7 +364,7 @@ var EventKinds = []string{store.EventUnreachable, store.EventRecovered, store.Ev
 // defaultEventSettings — всё записывается; будят недоступностью,
 // проблемами и провалом задания, но не возвратами.
 func defaultEventSettings() EventSettings {
-	s := EventSettings{Record: map[string]bool{}, Notify: map[string]bool{}}
+	s := EventSettings{Record: map[string]bool{}, Notify: map[string]bool{}, Hide: map[string]bool{}}
 	for _, k := range EventKinds {
 		s.Record[k] = true
 	}
@@ -330,6 +394,12 @@ func (m *Manager) EventSettings(ctx context.Context) EventSettings {
 	for k, v := range saved.Notify {
 		s.Notify[k] = v
 	}
+	for k, v := range saved.Hide {
+		s.Hide[k] = v
+		if v {
+			s.Notify[k] = false
+		}
+	}
 	s.CollapseMinutes = saved.CollapseMinutes
 	return s
 }
@@ -338,6 +408,13 @@ func (m *Manager) EventSettings(ctx context.Context) EventSettings {
 func (m *Manager) SaveEventSettings(ctx context.Context, s EventSettings) error {
 	if s.CollapseMinutes < 0 || s.CollapseMinutes > 1440 {
 		return msgs.Errorf("hub.collapse01440Minutes")
+	}
+	// Скрытый вид не всплывает: уведомление о том, чего не видно в
+	// журнале, только сбивает.
+	for k, hidden := range s.Hide {
+		if hidden && s.Notify != nil {
+			s.Notify[k] = false
+		}
 	}
 	raw, err := json.Marshal(s)
 	if err != nil {
