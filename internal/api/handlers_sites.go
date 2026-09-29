@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"path"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -685,6 +686,12 @@ func (s *Server) siteCombinedPEM(lineage string) ([]byte, error) {
 func (s *Server) handleSiteRemove(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Domain string `json:"domain"`
+		// Unpublish — снять публикацию сервиса на 127.0.0.1 (файл
+		// compose.nkt.yml) и пересоздать сервис без неё.
+		Unpublish bool `json:"unpublish"`
+		// DeleteCert — удалить и сертификат (certbot delete), если его не
+		// использует другой сайт.
+		DeleteCert bool `json:"delete_cert"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -747,7 +754,79 @@ func (s *Server) handleSiteRemove(w http.ResponseWriter, r *http.Request) {
 		kept = []HostSite{}
 	}
 	_ = s.saveHostSites(ctx, kept)
-	s.db.Audit(ctx, user, "site.remove", req.Domain, "ok", nil)
+	out := map[string]any{"ok": true}
+	if req.Unpublish && rec.Stack != "" && rec.HostPort > 0 {
+		done, err := s.siteUnpublish(ctx, user, lang, *rec)
+		if err != nil {
+			out["unpublish_error"] = msgs.Localize(lang, err)
+		}
+		out["unpublished"] = done
+	}
+	if req.DeleteCert && rec.Lineage != "" {
+		shared := false
+		for _, o := range kept {
+			if o.Lineage == rec.Lineage {
+				shared = true
+			}
+		}
+		switch {
+		case shared:
+			out["cert_shared"] = true
+		case !lineageRe.MatchString(rec.Lineage):
+			out["cert_error"] = msgs.T(lang, "site.badLineage", rec.Lineage)
+		default:
+			res, err := c.RunTimeout(ctx, 2*time.Minute, "certbot", "delete", "--cert-name", rec.Lineage, "--non-interactive")
+			if err == nil && !res.OK() {
+				err = msgs.Errorf("compose.commandFailed", "certbot delete", res.ExitCode)
+			}
+			if err != nil {
+				out["cert_error"] = msgs.Localize(lang, err) + " " + strings.TrimSpace(res.Output())
+			} else {
+				out["cert_deleted"] = rec.Lineage
+			}
+		}
+	}
+	s.db.Audit(ctx, user, "site.remove", req.Domain, "ok", out)
 	s.rescanLater()
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	writeJSON(w, http.StatusOK, out)
+}
+
+// lineageRe — имя сертификата certbot (домен, возможно с «-0001»).
+var lineageRe = regexp.MustCompile(`^[a-z0-9][a-z0-9.-]{0,252}$`)
+
+// siteUnpublish убирает публикацию сервиса сайта из compose.nkt.yml и
+// пересоздаёт сервис (up -d) без неё. false — публиковал не nkt.
+func (s *Server) siteUnpublish(ctx context.Context, user string, lang msgs.Lang, rec HostSite) (bool, error) {
+	c := s.scanner.Collector()
+	dir := composeStackDir(rec.Stack)
+	ovPath := dir + "/" + site.OverrideFile
+	old, err := c.ReadFile(ovPath)
+	if err != nil {
+		return false, nil
+	}
+	content, changed, err := site.RemoveOverride(string(old), rec.Service, rec.HostPort, rec.ContainerPort)
+	if err != nil || !changed {
+		return false, err
+	}
+	if content == "" {
+		err = c.DeleteFile(ovPath)
+	} else {
+		err = c.WriteFile(ovPath, []byte(content), 0o644)
+	}
+	if err != nil {
+		return false, err
+	}
+	if s.configs != nil {
+		_, _ = s.configs.RecordDoc(ctx, ovPath, "docker", user, store.ActionEdit, msgs.T(lang, "site.noteRemoved", rec.Domains[0]), old, []byte(content))
+	}
+	file := composeFileIn(c, dir)
+	engine := composeEngine(ctx, c)
+	if file == "" || engine == "" {
+		return true, nil
+	}
+	res, err := c.RunTimeout(ctx, 10*time.Minute, engine, append(composeArgs(c, rec.Stack, file), "up", "-d", rec.Service)...)
+	if err == nil && !res.OK() {
+		err = msgs.Errorf("compose.commandFailed", "up -d "+rec.Service, res.ExitCode)
+	}
+	return true, err
 }

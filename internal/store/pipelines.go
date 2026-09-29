@@ -27,7 +27,10 @@ type Pipeline struct {
 	FailedTag    string `json:"failed_tag,omitempty"`
 	// EnvSHA — sha256 .env, записанного на хосты последней выкладкой: по
 	// нему хост видит, что .env правили вручную.
-	EnvSHA    string `json:"-"`
+	EnvSHA string `json:"-"`
+	// Removal — удаление конвейера с хостов: что удалять и ошибка, если
+	// не завершилось (JSON; пусто — не удаляется).
+	Removal   string `json:"removal,omitempty"`
 	Author    string `json:"author,omitempty"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
@@ -74,12 +77,12 @@ const (
 	DeployFailed    = "failed"
 )
 
-const pipelineColumns = `id, name, content, hook_id, hook_secret, git_cred, registry_cred, env_enc, enabled, last_commit, last_tag, failed_commit, failed_tag, env_sha, author, created_at, updated_at`
+const pipelineColumns = `id, name, content, hook_id, hook_secret, git_cred, registry_cred, env_enc, enabled, last_commit, last_tag, failed_commit, failed_tag, env_sha, removal, author, created_at, updated_at`
 
 func scanPipeline(row interface{ Scan(...any) error }) (Pipeline, error) {
 	var p Pipeline
 	err := row.Scan(&p.ID, &p.Name, &p.Content, &p.HookID, &p.HookSecret, &p.GitCred, &p.RegistryCred, &p.EnvEnc, &p.Enabled,
-		&p.LastCommit, &p.LastTag, &p.FailedCommit, &p.FailedTag, &p.EnvSHA, &p.Author, &p.CreatedAt, &p.UpdatedAt)
+		&p.LastCommit, &p.LastTag, &p.FailedCommit, &p.FailedTag, &p.EnvSHA, &p.Removal, &p.Author, &p.CreatedAt, &p.UpdatedAt)
 	p.HasGitCred, p.HasRegistryCred, p.HasEnv = len(p.GitCred) > 0, len(p.RegistryCred) > 0, len(p.EnvEnc) > 0
 	return p, err
 }
@@ -169,6 +172,12 @@ func (db *DB) SetPipelineEnabled(ctx context.Context, id int64, enabled bool) er
 // SetPipelineDeployed запоминает последнее выложенное.
 func (db *DB) SetPipelineDeployed(ctx context.Context, id int64, commit, tag string) error {
 	_, err := db.ExecContext(ctx, `UPDATE pipelines SET last_commit = ?, last_tag = ?, failed_commit = '', failed_tag = '' WHERE id = ?`, commit, tag, id)
+	return err
+}
+
+// SetPipelineRemoval — состояние удаления с хостов (JSON; пусто — нет).
+func (db *DB) SetPipelineRemoval(ctx context.Context, id int64, removal string) error {
+	_, err := db.ExecContext(ctx, `UPDATE pipelines SET removal = ? WHERE id = ?`, removal, id)
 	return err
 }
 

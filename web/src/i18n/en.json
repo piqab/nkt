@@ -3231,7 +3231,18 @@
     "envNoChange": "same names: {{names}}",
     "envCopy": "Copy",
     "envHide": "Hide",
-    "envSaveConfirm": "Save the new .env ({{count}} variables)? Appear: {{appear}}; disappear: {{vanish}}; the rest get the values you entered. The previous one stays in \".env history\"; hosts get it with the next deployment."
+    "envSaveConfirm": "Save the new .env ({{count}} variables)? Appear: {{appear}}; disappear: {{vanish}}; the rest get the values you entered. The previous one stays in \".env history\"; hosts get it with the next deployment.",
+    "deleteRetry": "Retry deletion",
+    "removeUnfinished": "deletion unfinished",
+    "removing": "deleting",
+    "removeTitle": "Delete pipeline \"{{name}}\"",
+    "removeHint": "A hub job: the pipeline's site (proxy config), on each host compose down (containers and network) and the stack directory, then the hub record. Without volumes the stack directory is not wiped but moved to /srv/compose/.nkt-removed, so bind-mount data (./data) is kept. If a host fails, the pipeline stays marked \"deletion unfinished\"; retry with this same button.",
+    "removeUnfinishedText": "The previous deletion did not finish: {{error}}",
+    "removeVolumes": "delete volumes and the whole stack directory (down -v): the data is gone for good",
+    "removeVolumesHint": "Without the tick docker volumes stay and the stack directory is moved to .nkt-removed.",
+    "removeImages": "delete the stack images (down --rmi all)",
+    "removeCert": "delete the certificate of the pipeline's site (certbot delete)",
+    "removeStart": "Delete from hosts"
   },
   "edge": {
     "subtitle": "Webhooks from the internet without exposing the hub: edge on a VPS accepts only them, the hub keeps the tunnel to it.",
@@ -3489,7 +3500,9 @@
       "new": "new",
       "setting-up": "setting up",
       "ok": "working",
-      "failed": "error"
+      "failed": "error",
+      "removing": "deleting",
+      "remove-failed": "deletion unfinished"
     },
     "port": {
       "open": "open",
@@ -3499,7 +3512,11 @@
     },
     "fromPipeline": "pipeline {{name}}",
     "fromPipelineHint": "The site is described by the pipeline's site: block; deployments set it up",
-    "pipelineManaged": "The site is described in pipeline \"{{name}}\": editing here works, but the next deployment restores the settings from its site: block if they differ."
+    "pipelineManaged": "The site is described in pipeline \"{{name}}\": editing here works, but the next deployment restores the settings from its site: block if they differ.",
+    "deleteCert": "also delete the certificate (certbot delete)",
+    "deleteCertHint": "A job: the proxy config and the service's 127.0.0.1 publication are removed and the service is recreated without it. The certificate stays by default; if another site needs it, it stays even with the tick.",
+    "deleteFromPipeline": "The site is described in pipeline \"{{name}}\": the next deployment brings it back unless the site: block is removed.",
+    "deleteRetry": "Retry deletion"
   },
   "composeEngine": {
     "checking": "checking…",

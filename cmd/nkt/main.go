@@ -918,6 +918,8 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	r.jobs.Register(hub.KindF2BFleet, hub.NewF2BFleetRunner(server))
 	// Сайт: DNS и порты снаружи, прокси, задание хоста, HTTPS.
 	r.jobs.Register(hub.KindSiteSetup, hub.NewSiteSetupRunner(server))
+	r.jobs.Register(hub.KindSiteRemove, hub.NewSiteRemoveRunner(server))
+	r.jobs.Register(hub.KindPipelineRemove, hub.NewPipelineRemoveRunner(server))
 	// Опрос репозиториев и registry у конвейеров выкладки.
 	server.StartPipelineWatch(ctx)
 	// Соединение с nkt-edge (вебхуки из интернета без открытого хаба).
