@@ -57,10 +57,13 @@ func ManualJailContent(banTime int64) string {
 		"banaction = %(banaction_allports)s\n"
 }
 
-// ManualFilterContent — фильтр ручного джейла: ни с чем не совпадает.
+// ManualFilterContent — фильтр ручного джейла: ни с чем не совпадает
+// (журнал — /dev/null). Группа <HOST> обязательна: без неё fail2ban
+// отвергает фильтр при reload («No failure-id group»), хотя проверка
+// конфигурации (-t) его пропускает.
 const ManualFilterContent = "# Managed by nkt: filter of the manual jail, matches nothing.\n" +
 	"[Definition]\n" +
-	"failregex = ^nkt-manual-never-matches$\n" +
+	"failregex = ^nkt-manual-never-matches <HOST>$\n" +
 	"ignoreregex =\n"
 
 // INI — разобранный файл конфигурации fail2ban: секция → ключ →

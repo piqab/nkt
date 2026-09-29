@@ -313,7 +313,53 @@ func readOnlyBySandbox(p string) bool {
 const wOK = 0x2
 
 func (l *Local) DeleteFile(p string) error {
-	return os.Remove(p)
+	err := os.Remove(p)
+	if err == nil || errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	// Как у WriteFile: под ProtectSystem каталог может быть закрыт на
+	// запись изнутри песочницы — записать файл туда nkt сумел (выходом
+	// наружу), а удалить при откате не мог, и на хосте оставался новый
+	// файл, не прошедший проверку.
+	if !errors.Is(err, syscall.EROFS) && !errors.Is(err, fs.ErrPermission) {
+		return err
+	}
+	if !filepath.IsAbs(p) || strings.Contains(p, "..") || filepath.Clean(p) != p {
+		return err
+	}
+	if escErr := l.removeUnrestricted(p); escErr == nil {
+		return nil
+	} else if !errors.Is(escErr, errNoEscape) {
+		return escErr
+	}
+	return err
+}
+
+// privilegedRemoveScript — удалить файл или пустой каталог вне песочницы.
+const privilegedRemoveScript = `if [ -d "$1" ] && [ ! -L "$1" ]; then rmdir -- "$1"; else rm -f -- "$1"; fi`
+
+func (l *Local) removeUnrestricted(p string) error {
+	if l.escape == nil {
+		return errNoEscape
+	}
+	timeout := l.commandTimeout
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	res, err := l.escape(ctx, nil, "sh", "-c", privilegedRemoveScript, "sh", p)
+	if err != nil {
+		return msgs.Errorf("collect.writingOutsideSandbox", err)
+	}
+	if res.ExitCode != 0 {
+		var detail any = strings.TrimSpace(res.Stderr)
+		if detail == "" {
+			detail = msgs.Errorf("collect.exitCode", res.ExitCode)
+		}
+		return msgs.Errorf("collect.writingOutsideSandbox2", detail)
+	}
+	return nil
 }
 
 func (l *Local) Mkdir(p string) error {

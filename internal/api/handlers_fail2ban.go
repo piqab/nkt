@@ -399,10 +399,10 @@ func (s *Server) f2bEnsureManual(ctx context.Context, user string) error {
 	if fail2ban.HasJail(fail2ban.CollectBans(ctx, c), fail2ban.ManualJail) {
 		return nil
 	}
-	if !c.Exists(path.Join(s.f2bRoot(), fail2ban.ManualFilterFile)) {
-		if _, err := s.f2bWrite(ctx, user, fail2ban.ManualFilterFile, fail2ban.ManualFilterContent, msgs.Tc(ctx, "f2b.noteManual"), false); err != nil {
-			return err
-		}
+	// Фильтр — наш и без настроек: переписывается, если отличается (в
+	// 1.11.x он был без <HOST>, и fail2ban не принимал его при reload).
+	if _, err := s.f2bWrite(ctx, user, fail2ban.ManualFilterFile, fail2ban.ManualFilterContent, msgs.Tc(ctx, "f2b.noteManual"), false); err != nil {
+		return err
 	}
 	if _, err := s.f2bWrite(ctx, user, fail2ban.ManualJailFile, fail2ban.ManualJailContent(fail2ban.DefaultManualBanTime), msgs.Tc(ctx, "f2b.noteManual"), false); err != nil {
 		return err
@@ -580,11 +580,10 @@ func (s *Server) handleF2BSetup(w http.ResponseWriter, r *http.Request) {
 	} else if ok {
 		done = append(done, fail2ban.HubIgnoreFile)
 	}
-	if !c.Exists(path.Join(s.f2bRoot(), fail2ban.ManualFilterFile)) {
-		if _, err := s.f2bWrite(ctx, user, fail2ban.ManualFilterFile, fail2ban.ManualFilterContent, note, false); err != nil {
-			writeErr(w, r, http.StatusBadRequest, err)
-			return
-		}
+	if ok, err := s.f2bWrite(ctx, user, fail2ban.ManualFilterFile, fail2ban.ManualFilterContent, note, false); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	} else if ok {
 		done = append(done, fail2ban.ManualFilterFile)
 	}
 	if !c.Exists(path.Join(s.f2bRoot(), fail2ban.ManualJailFile)) {
