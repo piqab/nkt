@@ -71,4 +71,7 @@ var enFail2banCatalog = map[string]string{
 	"hub.aiIPLog":            "fail2ban log of host %s over 7 days: %d lines with the address; events: %s. Latest:",
 	"hub.aiIPNoLog":          "The address does not appear in the hosts' fail2ban logs over 7 days (or the logs are unavailable).",
 	"hub.aiIPEvents":         "Mentions in hub alerts: %d, the latest at %s.",
+	"f2b.badIgnoreEntry":     "Not an address, network or host name: %q",
+	"f2b.tooManyIgnore":      "The exception list is too long: %d (500 at most)",
+	"f2b.noteIgnore":         "Common ignoreip exception list",
 }

@@ -11,8 +11,8 @@ import { confirmAction } from '../components/confirm'
 import { EditTextModal } from '../components/EditTextModal'
 import { VersionHistory } from '../components/VersionHistory'
 import PackageInstallModal from '../components/PackageInstallModal'
-import { IPWithCheck, TemplateApplyModal, TemplatesPanel, underHub } from '../components/Fail2banParts'
-import { BAN_TIMES, fmtDuration, getIniKey, ignoreCovers, setIniKey } from '../fail2ban'
+import { FilesDiffModal, IPWithCheck, TemplateApplyModal, TemplatesPanel, underHub, type ApplyChange } from '../components/Fail2banParts'
+import { BAN_TIMES, fmtDuration, getIniKey, ignoreCovers, sameIgnore, setIniKey } from '../fail2ban'
 
 /**
  * fail2ban хоста: джейлы, забаненные адреса (разбан галочками, ручной
@@ -223,6 +223,8 @@ export default function Fail2ban({ me }: { me: Me }) {
               </div>
             )}
           </Card>
+
+          <IgnoreCard status={data} me={me} onEditJail={(jail) => setEdit({ jail })} onChanged={() => st.reload()} />
 
           <Card
             title={t('fail2ban.bansTitle')}
@@ -640,5 +642,173 @@ function BanLog({ status, me }: { status: Fail2banStatus; me: Me }) {
         />
       </div>
     </Card>
+  )
+}
+
+/**
+ * Исключения (ignoreip): общий список [DEFAULT] — правится здесь, с
+ * диффом и историей; адрес хаба в нём закреплён (файл защиты nkt). Ниже —
+ * действующий список каждого джейла: общий или свой (свой заменяет
+ * общий целиком и правится в окне джейла).
+ */
+function IgnoreCard({
+  status,
+  me,
+  onEditJail,
+  onChanged,
+}: {
+  status: Fail2banStatus
+  me: Me
+  onEditJail: (jail: string) => void
+  onChanged: () => void
+}) {
+  const { t } = useTranslation()
+  const [edit, setEdit] = useState(false)
+  const [history, setHistory] = useState(false)
+  const common = status.default_ignore
+  const effective = status.hub_addr && !ignoreCovers(common, status.hub_addr) ? [...common, status.hub_addr] : common
+  const same = (list: string[]) => sameIgnore(list, effective) || sameIgnore(list, common)
+  const jails = status.state.jails.filter((j) => j.name !== status.manual_jail)
+  return (
+    <Card
+      title={t('fail2ban.ignoreTitle')}
+      subtitle={t('fail2ban.ignoreSubtitle')}
+      actions={
+        <>
+          {me.is_admin && <Button onClick={() => setEdit(true)}>{t('fail2ban.ignoreEdit')}</Button>}
+          {status.ignore_defined && <Button onClick={() => setHistory(true)}>{t('configs.versionHistoryTitle')}</Button>}
+        </>
+      }
+    >
+      <div className="col" style={{ gap: '0.4rem' }}>
+        <div className="row" style={{ flexWrap: 'wrap', gap: '0.3rem', alignItems: 'center' }}>
+          <span className="small">{t('fail2ban.ignoreCommon')}</span>
+          {common.map((ip) => (
+            <Tag key={ip} className="mono">{ip}</Tag>
+          ))}
+          {status.hub_addr && (
+            <Tooltip title={t('fail2ban.ignoreHubPinned')}>
+              <Tag color="blue" className="mono">
+                {status.hub_addr} · {t('fail2ban.hubTag')}
+              </Tag>
+            </Tooltip>
+          )}
+        </div>
+        <div className="small muted">
+          {status.ignore_defined
+            ? t('fail2ban.ignoreSource', { path: status.ignore_source })
+            : t('fail2ban.ignoreSourceNew', { path: status.ignore_source })}
+        </div>
+        {jails.length > 0 && (
+          <div className="table-wrap">
+            <DataTable<Fail2banJail>
+              dataSource={jails}
+              rowKey="name"
+              columns={[
+                { title: t('fail2ban.colJail'), dataIndex: 'name', key: 'name', className: 'mono small' },
+                {
+                  title: t('fail2ban.ignoreEffective'),
+                  key: 'list',
+                  render: (_, j) => (
+                    <div className="row" style={{ flexWrap: 'wrap', gap: '0.2rem' }}>
+                      {(j.ignore_ip ?? []).map((ip) => (
+                        <Tag key={ip} className="mono" color={status.hub_addr && ip === status.hub_addr ? 'blue' : undefined}>
+                          {ip}
+                        </Tag>
+                      ))}
+                    </div>
+                  ),
+                },
+                {
+                  title: '',
+                  key: 'kind',
+                  render: (_, j) =>
+                    same(j.ignore_ip ?? []) ? (
+                      <Tag>{t('fail2ban.ignoreKindCommon')}</Tag>
+                    ) : (
+                      <span className="row row-nowrap" style={{ gap: '0.3rem' }}>
+                        <Tooltip title={t('fail2ban.ignoreKindOwnHint')}>
+                          <Tag color="gold">{t('fail2ban.ignoreKindOwn')}</Tag>
+                        </Tooltip>
+                        {me.is_admin && <RowAction action="edit" label={t('fail2ban.editJail')} onClick={() => onEditJail(j.name)} />}
+                      </span>
+                    ),
+                },
+              ]}
+            />
+          </div>
+        )}
+      </div>
+      {edit && <IgnoreEditModal status={status} onClose={() => setEdit(false)} onSaved={onChanged} />}
+      {history && (
+        <Modal title={t('configs.versionHistoryTitle')} onClose={() => setHistory(false)} width={900}>
+          <div className="small mono" style={{ marginBottom: '0.4rem' }}>{status.ignore_source}</div>
+          <VersionHistory path={status.ignore_source} me={me} apply onChanged={onChanged} />
+        </Modal>
+      )}
+    </Card>
+  )
+}
+
+/** Правка общего ignoreip: список, заметка, дифф файлов, запись. */
+function IgnoreEditModal({ status, onClose, onSaved }: { status: Fail2banStatus; onClose: () => void; onSaved: () => void }) {
+  const { t } = useTranslation()
+  const [text, setText] = useState(status.default_ignore.join('\n'))
+  const [note, setNote] = useState('')
+  const [changes, setChanges] = useState<ApplyChange[] | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const list = text.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
+
+  async function preview() {
+    setError(null)
+    try {
+      const res = await api<{ files: ApplyChange[] }>('/fail2ban/ignore', { method: 'PUT', body: { list, dry_run: true } })
+      setChanges(res.files)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    }
+  }
+
+  async function write() {
+    setBusy(true)
+    setError(null)
+    try {
+      await api('/fail2ban/ignore', { method: 'PUT', body: { list, note }, timeoutMs: 120_000 })
+      onSaved()
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setChanges(null)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <Modal title={t('fail2ban.ignoreEditTitle')} onClose={onClose} width={620} maskClosable={false}>
+      <div className="col">
+        <p className="small muted">{t('fail2ban.ignoreEditHint', { path: status.ignore_source })}</p>
+        <Input.TextArea rows={8} value={text} onChange={(e) => setText(e.target.value)} className="mono" />
+        {status.hub_addr && <div className="small muted">{t('fail2ban.ignoreHubPinnedEdit', { addr: status.hub_addr })}</div>}
+        {status.client_ip && !ignoreCovers(list, status.client_ip) && (
+          <Button size="small" type="link" style={{ alignSelf: 'flex-start', padding: 0 }} onClick={() => setText((v) => `${v.trim()}\n${status.client_ip}`)}>
+            {t('fail2ban.ignoreAddMine', { ip: status.client_ip })}
+          </Button>
+        )}
+        <label>
+          {t('configs.editNote')}
+          <Input value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        {error && <Banner kind="error">{error}</Banner>}
+        <div className="row">
+          <Button type="primary" onClick={() => void preview()}>
+            {t('fail2ban.tplApplyGo')}
+          </Button>
+          <Button onClick={onClose}>{t('common.cancel')}</Button>
+        </div>
+      </div>
+      {changes && <FilesDiffModal changes={changes} hint={t('fail2ban.tplApplyWriteHint')} busy={busy} onWrite={() => void write()} onClose={() => setChanges(null)} />}
+    </Modal>
   )
 }

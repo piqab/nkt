@@ -108,6 +108,14 @@ func ParseINI(text string) INI {
 // файла защиты: последнее значение побеждает. Пусто — как в jail.conf:
 // только loopback.
 func DefaultIgnoreIP(c collect.Collector, root string) []string {
+	list, _, _ := DefaultIgnoreSource(c, root)
+	return list
+}
+
+// DefaultIgnoreSource — общий список ignoreip и файл, где он задан
+// (последний по порядку чтения, кроме файла защиты). Не задан нигде —
+// файл jail.local (туда его и запишет правка), defined=false.
+func DefaultIgnoreSource(c collect.Collector, root string) (list []string, file string, defined bool) {
 	files := []string{path.Join(root, "jail.conf")}
 	confs, _ := c.Glob(path.Join(root, "jail.d", "*.conf"))
 	sort.Strings(confs)
@@ -118,6 +126,7 @@ func DefaultIgnoreIP(c collect.Collector, root string) []string {
 	files = append(files, locals...)
 
 	value := ""
+	file = path.Join(root, "jail.local")
 	for _, f := range files {
 		if f == path.Join(root, HubIgnoreFile) {
 			continue
@@ -127,14 +136,108 @@ func DefaultIgnoreIP(c collect.Collector, root string) []string {
 			continue
 		}
 		if v, ok := ParseINI(string(raw))["DEFAULT"]["ignoreip"]; ok {
-			value = v
+			value, file, defined = v, f, true
 		}
 	}
-	list := strings.Fields(strings.ReplaceAll(value, ",", " "))
+	list = strings.Fields(strings.ReplaceAll(value, ",", " "))
 	if len(list) == 0 {
 		list = []string{"127.0.0.1/8", "::1"}
 	}
-	return list
+	return list, file, defined
+}
+
+var hostnameRe = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,62})(\.[A-Za-z0-9]([A-Za-z0-9-]{0,62}))*$`)
+
+// ValidIgnoreEntry — элемент ignoreip: адрес, сеть CIDR или имя хоста
+// (fail2ban разрешает и имена).
+func ValidIgnoreEntry(s string) bool {
+	if _, err := netip.ParseAddr(s); err == nil {
+		return true
+	}
+	if _, err := netip.ParsePrefix(s); err == nil {
+		return true
+	}
+	return len(s) <= 253 && hostnameRe.MatchString(s)
+}
+
+// SetINIKey задаёт (value не пусто) или убирает ключ в секции, не трогая
+// остального текста: комментарии, свои ключи, отступы. Секции нет —
+// добавляется в конец.
+func SetINIKey(text, section, key, value string) string {
+	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
+	if len(lines) > 0 && lines[len(lines)-1] == "" {
+		lines = lines[:len(lines)-1]
+	}
+	header := func(l string) (string, bool) {
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "[") && strings.HasSuffix(t, "]") {
+			return strings.TrimSpace(t[1 : len(t)-1]), true
+		}
+		return "", false
+	}
+	keyOf := func(l string) string {
+		if l == "" || l[0] == ' ' || l[0] == '\t' {
+			return ""
+		}
+		t := strings.TrimSpace(l)
+		if strings.HasPrefix(t, "#") || strings.HasPrefix(t, ";") {
+			return ""
+		}
+		if i := strings.IndexAny(t, "=:"); i > 0 {
+			return strings.ToLower(strings.TrimSpace(t[:i]))
+		}
+		return ""
+	}
+	start, end := -1, len(lines)
+	for i, l := range lines {
+		h, ok := header(l)
+		if !ok {
+			continue
+		}
+		if start >= 0 {
+			end = i
+			break
+		}
+		if h == section {
+			start = i
+		}
+	}
+	remove := strings.TrimSpace(value) == ""
+	join := func() string { return strings.Join(lines, "\n") + "\n" }
+	if start < 0 {
+		if remove {
+			return join()
+		}
+		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
+			lines = append(lines, "")
+		}
+		lines = append(lines, "["+section+"]", key+" = "+value)
+		return join()
+	}
+	for i := start + 1; i < end; i++ {
+		if keyOf(lines[i]) != strings.ToLower(key) {
+			continue
+		}
+		j := i + 1
+		for j < end && len(lines[j]) > 0 && (lines[j][0] == ' ' || lines[j][0] == '\t') && strings.TrimSpace(lines[j]) != "" {
+			j++
+		}
+		repl := []string{}
+		if !remove {
+			repl = []string{key + " = " + value}
+		}
+		lines = append(append(append([]string{}, lines[:i]...), repl...), lines[j:]...)
+		return join()
+	}
+	if remove {
+		return join()
+	}
+	at := end
+	for at > start+1 && strings.TrimSpace(lines[at-1]) == "" {
+		at--
+	}
+	lines = append(append(append([]string{}, lines[:at]...), key+" = "+value), lines[at:]...)
+	return join()
 }
 
 // HubIgnoreContent — файл защиты: прежний список ignoreip [DEFAULT] плюс

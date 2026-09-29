@@ -325,11 +325,51 @@ export function TemplateEditModal({
   )
 }
 
-interface ApplyChange {
+export interface ApplyChange {
   path: string
   before: string
   after: string
   exists: boolean
+}
+
+/** Дифф всех файлов, которые изменит запись, и «Записать». */
+export function FilesDiffModal({
+  changes,
+  hint,
+  busy,
+  onWrite,
+  onClose,
+}: {
+  changes: ApplyChange[]
+  hint?: string
+  busy: boolean
+  onWrite: () => void
+  onClose: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <Modal title={t('blocks.previewTitle')} onClose={onClose} width={900} sizeKey="diff" maskClosable={false}>
+      {changes.map((c) => (
+        <div key={c.path} style={{ marginBottom: '0.6rem' }}>
+          <div className="small mono">
+            {c.path} {!c.exists && <Tag color="green">{t('fail2ban.newFile')}</Tag>}
+          </div>
+          {c.before === c.after ? (
+            <p className="small muted">{t('editModal.noChanges')}</p>
+          ) : (
+            <DiffView text={unifiedDiff(c.before, c.after, t('editModal.saved'), t('editModal.draft'))} />
+          )}
+        </div>
+      ))}
+      {hint && <div className="small muted">{hint}</div>}
+      <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
+        <Button type="primary" loading={busy} onClick={onWrite}>
+          {t('virt.applyChanges')}
+        </Button>
+        <Button onClick={onClose}>{t('common.cancel')}</Button>
+      </div>
+    </Modal>
+  )
 }
 
 /** Применение шаблона к хосту: текст можно поправить, перед записью —
@@ -399,27 +439,7 @@ export function TemplateApplyModal({
         </div>
       </div>
       {changes && (
-        <Modal title={t('blocks.previewTitle')} onClose={() => setChanges(null)} width={900} sizeKey="diff" maskClosable={false}>
-          {changes.map((c) => (
-            <div key={c.path} style={{ marginBottom: '0.6rem' }}>
-              <div className="small mono">
-                {c.path} {!c.exists && <Tag color="green">{t('fail2ban.newFile')}</Tag>}
-              </div>
-              {c.before === c.after ? (
-                <p className="small muted">{t('editModal.noChanges')}</p>
-              ) : (
-                <DiffView text={unifiedDiff(c.before, c.after, t('editModal.saved'), t('editModal.draft'))} />
-              )}
-            </div>
-          ))}
-          <div className="small muted">{t('fail2ban.tplApplyWriteHint')}</div>
-          <div className="row" style={{ marginTop: '0.75rem', gap: '0.5rem' }}>
-            <Button type="primary" loading={busy} onClick={() => void write()}>
-              {t('virt.applyChanges')}
-            </Button>
-            <Button onClick={() => setChanges(null)}>{t('common.cancel')}</Button>
-          </div>
-        </Modal>
+        <FilesDiffModal changes={changes} hint={t('fail2ban.tplApplyWriteHint')} busy={busy} onWrite={() => void write()} onClose={() => setChanges(null)} />
       )}
     </Modal>
   )

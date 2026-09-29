@@ -3323,6 +3323,22 @@
       "postfix": "Postfix: отказы SMTP и подбор",
       "dovecot": "Dovecot: подбор паролей IMAP/POP3",
       "recidive": "Рецидивисты: кого банили много раз — надолго и на всех портах"
-    }
+    },
+    "ignoreTitle": "Исключения (ignoreip)",
+    "ignoreSubtitle": "Адреса, которые fail2ban не банит никогда: общий список и действующий у каждого джейла",
+    "ignoreEdit": "Изменить общий список",
+    "ignoreCommon": "Общий список:",
+    "hubTag": "хаб",
+    "ignoreHubPinned": "Адрес хаба закреплён: nkt держит его в файле защиты zz-nkt-hub.local поверх общего списка",
+    "ignoreSource": "Задан в {{path}}; адрес хаба добавляется файлом защиты nkt.",
+    "ignoreSourceNew": "Нигде не задан — действует список по умолчанию; правка запишется в {{path}}.",
+    "ignoreEffective": "Действует",
+    "ignoreKindCommon": "общий",
+    "ignoreKindOwn": "свой",
+    "ignoreKindOwnHint": "У джейла свой ignoreip: он заменяет общий список целиком",
+    "ignoreEditTitle": "Общий список исключений",
+    "ignoreEditHint": "По одному адресу, сети (CIDR) или имени хоста в строке. Запишется в [DEFAULT] ignoreip файла {{path}}, затем файл защиты хаба соберётся заново; перед записью — дифф всех файлов и проверка fail2ban-client -t.",
+    "ignoreHubPinnedEdit": "Адрес хаба {{addr}} вписывать не нужно — он закреплён и добавится сам.",
+    "ignoreAddMine": "добавить мой адрес {{ip}}"
   }
 }

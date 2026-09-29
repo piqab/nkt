@@ -56,6 +56,7 @@ func f2bServer(t *testing.T) (*Server, string, f2bCall) {
 	r.Post("/fail2ban/unban", s.handleF2BUnban)
 	r.Post("/fail2ban/setup", s.handleF2BSetup)
 	r.Put("/fail2ban/hub-addr", s.handleF2BHubAddr)
+	r.Put("/fail2ban/ignore", s.handleF2BIgnore)
 	r.Put("/fail2ban/templates", s.handleF2BTemplateSave)
 	r.Delete("/fail2ban/templates/{name}", s.handleF2BTemplateDelete)
 	r.Post("/fail2ban/templates/apply", s.handleF2BTemplateApply)
@@ -211,5 +212,44 @@ func TestF2BTemplates(t *testing.T) {
 	}
 	if code, _ := call("POST", "/fail2ban/regex-test", map[string]any{"filter": "x", "log": "/etc/shadow"}, ""); code != 400 {
 		t.Fatalf("regex test outside /var/log: %d", code)
+	}
+}
+
+// Общий ignoreip: пишется туда, где задан (jail.local), файл защиты
+// собирается заново с адресом хаба; удалённое не возвращается; правка
+// jail.local через «Конфигурации» тоже пересобирает файл защиты.
+func TestF2BIgnoreList(t *testing.T) {
+	s, root, call := f2bServer(t)
+	if code, _ := call("PUT", "/fail2ban/hub-addr", map[string]any{"addr": "198.51.100.7"}, ""); code != 200 {
+		t.Fatal("hub addr")
+	}
+	code, out := call("PUT", "/fail2ban/ignore", map[string]any{"list": []string{"127.0.0.1/8", "::1", "192.168.0.0/16", "198.51.100.7"}, "dry_run": true}, "")
+	files, _ := out["files"].([]any)
+	if code != 200 || len(files) != 2 {
+		t.Fatalf("dry run: %d %v", code, out)
+	}
+	if code, _ := call("PUT", "/fail2ban/ignore", map[string]any{"list": []string{"1.2.3.4; rm"}}, ""); code != 400 {
+		t.Fatalf("bad entry accepted: %d", code)
+	}
+	if code, out := call("PUT", "/fail2ban/ignore", map[string]any{"list": []string{"127.0.0.1/8", "::1", "192.168.0.0/16", "office.example.com"}}, ""); code != 200 {
+		t.Fatalf("write: %d %v", code, out)
+	}
+	local, _ := os.ReadFile(filepath.Join(root, "etc", "fail2ban", "jail.local"))
+	if !strings.Contains(string(local), "ignoreip = 127.0.0.1/8 ::1 192.168.0.0/16 office.example.com\n") || !strings.Contains(string(local), "bantime = 1h") {
+		t.Fatalf("jail.local: %s", local)
+	}
+	hub, _ := os.ReadFile(filepath.Join(root, "etc", "fail2ban", "jail.d", "zz-nkt-hub.local"))
+	if !strings.Contains(string(hub), "ignoreip = 127.0.0.1/8 ::1 192.168.0.0/16 office.example.com 198.51.100.7\n") {
+		t.Fatalf("hub file: %s", hub)
+	}
+	// Правка jail.local мимо раздела — файл защиты догоняет.
+	edited := strings.Replace(string(local), " office.example.com", "", 1)
+	if err := os.WriteFile(filepath.Join(root, "etc", "fail2ban", "jail.local"), []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s.f2bAfterConfigChange(t.Context(), "admin", "/etc/fail2ban/jail.local")
+	hub, _ = os.ReadFile(filepath.Join(root, "etc", "fail2ban", "jail.d", "zz-nkt-hub.local"))
+	if strings.Contains(string(hub), "office.example.com") || !strings.Contains(string(hub), "198.51.100.7") {
+		t.Fatalf("hub file after jail.local edit: %s", hub)
 	}
 }

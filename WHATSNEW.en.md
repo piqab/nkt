@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.37 — 2026-09-29
+
+- **fail2ban: exceptions (ignoreip) in plain sight.** A new card shows
+  the common `[DEFAULT] ignoreip` list with the hub address pinned and
+  the effective list of every jail, common or own. The common list is
+  edited right there: a diff of every file, a `fail2ban-client -t` check,
+  version history, an “add my address” button.
+- An `ignoreip` edit in “Configs” is no longer lost: after writing or
+  rolling back a fail2ban file the hub protection file is rebuilt (before,
+  it overrode the edit until “Set up” was pressed).
+
 ## v1.11.36 — 2026-09-29
 
 - **fail2ban gets its own host section, right below “Firewall”.** State

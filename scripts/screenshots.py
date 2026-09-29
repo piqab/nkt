@@ -52,6 +52,7 @@ SCREENS = [
     ('firewall', 'host', '/firewall', ''),
     ('fail2ban', 'host', '/fail2ban', ''),
     ('fail2ban-jail', 'host', '/fail2ban', "await sleep(800); document.querySelector('button[aria-label=\"' + pick({ru: 'Править джейл', en: 'Edit jail'}) + '\"]')?.click()"),
+    ('fail2ban-ignore', 'host', '/fail2ban', "await sleep(800); [...document.querySelectorAll('.ant-card-head-title')].find((e) => e.textContent.startsWith(pick({ru: 'Исключения', en: 'Exceptions'})))?.scrollIntoView({block: 'start'})"),
     ('fail2ban-templates', 'host', '/fail2ban', "clickText('button', /^(Шаблоны|Templates)$/)"),
     ('fail2ban-log', 'host', '/fail2ban', "await sleep(800); [...document.querySelectorAll('.ant-card-head-title')].find((e) => e.textContent.startsWith(pick({ru: 'Журнал событий', en: 'Event log'})))?.scrollIntoView({block: 'start'})"),
     ('certificates', 'host', '/certificates', ''),

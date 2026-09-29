@@ -146,13 +146,16 @@ func (s *Server) handleF2BStatus(w http.ResponseWriter, r *http.Request) {
 	c := s.f2bCollector()
 	st := fail2ban.Collect(r.Context(), c)
 	hub := s.f2bHubAddr(r.Context())
+	ignoreList, ignoreFile, ignoreDefined := fail2ban.DefaultIgnoreSource(c, s.f2bRoot())
 	out := map[string]any{
 		"state":          st,
 		"root":           s.f2bRoot(),
 		"manual_jail":    fail2ban.ManualJail,
 		"manual_ready":   fail2ban.HasJail(st, fail2ban.ManualJail),
 		"hub_file":       path.Join(s.f2bRoot(), fail2ban.HubIgnoreFile),
-		"default_ignore": fail2ban.DefaultIgnoreIP(c, s.f2bRoot()),
+		"default_ignore": ignoreList,
+		"ignore_source":  ignoreFile,
+		"ignore_defined": ignoreDefined,
 		"log_path":       fail2ban.LogPath,
 		"actions":        fail2ban.Actions,
 		"simulated":      s.cfg.IsFixtures(),
@@ -417,6 +420,126 @@ func (s *Server) f2bEnsureHubIgnore(ctx context.Context, user string) (bool, err
 	content := fail2ban.HubIgnoreContent(fail2ban.DefaultIgnoreIP(c, s.f2bRoot()), hub)
 	running := fail2ban.CollectBans(ctx, c).Running
 	return s.f2bWrite(ctx, user, fail2ban.HubIgnoreFile, content, msgs.Tc(ctx, "f2b.noteHub", hub.String()), running)
+}
+
+// f2bAfterConfigChange — после записи или отката файла fail2ban в
+// «Конфигурациях»: общий ignoreip мог измениться, файл защиты хаба
+// собирается заново (он читается последним и иначе перекрыл бы правку).
+func (s *Server) f2bAfterConfigChange(ctx context.Context, user, p string) {
+	if s.cfg == nil || s.scanner == nil || s.db == nil || strings.Trim(s.f2bRoot(), "/") == "" {
+		return
+	}
+	root := strings.TrimSuffix(s.f2bRoot(), "/") + "/"
+	if !strings.HasPrefix(p, root) || p == path.Join(s.f2bRoot(), fail2ban.HubIgnoreFile) || !s.f2bHubAddr(ctx).IsValid() {
+		return
+	}
+	if _, err := s.f2bEnsureHubIgnore(ctx, user); err != nil && s.log != nil {
+		s.log.Warn("fail2ban hub ignore file not refreshed", "err", err)
+	}
+	s.f2bInvalidate()
+}
+
+// handleF2BIgnore — PUT /fail2ban/ignore {list, note, dry_run}: общий
+// список ignoreip ([DEFAULT]). Пишется туда, где он задан (иначе в
+// jail.local), затем пересобирается файл защиты хаба — адрес хаба в
+// списке закреплён и в запросе не нужен. dry_run — дифф всех файлов.
+func (s *Server) handleF2BIgnore(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		List   []string `json:"list"`
+		Note   string   `json:"note"`
+		DryRun bool     `json:"dry_run"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	ctx := r.Context()
+	c := s.f2bCollector()
+	hub := s.f2bHubAddr(ctx)
+	var list []string
+	seen := map[string]bool{}
+	for _, raw := range req.List {
+		for _, item := range strings.Fields(strings.ReplaceAll(raw, ",", " ")) {
+			if !fail2ban.ValidIgnoreEntry(item) {
+				writeErr(w, r, http.StatusBadRequest, msgs.Errorf("f2b.badIgnoreEntry", item))
+				return
+			}
+			if a, err := netip.ParseAddr(item); err == nil && hub.IsValid() && a.Unmap() == hub {
+				continue // закреплён в файле защиты
+			}
+			if !seen[item] {
+				seen[item] = true
+				list = append(list, item)
+			}
+		}
+	}
+	if len(list) > 500 {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("f2b.tooManyIgnore", len(list)))
+		return
+	}
+	_, source, _ := fail2ban.DefaultIgnoreSource(c, s.f2bRoot())
+	var changes []f2bFileChange
+	ch := f2bFileChange{Path: source}
+	if raw, err := c.ReadFile(source); err == nil {
+		ch.Before, ch.Exists = string(raw), true
+	}
+	ch.After = fail2ban.SetINIKey(ch.Before, "DEFAULT", "ignoreip", strings.Join(list, " "))
+	changes = append(changes, ch)
+	if hub.IsValid() {
+		effective := list
+		if len(effective) == 0 {
+			effective = []string{"127.0.0.1/8", "::1"}
+		}
+		hubPath := path.Join(s.f2bRoot(), fail2ban.HubIgnoreFile)
+		hc := f2bFileChange{Path: hubPath, After: fail2ban.HubIgnoreContent(effective, hub)}
+		if raw, err := c.ReadFile(hubPath); err == nil {
+			hc.Before, hc.Exists = string(raw), true
+		}
+		changes = append(changes, hc)
+	}
+	if req.DryRun {
+		writeJSON(w, http.StatusOK, map[string]any{"files": changes})
+		return
+	}
+	if !fail2ban.Installed(ctx, c) {
+		writeErr(w, r, http.StatusConflict, msgs.Errorf("f2b.notInstalled"))
+		return
+	}
+	user := auth.Username(ctx)
+	note := strings.TrimSpace(req.Note)
+	if note == "" {
+		note = msgs.Tc(ctx, "f2b.noteIgnore")
+	}
+	running := fail2ban.CollectBans(ctx, c).Running
+	for i, ch := range changes {
+		if ch.Before == ch.After {
+			continue
+		}
+		last := i == len(changes)-1
+		if _, err := s.configs.Write(ctx, msgs.FromContext(ctx), user, ch.Path, ch.After, note, last && running); err != nil {
+			for _, prev := range changes[:i] {
+				if prev.Before == prev.After {
+					continue
+				}
+				if prev.Exists {
+					_, _ = s.configs.Write(ctx, msgs.FromContext(ctx), user, prev.Path, prev.Before, note, false)
+				} else {
+					_ = c.DeleteFile(prev.Path)
+				}
+			}
+			s.db.Audit(ctx, user, "fail2ban.ignore", strings.Join(list, " "), "error", err.Error())
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+	}
+	// Без адреса хаба файла защиты нет — перечитать конфигурацию здесь.
+	if !hub.IsValid() && running && changes[0].Before != changes[0].After {
+		_, _ = fail2ban.Reload(ctx, c, "")
+	}
+	s.db.Audit(ctx, user, "fail2ban.ignore", strings.Join(list, " "), "ok", nil)
+	s.f2bInvalidate()
+	s.rescanLater()
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "files": changes})
 }
 
 // f2bSSHJournal — у sshd нет журнала в файле: только journald.

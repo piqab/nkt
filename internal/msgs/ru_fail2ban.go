@@ -71,4 +71,7 @@ var ruFail2banCatalog = map[string]string{
 	"hub.aiIPLog":            "Журнал fail2ban хоста %s за 7 дней: строк с адресом %d; события: %s. Последние:",
 	"hub.aiIPNoLog":          "В журналах fail2ban хостов за 7 дней адрес не встречается (или журналы недоступны).",
 	"hub.aiIPEvents":         "Упоминаний в оповещениях хаба: %d, последнее — %s.",
+	"f2b.badIgnoreEntry":     "Не адрес, сеть или имя хоста: %q",
+	"f2b.tooManyIgnore":      "Слишком длинный список исключений: %d (не больше 500)",
+	"f2b.noteIgnore":         "Общий список исключений ignoreip",
 }

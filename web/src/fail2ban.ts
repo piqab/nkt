@@ -111,6 +111,25 @@ export function ignoreCovers(list: string[], ip: string): boolean {
   return false
 }
 
+/** Элемент ignoreip в каноническом виде: у сети IPv4 — адрес сети
+ * (fail2ban сам показывает 127.0.0.1/8 как 127.0.0.0/8). */
+export function normIgnore(item: string): string {
+  const [net, bitsRaw] = item.split('/')
+  const a = v4(net)
+  if (!a || bitsRaw === undefined) return item.toLowerCase()
+  const bits = Number(bitsRaw)
+  const n = ((a[0] << 24) | (a[1] << 16) | (a[2] << 8) | a[3]) >>> 0
+  const mask = bits === 0 ? 0 : (0xffffffff << (32 - bits)) >>> 0
+  const m = (n & mask) >>> 0
+  return `${m >>> 24}.${(m >>> 16) & 255}.${(m >>> 8) & 255}.${m & 255}/${bits}`
+}
+
+/** Одинаковы ли списки ignoreip с точностью до порядка и записи сетей. */
+export function sameIgnore(a: string[], b: string[]): boolean {
+  const k = (l: string[]) => [...new Set(l.map(normIgnore))].sort().join(' ')
+  return k(a) === k(b)
+}
+
 /** Внешний (публичный) адрес — не частный, не loopback, не link-local. */
 export function isExternalIP(ip: string): boolean {
   const a = v4(ip)
