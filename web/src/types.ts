@@ -1086,6 +1086,9 @@ export interface Fail2banStatus {
   hub_addr?: string
   client_ip?: string
   default_ignore: string[]
+  /** Файл, где задан общий ignoreip (или куда он запишется). */
+  ignore_source: string
+  ignore_defined: boolean
   log_path: string
   actions: string[]
   simulated: boolean

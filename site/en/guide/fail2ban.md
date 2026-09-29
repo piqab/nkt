@@ -73,6 +73,32 @@ history, with a diff and rollback.
 A jail's own `ignoreip` replaces `[DEFAULT]` entirely, so the hub's
 address is added to it automatically as soon as the field is filled in.
 
+## Exceptions (ignoreip)
+
+![Exceptions](/screens/en/fail2ban-ignore.png)
+
+The **“Exceptions (ignoreip)”** card lists the addresses fail2ban never
+bans:
+
+- **The common list** (`[DEFAULT] ignoreip`) and the file it is set in.
+  The hub's address is shown separately and **pinned**: the nkt
+  protection file `jail.d/zz-nkt-hub.local` keeps it on top of the common
+  list.
+- **The effective list of every jail**, marked “common” or “own”: a
+  jail's own `ignoreip` replaces the common list entirely and is edited in
+  the jail window (the button next to it).
+
+**“Edit the common list”** takes one address, network (CIDR) or host
+name per line; “add my address” adds your current one. The list is
+written where it is already set (usually `jail.local`; if nowhere, into
+`jail.local`), then the hub protection file is rebuilt. Before writing
+there is a diff of every file that changes and a `fail2ban-client -t`
+check; the file with the list has a version history.
+
+Editing `ignoreip` outside this card, in “Configs” (writing or rolling
+back any fail2ban file), is picked up too: the hub protection file is
+rebuilt automatically.
+
 ## Banned addresses
 
 A table of all bans by jail: address, jail, when it was banned and until
@@ -138,8 +164,9 @@ ban the hub itself. So:
   `SSH_CONNECTION` of its SSH session (every 6 hours and after a start),
   and passes it to the host;
 - the host keeps this address in `[DEFAULT] ignoreip` (the file
-  `jail.d/zz-nkt-hub.local`, read last) and rewrites the file when the
-  address changes;
+  `jail.d/zz-nkt-hub.local`, read last: the common list plus the hub
+  address) and rebuilds the file when the address or the common list
+  changes ([Exceptions](#exceptions-ignoreip));
 - neither the hub's address nor the address a request came from can be
   banned, whether from the page or by a hub job;
 - the finding **“The hub can ban itself”** appears when some jail's

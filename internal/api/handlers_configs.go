@@ -186,6 +186,7 @@ func (s *Server) handleConfigWrite(w http.ResponseWriter, r *http.Request) {
 	s.db.Audit(r.Context(), user, "config.write", req.Path, "ok", map[string]any{
 		"version": res.VersionID, "applied": res.Applied, "note": req.Note,
 	})
+	s.f2bAfterConfigChange(r.Context(), user, req.Path)
 
 	if isNew {
 		// Synchronous on purpose. Creating a file is rare and the wait is
@@ -305,6 +306,7 @@ func (s *Server) handleConfigRollback(w http.ResponseWriter, r *http.Request) {
 	}
 	s.db.Audit(r.Context(), user, "config.rollback", res.Path, "ok",
 		map[string]any{"restored_from": id, "new_version": res.VersionID})
+	s.f2bAfterConfigChange(r.Context(), user, res.Path)
 	writeJSON(w, http.StatusOK, res)
 }
 

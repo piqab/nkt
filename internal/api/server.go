@@ -469,6 +469,7 @@ func (s *Server) Handler() http.Handler {
 				r.Post("/fail2ban/reload", s.handleF2BReload)
 				r.Post("/fail2ban/setup", s.handleF2BSetup)
 				r.Put("/fail2ban/hub-addr", s.handleF2BHubAddr)
+				r.Put("/fail2ban/ignore", s.handleF2BIgnore)
 				r.Put("/fail2ban/templates", s.handleF2BTemplateSave)
 				r.Delete("/fail2ban/templates/{name}", s.handleF2BTemplateDelete)
 				r.Post("/fail2ban/templates/apply", s.handleF2BTemplateApply)
