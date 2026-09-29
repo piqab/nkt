@@ -4,10 +4,9 @@
 # совместимый по API, под amd64 и arm64.
 services:
   httpbin:
-    # В ghcr.io версионные теги кончаются на v2.16.1, свежие версии —
-    # только latest (выкладка каждый раз делает pull). Зафиксировать
-    # версию — Docker Hub того же автора: mccutchen/go-httpbin:2.25.0.
-    image: ghcr.io/mccutchen/go-httpbin:latest
+    # Образ с Docker Hub: в ghcr.io версионные теги go-httpbin кончаются
+    # на v2.16.1, а версия закреплена — обновление правкой этой строки.
+    image: mccutchen/go-httpbin:2.25.0
     restart: unless-stopped
     # Порт не публикуется: мастер «Сайтов» опубликует 8080 только на
     # 127.0.0.1, и наружу httpbin будет доступен лишь через прокси.

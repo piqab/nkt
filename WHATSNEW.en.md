@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.44 — 2026-09-29
+
+- The httpbin example: the image is pinned to a version,
+  `mccutchen/go-httpbin:2.25.0` from Docker Hub instead of `latest` from
+  ghcr.io.
+
 ## v1.11.43 — 2026-09-29
 
 - **An example compose stack deployment, httpbin** (`examples/httpbin`):

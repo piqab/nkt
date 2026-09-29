@@ -54,7 +54,7 @@ func TestHTTPBinExample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(files[main], "go-httpbin:latest") {
+	if !strings.Contains(files[main], "mccutchen/go-httpbin:2.25.0") {
 		t.Fatal(files[main])
 	}
 	pl, err := os.ReadFile("../../examples/httpbin/deploy/pipeline.yaml")

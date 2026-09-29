@@ -20,10 +20,10 @@ Compose-файл оригинала,
 ```
 
 а порт 80 нужен прокси. Здесь — [go-httpbin](https://github.com/mccutchen/go-httpbin),
-совместимый по API клон на Go: готовый образ `ghcr.io/mccutchen/go-httpbin`
-под amd64 и arm64. В ghcr.io версионные теги кончаются на v2.16.1, свежие
-версии — только `latest` (выкладка каждый раз делает `pull`); зафиксировать
-версию — образ того же автора с Docker Hub, `mccutchen/go-httpbin:2.25.0`.
+совместимый по API клон на Go: готовый образ `mccutchen/go-httpbin:2.25.0`
+с Docker Hub под amd64 и arm64. Версия закреплена — новая выкладывается
+правкой тега в `docker-compose.yml` (в ghcr.io версионные теги go-httpbin
+кончаются на v2.16.1, поэтому образ — с Docker Hub).
 
 ## 1. Конвейер
 
