@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.45 — 2026-09-29
+
+- **fail2ban, ban on all hosts:** the `nkt-manual` jail did not load: its
+  filter had no `<HOST>` group, and fail2ban rejected it on reload ("No
+  failure-id group"). The filter is fixed and rewrites itself on the next
+  ban or setup if a host still has the old one.
+- Rolling back a new config that failed validation on hosts where the
+  directory is closed by the systemd sandbox ("read-only file system"): the
+  file is now removed the same way it is written, outside the sandbox.
+
 ## v1.11.44 — 2026-09-29
 
 - The httpbin example: the image is pinned to a version,
