@@ -3203,7 +3203,9 @@
     "fromLinkPollComment": "deploy new commits of the branch",
     "fromLinkProject": "stack name",
     "tabPipelines": "Pipelines",
-    "tabSites": "Sites"
+    "tabSites": "Sites",
+    "dryRun": "Dry run",
+    "dryRunHint": "Everything a deployment would do except the changes: repository, substitutions and, on each host, docker and compose, compose config on a copy of the stack, what would change, whether the images are in the registry. The stack and containers are left alone."
   },
   "edge": {
     "subtitle": "Webhooks from the internet without exposing the hub: edge on a VPS accepts only them, the hub keeps the tunnel to it.",
@@ -3469,5 +3471,17 @@
       "timeout": "no answer",
       "error": "error"
     }
+  },
+  "composeEngine": {
+    "checking": "checking…",
+    "old": "old nkt version, cannot check",
+    "unreachable": "unreachable",
+    "ok": "{{engine}} with compose, ready",
+    "none": "no docker or podman",
+    "noCompose": "{{engine}} without compose",
+    "install": "Install Docker",
+    "installCompose": "Install compose",
+    "installHint": "docker.io and the compose plugin from the distribution's repository, as a background host job",
+    "notInstallable": "Installing from here works only on hosts with apt-get"
   }
 }

@@ -8,6 +8,22 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.46 — 2026-09-29
+
+- **Dry run of a compose stack deployment**: a button in the "Deploy"
+  window and in the pipeline editor (unsaved text included). It does
+  everything a deployment would do except the changes. On each host:
+  docker/podman and compose, which stack files would appear or change,
+  what happens to `.env`, `compose config` on a copy of the stack, whether
+  the images are in the registry. The result is a job with a log, with no
+  entry in the deployment history.
+- **A host check as soon as the host is picked**, in "Compose from a link"
+  and in the "Sites" wizard: whether docker with compose is ready; where it
+  is not, an "Install Docker" (or "Install compose") button runs a
+  background host job.
+- A stack deployment first checks docker and compose on all hosts: if one
+  lacks them, it does not start and no host is touched.
+
 ## v1.11.45 — 2026-09-29
 
 - **fail2ban, ban on all hosts:** the `nkt-manual` jail did not load: its

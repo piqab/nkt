@@ -134,6 +134,7 @@ func (s *Server) Handler() http.Handler {
 			"/system/dbus-install/ws",
 			"/system/tmux-install/ws",
 			"/system/btop-install/ws",
+			"/system/docker-install/ws",
 			"/services/{name}/install/ws",
 			"/containers/{name}/run/ws",
 			"/containers/{name}/logs/ws",
@@ -319,6 +320,7 @@ func (s *Server) Handler() http.Handler {
 					r.Get("/hub/pipelines/template", s.handlePipelineTemplate)
 					r.Get("/hub/pipelines/versions/{version}", s.handlePipelineVersion)
 					r.Post("/hub/pipelines", s.handlePipelineCreate)
+					r.Post("/hub/pipelines/dryrun", s.handlePipelineDryRun)
 					r.Get("/hub/pipelines/{id}", s.handlePipelineGet)
 					r.Put("/hub/pipelines/{id}", s.handlePipelineUpdate)
 					r.Delete("/hub/pipelines/{id}", s.handlePipelineDelete)

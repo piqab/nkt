@@ -12,6 +12,7 @@ import { unifiedDiff } from '../components/textDiff'
 import { JobLogModal } from './Jobs'
 import { EdgeCard } from '../components/EdgeCard'
 import { SitesPanel } from '../components/SitesPanel'
+import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
 
 interface Deployment {
   id: number
@@ -245,6 +246,19 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
   const [history, setHistory] = useState(false)
   const saved = pipeline?.content ?? ''
   const text = draft ?? (pipeline ? saved : (tpl.data?.content ?? ''))
+  const [dryJob, setDryJob] = useState<Job | null>(null)
+
+  // Сухой прогон текущего текста — и несохранённого: доступ и .env —
+  // сохранённого конвейера.
+  async function dryRun() {
+    setError(null)
+    try {
+      const res = await api<{ job_id: number }>('/hub/pipelines/dryrun', { method: 'POST', body: { pipeline_id: pipeline?.id ?? 0, content: text } })
+      setDryJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
 
   async function save(): Promise<boolean> {
     setBusy(true)
@@ -287,11 +301,19 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
             <Space wrap style={{ marginBottom: '0.5rem' }}>
               {!pipeline && <Input size="small" style={{ width: '16rem' }} value={name} placeholder={t('deploy.name')} onChange={(e) => setName(e.target.value)} />}
               {pipeline && <Input size="small" style={{ width: '20rem' }} value={note} placeholder={t('deploy.notePlaceholder')} onChange={(e) => setNote(e.target.value)} />}
+              {/action:\s*compose/.test(text) && (
+                <Tooltip title={t('deploy.dryRunHint')}>
+                  <Button size="small" onClick={() => void dryRun()}>
+                    {t('deploy.dryRun')}
+                  </Button>
+                </Tooltip>
+              )}
             </Space>
           </>
         }
         below={error ? <Banner kind="error" onClose={() => setError(null)}>{error}</Banner> : null}
       />
+      {dryJob && <JobLogModal job={dryJob} scope="/hosts/local" onClose={() => setDryJob(null)} />}
       {history && pipeline && (
         <VersionsModal
           p={pipeline}
@@ -384,6 +406,14 @@ function ComposeFromLink({ onFill }: { onFill: (yaml: string, name: string) => v
           {t('deploy.fromLinkFill')}
         </Button>
       </div>
+      {picked.length > 0 && (
+        <div className="row" style={{ gap: '0.9rem', flexWrap: 'wrap' }}>
+          {picked.map((n) => {
+            const h = (hosts.data ?? []).find((x) => x.name === n)
+            return h ? <ComposeEngineStatus key={n} hostId={h.id} name={n} admin /> : null
+          })}
+        </div>
+      )}
       {bad && <span className="small" style={{ color: 'var(--status-error)' }}>{t('deploy.fromLinkBad')}</span>}
     </div>
   )
@@ -462,6 +492,25 @@ function DeployModal({ p, onClose, onStarted }: { p: Pipeline; onClose: () => vo
         >
           {t('deploy.deployNow')}
         </Button>
+        <Tooltip title={t('deploy.dryRunHint')}>
+          <Button
+            loading={busy}
+            onClick={async () => {
+              setBusy(true)
+              setError(null)
+              try {
+                const res = await api<{ job_id: number }>('/hub/pipelines/dryrun', { method: 'POST', body: { pipeline_id: p.id, ref, tag } })
+                onStarted(res.job_id)
+              } catch (err) {
+                setError(errText(err))
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            {t('deploy.dryRun')}
+          </Button>
+        </Tooltip>
       </Space>
     </Modal>
   )
