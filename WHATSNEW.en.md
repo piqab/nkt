@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.38 — 2026-09-29
+
+- **Hub export carries everything.** The file (format version 4) now
+  includes deployment pipelines with their revision history, secrets and
+  the same webhook address (webhooks in GitHub/GitLab keep working),
+  fail2ban templates with version history, nkt-edge settings and every
+  edited AI instruction (“configuration help” and the new “address check”
+  used to be lost). With a checkbox, web interface user accounts too
+  (logins, roles, password hashes). Every secret is re-encrypted with the
+  receiving hub's key. Version 1 to 3 files import as before.
+- **Import goes through a plan.** The window shows what the file
+  contains by section and what already exists on the hub; every match
+  gets “skip” or “replace” (and “all” per section). Replacing adds a new
+  version to the history (you can roll back). After the import comes a
+  report: added, replaced, skipped, errors.
+- Fixed: importing the same file again duplicated hosts; now a host with
+  a taken name is skipped or replaced as chosen.
+
 ## v1.11.37 — 2026-09-29
 
 - **fail2ban: exceptions (ignoreip) in plain sight.** A new card shows

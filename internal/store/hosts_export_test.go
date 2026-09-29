@@ -64,7 +64,7 @@ func TestExportImportHostsRoundTrip(t *testing.T) {
 	}
 	defer dst.Close()
 
-	imported, errs := dst.ImportHosts(ctx, export)
+	imported, errs := importCompat(dst, ctx, export)
 	if len(errs) != 0 {
 		t.Fatalf("ImportHosts errs = %v, want none", errs)
 	}
@@ -143,7 +143,7 @@ func TestImportHostsPartialFailureKeepsGoing(t *testing.T) {
 		},
 	}
 
-	imported, errs := db.ImportHosts(ctx, export)
+	imported, errs := importCompat(db, ctx, export)
 	if imported != 1 {
 		t.Errorf("imported = %d, want 1 (the good entry)", imported)
 	}
@@ -187,7 +187,7 @@ func TestImportHostsRejectsUnsafeAdminUser(t *testing.T) {
 		},
 	}
 
-	imported, errs := db.ImportHosts(ctx, export)
+	imported, errs := importCompat(db, ctx, export)
 	if imported != 0 {
 		t.Errorf("imported = %d, want 0 — a shell-metacharacter AdminUser must be rejected", imported)
 	}
@@ -296,12 +296,12 @@ func TestExportImportV2RoundTrip(t *testing.T) {
 	if _, err := dst.SaveVMTemplate(ctx, VMTemplate{Name: "small", Spec: `{"vcpus":8}`}); err != nil {
 		t.Fatal(err)
 	}
-	imported, errs := dst.ImportHosts(ctx, export)
-	if imported != 2 {
-		t.Errorf("imported = %d, errs = %v", imported, errs)
+	rep := dst.ImportHosts(ctx, export, nil)
+	if imported := rep.Count(SectionHosts).Added; imported != 2 {
+		t.Errorf("imported = %d, errs = %v", imported, rep.Errors)
 	}
-	if len(errs) != 1 {
-		t.Errorf("ожидалось одно сообщение о занятом шаблоне, получено %v", errs)
+	if len(rep.Errors) != 0 || rep.Count(SectionVMTemplates).Skipped != 1 {
+		t.Errorf("занятый шаблон должен быть пропущен без ошибки: %+v", rep)
 	}
 	hosts, _ := dst.ListHosts(ctx)
 	byName := map[string]Host{}
@@ -337,7 +337,7 @@ func TestExportImportV2RoundTrip(t *testing.T) {
 	if _, err := DecodeHubExport([]byte(`{"version": 1, "hosts": []}`)); err != nil {
 		t.Errorf("файл версии 1 отвергнут: %v", err)
 	}
-	if _, err := DecodeHubExport([]byte(`{"version": 4, "hosts": []}`)); err == nil {
+	if _, err := DecodeHubExport([]byte(`{"version": 5, "hosts": []}`)); err == nil {
 		t.Error("файл из будущего принят")
 	}
 }
@@ -409,7 +409,7 @@ func TestExportImportV3ClustersAndScripts(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer dst.Close()
-	n, errs := dst.ImportHosts(ctx, decoded)
+	n, errs := importCompat(dst, ctx, decoded)
 	if n != 3 || len(errs) != 0 {
 		t.Fatalf("imported %d, errs %v", n, errs)
 	}
@@ -432,9 +432,9 @@ func TestExportImportV3ClustersAndScripts(t *testing.T) {
 		t.Errorf("dst aptcache limit: %q", v)
 	}
 	// Повторный импорт: кластер и хосты с теми же именами не дублируются.
-	_, errs = dst.ImportHosts(ctx, decoded)
-	if len(errs) == 0 {
-		t.Errorf("повторный импорт должен сообщить о занятых именах")
+	again := dst.ImportHosts(ctx, decoded, nil)
+	if again.Count(SectionHosts).Skipped == 0 || again.Count(SectionClusters).Skipped != 1 || again.Count(SectionHosts).Added != 0 {
+		t.Errorf("повторный импорт должен пропустить занятые имена: %+v", again.Sections)
 	}
 	if clusters, _ = dst.ListClusters(ctx); len(clusters) != 1 {
 		t.Errorf("кластер задублирован: %d", len(clusters))
@@ -468,10 +468,10 @@ func TestClusterPresets(t *testing.T) {
 	}
 	dst, _ := Open(filepath.Join(t.TempDir(), "dst.db"))
 	defer dst.Close()
-	if _, errs := dst.ImportHosts(ctx, export); len(errs) != 0 {
+	if _, errs := importCompat(dst, ctx, export); len(errs) != 0 {
 		t.Fatalf("import: %v", errs)
 	}
-	if _, errs := dst.ImportHosts(ctx, export); len(errs) != 0 {
+	if _, errs := importCompat(dst, ctx, export); len(errs) != 0 {
 		t.Fatalf("second import: %v", errs)
 	}
 	if l, _ := dst.ListClusterPresets(ctx); len(l) != 1 {
@@ -488,4 +488,11 @@ func l0(l []ClusterPreset) int64 {
 		return 0
 	}
 	return l[0].ID
+}
+
+// importCompat — импорт без выбора «заменить»: сколько хостов добавлено и
+// ошибки (вид прежних тестов).
+func importCompat(db *DB, ctx context.Context, export HubExport) (int, []string) {
+	rep := db.ImportHosts(ctx, export, nil)
+	return rep.Count(SectionHosts).Added, rep.Errors
 }

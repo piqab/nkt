@@ -53,3 +53,18 @@ func (h *history) get(name string) ([]byte, error) {
 	}
 	return os.ReadFile(filepath.Join(h.root, filepath.FromSlash(name)))
 }
+
+// HistoryRead — содержимое версии по имени в хранилище истории dir (для
+// переноса истории экспортом хаба).
+func HistoryRead(dir, name string) ([]byte, error) {
+	if strings.Contains(name, "..") {
+		return nil, msgs.Errorf("control.invalidVersionName", name)
+	}
+	return newHistory(dir).get(name)
+}
+
+// HistoryWrite кладёт содержимое версии пути в хранилище истории dir:
+// имя в хранилище и сумма — для строки config_versions.
+func HistoryWrite(dir, path string, content []byte) (name, sum string, err error) {
+	return newHistory(dir).put(path, content)
+}

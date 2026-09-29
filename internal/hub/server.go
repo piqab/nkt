@@ -359,6 +359,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts/{id}/start", s.handleStartHost)
 					r.Get("/hub/export", s.handleExportHosts)
 					r.Post("/hub/import", s.handleImportHosts)
+					r.Post("/hub/import/plan", s.handleImportPlan)
 
 					// Every other host-scoped call — reads and mutations alike —
 					// crosses the SSH tunnel to that host's own nkt API,

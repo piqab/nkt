@@ -42,7 +42,7 @@ func f2bServer(t *testing.T) (*Server, string, f2bCall) {
 	scanner := inventory.New(cfg, c, db)
 	svc := control.NewServiceManager(cfg, c, db)
 	s := &Server{cfg: cfg, db: db, scanner: scanner, services: svc, configs: control.NewConfigManager(cfg, c, db, scanner, svc)}
-	s.configs.AttachDocs(f2bTemplatePrefix, &f2bTemplateDocs{s})
+	s.configs.AttachDocs(F2BTemplatePrefix, &f2bTemplateDocs{s})
 	r := chi.NewRouter()
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -184,7 +184,7 @@ func TestF2BTemplates(t *testing.T) {
 	if code, _ := call("DELETE", "/fail2ban/templates/myapp", nil, ""); code != 200 {
 		t.Fatal("delete")
 	}
-	code, out = call("GET", "/configs/versions?path="+f2bTemplatePrefix+"myapp", nil, "")
+	code, out = call("GET", "/configs/versions?path="+F2BTemplatePrefix+"myapp", nil, "")
 	versions, _ := out["versions"].([]any)
 	if code != 200 || len(versions) < 3 {
 		t.Fatalf("versions: %d %v", code, out)

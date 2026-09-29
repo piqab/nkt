@@ -54,7 +54,7 @@ func TestImportHostsWithEmbeddedKeyReencrypts(t *testing.T) {
 		t.Fatal("ExportHosts(ctx, true) did not embed a master key")
 	}
 
-	imported, errs := m2.ImportHosts(ctx, export)
+	imported, errs := importCompatHub(m2, ctx, export)
 	if len(errs) != 0 {
 		t.Fatalf("ImportHosts errs = %v, want none", errs)
 	}
@@ -133,7 +133,7 @@ func TestImportHostsRejectsBadEmbeddedKey(t *testing.T) {
 		},
 	}
 
-	imported, errs := m2.ImportHosts(ctx, export)
+	imported, errs := importCompatHub(m2, ctx, export)
 	if imported != 0 {
 		t.Errorf("imported = %d, want 0", imported)
 	}
@@ -171,7 +171,7 @@ func TestImportHostsDropsEntryUndecryptableWithEmbeddedKey(t *testing.T) {
 		},
 	}
 
-	imported, errs := m2.ImportHosts(ctx, export)
+	imported, errs := importCompatHub(m2, ctx, export)
 	if imported != 0 {
 		t.Errorf("imported = %d, want 0", imported)
 	}
@@ -212,7 +212,7 @@ func TestImportReencryptsAIKeyAndCarriesAISettings(t *testing.T) {
 	if export.Settings["ai.api_key_enc"] == "" || export.Settings["ai.settings"] == "" || export.Settings["update.beta"] != "1" {
 		t.Fatalf("настройки ИИ и бета-канал не в экспорте: %v", export.Settings)
 	}
-	if _, errs := m2.ImportHosts(ctx, export); len(errs) != 0 {
+	if _, errs := importCompatHub(m2, ctx, export); len(errs) != 0 {
 		t.Fatalf("ImportHosts errs = %v", errs)
 	}
 	// Ключ читается мастер-ключом второго хаба — значит, перешифрован.
@@ -226,4 +226,9 @@ func TestImportReencryptsAIKeyAndCarriesAISettings(t *testing.T) {
 	if !m2.betaChannelEnabled(ctx) {
 		t.Error("бета-канал не перенёсся")
 	}
+}
+
+func importCompatHub(m *Manager, ctx context.Context, export store.HubExport) (int, []string) {
+	rep := m.ImportHosts(ctx, export, nil)
+	return rep.Count(store.SectionHosts).Added, rep.Errors
 }

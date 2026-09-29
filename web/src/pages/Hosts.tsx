@@ -26,6 +26,7 @@ import { RowAction } from '../components/RowAction'
 import { PowerToggle } from '../components/PowerToggle'
 import { JobLogModal } from './Jobs'
 import { ClustersCard, NewClusterModal } from '../components/Clusters'
+import { ImportPlanModal } from '../components/ImportPlanModal'
 
 /** Хост из параметров задания установки (host.install), иначе null. */
 function installJobHost(job: Job): number | null {
@@ -352,7 +353,6 @@ export default function Hosts({
   // «Обновить всё»: пока запускаются задания по хостам.
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [updateAllDialog, setUpdateAllDialog] = useState(false)
-  const [importing, setImporting] = useState(false)
   const importInputRef = useRef<HTMLInputElement>(null)
   // Set when "экспорт с ключом" is clicked — opens ExportPasswordModal
   // instead of downloading immediately, since the file about to be
@@ -363,6 +363,8 @@ export default function Hosts({
   // password-encrypted (see exportCrypto.ts) — decryptImportFile below
   // needs the password before store.DecodeHubExport has anything to parse.
   const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
+  // Текст файла импорта — пока открыто окно плана.
+  const [importText, setImportText] = useState<string | null>(null)
   // Set by openHost when "открыть" is clicked on a host whose nkt_version
   // trails the hub's own — the update this same click kicked off has to
   // actually finish before there's anything current to look at. Cleared
@@ -829,11 +831,12 @@ export default function Hosts({
    * given, encrypts the downloaded bytes in-browser (see exportCrypto.ts)
    * before the save-as dialog ever sees them — the plaintext export never
    * touches disk itself. */
-  async function downloadExport(includeKey: boolean, password?: string) {
+  async function downloadExport(includeKey: boolean, password?: string, includeUsers = false) {
     setNotice(null)
     setExportBusy(true)
     try {
-      const res = await fetch(`/api/hub/export${includeKey ? '?include_key=1' : ''}`, { credentials: 'same-origin' })
+      const q = [includeKey && 'include_key=1', includeUsers && 'include_users=1'].filter(Boolean).join('&')
+      const res = await fetch(`/api/hub/export${q ? `?${q}` : ''}`, { credentials: 'same-origin' })
       if (!res.ok) {
         const payload = await res.json().catch(() => null)
         throw new Error(payload?.error ?? t('common.httpError', { status: res.status }))
@@ -895,34 +898,10 @@ export default function Hosts({
     }
   }
 
+  /** Файл прочитан (и расшифрован, если нужно) — дальше окно плана:
+   * совпадения по имени, «пропустить / заменить», отчёт по разделам. */
   async function doImport(jsonText: string) {
-    if (!(await confirmAction(t('hosts.confirmImport')))) {
-      return
-    }
-    setImporting(true)
-    try {
-      const res = await fetch('/api/hub/import', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: jsonText,
-      })
-      const payload = await res.json()
-      if (!res.ok) throw new Error(payload?.error ?? t('common.httpError', { status: res.status }))
-      const { imported, errors } = payload as { imported: number; errors?: string[] }
-      setNotice({
-        kind: errors?.length ? 'error' : 'info',
-        text: t('hosts.imported', {
-          count: imported,
-          errors: errors?.length ? t('hosts.importedErrors', { errors: errors.join('; ') }) : '',
-        }),
-      })
-      reload()
-    } catch (err) {
-      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    } finally {
-      setImporting(false)
-    }
+    setImportText(jsonText)
   }
 
   // Удаление открывает окно с выбором того, что убрать с самого хоста:
@@ -1476,7 +1455,7 @@ export default function Hosts({
                 {t('hosts.export')}
               </Button>
             </Tooltip>
-            <Button size="small" loading={importing} onClick={() => importInputRef.current?.click()}>
+            <Button size="small" onClick={() => importInputRef.current?.click()}>
               {t('hosts.import')}
             </Button>
             <input
@@ -1702,9 +1681,13 @@ export default function Hosts({
       {exportPrompt && (
         <ExportPasswordModal
           busy={exportBusy}
-          onDownload={(password) => downloadExport(true, password)}
+          onDownload={(password, users) => downloadExport(true, password, users)}
           onClose={() => setExportPrompt(false)}
         />
+      )}
+
+      {importText !== null && (
+        <ImportPlanModal jsonText={importText} onClose={() => setImportText(null)} onDone={() => reload()} />
       )}
 
       {pendingImportFile && (
@@ -1809,21 +1792,22 @@ function ExportPasswordModal({
   onClose,
 }: {
   busy: boolean
-  onDownload: (password?: string) => void
+  onDownload: (password: string | undefined, users: boolean) => void
   onClose: () => void
 }) {
   const { t } = useTranslation()
   const [password, setPassword] = useState('')
+  const [users, setUsers] = useState(false)
 
   async function download() {
     if (!password) {
       if (!(await confirmAction(t('hosts.confirmExportUnencrypted')))) {
         return
       }
-      onDownload(undefined)
+      onDownload(undefined, users)
       return
     }
-    onDownload(password)
+    onDownload(password, users)
   }
 
   return (
@@ -1832,6 +1816,13 @@ function ExportPasswordModal({
         <Trans i18nKey="hosts.exportWithKeyBody" components={{ strong: <strong /> }} />
       </p>
       <Form layout="vertical" onFinish={download}>
+        <p className="small muted">{t('hosts.exportContents')}</p>
+        <Form.Item>
+          <Checkbox checked={users} onChange={(e) => setUsers(e.target.checked)}>
+            {t('hosts.exportUsers')}
+          </Checkbox>
+          <div className="small muted">{t('hosts.exportUsersHint')}</div>
+        </Form.Item>
         <Form.Item label={t('hosts.encryptPasswordLabel')}>
           <Input.Password
             value={password}

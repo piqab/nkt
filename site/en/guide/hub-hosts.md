@@ -207,23 +207,43 @@ it answers, otherwise goes through the host; *direct*; *via host*.
 encrypted SSH and admin secrets and settings, groups (empty ones too),
 machine-to-host links, Kubernetes clusters (nodes, API address,
 kubeconfig, WireGuard plan), profiles and scripts with history, machine
-templates, hub settings (alerts, package cache, model analysis with the
-API key, beta channel), saved cluster form presets, fallback channel
-switches and tokens. The file is JSON version 3; versions 1 and 2 import
-too.
+templates, **deployment pipelines** with their revision history, secrets
+(webhook signature, git and registry tokens) and webhook address,
+**fail2ban templates** with version history, **nkt-edge** (address,
+domain, token, pinned certificate, the host it runs on), hub settings
+(alerts, package cache, model analysis with the API key and every edited
+instruction, beta channel), saved cluster form presets, fallback channel
+switches and tokens. With the "Web interface user accounts" checkbox it
+also carries logins, roles and password hashes. The file is JSON version
+4; versions 1 to 3 import too.
 
 - **The hub's encryption key travels in the file**: the receiving hub
-  decrypts the secrets with it and re-encrypts them with its own right
-  away. That's why the export **insists** on encrypting the file with a
-  password (Web Crypto, PBKDF2 + AES-256-GCM, the password never leaves
-  the browser); an empty password only through a separate confirmation.
-  The format is shared with `nkt hub delete -export` and
-  `nkt hub import`.
-- **Import appends**: a host, cluster, profile, script or template whose
-  name is taken is skipped with a message; settings are written only
-  where they haven't been set yet.
+  decrypts the secrets with it (of hosts, clusters, pipelines, edge, the
+  model key) and re-encrypts them with its own right away. That's why the
+  export **insists** on encrypting the file with a password (Web Crypto,
+  PBKDF2 + AES-256-GCM, the password never leaves the browser); an empty
+  password only through a separate confirmation. The format is shared
+  with `nkt hub delete -export` and `nkt hub import`.
+- **Import goes through a plan**:
+
+  ![Import plan](/screens/en/hub-import.png)
+
+  the window shows what the file contains by section and what of it
+  already exists on the hub (by name). Every match gets **"skip"** (the
+  default) or **"replace"**, and each section has "skip all / replace
+  all". Replacing a profile, script, pipeline or fail2ban template adds a
+  new version to this hub's history (you can roll back to the previous
+  one); for a host the address, access and secrets are replaced while its
+  log and bindings stay; for a user account, the password hash, role and
+  lock. Clusters with a taken name are only skipped. After the import
+  comes a report by section: added, replaced, skipped, errors.
+- **A pipeline's webhook address is kept**, so webhooks in GitHub, GitLab
+  and Gitea keep working on the new hub. If the address is already used
+  by another pipeline on the receiving hub, a new one is issued and the
+  report says so.
+- `nkt hub import` on the command line skips matches; to replace, use
+  the import window.
 - **Not carried over**: cluster images (only their list — the import says
   which to copy into `cluster-images` by hand), the package cache, jobs,
-  the alert log, user accounts, deployment pipelines and nkt-edge
-  settings, the fallback channel certificate pin (the new hub pins its
-  own).
+  deployment history, the alert log, saved model answers, the fallback
+  channel certificate pin (the new hub pins its own).

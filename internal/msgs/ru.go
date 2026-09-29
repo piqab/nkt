@@ -1718,6 +1718,8 @@ var ruCatalog = map[string]string{
 	"vmnet.libvirtNetwork":                                "сетью libvirt «%s»",
 	"api.fileBrowserUnavailable":                          "проводник недоступен в этом режиме",
 	"hub.noPreviousRelease":                               "релиза старше %s не найдено — откатывать не на что",
+	"store.importHookTaken":                               "конвейер %q: адрес вебхука %s в этом хабе занят — выдан новый, поправьте вебхук в репозитории",
+	"store.importReplacedNote":                            "заменено импортом",
 	"store.importParentMissing":                           "%s: хост-родитель %q в файле не найден — машина заведена без привязки",
 	"store.importProfileExists":                           "профиль %q уже есть — пропущен",
 	"store.importTemplateExists":                          "шаблон машины %q уже есть — пропущен",

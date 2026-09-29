@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
+	"sort"
 )
 
 // validAdminUser mirrors internal/hub's own check on the same field — kept
@@ -27,9 +28,11 @@ var validAdminUser = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 // Версия 2 добавила группы, связь машины с хостом-родителем, профили,
 // шаблоны машин и настройки хаба; версия 3 — кластеры Kubernetes с
 // узлами, способ связи и доставки у хостов, историю редакций сценариев,
-// лимит кэша пакетов и список образов для кластеров. Файлы версий 1 и 2
-// читаются по-прежнему.
-const ExportFormatVersion = 3
+// лимит кэша пакетов и список образов для кластеров; версия 4 —
+// конвейеры выкладок с историей, учётные записи веб-интерфейса (по
+// выбору), шаблоны fail2ban с историей, настройки nkt-edge и все
+// инструкции ИИ. Файлы версий 1–3 читаются по-прежнему.
+const ExportFormatVersion = 4
 
 // minExportFormatVersion — самая старая версия, которую импорт ещё
 // понимает.
@@ -165,9 +168,10 @@ type VMTemplateExport struct {
 }
 
 // HubExport is the full document GET /hub/export hands back and POST
-// /hub/import expects — deliberately just the host registry (not user
-// accounts or the audit log): the thing that actually takes real effort to
-// recreate by hand is which hosts the hub knows and how to reach them.
+// /hub/import expects: всё, что долго заводить заново — хосты и доступ к
+// ним, группы, профили, сценарии, кластеры, конвейеры, шаблоны,
+// настройки; учётные записи веб-интерфейса — только по выбору при
+// экспорте. Журналы (аудит, задания, выкладки, оповещения) не входят.
 type HubExport struct {
 	Version    int          `json:"version"`
 	ExportedAt string       `json:"exported_at"`
@@ -189,6 +193,14 @@ type HubExport struct {
 	Clusters       []ClusterExport       `json:"clusters,omitempty"`
 	ClusterImages  []ClusterImageExport  `json:"cluster_images,omitempty"`
 	ClusterPresets []ClusterPresetExport `json:"cluster_presets,omitempty"`
+	// Версия 4: конвейеры выкладок с историей редакций (секреты —
+	// зашифрованы мастер-ключом, как у хостов), учётные записи
+	// веб-интерфейса (только по выбору при экспорте), шаблоны fail2ban с
+	// историей и настройки nkt-edge.
+	Pipelines    []PipelineExport    `json:"pipelines,omitempty"`
+	Users        []UserExport        `json:"users,omitempty"`
+	F2BTemplates []F2BTemplateExport `json:"f2b_templates,omitempty"`
+	Edge         *EdgeExport         `json:"edge,omitempty"`
 	// MasterKey is the exporting hub's own secretbox key (base64), present
 	// only when the operator opted into a one-step migration — see
 	// Manager.ExportHosts/ImportHosts in internal/hub, which is what
@@ -218,6 +230,7 @@ var ExportedSettingKeys = []string{
 	// мастер-ключом — см. hub.ImportHosts) и правленые инструкции.
 	"ai.settings", "ai.api_key_enc",
 	"ai.prompt.finding/ru", "ai.prompt.finding/en", "ai.prompt.map/ru", "ai.prompt.map/en",
+	"ai.prompt.config/ru", "ai.prompt.config/en", "ai.prompt.ip/ru", "ai.prompt.ip/en",
 	// Бета-канал обновлений.
 	"update.beta",
 }
@@ -338,6 +351,9 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 	for _, p := range presets {
 		out.ClusterPresets = append(out.ClusterPresets, ClusterPresetExport{Name: p.Name, Form: p.Form, Author: p.Author})
 	}
+	if out.Pipelines, err = d.ExportPipelines(ctx); err != nil {
+		return HubExport{}, err
+	}
 	for _, key := range ExportedSettingKeys {
 		if v, ok, err := d.KVGet(ctx, key); err == nil && ok && v != "" {
 			if out.Settings == nil {
@@ -349,37 +365,229 @@ func (d *DB) ExportHosts(ctx context.Context) (HubExport, error) {
 	return out, nil
 }
 
-// ImportHosts inserts every host in export as a brand-new row — additive,
-// not a replace-or-merge: it never touches an existing host, and does not
-// deduplicate by name/address against what's already registered (importing
-// the same file twice creates duplicates). Each host is attempted
-// independently so one malformed entry (an export file hand-edited badly,
-// or from an incompatible future version) doesn't abort the rest — imported
-// counts the successes, errs carries one message per row that failed.
+// Разделы файла экспорта — ключи плана импорта, выбора «заменить» и
+// отчёта.
+const (
+	SectionHosts          = "hosts"
+	SectionProfiles       = "profiles"
+	SectionScripts        = "scripts"
+	SectionVMTemplates    = "vm_templates"
+	SectionClusters       = "clusters"
+	SectionClusterPresets = "cluster_presets"
+	SectionPipelines      = "pipelines"
+	SectionUsers          = "users"
+	SectionSettings       = "settings"
+	SectionF2BTemplates   = "f2b_templates"
+	SectionEdge           = "edge"
+)
+
+// ImportResolutions — что делать с тем, что в этом хабе уже есть под тем
+// же именем: раздел → имя → "replace". Всё остальное пропускается —
+// затирать без явного выбора импорт не должен.
+type ImportResolutions map[string]map[string]string
+
+// Replace — выбрано ли «заменить».
+func (r ImportResolutions) Replace(section, name string) bool {
+	return r != nil && r[section] != nil && r[section][name] == "replace"
+}
+
+// SectionCount — итог раздела.
+type SectionCount struct {
+	Added    int `json:"added"`
+	Replaced int `json:"replaced"`
+	Skipped  int `json:"skipped"`
+}
+
+// ImportReport — итог импорта по разделам и ошибки.
+type ImportReport struct {
+	Sections map[string]*SectionCount `json:"sections"`
+	Errors   []string                 `json:"errors"`
+}
+
+// Count — счётчик раздела (заводится при первом обращении).
+func (r *ImportReport) Count(section string) *SectionCount {
+	if r.Sections == nil {
+		r.Sections = map[string]*SectionCount{}
+	}
+	if r.Sections[section] == nil {
+		r.Sections[section] = &SectionCount{}
+	}
+	return r.Sections[section]
+}
+
+// Err — добавить ошибку.
+func (r *ImportReport) Err(format string, args ...any) {
+	r.Errors = append(r.Errors, fmt.Sprintf(format, args...))
+}
+
+// PlanItem — объект файла и есть ли такой в этом хабе.
+type PlanItem struct {
+	Name     string `json:"name"`
+	Conflict bool   `json:"conflict"`
+	// Replaceable — можно ли заменить существующий (кластеры — только
+	// пропуск: узлы и секреты кластера живут на хостах).
+	Replaceable bool `json:"replaceable"`
+}
+
+// PlanSection — раздел плана.
+type PlanSection struct {
+	Section string     `json:"section"`
+	Items   []PlanItem `json:"items"`
+}
+
+func planSection(section string, names []string, taken map[string]bool, replaceable bool) PlanSection {
+	ps := PlanSection{Section: section, Items: []PlanItem{}}
+	for _, n := range names {
+		if n == "" {
+			continue
+		}
+		ps.Items = append(ps.Items, PlanItem{Name: n, Conflict: taken[n], Replaceable: replaceable})
+	}
+	return ps
+}
+
+// ImportPlan — что есть в файле по разделам и что из этого уже есть в
+// хабе (по имени): по нему окно импорта спрашивает «пропустить или
+// заменить».
+func (d *DB) ImportPlan(ctx context.Context, export HubExport) ([]PlanSection, error) {
+	var out []PlanSection
+	names := func(n int, f func(int) string) []string {
+		l := make([]string, n)
+		for i := range l {
+			l[i] = f(i)
+		}
+		return l
+	}
+	hosts, err := d.ListHosts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	taken := map[string]bool{}
+	for _, h := range hosts {
+		taken[h.Name] = true
+	}
+	out = append(out, planSection(SectionHosts, names(len(export.Hosts), func(i int) string { return export.Hosts[i].Name }), taken, true))
+
+	taken = map[string]bool{}
+	if list, err := d.ListProfiles(ctx); err == nil {
+		for _, p := range list {
+			taken[p.Name] = true
+		}
+	}
+	out = append(out, planSection(SectionProfiles, names(len(export.Profiles), func(i int) string { return export.Profiles[i].Name }), taken, true))
+
+	taken = map[string]bool{}
+	if list, err := d.ListScripts(ctx); err == nil {
+		for _, p := range list {
+			taken[p.Name] = true
+		}
+	}
+	out = append(out, planSection(SectionScripts, names(len(export.Scripts), func(i int) string { return export.Scripts[i].Name }), taken, true))
+
+	taken = map[string]bool{}
+	if list, err := d.ListVMTemplates(ctx); err == nil {
+		for _, p := range list {
+			taken[p.Name] = true
+		}
+	}
+	out = append(out, planSection(SectionVMTemplates, names(len(export.VMTemplates), func(i int) string { return export.VMTemplates[i].Name }), taken, true))
+
+	taken = map[string]bool{}
+	if list, err := d.ListClusters(ctx); err == nil {
+		for _, p := range list {
+			taken[p.Name] = true
+		}
+	}
+	out = append(out, planSection(SectionClusters, names(len(export.Clusters), func(i int) string { return export.Clusters[i].Name }), taken, false))
+
+	taken = map[string]bool{}
+	if list, err := d.ListClusterPresets(ctx); err == nil {
+		for _, p := range list {
+			taken[p.Name] = true
+		}
+	}
+	out = append(out, planSection(SectionClusterPresets, names(len(export.ClusterPresets), func(i int) string { return export.ClusterPresets[i].Name }), taken, true))
+
+	taken = map[string]bool{}
+	if list, err := d.ListPipelines(ctx); err == nil {
+		for _, p := range list {
+			taken[p.Name] = true
+		}
+	}
+	out = append(out, planSection(SectionPipelines, names(len(export.Pipelines), func(i int) string { return export.Pipelines[i].Name }), taken, true))
+
+	taken = map[string]bool{}
+	if list, err := d.ListUsers(ctx); err == nil {
+		for _, u := range list {
+			taken[u.Username] = true
+		}
+	}
+	out = append(out, planSection(SectionUsers, names(len(export.Users), func(i int) string { return export.Users[i].Username }), taken, true))
+
+	taken = map[string]bool{}
+	var keys []string
+	for key := range export.Settings {
+		if !exportedSettingKey(key) {
+			continue
+		}
+		keys = append(keys, key)
+		if _, ok, err := d.KVGet(ctx, key); err == nil && ok {
+			taken[key] = true
+		}
+	}
+	sort.Strings(keys)
+	out = append(out, planSection(SectionSettings, keys, taken, true))
+	return out, nil
+}
+
+// ImportHosts переносит файл в этот хаб. Совпадения по имени по
+// умолчанию пропускаются; res выбирает «заменить» поштучно. Каждый объект
+// — отдельно: одна испорченная запись не останавливает остальные, её
+// ошибка — в отчёте.
 //
-// Остальное из файла версии 2: группы заводятся (существующие не
-// трогаются), родитель машины находится по имени среди хостов файла,
-// профили и шаблоны с уже занятым именем пропускаются с сообщением —
-// затирать то, что есть в этом хабе, импорт не должен; настройки хаба
-// записываются только туда, где их ещё не задавали.
-func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, errs []string) {
+// Группы заводятся (существующие не трогаются), родитель машины и узлы
+// кластеров находятся по имени среди хостов файла (добавленных и
+// заменённых).
+func (d *DB) ImportHosts(ctx context.Context, export HubExport, res ImportResolutions) ImportReport {
+	var rep ImportReport
 	for _, g := range export.Groups {
 		if g == "" {
 			continue
 		}
 		if err := d.CreateHostGroup(ctx, g); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", g, err))
+			rep.Err("%s: %v", g, err)
+		}
+	}
+	existing := map[string]int64{}
+	if list, err := d.ListHosts(ctx); err == nil {
+		for _, h := range list {
+			existing[h.Name] = h.ID
 		}
 	}
 	ids := map[string]int64{}
 	for _, h := range export.Hosts {
+		cnt := rep.Count(SectionHosts)
+		if oldID, ok := existing[h.Name]; ok && h.Name != "" {
+			if !res.Replace(SectionHosts, h.Name) {
+				cnt.Skipped++
+				continue
+			}
+			if err := d.replaceHost(ctx, oldID, h); err != nil {
+				rep.Err("%s (%s): %v", h.Name, h.Addr, err)
+				continue
+			}
+			ids[h.Name] = oldID
+			cnt.Replaced++
+			continue
+		}
 		id, err := d.importOneHost(ctx, h)
 		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s (%s): %v", h.Name, h.Addr, err))
+			rep.Err("%s (%s): %v", h.Name, h.Addr, err)
 			continue
 		}
 		ids[h.Name] = id
-		imported++
+		existing[h.Name] = id
+		cnt.Added++
 	}
 	for _, h := range export.Hosts {
 		if h.Parent == "" {
@@ -391,18 +599,23 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 		}
 		parentID, ok := ids[h.Parent]
 		if !ok {
-			errs = append(errs, msgs.Tc(ctx, "store.importParentMissing", h.Name, h.Parent))
+			parentID, ok = existing[h.Parent]
+		}
+		if !ok {
+			rep.Errors = append(rep.Errors, msgs.Tc(ctx, "store.importParentMissing", h.Name, h.Parent))
 			continue
 		}
 		if err := d.SetHostParent(ctx, id, parentID); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", h.Name, err))
+			rep.Err("%s: %v", h.Name, err)
 		}
 	}
-	errs = append(errs, d.importClusters(ctx, export, ids)...)
-	errs = append(errs, d.importProfiles(ctx, export.Profiles)...)
-	errs = append(errs, d.importVMTemplates(ctx, export.VMTemplates)...)
-	errs = append(errs, d.importScripts(ctx, export.Scripts)...)
-	errs = append(errs, d.importClusterPresets(ctx, export.ClusterPresets)...)
+	d.importClusters(ctx, export, ids, &rep)
+	d.importProfiles(ctx, export.Profiles, res, &rep)
+	d.importVMTemplates(ctx, export.VMTemplates, res, &rep)
+	d.importScripts(ctx, export.Scripts, res, &rep)
+	d.importClusterPresets(ctx, export.ClusterPresets, res, &rep)
+	d.importPipelines(ctx, export.Pipelines, res, &rep)
+	d.importUsers(ctx, export.Users, res, &rep)
 	// Профили групп — после профилей: искать их по имени можно только
 	// когда они уже заведены. Существующий профиль группы не трогается.
 	hostProfiles := false
@@ -414,7 +627,7 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 	if len(export.GroupProfiles) > 0 || hostProfiles {
 		all, err := d.ListProfiles(ctx)
 		if err != nil {
-			errs = append(errs, err.Error())
+			rep.Errors = append(rep.Errors, err.Error())
 		} else {
 			byName := map[string]int64{}
 			for _, p := range all {
@@ -423,11 +636,11 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 			for group, name := range export.GroupProfiles {
 				id, ok := byName[name]
 				if !ok {
-					errs = append(errs, msgs.Tc(ctx, "store.importGroupProfileMissing", group, name))
+					rep.Errors = append(rep.Errors, msgs.Tc(ctx, "store.importGroupProfileMissing", group, name))
 					continue
 				}
 				if _, err := d.ExecContext(ctx, `UPDATE host_groups SET profile_id = ? WHERE name = ? AND profile_id = 0`, id, group); err != nil {
-					errs = append(errs, fmt.Sprintf("%s: %v", group, err))
+					rep.Err("%s: %v", group, err)
 				}
 			}
 			for _, h := range export.Hosts {
@@ -442,18 +655,37 @@ func (d *DB) ImportHosts(ctx context.Context, export HubExport) (imported int, e
 			}
 		}
 	}
-	for key, value := range export.Settings {
+	keys := make([]string, 0, len(export.Settings))
+	for key := range export.Settings {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		value := export.Settings[key]
 		if !exportedSettingKey(key) {
 			continue
 		}
-		if _, ok, err := d.KVGet(ctx, key); err != nil || ok {
+		cnt := rep.Count(SectionSettings)
+		_, ok, err := d.KVGet(ctx, key)
+		if err != nil {
+			rep.Err("%s: %v", key, err)
+			continue
+		}
+		if ok && !res.Replace(SectionSettings, key) {
+			cnt.Skipped++
 			continue
 		}
 		if err := d.KVSet(ctx, key, value); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", key, err))
+			rep.Err("%s: %v", key, err)
+			continue
+		}
+		if ok {
+			cnt.Replaced++
+		} else {
+			cnt.Added++
 		}
 	}
-	return imported, errs
+	return rep
 }
 
 func exportedSettingKey(key string) bool {
@@ -465,26 +697,41 @@ func exportedSettingKey(key string) bool {
 	return false
 }
 
-func (d *DB) importProfiles(ctx context.Context, profiles []ProfileExport) (errs []string) {
+// importNote — пометка редакции, заменённой импортом.
+func importNote(ctx context.Context) string { return msgs.Tc(ctx, "store.importReplacedNote") }
+
+func (d *DB) importProfiles(ctx context.Context, profiles []ProfileExport, res ImportResolutions, rep *ImportReport) {
 	existing, err := d.ListProfiles(ctx)
 	if err != nil {
-		return []string{err.Error()}
+		rep.Errors = append(rep.Errors, err.Error())
+		return
 	}
-	taken := map[string]bool{}
+	taken := map[string]int64{}
 	for _, p := range existing {
-		taken[p.Name] = true
+		taken[p.Name] = p.ID
 	}
 	for _, p := range profiles {
 		if p.Name == "" {
 			continue
 		}
-		if taken[p.Name] {
-			errs = append(errs, msgs.Tc(ctx, "store.importProfileExists", p.Name))
+		cnt := rep.Count(SectionProfiles)
+		if oldID, ok := taken[p.Name]; ok {
+			if !res.Replace(SectionProfiles, p.Name) {
+				cnt.Skipped++
+				continue
+			}
+			// Замена — новой редакцией: своя история этого хаба остаётся,
+			// откатиться к прежнему можно.
+			if err := d.UpdateProfile(ctx, Profile{ID: oldID, Name: p.Name, Color: p.Color, Content: p.Content, Note: importNote(ctx), Author: p.Author}); err != nil {
+				rep.Err("%s: %v", p.Name, err)
+				continue
+			}
+			cnt.Replaced++
 			continue
 		}
 		id, err := d.CreateProfile(ctx, Profile{Name: p.Name, Color: p.Color, Content: p.Content, Note: p.Note, Author: p.Author})
 		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
+			rep.Err("%s: %v", p.Name, err)
 			continue
 		}
 		// История — как была: CreateProfile записал редакцию «создан» с
@@ -492,72 +739,83 @@ func (d *DB) importProfiles(ctx context.Context, profiles []ProfileExport) (errs
 		// нужна, а не этот дубликат.
 		if len(p.Versions) > 0 {
 			if _, err := d.ExecContext(ctx, `DELETE FROM profile_versions WHERE profile_id = ?`, id); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
+				rep.Err("%s: %v", p.Name, err)
 			}
 		}
 		for _, v := range p.Versions {
 			if _, err := d.ExecContext(ctx, `
 				INSERT INTO profile_versions (profile_id, ts, author, note, content)
 				VALUES (?, ?, ?, ?, ?)`, id, v.TS, v.Author, v.Note, v.Content); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
+				rep.Err("%s: %v", p.Name, err)
 				break
 			}
 		}
-		taken[p.Name] = true
+		taken[p.Name] = id
+		cnt.Added++
 	}
-	return errs
 }
 
-func (d *DB) importScripts(ctx context.Context, scripts []ScriptExport) (errs []string) {
+func (d *DB) importScripts(ctx context.Context, scripts []ScriptExport, res ImportResolutions, rep *ImportReport) {
 	existing, err := d.ListScripts(ctx)
 	if err != nil {
-		return []string{err.Error()}
+		rep.Errors = append(rep.Errors, err.Error())
+		return
 	}
-	taken := map[string]bool{}
+	taken := map[string]int64{}
 	for _, s := range existing {
-		taken[s.Name] = true
+		taken[s.Name] = s.ID
 	}
 	for _, s := range scripts {
 		if s.Name == "" {
 			continue
 		}
-		if taken[s.Name] {
-			errs = append(errs, msgs.Tc(ctx, "store.importScriptExists", s.Name))
+		cnt := rep.Count(SectionScripts)
+		if oldID, ok := taken[s.Name]; ok {
+			if !res.Replace(SectionScripts, s.Name) {
+				cnt.Skipped++
+				continue
+			}
+			if err := d.UpdateScript(ctx, Script{ID: oldID, Name: s.Name, Color: s.Color, Content: s.Content, Note: importNote(ctx), Author: s.Author}); err != nil {
+				rep.Err("%s: %v", s.Name, err)
+				continue
+			}
+			cnt.Replaced++
 			continue
 		}
 		id, err := d.CreateScript(ctx, Script{Name: s.Name, Color: s.Color, Content: s.Content, Note: s.Note, Author: s.Author})
 		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", s.Name, err))
+			rep.Err("%s: %v", s.Name, err)
 			continue
 		}
 		// История редакций из файла заменяет единственную «создан».
 		if len(s.Versions) > 0 {
 			if _, err := d.ExecContext(ctx, `DELETE FROM script_versions WHERE script_id = ?`, id); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: %v", s.Name, err))
+				rep.Err("%s: %v", s.Name, err)
 			}
 			for _, v := range s.Versions {
 				if _, err := d.ExecContext(ctx, `
 					INSERT INTO script_versions (script_id, ts, author, note, content)
 					VALUES (?, ?, ?, ?, ?)`, id, v.TS, v.Author, v.Note, v.Content); err != nil {
-					errs = append(errs, fmt.Sprintf("%s: %v", s.Name, err))
+					rep.Err("%s: %v", s.Name, err)
 					break
 				}
 			}
 		}
-		taken[s.Name] = true
+		taken[s.Name] = id
+		cnt.Added++
 	}
-	return errs
 }
 
 // importClusters заводит кластеры файла (существующее имя — пропуск) и
-// привязывает к ним узлы среди только что добавленных хостов.
-func (d *DB) importClusters(ctx context.Context, export HubExport, ids map[string]int64) (errs []string) {
+// привязывает к ним узлы среди хостов файла.
+func (d *DB) importClusters(ctx context.Context, export HubExport, ids map[string]int64, rep *ImportReport) {
 	if len(export.Clusters) == 0 {
-		return nil
+		return
 	}
 	existing, err := d.ListClusters(ctx)
 	if err != nil {
-		return []string{err.Error()}
+		rep.Errors = append(rep.Errors, err.Error())
+		return
 	}
 	taken := map[string]bool{}
 	for _, c := range existing {
@@ -568,25 +826,27 @@ func (d *DB) importClusters(ctx context.Context, export HubExport, ids map[strin
 		if c.Name == "" {
 			continue
 		}
+		cnt := rep.Count(SectionClusters)
 		if taken[c.Name] {
-			errs = append(errs, msgs.Tc(ctx, "store.importClusterExists", c.Name))
+			cnt.Skipped++
 			continue
 		}
 		hostID, ok := ids[c.Host]
 		if !ok {
-			errs = append(errs, msgs.Tc(ctx, "store.importClusterHostMissing", c.Name, c.Host))
+			rep.Errors = append(rep.Errors, msgs.Tc(ctx, "store.importClusterHostMissing", c.Name, c.Host))
 			continue
 		}
 		res, err := d.ExecContext(ctx, `INSERT INTO clusters(name, host_id, flavor, topology, workers, expose, status, error_msg, server_addr, kubeconfig_enc, spec_json, wg_enc, created_at, updated_at)
 			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 			c.Name, hostID, c.Flavor, c.Topology, c.Workers, c.Expose, c.Status, c.ErrorMsg, c.ServerAddr, c.KubeconfigEnc, c.SpecJSON, c.WGEnc, c.CreatedAt, Now())
 		if err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", c.Name, err))
+			rep.Err("%s: %v", c.Name, err)
 			continue
 		}
 		id, _ := res.LastInsertId()
 		clusterIDs[c.Name] = id
 		taken[c.Name] = true
+		cnt.Added++
 	}
 	for _, h := range export.Hosts {
 		if h.Cluster == "" {
@@ -598,37 +858,49 @@ func (d *DB) importClusters(ctx context.Context, export HubExport, ids map[strin
 			continue
 		}
 		if err := d.SetHostCluster(ctx, hostID, cid, h.K8sRole); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", h.Name, err))
+			rep.Err("%s: %v", h.Name, err)
 		}
 	}
-	return errs
 }
 
-func (d *DB) importClusterPresets(ctx context.Context, presets []ClusterPresetExport) (errs []string) {
+func (d *DB) importClusterPresets(ctx context.Context, presets []ClusterPresetExport, res ImportResolutions, rep *ImportReport) {
 	existing, err := d.ListClusterPresets(ctx)
 	if err != nil {
-		return []string{err.Error()}
+		rep.Errors = append(rep.Errors, err.Error())
+		return
 	}
 	taken := map[string]bool{}
 	for _, p := range existing {
 		taken[p.Name] = true
 	}
 	for _, p := range presets {
-		if p.Name == "" || taken[p.Name] {
+		if p.Name == "" {
+			continue
+		}
+		cnt := rep.Count(SectionClusterPresets)
+		replace := taken[p.Name]
+		if replace && !res.Replace(SectionClusterPresets, p.Name) {
+			cnt.Skipped++
 			continue
 		}
 		if _, err := d.SaveClusterPreset(ctx, ClusterPreset{Name: p.Name, Form: p.Form, Author: p.Author}); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", p.Name, err))
+			rep.Err("%s: %v", p.Name, err)
+			continue
+		}
+		if replace {
+			cnt.Replaced++
+		} else {
+			cnt.Added++
 		}
 		taken[p.Name] = true
 	}
-	return errs
 }
 
-func (d *DB) importVMTemplates(ctx context.Context, templates []VMTemplateExport) (errs []string) {
+func (d *DB) importVMTemplates(ctx context.Context, templates []VMTemplateExport, res ImportResolutions, rep *ImportReport) {
 	existing, err := d.ListVMTemplates(ctx)
 	if err != nil {
-		return []string{err.Error()}
+		rep.Errors = append(rep.Errors, err.Error())
+		return
 	}
 	taken := map[string]bool{}
 	for _, t := range existing {
@@ -638,16 +910,23 @@ func (d *DB) importVMTemplates(ctx context.Context, templates []VMTemplateExport
 		if t.Name == "" {
 			continue
 		}
-		if taken[t.Name] {
-			errs = append(errs, msgs.Tc(ctx, "store.importTemplateExists", t.Name))
+		cnt := rep.Count(SectionVMTemplates)
+		replace := taken[t.Name]
+		if replace && !res.Replace(SectionVMTemplates, t.Name) {
+			cnt.Skipped++
 			continue
 		}
 		if _, err := d.SaveVMTemplate(ctx, VMTemplate{Name: t.Name, Spec: t.Spec, Author: t.Author}); err != nil {
-			errs = append(errs, fmt.Sprintf("%s: %v", t.Name, err))
+			rep.Err("%s: %v", t.Name, err)
+			continue
+		}
+		if replace {
+			cnt.Replaced++
+		} else {
+			cnt.Added++
 		}
 		taken[t.Name] = true
 	}
-	return errs
 }
 
 func (d *DB) importOneHost(ctx context.Context, h HostExport) (int64, error) {
@@ -674,6 +953,32 @@ func (d *DB) importOneHost(ctx context.Context, h HostExport) (int64, error) {
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+// replaceHost переписывает существующий хост данными из файла: адрес,
+// доступ и секреты, группа, способ связи. Идентификатор, журнал и
+// привязки этого хаба остаются.
+func (d *DB) replaceHost(ctx context.Context, id int64, h HostExport) error {
+	if h.Addr == "" {
+		return msgs.Errorf("store.emptyNameAddress")
+	}
+	if h.AdminUser != "" && !validAdminUser.MatchString(h.AdminUser) {
+		return msgs.Errorf("store.invalidAdminName", h.AdminUser)
+	}
+	_, err := d.ExecContext(ctx,
+		`UPDATE hosts SET
+			addr = ?, ssh_port = ?, ssh_user = ?, ssh_auth_kind = ?, secret_enc = ?,
+			arch = ?, status = ?, nkt_version = ?, admin_user = ?, admin_password_enc = ?,
+			sudo_status = ?, terminal_enabled = ?, tunnel_enabled = ?, tunnel_token_enc = ?,
+			error_msg = ?, group_name = ?, apt_via_hub = ?, via = ?, binary_via = ?,
+			ssh_host_key = ?, api_port = ?
+		WHERE id = ?`,
+		h.Addr, h.SSHPort, h.SSHUser, h.SSHAuthKind, h.SecretEnc,
+		h.Arch, h.Status, h.NktVersion, h.AdminUser, h.AdminPasswordEnc,
+		h.SudoStatus, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
+		h.ErrorMsg, h.Group, h.AptViaHub, h.Via, h.BinaryVia,
+		h.SSHHostKey, h.APIPort, id)
+	return err
 }
 
 // DecodeHubExport parses an uploaded export file, rejecting one from an
