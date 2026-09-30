@@ -3243,7 +3243,9 @@
     "removeVolumesHint": "Without the tick docker volumes stay and the stack directory is moved to .nkt-removed.",
     "removeImages": "delete the stack images (down --rmi all)",
     "removeCert": "delete the certificate of the pipeline's site (certbot delete)",
-    "removeStart": "Delete from hosts"
+    "removeStart": "Delete from hosts",
+    "manualOnly": "manual only",
+    "enabledHint": "\"Enabled\" means automatic deployments: the webhook, repository polling (poll) and new registry tags. A disabled pipeline deploys only with the \"Deploy\" button, which always works."
   },
   "edge": {
     "subtitle": "Webhooks from the internet without exposing the hub: edge on a VPS accepts only them, the hub keeps the tunnel to it.",

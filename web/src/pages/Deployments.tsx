@@ -107,7 +107,11 @@ export default function Deployments({ me }: { me: Me }) {
       render: (_: unknown, p: Pipeline) => (
         <Space size={4}>
           <strong>{p.name}</strong>
-          {!p.enabled && <Tag>{t('deploy.disabled')}</Tag>}
+          {!p.enabled && (
+            <Tooltip title={t('deploy.enabledHint')}>
+              <Tag>{t('deploy.manualOnly')}</Tag>
+            </Tooltip>
+          )}
           {removalOf(p)?.error ? (
             <Tooltip title={removalOf(p)?.error}>
               <Tag color="error">{t('deploy.removeUnfinished')}</Tag>
@@ -145,10 +149,15 @@ export default function Deployments({ me }: { me: Me }) {
         ),
     },
     {
-      title: t('deploy.enabled'),
+      title: (
+        <Tooltip title={t('deploy.enabledHint')}>
+          <span>{t('deploy.enabled')}</span>
+        </Tooltip>
+      ),
       key: 'enabled',
       render: (_: unknown, p: Pipeline) => (
         <Switch
+          title={t('deploy.enabledHint')}
           size="small"
           checked={p.enabled}
           onChange={async (v) => {

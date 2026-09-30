@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"os/exec"
 	"path"
+	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -90,6 +93,10 @@ type ComposeImageCheck struct {
 	// (registry ответил «нет такого») или unknown (проверить не удалось).
 	State  string `json:"state"`
 	Detail string `json:"detail,omitempty"`
+	// Arches — архитектуры образа (из манифеста или скачанного образа);
+	// ArchMismatch — среди них нет архитектуры хоста.
+	Arches       []string `json:"arches,omitempty"`
+	ArchMismatch bool     `json:"arch_mismatch,omitempty"`
 }
 
 // ComposeCheckResult — итог сухого прогона на хосте.
@@ -105,6 +112,10 @@ type ComposeCheckResult struct {
 	ConfigError string              `json:"config_error,omitempty"`
 	Services    []string            `json:"services,omitempty"`
 	Images      []ComposeImageCheck `json:"images,omitempty"`
+	// PortsBusy — порты хоста из публикаций, занятые не этим стеком.
+	PortsBusy []ComposePortBusy `json:"ports_busy,omitempty"`
+	// HostArch — архитектура хоста (для сверки с образами).
+	HostArch string `json:"host_arch,omitempty"`
 	// Simulated — фикстуры: команды не выполнялись по-настоящему.
 	Simulated bool `json:"simulated,omitempty"`
 	// Сайт конвейера: проверен ли порт (SiteChecked), есть ли сервис
@@ -208,11 +219,13 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 	if out, err := c.RunTimeout(ctx, time.Minute, res.Engine, append(args, "config", "--services")...); err == nil && out.OK() {
 		res.Services = splitLines(out.Stdout)
 	}
+	res.HostArch = hostArch(ctx, c)
 	if out, err := c.RunTimeout(ctx, time.Minute, res.Engine, append(args, "config", "--images")...); err == nil && out.OK() {
 		for _, img := range dedupe(splitLines(out.Stdout)) {
-			res.Images = append(res.Images, s.checkImage(ctx, c, res.Engine, img))
+			res.Images = append(res.Images, s.checkImage(ctx, c, res.Engine, img, res.HostArch))
 		}
 	}
+	res.PortsBusy = busyPorts(ctx, c, res.Engine, work, req.Project, req.File)
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -299,10 +312,18 @@ func composeCheckCleanup(c collect.Collector, work string, rels []string) {
 
 // checkImage — есть ли образ: сначала на хосте, потом в registry (без
 // скачивания: только манифест).
-func (s *Server) checkImage(ctx context.Context, c collect.Collector, engine, img string) ComposeImageCheck {
-	out := ComposeImageCheck{Image: img}
-	if res, err := c.RunTimeout(ctx, 20*time.Second, engine, "image", "inspect", img); err == nil && res.OK() {
+func (s *Server) checkImage(ctx context.Context, c collect.Collector, engine, img, hostArch string) (out ComposeImageCheck) {
+	out = ComposeImageCheck{Image: img}
+	defer func() {
+		if hostArch != "" && len(out.Arches) > 0 && !slices.Contains(out.Arches, hostArch) {
+			out.ArchMismatch = true
+		}
+	}()
+	if res, err := c.RunTimeout(ctx, 20*time.Second, engine, "image", "inspect", "--format", "{{.Architecture}}", img); err == nil && res.OK() {
 		out.State = "local"
+		if a := strings.TrimSpace(res.Stdout); a != "" {
+			out.Arches = []string{a}
+		}
 	}
 	var res collect.CommandResult
 	var err error
@@ -321,6 +342,9 @@ func (s *Server) checkImage(ctx context.Context, c collect.Collector, engine, im
 	case err == nil && res.OK():
 		out.State = "registry"
 		out.Detail = ""
+		if arches := manifestArches(res.Stdout); len(arches) > 0 {
+			out.Arches = arches
+		}
 	case out.State == "local":
 		// Скачан, а в registry не виден (закрытый, нет входа) — поднимется
 		// из скачанного, но pull упадёт: сказать об этом.
@@ -338,6 +362,202 @@ func (s *Server) checkImage(ctx context.Context, c collect.Collector, engine, im
 		out.Detail = text
 	}
 	return out
+}
+
+// manifestArches — архитектуры из списка манифестов (multi-arch образ);
+// одиночный манифест архитектуры не называет — пусто.
+func manifestArches(raw string) []string {
+	var doc struct {
+		Manifests []struct {
+			Platform struct {
+				Architecture string `json:"architecture"`
+				OS           string `json:"os"`
+			} `json:"platform"`
+		} `json:"manifests"`
+	}
+	if json.Unmarshal([]byte(raw), &doc) != nil {
+		return nil
+	}
+	var out []string
+	for _, m := range doc.Manifests {
+		a := m.Platform.Architecture
+		if a == "" || a == "unknown" || (m.Platform.OS != "" && m.Platform.OS != "linux") || slices.Contains(out, a) {
+			continue
+		}
+		out = append(out, a)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// hostArch — архитектура хоста в терминах образов (amd64, arm64…).
+func hostArch(ctx context.Context, c collect.Collector) string {
+	res, err := c.RunTimeout(ctx, 10*time.Second, "uname", "-m")
+	if err != nil || !res.OK() {
+		return ""
+	}
+	switch m := strings.TrimSpace(res.Stdout); m {
+	case "x86_64", "amd64":
+		return "amd64"
+	case "aarch64", "arm64":
+		return "arm64"
+	case "armv7l", "armv6l", "armhf":
+		return "arm"
+	case "i686", "i386":
+		return "386"
+	default:
+		return m
+	}
+}
+
+// ComposePortBusy — порт хоста из публикаций стека, который уже слушает
+// кто-то другой.
+type ComposePortBusy struct {
+	Addr   string `json:"addr"`
+	Holder string `json:"holder,omitempty"`
+}
+
+// busyPorts — публикации стека (копия в work) против слушающих сокетов
+// хоста; порты, которые держит этот же стек (compose ps), — не заняты.
+func busyPorts(ctx context.Context, c collect.Collector, engine, work, project, file string) []ComposePortBusy {
+	res, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgsIn(c, work, project, file), "config", "--format", "json")...)
+	if err != nil || !res.OK() {
+		return nil
+	}
+	var doc struct {
+		Services map[string]struct {
+			Ports []struct {
+				HostIP    string `json:"host_ip"`
+				Published any    `json:"published"`
+				Protocol  string `json:"protocol"`
+			} `json:"ports"`
+		} `json:"services"`
+	}
+	if json.Unmarshal([]byte(res.Stdout), &doc) != nil {
+		return nil
+	}
+	type want struct {
+		ip, proto string
+		port      int
+	}
+	var wants []want
+	for _, svc := range doc.Services {
+		for _, p := range svc.Ports {
+			port := 0
+			switch v := p.Published.(type) {
+			case float64:
+				port = int(v)
+			case string:
+				port, _ = strconv.Atoi(v)
+			}
+			if port == 0 {
+				continue // порт хоста — любой свободный
+			}
+			proto := p.Protocol
+			if proto == "" {
+				proto = "tcp"
+			}
+			wants = append(wants, want{p.HostIP, proto, port})
+		}
+	}
+	if len(wants) == 0 {
+		return nil
+	}
+	// Что уже держит сам стек (повторная выкладка — не «занято»).
+	own := map[string]bool{}
+	if dir := composeStackDir(project); composeFileIn(c, dir) != "" {
+		if ps, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgs(c, project, composeFileIn(c, dir)), "ps", "--format", "json")...); err == nil && ps.OK() {
+			for _, ct := range composePS(ps.Stdout) {
+				for _, p := range ct.Publishers {
+					if p.PublishedPort > 0 {
+						own[p.Protocol+"/"+strconv.Itoa(p.PublishedPort)] = true
+					}
+				}
+			}
+		}
+	}
+	ss, err := c.RunTimeout(ctx, 20*time.Second, "ss", "-Hltunp")
+	if err != nil || !ss.OK() {
+		return nil
+	}
+	wild := func(ip string) bool { return ip == "" || ip == "0.0.0.0" || ip == "::" || ip == "*" || ip == "[::]" }
+	var out []ComposePortBusy
+	seen := map[string]bool{}
+	for _, line := range splitLines(ss.Stdout) {
+		f := strings.Fields(line)
+		if len(f) < 5 {
+			continue
+		}
+		proto := f[0]
+		local := f[4]
+		i := strings.LastIndexByte(local, ':')
+		if i < 0 {
+			continue
+		}
+		ip := strings.Trim(strings.SplitN(local[:i], "%", 2)[0], "[]")
+		port, err := strconv.Atoi(local[i+1:])
+		if err != nil {
+			continue
+		}
+		holder := ""
+		if len(f) >= 7 {
+			if j := strings.Index(f[6], "((\""); j >= 0 {
+				holder = strings.SplitN(f[6][j+3:], "\"", 2)[0]
+			}
+		}
+		for _, w := range wants {
+			if w.port != port || w.proto != proto || own[proto+"/"+strconv.Itoa(port)] {
+				continue
+			}
+			if !wild(w.ip) && !wild(ip) && w.ip != ip {
+				continue
+			}
+			addr := w.ip
+			if addr == "" {
+				addr = "0.0.0.0"
+			}
+			key := proto + " " + addr + ":" + strconv.Itoa(port)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
+			out = append(out, ComposePortBusy{Addr: key, Holder: holder})
+		}
+	}
+	return out
+}
+
+// composePSEntry — контейнер из «compose ps --format json».
+type composePSEntry struct {
+	Name       string `json:"Name"`
+	Service    string `json:"Service"`
+	State      string `json:"State"`
+	Health     string `json:"Health"`
+	ExitCode   int    `json:"ExitCode"`
+	Publishers []struct {
+		URL           string `json:"URL"`
+		PublishedPort int    `json:"PublishedPort"`
+		TargetPort    int    `json:"TargetPort"`
+		Protocol      string `json:"Protocol"`
+	} `json:"Publishers"`
+}
+
+// composePS — вывод «compose ps --format json»: массив (старые compose) или
+// объект на строку (новые).
+func composePS(out string) []composePSEntry {
+	out = strings.TrimSpace(out)
+	var list []composePSEntry
+	if strings.HasPrefix(out, "[") {
+		_ = json.Unmarshal([]byte(out), &list)
+		return list
+	}
+	for _, line := range splitLines(out) {
+		var e composePSEntry
+		if json.Unmarshal([]byte(line), &e) == nil {
+			list = append(list, e)
+		}
+	}
+	return list
 }
 
 // Установка Docker на хост: docker.io из репозитория дистрибутива и

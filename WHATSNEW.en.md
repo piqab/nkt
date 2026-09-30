@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.60 — 2026-09-30
+
+- **A stack that did not come up says why:** the host appends the container
+  states and the last log lines of the failed services, and the error names
+  the cause: a port in use ("Port 127.0.0.1:8080 on the host is already in
+  use"), an image for another architecture, an exited container, a failed
+  healthcheck, instead of "code 1".
+- **The dry run checks host ports in use** (except those the stack itself
+  holds) and **the image architecture** against the host's: what used to
+  fail the deployment although the dry run passed.
+- **The pipeline's "Enabled" switch** has a hint: it is only about
+  automatic deployments; a disabled pipeline is marked "manual only".
+
 ## v1.11.59 — 2026-09-30
 
 - **YAML errors in the pipeline description are explained:** the line,

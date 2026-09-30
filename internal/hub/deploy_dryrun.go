@@ -37,10 +37,17 @@ type composeCheck struct {
 	ConfigError string   `json:"config_error"`
 	Services    []string `json:"services"`
 	Images      []struct {
-		Image  string `json:"image"`
-		State  string `json:"state"`
-		Detail string `json:"detail"`
+		Image        string   `json:"image"`
+		State        string   `json:"state"`
+		Detail       string   `json:"detail"`
+		Arches       []string `json:"arches"`
+		ArchMismatch bool     `json:"arch_mismatch"`
 	} `json:"images"`
+	PortsBusy []struct {
+		Addr   string `json:"addr"`
+		Holder string `json:"holder"`
+	} `json:"ports_busy"`
+	HostArch    string `json:"host_arch"`
 	Simulated   bool   `json:"simulated"`
 	SiteChecked bool   `json:"site_checked"`
 	SiteFound   bool   `json:"site_found"`
@@ -196,7 +203,16 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck) i
 		return 1
 	}
 	jc.Log("deploy.dryConfigOK", strings.Join(res.Services, ", "))
+	for _, pb := range res.PortsBusy {
+		problems++
+		jc.Log("deploy.dryPortBusy", pb.Addr, pb.Holder)
+	}
 	for _, img := range res.Images {
+		if img.ArchMismatch {
+			problems++
+			jc.Log("deploy.dryImageArch", img.Image, strings.Join(img.Arches, ", "), res.HostArch)
+			continue
+		}
 		switch img.State {
 		case "registry":
 			jc.Log("deploy.dryImageRegistry", img.Image)
