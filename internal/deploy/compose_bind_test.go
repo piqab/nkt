@@ -72,3 +72,21 @@ func TestBindPorts(t *testing.T) {
 		}
 	}
 }
+
+func TestSitePortHints(t *testing.T) {
+	base := "repo: https://codeberg.org/me/app.git\nref: main\naction: compose\ncompose:\n  file: compose.yaml\n  project: app\n  hosts: [web1]\n  site:\n    domains: [a.example.com]\n    service: httpbin\n"
+	if _, err := ParseSpec(base); err == nil || !strings.Contains(err.Error(), "port") {
+		t.Fatalf("missing port: %v", err)
+	}
+	s, err := ParseSpec(base + "    port: 8080\n  ports:\n    httpbin: [\"127.0.0.1:8080:80\"]\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Compose.SitePortsMismatch(); len(got) != 1 || got[0] != 80 {
+		t.Fatalf("mismatch: %v", got)
+	}
+	s, _ = ParseSpec(base + "    port: 80\n  ports:\n    httpbin: [\"127.0.0.1:8080:80\"]\n")
+	if got := s.Compose.SitePortsMismatch(); got != nil {
+		t.Fatalf("false mismatch: %v", got)
+	}
+}

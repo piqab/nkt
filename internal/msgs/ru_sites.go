@@ -183,4 +183,8 @@ var ruSitesCatalog = map[string]string{
 	"deploy.drySitePortUnknown":     "? сайт: образ %s не объявляет портов (или ещё не скачан) — порт не проверить",
 	"deploy.drySitePortOK":          "  сайт: порт %d у сервиса %s объявлен",
 	"hub.site502Hint":               "? 502 — прокси не достучался до сервиса %s: проверьте, что контейнер слушает порт %d (site.port — порт внутри контейнера)",
+	"deploy.hostOld":                "? %s: старая версия nkt не знает полей %s — запрос повторён без них: порт сайта не проверен, ручная правка .env не отслеживается. Обновите nkt на хосте («Хосты» → «Обновить»)",
+	"deploy.sitePortMissing":        "compose.site.port не задан — укажите порт внутри контейнера, который слушает образ (например, port: 80)",
+	"deploy.drySitePortBadOne":      "✗ сайт: port %d, а образ %s слушает %d — укажите port: %d",
+	"deploy.sitePortsMismatch":      "? сайт: compose.ports публикует у сервиса %s порт контейнера %s, а site.port — %d; сайту нужен именно site.port (публикацию сайта nkt делает сам)",
 }

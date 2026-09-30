@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.58 — 2026-09-30
+
+- **A host with an old nkt version:** deployments and dry runs there no
+  longer fail with "unknown field": the hub repeats the request without the
+  new fields and logs which checks do not work on that host (site port,
+  hand edits of `.env`); update nkt on the host.
+- **Site port:** a clear error when `site.port` is not set; the dry run
+  suggests the right port ("the image listens on 80; set port: 80"); a
+  warning when `compose.ports` publishes a different container port of the
+  service.
+- **No model-analysis bulb** in the job windows of "Deployments"
+  (deployment, dry run, deletion, site, stack on a host).
+
 ## v1.11.57 — 2026-09-30
 
 - **Help next to the section title:** a "?" icon in place of the former

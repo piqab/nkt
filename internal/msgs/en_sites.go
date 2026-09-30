@@ -183,4 +183,8 @@ var enSitesCatalog = map[string]string{
 	"deploy.drySitePortUnknown":     "? site: image %s declares no ports (or is not pulled yet); the port cannot be checked",
 	"deploy.drySitePortOK":          "  site: port %d is declared by service %s",
 	"hub.site502Hint":               "? 502: the proxy could not reach service %s; check that the container listens on port %d (site.port is the port inside the container)",
+	"deploy.hostOld":                "? %s: an old nkt version does not know the fields %s; the request was repeated without them: the site port is not checked and hand edits of .env are not tracked. Update nkt on the host (\"Hosts\" → \"Update\")",
+	"deploy.sitePortMissing":        "compose.site.port is not set; give the port inside the container that the image listens on (e.g. port: 80)",
+	"deploy.drySitePortBadOne":      "✗ site: port %d, but image %s listens on %d; set port: %d",
+	"deploy.sitePortsMismatch":      "? site: compose.ports publishes container port %[2]s of service %[1]s, but site.port is %[3]d; the site needs site.port (nkt publishes it for the site itself)",
 }
