@@ -12,6 +12,7 @@ import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { ProbeLink } from '../components/PortProbe'
+import { TitleHelp } from '../components/Docs'
 
 interface FirewallResponse {
   managers: FirewallManagerState[]
@@ -617,7 +618,7 @@ export default function Firewall({ me }: { me: Me }) {
         <div>
           <h1>
             Firewall
-            <InfoHint>{t('fw.hint')}</InfoHint>
+            <TitleHelp>{t('fw.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

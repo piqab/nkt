@@ -4,9 +4,10 @@ import { Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
 import type { NetworkInterface } from '../types'
-import { Card, ErrorNote, InfoHint, Loading, formatBytesShort } from '../components/ui'
+import { Card, ErrorNote, Loading, formatBytesShort } from '../components/ui'
 import i18n from '../i18n'
 import { DataTable } from '../components/DataTable'
+import { TitleHelp } from '../components/Docs'
 
 /**
  * up alone can't tell a genuinely working interface apart from one that's
@@ -192,7 +193,7 @@ export default function Interfaces() {
         <div>
           <h1>
             {t('interfaces.title')}
-            <InfoHint>{t('interfaces.hint')}</InfoHint>
+            <TitleHelp>{t('interfaces.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

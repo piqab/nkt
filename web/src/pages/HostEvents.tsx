@@ -5,11 +5,12 @@ import { Button, Checkbox, Input, InputNumber, Select, Switch, Tag, Tooltip, typ
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { HostEvent, Me } from '../types'
-import { Card, ErrorNote, InfoHint, Loading, formatDateTime, formatRelative } from '../components/ui'
+import { Card, ErrorNote, Loading, formatDateTime, formatRelative } from '../components/ui'
 import { notificationsEnabled, requestNotificationPermission, setNotificationsEnabled } from '../notifications'
 import { DataTable } from '../components/DataTable'
 import { IPWithCheck } from '../components/Fail2banParts'
 import { ipsInText, isExternalIP } from '../fail2ban'
+import { TitleHelp } from '../components/Docs'
 
 const POLL_MS = 30_000
 
@@ -304,7 +305,7 @@ export default function HostEvents({ me }: { me?: Me }) {
       <div className="page-head spread">
         <h1>
           {t('events.title')}
-          <InfoHint>{t('events.hint')}</InfoHint>
+          <TitleHelp>{t('events.hint')}</TitleHelp>
         </h1>
         <Button onClick={() => events.reload()} loading={events.loading}>
           {t('events.refresh')}

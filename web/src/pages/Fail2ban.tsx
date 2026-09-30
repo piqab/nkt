@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { UnlockOutlined } from '@ant-design/icons'
 import { ApiError, api, qs, useApi } from '../api'
 import type { Fail2banBan, Fail2banEvent, Fail2banJail, Fail2banStatus, Fail2banTemplate, FileContent, Me, WriteResult } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, formatDateTime, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Modal, formatDateTime, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { confirmAction } from '../components/confirm'
@@ -13,6 +13,7 @@ import { VersionHistory } from '../components/VersionHistory'
 import PackageInstallModal from '../components/PackageInstallModal'
 import { FilesDiffModal, IPWithCheck, TemplateApplyModal, TemplatesPanel, underHub, type ApplyChange } from '../components/Fail2banParts'
 import { BAN_TIMES, fmtDuration, getIniKey, ignoreCovers, sameIgnore, setIniKey } from '../fail2ban'
+import { TitleHelp } from '../components/Docs'
 
 /**
  * fail2ban хоста: джейлы, забаненные адреса (разбан галочками, ручной
@@ -77,7 +78,7 @@ export default function Fail2ban({ me }: { me: Me }) {
       <div className="page-head spread">
         <h1>
           fail2ban
-          <InfoHint>{t('fail2ban.hint')}</InfoHint>
+          <TitleHelp>{t('fail2ban.hint')}</TitleHelp>
         </h1>
         <div className="row">
           {state?.installed && admin && (

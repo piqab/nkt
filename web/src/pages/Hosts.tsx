@@ -18,7 +18,7 @@ import {
 import { Trans, useTranslation } from 'react-i18next'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
 import type { HubHost, Job, Severity } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SEVERITIES, Spinner, formatRelative, severityLabel } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Modal, SEVERITIES, Spinner, formatRelative, severityLabel } from '../components/ui'
 import { decryptWithPassword, encryptWithPassword, isPasswordEncrypted } from '../exportCrypto'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
@@ -27,6 +27,7 @@ import { PowerToggle } from '../components/PowerToggle'
 import { JobLogModal } from './Jobs'
 import { ClustersCard, NewClusterModal } from '../components/Clusters'
 import { ImportPlanModal } from '../components/ImportPlanModal'
+import { TitleHelp } from '../components/Docs'
 
 /** Хост из параметров задания установки (host.install), иначе null. */
 function installJobHost(job: Job): number | null {
@@ -1399,7 +1400,7 @@ export default function Hosts({
         title={
           <span style={{ whiteSpace: 'nowrap' }}>
             {t('hosts.registeredHosts')}
-            <InfoHint>{t('hosts.hint')}</InfoHint>
+            <TitleHelp>{t('hosts.hint')}</TitleHelp>
           </span>
         }
         actions={

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button, Checkbox, InputNumber, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import { DocsSettingsCard } from '../components/Docs'
+import { DocsSettingsCard, TitleHelp } from '../components/Docs'
 import { usePrivacy } from '../privacy'
 import { AISettingsCard } from '../components/AISettingsCard'
 import type { HubVersionInfo, HubVulnDBInfo } from '../types'
@@ -18,7 +18,7 @@ interface AptCacheInfo {
   bytes_fetched: number
   connected_hosts: number
 }
-import { Banner, Card, ErrorNote, InfoHint, Loading, formatBytesShort, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, formatBytesShort, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
 
 /**
@@ -202,7 +202,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
         <div>
           <h1>
             {t('about.title')}
-            <InfoHint>{t('about.hint')}</InfoHint>
+            <TitleHelp>{t('about.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

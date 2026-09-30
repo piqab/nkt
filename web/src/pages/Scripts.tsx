@@ -4,12 +4,13 @@ import { CopyOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Job, Me } from '../types'
-import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDateTime } from '../components/ui'
+import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, formatDateTime } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { EditTextModal } from '../components/EditTextModal'
 import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
 import ScriptScheme from '../components/ScriptScheme'
+import { TitleHelp } from '../components/Docs'
 
 /**
  * Сценарии хаба: короткий построчный язык, которым описывают, что
@@ -242,7 +243,7 @@ export default function Scripts({ me }: { me: Me }) {
       <div className="page-head spread">
         <h1>
           {t('scripts.title')}
-          <InfoHint>{t('scripts.hint')}</InfoHint>
+          <TitleHelp>{t('scripts.hint')}</TitleHelp>
         </h1>
         {canEdit && <Button onClick={startNew}>{t('scripts.newScript')}</Button>}
       </div>

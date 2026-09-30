@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os/exec"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/piqab/nkt/internal/auth"
@@ -39,7 +41,11 @@ type composeCheck struct {
 		State  string `json:"state"`
 		Detail string `json:"detail"`
 	} `json:"images"`
-	Simulated bool `json:"simulated"`
+	Simulated   bool   `json:"simulated"`
+	SiteChecked bool   `json:"site_checked"`
+	SiteFound   bool   `json:"site_found"`
+	SitePorts   []int  `json:"site_ports"`
+	SiteImage   string `json:"site_image"`
 }
 
 // dryRun — задание сухого прогона.
@@ -110,6 +116,9 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	for _, t := range targets {
 		var res composeCheck
 		body := composeBody(c, main, files, env, pl.EnvSHA, "")
+		if c.Site.Managed() {
+			body["site_service"], body["site_port"] = c.Site.Service, c.Site.Port
+		}
 		code, err := s.hostCall(ctx, user, t.ID, "POST", "/api/compose/stacks/check", body, &res)
 		switch {
 		case code == http.StatusNotFound || code == http.StatusMethodNotAllowed:
@@ -121,6 +130,9 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			continue
 		}
 		problems += logComposeCheck(jc, t.Name, c.Project, res)
+		if c.Site.Managed() && res.SiteChecked {
+			problems += logSitePort(jc, c, res)
+		}
 		if res.ConfigOK && !res.Simulated {
 			services = res.Services
 		}
@@ -277,4 +289,27 @@ func (s *Server) handleDeployGit(w http.ResponseWriter, r *http.Request) {
 	_, aptErr := exec.LookPath("apt-get")
 	out["installable"] = aptErr == nil && s.local != nil && s.hub.cfg.Mode != config.ModeFixtures
 	writeJSON(w, http.StatusOK, out)
+}
+
+// logSitePort — сервис и порт сайта против того, что объявляют стек и
+// образ; число проблем. Образ портов не объявляет — проверять не с чем.
+func logSitePort(jc *jobs.Context, c *deploy.ComposeSpec, res composeCheck) int {
+	sp := c.Site
+	switch {
+	case !res.SiteFound:
+		jc.Log("deploy.drySiteNoService", sp.Service, c.Project, strings.Join(res.Services, ", "))
+		return 1
+	case len(res.SitePorts) == 0:
+		jc.Log("deploy.drySitePortUnknown", res.SiteImage)
+	case !slices.Contains(res.SitePorts, sp.Port):
+		ports := make([]string, len(res.SitePorts))
+		for i, p := range res.SitePorts {
+			ports[i] = strconv.Itoa(p)
+		}
+		jc.Log("deploy.drySitePortBad", sp.Port, sp.Service, res.SiteImage, strings.Join(ports, ", "))
+		return 1
+	default:
+		jc.Log("deploy.drySitePortOK", sp.Port, sp.Service)
+	}
+	return 0
 }

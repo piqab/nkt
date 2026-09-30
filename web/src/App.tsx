@@ -45,8 +45,7 @@ import type { HostEvent, HubVersionInfo, Me, Overview } from './types'
 import Login from './pages/Login'
 import Hosts from './pages/Hosts'
 import About from './pages/About'
-import { HelpButton } from './components/Docs'
-import { DOCS } from './docs'
+import { DOCS, DocsContext } from './docs'
 import Profiles from './pages/Profiles'
 import Scripts from './pages/Scripts'
 import OverviewPage from './pages/Overview'
@@ -519,21 +518,15 @@ function Shell({
   }, [knownHosts.data])
   // Справка — раздел документации для того, что открыто сейчас.
   const docKey = showingHostPicker ? `hub:${hubView}` : docsKeyFor(location.pathname)
-  const help = <HelpButton docKey={docKey} isHub={isHub} admin={me.is_admin} version={me.hub_version} compact={collapsed} />
+  const docsPlace = { docKey, isHub, admin: me.is_admin, version: me.hub_version }
   const foot = (
     <div className={`sidebar-foot${collapsed ? ' sidebar-foot-collapsed' : ''}`}>
       {collapsed ? (
-        <>
-          <Tooltip title={t('docs.button')} placement="right">
-            <span>{help}</span>
-          </Tooltip>
-          <Tooltip title={t('app.logout')} placement="right">
-            <Button type="text" size="small" aria-label={t('app.logout')} icon={<LogoutOutlined />} onClick={logout} />
-          </Tooltip>
-        </>
+        <Tooltip title={t('app.logout')} placement="right">
+          <Button type="text" size="small" aria-label={t('app.logout')} icon={<LogoutOutlined />} onClick={logout} />
+        </Tooltip>
       ) : (
         <>
-          <div style={{ marginBottom: '0.4rem' }}>{help}</div>
           <div className="row" style={{ marginBottom: '0.4rem' }}>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
               {t('app.theme')}
@@ -643,28 +636,30 @@ function Shell({
         </Layout.Sider>
         <Layout.Content className="main">
           <div className="content">
-            {hubView === 'hosts' ? (
-              <Hosts onSelect={selectHost} hubVersion={me.hub_version} onOpenProfiles={() => setHubView('profiles')} />
-            ) : hubView === 'events' ? (
-              <HostEvents me={me} />
-            ) : hubView === 'fail2ban' ? (
-              <HubFail2ban me={me} />
-            ) : hubView === 'jobs' ? (
-              <JobsPage me={me} />
-            ) : hubView === 'profiles' ? (
-              <Tabs
-                items={[
-                  { key: 'profiles', label: t('profiles.tabProfiles'), children: <Profiles me={me} hubLevel /> },
-                  { key: 'scripts', label: t('profiles.tabScripts'), children: <Scripts me={me} /> },
-                ]}
-              />
-            ) : hubView === 'clusters' ? (
-              <ClustersPage me={me} />
-            ) : hubView === 'deploy' ? (
-              <Deployments me={me} />
-            ) : (
-              <About admin={me.is_admin} />
-            )}
+            <DocsContext.Provider value={docsPlace}>
+              {hubView === 'hosts' ? (
+                <Hosts onSelect={selectHost} hubVersion={me.hub_version} onOpenProfiles={() => setHubView('profiles')} />
+              ) : hubView === 'events' ? (
+                <HostEvents me={me} />
+              ) : hubView === 'fail2ban' ? (
+                <HubFail2ban me={me} />
+              ) : hubView === 'jobs' ? (
+                <JobsPage me={me} />
+              ) : hubView === 'profiles' ? (
+                <Tabs
+                  items={[
+                    { key: 'profiles', label: t('profiles.tabProfiles'), children: <Profiles me={me} hubLevel /> },
+                    { key: 'scripts', label: t('profiles.tabScripts'), children: <Scripts me={me} /> },
+                  ]}
+                />
+              ) : hubView === 'clusters' ? (
+                <ClustersPage me={me} />
+              ) : hubView === 'deploy' ? (
+                <Deployments me={me} />
+              ) : (
+                <About admin={me.is_admin} />
+              )}
+            </DocsContext.Provider>
           </div>
         </Layout.Content>
       </Layout>
@@ -726,84 +721,86 @@ function Shell({
             calls re-fetch scoped to the newly selected host instead of
             showing stale data from the previous one. */}
         <div className="content" key={isHub ? selectedHost!.id : 'local'}>
-          {showPassword && (
-            <Card
-              title={t('app.changePasswordTitle')}
-              actions={
-                <button className="ghost" onClick={() => setShowPassword(false)}>
-                  {t('app.close')}
-                </button>
-              }
-            >
-              <PasswordForm
-                onDone={() => {
-                  setShowPassword(false)
-                  onLogout()
-                  navigate('/login', { replace: true })
-                }}
-              />
-            </Card>
-          )}
+          <DocsContext.Provider value={docsPlace}>
+            {showPassword && (
+              <Card
+                title={t('app.changePasswordTitle')}
+                actions={
+                  <button className="ghost" onClick={() => setShowPassword(false)}>
+                    {t('app.close')}
+                  </button>
+                }
+              >
+                <PasswordForm
+                  onDone={() => {
+                    setShowPassword(false)
+                    onLogout()
+                    navigate('/login', { replace: true })
+                  }}
+                />
+              </Card>
+            )}
 
-          {me.simulated && (
-            <Banner kind="warn">
-              <strong>{t('app.simulatedModeTitle')}</strong>{' '}
-              <Trans i18nKey="app.simulatedModeBody" components={{ code: <code className="mono" /> }} />
-            </Banner>
-          )}
-          {!me.allow_mutations && (
-            <Banner kind="info">
-              <Trans i18nKey="app.readOnlyMode" components={{ code: <code className="mono" /> }} />
-            </Banner>
-          )}
+            {me.simulated && (
+              <Banner kind="warn">
+                <strong>{t('app.simulatedModeTitle')}</strong>{' '}
+                <Trans i18nKey="app.simulatedModeBody" components={{ code: <code className="mono" /> }} />
+              </Banner>
+            )}
+            {!me.allow_mutations && (
+              <Banner kind="info">
+                <Trans i18nKey="app.readOnlyMode" components={{ code: <code className="mono" /> }} />
+              </Banner>
+            )}
 
-          {/* Граница вокруг всего блока разделов, но со сбросом при смене
-              адреса (key): сломавшийся раздел показывает карточку с
-              ошибкой вместо белой страницы, а переход в другой раздел
-              возвращает интерфейс к жизни сам, без перезагрузки. */}
-          <ErrorBoundary key={location.pathname} section={location.pathname}>
-            <Routes>
-              <Route path="/" element={<OverviewPage me={me} />} />
-              <Route path="/findings" element={<Findings />} />
-              <Route path="/vulnerabilities" element={<Vulnerabilities me={me} />} />
-              <Route path="/topology" element={<TopologyPage />} />
-              <Route path="/availability" element={<Availability me={me} />} />
-              <Route path="/usage" element={<Usage me={me} />} />
-              <Route path="/configs" element={<Configs me={me} />} />
-              <Route path="/logs" element={<LogsPage />} />
-              <Route path="/jobs" element={<JobsPage me={me} />} />
-              {/* Профили переехали вкладкой в «Контейнеры и ВМ»; старый
-                  адрес остаётся рабочим — на него есть ссылки и закладки. */}
-              <Route path="/profiles" element={<Navigate to="/containers" replace />} />
-              <Route path="/services" element={<Services me={me} />} />
-              <Route path="/containers" element={<Containers me={me} />} />
-              <Route path="/packages" element={<Packages me={me} />} />
-              {/* Docker/Podman/LXD/ВМ were separate nav entries before —
-                  redirect their old URLs to the merged page's default tab
-                  rather than a bare 404 for anyone with these bookmarked. */}
-              <Route path="/podman" element={<Navigate to="/containers" replace />} />
-              <Route path="/lxd" element={<Navigate to="/containers" replace />} />
-              <Route path="/vms" element={<Navigate to="/containers" replace />} />
-              {me.is_admin && <Route path="/terminal" element={null} />}
-              <Route path="/firewall" element={<Firewall me={me} />} />
-              <Route path="/fail2ban" element={<Fail2ban me={me} />} />
-              <Route path="/interfaces" element={<Interfaces />} />
-              <Route path="/certificates" element={<Certificates me={me} />} />
-              <Route path="/audit" element={<Audit />} />
-              <Route path="/disks" element={<Disks />} />
-              <Route path="/hardware" element={<HardwarePage />} />
-              {me.is_admin && <Route path="/system" element={<SystemSettingsPage me={me} />} />}
-              {me.is_admin && <Route path="/users" element={<Users me={me} />} />}
-              {me.is_admin && <Route path="/os-users" element={<OSUsers me={me} />} />}
-              <Route path="/login" element={<Navigate to="/" replace />} />
-              <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
-          </ErrorBoundary>
-          {me.is_admin && terminalMounted && (
-            <div style={{ display: isTerminalRoute ? 'contents' : 'none' }}>
-              <TerminalPage me={me} />
-            </div>
-          )}
+            {/* Граница вокруг всего блока разделов, но со сбросом при смене
+                адреса (key): сломавшийся раздел показывает карточку с
+                ошибкой вместо белой страницы, а переход в другой раздел
+                возвращает интерфейс к жизни сам, без перезагрузки. */}
+            <ErrorBoundary key={location.pathname} section={location.pathname}>
+              <Routes>
+                <Route path="/" element={<OverviewPage me={me} />} />
+                <Route path="/findings" element={<Findings />} />
+                <Route path="/vulnerabilities" element={<Vulnerabilities me={me} />} />
+                <Route path="/topology" element={<TopologyPage />} />
+                <Route path="/availability" element={<Availability me={me} />} />
+                <Route path="/usage" element={<Usage me={me} />} />
+                <Route path="/configs" element={<Configs me={me} />} />
+                <Route path="/logs" element={<LogsPage />} />
+                <Route path="/jobs" element={<JobsPage me={me} />} />
+                {/* Профили переехали вкладкой в «Контейнеры и ВМ»; старый
+                    адрес остаётся рабочим — на него есть ссылки и закладки. */}
+                <Route path="/profiles" element={<Navigate to="/containers" replace />} />
+                <Route path="/services" element={<Services me={me} />} />
+                <Route path="/containers" element={<Containers me={me} />} />
+                <Route path="/packages" element={<Packages me={me} />} />
+                {/* Docker/Podman/LXD/ВМ were separate nav entries before —
+                    redirect their old URLs to the merged page's default tab
+                    rather than a bare 404 for anyone with these bookmarked. */}
+                <Route path="/podman" element={<Navigate to="/containers" replace />} />
+                <Route path="/lxd" element={<Navigate to="/containers" replace />} />
+                <Route path="/vms" element={<Navigate to="/containers" replace />} />
+                {me.is_admin && <Route path="/terminal" element={null} />}
+                <Route path="/firewall" element={<Firewall me={me} />} />
+                <Route path="/fail2ban" element={<Fail2ban me={me} />} />
+                <Route path="/interfaces" element={<Interfaces />} />
+                <Route path="/certificates" element={<Certificates me={me} />} />
+                <Route path="/audit" element={<Audit />} />
+                <Route path="/disks" element={<Disks />} />
+                <Route path="/hardware" element={<HardwarePage />} />
+                {me.is_admin && <Route path="/system" element={<SystemSettingsPage me={me} />} />}
+                {me.is_admin && <Route path="/users" element={<Users me={me} />} />}
+                {me.is_admin && <Route path="/os-users" element={<OSUsers me={me} />} />}
+                <Route path="/login" element={<Navigate to="/" replace />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+              </Routes>
+            </ErrorBoundary>
+            {me.is_admin && terminalMounted && (
+              <div style={{ display: isTerminalRoute ? 'contents' : 'none' }}>
+                <TerminalPage me={me} />
+              </div>
+            )}
+          </DocsContext.Provider>
         </div>
       </Layout.Content>
     </Layout>

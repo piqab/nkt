@@ -244,7 +244,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 
 ## Command line
 
-- In-app help: the "Help" button opens the documentation section for the current page in a window (detachable into a separate window); the site address — the project site or your own — is set in "About".
+- In-app help: the "?" icon next to a section title opens the documentation section for the current page in a window (detachable into a separate window); the site address — the project site or your own — is set in "About".
 - `nkt serve` — start the web UI; `nkt scan` — a one-off scan to JSON; `nkt version`.
 - `nkt users` and `nkt passwd` — accounts and passwords without the web UI.
 - `nkt hub` — start the hub; `nkt hub import` — restore the registry; `nkt hub delete` — complete removal of the hub's data with an export offer.

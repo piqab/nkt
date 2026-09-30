@@ -107,6 +107,12 @@ type ComposeCheckResult struct {
 	Images      []ComposeImageCheck `json:"images,omitempty"`
 	// Simulated — фикстуры: команды не выполнялись по-настоящему.
 	Simulated bool `json:"simulated,omitempty"`
+	// Сайт конвейера: проверен ли порт (SiteChecked), есть ли сервис
+	// (SiteFound), какие порты объявляют сервис и образ.
+	SiteChecked bool   `json:"site_checked,omitempty"`
+	SiteFound   bool   `json:"site_found,omitempty"`
+	SitePorts   []int  `json:"site_ports,omitempty"`
+	SiteImage   string `json:"site_image,omitempty"`
 }
 
 // composeCheckDir — каталог сухого прогона: рядом со стеками, чтобы
@@ -194,6 +200,10 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 		// На фикстурах вывод команд — заготовка, а не список сервисов.
 		writeJSON(w, http.StatusOK, res)
 		return
+	}
+	if req.SiteService != "" {
+		ports, image, found, err := serviceDeclaredPorts(ctx, c, res.Engine, work, req.Project, req.File, req.SiteService)
+		res.SiteChecked, res.SiteFound, res.SitePorts, res.SiteImage = err == nil, found, ports, image
 	}
 	if out, err := c.RunTimeout(ctx, time.Minute, res.Engine, append(args, "config", "--services")...); err == nil && out.OK() {
 		res.Services = splitLines(out.Stdout)

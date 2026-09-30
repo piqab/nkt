@@ -176,4 +176,11 @@ var enSitesCatalog = map[string]string{
 	"deploy.portKept":               "  port %s (%s): the file sets an address; kept (bind_force: true replaces it)",
 	"deploy.portSkipped":            "? port %s (%s): the entry uses a variable; no address set, give it in compose.ports",
 	"ui.docsURLBad":                 "Docs address %s: needs http:// or https://, no login or parameters, ending with \"/\"",
+	"site.portNotExposed":           "Port %d: service %s (image %s) does not declare it; it declares %s. Fix site.port (the port inside the container); no certificate was issued",
+	"site.portUnverified":           "Image %s declares no ports; the site port cannot be checked",
+	"site.portOK":                   "Container port %d is declared (%s)",
+	"deploy.drySitePortBad":         "✗ site: port %d, but service %s (image %s) declares %s; the proxy would get 502, fix site.port",
+	"deploy.drySitePortUnknown":     "? site: image %s declares no ports (or is not pulled yet); the port cannot be checked",
+	"deploy.drySitePortOK":          "  site: port %d is declared by service %s",
+	"hub.site502Hint":               "? 502: the proxy could not reach service %s; check that the container listens on port %d (site.port is the port inside the container)",
 }

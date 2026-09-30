@@ -17,6 +17,7 @@ import { ConsoleModal } from '../components/ConsoleModal'
 import { BackupModal } from '../components/BackupModal'
 import { useJobLauncher } from '../components/useJobLauncher'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
+import { TitleHelp } from '../components/Docs'
 
 export default function Podman({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -192,7 +193,7 @@ export default function Podman({ me }: { me: Me }) {
         <div>
           <h1>
             Podman
-            <InfoHint>{t('podman.hint')}</InfoHint>
+            <TitleHelp>{t('podman.hint')}</TitleHelp>
           </h1>
         </div>
         <div className="row">

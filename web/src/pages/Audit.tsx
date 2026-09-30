@@ -4,8 +4,9 @@ import { Select, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { qs, useApi } from '../api'
 import type { AuditEntry, JobStatus } from '../types'
-import { Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
+import { Card, ErrorNote, Loading, StateBadge, formatDateTime, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
+import { TitleHelp } from '../components/Docs'
 
 interface JobsResponse {
   jobs: JobStatus[] | null
@@ -85,7 +86,7 @@ export default function Audit() {
         <div>
           <h1>
             {t('audit.title')}
-            <InfoHint>{t('audit.hint')}</InfoHint>
+            <TitleHelp>{t('audit.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

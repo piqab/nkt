@@ -5,12 +5,13 @@ import { QuestionCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Job, Me, Profile, ProfilePlan, PlanChange, ProfileVersion } from '../types'
-import { Banner, Card, CodeEditor, ErrorNote, InfoHint, Loading, Modal, formatDateTime } from '../components/ui'
+import { Banner, Card, CodeEditor, ErrorNote, Loading, Modal, formatDateTime } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { EditTextModal } from '../components/EditTextModal'
 import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
+import { TitleHelp } from '../components/Docs'
 
 /** Заготовка для нового профиля: показывает форму, а не пустой экран. */
 const TEMPLATE = `version: 1
@@ -293,7 +294,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
       <div className="page-head spread">
         <h1>
           {t('profiles.title')}
-          <InfoHint>{t(hubLevel ? 'profiles.hubHint' : 'profiles.hint')}</InfoHint>
+          <TitleHelp>{t(hubLevel ? 'profiles.hubHint' : 'profiles.hint')}</TitleHelp>
           {/* Подсказка у заголовка отвечает «что это за раздел», а писать
               профиль приходится здесь же — за справочником с примерами
               уходить в репозиторий незачем. */}

@@ -3,11 +3,12 @@ import { Button, Progress, Segmented, Tag, type TableColumnsType } from 'antd'
 import { PieChartOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
-import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import FileBrowser from '../components/FileBrowser'
+import { TitleHelp } from '../components/Docs'
 
 interface Filesystem {
   device: string
@@ -206,7 +207,7 @@ export default function Disks() {
         <div>
           <h1>
             {t('disks.title')}
-            <InfoHint>{t('disks.hint')}</InfoHint>
+            <TitleHelp>{t('disks.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

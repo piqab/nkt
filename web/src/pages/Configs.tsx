@@ -13,6 +13,7 @@ import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import PathPicker from '../components/PathPicker'
 import { RowAction } from '../components/RowAction'
+import { TitleHelp } from '../components/Docs'
 
 const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker', 'caddy', 'libvirt'])
 
@@ -313,7 +314,7 @@ export default function Configs({ me }: { me: Me }) {
         <div>
           <h1>
             {t('configs.title')}
-            <InfoHint>{t('configs.hint')}</InfoHint>
+            <TitleHelp>{t('configs.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

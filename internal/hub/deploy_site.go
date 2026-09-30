@@ -145,9 +145,6 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 	if clash != "" {
 		jc.Log("deploy.drySiteWarn", msgs.T(jc.Lang(), "hub.siteExists", clash))
 	}
-	if services != nil && !slices.Contains(services, sp.Service) {
-		jc.Log("deploy.drySiteNoService", sp.Service, c.Project, strings.Join(services, ", "))
-	}
 	proxy, installed := sp.Proxy, true
 	if proxy == "" && cur != nil {
 		proxy = cur.Proxy

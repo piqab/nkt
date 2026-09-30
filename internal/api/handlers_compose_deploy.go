@@ -46,6 +46,10 @@ type composeDeployRequest struct {
 	// EnvSHA — sha256 .env, записанного прошлой выкладкой хаба: другой на
 	// хосте — значит, его правили вручную (ответ env_edited).
 	EnvSHA string `json:"env_sha,omitempty"`
+	// SiteService / SitePort — сухой прогон: сайт конвейера смотрит на этот
+	// сервис и порт контейнера (есть ли они в стеке и в образе).
+	SiteService string `json:"site_service,omitempty"`
+	SitePort    int    `json:"site_port,omitempty"`
 	// Pull — скачать образы перед подъёмом.
 	Pull bool `json:"pull"`
 	// WaitTimeout — сколько ждать, пока контейнеры поднимутся и пройдут

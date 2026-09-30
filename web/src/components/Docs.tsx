@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import { Button, Space } from 'antd'
+import { useContext, useState, type ReactNode } from 'react'
+import { Button, Space, Tooltip } from 'antd'
 import { ExportOutlined, QuestionCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
-import { DEFAULT_DOCS_URL, DOCS, type DocsTarget, docsSettingsPath, docsURL, setDocsBase, useDocsBase } from '../docs'
+import { DEFAULT_DOCS_URL, DOCS, DocsContext, type DocsTarget, docsSettingsPath, docsURL, setDocsBase, useDocsBase } from '../docs'
 import { Banner, Card, Modal, formatRelative } from './ui'
 import { EditTextModal } from './EditTextModal'
 
@@ -192,5 +192,42 @@ export function DocsSettingsCard({ isHub, admin }: { isHub: boolean; admin: bool
       </p>
       {edit && <DocsSettingsModal isHub={isHub} onClose={() => setEdit(false)} />}
     </Card>
+  )
+}
+
+/**
+ * Значок у названия раздела вместо «ⓘ»: при наведении — та же подсказка и
+ * «нажмите — справка», по щелчку — окно справки для этого раздела.
+ * Вне оболочки (нет контекста) — просто подсказка.
+ */
+export function TitleHelp({ children }: { children: ReactNode }) {
+  const { t } = useTranslation()
+  const place = useContext(DocsContext)
+  const [open, setOpen] = useState(false)
+  const target = place ? DOCS[place.docKey] : undefined
+  return (
+    <>
+      <Tooltip
+        title={
+          <>
+            {children}
+            {target && <div style={{ marginTop: '0.3rem', opacity: 0.8 }}>{t('docs.clickHint')}</div>}
+          </>
+        }
+      >
+        <QuestionCircleOutlined
+          className="muted"
+          role={target ? 'button' : undefined}
+          aria-label={t('docs.button')}
+          style={{ marginLeft: '0.4rem', fontSize: '0.8em', cursor: target ? 'pointer' : 'help', verticalAlign: 'middle' }}
+          tabIndex={0}
+          onClick={() => target && setOpen(true)}
+          onKeyDown={(e) => {
+            if (target && (e.key === 'Enter' || e.key === ' ')) setOpen(true)
+          }}
+        />
+      </Tooltip>
+      {open && target && place && <DocsModal target={target} isHub={place.isHub} admin={place.admin} version={place.version} onClose={() => setOpen(false)} />}
+    </>
   )
 }

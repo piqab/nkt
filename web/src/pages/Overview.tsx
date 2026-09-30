@@ -12,6 +12,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, SeverityBadge, StateBadge, 
 import { AIExplain } from '../components/AIExplain'
 import i18n from '../i18n'
 import { DataTable } from '../components/DataTable'
+import { TitleHelp } from '../components/Docs'
 
 // Module-level column builders take t() as an argument rather than calling
 // useTranslation() themselves — they're plain functions, not components, so
@@ -123,7 +124,10 @@ export default function OverviewPage({ me }: { me: Me }) {
     <>
       <div className="page-head spread">
         <div>
-          <h1><Sensitive>{data.host.hostname}</Sensitive></h1>
+          <h1>
+            <Sensitive>{data.host.hostname}</Sensitive>
+            <TitleHelp>{t('overview.pageHint')}</TitleHelp>
+          </h1>
           <p>
             {t('overview.summary', {
               os: data.host.os,

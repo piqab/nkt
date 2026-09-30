@@ -5,13 +5,14 @@ import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
 import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Modal, StateBadge, formatBytesShort } from '../components/ui'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { PowerToggle, servicePowerState } from '../components/PowerToggle'
 import { ProbeLink } from '../components/PortProbe'
+import { TitleHelp } from '../components/Docs'
 
 const ACTION_LABEL_KEY: Record<string, string> = {
   start: 'services.actionStart',
@@ -359,7 +360,7 @@ export default function Services({ me }: { me: Me }) {
         <div>
           <h1>
             {t('services.title')}
-            <InfoHint>{t('services.hint')}</InfoHint>
+            <TitleHelp>{t('services.hint')}</TitleHelp>
           </h1>
         </div>
         <div className="row">

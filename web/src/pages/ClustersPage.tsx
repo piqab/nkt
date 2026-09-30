@@ -7,10 +7,11 @@ import { api, useApi } from '../api'
 import { HubManifestsCard } from '../components/HubManifests'
 import { ClustersFindingsCard, HelmMultiModal } from '../components/HubClustersMulti'
 import type { HubHost, Job, Me } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Modal, formatBytesShort, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, Modal, formatBytesShort, formatRelative } from '../components/ui'
 import { confirmAction } from '../components/confirm'
 import { ClustersCard } from '../components/Clusters'
 import { JobLogModal } from './Jobs'
+import { TitleHelp } from '../components/Docs'
 
 /**
  * Раздел «Кластеры» на хабе: все кластеры Kubernetes и создание кластера
@@ -74,7 +75,7 @@ export default function ClustersPage({ me }: { me: Me }) {
       <div className="page-head spread">
         <h1>
           {t('clusters.title')}
-          <InfoHint>{t('clusters.pageHint')}</InfoHint>
+          <TitleHelp>{t('clusters.pageHint')}</TitleHelp>
         </h1>
         {me.is_admin && (
           <div className="row" style={{ gap: '0.5rem' }}>

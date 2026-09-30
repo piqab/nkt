@@ -1,9 +1,10 @@
 import { Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
-import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading } from '../components/ui'
 import { formatBytes } from '../components/charts'
 import { DataTable } from '../components/DataTable'
+import { TitleHelp } from '../components/Docs'
 
 interface Battery {
   name: string
@@ -127,7 +128,7 @@ export default function HardwarePage() {
         <div>
           <h1>
             {t('hardware.title')}
-            <InfoHint>{t('hardware.hint')}</InfoHint>
+            <TitleHelp>{t('hardware.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

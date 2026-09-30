@@ -5,8 +5,9 @@ import { Checkbox, Input, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { qs, useApi } from '../api'
 import type { Finding, Severity } from '../types'
-import { Card, ErrorNote, InfoHint, Loading, SeverityBadge, SEVERITIES, severityLabel } from '../components/ui'
+import { Card, ErrorNote, Loading, SeverityBadge, SEVERITIES, severityLabel } from '../components/ui'
 import { formatNumber } from '../components/charts'
+import { TitleHelp } from '../components/Docs'
 
 interface FindingsResponse {
   findings: Finding[]
@@ -58,7 +59,7 @@ export default function Findings() {
         <div>
           <h1>
             {t('findings.title')}
-            <InfoHint>{t('findings.hint')}</InfoHint>
+            <TitleHelp>{t('findings.hint')}</TitleHelp>
           </h1>
         </div>
       </div>
