@@ -199,7 +199,17 @@ substitutions, collects the stack files and, on each host, checks:
 - services and images: whether each image is in the registry (manifest
   only, no pull) and whether it is already pulled on the host. "Not in the
   registry" is an error; "could not check" (a private registry without a
-  login, podman without skopeo) is a warning.
+  login, podman without skopeo) is a warning;
+- host ports from the publications: one held by another process (not this
+  stack) is a problem, since `up` would fail on it;
+- the image architecture against the host's (`uname -m`): an amd64-only
+  image on an arm64 host is a problem (`exec format error`).
+
+If the stack does not come up in a real deployment, the host appends the
+container states (`compose ps -a`) and the last log lines of the failed
+services, and the error names the cause: "port 127.0.0.1:8080 is in use",
+"the image is not for this architecture", "container httpbin exited
+(code 1)", "failed its healthcheck".
 
 The result is a hub job with a log: "the deployment would succeed" or the
 number of problems. Nothing is recorded in the deployment history.
@@ -334,6 +344,10 @@ compose:
 - **Registry** (`registry`) — the hub notices a new image tag newer than
   the previous one (compared by numbers: `v1.10.0` is newer than
   `v1.9.3`) and deploys the `ref` branch with that tag.
+
+The **"Enabled"** switch in the pipeline list is only about automatic
+deployments (webhook, polling, registry); a disabled pipeline is marked
+"manual only", and the "Deploy" button always works.
 
 Polling and registry start working **after the first deployment with
 the button** — a freshly saved pipeline deploys nothing by itself. A
