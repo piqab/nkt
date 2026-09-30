@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.55 — 2026-09-30
+
+- **In-app help:** the "Help" button at the bottom of the sidebar opens
+  the documentation section for the current page, in a window inside nkt,
+  with "Detach" into a separate browser window and "In a new tab". The
+  pipeline editor, "Access" and the "Sites" wizard have buttons straight
+  to their sections.
+- **The help site address** is in "About" (and in the help window): the
+  project site by default or your own copy, e.g. on a network without
+  internet; editing with a diff and history.
+- Fixed in-docs links to sections whose Russian titles contain "й".
+
 ## v1.11.54 — 2026-09-30
 
 - **Compose stack ports on 127.0.0.1 only (important):** a publication

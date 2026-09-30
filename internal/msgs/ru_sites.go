@@ -175,4 +175,5 @@ var ruSitesCatalog = map[string]string{
 	"deploy.portBound":              "  порт %s (%s) → %s",
 	"deploy.portKept":               "  порт %s (%s): адрес указан в файле — как есть (bind_force: true — заменить)",
 	"deploy.portSkipped":            "? порт %s (%s): в записи переменная — адрес не подставлен, укажите его в compose.ports",
+	"ui.docsURLBad":                 "Адрес справки %s: нужен http:// или https://, без логина и параметров, с «/» на конце",
 }

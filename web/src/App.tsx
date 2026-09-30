@@ -45,6 +45,8 @@ import type { HostEvent, HubVersionInfo, Me, Overview } from './types'
 import Login from './pages/Login'
 import Hosts from './pages/Hosts'
 import About from './pages/About'
+import { HelpButton } from './components/Docs'
+import { DOCS } from './docs'
 import Profiles from './pages/Profiles'
 import Scripts from './pages/Scripts'
 import OverviewPage from './pages/Overview'
@@ -182,6 +184,17 @@ const NAV_ITEMS: {
   { to: '/users', labelKey: 'nav.users', icon: <UserOutlined />, adminOnly: true },
   { to: '/os-users', labelKey: 'nav.osUsers', icon: <TeamOutlined />, adminOnly: true },
 ]
+
+/** Раздел справки для адреса страницы: самый длинный подходящий ключ
+ * docsMap.json («/containers/…» → «/containers»; «/» — только сам). */
+function docsKeyFor(pathname: string): string {
+  let best = '/'
+  for (const key of Object.keys(DOCS)) {
+    if (!key.startsWith('/') || key === '/') continue
+    if ((pathname === key || pathname.startsWith(key + '/')) && key.length > best.length) best = key
+  }
+  return best
+}
 
 /** Ключ, под которым запоминается, свёрнут ли сайдбар в иконки. */
 const SIDEBAR_KEY = 'nkt-sidebar-collapsed'
@@ -504,14 +517,23 @@ function Shell({
   useEffect(() => {
     if (knownHosts.data) setKnownNames(knownHosts.data.map((h) => h.name))
   }, [knownHosts.data])
+  // Справка — раздел документации для того, что открыто сейчас.
+  const docKey = showingHostPicker ? `hub:${hubView}` : docsKeyFor(location.pathname)
+  const help = <HelpButton docKey={docKey} isHub={isHub} admin={me.is_admin} version={me.hub_version} compact={collapsed} />
   const foot = (
     <div className={`sidebar-foot${collapsed ? ' sidebar-foot-collapsed' : ''}`}>
       {collapsed ? (
-        <Tooltip title={t('app.logout')} placement="right">
-          <Button type="text" size="small" aria-label={t('app.logout')} icon={<LogoutOutlined />} onClick={logout} />
-        </Tooltip>
+        <>
+          <Tooltip title={t('docs.button')} placement="right">
+            <span>{help}</span>
+          </Tooltip>
+          <Tooltip title={t('app.logout')} placement="right">
+            <Button type="text" size="small" aria-label={t('app.logout')} icon={<LogoutOutlined />} onClick={logout} />
+          </Tooltip>
+        </>
       ) : (
         <>
+          <div style={{ marginBottom: '0.4rem' }}>{help}</div>
           <div className="row" style={{ marginBottom: '0.4rem' }}>
             <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.35rem' }}>
               {t('app.theme')}
@@ -641,7 +663,7 @@ function Shell({
             ) : hubView === 'deploy' ? (
               <Deployments me={me} />
             ) : (
-              <About />
+              <About admin={me.is_admin} />
             )}
           </div>
         </Layout.Content>

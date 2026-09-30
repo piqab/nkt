@@ -5,6 +5,7 @@ import { api, useApi } from '../api'
 import type { HubHost, Job, Me } from '../types'
 import { JobLogModal } from '../pages/Jobs'
 import { ComposeEngineStatus } from './ComposeEngineStatus'
+import { HelpButton } from './Docs'
 import { Banner, Card, ErrorNote, Loading, Modal, formatRelative } from './ui'
 import { DataTable } from './DataTable'
 import { confirmWithOption } from './confirm'
@@ -342,7 +343,10 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
   return (
     <Modal title={site ? t('sites.editTitle', { name: site.domains[0] }) : t('sites.newTitle')} onClose={onClose} width={860} maskClosable={false}>
       <div className="col">
-        <p className="small muted">{t('sites.wizardHint')}</p>
+        <Space size={4} wrap>
+          <span className="small muted">{t('sites.wizardHint')}</span>
+          <HelpButton docKey="deploy:sites" isHub admin />
+        </Space>
         {site?.pipeline_id ? <Banner kind="info">{t('sites.pipelineManaged', { name: site.pipeline_name ?? `#${site.pipeline_id}` })}</Banner> : null}
         <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <label style={{ minWidth: 200 }}>

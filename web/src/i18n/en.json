@@ -3529,5 +3529,25 @@
     "installCompose": "Install compose",
     "installHint": "docker.io and the compose plugin from the distribution's repository, as a background host job",
     "notInstallable": "Installing from here works only on hosts with apt-get"
+  },
+  "docs": {
+    "button": "Help",
+    "title": "Help",
+    "detach": "Detach",
+    "newTab": "In a new tab",
+    "hint": "The help site describes the latest nkt version (you have {{version}}). If it does not open inside the window, use \"Detach\" or \"In a new tab\".",
+    "settingsLink": "Help address…",
+    "settingsTitle": "Help site address",
+    "settingsHint": "The documentation site for the \"Help\" button: {{def}} by default; your own copy works too (npm run build in the project's site/). http:// or https://, ending with \"/\".",
+    "useDefault": "Project site",
+    "check": "Open",
+    "historyTitle": "Previous help addresses",
+    "historyEmpty": "The address has not been changed yet.",
+    "load": "Load",
+    "cardTitle": "Help",
+    "cardHint": "The \"Help\" button at the bottom of the sidebar opens the documentation section for the current page.",
+    "change": "Change address",
+    "current": "Help site",
+    "isDefault": "project site"
   }
 }
