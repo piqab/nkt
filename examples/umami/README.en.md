@@ -48,9 +48,10 @@ Verified: deployment on docker 29, both services healthy in ~80 seconds,
 
 ## Version
 
-The umami file refers to `ghcr.io/umami-software/umami:latest`, so each
-deployment takes a fresh image. To pin a version, use `images:` in the
-pipeline (`umami: ghcr.io/umami-software/umami:<version>`).
+The umami file refers to `ghcr.io/umami-software/umami:latest`; the
+pipeline pins the version with `images:`,
+`ghcr.io/umami-software/umami:3.4.0`. Upgrade by editing that line (and run
+a "Dry run" before deploying).
 
 ## Deletion
 

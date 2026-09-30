@@ -47,9 +47,9 @@ DATABASE_URL=postgresql://umami:<пароль базы>@db:5432/umami
 
 ## Версия
 
-Файл umami ссылается на `ghcr.io/umami-software/umami:latest` — каждая
-выкладка берёт свежий образ. Закрепить версию — `images:` в конвейере
-(`umami: ghcr.io/umami-software/umami:<версия>`).
+Файл umami ссылается на `ghcr.io/umami-software/umami:latest`; конвейер
+закрепляет версию через `images:` — `ghcr.io/umami-software/umami:3.4.0`.
+Обновление — правкой этой строки (и «Сухой прогон» перед выкладкой).
 
 ## Удаление
 

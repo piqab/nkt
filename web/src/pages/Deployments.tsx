@@ -562,6 +562,14 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
     setBad(false)
     const proj = (project || p.name).toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^[-_]+/, '').slice(0, 63) || 'app'
     const site = ex?.site ?? { service: 'web', port: 80 }
+    const block = (name: string, rec: Record<string, string | string[]> | undefined, comment: string) =>
+      rec
+        ? `  ${name}:${comment ? '                          '.slice(name.length) + '# ' + comment : ''}\n` +
+          Object.entries(rec)
+            .map(([svc, v]) => `    ${svc}: ${Array.isArray(v) ? `[${v.map((x) => (x.includes(':') ? `"${x}"` : x)).join(', ')}]` : v}\n`)
+            .join('')
+        : ''
+    const files = ex?.files ? `  files: [${ex.files.join(', ')}]              # ${t('deploy.fromLinkFilesComment')}\n` : ''
     const envKeys = ex?.envKeys
       ? `  env_keys:                        # ${t('deploy.envKeysComment')}\n` +
         Object.entries(ex.envKeys)
@@ -576,7 +584,10 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
       `repo: ${p.repo}\nref: ${p.ref}\n\naction: compose\ncompose:\n  file: ${p.file}\n  project: ${proj}\n` +
       `  hosts: [${picked.join(', ')}]\n` +
       (ex ? '' : `  # files: [${p.file.includes('/') ? p.file.slice(0, p.file.lastIndexOf('/') + 1) : ''}nginx.conf]  # ${t('deploy.fromLinkFilesComment')}\n`) +
-      `  wait_timeout: 5m\n` +
+      files +
+      `  wait_timeout: ${ex?.waitTimeout ?? '5m'}\n` +
+      block('images', ex?.images, t('deploy.imagesComment')) +
+      block('ports', ex?.ports, t('deploy.portsComment')) +
       envKeys +
       `  # site:                          # ${t('deploy.fromLinkSiteComment')}\n` +
       `  #   domains: [${ex ? ex.project : proj}.example.com]\n` +

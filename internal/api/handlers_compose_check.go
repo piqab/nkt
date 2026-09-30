@@ -356,6 +356,9 @@ func (s *Server) checkImage(ctx context.Context, c collect.Collector, engine, im
 		}
 		low := strings.ToLower(text)
 		out.State = "unknown"
+		if strings.Contains(low, "429") || strings.Contains(low, "toomanyrequests") {
+			text = msgs.Tc(ctx, "compose.pullRateLimit")
+		}
 		if strings.Contains(low, "no such manifest") || strings.Contains(low, "manifest unknown") || strings.Contains(low, "not found") {
 			out.State = "missing"
 		}

@@ -3250,13 +3250,35 @@
     "examples": {
       "httpbin": {
         "title": "httpbin",
-        "hint": "An HTTP testing service; one container, go-httpbin from the nkt repository."
+        "hint": "An HTTP testing service; one container."
+      },
+      "uptimekuma": {
+        "title": "Uptime Kuma",
+        "hint": "Uptime monitoring; one container, data in ./data. The project's compose file."
       },
       "umami": {
         "title": "umami + PostgreSQL",
-        "hint": "Web analytics: two services (app and database), secrets from the pipeline .env (env_keys), a data volume."
+        "hint": "Web analytics: two services, secrets from .env (env_keys), a pinned version (images)."
+      },
+      "n8n": {
+        "title": "n8n + PostgreSQL",
+        "hint": "Automation: three services, the init-data.sh file alongside (files), everything from the project's .env."
+      },
+      "gitea": {
+        "title": "Gitea + PostgreSQL",
+        "hint": "A git server: the web through the site, SSH on 2222 open to the outside (ports, 0.0.0.0)."
+      },
+      "wordpress": {
+        "title": "WordPress + MariaDB",
+        "hint": "A WordPress site behind the HTTPS proxy; passwords from .env."
+      },
+      "plausible": {
+        "title": "Plausible (PostgreSQL + ClickHouse)",
+        "hint": "Analytics: three services, ClickHouse configs alongside (files); needs ~2 GB of memory."
       }
-    }
+    },
+    "imagesComment": "pinned image versions",
+    "portsComment": "port publications instead of the file's"
   },
   "edge": {
     "subtitle": "Webhooks from the internet without exposing the hub: edge on a VPS accepts only them, the hub keeps the tunnel to it.",

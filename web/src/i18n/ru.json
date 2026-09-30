@@ -3254,13 +3254,35 @@
     "examples": {
       "httpbin": {
         "title": "httpbin",
-        "hint": "Сервис для проверки HTTP-клиентов; один контейнер, go-httpbin из репозитория nkt."
+        "hint": "Сервис для проверки HTTP-клиентов; один контейнер."
+      },
+      "uptimekuma": {
+        "title": "Uptime Kuma",
+        "hint": "Мониторинг доступности; один контейнер, данные в ./data. Compose-файл проекта."
       },
       "umami": {
         "title": "umami + PostgreSQL",
-        "hint": "Веб-аналитика: два сервиса (приложение и база), секреты из .env конвейера (env_keys), том с данными."
+        "hint": "Веб-аналитика: два сервиса, секреты из .env (env_keys), версия закреплена (images)."
+      },
+      "n8n": {
+        "title": "n8n + PostgreSQL",
+        "hint": "Автоматизация: три сервиса, файл init-data.sh рядом (files), всё — из .env проекта."
+      },
+      "gitea": {
+        "title": "Gitea + PostgreSQL",
+        "hint": "Git-сервер: веб — через сайт, SSH на 2222 — наружу (ports, 0.0.0.0)."
+      },
+      "wordpress": {
+        "title": "WordPress + MariaDB",
+        "hint": "Сайт на WordPress за прокси с HTTPS; пароли из .env."
+      },
+      "plausible": {
+        "title": "Plausible (PostgreSQL + ClickHouse)",
+        "hint": "Аналитика: три сервиса, конфиги ClickHouse рядом (files); нужно ~2 ГБ памяти."
       }
-    }
+    },
+    "imagesComment": "закреплённые версии образов",
+    "portsComment": "публикации портов вместо тех, что в файле"
   },
   "edge": {
     "subtitle": "Вебхуки из интернета без открытого хаба: edge на VPS принимает только их, хаб сам держит к нему туннель.",

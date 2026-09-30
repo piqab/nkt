@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.63 — 2026-09-30
+
+- **"Examples": seven verified stacks:** httpbin, Uptime Kuma, umami +
+  PostgreSQL, n8n + PostgreSQL, Gitea + PostgreSQL, WordPress + MariaDB and
+  Plausible (PostgreSQL + ClickHouse). Each was deployed on docker and
+  checked by the service's answer; README and `pipeline.yaml` are in
+  `examples/`. They show `files` (n8n, Plausible), `env_keys` (umami, n8n,
+  Plausible), `images` (umami pinned at 3.4.0), `ports` with SSH open
+  (Gitea), and a site behind HTTPS (WordPress).
+- **A failed image pull names the cause:** "Docker Hub limited pulls
+  (429)", "no access to the image", "no such tag" instead of "pull: code
+  1"; the dry run also names the Docker Hub limit.
+
 ## v1.11.62 — 2026-09-30
 
 - **`compose.env_keys`: secrets from .env for someone else's compose

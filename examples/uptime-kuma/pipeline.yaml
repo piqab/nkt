@@ -1,0 +1,14 @@
+# Uptime Kuma — мониторинг доступности, compose-файл проекта как есть.
+repo: https://github.com/louislam/uptime-kuma.git
+ref: master
+
+action: compose
+compose:
+  file: compose.yaml
+  project: uptime-kuma
+  hosts: [web1]
+  wait_timeout: 5m
+  site:
+    domains: [status.example.com]
+    service: uptime-kuma
+    port: 3001
