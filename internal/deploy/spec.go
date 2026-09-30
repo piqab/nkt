@@ -81,6 +81,10 @@ type ComposeSpec struct {
 	// Images — готовые образы сервисов вместо сборки: сервис → образ
 	// (build в compose-файле убирается). Для чужих compose-файлов с build:.
 	Images map[string]string `yaml:"images,omitempty"`
+	// Ports — публикации портов сервисов вместо тех, что в compose-файле:
+	// сервис → список ("127.0.0.1:8080:80"); пустой список — не
+	// публиковать (порт 80 хоста нужен прокси сайта).
+	Ports map[string][]string `yaml:"ports,omitempty"`
 	// Site — сайт стека: строкой — проверить по HTTPS после выкладки,
 	// блоком — настроить (прокси, сертификат); см. SiteSpec.
 	Site *SiteSpec `yaml:"site,omitempty"`
@@ -207,6 +211,9 @@ func (s Spec) Validate() error {
 			}
 		}
 		if err := validateImages(c.Images); err != nil {
+			return err
+		}
+		if err := validatePorts(c.Ports); err != nil {
 			return err
 		}
 		if err := c.Site.validate(c); err != nil {

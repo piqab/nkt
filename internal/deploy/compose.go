@@ -139,12 +139,39 @@ func validateImages(images map[string]string) error {
 	return nil
 }
 
+// portRe — публикация порта compose строкой: [адрес:][порт хоста:]порт
+// контейнера[/tcp|udp], диапазоны через «-».
+var portRe = regexp.MustCompile(`^((\d{1,3}\.){3}\d{1,3}:)?(\d{1,5}(-\d{1,5})?:)?\d{1,5}(-\d{1,5})?(/(tcp|udp))?$`)
+
+// validatePorts — compose.ports: сервис → публикации (пусто — убрать).
+func validatePorts(ports map[string][]string) error {
+	for svc, list := range ports {
+		if !composeServiceRe.MatchString(svc) {
+			return msgs.Errorf("deploy.specBad", "compose.ports", svc)
+		}
+		for _, p := range list {
+			if !portRe.MatchString(p) {
+				return msgs.Errorf("deploy.specBad", "compose.ports."+svc, p)
+			}
+		}
+	}
+	return nil
+}
+
 // OverrideImages ставит сервисам готовые образы (compose.images): image —
 // из описания конвейера, build убирается. Так выкладывается чужой
 // compose-файл, который собирает образ из исходников, без форка. Сервиса
 // нет в файле — ошибка (опечатка не должна пройти молча).
 func OverrideImages(text string, images map[string]string) (string, error) {
-	if len(images) == 0 {
+	return OverrideServices(text, images, nil)
+}
+
+// OverrideServices — compose.images и compose.ports в копии compose-файла,
+// которая едет на хост (файл в репозитории не меняется). ports: список
+// заменяет публикации сервиса целиком, пустой — убирает их (сервис
+// доступен только через прокси сайта или внутреннюю сеть стека).
+func OverrideServices(text string, images map[string]string, ports map[string][]string) (string, error) {
+	if len(images) == 0 && len(ports) == 0 {
 		return text, nil
 	}
 	var doc yaml.Node
@@ -155,26 +182,48 @@ func OverrideImages(text string, images map[string]string) (string, error) {
 		return "", msgs.Errorf("deploy.composeYAML", "not a mapping")
 	}
 	services := mapValue(doc.Content[0], "services")
-	if services == nil || services.Kind != yaml.MappingNode {
-		return "", msgs.Errorf("deploy.imageServiceMissing", strings.Join(sortedKeys(images), ", "))
+	names := sortedKeys(images)
+	for n := range ports {
+		if _, dup := images[n]; !dup {
+			names = append(names, n)
+		}
 	}
-	for _, name := range sortedKeys(images) {
+	if services == nil || services.Kind != yaml.MappingNode {
+		return "", msgs.Errorf("deploy.imageServiceMissing", strings.Join(names, ", "))
+	}
+	for _, name := range names {
 		svc := mapValue(services, name)
 		if svc == nil || svc.Kind != yaml.MappingNode {
 			return "", msgs.Errorf("deploy.imageServiceMissing", name)
 		}
+		img, setImage := images[name]
+		list, setPorts := ports[name]
 		var kept []*yaml.Node
 		for i := 0; i+1 < len(svc.Content); i += 2 {
-			if k := svc.Content[i].Value; k == "build" || k == "image" {
+			k := svc.Content[i].Value
+			if setImage && (k == "build" || k == "image") {
+				continue
+			}
+			if setPorts && k == "ports" {
 				continue
 			}
 			kept = append(kept, svc.Content[i], svc.Content[i+1])
 		}
-		img := []*yaml.Node{
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "image"},
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: images[name]},
+		if setPorts && len(list) > 0 {
+			seq := &yaml.Node{Kind: yaml.SequenceNode, Tag: "!!seq"}
+			for _, p := range list {
+				// В кавычках: «80:80» без них YAML 1.1 читает как число.
+				seq.Content = append(seq.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: p, Style: yaml.DoubleQuotedStyle})
+			}
+			kept = append(kept, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "ports"}, seq)
 		}
-		svc.Content = append(img, kept...)
+		if setImage {
+			kept = append([]*yaml.Node{
+				{Kind: yaml.ScalarNode, Tag: "!!str", Value: "image"},
+				{Kind: yaml.ScalarNode, Tag: "!!str", Value: img},
+			}, kept...)
+		}
+		svc.Content = kept
 	}
 	out, err := yaml.Marshal(&doc)
 	if err != nil {

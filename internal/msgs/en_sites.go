@@ -171,5 +171,5 @@ var enSitesCatalog = map[string]string{
 	"hub.siteRemoveStep":            "Removing %s from the host",
 	"hub.siteRemoved":               "Site %s removed",
 	"deploy.composeYAML":            "cannot parse the compose file: %s",
-	"deploy.imageServiceMissing":    "compose.images: service %s is not in the compose file",
+	"deploy.imageServiceMissing":    "compose.images / compose.ports: service %s is not in the compose file",
 }

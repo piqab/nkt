@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.53 — 2026-09-30
+
+- **`compose.ports` in the pipeline:** a service's port publications
+  instead of those in the compose file; an empty list removes them (e.g.
+  the `80:80` in `postmanlabs/httpbin`, so port 80 stays with the site
+  proxy). No fork of someone else's file needed.
+
 ## v1.11.52 — 2026-09-30
 
 - **`compose.images` in the pipeline:** ready images for services instead

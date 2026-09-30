@@ -146,7 +146,13 @@ compose:
     file: docker-compose.yml          # from github.com/postmanlabs/httpbin
     images:
       httpbin: kennethreitz/httpbin   # service: image ({{nkt.tag}} allowed)
+    ports:
+      httpbin: []                     # drop the file's 80:80: the site proxy needs 80/443
   ```
+
+  `ports:` replaces the service's publications entirely
+  (`["127.0.0.1:8080:80"]`); an empty list removes them, in someone else's
+  file without a fork.
 - **The stack's `.env`** is set in the pipeline's "Access": stored on the
   hub encrypted, written to the host with 0600 permissions, never in the
   version history or logs.
