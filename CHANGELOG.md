@@ -687,3 +687,4 @@
 - `540035e` collect: DeleteFile проверяет путь до удаления (CodeQL #271)
 - `83addb7` Выкладки compose: compose.images — готовые образы вместо build:
 - `83f8d1c` Выкладки compose: compose.ports — переопределение публикаций портов
+- `53b38b9` Шаблон конвейера: пример compose.ports
