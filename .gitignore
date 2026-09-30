@@ -39,3 +39,6 @@ Thumbs.db
 # Сайт (VitePress) — сборка и кэш
 /site/.vitepress/dist/
 /site/.vitepress/cache/
+
+# Кэш Python скриптов скриншотов
+__pycache__/
