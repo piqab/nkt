@@ -337,6 +337,8 @@ clusters: [prod]        # кластеры хаба
 #   files: [deploy/nginx.conf] # что ещё нужно стеку (внутри каталога compose-файла)
 #   images:                    # готовые образы вместо build: в чужом compose-файле
 #     web: ghcr.io/org/app:{{nkt.tag}}
+#   ports:                     # публикации портов вместо тех, что в compose-файле
+#     web: []                  # [] — не публиковать (80/443 нужны прокси сайта)
 #   wait_timeout: 5m           # ждать подъёма и healthcheck
 #   site: app.example.com      # после выкладки проверить сайт по HTTPS, или блоком —
 #   # сайт настроит хаб (прокси, сертификат; стек — на одном хосте):
@@ -384,6 +386,8 @@ clusters: [prod]        # hub clusters
 #   files: [deploy/nginx.conf] # what else the stack needs (inside the compose file's directory)
 #   images:                    # ready images instead of build: in someone else's compose file
 #     web: ghcr.io/org/app:{{nkt.tag}}
+#   ports:                     # port publications instead of those in the compose file
+#     web: []                  # [] — publish nothing (the site proxy needs 80/443)
 #   wait_timeout: 5m           # wait for startup and healthchecks
 #   site: app.example.com      # check the site over HTTPS after the deployment, or as a
 #   # block the hub sets the site up (proxy, certificate; the stack on one host):
