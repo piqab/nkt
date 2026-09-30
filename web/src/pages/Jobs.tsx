@@ -3,6 +3,11 @@ import { blurText } from '../privacy'
 import { Button, Progress, Spin, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { RedoOutlined } from '@ant-design/icons'
 import { AIExplain } from '../components/AIExplain'
+
+/** Задания «Выкладок» — без разбора ошибки моделью: их журнал сам говорит,
+ * что не так (сухой прогон, порт сайта, старый хост), и лампочка там
+ * только мешает. */
+const NO_AI_KINDS = new Set(['deploy.run', 'pipeline.remove', 'site.setup', 'site.remove', 'site.apply', 'compose.deploy', 'compose.remove'])
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import { wsURL } from '../hooks/usePty'
@@ -361,7 +366,9 @@ export function JobLogModal({
             <span>{current.error}</span>
             {/* Ошибка задания — тот же случай, что находка: объяснить и
                 подсказать, что делать. */}
-            <AIExplain ctx={{ kind: 'job-error', title: current.title || current.kind, detail: current.error, service: current.kind }} />
+            {!NO_AI_KINDS.has(current.kind) && (
+              <AIExplain ctx={{ kind: 'job-error', title: current.title || current.kind, detail: current.error, service: current.kind }} />
+            )}
           </span>
         </Banner>
       )}

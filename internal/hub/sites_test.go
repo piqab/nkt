@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -9,8 +10,10 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"io"
 	"log/slog"
 	"math/big"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -541,5 +544,47 @@ func TestPipelineRemoveJob(t *testing.T) {
 	pl, err := db.PipelineByID(ctx, pid2)
 	if err != nil || !strings.Contains(pl.Removal, "error") {
 		t.Fatalf("removal state: %+v %v", pl.Removal, err)
+	}
+}
+
+// Старый хост не знает новых полей запроса — хаб повторяет без них.
+func TestComposeOldHostFallback(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git не установлен")
+	}
+	deploy.AllowLocalReposForTest(true)
+	defer deploy.AllowLocalReposForTest(false)
+	srv, db, _ := localFixtureHub(t)
+	ctx := context.Background()
+	inner := srv.local
+	srv.local = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/api/compose/stacks/") {
+			raw, _ := io.ReadAll(r.Body)
+			if strings.Contains(string(raw), "site_port") || strings.Contains(string(raw), "env_sha") {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				_, _ = w.Write([]byte(`{"error":"некорректное тело запроса: json: unknown field \"site_port\""}`))
+				return
+			}
+			r.Body = io.NopCloser(bytes.NewReader(raw))
+		}
+		inner.ServeHTTP(w, r)
+	})
+	repo := t.TempDir()
+	testGit(t, repo, "init", "-q", "-b", "main")
+	_ = os.WriteFile(filepath.Join(repo, "compose.yaml"), []byte("services:\n  web:\n    image: nginx\n"), 0o644)
+	testGit(t, repo, "add", ".")
+	testGit(t, repo, "commit", "-q", "-m", "one")
+	content := "repo: " + repo + "\nref: main\naction: compose\ncompose:\n  file: compose.yaml\n  project: shop\n  hosts: [localhost]\n" +
+		"  site:\n    domains: [shop.example.com]\n    service: web\n    port: 80\n"
+	id, err := srv.jobs.Start(ctx, jobs.Spec{Kind: KindDeploy, Queue: "deploy:dryrun", Author: "admin", Steps: 3,
+		Params: DeployParams{DryRun: true, Content: content}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := waitJobDone(t, db, id)
+	log := jobLogText(t, ctx, db, id)
+	if j.Status != store.JobSucceeded || !strings.Contains(log, "site_service") {
+		t.Fatalf("old host: %+v\n%s", j, log)
 	}
 }

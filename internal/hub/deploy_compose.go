@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -156,7 +157,7 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 			Engine    string `json:"engine"`
 			EnvEdited bool   `json:"env_edited"`
 		}
-		if _, err := s.hostCall(ctx, user, t.ID, "POST", "/api/compose/stacks/deploy", body, &started); err != nil {
+		if _, err := s.composeHostPost(ctx, jc, user, t, "/api/compose/stacks/deploy", body, &started); err != nil {
 			return msgs.Errorf("deploy.composeHostFailed", t.Name, msgs.Localize(lang, err))
 		}
 		if started.EnvEdited {
@@ -194,6 +195,13 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 // bindComposePorts — адрес публикаций портов в копии compose-файла и
 // строка журнала про каждый порт.
 func bindComposePorts(jc *jobs.Context, files map[string]string, main string, c *deploy.ComposeSpec) error {
+	if other := c.SitePortsMismatch(); len(other) > 0 {
+		list := make([]string, len(other))
+		for i, p := range other {
+			list[i] = strconv.Itoa(p)
+		}
+		jc.Log("deploy.sitePortsMismatch", c.Site.Service, strings.Join(list, ", "), c.Site.Port)
+	}
 	out, changes, err := deploy.BindPorts(files[main], c.BindAddr(), c.BindForce)
 	if err != nil {
 		return err
@@ -210,6 +218,32 @@ func bindComposePorts(jc *jobs.Context, files map[string]string, main string, c 
 		}
 	}
 	return nil
+}
+
+// composeOptionalFields — поля запроса к хосту, появившиеся позже самого
+// запроса: старый хост их не знает и отвергает тело целиком («unknown
+// field»). Тогда запрос повторяется без них — выкладка работает, а
+// проверки, которых старому хосту не сделать, в журнале названы.
+var composeOptionalFields = []string{"env_sha", "site_service", "site_port"}
+
+// composeHostPost — POST к хосту с откатом на старый хост.
+func (s *Server) composeHostPost(ctx context.Context, jc *jobs.Context, user string, t targetHost, path string, body map[string]any, out any) (int, error) {
+	code, err := s.hostCall(ctx, user, t.ID, "POST", path, body, out)
+	if err == nil || code != http.StatusBadRequest || !strings.Contains(msgs.Localize(msgs.EN, err), "unknown field") {
+		return code, err
+	}
+	var dropped []string
+	for _, k := range composeOptionalFields {
+		if _, ok := body[k]; ok {
+			delete(body, k)
+			dropped = append(dropped, k)
+		}
+	}
+	if len(dropped) == 0 {
+		return code, err
+	}
+	jc.Log("deploy.hostOld", t.Name, strings.Join(dropped, ", "))
+	return s.hostCall(ctx, user, t.ID, "POST", path, body, out)
 }
 
 // pipelineEnv — расшифрованный .env стека конвейера (nil — не задан).

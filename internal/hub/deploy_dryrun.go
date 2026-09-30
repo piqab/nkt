@@ -119,7 +119,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 		if c.Site.Managed() {
 			body["site_service"], body["site_port"] = c.Site.Service, c.Site.Port
 		}
-		code, err := s.hostCall(ctx, user, t.ID, "POST", "/api/compose/stacks/check", body, &res)
+		code, err := s.composeHostPost(ctx, jc, user, t, "/api/compose/stacks/check", body, &res)
 		switch {
 		case code == http.StatusNotFound || code == http.StatusMethodNotAllowed:
 			jc.Log("deploy.dryOldHost", t.Name)
@@ -301,6 +301,9 @@ func logSitePort(jc *jobs.Context, c *deploy.ComposeSpec, res composeCheck) int 
 		return 1
 	case len(res.SitePorts) == 0:
 		jc.Log("deploy.drySitePortUnknown", res.SiteImage)
+	case !slices.Contains(res.SitePorts, sp.Port) && len(res.SitePorts) == 1:
+		jc.Log("deploy.drySitePortBadOne", sp.Port, res.SiteImage, res.SitePorts[0], res.SitePorts[0])
+		return 1
 	case !slices.Contains(res.SitePorts, sp.Port):
 		ports := make([]string, len(res.SitePorts))
 		for i, p := range res.SitePorts {

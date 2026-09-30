@@ -110,6 +110,9 @@ func (s *SiteSpec) validate(c *ComposeSpec) error {
 	if !site.ValidName(s.Service) {
 		return msgs.Errorf("deploy.specBad", "compose.site.service", s.Service)
 	}
+	if s.Port == 0 {
+		return msgs.Errorf("deploy.sitePortMissing")
+	}
 	if s.Port < 1 || s.Port > 65535 {
 		return msgs.Errorf("deploy.specBad", "compose.site.port", strconv.Itoa(s.Port))
 	}
@@ -247,5 +250,43 @@ func sortedKeys(m map[string]string) []string {
 		out = append(out, k)
 	}
 	sort.Strings(out)
+	return out
+}
+
+// containerPort — порт контейнера из записи публикации («127.0.0.1:8080:80»,
+// «8080:80/tcp», «80») или 0, если не разобрать.
+func containerPort(p string) int {
+	p = strings.SplitN(p, "/", 2)[0]
+	if i := strings.LastIndexByte(p, ':'); i >= 0 {
+		p = p[i+1:]
+	}
+	n, err := strconv.Atoi(p)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// SitePortsMismatch — порты контейнера, которые compose.ports публикует у
+// сервиса сайта, если среди них нет site.port (пусто — всё сходится или
+// ports для сервиса не задан).
+func (c ComposeSpec) SitePortsMismatch() []int {
+	if !c.Site.Managed() {
+		return nil
+	}
+	list, ok := c.Ports[c.Site.Service]
+	if !ok || len(list) == 0 {
+		return nil
+	}
+	var out []int
+	for _, p := range list {
+		n := containerPort(p)
+		if n == c.Site.Port {
+			return nil
+		}
+		if n > 0 {
+			out = append(out, n)
+		}
+	}
 	return out
 }

@@ -304,7 +304,9 @@ compose:
   closed), the deployment still succeeds: the stack is updated. The reason
   is in the deployment log and on the site in the "Sites" tab.
 - **`port` is the port inside the container**, the one the image listens
-  on. Before installing the proxy and issuing the certificate, the hub
+  on; it is required and `compose.ports` does not replace it (nkt publishes
+  it for the site on 127.0.0.1 itself). If `ports:` publishes a different
+  container port of the service, the log warns. Before installing the proxy and issuing the certificate, the hub
   checks it against the ports the image declares (`EXPOSE`; if the image
   declares none, `expose:` and `ports` in compose): a wrong port is a site
   error with a hint ("image kennethreitz/httpbin declares 80"), and no
@@ -462,6 +464,7 @@ Docker Compose. Step by step — [CI/CD examples](/en/guide/cicd-examples).
 | Webhook `401` | Wrong secret or signature; a replayed delivery ("Redeliver" in GitHub sends the same ID); for the nkt signature — CI and hub clocks differ by more than 5 minutes. The reason is in the hub's audit log (`pipeline.hook.rejected`) |
 | `200 ignored: another branch` | The push wasn't to `ref`; the tag doesn't match `tags` |
 | `no cluster matches` | Names in `clusters` don't match the "Clusters" section, the group has no clusters or the cluster isn't "ready" |
+| `unknown field "site_port"` / "an old nkt version does not know the fields" | nkt on the host is older than the hub: the hub repeats the request without the new fields (the site port is not checked, hand edits of `.env` are not tracked); update nkt on the host |
 | `git is not installed on the hub` | The "Install git" button on the "Pipelines" tab, or `apt install git` on the hub machine |
 | `the repository has no branch or tag …` | A typo in `ref`, the tag isn't pushed yet (`git push origin v1.0.0`) |
 | `git …: Authentication failed` / `Permission denied (publickey)` | A private repository without "Access", the token can't read, the key isn't added as a deploy key |
