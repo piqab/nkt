@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.52 — 2026-09-30
+
+- **`compose.images` in the pipeline:** ready images for services instead
+  of `build:`, for someone else's compose file without a fork (e.g.
+  `postmanlabs/httpbin` → `httpbin: kennethreitz/httpbin`). The hub sets
+  the service's `image:` and drops `build:`; `{{nkt.tag}}` is allowed in
+  the image. A service missing from the file is an error before the
+  deployment.
+
 ## v1.11.51 — 2026-09-29
 
 - Deleting a file on a host checks the path up front (absolute, no

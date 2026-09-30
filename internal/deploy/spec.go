@@ -78,6 +78,9 @@ type ComposeSpec struct {
 	Pull *bool `yaml:"pull,omitempty"`
 	// WaitTimeout — сколько ждать подъёма и healthcheck на хосте (5m).
 	WaitTimeout string `yaml:"wait_timeout,omitempty"`
+	// Images — готовые образы сервисов вместо сборки: сервис → образ
+	// (build в compose-файле убирается). Для чужих compose-файлов с build:.
+	Images map[string]string `yaml:"images,omitempty"`
 	// Site — сайт стека: строкой — проверить по HTTPS после выкладки,
 	// блоком — настроить (прокси, сертификат); см. SiteSpec.
 	Site *SiteSpec `yaml:"site,omitempty"`
@@ -203,6 +206,9 @@ func (s Spec) Validate() error {
 				return msgs.Errorf("deploy.specBad", "compose.wait_timeout", c.WaitTimeout)
 			}
 		}
+		if err := validateImages(c.Images); err != nil {
+			return err
+		}
 		if err := c.Site.validate(c); err != nil {
 			return err
 		}
@@ -322,6 +328,8 @@ clusters: [prod]        # кластеры хаба
 #   project: app               # /srv/compose/app на хосте
 #   hosts: [web1, web2]        # или group: prod
 #   files: [deploy/nginx.conf] # что ещё нужно стеку (внутри каталога compose-файла)
+#   images:                    # готовые образы вместо build: в чужом compose-файле
+#     web: ghcr.io/org/app:{{nkt.tag}}
 #   wait_timeout: 5m           # ждать подъёма и healthcheck
 #   site: app.example.com      # после выкладки проверить сайт по HTTPS, или блоком —
 #   # сайт настроит хаб (прокси, сертификат; стек — на одном хосте):
@@ -367,6 +375,8 @@ clusters: [prod]        # hub clusters
 #   project: app               # /srv/compose/app on the host
 #   hosts: [web1, web2]        # or group: prod
 #   files: [deploy/nginx.conf] # what else the stack needs (inside the compose file's directory)
+#   images:                    # ready images instead of build: in someone else's compose file
+#     web: ghcr.io/org/app:{{nkt.tag}}
 #   wait_timeout: 5m           # wait for startup and healthchecks
 #   site: app.example.com      # check the site over HTTPS after the deployment, or as a
 #   # block the hub sets the site up (proxy, certificate; the stack on one host):

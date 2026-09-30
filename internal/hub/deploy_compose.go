@@ -69,6 +69,17 @@ func collectComposeFiles(src string, c *deploy.ComposeSpec, vars deploy.Vars) (m
 		return nil, "", err
 	}
 	main, _ := rel(c.File)
+	if len(c.Images) > 0 {
+		images := map[string]string{}
+		for svc, img := range c.Images {
+			images[svc] = vars.Substitute(img)
+		}
+		out, err := deploy.OverrideImages(files[main], images)
+		if err != nil {
+			return nil, "", err
+		}
+		files[main] = out
+	}
 	if names := deploy.BuildOnlyServices(files[main]); len(names) > 0 {
 		// Ловим до хостов: там up попытался бы собрать образ без
 		// Dockerfile и упал бы с невнятной ошибкой.

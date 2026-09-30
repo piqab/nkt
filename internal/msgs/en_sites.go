@@ -59,7 +59,7 @@ var enSitesCatalog = map[string]string{
 	"site.stepTarget":               "Site target",
 	"site.tooManyDomains":           "Too many names: %d (20 at most)",
 	"site.upstream":                 "The proxy will point at %s",
-	"compose.buildOnly":             "service %s is built from source (build:) — specify a ready image (image:): deployments take ready images only; building is the job of CI",
+	"compose.buildOnly":             "service %s is built from source (build:) — specify a ready image: image: in the compose file or compose.images in the pipeline description (service: image); building is the job of CI",
 	"deploy.composeBinary":          "%s is a binary file: stack files travel to the host as text; binaries belong in the image",
 	"deploy.composeFiles":           "Stack files: %d, stack %s, hosts: %d",
 	"deploy.composeHostDone":        "%s: the stack is up",
@@ -170,4 +170,6 @@ var enSitesCatalog = map[string]string{
 	"hub.siteRemoveTitle":           "Removing site %s",
 	"hub.siteRemoveStep":            "Removing %s from the host",
 	"hub.siteRemoved":               "Site %s removed",
+	"deploy.composeYAML":            "cannot parse the compose file: %s",
+	"deploy.imageServiceMissing":    "compose.images: service %s is not in the compose file",
 }

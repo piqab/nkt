@@ -45,3 +45,30 @@ func TestSiteSpec(t *testing.T) {
 		}
 	}
 }
+
+func TestOverrideImages(t *testing.T) {
+	// docker-compose.yml из github.com/postmanlabs/httpbin.
+	src := "version: '2'\nservices:\n    httpbin:\n      build: '.'\n      ports:\n        - '80:80'\n"
+	out, err := OverrideImages(src, map[string]string{"httpbin": "kennethreitz/httpbin"})
+	if err != nil || strings.Contains(out, "build") || !strings.Contains(out, "image: kennethreitz/httpbin") || !strings.Contains(out, "80:80") {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	if names := BuildOnlyServices(out); names != nil {
+		t.Fatal(names)
+	}
+	if _, err := OverrideImages(src, map[string]string{"web": "nginx"}); err == nil {
+		t.Fatal("unknown service accepted")
+	}
+	base := "repo: https://github.com/postmanlabs/httpbin.git\nref: master\naction: compose\ncompose:\n  file: docker-compose.yml\n  project: httpbin\n  hosts: [cn4]\n"
+	if _, err := ParseSpec(base + "  images:\n    httpbin: kennethreitz/httpbin\n"); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"  images:\n    httpbin: 'x; rm -rf /'\n", "  images:\n    'a b': nginx\n"} {
+		if _, err := ParseSpec(base + bad); err == nil {
+			t.Fatalf("accepted: %s", bad)
+		}
+	}
+	if _, err := ParseSpec(base + "  images:\n    httpbin: ghcr.io/me/httpbin:{{nkt.tag}}\n"); err != nil {
+		t.Fatal(err)
+	}
+}
