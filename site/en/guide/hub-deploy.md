@@ -153,6 +153,17 @@ compose:
   `ports:` replaces the service's publications entirely
   (`["127.0.0.1:8080:80"]`); an empty list removes them, in someone else's
   file without a fork.
+- **Ports on 127.0.0.1 only.** A publication without an address
+  (`8080:80`) listens on all addresses, and docker opens it with its own
+  iptables rules, bypassing ufw and firewalld. So the hub gives such
+  publications the `bind:` address, `127.0.0.1` by default (`8080:80` →
+  `127.0.0.1:8080:80`, `443` → `127.0.0.1::443`, `host_ip` in the long
+  syntax): the stack reaches the outside through the [site](#sites) proxy.
+  Publications that set an address are kept; `bind_force: true` replaces
+  them too. To open to the outside: `bind: 0.0.0.0` or an explicit address
+  in `ports:` (`"0.0.0.0:25:25"`). An entry with a variable (`${PORT}:80`)
+  cannot be parsed; the log warns. The deployment and dry run logs show
+  what happened to each port.
 - **The stack's `.env`** is set in the pipeline's "Access": stored on the
   hub encrypted, written to the host with 0600 permissions, never in the
   version history or logs.

@@ -85,6 +85,11 @@ type ComposeSpec struct {
 	// сервис → список ("127.0.0.1:8080:80"); пустой список — не
 	// публиковать (порт 80 хоста нужен прокси сайта).
 	Ports map[string][]string `yaml:"ports,omitempty"`
+	// Bind — адрес публикаций портов без адреса (по умолчанию 127.0.0.1:
+	// docker публикует в обход файрвола хоста); 0.0.0.0 — на всех.
+	Bind string `yaml:"bind,omitempty"`
+	// BindForce — адрес Bind и у публикаций, где адрес уже указан.
+	BindForce bool `yaml:"bind_force,omitempty"`
 	// Site — сайт стека: строкой — проверить по HTTPS после выкладки,
 	// блоком — настроить (прокси, сертификат); см. SiteSpec.
 	Site *SiteSpec `yaml:"site,omitempty"`
@@ -216,6 +221,9 @@ func (s Spec) Validate() error {
 		if err := validatePorts(c.Ports); err != nil {
 			return err
 		}
+		if err := validateBind(c.Bind); err != nil {
+			return err
+		}
 		if err := c.Site.validate(c); err != nil {
 			return err
 		}
@@ -339,6 +347,8 @@ clusters: [prod]        # кластеры хаба
 #     web: ghcr.io/org/app:{{nkt.tag}}
 #   ports:                     # публикации портов вместо тех, что в compose-файле
 #     web: []                  # [] — не публиковать (80/443 нужны прокси сайта)
+#   bind: 127.0.0.1            # адрес публикаций без адреса (по умолчанию; 0.0.0.0 — наружу)
+#   bind_force: false          # true — и у публикаций с указанным адресом
 #   wait_timeout: 5m           # ждать подъёма и healthcheck
 #   site: app.example.com      # после выкладки проверить сайт по HTTPS, или блоком —
 #   # сайт настроит хаб (прокси, сертификат; стек — на одном хосте):
@@ -388,6 +398,8 @@ clusters: [prod]        # hub clusters
 #     web: ghcr.io/org/app:{{nkt.tag}}
 #   ports:                     # port publications instead of those in the compose file
 #     web: []                  # [] — publish nothing (the site proxy needs 80/443)
+#   bind: 127.0.0.1            # address for publications without one (default; 0.0.0.0 — public)
+#   bind_force: false          # true — also for publications that set an address
 #   wait_timeout: 5m           # wait for startup and healthchecks
 #   site: app.example.com      # check the site over HTTPS after the deployment, or as a
 #   # block the hub sets the site up (proxy, certificate; the stack on one host):

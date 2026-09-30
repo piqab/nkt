@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.54 — 2026-09-30
+
+- **Compose stack ports on 127.0.0.1 only (important):** a publication
+  without an address (`8080:80`) listened on all addresses, and docker
+  opens it bypassing ufw and firewalld. The hub now gives such
+  publications the `compose.bind` address, `127.0.0.1` by default, **for
+  existing pipelines too, from their next deployment**. A stack meant to be
+  public without a proxy (mail, a game server) needs `bind: 0.0.0.0` or an
+  explicit address in `compose.ports`. `bind_force: true` replaces addresses
+  that are already set. The deployment and dry run logs show what happened
+  to each port.
+
 ## v1.11.53 — 2026-09-30
 
 - **`compose.ports` in the pipeline:** a service's port publications
