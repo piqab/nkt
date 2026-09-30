@@ -59,7 +59,7 @@ var ruSitesCatalog = map[string]string{
 	"site.stepTarget":               "Цель сайта",
 	"site.tooManyDomains":           "Слишком много имён: %d (до 20)",
 	"site.upstream":                 "Прокси будет смотреть на %s",
-	"compose.buildOnly":             "сервис %s собирается из исходников (build:) — укажите готовый образ (image:): выкладка берёт только готовые образы, сборка — дело CI",
+	"compose.buildOnly":             "сервис %s собирается из исходников (build:) — укажите готовый образ: image: в compose-файле или compose.images в описании конвейера (сервис: образ); сборка — дело CI",
 	"deploy.composeBinary":          "%s — двоичный файл: файлы стека едут на хост текстом, двоичному место в образе",
 	"deploy.composeFiles":           "Файлов стека: %d, стек %s, хостов: %d",
 	"deploy.composeHostDone":        "%s: стек поднят",
@@ -170,4 +170,6 @@ var ruSitesCatalog = map[string]string{
 	"hub.siteRemoveTitle":           "Удаление сайта %s",
 	"hub.siteRemoveStep":            "Удаление %s с хоста",
 	"hub.siteRemoved":               "Сайт %s удалён",
+	"deploy.composeYAML":            "compose-файл не разобрать: %s",
+	"deploy.imageServiceMissing":    "compose.images: сервиса %s нет в compose-файле",
 }

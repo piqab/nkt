@@ -1,6 +1,7 @@
 package deploy
 
 import (
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -116,4 +117,86 @@ func (s *SiteSpec) validate(c *ComposeSpec) error {
 		return msgs.Errorf("deploy.specBad", "compose.site.proxy", s.Proxy)
 	}
 	return nil
+}
+
+// imageRe — ссылка на образ: [registry[:порт]/]путь[:тег][@sha256:…];
+// {{nkt.tag}} подставляется до проверки на хосте, поэтому допустим.
+var imageRe = regexp.MustCompile(`^[a-z0-9]([a-z0-9._/:-]|\{\{nkt\.(tag|commit|ref)\}\}){0,254}(@sha256:[0-9a-f]{64})?$`)
+
+// composeServiceRe — имя сервиса compose.
+var composeServiceRe = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,62}$`)
+
+// validateImages — compose.images: сервис → готовый образ.
+func validateImages(images map[string]string) error {
+	for svc, img := range images {
+		if !composeServiceRe.MatchString(svc) {
+			return msgs.Errorf("deploy.specBad", "compose.images", svc)
+		}
+		if !imageRe.MatchString(img) {
+			return msgs.Errorf("deploy.specBad", "compose.images."+svc, img)
+		}
+	}
+	return nil
+}
+
+// OverrideImages ставит сервисам готовые образы (compose.images): image —
+// из описания конвейера, build убирается. Так выкладывается чужой
+// compose-файл, который собирает образ из исходников, без форка. Сервиса
+// нет в файле — ошибка (опечатка не должна пройти молча).
+func OverrideImages(text string, images map[string]string) (string, error) {
+	if len(images) == 0 {
+		return text, nil
+	}
+	var doc yaml.Node
+	if err := yaml.Unmarshal([]byte(text), &doc); err != nil {
+		return "", msgs.Errorf("deploy.composeYAML", err.Error())
+	}
+	if len(doc.Content) == 0 || doc.Content[0].Kind != yaml.MappingNode {
+		return "", msgs.Errorf("deploy.composeYAML", "not a mapping")
+	}
+	services := mapValue(doc.Content[0], "services")
+	if services == nil || services.Kind != yaml.MappingNode {
+		return "", msgs.Errorf("deploy.imageServiceMissing", strings.Join(sortedKeys(images), ", "))
+	}
+	for _, name := range sortedKeys(images) {
+		svc := mapValue(services, name)
+		if svc == nil || svc.Kind != yaml.MappingNode {
+			return "", msgs.Errorf("deploy.imageServiceMissing", name)
+		}
+		var kept []*yaml.Node
+		for i := 0; i+1 < len(svc.Content); i += 2 {
+			if k := svc.Content[i].Value; k == "build" || k == "image" {
+				continue
+			}
+			kept = append(kept, svc.Content[i], svc.Content[i+1])
+		}
+		img := []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "image"},
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: images[name]},
+		}
+		svc.Content = append(img, kept...)
+	}
+	out, err := yaml.Marshal(&doc)
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+func mapValue(m *yaml.Node, key string) *yaml.Node {
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			return m.Content[i+1]
+		}
+	}
+	return nil
+}
+
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }

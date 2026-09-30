@@ -136,7 +136,17 @@ compose:
   not start and no host is touched; otherwise some hosts would be updated
   while the rest kept the old stack.
 - Ready images only: the hub rejects a service with `build:` and no
-  `image:` before touching any host; building is CI's job.
+  `image:` before touching any host; building is CI's job. For someone
+  else's compose file with `build:` (without a fork), use `images:` in the
+  pipeline description: the hub gives the service a ready image and drops
+  `build:`:
+
+  ```yaml
+  compose:
+    file: docker-compose.yml          # from github.com/postmanlabs/httpbin
+    images:
+      httpbin: kennethreitz/httpbin   # service: image ({{nkt.tag}} allowed)
+  ```
 - **The stack's `.env`** is set in the pipeline's "Access": stored on the
   hub encrypted, written to the host with 0600 permissions, never in the
   version history or logs.
