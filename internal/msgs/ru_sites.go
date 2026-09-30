@@ -171,5 +171,5 @@ var ruSitesCatalog = map[string]string{
 	"hub.siteRemoveStep":            "Удаление %s с хоста",
 	"hub.siteRemoved":               "Сайт %s удалён",
 	"deploy.composeYAML":            "compose-файл не разобрать: %s",
-	"deploy.imageServiceMissing":    "compose.images: сервиса %s нет в compose-файле",
+	"deploy.imageServiceMissing":    "compose.images / compose.ports: сервиса %s нет в compose-файле",
 }

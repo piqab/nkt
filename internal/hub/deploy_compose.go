@@ -69,12 +69,12 @@ func collectComposeFiles(src string, c *deploy.ComposeSpec, vars deploy.Vars) (m
 		return nil, "", err
 	}
 	main, _ := rel(c.File)
-	if len(c.Images) > 0 {
+	if len(c.Images) > 0 || len(c.Ports) > 0 {
 		images := map[string]string{}
 		for svc, img := range c.Images {
 			images[svc] = vars.Substitute(img)
 		}
-		out, err := deploy.OverrideImages(files[main], images)
+		out, err := deploy.OverrideServices(files[main], images, c.Ports)
 		if err != nil {
 			return nil, "", err
 		}

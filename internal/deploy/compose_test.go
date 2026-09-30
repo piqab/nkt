@@ -72,3 +72,23 @@ func TestOverrideImages(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestOverridePorts(t *testing.T) {
+	src := "version: '2'\nservices:\n    httpbin:\n      build: '.'\n      ports:\n        - '80:80'\n    db:\n      image: postgres\n"
+	out, err := OverrideServices(src, map[string]string{"httpbin": "kennethreitz/httpbin"}, map[string][]string{"httpbin": {}, "db": {"127.0.0.1:5432:5432"}})
+	if err != nil || strings.Contains(out, "80:80") || strings.Contains(out, "build") || !strings.Contains(out, `"127.0.0.1:5432:5432"`) {
+		t.Fatalf("%v\n%s", err, out)
+	}
+	base := "repo: https://github.com/postmanlabs/httpbin.git\nref: master\naction: compose\ncompose:\n  file: docker-compose.yml\n  project: httpbin\n  hosts: [cn4]\n"
+	if _, err := ParseSpec(base + "  ports:\n    httpbin: []\n"); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"  ports:\n    httpbin: ['80:80; rm']\n", "  ports:\n    httpbin: ['abc']\n"} {
+		if _, err := ParseSpec(base + bad); err == nil {
+			t.Fatalf("accepted: %s", bad)
+		}
+	}
+	if _, err := OverrideServices(src, nil, map[string][]string{"nope": {}}); err == nil {
+		t.Fatal("unknown service accepted")
+	}
+}
