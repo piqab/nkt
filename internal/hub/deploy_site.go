@@ -3,7 +3,10 @@ package hub
 import (
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/piqab/nkt/internal/deploy"
@@ -98,8 +101,14 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 			return err
 		}
 	}
+	port := sp.Port
+	if port == 0 {
+		if port, err = s.autoSitePort(ctx, jc, user, t, c.Project, sp.Service); err != nil {
+			return err
+		}
+	}
 	want := store.Site{Domains: sp.Domains, HostID: t.ID, Proxy: proxy, Stack: c.Project, Service: sp.Service,
-		ContainerPort: sp.Port, OpenFirewall: sp.OpenFirewall(), PipelineID: pl.ID, Author: user}
+		ContainerPort: port, OpenFirewall: sp.OpenFirewall(), PipelineID: pl.ID, Author: user}
 	if cur != nil {
 		want.ID = cur.ID
 		if sameSite(*cur, want) && cur.Status == store.SiteOK {
@@ -109,9 +118,14 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 			full.HTTPS = chk
 			raw, _ := json.Marshal(full)
 			_ = s.db.SetSiteCheck(ctx, cur.ID, raw)
-			if chk.OK {
+			switch {
+			case chk.WrongCert:
+				err := msgs.Errorf("hub.siteWrongCert", want.Domains[0], strings.Join(chk.CertNames, ", "))
+				_ = s.db.SetSiteState(ctx, cur.ID, store.SiteFailed, msgs.Localize(jc.Lang(), err), jc.Job.ID)
+				return err
+			case chk.OK:
 				jc.Log("deploy.siteOK", want.Domains[0], chk.Status, chk.CertDaysLeft)
-			} else {
+			default:
 				jc.Log("deploy.siteFailed", want.Domains[0], chk.Error)
 			}
 			return nil
@@ -133,9 +147,50 @@ func (s *Server) pipelineSite(ctx context.Context, jc *jobs.Context, user string
 	return s.setupSite(ctx, jc, user, want, true, false)
 }
 
+// autoSitePort — site.port: auto (или не задан): порт, который объявляет
+// образ сервиса, если он один.
+func (s *Server) autoSitePort(ctx context.Context, jc *jobs.Context, user string, t targetHost, stack, service string) (int, error) {
+	var pc struct {
+		Checked      bool   `json:"checked"`
+		StackMissing bool   `json:"stack_missing"`
+		Found        bool   `json:"found"`
+		Ports        []int  `json:"ports"`
+		Image        string `json:"image"`
+	}
+	q := "/api/sites/port-check?stack=" + url.QueryEscape(stack) + "&service=" + url.QueryEscape(service)
+	code, err := s.hostCall(ctx, user, t.ID, "GET", q, nil, &pc)
+	switch {
+	case code == http.StatusNotFound || code == http.StatusMethodNotAllowed:
+		return 0, msgs.Errorf("deploy.sitePortAutoOld", t.Name)
+	case err != nil:
+		return 0, err
+	case !pc.Checked:
+		return 0, msgs.Errorf("deploy.sitePortAutoUnknown")
+	case pc.StackMissing:
+		return 0, msgs.Errorf("site.stackMissing", stack)
+	case !pc.Found:
+		return 0, msgs.Errorf("site.serviceMissing", service, stack)
+	case len(pc.Ports) != 1:
+		return 0, msgs.Errorf("deploy.sitePortAutoMany", pc.Image, portsText(pc.Ports))
+	}
+	jc.Log("deploy.sitePortAuto", pc.Ports[0], pc.Image)
+	return pc.Ports[0], nil
+}
+
+func portsText(ports []int) string {
+	if len(ports) == 0 {
+		return "—"
+	}
+	out := make([]string, len(ports))
+	for i, p := range ports {
+		out[i] = strconv.Itoa(p)
+	}
+	return strings.Join(out, ", ")
+}
+
 // dryRunSite — что сделала бы выкладка с сайтом (только журнал: неудача
 // сайта выкладку не отменяет, поэтому здесь — предупреждения).
-func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, pl store.Pipeline, c *deploy.ComposeSpec, t targetHost, services []string) {
+func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, pl store.Pipeline, c *deploy.ComposeSpec, t targetHost, port int) {
 	sp := c.Site
 	cur, clash, err := s.pipelineSiteFor(ctx, pl, sp.Domains)
 	if err != nil {
@@ -160,12 +215,15 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 	} else {
 		jc.Log("deploy.drySiteProxy", proxy)
 	}
+	if port == 0 {
+		port = sp.Port
+	}
 	if cur != nil && cur.Status == store.SiteOK && sameSite(*cur, store.Site{Domains: sp.Domains, HostID: t.ID, Proxy: proxy,
-		Stack: c.Project, Service: sp.Service, ContainerPort: sp.Port, OpenFirewall: sp.OpenFirewall()}) {
+		Stack: c.Project, Service: sp.Service, ContainerPort: port, OpenFirewall: sp.OpenFirewall()}) {
 		jc.Log("deploy.drySiteSame", sp.Domains[0])
 		return
 	}
-	jc.Log("deploy.drySiteWill", strings.Join(sp.Domains, ", "), sp.Service, sp.Port)
+	jc.Log("deploy.drySiteWill", strings.Join(sp.Domains, ", "), sp.Service, port)
 	chk := s.siteOutside(ctx, t, sp.Domains, false)
 	for _, d := range chk.DNS {
 		switch {

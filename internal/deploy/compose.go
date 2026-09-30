@@ -63,6 +63,13 @@ func (s *SiteSpec) UnmarshalYAML(n *yaml.Node) error {
 			return msgs.Errorf("deploy.specBad", "compose.site."+k, n.Content[i+1].Value)
 		}
 	}
+	// port: auto — порт из образа (как и без port): 0.
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Value == "port" && strings.EqualFold(n.Content[i+1].Value, "auto") {
+			n.Content = append(n.Content[:i:i], n.Content[i+2:]...)
+			break
+		}
+	}
 	type plain SiteSpec
 	return n.Decode((*plain)(s))
 }
@@ -110,11 +117,16 @@ func (s *SiteSpec) validate(c *ComposeSpec) error {
 	if !site.ValidName(s.Service) {
 		return msgs.Errorf("deploy.specBad", "compose.site.service", s.Service)
 	}
-	if s.Port == 0 {
-		return msgs.Errorf("deploy.sitePortMissing")
-	}
-	if s.Port < 1 || s.Port > 65535 {
+	// 0 — auto: порт, который объявляет образ (если он один), — при выкладке.
+	if s.Port < 0 || s.Port > 65535 {
 		return msgs.Errorf("deploy.specBad", "compose.site.port", strconv.Itoa(s.Port))
+	}
+	// Частая путаница: в site.port — порт хоста из compose.ports
+	// («127.0.0.1:8080:80» → 8080), а нужен порт внутри контейнера (80).
+	for _, p := range c.Ports[s.Service] {
+		if s.Port != 0 && hostPortOf(p) == s.Port && containerPort(p) != s.Port && containerPort(p) > 0 {
+			return msgs.Errorf("deploy.sitePortIsHost", s.Port, p, containerPort(p))
+		}
 	}
 	if s.Proxy != "" && !slices.Contains(site.Proxies, s.Proxy) {
 		return msgs.Errorf("deploy.specBad", "compose.site.proxy", s.Proxy)
@@ -289,4 +301,21 @@ func (c ComposeSpec) SitePortsMismatch() []int {
 		}
 	}
 	return out
+}
+
+// hostPortOf — порт хоста из записи публикации («127.0.0.1:8080:80» → 8080,
+// «8080:80» → 8080; «80» — 0, порт хоста не задан).
+func hostPortOf(p string) int {
+	body := strings.SplitN(p, "/", 2)[0]
+	if strings.HasPrefix(body, "[") {
+		if i := strings.Index(body, "]:"); i >= 0 {
+			body = body[i+2:]
+		}
+	}
+	parts := strings.Split(body, ":")
+	if len(parts) < 2 {
+		return 0
+	}
+	n, _ := strconv.Atoi(parts[len(parts)-2])
+	return n
 }

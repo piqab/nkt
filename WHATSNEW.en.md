@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.59 — 2026-09-30
+
+- **YAML errors in the pipeline description are explained:** the line,
+  its text and what is wrong: "key site already has the value
+  hb.example.com, yet a nested block follows", an unknown key with the
+  allowed ones, a tab, "a number is expected" and so on, instead of "did not
+  find expected key".
+- **Site port:** `port: auto` (or no `port`) takes the port from the image
+  if it declares one; a `site.port` equal to the host port from
+  `compose.ports` ("127.0.0.1:8080:80" with `port: 8080`) is an error with
+  the hint "80 is needed"; the publication log lines are clearer and come
+  after the heading.
+- **Wrong certificate:** if a site answers with a certificate for another
+  name (the proxy answers as another site), the HTTPS check says so, the
+  site gets the "error" status, and "Sites" shows "wrong certificate" with
+  the certificate's names.
+
 ## v1.11.58 — 2026-09-30
 
 - **A host with an old nkt version:** deployments and dry runs there no

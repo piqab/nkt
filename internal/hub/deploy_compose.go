@@ -3,7 +3,10 @@ package hub
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -127,9 +130,6 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	if err != nil {
 		return err
 	}
-	if err := bindComposePorts(jc, files, main, c); err != nil {
-		return err
-	}
 	env, err := s.pipelineEnv(pl)
 	if err != nil {
 		return err
@@ -149,6 +149,9 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 		return msgs.Errorf("deploy.composeEngines", strings.Join(bad, "; "))
 	}
 	jc.Log("deploy.composeFiles", len(files), c.Project, len(targets))
+	if err := bindComposePorts(jc, files, main, c); err != nil {
+		return err
+	}
 	for i, t := range targets {
 		jc.StepKey(2+i, 2+len(targets), "deploy.stepCompose", t.Name)
 		body := composeBody(c, main, files, env, pl.EnvSHA, msgs.T(lang, "deploy.composeNote", pl.Name, deploy.ShortSHA(vars.Commit)))
@@ -314,8 +317,18 @@ type HTTPSCheck struct {
 	CertNotAfter string `json:"cert_not_after,omitempty"`
 	CertDaysLeft int    `json:"cert_days_left,omitempty"`
 	CertIssuer   string `json:"cert_issuer,omitempty"`
-	CheckedAt    string `json:"checked_at"`
+	// CertNames — на какие имена выдан отданный сертификат; WrongCert —
+	// он не для этого имени (прокси отвечает чужим сайтом).
+	CertNames []string `json:"cert_names,omitempty"`
+	WrongCert bool     `json:"wrong_cert,omitempty"`
+	CheckedAt string   `json:"checked_at"`
 }
+
+// Для тестов: куда подключаться и чему доверять (nil — как обычно).
+var (
+	httpsCheckDial  func(ctx context.Context, network, addr string) (net.Conn, error)
+	httpsCheckRoots *x509.CertPool
+)
 
 // httpsCheck — GET https://<домен>/ с проверкой сертификата: ответил ли
 // (любой код, кроме 5xx) и сколько сертификату осталось.
@@ -328,15 +341,27 @@ func httpsCheck(ctx context.Context, domain string) HTTPSCheck {
 		out.Error = err.Error()
 		return out
 	}
+	tr := &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12, RootCAs: httpsCheckRoots}}
+	if httpsCheckDial != nil {
+		tr.DialContext = httpsCheckDial
+	}
 	client := &http.Client{
 		Timeout:   20 * time.Second,
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}},
+		Transport: tr,
 		// Редирект (например, на /login) — тоже ответ сайта.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
 	resp, err := client.Do(req)
 	if err != nil {
 		out.Error = err.Error()
+		var he x509.HostnameError
+		if errors.As(err, &he) && he.Certificate != nil {
+			// Сертификат не для этого имени: чей он — видно из самого
+			// сертификата (подключение уже состоялось, проверка — нет).
+			out.WrongCert = true
+			out.CertNames = certNames(he.Certificate)
+			out.CertNotAfter = he.Certificate.NotAfter.UTC().Format(time.RFC3339)
+		}
 		return out
 	}
 	defer resp.Body.Close()
@@ -347,12 +372,24 @@ func httpsCheck(ctx context.Context, domain string) HTTPSCheck {
 		out.CertNotAfter = cert.NotAfter.UTC().Format(time.RFC3339)
 		out.CertDaysLeft = int(time.Until(cert.NotAfter).Hours() / 24)
 		out.CertIssuer = cert.Issuer.CommonName
+		out.CertNames = certNames(cert)
 	}
 	out.OK = resp.StatusCode < 500
 	if !out.OK {
 		out.Error = resp.Status
 	}
 	return out
+}
+
+// certNames — имена сертификата (SAN, иначе CN).
+func certNames(c *x509.Certificate) []string {
+	if len(c.DNSNames) > 0 {
+		return c.DNSNames
+	}
+	if c.Subject.CommonName != "" {
+		return []string{c.Subject.CommonName}
+	}
+	return nil
 }
 
 // actingUser — первая из кандидатур, что является действующей учётной

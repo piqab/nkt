@@ -510,6 +510,11 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 	chk.HTTPS = httpsCheck(ctx, st.Domains[0])
 	raw, _ := json.Marshal(chk)
 	_ = s.db.SetSiteCheck(ctx, st.ID, raw)
+	if chk.HTTPS.WrongCert {
+		// Прокси отвечает чужим сертификатом — конфигурация этого сайта не
+		// действует (не подхватилась, перекрыта другим server): не «готово».
+		return msgs.Errorf("hub.siteWrongCert", st.Domains[0], strings.Join(chk.HTTPS.CertNames, ", "))
+	}
 	if chk.HTTPS.OK {
 		jc.Log("hub.siteHTTPSOK", st.Domains[0], chk.HTTPS.Status, chk.HTTPS.CertDaysLeft)
 	} else {

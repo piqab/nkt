@@ -304,9 +304,12 @@ compose:
   closed), the deployment still succeeds: the stack is updated. The reason
   is in the deployment log and on the site in the "Sites" tab.
 - **`port` is the port inside the container**, the one the image listens
-  on; it is required and `compose.ports` does not replace it (nkt publishes
-  it for the site on 127.0.0.1 itself). If `ports:` publishes a different
-  container port of the service, the log warns. Before installing the proxy and issuing the certificate, the hub
+  on, not the host port: in `"127.0.0.1:8080:80"` it is the last number,
+  `80` (`port: 8080` there is an error with a hint). `port: auto` or no
+  `port` takes the port from the image if it declares exactly one. If
+  `ports:` already publishes it (`127.0.0.1:8080:80`), the proxy uses that
+  (`127.0.0.1:8080`) and no second publication appears; otherwise nkt
+  publishes it on 127.0.0.1 itself. Before installing the proxy and issuing the certificate, the hub
   checks it against the ports the image declares (`EXPOSE`; if the image
   declares none, `expose:` and `ports` in compose): a wrong port is a site
   error with a hint ("image kennethreitz/httpbin declares 80"), and no
@@ -465,6 +468,8 @@ Docker Compose. Step by step — [CI/CD examples](/en/guide/cicd-examples).
 | `200 ignored: another branch` | The push wasn't to `ref`; the tag doesn't match `tags` |
 | `no cluster matches` | Names in `clusters` don't match the "Clusters" section, the group has no clusters or the cluster isn't "ready" |
 | `unknown field "site_port"` / "an old nkt version does not know the fields" | nkt on the host is older than the hub: the hub repeats the request without the new fields (the site port is not checked, hand edits of `.env` are not tracked); update nkt on the host |
+| `pipeline description, line N "…": …` | A YAML error: the description line, its text and an explanation: broken indentation, a key with both a value and a block (`site: name` and lines below), an unknown key (with the allowed ones), a tab, a wrong value type |
+| site — "wrong certificate" | The proxy answers with another site's certificate: this site's configuration is not in effect (it was not set up, see the log, or another `server` overrides it) |
 | `git is not installed on the hub` | The "Install git" button on the "Pipelines" tab, or `apt install git` on the hub machine |
 | `the repository has no branch or tag …` | A typo in `ref`, the tag isn't pushed yet (`git push origin v1.0.0`) |
 | `git …: Authentication failed` / `Permission denied (publickey)` | A private repository without "Access", the token can't read, the key isn't added as a deploy key |
