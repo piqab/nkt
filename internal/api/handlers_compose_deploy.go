@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/http"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -249,10 +250,12 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	c := d.s.scanner.Collector()
 	defer d.s.rescanLater()
+	var lastOutput string
 	run := func(timeout time.Duration, extra ...string) error {
 		args := append(composeArgs(c, p.Project, p.File), extra...)
 		jc.Logf("$ %s %s", p.Engine, strings.Join(args, " "))
 		res, err := c.RunTimeout(ctx, timeout, p.Engine, args...)
+		lastOutput = res.Output()
 		for _, l := range strings.Split(strings.TrimSpace(res.Output()), "\n") {
 			if strings.TrimSpace(l) != "" {
 				jc.Logf("      %s", l)
@@ -266,6 +269,31 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 		return nil
 	}
+	// Не поднялся — что именно: состояние контейнеров, хвост журналов
+	// упавших и причина словами (занятый порт, чужая архитектура, выход).
+	diagnose := func(upErr error) error {
+		jc.Log("compose.diagnose")
+		var entries []composePSEntry
+		if res, err := c.RunTimeout(ctx, time.Minute, p.Engine, append(composeArgs(c, p.Project, p.File), "ps", "-a", "--format", "json")...); err == nil && res.OK() {
+			entries = composePS(res.Stdout)
+		}
+		var bad []string
+		for _, e := range entries {
+			jc.Log("compose.diagContainer", e.Name, e.State, e.Health, e.ExitCode)
+			if e.State != "running" || (e.Health != "" && e.Health != "healthy") {
+				bad = append(bad, e.Service)
+			}
+		}
+		for _, svc := range dedupe(bad) {
+			if res, err := c.RunTimeout(ctx, time.Minute, p.Engine, append(composeArgs(c, p.Project, p.File), "logs", "--no-color", "--tail", "30", svc)...); err == nil {
+				jc.Log("compose.diagLogs", svc)
+				for _, l := range splitLines(res.Output()) {
+					jc.Logf("      %s", l)
+				}
+			}
+		}
+		return composeUpCause(lastOutput, entries, upErr)
+	}
 	wait := time.Duration(p.WaitTimeout) * time.Second
 	jc.StepKey(1, 3, "compose.stepPull", p.Project)
 	if p.Pull {
@@ -277,11 +305,11 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if p.Engine == "docker" {
 		// --wait: ждать, пока контейнеры поднимутся и пройдут healthcheck.
 		if err := run(wait+5*time.Minute, "up", "-d", "--remove-orphans", "--wait", "--wait-timeout", strconv.Itoa(p.WaitTimeout)); err != nil {
-			return err
+			return diagnose(err)
 		}
 	} else {
 		if err := run(10*time.Minute, "up", "-d", "--remove-orphans"); err != nil {
-			return err
+			return diagnose(err)
 		}
 		if err := waitPodmanStack(ctx, jc, c, p.Project, wait); err != nil {
 			return err
@@ -326,4 +354,36 @@ func waitPodmanStack(ctx context.Context, jc *jobs.Context, c collect.Collector,
 		case <-time.After(3 * time.Second):
 		}
 	}
+}
+
+var (
+	portBusyRe = regexp.MustCompile(`(?i)(?:bind for |listen \w+ )(\S+?)(?::? failed)?: (?:port is already allocated|bind: address already in use)|ports are not available: exposing port \w+ (\S+)`)
+)
+
+// composeUpCause — причина неудачного up словами (или исходная ошибка).
+func composeUpCause(out string, entries []composePSEntry, upErr error) error {
+	if m := portBusyRe.FindStringSubmatch(out); m != nil {
+		addr := m[1]
+		if addr == "" {
+			addr = m[2]
+		}
+		return msgs.Errorf("compose.upPortBusy", strings.TrimSuffix(addr, ":"))
+	}
+	low := strings.ToLower(out)
+	if strings.Contains(low, "exec format error") || strings.Contains(low, "does not match the detected host platform") {
+		return msgs.Errorf("compose.upArch")
+	}
+	for _, e := range entries {
+		switch {
+		case e.State == "exited" || e.State == "dead":
+			return msgs.Errorf("compose.upExited", e.Service, e.ExitCode)
+		case e.State == "created":
+			return msgs.Errorf("compose.upCreated", e.Service)
+		case e.State == "restarting":
+			return msgs.Errorf("compose.upRestarting", e.Service)
+		case e.Health == "unhealthy":
+			return msgs.Errorf("compose.upUnhealthy", e.Service)
+		}
+	}
+	return upErr
 }
