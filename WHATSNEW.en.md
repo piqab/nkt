@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.56 — 2026-09-30
+
+- Housekeeping: the Python cache (`__pycache__`) no longer gets into the repository.
+
 ## v1.11.55 — 2026-09-30
 
 - **In-app help:** the "Help" button at the bottom of the sidebar opens
