@@ -8,6 +8,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime,
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { TitleHelp } from '../components/Docs'
 
 /** Matches the minimum the API enforces, counted in characters. */
 const MIN_LENGTH = 10
@@ -136,7 +137,7 @@ export default function Users({ me }: { me: Me }) {
         <div>
           <h1>
             {t('users.title')}
-            <InfoHint>{t('users.hint')}</InfoHint>
+            <TitleHelp>{t('users.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

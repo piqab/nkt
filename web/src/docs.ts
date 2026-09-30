@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { createContext, useEffect, useState } from 'react'
 import { api } from './api'
 import docsMap from './docsMap.json'
 
@@ -67,3 +67,13 @@ export function useDocsBase(isHub: boolean): string {
   }, [isHub])
   return url
 }
+
+/** Где сейчас справка: раздел текущей страницы и кто смотрит (выставляет
+ * оболочка, читает значок у названия раздела). */
+export interface DocsPlace {
+  docKey: string
+  isHub: boolean
+  admin: boolean
+  version?: string
+}
+export const DocsContext = createContext<DocsPlace | null>(null)

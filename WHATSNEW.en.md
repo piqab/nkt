@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.57 — 2026-09-30
+
+- **Help next to the section title:** a "?" icon in place of the former
+  "ⓘ" shows the hint on hover and opens the section's help when clicked
+  (a window with "Detach"). The button at the bottom of the sidebar is
+  gone.
+- **The site port is checked before the certificate:** `site.port` (and the
+  port in the "Sites" wizard) is compared with the ports the image declares
+  (`EXPOSE`) before installing the proxy and issuing the certificate; a
+  wrong port (e.g. image `kennethreitz/httpbin` listens on 80 but 8080 is
+  given) gives a clear error instead of a 502. A dry run counts it as a
+  problem; on a 502 the log suggests checking the port.
+
 ## v1.11.56 — 2026-09-30
 
 - Housekeeping: the Python cache (`__pycache__`) no longer gets into the repository.

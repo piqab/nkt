@@ -3,9 +3,10 @@ import { Button, Input, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useApi } from '../api'
 import type { Me } from '../types'
-import { Card, ErrorNote, InfoHint, Loading } from '../components/ui'
+import { Card, ErrorNote, Loading } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { FleetBanModal, IPWithCheck, TemplatesPanel } from '../components/Fail2banParts'
+import { TitleHelp } from '../components/Docs'
 
 interface BannedIP {
   ip: string
@@ -44,7 +45,7 @@ export default function HubFail2ban({ me }: { me: Me }) {
       <div className="page-head spread">
         <h1>
           fail2ban
-          <InfoHint>{t('fail2ban.hubHint')}</InfoHint>
+          <TitleHelp>{t('fail2ban.hubHint')}</TitleHelp>
         </h1>
         <div className="row">
           {me.is_admin && (

@@ -107,11 +107,14 @@ instructions and the "hide sensitive" checkbox — on the
 
 ## Help
 
-The **"Help"** button at the bottom of the sidebar opens this site's
-section for the current page of the interface, in a window inside nkt;
+The **"?"** icon next to a section title (in place of the former "ⓘ")
+shows a short hint on hover and, when clicked, opens this site's section
+for the current page of the interface, in a window inside nkt;
 **"Detach"** moves the help into a separate browser window (like the
 terminal), **"In a new tab"** opens a regular tab. The pipeline editor,
 "Access" and the "Sites" wizard have buttons straight to their sections.
+
+![Help icon](/screens/en/help-hover.png)
 
 ![Help](/screens/en/help-modal.png)
 

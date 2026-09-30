@@ -11,6 +11,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, formatDateTime } fro
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { confirmAction } from '../components/confirm'
+import { TitleHelp } from '../components/Docs'
 
 /** Как часто перечитывать список. Задание может закончиться в любой
  * момент, а список, который врёт полминуты, хуже пустого. */
@@ -119,7 +120,7 @@ export default function Jobs({ me }: { me: Me }) {
       <div className="page-head spread">
         <h1>
           {t('jobs.title')}
-          <InfoHint>{t('jobs.hint')}</InfoHint>
+          <TitleHelp>{t('jobs.hint')}</TitleHelp>
         </h1>
       </div>
 

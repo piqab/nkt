@@ -21,6 +21,7 @@ import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { StandaloneConfirm } from '../components/StandaloneConfirm'
 import PackageInstallModal from '../components/PackageInstallModal'
+import { TitleHelp } from '../components/Docs'
 
 /** How often to poll a running renew job for new progress lines. */
 const RENEW_POLL_MS = 800
@@ -426,7 +427,7 @@ export default function Certificates({ me }: { me: Me }) {
         <div>
           <h1>
             {t('certs.title')}
-            <InfoHint>{t('certs.hint')}</InfoHint>
+            <TitleHelp>{t('certs.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

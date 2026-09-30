@@ -4,11 +4,12 @@ import { useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import type { Me } from '../types'
 import { api, hostScope, readSelectedHost, useApi } from '../api'
-import { Banner, Card, InfoHint } from '../components/ui'
+import { Banner, Card } from '../components/ui'
 import { PtyToolbar } from '../components/PtyToolbar'
 import { usePty, wsURL } from '../hooks/usePty'
 import PackageInstallModal from '../components/PackageInstallModal'
 import { confirmAction } from '../components/confirm'
+import { TitleHelp } from '../components/Docs'
 
 /**
  * A real login shell on the host, streamed over WebSocket into xterm.js.
@@ -321,7 +322,7 @@ export default function TerminalPage({ me }: { me: Me }) {
         <div>
           <h1>
             {t('terminal.title')}
-            <InfoHint>{t('terminal.hint')}</InfoHint>
+            <TitleHelp>{t('terminal.hint')}</TitleHelp>
           </h1>
         </div>
         <div className="row">

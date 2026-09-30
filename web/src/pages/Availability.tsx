@@ -11,6 +11,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, StateBadge, formatDateTime 
 import i18n from '../i18n'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { TitleHelp } from '../components/Docs'
 
 interface TargetsResponse {
   targets: TargetStatus[]
@@ -222,7 +223,7 @@ export default function Availability({ me }: { me?: Me }) {
         <div>
           <h1>
             {t('availability.title')}
-            <InfoHint>{t('availability.hint', { interval: targets.data?.interval ?? '—' })}</InfoHint>
+            <TitleHelp>{t('availability.hint', { interval: targets.data?.interval ?? '—' })}</TitleHelp>
           </h1>
         </div>
         <label>

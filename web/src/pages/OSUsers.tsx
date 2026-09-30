@@ -3,8 +3,9 @@ import { Button, Checkbox, Form, Input, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading } from '../components/ui'
 import { DataTable } from '../components/DataTable'
+import { TitleHelp } from '../components/Docs'
 
 interface OSUserKey {
   type: string
@@ -106,7 +107,7 @@ export default function OSUsers({ me }: { me: Me }) {
         <div>
           <h1>
             {t('osUsers.title')}
-            <InfoHint>{t('osUsers.hint')}</InfoHint>
+            <TitleHelp>{t('osUsers.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

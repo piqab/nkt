@@ -10,6 +10,7 @@ import { usePty, wsURL } from '../hooks/usePty'
 import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
+import { TitleHelp } from '../components/Docs'
 
 /**
  * Usage series the backend collects. Each entry fixes the unit and the
@@ -128,7 +129,7 @@ export default function Usage({ me }: { me: Me }) {
         <div>
           <h1>
             {t('usage.title')}
-            <InfoHint>{t('usage.hint')}</InfoHint>
+            <TitleHelp>{t('usage.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

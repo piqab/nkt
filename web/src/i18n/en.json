@@ -1385,7 +1385,8 @@
     },
     "uptime": "Up {{uptime}}",
     "uptimeRebooted": "rebooted since your last visit (was {{was}})",
-    "uptimeSteady": "no reboots since your last visit"
+    "uptimeSteady": "no reboots since your last visit",
+    "pageHint": "Host overview: services, ports, findings and vulnerabilities from the latest scan."
   },
   "vulns": {
     "title": "Vulnerabilities",
@@ -3545,9 +3546,10 @@
     "historyEmpty": "The address has not been changed yet.",
     "load": "Load",
     "cardTitle": "Help",
-    "cardHint": "The \"Help\" button at the bottom of the sidebar opens the documentation section for the current page.",
+    "cardHint": "The \"?\" icon next to a section title opens the documentation section for the current page.",
     "change": "Change address",
     "current": "Help site",
-    "isDefault": "project site"
+    "isDefault": "project site",
+    "clickHint": "Click for the help on this section"
   }
 }

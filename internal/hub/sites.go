@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -424,6 +425,35 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 		jc.Log("hub.siteLAN")
 	}
 
+	// Порт сервиса — до установки прокси и сертификата (старый хост
+	// маршрута не знает — проверит задание хоста).
+	if st.Stack != "" {
+		var pc struct {
+			Checked      bool   `json:"checked"`
+			StackMissing bool   `json:"stack_missing"`
+			Found        bool   `json:"found"`
+			Ports        []int  `json:"ports"`
+			Image        string `json:"image"`
+		}
+		q := "/api/sites/port-check?stack=" + url.QueryEscape(st.Stack) + "&service=" + url.QueryEscape(st.Service)
+		if code, err := s.hostCall(ctx, user, t.ID, "GET", q, nil, &pc); err == nil && pc.Checked {
+			switch {
+			case pc.StackMissing:
+				return msgs.Errorf("site.stackMissing", st.Stack)
+			case !pc.Found:
+				return msgs.Errorf("site.serviceMissing", st.Service, st.Stack)
+			case len(pc.Ports) > 0 && !slices.Contains(pc.Ports, st.ContainerPort):
+				list := make([]string, len(pc.Ports))
+				for i, p := range pc.Ports {
+					list[i] = strconv.Itoa(p)
+				}
+				return msgs.Errorf("site.portNotExposed", st.ContainerPort, st.Service, pc.Image, strings.Join(list, ", "))
+			}
+		} else if err != nil && code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
+			return err
+		}
+	}
+
 	// 3. Прокси на хосте.
 	step(3, "hub.siteStepProxy", st.Proxy)
 	var pre struct {
@@ -487,6 +517,11 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 		// сервис стартует, фильтр провайдера — это видно в журнале, а не
 		// повод откатывать уже сделанное.
 		jc.Log("hub.siteHTTPSFailed", st.Domains[0], chk.HTTPS.Error)
+		if chk.HTTPS.Status == http.StatusBadGateway && st.Stack != "" {
+			// Прокси работает, а сервис за ним не ответил — чаще всего
+			// порт контейнера не тот, что слушает образ.
+			jc.Log("hub.site502Hint", st.Service, st.ContainerPort)
+		}
 	}
 	return nil
 }

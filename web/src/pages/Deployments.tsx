@@ -4,7 +4,7 @@ import { CopyOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HubHost, Job, Me } from '../types'
-import { Banner, Card, DiffView, ErrorNote, InfoHint, Loading, Modal, formatRelative } from '../components/ui'
+import { Banner, Card, DiffView, ErrorNote, Loading, Modal, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { EditTextModal } from '../components/EditTextModal'
 import { confirmAction, confirmWithOption } from '../components/confirm'
@@ -13,7 +13,7 @@ import { JobLogModal } from './Jobs'
 import { EdgeCard } from '../components/EdgeCard'
 import { SitesPanel } from '../components/SitesPanel'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
-import { HelpButton } from '../components/Docs'
+import { HelpButton, TitleHelp } from '../components/Docs'
 
 interface Deployment {
   id: number
@@ -213,7 +213,7 @@ export default function Deployments({ me }: { me: Me }) {
       <div className="page-head spread">
         <h1>
           {t('deploy.title')}
-          <InfoHint>{t('deploy.pageHint')}</InfoHint>
+          <TitleHelp>{t('deploy.pageHint')}</TitleHelp>
         </h1>
         {me.is_admin && (
           <Button type="primary" onClick={() => setEdit({})}>

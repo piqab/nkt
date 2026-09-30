@@ -293,6 +293,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/fail2ban/templates", s.handleF2BTemplates)
 			r.Get("/fail2ban/install/status", s.handleF2BInstallStatus)
 			r.Get("/sites/preflight", s.handleSitePreflight)
+			r.Get("/sites/port-check", s.handleSitePortCheck)
 			r.Get("/ui/docs", s.handleDocsGet)
 			r.Get("/compose/engine", s.handleComposeEngine)
 			r.Get("/system/docker-install/status", s.handleDockerInstallStatus)

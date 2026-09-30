@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"github.com/piqab/nkt/internal/config"
 	"net/http"
 	"path"
 	"regexp"
@@ -182,6 +183,83 @@ func stackServices(ctx context.Context, c collect.Collector, engine, name, file 
 	return out, nil
 }
 
+// serviceDeclaredPorts — порты контейнера, которые объявляет сервис: в
+// compose (expose, target у ports) и в образе (EXPOSE). found — сервис
+// есть в стеке; пусто — образ портов не объявляет (проверять не с чем).
+func serviceDeclaredPorts(ctx context.Context, c collect.Collector, engine, dir, project, file, service string) (ports []int, image string, found bool, err error) {
+	res, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgsIn(c, dir, project, file), "config", "--format", "json")...)
+	if err != nil {
+		return nil, "", false, err
+	}
+	if !res.OK() {
+		return nil, "", false, msgs.Errorf("compose.configRejected", strings.TrimSpace(res.Output()))
+	}
+	var doc struct {
+		Services map[string]struct {
+			Image string `json:"image"`
+			Ports []struct {
+				Target int `json:"target"`
+			} `json:"ports"`
+			Expose []any `json:"expose"`
+		} `json:"services"`
+	}
+	if err := json.Unmarshal([]byte(res.Stdout), &doc); err != nil {
+		return nil, "", false, msgs.Errorf("compose.configRejected", err.Error())
+	}
+	svc, ok := doc.Services[service]
+	if !ok {
+		return nil, "", false, nil
+	}
+	// Образ объявляет порты (EXPOSE) — сверка только с ними: expose в
+	// compose — лишь пометка, процесс в контейнере она не заставит
+	// слушать (пример httpbin с чужим образом: expose 8080, образ — 80).
+	imageSet := map[int]bool{}
+	set := map[int]bool{}
+	for _, p := range svc.Ports {
+		set[p.Target] = true
+	}
+	for _, e := range svc.Expose {
+		switch v := e.(type) {
+		case float64:
+			set[int(v)] = true
+		case string:
+			if n, err := strconv.Atoi(strings.SplitN(v, "/", 2)[0]); err == nil {
+				set[n] = true
+			}
+		}
+	}
+	if svc.Image != "" {
+		// Образ ещё не скачан — EXPOSE не узнать (без скачивания).
+		if out, err := c.RunTimeout(ctx, 20*time.Second, engine, "image", "inspect", "--format", "{{json .Config.ExposedPorts}}", svc.Image); err == nil && out.OK() {
+			var exposed map[string]any
+			if json.Unmarshal([]byte(strings.TrimSpace(out.Stdout)), &exposed) == nil {
+				for k := range exposed {
+					if n, err := strconv.Atoi(strings.SplitN(k, "/", 2)[0]); err == nil {
+						imageSet[n] = true
+					}
+				}
+			}
+		}
+	}
+	if len(imageSet) > 0 {
+		set = imageSet
+	}
+	for n := range set {
+		ports = append(ports, n)
+	}
+	sort.Ints(ports)
+	return ports, svc.Image, true, nil
+}
+
+// portList — «80, 443» для сообщений.
+func portList(ports []int) string {
+	parts := make([]string, len(ports))
+	for i, p := range ports {
+		parts[i] = strconv.Itoa(p)
+	}
+	return strings.Join(parts, ", ")
+}
+
 func (s *Server) siteStacks(ctx context.Context, engine string) []SiteStack {
 	c := s.scanner.Collector()
 	dirs, _ := c.Glob(parse.ComposeStacksDir + "/*")
@@ -272,6 +350,40 @@ func (s *Server) handleSitePreflight(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleSitePortCheck — GET /sites/port-check?stack=&service=: есть ли
+// сервис в стеке и какие порты контейнера он объявляет (хаб спрашивает до
+// установки прокси и выпуска сертификата).
+func (s *Server) handleSitePortCheck(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := r.URL.Query()
+	stack, service := q.Get("stack"), q.Get("service")
+	if !site.ValidName(stack) || service == "" || len(service) > 64 || strings.ContainsAny(service, "/ \t\n") {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("site.badTarget"))
+		return
+	}
+	out := map[string]any{"checked": false}
+	if s.cfg.Mode == config.ModeFixtures {
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	c := s.scanner.Collector()
+	dir := composeStackDir(stack)
+	file := composeFileIn(c, dir)
+	engine := composeEngine(ctx, c)
+	if file == "" || engine == "" {
+		out["checked"], out["stack_missing"] = true, true
+		writeJSON(w, http.StatusOK, out)
+		return
+	}
+	ports, image, found, err := serviceDeclaredPorts(ctx, c, engine, dir, stack, file, service)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	out["checked"], out["found"], out["ports"], out["image"] = true, found, ports, image
+	writeJSON(w, http.StatusOK, out)
+}
+
 // --- настройка ----------------------------------------------------------
 
 // SiteApplyParams — вход задания.
@@ -357,6 +469,30 @@ func (sr *siteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 
 	// 1. Прокси установлен.
 	jc.StepKey(1, 5, "site.stepCheck", p.Proxy)
+	// Порт сервиса — до файрвола и сертификата: сайт на порт, который
+	// контейнер не слушает, дал бы 502 уже после выпуска сертификата.
+	if p.Stack != "" && s.cfg.Mode != config.ModeFixtures {
+		dir := composeStackDir(p.Stack)
+		file := composeFileIn(c, dir)
+		engine := composeEngine(ctx, c)
+		if file == "" || engine == "" {
+			return msgs.Errorf("site.stackMissing", p.Stack)
+		}
+		ports, image, found, err := serviceDeclaredPorts(ctx, c, engine, dir, p.Stack, file, p.Service)
+		switch {
+		case err != nil:
+			return err
+		case !found:
+			return msgs.Errorf("site.serviceMissing", p.Service, p.Stack)
+		case len(ports) == 0:
+			jc.Log("site.portUnverified", image)
+		case !slices.Contains(ports, p.ContainerPort):
+			return msgs.Errorf("site.portNotExposed", p.ContainerPort, p.Service, image, portList(ports))
+		default:
+			jc.Log("site.portOK", p.ContainerPort, portList(ports))
+		}
+	}
+
 	if !collect.Which(ctx, c, p.Proxy) {
 		return msgs.Errorf("site.proxyMissing", p.Proxy)
 	}

@@ -25,6 +25,7 @@ import { ProbeLink } from '../components/PortProbe'
 import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
 import { LXDImagePicker } from '../components/LXDImagePicker'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
+import { TitleHelp } from '../components/Docs'
 
 export default function LXD({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -247,7 +248,7 @@ export default function LXD({ me }: { me: Me }) {
         <div>
           <h1>
             LXD
-            <InfoHint>{t('lxd.hint')}</InfoHint>
+            <TitleHelp>{t('lxd.hint')}</TitleHelp>
           </h1>
         </div>
         <div className="row">

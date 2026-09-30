@@ -4,12 +4,13 @@ import { InfoCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { Me, PackageUpdate } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading } from '../components/ui'
 import SandboxPackagesCard from '../components/SandboxPackagesCard'
 import PackageInstallModal from '../components/PackageInstallModal'
 import UpdateModal from '../components/UpdateModal'
 import { confirmAction } from '../components/confirm'
 import { RowAction } from '../components/RowAction'
+import { TitleHelp } from '../components/Docs'
 
 interface AptSearchResult {
   name: string
@@ -267,7 +268,7 @@ export default function Packages({ me }: { me: Me }) {
         <div>
           <h1>
             {t('packages.title')}
-            <InfoHint>{t('packages.hint')}</InfoHint>
+            <TitleHelp>{t('packages.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

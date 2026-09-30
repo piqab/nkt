@@ -19,6 +19,7 @@ import { RowAction } from '../components/RowAction'
 import { PowerToggle, vmPowerState } from '../components/PowerToggle'
 import VMImagesSection from '../components/VMImagesSection'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
+import { TitleHelp } from '../components/Docs'
 
 function domainXMLSkeleton(name: string): string {
   return domainXMLFromWizard(name, { memoryMB: 2048, vcpus: 2, diskPath: defaultDiskPath(name), bridge: 'br0' })
@@ -328,7 +329,7 @@ export default function Virtualization({ me }: { me: Me }) {
         <div>
           <h1>
             {t('virt.title')}
-            <InfoHint>{t('virt.hint')}</InfoHint>
+            <TitleHelp>{t('virt.hint')}</TitleHelp>
           </h1>
         </div>
         <div className="row">

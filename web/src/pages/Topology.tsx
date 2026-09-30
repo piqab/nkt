@@ -5,7 +5,8 @@ import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
 import { AIReviewCard } from '../components/AIReview'
 import { hostScope } from '../api'
-import { Card, ErrorNote, InfoHint, Loading, SeverityBadge } from '../components/ui'
+import { Card, ErrorNote, Loading, SeverityBadge } from '../components/ui'
+import { TitleHelp } from '../components/Docs'
 
 /**
  * The resource map is laid out in fixed columns by node kind rather than by a
@@ -357,7 +358,7 @@ export default function TopologyPage() {
         <div>
           <h1>
             {t('topology.title')}
-            <InfoHint>{t('topology.hint')}</InfoHint>
+            <TitleHelp>{t('topology.hint')}</TitleHelp>
           </h1>
         </div>
 

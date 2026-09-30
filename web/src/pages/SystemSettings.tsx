@@ -3,9 +3,10 @@ import { Button, Form, Input, Select, Switch, Tag, type TableColumnsType } from 
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { LocaleCard, TimeSyncCard } from '../components/LocaleTimeCards'
+import { TitleHelp } from '../components/Docs'
 
 interface SystemSettings {
   hostname: string
@@ -159,7 +160,7 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
         <div>
           <h1>
             {t('sysSettings.title')}
-            <InfoHint>{t('sysSettings.hint')}</InfoHint>
+            <TitleHelp>{t('sysSettings.hint')}</TitleHelp>
           </h1>
         </div>
       </div>

@@ -4,9 +4,10 @@ import { AIExplain } from '../components/AIExplain'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, SeverityBadge, Spinner, formatRelative } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Modal, SeverityBadge, Spinner, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import MalwareTab from './Malware'
+import { TitleHelp } from '../components/Docs'
 
 // Trivy's own severity scale, mapped onto the app's lowercase Severity
 // union so this page can reuse SeverityBadge instead of inventing its own
@@ -41,7 +42,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
       <div className="page-head">
         <h1>
           {t('vulns.title')}
-          <InfoHint>{t('vulns.hint')}</InfoHint>
+          <TitleHelp>{t('vulns.hint')}</TitleHelp>
         </h1>
       </div>
       <Tabs

@@ -4,7 +4,8 @@ import { useTranslation } from 'react-i18next'
 import { useLocation } from 'react-router-dom'
 import { api, hostScope, readSelectedHost, useApi } from '../api'
 import { wsURL } from '../hooks/usePty'
-import { Card, ErrorNote, InfoHint } from '../components/ui'
+import { Card, ErrorNote } from '../components/ui'
+import { TitleHelp } from '../components/Docs'
 
 type LogSource = {
   kind: 'unit' | 'file'
@@ -188,7 +189,7 @@ export default function Logs() {
         <div>
           <h1>
             {t('logs.title')}
-            <InfoHint>{t('logs.hint', { root: sources.data?.root ?? '/var/log' })}</InfoHint>
+            <TitleHelp>{t('logs.hint', { root: sources.data?.root ?? '/var/log' })}</TitleHelp>
           </h1>
         </div>
         <div className="row">

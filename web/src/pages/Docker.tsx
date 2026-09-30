@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { Container, DockerNetwork, FileContent, Me } from '../types'
-import { Banner, Card, ErrorNote, InfoHint, Loading, Modal, StateBadge, shortImageRef } from '../components/ui'
+import { Banner, Card, ErrorNote, Loading, Modal, StateBadge, shortImageRef } from '../components/ui'
 import { InactiveSummary } from '../components/InactiveSummary'
 import BlockTree from '../components/BlockTree'
 import { VersionHistory } from '../components/VersionHistory'
@@ -19,6 +19,7 @@ import ContainerLogsModal from '../components/ContainerLogsModal'
 import { ConsoleModal, type ConsoleKind } from '../components/ConsoleModal'
 import { BackupModal, type BackupKind } from '../components/BackupModal'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
+import { TitleHelp } from '../components/Docs'
 
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -307,7 +308,7 @@ export default function Docker({ me }: { me: Me }) {
         <div>
           <h1>
             Docker
-            <InfoHint>{t('docker.hint')}</InfoHint>
+            <TitleHelp>{t('docker.hint')}</TitleHelp>
           </h1>
         </div>
         <div className="row">

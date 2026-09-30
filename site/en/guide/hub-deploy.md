@@ -303,9 +303,17 @@ compose:
 - **If the site fails** (DNS does not point at the host yet, port 80 is
   closed), the deployment still succeeds: the stack is updated. The reason
   is in the deployment log and on the site in the "Sites" tab.
+- **`port` is the port inside the container**, the one the image listens
+  on. Before installing the proxy and issuing the certificate, the hub
+  checks it against the ports the image declares (`EXPOSE`; if the image
+  declares none, `expose:` and `ports` in compose): a wrong port is a site
+  error with a hint ("image kennethreitz/httpbin declares 80"), and no
+  certificate is spent. If the image declares no ports there is nothing to
+  check; if the site answers 502, the log suggests checking the port.
 - **A dry run** shows what would happen to the site: the proxy (or that it
-  will be installed), DNS and ports from outside, and whether the stack has
-  that service.
+  will be installed), DNS and ports from outside, whether the stack has
+  that service and whether the port is declared; a port mismatch counts as
+  a problem.
 - A `site: name` string still means only an HTTPS check after the
   deployment.
 - Editing such a site in the wizard works, but the next deployment restores
