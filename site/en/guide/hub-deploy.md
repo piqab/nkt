@@ -186,9 +186,18 @@ compose file (GitHub `…/blob/<branch>/<path>`, GitLab `…/-/blob/…`,
 Codeberg/Gitea/Forgejo `…/src/branch/…`, or their raw variants) and pick
 hosts; the description fills itself in: repository, branch, path, stack
 name. Then it is an ordinary edit with a diff. **"Examples"** are ready
-pipelines: httpbin (one container) and umami + PostgreSQL (two services,
-secrets through `env_keys`, a data volume); details are in the
-repository's `examples/`.
+pipelines, each verified by a deployment; details and `.env` templates are
+in the repository's `examples/`:
+
+| Example | What it shows |
+|---|---|
+| httpbin | one container |
+| Uptime Kuma | the project's compose file as is, data in `./data` |
+| umami + PostgreSQL | secrets from `.env` (`env_keys`), a pinned version (`images`) |
+| n8n + PostgreSQL | three services, a file alongside (`files`), everything from the project's `.env` |
+| Gitea + PostgreSQL | a second port to the outside, SSH 2222 (`ports` with `0.0.0.0`) |
+| WordPress + MariaDB | a site behind the HTTPS proxy (`X-Forwarded-Proto`) |
+| Plausible | three services with ClickHouse, a config directory (`files`) |
 
 ![Examples](/screens/en/deploy-examples.png)
 

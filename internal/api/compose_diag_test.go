@@ -51,3 +51,19 @@ func TestManifestArchesAndPS(t *testing.T) {
 		t.Fatalf("array form: %+v", ps)
 	}
 }
+
+func TestComposePullCause(t *testing.T) {
+	base := errors.New("pull failed")
+	for out, want := range map[string]string{
+		`Error response from daemon: unknown: failed to resolve reference "docker.io/library/postgres:17-alpine": unexpected status from HEAD request to https://registry-1.docker.io/v2/library/postgres/manifests/17-alpine: 429 Too Many Requests`: "лимит",
+		"Error response from daemon: pull access denied for foo, repository does not exist or may require 'docker login'":                                                                                                                             "доступ",
+		"Error response from daemon: manifest unknown": "нет",
+	} {
+		if got := msgs.Localize(msgs.RU, composePullCause(out, base)); !strings.Contains(got, want) {
+			t.Fatalf("%q → %q", out, got)
+		}
+	}
+	if composePullCause("other", base) != base {
+		t.Fatal("unknown cause replaced")
+	}
+}

@@ -298,7 +298,7 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	jc.StepKey(1, 3, "compose.stepPull", p.Project)
 	if p.Pull {
 		if err := run(20*time.Minute, "pull"); err != nil {
-			return err
+			return composePullCause(lastOutput, err)
 		}
 	}
 	jc.StepKey(2, 3, "compose.stepUp", p.Project)
@@ -386,4 +386,18 @@ func composeUpCause(out string, entries []composePSEntry, upErr error) error {
 		}
 	}
 	return upErr
+}
+
+// composePullCause — причина неудачного pull словами (или исходная ошибка).
+func composePullCause(out string, pullErr error) error {
+	low := strings.ToLower(out)
+	switch {
+	case strings.Contains(low, "429 too many requests") || strings.Contains(low, "toomanyrequests"):
+		return msgs.Errorf("compose.pullRateLimit")
+	case strings.Contains(low, "pull access denied") || strings.Contains(low, "unauthorized") || strings.Contains(low, "denied: "):
+		return msgs.Errorf("compose.pullDenied")
+	case strings.Contains(low, "manifest unknown") || strings.Contains(low, "not found: manifest") || strings.Contains(low, ": not found"):
+		return msgs.Errorf("compose.pullNotFound")
+	}
+	return pullErr
 }

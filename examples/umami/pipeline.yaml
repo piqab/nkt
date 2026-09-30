@@ -17,9 +17,9 @@ compose:
     domains: [stats.example.com]
     service: umami
     port: 3000
-  # Закрепить версию (иначе — latest при каждой выкладке):
-  # images:
-  #   umami: ghcr.io/umami-software/umami:<версия>
+  # Версия закреплена: в файле umami — latest; новая — правкой строки.
+  images:
+    umami: ghcr.io/umami-software/umami:3.4.0
 
 # .env стека — «Доступ» → «.env стека»:
 #   APP_SECRET=<openssl rand -hex 32>

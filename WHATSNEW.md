@@ -12,6 +12,19 @@ Release из разделов, накопившихся с прошлого те
 тем же коммитом: workflow приклеивает её к описанию релиза после
 маркера `<!-- en -->`, и хаб показывает читающему его язык.
 
+## v1.11.63 — 2026-09-30
+
+- **«Примеры» — семь проверенных стеков:** httpbin, Uptime Kuma, umami +
+  PostgreSQL, n8n + PostgreSQL, Gitea + PostgreSQL, WordPress + MariaDB и
+  Plausible (PostgreSQL + ClickHouse). Каждый выложен на docker и
+  проверен ответом сервиса; README и `pipeline.yaml` — в `examples/`.
+  Показывают `files` (n8n, Plausible), `env_keys` (umami, n8n, Plausible),
+  `images` (umami — версия 3.4.0 закреплена), `ports` с открытым SSH
+  (Gitea), сайт за HTTPS (WordPress).
+- **Неудачное скачивание образа — с причиной:** «Docker Hub ограничил
+  скачивания (429)», «нет доступа к образу», «нет такого тега» — вместо
+  «pull: код 1»; сухой прогон тоже называет лимит Docker Hub.
+
 ## v1.11.62 — 2026-09-30
 
 - **`compose.env_keys` — секреты из .env для чужих compose-файлов:** если в

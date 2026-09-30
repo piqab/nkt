@@ -1,0 +1,29 @@
+# n8n + PostgreSQL (+ task runner) из n8n-io/n8n-hosting, withPostgres.
+repo: https://github.com/n8n-io/n8n-hosting.git
+ref: main
+
+action: compose
+compose:
+  file: docker-compose/withPostgres/docker-compose.yml
+  project: n8n
+  hosts: [web1]
+  files: [docker-compose/withPostgres/init-data.sh]   # создаёт пользователя базы n8n
+  wait_timeout: 5m
+  # Адрес для вебхуков и работа за прокси — в файле их нет, берём из .env:
+  env_keys:
+    n8n: [WEBHOOK_URL, N8N_PROXY_HOPS]
+  site:
+    domains: [n8n.example.com]
+    service: n8n
+    port: 5678
+
+# .env стека — «Доступ» → «.env стека» (версия n8n закреплена здесь):
+#   N8N_VERSION=2.41.4
+#   POSTGRES_USER=postgres
+#   POSTGRES_PASSWORD=<пароль администратора базы>
+#   POSTGRES_DB=n8n
+#   POSTGRES_NON_ROOT_USER=n8n
+#   POSTGRES_NON_ROOT_PASSWORD=<пароль базы n8n>
+#   RUNNERS_AUTH_TOKEN=<openssl rand -hex 16>
+#   WEBHOOK_URL=https://n8n.example.com/
+#   N8N_PROXY_HOPS=1

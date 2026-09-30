@@ -1,0 +1,26 @@
+# Plausible Community Edition: приложение, PostgreSQL и ClickHouse.
+repo: https://github.com/plausible/community-edition.git
+ref: v3.2.1
+
+action: compose
+compose:
+  file: compose.yml
+  project: plausible
+  hosts: [web1]
+  files: [clickhouse/]          # конфиги ClickHouse (малые ресурсы, только IPv4)
+  wait_timeout: 10m
+  # Пароль PostgreSQL записан в файле значением — берём из .env:
+  env_keys:
+    plausible_db: [POSTGRES_PASSWORD]
+  site:
+    domains: [plausible.example.com]
+    service: plausible
+    port: 8000
+
+# .env стека — «Доступ» → «.env стека»:
+#   BASE_URL=https://plausible.example.com
+#   SECRET_KEY_BASE=<openssl rand -base64 48>
+#   TOTP_VAULT_KEY=<openssl rand -base64 32>
+#   POSTGRES_PASSWORD=<пароль базы>
+#   DATABASE_URL=postgres://postgres:<пароль базы>@plausible_db:5432/plausible_db
+#   DISABLE_REGISTRATION=invite_only

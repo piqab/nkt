@@ -224,4 +224,7 @@ var enSitesCatalog = map[string]string{
 	"deploy.envKeysMissing":         "The pipeline .env lacks variables from compose.env_keys: %s; set them in \"Access\" → \"Stack .env\" (no host touched)",
 	"deploy.dryEnvKeysMissing":      "✗ the pipeline .env lacks %s (compose.env_keys); set them in \"Access\" → \"Stack .env\"",
 	"deploy.dryEnvKeysOK":           "  secrets from the pipeline .env: %s",
+	"compose.pullRateLimit":         "Docker Hub limited pulls (429: 100 per hour for anonymous users); wait up to an hour or run docker login on the host (a free account has a higher limit)",
+	"compose.pullDenied":            "No access to the image (a private registry or no such repository); log in to the registry on the host (docker login) or set \"Access\" → Registry for the pipeline",
+	"compose.pullNotFound":          "No such image or tag in the registry; check the name and tag",
 }

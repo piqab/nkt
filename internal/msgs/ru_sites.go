@@ -224,4 +224,7 @@ var ruSitesCatalog = map[string]string{
 	"deploy.envKeysMissing":         "В .env конвейера нет переменных из compose.env_keys: %s — задайте их в «Доступ» → «.env стека» (хосты не тронуты)",
 	"deploy.dryEnvKeysMissing":      "✗ в .env конвейера нет %s (compose.env_keys) — задайте в «Доступ» → «.env стека»",
 	"deploy.dryEnvKeysOK":           "  секреты из .env конвейера: %s",
+	"compose.pullRateLimit":         "Docker Hub ограничил скачивания (429: 100 в час для анонимных) — подождите до часа или выполните на хосте docker login (у бесплатной учётной записи лимит выше)",
+	"compose.pullDenied":            "Нет доступа к образу (закрытый registry или нет такого репозитория) — вход в registry на хосте (docker login) или «Доступ» → Registry конвейера",
+	"compose.pullNotFound":          "Такого образа или тега в registry нет — проверьте имя и тег",
 }

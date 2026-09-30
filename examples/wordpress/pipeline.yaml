@@ -1,0 +1,18 @@
+# WordPress + MariaDB из examples/ репозитория nkt.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/wordpress/deploy/docker-compose.yml
+  project: wordpress
+  hosts: [web1]
+  wait_timeout: 5m
+  site:
+    domains: [blog.example.com]
+    service: wordpress
+    port: 80
+
+# .env стека — «Доступ» → «.env стека»:
+#   DB_PASSWORD=<пароль базы WordPress>
+#   DB_ROOT_PASSWORD=<пароль root MariaDB>

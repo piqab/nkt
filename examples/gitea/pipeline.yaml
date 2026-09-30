@@ -1,0 +1,22 @@
+# Gitea + PostgreSQL из examples/ репозитория nkt.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/gitea/deploy/docker-compose.yml
+  project: gitea
+  hosts: [web1]
+  wait_timeout: 5m
+  # SSH для git — наружу (bind по умолчанию сделал бы его 127.0.0.1):
+  ports:
+    gitea: ["0.0.0.0:2222:22"]
+  site:
+    domains: [git.example.com]
+    service: gitea
+    port: 3000
+
+# .env стека — «Доступ» → «.env стека»:
+#   POSTGRES_PASSWORD=<пароль базы>
+#   GITEA_ROOT_URL=https://git.example.com/
+#   GITEA_SSH_DOMAIN=git.example.com

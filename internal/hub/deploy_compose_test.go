@@ -108,3 +108,17 @@ func TestUmamiExamplePipeline(t *testing.T) {
 		t.Fatalf("%+v %v", spec.Compose, err)
 	}
 }
+
+// Все примеры examples/*/pipeline.yaml разбираются.
+func TestAllExamplePipelines(t *testing.T) {
+	paths, _ := filepath.Glob("../../examples/*/pipeline.yaml")
+	if len(paths) < 6 {
+		t.Fatalf("examples: %v", paths)
+	}
+	for _, p := range paths {
+		raw, _ := os.ReadFile(p)
+		if _, err := deploy.ParseSpec(string(raw)); err != nil {
+			t.Fatalf("%s: %v", p, err)
+		}
+	}
+}
