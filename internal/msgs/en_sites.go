@@ -172,4 +172,7 @@ var enSitesCatalog = map[string]string{
 	"hub.siteRemoved":               "Site %s removed",
 	"deploy.composeYAML":            "cannot parse the compose file: %s",
 	"deploy.imageServiceMissing":    "compose.images / compose.ports: service %s is not in the compose file",
+	"deploy.portBound":              "  port %s (%s) → %s",
+	"deploy.portKept":               "  port %s (%s): the file sets an address; kept (bind_force: true replaces it)",
+	"deploy.portSkipped":            "? port %s (%s): the entry uses a variable; no address set, give it in compose.ports",
 }

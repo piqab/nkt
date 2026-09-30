@@ -126,6 +126,9 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	if err != nil {
 		return err
 	}
+	if err := bindComposePorts(jc, files, main, c); err != nil {
+		return err
+	}
 	env, err := s.pipelineEnv(pl)
 	if err != nil {
 		return err
@@ -183,6 +186,27 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 			jc.Log("deploy.siteOK", d, chk.Status, chk.CertDaysLeft)
 		} else {
 			jc.Log("deploy.siteFailed", d, chk.Error)
+		}
+	}
+	return nil
+}
+
+// bindComposePorts — адрес публикаций портов в копии compose-файла и
+// строка журнала про каждый порт.
+func bindComposePorts(jc *jobs.Context, files map[string]string, main string, c *deploy.ComposeSpec) error {
+	out, changes, err := deploy.BindPorts(files[main], c.BindAddr(), c.BindForce)
+	if err != nil {
+		return err
+	}
+	files[main] = out
+	for _, ch := range changes {
+		switch {
+		case ch.Skipped:
+			jc.Log("deploy.portSkipped", ch.From, ch.Service)
+		case ch.Kept:
+			jc.Log("deploy.portKept", ch.From, ch.Service)
+		default:
+			jc.Log("deploy.portBound", ch.From, ch.Service, ch.To)
 		}
 	}
 	return nil

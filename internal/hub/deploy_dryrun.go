@@ -91,6 +91,9 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	if err != nil {
 		return err
 	}
+	if err := bindComposePorts(jc, files, main, c); err != nil {
+		return err
+	}
 	env, err := s.pipelineEnv(pl)
 	if err != nil {
 		return err

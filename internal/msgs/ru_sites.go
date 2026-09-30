@@ -172,4 +172,7 @@ var ruSitesCatalog = map[string]string{
 	"hub.siteRemoved":               "Сайт %s удалён",
 	"deploy.composeYAML":            "compose-файл не разобрать: %s",
 	"deploy.imageServiceMissing":    "compose.images / compose.ports: сервиса %s нет в compose-файле",
+	"deploy.portBound":              "  порт %s (%s) → %s",
+	"deploy.portKept":               "  порт %s (%s): адрес указан в файле — как есть (bind_force: true — заменить)",
+	"deploy.portSkipped":            "? порт %s (%s): в записи переменная — адрес не подставлен, укажите его в compose.ports",
 }
