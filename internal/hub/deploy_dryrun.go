@@ -97,9 +97,6 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	if err != nil {
 		return err
 	}
-	if err := bindComposePorts(jc, files, main, c); err != nil {
-		return err
-	}
 	env, err := s.pipelineEnv(pl)
 	if err != nil {
 		return err
@@ -111,8 +108,11 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	user := s.actingUser(ctx, jc.Job.Author, pl.Author)
 	jc.StepKey(2, 3, "deploy.stepDryHosts", len(targets))
 	jc.Log("deploy.dryFiles", len(files), c.Project, len(targets), vars.Tag)
+	if err := bindComposePorts(jc, files, main, c); err != nil {
+		return err
+	}
 	problems := 0
-	var services []string
+	sitePort := 0
 	for _, t := range targets {
 		var res composeCheck
 		body := composeBody(c, main, files, env, pl.EnvSHA, "")
@@ -131,16 +131,15 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 		}
 		problems += logComposeCheck(jc, t.Name, c.Project, res)
 		if c.Site.Managed() && res.SiteChecked {
-			problems += logSitePort(jc, c, res)
-		}
-		if res.ConfigOK && !res.Simulated {
-			services = res.Services
+			n, port := logSitePort(jc, c, res)
+			problems += n
+			sitePort = port
 		}
 	}
 	jc.StepKey(3, 3, "deploy.stepDryResult")
 	switch {
 	case c.Site.Managed():
-		s.dryRunSite(ctx, jc, user, pl, c, targets[0], services)
+		s.dryRunSite(ctx, jc, user, pl, c, targets[0], sitePort)
 	case c.Site.CheckDomain() != "":
 		d := c.Site.CheckDomain()
 		chk := httpsCheck(ctx, d)
@@ -292,27 +291,33 @@ func (s *Server) handleDeployGit(w http.ResponseWriter, r *http.Request) {
 }
 
 // logSitePort — сервис и порт сайта против того, что объявляют стек и
-// образ; число проблем. Образ портов не объявляет — проверять не с чем.
-func logSitePort(jc *jobs.Context, c *deploy.ComposeSpec, res composeCheck) int {
+// образ; число проблем и порт, который получит сайт (auto — из образа).
+func logSitePort(jc *jobs.Context, c *deploy.ComposeSpec, res composeCheck) (int, int) {
 	sp := c.Site
+	ports := make([]string, len(res.SitePorts))
+	for i, p := range res.SitePorts {
+		ports[i] = strconv.Itoa(p)
+	}
 	switch {
 	case !res.SiteFound:
 		jc.Log("deploy.drySiteNoService", sp.Service, c.Project, strings.Join(res.Services, ", "))
-		return 1
+		return 1, 0
+	case sp.Port == 0 && len(res.SitePorts) == 1:
+		jc.Log("deploy.sitePortAuto", res.SitePorts[0], res.SiteImage)
+		return 0, res.SitePorts[0]
+	case sp.Port == 0:
+		jc.Log("deploy.drySitePortAutoMany", res.SiteImage, strings.Join(ports, ", "))
+		return 1, 0
 	case len(res.SitePorts) == 0:
 		jc.Log("deploy.drySitePortUnknown", res.SiteImage)
 	case !slices.Contains(res.SitePorts, sp.Port) && len(res.SitePorts) == 1:
 		jc.Log("deploy.drySitePortBadOne", sp.Port, res.SiteImage, res.SitePorts[0], res.SitePorts[0])
-		return 1
+		return 1, sp.Port
 	case !slices.Contains(res.SitePorts, sp.Port):
-		ports := make([]string, len(res.SitePorts))
-		for i, p := range res.SitePorts {
-			ports[i] = strconv.Itoa(p)
-		}
 		jc.Log("deploy.drySitePortBad", sp.Port, sp.Service, res.SiteImage, strings.Join(ports, ", "))
-		return 1
+		return 1, sp.Port
 	default:
 		jc.Log("deploy.drySitePortOK", sp.Port, sp.Service)
 	}
-	return 0
+	return 0, sp.Port
 }

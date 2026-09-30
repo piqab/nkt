@@ -35,7 +35,7 @@ func TestSiteSpec(t *testing.T) {
 	for _, bad := range []string{
 		strings.Replace(block, "hosts: [web1]", "hosts: [web1, web2]", 1),
 		strings.Replace(block, "hosts: [web1]", "group: prod", 1),
-		strings.Replace(block, "port: 8080", "port: 0", 1),
+		strings.Replace(block, "port: 8080", "port: 70000", 1),
 		strings.Replace(block, "service: web", "service: 'a b'", 1),
 		block + "    proxy: apache\n",
 		block + "    unknown: 1\n",

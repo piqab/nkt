@@ -75,10 +75,18 @@ func TestBindPorts(t *testing.T) {
 
 func TestSitePortHints(t *testing.T) {
 	base := "repo: https://codeberg.org/me/app.git\nref: main\naction: compose\ncompose:\n  file: compose.yaml\n  project: app\n  hosts: [web1]\n  site:\n    domains: [a.example.com]\n    service: httpbin\n"
-	if _, err := ParseSpec(base); err == nil || !strings.Contains(err.Error(), "port") {
-		t.Fatalf("missing port: %v", err)
+	// Без port и с port: auto — порт из образа (0 до выкладки).
+	for _, extra := range []string{"", "    port: auto\n"} {
+		s, err := ParseSpec(base + extra)
+		if err != nil || s.Compose.Site.Port != 0 {
+			t.Fatalf("auto %q: %+v %v", extra, s.Compose.Site, err)
+		}
 	}
-	s, err := ParseSpec(base + "    port: 8080\n  ports:\n    httpbin: [\"127.0.0.1:8080:80\"]\n")
+	// site.port — порт хоста из ports: понятная ошибка.
+	if _, err := ParseSpec(base + "    port: 8080\n  ports:\n    httpbin: [\"127.0.0.1:8080:80\"]\n"); err == nil || !strings.Contains(err.Error(), "порт на хосте") {
+		t.Fatalf("host port as site.port: %v", err)
+	}
+	s, err := ParseSpec(base + "    port: 81\n  ports:\n    httpbin: [\"127.0.0.1:8080:80\"]\n")
 	if err != nil {
 		t.Fatal(err)
 	}

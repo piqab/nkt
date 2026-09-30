@@ -140,7 +140,7 @@ func ParseSpec(content string) (Spec, error) {
 	dec := yaml.NewDecoder(strings.NewReader(content))
 	dec.KnownFields(true)
 	if err := dec.Decode(&s); err != nil {
-		return Spec{}, msgs.Errorf("deploy.specYAML", err.Error())
+		return Spec{}, explainYAML(content, err)
 	}
 	return s, s.Validate()
 }

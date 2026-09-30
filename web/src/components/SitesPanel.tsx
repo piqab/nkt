@@ -32,6 +32,9 @@ interface HTTPSCheck {
   error?: string
   cert_days_left?: number
   cert_issuer?: string
+  /** На какие имена выдан отданный сертификат; wrong_cert — не для этого. */
+  cert_names?: string[]
+  wrong_cert?: boolean
   checked_at: string
 }
 
@@ -195,13 +198,20 @@ export function SitesPanel({ me }: { me: Me }) {
                   return (
                     <Space size={4} wrap className="small">
                       <Tag color={dnsOK ? 'success' : 'error'}>DNS</Tag>
-                      {c.https?.checked_at && (c.https.ok ? (
-                        <Tag color="success">HTTPS {c.https.status}</Tag>
-                      ) : (
-                        <Tooltip title={c.https.error}>
-                          <Tag color="error">HTTPS</Tag>
-                        </Tooltip>
-                      ))}
+                      {c.https?.checked_at &&
+                        (c.https.wrong_cert ? (
+                          <Tooltip title={t('sites.wrongCertHint', { names: (c.https.cert_names ?? []).join(', ') })}>
+                            <Tag color="error">{t('sites.wrongCert')}</Tag>
+                          </Tooltip>
+                        ) : c.https.ok ? (
+                          <Tooltip title={c.https.cert_names?.length ? t('sites.certNames', { names: c.https.cert_names.join(', ') }) : undefined}>
+                            <Tag color="success">HTTPS {c.https.status}</Tag>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip title={c.https.error}>
+                            <Tag color="error">HTTPS</Tag>
+                          </Tooltip>
+                        ))}
                       {c.https?.cert_days_left !== undefined && c.https.ok && (
                         <Tag color={c.https.cert_days_left < 14 ? 'warning' : 'default'}>{t('sites.certDays', { n: c.https.cert_days_left })}</Tag>
                       )}

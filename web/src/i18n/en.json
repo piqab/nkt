@@ -3517,7 +3517,10 @@
     "deleteCert": "also delete the certificate (certbot delete)",
     "deleteCertHint": "A job: the proxy config and the service's 127.0.0.1 publication are removed and the service is recreated without it. The certificate stays by default; if another site needs it, it stays even with the tick.",
     "deleteFromPipeline": "The site is described in pipeline \"{{name}}\": the next deployment brings it back unless the site: block is removed.",
-    "deleteRetry": "Retry deletion"
+    "deleteRetry": "Retry deletion",
+    "wrongCert": "wrong certificate",
+    "wrongCertHint": "The site answers with a certificate for {{names}}, not for this name: the site configuration is not in effect, the proxy answers as another site. Use \"Set up again\" and check the log.",
+    "certNames": "Certificate issued for: {{names}}"
   },
   "composeEngine": {
     "checking": "checking…",
