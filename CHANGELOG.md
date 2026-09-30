@@ -688,3 +688,4 @@
 - `83addb7` Выкладки compose: compose.images — готовые образы вместо build:
 - `83f8d1c` Выкладки compose: compose.ports — переопределение публикаций портов
 - `53b38b9` Шаблон конвейера: пример compose.ports
+- `d3d7a59` Выкладки compose: порты только на 127.0.0.1 (compose.bind, bind_force)
