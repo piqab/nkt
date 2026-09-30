@@ -167,12 +167,30 @@ compose:
 - **The stack's `.env`** is set in the pipeline's "Access": stored on the
   hub encrypted, written to the host with 0600 permissions, never in the
   version history or logs.
+- **Secrets written as values in someone else's compose file**
+  (`APP_SECRET: replace-me…`) are not overridden by `.env`; use
+  `env_keys:` in the pipeline: the hub replaces those variables' values
+  with `${NAME}` in the file copy, and the values come from the pipeline
+  `.env`. If some are missing from `.env`, the deployment does not start,
+  and the dry run names them.
+
+  ```yaml
+  compose:
+    env_keys:
+      umami: [APP_SECRET, TWO_FACTOR_ENCRYPTION_KEY, DATABASE_URL]
+      db: [POSTGRES_PASSWORD]
+  ```
 
 **Compose from a link.** In the new pipeline window, paste a link to a
 compose file (GitHub `…/blob/<branch>/<path>`, GitLab `…/-/blob/…`,
 Codeberg/Gitea/Forgejo `…/src/branch/…`, or their raw variants) and pick
 hosts; the description fills itself in: repository, branch, path, stack
-name. Then it is an ordinary edit with a diff.
+name. Then it is an ordinary edit with a diff. **"Examples"** are ready
+pipelines: httpbin (one container) and umami + PostgreSQL (two services,
+secrets through `env_keys`, a data volume); details are in the
+repository's `examples/`.
+
+![Examples](/screens/en/deploy-examples.png)
 
 ![Compose from a link](/screens/en/deploy-compose.png)
 
@@ -222,7 +240,7 @@ a [go-httpbin](https://github.com/mccutchen/go-httpbin) stack on the ready
 image `mccutchen/go-httpbin:2.25.0` and a pipeline for it. It deploys
 straight from the link
 `https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml`
-(stack name `httpbin`) or with the **"Example: httpbin"** button in the new
+(stack name `httpbin`) or with **"Examples" → "httpbin"** in the new
 pipeline window: it fills in the link and the names, leaving you to pick a
 host. The site goes in the pipeline's `site:` block (commented out in the
 description) or by hand in "Sites": stack `httpbin`, service `httpbin`,

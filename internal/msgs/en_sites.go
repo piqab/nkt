@@ -221,4 +221,7 @@ var enSitesCatalog = map[string]string{
 	"deploy.dryPortBusy":            "✗ port %s on the host is already in use (%s); up would fail; free it or change compose.ports",
 	"deploy.dryImageArch":           "✗ image %s is built for %s, but the host is %s: the container will not start (exec format error)",
 	"compose.upCreated":             "The container of service %s was created but did not start; the reason is in the log above",
+	"deploy.envKeysMissing":         "The pipeline .env lacks variables from compose.env_keys: %s; set them in \"Access\" → \"Stack .env\" (no host touched)",
+	"deploy.dryEnvKeysMissing":      "✗ the pipeline .env lacks %s (compose.env_keys); set them in \"Access\" → \"Stack .env\"",
+	"deploy.dryEnvKeysOK":           "  secrets from the pipeline .env: %s",
 }

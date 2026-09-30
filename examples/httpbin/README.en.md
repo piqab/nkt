@@ -29,7 +29,7 @@ v2.16.1, hence Docker Hub).
 
 ## 1. Pipeline
 
-"Deployments" → "New pipeline" → the **"Example: httpbin"** button fills in
+"Deployments" → "New pipeline" → **"Examples" → "httpbin"** fills in
 the compose file link and the stack and pipeline names; pick a host (the hub
 shows right away whether it has docker with compose and offers to install
 it if not) and the description is ready. Without the button, use "Compose

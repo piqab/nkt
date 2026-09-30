@@ -120,6 +120,12 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	}
 	problems := 0
 	sitePort := 0
+	if missing := missingEnvKeys(c.AllEnvKeys(), env); len(missing) > 0 {
+		problems++
+		jc.Log("deploy.dryEnvKeysMissing", strings.Join(missing, ", "))
+	} else if keys := c.AllEnvKeys(); len(keys) > 0 {
+		jc.Log("deploy.dryEnvKeysOK", strings.Join(keys, ", "))
+	}
 	for _, t := range targets {
 		var res composeCheck
 		body := composeBody(c, main, files, env, pl.EnvSHA, "")

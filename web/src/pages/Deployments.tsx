@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Button, Checkbox, Input, Select, Space, Switch, Tabs, Tag, Tooltip } from 'antd'
-import { CopyOutlined } from '@ant-design/icons'
+import { Button, Checkbox, Dropdown, Input, Select, Space, Switch, Tabs, Tag, Tooltip } from 'antd'
+import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HubHost, Job, Me } from '../types'
@@ -14,6 +14,7 @@ import { EdgeCard } from '../components/EdgeCard'
 import { SitesPanel } from '../components/SitesPanel'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
 import { HelpButton, TitleHelp } from '../components/Docs'
+import { PIPELINE_EXAMPLES, type PipelineExample } from '../pipelineExamples'
 
 interface Deployment {
   id: number
@@ -462,8 +463,8 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
           <>
             <Space size={4} wrap style={{ marginBottom: '0.3rem' }}>
               <span className="small muted">{t('deploy.editHint')}</span>
-              <HelpButton docKey="deploy:compose" isHub admin />
-              <HelpButton docKey="deploy:site" isHub admin />
+              <HelpButton docKey="deploy:compose" isHub admin label={t('docs.labelCompose')} />
+              <HelpButton docKey="deploy:site" isHub admin label={t('docs.labelSite')} />
             </Space>
             {!pipeline && (
               <ComposeFromLink
@@ -543,10 +544,6 @@ export function parseComposeLink(link: string): { repo: string; ref: string; fil
 
 /** «Compose по ссылке»: ссылка на compose-файл, хосты, имя стека →
  * описание конвейера action: compose (дальше — обычная правка с диффом). */
-/** Пример выкладки: httpbin из репозитория nkt (examples/httpbin). */
-const HTTPBIN_LINK = 'https://github.com/piqab/nkt/blob/main/examples/httpbin/deploy/docker-compose.yml'
-const HTTPBIN_README = 'https://github.com/piqab/nkt/tree/main/examples/httpbin'
-
 function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: string) => void; onName: (name: string) => void }) {
   const { t } = useTranslation()
   const hosts = useApi<HubHost[]>('/hub/hosts')
@@ -554,7 +551,9 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
   const [picked, setPicked] = useState<string[]>([])
   const [project, setProject] = useState('')
   const [bad, setBad] = useState(false)
-  function fill(link: string, project: string) {
+  // Пример выбран до хостов — описание заполнится по «Заполнить описание».
+  const [pending, setPending] = useState<PipelineExample | null>(null)
+  function fill(link: string, project: string, ex?: PipelineExample) {
     const p = parseComposeLink(link)
     if (!p) {
       setBad(true)
@@ -562,25 +561,37 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
     }
     setBad(false)
     const proj = (project || p.name).toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^[-_]+/, '').slice(0, 63) || 'app'
-    const example = link === HTTPBIN_LINK
+    const site = ex?.site ?? { service: 'web', port: 80 }
+    const envKeys = ex?.envKeys
+      ? `  env_keys:                        # ${t('deploy.envKeysComment')}\n` +
+        Object.entries(ex.envKeys)
+          .map(([svc, keys]) => `    ${svc}: [${keys.join(', ')}]\n`)
+          .join('')
+      : ''
+    const envTemplate = ex?.envTemplate
+      ? `\n# ${t('deploy.envTemplateComment')}\n` + ex.envTemplate.map((l) => `#   ${l}\n`).join('')
+      : ''
     const yaml =
-      (example ? `# ${t('deploy.exampleComment')}: ${HTTPBIN_README}\n` : '') +
+      (ex ? `# ${t('deploy.exampleComment')}: ${ex.readme}\n` : '') +
       `repo: ${p.repo}\nref: ${p.ref}\n\naction: compose\ncompose:\n  file: ${p.file}\n  project: ${proj}\n` +
       `  hosts: [${picked.join(', ')}]\n` +
-      (example ? '' : `  # files: [${p.file.includes('/') ? p.file.slice(0, p.file.lastIndexOf('/') + 1) : ''}nginx.conf]  # ${t('deploy.fromLinkFilesComment')}\n`) +
+      (ex ? '' : `  # files: [${p.file.includes('/') ? p.file.slice(0, p.file.lastIndexOf('/') + 1) : ''}nginx.conf]  # ${t('deploy.fromLinkFilesComment')}\n`) +
       `  wait_timeout: 5m\n` +
+      envKeys +
       `  # site:                          # ${t('deploy.fromLinkSiteComment')}\n` +
-      `  #   domains: [${example ? 'httpbin' : proj}.example.com]\n` +
-      `  #   service: ${example ? 'httpbin' : 'web'}\n` +
-      `  #   port: ${example ? 8080 : 80}\n` +
-      `\n# poll: 5m   # ${t('deploy.fromLinkPollComment')}\n`
+      `  #   domains: [${ex ? ex.project : proj}.example.com]\n` +
+      `  #   service: ${site.service}\n` +
+      `  #   port: ${site.port}\n` +
+      `\n# poll: 5m   # ${t('deploy.fromLinkPollComment')}\n` +
+      envTemplate
     onFill(yaml, proj)
   }
-  function example() {
-    setLink(HTTPBIN_LINK)
-    setProject('httpbin')
-    onName('httpbin')
-    if (picked.length > 0) fill(HTTPBIN_LINK, 'httpbin')
+  function example(ex: PipelineExample) {
+    setLink(ex.link)
+    setProject(ex.project)
+    onName(ex.project)
+    if (picked.length > 0) fill(ex.link, ex.project, ex)
+    else setPending(ex)
   }
   return (
     <div className="col" style={{ gap: '0.3rem', marginBottom: '0.6rem', padding: '0.5rem', border: '1px solid var(--border)', borderRadius: 6 }}>
@@ -598,14 +609,33 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
           options={(hosts.data ?? []).map((h) => ({ value: h.name, label: h.name }))}
         />
         <Input size="small" style={{ width: 140 }} value={project} onChange={(e) => setProject(e.target.value)} placeholder={t('deploy.fromLinkProject')} />
-        <Button size="small" disabled={!link || picked.length === 0} onClick={() => fill(link, project)}>
+        <Button size="small" disabled={!link || picked.length === 0} onClick={() => fill(link, project, pending?.link === link ? pending : undefined)}>
           {t('deploy.fromLinkFill')}
         </Button>
-        <Tooltip title={t('deploy.exampleHint')}>
-          <Button size="small" type="dashed" onClick={example}>
-            {t('deploy.exampleHttpbin')}
+        <Dropdown
+          trigger={['click']}
+          menu={{
+            items: PIPELINE_EXAMPLES.map((ex) => ({
+              key: ex.key,
+              label: (
+                <div style={{ maxWidth: 360 }}>
+                  <strong>{t(`deploy.examples.${ex.key}.title`)}</strong>
+                  <div className="small muted" style={{ whiteSpace: 'normal' }}>
+                    {t(`deploy.examples.${ex.key}.hint`)}
+                  </div>
+                </div>
+              ),
+            })),
+            onClick: ({ key }) => {
+              const ex = PIPELINE_EXAMPLES.find((e) => e.key === key)
+              if (ex) example(ex)
+            },
+          }}
+        >
+          <Button size="small" type="dashed">
+            {t('deploy.examplesButton')} <DownOutlined />
           </Button>
-        </Tooltip>
+        </Dropdown>
       </div>
       {picked.length > 0 && (
         <div className="row" style={{ gap: '0.9rem', flexWrap: 'wrap' }}>

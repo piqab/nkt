@@ -173,20 +173,54 @@ func validatePorts(ports map[string][]string) error {
 	return nil
 }
 
+// envKeyRe — имя переменной окружения.
+var envKeyRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)
+
+// validateEnvKeys — compose.env_keys: сервис → имена переменных.
+func validateEnvKeys(keys map[string][]string) error {
+	for svc, list := range keys {
+		if !composeServiceRe.MatchString(svc) {
+			return msgs.Errorf("deploy.specBad", "compose.env_keys", svc)
+		}
+		for _, k := range list {
+			if !envKeyRe.MatchString(k) {
+				return msgs.Errorf("deploy.specBad", "compose.env_keys."+svc, k)
+			}
+		}
+	}
+	return nil
+}
+
+// AllEnvKeys — все имена из env_keys (для сверки с .env конвейера).
+func (c ComposeSpec) AllEnvKeys() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, list := range c.EnvKeys {
+		for _, k := range list {
+			if !seen[k] {
+				seen[k] = true
+				out = append(out, k)
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // OverrideImages ставит сервисам готовые образы (compose.images): image —
 // из описания конвейера, build убирается. Так выкладывается чужой
 // compose-файл, который собирает образ из исходников, без форка. Сервиса
 // нет в файле — ошибка (опечатка не должна пройти молча).
 func OverrideImages(text string, images map[string]string) (string, error) {
-	return OverrideServices(text, images, nil)
+	return OverrideServices(text, images, nil, nil)
 }
 
 // OverrideServices — compose.images и compose.ports в копии compose-файла,
 // которая едет на хост (файл в репозитории не меняется). ports: список
 // заменяет публикации сервиса целиком, пустой — убирает их (сервис
 // доступен только через прокси сайта или внутреннюю сеть стека).
-func OverrideServices(text string, images map[string]string, ports map[string][]string) (string, error) {
-	if len(images) == 0 && len(ports) == 0 {
+func OverrideServices(text string, images map[string]string, ports map[string][]string, envKeys map[string][]string) (string, error) {
+	if len(images) == 0 && len(ports) == 0 && len(envKeys) == 0 {
 		return text, nil
 	}
 	var doc yaml.Node
@@ -202,6 +236,15 @@ func OverrideServices(text string, images map[string]string, ports map[string][]
 		if _, dup := images[n]; !dup {
 			names = append(names, n)
 		}
+	}
+	for n := range envKeys {
+		if _, dup := images[n]; dup {
+			continue
+		}
+		if _, dup := ports[n]; dup {
+			continue
+		}
+		names = append(names, n)
 	}
 	if services == nil || services.Kind != yaml.MappingNode {
 		return "", msgs.Errorf("deploy.imageServiceMissing", strings.Join(names, ", "))
@@ -232,6 +275,9 @@ func OverrideServices(text string, images map[string]string, ports map[string][]
 			}
 			kept = append(kept, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "ports"}, seq)
 		}
+		if keys := envKeys[name]; len(keys) > 0 {
+			kept = withEnvRefs(kept, keys)
+		}
 		if setImage {
 			kept = append([]*yaml.Node{
 				{Kind: yaml.ScalarNode, Tag: "!!str", Value: "image"},
@@ -245,6 +291,56 @@ func OverrideServices(text string, images map[string]string, ports map[string][]
 		return "", err
 	}
 	return string(out), nil
+}
+
+// withEnvRefs — у сервиса (пары ключ-значение content) значения
+// переменных keys становятся ссылками ${KEY} на .env стека; environment
+// словарём или списком «KEY=value», нет — появляется словарём.
+func withEnvRefs(content []*yaml.Node, keys []string) []*yaml.Node {
+	var env *yaml.Node
+	for i := 0; i+1 < len(content); i += 2 {
+		if content[i].Value == "environment" {
+			env = content[i+1]
+		}
+	}
+	if env == nil || (env.Kind != yaml.MappingNode && env.Kind != yaml.SequenceNode) {
+		env = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		var rest []*yaml.Node
+		for i := 0; i+1 < len(content); i += 2 {
+			if content[i].Value != "environment" {
+				rest = append(rest, content[i], content[i+1])
+			}
+		}
+		content = append(rest, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "environment"}, env)
+	}
+	ref := func(k string) string { return "${" + k + "}" }
+	for _, k := range keys {
+		done := false
+		if env.Kind == yaml.MappingNode {
+			for i := 0; i+1 < len(env.Content); i += 2 {
+				if env.Content[i].Value == k {
+					env.Content[i+1] = &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ref(k), Style: yaml.DoubleQuotedStyle}
+					done = true
+				}
+			}
+			if !done {
+				env.Content = append(env.Content,
+					&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k},
+					&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: ref(k), Style: yaml.DoubleQuotedStyle})
+			}
+			continue
+		}
+		for _, item := range env.Content {
+			if name, _, _ := strings.Cut(item.Value, "="); name == k {
+				item.Value, item.Style = k+"="+ref(k), yaml.DoubleQuotedStyle
+				done = true
+			}
+		}
+		if !done {
+			env.Content = append(env.Content, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: k + "=" + ref(k), Style: yaml.DoubleQuotedStyle})
+		}
+	}
+	return content
 }
 
 func mapValue(m *yaml.Node, key string) *yaml.Node {

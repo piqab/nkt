@@ -73,12 +73,12 @@ func collectComposeFiles(src string, c *deploy.ComposeSpec, vars deploy.Vars) (m
 		return nil, "", err
 	}
 	main, _ := rel(c.File)
-	if len(c.Images) > 0 || len(c.Ports) > 0 {
+	if len(c.Images) > 0 || len(c.Ports) > 0 || len(c.EnvKeys) > 0 {
 		images := map[string]string{}
 		for svc, img := range c.Images {
 			images[svc] = vars.Substitute(img)
 		}
-		out, err := deploy.OverrideServices(files[main], images, c.Ports)
+		out, err := deploy.OverrideServices(files[main], images, c.Ports, c.EnvKeys)
 		if err != nil {
 			return nil, "", err
 		}
@@ -133,6 +133,11 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	env, err := s.pipelineEnv(pl)
 	if err != nil {
 		return err
+	}
+	// Секреты из env_keys — только из .env конвейера: без них стек
+	// поднялся бы с пустыми значениями.
+	if missing := missingEnvKeys(c.AllEnvKeys(), env); len(missing) > 0 {
+		return msgs.Errorf("deploy.envKeysMissing", strings.Join(missing, ", "))
 	}
 	targets, err := s.resolveHosts(ctx, c.Hosts, c.Group)
 	if err != nil {

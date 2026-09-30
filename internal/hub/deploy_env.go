@@ -219,3 +219,19 @@ func (s *Server) restoreEnvVersion(ctx context.Context, p store.Pipeline, v stor
 	}
 	return s.setPipelineEnv(ctx, p, user, note, env)
 }
+
+// missingEnvKeys — имена из compose.env_keys, которых нет в .env конвейера
+// (nil — .env не задан вовсе).
+func missingEnvKeys(keys []string, env *string) []string {
+	have := map[string]string{}
+	if env != nil {
+		have = envVars(*env)
+	}
+	var out []string
+	for _, k := range keys {
+		if v, ok := have[k]; !ok || strings.TrimSpace(v) == "" {
+			out = append(out, k)
+		}
+	}
+	return out
+}
