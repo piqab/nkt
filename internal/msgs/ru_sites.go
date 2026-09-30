@@ -221,4 +221,7 @@ var ruSitesCatalog = map[string]string{
 	"deploy.dryPortBusy":            "✗ порт %s на хосте уже занят (%s) — up упадёт; освободите его или поменяйте compose.ports",
 	"deploy.dryImageArch":           "✗ образ %s собран для %s, а хост — %s: контейнер не запустится (exec format error)",
 	"compose.upCreated":             "Контейнер сервиса %s создан, но не запущен — причина в журнале выше",
+	"deploy.envKeysMissing":         "В .env конвейера нет переменных из compose.env_keys: %s — задайте их в «Доступ» → «.env стека» (хосты не тронуты)",
+	"deploy.dryEnvKeysMissing":      "✗ в .env конвейера нет %s (compose.env_keys) — задайте в «Доступ» → «.env стека»",
+	"deploy.dryEnvKeysOK":           "  секреты из .env конвейера: %s",
 }

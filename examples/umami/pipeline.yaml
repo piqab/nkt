@@ -1,0 +1,28 @@
+# Конвейер «Выкладок» хаба nkt: umami (веб-аналитика) с PostgreSQL прямо из
+# репозитория проекта — compose-файл их, секреты — из .env конвейера.
+repo: https://github.com/umami-software/umami.git
+ref: master
+
+action: compose
+compose:
+  file: docker-compose.yml
+  project: umami
+  hosts: [web1]
+  wait_timeout: 5m            # первый старт с миграциями базы — не мгновенный
+  # В compose-файле umami секреты записаны значениями — берём их из .env:
+  env_keys:
+    umami: [APP_SECRET, TWO_FACTOR_ENCRYPTION_KEY, DATABASE_URL]
+    db: [POSTGRES_PASSWORD]
+  site:
+    domains: [stats.example.com]
+    service: umami
+    port: 3000
+  # Закрепить версию (иначе — latest при каждой выкладке):
+  # images:
+  #   umami: ghcr.io/umami-software/umami:<версия>
+
+# .env стека — «Доступ» → «.env стека»:
+#   APP_SECRET=<openssl rand -hex 32>
+#   TWO_FACTOR_ENCRYPTION_KEY=<openssl rand -hex 32>
+#   POSTGRES_PASSWORD=<пароль базы>
+#   DATABASE_URL=postgresql://umami:<пароль базы>@db:5432/umami

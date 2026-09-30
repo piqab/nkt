@@ -85,6 +85,9 @@ type ComposeSpec struct {
 	// сервис → список ("127.0.0.1:8080:80"); пустой список — не
 	// публиковать (порт 80 хоста нужен прокси сайта).
 	Ports map[string][]string `yaml:"ports,omitempty"`
+	// EnvKeys — переменные окружения сервисов, значения которых берутся из
+	// .env конвейера (секреты), а не из compose-файла: сервис → имена.
+	EnvKeys map[string][]string `yaml:"env_keys,omitempty"`
 	// Bind — адрес публикаций портов без адреса (по умолчанию 127.0.0.1:
 	// docker публикует в обход файрвола хоста); 0.0.0.0 — на всех.
 	Bind string `yaml:"bind,omitempty"`
@@ -219,6 +222,9 @@ func (s Spec) Validate() error {
 			return err
 		}
 		if err := validatePorts(c.Ports); err != nil {
+			return err
+		}
+		if err := validateEnvKeys(c.EnvKeys); err != nil {
 			return err
 		}
 		if err := validateBind(c.Bind); err != nil {

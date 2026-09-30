@@ -85,3 +85,26 @@ func TestComposeSpecValidation(t *testing.T) {
 		}
 	}
 }
+
+func TestMissingEnvKeys(t *testing.T) {
+	env := "APP_SECRET=abc\nDATABASE_URL=\n# X=1\n"
+	got := missingEnvKeys([]string{"APP_SECRET", "DATABASE_URL", "X"}, &env)
+	if strings.Join(got, ",") != "DATABASE_URL,X" {
+		t.Fatal(got)
+	}
+	if got := missingEnvKeys([]string{"A"}, nil); len(got) != 1 {
+		t.Fatal(got)
+	}
+}
+
+// Пример umami из examples/ разбирается.
+func TestUmamiExamplePipeline(t *testing.T) {
+	raw, err := os.ReadFile("../../examples/umami/pipeline.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spec, err := deploy.ParseSpec(string(raw))
+	if err != nil || spec.Compose == nil || len(spec.Compose.AllEnvKeys()) != 4 || !spec.Compose.Site.Managed() {
+		t.Fatalf("%+v %v", spec.Compose, err)
+	}
+}

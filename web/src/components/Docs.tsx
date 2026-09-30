@@ -66,7 +66,7 @@ export function DocsModal({ target, isHub, admin, version, onClose }: { target: 
 }
 
 /** Кнопка «Справка» для места интерфейса (ключ docsMap.json). */
-export function HelpButton({ docKey, isHub, admin, version, compact }: { docKey: string; isHub: boolean; admin: boolean; version?: string; compact?: boolean }) {
+export function HelpButton({ docKey, isHub, admin, version, compact, label }: { docKey: string; isHub: boolean; admin: boolean; version?: string; compact?: boolean; label?: string }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const target = DOCS[docKey]
@@ -74,7 +74,7 @@ export function HelpButton({ docKey, isHub, admin, version, compact }: { docKey:
   return (
     <>
       <Button size="small" type={compact ? 'text' : 'default'} icon={<QuestionCircleOutlined />} aria-label={t('docs.button')} onClick={() => setOpen(true)}>
-        {compact ? null : t('docs.button')}
+        {compact ? null : label ? `${t('docs.button')}: ${label}` : t('docs.button')}
       </Button>
       {open && <DocsModal target={target} isHub={isHub} admin={admin} version={version} onClose={() => setOpen(false)} />}
     </>

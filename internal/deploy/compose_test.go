@@ -75,7 +75,7 @@ func TestOverrideImages(t *testing.T) {
 
 func TestOverridePorts(t *testing.T) {
 	src := "version: '2'\nservices:\n    httpbin:\n      build: '.'\n      ports:\n        - '80:80'\n    db:\n      image: postgres\n"
-	out, err := OverrideServices(src, map[string]string{"httpbin": "kennethreitz/httpbin"}, map[string][]string{"httpbin": {}, "db": {"127.0.0.1:5432:5432"}})
+	out, err := OverrideServices(src, map[string]string{"httpbin": "kennethreitz/httpbin"}, map[string][]string{"httpbin": {}, "db": {"127.0.0.1:5432:5432"}}, nil)
 	if err != nil || strings.Contains(out, "80:80") || strings.Contains(out, "build") || !strings.Contains(out, `"127.0.0.1:5432:5432"`) {
 		t.Fatalf("%v\n%s", err, out)
 	}
@@ -88,7 +88,7 @@ func TestOverridePorts(t *testing.T) {
 			t.Fatalf("accepted: %s", bad)
 		}
 	}
-	if _, err := OverrideServices(src, nil, map[string][]string{"nope": {}}); err == nil {
+	if _, err := OverrideServices(src, nil, map[string][]string{"nope": {}}, nil); err == nil {
 		t.Fatal("unknown service accepted")
 	}
 }

@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.62 — 2026-09-30
+
+- **`compose.env_keys`: secrets from .env for someone else's compose
+  files:** if a project's file writes a secret as a value (`APP_SECRET:
+  replace-me…`), `.env` does not override it; now the hub replaces the
+  listed variables' values in the file copy with references to the
+  pipeline `.env`. A variable missing from `.env` stops the deployment
+  before it starts, and the dry run names it.
+- **"Examples" instead of the httpbin button:** a list of ready pipelines
+  with descriptions: httpbin and **umami + PostgreSQL** (two services,
+  secrets through `env_keys`, a data volume, a `.env` template);
+  `examples/umami` in the repository. Verified: umami comes up in ~80
+  seconds with both services healthy.
+- The help buttons in the pipeline editor are labelled with their sections.
+
 ## v1.11.61 — 2026-09-30
 
 - Docs (English): dry-run checks (ports, architecture), causes of a failed `up` and the "Enabled" switch.
