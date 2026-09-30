@@ -13,6 +13,7 @@ import { JobLogModal } from './Jobs'
 import { EdgeCard } from '../components/EdgeCard'
 import { SitesPanel } from '../components/SitesPanel'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
+import { HelpButton } from '../components/Docs'
 
 interface Deployment {
   id: number
@@ -450,7 +451,11 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
         onHistory={pipeline ? () => setHistory(true) : undefined}
         fields={
           <>
-            <p className="small muted">{t('deploy.editHint')}</p>
+            <Space size={4} wrap style={{ marginBottom: '0.3rem' }}>
+              <span className="small muted">{t('deploy.editHint')}</span>
+              <HelpButton docKey="deploy:compose" isHub admin />
+              <HelpButton docKey="deploy:site" isHub admin />
+            </Space>
             {!pipeline && (
               <ComposeFromLink
                 onFill={(yaml, suggested) => {
@@ -804,7 +809,10 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
   }
   return (
     <Modal title={t('deploy.accessTitle', { name: p.name })} onClose={onClose} width={700}>
-      <p className="small muted">{t('deploy.accessHint')}</p>
+      <Space size={4} wrap>
+        <span className="small muted">{t('deploy.accessHint')}</span>
+        <HelpButton docKey="deploy:access" isHub admin />
+      </Space>
       {error && <Banner kind="error">{error}</Banner>}
       <p className="small">
         {t('deploy.gitCred')}: <Tag color={p.has_git_cred ? 'success' : 'default'}>{p.has_git_cred ? t('deploy.set') : t('deploy.notSet')}</Tag>

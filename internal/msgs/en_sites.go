@@ -175,4 +175,5 @@ var enSitesCatalog = map[string]string{
 	"deploy.portBound":              "  port %s (%s) → %s",
 	"deploy.portKept":               "  port %s (%s): the file sets an address; kept (bind_force: true replaces it)",
 	"deploy.portSkipped":            "? port %s (%s): the entry uses a variable; no address set, give it in compose.ports",
+	"ui.docsURLBad":                 "Docs address %s: needs http:// or https://, no login or parameters, ending with \"/\"",
 }

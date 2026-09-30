@@ -325,3 +325,33 @@ func TestComposeRemoveScript(t *testing.T) {
 		t.Fatalf("absent: %v %s", err, out)
 	}
 }
+
+func TestDocsURL(t *testing.T) {
+	s, _ := sitesServer(t)
+	for _, bad := range []string{"ftp://x/", "https://x", "https://u:p@x/", "javascript:alert(1)/", "https://x/?a=1/", "https://x/#a/"} {
+		rec := httptest.NewRecorder()
+		s.handleDocsSet(rec, adminReq("PUT", "/ui/docs", map[string]any{"url": bad}))
+		if rec.Code != 400 {
+			t.Fatalf("accepted %q: %d", bad, rec.Code)
+		}
+	}
+	rec := httptest.NewRecorder()
+	s.handleDocsSet(rec, adminReq("PUT", "/ui/docs", map[string]any{"url": "http://docs.lan/nkt/"}))
+	var st struct {
+		URL     string `json:"url"`
+		Custom  bool   `json:"custom"`
+		History []struct {
+			URL string `json:"url"`
+		} `json:"history"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &st)
+	if rec.Code != 200 || st.URL != "http://docs.lan/nkt/" || !st.Custom || len(st.History) != 1 || st.History[0].URL != DefaultDocsURL {
+		t.Fatalf("set: %d %s", rec.Code, rec.Body)
+	}
+	rec = httptest.NewRecorder()
+	s.handleDocsSet(rec, adminReq("PUT", "/ui/docs", map[string]any{"url": ""}))
+	_ = json.Unmarshal(rec.Body.Bytes(), &st)
+	if st.URL != DefaultDocsURL || st.Custom || len(st.History) != 2 {
+		t.Fatalf("reset: %s", rec.Body)
+	}
+}

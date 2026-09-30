@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Button, Checkbox, InputNumber, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
+import { DocsSettingsCard } from '../components/Docs'
 import { usePrivacy } from '../privacy'
 import { AISettingsCard } from '../components/AISettingsCard'
 import type { HubVersionInfo, HubVulnDBInfo } from '../types'
@@ -32,7 +33,7 @@ import { confirmAction } from '../components/confirm'
  * back as a server error surfaced through the same notice banner every
  * other action here already uses.
  */
-export default function About() {
+export default function About({ admin = false }: { admin?: boolean }) {
   const { t } = useTranslation()
   const [privacy, setPrivacy] = usePrivacy()
   const version = useApi<HubVersionInfo>('/hub/version', 5 * 60_000)
@@ -223,6 +224,7 @@ export default function About() {
       </Card>
 
       <AISettingsCard />
+      <DocsSettingsCard isHub admin={admin} />
 
       <Card title={t('about.hubVersionTitle')}>
         {version.loading && !info ? (

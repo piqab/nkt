@@ -104,3 +104,24 @@ Size, hits, limit and clearing — in the same place; how it works — on the
 The model setup (Anthropic or OpenAI-compatible, local ones included),
 instructions and the "hide sensitive" checkbox — on the
 [Alerts, jobs, AI](/en/guide/hub-operations) page.
+
+## Help
+
+The **"Help"** button at the bottom of the sidebar opens this site's
+section for the current page of the interface, in a window inside nkt;
+**"Detach"** moves the help into a separate browser window (like the
+terminal), **"In a new tab"** opens a regular tab. The pipeline editor,
+"Access" and the "Sites" wizard have buttons straight to their sections.
+
+![Help](/screens/en/help-modal.png)
+
+**The site address** is set in the "Help" card on "About" (and via the
+"Help address…" link in the help window, also on a standalone host without
+a hub): `https://piqab.github.io/nkt/` by default, or your own copy, e.g.
+on a local network without internet (`npm run build` in the project's
+`site/`, the result is `site/.vitepress/dist`). Editing shows the
+difference before saving and keeps a history of previous addresses. The
+site describes the latest nkt version; your own copy built from the same
+commit as the installed nkt matches it exactly. If your server forbids
+being shown inside other pages (`X-Frame-Options`), the window stays
+empty; use "Detach" or "In a new tab".
