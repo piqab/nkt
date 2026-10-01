@@ -45,6 +45,8 @@ type DeployParams struct {
 	PipelineID int64  `json:"pipeline_id,omitempty"`
 	Ref        string `json:"ref,omitempty"`
 	Tag        string `json:"tag,omitempty"`
+	// Skip — проверки сухого прогона, с которых сняли галочки.
+	Skip []string `json:"skip,omitempty"`
 }
 
 // DeployRunner — исполнитель выкладки.

@@ -30,7 +30,10 @@ type Pipeline struct {
 	EnvSHA string `json:"-"`
 	// Removal — удаление конвейера с хостов: что удалять и ошибка, если
 	// не завершилось (JSON; пусто — не удаляется).
-	Removal   string `json:"removal,omitempty"`
+	Removal string `json:"removal,omitempty"`
+	// DrySkip — проверки сухого прогона, с которых сняли галочки (JSON-
+	// список ключей; новые проверки по умолчанию включены).
+	DrySkip   string `json:"dry_skip,omitempty"`
 	Author    string `json:"author,omitempty"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
@@ -77,12 +80,12 @@ const (
 	DeployFailed    = "failed"
 )
 
-const pipelineColumns = `id, name, content, hook_id, hook_secret, git_cred, registry_cred, env_enc, enabled, last_commit, last_tag, failed_commit, failed_tag, env_sha, removal, author, created_at, updated_at`
+const pipelineColumns = `id, name, content, hook_id, hook_secret, git_cred, registry_cred, env_enc, enabled, last_commit, last_tag, failed_commit, failed_tag, env_sha, removal, dry_skip, author, created_at, updated_at`
 
 func scanPipeline(row interface{ Scan(...any) error }) (Pipeline, error) {
 	var p Pipeline
 	err := row.Scan(&p.ID, &p.Name, &p.Content, &p.HookID, &p.HookSecret, &p.GitCred, &p.RegistryCred, &p.EnvEnc, &p.Enabled,
-		&p.LastCommit, &p.LastTag, &p.FailedCommit, &p.FailedTag, &p.EnvSHA, &p.Removal, &p.Author, &p.CreatedAt, &p.UpdatedAt)
+		&p.LastCommit, &p.LastTag, &p.FailedCommit, &p.FailedTag, &p.EnvSHA, &p.Removal, &p.DrySkip, &p.Author, &p.CreatedAt, &p.UpdatedAt)
 	p.HasGitCred, p.HasRegistryCred, p.HasEnv = len(p.GitCred) > 0, len(p.RegistryCred) > 0, len(p.EnvEnc) > 0
 	return p, err
 }
@@ -172,6 +175,12 @@ func (db *DB) SetPipelineEnabled(ctx context.Context, id int64, enabled bool) er
 // SetPipelineDeployed запоминает последнее выложенное.
 func (db *DB) SetPipelineDeployed(ctx context.Context, id int64, commit, tag string) error {
 	_, err := db.ExecContext(ctx, `UPDATE pipelines SET last_commit = ?, last_tag = ?, failed_commit = '', failed_tag = '' WHERE id = ?`, commit, tag, id)
+	return err
+}
+
+// SetPipelineDrySkip — снятые галочки проверок сухого прогона (JSON).
+func (db *DB) SetPipelineDrySkip(ctx context.Context, id int64, skip string) error {
+	_, err := db.ExecContext(ctx, `UPDATE pipelines SET dry_skip = ? WHERE id = ?`, skip, id)
 	return err
 }
 

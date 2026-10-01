@@ -242,15 +242,24 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 	if out, err := c.RunTimeout(ctx, time.Minute, res.Engine, append(args, "config", "--services")...); err == nil && out.OK() {
 		res.Services = splitLines(out.Stdout)
 	}
-	res.HostArch = hostArch(ctx, c)
-	if out, err := c.RunTimeout(ctx, time.Minute, res.Engine, append(args, "config", "--images")...); err == nil && out.OK() {
-		for _, img := range dedupe(splitLines(out.Stdout)) {
-			res.Images = append(res.Images, s.checkImage(ctx, c, res.Engine, img, res.HostArch))
+	on := func(k string) bool { return !slices.Contains(req.Skip, k) }
+	if on("images") {
+		res.HostArch = hostArch(ctx, c)
+		if out, err := c.RunTimeout(ctx, time.Minute, res.Engine, append(args, "config", "--images")...); err == nil && out.OK() {
+			for _, img := range dedupe(splitLines(out.Stdout)) {
+				res.Images = append(res.Images, s.checkImage(ctx, c, res.Engine, img, res.HostArch))
+			}
 		}
 	}
-	res.PortsBusy = busyPorts(ctx, c, res.Engine, work, req.Project, req.File)
-	res.NoHealthcheck = noHealthcheck(ctx, c, res.Engine, work, req.Project, req.File)
-	res.MemAvailableMB, res.DiskFreeMB = hostResources(ctx, c, res.Engine)
+	if on("ports") {
+		res.PortsBusy = busyPorts(ctx, c, res.Engine, work, req.Project, req.File)
+	}
+	if on("health") {
+		res.NoHealthcheck = noHealthcheck(ctx, c, res.Engine, work, req.Project, req.File)
+	}
+	if on("resources") {
+		res.MemAvailableMB, res.DiskFreeMB = hostResources(ctx, c, res.Engine)
+	}
 	writeJSON(w, http.StatusOK, res)
 }
 

@@ -48,6 +48,8 @@ interface Pipeline {
   action?: string
   /** JSON: что удалять и ошибка, если удаление с хостов не завершилось. */
   removal?: string
+  /** JSON: проверки сухого прогона, с которых сняли галочки. */
+  dry_skip?: string
 }
 interface PipelineVersion {
   id: number
@@ -419,18 +421,8 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
   const saved = pipeline?.content ?? ''
   const text = draft ?? (pipeline ? saved : (tpl.data?.content ?? ''))
   const [dryJob, setDryJob] = useState<Job | null>(null)
-
-  // Сухой прогон текущего текста — и несохранённого: доступ и .env —
-  // сохранённого конвейера.
-  async function dryRun() {
-    setError(null)
-    try {
-      const res = await api<{ job_id: number }>('/hub/pipelines/dryrun', { method: 'POST', body: { pipeline_id: pipeline?.id ?? 0, content: text } })
-      setDryJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
-    } catch (err) {
-      setError(errText(err))
-    }
-  }
+  const [dryOpen, setDryOpen] = useState(false)
+  const [drySkip, setDrySkip] = useState(() => parseDrySkip(pipeline?.dry_skip))
 
   async function save(): Promise<boolean> {
     setBusy(true)
@@ -482,7 +474,7 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
               {pipeline && <Input size="small" style={{ width: '20rem' }} value={note} placeholder={t('deploy.notePlaceholder')} onChange={(e) => setNote(e.target.value)} />}
               {/action:\s*compose/.test(text) && (
                 <Tooltip title={t('deploy.dryRunHint')}>
-                  <Button size="small" onClick={() => void dryRun()}>
+                  <Button size="small" onClick={() => setDryOpen(true)}>
                     {t('deploy.dryRun')}
                   </Button>
                 </Tooltip>
@@ -492,6 +484,22 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
         }
         below={error ? <Banner kind="error" onClose={() => setError(null)}>{error}</Banner> : null}
       />
+      {dryOpen && (
+        <DryRunModal
+          name={pipeline?.name ?? name}
+          skip={drySkip}
+          saved={!!pipeline}
+          onClose={() => setDryOpen(false)}
+          onRun={async (skip) => {
+            // Сухой прогон текущего текста — и несохранённого: доступ и
+            // .env — сохранённого конвейера.
+            const res = await api<{ job_id: number }>('/hub/pipelines/dryrun', { method: 'POST', body: { pipeline_id: pipeline?.id ?? 0, content: text, skip } })
+            setDrySkip(skip)
+            setDryOpen(false)
+            setDryJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
+          }}
+        />
+      )}
       {dryJob && <JobLogModal job={dryJob} scope="/hosts/local" onClose={() => setDryJob(null)} />}
       {history && pipeline && (
         <VersionsModal
@@ -709,6 +717,7 @@ function DeployModal({ p, onClose, onStarted }: { p: Pipeline; onClose: () => vo
   const [tag, setTag] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [dryOpen, setDryOpen] = useState(false)
   return (
     <Modal title={t('deploy.deployTitle', { name: p.name })} onClose={onClose} width={560}>
       <p className="small muted">{t('deploy.deployHint')}</p>
@@ -735,25 +744,83 @@ function DeployModal({ p, onClose, onStarted }: { p: Pipeline; onClose: () => vo
           {t('deploy.deployNow')}
         </Button>
         <Tooltip title={t('deploy.dryRunHint')}>
-          <Button
-            loading={busy}
-            onClick={async () => {
-              setBusy(true)
-              setError(null)
-              try {
-                const res = await api<{ job_id: number }>('/hub/pipelines/dryrun', { method: 'POST', body: { pipeline_id: p.id, ref, tag } })
-                onStarted(res.job_id)
-              } catch (err) {
-                setError(errText(err))
-              } finally {
-                setBusy(false)
-              }
-            }}
-          >
+          <Button disabled={busy} onClick={() => setDryOpen(true)}>
             {t('deploy.dryRun')}
           </Button>
         </Tooltip>
       </Space>
+      {dryOpen && (
+        <DryRunModal
+          name={p.name}
+          skip={parseDrySkip(p.dry_skip)}
+          saved
+          onClose={() => setDryOpen(false)}
+          onRun={async (skip) => {
+            const res = await api<{ job_id: number }>('/hub/pipelines/dryrun', { method: 'POST', body: { pipeline_id: p.id, ref, tag, skip } })
+            onStarted(res.job_id)
+          }}
+        />
+      )}
+    </Modal>
+  )
+}
+
+/** Проверки сухого прогона (ключи — как на хабе, DryChecks). */
+const DRY_CHECKS = ['engine', 'config', 'images', 'ports', 'resources', 'health', 'stack', 'site_dns', 'site_outside', 'site_host', 'site_cert', 'version']
+
+function parseDrySkip(raw?: string): string[] {
+  try {
+    const v: unknown = raw ? JSON.parse(raw) : []
+    return Array.isArray(v) ? v.filter((k): k is string => DRY_CHECKS.includes(k as string)) : []
+  } catch {
+    return []
+  }
+}
+
+/** Сухой прогон: какие проверки делать. Хранятся снятые галочки — новая
+ *  проверка в следующей версии будет включена сама. */
+function DryRunModal({ name, skip, saved, onClose, onRun }: { name: string; skip: string[]; saved: boolean; onClose: () => void; onRun: (skip: string[]) => Promise<void> }) {
+  const { t } = useTranslation()
+  const [off, setOff] = useState<string[]>(skip)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  return (
+    <Modal title={t('deploy.dryTitle', { name })} onClose={onClose} width={560}>
+      <p className="small muted">{t('deploy.dryChecksHint')}</p>
+      {!saved && <p className="small muted">{t('deploy.dryUnsaved')}</p>}
+      <Space size={4} style={{ marginBottom: '0.5rem' }}>
+        <Button
+          type="primary"
+          loading={busy}
+          onClick={async () => {
+            setBusy(true)
+            setError(null)
+            try {
+              await onRun(DRY_CHECKS.filter((k) => off.includes(k)))
+            } catch (err) {
+              setError(errText(err))
+            } finally {
+              setBusy(false)
+            }
+          }}
+        >
+          {t('deploy.dryRunStart')}
+        </Button>
+        <Button size="small" type="link" onClick={() => setOff([])}>
+          {t('deploy.dryAll')}
+        </Button>
+        <Button size="small" type="link" onClick={() => setOff(DRY_CHECKS)}>
+          {t('deploy.dryNone')}
+        </Button>
+      </Space>
+      {error && <Banner kind="error">{error}</Banner>}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+        {DRY_CHECKS.map((k) => (
+          <Checkbox key={k} checked={!off.includes(k)} onChange={(e) => setOff(e.target.checked ? off.filter((x) => x !== k) : [...off, k])}>
+            {t(`deploy.dryCheck.${k}`)} <span className="small muted">— {t(`deploy.dryCheck.${k}Hint`)}</span>
+          </Checkbox>
+        ))}
+      </div>
     </Modal>
   )
 }

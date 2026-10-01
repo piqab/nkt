@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/piqab/nkt/internal/deploy"
+	"github.com/piqab/nkt/internal/msgs"
 )
 
 func TestCollectComposeFiles(t *testing.T) {
@@ -131,6 +132,19 @@ func TestDryHelpers(t *testing.T) {
 		t.Fatal(got)
 	}
 	if got := foreignV6([]string{"203.0.113.5"}, nil); got != nil {
+		t.Fatal(got)
+	}
+	on := dryChecksOn([]string{"ports", "site_dns", "health"})
+	if on("ports") || !on("images") || !on("engine") {
+		t.Fatal("dryChecksOn")
+	}
+	if got := strings.Join(on.hostSkip(), ","); got != "ports,health" {
+		t.Fatal(got)
+	}
+	if got := dryChecksOn(nil).skippedNames(msgs.EN); got != "" {
+		t.Fatal(got)
+	}
+	if got := on.skippedNames(msgs.EN); got != "host ports, healthcheck, site: DNS" {
 		t.Fatal(got)
 	}
 	for ref, want := range map[string]string{"nginx": "", "nginx:latest": "latest", "ghcr.io/a/b:3.4.0": "3.4.0", "registry:5000/x": "", "x@sha256:abc": "@"} {

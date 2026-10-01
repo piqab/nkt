@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os/exec"
@@ -95,12 +96,12 @@ func (r *DeployRunner) dryRun(ctx context.Context, jc *jobs.Context, p DeployPar
 	if err := g.Checkout(ctx, spec.Repo, ref, commit, src); err != nil {
 		return err
 	}
-	return r.checkCompose(ctx, jc, pl, spec, src, vars)
+	return r.checkCompose(ctx, jc, pl, spec, src, vars, dryChecksOn(p.Skip))
 }
 
 // checkCompose — сухой прогон стека на всех его хостах; ошибка — если
 // хоть на одном выкладка не прошла бы.
-func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl store.Pipeline, spec deploy.Spec, src string, vars deploy.Vars) error {
+func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl store.Pipeline, spec deploy.Spec, src string, vars deploy.Vars, on dryOn) error {
 	s := r.s
 	c := spec.Compose
 	lang := jc.Lang()
@@ -124,21 +125,30 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	}
 	problems := 0
 	sitePort := 0
-	if others := s.pipelinesWithProject(ctx, pl.ID, c.Project); len(others) > 0 {
+	if skipped := on.skippedNames(lang); skipped != "" {
+		jc.Log("deploy.drySkipped", skipped)
+	}
+	if others := s.pipelinesWithProject(ctx, pl.ID, c.Project); len(others) > 0 && on("stack") {
 		jc.Log("deploy.dryProjectShared", c.Project, strings.Join(others, ", "))
 	}
-	missingEnv := missingEnvKeys(c.AllEnvKeys(), env)
-	if len(missingEnv) > 0 {
-		problems++
-		jc.Log("deploy.dryEnvKeysMissing", strings.Join(missingEnv, ", "))
-	} else if keys := c.AllEnvKeys(); len(keys) > 0 {
-		jc.Log("deploy.dryEnvKeysOK", strings.Join(keys, ", "))
+	var missingEnv []string
+	if on("config") {
+		missingEnv = missingEnvKeys(c.AllEnvKeys(), env)
+		if len(missingEnv) > 0 {
+			problems++
+			jc.Log("deploy.dryEnvKeysMissing", strings.Join(missingEnv, ", "))
+		} else if keys := c.AllEnvKeys(); len(keys) > 0 {
+			jc.Log("deploy.dryEnvKeysOK", strings.Join(keys, ", "))
+		}
 	}
 	for _, t := range targets {
 		var res composeCheck
 		body := composeBody(c, main, files, env, pl.EnvSHA, "")
-		if c.Site.Managed() {
+		if c.Site.Managed() && on("site_host") {
 			body["site_service"], body["site_port"] = c.Site.Service, c.Site.Port
+		}
+		if skip := on.hostSkip(); len(skip) > 0 {
+			body["skip"] = skip
 		}
 		code, err := s.composeHostPost(ctx, jc, user, t, "/api/compose/stacks/check", body, &res)
 		switch {
@@ -150,14 +160,16 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			jc.Log("deploy.dryHostError", t.Name, msgs.Localize(lang, err))
 			continue
 		}
-		problems += logComposeCheck(jc, t.Name, c.Project, res, missingEnv)
-		if res.StackExists && pl.LastCommit == "" {
+		problems += logComposeCheck(jc, t.Name, c.Project, res, missingEnv, on)
+		if res.StackExists && pl.LastCommit == "" && on("stack") {
 			// Стек с таким именем на хосте есть, а этот конвейер его не
 			// выкладывал: файлы перезапишутся.
 			jc.Log("deploy.dryStackForeign", c.Project, t.Name)
 		}
-		problems += s.dryHostVersion(ctx, jc, t)
-		if c.Site.Managed() && res.SiteChecked {
+		if on("version") {
+			problems += s.dryHostVersion(ctx, jc, t)
+		}
+		if c.Site.Managed() && res.SiteChecked && on("site_host") {
 			n, port := logSitePort(jc, c, res)
 			problems += n
 			sitePort = port
@@ -166,7 +178,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	jc.StepKey(3, 3, "deploy.stepDryResult")
 	switch {
 	case c.Site.Managed():
-		problems += s.dryRunSite(ctx, jc, user, pl, c, targets[0], sitePort)
+		problems += s.dryRunSite(ctx, jc, user, pl, c, targets[0], sitePort, on)
 	case c.Site.CheckDomain() != "":
 		d := c.Site.CheckDomain()
 		chk := httpsCheck(ctx, d)
@@ -184,13 +196,16 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 }
 
 // logComposeCheck пишет итог хоста в журнал; возвращает число проблем.
-func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, envKeysMissing []string) int {
-	if res.Engine == "" {
-		jc.Log("deploy.dryNoEngine", host)
-		return 1
-	}
-	if !res.Compose {
-		jc.Log("deploy.dryNoCompose", host, res.Version, res.ComposeError)
+func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, envKeysMissing []string, on dryOn) int {
+	if res.Engine == "" || !res.Compose {
+		if !on("engine") {
+			return 0 // без движка остальное и не проверить
+		}
+		if res.Engine == "" {
+			jc.Log("deploy.dryNoEngine", host)
+		} else {
+			jc.Log("deploy.dryNoCompose", host, res.Version, res.ComposeError)
+		}
 		return 1
 	}
 	if res.Simulated {
@@ -199,7 +214,7 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, e
 		jc.Log("deploy.dryEngine", host, res.Version, res.ComposeVersion)
 	}
 	problems := 0
-	if res.DaemonDown {
+	if res.DaemonDown && on("engine") {
 		problems++
 		jc.Log("deploy.dryDaemonDown", res.Engine, res.DaemonError)
 	}
@@ -211,29 +226,35 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, e
 			touched = append(touched, f.Path)
 		}
 	}
-	if res.StackExists {
-		jc.Log("deploy.dryStackExists", project, counts["new"], counts["changed"], counts["same"], strings.Join(touched, ", "))
-	} else {
-		jc.Log("deploy.dryStackNew", project, len(res.Files))
+	if on("stack") {
+		if res.StackExists {
+			jc.Log("deploy.dryStackExists", project, counts["new"], counts["changed"], counts["same"], strings.Join(touched, ", "))
+		} else {
+			jc.Log("deploy.dryStackNew", project, len(res.Files))
+		}
+		if res.Env != "none" && res.Env != "" {
+			jc.Log("deploy.dryEnv." + res.Env)
+		}
+		if res.EnvEdited {
+			jc.Log("deploy.dryEnvEdited")
+		}
 	}
-	if res.Env != "none" && res.Env != "" {
-		jc.Log("deploy.dryEnv." + res.Env)
+	if on("config") {
+		if unset := withoutNames(res.UnsetVars, envKeysMissing); len(unset) > 0 {
+			problems++
+			jc.Log("deploy.dryUnsetVars", strings.Join(unset, ", "))
+		}
+		if !res.ConfigOK {
+			jc.Log("deploy.dryConfigBad", res.ConfigError)
+			return problems + 1
+		}
+		jc.Log("deploy.dryConfigOK", strings.Join(res.Services, ", "))
+	} else if !res.ConfigOK {
+		return problems // compose файл не принял — дальше проверять нечего
 	}
-	if res.EnvEdited {
-		jc.Log("deploy.dryEnvEdited")
-	}
-	if unset := withoutNames(res.UnsetVars, envKeysMissing); len(unset) > 0 {
-		problems++
-		jc.Log("deploy.dryUnsetVars", strings.Join(unset, ", "))
-	}
-	if !res.ConfigOK {
-		jc.Log("deploy.dryConfigBad", res.ConfigError)
-		return problems + 1
-	}
-	jc.Log("deploy.dryConfigOK", strings.Join(res.Services, ", "))
 	// Ресурсы: мало — проблема (не скачать образы, не поднять базу),
 	// впритык — предупреждение.
-	if res.MemAvailableMB > 0 || res.DiskFreeMB > 0 {
+	if (res.MemAvailableMB > 0 || res.DiskFreeMB > 0) && on("resources") {
 		jc.Log("deploy.dryResources", sizeText(res.MemAvailableMB), sizeText(res.DiskFreeMB))
 		switch {
 		case res.DiskFreeMB > 0 && res.DiskFreeMB < 2048:
@@ -246,14 +267,20 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, e
 			jc.Log("deploy.dryMemTight", res.MemAvailableMB)
 		}
 	}
-	if len(res.NoHealthcheck) > 0 {
+	if len(res.NoHealthcheck) > 0 && on("health") {
 		jc.Log("deploy.dryNoHealthcheck", strings.Join(res.NoHealthcheck, ", "))
 	}
 	for _, pb := range res.PortsBusy {
+		if !on("ports") {
+			break
+		}
 		problems++
 		jc.Log("deploy.dryPortBusy", pb.Addr, pb.Holder)
 	}
 	for _, img := range res.Images {
+		if !on("images") {
+			break // старый хост проверил и так — не показываем
+		}
 		if img.ArchMismatch {
 			problems++
 			jc.Log("deploy.dryImageArch", img.Image, strings.Join(img.Arches, ", "), res.HostArch)
@@ -285,10 +312,11 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, e
 // описания (сохранённого конвейера или текста из редактора).
 func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		PipelineID int64  `json:"pipeline_id"`
-		Content    string `json:"content"`
-		Ref        string `json:"ref"`
-		Tag        string `json:"tag"`
+		PipelineID int64    `json:"pipeline_id"`
+		Content    string   `json:"content"`
+		Ref        string   `json:"ref"`
+		Tag        string   `json:"tag"`
+		Skip       []string `json:"skip"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -321,6 +349,20 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "deploy.specBad", "ref", req.Ref+req.Tag))
 		return
 	}
+	for _, k := range req.Skip {
+		if !slices.Contains(DryChecks, k) {
+			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("deploy.specBad", "skip", k))
+			return
+		}
+	}
+	if req.PipelineID > 0 {
+		// Выбор галочек — у конвейера: следующий прогон откроется с ним.
+		raw, _ := json.Marshal(req.Skip)
+		if len(req.Skip) == 0 {
+			raw = nil
+		}
+		_ = s.db.SetPipelineDrySkip(ctx, req.PipelineID, string(raw))
+	}
 	queue := "deploy:dryrun"
 	if req.PipelineID > 0 {
 		// Та же очередь, что у выкладок конвейера: checkout в тот же каталог.
@@ -329,7 +371,7 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindDeploy, TitleKey: "deploy.dryTitle", TitleArgs: []any{name},
 		Queue: queue, Author: user, Steps: 3,
-		Params: DeployParams{DryRun: true, PipelineID: req.PipelineID, Content: req.Content, Ref: req.Ref, Tag: req.Tag},
+		Params: DeployParams{DryRun: true, PipelineID: req.PipelineID, Content: req.Content, Ref: req.Ref, Tag: req.Tag, Skip: req.Skip},
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
@@ -457,4 +499,44 @@ func withoutNames(list, skip []string) []string {
 		}
 	}
 	return out
+}
+
+// dryOn — включена ли проверка сухого прогона (галочка).
+type dryOn func(key string) bool
+
+// DryChecks — проверки сухого прогона, которые можно снять галочкой (в
+// окне сухого прогона; выбор хранится у конвейера).
+var DryChecks = []string{"engine", "config", "images", "ports", "resources", "health", "stack", "site_dns", "site_outside", "site_host", "site_cert", "version"}
+
+// dryHostChecks — проверки, которые делает хост (снятые — не тратит на
+// них время и запросы к registry).
+var dryHostChecks = []string{"images", "ports", "resources", "health"}
+
+func dryChecksOn(skip []string) dryOn {
+	off := map[string]bool{}
+	for _, k := range skip {
+		off[k] = true
+	}
+	return func(key string) bool { return !off[key] }
+}
+
+func (on dryOn) hostSkip() []string {
+	var out []string
+	for _, k := range dryHostChecks {
+		if !on(k) {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// skippedNames — названия снятых проверок для журнала.
+func (on dryOn) skippedNames(lang msgs.Lang) string {
+	var names []string
+	for _, k := range DryChecks {
+		if !on(k) {
+			names = append(names, msgs.T(lang, "deploy.dryCheck."+k))
+		}
+	}
+	return strings.Join(names, ", ")
 }

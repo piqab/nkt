@@ -568,6 +568,8 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"deployments", "env_version", `ALTER TABLE deployments ADD COLUMN env_version INTEGER NOT NULL DEFAULT 0`},
 	// removal — удаление конвейера с хостов (JSON: что удалять, ошибка).
 	{"pipelines", "removal", `ALTER TABLE pipelines ADD COLUMN removal TEXT NOT NULL DEFAULT ''`},
+	// dry_skip — снятые галочки проверок сухого прогона (JSON-список).
+	{"pipelines", "dry_skip", `ALTER TABLE pipelines ADD COLUMN dry_skip TEXT NOT NULL DEFAULT ''`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table
