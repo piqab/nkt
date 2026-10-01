@@ -19,7 +19,7 @@ internet.
 | `22/tcp` | managed hosts | the hub | from the hub's address |
 | `8078/tcp` | managed hosts (fallback channel) | the hub | from the hub's address |
 | `3142/tcp` | managed hosts, `127.0.0.1` | apt and containerd on the host (reverse SSH forward from the hub) | no |
-| `443/tcp`, `80/tcp` | the VPS with [nkt-edge](/en/guide/edge) | GitHub, GitLab, CI; 80 — certbot (Let's Encrypt) | yes — that's their purpose |
+| `443/tcp`, `80/tcp` | the VPS with [nkt-edge](/en/guide/edge) | by edge role: GitHub, GitLab, CI (webhooks), n8n and scripts (API), Slack (callbacks); 80 — certbot | yes — that's their purpose |
 | `8444/tcp` | the VPS with nkt-edge | the hub (tunnel) | from the hub's address; may be open to all — login by token |
 | `51820/udp` | cluster hosts on WireGuard | neighboring cluster hosts | between the cluster hosts |
 | `6443`, `80`, `443` | a host with a cluster (DNAT) | cluster clients | optional, "expose" |
@@ -116,22 +116,32 @@ The hub keeps a reverse SSH forward to the host: on the host
 proxy. The port lives only on the host's loopback, nothing has to be
 opened. See [Package cache](/en/guide/hub-cache).
 
-## Deployment webhooks
+## A way in for a hub behind NAT: webhooks, API, bots
 
-A pipeline webhook is `POST /api/hub/hooks/{id}` at the hub's address. If
-the hub is behind NAT or must not be exposed:
+What reaches the hub from outside, and how to do without exposing it:
 
-- **repository or registry polling** — the hub asks by itself, nothing
-  to open;
-- **[nkt-edge](/en/guide/edge)** on a VPS — accepts only webhooks on 443
-  and passes them to the hub over a tunnel the hub keeps itself (8444 on
-  the VPS).
+| What | Path on the hub | Without exposing the hub |
+|---|---|---|
+| a pipeline webhook | `POST /api/hub/hooks/{id}` | repository or registry polling; an [nkt-edge](/en/guide/edge) with the "webhooks" role |
+| API tokens (n8n, CI, scripts) | `/api/hub/…`, `/api/hosts/…` | an nkt-edge with the "API" role, signed requests only |
+| Slack commands and buttons | `POST /api/hub/callbacks/slack/…` | an nkt-edge with the "callbacks" role |
+| the Telegram bot, outgoing webhooks, Slack alerts | — | no way in needed: the hub reaches out itself (443 to Telegram, Slack, recipients) |
+| outside checks of sites | — | an nkt-edge with the "outside checks" role: the hub asks the edge through the tunnel |
+
+The edge accepts its roles on 443 and passes them to the hub over a
+tunnel the hub keeps itself (8444 on the VPS).
 
 If the hub is already behind a proxy and you want to take webhooks
-directly, expose **only that path**:
+directly, expose **only these paths** (`/api/hub/callbacks/` if you need
+Slack):
 
 ```nginx
 location /api/hub/hooks/ {
+    proxy_pass http://127.0.0.1:8077;
+    proxy_set_header Host $host;
+    client_max_body_size 1m;
+}
+location /api/hub/callbacks/ {
     proxy_pass http://127.0.0.1:8077;
     proxy_set_header Host $host;
     client_max_body_size 1m;

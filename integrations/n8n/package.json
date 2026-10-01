@@ -1,20 +1,34 @@
 {
   "name": "n8n-nodes-nkt",
-  "version": "1.11.73",
+  "version": "1.11.79",
   "description": "n8n nodes for the NetKnownsThat (nkt) hub: hosts, findings, deployments and dry runs, fail2ban, alerts, outgoing webhooks",
-  "keywords": ["n8n-community-node-package", "nkt", "netknownsthat", "devops", "monitoring"],
+  "keywords": [
+    "n8n-community-node-package",
+    "nkt",
+    "netknownsthat",
+    "devops",
+    "monitoring"
+  ],
   "license": "MIT",
   "homepage": "https://piqab.github.io/nkt/guide/n8n",
-  "repository": { "type": "git", "url": "https://github.com/piqab/nkt.git", "directory": "integrations/n8n" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/piqab/nkt.git",
+    "directory": "integrations/n8n"
+  },
   "main": "index.js",
   "scripts": {
     "build": "tsc && node scripts/copy-icons.js",
     "test": "npm run build && node --test test/*.test.js"
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "n8n": {
     "n8nNodesApiVersion": 1,
-    "credentials": ["dist/credentials/NktApi.credentials.js"],
+    "credentials": [
+      "dist/credentials/NktApi.credentials.js"
+    ],
     "nodes": [
       "dist/nodes/Nkt/Nkt.node.js",
       "dist/nodes/NktTrigger/NktTrigger.node.js",

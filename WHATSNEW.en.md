@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.79 — 2026-10-01
+
+- **The n8n node ships with every release**: the
+  `n8n-nodes-nkt-<version>.tgz` archive (checksum in `SHA256SUMS`) is
+  unpacked into your n8n custom nodes directory, with no build from the
+  repository needed.
+- **The site documentation** is updated for API tokens, nkt-edge roles,
+  outgoing webhooks, n8n and bots: the home page, the hub overview, ports
+  and access, security, limitations, troubleshooting, and CI/CD (a dry run
+  from CI before deploying). A new page is an **end-to-end example**, "A
+  hub behind NAT, n8n, a bot and CI", with new screenshots.
+
 ## v1.11.78 — 2026-10-01
 
 - **Hub export carries outside access**: API tokens (role, scope,

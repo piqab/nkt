@@ -39,8 +39,17 @@ the hosts expose nothing except SSH for the hub.
   several clusters at once.
 - **[Deployments](/en/guide/hub-deploy)** — applications from Git to
   clusters and hosts on a button, webhook, polling or a new image tag;
-  [nkt-edge](/en/guide/edge) for webhooks without exposing the hub,
+  compose stacks with sites and HTTPS, a dry run with selectable checks,
   [CI/CD examples](/en/guide/cicd-examples).
+- **[nkt-edge](/en/guide/edge)** — a way in from the internet for a hub
+  behind NAT: the "webhooks", "API", "outside checks" and "callbacks"
+  roles; there can be several edges.
+- **[API and tokens](/en/guide/hub-api)** — access for automation with a
+  role and a host and group scope; [outgoing
+  webhooks](/en/guide/hub-api#outgoing-webhooks) for alerts.
+- **[n8n](/en/guide/n8n)** and **[Telegram and Slack bots](/en/guide/bots)**
+  — workflows around the hub, alerts with buttons and commands from a
+  chat; [a complete example](/en/guide/case-automation).
 - **[Alerts, jobs, AI](/en/guide/hub-operations)** — host unreachable,
   findings, failed jobs; the job log; model analysis of findings; privacy
   mode.

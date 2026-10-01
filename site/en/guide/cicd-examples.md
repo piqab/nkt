@@ -250,6 +250,45 @@ the hub deploys a new branch commit by itself.
 - **Rolling back**: "History" → "Roll back" on an earlier successful
   deployment — the hub deploys its commit and tag again, no rebuild.
 
+## A dry run from CI before deploying
+
+CI can first ask the hub whether a deployment would pass, and call the
+webhook only if it would. This needs an [API token](/en/guide/hub-api)
+with the admin role (a dry run is an action), preferably scoped to the
+pipeline's hosts. Keep the key and secret in CI secrets (`NKT_KEY`,
+`NKT_SECRET`) and the hub address, or an edge with the API role, in
+`NKT_URL`.
+
+```yaml
+# .github/workflows/release.yml — a step before calling the webhook
+- name: Dry run on the hub
+  env:
+    NKT_URL: ${{ secrets.NKT_URL }}
+    NKT_KEY: ${{ secrets.NKT_KEY }}
+    NKT_SECRET: ${{ secrets.NKT_SECRET }}
+  run: |
+    call() {  # method, path, body: a signed request to the hub
+      ts=$(date +%s); nonce=$(openssl rand -hex 16)
+      hash=$(printf %s "$3" | sha256sum | cut -d' ' -f1)
+      sig=$(printf 'NKT-API-1\n%s\n%s\n%s\n%s\n%s' "$ts" "$nonce" "$1" "$2" "$hash" \
+        | openssl dgst -sha256 -hmac "$NKT_SECRET" | sed 's/.* //')
+      curl -sf -X "$1" -H 'Content-Type: application/json' \
+        -H "X-NKT-API-Key: $NKT_KEY" -H "X-NKT-API-Timestamp: $ts" \
+        -H "X-NKT-API-Nonce: $nonce" -H "X-NKT-API-Signature: $sig" \
+        ${3:+-d "$3"} "$NKT_URL$2"
+    }
+    job=$(call POST /api/hub/pipelines/dryrun '{"pipeline_id":1}' | jq -r .job_id)
+    for i in $(seq 1 120); do
+      status=$(call GET /api/hub/jobs/$job "" | jq -r .status)
+      case "$status" in queued|running) sleep 5 ;; *) break ;; esac
+    done
+    call GET "/api/hub/jobs/$job/log?after=0" "" | jq -r '.lines[].text'
+    test "$status" = succeeded
+```
+
+If the dry run fails, the step fails, the webhook is not called, and the
+check log is in the CI output.
+
 ## Hub behind NAT
 
 A webhook needs an address CI can reach. If the hub isn't exposed —

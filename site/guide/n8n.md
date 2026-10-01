@@ -16,7 +16,18 @@ API-токену и принимают его [исходящие вебхуки
 
 ## Установка
 
-Пакет собирается из репозитория (нужен Node.js 18+):
+**Из релиза** — к каждому [релизу nkt](https://github.com/piqab/nkt/releases)
+приложен архив `n8n-nodes-nkt-<версия>.tgz` (сумма — в `SHA256SUMS`).
+Распакуйте его в каталог своих узлов n8n и перезапустите n8n:
+
+```sh
+V=1.11.79
+curl -fLO https://github.com/piqab/nkt/releases/download/v$V/n8n-nodes-nkt-$V.tgz
+mkdir -p ~/.n8n/custom/n8n-nodes-nkt
+tar xzf n8n-nodes-nkt-$V.tgz -C ~/.n8n/custom/n8n-nodes-nkt --strip-components=1
+```
+
+**Из репозитория** (нужен Node.js 18+):
 
 ```sh
 cd integrations/n8n
@@ -25,6 +36,10 @@ npm test        # подписи сверяются с теми же этало�
 mkdir -p ~/.n8n/custom/n8n-nodes-nkt
 cp -r package.json dist ~/.n8n/custom/n8n-nodes-nkt/
 ```
+
+Версия узла — версия хаба; узел подходит к хабу той же или более новой
+версии. В npm пакет не публикуется: «Community Nodes» в настройках n8n
+его не найдут — только так.
 
 n8n в Docker — тот же каталог томом, затем перезапуск n8n:
 
@@ -119,3 +134,8 @@ File»):
 | 403 «Хост вне пределов API-токена» | хост не в хостах или группах токена |
 | 403 «не разрешён доступ через nkt-edge» | у токена нет галочки «через nkt-edge» |
 | 401 в журнале доставки адресата на хабе | секрет в узле nkt Trigger не тот (после «Новый секрет» — вставить заново) |
+
+## Пример целиком
+
+Как n8n складывается с ботом, edge и CI в одну схему — [пример:
+автоматизация вокруг хаба](/guide/case-automation).

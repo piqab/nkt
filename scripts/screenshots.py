@@ -68,6 +68,14 @@ SCREENS = [
     ('hub-fail2ban', 'hub', '/', "menu('fail2ban')"),
     ('hub-about', 'hub', '/', "menu({ru: 'О системе', en: 'About'})"),
     ('deployments', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'})"),
+    # Доступ извне: на стенде должны быть токен, исходящий вебхук, edge
+    # с ролями и compose-конвейер (для сухого прогона).
+    ('deploy-dryrun', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(3000); [...([...document.querySelectorAll('tr')].find((r) => /skiptest|httpbin/.test(r.textContent))?.querySelectorAll('button') ?? [])].find((b) => new RegExp('^' + pick({ru: 'Выложить', en: 'Deploy'}) + '$').test(b.textContent.trim()))?.click(); await sleep(2000); clickText('.ant-modal button', new RegExp('^' + pick({ru: 'Сухой прогон', en: 'Dry run'}) + '$'))"),
+    ('deploy-edges', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); scrollToText('nkt-edge')"),
+    ('edge-probe', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Проверить снаружи', en: 'Check from outside'}) + '$')); await sleep(1000); setInput('.ant-modal input', 'example.com'); await sleep(300); clickText('.ant-modal button', new RegExp('^' + pick({ru: 'Проверить', en: 'Check'}) + '$')); await sleep(4000)"),
+    ('hub-api-tokens', 'hub', '/', "menu({ru: 'О системе', en: 'About'}); await sleep(1500); scrollToText(pick({ru: 'API-токены', en: 'API tokens'}))"),
+    ('hub-webhooks', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'}); await sleep(1500); scrollToText(pick({ru: 'Исходящие вебхуки', en: 'Outgoing webhooks'}))"),
+    ('hub-bots', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'}); await sleep(1500); scrollToText(pick({ru: 'Бот Telegram', en: 'Telegram bot'}))"),
     ('deploy-edge', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Вебхук', en: 'Webhook'}) + '$')); await sleep(1200); clickText('.ant-modal .ant-tabs-tab-btn, .ant-modal .ant-segmented-item-label, .ant-modal button', new RegExp('^' + pick({ru: 'Через edge', en: 'Via edge'})))"),
 ]
 
@@ -84,6 +92,13 @@ const clickText = (sel, re) => {
 const menu = (m) => clickText('.ant-menu-item', new RegExp('^' + pick(m)));
 const tab = (m) => clickText('.ant-tabs-tab-btn', new RegExp('^' + pick(m) + '$'));
 const tabStart = (m) => clickText('.ant-tabs-tab-btn', new RegExp('^' + pick(m)));
+const scrollToText = (t) => [...document.querySelectorAll('*')].find((e) => e.children.length === 0 && e.textContent.trim() === t)?.scrollIntoView({block: 'start'});
+const setInput = (sel, v) => {
+  const i = document.querySelector(sel);
+  if (!i) return;
+  Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(i, v);
+  i.dispatchEvent(new Event('input', {bubbles: true}));
+};
 """
 
 # Перед снимком: убрать плашки режима fixtures — на сайте показывается

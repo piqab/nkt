@@ -81,7 +81,19 @@ simulated.
 ## Deployments
 
 - No image building — that's CI's job or yours.
-- Pipelines, their history and nkt-edge settings are not part of the hub
-  export.
 - Polling and registry watching start after the first deployment with
   the button.
+
+## Automation and bots
+
+- Only the hub has API tokens; a standalone nkt on a host does not accept
+  them.
+- A scoped token cannot reach cluster or hub script pipelines, only
+  compose stacks whose hosts are all in its scope.
+- Through nkt-edge only signed token requests pass (Bearer does not).
+- The Telegram bot polls Telegram by itself: one bot token means one hub
+  (a second hub with the same token would take the first one's updates).
+- Slack does not work without a way into the hub: it needs an nkt-edge
+  with the callbacks role or a hub reachable from the internet.
+- The n8n node is not published to npm: it is installed from the release
+  archive or built from the repository.

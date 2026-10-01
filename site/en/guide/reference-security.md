@@ -130,12 +130,51 @@ a hub has its own checkbox in its form.
   signature.
 - The hub initiates the tunnel; TLS 1.3, the hub trusts **exactly** its
   edge's certificate (the only verification root), then a token.
-- One route is available through the tunnel — `POST /hooks/{id}`. The
-  hub's UI and API are not reachable via the edge.
+- Through the tunnel the hub serves only this edge's roles: "webhooks"
+  is `POST /hooks/{id}`; "API" is **signed** token requests from tokens
+  with the "through nkt-edge" box (Bearer, cookies, password login and
+  websockets do not pass: the token secret never reaches the VPS, and a
+  signature works once); "callbacks" is `POST /callbacks/slack/…` with a
+  Slack signature; "outside checks" is only streams the hub opens. The UI
+  is never reachable via an edge.
 - The service on the VPS — a system user `nkt-edge`, the only capability
   is binding 443; certbot issues the certificate.
 
 Details — [nkt-edge](/en/guide/edge#security-model).
+
+## API tokens
+
+- A token opens not the whole API but a list of automation calls; hub
+  management (accounts, tokens, export, updates, edge, bots), the
+  terminal, console, files, backups, configs, Kubernetes and websockets
+  are closed to it with any role.
+- The read role reads and the admin role also acts; a host and group
+  scope narrows both lists and actions (a deploy only of a pipeline whose
+  hosts are all in scope; a dry run only of a saved pipeline).
+- The secret is stored encrypted with the master key (HMAC signatures are
+  checked with it) and is shown once; a signature lives 5 minutes, the
+  nonce is single-use, and the body is signed.
+- The token's address list is checked against the real connection
+  address; the hub trusts proxy headers only from loopback (your own
+  reverse proxy, the edge tunnel). Five invalid tokens from an address
+  mean a pause.
+- Creating, editing, a new secret, revoking and every call go to the
+  audit log as `token:<name>`.
+
+## Outgoing webhooks and bots
+
+- Outgoing webhooks are signed with HMAC using the recipient's secret (as
+  nkt's incoming webhooks are); redirects are not followed, and no more
+  than 300 bytes of a response body are read.
+- The Telegram bot reaches Telegram by itself (long polling), so no way
+  into the hub is needed; Slack sends commands by itself, and every
+  request is checked with the Slack signature and its time (no older than
+  5 minutes).
+- Bots answer only the chats and channels on the list; actions need the
+  admin role, an allowed person and a confirmation button (which lives 10
+  minutes and works only for whoever ran the command).
+- Bot tokens and signing secrets are stored encrypted with the master key
+  and are never shown in error logs.
 
 ## Model analysis (AI)
 

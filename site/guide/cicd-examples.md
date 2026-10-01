@@ -243,11 +243,51 @@ NKT_HOOK_URL=… NKT_HOOK_SECRET=… sh scripts/nkt-hook.sh "$TAG" "$(git rev-pa
 - **Откат**: «История» → «Откатить» у прежней удачной выкладки — хаб
   выложит её коммит и тег заново, без пересборки.
 
+## Сухой прогон из CI перед выкладкой
+
+CI может сначала спросить хаб, пройдёт ли выкладка, и вызывать вебхук,
+только если да. Нужен [API-токен](/guide/hub-api) с ролью «администратор»
+(сухой прогон — действие), лучше с пределами по хостам конвейера. Ключ и
+секрет — в секретах CI (`NKT_KEY`, `NKT_SECRET`), адрес хаба или edge с
+ролью API — `NKT_URL`.
+
+```yaml
+# .github/workflows/release.yml — шаг перед вызовом вебхука
+- name: Сухой прогон на хабе
+  env:
+    NKT_URL: ${{ secrets.NKT_URL }}
+    NKT_KEY: ${{ secrets.NKT_KEY }}
+    NKT_SECRET: ${{ secrets.NKT_SECRET }}
+  run: |
+    call() {  # метод, путь, тело — подписанный запрос к хабу
+      ts=$(date +%s); nonce=$(openssl rand -hex 16)
+      hash=$(printf %s "$3" | sha256sum | cut -d' ' -f1)
+      sig=$(printf 'NKT-API-1\n%s\n%s\n%s\n%s\n%s' "$ts" "$nonce" "$1" "$2" "$hash" \
+        | openssl dgst -sha256 -hmac "$NKT_SECRET" | sed 's/.* //')
+      curl -sf -X "$1" -H 'Content-Type: application/json' \
+        -H "X-NKT-API-Key: $NKT_KEY" -H "X-NKT-API-Timestamp: $ts" \
+        -H "X-NKT-API-Nonce: $nonce" -H "X-NKT-API-Signature: $sig" \
+        ${3:+-d "$3"} "$NKT_URL$2"
+    }
+    job=$(call POST /api/hub/pipelines/dryrun '{"pipeline_id":1}' | jq -r .job_id)
+    for i in $(seq 1 120); do
+      status=$(call GET /api/hub/jobs/$job "" | jq -r .status)
+      case "$status" in queued|running) sleep 5 ;; *) break ;; esac
+    done
+    call GET "/api/hub/jobs/$job/log?after=0" "" | jq -r '.lines[].text'
+    test "$status" = succeeded
+```
+
+Сухой прогон не прошёл — шаг падает, вебхук не вызывается, журнал
+проверок — в выводе CI.
+
 ## Хаб за NAT
 
 Вебхуку нужен адрес, до которого достучится CI. Если хаб не открыт
-наружу — [nkt-edge](/guide/edge) на VPS или вариант 4 (registry) и
-`poll`, которым ничего открывать не нужно.
+наружу — [nkt-edge](/guide/edge) на VPS с ролью «вебхуки» или вариант 4
+(registry) и `poll`, которым ничего открывать не нужно. Сухому прогону из
+CI — edge с ролью «API» (`NKT_URL` — его имя, у токена — галочка «через
+nkt-edge»).
 
 Если что-то не выкладывается — таблица в конце страницы
 [Выкладки](/guide/hub-deploy#если-не-выкладывается).

@@ -51,6 +51,8 @@ the edge (the same edge on the same host; the tunnel token and
 certificate stay). The hub serves through the tunnel only this edge's
 roles, even if the edge itself let more through.
 
+![nkt-edge with roles](/screens/en/deploy-edges.png)
+
 There can be **several** edges, each on its own VPS and name: for
 example, webhooks on `hooks.example.com` and the API on
 `api.example.com` on another VPS, to separate what is open from which
@@ -78,6 +80,8 @@ outside via nkt-edge …"; without one, the check runs from the hub as
 before. The edge's **"Check from outside"** button does the same by hand
 for any name and ports. The edge does not pass on site response bodies,
 only the status and the certificate.
+
+![Outside check](/screens/en/edge-probe.png)
 
 ## Security model
 
