@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.77 — 2026-10-01
+
+- The accidentally committed `nkt-edge` binary (11 MB) is removed from the
+  repository; a built `nkt-edge` in the root is now in `.gitignore`, like
+  `nkt`.
+
 ## v1.11.76 — 2026-10-01
 
 - **A Slack bot** in "Alerts" → "Slack": alerts with buttons in channels
