@@ -27,6 +27,8 @@ scope, an address list and an expiry.
   when the connection comes from loopback, that is from your own reverse
   proxy; a header cannot fake the address of a direct connection.
 - **Expiry**: 30, 90 or 365 days, or never.
+- **Through nkt-edge**: the token is also accepted through an edge with
+  the API role (see below).
 
 The secret is shown **once**, right after creation. If it is lost, use
 "New secret": the old one stops working at once. "Revoke" deletes the
@@ -104,6 +106,21 @@ function sign(secret, method, uri, body = '') {
 
 A signed request body is limited to 1 MB. The signature covers the body
 exactly as it is sent.
+
+## From outside through nkt-edge
+
+If the hub is behind NAT, the API can be reached from outside (n8n in the
+cloud, CI) through an [nkt-edge](/en/guide/edge) with the **API** role:
+the request goes to `https://api.example.com/api/…` and the edge passes it
+to the hub through the tunnel. Conditions:
+
+- the token has the **"through nkt-edge"** box ticked;
+- **signed** requests only: the edge passes neither Bearer nor cookies, so
+  the token secret never reaches the VPS;
+- the token's address list is checked against the client address the
+  edge passed on;
+- the signed path is the one the hub sees: `/api/hub/hosts`, without the
+  edge name.
 
 ## What a token can call
 

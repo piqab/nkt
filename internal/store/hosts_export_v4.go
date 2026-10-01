@@ -60,6 +60,19 @@ type EdgeExport struct {
 	CertPEM     string `json:"cert_pem,omitempty"`
 	Fingerprint string `json:"fingerprint,omitempty"`
 	Host        string `json:"host,omitempty"`
+	// Roles — роли edge (пусто — вебхуки).
+	Roles []string `json:"roles,omitempty"`
+}
+
+// EdgeList — edge файла: новый список или прежний одиночный.
+func (e HubExport) EdgeList() []EdgeExport {
+	if len(e.Edges) > 0 {
+		return e.Edges
+	}
+	if e.Edge != nil {
+		return []EdgeExport{*e.Edge}
+	}
+	return nil
 }
 
 // ExportPipelines — конвейеры с секретами и историей (старые редакции

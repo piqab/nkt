@@ -2,13 +2,17 @@ package hub
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,21 +26,45 @@ import (
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/secretbox"
+	"github.com/piqab/nkt/internal/store"
 )
 
-// nkt-edge со стороны хаба: хаб сам подключается к edge на VPS (TLS с
-// закреплённым отпечатком, токен, yamux) и держит соединение; по нему
-// приходят только вебхуки выкладок — через туннель хаб обслуживает один
-// маршрут, POST /hooks/{hook}. Настройки — в KV хаба, токен зашифрован.
+// nkt-edge со стороны хаба: хаб сам подключается к каждому edge на VPS
+// (TLS с закреплённым отпечатком, токен, yamux) и держит соединения. У
+// edge роли — что он принимает из интернета и передаёт хабу:
+//
+//   - hooks — вебхуки выкладок, POST /hooks/{hook};
+//   - api — подписанные запросы API-токенов к /api/hub/… и /api/hosts/…
+//     (Bearer, cookie и веб-сокеты не проходят: секрет на VPS не попадает).
+//
+// Хаб обслуживает по туннелю только роли этого edge — даже если сам edge
+// пропустит лишнее. Edge может быть несколько (разные VPS и имена: вебхуки
+// на одном, API на другом). Настройки — список в KV хаба, токены туннелей
+// зашифрованы.
 
-const edgeSettingsKey = "hub.edge"
+const (
+	// edgeSettingsKey — до v1.11.71 edge был один; при первом чтении он
+	// переезжает в список.
+	edgeSettingsKey = "hub.edge"
+	edgesKey        = "hub.edges"
+)
 
-// EdgeSettings — настройки edge.
+// Роли edge.
+const (
+	EdgeRoleHooks = "hooks"
+	EdgeRoleAPI   = "api"
+)
+
+// EdgeRoles — все роли, в порядке показа.
+var EdgeRoles = []string{EdgeRoleHooks, EdgeRoleAPI}
+
+// EdgeSettings — один edge.
 type EdgeSettings struct {
-	Enabled bool `json:"enabled"`
+	ID      int64 `json:"id"`
+	Enabled bool  `json:"enabled"`
 	// Address — куда подключаться (хост:8444).
 	Address string `json:"address"`
-	// Domain — имя с сертификатом Let's Encrypt (адрес вебхуков).
+	// Domain — имя с сертификатом Let's Encrypt (адрес вебхуков и API).
 	Domain   string `json:"domain"`
 	TokenEnc []byte `json:"token_enc,omitempty"`
 	// CertPEM — сертификат туннеля edge: хаб доверяет ровно ему.
@@ -44,6 +72,129 @@ type EdgeSettings struct {
 	Fingerprint string `json:"fingerprint,omitempty"`
 	// HostID — хост хаба, на который edge поставлен (0 — вручную).
 	HostID int64 `json:"host_id,omitempty"`
+	// Roles — что edge передаёт хабу; пусто — только вебхуки (как было).
+	Roles []string `json:"roles,omitempty"`
+}
+
+// Has — у edge есть роль.
+func (st EdgeSettings) Has(role string) bool {
+	if len(st.Roles) == 0 {
+		return role == EdgeRoleHooks
+	}
+	return slices.Contains(st.Roles, role)
+}
+
+func (st EdgeSettings) roles() []string {
+	if len(st.Roles) == 0 {
+		return []string{EdgeRoleHooks}
+	}
+	return st.Roles
+}
+
+// validRoles — роли из запроса: известные, без повторов, хоть одна.
+func validRoles(in []string) ([]string, bool) {
+	var out []string
+	for _, r := range in {
+		if !slices.Contains(EdgeRoles, r) {
+			return nil, false
+		}
+		if !slices.Contains(out, r) {
+			out = append(out, r)
+		}
+	}
+	if len(out) == 0 {
+		return []string{EdgeRoleHooks}, true
+	}
+	slices.SortFunc(out, func(a, b string) int { return slices.Index(EdgeRoles, a) - slices.Index(EdgeRoles, b) })
+	return out, true
+}
+
+// edgesMu — правка списка edge (KV): хаб и импорт.
+var edgesMu sync.Mutex
+
+// loadEdges — все edge хаба (прежний одиночный переезжает в список).
+func loadEdges(ctx context.Context, db *store.DB) []EdgeSettings {
+	var list []EdgeSettings
+	if raw, ok, err := db.KVGet(ctx, edgesKey); err == nil && ok {
+		_ = json.Unmarshal([]byte(raw), &list)
+		return list
+	}
+	var old EdgeSettings
+	if raw, ok, err := db.KVGet(ctx, edgeSettingsKey); err == nil && ok {
+		_ = json.Unmarshal([]byte(raw), &old)
+	}
+	if old.Address != "" || len(old.TokenEnc) > 0 {
+		old.ID, old.Roles = 1, []string{EdgeRoleHooks}
+		list = append(list, old)
+	}
+	edgesMu.Lock()
+	defer edgesMu.Unlock()
+	if saveEdgesLocked(ctx, db, list) == nil {
+		_ = db.KVSet(ctx, edgeSettingsKey, "{}")
+	}
+	return list
+}
+
+func saveEdgesLocked(ctx context.Context, db *store.DB, list []EdgeSettings) error {
+	if list == nil {
+		list = []EdgeSettings{}
+	}
+	b, _ := json.Marshal(list)
+	return db.KVSet(ctx, edgesKey, string(b))
+}
+
+// putEdgeDB — сохранить edge (новый — с новым номером).
+func putEdgeDB(ctx context.Context, db *store.DB, st EdgeSettings) (EdgeSettings, error) {
+	list := loadEdges(ctx, db)
+	edgesMu.Lock()
+	defer edgesMu.Unlock()
+	if st.ID == 0 {
+		for _, e := range list {
+			st.ID = max(st.ID, e.ID)
+		}
+		st.ID++
+		list = append(list, st)
+	} else {
+		i := slices.IndexFunc(list, func(e EdgeSettings) bool { return e.ID == st.ID })
+		if i < 0 {
+			list = append(list, st)
+		} else {
+			list[i] = st
+		}
+	}
+	return st, saveEdgesLocked(ctx, db, list)
+}
+
+func (s *Server) edges(ctx context.Context) []EdgeSettings { return loadEdges(ctx, s.db) }
+
+func (s *Server) edgeByID(ctx context.Context, id int64) (EdgeSettings, bool) {
+	for _, st := range s.edges(ctx) {
+		if st.ID == id {
+			return st, true
+		}
+	}
+	return EdgeSettings{}, false
+}
+
+// putEdge — сохранить edge (новый — с новым номером).
+func (s *Server) putEdge(ctx context.Context, st EdgeSettings) (EdgeSettings, error) {
+	return putEdgeDB(ctx, s.db, st)
+}
+
+// dropEdge — хаб забывает edge (на VPS он остаётся).
+func (s *Server) dropEdge(ctx context.Context, id int64) error {
+	list := s.edges(ctx)
+	edgesMu.Lock()
+	defer edgesMu.Unlock()
+	return saveEdgesLocked(ctx, s.db, slices.DeleteFunc(list, func(e EdgeSettings) bool { return e.ID == id }))
+}
+
+// --- соединения -------------------------------------------------------------
+
+type edgeHub struct {
+	mu      sync.Mutex
+	clients map[int64]*edgeClient
+	reload  chan struct{}
 }
 
 type edgeClient struct {
@@ -51,86 +202,120 @@ type edgeClient struct {
 	connected bool
 	since     time.Time
 	lastErr   error
-	reload    chan struct{}
-	cancel    context.CancelFunc
+	// sig — отпечаток настроек: сменились — переподключение.
+	sig    string
+	cancel context.CancelFunc
 }
 
-func (s *Server) edgeSettings(ctx context.Context) EdgeSettings {
-	var st EdgeSettings
-	if raw, ok, err := s.db.KVGet(ctx, edgeSettingsKey); err == nil && ok {
-		_ = json.Unmarshal([]byte(raw), &st)
-	}
-	return st
-}
-
-func (s *Server) saveEdgeSettings(ctx context.Context, st EdgeSettings) error {
+func edgeSig(st EdgeSettings) string {
 	b, _ := json.Marshal(st)
-	return s.db.KVSet(ctx, edgeSettingsKey, string(b))
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }
 
-// kickEdge — переподключиться с новыми настройками.
+func (c *edgeClient) set(connected bool, lastErr error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if connected && !c.connected {
+		c.since = time.Now()
+	}
+	c.connected = connected
+	if lastErr != nil || connected {
+		c.lastErr = lastErr
+	}
+}
+
+// kickEdge — сверить соединения с настройками сейчас.
 func (s *Server) kickEdge() {
 	if s.edge == nil {
 		return
 	}
-	s.edge.mu.Lock()
-	if s.edge.cancel != nil {
-		s.edge.cancel()
-	}
-	s.edge.mu.Unlock()
 	select {
 	case s.edge.reload <- struct{}{}:
 	default:
 	}
 }
 
-// StartEdge держит соединение с edge, пока он включён.
+// StartEdge держит соединения со всеми включёнными edge.
 func (s *Server) StartEdge(ctx context.Context) {
-	s.edge = &edgeClient{reload: make(chan struct{}, 1)}
+	s.edge = &edgeHub{clients: map[int64]*edgeClient{}, reload: make(chan struct{}, 1)}
 	go func() {
-		backoff := 5 * time.Second
-		for ctx.Err() == nil {
-			st := s.edgeSettings(ctx)
-			if !st.Enabled || st.Address == "" {
-				s.setEdgeStatus(false, nil)
-				select {
-				case <-ctx.Done():
-				case <-s.edge.reload:
-				case <-time.After(time.Minute):
-				}
-				continue
-			}
-			err := s.runEdge(ctx, st)
-			s.setEdgeStatus(false, err)
-			if err == nil {
-				backoff = 5 * time.Second
-			} else if backoff < time.Minute {
-				backoff *= 2
-			}
+		for {
+			s.reconcileEdges(ctx)
 			select {
 			case <-ctx.Done():
+				return
 			case <-s.edge.reload:
-				backoff = 5 * time.Second
-			case <-time.After(backoff):
+			case <-time.After(time.Minute):
 			}
 		}
 	}()
 }
 
-func (s *Server) setEdgeStatus(connected bool, lastErr error) {
-	s.edge.mu.Lock()
-	defer s.edge.mu.Unlock()
-	if connected && !s.edge.connected {
-		s.edge.since = time.Now()
+// reconcileEdges — по соединению на включённый edge; сменились настройки
+// — переподключиться, edge убран или выключен — отключиться.
+func (s *Server) reconcileEdges(ctx context.Context) {
+	want := map[int64]EdgeSettings{}
+	for _, st := range s.edges(ctx) {
+		if st.Enabled && st.Address != "" {
+			want[st.ID] = st
+		}
 	}
-	s.edge.connected = connected
-	if lastErr != nil || connected {
-		s.edge.lastErr = lastErr
+	h := s.edge
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for id, c := range h.clients {
+		if st, ok := want[id]; !ok || edgeSig(st) != c.sig {
+			c.cancel()
+			delete(h.clients, id)
+		}
+	}
+	for id, st := range want {
+		if _, ok := h.clients[id]; ok {
+			continue
+		}
+		cctx, cancel := context.WithCancel(ctx)
+		c := &edgeClient{sig: edgeSig(st), cancel: cancel}
+		h.clients[id] = c
+		go s.edgeLoop(cctx, st, c)
 	}
 }
 
+func (s *Server) edgeLoop(ctx context.Context, st EdgeSettings, c *edgeClient) {
+	backoff := 5 * time.Second
+	for ctx.Err() == nil {
+		err := s.runEdge(ctx, st, c)
+		c.set(false, err)
+		if err == nil {
+			backoff = 5 * time.Second
+		} else if backoff < time.Minute {
+			backoff *= 2
+		}
+		select {
+		case <-ctx.Done():
+		case <-time.After(backoff):
+		}
+	}
+}
+
+// edgeState — состояние соединения с edge (нет соединения — не подключён).
+func (s *Server) edgeState(id int64) (connected bool, since time.Time, lastErr error) {
+	if s.edge == nil {
+		return false, time.Time{}, nil
+	}
+	s.edge.mu.Lock()
+	c := s.edge.clients[id]
+	s.edge.mu.Unlock()
+	if c == nil {
+		return false, time.Time{}, nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.connected, c.since, c.lastErr
+}
+
 // runEdge — одно подключение: до разрыва или смены настроек.
-func (s *Server) runEdge(ctx context.Context, st EdgeSettings) error {
+func (s *Server) runEdge(ctx context.Context, st EdgeSettings, c *edgeClient) error {
 	token, err := secretbox.Decrypt(s.hub.key, st.TokenEnc)
 	if err != nil {
 		return err
@@ -153,16 +338,13 @@ func (s *Server) runEdge(ctx context.Context, st EdgeSettings) error {
 		return err
 	}
 	cctx, cancel := context.WithCancel(ctx)
-	s.edge.mu.Lock()
-	s.edge.cancel = cancel
-	s.edge.mu.Unlock()
 	defer cancel()
 	go func() {
 		<-cctx.Done()
 		sess.Close()
 	}()
-	s.setEdgeStatus(true, nil)
-	srv := &http.Server{Handler: s.edgeHandler(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second}
+	c.set(true, nil)
+	srv := &http.Server{Handler: s.edgeHandler(st), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second}
 	err = srv.Serve(sess)
 	if cctx.Err() != nil || errors.Is(err, net.ErrClosed) || sess.IsClosed() {
 		return nil
@@ -170,48 +352,102 @@ func (s *Server) runEdge(ctx context.Context, st EdgeSettings) error {
 	return err
 }
 
-// edgeHandler — единственный маршрут туннеля.
-func (s *Server) edgeHandler() http.Handler {
+// edgeHandler — маршруты туннеля: только роли этого edge.
+func (s *Server) edgeHandler(st EdgeSettings) http.Handler {
 	r := chi.NewRouter()
-	r.Post("/hooks/{hook}", func(w http.ResponseWriter, r *http.Request) {
-		from := r.Header.Get("X-Forwarded-For")
-		if from == "" {
-			from = "edge"
-		}
-		s.serveHook(w, r, from+" (edge)")
-	})
+	if st.Has(EdgeRoleHooks) {
+		r.Post("/hooks/{hook}", func(w http.ResponseWriter, r *http.Request) {
+			from := r.Header.Get("X-Forwarded-For")
+			if from == "" {
+				from = "edge"
+			}
+			s.serveHook(w, r, from+" (edge)")
+		})
+	}
+	if st.Has(EdgeRoleAPI) {
+		r.HandleFunc("/api/*", func(w http.ResponseWriter, r *http.Request) { s.serveEdgeAPI(w, r, st) })
+	}
 	return r
 }
 
-type edgeStatusJSON struct {
-	Configured  bool   `json:"configured"`
-	Enabled     bool   `json:"enabled"`
-	Address     string `json:"address,omitempty"`
-	Domain      string `json:"domain,omitempty"`
-	Fingerprint string `json:"fingerprint,omitempty"`
-	HostID      int64  `json:"host_id,omitempty"`
-	Connected   bool   `json:"connected"`
-	Since       string `json:"since,omitempty"`
-	LastError   string `json:"last_error,omitempty"`
+type edgeCtxKey struct{}
+
+// viaEdge — запрос пришёл через edge (роль api): имя edge.
+func viaEdge(ctx context.Context) (string, bool) {
+	v, ok := ctx.Value(edgeCtxKey{}).(string)
+	return v, ok
 }
 
-// handleEdgeStatus — GET /hub/edge.
-func (s *Server) handleEdgeStatus(w http.ResponseWriter, r *http.Request) {
-	st := s.edgeSettings(r.Context())
-	out := edgeStatusJSON{Configured: st.Address != "" && len(st.TokenEnc) > 0 && st.CertPEM != "", Enabled: st.Enabled, Address: st.Address, Domain: st.Domain,
-		Fingerprint: st.Fingerprint, HostID: st.HostID}
-	if s.edge != nil {
-		s.edge.mu.Lock()
-		out.Connected = s.edge.connected
-		if s.edge.lastErr != nil {
-			out.LastError = msgs.Localize(msgs.LangFromRequest(r), s.edge.lastErr)
-		}
-		if s.edge.connected {
-			out.Since = s.edge.since.UTC().Format(time.RFC3339)
-		}
-		s.edge.mu.Unlock()
+// serveEdgeAPI — запрос токена через edge: только подписанный, без cookie
+// и веб-сокетов; адрес клиента — тот, что передал edge (edge проверен
+// закреплённым сертификатом и токеном туннеля).
+func (s *Server) serveEdgeAPI(w http.ResponseWriter, r *http.Request, st EdgeSettings) {
+	lang := msgs.LangFromRequest(r)
+	refuse := func(code int, key string) {
+		writeError(w, code, msgs.T(lang, key))
 	}
-	writeJSON(w, http.StatusOK, out)
+	if !edge.APIPath(r.URL.Path) || r.Header.Get("Upgrade") != "" {
+		refuse(http.StatusNotFound, "edge.apiPathDenied")
+		return
+	}
+	if r.Header.Get("Authorization") != "" || r.Header.Get("X-NKT-API-Signature") == "" {
+		refuse(http.StatusUnauthorized, "auth.tokenEdgeSigned")
+		return
+	}
+	ip, err := netip.ParseAddr(strings.TrimSpace(r.Header.Get("X-Forwarded-For")))
+	if err != nil {
+		refuse(http.StatusBadRequest, "edge.apiNoClient")
+		return
+	}
+	r.Header.Del("Cookie")
+	r.Header.Del("X-Real-IP")
+	r.Header.Set("X-Forwarded-For", ip.String())
+	r.RemoteAddr = net.JoinHostPort(ip.String(), "0")
+	name := st.Domain
+	if name == "" {
+		name = st.Address
+	}
+	s.apiOnce.Do(func() { s.apiHandler = s.Handler() })
+	// Свой контекст маршрута у роутера туннеля — API хаба должен
+	// разобрать путь заново (см. proxyLocal).
+	ctx := context.WithValue(r.Context(), chi.RouteCtxKey, (*chi.Context)(nil))
+	s.apiHandler.ServeHTTP(w, r.WithContext(context.WithValue(ctx, edgeCtxKey{}, name)))
+}
+
+// --- состояние и настройка ----------------------------------------------------
+
+type edgeStatusJSON struct {
+	ID          int64    `json:"id"`
+	Configured  bool     `json:"configured"`
+	Enabled     bool     `json:"enabled"`
+	Address     string   `json:"address,omitempty"`
+	Domain      string   `json:"domain,omitempty"`
+	Fingerprint string   `json:"fingerprint,omitempty"`
+	HostID      int64    `json:"host_id,omitempty"`
+	Roles       []string `json:"roles"`
+	Connected   bool     `json:"connected"`
+	Since       string   `json:"since,omitempty"`
+	LastError   string   `json:"last_error,omitempty"`
+}
+
+// handleEdges — GET /hub/edges.
+func (s *Server) handleEdges(w http.ResponseWriter, r *http.Request) {
+	out := []edgeStatusJSON{}
+	lang := msgs.LangFromRequest(r)
+	for _, st := range s.edges(r.Context()) {
+		item := edgeStatusJSON{ID: st.ID, Configured: st.Address != "" && len(st.TokenEnc) > 0 && st.CertPEM != "", Enabled: st.Enabled,
+			Address: st.Address, Domain: st.Domain, Fingerprint: st.Fingerprint, HostID: st.HostID, Roles: st.roles()}
+		connected, since, lastErr := s.edgeState(st.ID)
+		item.Connected = connected
+		if connected {
+			item.Since = since.UTC().Format(time.RFC3339)
+		}
+		if lastErr != nil {
+			item.LastError = msgs.Localize(lang, lastErr)
+		}
+		out = append(out, item)
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"edges": out, "roles": EdgeRoles})
 }
 
 var (
@@ -219,38 +455,53 @@ var (
 	edgeEmailRe  = regexp.MustCompile(`^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,63}$`)
 )
 
-// handleEdgeUpdate — PUT /hub/edge {enabled, address, domain, token,
-// reset_fingerprint}: настройка вручную (edge поставлен не из хаба).
-func (s *Server) handleEdgeUpdate(w http.ResponseWriter, r *http.Request) {
+func edgeIDParam(r *http.Request) int64 {
+	id, _ := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	return id
+}
+
+// handleEdgeSave — POST /hub/edges (новый, вручную) и PUT /hub/edges/{id}
+// {enabled, address, domain, token, cert_pem, roles}: edge поставлен не из
+// хаба. Пустые token и cert_pem при правке — оставить прежние.
+func (s *Server) handleEdgeSave(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Enabled bool   `json:"enabled"`
-		Address string `json:"address"`
-		Domain  string `json:"domain"`
-		Token   string `json:"token"`
-		CertPEM string `json:"cert_pem"`
+		Enabled bool     `json:"enabled"`
+		Address string   `json:"address"`
+		Domain  string   `json:"domain"`
+		Token   string   `json:"token"`
+		CertPEM string   `json:"cert_pem"`
+		Roles   []string `json:"roles"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	st := s.edgeSettings(r.Context())
+	ctx := r.Context()
+	var st EdgeSettings
+	if r.Method == http.MethodPut {
+		var ok bool
+		if st, ok = s.edgeByID(ctx, edgeIDParam(r)); !ok {
+			writeError(w, http.StatusNotFound, msgs.Tc(ctx, "edge.missing", edgeIDParam(r)))
+			return
+		}
+	}
 	if req.Address != "" {
 		if _, _, err := net.SplitHostPort(req.Address); err != nil {
-			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.badAddress", req.Address))
+			writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.badAddress", req.Address))
 			return
 		}
 		st.Address = req.Address
 	}
 	if req.Domain != "" {
 		if !edgeDomainRe.MatchString(strings.ToLower(req.Domain)) {
-			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.badDomain", req.Domain))
+			writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.badDomain", req.Domain))
 			return
 		}
 		st.Domain = strings.ToLower(req.Domain)
 	}
 	if req.Token != "" {
 		if len(req.Token) < 32 {
-			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.shortToken"))
+			writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.shortToken"))
 			return
 		}
 		enc, err := secretbox.Encrypt(s.hub.key, []byte(req.Token))
@@ -263,26 +514,41 @@ func (s *Server) handleEdgeUpdate(w http.ResponseWriter, r *http.Request) {
 	if strings.TrimSpace(req.CertPEM) != "" {
 		fp, err := edge.CertInfo(strings.TrimSpace(req.CertPEM))
 		if err != nil {
-			writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.badCert"))
+			writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.badCert"))
 			return
 		}
 		st.CertPEM, st.Fingerprint = strings.TrimSpace(req.CertPEM)+"\n", fp
 	}
-	st.Enabled = req.Enabled
-	err := s.saveEdgeSettings(r.Context(), st)
-	s.db.Audit(r.Context(), auth.Username(r.Context()), "edge.update", st.Address, auditOutcome(err), map[string]any{"enabled": st.Enabled, "domain": st.Domain})
+	roles, ok := validRoles(req.Roles)
+	if !ok {
+		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.badRoles", strings.Join(req.Roles, ", ")))
+		return
+	}
+	st.Roles, st.Enabled = roles, req.Enabled
+	if st.Address == "" || len(st.TokenEnc) == 0 {
+		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.manualIncomplete"))
+		return
+	}
+	st, err := s.putEdge(ctx, st)
+	s.db.Audit(ctx, auth.Username(ctx), "edge.update", st.Address, auditOutcome(err), map[string]any{"enabled": st.Enabled, "domain": st.Domain, "roles": st.Roles})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
 	s.kickEdge()
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]any{"id": st.ID})
 }
 
-// handleEdgeDelete — DELETE /hub/edge: забыть edge (на VPS он остаётся).
+// handleEdgeDelete — DELETE /hub/edges/{id}: забыть edge (на VPS он остаётся).
 func (s *Server) handleEdgeDelete(w http.ResponseWriter, r *http.Request) {
-	err := s.db.KVSet(r.Context(), edgeSettingsKey, "{}")
-	s.db.Audit(r.Context(), auth.Username(r.Context()), "edge.delete", "", auditOutcome(err), "")
+	ctx := r.Context()
+	st, ok := s.edgeByID(ctx, edgeIDParam(r))
+	if !ok {
+		writeError(w, http.StatusNotFound, msgs.Tc(ctx, "edge.missing", edgeIDParam(r)))
+		return
+	}
+	err := s.dropEdge(ctx, st.ID)
+	s.db.Audit(ctx, auth.Username(ctx), "edge.delete", st.Address, auditOutcome(err), "")
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
@@ -301,42 +567,52 @@ type EdgeInstallParams struct {
 	Email      string `json:"email"`
 	GitHubOnly bool   `json:"github_only"`
 	// ProxyPort — edge за обратным прокси на VPS (80 и 443 заняты nginx
-	// или Caddy): вебхуки по HTTP на 127.0.0.1:ProxyPort; 0 — edge сам
-	// на 80 и 443.
+	// или Caddy): по HTTP на 127.0.0.1:ProxyPort; 0 — edge сам на 80 и 443.
 	ProxyPort int `json:"proxy_port,omitempty"`
+	// Roles — роли edge (пусто — вебхуки).
+	Roles []string `json:"roles,omitempty"`
 }
 
-// handleEdgeInstall — POST /hub/edge/install {host_id, domain, email, github_only}.
+// handleEdgeInstall — POST /hub/edges/install {host_id, domain, email,
+// github_only, proxy_port, roles}. На хост, где edge уже стоит, —
+// переустановка с новыми настройками (тот же edge в списке).
 func (s *Server) handleEdgeInstall(w http.ResponseWriter, r *http.Request) {
 	var req EdgeInstallParams
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	ctx := r.Context()
 	req.Domain = strings.ToLower(strings.TrimSpace(req.Domain))
 	if !edgeDomainRe.MatchString(req.Domain) {
-		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.badDomain", req.Domain))
+		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.badDomain", req.Domain))
 		return
 	}
 	if req.Email != "" && !edgeEmailRe.MatchString(req.Email) {
-		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.badEmail", req.Email))
+		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.badEmail", req.Email))
 		return
 	}
 	if req.ProxyPort != 0 && (req.ProxyPort < 1024 || req.ProxyPort > 65535 || strconv.Itoa(req.ProxyPort) == EdgeTunnelPort) {
-		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.badProxyPort", req.ProxyPort))
+		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.badProxyPort", req.ProxyPort))
 		return
 	}
-	host, err := s.db.HostByID(r.Context(), req.HostID)
+	roles, ok := validRoles(req.Roles)
+	if !ok {
+		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.badRoles", strings.Join(req.Roles, ", ")))
+		return
+	}
+	req.Roles = roles
+	host, err := s.db.HostByID(ctx, req.HostID)
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	user := auth.Username(r.Context())
-	id, err := s.jobs.Start(r.Context(), jobs.Spec{
+	user := auth.Username(ctx)
+	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindEdgeInstall, TitleKey: "edge.jobTitle", TitleArgs: []any{host.Name, req.Domain},
 		Queue: fmt.Sprintf("host:%d", host.ID), Author: user, Steps: 5, Params: req,
 	})
-	s.db.Audit(r.Context(), user, "edge.install", host.Name, auditOutcome(err), req.Domain)
+	s.db.Audit(ctx, user, "edge.install", host.Name, auditOutcome(err), map[string]any{"domain": req.Domain, "roles": req.Roles})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
@@ -359,31 +635,38 @@ const EdgeTunnelPort = "8444"
 // KindEdgeUninstall — задание «удалить nkt-edge с хоста».
 const KindEdgeUninstall = "edge.uninstall"
 
-// EdgeUninstallParams — вход задания: хост, на который edge ставил хаб.
+// EdgeUninstallParams — вход задания: хост, на который edge ставил хаб, и
+// сам edge в списке.
 type EdgeUninstallParams struct {
 	HostID int64 `json:"host_id"`
+	EdgeID int64 `json:"edge_id,omitempty"`
 }
 
-// handleEdgeUninstall — POST /hub/edge/uninstall: снять edge с VPS, на
-// который его поставил хаб, и забыть настройки. Edge, поставленный
-// вручную, хаб не трогает — только «Забыть».
+// handleEdgeUninstall — POST /hub/edges/{id}/uninstall: снять edge с VPS,
+// на который его поставил хаб, и забыть его. Edge, поставленный вручную,
+// хаб не трогает — только «Забыть».
 func (s *Server) handleEdgeUninstall(w http.ResponseWriter, r *http.Request) {
-	st := s.edgeSettings(r.Context())
-	if st.HostID == 0 {
-		writeError(w, http.StatusBadRequest, msgs.Tc(r.Context(), "edge.uninstallManual"))
+	ctx := r.Context()
+	st, ok := s.edgeByID(ctx, edgeIDParam(r))
+	if !ok {
+		writeError(w, http.StatusNotFound, msgs.Tc(ctx, "edge.missing", edgeIDParam(r)))
 		return
 	}
-	host, err := s.db.HostByID(r.Context(), st.HostID)
+	if st.HostID == 0 {
+		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.uninstallManual"))
+		return
+	}
+	host, err := s.db.HostByID(ctx, st.HostID)
 	if err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	user := auth.Username(r.Context())
-	id, err := s.jobs.Start(r.Context(), jobs.Spec{
+	user := auth.Username(ctx)
+	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindEdgeUninstall, TitleKey: "edge.uninstallTitle", TitleArgs: []any{host.Name},
-		Queue: fmt.Sprintf("host:%d", host.ID), Author: user, Steps: 3, Params: EdgeUninstallParams{HostID: host.ID},
+		Queue: fmt.Sprintf("host:%d", host.ID), Author: user, Steps: 3, Params: EdgeUninstallParams{HostID: host.ID, EdgeID: st.ID},
 	})
-	s.db.Audit(r.Context(), user, "edge.uninstall", host.Name, auditOutcome(err), "")
+	s.db.Audit(ctx, user, "edge.uninstall", host.Name, auditOutcome(err), "")
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return

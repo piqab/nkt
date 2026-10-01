@@ -80,3 +80,15 @@ func TestTunnelCertStable(t *testing.T) {
 		t.Errorf("пересоздание: %v", err)
 	}
 }
+
+func TestAPIPath(t *testing.T) {
+	for p, want := range map[string]bool{
+		"/api/auth/me": true, "/api/hub/hosts": true, "/api/hosts/3/overview": true,
+		"/api/auth/login": false, "/api/hub/hooks/x": false, "/api/hosts/local/k8s/pf/tok": false,
+		"/api/hub/../auth/login": false, "/healthz": false, "/": false,
+	} {
+		if got := APIPath(p); got != want {
+			t.Errorf("%s: %v", p, got)
+		}
+	}
+}

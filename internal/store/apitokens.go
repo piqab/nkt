@@ -29,11 +29,14 @@ type APIToken struct {
 	Groups    []string `json:"groups"`
 	IPs       []string `json:"ips"`
 	ExpiresAt string   `json:"expires_at,omitempty"`
-	Author    string   `json:"author,omitempty"`
-	CreatedAt string   `json:"created_at"`
-	UpdatedAt string   `json:"updated_at"`
-	LastUsed  string   `json:"last_used_at,omitempty"`
-	LastIP    string   `json:"last_ip,omitempty"`
+	// ViaEdge — токен принимается и через nkt-edge с ролью api (только
+	// подписанные запросы).
+	ViaEdge   bool   `json:"via_edge"`
+	Author    string `json:"author,omitempty"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+	LastUsed  string `json:"last_used_at,omitempty"`
+	LastIP    string `json:"last_ip,omitempty"`
 
 	SecretEnc []byte `json:"-"`
 }
@@ -58,12 +61,12 @@ func (t APIToken) AllowsHost(id int64, group string) bool {
 	return slices.Contains(t.Hosts, id) || (group != "" && slices.Contains(t.Groups, group))
 }
 
-const apiTokenCols = `id, name, key_id, secret_enc, role, hosts, groups_json, ips, expires_at, author, created_at, updated_at, last_used_at, last_ip`
+const apiTokenCols = `id, name, key_id, secret_enc, role, hosts, groups_json, ips, expires_at, via_edge, author, created_at, updated_at, last_used_at, last_ip`
 
 func scanAPIToken(row interface{ Scan(...any) error }) (APIToken, error) {
 	var t APIToken
 	var hosts, groups, ips string
-	err := row.Scan(&t.ID, &t.Name, &t.KeyID, &t.SecretEnc, &t.Role, &hosts, &groups, &ips, &t.ExpiresAt, &t.Author,
+	err := row.Scan(&t.ID, &t.Name, &t.KeyID, &t.SecretEnc, &t.Role, &hosts, &groups, &ips, &t.ExpiresAt, &t.ViaEdge, &t.Author,
 		&t.CreatedAt, &t.UpdatedAt, &t.LastUsed, &t.LastIP)
 	if errors.Is(err, sql.ErrNoRows) {
 		return t, ErrNotFound
@@ -97,9 +100,9 @@ func jsonList[T any](v []T) string {
 // CreateAPIToken заводит токен.
 func (d *DB) CreateAPIToken(ctx context.Context, t APIToken) (int64, error) {
 	now := FormatTime(time.Now())
-	res, err := d.ExecContext(ctx, `INSERT INTO api_tokens(name, key_id, secret_enc, role, hosts, groups_json, ips, expires_at, author, created_at, updated_at)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		t.Name, t.KeyID, t.SecretEnc, t.Role, jsonList(t.Hosts), jsonList(t.Groups), jsonList(t.IPs), t.ExpiresAt, t.Author, now, now)
+	res, err := d.ExecContext(ctx, `INSERT INTO api_tokens(name, key_id, secret_enc, role, hosts, groups_json, ips, expires_at, via_edge, author, created_at, updated_at)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		t.Name, t.KeyID, t.SecretEnc, t.Role, jsonList(t.Hosts), jsonList(t.Groups), jsonList(t.IPs), t.ExpiresAt, t.ViaEdge, t.Author, now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -136,8 +139,8 @@ func (d *DB) APITokenByKeyID(ctx context.Context, keyID string) (APIToken, error
 
 // UpdateAPIToken — имя, роль, пределы, адреса и срок.
 func (d *DB) UpdateAPIToken(ctx context.Context, t APIToken) error {
-	_, err := d.ExecContext(ctx, `UPDATE api_tokens SET name = ?, role = ?, hosts = ?, groups_json = ?, ips = ?, expires_at = ?, updated_at = ? WHERE id = ?`,
-		t.Name, t.Role, jsonList(t.Hosts), jsonList(t.Groups), jsonList(t.IPs), t.ExpiresAt, FormatTime(time.Now()), t.ID)
+	_, err := d.ExecContext(ctx, `UPDATE api_tokens SET name = ?, role = ?, hosts = ?, groups_json = ?, ips = ?, expires_at = ?, via_edge = ?, updated_at = ? WHERE id = ?`,
+		t.Name, t.Role, jsonList(t.Hosts), jsonList(t.Groups), jsonList(t.IPs), t.ExpiresAt, t.ViaEdge, FormatTime(time.Now()), t.ID)
 	return err
 }
 

@@ -200,7 +200,10 @@ type HubExport struct {
 	Pipelines    []PipelineExport    `json:"pipelines,omitempty"`
 	Users        []UserExport        `json:"users,omitempty"`
 	F2BTemplates []F2BTemplateExport `json:"f2b_templates,omitempty"`
-	Edge         *EdgeExport         `json:"edge,omitempty"`
+	// Edge — до v1.11.71 edge был один (старые файлы и старые хабы);
+	// Edges — все edge с ролями.
+	Edge  *EdgeExport  `json:"edge,omitempty"`
+	Edges []EdgeExport `json:"edges,omitempty"`
 	// MasterKey is the exporting hub's own secretbox key (base64), present
 	// only when the operator opted into a one-step migration — see
 	// Manager.ExportHosts/ImportHosts in internal/hub, which is what

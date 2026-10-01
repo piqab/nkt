@@ -98,9 +98,13 @@ func TestExportImportV4(t *testing.T) {
 	if vs, _ := db2.PipelineVersions(ctx, p.ID); len(vs) != 2 {
 		t.Fatalf("pipeline history: %+v", vs)
 	}
-	var st EdgeSettings
-	rawEdge, _, _ := db2.KVGet(ctx, edgeSettingsKey)
-	_ = json.Unmarshal([]byte(rawEdge), &st)
+	// Прежний одиночный edge (ключ hub.edge) переехал в список и прошёл
+	// через файл с ролью «вебхуки».
+	edges := loadEdges(ctx, db2)
+	if len(edges) != 1 || !edges[0].Has(EdgeRoleHooks) || edges[0].Has(EdgeRoleAPI) {
+		t.Fatalf("edges: %+v", edges)
+	}
+	st := edges[0]
 	hosts, _ := db2.ListHosts(ctx)
 	if st.Address != "vps:8444" || len(hosts) != 1 || st.HostID != hosts[0].ID {
 		t.Fatalf("edge: %+v hosts %+v", st, hosts)

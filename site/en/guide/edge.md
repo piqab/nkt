@@ -8,8 +8,9 @@ A deployment webhook needs an address GitHub, GitLab or your CI can
 reach. You usually don't want to expose the hub like that: it sits at
 home or in an office behind NAT, and access to it is access to every
 host. **nkt-edge** solves this: a small separate program (about 8 MB) on
-a cheap VPS with a public address accepts **only webhooks** from the
-internet and passes them to the hub over a tunnel the hub keeps to it.
+a cheap VPS with a public address accepts **only its roles** from the
+internet (deployment webhooks and/or signed [API token](/en/guide/hub-api)
+requests) and passes them to the hub over a tunnel the hub keeps to it.
 
 ![nkt-edge](/screens/en/deploy-edge.png)
 
@@ -27,11 +28,42 @@ GitHub / GitLab / CI ──HTTPS 443 (certbot)─────────▶ VPS
 - The hub connects to the edge and keeps the connection; its address may
   change, it needs no public IP. On a drop the hub reconnects.
 - The edge accepts `POST /hooks/{id}` and passes the request to the hub
-  through the tunnel. Through the tunnel the hub serves **this one
-  route**: the hub's UI and API are not reachable via the edge.
+  through the tunnel. Through the tunnel the hub serves **only this
+  edge's roles**: the UI, password login and websockets are never
+  reachable via an edge.
 - Repository or registry polling is an alternative without an edge at
   all: the hub asks by itself, nothing to expose, but a deployment starts
   with the polling delay.
+
+## Roles and several edges
+
+An edge has **roles**: what it accepts from the internet.
+
+| Role | What | `EDGE_ROLES` |
+|---|---|---|
+| **webhooks** | `POST /hooks/{id}`: a push from GitHub, Gitea, GitLab or CI → a deployment | `hooks` |
+| **API** | signed [API token](/en/guide/hub-api) requests to `/api/auth/me`, `/api/hub/…`, `/api/hosts/…`: n8n, CI and scripts from outside | `api` |
+
+Roles are ticked at install time; to change them, use **"Reinstall"** on
+the edge (the same edge on the same host; the tunnel token and
+certificate stay). The hub serves through the tunnel only this edge's
+roles, even if the edge itself let more through.
+
+There can be **several** edges, each on its own VPS and name: for
+example, webhooks on `hooks.example.com` and the API on
+`api.example.com` on another VPS, to separate what is open from which
+address. The nkt-edge card lists them all, each with its state, roles,
+addresses and actions.
+
+**The API role** passes only **signed** token requests (`X-NKT-API-Key`,
+`-Timestamp`, `-Nonce`, `-Signature`): the token secret never crosses the
+network or reaches the VPS, and each signature works once, so a
+compromised VPS gets nothing it could replay. The edge itself rejects
+`Authorization: Bearer`, cookies, websockets, password login and paths
+outside the token API, and the hub checks again. Only tokens with the
+**"through nkt-edge"** box are accepted via an edge; the token's address
+list is checked against the client address the edge passed on. The rate
+is `EDGE_API_RATE` (120 per minute per address).
 
 ## Security model
 
@@ -73,8 +105,8 @@ GitHub / GitLab / CI ──HTTPS 443 (certbot)─────────▶ VPS
 1. Add the VPS to the hub as a regular host (installing nkt on it is not
    required — only SSH is).
 2. "Deployments" → the **nkt-edge** card → **"Install on a host"**:
-   host, name, e-mail for Let's Encrypt (optional), "GitHub addresses
-   only". The name is taken from the host's address in the hub if it is
+   host, name, roles (webhooks, API), e-mail for Let's Encrypt
+   (optional), "GitHub addresses only". The name is taken from the host's address in the hub if it is
    a DNS name; the **"check the name"** button tells right away whether
    it points to this host.
 3. A hub job (log — like other jobs):
@@ -209,6 +241,8 @@ From source: `make edge` puts the binaries into `dist/`.
 | `EDGE_GITHUB_ONLY` | `false` | Accept webhooks from GitHub addresses only |
 | `EDGE_SELF_SIGNED` | `false` | No certbot, the tunnel certificate instead — for testing and internal networks |
 | `EDGE_PROXY_ADDR` | empty | Behind a reverse proxy: webhooks over HTTP on this loopback address (`127.0.0.1:8445`), 443 is not taken |
+| `EDGE_ROLES` | `hooks` | Comma-separated roles: `hooks` for webhooks, `api` for signed API token requests |
+| `EDGE_API_RATE` | `120` | API requests per minute per address |
 
 ## Updating
 

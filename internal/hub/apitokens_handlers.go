@@ -30,6 +30,7 @@ type tokenReq struct {
 	// KeepExpiry оставляет прежний срок.
 	ExpiresDays int  `json:"expires_days"`
 	KeepExpiry  bool `json:"keep_expiry"`
+	ViaEdge     bool `json:"via_edge"`
 }
 
 // validate — проверка и приведение полей; хосты и группы — только
@@ -112,7 +113,7 @@ func tokenIDParam(r *http.Request) (int64, error) {
 
 // tokenAudit — пределы токена для журнала действий (без секрета).
 func tokenAudit(t store.APIToken) map[string]any {
-	return map[string]any{"role": t.Role, "hosts": t.Hosts, "groups": t.Groups, "ips": t.IPs, "expires_at": t.ExpiresAt}
+	return map[string]any{"role": t.Role, "hosts": t.Hosts, "groups": t.Groups, "ips": t.IPs, "expires_at": t.ExpiresAt, "via_edge": t.ViaEdge}
 }
 
 // handleTokens — GET /hub/tokens.
@@ -149,7 +150,7 @@ func (s *Server) handleTokenCreate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user := auth.Username(ctx)
 	t := store.APIToken{Name: req.Name, KeyID: keyID, SecretEnc: enc, Role: req.Role, Hosts: req.Hosts, Groups: req.Groups,
-		IPs: req.IPs, ExpiresAt: expiryFromDays(req.ExpiresDays), Author: user}
+		IPs: req.IPs, ExpiresAt: expiryFromDays(req.ExpiresDays), ViaEdge: req.ViaEdge, Author: user}
 	id, err := s.db.CreateAPIToken(ctx, t)
 	s.db.Audit(ctx, user, "token.create", req.Name, auditOutcome(err), tokenAudit(t))
 	if err != nil {
@@ -182,7 +183,7 @@ func (s *Server) handleTokenUpdate(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
-	t.Name, t.Role, t.Hosts, t.Groups, t.IPs = req.Name, req.Role, req.Hosts, req.Groups, req.IPs
+	t.Name, t.Role, t.Hosts, t.Groups, t.IPs, t.ViaEdge = req.Name, req.Role, req.Hosts, req.Groups, req.IPs, req.ViaEdge
 	if !req.KeepExpiry {
 		t.ExpiresAt = expiryFromDays(req.ExpiresDays)
 	}

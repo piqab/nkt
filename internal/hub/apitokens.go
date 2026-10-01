@@ -192,6 +192,10 @@ func (a *tokenAuth) Authenticate(r *http.Request) (context.Context, error) {
 	if !a.fails.Allow(failKey) {
 		return nil, tokenDeny(http.StatusTooManyRequests, "auth.tokenTooMany")
 	}
+	edgeName, byEdge := viaEdge(r.Context())
+	if byEdge && r.Header.Get("X-NKT-API-Signature") == "" {
+		return nil, tokenDeny(http.StatusUnauthorized, "auth.tokenEdgeSigned")
+	}
 	t, err := a.verify(r)
 	if err != nil {
 		var te *auth.TokenError
@@ -202,6 +206,9 @@ func (a *tokenAuth) Authenticate(r *http.Request) (context.Context, error) {
 	}
 	a.fails.Clear(failKey)
 	now := time.Now()
+	if byEdge && !t.ViaEdge {
+		return nil, tokenDeny(http.StatusForbidden, "auth.tokenEdgeDenied", t.Name, edgeName)
+	}
 	if t.Expired(now) {
 		return nil, tokenDeny(http.StatusUnauthorized, "auth.tokenExpired", t.Name)
 	}

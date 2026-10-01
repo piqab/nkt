@@ -3315,7 +3315,7 @@
     "portsComment": "port publications instead of the file's"
   },
   "edge": {
-    "subtitle": "Webhooks from the internet without exposing the hub: edge on a VPS accepts only them, the hub keeps the tunnel to it.",
+    "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment webhooks and/or signed API token requests), and the hub keeps the tunnel to it. There can be several edges.",
     "install": "Install on a host",
     "manual": "Configure manually",
     "forget": "Forget",
@@ -3344,7 +3344,22 @@
     "check": "check the name",
     "dnsMatch": "{{domain}} points to this host ({{ips}}) — the certificate will be issued",
     "dnsMissing": "{{domain}} is not in DNS — create an A record pointing to the host",
-    "dnsMismatch": "{{domain}} points to {{ips}}, while the host has {{host}} — Let's Encrypt won't issue a certificate"
+    "dnsMismatch": "{{domain}} points to {{ips}}, while the host has {{host}} — Let's Encrypt won't issue a certificate",
+    "roles": "Roles",
+    "role": {
+      "hooks": "webhooks",
+      "api": "API"
+    },
+    "roleHint": {
+      "hooks": "a push from GitHub, Gitea, GitLab or CI → a deployment",
+      "api": "signed API token requests (n8n, CI): /api/hub/…, /api/hosts/…"
+    },
+    "reinstall": "Reinstall",
+    "edit": "Edit",
+    "apiAt": "API",
+    "reinstallTitle": "Reinstall edge {{name}}",
+    "reinstallHint": "The same edge on the same host, with new roles and settings; the tunnel token and certificate stay.",
+    "manualApiHint": "For the API, the edge itself needs EDGE_ROLES=hooks,api (or api) in /etc/nkt-edge/edge.env and a service restart."
   },
   "bulk": {
     "selected_one": "{{count}} selected",
@@ -3676,6 +3691,11 @@
     "issuedBearer": "Authorization: Bearer header; simple, fine inside your own network:",
     "issuedSigned": "For signed requests (the secret never crosses the network, so this also works through nkt-edge), the key and secret separately:",
     "secret": "secret",
-    "issuedExample": "Check:"
+    "issuedExample": "Check:",
+    "viaEdge": "through nkt-edge",
+    "viaEdgeHint": "the token is also accepted through an edge with the API role, signed requests only",
+    "edgeTag": "edge",
+    "yes": "yes",
+    "no": "no"
   }
 }

@@ -22,6 +22,12 @@
 //	                   когда 80 и 443 на VPS уже заняты: вебхуки по HTTP
 //	                   только на loopback, TLS и сертификат — у прокси,
 //	                   адрес отправителя — из X-Real-IP / X-Forwarded-For
+//	EDGE_ROLES         роли через запятую (hooks): hooks — вебхуки
+//	                   выкладок, api — подписанные запросы API-токенов
+//	                   хаба (/api/hub/…, /api/hosts/…; Bearer, cookie и
+//	                   веб-сокеты не проходят — секрет токена на VPS не
+//	                   попадает)
+//	EDGE_API_RATE      запросов API в минуту с одного адреса (120)
 package main
 
 import (
@@ -60,6 +66,7 @@ var hookPath = regexp.MustCompile(`^/hooks/[A-Za-z0-9_-]{1,64}$`)
 type server struct {
 	token string
 	rate  int
+	roles map[string]bool
 	// behindProxy — вебхуки приходят от обратного прокси на loopback:
 	// адрес отправителя берётся из его заголовков.
 	behindProxy bool
@@ -68,8 +75,9 @@ type server struct {
 	session *yamux.Session
 	since   time.Time
 
-	limiter *limiter
-	github  *githubNets
+	limiter    *limiter
+	apiLimiter *limiter
+	github     *githubNets
 }
 
 func env(key, def string) string {
@@ -97,7 +105,23 @@ func main() {
 	if rate <= 0 {
 		rate = 60
 	}
-	s := &server{token: token, rate: rate, limiter: newLimiter(rate)}
+	apiRate, _ := strconv.Atoi(env("EDGE_API_RATE", "120"))
+	if apiRate <= 0 {
+		apiRate = 120
+	}
+	s := &server{token: token, rate: rate, limiter: newLimiter(rate), apiLimiter: newLimiter(apiRate), roles: map[string]bool{}}
+	for _, role := range strings.Split(env("EDGE_ROLES", "hooks"), ",") {
+		switch role = strings.TrimSpace(role); role {
+		case "hooks", "api":
+			s.roles[role] = true
+		case "":
+		default:
+			log.Fatal("EDGE_ROLES: unknown role (hooks, api)")
+		}
+	}
+	if len(s.roles) == 0 {
+		s.roles["hooks"] = true
+	}
 	if env("EDGE_GITHUB_ONLY", "false") == "true" {
 		s.github = &githubNets{}
 		go s.github.refreshLoop()
@@ -116,7 +140,12 @@ func main() {
 	// (скажем, 443 держит nginx), служба выходит сразу с понятной ошибкой,
 	// а хаб видит закрытый порт туннеля, а не обрыв посреди рукопожатия.
 	mux := http.NewServeMux()
-	mux.HandleFunc("/hooks/", s.handleHook)
+	if s.roles["hooks"] {
+		mux.HandleFunc("/hooks/", s.handleHook)
+	}
+	if s.roles["api"] {
+		mux.HandleFunc("/api/", s.handleAPI)
+	}
 	mux.HandleFunc("/healthz", s.handleHealth)
 	hookSrv := &http.Server{
 		Handler:           mux,
@@ -248,7 +277,13 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	connected := s.session != nil
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "hub": connected, "version": version})
+	roles := []string{}
+	for _, role := range []string{"hooks", "api"} {
+		if s.roles[role] {
+			roles = append(roles, role)
+		}
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"ok": true, "hub": connected, "version": version, "roles": roles})
 }
 
 // handleHook — фильтры и передача хабу. Всё, что не POST на
@@ -276,13 +311,44 @@ func (s *server) handleHook(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", status)
 		return
 	}
+	status = s.forward(w, r, ip)
+}
+
+// handleAPI — роль api: подписанные запросы API-токенов хаба. Без
+// подписи, с Bearer или cookie, веб-сокеты и пути вне API токенов — отказ
+// здесь же: секрет токена на VPS не попадает, а хаб проверит всё ещё раз.
+func (s *server) handleAPI(w http.ResponseWriter, r *http.Request) {
+	ip := s.clientIP(r)
+	status := http.StatusOK
+	defer func() {
+		slog.Info("api", "ip", noNewlines(ip), "method", noNewlines(r.Method), "path", noNewlines(r.URL.Path), "status", status)
+	}()
+	if !edge.APIPath(r.URL.Path) || r.Header.Get("Upgrade") != "" {
+		status = http.StatusNotFound
+		http.NotFound(w, r)
+		return
+	}
+	if r.Header.Get("Authorization") != "" || r.Header.Get("X-NKT-API-Signature") == "" || r.Header.Get("X-NKT-API-Key") == "" {
+		status = http.StatusUnauthorized
+		http.Error(w, `{"error":"only signed API token requests (X-NKT-API-*) pass through nkt-edge"}`, status)
+		return
+	}
+	if !s.apiLimiter.allow(ip, time.Now()) {
+		status = http.StatusTooManyRequests
+		http.Error(w, "too many requests", status)
+		return
+	}
+	status = s.forward(w, r, ip)
+}
+
+// forward — запрос хабу по туннелю; код ответа — для журнала.
+func (s *server) forward(w http.ResponseWriter, r *http.Request, ip string) int {
 	s.mu.Lock()
 	sess := s.session
 	s.mu.Unlock()
 	if sess == nil {
-		status = http.StatusServiceUnavailable
-		http.Error(w, "hub not connected", status)
-		return
+		http.Error(w, "hub not connected", http.StatusServiceUnavailable)
+		return http.StatusServiceUnavailable
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxBody)
 	rec := &statusWriter{ResponseWriter: w, status: http.StatusOK}
@@ -292,6 +358,7 @@ func (s *server) handleHook(w http.ResponseWriter, r *http.Request) {
 			pr.Out.Host = "hub"
 			pr.Out.Header.Del("Cookie")
 			pr.Out.Header.Del("Authorization")
+			pr.Out.Header.Del("X-Real-IP")
 			pr.Out.Header.Set("X-Forwarded-For", ip)
 		},
 		Transport: &http.Transport{
@@ -304,7 +371,7 @@ func (s *server) handleHook(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	proxy.ServeHTTP(rec, r)
-	status = rec.status
+	return rec.status
 }
 
 type statusWriter struct {

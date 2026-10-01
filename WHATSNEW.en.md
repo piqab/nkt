@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.71 — 2026-10-01
+
+- **nkt-edge roles and several edges.** An edge has roles: "webhooks" and
+  "API". With the API role the edge passes signed API token requests to
+  the hub, so n8n in the cloud or CI can reach a hub behind NAT. Bearer,
+  cookies, password login and websockets do not pass through an edge, and
+  the token secret never reaches the VPS; the token needs the "through
+  nkt-edge" box.
+- There can be several edges (different VPSes and names), and the
+  nkt-edge card lists them all. Roles change with the "Reinstall" button.
+  The previous edge becomes the first in the list with the "webhooks"
+  role; hub export carries all edges with their roles.
+
 ## v1.11.70 — 2026-10-01
 
 - **Hub API tokens** in "About" → "API tokens": access for n8n, CI and
