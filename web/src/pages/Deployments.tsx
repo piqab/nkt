@@ -559,7 +559,9 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
   const [picked, setPicked] = useState<string[]>([])
   const [project, setProject] = useState('')
   const [bad, setBad] = useState(false)
-  // Пример выбран до хостов — описание заполнится по «Заполнить описание».
+  // Выбранный пример: и до хостов (описание заполнится по «Заполнить
+  // описание»), и после — повторное заполнение тоже по примеру, пока
+  // ссылку не сменили.
   const [pending, setPending] = useState<PipelineExample | null>(null)
   function fill(link: string, project: string, ex?: PipelineExample) {
     const p = parseComposeLink(link)
@@ -569,7 +571,8 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
     }
     setBad(false)
     const proj = (project || p.name).toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^[-_]+/, '').slice(0, 63) || 'app'
-    const site = ex?.site ?? { service: 'web', port: 80 }
+    // Сервисов чужого compose хаб не знает — заглушка явная.
+    const site = ex?.site ?? { service: t('deploy.fromLinkSiteService'), port: t('deploy.fromLinkSitePort') }
     const block = (name: string, rec: Record<string, string | string[]> | undefined, comment: string) =>
       rec
         ? `  ${name}:${comment ? '                          '.slice(name.length) + '# ' + comment : ''}\n` +
@@ -609,8 +612,8 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
     setLink(ex.link)
     setProject(ex.project)
     onName(ex.project)
+    setPending(ex)
     if (picked.length > 0) fill(ex.link, ex.project, ex)
-    else setPending(ex)
   }
   return (
     <div className="col" style={{ gap: '0.3rem', marginBottom: '0.6rem', padding: '0.5rem', border: '1px solid var(--border)', borderRadius: 6 }}>

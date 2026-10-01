@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.68 — 2026-10-01
+
+- **Deployment and dry run logs:** problems (`✗`) are bold red, warnings
+  (`?`, `!`) bold orange.
+- **Pipeline examples:** the chosen example is remembered, so filling in
+  the description again (after changing hosts) no longer loses its settings
+  (`service: plausible`, `files`, `env_keys`, `wait_timeout`). For your own
+  link the `site:` block has explicit placeholders `<service from compose>`
+  and `<container port>` instead of `web`/`80`.
+- **"About":** "Hub version" comes first, "Private mode" last.
+
 ## v1.11.67 — 2026-10-01
 
 - **Dry run with check boxes:** the button opens a window listing the

@@ -177,15 +177,18 @@ function duration(j: Job, t: (k: string, o?: Record<string, unknown>) => string)
 /** Строка чек-листа («  ✓ …», «  ✗ …», «  ! …») подсвечивается по знаку;
  * остальные строки — как есть. */
 function LogLine({ text, last }: { text: string; last: boolean }) {
-  const m = /^(\s*)([✓✗!])(\s.*)$/s.exec(text)
+  // ✓ — успех (цветной значок); ✗ — ошибка, «!» и «?» — предупреждение
+  // (журналы выкладки и сухого прогона): вся строка жирная, своим цветом.
+  const m = /^(\s*)([✓✗!?])(\s.*)$/s.exec(text)
   const color = m ? (m[2] === '✓' ? 'var(--series-3)' : m[2] === '✗' ? 'var(--series-8)' : 'var(--series-4)') : undefined
+  const loud = !!m && m[2] !== '✓'
   return (
     <>
       {m ? (
         <>
           {m[1]}
           <span style={{ color, fontWeight: 600 }}>{m[2]}</span>
-          <span style={{ color: m[2] === '✗' ? color : undefined }}>{blurText(m[3])}</span>
+          <span style={loud ? { color, fontWeight: 600 } : undefined}>{blurText(m[3])}</span>
         </>
       ) : (
         blurText(text)
