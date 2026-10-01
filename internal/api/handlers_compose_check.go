@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os/exec"
 	"path"
+	"regexp"
 	"slices"
 	"sort"
 	"strconv"
@@ -36,6 +37,9 @@ type ComposeEngineInfo struct {
 	ComposeError   string `json:"compose_error,omitempty"`
 	// Installable — Docker можно поставить отсюда (apt-get, не фикстуры).
 	Installable bool `json:"installable"`
+	// DaemonDown — программа есть, а демон не отвечает (docker info).
+	DaemonDown  bool   `json:"daemon_down,omitempty"`
+	DaemonError string `json:"daemon_error,omitempty"`
 }
 
 func firstLine(s string) string {
@@ -60,6 +64,14 @@ func (s *Server) composeEngineInfo(ctx context.Context) ComposeEngineInfo {
 	}
 	if res, err := c.RunTimeout(ctx, 20*time.Second, info.Engine, "--version"); err == nil && res.OK() {
 		info.Version = firstLine(res.Stdout)
+	}
+	if r, err := c.RunTimeout(ctx, 20*time.Second, info.Engine, "info", "--format", "{{.ServerVersion}}"); err != nil || !r.OK() {
+		info.DaemonDown = true
+		if err != nil {
+			info.DaemonError = err.Error()
+		} else {
+			info.DaemonError = firstLine(r.Output())
+		}
 	}
 	res, err := c.RunTimeout(ctx, 30*time.Second, info.Engine, "compose", "version")
 	switch {
@@ -112,6 +124,16 @@ type ComposeCheckResult struct {
 	ConfigError string              `json:"config_error,omitempty"`
 	Services    []string            `json:"services,omitempty"`
 	Images      []ComposeImageCheck `json:"images,omitempty"`
+	// UnsetVars — ${VAR} в compose без значения (compose подставит пустую
+	// строку).
+	UnsetVars []string `json:"unset_vars,omitempty"`
+	// NoHealthcheck — сервисы без healthcheck ни в compose, ни в образе:
+	// up --wait ждёт для них только запуска.
+	NoHealthcheck []string `json:"no_healthcheck,omitempty"`
+	// MemAvailableMB / DiskFreeMB — свободная память хоста и место в
+	// каталоге docker (0 — не узнать).
+	MemAvailableMB int `json:"mem_available_mb,omitempty"`
+	DiskFreeMB     int `json:"disk_free_mb,omitempty"`
 	// PortsBusy — порты хоста из публикаций, занятые не этим стеком.
 	PortsBusy []ComposePortBusy `json:"ports_busy,omitempty"`
 	// HostArch — архитектура хоста (для сверки с образами).
@@ -199,6 +221,7 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 	// подхватит его, раз он лежит рядом).
 	args := composeArgsIn(c, work, req.Project, req.File)
 	out, err := c.RunTimeout(ctx, 2*time.Minute, res.Engine, append(args, "config", "-q")...)
+	res.UnsetVars = unsetVars(out.Output())
 	switch {
 	case err != nil:
 		res.ConfigError = err.Error()
@@ -226,6 +249,8 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	res.PortsBusy = busyPorts(ctx, c, res.Engine, work, req.Project, req.File)
+	res.NoHealthcheck = noHealthcheck(ctx, c, res.Engine, work, req.Project, req.File)
+	res.MemAvailableMB, res.DiskFreeMB = hostResources(ctx, c, res.Engine)
 	writeJSON(w, http.StatusOK, res)
 }
 
@@ -561,6 +586,88 @@ func composePS(out string) []composePSEntry {
 		}
 	}
 	return list
+}
+
+var unsetVarRe = regexp.MustCompile(`The \\?"(\w+)\\?" variable is not set`)
+
+// unsetVars — имена из предупреждений compose «The "X" variable is not set».
+func unsetVars(out string) []string {
+	var names []string
+	for _, m := range unsetVarRe.FindAllStringSubmatch(out, -1) {
+		if !slices.Contains(names, m[1]) {
+			names = append(names, m[1])
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// noHealthcheck — сервисы без healthcheck в compose и в (скачанном) образе.
+func noHealthcheck(ctx context.Context, c collect.Collector, engine, work, project, file string) []string {
+	res, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgsIn(c, work, project, file), "config", "--format", "json")...)
+	if err != nil || !res.OK() {
+		return nil
+	}
+	var doc struct {
+		Services map[string]struct {
+			Image       string `json:"image"`
+			Healthcheck *struct {
+				Disable bool `json:"disable"`
+			} `json:"healthcheck"`
+		} `json:"services"`
+	}
+	if json.Unmarshal([]byte(res.Stdout), &doc) != nil {
+		return nil
+	}
+	var out []string
+	for name, svc := range doc.Services {
+		if svc.Healthcheck != nil && !svc.Healthcheck.Disable {
+			continue
+		}
+		if svc.Healthcheck == nil && svc.Image != "" {
+			if r, err := c.RunTimeout(ctx, 20*time.Second, engine, "image", "inspect", "--format", "{{json .Config.Healthcheck}}", svc.Image); err == nil && r.OK() {
+				if t := strings.TrimSpace(r.Stdout); t != "" && t != "null" && t != "<nil>" {
+					continue
+				}
+			}
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// hostResources — свободная память (MemAvailable) и место в каталоге
+// docker, МБ.
+func hostResources(ctx context.Context, c collect.Collector, engine string) (int, int) {
+	mem := 0
+	if raw, err := c.ReadFile("/proc/meminfo"); err == nil {
+		for _, l := range strings.Split(string(raw), "\n") {
+			if f := strings.Fields(l); len(f) >= 2 && f[0] == "MemAvailable:" {
+				kb, _ := strconv.Atoi(f[1])
+				mem = kb / 1024
+			}
+		}
+	}
+	dir := "/var/lib/docker"
+	if engine == "docker" {
+		if r, err := c.RunTimeout(ctx, 20*time.Second, "docker", "info", "--format", "{{.DockerRootDir}}"); err == nil && r.OK() && strings.TrimSpace(r.Stdout) != "" {
+			dir = strings.TrimSpace(r.Stdout)
+		}
+	} else {
+		dir = "/var/lib/containers"
+	}
+	disk := 0
+	if r, err := c.RunTimeout(ctx, 20*time.Second, "df", "-Pk", dir); err == nil && r.OK() {
+		lines := splitLines(r.Stdout)
+		if len(lines) >= 2 {
+			if f := strings.Fields(lines[len(lines)-1]); len(f) >= 4 {
+				kb, _ := strconv.Atoi(f[3])
+				disk = kb / 1024
+			}
+		}
+	}
+	return mem, disk
 }
 
 // Установка Docker на хост: docker.io из репозитория дистрибутива и

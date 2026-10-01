@@ -394,6 +394,76 @@ func (s *Server) handleSitePortCheck(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+// handleSiteDry — GET /sites/dry?domains=a,b&proxy=nginx: что увидит
+// настройка сайта на хосте (для сухого прогона): годный сертификат на эти
+// имена, читает ли nginx conf.d и не занято ли имя чужой конфигурацией.
+func (s *Server) handleSiteDry(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	q := r.URL.Query()
+	domains, err := site.NormalizeDomains(strings.Split(q.Get("domains"), ","))
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	proxy := q.Get("proxy")
+	if !slices.Contains(site.Proxies, proxy) {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("site.badProxy", proxy))
+		return
+	}
+	out := map[string]any{}
+	if s.certs != nil {
+		if list, err := s.certs.ListLetsEncryptLineages(); err == nil {
+			for _, l := range list {
+				covers := true
+				for _, d := range domains {
+					if !slices.Contains(l.Names, d) {
+						covers = false
+					}
+				}
+				if covers {
+					out["cert"] = map[string]any{"lineage": l.Name, "days_left": l.DaysLeft}
+					break
+				}
+			}
+		}
+	}
+	c := s.scanner.Collector()
+	if proxy == site.ProxyNginx && collect.Which(ctx, c, "nginx") {
+		main, _ := c.ReadFile(s.cfg.NginxMainConfig)
+		out["nginx_conf_d"] = strings.Contains(string(main), "conf.d/*.conf")
+		// Чужие server_name с этими именами: тогда наш server не действует.
+		if res, err := c.RunTimeout(ctx, 30*time.Second, "nginx", "-T"); err == nil {
+			out["conflicts"] = nginxNameConflicts(res.Stdout, domains)
+		}
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// nginxNameConflicts — «файл: server_name …» с нашими именами вне файла
+// сайта nkt (вывод nginx -T помечает файлы «# configuration file …:»).
+func nginxNameConflicts(dump string, domains []string) []string {
+	var out []string
+	file := ""
+	for _, line := range strings.Split(dump, "\n") {
+		t := strings.TrimSpace(line)
+		if strings.HasPrefix(t, "# configuration file ") {
+			file = strings.TrimSuffix(strings.TrimPrefix(t, "# configuration file "), ":")
+			continue
+		}
+		if !strings.HasPrefix(t, "server_name") || strings.Contains(path.Base(file), "nkt-") {
+			continue
+		}
+		names := strings.Fields(strings.TrimSuffix(strings.TrimPrefix(t, "server_name"), ";"))
+		for _, d := range domains {
+			if slices.Contains(names, d) {
+				out = append(out, file+": "+t)
+				break
+			}
+		}
+	}
+	return out
+}
+
 // --- настройка ----------------------------------------------------------
 
 // SiteApplyParams — вход задания.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"slices"
 	"strconv"
@@ -189,17 +190,20 @@ func portsText(ports []int) string {
 	return strings.Join(out, ", ")
 }
 
-// dryRunSite — что сделала бы выкладка с сайтом (только журнал: неудача
-// сайта выкладку не отменяет, поэтому здесь — предупреждения).
-func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, pl store.Pipeline, c *deploy.ComposeSpec, t targetHost, port int) {
+// dryRunSite — что сделала бы выкладка с сайтом; число проблем (то, на
+// чём настройка сайта не пройдёт: выкладка стека при этом удалась бы).
+func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, pl store.Pipeline, c *deploy.ComposeSpec, t targetHost, port int) int {
 	sp := c.Site
+	lang := jc.Lang()
+	problems := 0
 	cur, clash, err := s.pipelineSiteFor(ctx, pl, sp.Domains)
 	if err != nil {
-		jc.Log("deploy.drySiteWarn", msgs.Localize(jc.Lang(), err))
-		return
+		jc.Log("deploy.drySiteWarn", msgs.Localize(lang, err))
+		return 1
 	}
 	if clash != "" {
-		jc.Log("deploy.drySiteWarn", msgs.T(jc.Lang(), "hub.siteExists", clash))
+		problems++
+		jc.Log("deploy.drySiteBad", msgs.T(lang, "hub.siteExists", clash))
 	}
 	proxy, installed := sp.Proxy, true
 	if proxy == "" && cur != nil {
@@ -207,8 +211,8 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 	}
 	if proxy == "" {
 		if proxy, installed, err = s.pickProxy(ctx, user, t); err != nil {
-			jc.Log("deploy.drySiteWarn", msgs.Localize(jc.Lang(), err))
-			return
+			jc.Log("deploy.drySiteWarn", msgs.Localize(lang, err))
+			return problems + 1
 		}
 	}
 	if !installed {
@@ -216,14 +220,14 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 	} else {
 		jc.Log("deploy.drySiteProxy", proxy)
 	}
-	s.dryRunFirewall(ctx, jc, user, t, sp.OpenFirewall(), proxy)
+	problems += s.dryRunHostSite(ctx, jc, user, t, sp, proxy, installed)
 	if port == 0 {
 		port = sp.Port
 	}
 	if cur != nil && cur.Status == store.SiteOK && sameSite(*cur, store.Site{Domains: sp.Domains, HostID: t.ID, Proxy: proxy,
 		Stack: c.Project, Service: sp.Service, ContainerPort: port, OpenFirewall: sp.OpenFirewall()}) {
 		jc.Log("deploy.drySiteSame", sp.Domains[0])
-		return
+		return problems
 	}
 	jc.Log("deploy.drySiteWill", strings.Join(sp.Domains, ", "), sp.Service, port)
 	chk := s.siteOutside(ctx, t, sp.Domains, false)
@@ -232,23 +236,61 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 		case d.Match:
 			jc.Log("hub.siteDNSOK", d.Domain, strings.Join(d.DomainIPs, ", "))
 		case len(d.DomainIPs) == 0:
+			problems++
 			jc.Log("deploy.drySiteNoDNS", d.Domain)
 		default:
+			problems++
 			jc.Log("deploy.drySiteDNS", d.Domain, strings.Join(d.DomainIPs, ", "), strings.Join(d.HostIPs, ", "))
 		}
+		// AAAA не на хост: Let's Encrypt предпочитает IPv6 и придёт не туда,
+		// даже если A-запись верна.
+		if v6 := foreignV6(d.DomainIPs, d.HostIPs); len(v6) > 0 {
+			problems++
+			jc.Log("deploy.drySiteAAAA", d.Domain, strings.Join(v6, ", "))
+		}
 	}
-	for _, port := range []string{"80", "443"} {
-		jc.Log("hub.sitePort", port, chk.Ports[port])
+	for _, p := range []string{"80", "443"} {
+		jc.Log("hub.sitePort", p, chk.Ports[p])
 	}
 	if chk.Ports["80"] == "timeout" {
-		jc.Log("hub.sitePort80Blocked")
+		problems++
+		jc.Log("deploy.drySitePort80")
 	}
+	return problems
 }
 
-// dryRunFirewall — что будет с файрволом хоста при настройке сайта.
-func (s *Server) dryRunFirewall(ctx context.Context, jc *jobs.Context, user string, t targetHost, open bool, proxy string) {
+// foreignV6 — IPv6-адреса имени, которых нет у хоста (пусто — AAAA нет
+// или они на хост).
+func foreignV6(domainIPs, hostIPs []string) []string {
+	var v6, out []string
+	for _, ip := range domainIPs {
+		if a, err := netip.ParseAddr(ip); err == nil && a.Is6() && !a.Is4In6() {
+			v6 = append(v6, ip)
+		}
+	}
+	for _, ip := range v6 {
+		if !slices.Contains(hostIPs, ip) {
+			out = append(out, ip)
+		}
+	}
+	if len(out) == len(v6) {
+		return out
+	}
+	return nil // хотя бы один AAAA ведёт на хост
+}
+
+// dryRunHostSite — хост глазами настройки сайта: certbot, файрвол, кто
+// держит 80/443, сертификат, конфигурация nginx. Число проблем.
+func (s *Server) dryRunHostSite(ctx context.Context, jc *jobs.Context, user string, t targetHost, sp *deploy.SiteSpec, proxy string, proxyInstalled bool) int {
+	problems := 0
 	var pre struct {
-		Certbot  bool `json:"certbot"`
+		Certbot bool `json:"certbot"`
+		Holders []struct {
+			Port      int    `json:"port"`
+			Process   string `json:"process"`
+			Unit      string `json:"unit"`
+			Container string `json:"container"`
+		} `json:"holders"`
 		Firewall *struct {
 			Manager  string `json:"manager"`
 			Active   bool   `json:"active"`
@@ -258,7 +300,7 @@ func (s *Server) dryRunFirewall(ctx context.Context, jc *jobs.Context, user stri
 		} `json:"firewall"`
 	}
 	if _, err := s.hostCall(ctx, user, t.ID, "GET", "/api/sites/preflight", nil, &pre); err != nil || pre.Firewall == nil {
-		return
+		return 0
 	}
 	if !pre.Certbot && proxy != site.ProxyCaddy {
 		jc.Log("deploy.dryCertbotInstall")
@@ -269,11 +311,68 @@ func (s *Server) dryRunFirewall(ctx context.Context, jc *jobs.Context, user stri
 		jc.Log("deploy.dryFirewallOff")
 	case fw.Open80 && fw.Open443:
 		jc.Log("deploy.dryFirewallOpen", fw.Manager)
-	case !open:
+	case !sp.OpenFirewall():
 		jc.Log("deploy.dryFirewallClosedSkip", fw.Manager)
 	case fw.Writable != nil && !*fw.Writable:
 		jc.Log("deploy.dryFirewallNotWritable", fw.Manager)
 	default:
 		jc.Log("deploy.dryFirewallWillOpen", fw.Manager)
 	}
+	// 80/443 держит не наш прокси: certbot --standalone не займёт порт,
+	// прокси сайта не встанет.
+	seen := map[string]bool{}
+	for _, h := range pre.Holders {
+		name := h.Process
+		if h.Container != "" {
+			name = "container " + h.Container
+		} else if name == "" {
+			name = h.Unit
+		}
+		if h.Container == "" && (name == proxy || (h.Unit != "" && strings.HasPrefix(h.Unit, proxy))) {
+			continue
+		}
+		key := strconv.Itoa(h.Port) + name
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		problems++
+		jc.Log("deploy.drySiteHolder", h.Port, name, proxy)
+	}
+	// С хоста: сертификат, conf.d у nginx, чужие server_name.
+	var dry struct {
+		Cert *struct {
+			Lineage  string `json:"lineage"`
+			DaysLeft int    `json:"days_left"`
+		} `json:"cert"`
+		NginxConfD *bool    `json:"nginx_conf_d"`
+		Conflicts  []string `json:"conflicts"`
+	}
+	q := "/api/sites/dry?domains=" + url.QueryEscape(strings.Join(sp.Domains, ",")) + "&proxy=" + url.QueryEscape(proxy)
+	code, err := s.hostCall(ctx, user, t.ID, "GET", q, nil, &dry)
+	switch {
+	case code == http.StatusNotFound || code == http.StatusMethodNotAllowed:
+		jc.Log("deploy.drySiteOldHost", t.Name)
+		return problems
+	case err != nil:
+		jc.Log("deploy.drySiteWarn", msgs.Localize(jc.Lang(), err))
+		return problems
+	}
+	switch {
+	case proxy == site.ProxyCaddy:
+		jc.Log("deploy.drySiteCertCaddy")
+	case dry.Cert != nil && dry.Cert.DaysLeft > 20:
+		jc.Log("deploy.drySiteCertReuse", dry.Cert.Lineage, dry.Cert.DaysLeft)
+	default:
+		jc.Log("deploy.drySiteCertIssue", strings.Join(sp.Domains, ", "))
+	}
+	if dry.NginxConfD != nil && !*dry.NginxConfD && proxyInstalled {
+		problems++
+		jc.Log("deploy.drySiteNoConfD")
+	}
+	for _, c := range dry.Conflicts {
+		problems++
+		jc.Log("deploy.drySiteConflict", c)
+	}
+	return problems
 }

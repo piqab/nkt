@@ -67,3 +67,22 @@ func TestComposePullCause(t *testing.T) {
 		t.Fatal("unknown cause replaced")
 	}
 }
+
+func TestDryParsers(t *testing.T) {
+	out := `time="x" level=warning msg="The \"APP_SECRET\" variable is not set. Defaulting to a blank string."
+WARN[0000] The "DB_PASS" variable is not set. Defaulting to a blank string.`
+	if got := unsetVars(out); strings.Join(got, ",") != "APP_SECRET,DB_PASS" {
+		t.Fatal(got)
+	}
+	dump := `# configuration file /etc/nginx/nginx.conf:
+http { include /etc/nginx/conf.d/*.conf; }
+# configuration file /etc/nginx/sites-enabled/www.conf:
+server { server_name www.xxx.xx hb.xxx.xx; }
+# configuration file /etc/nginx/conf.d/nkt-hb.xxx.xx.conf:
+server { server_name hb.xxx.xx; }`
+	_ = dump
+	lines := "# configuration file /etc/nginx/sites-enabled/www.conf:\n    server_name www.xxx.xx hb.xxx.xx;\n# configuration file /etc/nginx/conf.d/nkt-hb.xxx.xx.conf:\n    server_name hb.xxx.xx;\n"
+	if got := nginxNameConflicts(lines, []string{"hb.xxx.xx"}); len(got) != 1 || !strings.Contains(got[0], "www.conf") {
+		t.Fatal(got)
+	}
+}

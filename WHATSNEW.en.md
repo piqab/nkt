@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.66 — 2026-10-01
+
+- **The dry run checks more. Problems:** a `${VAR}` without a value in
+  `.env`, the docker daemon not running, too little space or memory, 80/443
+  held by something other than the site proxy, the name already in another
+  nginx config or nginx not reading `conf.d`, an AAAA record not pointing at
+  the host, DNS not pointing at the host and port 80 closed from outside,
+  nkt on the host older than the hub. **Warnings:** `latest` images,
+  services without a healthcheck, the stack already on the host from
+  elsewhere or deployed by other pipelines too. **Info:** memory and space,
+  the certificate: a valid one (days left) or a new issuance.
+- A real deployment also checks the docker daemon on all hosts before the
+  first one.
+
 ## v1.11.65 — 2026-10-01
 
 - **certbot installs itself:** if the host lacks it, site setup installs the
