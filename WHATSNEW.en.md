@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.81 — 2026-10-01
+
+- The edge HTTPS check builds the address from the validated name, only
+  through `url.URL`, with no path, login or foreign scheme (a CodeQL
+  finding).
+
 ## v1.11.80 — 2026-10-01
 
 - **Outside checks no longer reach into the VPS's own network**: an edge

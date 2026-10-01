@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/netip"
+	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
@@ -162,6 +163,9 @@ func RunProbe(ctx context.Context, req ProbeRequest) ProbeResponse {
 }
 
 func probeTCP(ctx context.Context, host string, port int) string {
+	if !probeHostRe.MatchString(host) {
+		return "error: invalid check"
+	}
 	conn, err := probeDialer().DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err == nil {
 		_ = conn.Close()
@@ -181,6 +185,13 @@ func probeTCP(ctx context.Context, host string, port int) string {
 }
 
 func probeHTTPS(ctx context.Context, c ProbeCheck, r *ProbeResult) {
+	// Имя или адрес — только допустимые знаки, прямо перед запросом (кроме
+	// проверки в RunProbe): ни пути, ни логина, ни другой схемы в URL не
+	// подсунуть. Куда можно соединяться — решает probeDialer.
+	if !probeHostRe.MatchString(c.Host) {
+		r.Error = "invalid check"
+		return
+	}
 	host, port := c.Host, c.Port
 	if port == 0 {
 		port = 443
@@ -188,7 +199,8 @@ func probeHTTPS(ctx context.Context, c ProbeCheck, r *ProbeResult) {
 	if port != 443 || strings.Contains(host, ":") {
 		host = net.JoinHostPort(c.Host, strconv.Itoa(port))
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://"+host+"/", nil)
+	target := url.URL{Scheme: "https", Host: host, Path: "/"}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target.String(), nil)
 	if err != nil {
 		r.Error = err.Error()
 		return
