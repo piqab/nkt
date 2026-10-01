@@ -64,6 +64,9 @@ func (m *Manager) ExportHub(ctx context.Context, includeKey, includeUsers bool) 
 	if export.F2BTemplates, err = m.exportF2BTemplates(ctx); err != nil {
 		return store.HubExport{}, err
 	}
+	if err := m.exportAccess(ctx, &export); err != nil {
+		return store.HubExport{}, err
+	}
 	return export, nil
 }
 
@@ -142,6 +145,7 @@ func (m *Manager) ImportPlan(ctx context.Context, export store.HubExport) ([]sto
 		edge.Items = append(edge.Items, store.PlanItem{Name: e.Address, Conflict: m.edgeExists(ctx, e.Address), Replaceable: true})
 	}
 	plan = append(plan, edge)
+	plan = append(plan, m.planAccess(ctx, export)...)
 	return plan, nil
 }
 
@@ -265,6 +269,7 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 			edges = append(edges, e)
 		}
 		export.Edges, export.Edge = edges, nil
+		reencryptAccess(&export, reenc, func(what string, err error) { pre = append(pre, fmt.Sprintf("%s: %v", what, err)) })
 		// Ключ модели — тем же мастер-ключом, что и секреты хостов.
 		if enc := export.Settings[aiKeyKVKey]; enc != "" {
 			raw, err := secretbox.Decrypt(oldKey, []byte(enc))
@@ -285,6 +290,7 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 	rep.Errors = append(pre, rep.Errors...)
 	m.importF2BTemplates(ctx, export.F2BTemplates, res, &rep)
 	m.importEdges(ctx, export.EdgeList(), res, &rep)
+	m.importAccess(ctx, export, res, &rep)
 	// Образы для кластеров: чего нет в библиотеке этого хаба.
 	have := map[string]bool{}
 	for _, img := range m.ClusterImages() {

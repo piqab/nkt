@@ -204,6 +204,11 @@ type HubExport struct {
 	// Edges — все edge с ролями.
 	Edge  *EdgeExport  `json:"edge,omitempty"`
 	Edges []EdgeExport `json:"edges,omitempty"`
+	// API-токены, исходящие вебхуки и боты (секреты — как у конвейеров);
+	// хосты — по именам.
+	APITokens []APITokenExport           `json:"api_tokens,omitempty"`
+	OutHooks  []OutHookExport            `json:"webhooks,omitempty"`
+	Bots      map[string]json.RawMessage `json:"bots,omitempty"`
 	// MasterKey is the exporting hub's own secretbox key (base64), present
 	// only when the operator opted into a one-step migration — see
 	// Manager.ExportHosts/ImportHosts in internal/hub, which is what
@@ -382,6 +387,9 @@ const (
 	SectionSettings       = "settings"
 	SectionF2BTemplates   = "f2b_templates"
 	SectionEdge           = "edge"
+	SectionAPITokens      = "api_tokens"
+	SectionWebhooks       = "webhooks"
+	SectionBots           = "bots"
 )
 
 // ImportResolutions — что делать с тем, что в этом хабе уже есть под тем

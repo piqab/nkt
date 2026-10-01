@@ -1047,6 +1047,9 @@ func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
 	if c := rep.Sections[store.SectionEdge]; c != nil && c.Added+c.Replaced > 0 {
 		s.kickEdge()
 	}
+	if c := rep.Sections[store.SectionBots]; c != nil && c.Added+c.Replaced > 0 {
+		s.kickTelegram()
+	}
 	added := 0
 	if c := rep.Sections[store.SectionHosts]; c != nil {
 		added = c.Added + c.Replaced

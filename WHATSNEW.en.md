@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.78 — 2026-10-01
+
+- **Hub export carries outside access**: API tokens (role, scope,
+  addresses, expiry, secret), outgoing webhooks and the Telegram and Slack
+  bot settings. Secrets are re-encrypted with the receiving hub's key;
+  hosts in a scope are matched by name. If no host with that name exists,
+  the token or recipient is not imported (otherwise the scope would widen
+  to "all hosts"), and the import says so. Name matches are "skip" or
+  "replace", as in the other sections.
+
 ## v1.11.77 — 2026-10-01
 
 - The accidentally committed `nkt-edge` binary (11 MB) is removed from the

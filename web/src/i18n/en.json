@@ -751,7 +751,10 @@
       "users": "User accounts",
       "settings": "Hub settings",
       "f2b_templates": "fail2ban templates",
-      "edge": "nkt-edge"
+      "edge": "nkt-edge",
+      "api_tokens": "API tokens",
+      "webhooks": "Outgoing webhooks",
+      "bots": "Bots"
     },
     "importPlanTitle": "Import: what the file contains",
     "importPlanHint": "A version {{version}} file from {{date}}. Items whose name already exists on this hub are skipped by default; “replace” is chosen per item or for a whole section.",

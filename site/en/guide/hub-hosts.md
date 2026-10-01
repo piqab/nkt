@@ -209,8 +209,12 @@ machine-to-host links, Kubernetes clusters (nodes, API address,
 kubeconfig, WireGuard plan), profiles and scripts with history, machine
 templates, **deployment pipelines** with their revision history, secrets
 (webhook signature, git and registry tokens) and webhook address,
-**fail2ban templates** with version history, **nkt-edge** (address,
-domain, token, pinned certificate, the host it runs on), hub settings
+**fail2ban templates** with version history, every **nkt-edge** with its
+roles (address, domain, token, pinned certificate, the host it runs on),
+**API tokens** (role, scope, addresses, expiry, secret), **outgoing
+webhooks** and the Telegram and Slack **bots** (tokens and secrets; hosts
+in a scope go by name, and a token or recipient whose host is missing is
+not imported), hub settings
 (alerts, package cache, model analysis with the API key and every edited
 instruction, beta channel), saved cluster form presets, fallback channel
 switches and tokens. With the "Web interface user accounts" checkbox it
