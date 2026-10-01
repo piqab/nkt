@@ -187,7 +187,10 @@ Codeberg/Gitea/Forgejo `…/src/branch/…`, or their raw variants) and pick
 hosts; the description fills itself in: repository, branch, path, stack
 name. Then it is an ordinary edit with a diff. **"Examples"** are ready
 pipelines, each verified by a deployment; details and `.env` templates are
-in the repository's `examples/`:
+in the repository's `examples/`. The chosen example is remembered: clicking
+"Fill in the description" again (say, after changing hosts) fills it in
+completely again. For your own link the `site:` block is commented out,
+with the placeholders `<service from compose>` and `<container port>`:
 
 | Example | What it shows |
 |---|---|
@@ -265,7 +268,9 @@ on the host does not know the boxes and checks everything; the hub leaves
 the extra lines out of the log.
 
 The result is a hub job with a log: "the deployment would succeed" or the
-number of problems. Nothing is recorded in the deployment history.
+number of problems.
+In the deployment and dry run logs, problems (`✗`) are bold red and
+warnings (`?`, `!`) bold orange. Nothing is recorded in the deployment history.
 
 ![Dry run](/screens/en/deploy-dryrun.png)
 

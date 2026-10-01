@@ -3245,6 +3245,8 @@
     },
     "exampleComment": "пример выкладки, пошагово",
     "fromLinkSiteComment": "сайт: прокси и сертификат (один хост)",
+    "fromLinkSiteService": "<сервис из compose>",
+    "fromLinkSitePort": "<порт контейнера>",
     "noGit": "На хабе нет git — выкладки и сухой прогон не работают.",
     "installGit": "Установить git",
     "noGitManual": "Установите пакет git на машине хаба (apt install git, dnf install git).",

@@ -214,18 +214,6 @@ export default function About({ admin = false }: { admin?: boolean }) {
         </Banner>
       )}
 
-      {/* Приватный режим — настройка браузера, живёт здесь рядом с
-          остальными настройками хаба; включённый виден по оранжевому
-          «nkt» в шапке. */}
-      <Card title={t('about.privacyTitle')} subtitle={t('app.privacyHint')}>
-        <Checkbox checked={privacy} onChange={(e) => setPrivacy(e.target.checked)}>
-          {t('app.privacy')}
-        </Checkbox>
-      </Card>
-
-      <AISettingsCard />
-      <DocsSettingsCard isHub admin={admin} />
-
       <Card title={t('about.hubVersionTitle')}>
         {version.loading && !info ? (
           <Loading what={t('about.loadingVersion')} />
@@ -342,6 +330,9 @@ export default function About({ admin = false }: { admin?: boolean }) {
           </>
         )}
       </Card>
+
+      <AISettingsCard />
+      <DocsSettingsCard isHub admin={admin} />
 
       <Card title={t('about.vulnDBTitle')} subtitle={t('about.vulnDBHint')}>
         {vulndb.loading && !vulndb.data ? (
@@ -470,6 +461,15 @@ export default function About({ admin = false }: { admin?: boolean }) {
             </div>
           </>
         )}
+      </Card>
+
+      {/* Приватный режим — настройка браузера, живёт здесь рядом с
+          остальными настройками хаба; включённый виден по оранжевому
+          «nkt» в шапке. */}
+      <Card title={t('about.privacyTitle')} subtitle={t('app.privacyHint')}>
+        <Checkbox checked={privacy} onChange={(e) => setPrivacy(e.target.checked)}>
+          {t('app.privacy')}
+        </Checkbox>
       </Card>
     </>
   )
