@@ -7,6 +7,8 @@ node_modules/
 # Build output
 /nkt
 /nkt.exe
+/nkt-edge
+/nkt-edge.exe
 /dist/
 dist/*.map
 web/tsconfig.tsbuildinfo
