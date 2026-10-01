@@ -1,0 +1,114 @@
+{
+  "name": "nkt: ночной сухой прогон",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 3
+            }
+          ]
+        }
+      },
+      "name": "Каждую ночь",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "pipeline",
+        "operation": "dryRun",
+        "pipelineId": "1",
+        "skip": [],
+        "wait": true,
+        "timeout": 900
+      },
+      "name": "Сухой прогон",
+      "type": "CUSTOM.nkt",
+      "typeVersion": 1,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.succeeded }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "name": "Прошёл?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "<chat id>",
+        "text": "={{ 'Сухой прогон не прошёл:\\n' + $json.log.join('\\n') }}",
+        "additionalFields": {}
+      },
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        720,
+        80
+      ]
+    }
+  ],
+  "connections": {
+    "Каждую ночь": {
+      "main": [
+        [
+          {
+            "node": "Сухой прогон",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Сухой прогон": {
+      "main": [
+        [
+          {
+            "node": "Прошёл?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Прошёл?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

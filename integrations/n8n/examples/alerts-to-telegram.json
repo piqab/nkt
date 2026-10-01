@@ -1,0 +1,55 @@
+{
+  "name": "nkt: оповещения → Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "secret": "<секрет адресата с хаба>",
+        "events": [
+          "unreachable",
+          "problems",
+          "job-failed",
+          "deploy-failed"
+        ]
+      },
+      "name": "nkt Trigger",
+      "type": "CUSTOM.nktTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "nkt-alerts"
+    },
+    {
+      "parameters": {
+        "chatId": "<chat id>",
+        "text": "={{ ($json.host ? $json.host.name + ': ' : '') + $json.text }}",
+        "additionalFields": {}
+      },
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        260,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "nkt Trigger": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}

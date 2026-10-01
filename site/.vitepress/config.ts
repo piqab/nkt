@@ -111,6 +111,7 @@ function sidebarRu() {
         { text: 'Обновления и база уязвимостей', link: '/guide/hub-updates' },
         { text: 'Кэш пакетов', link: '/guide/hub-cache' },
         { text: 'API и токены', link: '/guide/hub-api' },
+        { text: 'n8n', link: '/guide/n8n' },
       ],
     },
     {
@@ -182,6 +183,7 @@ function sidebarEn() {
         { text: 'Updates and vulnerability DB', link: '/en/guide/hub-updates' },
         { text: 'Package cache', link: '/en/guide/hub-cache' },
         { text: 'API and tokens', link: '/en/guide/hub-api' },
+        { text: 'n8n', link: '/en/guide/n8n' },
       ],
     },
     {
