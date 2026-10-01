@@ -47,12 +47,16 @@ type composeCheck struct {
 		Addr   string `json:"addr"`
 		Holder string `json:"holder"`
 	} `json:"ports_busy"`
-	HostArch    string `json:"host_arch"`
-	Simulated   bool   `json:"simulated"`
-	SiteChecked bool   `json:"site_checked"`
-	SiteFound   bool   `json:"site_found"`
-	SitePorts   []int  `json:"site_ports"`
-	SiteImage   string `json:"site_image"`
+	HostArch       string   `json:"host_arch"`
+	UnsetVars      []string `json:"unset_vars"`
+	NoHealthcheck  []string `json:"no_healthcheck"`
+	MemAvailableMB int      `json:"mem_available_mb"`
+	DiskFreeMB     int      `json:"disk_free_mb"`
+	Simulated      bool     `json:"simulated"`
+	SiteChecked    bool     `json:"site_checked"`
+	SiteFound      bool     `json:"site_found"`
+	SitePorts      []int    `json:"site_ports"`
+	SiteImage      string   `json:"site_image"`
 }
 
 // dryRun — задание сухого прогона.
@@ -120,9 +124,13 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	}
 	problems := 0
 	sitePort := 0
-	if missing := missingEnvKeys(c.AllEnvKeys(), env); len(missing) > 0 {
+	if others := s.pipelinesWithProject(ctx, pl.ID, c.Project); len(others) > 0 {
+		jc.Log("deploy.dryProjectShared", c.Project, strings.Join(others, ", "))
+	}
+	missingEnv := missingEnvKeys(c.AllEnvKeys(), env)
+	if len(missingEnv) > 0 {
 		problems++
-		jc.Log("deploy.dryEnvKeysMissing", strings.Join(missing, ", "))
+		jc.Log("deploy.dryEnvKeysMissing", strings.Join(missingEnv, ", "))
 	} else if keys := c.AllEnvKeys(); len(keys) > 0 {
 		jc.Log("deploy.dryEnvKeysOK", strings.Join(keys, ", "))
 	}
@@ -142,7 +150,13 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			jc.Log("deploy.dryHostError", t.Name, msgs.Localize(lang, err))
 			continue
 		}
-		problems += logComposeCheck(jc, t.Name, c.Project, res)
+		problems += logComposeCheck(jc, t.Name, c.Project, res, missingEnv)
+		if res.StackExists && pl.LastCommit == "" {
+			// Стек с таким именем на хосте есть, а этот конвейер его не
+			// выкладывал: файлы перезапишутся.
+			jc.Log("deploy.dryStackForeign", c.Project, t.Name)
+		}
+		problems += s.dryHostVersion(ctx, jc, t)
 		if c.Site.Managed() && res.SiteChecked {
 			n, port := logSitePort(jc, c, res)
 			problems += n
@@ -152,7 +166,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	jc.StepKey(3, 3, "deploy.stepDryResult")
 	switch {
 	case c.Site.Managed():
-		s.dryRunSite(ctx, jc, user, pl, c, targets[0], sitePort)
+		problems += s.dryRunSite(ctx, jc, user, pl, c, targets[0], sitePort)
 	case c.Site.CheckDomain() != "":
 		d := c.Site.CheckDomain()
 		chk := httpsCheck(ctx, d)
@@ -170,7 +184,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 }
 
 // logComposeCheck пишет итог хоста в журнал; возвращает число проблем.
-func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck) int {
+func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, envKeysMissing []string) int {
 	if res.Engine == "" {
 		jc.Log("deploy.dryNoEngine", host)
 		return 1
@@ -183,6 +197,11 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck) i
 		jc.Log("deploy.drySimulated", host, res.Engine)
 	} else {
 		jc.Log("deploy.dryEngine", host, res.Version, res.ComposeVersion)
+	}
+	problems := 0
+	if res.DaemonDown {
+		problems++
+		jc.Log("deploy.dryDaemonDown", res.Engine, res.DaemonError)
 	}
 	counts := map[string]int{}
 	var touched []string
@@ -203,12 +222,33 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck) i
 	if res.EnvEdited {
 		jc.Log("deploy.dryEnvEdited")
 	}
-	problems := 0
+	if unset := withoutNames(res.UnsetVars, envKeysMissing); len(unset) > 0 {
+		problems++
+		jc.Log("deploy.dryUnsetVars", strings.Join(unset, ", "))
+	}
 	if !res.ConfigOK {
 		jc.Log("deploy.dryConfigBad", res.ConfigError)
-		return 1
+		return problems + 1
 	}
 	jc.Log("deploy.dryConfigOK", strings.Join(res.Services, ", "))
+	// Ресурсы: мало — проблема (не скачать образы, не поднять базу),
+	// впритык — предупреждение.
+	if res.MemAvailableMB > 0 || res.DiskFreeMB > 0 {
+		jc.Log("deploy.dryResources", sizeText(res.MemAvailableMB), sizeText(res.DiskFreeMB))
+		switch {
+		case res.DiskFreeMB > 0 && res.DiskFreeMB < 2048:
+			problems++
+			jc.Log("deploy.dryDiskLow", res.DiskFreeMB)
+		case res.MemAvailableMB > 0 && res.MemAvailableMB < 256:
+			problems++
+			jc.Log("deploy.dryMemLow", res.MemAvailableMB)
+		case res.MemAvailableMB > 0 && res.MemAvailableMB < 1024:
+			jc.Log("deploy.dryMemTight", res.MemAvailableMB)
+		}
+	}
+	if len(res.NoHealthcheck) > 0 {
+		jc.Log("deploy.dryNoHealthcheck", strings.Join(res.NoHealthcheck, ", "))
+	}
 	for _, pb := range res.PortsBusy {
 		problems++
 		jc.Log("deploy.dryPortBusy", pb.Addr, pb.Holder)
@@ -218,6 +258,9 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck) i
 			problems++
 			jc.Log("deploy.dryImageArch", img.Image, strings.Join(img.Arches, ", "), res.HostArch)
 			continue
+		}
+		if tag := imageTag(img.Image); tag == "" || tag == "latest" {
+			jc.Log("deploy.dryImageUnpinned", img.Image)
 		}
 		switch img.State {
 		case "registry":
@@ -342,4 +385,76 @@ func logSitePort(jc *jobs.Context, c *deploy.ComposeSpec, res composeCheck) (int
 		jc.Log("deploy.drySitePortOK", sp.Port, sp.Service)
 	}
 	return 0, sp.Port
+}
+
+// imageTag — тег ссылки на образ (пусто — не указан, то есть latest;
+// закреплённый дайджестом — «@»).
+func imageTag(ref string) string {
+	if strings.Contains(ref, "@") {
+		return "@"
+	}
+	slash := strings.LastIndex(ref, "/")
+	if i := strings.LastIndex(ref, ":"); i > slash {
+		return ref[i+1:]
+	}
+	return ""
+}
+
+// pipelinesWithProject — другие конвейеры compose с тем же стеком.
+func (s *Server) pipelinesWithProject(ctx context.Context, self int64, project string) []string {
+	list, err := s.db.ListPipelines(ctx)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, p := range list {
+		if p.ID == self {
+			continue
+		}
+		if spec, err := deploy.ParseSpec(p.Content); err == nil && spec.Compose != nil && spec.Compose.Project == project {
+			out = append(out, p.Name)
+		}
+	}
+	return out
+}
+
+// dryHostVersion — nkt на хосте старее хаба: части проверок там нет
+// (проблема — прогон по такому хосту неполный).
+func (s *Server) dryHostVersion(ctx context.Context, jc *jobs.Context, t targetHost) int {
+	if t.ID == localHostID {
+		return 0
+	}
+	h, err := s.db.HostByID(ctx, t.ID)
+	hub := s.hub.version
+	if err != nil || h.NktVersion == "" || hub == "" || hub == "dev" || h.NktVersion == "dev" {
+		return 0
+	}
+	if deploy.CompareVersions(strings.TrimPrefix(h.NktVersion, "v"), strings.TrimPrefix(hub, "v")) < 0 {
+		jc.Log("deploy.dryHostOlder", t.Name, h.NktVersion, hub)
+		return 1
+	}
+	return 0
+}
+
+// sizeText — «512 МБ» / «3.4 ГБ» / «—» (не узнать).
+func sizeText(mb int) string {
+	switch {
+	case mb <= 0:
+		return "—"
+	case mb < 1024:
+		return strconv.Itoa(mb) + " MB"
+	default:
+		return strconv.FormatFloat(float64(mb)/1024, 'f', 1, 64) + " GB"
+	}
+}
+
+// withoutNames — list без имён из skip (уже названы другой проблемой).
+func withoutNames(list, skip []string) []string {
+	var out []string
+	for _, n := range list {
+		if !slices.Contains(skip, n) {
+			out = append(out, n)
+		}
+	}
+	return out
 }

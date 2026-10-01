@@ -289,6 +289,8 @@ type composeEngine struct {
 	ComposeVersion string `json:"compose_version"`
 	ComposeError   string `json:"compose_error"`
 	Installable    bool   `json:"installable"`
+	DaemonDown     bool   `json:"daemon_down"`
+	DaemonError    string `json:"daemon_error"`
 }
 
 // composeEngineProblems — хосты, где стек не поднять: нет docker/podman
@@ -309,6 +311,8 @@ func (s *Server) composeEngineProblems(ctx context.Context, jc *jobs.Context, us
 			bad = append(bad, msgs.T(lang, "deploy.hostNoEngine", t.Name))
 		case !e.Compose:
 			bad = append(bad, msgs.T(lang, "deploy.hostNoCompose", t.Name, e.Version, e.ComposeError))
+		case e.DaemonDown:
+			bad = append(bad, msgs.T(lang, "deploy.hostDaemonDown", t.Name, e.Engine, e.DaemonError))
 		}
 	}
 	return bad

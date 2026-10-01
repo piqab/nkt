@@ -122,3 +122,20 @@ func TestAllExamplePipelines(t *testing.T) {
 		}
 	}
 }
+
+func TestDryHelpers(t *testing.T) {
+	if got := foreignV6([]string{"203.0.113.5", "2001:db8::1"}, []string{"203.0.113.5"}); len(got) != 1 {
+		t.Fatal(got)
+	}
+	if got := foreignV6([]string{"2001:db8::1", "2001:db8::2"}, []string{"2001:db8::2"}); got != nil {
+		t.Fatal(got)
+	}
+	if got := foreignV6([]string{"203.0.113.5"}, nil); got != nil {
+		t.Fatal(got)
+	}
+	for ref, want := range map[string]string{"nginx": "", "nginx:latest": "latest", "ghcr.io/a/b:3.4.0": "3.4.0", "registry:5000/x": "", "x@sha256:abc": "@"} {
+		if got := imageTag(ref); got != want {
+			t.Fatalf("%s → %q", ref, got)
+		}
+	}
+}

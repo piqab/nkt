@@ -232,6 +232,19 @@ substitutions, collects the stack files and, on each host, checks:
 - the image architecture against the host's (`uname -m`): an amd64-only
   image on an arm64 host is a problem (`exec format error`).
 
+The dry run also checks. **Problems** (the deployment or the site would
+fail): a `${VAR}` in compose with no value in `.env`; the docker daemon not
+running; too little space for images or memory; who holds 80/443 on the
+host (not the site proxy: certbot and the proxy would not start); the name
+already in another nginx config and whether nginx reads `conf.d`; an AAAA
+record not pointing at the host; DNS not pointing at the host and port 80
+closed from outside; nkt on the host older than the hub. **Warnings:**
+images without a pinned version (`latest`), services without a healthcheck
+(`--wait` waits only for them to start), the stack already on the host but
+not deployed by this pipeline, or deployed by another pipeline too.
+**Info:** free memory and space, a valid certificate (days left) or a new
+issuance.
+
 If the stack does not come up in a real deployment, the host appends the
 container states (`compose ps -a`) and the last log lines of the failed
 services, and the error names the cause: "port 127.0.0.1:8080 is in use",

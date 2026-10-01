@@ -294,6 +294,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/fail2ban/install/status", s.handleF2BInstallStatus)
 			r.Get("/sites/preflight", s.handleSitePreflight)
 			r.Get("/sites/port-check", s.handleSitePortCheck)
+			r.Get("/sites/dry", s.handleSiteDry)
 			r.Get("/ui/docs", s.handleDocsGet)
 			r.Get("/compose/engine", s.handleComposeEngine)
 			r.Get("/system/docker-install/status", s.handleDockerInstallStatus)
