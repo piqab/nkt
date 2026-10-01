@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.73 — 2026-10-01
+
+- **n8n nodes**: the `n8n-nodes-nkt` package in `integrations/n8n`. The
+  **nkt** node covers hosts and their findings, vulnerabilities and
+  services, service and container actions, pipeline deploys and dry runs
+  with waiting for the result and the log, hub jobs, IP bans and unbans,
+  alerts, and any token API call. **nkt Trigger** receives the hub's
+  outgoing webhooks and checks the signature; **nkt Alert Trigger** polls
+  alerts when n8n cannot receive webhooks. Credentials are an API token
+  with signed requests (which also work through nkt-edge). Ready
+  workflows: alerts to Telegram, a nightly dry run, and banning addresses
+  from a list. Building and installing are on the "n8n" documentation
+  page.
+
 ## v1.11.72 — 2026-10-01
 
 - **Outgoing webhooks** in "Alerts" → "Outgoing webhooks": the hub sends

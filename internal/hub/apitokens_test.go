@@ -281,3 +281,13 @@ func EdgeSettingsHasDefault() bool {
 	st := EdgeSettings{}
 	return st.Has(EdgeRoleHooks) && !st.Has(EdgeRoleAPI)
 }
+
+// Эталоны подписей — те же проверяет узел n8n (integrations/n8n/test).
+func TestSignatureVectors(t *testing.T) {
+	if got := TokenSignature("s3cr3t-token-secret", "1700000000", "nonce-0123456789abcdef", "POST", "/api/hub/fail2ban/fleet?x=1", []byte(`{"action":"ban","ips":["198.51.100.7"]}`)); got != "4856857557412ec16c5748ccc1463f0114bbbf6631f1b7007a92dc3ff374db22" {
+		t.Fatalf("API: %s", got)
+	}
+	if got := OutSignature("0f0e0d0c0b0a", "1700000000", []byte(`{"kind":"test","text":"<b> & co"}`)); got != "70e42b0bc62cd56f2cec516eec7ed2ed473f36f6bec0f8b178bb2b4f5b0fe4d8" {
+		t.Fatalf("out: %s", got)
+	}
+}

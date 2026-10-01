@@ -1,0 +1,109 @@
+{
+  "name": "nkt: бан адресов из списка",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "name": "Каждый час",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://example.com/blocklist.txt",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "name": "Список",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const ips = String($json.data).split(/\\s+/).filter(l => /^\\d+\\.\\d+\\.\\d+\\.\\d+$/.test(l)).slice(0, 256)\nreturn [{ json: { ips: ips.join(',') } }]"
+      },
+      "name": "Адреса",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "fail2ban",
+        "operation": "ban",
+        "ips": "={{ $json.ips }}",
+        "hostIds": [],
+        "wait": true
+      },
+      "name": "Бан на хостах",
+      "type": "CUSTOM.nkt",
+      "typeVersion": 1,
+      "position": [
+        720,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Каждый час": {
+      "main": [
+        [
+          {
+            "node": "Список",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Список": {
+      "main": [
+        [
+          {
+            "node": "Адреса",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Адреса": {
+      "main": [
+        [
+          {
+            "node": "Бан на хостах",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
