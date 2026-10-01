@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.64 — 2026-10-01
+
+- **ufw on hosts:** a rule could not be added ("'/etc/ufw/user.rules' is
+  not writable"): the nkt service runs in a systemd sandbox where
+  `/etc/ufw` was not open. Now the ufw rule is added outside the sandbox
+  (like config writes), and new installs open `/etc/ufw` in the service.
+  This covers both "Firewall" and sites.
+- **Site setup no longer stops at the firewall:** if 80/443 cannot be
+  opened, the log warns and the certificate and proxy steps follow.
+- **The dry run shows the host firewall:** off, 80/443 open, will be
+  opened, or the rule cannot be written (then open it by hand).
+
 ## v1.11.63 — 2026-09-30
 
 - **"Examples": seven verified stacks:** httpbin, Uptime Kuma, umami +

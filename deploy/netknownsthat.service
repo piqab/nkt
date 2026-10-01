@@ -93,6 +93,11 @@ ReadWritePaths=-/etc/hosts
 # /etc/resolv.conf на системах с systemd-resolved — симлинк в /run, и
 # писать надо именно туда; на остальных это обычный файл в /etc.
 ReadWritePaths=-/etc/resolv.conf
+# ufw хранит правила в /etc/ufw (user.rules, user6.rules) и включение — в
+# /etc/default/ufw и /etc/ufw/ufw.conf: без этого «ERROR: '/etc/ufw/user.rules'
+# is not writable» при добавлении правила (в «Firewall» и для сайтов).
+ReadWritePaths=-/etc/ufw
+ReadWritePaths=-/etc/default/ufw
 ReadWritePaths=-/run/systemd/resolve
 # read-only, а не yes: при ProtectHome=yes /home (и /root) для юнита
 # пусты — проводник файлов показывал пустые папки, загруженное через

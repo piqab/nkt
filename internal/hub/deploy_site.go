@@ -215,6 +215,7 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 	} else {
 		jc.Log("deploy.drySiteProxy", proxy)
 	}
+	s.dryRunFirewall(ctx, jc, user, t, sp.OpenFirewall())
 	if port == 0 {
 		port = sp.Port
 	}
@@ -240,5 +241,34 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 	}
 	if chk.Ports["80"] == "timeout" {
 		jc.Log("hub.sitePort80Blocked")
+	}
+}
+
+// dryRunFirewall — что будет с файрволом хоста при настройке сайта.
+func (s *Server) dryRunFirewall(ctx context.Context, jc *jobs.Context, user string, t targetHost, open bool) {
+	var pre struct {
+		Firewall *struct {
+			Manager  string `json:"manager"`
+			Active   bool   `json:"active"`
+			Open80   bool   `json:"open80"`
+			Open443  bool   `json:"open443"`
+			Writable *bool  `json:"writable"`
+		} `json:"firewall"`
+	}
+	if _, err := s.hostCall(ctx, user, t.ID, "GET", "/api/sites/preflight", nil, &pre); err != nil || pre.Firewall == nil {
+		return
+	}
+	fw := pre.Firewall
+	switch {
+	case !fw.Active:
+		jc.Log("deploy.dryFirewallOff")
+	case fw.Open80 && fw.Open443:
+		jc.Log("deploy.dryFirewallOpen", fw.Manager)
+	case !open:
+		jc.Log("deploy.dryFirewallClosedSkip", fw.Manager)
+	case fw.Writable != nil && !*fw.Writable:
+		jc.Log("deploy.dryFirewallNotWritable", fw.Manager)
+	default:
+		jc.Log("deploy.dryFirewallWillOpen", fw.Manager)
 	}
 }

@@ -227,4 +227,10 @@ var ruSitesCatalog = map[string]string{
 	"compose.pullRateLimit":         "Docker Hub ограничил скачивания (429: 100 в час для анонимных) — подождите до часа или выполните на хосте docker login (у бесплатной учётной записи лимит выше)",
 	"compose.pullDenied":            "Нет доступа к образу (закрытый registry или нет такого репозитория) — вход в registry на хосте (docker login) или «Доступ» → Registry конвейера",
 	"compose.pullNotFound":          "Такого образа или тега в registry нет — проверьте имя и тег",
+	"site.firewallFailed":           "? %s: 80/443 открыть не удалось (%s) — продолжаю; если снаружи порт 80 закрыт, сертификат не выпустится, откройте вручную: ufw allow 80,443/tcp",
+	"deploy.dryFirewallOff":         "  файрвол хоста не включён — открывать нечего",
+	"deploy.dryFirewallOpen":        "  файрвол %s: 80/443 уже открыты",
+	"deploy.dryFirewallClosedSkip":  "? файрвол %s: 80/443 закрыты, а firewall: false — откройте вручную",
+	"deploy.dryFirewallNotWritable": "? файрвол %s: правило не записать (песочница службы, старая версия nkt) — откройте вручную: ufw allow 80,443/tcp",
+	"deploy.dryFirewallWillOpen":    "  файрвол %s: 80/443 будут открыты",
 }

@@ -353,7 +353,9 @@ compose:
   certificate is spent. If the image declares no ports there is nothing to
   check; if the site answers 502, the log suggests checking the port.
 - **A dry run** shows what would happen to the site: the proxy (or that it
-  will be installed), DNS and ports from outside, whether the stack has
+  will be installed), the host firewall (off, 80/443 already open, will be
+  opened, or the rule cannot be written, so open it by hand), DNS and ports
+  from outside, whether the stack has
   that service and whether the port is declared; a port mismatch counts as
   a problem.
 - A `site: name` string still means only an HTTPS check after the
@@ -511,6 +513,7 @@ Docker Compose. Step by step — [CI/CD examples](/en/guide/cicd-examples).
 | `unknown field "site_port"` / "an old nkt version does not know the fields" | nkt on the host is older than the hub: the hub repeats the request without the new fields (the site port is not checked, hand edits of `.env` are not tracked); update nkt on the host |
 | `pipeline description, line N "…": …` | A YAML error: the description line, its text and an explanation: broken indentation, a key with both a value and a block (`site: name` and lines below), an unknown key (with the allowed ones), a tab, a wrong value type |
 | site — "wrong certificate" | The proxy answers with another site's certificate: this site's configuration is not in effect (it was not set up, see the log, or another `server` overrides it) |
+| `ufw … '/etc/ufw/user.rules' is not writable` | The nkt service runs in a systemd sandbox without `/etc/ufw` open: since 1.11.64 the ufw rule is added outside the sandbox (and new installs open `/etc/ufw` in the service). The site setup no longer stops on it; the ports can be opened by hand: `ufw allow 80,443/tcp` |
 | `git is not installed on the hub` | The "Install git" button on the "Pipelines" tab, or `apt install git` on the hub machine |
 | `the repository has no branch or tag …` | A typo in `ref`, the tag isn't pushed yet (`git push origin v1.0.0`) |
 | `git …: Authentication failed` / `Permission denied (publickey)` | A private repository without "Access", the token can't read, the key isn't added as a deploy key |
