@@ -13,6 +13,7 @@ import { ipsInText, isExternalIP } from '../fail2ban'
 import { TitleHelp } from '../components/Docs'
 import { OutgoingWebhooksCard } from '../components/OutgoingWebhooksCard'
 import { TelegramCard } from '../components/TelegramCard'
+import { SlackCard } from '../components/SlackCard'
 
 const POLL_MS = 30_000
 
@@ -319,6 +320,7 @@ export default function HostEvents({ me }: { me?: Me }) {
       <EventSettingsCard onSaved={() => events.reload()} />
       <OutgoingWebhooksCard admin={!!me?.is_admin} />
       <TelegramCard admin={!!me?.is_admin} />
+      <SlackCard admin={!!me?.is_admin} />
 
       <Card
         title={t('events.listTitle')}

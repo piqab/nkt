@@ -932,6 +932,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	r.jobs.Register(hub.KindEdgeUninstall, hub.NewEdgeUninstallRunner(server))
 	server.StartEdge(ctx)
 	server.StartTelegram(ctx)
+	server.StartSlack()
 
 	// Хаб ведёт задания собственной машины — той самой строки
 	// «localhost» в списке хостов.

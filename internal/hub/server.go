@@ -47,6 +47,9 @@ type Server struct {
 	edge *edgeHub
 	// tg — бот Telegram (telegram.go); nil — не запущен.
 	tg *tgBot
+	// bot — ядро ботов (bot.go).
+	bot     *botCore
+	botOnce sync.Once
 	// apiHandler — API хаба для запросов токенов через edge (роль api).
 	apiOnce    sync.Once
 	apiHandler http.Handler
@@ -104,7 +107,7 @@ func (s *Server) Handler() http.Handler {
 	r.Use(s.requestLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(auth.SameOrigin(s.cfg.CORSOrigins, func(p string) bool {
-		return strings.Contains(p, "/k8s/pf/") || strings.HasPrefix(p, "/api/hub/hooks/")
+		return strings.Contains(p, "/k8s/pf/") || strings.HasPrefix(p, "/api/hub/hooks/") || strings.HasPrefix(p, "/api/hub/callbacks/")
 	}))
 	r.Use(securityHeaders)
 	r.Use(msgs.LangMiddleware)
@@ -162,6 +165,9 @@ func (s *Server) Handler() http.Handler {
 		// Проброс порта Kubernetes: доступ по токену, его проверяет хост.
 		// Вебхук выкладки: без сессии, доступ — подписью (deploy_triggers.go).
 		r.Post("/hub/hooks/{hook}", s.handleHook)
+		// Колбэки Slack (команды, кнопки): без сессии, доступ — подписью
+		// Slack (slack.go).
+		r.Post("/hub/callbacks/slack/{kind}", s.handleSlackCallback)
 		r.HandleFunc("/hosts/local/k8s/pf/{token}", s.proxyLocal)
 		r.HandleFunc("/hosts/local/k8s/pf/{token}/*", s.proxyLocal)
 		r.HandleFunc("/hosts/{id}/k8s/pf/{token}", s.proxyHost)
@@ -318,6 +324,9 @@ func (s *Server) Handler() http.Handler {
 					r.Delete("/hub/k8s/manifests/{id}", s.handleManifestDelete)
 					r.Post("/hub/k8s/manifests/diff", s.handleManifestDiff)
 					r.Get("/hub/k8s/findings", s.handleClustersFindings)
+					r.Get("/hub/slack", s.handleSlack)
+					r.Put("/hub/slack", s.handleSlackSave)
+					r.Post("/hub/slack/test", s.handleSlackTest)
 					r.Get("/hub/telegram", s.handleTelegram)
 					r.Put("/hub/telegram", s.handleTelegramSave)
 					r.Post("/hub/telegram/test", s.handleTelegramTest)

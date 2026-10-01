@@ -57,10 +57,13 @@ const (
 	// EdgeRoleProbe — проверки «снаружи» по просьбе хаба (DNS, порты,
 	// HTTPS): из интернета не принимает ничего, только по туннелю.
 	EdgeRoleProbe = "probe"
+	// EdgeRoleCallbacks — колбэки ботов (Slack: команды и кнопки), POST
+	// /callbacks/{платформа}/{вид}; подпись проверяет хаб.
+	EdgeRoleCallbacks = "callbacks"
 )
 
 // EdgeRoles — все роли, в порядке показа.
-var EdgeRoles = []string{EdgeRoleHooks, EdgeRoleAPI, EdgeRoleProbe}
+var EdgeRoles = []string{EdgeRoleHooks, EdgeRoleAPI, EdgeRoleProbe, EdgeRoleCallbacks}
 
 // EdgeSettings — один edge.
 type EdgeSettings struct {
@@ -380,6 +383,15 @@ func (s *Server) edgeHandler(st EdgeSettings) http.Handler {
 	}
 	if st.Has(EdgeRoleAPI) {
 		r.HandleFunc("/api/*", func(w http.ResponseWriter, r *http.Request) { s.serveEdgeAPI(w, r, st) })
+	}
+	if st.Has(EdgeRoleCallbacks) {
+		r.Post("/callbacks/{provider}/{kind}", func(w http.ResponseWriter, r *http.Request) {
+			if chi.URLParam(r, "provider") != "slack" {
+				http.NotFound(w, r)
+				return
+			}
+			s.serveSlack(w, r, chi.URLParam(r, "kind"))
+		})
 	}
 	return r
 }

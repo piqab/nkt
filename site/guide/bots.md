@@ -63,3 +63,41 @@ title: Боты
 - Действия идут от имени `telegram:<имя>` и пишутся в журнал действий.
 - Токен бота хранится зашифрованным ключом хаба и в журналах ошибок не
   показывается.
+
+## Slack
+
+Бот Slack умеет то же: оповещения с кнопками в каналах и команду `/nkt`
+(`/nkt status`, `/nkt hosts`, `/nkt alerts`, `/nkt pipelines`,
+`/nkt deploy <конвейер>`, `/nkt dryrun <конвейер>`, `/nkt ban|unban <IP>`,
+`/nkt id`). Права, подтверждения и журнал — как у Telegram.
+
+**Отличие — вход.** Команды и нажатия кнопок Slack присылает сам,
+запросами на адрес приложения. Хабу за NAT нужен
+[nkt-edge](/guide/edge#роли-и-несколько-edge) с ролью **«колбэки»**:
+он принимает только `POST /callbacks/slack/…` и передаёт хабу. Хаб,
+доступный из интернета, принимает их сам на `/api/hub/callbacks/slack/…`.
+Каждый запрос хаб проверяет подписью Slack (`X-Slack-Signature`, v0,
+секрет подписи приложения) и временем — не старше 5 минут; без верной
+подписи — 401. Оповещения хаб шлёт в Slack сам (`chat.postMessage`) —
+для них вход не нужен.
+
+### Настройка
+
+1. [api.slack.com/apps](https://api.slack.com/apps) → **Create New App**:
+   - **OAuth & Permissions** → Bot Token Scopes: `chat:write`,
+     `commands`;
+   - **Slash Commands** → `/nkt`, Request URL —
+     `https://<edge>/callbacks/slack/commands`;
+   - **Interactivity & Shortcuts** → On, Request URL —
+     `https://<edge>/callbacks/slack/interactive`;
+   - **Install to Workspace**; пригласите бота в каналы (`/invite @бот`).
+2. «Оповещения» → **«Slack»** → «Настроить»: **Bot User OAuth Token**
+   (`xoxb-…`, хаб проверит его у Slack) и **Signing Secret** (Basic
+   Information). Карточка показывает готовые Request URL — с edge с ролью
+   «колбэки», если он есть, иначе адрес самого хаба.
+3. Каналы — номер (`C0123ABCD`; `/nkt id` назовёт), роль, оповещения.
+   **Кому можно действовать** — Slack user id (`U0123ABCD`); пусто — любому
+   в канале с ролью «администратор».
+
+Чужим каналам бот отвечает только их номером. «Пробное сообщение» у
+канала — проверка, что бот туда пишет.

@@ -3353,12 +3353,14 @@
     "role": {
       "hooks": "вебхуки",
       "api": "API",
-      "probe": "проверки снаружи"
+      "probe": "проверки снаружи",
+      "callbacks": "колбэки"
     },
     "roleHint": {
       "hooks": "push из GitHub, Gitea, GitLab, CI → выкладка",
       "api": "подписанные запросы API-токенов (n8n, CI) — /api/hub/…, /api/hosts/…",
-      "probe": "хаб просит edge проверить DNS, порты и HTTPS из интернета; снаружи ничего не принимает"
+      "probe": "хаб просит edge проверить DNS, порты и HTTPS из интернета; снаружи ничего не принимает",
+      "callbacks": "кнопки и команды ботов (Slack): POST /callbacks/…, подпись проверяет хаб"
     },
     "reinstall": "Переустановить",
     "edit": "Изменить",
@@ -3794,5 +3796,23 @@
     "usersHint": "Пусто — любому участнику чата с ролью «администратор». Свой id бот назовёт на /id.",
     "badUsers": "Номера людей — целые числа через запятую",
     "kinds": "Оповещения"
+  },
+  "slack": {
+    "hint": "Оповещения с кнопками в каналах и команда /nkt. Команды и кнопки Slack присылает сам — нужен вход: nkt-edge с ролью «колбэки» или хаб, доступный из интернета.",
+    "none": "Не настроено: создайте приложение Slack, вставьте токен бота и секрет подписи.",
+    "on": "включено",
+    "noSigning": "нет секрета подписи",
+    "requestURLs": "Request URL для Slash Command и Interactivity (заканчиваются на commands и interactive):",
+    "noEdge": "Edge с ролью «колбэки» нет — адрес выше годится, только если хаб доступен из интернета.",
+    "setupHint": "api.slack.com/apps → Create New App: Bot Token Scopes — chat:write и commands; Slash Commands — /nkt с Request URL …/commands; Interactivity — Request URL …/interactive; установите приложение и пригласите бота в каналы (/invite @бот). Номер канала и свой — /nkt id.",
+    "token": "Bot User OAuth Token",
+    "signing": "Signing Secret",
+    "signingKeep": "не менять",
+    "channels": "Каналы",
+    "channel": "канал",
+    "channelName": "имя (для себя)",
+    "addChannel": "Добавить канал",
+    "users": "Кому можно действовать (Slack user id)",
+    "usersHint": "Пусто — любому в канале с ролью «администратор». Свой id — /nkt id."
   }
 }
