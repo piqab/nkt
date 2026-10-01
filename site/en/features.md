@@ -42,8 +42,10 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Network and firewall rules: port conflicts, declared-but-not-listening, listening-but-not-declared, no default deny, public port blocked by the firewall, Docker bypassing the firewall, stale rules, sensitive services on all interfaces.
 - TLS rules: weak protocols, missing HSTS, certificate not set, expired, expiring, not yet valid, unreadable, name mismatch, not renewed automatically, orphan certbot lineage, self-signed, weak key or signature, service did not reload the certificate, public plaintext proxy.
 - Pool and container rules: undefined or orphan upstream, backend down, all backends disabled, single backend, no health check, container restarting, not running, undeclared, no restart policy, haproxy stats panel without a password.
+- Kubernetes pod image vulnerabilities (containerd of the node or the registry), with the pods using each image.
+- Kubernetes rules (on a control plane): pod in CrashLoopBackOff/ImagePullBackOff, a pod restarted within the last hour, long Pending, NotReady node, Deployment/StatefulSet missing replicas, stuck PVC, expiring API server certificate, privileged/hostNetwork pods, NodePort/LoadBalancer bypassing the firewall, containers without limits, images without a version, cluster-admin bindings, namespaces without a NetworkPolicy.
 - Host drift from an applied profile — as a finding.
-- Search and filters by severity, service and text.
+- Search and filters by severity, service and text; findings that appeared since the last review are tagged “new”, with an “only new” filter.
 
 ### Vulnerabilities
 - Scan of installed OS packages for CVEs with trivy (the database downloads automatically or comes from the hub).
@@ -59,6 +61,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Graph "external network → service → listener → pool → backend → container or machine → network" built from configs and the real state.
 - libvirt machines and LXD instances are linked to their networks and to backends pointing at their address; forwarded LXD ports are an entry from the host into the instance.
 - A machine node shows its address, ping, current CPU and memory and the vulnerabilities of its packages; no ping reply turns it red, critical vulnerabilities yellow.
+- Kubernetes: Ingress → Service → pods → cluster node → the host machine it runs on.
 - Node status from live listeners, containers and findings.
 - Stable column layout, zoom and drag with the mouse, node details on hover.
 
@@ -95,10 +98,12 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Actions: start, stop, restart, reload, enable/disable autostart, unit log.
 - Service configuration check (`nginx -t`, `haproxy -c`, …) before an action.
 - "Other services": processes started by hand or from a container, with their sockets and exposure; terminate with SIGTERM/SIGKILL.
-- Install a missing service as a package with a live apt log.
+- The table shows every installed service, running and stopped (with "start"); services that aren't installed are installed via Packages.
 - Open port probe: TCP, HTTP/HTTPS, TLS handshake, arbitrary `curl` — with body, headers, rendering of the received page and response download.
 
 ### Containers & VMs
+
+- Deleting in bulk by checkboxes (containers, instances, snapshots, machines, images, disk files, LXD networks, Kubernetes objects); long deletions run as a job with the row locked until done and related tables rebuilt afterwards.
 - **Docker**: containers (state, image, ports, networks), start/stop/restart/remove, logs, a console inside, container creation, compose stack scanning; container backup and restore (a compose stack as a whole).
 - **Docker → images**: list with size, date and usage, removal, saving to a tar on the host, pruning dangling layers.
 - **Docker → stacks**: the host's compose files, `up`/`down`/`restart`, compose editing through the config editor, a new stack from a template.
@@ -114,6 +119,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Machine creation from a cloud image: name, cores, memory, disk, network, user, SSH key and an optional password (cloud-init gets only a bcrypt hash); missing tools are installed automatically; machine templates for repeat creation.
 - Cloud image catalog (Ubuntu, Debian, …) and own images: download with checksum verification, upload of an own file, move into the disk directory.
 - libvirt networks: list, NAT network creation with DHCP and autostart, subnet overlap check against host networks and interfaces, bridge onto a host interface.
+- **Kubernetes**: a tab on a cluster node — flavor, role, version, nodes (roles, Ready, IP), kubeconfig, node removal; cluster objects by section (workloads with HPA, pods, network with NetworkPolicy, configuration, storage, access — RBAC with the roles bound to each ServiceAccount, nodes, namespaces, events, Custom Resources) with a shared namespace filter, secret values for an administrator with audit; actions — describe, pod logs and `kubectl exec` console, scale, rollout restart, rollout history and rollback, CronJob run now/suspend, a pod or service opened in the browser via port-forward, cordon/uncordon, drain as a job, namespace create/delete, deletion — all audited; object YAML with a text diff and `kubectl diff` before `kubectl apply`, version history with rollback, "new object" from templates; block mode in the YAML editors (objects, containers, ports, rules, keys); Helm — releases, history and rollback, values editing with a diff and upgrade, uninstall, chart install from a repository or oci://, helm installation — all as jobs; node upgrade (k3s binary, kubeadm upgrade) as a job; k3s/kubeadm role installation as a host job.
 - Domain XML editing in a window (text and blocks) with a diff, version history, `virt-xml-validate` and `virsh define` on apply.
 - **Profiles**: the host's desired state in YAML — packages, services, files, firewall rules, accounts, system settings, compose stacks.
 - Apply plan with risky items marked, application as a job with a log, scheduled drift check.
@@ -145,6 +151,8 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - zip/tar archive extraction in place with protection against escaping paths.
 - `git clone` as a job with a log, private repositories included: a token over HTTPS or the host's deploy key over SSH.
 - File editor with line numbers, renaming, mode preservation and protection against overwriting someone else's edit.
+- Uploads with a plan (new / changed with a diff / identical / protected, a checkbox per file), a folder's protected files, upload history with rollback as a job, version history of any file; history storage with limits, manual cleanup and an alert at 80%.
+- File edits as in Configs: an edit comment, a diff before writing, version history with a diff against the current file and rollback; a file that is a service config is written with the service's check, sharing the history with Configs.
 
 ### Hardware
 - Machine, CPU, memory, batteries, temperatures (lm-sensors), PCI and USB devices.
@@ -172,13 +180,23 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Installation of ufw or firewalld as a package with a live log when the host has neither.
 - iptables view as is (no editing).
 
+### fail2ban
+- A section right below Firewall: state and version, running jails (log files or journald, rules, failures and bans now/total, a missing log highlighted), banned addresses with ban times, unbanning per row, with checkboxes or all at once, a manual ban into the `nkt-manual` jail with a chosen time.
+- Editing a jail in a window with a form (enabled, maxretry, findtime, bantime, bantime.increment, backend, logpath, ignoreip) and the text: the nkt file `jail.d/nkt-<jail>.local`, a diff before writing, a `fail2ban-client -t` check with rollback, reload, version history; enabling and disabling a jail the same way.
+- Exceptions (ignoreip): the common `[DEFAULT]` list edited with a diff of every file and version history, the hub address pinned, the effective list of every jail (common or own); edits of fail2ban files in Configs rebuild the hub protection file.
+- Event log for 1/3/7 days from `fail2ban.log` and its rotations (including `.gz`) or journald: search, filters by jail and event.
+- Templates: sshd, nginx-http-auth, nginx-botsearch, nginx-limit-req, haproxy-http-auth, postfix, dovecot, recidive, offered when the program is on the host; custom templates with a jail, a filter, a `fail2ban-regex` test against a host log and version history, stored on the hub; applying through a diff of every file.
+- Installation as a package in the standard job window and setup: the hub's address in `[DEFAULT] ignoreip`, the manual bans jail, sshd via journald where there is no log file.
+- Lock-out protection: the hub passes the host its external address as the host sees it (`SSH_CONNECTION`), the host keeps it in `ignoreip`; banning the hub's address or your own is refused.
+- Findings: SSH exposed without fail2ban, fail2ban not running, no sshd jail, a jail without logs, the hub not in `ignoreip`.
+
 ### Certificates
 - Every certificate from nginx, haproxy, caddy configs and `/etc/letsencrypt`: expiry, names, issuer, algorithm, key, self-signed or not.
 - haproxy `crt` directories expand by SNI, derived copies are found by fingerprint.
 - Check against the real TLS socket: the service serves the same certificate that lies on disk.
 - Auto-renewal state: whether certbot knows it, whether the timer or cron is active.
 - certbot lineage renewal via `--standalone`, stopping and restoring the services and processes holding 80/443 (including manually started ones), with their relaunch.
-- Issuing a new Let's Encrypt certificate; certbot check and installation if missing.
+- Issuing a new Let's Encrypt certificate; certbot check and installation if missing; before running certbot the name is checked: does it resolve and point at this host (a foreign address is refused unless “host behind NAT or a proxy” is ticked; one that does not answer ping is always refused).
 - Assembling a haproxy PEM from a certbot lineage with a haproxy reload.
 - Self-signed certificate: RSA 2048/3072/4096, several names, wildcard, Unicode domains.
 - nginx, haproxy and caddy config snippets for the issued certificate with copy to clipboard.
@@ -204,19 +222,22 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Fallback channel (a reverse TLS tunnel with certificate pinning) for when SSH is unavailable.
 - Revoking passwordless sudo, address diagnostics, complete nkt removal from a host (restoring password login).
 - Machines inside a host: creating a virtual machine on a host from the hub, automatic nkt installation into it, profile application; discovery of existing machines and adding them to the list; start/shutdown through the parent host; removal together with disks.
-- Scripts (experimental): a line-based deployment language (group, hosts, nkt install, packages, services, firewall, Docker and compose stacks, machines, profiles, files, user accounts, system settings, certificates, git clone; several hosts in one command) with run-time parameters, waiting for a port/HTTP/service, a check, a dry run, a reference and execution as a hub job.
+- Kubernetes clusters on a host's virtual machines: “new cluster” — k3s or kubeadm, topology (one machine; 1 control plane + N workers; 3 control planes + N workers for k3s), sizes, image, network, Cilium (default, with kube-proxy replacement by a checkbox) or flannel, forwarding of host ports (API/HTTP/HTTPS configurable); the job creates machines with nkt, installs roles, joins nodes, waits for Ready, fetches the kubeconfig; the clusters card — nodes, kubeconfig, “+ worker”, deletion with disks; the “Clusters” section: placement across several hosts (machines or the host itself as a node, roles, sizes) with a network between hosts (NAT / bridge / a WireGuard tunnel with a separate machine network per host); a “dry run” — a checklist of host checks and the machine plan without changes, with preparation (image and packages into caches); manifests — one YAML into several clusters with a text diff and `kubectl diff` per cluster before `kubectl apply`, a per-cluster outcome and a revision history on the hub; cluster upgrade node by node with drain, Ready wait and uncordon; Kubernetes findings across all clusters; a Helm release into several clusters as a hub job; picking clusters by host group.
+- Deployments from Git: pipelines (manifest into clusters, Helm with values from Git, hub script, a compose stack deployed host by host with waiting, a dry run and a docker check on the hosts (installed with a button), including from a link to a compose file on GitHub, GitLab or Codeberg) triggered by a button, a signed webhook (GitHub, Gitea, GitLab, CI), repository polling or registry tags; encrypted repository/registry access, revision history, per-deployment jobs and rollback; "Sites": a domain on a host with DNS and port checks from outside, an nginx/HAProxy/Caddy proxy, a Let's Encrypt certificate and a link to a compose stack service, in the wizard or with a site: block right in the pipeline.
+- Compose stack deployment: pipeline examples (httpbin, Uptime Kuma, umami, n8n, Gitea, WordPress, Plausible) from a drop-down; stack ports are published on 127.0.0.1 only (`bind`, `ports` overrides); secrets live in the pipeline's `.env` with version history and an `env_keys` check; YAML errors in the description come with the line number and an explanation; deleting a pipeline removes the stack from the hosts as a job; for a site, certbot and the firewall rule are set up automatically.
+- A compose stack dry run with selectable checks (the boxes are remembered on the pipeline): docker and its daemon, `compose config`, variables without a value, images in the registry and their architecture, busy ports, memory and disk, healthcheck, a foreign stack on the host, the site's DNS and ports from outside, who holds 80/443, the certificate and nginx, the nkt version on the host; problems and warnings are colour-coded in the log.
+- nkt-edge: a separate small webhook receiver for a VPS (Let's Encrypt via certbot standalone, issued during installation with a name ↔ IP check; filters, rate limit) connected to the hub by a tunnel the hub keeps (pinned TLS, token) — webhooks without exposing the hub; installed from the hub as a job with a busy-port check, can run behind an existing nginx/Caddy on the VPS and be removed from the VPS completely.
+- Scripts (experimental): a line-based deployment language (group, hosts, nkt install, packages, services, firewall, Docker and compose stacks, machines, profiles, files, user accounts, system settings, certificates, git clone, k8s clusters; several hosts in one command) with run-time parameters, waiting for a port/HTTP/service, a check, a dry run, a reference and execution as a hub job.
 - A "Profiles" section on the hub, each profile has a color; a profile is set on a group at creation: machines created in the group are built from it and their rows are tinted with its color; moving a host into a group applies nothing.
-- Alerts: unreachable, responding again, rebooted (uptime dropped), serious problems appeared, resolved, job failed; an alert journal with settings for what to record and what to notify about, collapsing short episodes; browser notifications.
-- Hub jobs with a log, “try again” for failed ones (resuming from the saved state); job logs and alerts in the reader's language.
-- Kubernetes clusters (k3s/kubeadm, version choice) on one host or across several: a placement table, the network between hosts — NAT, bridge or a WireGuard tunnel, Cilium, a dry run with a checklist and preparation, your own qcow2 images in the hub library, saved form presets, a kubectl terminal on the control plane.
-- Hub cache for hosts without internet: apt packages, files by URL (installers, binaries, machine images) and a registry mirror for container images — everything stays on the hub and leaves for the internet once.
-- The binary is delivered to a host the fastest way: on every delivery a probe of GitHub from the host against SFTP from the hub.
-- Machines: discovery of existing ones with all their addresses and per-machine SSH credentials, “check access”, connection direct or via the host (auto).
-- Privacy mode: sensitive data (addresses, names, users, keys, domains) is blurred on every page and in modal windows — for screen sharing.
-- Whole-hub export and import: hosts with secrets, groups, machines with parents, clusters with nodes and kubeconfig, profiles and scripts with history, machine templates, cluster form presets, settings; the file is password-encrypted.
+- Model analysis (AI) on the hub: Anthropic or an OpenAI-compatible provider, including local ones (Ollama, vLLM, LM Studio); the model is picked from the provider's list by “Get models” (searchable, release date or size, non-chat models hidden) or typed by hand; a live “Test”, a daily limit, anonymization, editable instructions; “show request” shows the whole request (instruction, message, what was replaced).
+- Alerts: unreachable, responding again, serious problems appeared, resolved, job failed, new fail2ban bans; an AI check with its own instruction for every external IP in an alert, with “Ban on all hosts” in the answer window; an alert journal with settings for what to record, what to notify about and what to hide, filters by kind and host and a text search over the whole journal, collapsing short episodes; browser notifications.
+- fail2ban across hosts: where it is installed and how many are banned, banned addresses and where (on how many hosts, in which jails), banning and unbanning on all hosts as a hub job with a per-host log, custom jail templates, a “Banned” column in the host list.
+- Hub jobs with a log.
+- Whole-hub export and import: hosts with secrets, groups, machines with parents, clusters, profiles and scripts with history, machine templates, deployment pipelines with history, secrets and webhook address, fail2ban templates with history, nkt-edge, settings and every AI instruction, web interface accounts by choice; the file is password-encrypted, secrets are re-encrypted with the receiving hub's key; import through a plan with a per-item “skip / replace” choice and a per-section report.
 - A centralized trivy vulnerability database for all hosts, refreshed on a schedule and by button.
+- A package cache: hosts download .deb files through the hub over a reverse SSH forward (every package comes from the internet once), apt with Proxy-Auto-Detect goes direct when the hub is away; a checkbox in the host form, a card in “About” with a limit and clearing.
 - A copy of the ClamAV signature database on the hub (created by a button in “About”, then refreshed on a schedule, only what changed is downloaded) and its upload to a host as a job — “database from hub” in the “Malware” tab.
-- "About": hub version, GitHub release check, update to the latest, rollback to the previous, the new version's notes before installing — in the UI language.
+- "About": hub version, GitHub release check, update to the latest, rollback to the previous, the new version's notes before installing.
 - Configuration via `hub.env`, running as a systemd unit, in Docker Compose or Kubernetes.
 
 ## Terminal UI (`nkt tui`)
@@ -227,6 +248,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 
 ## Command line
 
+- In-app help: the "?" icon next to a section title opens the documentation section for the current page in a window (detachable into a separate window); the site address — the project site or your own — is set in "About".
 - `nkt serve` — start the web UI; `nkt scan` — a one-off scan to JSON; `nkt version`.
 - `nkt users` and `nkt passwd` — accounts and passwords without the web UI.
 - `nkt hub` — start the hub; `nkt hub import` — restore the registry; `nkt hub delete` — complete removal of the hub's data with an export offer.

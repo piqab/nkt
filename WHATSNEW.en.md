@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.69 — 2026-10-01
+
+- **Documentation:** the site's "Features" page caught up with FEATURES:
+  deployments from Git, sites, nkt-edge, clusters and hub export; compose
+  stack deployment (examples, ports on 127.0.0.1, `.env` with history,
+  removal as a job) and the dry run with selectable checks are added.
+
 ## v1.11.68 — 2026-10-01
 
 - **Deployment and dry run logs:** problems (`✗`) are bold red, warnings
