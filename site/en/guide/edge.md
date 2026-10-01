@@ -44,6 +44,7 @@ An edge has **roles**: what it accepts from the internet.
 | **webhooks** | `POST /hooks/{id}`: a push from GitHub, Gitea, GitLab or CI → a deployment | `hooks` |
 | **API** | signed [API token](/en/guide/hub-api) requests to `/api/auth/me`, `/api/hub/…`, `/api/hosts/…`: n8n, CI and scripts from outside | `api` |
 | **outside checks** | the hub asks the edge through the tunnel to check DNS, ports and HTTPS from the internet; this role accepts nothing from the internet | `probe` |
+| **callbacks** | [bot](/en/guide/bots#slack) buttons and commands (Slack): `POST /callbacks/slack/…`; the hub checks the Slack signature | `callbacks` |
 
 Roles are ticked at install time; to change them, use **"Reinstall"** on
 the edge (the same edge on the same host; the tunnel token and
@@ -254,7 +255,7 @@ From source: `make edge` puts the binaries into `dist/`.
 | `EDGE_GITHUB_ONLY` | `false` | Accept webhooks from GitHub addresses only |
 | `EDGE_SELF_SIGNED` | `false` | No certbot, the tunnel certificate instead — for testing and internal networks |
 | `EDGE_PROXY_ADDR` | empty | Behind a reverse proxy: webhooks over HTTP on this loopback address (`127.0.0.1:8445`), 443 is not taken |
-| `EDGE_ROLES` | `hooks` | Comma-separated roles: `hooks` for webhooks, `api` for signed API token requests, `probe` for outside checks on the hub's request |
+| `EDGE_ROLES` | `hooks` | Comma-separated roles: `hooks` for webhooks, `api` for signed API token requests, `probe` for outside checks on the hub's request, `callbacks` for bot callbacks |
 | `EDGE_API_RATE` | `120` | API requests per minute per address |
 
 ## Updating

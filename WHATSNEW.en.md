@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.76 — 2026-10-01
+
+- **A Slack bot** in "Alerts" → "Slack": alerts with buttons in channels
+  and the /nkt command: status, hosts, alerts, pipelines, deploy and
+  ban/unban with a confirmation button, and dryrun. Slack sends commands
+  and button presses by itself, so a way in is needed: the new nkt-edge
+  "callbacks" role (which accepts only `POST /callbacks/slack/…`) or a hub
+  reachable from the internet. The hub checks every request with the
+  Slack signature. Channels have roles, actions can be limited to a list
+  of people, and everything goes to the audit log.
+
 ## v1.11.75 — 2026-10-01
 
 - **A Telegram bot** in "Alerts" → "Telegram bot". Hub alerts come with

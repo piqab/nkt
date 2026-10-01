@@ -3349,12 +3349,14 @@
     "role": {
       "hooks": "webhooks",
       "api": "API",
-      "probe": "outside checks"
+      "probe": "outside checks",
+      "callbacks": "callbacks"
     },
     "roleHint": {
       "hooks": "a push from GitHub, Gitea, GitLab or CI → a deployment",
       "api": "signed API token requests (n8n, CI): /api/hub/…, /api/hosts/…",
-      "probe": "the hub asks the edge to check DNS, ports and HTTPS from the internet; accepts nothing from outside"
+      "probe": "the hub asks the edge to check DNS, ports and HTTPS from the internet; accepts nothing from outside",
+      "callbacks": "bot buttons and commands (Slack): POST /callbacks/…, the hub checks the signature"
     },
     "reinstall": "Reinstall",
     "edit": "Edit",
@@ -3778,5 +3780,23 @@
     "usersHint": "Empty means any member of a chat with the admin role. The bot tells you your id on /id.",
     "badUsers": "People numbers are integers separated by commas",
     "kinds": "Alerts"
+  },
+  "slack": {
+    "hint": "Alerts with buttons in channels and the /nkt command. Slack sends commands and button presses by itself, so a way in is needed: an nkt-edge with the callbacks role or a hub reachable from the internet.",
+    "none": "Not configured: create a Slack app and paste the bot token and the signing secret.",
+    "on": "enabled",
+    "noSigning": "no signing secret",
+    "requestURLs": "Request URLs for the Slash Command and Interactivity (ending in commands and interactive):",
+    "noEdge": "There is no edge with the callbacks role; the address above works only if the hub is reachable from the internet.",
+    "setupHint": "api.slack.com/apps → Create New App: Bot Token Scopes chat:write and commands; Slash Commands: /nkt with Request URL …/commands; Interactivity: Request URL …/interactive; install the app and invite the bot to channels (/invite @bot). The channel and your id: /nkt id.",
+    "token": "Bot User OAuth Token",
+    "signing": "Signing Secret",
+    "signingKeep": "keep",
+    "channels": "Channels",
+    "channel": "channel",
+    "channelName": "name (for yourself)",
+    "addChannel": "Add channel",
+    "users": "Who may act (Slack user id)",
+    "usersHint": "Empty means anyone in a channel with the admin role. Your id: /nkt id."
   }
 }

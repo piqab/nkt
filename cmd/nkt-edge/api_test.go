@@ -38,3 +38,25 @@ func TestHandleAPIFilters(t *testing.T) {
 		}
 	}
 }
+
+// Роль callbacks: только POST /callbacks/<платформа>/<вид>.
+func TestHandleCallbackFilters(t *testing.T) {
+	s := &server{roles: map[string]bool{"callbacks": true}, limiter: newLimiter(60), apiLimiter: newLimiter(120)}
+	for path, want := range map[string]int{
+		"/callbacks/slack/commands":    http.StatusServiceUnavailable, // фильтры пройдены, хаба нет
+		"/callbacks/slack/../../api/x": http.StatusNotFound,
+		"/callbacks/slack":             http.StatusNotFound,
+		"/callbacks/Slack/commands":    http.StatusNotFound,
+	} {
+		rec := httptest.NewRecorder()
+		s.handleCallback(rec, httptest.NewRequest("POST", path, nil))
+		if rec.Code != want {
+			t.Errorf("%s: want %d, got %d", path, want, rec.Code)
+		}
+	}
+	rec := httptest.NewRecorder()
+	s.handleCallback(rec, httptest.NewRequest("GET", "/callbacks/slack/commands", nil))
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET: %d", rec.Code)
+	}
+}

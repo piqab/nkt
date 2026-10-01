@@ -9,15 +9,12 @@ import (
 	"net/http"
 	"regexp"
 	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/piqab/nkt/internal/auth"
-	"github.com/piqab/nkt/internal/fail2ban"
-	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
@@ -97,15 +94,7 @@ type tgBot struct {
 	lastErr string
 	lastAt  time.Time
 	reload  chan struct{}
-	// pending — подтверждения действий: ключ кнопки → что сделать.
-	pending map[string]tgPending
-}
-
-type tgPending struct {
-	action string
-	arg    string
-	user   int64
-	at     time.Time
+	core    *botCore
 }
 
 type tgUpdate struct {
@@ -199,19 +188,11 @@ func (b *tgBot) send(ctx context.Context, token string, chat int64, text string,
 	return b.call(ctx, token, "sendMessage", in, nil)
 }
 
-func trimRunes(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
-	}
-	return string(r[:n-1]) + "…"
-}
-
 // --- запуск и опрос ---------------------------------------------------------------
 
 // StartTelegram — опрос Telegram, пока бот включён; оповещения — тоже ему.
 func (s *Server) StartTelegram(ctx context.Context) {
-	b := &tgBot{s: s, client: &http.Client{Timeout: 70 * time.Second}, reload: make(chan struct{}, 1), pending: map[string]tgPending{}}
+	b := &tgBot{s: s, client: &http.Client{Timeout: 70 * time.Second}, reload: make(chan struct{}, 1), core: s.botCore()}
 	s.tg = b
 	s.hub.AddOutSink(func(ev OutEvent) { b.notify(context.Background(), ev) })
 	go b.loop(ctx)
@@ -312,7 +293,26 @@ func (b *tgBot) poll(ctx context.Context, token string) error {
 
 // --- команды и кнопки ---------------------------------------------------------------
 
-var tgIPRe = regexp.MustCompile(`^[0-9A-Fa-f:.]{2,45}(/\d{1,3})?$`)
+// turn — кто пишет в этом чате и что ему можно.
+func (b *tgBot) turn(ctx context.Context, token string, st TelegramSettings, chat TelegramChat, from tgUser) botTurn {
+	return botTurn{
+		Platform: "telegram", User: strconv.FormatInt(from.ID, 10), UserName: from.name(), Lang: st.lang(),
+		CanAct: chat.Role == store.TokenRoleAdmin && (len(st.Users) == 0 || slices.Contains(st.Users, from.ID)),
+		Later:  func(r botReply) { _ = b.sendReply(context.WithoutCancel(ctx), token, chat.ID, r) },
+	}
+}
+
+func (b *tgBot) sendReply(ctx context.Context, token string, chat int64, r botReply) error {
+	var rows [][]tgButton
+	if len(r.Buttons) > 0 {
+		row := make([]tgButton, len(r.Buttons))
+		for i, btn := range r.Buttons {
+			row[i] = tgButton{Text: btn.Text, Data: btn.Data}
+		}
+		rows = append(rows, row)
+	}
+	return b.send(ctx, token, chat, r.Text, rows...)
+}
 
 func (b *tgBot) handle(ctx context.Context, token string, u tgUpdate) {
 	st := b.s.tgSettings(ctx)
@@ -327,7 +327,9 @@ func (b *tgBot) handle(ctx context.Context, token string, u tgUpdate) {
 		if !ok {
 			return
 		}
-		b.button(ctx, token, st, chat, cb.From, cb.Data, lang)
+		for _, r := range b.core.press(ctx, b.turn(ctx, token, st, chat, cb.From), cb.Data) {
+			_ = b.sendReply(ctx, token, chat.ID, r)
+		}
 		return
 	}
 	m := u.Message
@@ -335,12 +337,11 @@ func (b *tgBot) handle(ctx context.Context, token string, u tgUpdate) {
 		return
 	}
 	fields := strings.Fields(m.Text)
-	cmd := strings.ToLower(strings.SplitN(fields[0], "@", 2)[0])
-	args := fields[1:]
+	cmd := strings.TrimPrefix(strings.ToLower(strings.SplitN(fields[0], "@", 2)[0]), "/")
 	chat, ok := st.chat(m.Chat.ID)
 	if !ok {
 		// Чужому чату — только его номер (чтобы добавить его на хабе).
-		if cmd == "/start" || cmd == "/id" {
+		if cmd == "start" || cmd == "id" {
 			_ = b.send(ctx, token, m.Chat.ID, msgs.T(lang, "tg.unknownChat", m.Chat.ID))
 		}
 		return
@@ -349,432 +350,31 @@ func (b *tgBot) handle(ctx context.Context, token string, u tgUpdate) {
 	if m.From != nil {
 		from = *m.From
 	}
-	reply := func(text string, rows ...[]tgButton) { _ = b.send(ctx, token, chat.ID, text, rows...) }
-	switch cmd {
-	case "/start", "/help":
-		key := "tg.helpRead"
-		if chat.Role == store.TokenRoleAdmin {
-			key = "tg.helpAdmin"
-		}
-		reply(msgs.T(lang, key))
-	case "/id":
-		reply(msgs.T(lang, "tg.chatID", chat.ID, from.ID))
-	case "/status":
-		reply(b.status(ctx, lang))
-	case "/hosts":
-		reply(b.hosts(ctx, lang))
-	case "/alerts":
-		reply(b.alerts(ctx, lang))
-	case "/pipelines":
-		reply(b.pipelines(ctx, lang))
-	case "/deploy", "/dryrun":
-		if !b.mayAct(st, chat, from) {
-			reply(msgs.T(lang, "tg.denied"))
-			return
-		}
-		pl, ok := b.findPipeline(ctx, strings.Join(args, " "))
-		if !ok {
-			reply(msgs.T(lang, "tg.noPipeline", strings.Join(args, " ")))
-			return
-		}
-		if cmd == "/dryrun" {
-			b.dryRun(ctx, token, chat.ID, from, pl, lang)
-			return
-		}
-		key := b.ask("deploy", strconv.FormatInt(pl.ID, 10), from.ID)
-		reply(msgs.T(lang, "tg.confirmDeploy", pl.Name), []tgButton{{msgs.T(lang, "tg.btnDeploy"), "ok:" + key}, {msgs.T(lang, "tg.btnCancel"), "no:" + key}})
-	case "/ban", "/unban":
-		if !b.mayAct(st, chat, from) {
-			reply(msgs.T(lang, "tg.denied"))
-			return
-		}
-		if len(args) != 1 || !tgIPRe.MatchString(args[0]) {
-			reply(msgs.T(lang, "tg.banUsage"))
-			return
-		}
-		ip, err := fail2ban.ParseIP(args[0])
-		if err != nil {
-			reply(msgs.Localize(lang, err))
-			return
-		}
-		action, ask, btn := "ban", "tg.confirmBan", "tg.btnBan"
-		if cmd == "/unban" {
-			action, ask, btn = "unban", "tg.confirmUnban", "tg.btnUnban"
-		}
-		key := b.ask(action, ip.String(), from.ID)
-		reply(msgs.T(lang, ask, ip.String()), []tgButton{{msgs.T(lang, btn), "ok:" + key}, {msgs.T(lang, "tg.btnCancel"), "no:" + key}})
-	default:
-		reply(msgs.T(lang, "tg.unknownCommand"))
-	}
-}
-
-// mayAct — действие разрешено: чат с ролью admin и (если список задан)
-// человек из списка.
-func (b *tgBot) mayAct(st TelegramSettings, chat TelegramChat, from tgUser) bool {
-	return chat.Role == store.TokenRoleAdmin && (len(st.Users) == 0 || slices.Contains(st.Users, from.ID))
-}
-
-// ask — подтверждение действия: ключ кнопки (живёт 10 минут, только для
-// того же человека).
-func (b *tgBot) ask(action, arg string, user int64) string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	for k, p := range b.pending {
-		if time.Since(p.at) > 10*time.Minute {
-			delete(b.pending, k)
-		}
-	}
-	key := randomHex(6)
-	b.pending[key] = tgPending{action: action, arg: arg, user: user, at: time.Now()}
-	return key
-}
-
-func (b *tgBot) take(key string, user int64) (tgPending, bool) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	p, ok := b.pending[key]
-	if !ok || p.user != user || time.Since(p.at) > 10*time.Minute {
-		return tgPending{}, false
-	}
-	delete(b.pending, key)
-	return p, true
-}
-
-func (b *tgBot) button(ctx context.Context, token string, st TelegramSettings, chat TelegramChat, from tgUser, data string, lang msgs.Lang) {
-	reply := func(text string, rows ...[]tgButton) { _ = b.send(ctx, token, chat.ID, text, rows...) }
-	kind, arg, _ := strings.Cut(data, ":")
-	switch kind {
-	case "ov", "fd":
-		id, err := strconv.ParseInt(arg, 10, 64)
-		if err != nil {
-			return
-		}
-		reply(b.hostDetail(ctx, id, kind == "fd", lang))
-	case "jl":
-		id, err := strconv.ParseInt(arg, 10, 64)
-		if err != nil {
-			return
-		}
-		reply(b.jobTail(ctx, id, 15, lang))
-	case "rd":
-		if !b.mayAct(st, chat, from) {
-			reply(msgs.T(lang, "tg.denied"))
-			return
-		}
-		id, err := strconv.ParseInt(arg, 10, 64)
-		if err != nil {
-			return
-		}
-		pl, err := b.s.db.PipelineByID(ctx, id)
-		if err != nil {
-			return
-		}
-		key := b.ask("deploy", arg, from.ID)
-		reply(msgs.T(lang, "tg.confirmDeploy", pl.Name), []tgButton{{msgs.T(lang, "tg.btnDeploy"), "ok:" + key}, {msgs.T(lang, "tg.btnCancel"), "no:" + key}})
-	case "no":
-		if _, ok := b.take(arg, from.ID); ok {
-			reply(msgs.T(lang, "tg.cancelled"))
-		}
-	case "ok":
-		p, ok := b.take(arg, from.ID)
-		if !ok {
-			reply(msgs.T(lang, "tg.expired"))
-			return
-		}
-		if !b.mayAct(st, chat, from) {
-			reply(msgs.T(lang, "tg.denied"))
-			return
-		}
-		b.act(ctx, token, chat.ID, from, p, lang)
-	}
-}
-
-// act — подтверждённое действие.
-func (b *tgBot) act(ctx context.Context, token string, chat int64, from tgUser, p tgPending, lang msgs.Lang) {
-	s := b.s
-	author := "telegram:" + from.name()
-	reply := func(text string, rows ...[]tgButton) { _ = b.send(ctx, token, chat, text, rows...) }
-	switch p.action {
-	case "deploy":
-		id, _ := strconv.ParseInt(p.arg, 10, 64)
-		pl, err := s.db.PipelineByID(ctx, id)
-		if err != nil {
-			reply(msgs.Localize(lang, err))
-			return
-		}
-		d, err := s.startDeployment(ctx, pl, store.Deployment{Trigger: "telegram", Author: author}, true)
-		s.db.Audit(ctx, author, "pipeline.deploy", pl.Name, auditOutcome(err), map[string]any{"via": "telegram"})
-		if err != nil {
-			reply(msgs.Localize(lang, err))
-			return
-		}
-		reply(msgs.T(lang, "tg.deployStarted", pl.Name, d.JobID))
-		go b.watchJob(context.WithoutCancel(ctx), token, chat, d.JobID, lang)
-	case "ban", "unban":
-		params := F2BFleetParams{Action: p.action, IPs: []string{p.arg}}
-		targets, err := s.f2bTargets(ctx, nil)
-		if err == nil && len(targets) == 0 {
-			err = msgs.Errorf("hub.f2bNoHosts")
-		}
-		if err != nil {
-			reply(msgs.Localize(lang, err))
-			return
-		}
-		for _, t := range targets {
-			params.HostIDs = append(params.HostIDs, t.ID)
-		}
-		titleKey := "hub.f2bJobBan"
-		if p.action == "unban" {
-			titleKey = "hub.f2bJobUnban"
-		}
-		id, err := s.jobs.Start(ctx, jobsSpecF2B(titleKey, author, params))
-		s.db.Audit(ctx, author, "fail2ban.fleet", p.arg, auditOutcome(err), map[string]any{"action": p.action, "via": "telegram"})
-		if err != nil {
-			reply(msgs.Localize(lang, err))
-			return
-		}
-		reply(msgs.T(lang, "tg.jobStarted", id))
-		go b.watchJob(context.WithoutCancel(ctx), token, chat, id, lang)
-	}
-}
-
-func (b *tgBot) dryRun(ctx context.Context, token string, chat int64, from tgUser, pl store.Pipeline, lang msgs.Lang) {
-	author := "telegram:" + from.name()
-	id, err := b.s.jobs.Start(ctx, jobsSpecDry(pl, author))
-	b.s.db.Audit(ctx, author, "pipeline.dryrun", pl.Name, auditOutcome(err), map[string]any{"via": "telegram"})
-	if err != nil {
-		_ = b.send(ctx, token, chat, msgs.Localize(lang, err))
+	if cmd == "id" {
+		_ = b.send(ctx, token, chat.ID, msgs.T(lang, "tg.chatID", chat.ID, from.ID))
 		return
 	}
-	_ = b.send(ctx, token, chat, msgs.T(lang, "tg.dryStarted", pl.Name, id))
-	go b.watchJob(context.WithoutCancel(ctx), token, chat, id, lang)
-}
-
-// watchJob — итог задания в чат (до получаса).
-func (b *tgBot) watchJob(ctx context.Context, token string, chat, id int64, lang msgs.Lang) {
-	deadline := time.Now().Add(30 * time.Minute)
-	for time.Now().Before(deadline) {
-		j, err := b.s.db.JobByID(ctx, id)
-		if err != nil {
-			return
-		}
-		if j.Status != store.JobQueued && j.Status != store.JobRunning {
-			_ = b.send(ctx, token, chat, b.jobTail(ctx, id, 12, lang))
-			return
-		}
-		time.Sleep(3 * time.Second)
+	for _, r := range b.core.command(ctx, b.turn(ctx, token, st, chat, from), cmd, fields[1:]) {
+		_ = b.sendReply(ctx, token, chat.ID, r)
 	}
-}
-
-// --- тексты ---------------------------------------------------------------------
-
-func (b *tgBot) status(ctx context.Context, lang msgs.Lang) string {
-	rows, err := b.s.hostRows(ctx)
-	if err != nil {
-		return msgs.Localize(lang, err)
-	}
-	up, down, findings := 0, 0, map[string]int{}
-	for _, h := range rows {
-		if h.Reachable != nil && !*h.Reachable {
-			down++
-		} else {
-			up++
-		}
-		for k, v := range h.Findings {
-			findings[k] += v
-		}
-	}
-	return msgs.T(lang, "tg.status", len(rows), up, down, findings["critical"], findings["high"], findings["medium"])
-}
-
-func (b *tgBot) hosts(ctx context.Context, lang msgs.Lang) string {
-	rows, err := b.s.hostRows(ctx)
-	if err != nil {
-		return msgs.Localize(lang, err)
-	}
-	var lines []string
-	for i, h := range rows {
-		if i >= 40 {
-			lines = append(lines, "…")
-			break
-		}
-		mark := "🟢"
-		if h.Reachable != nil && !*h.Reachable {
-			mark = "🔴"
-		}
-		lines = append(lines, fmt.Sprintf("%s %s (%d) — %s", mark, h.Name, h.ID, findingsText(lang, h.Findings)))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func findingsText(lang msgs.Lang, f map[string]int) string {
-	if f["critical"]+f["high"]+f["medium"] == 0 {
-		return msgs.T(lang, "tg.noFindings")
-	}
-	return msgs.T(lang, "tg.findings", f["critical"], f["high"], f["medium"])
-}
-
-func (b *tgBot) hostDetail(ctx context.Context, id int64, withFindings bool, lang msgs.Lang) string {
-	rows, err := b.s.hostRows(ctx)
-	if err != nil {
-		return msgs.Localize(lang, err)
-	}
-	i := slices.IndexFunc(rows, func(h hostWithOverview) bool { return h.ID == id })
-	if i < 0 {
-		return msgs.T(lang, "tg.noHost", id)
-	}
-	h := rows[i]
-	state := msgs.T(lang, "tg.hostUp")
-	if h.Reachable != nil && !*h.Reachable {
-		state = msgs.T(lang, "tg.hostDown")
-	}
-	text := msgs.T(lang, "tg.hostDetail", h.Name, h.Addr, state, h.RunningVersion, findingsText(lang, h.Findings))
-	if !withFindings {
-		return text
-	}
-	var list []struct {
-		Severity string `json:"severity"`
-		Title    string `json:"title"`
-	}
-	path := "/api/findings"
-	var err2 error
-	if id == localHostID {
-		_, err2 = b.s.localAPI(ctx, "", http.MethodGet, path, nil, &list)
-	} else {
-		_, err2 = b.s.hub.HostAPI(ctx, id, http.MethodGet, path, nil, &list)
-	}
-	if err2 != nil {
-		return text + "\n" + msgs.Localize(lang, err2)
-	}
-	rank := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3}
-	sort.SliceStable(list, func(i, j int) bool { return rank[list[i].Severity] < rank[list[j].Severity] })
-	for i, f := range list {
-		if i >= 10 {
-			text += "\n…"
-			break
-		}
-		text += fmt.Sprintf("\n• [%s] %s", f.Severity, f.Title)
-	}
-	return text
-}
-
-func (b *tgBot) alerts(ctx context.Context, lang msgs.Lang) string {
-	res, err := b.s.hub.QueryEvents(msgs.WithLang(ctx, lang), EventQuery{Limit: 5})
-	if err != nil {
-		return msgs.Localize(lang, err)
-	}
-	if len(res.Events) == 0 {
-		return msgs.T(lang, "tg.noAlerts")
-	}
-	var lines []string
-	for _, e := range res.Events {
-		lines = append(lines, fmt.Sprintf("#%d %s %s — %s: %s", e.ID, e.TS, e.HostName, msgs.T(lang, "tg.kind."+e.Kind), e.Detail))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (b *tgBot) pipelines(ctx context.Context, lang msgs.Lang) string {
-	list, err := b.s.db.ListPipelines(ctx)
-	if err != nil {
-		return msgs.Localize(lang, err)
-	}
-	if len(list) == 0 {
-		return msgs.T(lang, "tg.noPipelines")
-	}
-	var lines []string
-	for _, p := range list {
-		last := "—"
-		if ds, err := b.s.db.Deployments(ctx, p.ID, 1); err == nil && len(ds) > 0 {
-			last = ds[0].Status
-		}
-		lines = append(lines, fmt.Sprintf("%d · %s — %s", p.ID, p.Name, last))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (b *tgBot) findPipeline(ctx context.Context, arg string) (store.Pipeline, bool) {
-	arg = strings.TrimSpace(arg)
-	if arg == "" {
-		return store.Pipeline{}, false
-	}
-	if id, err := strconv.ParseInt(arg, 10, 64); err == nil {
-		p, err := b.s.db.PipelineByID(ctx, id)
-		return p, err == nil
-	}
-	list, _ := b.s.db.ListPipelines(ctx)
-	for _, p := range list {
-		if strings.EqualFold(p.Name, arg) {
-			return p, true
-		}
-	}
-	return store.Pipeline{}, false
-}
-
-func (b *tgBot) jobTail(ctx context.Context, id int64, n int, lang msgs.Lang) string {
-	j, err := b.s.db.JobByID(ctx, id)
-	if err != nil {
-		return msgs.T(lang, "tg.noJob", id)
-	}
-	lines, _ := b.s.db.JobLog(ctx, id, 0, 2000)
-	var tail []string
-	for _, l := range lines {
-		tail = append(tail, msgs.Render(lang, l.Key, l.Args, l.Text))
-	}
-	if len(tail) > n {
-		tail = tail[len(tail)-n:]
-	}
-	title := msgs.Render(lang, j.TitleKey, j.TitleArgs, j.Title)
-	head := msgs.T(lang, "tg.job", id, title, msgs.T(lang, "tg.jobStatus."+j.Status))
-	if j.Status == store.JobFailed {
-		head += "\n" + msgs.Render(lang, j.ErrorKey, j.ErrorArgs, j.Error)
-	}
-	return head + "\n\n" + strings.Join(tail, "\n")
 }
 
 // notify — оповещение в чаты с Notify (события — из настроек бота).
 func (b *tgBot) notify(ctx context.Context, ev OutEvent) {
-	if ev.Kind == OutTest {
-		return
-	}
 	st := b.s.tgSettings(ctx)
 	token := b.token(ctx, st)
-	if !st.Enabled || token == "" || (len(st.Kinds) > 0 && !slices.Contains(st.Kinds, ev.Kind)) {
+	if !st.Enabled || token == "" {
 		return
 	}
-	lang := st.lang()
-	icon := map[string]string{store.EventUnreachable: "🔴", store.EventRecovered: "🟢", store.EventProblems: "⚠️", store.EventResolved: "✅",
-		store.EventJobFailed: "❌", store.EventRebooted: "🔄", store.EventBans: "🚫", OutDeploySucceeded: "🚀", OutDeployFailed: "💥"}[ev.Kind]
-	text := strings.TrimSpace(icon + " " + msgs.T(lang, "tg.kind."+ev.Kind))
-	if ev.HostName != "" {
-		text += " · " + ev.HostName
-	}
-	if body := msgs.Render(lang, ev.Key, ev.Args, ev.Text); body != "" {
-		text += "\n" + body
-	}
-	var buttons []tgButton
-	switch {
-	case ev.HostName != "":
-		buttons = append(buttons, tgButton{msgs.T(lang, "tg.btnOverview"), "ov:" + strconv.FormatInt(ev.HostID, 10)})
-		if ev.Kind == store.EventProblems {
-			buttons = append(buttons, tgButton{msgs.T(lang, "tg.btnFindings"), "fd:" + strconv.FormatInt(ev.HostID, 10)})
-		}
-	case ev.PipelineID != 0:
-		buttons = append(buttons, tgButton{msgs.T(lang, "tg.btnLog"), "jl:" + strconv.FormatInt(ev.JobID, 10)})
-		if ev.Kind == OutDeployFailed {
-			buttons = append(buttons, tgButton{msgs.T(lang, "tg.btnRetry"), "rd:" + strconv.FormatInt(ev.PipelineID, 10)})
-		}
+	r, ok := b.core.notifyReply(st.lang(), st.Kinds, ev)
+	if !ok {
+		return
 	}
 	for _, c := range st.Chats {
 		if !c.Notify {
 			continue
 		}
-		var err error
-		if len(buttons) > 0 {
-			err = b.send(ctx, token, c.ID, text, buttons)
-		} else {
-			err = b.send(ctx, token, c.ID, text)
-		}
-		if err != nil {
+		if err := b.sendReply(ctx, token, c.ID, r); err != nil {
 			b.s.log.Warn("бот Telegram: оповещение не отправлено", "chat", c.ID, "err", err)
 		}
 	}
@@ -920,20 +520,4 @@ func (s *Server) handleTelegramTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-// jobsSpecF2B — задание бана на хостах (как из «fail2ban» хаба).
-func jobsSpecF2B(titleKey, author string, p F2BFleetParams) jobs.Spec {
-	return jobs.Spec{Kind: KindF2BFleet, TitleKey: titleKey, TitleArgs: []any{strings.Join(p.IPs, ", "), len(p.HostIDs)},
-		Author: author, Steps: len(p.HostIDs), Params: p}
-}
-
-// jobsSpecDry — сухой прогон сохранённого конвейера с галочками,
-// выбранными администраторами.
-func jobsSpecDry(pl store.Pipeline, author string) jobs.Spec {
-	var skip []string
-	_ = json.Unmarshal([]byte(pl.DrySkip), &skip)
-	return jobs.Spec{Kind: KindDeploy, TitleKey: "deploy.dryTitle", TitleArgs: []any{pl.Name},
-		Queue: fmt.Sprintf("deploy:%d", pl.ID), Author: author, Steps: 3,
-		Params: DeployParams{DryRun: true, PipelineID: pl.ID, Content: pl.Content, Skip: skip}}
 }

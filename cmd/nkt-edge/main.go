@@ -30,6 +30,8 @@
 //	EDGE_API_RATE      запросов API в минуту с одного адреса (120)
 //	                   роль probe — проверки «снаружи» по просьбе хаба
 //	                   (DNS, порты, HTTPS); только по туннелю
+//	                   роль callbacks — колбэки ботов (Slack):
+//	                   POST /callbacks/<платформа>/<вид>, подпись — у хаба
 package main
 
 import (
@@ -114,11 +116,11 @@ func main() {
 	s := &server{token: token, rate: rate, limiter: newLimiter(rate), apiLimiter: newLimiter(apiRate), roles: map[string]bool{}}
 	for _, role := range strings.Split(env("EDGE_ROLES", "hooks"), ",") {
 		switch role = strings.TrimSpace(role); role {
-		case "hooks", "api", "probe":
+		case "hooks", "api", "probe", "callbacks":
 			s.roles[role] = true
 		case "":
 		default:
-			log.Fatal("EDGE_ROLES: unknown role (hooks, api, probe)")
+			log.Fatal("EDGE_ROLES: unknown role (hooks, api, probe, callbacks)")
 		}
 	}
 	if len(s.roles) == 0 {
@@ -147,6 +149,9 @@ func main() {
 	}
 	if s.roles["api"] {
 		mux.HandleFunc("/api/", s.handleAPI)
+	}
+	if s.roles["callbacks"] {
+		mux.HandleFunc("/callbacks/", s.handleCallback)
 	}
 	mux.HandleFunc("/healthz", s.handleHealth)
 	hookSrv := &http.Server{
@@ -284,7 +289,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	roles := []string{}
-	for _, role := range []string{"hooks", "api", "probe"} {
+	for _, role := range []string{"hooks", "api", "probe", "callbacks"} {
 		if s.roles[role] {
 			roles = append(roles, role)
 		}
@@ -415,4 +420,27 @@ func probeHandler() http.Handler {
 		_ = json.NewEncoder(w).Encode(res)
 	})
 	return mux
+}
+
+var callbackPath = regexp.MustCompile(`^/callbacks/[a-z]{2,20}/[a-z]{2,20}$`)
+
+// handleCallback — роль callbacks: колбэки ботов (Slack). Подпись
+// платформы проверяет хаб; здесь — только путь, метод, тело и частота.
+func (s *server) handleCallback(w http.ResponseWriter, r *http.Request) {
+	ip := s.clientIP(r)
+	status := http.StatusOK
+	defer func() {
+		slog.Info("callback", "ip", noNewlines(ip), "method", noNewlines(r.Method), "path", noNewlines(r.URL.Path), "status", status)
+	}()
+	if r.Method != http.MethodPost || !callbackPath.MatchString(r.URL.Path) {
+		status = http.StatusNotFound
+		http.NotFound(w, r)
+		return
+	}
+	if !s.limiter.allow(ip, time.Now()) {
+		status = http.StatusTooManyRequests
+		http.Error(w, "too many requests", status)
+		return
+	}
+	status = s.forward(w, r, ip)
 }

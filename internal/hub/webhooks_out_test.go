@@ -88,8 +88,8 @@ func TestOutgoingWebhooks(t *testing.T) {
 
 	host, _ := db.HostByID(ctx, webID)
 	other, _ := db.HostByID(ctx, dbID)
-	srv.hub.recordEventMsg(ctx, host, store.EventUnreachable, "warning", "hub.unreachableMin", 3) // доставится (после повтора)
-	srv.hub.recordEventMsg(ctx, host, store.EventRecovered, "", "hub.unreachableMin", 1)          // не тот вид
+	srv.hub.recordEventMsg(ctx, host, store.EventUnreachable, "warning", "hub.unreachableMin", 3)  // доставится (после повтора)
+	srv.hub.recordEventMsg(ctx, host, store.EventRecovered, "", "hub.unreachableMin", 1)           // не тот вид
 	srv.hub.recordEventMsg(ctx, other, store.EventUnreachable, "warning", "hub.unreachableMin", 2) // вне пределов
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {

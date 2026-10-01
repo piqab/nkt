@@ -30,7 +30,7 @@ interface EdgeStatus {
   last_error?: string
 }
 
-const ROLES = ['hooks', 'api', 'probe']
+const ROLES = ['hooks', 'api', 'probe', 'callbacks']
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
@@ -93,7 +93,7 @@ export function EdgeCard({ onOpenJob }: { onOpenJob: (id: number) => void }) {
                 {e.connected ? <Tag color="success">{t('edge.connected')}</Tag> : e.enabled ? <Tag color="error">{t('edge.disconnected')}</Tag> : <Tag>{t('edge.disabled')}</Tag>}
                 {e.connected && e.since && <span className="muted">{formatRelative(e.since)}</span>}
                 {e.roles.map((r) => (
-                  <Tag key={r} color={r === 'api' ? 'purple' : r === 'probe' ? 'cyan' : 'blue'}>
+                  <Tag key={r} color={r === 'api' ? 'purple' : r === 'probe' ? 'cyan' : r === 'callbacks' ? 'gold' : 'blue'}>
                     {t(`edge.role.${r}`)}
                   </Tag>
                 ))}
