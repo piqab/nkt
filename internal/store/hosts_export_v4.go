@@ -249,3 +249,30 @@ func randomSuffix() string {
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
 }
+
+// APITokenExport — API-токен; хосты пределов — по именам (localhost —
+// машина хаба).
+type APITokenExport struct {
+	Name      string   `json:"name"`
+	KeyID     string   `json:"key_id"`
+	Role      string   `json:"role"`
+	Hosts     []string `json:"hosts,omitempty"`
+	Groups    []string `json:"groups,omitempty"`
+	IPs       []string `json:"ips,omitempty"`
+	ExpiresAt string   `json:"expires_at,omitempty"`
+	ViaEdge   bool     `json:"via_edge,omitempty"`
+	Author    string   `json:"author,omitempty"`
+	SecretEnc []byte   `json:"secret_enc"`
+}
+
+// OutHookExport — адресат исходящих вебхуков; хосты — по именам.
+type OutHookExport struct {
+	Name      string   `json:"name"`
+	URL       string   `json:"url"`
+	Kinds     []string `json:"kinds,omitempty"`
+	Hosts     []string `json:"hosts,omitempty"`
+	Groups    []string `json:"groups,omitempty"`
+	Lang      string   `json:"lang,omitempty"`
+	Enabled   bool     `json:"enabled"`
+	SecretEnc []byte   `json:"secret_enc"`
+}
