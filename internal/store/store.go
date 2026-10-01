@@ -503,6 +503,26 @@ CREATE TABLE IF NOT EXISTS host_events (
     detail_args TEXT NOT NULL DEFAULT ''  -- аргументы (msgs.EncodeArgs)
 );
 CREATE INDEX IF NOT EXISTS idx_host_events_ts ON host_events(id DESC);
+
+-- API-токены хаба (apitokens.go): доступ для автоматизации — n8n, CI,
+-- скрипты. Секрет зашифрован ключом хаба: подписанный запрос (HMAC)
+-- проверяется по нему, значит, хэша мало. hosts/groups/ips — JSON.
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    name         TEXT NOT NULL UNIQUE,
+    key_id       TEXT NOT NULL UNIQUE,
+    secret_enc   BLOB NOT NULL,
+    role         TEXT NOT NULL,
+    hosts        TEXT NOT NULL DEFAULT '[]',
+    groups_json  TEXT NOT NULL DEFAULT '[]',
+    ips          TEXT NOT NULL DEFAULT '[]',
+    expires_at   TEXT NOT NULL DEFAULT '',
+    author       TEXT NOT NULL DEFAULT '',
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    last_used_at TEXT NOT NULL DEFAULT '',
+    last_ip      TEXT NOT NULL DEFAULT ''
+);
 `
 
 // columnMigrations lists every column the hosts table has picked up since

@@ -221,7 +221,8 @@ func (s *Server) f2bHosts(ctx context.Context) ([]F2BHostState, map[int64]*f2bSu
 	}
 	var states []F2BHostState
 	sums := map[int64]*f2bSummary{}
-	if s.local != nil {
+	allow := s.scopeFilter(ctx)
+	if s.local != nil && (allow == nil || allow(localHostID)) {
 		st := F2BHostState{ID: localHostID, Name: "localhost"}
 		if sum := s.localF2B(); sum != nil {
 			sums[localHostID] = sum
@@ -230,7 +231,7 @@ func (s *Server) f2bHosts(ctx context.Context) ([]F2BHostState, map[int64]*f2bSu
 		states = append(states, st)
 	}
 	for _, h := range hosts {
-		if h.Status != store.HostStatusOnline {
+		if h.Status != store.HostStatusOnline || (allow != nil && !allow(h.ID)) {
 			continue
 		}
 		st := F2BHostState{ID: h.ID, Name: h.Name}
@@ -327,6 +328,14 @@ func (s *Server) handleF2BFleet(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		p.IPs[i] = a.String()
+	}
+	if allow := s.scopeFilter(r.Context()); allow != nil {
+		for _, id := range p.HostIDs {
+			if !allow(id) {
+				writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenHostDenied"))
+				return
+			}
+		}
 	}
 	targets, err := s.f2bTargets(r.Context(), p.HostIDs)
 	if err != nil {

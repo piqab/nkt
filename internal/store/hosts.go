@@ -586,6 +586,9 @@ func (d *DB) RenameHostGroup(ctx context.Context, from, to string) error {
 	if _, err := tx.ExecContext(ctx, `UPDATE hosts SET group_name = ? WHERE group_name = ?`, to, from); err != nil {
 		return err
 	}
+	if err := renameGroupInTokens(ctx, tx, from, to); err != nil {
+		return err
+	}
 	// Профиль переезжает вместе с группой.
 	var profileID int64
 	_ = tx.QueryRowContext(ctx, `SELECT profile_id FROM host_groups WHERE name = ?`, from).Scan(&profileID)

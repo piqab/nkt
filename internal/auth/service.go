@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/piqab/nkt/internal/config"
@@ -31,6 +32,46 @@ type Service struct {
 	cfg *config.Config
 
 	attempts *AttemptLimiter
+	tokens   TokenAuthenticator
+}
+
+// TokenAuthenticator проверяет запрос с API-токеном (заголовок
+// Authorization: Bearer nkt_… или подписанный X-NKT-API-*). Токены есть
+// только у хаба: он и проверяет, и решает, какие вызовы токену открыты.
+// Возвращает контекст с пользователем токена; отказ — *TokenError.
+type TokenAuthenticator interface {
+	Authenticate(r *http.Request) (context.Context, error)
+}
+
+// TokenError — отказ токену: код ответа и причина.
+type TokenError struct {
+	Code int
+	Err  error
+}
+
+func (e *TokenError) Error() string { return e.Err.Error() }
+func (e *TokenError) Unwrap() error { return e.Err }
+
+// SetTokenAuth включает API-токены (хаб).
+func (s *Service) SetTokenAuth(t TokenAuthenticator) { s.tokens = t }
+
+// IsTokenRequest — запрос пришёл с API-токеном, а не с сессией браузера.
+func IsTokenRequest(r *http.Request) bool {
+	return strings.HasPrefix(r.Header.Get("Authorization"), "Bearer ") || r.Header.Get("X-NKT-API-Key") != ""
+}
+
+const readGrantKey ctxKey = iota + 100
+
+// WithReadGrant — токену с ролью «чтение» этот GET открыт, хотя маршрут
+// за RequireAdmin (просмотр хоста через хаб — только администраторам
+// интерфейса, а токену чтения — по списку разделов).
+func WithReadGrant(ctx context.Context) context.Context {
+	return context.WithValue(ctx, readGrantKey, true)
+}
+
+func readGranted(r *http.Request) bool {
+	g, _ := r.Context().Value(readGrantKey).(bool)
+	return g && (r.Method == http.MethodGet || r.Method == http.MethodHead)
 }
 
 // NewService builds the auth service.
@@ -173,6 +214,31 @@ func TokenFromRequest(r *http.Request) string {
 // RequireAuth rejects unauthenticated requests and puts the user in the context.
 func (s *Service) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Уже проверен: хаб передал запрос встроенному API машины хаба
+		// (/hosts/local/*) с тем же контекстом.
+		if _, ok := UserFromContext(r.Context()); ok {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if IsTokenRequest(r) {
+			lang := msgs.LangFromRequest(r)
+			if s.tokens == nil {
+				writeAuthError(w, http.StatusUnauthorized, msgs.T(lang, "auth.tokensUnsupported"))
+				return
+			}
+			ctx, err := s.tokens.Authenticate(r)
+			if err != nil {
+				code := http.StatusUnauthorized
+				var te *TokenError
+				if errors.As(err, &te) {
+					code = te.Code
+				}
+				writeAuthError(w, code, msgs.Localize(lang, err))
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
 		token := TokenFromRequest(r)
 		if token == "" {
 			writeAuthError(w, http.StatusUnauthorized, msgs.T(msgs.LangFromRequest(r), "auth.loginRequired"))
@@ -193,6 +259,10 @@ func (s *Service) RequireAdmin(next http.Handler) http.Handler {
 		user, ok := UserFromContext(r.Context())
 		if !ok {
 			writeAuthError(w, http.StatusUnauthorized, msgs.T(msgs.LangFromRequest(r), "auth.loginRequired"))
+			return
+		}
+		if readGranted(r) {
+			next.ServeHTTP(w, r)
 			return
 		}
 		if !user.IsAdmin() {

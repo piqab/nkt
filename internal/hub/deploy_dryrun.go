@@ -325,8 +325,17 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	user := auth.Username(ctx)
 	name := msgs.Tc(ctx, "deploy.dryNewPipeline")
+	tok, byToken := tokenFromContext(ctx)
+	if byToken && tok.Scoped() && (req.PipelineID == 0 || strings.TrimSpace(req.Content) != "") {
+		// Произвольное описание может смотреть на любые хосты.
+		writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenDryContent"))
+		return
+	}
 	if req.PipelineID > 0 {
 		pl, err := s.db.PipelineByID(ctx, req.PipelineID)
+		if err == nil && !s.pipelineInScope(ctx, pl) {
+			err = store.ErrNotFound
+		}
 		if err != nil {
 			writeErr(w, r, http.StatusNotFound, err)
 			return
@@ -355,8 +364,9 @@ func (s *Server) handlePipelineDryRun(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if req.PipelineID > 0 {
-		// Выбор галочек — у конвейера: следующий прогон откроется с ним.
+	if req.PipelineID > 0 && !byToken {
+		// Выбор галочек — у конвейера: следующий прогон откроется с ним
+		// (прогон токеном выбор администраторов не трогает).
 		raw, _ := json.Marshal(req.Skip)
 		if len(req.Skip) == 0 {
 			raw = nil

@@ -137,7 +137,11 @@ func (s *Server) handleSites(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	out := make([]siteJSON, 0, len(list))
+	allow := s.scopeFilter(r.Context())
 	for _, st := range list {
+		if allow != nil && !allow(st.HostID) {
+			continue
+		}
 		name := "localhost"
 		if st.HostID != localHostID {
 			if h, err := s.db.HostByID(r.Context(), st.HostID); err == nil {
