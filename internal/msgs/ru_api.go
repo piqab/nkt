@@ -44,4 +44,9 @@ var ruAPICatalog = map[string]string{
 	"hub.outBadKind":         "Неизвестный вид события: %q",
 	"hub.outMissing":         "Нет исходящего вебхука №%d",
 	"hub.outTooMany":         "Исходящих вебхуков — не больше 32",
+	"hub.siteViaEdge":        "  проверка снаружи — с nkt-edge %s (как видит интернет)",
+	"edge.probeFailed":       "nkt-edge не выполнил проверку: %s",
+	"edge.probeBad":          "Проверок — от 1 до 32",
+	"edge.probeBadCheck":     "Непонятная проверка: %s %s %d",
+	"edge.probeUnavailable":  "Нет подключённого nkt-edge с ролью «проверки снаружи»",
 }

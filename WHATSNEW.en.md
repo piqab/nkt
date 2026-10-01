@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.74 — 2026-10-01
+
+- **Outside checks from nkt-edge**: a new "outside checks" edge role. A
+  hub behind NAT cannot see itself from outside, so its port 80 or HTTPS
+  checks could be wrong; now an edge on a VPS runs them as the internet
+  does: DNS, ports 80/443, HTTPS and the certificate. The "Sites" wizard,
+  the site check and the dry run use such an edge by themselves (marked
+  "checked from outside via nkt-edge"), and the edge's "Check from
+  outside" button works for any name and ports. This role accepts nothing
+  from the internet.
+
 ## v1.11.73 — 2026-10-01
 
 - **n8n nodes**: the `n8n-nodes-nkt` package in `integrations/n8n`. The

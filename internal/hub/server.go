@@ -334,6 +334,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/edges/install", s.handleEdgeInstall)
 					r.Post("/hub/edges/{id}/uninstall", s.handleEdgeUninstall)
 					r.Post("/hub/edges/check", s.handleEdgeCheck)
+					r.Post("/hub/edges/{id}/probe", s.handleEdgeProbe)
 					r.Get("/hub/sites", s.handleSites)
 					r.Post("/hub/sites/preflight", s.handleSitePreflight)
 					r.Post("/hub/sites", s.handleSiteSave)

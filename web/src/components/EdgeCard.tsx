@@ -30,7 +30,7 @@ interface EdgeStatus {
   last_error?: string
 }
 
-const ROLES = ['hooks', 'api']
+const ROLES = ['hooks', 'api', 'probe']
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
 
@@ -60,6 +60,7 @@ export function EdgeCard({ onOpenJob }: { onOpenJob: (id: number) => void }) {
   const st = useApi<{ edges: EdgeStatus[] }>('/hub/edges', 10_000)
   const [dialog, setDialog] = useState<{ kind: 'install'; edge?: EdgeStatus } | { kind: 'manual'; edge?: EdgeStatus } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [probe, setProbe] = useState<EdgeStatus | null>(null)
   const edges = st.data?.edges ?? []
   return (
     <Card
@@ -92,11 +93,16 @@ export function EdgeCard({ onOpenJob }: { onOpenJob: (id: number) => void }) {
                 {e.connected ? <Tag color="success">{t('edge.connected')}</Tag> : e.enabled ? <Tag color="error">{t('edge.disconnected')}</Tag> : <Tag>{t('edge.disabled')}</Tag>}
                 {e.connected && e.since && <span className="muted">{formatRelative(e.since)}</span>}
                 {e.roles.map((r) => (
-                  <Tag key={r} color={r === 'api' ? 'purple' : 'blue'}>
+                  <Tag key={r} color={r === 'api' ? 'purple' : r === 'probe' ? 'cyan' : 'blue'}>
                     {t(`edge.role.${r}`)}
                   </Tag>
                 ))}
                 <span style={{ flex: 1 }} />
+                {e.roles.includes('probe') && e.connected && (
+                  <Button size="small" onClick={() => setProbe(e)}>
+                    {t('edge.probe')}
+                  </Button>
+                )}
                 <Button size="small" onClick={() => setDialog(e.host_id ? { kind: 'install', edge: e } : { kind: 'manual', edge: e })}>
                   {e.host_id ? t('edge.reinstall') : t('edge.edit')}
                 </Button>
@@ -169,6 +175,7 @@ export function EdgeCard({ onOpenJob }: { onOpenJob: (id: number) => void }) {
         />
       )}
       {dialog?.kind === 'manual' && <ManualModal st={dialog.edge} onClose={() => setDialog(null)} onSaved={() => void st.reload()} />}
+      {probe && <ProbeModal edge={probe} onClose={() => setProbe(null)} />}
     </Card>
   )
 }
@@ -334,6 +341,107 @@ function ManualModal({ st, onClose, onSaved }: { st?: EdgeStatus; onClose: () =>
             {t('common.save')}
           </Button>
         </div>
+      </div>
+    </Modal>
+  )
+}
+
+interface ProbeResult {
+  type: string
+  host: string
+  port?: number
+  ips?: string[]
+  state?: string
+  status?: number
+  cert_not_after?: string
+  cert_issuer?: string
+  cert_names?: string[]
+  wrong_cert?: boolean
+  error?: string
+  ms: number
+}
+
+/** «Проверить снаружи» с edge (роль probe): DNS, порты, HTTPS — как видит интернет. */
+function ProbeModal({ edge, onClose }: { edge: EdgeStatus; onClose: () => void }) {
+  const { t } = useTranslation()
+  const [host, setHost] = useState('')
+  const [ports, setPorts] = useState('80, 443')
+  const [https, setHttps] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [results, setResults] = useState<ProbeResult[] | null>(null)
+  async function run() {
+    setBusy(true)
+    setError(null)
+    setResults(null)
+    const checks = [
+      { type: 'dns', host },
+      ...ports
+        .split(/[\s,;]+/)
+        .filter(Boolean)
+        .map((p) => ({ type: 'tcp', host, port: Number(p) })),
+      ...(https ? [{ type: 'https', host }] : []),
+    ]
+    try {
+      const res = await api<{ results: ProbeResult[] }>(`/hub/edges/${edge.id}/probe`, { method: 'POST', body: { checks } })
+      setResults(res.results)
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const outcome = (r: ProbeResult) => {
+    if (r.type === 'dns') return r.error ? <Tag color="error">{r.error}</Tag> : <span className="mono">{(r.ips ?? []).join(', ') || '—'}</span>
+    if (r.type === 'tcp') return <Tag color={r.state === 'open' ? 'success' : r.state === 'refused' ? 'warning' : 'error'}>{r.state}</Tag>
+    if (r.error)
+      return (
+        <span>
+          <Tag color="error">{r.wrong_cert ? t('edge.probeWrongCert') : t('edge.probeError')}</Tag> <span className="small">{r.error}</span>
+          {r.wrong_cert && <span className="small muted"> · {(r.cert_names ?? []).join(', ')}</span>}
+        </span>
+      )
+    return (
+      <span>
+        <Tag color={(r.status ?? 0) < 500 ? 'success' : 'error'}>HTTP {r.status}</Tag>
+        {r.cert_not_after && (
+          <span className="small muted">
+            {t('edge.probeCert', { issuer: r.cert_issuer ?? '', date: new Date(r.cert_not_after).toLocaleDateString() })}
+          </span>
+        )}
+      </span>
+    )
+  }
+  return (
+    <Modal title={t('edge.probeTitle', { name: edge.domain || edge.address })} onClose={onClose} width={680}>
+      <p className="small muted">{t('edge.probeHint')}</p>
+      <div className="col" style={{ gap: '0.5rem' }}>
+        <Input size="small" className="mono" placeholder="shop.example.com" value={host} onChange={(ev) => setHost(ev.target.value.trim())} />
+        <Input size="small" className="mono" placeholder="80, 443" value={ports} onChange={(ev) => setPorts(ev.target.value)} addonBefore={t('edge.probePorts')} />
+        <Checkbox checked={https} onChange={(ev) => setHttps(ev.target.checked)}>
+          {t('edge.probeHttps')}
+        </Checkbox>
+        <div>
+          <Button type="primary" loading={busy} disabled={!host} onClick={() => void run()}>
+            {t('edge.probeRun')}
+          </Button>
+        </div>
+        {error && <Banner kind="error">{error}</Banner>}
+        {results && (
+          <table className="small" style={{ borderCollapse: 'collapse' }}>
+            <tbody>
+              {results.map((r, i) => (
+                <tr key={i}>
+                  <td style={{ padding: '0.2rem 0.6rem 0.2rem 0' }} className="nowrap">
+                    {r.type.toUpperCase()} {r.port ? <span className="mono">:{r.port}</span> : null}
+                  </td>
+                  <td style={{ padding: '0.2rem 0.6rem 0.2rem 0' }}>{outcome(r)}</td>
+                  <td className="muted nowrap">{r.ms} ms</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     </Modal>
   )

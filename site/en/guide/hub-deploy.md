@@ -295,7 +295,9 @@ Encrypt certificate:
 
 ![New site](/screens/en/deploy-sites.png)
 
-1. **Host and names → "Check".** From the hub (that is, from outside):
+1. **Host and names → "Check".** From outside: from an
+   [nkt-edge](/en/guide/edge#roles-and-several-edges) with the outside
+   checks role if one is connected, otherwise from the hub:
    whether each name points at the host and whether ports 80 and 443
    answer. "Free" (connection refused) means the path is open and certbot
    will bind the port itself; "no answer" means the port is most likely
