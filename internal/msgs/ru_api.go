@@ -36,4 +36,12 @@ var ruAPICatalog = map[string]string{
 	"edge.missing":           "Нет edge №%d",
 	"edge.badRoles":          "Неизвестные роли edge: %s",
 	"edge.manualIncomplete":  "Для edge нужны адрес туннеля и токен (EDGE_TOKEN)",
+	"hub.outDeployOK":        "Выкладка «%s» прошла: %s",
+	"hub.outDeployFailed":    "Выкладка «%s» (%s) не прошла: %s",
+	"hub.outTestText":        "Пробное событие исходящего вебхука nkt (отправил %s)",
+	"hub.outBadName":         "Имя адресата — от 1 до 64 символов в одну строку",
+	"hub.outBadURL":          "Адрес — http:// или https:// без логина и пароля, а не %q",
+	"hub.outBadKind":         "Неизвестный вид события: %q",
+	"hub.outMissing":         "Нет исходящего вебхука №%d",
+	"hub.outTooMany":         "Исходящих вебхуков — не больше 32",
 }

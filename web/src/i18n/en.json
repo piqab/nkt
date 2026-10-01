@@ -3697,5 +3697,39 @@
     "edgeTag": "edge",
     "yes": "yes",
     "no": "no"
+  },
+  "webhooks": {
+    "title": "Outgoing webhooks",
+    "hint": "The hub sends events out by itself (to n8n, a chat bot or your own system) as a POST of JSON with an HMAC signature. Nothing on the hub needs to be exposed.",
+    "help": "Webhooks",
+    "create": "New recipient",
+    "empty": "No recipients.",
+    "name": "Name",
+    "kinds": "Events",
+    "allKinds": "all events",
+    "kindsHint": "nothing ticked means all events",
+    "scope": "Scope",
+    "scopeHint": "Hosts and groups limit it to their events (a deployment, if all its hosts are in scope); empty means all.",
+    "last": "Last delivery",
+    "never": "none yet",
+    "failed": "error",
+    "off": "off",
+    "test": "Test",
+    "testOK": "\"{{name}}\": the test event was delivered, response {{code}}",
+    "testFailed": "\"{{name}}\": the test event was not delivered: {{error}}",
+    "rotateConfirm": "Issue a new signing secret for \"{{name}}\"? The old one stops matching at once.",
+    "delete": "Delete",
+    "deleteConfirm": "Delete recipient \"{{name}}\"? Events will no longer reach it.",
+    "newTitle": "New outgoing webhook",
+    "editTitle": "Webhook \"{{name}}\"",
+    "lang": "Text language",
+    "enabled": "enabled",
+    "secretTitle": "Signing secret of \"{{name}}\"",
+    "verifyHint": "Signature: X-NKT-Signature = hex HMAC-SHA256 with the secret over \"X-NKT-Timestamp.body\". Checking it in n8n:",
+    "kind": {
+      "deploy-succeeded": "deployment succeeded",
+      "deploy-failed": "deployment failed",
+      "test": "test"
+    }
   }
 }

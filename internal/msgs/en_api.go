@@ -36,4 +36,12 @@ var enAPICatalog = map[string]string{
 	"edge.missing":           "No edge #%d",
 	"edge.badRoles":          "Unknown edge roles: %s",
 	"edge.manualIncomplete":  "An edge needs a tunnel address and a token (EDGE_TOKEN)",
+	"hub.outDeployOK":        "Deployment \"%s\" succeeded: %s",
+	"hub.outDeployFailed":    "Deployment \"%s\" (%s) failed: %s",
+	"hub.outTestText":        "A test event of an nkt outgoing webhook (sent by %s)",
+	"hub.outBadName":         "A recipient name is 1 to 64 characters on one line",
+	"hub.outBadURL":          "The address is http:// or https:// without a login or password, not %q",
+	"hub.outBadKind":         "Unknown event kind: %q",
+	"hub.outMissing":         "No outgoing webhook #%d",
+	"hub.outTooMany":         "Up to 32 outgoing webhooks",
 }
