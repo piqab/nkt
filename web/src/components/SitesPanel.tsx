@@ -421,7 +421,7 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
                   {t('sites.containerHolds', { list: holders80.map((h) => `${h.port} (${h.process ?? '?'})`).join(', ') })}
                 </Banner>
               )}
-              {!pre.host.certbot && proxy !== 'caddy' && <div className="small" style={{ color: 'var(--status-error)' }}>{t('sites.noCertbot')}</div>}
+              {!pre.host.certbot && proxy !== 'caddy' && <div className="small muted">{t('sites.certbotWillInstall')}</div>}
             </div>
             <div className="col" style={{ gap: '0.3rem' }}>
               <strong className="small">{t('sites.target')}</strong>

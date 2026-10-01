@@ -233,4 +233,9 @@ var ruSitesCatalog = map[string]string{
 	"deploy.dryFirewallClosedSkip":  "? файрвол %s: 80/443 закрыты, а firewall: false — откройте вручную",
 	"deploy.dryFirewallNotWritable": "? файрвол %s: правило не записать (песочница службы, старая версия nkt) — откройте вручную: ufw allow 80,443/tcp",
 	"deploy.dryFirewallWillOpen":    "  файрвол %s: 80/443 будут открыты",
+	"hub.siteInstallingCertbot":     "На хосте нет certbot — ставлю (пакет certbot)",
+	"site.packageNoApt":             "Пакет %s не поставить отсюда (%s) — установите вручную (apt install, dnf install …) и нажмите «Настроить заново»",
+	"site.packageNotInstalled":      "Установка пакета %s не запустилась",
+	"deploy.dryCertbotInstall":      "  сайт: certbot будет установлен",
+	"hub.siteCertbotInstallFailed":  "? certbot не установлен: %s — продолжаю: годный сертификат на хосте подойдёт и так",
 }

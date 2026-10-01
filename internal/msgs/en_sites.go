@@ -233,4 +233,9 @@ var enSitesCatalog = map[string]string{
 	"deploy.dryFirewallClosedSkip":  "? firewall %s: 80/443 are closed and firewall: false; open them by hand",
 	"deploy.dryFirewallNotWritable": "? firewall %s: the rule cannot be written (service sandbox, an old nkt version); open by hand: ufw allow 80,443/tcp",
 	"deploy.dryFirewallWillOpen":    "  firewall %s: 80/443 will be opened",
+	"hub.siteInstallingCertbot":     "certbot is not on the host; installing (the certbot package)",
+	"site.packageNoApt":             "Package %s cannot be installed from here (%s); install it by hand (apt install, dnf install …) and press \"Set up again\"",
+	"site.packageNotInstalled":      "Installing package %s did not start",
+	"deploy.dryCertbotInstall":      "  site: certbot will be installed",
+	"hub.siteCertbotInstallFailed":  "? certbot not installed: %s; continuing: a valid certificate on the host will do",
 }

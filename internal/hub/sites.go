@@ -355,6 +355,25 @@ func (s *Server) handleSiteDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
 }
 
+// installHostPackage — пакет дистрибутива на хосте фоновым заданием хоста
+// (apt-get); журнал установки — в журнал задания сайта.
+func (s *Server) installHostPackage(ctx context.Context, jc *jobs.Context, user string, t targetHost, pkg string) error {
+	var started struct {
+		JobID int64 `json:"job_id"`
+	}
+	code, err := s.hostCall(ctx, user, t.ID, "POST", "/api/system/apt/packages/"+pkg+"/install/ws?job=1", nil, &started)
+	switch {
+	case code == http.StatusForbidden:
+		// Нет apt-get (не Debian/Ubuntu) или режим фикстур.
+		return msgs.Errorf("site.packageNoApt", pkg, msgs.Localize(jc.Lang(), err))
+	case err != nil:
+		return err
+	case started.JobID == 0:
+		return msgs.Errorf("site.packageNotInstalled", pkg)
+	}
+	return s.waitHostJobVia(ctx, jc, user, t.ID, started.JobID)
+}
+
 // SiteSetupRunner — задание настройки сайта.
 type SiteSetupRunner struct{ s *Server }
 
@@ -461,6 +480,7 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 			Name      string `json:"name"`
 			Installed bool   `json:"installed"`
 		} `json:"proxies"`
+		Certbot bool `json:"certbot"`
 	}
 	if _, err := s.hostCall(ctx, user, t.ID, "GET", "/api/sites/preflight", nil, &pre); err != nil {
 		return err
@@ -476,17 +496,20 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 			return msgs.Errorf("site.proxyMissing", st.Proxy)
 		}
 		jc.Log("hub.siteInstallingProxy", st.Proxy)
-		var started struct {
-			JobID int64 `json:"job_id"`
-		}
-		if _, err := s.hostCall(ctx, user, t.ID, "POST", "/api/system/apt/packages/"+st.Proxy+"/install/ws?job=1", nil, &started); err != nil {
+		if err := s.installHostPackage(ctx, jc, user, t, st.Proxy); err != nil {
 			return err
 		}
-		if started.JobID == 0 {
-			return msgs.Errorf("site.proxyMissing", st.Proxy)
-		}
-		if err := s.waitHostJobVia(ctx, jc, user, t.ID, started.JobID); err != nil {
-			return err
+	}
+	// Сертификат выпускает и продлевает certbot (Caddy — свой сам): нет
+	// его — ставится так же, как прокси. Без разрешения ставить не
+	// требуется заранее: годный сертификат хост возьмёт и без certbot, а
+	// нужен будет выпуск — скажет сам.
+	if st.Proxy != site.ProxyCaddy && !pre.Certbot && installProxy {
+		jc.Log("hub.siteInstallingCertbot")
+		if err := s.installHostPackage(ctx, jc, user, t, "certbot"); err != nil {
+			// Не поставился — дальше: годный сертификат хост возьмёт и так,
+			// а для выпуска нового сам скажет, что certbot нужен.
+			jc.Log("hub.siteCertbotInstallFailed", msgs.Localize(jc.Lang(), err))
 		}
 	}
 

@@ -3555,7 +3555,8 @@
     "deleteRetry": "Retry deletion",
     "wrongCert": "wrong certificate",
     "wrongCertHint": "The site answers with a certificate for {{names}}, not for this name: the site configuration is not in effect, the proxy answers as another site. Use \"Set up again\" and check the log.",
-    "certNames": "Certificate issued for: {{names}}"
+    "certNames": "Certificate issued for: {{names}}",
+    "certbotWillInstall": "certbot is not on the host; a job installs it before issuing the certificate."
   },
   "composeEngine": {
     "checking": "checking…",

@@ -352,8 +352,14 @@ compose:
   error with a hint ("image kennethreitz/httpbin declares 80"), and no
   certificate is spent. If the image declares no ports there is nothing to
   check; if the site answers 502, the log suggests checking the port.
+- **What the host lacks is installed:** the proxy and `certbot` (to issue
+  and renew the certificate; not needed with Caddy), as distribution
+  packages, by background host jobs, logged in the site log. A host
+  without `apt-get` gets an error asking to install by hand. Docker and
+  compose are checked before deploying ("Install Docker"), git on the hub
+  has its "Install git" banner.
 - **A dry run** shows what would happen to the site: the proxy (or that it
-  will be installed), the host firewall (off, 80/443 already open, will be
+  will be installed), certbot, the host firewall (off, 80/443 already open, will be
   opened, or the rule cannot be written, so open it by hand), DNS and ports
   from outside, whether the stack has
   that service and whether the port is declared; a port mismatch counts as
