@@ -117,7 +117,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	if err != nil {
 		return err
 	}
-	user := s.actingUser(ctx, jc.Job.Author, pl.Author)
+	user := s.actingUser(ctx, jc.Job.Author, pl.Author, s.firstAdmin(ctx))
 	jc.StepKey(2, 3, "deploy.stepDryHosts", len(targets))
 	jc.Log("deploy.dryFiles", len(files), c.Project, len(targets), vars.Tag)
 	if err := bindComposePorts(jc, files, main, c); err != nil {

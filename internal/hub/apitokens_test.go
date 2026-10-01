@@ -291,3 +291,13 @@ func TestSignatureVectors(t *testing.T) {
 		t.Fatalf("out: %s", got)
 	}
 }
+
+// Бан на машине хаба из задания токена: автор — не учётная запись хаба,
+// действует администратор.
+func TestLocalAPIActsAsAdminForToken(t *testing.T) {
+	srv, _, _ := localFixtureHub(t)
+	code, err := srv.localAPI(context.Background(), "token:n8n", "GET", "/api/overview", nil, nil)
+	if err != nil || code != 200 {
+		t.Fatalf("%d %v", code, err)
+	}
+}

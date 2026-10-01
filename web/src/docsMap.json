@@ -32,6 +32,7 @@
   "hub:about": { "page": "hub-updates" },
   "hub:api": { "page": "hub-api" },
   "hub:webhooks": { "page": "hub-api", "ru": "Исходящие вебхуки", "en": "Outgoing webhooks" },
+  "hub:telegram": { "page": "bots" },
   "deploy:compose": { "page": "hub-deploy", "ru": "Compose-стек", "en": "Compose stack" },
   "deploy:site": { "page": "hub-deploy", "ru": "Сайт в конвейере", "en": "A site in the pipeline" },
   "deploy:access": { "page": "hub-deploy", "ru": "Доступ и секреты", "en": "Access and secrets" },

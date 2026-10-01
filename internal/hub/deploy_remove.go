@@ -179,7 +179,7 @@ func (r *PipelineRemoveRunner) Run(ctx context.Context, jc *jobs.Context) (err e
 		return err
 	}
 	c := spec.Compose
-	user := s.actingUser(ctx, jc.Job.Author, pl.Author)
+	user := s.actingUser(ctx, jc.Job.Author, pl.Author, s.firstAdmin(ctx))
 
 	// 1. Сайт конвейера (до стека: прокси не должен смотреть в пустоту).
 	jc.StepKey(1, 3, "deploy.removeStepSite")

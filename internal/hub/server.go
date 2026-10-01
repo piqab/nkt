@@ -45,6 +45,8 @@ type Server struct {
 	jobs *jobs.Manager
 	// edge — соединение с nkt-edge (edge.go); nil — не запущено.
 	edge *edgeHub
+	// tg — бот Telegram (telegram.go); nil — не запущен.
+	tg *tgBot
 	// apiHandler — API хаба для запросов токенов через edge (роль api).
 	apiOnce    sync.Once
 	apiHandler http.Handler
@@ -316,6 +318,9 @@ func (s *Server) Handler() http.Handler {
 					r.Delete("/hub/k8s/manifests/{id}", s.handleManifestDelete)
 					r.Post("/hub/k8s/manifests/diff", s.handleManifestDiff)
 					r.Get("/hub/k8s/findings", s.handleClustersFindings)
+					r.Get("/hub/telegram", s.handleTelegram)
+					r.Put("/hub/telegram", s.handleTelegramSave)
+					r.Post("/hub/telegram/test", s.handleTelegramTest)
 					r.Get("/hub/webhooks", s.handleOutHooks)
 					r.Post("/hub/webhooks", s.handleOutHookSave)
 					r.Put("/hub/webhooks/{id}", s.handleOutHookSave)

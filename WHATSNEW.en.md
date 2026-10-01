@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.75 — 2026-10-01
+
+- **A Telegram bot** in "Alerts" → "Telegram bot". Hub alerts come with
+  buttons: "Overview" and "Findings" for a host, "Log" and "Retry" for a
+  deployment. Commands: /status, /hosts, /alerts, /pipelines, /deploy and
+  /ban, /unban with a confirmation button, and /dryrun; the bot sends the
+  job outcome by itself. The hub polls Telegram by itself, so it needs
+  neither an edge nor an open port. Chats have a read or admin role, and
+  actions can be limited to a list of people; everything goes to the
+  audit log.
+- A ban on the hub machine started by an API token no longer fails: such
+  jobs act as a hub admin.
+
 ## v1.11.74 — 2026-10-01
 
 - **Outside checks from nkt-edge**: a new "outside checks" edge role. A
