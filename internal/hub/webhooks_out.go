@@ -161,9 +161,15 @@ func (m *Manager) emitOut(ev OutEvent) {
 	}
 }
 
+// AddOutSink — ещё получатель событий (до первого события).
+func (m *Manager) AddOutSink(f func(OutEvent)) { m.outSinks = append(m.outSinks, f) }
+
 func (m *Manager) outLoop() {
 	d := m.out
 	for ev := range d.queue {
+		for _, sink := range m.outSinks {
+			go sink(ev)
+		}
 		ctx := context.Background()
 		hooks := m.outHooks(ctx)
 		var groups map[int64]string

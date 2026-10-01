@@ -233,6 +233,9 @@ type Manager struct {
 	// out — исходящие вебхуки (webhooks_out.go), заводятся при первом событии.
 	out     *outDispatcher
 	outOnce sync.Once
+	// outSinks — ещё получатели событий (бот Telegram); задаются при
+	// запуске хаба.
+	outSinks []func(OutEvent)
 
 	cfg     *config.Config
 	db      *store.DB

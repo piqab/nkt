@@ -556,10 +556,22 @@ func f2bRow(sum *f2bSummary) *F2BRow {
 const localHostID = LocalHostID
 
 func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
-	hosts, err := s.db.ListHosts(r.Context())
+	out, err := s.hostRows(r.Context())
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
+	}
+	if allow := s.scopeFilter(r.Context()); allow != nil {
+		out = slices.DeleteFunc(out, func(h hostWithOverview) bool { return !allow(h.ID) })
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+// hostRows — строки списка хостов с последним опросом (API, бот).
+func (s *Server) hostRows(ctx context.Context) ([]hostWithOverview, error) {
+	hosts, err := s.db.ListHosts(ctx)
+	if err != nil {
+		return nil, err
 	}
 	// Группа машины — это группа её хоста. Своё поле у неё может
 	// остаться от прежних версий или от правки мимо интерфейса; здесь
@@ -571,14 +583,14 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 
 	// Профили — по одному запросу, а не по одному на хост.
 	profileByID := map[int64]store.Profile{}
-	if list, err := s.db.ListProfiles(r.Context()); err == nil {
+	if list, err := s.db.ListProfiles(ctx); err == nil {
 		for _, p := range list {
 			profileByID[p.ID] = p
 		}
 	}
 
 	out := make([]hostWithOverview, 0, len(hosts)+1)
-	if local := s.localHostEntry(r.Context()); local != nil {
+	if local := s.localHostEntry(ctx); local != nil {
 		out = append(out, *local)
 	}
 	for _, h := range hosts {
@@ -617,10 +629,7 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 		}
 		out = append(out, row)
 	}
-	if allow := s.scopeFilter(r.Context()); allow != nil {
-		out = slices.DeleteFunc(out, func(h hostWithOverview) bool { return !allow(h.ID) })
-	}
-	writeJSON(w, http.StatusOK, out)
+	return out, nil
 }
 
 // localHostEntry builds the pinned "localhost" row — the machine the hub

@@ -146,7 +146,7 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	// От чьего имени ходить во встроенный API машины хаба: у выкладки по
 	// вебхуку, опросу или registry автор — «github», «poll» — не учётная
 	// запись; тогда — автор конвейера.
-	user := s.actingUser(ctx, jc.Job.Author, pl.Author)
+	user := s.actingUser(ctx, jc.Job.Author, pl.Author, s.firstAdmin(ctx))
 	lang := jc.Lang()
 	// Движок — до первого хоста: без docker или compose где-то в конце
 	// списка выкладка иначе оставила бы хосты в разных версиях.
@@ -399,6 +399,20 @@ func certNames(c *x509.Certificate) []string {
 		return []string{c.Subject.CommonName}
 	}
 	return nil
+}
+
+// firstAdmin — любой действующий администратор хаба (пусто — нет).
+func (s *Server) firstAdmin(ctx context.Context) string {
+	users, err := s.db.ListUsers(ctx)
+	if err != nil {
+		return ""
+	}
+	for _, u := range users {
+		if u.IsAdmin() && !u.Disabled {
+			return u.Username
+		}
+	}
+	return ""
 }
 
 // actingUser — первая из кандидатур, что является действующей учётной

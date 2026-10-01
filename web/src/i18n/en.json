@@ -3745,5 +3745,38 @@
       "deploy-failed": "deployment failed",
       "test": "test"
     }
+  },
+  "telegram": {
+    "title": "Telegram bot",
+    "hint": "Alerts with buttons and commands from a chat (/status, /deploy, /ban…). The hub reaches Telegram by itself, so nothing needs to be exposed.",
+    "help": "Bot",
+    "configure": "Configure",
+    "none": "The bot is not configured: create a bot with @BotFather and paste its token.",
+    "off": "off",
+    "running": "connected",
+    "stopped": "not connected",
+    "noChats": "No chats; the bot answers no one.",
+    "notify": "alerts",
+    "test": "Test message",
+    "testSent": "A test message was sent to chat {{id}}",
+    "usersList": "Actions are allowed for: {{users}}",
+    "usersAny": "Actions are allowed for any member of a chat with the admin role.",
+    "modalTitle": "Telegram bot",
+    "setupHint": "The token comes from @BotFather (/newbot). The bot tells you the chat number itself: send it /start in that chat (add the bot to a group first). The read role gets state and view buttons; the admin role also gets deploys, dry runs and bans with confirmation.",
+    "token": "Bot token",
+    "tokenKeep": "keep (@{{name}})",
+    "tokenNew": "new",
+    "tokenKept": "unchanged",
+    "enabled": "enabled",
+    "chats": "Chats",
+    "chat": "chat",
+    "chatTitle": "title (for yourself)",
+    "removeChat": "Remove",
+    "addChat": "Add chat",
+    "chatsHint": "The bot answers other chats only with their number on /start.",
+    "users": "Who may act (Telegram user id)",
+    "usersHint": "Empty means any member of a chat with the admin role. The bot tells you your id on /id.",
+    "badUsers": "People numbers are integers separated by commas",
+    "kinds": "Alerts"
   }
 }

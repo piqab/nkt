@@ -493,7 +493,10 @@ func (s *Server) localAPI(ctx context.Context, username, method, path string, in
 	if s.local == nil {
 		return 0, msgs.Errorf("hub.f2bNoLocal")
 	}
-	user, err := s.db.UserByName(ctx, username)
+	// Задание, запущенное API-токеном или ботом, — от имени действующего
+	// администратора хаба: права уже проверены на входе (пределы токена,
+	// чат бота).
+	user, err := s.db.UserByName(ctx, s.actingUser(ctx, username, s.firstAdmin(ctx)))
 	if err != nil {
 		return 0, err
 	}
