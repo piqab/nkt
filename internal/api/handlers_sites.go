@@ -103,6 +103,9 @@ type SiteFirewall struct {
 	Active  bool   `json:"active"`
 	Open80  bool   `json:"open80"`
 	Open443 bool   `json:"open443"`
+	// Writable — nkt сможет добавить правило (ufw: /etc/ufw пишется
+	// изнутри песочницы или в обход неё; firewalld — через D-Bus).
+	Writable bool `json:"writable"`
 }
 
 func (s *Server) siteProxies(ctx context.Context, snap *model.Snapshot) []SiteProxyState {
@@ -287,6 +290,13 @@ func (s *Server) siteStacks(ctx context.Context, engine string) []SiteStack {
 	return out
 }
 
+// siteFirewallState — файрвол хоста и сможет ли nkt открыть в нём порты.
+func (s *Server) siteFirewallState(snap *model.Snapshot) SiteFirewall {
+	fw := siteFirewall(snap)
+	fw.Writable = fw.Manager != "ufw" || s.firewall == nil || s.firewall.Writable()
+	return fw
+}
+
 func siteFirewall(snap *model.Snapshot) SiteFirewall {
 	var fw SiteFirewall
 	if snap == nil {
@@ -343,7 +353,7 @@ func (s *Server) handleSitePreflight(w http.ResponseWriter, r *http.Request) {
 		"proxies":  s.siteProxies(ctx, snap),
 		"holders":  holders,
 		"stacks":   s.siteStacks(ctx, engine),
-		"firewall": siteFirewall(snap),
+		"firewall": s.siteFirewallState(snap),
 		"engine":   engine,
 		"certbot":  collect.Which(ctx, c, "certbot"),
 		"sites":    sites,
@@ -514,10 +524,13 @@ func (sr *siteRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	case !p.OpenFirewall:
 		jc.Log("site.firewallClosedSkip", fw.Manager)
 	default:
+		// Правило не добавилось — не повод бросать сайт: хаб снаружи уже
+		// проверил порт 80; если он закрыт, это скажет выпуск сертификата.
 		if err := s.siteOpenFirewall(ctx, user, fw.Manager, snap); err != nil {
-			return err
+			jc.Log("site.firewallFailed", fw.Manager, msgs.Localize(lang, err))
+		} else {
+			jc.Log("site.firewallOpened", fw.Manager)
 		}
-		jc.Log("site.firewallOpened", fw.Manager)
 	}
 
 	// 3. Цель: сервис стека — на 127.0.0.1.

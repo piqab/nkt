@@ -227,4 +227,10 @@ var enSitesCatalog = map[string]string{
 	"compose.pullRateLimit":         "Docker Hub limited pulls (429: 100 per hour for anonymous users); wait up to an hour or run docker login on the host (a free account has a higher limit)",
 	"compose.pullDenied":            "No access to the image (a private registry or no such repository); log in to the registry on the host (docker login) or set \"Access\" → Registry for the pipeline",
 	"compose.pullNotFound":          "No such image or tag in the registry; check the name and tag",
+	"site.firewallFailed":           "? %s: could not open 80/443 (%s); continuing; if port 80 is closed from outside, no certificate will be issued, open it by hand: ufw allow 80,443/tcp",
+	"deploy.dryFirewallOff":         "  the host firewall is off; nothing to open",
+	"deploy.dryFirewallOpen":        "  firewall %s: 80/443 are already open",
+	"deploy.dryFirewallClosedSkip":  "? firewall %s: 80/443 are closed and firewall: false; open them by hand",
+	"deploy.dryFirewallNotWritable": "? firewall %s: the rule cannot be written (service sandbox, an old nkt version); open by hand: ufw allow 80,443/tcp",
+	"deploy.dryFirewallWillOpen":    "  firewall %s: 80/443 will be opened",
 }

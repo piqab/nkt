@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"os/exec"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,6 +22,39 @@ type FirewallManager struct {
 	cfg *config.Config
 	c   collect.Collector
 	db  *store.DB
+	// escape — запуск вне песочницы юнита: ufw пишет правила в /etc/ufw,
+	// а под ProtectSystem=strict он только для чтения (старые юниты без
+	// ReadWritePaths=/etc/ufw).
+	escape func(ctx context.Context, argv ...string) (collect.CommandResult, error)
+}
+
+// SetEscape — как запускать ufw вне песочницы, если изнутри не пишется.
+func (f *FirewallManager) SetEscape(run func(ctx context.Context, argv ...string) (collect.CommandResult, error)) {
+	f.escape = run
+}
+
+// ufwRulesFile — куда ufw пишет правила (проверка, пишется ли изнутри).
+const ufwRulesFile = "/etc/ufw/user.rules"
+
+// Writable — сможет ли nkt записать правило ufw: изнутри песочницы или
+// в обход неё.
+func (f *FirewallManager) Writable() bool {
+	return f.escape != nil || f.c.Writable(ufwRulesFile)
+}
+
+// ufw запускает ufw; изменение, которому помешала песочница («is not
+// writable», «Read-only file system»), повторяется вне её.
+func (f *FirewallManager) ufw(ctx context.Context, args ...string) (collect.CommandResult, error) {
+	res, err := f.c.Run(ctx, "ufw", args...)
+	out := strings.ToLower(res.Output())
+	if f.escape != nil && (strings.Contains(out, "is not writable") || strings.Contains(out, "read-only file system")) {
+		full := "ufw"
+		if p, lerr := exec.LookPath("ufw"); lerr == nil {
+			full = p
+		}
+		return f.escape(ctx, append([]string{full}, args...)...)
+	}
+	return res, err
 }
 
 // NewFirewallManager builds the firewall control plane.
@@ -87,7 +121,7 @@ func (f *FirewallManager) AddRule(ctx context.Context, user string, spec RuleSpe
 		return collect.CommandResult{}, err
 	}
 	args := spec.argv()
-	res, err := f.c.Run(ctx, "ufw", args...)
+	res, err := f.ufw(ctx, args...)
 
 	outcome := "ok"
 	if err != nil || !res.OK() {
@@ -220,7 +254,7 @@ func (f *FirewallManager) DeleteRule(ctx context.Context, user string, number in
 			number, found.Text)
 	}
 
-	res, err := f.c.Run(ctx, "ufw", "--force", "delete", strconv.Itoa(number))
+	res, err := f.ufw(ctx, "--force", "delete", strconv.Itoa(number))
 	outcome := "ok"
 	if err != nil || !res.OK() {
 		outcome = "error"
@@ -249,7 +283,7 @@ func (f *FirewallManager) DeleteRuleBySpec(ctx context.Context, user string, spe
 		return collect.CommandResult{}, err
 	}
 	args := append([]string{"--force", "delete"}, spec.argv()...)
-	res, err := f.c.Run(ctx, "ufw", args...)
+	res, err := f.ufw(ctx, args...)
 
 	outcome := "ok"
 	if err != nil || !res.OK() {
@@ -269,7 +303,7 @@ func (f *FirewallManager) DeleteRuleBySpec(ctx context.Context, user string, spe
 
 // Reload re-applies the ufw ruleset.
 func (f *FirewallManager) Reload(ctx context.Context, user string) (collect.CommandResult, error) {
-	res, err := f.c.Run(ctx, "ufw", "reload")
+	res, err := f.ufw(ctx, "reload")
 	outcome := "ok"
 	if err != nil || !res.OK() {
 		outcome = "error"

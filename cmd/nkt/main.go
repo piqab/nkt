@@ -743,6 +743,11 @@ func registerJobRunners(cfg *config.Config, m *jobs.Manager, services *control.S
 		collect.SetEscape([]string{"lxc"}, func(ctx context.Context, argv ...string) (collect.CommandResult, error) {
 			return api.RunTooling(ctx, argv...)
 		})
+		// ufw пишет правила в /etc/ufw — у старых юнитов он под песочницей
+		// только для чтения: запись правила повторяется снаружи.
+		firewall.SetEscape(func(ctx context.Context, argv ...string) (collect.CommandResult, error) {
+			return api.RunTooling(ctx, argv...)
+		})
 		monitor.PingRunner = func(ctx context.Context, argv ...string) (string, int, error) {
 			res, err := api.RunTooling(ctx, argv...)
 			return res.Stdout + res.Stderr, res.ExitCode, err
