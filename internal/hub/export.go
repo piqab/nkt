@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/piqab/nkt/internal/api"
@@ -52,31 +53,42 @@ func (m *Manager) ExportHub(ctx context.Context, includeKey, includeUsers bool) 
 	for _, img := range m.ClusterImages() {
 		export.ClusterImages = append(export.ClusterImages, store.ClusterImageExport{Name: img.Name, Size: img.Size})
 	}
-	export.Edge = m.exportEdge(ctx)
+	export.Edges = m.exportEdges(ctx)
+	for i := range export.Edges {
+		// Старому хабу — edge вебхуков, как раньше.
+		if e := export.Edges[i]; len(e.Roles) == 0 || slices.Contains(e.Roles, EdgeRoleHooks) {
+			export.Edge = &e
+			break
+		}
+	}
 	if export.F2BTemplates, err = m.exportF2BTemplates(ctx); err != nil {
 		return store.HubExport{}, err
 	}
 	return export, nil
 }
 
-// exportEdge — настройки nkt-edge (хост — по имени); nil — не настроен.
-func (m *Manager) exportEdge(ctx context.Context) *store.EdgeExport {
-	raw, ok, err := m.db.KVGet(ctx, edgeSettingsKey)
-	if err != nil || !ok {
-		return nil
-	}
-	var st EdgeSettings
-	if json.Unmarshal([]byte(raw), &st) != nil || (st.Address == "" && !st.Enabled) {
-		return nil
-	}
-	e := &store.EdgeExport{Enabled: st.Enabled, Address: st.Address, Domain: st.Domain, TokenEnc: st.TokenEnc,
-		CertPEM: st.CertPEM, Fingerprint: st.Fingerprint}
-	if st.HostID != 0 {
-		if h, err := m.db.HostByID(ctx, st.HostID); err == nil {
-			e.Host = h.Name
+// exportEdges — все edge (хост — по имени).
+func (m *Manager) exportEdges(ctx context.Context) []store.EdgeExport {
+	var out []store.EdgeExport
+	for _, st := range loadEdges(ctx, m.db) {
+		if st.Address == "" && !st.Enabled {
+			continue
 		}
+		e := store.EdgeExport{Enabled: st.Enabled, Address: st.Address, Domain: st.Domain, TokenEnc: st.TokenEnc,
+			CertPEM: st.CertPEM, Fingerprint: st.Fingerprint, Roles: st.roles()}
+		if st.HostID != 0 {
+			if h, err := m.db.HostByID(ctx, st.HostID); err == nil {
+				e.Host = h.Name
+			}
+		}
+		out = append(out, e)
 	}
-	return e
+	return out
+}
+
+// edgeExists — у хаба уже есть edge с этим адресом туннеля.
+func (m *Manager) edgeExists(ctx context.Context, address string) bool {
+	return slices.ContainsFunc(loadEdges(ctx, m.db), func(e EdgeSettings) bool { return e.Address == address })
 }
 
 // exportF2BTemplates — свои шаблоны fail2ban с историей версий (старые
@@ -126,8 +138,8 @@ func (m *Manager) ImportPlan(ctx context.Context, export store.HubExport) ([]sto
 	}
 	plan = append(plan, ps)
 	edge := store.PlanSection{Section: store.SectionEdge, Items: []store.PlanItem{}}
-	if export.Edge != nil {
-		edge.Items = append(edge.Items, store.PlanItem{Name: export.Edge.Address, Conflict: m.exportEdge(ctx) != nil, Replaceable: true})
+	for _, e := range export.EdgeList() {
+		edge.Items = append(edge.Items, store.PlanItem{Name: e.Address, Conflict: m.edgeExists(ctx, e.Address), Replaceable: true})
 	}
 	plan = append(plan, edge)
 	return plan, nil
@@ -238,19 +250,21 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 			}
 			export.Settings = settings
 		}
-		if export.Edge != nil && m.exportEdge(ctx) != nil && !res.Replace(store.SectionEdge, export.Edge.Address) {
-			// Будет пропущен — секрет не нужен.
-		} else if export.Edge != nil {
-			e := *export.Edge
-			export.Edge = &e
-			t, err := reenc(export.Edge.TokenEnc)
-			if err != nil {
-				pre = append(pre, fmt.Sprintf("edge: %v", err))
-				export.Edge = nil
-			} else {
-				export.Edge.TokenEnc = t
+		var edges []store.EdgeExport
+		for _, e := range export.EdgeList() {
+			if m.edgeExists(ctx, e.Address) && !res.Replace(store.SectionEdge, e.Address) {
+				edges = append(edges, e) // будет пропущен — секрет не нужен
+				continue
 			}
+			t, err := reenc(e.TokenEnc)
+			if err != nil {
+				pre = append(pre, fmt.Sprintf("edge %s: %v", e.Address, err))
+				continue
+			}
+			e.TokenEnc = t
+			edges = append(edges, e)
 		}
+		export.Edges, export.Edge = edges, nil
 		// Ключ модели — тем же мастер-ключом, что и секреты хостов.
 		if enc := export.Settings[aiKeyKVKey]; enc != "" {
 			raw, err := secretbox.Decrypt(oldKey, []byte(enc))
@@ -270,7 +284,7 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 	rep := m.db.ImportHosts(ctx, export, res)
 	rep.Errors = append(pre, rep.Errors...)
 	m.importF2BTemplates(ctx, export.F2BTemplates, res, &rep)
-	m.importEdge(ctx, export.Edge, res, &rep)
+	m.importEdges(ctx, export.EdgeList(), res, &rep)
 	// Образы для кластеров: чего нет в библиотеке этого хаба.
 	have := map[string]bool{}
 	for _, img := range m.ClusterImages() {
@@ -342,36 +356,45 @@ func (m *Manager) importF2BTemplates(ctx context.Context, list []store.F2BTempla
 	}
 }
 
-// importEdge — настройки nkt-edge; хост — по имени среди хостов хаба.
-func (m *Manager) importEdge(ctx context.Context, e *store.EdgeExport, res store.ImportResolutions, rep *store.ImportReport) {
-	if e == nil {
+// importEdges — edge из файла; хост — по имени среди хостов хаба, edge
+// с тем же адресом туннеля — замена по выбору.
+func (m *Manager) importEdges(ctx context.Context, list []store.EdgeExport, res store.ImportResolutions, rep *store.ImportReport) {
+	if len(list) == 0 {
 		return
 	}
 	cnt := rep.Count(store.SectionEdge)
-	exists := m.exportEdge(ctx) != nil
-	if exists && !res.Replace(store.SectionEdge, e.Address) {
-		cnt.Skipped++
-		return
-	}
-	st := EdgeSettings{Enabled: e.Enabled, Address: e.Address, Domain: e.Domain, TokenEnc: e.TokenEnc, CertPEM: e.CertPEM, Fingerprint: e.Fingerprint}
-	if e.Host != "" {
-		if hosts, err := m.db.ListHosts(ctx); err == nil {
-			for _, h := range hosts {
-				if h.Name == e.Host {
-					st.HostID = h.ID
-				}
+	hosts, _ := m.db.ListHosts(ctx)
+	for _, e := range list {
+		var existing EdgeSettings
+		for _, cur := range loadEdges(ctx, m.db) {
+			if cur.Address == e.Address {
+				existing = cur
 			}
 		}
-	}
-	b, _ := json.Marshal(st)
-	if err := m.db.KVSet(ctx, edgeSettingsKey, string(b)); err != nil {
-		rep.Err("edge: %v", err)
-		return
-	}
-	if exists {
-		cnt.Replaced++
-	} else {
-		cnt.Added++
+		if existing.ID != 0 && !res.Replace(store.SectionEdge, e.Address) {
+			cnt.Skipped++
+			continue
+		}
+		roles, ok := validRoles(e.Roles)
+		if !ok {
+			roles = []string{EdgeRoleHooks}
+		}
+		st := EdgeSettings{ID: existing.ID, Enabled: e.Enabled, Address: e.Address, Domain: e.Domain, TokenEnc: e.TokenEnc,
+			CertPEM: e.CertPEM, Fingerprint: e.Fingerprint, Roles: roles}
+		for _, h := range hosts {
+			if e.Host != "" && h.Name == e.Host {
+				st.HostID = h.ID
+			}
+		}
+		if _, err := putEdgeDB(ctx, m.db, st); err != nil {
+			rep.Err("edge %s: %v", e.Address, err)
+			continue
+		}
+		if existing.ID != 0 {
+			cnt.Replaced++
+		} else {
+			cnt.Added++
+		}
 	}
 }
 

@@ -205,3 +205,14 @@ func TunnelCert(dir string) (tls.Certificate, string, error) {
 	}
 	return cert, Fingerprint(cert.Certificate[0]), nil
 }
+
+// APIPath — путь, который edge с ролью api передаёт хабу: вызовы API с
+// токеном (/api/auth/me, /api/hub/…, /api/hosts/…), кроме тех, что
+// обходятся без входа (вебхуки, проброс порта Kubernetes). Хаб проверяет
+// то же самое у себя.
+func APIPath(p string) bool {
+	if strings.Contains(p, "..") || strings.Contains(p, "/k8s/pf/") || strings.HasPrefix(p, "/api/hub/hooks/") {
+		return false
+	}
+	return p == "/api/auth/me" || strings.HasPrefix(p, "/api/hub/") || strings.HasPrefix(p, "/api/hosts/")
+}

@@ -29,4 +29,11 @@ var ruAPICatalog = map[string]string{
 	"hub.tokenNameTaken":     "Токен «%s» уже есть",
 	"hub.tokenMissing":       "Нет токена №%d",
 	"hub.jobMissing":         "Нет задания №%d",
+	"auth.tokenEdgeSigned":   "Через nkt-edge — только подписанные запросы токена (X-NKT-API-*), без Bearer и cookie",
+	"auth.tokenEdgeDenied":   "Токену «%s» не разрешён доступ через nkt-edge %s",
+	"edge.apiPathDenied":     "Через nkt-edge доступны только вызовы API с токеном: /api/auth/me, /api/hub/…, /api/hosts/…",
+	"edge.apiNoClient":       "nkt-edge не передал адрес клиента",
+	"edge.missing":           "Нет edge №%d",
+	"edge.badRoles":          "Неизвестные роли edge: %s",
+	"edge.manualIncomplete":  "Для edge нужны адрес туннеля и токен (EDGE_TOKEN)",
 }

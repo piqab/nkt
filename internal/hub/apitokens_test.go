@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/secretbox"
 	"github.com/piqab/nkt/internal/store"
 )
 
@@ -193,4 +194,90 @@ func TestTokenClientIP(t *testing.T) {
 	if !ipAllowed([]string{"2001:db8::1"}, "2001:db8::1") {
 		t.Fatal("ipAllowed v6")
 	}
+}
+
+// API через edge: только роль api, только подписанные запросы токена с
+// флагом «через edge»; адрес клиента — переданный edge.
+func TestAPIThroughEdge(t *testing.T) {
+	srv, db, _ := localFixtureHub(t)
+	ctx := context.Background()
+	mk := func(name string, viaEdge bool, ips []string) (string, string) {
+		keyID, secret, _ := newTokenSecret()
+		enc, _ := secretboxEncrypt(srv, secret)
+		if _, err := db.CreateAPIToken(ctx, store.APIToken{Name: name, KeyID: keyID, SecretEnc: enc, Role: store.TokenRoleRead, IPs: ips, ViaEdge: viaEdge}); err != nil {
+			t.Fatal(err)
+		}
+		return keyID, secret
+	}
+	edgeKey, edgeSecret := mk("via-edge", true, []string{"198.51.100.0/24"})
+	lanKey, lanSecret := mk("lan-only", false, nil)
+	n := 0
+	call := func(h http.Handler, method, uri, key, secret, from string, extra func(*http.Request)) int {
+		t.Helper()
+		n++
+		req := httptest.NewRequest(method, uri, nil)
+		req.RemoteAddr = "203.0.113.200:4000" // адрес самого VPS в туннеле
+		if from != "" {
+			req.Header.Set("X-Forwarded-For", from)
+		}
+		if key != "" {
+			ts := strconv.FormatInt(time.Now().Unix(), 10)
+			nonce := "edge-nonce-" + strconv.Itoa(n) + "-0000000"
+			req.Header.Set("X-NKT-API-Key", key)
+			req.Header.Set("X-NKT-API-Timestamp", ts)
+			req.Header.Set("X-NKT-API-Nonce", nonce)
+			req.Header.Set("X-NKT-API-Signature", TokenSignature(secret, ts, nonce, method, uri, nil))
+		}
+		if extra != nil {
+			extra(req)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code >= 400 {
+			t.Logf("%s %s: %d %s", method, uri, rec.Code, rec.Body)
+		}
+		return rec.Code
+	}
+	api := srv.edgeHandler(EdgeSettings{Domain: "api.example.com", Roles: []string{EdgeRoleAPI}})
+	hooks := srv.edgeHandler(EdgeSettings{Domain: "hooks.example.com"})
+	cases := []struct {
+		name string
+		h    http.Handler
+		uri  string
+		key  string
+		sec  string
+		from string
+		set  func(*http.Request)
+		want int
+	}{
+		{"signed via edge", api, "/api/hub/hosts", edgeKey, edgeSecret, "198.51.100.9", nil, 200},
+		{"local host section", api, "/api/hosts/local/overview", edgeKey, edgeSecret, "198.51.100.9", nil, 200},
+		{"token without edge flag", api, "/api/hub/hosts", lanKey, lanSecret, "198.51.100.9", nil, 403},
+		{"client address not allowed", api, "/api/hub/hosts", edgeKey, edgeSecret, "192.0.2.50", nil, 403},
+		{"no client address", api, "/api/hub/hosts", edgeKey, edgeSecret, "", nil, 400},
+		{"bearer refused", api, "/api/hub/hosts", "", "", "198.51.100.9", func(r *http.Request) { r.Header.Set("Authorization", "Bearer nkt_x") }, 401},
+		{"cookie only", api, "/api/hub/hosts", "", "", "198.51.100.9", func(r *http.Request) { r.Header.Set("Cookie", "nkt_session=x") }, 401},
+		{"login path", api, "/api/auth/login", edgeKey, edgeSecret, "198.51.100.9", nil, 404},
+		{"hooks path via api", api, "/api/hub/hooks/abc", edgeKey, edgeSecret, "198.51.100.9", nil, 404},
+		{"ui path", api, "/index.html", edgeKey, edgeSecret, "198.51.100.9", nil, 404},
+		{"api on hooks-only edge", hooks, "/api/hub/hosts", edgeKey, edgeSecret, "198.51.100.9", nil, 404},
+	}
+	for _, c := range cases {
+		if got := call(c.h, "GET", c.uri, c.key, c.sec, c.from, c.set); got != c.want {
+			t.Errorf("%s: want %d, got %d", c.name, c.want, got)
+		}
+	}
+	if !EdgeSettingsHasDefault() {
+		t.Error("edge without roles must serve hooks only")
+	}
+}
+
+func secretboxEncrypt(srv *Server, secret string) ([]byte, error) {
+	return secretbox.Encrypt(srv.hub.key, []byte(secret))
+}
+
+// EdgeSettingsHasDefault — edge без ролей (прежние настройки) — только вебхуки.
+func EdgeSettingsHasDefault() bool {
+	st := EdgeSettings{}
+	return st.Has(EdgeRoleHooks) && !st.Has(EdgeRoleAPI)
 }

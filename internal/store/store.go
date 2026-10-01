@@ -590,6 +590,7 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"pipelines", "removal", `ALTER TABLE pipelines ADD COLUMN removal TEXT NOT NULL DEFAULT ''`},
 	// dry_skip — снятые галочки проверок сухого прогона (JSON-список).
 	{"pipelines", "dry_skip", `ALTER TABLE pipelines ADD COLUMN dry_skip TEXT NOT NULL DEFAULT ''`},
+	{"api_tokens", "via_edge", `ALTER TABLE api_tokens ADD COLUMN via_edge INTEGER NOT NULL DEFAULT 0`},
 }
 
 // addMissingColumns applies whatever entries in columnMigrations a table

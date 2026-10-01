@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -43,7 +44,10 @@ type Server struct {
 	// незачем): обработчик тогда отвечает, что задания недоступны.
 	jobs *jobs.Manager
 	// edge — соединение с nkt-edge (edge.go); nil — не запущено.
-	edge *edgeClient
+	edge *edgeHub
+	// apiHandler — API хаба для запросов токенов через edge (роль api).
+	apiOnce    sync.Once
+	apiHandler http.Handler
 	// scripts — исполнитель сценариев (см. scriptrun.go); хранит пароли
 	// запуска в памяти, поэтому один на сервер.
 	scripts *ScriptRunner
@@ -317,12 +321,13 @@ func (s *Server) Handler() http.Handler {
 					r.Put("/hub/tokens/{id}", s.handleTokenUpdate)
 					r.Post("/hub/tokens/{id}/rotate", s.handleTokenRotate)
 					r.Delete("/hub/tokens/{id}", s.handleTokenDelete)
-					r.Get("/hub/edge", s.handleEdgeStatus)
-					r.Put("/hub/edge", s.handleEdgeUpdate)
-					r.Delete("/hub/edge", s.handleEdgeDelete)
-					r.Post("/hub/edge/install", s.handleEdgeInstall)
-					r.Post("/hub/edge/uninstall", s.handleEdgeUninstall)
-					r.Post("/hub/edge/check", s.handleEdgeCheck)
+					r.Get("/hub/edges", s.handleEdges)
+					r.Post("/hub/edges", s.handleEdgeSave)
+					r.Put("/hub/edges/{id}", s.handleEdgeSave)
+					r.Delete("/hub/edges/{id}", s.handleEdgeDelete)
+					r.Post("/hub/edges/install", s.handleEdgeInstall)
+					r.Post("/hub/edges/{id}/uninstall", s.handleEdgeUninstall)
+					r.Post("/hub/edges/check", s.handleEdgeCheck)
 					r.Get("/hub/sites", s.handleSites)
 					r.Post("/hub/sites/preflight", s.handleSitePreflight)
 					r.Post("/hub/sites", s.handleSiteSave)

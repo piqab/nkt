@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Button, Input, Select, Space, Tag, Tooltip, Typography } from 'antd'
+import { Button, Checkbox, Input, Select, Space, Tag, Tooltip, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { HubHost } from '../types'
@@ -19,6 +19,7 @@ interface ApiToken {
   groups: string[]
   ips: string[]
   expires_at?: string
+  via_edge: boolean
   author?: string
   created_at: string
   last_used_at?: string
@@ -71,7 +72,12 @@ export function ApiTokensCard({ admin }: { admin: boolean }) {
     {
       title: t('tokens.role'),
       key: 'role',
-      render: (_: unknown, tk: ApiToken) => <Tag color={tk.role === 'admin' ? 'red' : 'blue'}>{t(`tokens.roles.${tk.role}`)}</Tag>,
+      render: (_: unknown, tk: ApiToken) => (
+        <Space size={2} wrap>
+          <Tag color={tk.role === 'admin' ? 'red' : 'blue'}>{t(`tokens.roles.${tk.role}`)}</Tag>
+          {tk.via_edge && <Tag color="purple">{t('tokens.edgeTag')}</Tag>}
+        </Space>
+      ),
     },
     {
       title: t('tokens.scope'),
@@ -210,6 +216,7 @@ interface Draft {
   ips: string
   /** Срок в днях; -1 — оставить прежний (правка). */
   days: number
+  viaEdge: boolean
 }
 
 /** Текст токена для диффа перед записью. */
@@ -221,6 +228,7 @@ function draftText(d: Draft, hostName: Map<number, string>, expiresLabel: string
     `${t('tokens.groups')}: ${d.groups.join(', ') || '—'}`,
     `${t('tokens.ips')}: ${splitIPs(d.ips).join(', ') || '—'}`,
     `${t('tokens.expires')}: ${expiresLabel}`,
+    `${t('tokens.viaEdge')}: ${d.viaEdge ? t('tokens.yes') : t('tokens.no')}`,
     '',
   ].join('\n')
 }
@@ -249,8 +257,8 @@ function TokenModal({
   const { t } = useTranslation()
   const groups = useApi<{ groups: string[] }>('/hub/groups')
   const initial: Draft = token
-    ? { name: token.name, role: token.role, hosts: token.hosts, groups: token.groups, ips: token.ips.join(', '), days: -1 }
-    : { name: '', role: 'read', hosts: [], groups: [], ips: '', days: 90 }
+    ? { name: token.name, role: token.role, hosts: token.hosts, groups: token.groups, ips: token.ips.join(', '), days: -1, viaEdge: token.via_edge }
+    : { name: '', role: 'read', hosts: [], groups: [], ips: '', days: 90, viaEdge: false }
   const [d, setD] = useState<Draft>(initial)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -321,6 +329,9 @@ function TokenModal({
             ]}
           />
         </label>
+        <Checkbox checked={d.viaEdge} onChange={(e) => setD({ ...d, viaEdge: e.target.checked })}>
+          {t('tokens.viaEdge')} <span className="small muted">— {t('tokens.viaEdgeHint')}</span>
+        </Checkbox>
         {token && changed && (
           <>
             <span className="small muted">{t('tokens.diffHint')}</span>
@@ -344,6 +355,7 @@ function TokenModal({
                 ips: splitIPs(d.ips),
                 expires_days: Math.max(d.days, 0),
                 keep_expiry: d.days === -1,
+                via_edge: d.viaEdge,
               }
               try {
                 if (token) {

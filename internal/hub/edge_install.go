@@ -139,9 +139,16 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 
 	jc.StepKey(3, edgeSteps, "edge.stepFiles")
-	st := s.edgeSettings(ctx)
+	// Edge на этом хосте уже есть — переустановка того же edge (тот же
+	// номер в списке и токен туннеля).
+	var st EdgeSettings
+	for _, e := range s.edges(ctx) {
+		if e.HostID == host.ID {
+			st = e
+		}
+	}
 	token := ""
-	if len(st.TokenEnc) > 0 && st.HostID == host.ID {
+	if len(st.TokenEnc) > 0 {
 		if raw, err := secretbox.Decrypt(s.hub.key, st.TokenEnc); err == nil {
 			token = string(raw)
 		}
@@ -149,7 +156,9 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if token == "" {
 		token = randomToken(32)
 	}
-	envFile := fmt.Sprintf("EDGE_DOMAIN=%s\nEDGE_TOKEN=%s\nEDGE_TUNNEL_ADDR=:%s\nEDGE_GITHUB_ONLY=%t\n", p.Domain, token, EdgeTunnelPort, p.GitHubOnly)
+	roles, _ := validRoles(p.Roles)
+	envFile := fmt.Sprintf("EDGE_DOMAIN=%s\nEDGE_TOKEN=%s\nEDGE_TUNNEL_ADDR=:%s\nEDGE_GITHUB_ONLY=%t\nEDGE_ROLES=%s\n",
+		p.Domain, token, EdgeTunnelPort, p.GitHubOnly, strings.Join(roles, ","))
 	if p.ProxyPort > 0 {
 		envFile += fmt.Sprintf("EDGE_PROXY_ADDR=127.0.0.1:%d\n", p.ProxyPort)
 	}
@@ -245,19 +254,16 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err != nil {
 		return err
 	}
-	st = EdgeSettings{Enabled: true, Address: net.JoinHostPort(host.Addr, EdgeTunnelPort), Domain: p.Domain, TokenEnc: enc, CertPEM: certPEM, Fingerprint: fp, HostID: host.ID}
-	if err := s.saveEdgeSettings(ctx, st); err != nil {
+	st, err = s.putEdge(ctx, EdgeSettings{ID: st.ID, Enabled: true, Address: net.JoinHostPort(host.Addr, EdgeTunnelPort), Domain: p.Domain,
+		TokenEnc: enc, CertPEM: certPEM, Fingerprint: fp, HostID: host.ID, Roles: roles})
+	if err != nil {
 		return err
 	}
 	s.kickEdge()
 	connected := false
 	var last error
 	for i := 0; i < 20 && !connected; i++ {
-		if s.edge != nil {
-			s.edge.mu.Lock()
-			connected, last = s.edge.connected, s.edge.lastErr
-			s.edge.mu.Unlock()
-		}
+		connected, _, last = s.edgeState(st.ID)
 		if !connected && !sleepCtx(ctx, time.Second) {
 			return ctx.Err()
 		}
@@ -529,7 +535,7 @@ func ipsOverlap(a, b []string) bool {
 	return false
 }
 
-// handleEdgeCheck — POST /hub/edge/check {host_id, domain}: для формы
+// handleEdgeCheck — POST /hub/edges/check {host_id, domain}: для формы
 // установки — указывает ли имя на этот хост.
 func (s *Server) handleEdgeCheck(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -580,7 +586,16 @@ func (r *EdgeUninstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	defer link.Close()
 	sudo := sudoPrefix(host.SSHUser)
 	jc.StepKey(2, 3, "edge.stepRemove")
-	domain := s.edgeSettings(ctx).Domain
+	st, ok := s.edgeByID(ctx, p.EdgeID)
+	if !ok {
+		// Задание старой версии: edge по хосту.
+		for _, e := range s.edges(ctx) {
+			if e.HostID == host.ID {
+				st = e
+			}
+		}
+	}
+	domain := st.Domain
 	if domain != "" && edgeDomainRe.MatchString(domain) {
 		renewal := "/etc/letsencrypt/renewal/" + domain + ".conf"
 		if out, _ := runRemote(link.client, sudo+"grep -l nkt-edge "+renewal+" 2>/dev/null"); strings.TrimSpace(out) != "" {
@@ -600,8 +615,10 @@ func (r *EdgeUninstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	jc.Log("edge.removed")
 	jc.StepKey(3, 3, "edge.stepForget")
-	if err := s.db.KVSet(ctx, edgeSettingsKey, "{}"); err != nil {
-		return err
+	if st.ID != 0 {
+		if err := s.dropEdge(ctx, st.ID); err != nil {
+			return err
+		}
 	}
 	s.kickEdge()
 	jc.Log("edge.portsKept")

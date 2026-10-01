@@ -29,4 +29,11 @@ var enAPICatalog = map[string]string{
 	"hub.tokenNameTaken":     "Token \"%s\" already exists",
 	"hub.tokenMissing":       "No token #%d",
 	"hub.jobMissing":         "No job #%d",
+	"auth.tokenEdgeSigned":   "Through nkt-edge only signed token requests (X-NKT-API-*) are accepted, no Bearer or cookies",
+	"auth.tokenEdgeDenied":   "Token \"%s\" is not allowed through nkt-edge %s",
+	"edge.apiPathDenied":     "Through nkt-edge only token API calls are available: /api/auth/me, /api/hub/…, /api/hosts/…",
+	"edge.apiNoClient":       "nkt-edge did not pass the client address",
+	"edge.missing":           "No edge #%d",
+	"edge.badRoles":          "Unknown edge roles: %s",
+	"edge.manualIncomplete":  "An edge needs a tunnel address and a token (EDGE_TOKEN)",
 }
