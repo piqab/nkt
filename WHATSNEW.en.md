@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.80 — 2026-10-01
+
+- **Outside checks no longer reach into the VPS's own network**: an edge
+  with this role refuses to connect to loopback, private, link-local
+  (cloud metadata `169.254.169.254`) and CGNAT addresses. The address is
+  checked after DNS, so a name pointing inside does not help either. Such
+  a check reports "blocked: not a public address".
+- The n8n node builds with `n8n-workflow` 2.41 (the stable branch); the
+  vulnerable lodash, form-data, uuid and axios are gone from the build
+  dependencies. Dependencies install with `npm ci --ignore-scripts`.
+- Hub import errors quote names from the file and strip line breaks.
+
 ## v1.11.79 — 2026-10-01
 
 - **The n8n node ships with every release**: the

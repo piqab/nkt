@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/netip"
 	"regexp"
 	"strconv"
 	"strings"
@@ -68,6 +69,41 @@ type ProbeResponse struct {
 
 var probeHostRe = regexp.MustCompile(`^[A-Za-z0-9.:_-]{1,253}$`)
 
+// errProbePrivate — адрес не из интернета: роль «проверки снаружи»
+// смотрит на то, что видит интернет, и в сеть самого VPS (локальные
+// службы, метаданные облака 169.254.169.254) не ходит.
+var errProbePrivate = errors.New("blocked: not a public address")
+
+// probeAllowPrivate — тесты проверяют на loopback.
+var probeAllowPrivate = false
+
+// publicAddr — адрес из интернета (не loopback, не частная сеть, не
+// link-local, не CGNAT, не служебный).
+func publicAddr(a netip.Addr) bool {
+	a = a.Unmap()
+	if !a.IsGlobalUnicast() || a.IsPrivate() || a.IsLoopback() || a.IsLinkLocalUnicast() {
+		return false
+	}
+	return !netip.MustParsePrefix("100.64.0.0/10").Contains(a)
+}
+
+// probeDialer — соединения проверок: адрес проверяется после DNS, перед
+// соединением, — именем, которое резолвится во внутренний адрес, запрет
+// не обойти.
+func probeDialer() *net.Dialer {
+	return &net.Dialer{Control: func(_, address string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(address)
+		if err != nil {
+			return err
+		}
+		a, err := netip.ParseAddr(host)
+		if err != nil || (!probeAllowPrivate && !publicAddr(a)) {
+			return errProbePrivate
+		}
+		return nil
+	}}
+}
+
 // ValidProbe — проверка понятна и безопасна для командной строки и URL.
 func ValidProbe(c ProbeCheck) bool {
 	if !probeHostRe.MatchString(c.Host) {
@@ -126,11 +162,13 @@ func RunProbe(ctx context.Context, req ProbeRequest) ProbeResponse {
 }
 
 func probeTCP(ctx context.Context, host string, port int) string {
-	var d net.Dialer
-	conn, err := d.DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
+	conn, err := probeDialer().DialContext(ctx, "tcp", net.JoinHostPort(host, strconv.Itoa(port)))
 	if err == nil {
 		_ = conn.Close()
 		return "open"
+	}
+	if errors.Is(err, errProbePrivate) {
+		return errProbePrivate.Error()
 	}
 	if errors.Is(err, syscall.ECONNREFUSED) {
 		return "refused"
@@ -156,7 +194,8 @@ func probeHTTPS(ctx context.Context, c ProbeCheck, r *ProbeResult) {
 		return
 	}
 	client := &http.Client{
-		Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, DisableKeepAlives: true},
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{MinVersion: tls.VersionTLS12}, DisableKeepAlives: true,
+			DialContext: probeDialer().DialContext},
 		// Переадресация — тоже ответ сайта.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}

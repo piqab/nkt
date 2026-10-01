@@ -186,7 +186,7 @@ func (m *Manager) importAccess(ctx context.Context, export store.HubExport, res 
 		for _, e := range export.APITokens {
 			hosts, missing, ok := namesToIDs(e.Hosts, byName)
 			if !ok {
-				rep.Err("token %s: host %s missing — not imported", e.Name, missing)
+				rep.Err("token %q: host %q missing — not imported", e.Name, missing)
 				continue
 			}
 			if e.Role != store.TokenRoleAdmin {
@@ -206,14 +206,14 @@ func (m *Manager) importAccess(ctx context.Context, export store.HubExport, res 
 					err = m.db.SetAPITokenSecret(ctx, t.ID, t.KeyID, t.SecretEnc)
 				}
 				if err != nil {
-					rep.Err("token %s: %v", e.Name, err)
+					rep.Err("token %q: %v", e.Name, err)
 					continue
 				}
 				cnt.Replaced++
 				continue
 			}
 			if _, err := m.db.CreateAPIToken(ctx, t); err != nil {
-				rep.Err("token %s: %v", e.Name, err)
+				rep.Err("token %q: %v", e.Name, err)
 				continue
 			}
 			cnt.Added++
@@ -226,7 +226,7 @@ func (m *Manager) importAccess(ctx context.Context, export store.HubExport, res 
 		for _, e := range export.OutHooks {
 			hosts, missing, ok := namesToIDs(e.Hosts, byName)
 			if !ok {
-				rep.Err("webhook %s: host %s missing — not imported", e.Name, missing)
+				rep.Err("webhook %q: host %q missing — not imported", e.Name, missing)
 				continue
 			}
 			h := OutHook{Name: e.Name, URL: e.URL, Kinds: e.Kinds, Hosts: hosts, Groups: e.Groups, Lang: e.Lang, Enabled: e.Enabled,
@@ -265,7 +265,7 @@ func (m *Manager) importAccess(ctx context.Context, export store.HubExport, res 
 		}
 		existed := m.botConfigured(ctx, name)
 		if err := m.db.KVSet(ctx, botKey(name), string(raw)); err != nil {
-			rep.Err("bot %s: %v", name, err)
+			rep.Err("bot %q: %v", name, err)
 			continue
 		}
 		if name == "telegram" {

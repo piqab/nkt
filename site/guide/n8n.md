@@ -31,7 +31,7 @@ tar xzf n8n-nodes-nkt-$V.tgz -C ~/.n8n/custom/n8n-nodes-nkt --strip-components=1
 
 ```sh
 cd integrations/n8n
-npm ci && npm run build
+npm ci --ignore-scripts && npm run build
 npm test        # подписи сверяются с теми же эталонами, что и в тестах хаба
 mkdir -p ~/.n8n/custom/n8n-nodes-nkt
 cp -r package.json dist ~/.n8n/custom/n8n-nodes-nkt/

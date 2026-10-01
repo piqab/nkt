@@ -7,6 +7,7 @@ func init() {
 	}
 }
 
+// #nosec G101 -- тексты сообщений (ключи вроде auth.tokenInvalid), а не учётные данные.
 var ruAPICatalog = map[string]string{
 	"auth.tokensUnsupported": "API-токены принимает только хаб",
 	"auth.tokenInvalid":      "Неверный API-токен или подпись запроса",

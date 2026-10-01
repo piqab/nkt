@@ -163,7 +163,9 @@ jobs:
         working-directory: integrations/n8n
         run: |
           npm config set fetch-retries 5 fetch-retry-mintimeout 20000 fetch-retry-maxtimeout 120000
-          for i in 1 2 3 4; do npm ci && break; echo "npm ci не удался, попытка $i"; sleep 20; done
+          # Без install-скриптов: n8n-workflow нужен только ради типов, а
+          # тянет нативные модули (isolated-vm), которые незачем собирать.
+          for i in 1 2 3 4; do npm ci --ignore-scripts && break; echo "npm ci не удался, попытка $i"; sleep 20; done
           npm version --no-git-tag-version --allow-same-version "${{ needs.check-version.outputs.binary_version }}"
           npm test
           mkdir -p ../../dist
