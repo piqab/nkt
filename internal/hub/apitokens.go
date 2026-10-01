@@ -400,9 +400,11 @@ func (s *Server) tokenPolicy(r *http.Request, t store.APIToken) (bool, error) {
 
 // hostGroups — группа каждого хоста (у машины — группа её хоста) и
 // машины хаба.
-func (s *Server) hostGroups(ctx context.Context) map[int64]string {
+func (s *Server) hostGroups(ctx context.Context) map[int64]string { return s.hub.hostGroups(ctx) }
+
+func (m *Manager) hostGroups(ctx context.Context) map[int64]string {
 	out := map[int64]string{}
-	hosts, err := s.db.ListHosts(ctx)
+	hosts, err := m.db.ListHosts(ctx)
 	if err != nil {
 		return out
 	}
@@ -416,7 +418,7 @@ func (s *Server) hostGroups(ctx context.Context) map[int64]string {
 			}
 		}
 	}
-	out[localHostID] = s.hub.LocalHostGroup(ctx)
+	out[localHostID] = m.LocalHostGroup(ctx)
 	return out
 }
 
@@ -453,12 +455,8 @@ func (s *Server) pipelineInScope(ctx context.Context, p store.Pipeline) bool {
 	if allow == nil {
 		return true
 	}
-	spec, err := deploy.ParseSpec(p.Content)
-	if err != nil || spec.Action != deploy.ActionCompose || spec.Compose == nil {
-		return false
-	}
-	targets, err := s.resolveHosts(ctx, spec.Compose.Hosts, spec.Compose.Group)
-	if err != nil || len(targets) == 0 {
+	targets, ok := s.pipelineTargets(ctx, p)
+	if !ok {
 		return false
 	}
 	for _, t := range targets {
@@ -467,4 +465,17 @@ func (s *Server) pipelineInScope(ctx context.Context, p store.Pipeline) bool {
 		}
 	}
 	return true
+}
+
+// pipelineTargets — хосты compose-конвейера (прочие виды — нет).
+func (s *Server) pipelineTargets(ctx context.Context, p store.Pipeline) ([]targetHost, bool) {
+	spec, err := deploy.ParseSpec(p.Content)
+	if err != nil || spec.Action != deploy.ActionCompose || spec.Compose == nil {
+		return nil, false
+	}
+	targets, err := s.resolveHosts(ctx, spec.Compose.Hosts, spec.Compose.Group)
+	if err != nil || len(targets) == 0 {
+		return nil, false
+	}
+	return targets, true
 }

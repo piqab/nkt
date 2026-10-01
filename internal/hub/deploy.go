@@ -107,6 +107,7 @@ func (r *DeployRunner) Run(ctx context.Context, jc *jobs.Context) (err error) {
 			}
 		}
 		_ = s.db.UpdateDeployment(context.WithoutCancel(ctx), d.ID, status, commit, text)
+		s.emitDeploy(context.WithoutCancel(ctx), pl, d, jc.Job.ID, commit, err)
 	}()
 	_ = s.db.UpdateDeployment(ctx, d.ID, store.DeployRunning, "", "")
 

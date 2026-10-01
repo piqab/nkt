@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.72 — 2026-10-01
+
+- **Outgoing webhooks** in "Alerts" → "Outgoing webhooks": the hub sends
+  events to n8n, a chat bot or your own system by itself. Events: a host
+  is unreachable or back, new findings and their resolution, a failed
+  job, a reboot, bans, and a deployment that succeeded or failed. Each
+  recipient has a choice of events, hosts and groups, and a text
+  language. A POST of JSON with an HMAC signature (as on nkt's incoming
+  webhooks), retries on failure, a "Test" button and the last delivery
+  outcome. Nothing on the hub needs to be exposed.
+
 ## v1.11.71 — 2026-10-01
 
 - **nkt-edge roles and several edges.** An edge has roles: "webhooks" and

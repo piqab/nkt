@@ -38,6 +38,12 @@ func (m *Manager) recordEvent(ctx context.Context, host store.Host, kind, severi
 }
 
 func (m *Manager) recordEventKey(ctx context.Context, host store.Host, kind, severity, detail, key, args string) {
+	// Исходящие вебхуки — независимо от записи в журнал (выбор событий у
+	// адресата свой).
+	var eventID int64
+	defer func() {
+		m.emitOut(outFromHostEvent(host, hostAddrLabel(ctx, host), kind, severity, detail, key, args, eventID))
+	}()
 	settings := m.EventSettings(ctx)
 	if !settings.Record[kind] {
 		return
@@ -45,7 +51,7 @@ func (m *Manager) recordEventKey(ctx context.Context, host store.Host, kind, sev
 	if kind == store.EventRecovered && settings.CollapseMinutes > 0 && m.collapseOutage(ctx, host, settings.CollapseMinutes) {
 		return
 	}
-	_, err := m.db.AddHostEvent(ctx, store.HostEvent{
+	id, err := m.db.AddHostEvent(ctx, store.HostEvent{
 		HostID: host.ID, HostName: host.Name, HostAddr: hostAddrLabel(ctx, host),
 		Kind: kind, Severity: severity, Detail: detail, DetailKey: key, DetailArgs: args,
 	})
@@ -53,6 +59,7 @@ func (m *Manager) recordEventKey(ctx context.Context, host store.Host, kind, sev
 		m.log.Warn("не удалось записать оповещение", "host", host.Name, "kind", kind, "err", err)
 		return
 	}
+	eventID = id
 	if err := m.db.PruneHostEvents(ctx, eventKeep); err != nil {
 		m.log.Warn("не удалось подчистить журнал оповещений", "err", err)
 	}

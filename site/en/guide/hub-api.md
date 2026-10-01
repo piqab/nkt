@@ -160,3 +160,61 @@ in `GET /api/hub/jobs/{id}` (`status`: `queued`, `running`, `succeeded`,
 | 429 | too many invalid tokens from the address; wait a few minutes |
 
 The response body is `{"error": "…"}` in the `Accept-Language` language.
+
+## Outgoing webhooks
+
+The other direction: the hub sends events out by itself, to n8n, a chat
+bot or your own system. "Alerts" → **"Outgoing webhooks"** → "New
+recipient": a name, a URL (`http://` or `https://`), which events, hosts
+and groups, and the text language. The hub reaches out by itself, so
+nothing needs to be exposed.
+
+**Events:** unreachable, recovered, new findings, findings resolved, job
+failed, rebooted, new bans, deployment succeeded, deployment failed.
+Webhooks do not depend on the journal: a kind the journal does not record
+still reaches the recipient. A host and group scope limits it to its
+hosts' events; a deployment passes if all its hosts are in scope.
+
+**The request:** `POST`, `Content-Type: application/json`, headers:
+
+| Header | Value |
+|---|---|
+| `X-NKT-Event` | the event kind (`unreachable`, `deploy-failed`, `test`…) |
+| `X-NKT-Delivery` | the delivery number (a retry of a delivery keeps it) |
+| `X-NKT-Timestamp` | the time in unix seconds |
+| `X-NKT-Signature` | hex HMAC-SHA256 with the secret over `<timestamp>.<body>` |
+
+The signature is the same as on nkt's incoming webhooks. The body:
+
+```json
+{
+  "id": "4f1c…", "kind": "unreachable", "ts": "2026-10-01T12:00:00Z",
+  "hub": "nkt 1.11.72", "text": "unreachable: …", "severity": "warning",
+  "event_id": 120,
+  "host": {"id": 3, "name": "web1", "addr": "root@203.0.113.10:22"}
+}
+```
+
+A deployment has `pipeline` (`id`, `name`), `job_id`, `commit`, `tag`,
+`trigger` and, on failure, `error` instead of `host`.
+
+**Delivery** happens in the background. A non-2xx response or no
+connection is retried after 10 s, 1 and 5 minutes. Redirects are not
+followed. The recipient shows the outcome of the last delivery; **"Test"**
+sends a `test` event at once and shows the response. The signing secret
+is shown once; "New secret" replaces it at once. Edits happen in a window
+with a diff, and everything goes to the audit log.
+
+Checking it in n8n (Webhook node → Code):
+
+```js
+const crypto = require('crypto')
+const ts = $json.headers['x-nkt-timestamp']
+const sig = crypto.createHmac('sha256', '<secret>')
+  .update(ts + '.' + JSON.stringify($json.body)).digest('hex')
+if (sig !== $json.headers['x-nkt-signature']) throw new Error('bad signature')
+```
+
+The hub sends the body without escaping `<`, `>` or `&`, so
+`JSON.stringify` of the parsed body gives the same bytes. The raw body is
+the most reliable (the n8n Webhook node's "Raw Body" option).

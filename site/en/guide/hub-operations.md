@@ -32,6 +32,10 @@ The **“Notify on problems”** switch turns on browser notifications — they
 arrive in any hub section while the tab is open. The unread counter is on
 the menu item.
 
+**Outgoing webhooks**: the hub sends the same events (and deployment
+outcomes) out by itself, to n8n, a chat bot or your own system, with an
+HMAC signature. See [Outgoing webhooks](/en/guide/hub-api#outgoing-webhooks).
+
 ## Hub jobs
 
 Installing and updating nkt on a host (including “update all”), creating
