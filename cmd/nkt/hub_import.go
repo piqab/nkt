@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"sort"
+	"strings"
 
 	"golang.org/x/term"
 
@@ -80,8 +81,11 @@ func runHubImport(opts commandOptions, log *slog.Logger) error {
 		c := rep.Sections[name]
 		fmt.Printf("%s: добавлено %d, заменено %d, пропущено (уже есть) %d\n", name, c.Added, c.Replaced, c.Skipped)
 	}
+	// Ошибки несут имена из файла импорта — без переводов строк, чтобы
+	// чужой файл не подделал соседние строки вывода.
+	oneLine := strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
 	for _, e := range rep.Errors {
-		fmt.Printf("  ошибка: %s\n", e)
+		fmt.Printf("  ошибка: %s\n", oneLine.Replace(e))
 	}
 	if len(rep.Errors) > 0 {
 		return fmt.Errorf("ошибок при импорте: %d", len(rep.Errors))

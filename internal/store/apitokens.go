@@ -61,6 +61,7 @@ func (t APIToken) AllowsHost(id int64, group string) bool {
 	return slices.Contains(t.Hosts, id) || (group != "" && slices.Contains(t.Groups, group))
 }
 
+// #nosec G101 -- список колонок SQL (secret_enc — имя колонки), не учётные данные.
 const apiTokenCols = `id, name, key_id, secret_enc, role, hosts, groups_json, ips, expires_at, via_edge, author, created_at, updated_at, last_used_at, last_ip`
 
 func scanAPIToken(row interface{ Scan(...any) error }) (APIToken, error) {

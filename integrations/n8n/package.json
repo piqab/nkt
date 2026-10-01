@@ -1,6 +1,6 @@
 {
   "name": "n8n-nodes-nkt",
-  "version": "1.11.79",
+  "version": "1.11.80",
   "description": "n8n nodes for the NetKnownsThat (nkt) hub: hosts, findings, deployments and dry runs, fail2ban, alerts, outgoing webhooks",
   "keywords": [
     "n8n-community-node-package",
@@ -37,10 +37,13 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "n8n-workflow": "*",
+    "n8n-workflow": "~2.41.2",
     "typescript": "^5.6.0"
   },
   "peerDependencies": {
     "n8n-workflow": "*"
+  },
+  "overrides": {
+    "axios": "^1.20.0"
   }
 }

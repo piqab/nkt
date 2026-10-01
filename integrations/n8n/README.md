@@ -30,7 +30,7 @@ tar xzf n8n-nodes-nkt-$V.tgz -C ~/.n8n/custom/n8n-nodes-nkt --strip-components=1
 ## Build and install from source
 
 ```sh
-npm ci && npm run build        # dist/
+npm ci --ignore-scripts && npm run build        # dist/
 npm test                       # signature vectors shared with the hub's Go tests
 mkdir -p ~/.n8n/custom/n8n-nodes-nkt
 cp -r package.json dist ~/.n8n/custom/n8n-nodes-nkt/

@@ -7,6 +7,7 @@ func init() {
 	}
 }
 
+// #nosec G101 -- тексты сообщений (ключи вроде auth.tokenInvalid), а не учётные данные.
 var ruTelegramCatalog = map[string]string{
 	"tg.unknownChat":           "Этот чат хабу не знаком. Номер чата: %d — добавьте его в «Оповещения» → «Бот Telegram».",
 	"tg.helpRead":              "Команды:\n/status — сводка по хостам\n/hosts — хосты\n/alerts — последние оповещения\n/pipelines — конвейеры\n/id — номер чата и ваш",

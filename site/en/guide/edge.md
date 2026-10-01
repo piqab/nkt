@@ -79,7 +79,9 @@ the "Sites" wizard, the site check and the dry run, marked "checked from
 outside via nkt-edge …"; without one, the check runs from the hub as
 before. The edge's **"Check from outside"** button does the same by hand
 for any name and ports. The edge does not pass on site response bodies,
-only the status and the certificate.
+only the status and the certificate. Checks do not reach into the VPS's
+own network: loopback, private, link-local (cloud metadata) and CGNAT
+addresses get "blocked: not a public address".
 
 ![Outside check](/screens/en/edge-probe.png)
 
