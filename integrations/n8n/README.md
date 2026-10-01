@@ -16,7 +16,18 @@ Credentials: a hub **API token** ("About" → "API tokens"), signed requests
 by default (the secret never crosses the network, which also works through
 nkt-edge with the API role) or Bearer.
 
-## Build and install
+## Install from a release
+
+Every nkt release has `n8n-nodes-nkt-<version>.tgz` attached:
+
+```sh
+V=1.11.79
+curl -fLO https://github.com/piqab/nkt/releases/download/v$V/n8n-nodes-nkt-$V.tgz
+mkdir -p ~/.n8n/custom/n8n-nodes-nkt
+tar xzf n8n-nodes-nkt-$V.tgz -C ~/.n8n/custom/n8n-nodes-nkt --strip-components=1
+```
+
+## Build and install from source
 
 ```sh
 npm ci && npm run build        # dist/

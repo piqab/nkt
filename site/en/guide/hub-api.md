@@ -11,6 +11,8 @@ scope, an address list and an expiry.
 
 ## Tokens
 
+![API tokens](/screens/en/hub-api-tokens.png)
+
 "About" → **"API tokens"** → "New token" (admins only):
 
 - **Role.** *Read*: the host list, state, findings, vulnerabilities,
@@ -168,6 +170,8 @@ bot or your own system. "Alerts" → **"Outgoing webhooks"** → "New
 recipient": a name, a URL (`http://` or `https://`), which events, hosts
 and groups, and the text language. The hub reaches out by itself, so
 nothing needs to be exposed.
+
+![Outgoing webhooks](/screens/en/hub-webhooks.png)
 
 **Events:** unreachable, recovered, new findings, findings resolved, job
 failed, rebooted, new bans, deployment succeeded, deployment failed.

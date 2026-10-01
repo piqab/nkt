@@ -74,3 +74,18 @@ failed actions — in the audit log.
 | `Helm is not installed on the host` | The node's Kubernetes tab → Helm → "Install Helm" |
 | A deployment doesn't trigger | The table on the [Deployments](/en/guide/hub-deploy#if-nothing-deploys) page |
 | nkt-edge "disconnected" | The table on the [nkt-edge](/en/guide/edge#if-it-doesn-t-work) page |
+
+## API, webhooks and bots
+
+| Symptom | Cause and what to do |
+|---|---|
+| 401 "Invalid API token or request signature" | The token was revoked or replaced ("New secret"), part of the string is missing, or the signature is computed over the wrong path: the path is what the hub sees, with the `?query` |
+| 401 "The request signature is stale" | The client and hub clocks differ by more than 5 minutes; turn on time sync |
+| 403 "The API token cannot call" | The call is closed to tokens (hub management, terminal, files) or needs the admin role |
+| 403 "The API token is not allowed from" | The address is not on the token's list. Behind a reverse proxy the hub takes the address from `X-Forwarded-For` only from loopback, so the proxy must be on the same machine |
+| 403 "not allowed through nkt-edge" | The token lacks the "through nkt-edge" box |
+| Outgoing webhook: "error" in the last delivery | The hint is on the tag: the recipient did not answer 2xx, is unreachable or rejected the signature (after "New secret", paste the secret again) |
+| Telegram bot "not connected" | The error is in the card: a wrong token, no access to `api.telegram.org`, or another hub polls with the same token |
+| The Telegram bot is silent in a chat | The chat is not on the list (the bot tells its number on `/start`), or the command lacks `/` |
+| Slack: "dispatch_failed" or "operation_timeout" | Slack could not get through: no edge with the callbacks role (or it is not connected), a wrong Request URL, the hub is unreachable |
+| Slack: 401 "bad signature" | A wrong Signing Secret, or the hub clock is off |

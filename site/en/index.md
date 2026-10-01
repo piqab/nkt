@@ -42,7 +42,10 @@ features:
     details: Hosts over SSH, groups, alerts, jobs, desired-state profiles, virtual machines and Kubernetes clusters from the hub, deployment scripts, export and import of everything.
   - icon: 🚀
     title: Deployments from Git
-    details: Applications from a repository — as a manifest, a Helm release or a script — on a button, a CI webhook, polling or a new image tag; history and rollback, nkt-edge for webhooks without exposing the hub, examples for GitHub, GitLab and Gitea.
+    details: Applications from a repository — as a manifest, a Helm release, a compose stack or a script — on a button, a CI webhook, polling or a new image tag; a dry run with selectable checks, sites with HTTPS, history and rollback, nkt-edge as a way in without exposing the hub.
+  - icon: 🤖
+    title: Automation and bots
+    details: API tokens with roles and host scopes, n8n nodes, outgoing alert webhooks, Telegram and Slack bots with buttons and commands — all of it working with a hub behind NAT.
   - icon: 🌍
     title: Two languages, three themes
     details: UI and server messages in English and Russian, light, dark and system themes, a terminal UI and a JSON API to everything.

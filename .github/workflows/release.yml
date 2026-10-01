@@ -145,6 +145,36 @@ jobs:
             dist/nkt-edge-linux-${{ matrix.goarch }}
           retention-days: 1
 
+  # Узлы n8n (integrations/n8n) — архивом n8n-nodes-nkt-<версия>.tgz в
+  # релизе: в npm пакет не публикуется, ставится распаковкой в
+  # ~/.n8n/custom (см. сайт: «n8n»). Версия пакета — версия релиза; перед
+  # упаковкой — тесты (подписи сверяются с теми же эталонами, что у хаба).
+  n8n-node:
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: integrations/n8n/package-lock.json
+      - name: Собрать и упаковать
+        working-directory: integrations/n8n
+        run: |
+          npm config set fetch-retries 5 fetch-retry-mintimeout 20000 fetch-retry-maxtimeout 120000
+          for i in 1 2 3 4; do npm ci && break; echo "npm ci не удался, попытка $i"; sleep 20; done
+          npm version --no-git-tag-version --allow-same-version "${{ needs.check-version.outputs.binary_version }}"
+          npm test
+          mkdir -p ../../dist
+          npm pack --pack-destination ../../dist
+          ls -l ../../dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: n8n-node
+          path: dist/n8n-nodes-nkt-*.tgz
+          retention-days: 1
+
   # Собирает и публикует образ ХАБА (Dockerfile.hub) в GitHub Container
   # Registry — на него ссылаются deploy/docker-compose.hub.release.yml и
   # deploy/k8s/hub.yaml, чтобы их можно было развернуть без клонирования
@@ -188,7 +218,7 @@ jobs:
           tags: ${{ steps.version.outputs.tags }}
 
   release:
-    needs: [check-version, build]
+    needs: [check-version, build, n8n-node]
     runs-on: ubuntu-latest
     steps:
       # Нужен именно чекаут, а не голый gh: --generate-notes и определение
@@ -207,6 +237,10 @@ jobs:
           pattern: nkt-linux-*
           path: dist
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: n8n-node
+          path: dist
       # Манифесты для «готового образа» приклеиваются к релизу с точной
       # версией вместо :latest — мутабельный тег можно переставить на
       # чужой образ, а том хаба хранит мастер-ключ и секреты хостов.
@@ -231,7 +265,7 @@ jobs:
           chmod +x nkt-linux-* nkt-edge-linux-*
           # Манифесты тоже: они лежат рядом с бинарниками и их так же
           # скачивают по ссылке из README.
-          sha256sum nkt-linux-* nkt-edge-linux-* docker-compose.hub.release.yml k8s-hub.yaml > SHA256SUMS
+          sha256sum nkt-linux-* nkt-edge-linux-* n8n-nodes-nkt-*.tgz docker-compose.hub.release.yml k8s-hub.yaml > SHA256SUMS
       # Описание релиза — то, что хаб показывает в «О системе», когда видит
       # новую версию (internal/hub/versioncheck.go читает body этого релиза).
       # Поэтому оно должно быть написанным текстом из WHATSNEW.md, а не

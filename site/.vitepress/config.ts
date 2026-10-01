@@ -113,6 +113,7 @@ function sidebarRu() {
         { text: 'API и токены', link: '/guide/hub-api' },
         { text: 'n8n', link: '/guide/n8n' },
         { text: 'Боты', link: '/guide/bots' },
+        { text: 'Пример: автоматизация', link: '/guide/case-automation' },
       ],
     },
     {
@@ -186,6 +187,7 @@ function sidebarEn() {
         { text: 'API and tokens', link: '/en/guide/hub-api' },
         { text: 'n8n', link: '/en/guide/n8n' },
         { text: 'Bots', link: '/en/guide/bots' },
+        { text: 'Example: automation', link: '/en/guide/case-automation' },
       ],
     },
     {

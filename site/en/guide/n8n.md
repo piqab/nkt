@@ -17,7 +17,19 @@ in the repository's `integrations/n8n` directory. They call the
 
 ## Installation
 
-The package is built from the repository (Node.js 18+):
+**From a release**: every [nkt release](https://github.com/piqab/nkt/releases)
+has an `n8n-nodes-nkt-<version>.tgz` archive attached (its checksum is in
+`SHA256SUMS`). Unpack it into your n8n custom nodes directory and restart
+n8n:
+
+```sh
+V=1.11.79
+curl -fLO https://github.com/piqab/nkt/releases/download/v$V/n8n-nodes-nkt-$V.tgz
+mkdir -p ~/.n8n/custom/n8n-nodes-nkt
+tar xzf n8n-nodes-nkt-$V.tgz -C ~/.n8n/custom/n8n-nodes-nkt --strip-components=1
+```
+
+**From the repository** (Node.js 18+):
 
 ```sh
 cd integrations/n8n
@@ -26,6 +38,10 @@ npm test        # signatures are checked against the same vectors as the hub's t
 mkdir -p ~/.n8n/custom/n8n-nodes-nkt
 cp -r package.json dist ~/.n8n/custom/n8n-nodes-nkt/
 ```
+
+The node's version is the hub's version; the node works with a hub of
+the same or a newer version. The package is not published to npm, so
+n8n's "Community Nodes" settings will not find it; these are the ways.
 
 For n8n in Docker, mount the same directory as a volume and restart n8n:
 
@@ -121,3 +137,8 @@ chat id, and pick the nkt and Telegram credentials.
 | 403 "The host is outside the API token's scope" | the host is not in the token's hosts or groups |
 | 403 "not allowed through nkt-edge" | the token lacks the "through nkt-edge" box |
 | 401 in the recipient's delivery status on the hub | the secret in the nkt Trigger node is wrong (after "New secret", paste it again) |
+
+## The whole picture
+
+How n8n combines with the bot, the edge and CI into one setup:
+[example: automation around the hub](/en/guide/case-automation).

@@ -77,5 +77,7 @@ and 14 days of history are seeded on first start; turn that off with
 - [Section guide](/en/guide/overview) — what every page has.
 - [Deployments](/en/guide/hub-deploy) — applications from Git to clusters
   and hosts, [CI/CD examples](/en/guide/cicd-examples).
+- [Automation](/en/guide/case-automation) — a hub behind NAT, n8n, bots
+  and outgoing webhooks in one end-to-end example.
 - [Reference](/en/guide/reference-config) — every variable, security,
   API, limitations, troubleshooting.

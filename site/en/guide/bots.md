@@ -12,6 +12,8 @@ up commands and button presses by long polling (`getUpdates`). So the bot
 needs neither an edge nor an open port, and it works with a hub behind
 NAT.
 
+![Bots](/screens/en/hub-bots.png)
+
 ### Setup
 
 1. With [@BotFather](https://t.me/BotFather), use `/newbot` and get the
@@ -109,3 +111,8 @@ no way in.
 
 The bot answers other channels only with their id. A channel's "Test
 message" checks that the bot can write there.
+
+## The whole picture
+
+The bot together with n8n, the edge and a check from CI:
+[example: automation around the hub](/en/guide/case-automation).

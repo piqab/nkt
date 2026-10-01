@@ -79,7 +79,8 @@ make build-dev && NKT_MODE=fixtures ./nkt     # http://127.0.0.1:8077
 | [Установка](https://piqab.github.io/nkt/guide/getting-started) | хост, [хаб](https://piqab.github.io/nkt/guide/install-hub), [порты и доступ](https://piqab.github.io/nkt/guide/ports) |
 | [Руководство по разделам](https://piqab.github.io/nkt/guide/overview) | проблемы и коды правил, наблюдение, сервисы, контейнеры, ВМ, Kubernetes, конфигурации, firewall, сертификаты |
 | [Хаб](https://piqab.github.io/nkt/guide/hub) | [хосты](https://piqab.github.io/nkt/guide/hub-hosts), сценарии, кластеры, оповещения, [обновления](https://piqab.github.io/nkt/guide/hub-updates), [кэш пакетов](https://piqab.github.io/nkt/guide/hub-cache) |
-| [Выкладки](https://piqab.github.io/nkt/guide/hub-deploy) | конвейеры, вебхуки, [nkt-edge](https://piqab.github.io/nkt/guide/edge), [примеры CI/CD](https://piqab.github.io/nkt/guide/cicd-examples) для GitHub, GitLab, Gitea |
+| [Выкладки](https://piqab.github.io/nkt/guide/hub-deploy) | конвейеры, compose-стеки с сайтами, вебхуки, [nkt-edge](https://piqab.github.io/nkt/guide/edge) с ролями, [примеры CI/CD](https://piqab.github.io/nkt/guide/cicd-examples) для GitHub, GitLab, Gitea |
+| [Автоматизация](https://piqab.github.io/nkt/guide/case-automation) | [API-токены](https://piqab.github.io/nkt/guide/hub-api), исходящие вебхуки, [n8n](https://piqab.github.io/nkt/guide/n8n) (`integrations/n8n`), [боты Telegram и Slack](https://piqab.github.io/nkt/guide/bots) — и всё это с хабом за NAT |
 | [Справочник](https://piqab.github.io/nkt/guide/reference-config) | все переменные, [безопасность](https://piqab.github.io/nkt/guide/reference-security), [API](https://piqab.github.io/nkt/guide/reference-api), [ограничения](https://piqab.github.io/nkt/guide/reference-limitations), [решение проблем](https://piqab.github.io/nkt/guide/troubleshooting) |
 | [Разработка](https://piqab.github.io/nkt/guide/development) | сборка, стенд, тесты, устройство кода |
 
