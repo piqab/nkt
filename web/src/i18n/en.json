@@ -3348,18 +3348,29 @@
     "roles": "Roles",
     "role": {
       "hooks": "webhooks",
-      "api": "API"
+      "api": "API",
+      "probe": "outside checks"
     },
     "roleHint": {
       "hooks": "a push from GitHub, Gitea, GitLab or CI → a deployment",
-      "api": "signed API token requests (n8n, CI): /api/hub/…, /api/hosts/…"
+      "api": "signed API token requests (n8n, CI): /api/hub/…, /api/hosts/…",
+      "probe": "the hub asks the edge to check DNS, ports and HTTPS from the internet; accepts nothing from outside"
     },
     "reinstall": "Reinstall",
     "edit": "Edit",
     "apiAt": "API",
     "reinstallTitle": "Reinstall edge {{name}}",
     "reinstallHint": "The same edge on the same host, with new roles and settings; the tunnel token and certificate stay.",
-    "manualApiHint": "For the API, the edge itself needs EDGE_ROLES=hooks,api (or api) in /etc/nkt-edge/edge.env and a service restart."
+    "manualApiHint": "For the API, the edge itself needs EDGE_ROLES=hooks,api (or api) in /etc/nkt-edge/edge.env and a service restart.",
+    "probe": "Check from outside",
+    "probeTitle": "Outside check from {{name}}",
+    "probeHint": "The edge on the VPS checks the name, ports and HTTPS as the internet sees them; a hub behind NAT cannot see itself from outside. The site's response body is not passed on, only the status and the certificate.",
+    "probePorts": "ports",
+    "probeHttps": "HTTPS: response status and certificate",
+    "probeRun": "Check",
+    "probeWrongCert": "someone else's certificate",
+    "probeError": "error",
+    "probeCert": " · certificate {{issuer}} until {{date}}"
   },
   "bulk": {
     "selected_one": "{{count}} selected",
@@ -3605,7 +3616,10 @@
     "wrongCert": "wrong certificate",
     "wrongCertHint": "The site answers with a certificate for {{names}}, not for this name: the site configuration is not in effect, the proxy answers as another site. Use \"Set up again\" and check the log.",
     "certNames": "Certificate issued for: {{names}}",
-    "certbotWillInstall": "certbot is not on the host; a job installs it before issuing the certificate."
+    "certbotWillInstall": "certbot is not on the host; a job installs it before issuing the certificate.",
+    "viaEdge": "checked from outside via nkt-edge {{name}}",
+    "viaHub": "checked from the hub (no edge with the outside checks role is connected)",
+    "viaEdgeShort": "via edge"
   },
   "composeEngine": {
     "checking": "checking…",

@@ -1,6 +1,7 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -53,10 +54,13 @@ const (
 const (
 	EdgeRoleHooks = "hooks"
 	EdgeRoleAPI   = "api"
+	// EdgeRoleProbe — проверки «снаружи» по просьбе хаба (DNS, порты,
+	// HTTPS): из интернета не принимает ничего, только по туннелю.
+	EdgeRoleProbe = "probe"
 )
 
 // EdgeRoles — все роли, в порядке показа.
-var EdgeRoles = []string{EdgeRoleHooks, EdgeRoleAPI}
+var EdgeRoles = []string{EdgeRoleHooks, EdgeRoleAPI, EdgeRoleProbe}
 
 // EdgeSettings — один edge.
 type EdgeSettings struct {
@@ -205,6 +209,8 @@ type edgeClient struct {
 	// sig — отпечаток настроек: сменились — переподключение.
 	sig    string
 	cancel context.CancelFunc
+	// sess — открытое соединение (роль probe: хаб открывает потоки сам).
+	sess *yamux.Session
 }
 
 func edgeSig(st EdgeSettings) string {
@@ -342,6 +348,14 @@ func (s *Server) runEdge(ctx context.Context, st EdgeSettings, c *edgeClient) er
 	go func() {
 		<-cctx.Done()
 		sess.Close()
+	}()
+	c.mu.Lock()
+	c.sess = sess
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		c.sess = nil
+		c.mu.Unlock()
 	}()
 	c.set(true, nil)
 	srv := &http.Server{Handler: s.edgeHandler(st), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second}
@@ -682,3 +696,100 @@ func NewEdgeUninstallRunner(s *Server) *EdgeUninstallRunner { return &EdgeUninst
 
 // Resumable — да: удаление повторяемо.
 func (r *EdgeUninstallRunner) Resumable() bool { return true }
+
+// --- роль probe -----------------------------------------------------------------
+
+// probeEdge — подключённый edge с ролью probe: id 0 — любой.
+func (s *Server) probeEdge(ctx context.Context, id int64) (EdgeSettings, *yamux.Session, bool) {
+	if s.edge == nil {
+		return EdgeSettings{}, nil, false
+	}
+	for _, st := range s.edges(ctx) {
+		if (id != 0 && st.ID != id) || !st.Has(EdgeRoleProbe) {
+			continue
+		}
+		s.edge.mu.Lock()
+		c := s.edge.clients[st.ID]
+		s.edge.mu.Unlock()
+		if c == nil {
+			continue
+		}
+		c.mu.Lock()
+		sess := c.sess
+		c.mu.Unlock()
+		if sess != nil && !sess.IsClosed() {
+			return st, sess, true
+		}
+	}
+	return EdgeSettings{}, nil, false
+}
+
+// edgeName — как edge назвать в журнале.
+func edgeName(st EdgeSettings) string {
+	if st.Domain != "" {
+		return st.Domain
+	}
+	return st.Address
+}
+
+// runProbe — проверки с edge по туннелю.
+func runProbe(ctx context.Context, sess *yamux.Session, checks []edge.ProbeCheck) (edge.ProbeResponse, error) {
+	var out edge.ProbeResponse
+	body, _ := json.Marshal(edge.ProbeRequest{Checks: checks})
+	client := &http.Client{
+		Timeout: 45 * time.Second,
+		Transport: &http.Transport{
+			DialContext:       func(context.Context, string, string) (net.Conn, error) { return sess.Open() },
+			DisableKeepAlives: true,
+		},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://edge"+edge.ProbePath, bytes.NewReader(body))
+	if err != nil {
+		return out, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return out, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		msg, _ := io.ReadAll(io.LimitReader(resp.Body, 300))
+		return out, msgs.Errorf("edge.probeFailed", fmt.Sprintf("HTTP %d %s", resp.StatusCode, strings.TrimSpace(string(msg))))
+	}
+	err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&out)
+	return out, err
+}
+
+// handleEdgeProbe — POST /hub/edges/{id}/probe {checks}: проверки «снаружи»
+// с этого edge (роль probe).
+func (s *Server) handleEdgeProbe(w http.ResponseWriter, r *http.Request) {
+	var req edge.ProbeRequest
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	ctx := r.Context()
+	if len(req.Checks) == 0 || len(req.Checks) > edge.ProbeMaxChecks {
+		writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.probeBad"))
+		return
+	}
+	for _, c := range req.Checks {
+		if !edge.ValidProbe(c) {
+			writeError(w, http.StatusBadRequest, msgs.Tc(ctx, "edge.probeBadCheck", c.Type, c.Host, c.Port))
+			return
+		}
+	}
+	st, sess, ok := s.probeEdge(ctx, edgeIDParam(r))
+	if !ok {
+		writeError(w, http.StatusConflict, msgs.Tc(ctx, "edge.probeUnavailable"))
+		return
+	}
+	res, err := runProbe(ctx, sess, req.Checks)
+	s.db.Audit(ctx, auth.Username(ctx), "edge.probe", edgeName(st), auditOutcome(err), req.Checks)
+	if err != nil {
+		writeErr(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"edge": edgeName(st), "results": res.Results})
+}

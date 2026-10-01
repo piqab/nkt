@@ -43,6 +43,8 @@ interface Outside {
   ports: Record<string, string>
   lan?: boolean
   https?: HTTPSCheck
+  /** Проверено с nkt-edge (роль «проверки снаружи»). */
+  via?: string
 }
 
 interface HostPreflight {
@@ -216,6 +218,7 @@ export function SitesPanel({ me }: { me: Me }) {
                         <Tag color={c.https.cert_days_left < 14 ? 'warning' : 'default'}>{t('sites.certDays', { n: c.https.cert_days_left })}</Tag>
                       )}
                       {c.https?.checked_at && <span className="muted">{formatRelative(c.https.checked_at)}</span>}
+                      {c.via && <Tag>{t('sites.viaEdgeShort')}</Tag>}
                     </Space>
                   )
                 },
@@ -398,6 +401,7 @@ function SiteWizard({ site, onClose, onStarted }: { site: Site | null; onClose: 
               {pre.outside.ports['80'] === 'timeout' && <span style={{ color: 'var(--status-error)' }}> {t('sites.port80Blocked')}</span>}
             </div>
             {pre.outside.lan && <div className="small muted">{t('sites.lan')}</div>}
+            <div className="small muted">{pre.outside.via ? t('sites.viaEdge', { name: pre.outside.via }) : t('sites.viaHub')}</div>
           </div>
         )}
         {pre?.host_error && <Banner kind="error">{pre.host_error}</Banner>}

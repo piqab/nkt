@@ -3352,18 +3352,29 @@
     "roles": "Роли",
     "role": {
       "hooks": "вебхуки",
-      "api": "API"
+      "api": "API",
+      "probe": "проверки снаружи"
     },
     "roleHint": {
       "hooks": "push из GitHub, Gitea, GitLab, CI → выкладка",
-      "api": "подписанные запросы API-токенов (n8n, CI) — /api/hub/…, /api/hosts/…"
+      "api": "подписанные запросы API-токенов (n8n, CI) — /api/hub/…, /api/hosts/…",
+      "probe": "хаб просит edge проверить DNS, порты и HTTPS из интернета; снаружи ничего не принимает"
     },
     "reinstall": "Переустановить",
     "edit": "Изменить",
     "apiAt": "API",
     "reinstallTitle": "Переустановить edge {{name}}",
     "reinstallHint": "Тот же edge на том же хосте — с новыми ролями и настройками; токен туннеля и сертификат остаются.",
-    "manualApiHint": "Для API на самом edge нужно EDGE_ROLES=hooks,api (или api) в /etc/nkt-edge/edge.env и перезапуск службы."
+    "manualApiHint": "Для API на самом edge нужно EDGE_ROLES=hooks,api (или api) в /etc/nkt-edge/edge.env и перезапуск службы.",
+    "probe": "Проверить снаружи",
+    "probeTitle": "Проверка снаружи с {{name}}",
+    "probeHint": "Edge на VPS проверяет имя, порты и HTTPS так, как это видит интернет — хаб за NAT сам «снаружи» не видит. Тело ответа сайта не передаётся, только код и сертификат.",
+    "probePorts": "порты",
+    "probeHttps": "HTTPS: код ответа и сертификат",
+    "probeRun": "Проверить",
+    "probeWrongCert": "чужой сертификат",
+    "probeError": "ошибка",
+    "probeCert": " · сертификат {{issuer}} до {{date}}"
   },
   "bulk": {
     "selected_one": "Выбран {{count}}",
@@ -3619,7 +3630,10 @@
     "wrongCert": "чужой сертификат",
     "wrongCertHint": "Сайт отвечает сертификатом на {{names}} — не для этого имени: конфигурация сайта не действует, прокси отвечает другим сайтом. «Настроить заново» и журнал.",
     "certNames": "Сертификат выдан на: {{names}}",
-    "certbotWillInstall": "certbot на хосте нет — будет установлен заданием перед выпуском сертификата."
+    "certbotWillInstall": "certbot на хосте нет — будет установлен заданием перед выпуском сертификата.",
+    "viaEdge": "проверено снаружи с nkt-edge {{name}}",
+    "viaHub": "проверено с хаба (edge с ролью «проверки снаружи» не подключён)",
+    "viaEdgeShort": "с edge"
   },
   "composeEngine": {
     "checking": "проверка…",

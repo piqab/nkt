@@ -236,6 +236,9 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 		return problems
 	}
 	chk := s.siteOutside(ctx, t, sp.Domains, false)
+	if chk.Via != "" {
+		jc.Log("hub.siteViaEdge", chk.Via)
+	}
 	for _, d := range chk.DNS {
 		if !on("site_dns") {
 			break

@@ -28,6 +28,8 @@
 //	                   веб-сокеты не проходят — секрет токена на VPS не
 //	                   попадает)
 //	EDGE_API_RATE      запросов API в минуту с одного адреса (120)
+//	                   роль probe — проверки «снаружи» по просьбе хаба
+//	                   (DNS, порты, HTTPS); только по туннелю
 package main
 
 import (
@@ -112,11 +114,11 @@ func main() {
 	s := &server{token: token, rate: rate, limiter: newLimiter(rate), apiLimiter: newLimiter(apiRate), roles: map[string]bool{}}
 	for _, role := range strings.Split(env("EDGE_ROLES", "hooks"), ",") {
 		switch role = strings.TrimSpace(role); role {
-		case "hooks", "api":
+		case "hooks", "api", "probe":
 			s.roles[role] = true
 		case "":
 		default:
-			log.Fatal("EDGE_ROLES: unknown role (hooks, api)")
+			log.Fatal("EDGE_ROLES: unknown role (hooks, api, probe)")
 		}
 	}
 	if len(s.roles) == 0 {
@@ -234,6 +236,10 @@ func (s *server) acceptHubs(l net.Listener) {
 				old.Close()
 			}
 			log.Printf("hub connected from %s", conn.RemoteAddr())
+			if s.roles["probe"] {
+				// Хаб открывает потоки сам — проверки «снаружи».
+				go func() { _ = (&http.Server{Handler: probeHandler(), ReadHeaderTimeout: 10 * time.Second}).Serve(sess) }()
+			}
 			<-sess.CloseChan()
 			s.mu.Lock()
 			if s.session == sess {
@@ -278,7 +284,7 @@ func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	s.mu.Unlock()
 	w.Header().Set("Content-Type", "application/json")
 	roles := []string{}
-	for _, role := range []string{"hooks", "api"} {
+	for _, role := range []string{"hooks", "api", "probe"} {
 		if s.roles[role] {
 			roles = append(roles, role)
 		}
@@ -388,4 +394,25 @@ func (w *statusWriter) WriteHeader(code int) {
 // slog и так берёт такие значения в кавычки; это — вторая линия.
 func noNewlines(v string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(v, "\n", ""), "\r", "")
+}
+
+// probeHandler — роль probe: POST /probe от хаба по туннелю.
+func probeHandler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc(edge.ProbePath, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.NotFound(w, r)
+			return
+		}
+		var req edge.ProbeRequest
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil || len(req.Checks) == 0 || len(req.Checks) > edge.ProbeMaxChecks {
+			http.Error(w, `{"error":"bad probe request"}`, http.StatusBadRequest)
+			return
+		}
+		res := edge.RunProbe(r.Context(), req)
+		slog.Info("probe", "checks", len(req.Checks))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(res)
+	})
+	return mux
 }

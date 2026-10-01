@@ -44,4 +44,9 @@ var enAPICatalog = map[string]string{
 	"hub.outBadKind":         "Unknown event kind: %q",
 	"hub.outMissing":         "No outgoing webhook #%d",
 	"hub.outTooMany":         "Up to 32 outgoing webhooks",
+	"hub.siteViaEdge":        "  the outside check comes from nkt-edge %s (as the internet sees it)",
+	"edge.probeFailed":       "nkt-edge did not run the check: %s",
+	"edge.probeBad":          "From 1 to 32 checks",
+	"edge.probeBadCheck":     "Unclear check: %s %s %d",
+	"edge.probeUnavailable":  "No connected nkt-edge with the \"outside checks\" role",
 }

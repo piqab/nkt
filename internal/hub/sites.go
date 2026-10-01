@@ -17,6 +17,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	"github.com/piqab/nkt/internal/auth"
+	"github.com/piqab/nkt/internal/edge"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/site"
@@ -44,6 +45,8 @@ type SiteCheck struct {
 	// LAN — имя ведёт в частную сеть: хаб видит не то, что интернет.
 	LAN   bool       `json:"lan,omitempty"`
 	HTTPS HTTPSCheck `json:"https"`
+	// Via — проверено с edge (роль probe): имя edge; пусто — с хаба.
+	Via string `json:"via,omitempty"`
 }
 
 // siteDNS — указывает ли имя на хост (адрес хаба к хосту, интерфейсы).
@@ -88,6 +91,9 @@ func probePort(ctx context.Context, host string, port int) string {
 }
 
 func (s *Server) siteOutside(ctx context.Context, t targetHost, domains []string, https bool) SiteCheck {
+	if chk, ok := s.siteOutsideEdge(ctx, t, domains, https); ok {
+		return chk
+	}
 	chk := SiteCheck{Ports: map[string]string{}}
 	for _, d := range domains {
 		rep := s.siteDNS(ctx, t, d)
@@ -105,6 +111,65 @@ func (s *Server) siteOutside(ctx context.Context, t targetHost, domains []string
 		chk.HTTPS = httpsCheck(ctx, domains[0])
 	}
 	return chk
+}
+
+// siteOutsideEdge — то же с edge с ролью probe: хаб за NAT «снаружи» не
+// видит, edge на VPS видит как интернет. Нет такого edge или он не
+// ответил — false (проверка с хаба).
+func (s *Server) siteOutsideEdge(ctx context.Context, t targetHost, domains []string, https bool) (SiteCheck, bool) {
+	st, sess, ok := s.probeEdge(ctx, 0)
+	if !ok {
+		return SiteCheck{}, false
+	}
+	checks := make([]edge.ProbeCheck, 0, len(domains)+3)
+	for _, d := range domains {
+		checks = append(checks, edge.ProbeCheck{Type: "dns", Host: d})
+	}
+	checks = append(checks, edge.ProbeCheck{Type: "tcp", Host: domains[0], Port: 80}, edge.ProbeCheck{Type: "tcp", Host: domains[0], Port: 443})
+	if https {
+		checks = append(checks, edge.ProbeCheck{Type: "https", Host: domains[0]})
+	}
+	for _, c := range checks {
+		if !edge.ValidProbe(c) {
+			return SiteCheck{}, false
+		}
+	}
+	res, err := runProbe(ctx, sess, checks)
+	if err != nil || len(res.Results) != len(checks) {
+		s.log.Warn("проверка снаружи с edge не удалась — с хаба", "edge", edgeName(st), "err", err)
+		return SiteCheck{}, false
+	}
+	chk := SiteCheck{Ports: map[string]string{}, Via: edgeName(st)}
+	for i, d := range domains {
+		// Адреса хоста — как знает хаб (SSH, интерфейсы); куда ведёт имя —
+		// как видит интернет.
+		rep := s.siteDNS(ctx, t, d)
+		rep.DomainIPs = nil
+		for _, ip := range res.Results[i].IPs {
+			rep.DomainIPs = appendIP(rep.DomainIPs, ip)
+			if p := net.ParseIP(ip); p != nil && (p.IsPrivate() || p.IsLoopback()) {
+				chk.LAN = true
+			}
+		}
+		rep.Match = ipsOverlap(rep.DomainIPs, rep.HostIPs)
+		chk.DNS = append(chk.DNS, rep)
+	}
+	n := len(domains)
+	chk.Ports["80"], chk.Ports["443"] = res.Results[n].State, res.Results[n+1].State
+	if https {
+		r := res.Results[n+2]
+		h := HTTPSCheck{CheckedAt: store.Now(), Status: r.Status, Error: r.Error, CertNotAfter: r.CertNotAfter, CertIssuer: r.CertIssuer,
+			CertNames: r.CertNames, WrongCert: r.WrongCert}
+		if na, err := time.Parse(time.RFC3339, r.CertNotAfter); err == nil {
+			h.CertDaysLeft = int(time.Until(na).Hours() / 24)
+		}
+		h.OK = r.Error == "" && r.Status > 0 && r.Status < 500
+		if r.Error == "" && !h.OK {
+			h.Error = strconv.Itoa(r.Status)
+		}
+		chk.HTTPS = h
+	}
+	return chk, true
 }
 
 func (s *Server) siteTarget(ctx context.Context, hostID int64) (targetHost, error) {
@@ -426,6 +491,9 @@ func (s *Server) setupSite(ctx context.Context, jc *jobs.Context, user string, s
 	// 1. DNS.
 	step(1, "hub.siteStepDNS", strings.Join(st.Domains, ", "))
 	chk := s.siteOutside(ctx, t, st.Domains, false)
+	if chk.Via != "" {
+		jc.Log("hub.siteViaEdge", chk.Via)
+	}
 	force := true
 	for _, d := range chk.DNS {
 		if d.Match {
