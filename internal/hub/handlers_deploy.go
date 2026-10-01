@@ -40,6 +40,9 @@ func (s *Server) handlePipelines(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]pipelineJSON, 0, len(list))
 	for _, p := range list {
+		if !s.pipelineInScope(r.Context(), p) {
+			continue
+		}
 		row := pipelineJSON{Pipeline: p}
 		if spec, err := deploy.ParseSpec(p.Content); err == nil {
 			// Как удалять: compose — заданием с хостов, прочие — с хаба.
@@ -112,6 +115,9 @@ func (s *Server) pipelineFromReq(w http.ResponseWriter, r *http.Request) (store.
 		return store.Pipeline{}, false
 	}
 	p, err := s.db.PipelineByID(r.Context(), id)
+	if err == nil && !s.pipelineInScope(r.Context(), p) {
+		err = store.ErrNotFound // токену с пределами чужой конвейер не виден
+	}
 	if err != nil {
 		writeErr(w, r, http.StatusNotFound, err)
 		return store.Pipeline{}, false

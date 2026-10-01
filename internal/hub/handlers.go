@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -134,7 +135,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, msgs.T(msgs.LangFromRequest(r), "auth.loginRequired"))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
+	out := map[string]any{
 		"username":        user.Username,
 		"role":            user.Role,
 		"is_admin":        user.IsAdmin(),
@@ -143,7 +144,12 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"forward_base":    s.cfg.ForwardBase(),
 		"simulated":       false,
 		"hub_version":     s.hub.Version(),
-	})
+	}
+	// Запрос токеном — его пределы (узел n8n показывает, к чему доступ).
+	if t, ok := tokenFromContext(r.Context()); ok {
+		out["token"] = map[string]any{"name": t.Name, "role": t.Role, "hosts": t.Hosts, "groups": t.Groups, "expires_at": t.ExpiresAt}
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 // ---------------------------------------------------------- hub's own version
@@ -610,6 +616,9 @@ func (s *Server) handleListHosts(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		out = append(out, row)
+	}
+	if allow := s.scopeFilter(r.Context()); allow != nil {
+		out = slices.DeleteFunc(out, func(h hostWithOverview) bool { return !allow(h.ID) })
 	}
 	writeJSON(w, http.StatusOK, out)
 }
@@ -1191,8 +1200,10 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	if k := strings.TrimSpace(q.Get("kind")); k != "" {
 		kinds = strings.Split(k, ",")
 	}
+	after, _ := strconv.ParseInt(q.Get("after"), 10, 64)
 	res, err := s.hub.QueryEvents(r.Context(), EventQuery{
 		Limit: limit, Kinds: kinds, Host: q.Get("host"), Text: q.Get("q"), ShowHidden: q.Get("hidden") == "1",
+		After: after, Allow: s.scopeFilter(r.Context()),
 	})
 	if err != nil {
 		fail(w, r, err)

@@ -243,6 +243,10 @@ type EventQuery struct {
 	Host       string
 	Text       string
 	ShowHidden bool
+	// After — только события новее этого номера (опрос из n8n и скриптов).
+	After int64
+	// Allow — хосты в пределах токена (nil — все).
+	Allow func(hostID int64) bool
 }
 
 // EventsResult — выборка, сколько совпало всего, непрочитанные (без
@@ -278,6 +282,9 @@ func (m *Manager) QueryEvents(ctx context.Context, q EventQuery) (EventsResult, 
 	res := EventsResult{Events: []store.HostEvent{}, Hosts: []string{}}
 	hostSet := map[string]bool{}
 	for _, e := range all {
+		if q.Allow != nil && !q.Allow(e.HostID) {
+			continue
+		}
 		if !hostSet[e.HostName] {
 			hostSet[e.HostName] = true
 			res.Hosts = append(res.Hosts, e.HostName)
@@ -294,6 +301,9 @@ func (m *Manager) QueryEvents(ctx context.Context, q EventQuery) (EventsResult, 
 			continue
 		}
 		if q.Host != "" && e.HostName != q.Host {
+			continue
+		}
+		if q.After > 0 && e.ID <= q.After {
 			continue
 		}
 		e.Detail = msgs.Render(lang, e.DetailKey, e.DetailArgs, e.Detail)

@@ -24,6 +24,10 @@ accepted only from the application's own origin (see
 [Security](/en/guide/reference-security#requests-from-other-sites)); from
 `curl` and scripts — as is.
 
+For automation the hub has **API tokens** (Bearer or a signed request),
+with a role and a host and group scope: see [API and
+tokens](/en/guide/hub-api).
+
 `GET /api/health` — no login: whether the process is alive, the version.
 
 ## Through the hub
@@ -78,6 +82,7 @@ Under `/api/hub/`:
 | Clusters | `/hub/clusters*`, `/hub/cluster-images*`, `/hub/cluster-presets*`, `/hub/k8s-versions` | Creation, dry run, workers, resume, upgrade, kubeconfig, images, presets |
 | Manifests and Helm | `/hub/k8s/manifests*`, `/hub/k8s/helm/install`, `/hub/k8s/findings` | One YAML or release into several clusters, findings across clusters |
 | Deployments | `/hub/pipelines*` | Pipelines, access, webhook secret, deploy, rollback, history |
+| API tokens | `/hub/tokens*`, `/hub/jobs/{id}*` | Tokens (from the browser only), a hub job and its log |
 | Webhook | `POST /hub/hooks/{id}` | No session, access by signature |
 | nkt-edge | `/hub/edge`, `/hub/edge/install`, `/hub/edge/uninstall` | State, configuration, installation, removal from the VPS |
 | Alerts | `/hub/events*` | Log, mark seen, settings |

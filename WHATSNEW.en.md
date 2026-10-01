@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.70 — 2026-10-01
+
+- **Hub API tokens** in "About" → "API tokens": access for n8n, CI and
+  scripts without a password. A read role (hosts, findings,
+  vulnerabilities, alerts, job logs) or an admin role (also deploys, dry
+  runs, IP bans, service actions). Scope: hosts and groups, an address
+  list and an expiry. A token is presented with an `Authorization: Bearer`
+  header or a signed request, where the secret never crosses the network
+  and each signature works once. Hub management, the terminal, files and
+  websockets are closed to tokens. Details are on the "API and tokens"
+  documentation page.
+- For polling: `GET /api/hub/events?after=N` returns alerts newer than a
+  number; `GET /api/hub/jobs/{id}` and `/log` return a hub job and its log.
+
 ## v1.11.69 — 2026-10-01
 
 - **Documentation:** the site's "Features" page caught up with FEATURES:

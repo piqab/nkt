@@ -110,6 +110,7 @@ function sidebarRu() {
         { text: 'Оповещения, задания, ИИ', link: '/guide/hub-operations' },
         { text: 'Обновления и база уязвимостей', link: '/guide/hub-updates' },
         { text: 'Кэш пакетов', link: '/guide/hub-cache' },
+        { text: 'API и токены', link: '/guide/hub-api' },
       ],
     },
     {
@@ -180,6 +181,7 @@ function sidebarEn() {
         { text: 'Alerts, jobs, AI', link: '/en/guide/hub-operations' },
         { text: 'Updates and vulnerability DB', link: '/en/guide/hub-updates' },
         { text: 'Package cache', link: '/en/guide/hub-cache' },
+        { text: 'API and tokens', link: '/en/guide/hub-api' },
       ],
     },
     {

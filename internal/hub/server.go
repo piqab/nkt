@@ -75,10 +75,14 @@ type Deps struct {
 
 // New builds the hub server.
 func New(d Deps) *Server {
-	return &Server{
+	s := &Server{
 		cfg: d.Cfg, db: d.DB, auth: d.Auth, hub: d.Hub,
 		local: d.Local, localScanner: d.LocalScanner, ui: d.UI, log: d.Log, jobs: d.Jobs,
 	}
+	if s.auth != nil && s.hub != nil {
+		s.auth.SetTokenAuth(newTokenAuth(s))
+	}
+	return s
 }
 
 // Handler builds the HTTP router: the hub's own login, the host registry and
@@ -89,6 +93,7 @@ func New(d Deps) *Server {
 func (s *Server) Handler() http.Handler {
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
+	r.Use(rememberPeer)
 	r.Use(middleware.RealIP)
 	r.Use(s.requestLogger)
 	r.Use(middleware.Recoverer)
@@ -250,6 +255,10 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/scripts/{id}/versions", s.handleScriptVersions)
 				r.Get("/hub/hosts/{id}/pubkey", s.handleHostPubKey)
 				r.Get("/hub/hosts/{id}/install/latest", s.handleLatestInstallJob)
+				// Задание хаба по номеру — для токенов: выкладка, запущенная
+				// токеном без доступа к машине хаба, всё равно видна ему.
+				r.Get("/hub/jobs/{id}", s.handleHubJob)
+				r.Get("/hub/jobs/{id}/log", s.handleHubJobLog)
 
 				// "localhost" (internal/hub/handlers.go's synthetic entry
 				// prepended in handleListHosts) needs no RequireAdmin wrapper
@@ -303,6 +312,11 @@ func (s *Server) Handler() http.Handler {
 					r.Delete("/hub/k8s/manifests/{id}", s.handleManifestDelete)
 					r.Post("/hub/k8s/manifests/diff", s.handleManifestDiff)
 					r.Get("/hub/k8s/findings", s.handleClustersFindings)
+					r.Get("/hub/tokens", s.handleTokens)
+					r.Post("/hub/tokens", s.handleTokenCreate)
+					r.Put("/hub/tokens/{id}", s.handleTokenUpdate)
+					r.Post("/hub/tokens/{id}/rotate", s.handleTokenRotate)
+					r.Delete("/hub/tokens/{id}", s.handleTokenDelete)
 					r.Get("/hub/edge", s.handleEdgeStatus)
 					r.Put("/hub/edge", s.handleEdgeUpdate)
 					r.Delete("/hub/edge", s.handleEdgeDelete)
