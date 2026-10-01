@@ -232,7 +232,7 @@ func bindComposePorts(jc *jobs.Context, files map[string]string, main string, c 
 // запроса: старый хост их не знает и отвергает тело целиком («unknown
 // field»). Тогда запрос повторяется без них — выкладка работает, а
 // проверки, которых старому хосту не сделать, в журнале названы.
-var composeOptionalFields = []string{"env_sha", "site_service", "site_port"}
+var composeOptionalFields = []string{"env_sha", "site_service", "site_port", "skip"}
 
 // composeHostPost — POST к хосту с откатом на старый хост.
 func (s *Server) composeHostPost(ctx context.Context, jc *jobs.Context, user string, t targetHost, path string, body map[string]any, out any) (int, error) {

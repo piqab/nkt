@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.67 — 2026-10-01
+
+- **Dry run with check boxes:** the button opens a window listing the
+  checks (Docker and compose, stack description, images, ports, resources,
+  healthcheck, stack on the host, site: DNS, from outside, host,
+  certificate and nginx, nkt version), all ticked by default. Unticked ones
+  are skipped and the log says "not checked: …". The choice is remembered
+  on the pipeline (shared by admins); a real deployment always runs its
+  own checks.
+
 ## v1.11.66 — 2026-10-01
 
 - **The dry run checks more. Problems:** a `${VAR}` without a value in

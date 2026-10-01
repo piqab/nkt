@@ -51,6 +51,9 @@ type composeDeployRequest struct {
 	// сервис и порт контейнера (есть ли они в стеке и в образе).
 	SiteService string `json:"site_service,omitempty"`
 	SitePort    int    `json:"site_port,omitempty"`
+	// Skip — сухой прогон: проверки, с которых сняли галочки (images,
+	// ports, resources, health) — их хост не делает.
+	Skip []string `json:"skip,omitempty"`
 	// Pull — скачать образы перед подъёмом.
 	Pull bool `json:"pull"`
 	// WaitTimeout — сколько ждать, пока контейнеры поднимутся и пройдут

@@ -251,6 +251,19 @@ services, and the error names the cause: "port 127.0.0.1:8080 is in use",
 "the image is not for this architecture", "container httpbin exited
 (code 1)", "failed its healthcheck".
 
+The button opens a window with check boxes, all ticked by default: Docker
+and compose, stack description, images, host ports, resources,
+healthcheck, stack on the host, site (DNS, from outside, host,
+certificate and nginx), nkt version on the host. The repository and the
+description parsing are always checked. An unticked check is skipped (the
+host does not query the registry, look at ports and so on), and the log
+says "not checked: …". The choice is remembered on the pipeline on the
+hub and shared by admins; what is stored is the unticked checks, so a
+check added in a new version is on by itself. A real deployment ignores
+the boxes: its own checks (engine, daemon, `.env`) always run. An old nkt
+on the host does not know the boxes and checks everything; the hub leaves
+the extra lines out of the log.
+
 The result is a hub job with a log: "the deployment would succeed" or the
 number of problems. Nothing is recorded in the deployment history.
 

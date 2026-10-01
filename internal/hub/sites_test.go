@@ -214,10 +214,10 @@ func TestDryRunComposeOnLocal(t *testing.T) {
 	testGit(t, repo, "add", ".")
 	testGit(t, repo, "commit", "-q", "-m", "one")
 	content := "repo: " + repo + "\nref: main\naction: compose\ncompose:\n  file: deploy/docker-compose.yml\n  project: dry\n  hosts: [localhost]\n"
-	run := func(content string) (store.Job, string) {
+	run := func(content string, skip ...string) (store.Job, string) {
 		t.Helper()
 		id, err := srv.jobs.Start(ctx, jobs.Spec{Kind: KindDeploy, Queue: "deploy:dryrun", Author: "admin", Steps: 3,
-			Params: DeployParams{DryRun: true, Content: content}})
+			Params: DeployParams{DryRun: true, Content: content, Skip: skip}})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -238,6 +238,14 @@ func TestDryRunComposeOnLocal(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, "srv", "compose", "dry")); !os.IsNotExist(err) {
 		t.Fatalf("dry run touched the host: %v", err)
+	}
+	// Снятые галочки: в журнале названы, их строк нет.
+	j, skipped := run(content, "stack", "images", "version")
+	if j.Status != store.JobSucceeded || !strings.Contains(skipped, "стек на хосте") {
+		t.Fatalf("skipped dry run: %+v\n%s", j, skipped)
+	}
+	if !strings.Contains(log, "dry будет создан") || strings.Contains(skipped, "dry будет создан") {
+		t.Fatalf("stack still checked:\n%s", skipped)
 	}
 	// Неизвестный хост — ошибка до хостов; не compose — отказ.
 	if j, log := run(strings.Replace(content, "[localhost]", "[nope]", 1)); j.Status != store.JobFailed {
