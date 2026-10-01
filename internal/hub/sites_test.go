@@ -588,3 +588,30 @@ func TestComposeOldHostFallback(t *testing.T) {
 		t.Fatalf("old host: %+v\n%s", j, log)
 	}
 }
+
+// Нет certbot — настройка сайта ставит его (здесь установка недоступна:
+// фикстуры) и говорит, что поставить вручную.
+func TestSiteSetupInstallsCertbot(t *testing.T) {
+	srv, db, root := localFixtureHub(t)
+	ctx := context.Background()
+	idxPath := filepath.Join(root, ".commands", "index.json")
+	raw, _ := os.ReadFile(idxPath)
+	var idx map[string]any
+	_ = json.Unmarshal(raw, &idx)
+	idx["commands"] = append([]any{map[string]any{"match": []string{"sh", "-c", "command -v certbot"}, "exit_code": 1}}, idx["commands"].([]any)...)
+	raw, _ = json.Marshal(idx)
+	_ = os.WriteFile(idxPath, raw, 0o644)
+	id, _ := db.SaveSite(ctx, store.Site{Domains: []string{"shop.example.com"}, HostID: localHostID, Proxy: "nginx",
+		Stack: "shop", Service: "web", ContainerPort: 80, Author: "admin"})
+	jobID, err := srv.startSiteSetup(ctx, "admin", id, "shop.example.com", true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	j := waitJobDone(t, db, jobID)
+	log := jobLogText(t, ctx, db, jobID)
+	// Годный сертификат в фикстурах есть — без certbot сайт настроится,
+	// а в журнале — попытка установки и предупреждение.
+	if j.Status != store.JobSucceeded || !strings.Contains(log, "certbot не установлен") {
+		t.Fatalf("certbot install path: %+v\n%s", j, log)
+	}
+}

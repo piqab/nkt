@@ -12,6 +12,7 @@ import (
 	"github.com/piqab/nkt/internal/deploy"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/site"
 	"github.com/piqab/nkt/internal/store"
 )
 
@@ -215,7 +216,7 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 	} else {
 		jc.Log("deploy.drySiteProxy", proxy)
 	}
-	s.dryRunFirewall(ctx, jc, user, t, sp.OpenFirewall())
+	s.dryRunFirewall(ctx, jc, user, t, sp.OpenFirewall(), proxy)
 	if port == 0 {
 		port = sp.Port
 	}
@@ -245,8 +246,9 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 }
 
 // dryRunFirewall — что будет с файрволом хоста при настройке сайта.
-func (s *Server) dryRunFirewall(ctx context.Context, jc *jobs.Context, user string, t targetHost, open bool) {
+func (s *Server) dryRunFirewall(ctx context.Context, jc *jobs.Context, user string, t targetHost, open bool, proxy string) {
 	var pre struct {
+		Certbot  bool `json:"certbot"`
 		Firewall *struct {
 			Manager  string `json:"manager"`
 			Active   bool   `json:"active"`
@@ -257,6 +259,9 @@ func (s *Server) dryRunFirewall(ctx context.Context, jc *jobs.Context, user stri
 	}
 	if _, err := s.hostCall(ctx, user, t.ID, "GET", "/api/sites/preflight", nil, &pre); err != nil || pre.Firewall == nil {
 		return
+	}
+	if !pre.Certbot && proxy != site.ProxyCaddy {
+		jc.Log("deploy.dryCertbotInstall")
 	}
 	fw := pre.Firewall
 	switch {

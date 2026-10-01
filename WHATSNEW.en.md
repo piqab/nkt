@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.65 — 2026-10-01
+
+- **certbot installs itself:** if the host lacks it, site setup installs the
+  `certbot` package by a background host job before issuing the
+  certificate, like the proxy (not needed with Caddy). If the install
+  fails, a warning: a valid certificate on the host works without it. The
+  "Sites" wizard says "certbot will be installed" instead of "install it in
+  Packages", and the dry run shows it too.
+
 ## v1.11.64 — 2026-10-01
 
 - **ufw on hosts:** a rule could not be added ("'/etc/ufw/user.rules' is
