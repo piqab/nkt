@@ -1122,9 +1122,11 @@ export default function Hosts({
                       <span className="muted">{t('hosts.addrUnknown')}</span>
                     ) : (
                       <span className="row row-nowrap" style={{ display: 'inline-flex', gap: '0.1rem', alignItems: 'center' }}>
-                        <span className="mono muted">
-                          <Sensitive>{vm.ssh_user}@{vm.addr}</Sensitive>
-                        </span>
+                        <Tooltip title={<Sensitive>{`${vm.ssh_user}@${vm.addr}`}</Sensitive>}>
+                          <span className="mono muted small selectable addr-ellipsis">
+                            <Sensitive>{vm.ssh_user}@{vm.addr}</Sensitive>
+                          </span>
+                        </Tooltip>
                         <CopyButton text={`${vm.ssh_user}@${vm.addr}`} title={t('hosts.copyAddr')} />
                       </span>
                     )}
