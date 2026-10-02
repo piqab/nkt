@@ -1009,3 +1009,24 @@ span.vm-toggle {
   flex-direction: column;
   gap: 0.4rem;
 }
+
+/* Таблицы хостов хаба: каждая строка — в одну линию (заголовки тоже), а
+   ширины колонок общие для всех групп — см. HOST_COL_WIDTH в Hosts.tsx. */
+.hosts-card .ant-table-thead > tr > th,
+.hosts-card .ant-table-tbody > tr > td {
+  white-space: nowrap;
+}
+.hosts-card .ant-table-tbody > tr > td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cell-ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* Иконки действий у имени хоста — плотнее: девять штук в одной строке. */
+.host-actions {
+  gap: 0.15rem;
+}

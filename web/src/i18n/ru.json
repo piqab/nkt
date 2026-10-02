@@ -549,14 +549,13 @@
     "colAddr": "Адрес",
     "thisMachine": "эта машина — хаб сканирует сам себя, без SSH",
     "colProblems": "Проблемы",
-    "colArch": "Архитектура",
     "colStatus": "Состояние",
     "colSudo": "Sudo",
     "colChannel": "Канал",
-    "colVersion": "Версия nkt",
+    "colVersion": "nkt",
     "staleVersion": "установлено {{version}} — обновление не применилось",
     "hubVersion": "на хабе: {{version}}",
-    "colLastSeen": "Виден в сети",
+    "colLastSeen": "Виден",
     "never": "никогда",
     "title": "Хосты",
     "hint": "Каждый хост — отдельная VPS с собственным nkt: хаб заливает на неё бинарник по SSH, поднимает как systemd-сервис и дальше проксирует к нему запросы, так что дашборд и управление ничем не отличаются от обычного nkt на одном хосте.",
@@ -749,7 +748,7 @@
     "updateAllActive": "Уже обновляются, не трогаем: {{names}}",
     "updateAllUnreachable": "Недоступны, пропускаем: {{names}}",
     "updateAllStart": "Обновить ({{count}})",
-    "colBanned": "Забанено",
+    "colBanned": "f2b",
     "f2bMissing": "fail2ban не установлен",
     "f2bStopped": "fail2ban стоит",
     "f2bBannedHint": "Сколько адресов fail2ban держит забаненными сейчас",
@@ -804,7 +803,9 @@
       "deployTitle": "Попробовать выкладку",
       "deployHint": "«Выкладки» → «Новый конвейер» → «Примеры»: hello-app или httpbin на машине хаба — сухой прогон, выкладка и откат без своих серверов.",
       "openDeploy": "к выкладкам"
-    }
+    },
+    "colVersionHint": "Версия nkt на хосте",
+    "colLastSeenHint": "Когда хост последний раз был виден в сети"
   },
   "events": {
     "title": "Оповещения",

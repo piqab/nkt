@@ -12,6 +12,7 @@ import {
   QuestionCircleOutlined,
   SyncOutlined,
   WarningFilled,
+  DisconnectOutlined,
   CloudDownloadOutlined,
   ClusterOutlined,
   PauseCircleOutlined,
@@ -245,6 +246,20 @@ function TunnelChannelBadge({ host }: { host: HubHost }) {
   )
 }
 
+/** Ширины колонок списка хостов (общие для всех групп). «Проблемы» — с
+ * запасом на все пять уровней с трёхзначными числами. */
+const HOST_COL_WIDTH: Record<string, string> = {
+  status: '2rem',
+  name: '20.5rem',
+  addr: '7.25rem',
+  problems: '13rem',
+  banned: '3rem',
+  sudo: '4.25rem',
+  channel: '6.25rem',
+  version: '6rem',
+  last_seen: '7rem',
+}
+
 const SEVERITY_ICON: Record<Severity, ReactNode> = {
   critical: <CloseCircleFilled style={{ color: 'var(--status-critical)' }} />,
   high: <ExclamationCircleFilled style={{ color: 'var(--status-serious)' }} />,
@@ -275,21 +290,29 @@ function ProblemsCell({ host }: { host: HubHost }) {
   // пометкой «данные от …»), а если его не было — «нет данных», а не
   // «нет проблем»: пустой список здесь значит «не знаем».
   const stale = host.reachable === false
+  // «Не отвечает» — красной иконкой в той же строке, слова и время
+  // последнего опроса — в подсказке: вторая строка ломала высоту строк.
+  const unreachable = stale ? (
+    <Tooltip
+      title={t('hosts.unreachable', {
+        stale: host.last_polled_at ? t('hosts.unreachableStale', { time: formatRelative(host.last_polled_at) }) : '',
+      })}
+    >
+      <DisconnectOutlined style={{ color: 'var(--status-critical)' }} aria-label={t('hosts.unreachable', { stale: '' })} />
+    </Tooltip>
+  ) : null
   if (stale && !host.last_polled_at) {
     return (
-      <div className="col" style={{ gap: '0.25rem' }}>
-        <span className="small muted row" style={{ gap: '0.3rem', flexWrap: 'nowrap' }}>
-          <QuestionCircleOutlined /> {t('hosts.noData')}
-        </span>
-        <span className="small" style={{ color: 'var(--status-critical)' }}>
-          {t('hosts.unreachable', { stale: '' })}
-        </span>
-      </div>
+      <span className="small muted row row-nowrap" style={{ gap: '0.3rem' }}>
+        {unreachable}
+        <QuestionCircleOutlined /> {t('hosts.noData')}
+      </span>
     )
   }
   return (
-    <div className="col" style={{ gap: '0.25rem' }}>
-      <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap', opacity: stale ? 0.55 : 1 }}>
+    <div className="row row-nowrap" style={{ gap: '0.35rem' }}>
+      {unreachable}
+      <div className="row row-nowrap" style={{ gap: '0.35rem', opacity: stale ? 0.55 : 1 }}>
         {present.length === 0 ? (
           <span className="row small" style={{ gap: '0.3rem', color: 'var(--status-good)', flexWrap: 'nowrap' }}>
             <CheckCircleFilled /> {t('hosts.noProblems')}
@@ -297,20 +320,13 @@ function ProblemsCell({ host }: { host: HubHost }) {
         ) : (
           present.map((s) => (
             <Tooltip key={s} title={severityLabel(s)}>
-              <span className="row small" style={{ gap: '0.25rem', flexWrap: 'nowrap' }}>
+              <span className="row small" style={{ gap: '0.15rem', flexWrap: 'nowrap' }}>
                 {SEVERITY_ICON[s]} {findings[s]}
               </span>
             </Tooltip>
           ))
         )}
       </div>
-      {host.reachable === false && (
-        <span className="small" style={{ color: 'var(--status-critical)' }}>
-          {t('hosts.unreachable', {
-            stale: host.last_polled_at ? t('hosts.unreachableStale', { time: formatRelative(host.last_polled_at) }) : '',
-          })}
-        </span>
-      )}
     </div>
   )
 }
@@ -952,7 +968,7 @@ export default function Hosts({
     // its own dashboard, same as any other online host's "открыть".
     if (h.id === LOCAL_HOST_ID) {
       return (
-        <div className="row row-nowrap">
+        <div className="row row-nowrap host-actions">
           <RowAction action="open" label={t('hosts.open')} onClick={() => onSelect({ id: h.id, name: h.name })} />
         </div>
       )
@@ -970,7 +986,7 @@ export default function Hosts({
     const vmOff = !!h.parent_id && !!h.vm_state && h.vm_state !== 'running' && h.reachable !== true
     if (vmOff) {
       return (
-        <div className="row row-nowrap">
+        <div className="row row-nowrap host-actions">
           <RowAction action="start" label={t('hosts.vmStart')} loading={vmActing === h.id} disabled={busy} onClick={() => void vmDomainAction(h, 'start')} />
           <RowAction action="edit" label={t('hosts.edit')} disabled={busy} onClick={() => setEditingHost(h)} />
           <RowAction action="delete" label={t('hosts.delete')} danger loading={busy} disabled={busy} onClick={() => setRemovingHost(h)} />
@@ -978,7 +994,7 @@ export default function Hosts({
       )
     }
     return (
-      <div className="row row-nowrap">
+      <div className="row row-nowrap host-actions">
         {h.parent_id && h.vm_state === 'running' ? (
           <>
             <RowAction action="shutdown" label={t('hosts.vmShutdown')} danger loading={vmActing === h.id} disabled={busy} onClick={() => void vmDomainAction(h, 'shutdown')} />
@@ -1207,7 +1223,7 @@ export default function Hosts({
     { title: t('hosts.colProblems'), key: 'problems', render: (_, h) => <ProblemsCell host={h} /> },
     {
       // Сколько адресов fail2ban держит забаненными сейчас (из опроса).
-      title: t('hosts.colBanned'),
+      title: <Tooltip title={t('hosts.f2bBannedHint')}>{t('hosts.colBanned')}</Tooltip>,
       key: 'banned',
       align: 'right',
       render: (_, h) =>
@@ -1230,11 +1246,6 @@ export default function Hosts({
             </span>
           </Tooltip>
         ),
-    },
-    {
-      title: t('hosts.colArch'),
-      key: 'arch',
-      render: (_, h) => <span className="small">{h.id === LOCAL_HOST_ID ? '—' : h.arch || '—'}</span>,
     },
     {
       title: t('hosts.colSudo'),
@@ -1274,14 +1285,14 @@ export default function Hosts({
         h.id === LOCAL_HOST_ID ? (
           <span className="small muted">—</span>
         ) : (
-          <>
+          <span className="row row-nowrap" style={{ gap: 0 }}>
             <TunnelChannelBadge host={h} />
             <AptProxyBadge host={h} />
-          </>
+          </span>
         ),
     },
     {
-      title: t('hosts.colVersion'),
+      title: <Tooltip title={t('hosts.colVersionHint')}>{t('hosts.colVersion')}</Tooltip>,
       key: 'version',
       render: (_, h) => {
         const outdated = isOutdated(h, hubVersion)
@@ -1294,25 +1305,26 @@ export default function Hosts({
         // (see internal/hub/handlers.go's localHostEntry), so a mismatch
         // here can never mean "an update didn't take effect".
         const stale = h.id !== LOCAL_HOST_ID && !!h.running_version && h.running_version !== h.nkt_version
+        // Расхождение — значком в той же строке, слова — в подсказке:
+        // вторая строка под версией ломала высоту строк таблицы.
+        const note = stale ? t('hosts.staleVersion', { version: h.nkt_version }) : outdated ? t('hosts.hubVersion', { version: hubVersion }) : ''
+        const version = h.running_version || h.nkt_version || '—'
         return (
-          <span className="small mono">
-            {h.running_version || h.nkt_version || '—'}
-            {stale && (
-              <div className="small" style={{ color: 'var(--status-warning)' }}>
-                {t('hosts.staleVersion', { version: h.nkt_version })}
-              </div>
-            )}
-            {!stale && outdated && (
-              <div className="small" style={{ color: 'var(--status-warning)' }}>
-                {t('hosts.hubVersion', { version: hubVersion })}
-              </div>
+          <span className="row row-nowrap small mono" style={{ gap: '0.3rem' }}>
+            <span className="cell-ellipsis" title={version}>
+              {version}
+            </span>
+            {note && (
+              <Tooltip title={note}>
+                <WarningFilled style={{ color: 'var(--status-warning)' }} aria-label={note} />
+              </Tooltip>
             )}
           </span>
         )
       },
     },
     {
-      title: t('hosts.colLastSeen'),
+      title: <Tooltip title={t('hosts.colLastSeenHint')}>{t('hosts.colLastSeen')}</Tooltip>,
       key: 'last_seen',
       render: (_, h) => (
         <span className="small nowrap">
@@ -1321,6 +1333,11 @@ export default function Hosts({
       ),
     },
   ]
+
+  // Ширины колонок — одни на все группы: каждая группа — своя таблица, и
+  // с шириной «по содержимому» колонки разных групп не совпадали и
+  // сдвигались, когда менялись числа находок.
+  const fixedColumns = columns.map((c) => ({ ...c, width: HOST_COL_WIDTH[String(c.key)] ?? c.width }))
 
   const updatePlan = planUpdateAll(hosts ?? [], hubVersion)
   const outdatedCount = updatePlan.ready.length + updatePlan.failed.length
@@ -1596,7 +1613,8 @@ export default function Hosts({
                     <div className="table-wrap">
                       <DataTable<HubHost>
                         dataSource={items}
-                        columns={columns}
+                        columns={fixedColumns}
+                        tableLayout="fixed"
                         rowKey="id"
                         // Строка хоста, созданного по профилю, подкрашена
                         // его цветом — приглушённо, чтобы текст и иконки
@@ -1617,6 +1635,7 @@ export default function Hosts({
                         expandable={{
                           expandedRowKeys: items.filter((h) => openVMs.has(h.id)).map((h) => h.id),
                           expandIcon: () => null,
+                          showExpandColumn: false,
                           rowExpandable: (h) => (vmsByHost.get(h.id)?.length ?? 0) > 0 && openVMs.has(h.id),
                           expandedRowRender: renderRowBody,
                         }}

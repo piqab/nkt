@@ -212,7 +212,7 @@ fail2ban or with an old nkt version is skipped with a note in the log.
   them for a week (the previous ban time is not known). An undo cannot
   itself be undone.
 
-The hub's host list has a **“Banned”** column.
+The hub's host list has an **“f2b”** column: how many addresses are banned now.
 
 ### Alerts and address checks
 

@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.91 — 2026-10-02
+
+- **Hosts on the hub: an even table.** Each host takes one line: a version
+  mismatch and "unreachable" are icons with a tooltip, not a second line;
+  action icons and finding counters do not wrap. Column widths are shared
+  by all groups, so the columns line up and do not jump when the finding
+  numbers change. The "Architecture" column is gone, and the headers are
+  shorter: "f2b", "nkt", "Seen" (the full name is in the tooltip).
+
 ## v1.11.90 — 2026-10-02
 
 - **Hosts on the hub:** the address is now always short, with only the
