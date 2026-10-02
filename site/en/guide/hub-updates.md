@@ -131,6 +131,8 @@ empty; use "Detach" or "In a new tab".
 
 ## Menu
 
+![Host sections](/screens/en/hub-nav.png)
+
 The **"Menu"** card in "About" (admins only):
 
 - **"Hub section order"**: a window with the list of hub menu sections;

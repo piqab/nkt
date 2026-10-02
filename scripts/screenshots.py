@@ -67,6 +67,7 @@ SCREENS = [
     ('hub-script-scheme', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/); await sleep(800); tab({ru: 'Схема', en: 'Scheme'})"),
     ('hub-fail2ban', 'hub', '/', "menu('fail2ban')"),
     ('hub-about', 'hub', '/', "menu({ru: 'О системе', en: 'About'})"),
+    ('hub-nav', 'hub', '/', "menu({ru: 'О системе', en: 'About'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Редактирование разделов хоста', en: 'Edit host sections'}) + '$'))"),
     ('deployments', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'})"),
     # Доступ извне: на стенде должны быть токен, исходящий вебхук, edge
     # с ролями и compose-конвейер (для сухого прогона).
