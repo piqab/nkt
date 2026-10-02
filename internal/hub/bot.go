@@ -31,7 +31,10 @@ type botButton struct {
 
 // botReply — сообщение бота: текст и ряд кнопок.
 type botReply struct {
+	// Text — простое сообщение; Parts — блоки с жирной шапкой (события,
+	// списки). Есть Parts — Text не используется.
 	Text    string
+	Parts   []botPart
 	Buttons []botButton
 }
 
@@ -44,6 +47,8 @@ type botTurn struct {
 	// людей уже проверены платформой.
 	CanAct bool
 	Lang   msgs.Lang
+	// Loc — часовой пояс бота (свой в настройках или как у хаба).
+	Loc *time.Location
 	// Later — отправить в тот же чат позже (итог задания).
 	Later func(botReply)
 }
@@ -85,11 +90,11 @@ func (c *botCore) command(ctx context.Context, t botTurn, cmd string, args []str
 		}
 		return one(msgs.T(lang, keys[0]))
 	case "status":
-		return one(c.status(ctx, lang))
+		return []botReply{c.status(ctx, lang)}
 	case "hosts":
-		return one(c.hosts(ctx, lang))
+		return []botReply{c.hosts(ctx, lang)}
 	case "alerts":
-		return one(c.alerts(ctx, lang))
+		return []botReply{c.alerts(ctx, t)}
 	case "pipelines":
 		return one(c.pipelines(ctx, lang))
 	case "deploy", "dryrun":
@@ -279,52 +284,6 @@ func (c *botCore) watchJob(ctx context.Context, t botTurn, id int64) {
 
 // --- тексты ---------------------------------------------------------------------
 
-func (c *botCore) status(ctx context.Context, lang msgs.Lang) string {
-	rows, err := c.s.hostRows(ctx)
-	if err != nil {
-		return msgs.Localize(lang, err)
-	}
-	up, down, findings := 0, 0, map[string]int{}
-	for _, h := range rows {
-		if h.Reachable != nil && !*h.Reachable {
-			down++
-		} else {
-			up++
-		}
-		for k, v := range h.Findings {
-			findings[k] += v
-		}
-	}
-	return msgs.T(lang, "tg.status", len(rows), up, down, findings["critical"], findings["high"], findings["medium"])
-}
-
-func (c *botCore) hosts(ctx context.Context, lang msgs.Lang) string {
-	rows, err := c.s.hostRows(ctx)
-	if err != nil {
-		return msgs.Localize(lang, err)
-	}
-	var lines []string
-	for i, h := range rows {
-		if i >= 40 {
-			lines = append(lines, "…")
-			break
-		}
-		mark := "🟢"
-		if h.Reachable != nil && !*h.Reachable {
-			mark = "🔴"
-		}
-		lines = append(lines, fmt.Sprintf("%s %s (%d) — %s", mark, h.Name, h.ID, findingsText(lang, h.Findings)))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func findingsText(lang msgs.Lang, f map[string]int) string {
-	if f["critical"]+f["high"]+f["medium"] == 0 {
-		return msgs.T(lang, "tg.noFindings")
-	}
-	return msgs.T(lang, "tg.findings", f["critical"], f["high"], f["medium"])
-}
-
 func (c *botCore) hostDetail(ctx context.Context, id int64, withFindings bool, lang msgs.Lang) string {
 	rows, err := c.s.hostRows(ctx)
 	if err != nil {
@@ -366,21 +325,6 @@ func (c *botCore) hostDetail(ctx context.Context, id int64, withFindings bool, l
 		text += fmt.Sprintf("\n• [%s] %s", f.Severity, f.Title)
 	}
 	return text
-}
-
-func (c *botCore) alerts(ctx context.Context, lang msgs.Lang) string {
-	res, err := c.s.hub.QueryEvents(msgs.WithLang(ctx, lang), EventQuery{Limit: 5})
-	if err != nil {
-		return msgs.Localize(lang, err)
-	}
-	if len(res.Events) == 0 {
-		return msgs.T(lang, "tg.noAlerts")
-	}
-	var lines []string
-	for _, e := range res.Events {
-		lines = append(lines, fmt.Sprintf("#%d %s %s — %s: %s", e.ID, e.TS, e.HostName, msgs.T(lang, "tg.kind."+e.Kind), e.Detail))
-	}
-	return strings.Join(lines, "\n")
 }
 
 func (c *botCore) pipelines(ctx context.Context, lang msgs.Lang) string {
@@ -439,36 +383,6 @@ func (c *botCore) jobTail(ctx context.Context, id int64, n int, lang msgs.Lang) 
 		head += "\n" + msgs.Render(lang, j.ErrorKey, j.ErrorArgs, j.Error)
 	}
 	return head + "\n\n" + strings.Join(tail, "\n")
-}
-
-// notifyReply — оповещение для чата: текст и кнопки (тест не шлётся).
-func (c *botCore) notifyReply(lang msgs.Lang, kinds []string, ev OutEvent) (botReply, bool) {
-	if ev.Kind == OutTest || (len(kinds) > 0 && !slices.Contains(kinds, ev.Kind)) {
-		return botReply{}, false
-	}
-	icon := map[string]string{store.EventUnreachable: "🔴", store.EventRecovered: "🟢", store.EventProblems: "⚠️", store.EventResolved: "✅",
-		store.EventJobFailed: "❌", store.EventRebooted: "🔄", store.EventBans: "🚫", OutDeploySucceeded: "🚀", OutDeployFailed: "💥"}[ev.Kind]
-	text := strings.TrimSpace(icon + " " + msgs.T(lang, "tg.kind."+ev.Kind))
-	if ev.HostName != "" {
-		text += " · " + ev.HostName
-	}
-	if body := msgs.Render(lang, ev.Key, ev.Args, ev.Text); body != "" {
-		text += "\n" + body
-	}
-	var buttons []botButton
-	switch {
-	case ev.HostName != "":
-		buttons = append(buttons, botButton{msgs.T(lang, "tg.btnOverview"), "ov:" + strconv.FormatInt(ev.HostID, 10)})
-		if ev.Kind == store.EventProblems {
-			buttons = append(buttons, botButton{msgs.T(lang, "tg.btnFindings"), "fd:" + strconv.FormatInt(ev.HostID, 10)})
-		}
-	case ev.PipelineID != 0:
-		buttons = append(buttons, botButton{msgs.T(lang, "tg.btnLog"), "jl:" + strconv.FormatInt(ev.JobID, 10)})
-		if ev.Kind == OutDeployFailed {
-			buttons = append(buttons, botButton{msgs.T(lang, "tg.btnRetry"), "rd:" + strconv.FormatInt(ev.PipelineID, 10)})
-		}
-	}
-	return botReply{Text: text, Buttons: buttons}, true
 }
 
 func trimRunes(s string, n int) string {

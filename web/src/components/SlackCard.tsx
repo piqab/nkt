@@ -5,6 +5,7 @@ import { api, useApi } from '../api'
 import { Banner, Card, DiffView, ErrorNote, Loading, Modal } from './ui'
 import { unifiedDiff } from './textDiff'
 import { HelpButton } from './Docs'
+import { zoneOptions } from './TelegramCard'
 
 interface Channel {
   id: string
@@ -23,6 +24,8 @@ interface SlackStatus {
   users: string[]
   kinds: string[]
   lang: 'ru' | 'en' | ''
+  timezone?: string
+  hub_timezone: string
 }
 
 interface EdgeLite {
@@ -126,13 +129,14 @@ interface Draft {
   users: string
   kinds: string[]
   lang: 'ru' | 'en'
+  timezone: string
 }
 
 function SlackModal({ st, kinds, onClose, onSaved }: { st: SlackStatus; kinds: string[]; onClose: () => void; onSaved: () => void }) {
   const { t, i18n } = useTranslation()
   const kindLabel = (k: string) => t(`webhooks.kind.${k}`, { defaultValue: t(`events.kind.${k}`, { defaultValue: k }) })
   const lang = st.lang || (i18n.language.startsWith('en') ? 'en' : 'ru')
-  const initial: Draft = { enabled: st.has_token ? st.enabled : true, token: '', signing: '', channels: st.channels, users: st.users.join(', '), kinds: st.kinds, lang }
+  const initial: Draft = { enabled: st.has_token ? st.enabled : true, token: '', signing: '', channels: st.channels, users: st.users.join(', '), kinds: st.kinds, lang, timezone: st.timezone ?? '' }
   const [d, setD] = useState<Draft>(initial)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -145,6 +149,7 @@ function SlackModal({ st, kinds, onClose, onSaved }: { st: SlackStatus; kinds: s
       `${t('slack.users')}: ${x.users.trim() || '—'}`,
       `${t('webhooks.kinds')}: ${x.kinds.map(kindLabel).join(', ') || t('webhooks.allKinds')}`,
       `${t('webhooks.lang')}: ${x.lang}`,
+      `${t('telegram.timezone')}: ${x.timezone || t('telegram.timezoneHub')}`,
       '',
     ].join('\n')
   const diff = unifiedDiff(text(initial), text(d), t('tokens.saved'), t('tokens.draft'))
@@ -222,6 +227,16 @@ function SlackModal({ st, kinds, onClose, onSaved }: { st: SlackStatus; kinds: s
             ]}
           />
         </label>
+        <label className="small">
+          {t('telegram.timezone')}
+          <Select
+            showSearch
+            style={{ width: '100%' }}
+            value={d.timezone}
+            onChange={(timezone) => setD({ ...d, timezone })}
+            options={zoneOptions(st.hub_timezone, (z) => t('telegram.timezoneHubIs', { zone: z }))}
+          />
+        </label>
         {changed && (
           <>
             <span className="small muted">{t('tokens.diffHint')}</span>
@@ -244,7 +259,7 @@ function SlackModal({ st, kinds, onClose, onSaved }: { st: SlackStatus; kinds: s
                   .map((u) => u.toUpperCase())
                 await api('/hub/slack', {
                   method: 'PUT',
-                  body: { enabled: d.enabled, token: d.token, signing_secret: d.signing, channels: d.channels.filter((c) => c.id), users, kinds: d.kinds, lang: d.lang },
+                  body: { enabled: d.enabled, token: d.token, signing_secret: d.signing, channels: d.channels.filter((c) => c.id), users, kinds: d.kinds, lang: d.lang, timezone: d.timezone },
                 })
                 onSaved()
                 onClose()

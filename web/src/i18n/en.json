@@ -3782,7 +3782,10 @@
     "users": "Who may act (Telegram user id)",
     "usersHint": "Empty means any member of a chat with the admin role. The bot tells you your id on /id.",
     "badUsers": "People numbers are integers separated by commas",
-    "kinds": "Alerts"
+    "kinds": "Alerts",
+    "timezone": "Time zone",
+    "timezoneHub": "as on the hub",
+    "timezoneHubIs": "as on the hub: {{zone}}"
   },
   "slack": {
     "hint": "Alerts with buttons in channels and the /nkt command. Slack sends commands and button presses by itself, so a way in is needed: an nkt-edge with the callbacks role or a hub reachable from the internet.",

@@ -57,6 +57,9 @@ type TelegramSettings struct {
 	// Kinds — события для оповещений (пусто — все).
 	Kinds []string `json:"kinds"`
 	Lang  string   `json:"lang"`
+	// Timezone — часовой пояс времени в сообщениях (IANA); пусто — как у
+	// хаба.
+	Timezone string `json:"timezone,omitempty"`
 }
 
 func (st TelegramSettings) chat(id int64) (TelegramChat, bool) {
@@ -296,7 +299,7 @@ func (b *tgBot) poll(ctx context.Context, token string) error {
 // turn — кто пишет в этом чате и что ему можно.
 func (b *tgBot) turn(ctx context.Context, token string, st TelegramSettings, chat TelegramChat, from tgUser) botTurn {
 	return botTurn{
-		Platform: "telegram", User: strconv.FormatInt(from.ID, 10), UserName: from.name(), Lang: st.lang(),
+		Platform: "telegram", User: strconv.FormatInt(from.ID, 10), UserName: from.name(), Lang: st.lang(), Loc: botLocation(st.Timezone),
 		CanAct: chat.Role == store.TokenRoleAdmin && (len(st.Users) == 0 || slices.Contains(st.Users, from.ID)),
 		Later:  func(r botReply) { _ = b.sendReply(context.WithoutCancel(ctx), token, chat.ID, r) },
 	}
@@ -311,7 +314,11 @@ func (b *tgBot) sendReply(ctx context.Context, token string, chat int64, r botRe
 		}
 		rows = append(rows, row)
 	}
-	return b.send(ctx, token, chat, r.Text, rows...)
+	in := map[string]any{"chat_id": chat, "text": r.telegramHTML(), "parse_mode": "HTML", "disable_web_page_preview": true}
+	if len(rows) > 0 {
+		in["reply_markup"] = map[string]any{"inline_keyboard": rows}
+	}
+	return b.call(ctx, token, "sendMessage", in, nil)
 }
 
 func (b *tgBot) handle(ctx context.Context, token string, u tgUpdate) {
@@ -366,7 +373,7 @@ func (b *tgBot) notify(ctx context.Context, ev OutEvent) {
 	if !st.Enabled || token == "" {
 		return
 	}
-	r, ok := b.core.notifyReply(st.lang(), st.Kinds, ev)
+	r, ok := b.core.notifyReply(st.lang(), botLocation(st.Timezone), st.Kinds, ev)
 	if !ok {
 		return
 	}
@@ -385,6 +392,7 @@ func (b *tgBot) notify(ctx context.Context, ev OutEvent) {
 type tgStatusJSON struct {
 	TelegramSettings
 	HasToken bool   `json:"has_token"`
+	HubZone  string `json:"hub_timezone"`
 	Running  bool   `json:"running"`
 	LastErr  string `json:"last_error,omitempty"`
 	LastAt   string `json:"last_at,omitempty"`
@@ -393,7 +401,7 @@ type tgStatusJSON struct {
 // handleTelegram — GET /hub/telegram.
 func (s *Server) handleTelegram(w http.ResponseWriter, r *http.Request) {
 	st := s.tgSettings(r.Context())
-	out := tgStatusJSON{TelegramSettings: st, HasToken: len(st.TokenEnc) > 0}
+	out := tgStatusJSON{TelegramSettings: st, HasToken: len(st.TokenEnc) > 0, HubZone: hubZone()}
 	out.TokenEnc = nil
 	if s.tg != nil {
 		s.tg.mu.Lock()
@@ -412,12 +420,13 @@ var tgTokenRe = regexp.MustCompile(`^\d{5,20}:[A-Za-z0-9_-]{30,100}$`)
 // kinds, lang}: пустой token — прежний. Новый токен проверяется getMe.
 func (s *Server) handleTelegramSave(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		Enabled bool           `json:"enabled"`
-		Token   string         `json:"token"`
-		Chats   []TelegramChat `json:"chats"`
-		Users   []int64        `json:"users"`
-		Kinds   []string       `json:"kinds"`
-		Lang    string         `json:"lang"`
+		Enabled  bool           `json:"enabled"`
+		Token    string         `json:"token"`
+		Chats    []TelegramChat `json:"chats"`
+		Users    []int64        `json:"users"`
+		Kinds    []string       `json:"kinds"`
+		Lang     string         `json:"lang"`
+		Timezone string         `json:"timezone"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -475,6 +484,11 @@ func (s *Server) handleTelegramSave(w http.ResponseWriter, r *http.Request) {
 	if req.Lang == "en" {
 		st.Lang = "en"
 	}
+	if !validZone(req.Timezone) {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("tg.badTimezone", req.Timezone))
+		return
+	}
+	st.Timezone = req.Timezone
 	if st.Enabled && len(st.TokenEnc) == 0 {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("tg.noToken"))
 		return

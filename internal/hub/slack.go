@@ -58,6 +58,9 @@ type SlackSettings struct {
 	Users []string `json:"users"`
 	Kinds []string `json:"kinds"`
 	Lang  string   `json:"lang"`
+	// Timezone — часовой пояс времени в сообщениях (IANA); пусто — как у
+	// хаба.
+	Timezone string `json:"timezone,omitempty"`
 }
 
 func (st SlackSettings) channel(id string) (SlackChannel, bool) {
@@ -140,7 +143,7 @@ func slackEscape(s string) string {
 
 // slackBlocks — сообщение с кнопками (Block Kit).
 func slackBlocks(r botReply) []map[string]any {
-	blocks := []map[string]any{{"type": "section", "text": map[string]any{"type": "mrkdwn", "text": slackEscape(trimRunes(r.Text, 2900))}}}
+	blocks := []map[string]any{{"type": "section", "text": map[string]any{"type": "mrkdwn", "text": r.slackMrkdwn()}}}
 	if len(r.Buttons) > 0 {
 		var els []map[string]any
 		for i, b := range r.Buttons {
@@ -153,7 +156,7 @@ func slackBlocks(r botReply) []map[string]any {
 }
 
 func slackPost(ctx context.Context, token, channel string, r botReply) error {
-	return slackCall(ctx, token, "chat.postMessage", map[string]any{"channel": channel, "text": trimRunes(r.Text, 3000), "blocks": slackBlocks(r)}, nil)
+	return slackCall(ctx, token, "chat.postMessage", map[string]any{"channel": channel, "text": trimRunes(r.plain(), 3000), "blocks": slackBlocks(r)}, nil)
 }
 
 // slackVerify — подпись запроса Slack: v0=hex HMAC-SHA256 секретом от
@@ -177,7 +180,7 @@ func (s *Server) slackTurn(ctx context.Context, st SlackSettings, ch SlackChanne
 		userName = userID
 	}
 	return botTurn{
-		Platform: "slack", User: userID, UserName: userName, Lang: st.lang(),
+		Platform: "slack", User: userID, UserName: userName, Lang: st.lang(), Loc: botLocation(st.Timezone),
 		CanAct: ch.Role == store.TokenRoleAdmin && (len(st.Users) == 0 || slices.Contains(st.Users, userID)),
 		Later:  func(r botReply) { _ = slackPost(context.WithoutCancel(ctx), token, ch.ID, r) },
 	}
@@ -231,7 +234,7 @@ func (s *Server) serveSlack(w http.ResponseWriter, r *http.Request, kind string)
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]any{"response_type": "in_channel", "text": replies[0].Text, "blocks": slackBlocks(replies[0])})
+		writeJSON(w, http.StatusOK, map[string]any{"response_type": "in_channel", "text": trimRunes(replies[0].plain(), 3000), "blocks": slackBlocks(replies[0])})
 		for _, rep := range replies[1:] {
 			_ = slackPost(ctx, token, ch.ID, rep)
 		}
@@ -274,7 +277,7 @@ func (s *Server) slackNotify(ctx context.Context, ev OutEvent) {
 	if !st.Enabled || token == "" {
 		return
 	}
-	r, ok := s.botCore().notifyReply(st.lang(), st.Kinds, ev)
+	r, ok := s.botCore().notifyReply(st.lang(), botLocation(st.Timezone), st.Kinds, ev)
 	if !ok {
 		return
 	}
@@ -298,14 +301,15 @@ var (
 
 type slackStatusJSON struct {
 	SlackSettings
-	HasToken   bool `json:"has_token"`
-	HasSigning bool `json:"has_signing"`
+	HasToken   bool   `json:"has_token"`
+	HasSigning bool   `json:"has_signing"`
+	HubZone    string `json:"hub_timezone"`
 }
 
 // handleSlack — GET /hub/slack.
 func (s *Server) handleSlack(w http.ResponseWriter, r *http.Request) {
 	st := s.slackSettings(r.Context())
-	out := slackStatusJSON{SlackSettings: st, HasToken: len(st.TokenEnc) > 0, HasSigning: len(st.SigningEnc) > 0}
+	out := slackStatusJSON{SlackSettings: st, HasToken: len(st.TokenEnc) > 0, HasSigning: len(st.SigningEnc) > 0, HubZone: hubZone()}
 	out.TokenEnc, out.SigningEnc = nil, nil
 	writeJSON(w, http.StatusOK, out)
 }
@@ -322,6 +326,7 @@ func (s *Server) handleSlackSave(w http.ResponseWriter, r *http.Request) {
 		Users    []string       `json:"users"`
 		Kinds    []string       `json:"kinds"`
 		Lang     string         `json:"lang"`
+		Timezone string         `json:"timezone"`
 	}
 	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
@@ -410,6 +415,11 @@ func (s *Server) handleSlackSave(w http.ResponseWriter, r *http.Request) {
 	if req.Lang == "en" {
 		st.Lang = "en"
 	}
+	if !validZone(req.Timezone) {
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("tg.badTimezone", req.Timezone))
+		return
+	}
+	st.Timezone = req.Timezone
 	if st.Enabled && (len(st.TokenEnc) == 0 || len(st.SigningEnc) == 0) {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("slack.incomplete"))
 		return
