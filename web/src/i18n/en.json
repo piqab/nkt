@@ -788,7 +788,21 @@
     "exportContents": "The file includes hosts with secrets, groups, profiles, machine templates, scripts, clusters, deployment pipelines, fail2ban templates (with version history), nkt-edge and hub settings.",
     "exportUsers": "Web interface user accounts",
     "exportUsersHint": "Logins, roles and password hashes (the passwords themselves are stored nowhere). On the target hub an existing login is left alone by default.",
-    "copyAddr": "Copy address"
+    "copyAddr": "Copy address",
+    "empty": {
+      "title": "Where to start",
+      "subtitle": "There are no hosts yet besides the hub's own machine.",
+      "demo": "a demo without servers",
+      "addTitle": "Add a host",
+      "addHint": "You need an address and SSH access: the hub installs nkt itself and shows the key for authorized_keys. Hosts from another hub move over by importing its export file.",
+      "import": "import from another hub",
+      "localTitle": "Look at the hub's machine",
+      "localHint": "The localhost row below is the machine the hub runs on: its findings, services, firewall and certificates are visible right away.",
+      "openLocal": "open the hub's machine",
+      "deployTitle": "Try a deployment",
+      "deployHint": "\"Deployments\" → \"New pipeline\" → \"Examples\": hello-app or httpbin on the hub's machine, to try a dry run, a deployment and a rollback without servers of your own.",
+      "openDeploy": "go to deployments"
+    }
   },
   "events": {
     "title": "Alerts",

@@ -30,7 +30,7 @@ import { PowerToggle } from '../components/PowerToggle'
 import { JobLogModal } from './Jobs'
 import { ClustersCard, NewClusterModal } from '../components/Clusters'
 import { ImportPlanModal } from '../components/ImportPlanModal'
-import { TitleHelp } from '../components/Docs'
+import { HelpButton, TitleHelp } from '../components/Docs'
 
 /** Хост из параметров задания установки (host.install), иначе null. */
 function installJobHost(job: Job): number | null {
@@ -324,11 +324,14 @@ export default function Hosts({
   onSelect,
   hubVersion: hubVersionProp,
   onOpenProfiles,
+  onOpenDeploy,
 }: {
   onSelect: (host: { id: number; name: string }) => void
   hubVersion?: string
   /** Открыть раздел «Профили» хаба — из подсказки и с тега группы. */
   onOpenProfiles?: () => void
+  /** Открыть «Выкладки» хаба — из карточки пустого хаба. */
+  onOpenDeploy?: () => void
 }) {
   const { t } = useTranslation()
   const { data: hosts, error, loading, reload } = useApi<HubHost[]>('/hub/hosts', 30_000)
@@ -1410,6 +1413,15 @@ export default function Hosts({
         </Banner>
       )}
       <ErrorNote error={error} />
+
+      {hosts && !hosts.some((h) => h.id !== LOCAL_HOST_ID && !h.parent_id) && (
+        <EmptyHub
+          onAdd={() => setCreatingHost(true)}
+          onImport={() => importInputRef.current?.click()}
+          onOpenLocal={() => onSelect({ id: LOCAL_HOST_ID, name: hosts.find((h) => h.id === LOCAL_HOST_ID)?.name ?? 'localhost' })}
+          onOpenDeploy={onOpenDeploy}
+        />
+      )}
 
       {/* Все действия над списком — в одной строке с заголовком карточки,
           одного размера с «Создать группу»: отдельная шапка страницы
@@ -3016,5 +3028,50 @@ function UpdateAllModal({ plan, onClose, onStart }: { plan: ReturnType<typeof pl
         </div>
       </div>
     </Modal>
+  )
+}
+
+/** Хаб без хостов (кроме своей машины): три пути начать вместо пустой
+ * таблицы — добавить хост (или перенести из другого хаба), посмотреть
+ * машину хаба, попробовать выкладку на примере. */
+function EmptyHub({ onAdd, onImport, onOpenLocal, onOpenDeploy }: { onAdd: () => void; onImport: () => void; onOpenLocal: () => void; onOpenDeploy?: () => void }) {
+  const { t } = useTranslation()
+  return (
+    <Card title={t('hosts.empty.title')} subtitle={t('hosts.empty.subtitle')} actions={<HelpButton docKey="hub:demo" isHub admin label={t('hosts.empty.demo')} />}>
+      <div className="empty-hub">
+        <div className="empty-hub-step">
+          <strong>1. {t('hosts.empty.addTitle')}</strong>
+          <span className="small muted">{t('hosts.empty.addHint')}</span>
+          <div className="row" style={{ gap: '0.3rem' }}>
+            <Button size="small" type="primary" onClick={onAdd}>
+              {t('hosts.addHostBtn')}
+            </Button>
+            <Button size="small" onClick={onImport}>
+              {t('hosts.empty.import')}
+            </Button>
+          </div>
+        </div>
+        <div className="empty-hub-step">
+          <strong>2. {t('hosts.empty.localTitle')}</strong>
+          <span className="small muted">{t('hosts.empty.localHint')}</span>
+          <div>
+            <Button size="small" onClick={onOpenLocal}>
+              {t('hosts.empty.openLocal')}
+            </Button>
+          </div>
+        </div>
+        <div className="empty-hub-step">
+          <strong>3. {t('hosts.empty.deployTitle')}</strong>
+          <span className="small muted">{t('hosts.empty.deployHint')}</span>
+          {onOpenDeploy && (
+            <div>
+              <Button size="small" onClick={onOpenDeploy}>
+                {t('hosts.empty.openDeploy')}
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </Card>
   )
 }

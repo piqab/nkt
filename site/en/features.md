@@ -218,6 +218,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Hosts are grouped; each has a status, nkt version, problems, reachability, sudo and fallback channel.
 - Open any host in the same UI — every section above works through the hub.
 - The "localhost" row — the hub's own machine without SSH.
+- An empty hub (no hosts besides localhost) shows a "Where to start" card: add a host or import from another hub, open the hub's machine, try a deployment on an example, help on a demo without servers.
 - Install, update, reinstall, stop and start nkt on a host; "update all" for hosts that lag behind.
 - A host whose version differs from the hub's (older or newer) is brought to the hub's version when opened.
 - Fallback channel (a reverse TLS tunnel with certificate pinning) for when SSH is unavailable.
