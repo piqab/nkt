@@ -638,7 +638,7 @@ function Shell({
           <div className="content">
             <DocsContext.Provider value={docsPlace}>
               {hubView === 'hosts' ? (
-                <Hosts onSelect={selectHost} hubVersion={me.hub_version} onOpenProfiles={() => setHubView('profiles')} />
+                <Hosts onSelect={selectHost} hubVersion={me.hub_version} onOpenProfiles={() => setHubView('profiles')} onOpenDeploy={() => setHubView('deploy')} />
               ) : hubView === 'events' ? (
                 <HostEvents me={me} />
               ) : hubView === 'fail2ban' ? (

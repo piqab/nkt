@@ -105,6 +105,22 @@ entries into "error" on start — the buttons are available again.
 
 ## Host list
 
+While there are no hosts besides the localhost row, a **"Where to
+start"** card sits above the list with three paths:
+
+1. **Add a host**: the same form as the button in the list header, or
+   **import from another hub**: its export file (see
+   [below](#export-and-import)).
+2. **Look at the hub's machine**: opens the localhost row with the
+   findings, services, firewall and certificates of the machine the hub
+   runs on.
+3. **Try a deployment**: goes to "Deployments", where "New pipeline" →
+   "Examples" gives hello-app or httpbin on the hub's machine.
+
+The "Help: a demo without servers" button opens the
+[quick start](/en/guide/intro#quick-start) with the `fixtures` mode. The
+card disappears as soon as the first host appears.
+
 - **Availability icon** before the name: green — answered the last poll,
   red — unreachable (the tooltip says when it last answered), gray — not
   polled yet. Polling — every `NKT_HUB_FINDINGS_POLL_INTERVAL` (60 s)

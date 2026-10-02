@@ -23,6 +23,7 @@
   "/users": { "page": "access", "ru": "Пользователи nkt", "en": "nkt users" },
   "/os-users": { "page": "access", "ru": "Учётные записи хоста", "en": "Host accounts" },
   "hub:hosts": { "page": "hub-hosts" },
+  "hub:demo": { "page": "intro", "ru": "Быстрый старт", "en": "Quick start" },
   "hub:events": { "page": "hub-operations", "ru": "Оповещения", "en": "Alerts" },
   "hub:fail2ban": { "page": "fail2ban" },
   "hub:jobs": { "page": "hub-operations", "ru": "Задания хаба", "en": "Hub jobs" },

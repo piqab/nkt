@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.87 — 2026-10-02
+
+- **An empty hub suggests where to start.** While there are no hosts
+  besides localhost, a card above the list offers three paths: add a host
+  or import from another hub, open the hub's machine, try a deployment on
+  an example (hello-app, httpbin). Next to it is help on a demo without
+  servers.
+
 ## v1.11.86 — 2026-10-02
 
 - **fail2ban on the hub: "Undo" and a guard against banning your own.**
