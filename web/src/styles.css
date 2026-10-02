@@ -966,3 +966,15 @@ span.vm-toggle {
   white-space: nowrap;
   vertical-align: bottom;
 }
+
+/* Строка, к которой перешли из находки. */
+.code-gutter-focus {
+  background: var(--status-warning);
+  color: #000;
+  font-weight: 600;
+}
+
+/* Строка таблицы, к которой перешли из находки. */
+.row-focus > td {
+  background: color-mix(in srgb, var(--status-warning) 22%, transparent) !important;
+}

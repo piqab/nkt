@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { Alert, Badge, Button, Card as AntCard, Modal as AntModal, Spin, Tooltip } from 'antd'
 import { CompressOutlined, ExpandOutlined, InfoCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -359,6 +359,7 @@ export function CodeEditor({
   readOnly,
   autoFocus,
   fill,
+  focusLine,
 }: {
   value: string
   onChange?: (e: ChangeEvent<HTMLTextAreaElement>) => void
@@ -367,18 +368,37 @@ export function CodeEditor({
   autoFocus?: boolean
   /** Занять всю высоту растянутого окна. */
   fill?: boolean
+  /** Строка (с 1), к которой прокрутить и которую выделить — переход из
+   * находки. */
+  focusLine?: number
 }) {
   const gutterRef = useRef<HTMLDivElement>(null)
+  const areaRef = useRef<HTMLTextAreaElement>(null)
   const lineCount = value === '' ? 1 : value.split('\n').length
+
+  useEffect(() => {
+    const ta = areaRef.current
+    if (!ta || !focusLine || focusLine < 1 || focusLine > lineCount) return
+    const lines = value.split('\n')
+    const start = lines.slice(0, focusLine - 1).reduce((n, l) => n + l.length + 1, 0)
+    ta.setSelectionRange(start, start + lines[focusLine - 1].length)
+    const lh = parseFloat(getComputedStyle(ta).lineHeight) || 18
+    ta.scrollTop = Math.max(0, (focusLine - 4) * lh)
+    if (gutterRef.current) gutterRef.current.scrollTop = ta.scrollTop
+    ta.focus({ preventScroll: true })
+  }, [focusLine, value, lineCount])
 
   return (
     <div className={fill ? 'code-editor modal-fill' : 'code-editor'}>
       <div className="code-gutter" ref={gutterRef} aria-hidden="true">
         {Array.from({ length: lineCount }, (_, i) => (
-          <div key={i}>{i + 1}</div>
+          <div key={i} className={focusLine === i + 1 ? 'code-gutter-focus' : undefined}>
+            {i + 1}
+          </div>
         ))}
       </div>
       <textarea
+        ref={areaRef}
         className="code-textarea"
         value={value}
         onChange={onChange}

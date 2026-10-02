@@ -107,6 +107,17 @@ export default function Configs({ me }: { me: Me }) {
     setDiff(null)
   }
 
+  // Переход из находки: /configs?path=…&line=N — файл открывается сразу,
+  // нужная строка подсвечена.
+  const [focus] = useState(() => {
+    const q = new URLSearchParams(location.search)
+    return { path: q.get('path'), line: Number(q.get('line')) || undefined }
+  })
+  useEffect(() => {
+    if (focus.path) openFile(focus.path)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- только при входе
+  }, [])
+
   const file = useApi<FileContent>(path ? `/configs/file${qs({ path })}` : null)
   const versions = useApi<{ versions: ConfigVersion[] }>(path ? `/configs/versions${qs({ path })}` : null)
 
@@ -504,7 +515,13 @@ export default function Configs({ me }: { me: Me }) {
                     )}
                     {/* Просмотр: правка — только в окне, с диффом перед
                         записью и историей версий рядом. */}
-                    <CodeEditor value={file.data.content} onChange={() => undefined} rows={22} readOnly />
+                    <CodeEditor
+                      value={file.data.content}
+                      onChange={() => undefined}
+                      rows={22}
+                      readOnly
+                      focusLine={path === focus.path ? focus.line : undefined}
+                    />
                   </>
                 )}
               </Card>
