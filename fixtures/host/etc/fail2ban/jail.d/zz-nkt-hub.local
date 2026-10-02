@@ -1,0 +1,5 @@
+# Managed by nkt: the hub's external address is never banned, otherwise the
+# hub would lock itself out of this host after a few failed connections.
+# The other addresses are carried over from the previous [DEFAULT] ignoreip.
+[DEFAULT]
+ignoreip = 127.0.0.1/8 ::1 10.0.0.0/8

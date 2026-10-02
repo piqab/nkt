@@ -956,3 +956,13 @@ span.vm-toggle {
 @media (max-width: 767px) {
   .modal-resize-handle, .modal-max-btn { display: none !important; }
 }
+
+/* Адрес хоста в таблице хаба: по ширине колонки, целиком — в подсказке. */
+.addr-ellipsis {
+  display: inline-block;
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
