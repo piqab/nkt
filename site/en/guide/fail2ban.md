@@ -201,6 +201,17 @@ address is banned in the `nkt-manual` jail for the chosen time (a week by
 default); the hosts are by default all that have fail2ban; a host without
 fail2ban or with an old nkt version is skipped with a note in the log.
 
+- **An internal address** (the private networks 10/8, 172.16/12,
+  192.168/16, loopback, link-local, CGNAT) is banned only after a
+  separate confirmation listing such addresses: banning one can cut off
+  your own access, such as a proxy, a VPN, a neighbouring machine or the
+  hub itself.
+- **"Undo"**: after a successful ban or unban, a bar with a countdown
+  stays at the bottom of the screen for 15 seconds. Its button runs the
+  reverse job on the same hosts: unbanning the same addresses, or banning
+  them for a week (the previous ban time is not known). An undo cannot
+  itself be undone.
+
 The hub's host list has a **“Banned”** column.
 
 ### Alerts and address checks

@@ -3552,7 +3552,12 @@
     "ignoreEditTitle": "Common exception list",
     "ignoreEditHint": "One address, network (CIDR) or host name per line. It is written to [DEFAULT] ignoreip in {{path}}, then the hub protection file is rebuilt; before writing, a diff of every file and a fail2ban-client -t check.",
     "ignoreHubPinnedEdit": "No need to add the hub address {{addr}}: it is pinned and added automatically.",
-    "ignoreAddMine": "add my address {{ip}}"
+    "ignoreAddMine": "add my address {{ip}}",
+    "fleetPrivateTitle": "Banning an internal address",
+    "fleetPrivateConfirm": "{{ips}} are internal addresses (a private network, loopback or link-local). Banning them may cut off your own access: a proxy, a VPN, neighbouring machines, the hub itself. Ban anyway?",
+    "undoBanned": "Banned: {{ips}} on hosts: {{count}}",
+    "undoUnbanned": "Unbanned: {{ips}} on hosts: {{count}}",
+    "undo": "Undo ({{n}})"
   },
   "sites": {
     "title": "Sites",

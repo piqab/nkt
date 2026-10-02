@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.86 — 2026-10-02
+
+- **fail2ban on the hub: "Undo" and a guard against banning your own.**
+  After a successful ban or unban on hosts, an "Undo" bar stays at the
+  bottom of the screen for 15 seconds; it runs the reverse job on the same
+  hosts. Banning an internal address (a private network, loopback,
+  link-local, CGNAT) now asks for a separate confirmation listing such
+  addresses.
+
 ## v1.11.85 — 2026-10-02
 
 - **Action buttons on findings.** Below a finding is a way to where it
