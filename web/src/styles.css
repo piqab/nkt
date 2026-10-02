@@ -957,11 +957,11 @@ span.vm-toggle {
   .modal-resize-handle, .modal-max-btn { display: none !important; }
 }
 
-/* Адрес хоста в таблице хаба: всегда коротко (начало и «…»), целиком — в
- * подсказке и иконкой копирования. */
+/* Адрес хоста в таблице хаба: два-три первых знака и «…» — не читаются
+ * ни пользователь, ни адрес; целиком — в подсказке и иконкой копирования. */
 .addr-ellipsis {
   display: inline-block;
-  max-width: 5rem;
+  max-width: 2.2rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1029,4 +1029,10 @@ span.vm-toggle {
 /* Иконки действий у имени хоста — плотнее: девять штук в одной строке. */
 .host-actions {
   gap: 0.15rem;
+}
+/* Пустой отступ между иконками действий у имени и «Проблемами» — чтобы
+   они не сливались в одну полосу значков. */
+.hosts-card .ant-table-wrapper .ant-table-thead > tr > th.col-problems,
+.hosts-card .ant-table-wrapper .ant-table-tbody > tr > td.col-problems {
+  padding-inline-start: 1.5rem;
 }

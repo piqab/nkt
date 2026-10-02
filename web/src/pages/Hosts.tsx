@@ -251,8 +251,8 @@ function TunnelChannelBadge({ host }: { host: HubHost }) {
 const HOST_COL_WIDTH: Record<string, string> = {
   status: '2rem',
   name: '20.5rem',
-  addr: '7.25rem',
-  problems: '13rem',
+  addr: '4.5rem',
+  problems: '15.75rem',
   banned: '3rem',
   sudo: '4.25rem',
   channel: '6.25rem',
@@ -1193,34 +1193,7 @@ export default function Hosts({
         </div>
       ),
     },
-    {
-      title: t('hosts.colAddr'),
-      key: 'addr',
-      render: (_, h) =>
-        h.id === LOCAL_HOST_ID ? (
-          <span className="small muted">—</span>
-        ) : isAddrUnknown(h) ? (
-          // Машина ещё не получила адрес: показывать «0.0.0.0» значило бы
-          // выдавать заглушку за настоящий адрес.
-          <span className="small muted">{t('hosts.addrUnknown')}</span>
-        ) : (
-          // draggable={false} и selectable: строка таблицы перетаскивается
-          // в другую группу (onRow ниже), и браузер начинал перетаскивание
-          // вместо выделения — адрес нельзя было выделить мышью и
-          // скопировать.
-          // Адрес — обрезан по ширине колонки (целиком — в подсказке), а
-          // скопировать строку целиком — иконкой рядом.
-          <span className="row row-nowrap" style={{ gap: '0.1rem', alignItems: 'center' }}>
-            <Tooltip title={<Sensitive>{`${h.ssh_user}@${h.addr}:${h.ssh_port}`}</Sensitive>}>
-              <span className="mono small selectable addr-ellipsis" draggable={false} onDragStart={(e) => e.preventDefault()}>
-                <Sensitive>{h.ssh_user}@{h.addr}:{h.ssh_port}</Sensitive>
-              </span>
-            </Tooltip>
-            <CopyButton text={`${h.ssh_user}@${h.addr}:${h.ssh_port}`} title={t('hosts.copyAddr')} />
-          </span>
-        ),
-    },
-    { title: t('hosts.colProblems'), key: 'problems', render: (_, h) => <ProblemsCell host={h} /> },
+    { title: t('hosts.colProblems'), key: 'problems', className: 'col-problems', render: (_, h) => <ProblemsCell host={h} /> },
     {
       // Сколько адресов fail2ban держит забаненными сейчас (из опроса).
       title: <Tooltip title={t('hosts.f2bBannedHint')}>{t('hosts.colBanned')}</Tooltip>,
@@ -1288,6 +1261,33 @@ export default function Hosts({
           <span className="row row-nowrap" style={{ gap: 0 }}>
             <TunnelChannelBadge host={h} />
             <AptProxyBadge host={h} />
+          </span>
+        ),
+    },
+    {
+      title: t('hosts.colAddr'),
+      key: 'addr',
+      render: (_, h) =>
+        h.id === LOCAL_HOST_ID ? (
+          <span className="small muted">—</span>
+        ) : isAddrUnknown(h) ? (
+          // Машина ещё не получила адрес: показывать «0.0.0.0» значило бы
+          // выдавать заглушку за настоящий адрес.
+          <span className="small muted">{t('hosts.addrUnknown')}</span>
+        ) : (
+          // draggable={false} и selectable: строка таблицы перетаскивается
+          // в другую группу (onRow ниже), и браузер начинал перетаскивание
+          // вместо выделения — адрес нельзя было выделить мышью и
+          // скопировать.
+          // Адрес — обрезан по ширине колонки (целиком — в подсказке), а
+          // скопировать строку целиком — иконкой рядом.
+          <span className="row row-nowrap" style={{ gap: '0.1rem', alignItems: 'center' }}>
+            <Tooltip title={<Sensitive>{`${h.ssh_user}@${h.addr}:${h.ssh_port}`}</Sensitive>}>
+              <span className="mono small selectable addr-ellipsis" draggable={false} onDragStart={(e) => e.preventDefault()}>
+                <Sensitive>{h.ssh_user}@{h.addr}:{h.ssh_port}</Sensitive>
+              </span>
+            </Tooltip>
+            <CopyButton text={`${h.ssh_user}@${h.addr}:${h.ssh_port}`} title={t('hosts.copyAddr')} />
           </span>
         ),
     },
