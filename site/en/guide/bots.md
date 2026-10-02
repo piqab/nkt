@@ -51,6 +51,34 @@ write there.
 A pipeline is given by name or number. The bot sends the outcome of the
 job it started by itself (the status and the last log lines).
 
+### What messages look like
+
+An event is a block: a bold header (icon, host, what happened, time) and
+the text; new findings come as a list of up to three, then "…and N more":
+
+```text
+⚠️ cz281 — new findings · 13:05
+Serious findings: 25 (was 11)
+• Deployment carcheck/…-carcheck-server: 0 of 1 replicas available
+• Deployment carcheck/…-ledger-admin: 0 of 1 replicas available
+• Pod carcheck/…-tz4fc: ImagePullBackOff
+…and 11 more
+```
+
+- **Time** is "13:05" today, "yesterday 22:40", or "Sep 30 08:15"
+  earlier, in the **time zone** from the bot settings; by default, the hub
+  machine's (the setup window shows which zone that is; a hub in Docker is
+  usually in UTC).
+- **`/alerts`** shows the last five; identical events on different hosts
+  within two minutes (for example, nodes of one cluster) form one block,
+  "crem1, cg221 — new findings". Below the list are the hosts' "⚠️
+  Findings" buttons. Alerts the bot sends by itself are not merged; they
+  arrive at once.
+- **`/hosts`** and **`/status`** go by state, worst first: 🔴 unreachable
+  or an error (with its text), 🟠 critical or high findings, 🟡 only medium
+  ones, 🟢 no serious findings, ⚪ no data (new, installing, not polled
+  yet).
+
 ### Buttons in alerts
 
 - a host alert has **"Overview"** (state, version, findings); a new

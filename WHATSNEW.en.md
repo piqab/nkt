@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.82 — 2026-10-02
+
+- **Telegram and Slack bot messages are readable**: an event is a block
+  with a bold header (icon, host, what happened, time) and text; new
+  findings come as a list of up to three, then "…and N more", without the
+  event number.
+- **Time is in the bot's time zone**: "13:05", "yesterday 22:40", "Sep 30
+  08:15" instead of ISO in UTC. The zone is in the bot settings and
+  defaults to the hub machine's (the setup window shows which).
+- **`/alerts`** merges identical events from different hosts within two
+  minutes ("crem1, cg221 — new findings") and offers the hosts' "⚠️
+  Findings" buttons. Alerts the bot sends by itself still arrive one by
+  one, at once.
+- **`/hosts` and `/status` no longer paint everything green**: 🔴
+  unreachable or an error (with its text), 🟠 critical or high findings,
+  🟡 medium, 🟢 no serious findings, ⚪ no data; worst first.
+
 ## v1.11.81 — 2026-10-01
 
 - The edge HTTPS check builds the address from the validated name, only

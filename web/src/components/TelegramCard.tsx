@@ -21,6 +21,8 @@ interface TelegramStatus {
   users: number[]
   kinds: string[]
   lang: 'ru' | 'en'
+  timezone?: string
+  hub_timezone: string
   running: boolean
   last_error?: string
   last_at?: string
@@ -110,6 +112,7 @@ interface Draft {
   users: string
   kinds: string[]
   lang: 'ru' | 'en'
+  timezone: string
 }
 
 function draftText(d: Draft, t: (k: string, o?: Record<string, unknown>) => string, kindLabel: (k: string) => string): string {
@@ -120,6 +123,7 @@ function draftText(d: Draft, t: (k: string, o?: Record<string, unknown>) => stri
     `${t('telegram.users')}: ${d.users.trim() || '—'}`,
     `${t('webhooks.kinds')}: ${d.kinds.map(kindLabel).join(', ') || t('webhooks.allKinds')}`,
     `${t('webhooks.lang')}: ${d.lang}`,
+    `${t('telegram.timezone')}: ${d.timezone || t('telegram.timezoneHub')}`,
     '',
   ].join('\n')
 }
@@ -129,7 +133,7 @@ function TelegramModal({ st, kinds, onClose, onSaved }: { st: TelegramStatus; ki
   const { t, i18n } = useTranslation()
   const kindLabel = (k: string) => t(`webhooks.kind.${k}`, { defaultValue: t(`events.kind.${k}`, { defaultValue: k }) })
   const lang = st.lang || (i18n.language.startsWith('en') ? 'en' : 'ru')
-  const initial: Draft = { enabled: st.has_token ? st.enabled : true, token: '', chats: st.chats, users: st.users.join(', '), kinds: st.kinds, lang }
+  const initial: Draft = { enabled: st.has_token ? st.enabled : true, token: '', chats: st.chats, users: st.users.join(', '), kinds: st.kinds, lang, timezone: st.timezone ?? '' }
   const [d, setD] = useState<Draft>(initial)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -210,6 +214,16 @@ function TelegramModal({ st, kinds, onClose, onSaved }: { st: TelegramStatus; ki
             ]}
           />
         </label>
+        <label className="small">
+          {t('telegram.timezone')}
+          <Select
+            showSearch
+            style={{ width: '100%' }}
+            value={d.timezone}
+            onChange={(timezone) => setD({ ...d, timezone })}
+            options={zoneOptions(st.hub_timezone, (z) => t('telegram.timezoneHubIs', { zone: z }))}
+          />
+        </label>
         {changed && (
           <>
             <span className="small muted">{t('tokens.diffHint')}</span>
@@ -231,7 +245,7 @@ function TelegramModal({ st, kinds, onClose, onSaved }: { st: TelegramStatus; ki
                   .filter(Boolean)
                   .map(Number)
                 if (users.some((u) => !Number.isSafeInteger(u) || u <= 0)) throw new Error(t('telegram.badUsers'))
-                await api('/hub/telegram', { method: 'PUT', body: { enabled: d.enabled, token: d.token, chats: d.chats.filter((c) => c.id), users, kinds: d.kinds, lang: d.lang } })
+                await api('/hub/telegram', { method: 'PUT', body: { enabled: d.enabled, token: d.token, chats: d.chats.filter((c) => c.id), users, kinds: d.kinds, lang: d.lang, timezone: d.timezone } })
                 onSaved()
                 onClose()
               } catch (err) {
@@ -247,4 +261,10 @@ function TelegramModal({ st, kinds, onClose, onSaved }: { st: TelegramStatus; ki
       </div>
     </Modal>
   )
+}
+
+/** Часовые пояса IANA из браузера (пусто — как на хабе). */
+export function zoneOptions(hubZone: string, label: (zone: string) => string) {
+  const list: string[] = (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? []
+  return [{ value: '', label: label(hubZone) }, ...list.map((z) => ({ value: z, label: z }))]
 }
