@@ -6,6 +6,7 @@ import { DocsSettingsCard, TitleHelp } from '../components/Docs'
 import { usePrivacy } from '../privacy'
 import { AISettingsCard } from '../components/AISettingsCard'
 import { ApiTokensCard } from '../components/ApiTokensCard'
+import { NavLayoutCard } from '../components/NavLayoutModal'
 import type { HubVersionInfo, HubVulnDBInfo } from '../types'
 
 interface AptCacheInfo {
@@ -334,6 +335,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
 
       <AISettingsCard />
       <DocsSettingsCard isHub admin={admin} />
+      <NavLayoutCard admin={admin} />
       <ApiTokensCard admin={admin} />
 
       <Card title={t('about.vulnDBTitle')} subtitle={t('about.vulnDBHint')}>

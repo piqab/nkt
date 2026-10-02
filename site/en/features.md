@@ -249,6 +249,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - A package cache: hosts download .deb files through the hub over a reverse SSH forward (every package comes from the internet once), apt with Proxy-Auto-Detect goes direct when the hub is away; a checkbox in the host form, a card in “About” with a limit and clearing.
 - A copy of the ClamAV signature database on the hub (created by a button in “About”, then refreshed on a schedule, only what changed is downloaded) and its upload to a host as a job — “database from hub” in the “Malware” tab.
 - "About": hub version, GitHub release check, update to the latest, rollback to the previous, the new version's notes before installing.
+- Menu layout in "About": the hub section order by drag and drop; host sections, ordered and hidden for all hosts at once; a diff, version history, reset to default; carried in the hub export.
 - Configuration via `hub.env`, running as a systemd unit, in Docker Compose or Kubernetes.
 
 ## Terminal UI (`nkt tui`)

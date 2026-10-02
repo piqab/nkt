@@ -1036,3 +1036,33 @@ span.vm-toggle {
 .hosts-card .ant-table-wrapper .ant-table-tbody > tr > td.col-problems {
   padding-inline-start: 1.5rem;
 }
+
+/* Окно раскладки меню: строки перетаскиваются за любую часть. */
+.nav-layout-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.nav-layout-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--border, rgba(0, 0, 0, 0.08));
+  border-radius: 6px;
+  background: var(--surface-raised);
+  cursor: grab;
+}
+.nav-layout-row.dragging {
+  opacity: 0.5;
+}
+.nav-layout-row.hidden-item .nav-layout-label,
+.nav-layout-row.hidden-item .nav-layout-icon {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+.nav-layout-label {
+  flex: 1;
+}
