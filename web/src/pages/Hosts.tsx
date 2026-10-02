@@ -14,8 +14,11 @@ import {
   WarningFilled,
   CloudDownloadOutlined,
   ClusterOutlined,
+  PauseCircleOutlined,
+  SafetyOutlined,
 } from '@ant-design/icons'
 import { Trans, useTranslation } from 'react-i18next'
+import { CopyButton } from '../components/CopyButton'
 import { api, ApiError, LOCAL_HOST_ID, useApi } from '../api'
 import type { HubHost, Job, Severity } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, SEVERITIES, Spinner, formatRelative, severityLabel } from '../components/ui'
@@ -1115,8 +1118,11 @@ export default function Hosts({
                     {isAddrUnknown(vm) ? (
                       <span className="muted">{t('hosts.addrUnknown')}</span>
                     ) : (
-                      <span className="mono muted">
-                        <Sensitive>{vm.ssh_user}@{vm.addr}</Sensitive>
+                      <span className="row row-nowrap" style={{ display: 'inline-flex', gap: '0.1rem', alignItems: 'center' }}>
+                        <span className="mono muted">
+                          <Sensitive>{vm.ssh_user}@{vm.addr}</Sensitive>
+                        </span>
+                        <CopyButton text={`${vm.ssh_user}@${vm.addr}`} title={t('hosts.copyAddr')} />
                       </span>
                     )}
                   </span>
@@ -1181,8 +1187,15 @@ export default function Hosts({
           // в другую группу (onRow ниже), и браузер начинал перетаскивание
           // вместо выделения — адрес нельзя было выделить мышью и
           // скопировать.
-          <span className="mono small selectable" draggable={false} onDragStart={(e) => e.preventDefault()}>
-            <Sensitive>{h.ssh_user}@{h.addr}:{h.ssh_port}</Sensitive>
+          // Адрес — обрезан по ширине колонки (целиком — в подсказке), а
+          // скопировать строку целиком — иконкой рядом.
+          <span className="row row-nowrap" style={{ gap: '0.1rem', alignItems: 'center' }}>
+            <Tooltip title={<Sensitive>{`${h.ssh_user}@${h.addr}:${h.ssh_port}`}</Sensitive>}>
+              <span className="mono small selectable addr-ellipsis" draggable={false} onDragStart={(e) => e.preventDefault()}>
+                <Sensitive>{h.ssh_user}@{h.addr}:{h.ssh_port}</Sensitive>
+              </span>
+            </Tooltip>
+            <CopyButton text={`${h.ssh_user}@${h.addr}:${h.ssh_port}`} title={t('hosts.copyAddr')} />
           </span>
         ),
     },
@@ -1200,10 +1213,16 @@ export default function Hosts({
             <span className="muted small">—</span>
           </Tooltip>
         ) : !h.fail2ban.running ? (
-          <Tag color="red">{t('hosts.f2bStopped')}</Tag>
+          // Без слов: иконка, смысл — в подсказке.
+          <Tooltip title={t('hosts.f2bStopped')}>
+            <PauseCircleOutlined style={{ color: 'var(--status-critical)' }} aria-label={t('hosts.f2bStopped')} />
+          </Tooltip>
         ) : (
           <Tooltip title={t('hosts.f2bBannedHint')}>
-            <span className="num">{h.fail2ban.banned}</span>
+            <span className="row row-nowrap num" style={{ gap: '0.3rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+              <SafetyOutlined className="muted" />
+              {h.fail2ban.banned}
+            </span>
           </Tooltip>
         ),
     },

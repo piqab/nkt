@@ -776,7 +776,8 @@
     "importNoErrors": "No errors.",
     "exportContents": "The file includes hosts with secrets, groups, profiles, machine templates, scripts, clusters, deployment pipelines, fail2ban templates (with version history), nkt-edge and hub settings.",
     "exportUsers": "Web interface user accounts",
-    "exportUsersHint": "Logins, roles and password hashes (the passwords themselves are stored nowhere). On the target hub an existing login is left alone by default."
+    "exportUsersHint": "Logins, roles and password hashes (the passwords themselves are stored nowhere). On the target hub an existing login is left alone by default.",
+    "copyAddr": "Copy address"
   },
   "events": {
     "title": "Alerts",

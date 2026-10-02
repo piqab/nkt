@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.84 — 2026-10-02
+
+- **Hosts on the hub:** the address is cut to the column width (in full
+  in the tooltip), and the icon next to it copies `user@address:port`,
+  over http too, where the browser Clipboard API is unavailable. "Banned"
+  shows only icons and numbers: a shield and the number, a red pause when
+  fail2ban is stopped, "—" when it is not installed.
+
 ## v1.11.83 — 2026-10-02
 
 - **Bots: the "⚠️ Findings" button works**; it used to answer with a

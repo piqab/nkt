@@ -109,6 +109,11 @@ entries into "error" on start — the buttons are available again.
   red — unreachable (the tooltip says when it last answered), gray — not
   polled yet. Polling — every `NKT_HUB_FINDINGS_POLL_INTERVAL` (60 s)
   over the already open SSH connection.
+- **Address** — `user@address:port`, cut to the column width (in full in
+  the tooltip); the icon next to it copies the whole string.
+- **Banned** — how many addresses fail2ban holds now (a shield and the
+  number); a red pause icon means fail2ban is stopped, "—" that it is not
+  installed.
 - **Findings** — finding counters; for an unreachable host — numbers
   from the last successful poll (dimmed) or "no data".
 - **nkt version** — if it differs from the hub, "on hub: …" appears next
