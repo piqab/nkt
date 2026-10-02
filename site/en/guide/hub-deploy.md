@@ -380,11 +380,20 @@ compose:
   `ports:` already publishes it (`127.0.0.1:8080:80`), the proxy uses that
   (`127.0.0.1:8080`) and no second publication appears; otherwise nkt
   publishes it on 127.0.0.1 itself. Before installing the proxy and issuing the certificate, the hub
-  checks it against the ports the image declares (`EXPOSE`; if the image
-  declares none, `expose:` and `ports` in compose): a wrong port is a site
-  error with a hint ("image kennethreitz/httpbin declares 80"), and no
-  certificate is spent. If the image declares no ports there is nothing to
+  checks it against the ports the image declares (`EXPOSE`): a wrong port
+  is a site error with a hint ("image kennethreitz/httpbin declares only
+  port 80"), and no certificate is spent. If the image is not pulled on the
+  host yet, the dry run reads its `EXPOSE` from the registry without
+  pulling (the manifest for the host's architecture and the image config;
+  public Docker Hub, ghcr.io and quay.io need no login), and the log says
+  "ports of image … from the registry". If the registry does not answer,
+  the ports are only known from compose `ports`/`expose`, which proves
+  nothing, so it is a warning ("the site is checked after the deployment")
+  rather than an error. If the image declares no ports there is nothing to
   check; if the site answers 502, the log suggests checking the port.
+  Other publications of the site service (gitea's SSH `2222:22` in
+  `compose.ports`) do not get in the site's way; the log just notes they go
+  separately.
 - **What the host lacks is installed:** the proxy and `certbot` (to issue
   and renew the certificate; not needed with Caddy), as distribution
   packages, by background host jobs, logged in the site log. A host
@@ -480,7 +489,11 @@ A pipeline's "Access":
   token with Contents: read) or a private deploy key (for `ssh`/`git@`).
 - **Registry** — `login:token` for a private registry (for tag watching).
 - **Stack .env** — for `action: compose`: the stack's environment
-  variables (`KEY=value` per line).
+  variables (`KEY=value` per line). The order of lines only matters when a
+  value refers to another variable (`GITEA_ROOT_URL=https://${GITEA_SSH_DOMAIN}`):
+  docker compose only substitutes what is set above in `.env`, so such a
+  variable must come after the one it refers to; otherwise the dry run
+  names the line and says what to move up.
 
 They are stored on the hub encrypted and never get into the description,
 logs or command lines (git gets them through the environment); they
