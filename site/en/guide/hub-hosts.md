@@ -129,9 +129,10 @@ when the numbers change. Whatever does not fit is an icon with a tooltip.
   red — unreachable (the tooltip says when it last answered), gray — not
   polled yet. Polling — every `NKT_HUB_FINDINGS_POLL_INTERVAL` (60 s)
   over the already open SSH connection.
-- **Address** — `user@address:port`, always short: only the beginning is
-  visible (in full in the tooltip); the icon next to it copies the whole
-  string. Machines inside a host show it the same way.
+- **Address** (before "nkt") — `user@address:port`, with only the first
+  two or three characters visible, so neither the user nor the address can
+  be read on screen; in full in the tooltip, and the icon next to it
+  copies the whole string. Machines inside a host show it the same way.
 - **f2b** — how many addresses fail2ban holds now (a shield and the
   number); a red pause icon means fail2ban is stopped, "—" that it is not
   installed.

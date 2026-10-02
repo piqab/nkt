@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.93 — 2026-10-02
+
+- **Hosts on the hub:** only the first two or three characters of the
+  address are visible, so neither the user nor the IP can be read (in full
+  in the tooltip and via copy); the "Address" column moved next to "nkt",
+  the freed space went to "Findings", and an empty gap now separates the
+  action icons from "Findings".
+
 ## v1.11.92 — 2026-10-02
 
 - **The hub export caught up with the hub.** The file now carries the
