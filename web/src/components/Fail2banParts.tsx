@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Checkbox, Input, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, hostScope, useApi } from '../api'
@@ -40,6 +40,55 @@ interface FleetHost {
   banned: number
 }
 
+interface FleetParams {
+  action: 'ban' | 'unban'
+  ips: string[]
+  ban_time: number
+  host_ids: number[]
+}
+
+/** Сколько секунд держится «Отменить» после бана или разбана. */
+export const UNDO_SECONDS = 15
+
+/** Обратное задание к завершившемуся успешно: разбан тех же адресов на
+ * тех же хостах или бан на неделю (прежний срок не известен). Хосты —
+ * из входа задания: сервер записывает туда тех, на ком оно шло. */
+export function reverseFleet(j: Job): FleetParams | null {
+  if (j.status !== 'succeeded' || !j.params) return null
+  try {
+    const p = JSON.parse(j.params) as { action?: string; ips?: string[]; host_ids?: number[] }
+    if (!p.ips?.length || !p.host_ids?.length) return null
+    if (p.action === 'ban') return { action: 'unban', ips: p.ips, ban_time: 0, host_ids: p.host_ids }
+    if (p.action === 'unban') return { action: 'ban', ips: p.ips, ban_time: 7 * 86400, host_ids: p.host_ids }
+  } catch {
+    // Вход не разобрался — отменять нечего.
+  }
+  return null
+}
+
+/** Плашка внизу экрана с обратным отсчётом и «Отменить» — поверх окон. */
+export function UndoBar({ text, onUndo, onExpire }: { text: string; onUndo: () => void; onExpire: () => void }) {
+  const { t } = useTranslation()
+  const [left, setLeft] = useState(UNDO_SECONDS)
+  useEffect(() => {
+    if (left <= 0) {
+      onExpire()
+      return
+    }
+    const id = window.setTimeout(() => setLeft((n) => n - 1), 1000)
+    return () => window.clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- отсчёт идёт сам, onExpire зовётся один раз
+  }, [left])
+  return (
+    <div className="undo-bar" role="status">
+      <span>{text}</span>
+      <Button size="small" type="primary" onClick={onUndo}>
+        {t('fail2ban.undo', { n: left })}
+      </Button>
+    </div>
+  )
+}
+
 /**
  * Бан (или разбан) адресов на хостах — задание хаба с журналом. Хосты по
  * умолчанию — все, где есть fail2ban.
@@ -67,16 +116,27 @@ export function FleetBanModal({
   const eligible = list.filter((h) => !h.known || h.installed)
   const selected = picked ?? eligible.map((h) => h.id)
   const ips = ipsText.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)
+  // Обратное задание после успеха: «Отменить» на плашке 15 секунд.
+  const [undo, setUndo] = useState<FleetParams | null>(null)
+  const [logOpen, setLogOpen] = useState(true)
+  // Отменённое уже не отменяется: у обратного задания плашки нет.
+  const [undone, setUndone] = useState(false)
+
+  async function run(p: FleetParams) {
+    const res = await api<{ job_id: number }>('/hub/fail2ban/fleet', { method: 'POST', body: p })
+    setLogOpen(true)
+    setJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
+  }
 
   async function start() {
+    // Бан внутреннего адреса (частная сеть, loopback, link-local) может
+    // отрезать доступ своим: прокси, VPN, соседней машине, самому хабу.
+    const internal = action === 'ban' ? ips.filter((ip) => !isExternalIP(ip)) : []
+    if (internal.length > 0 && !(await confirmAction(t('fail2ban.fleetPrivateConfirm', { ips: internal.join(', ') }), { title: t('fail2ban.fleetPrivateTitle') }))) return
     setBusy(true)
     setError(null)
     try {
-      const res = await api<{ job_id: number }>('/hub/fail2ban/fleet', {
-        method: 'POST',
-        body: { action, ips, ban_time: action === 'ban' ? banTime : 0, host_ids: selected },
-      })
-      setJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
+      await run({ action, ips, ban_time: action === 'ban' ? banTime : 0, host_ids: selected })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -86,12 +146,45 @@ export function FleetBanModal({
 
   if (job) {
     return (
-      <JobLogModal
-        job={job}
-        scope="/hosts/local"
-        onClose={onClose}
-        onDone={() => onDone?.()}
-      />
+      <>
+        {logOpen && (
+          <JobLogModal
+            key={job.id}
+            job={job}
+            scope="/hosts/local"
+            onClose={() => (undo ? setLogOpen(false) : onClose())}
+            onDone={(j) => {
+              onDone?.()
+              const p = reverseFleet(j)
+              if (p && !undone) setUndo(p)
+            }}
+          />
+        )}
+        {undo && (
+          <UndoBar
+            text={t(undo.action === 'unban' ? 'fail2ban.undoBanned' : 'fail2ban.undoUnbanned', { ips: undo.ips.join(', '), count: undo.host_ids.length })}
+            onUndo={async () => {
+              const p = undo
+              setUndo(null)
+              setUndone(true)
+              try {
+                await run(p)
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err))
+              }
+            }}
+            onExpire={() => {
+              setUndo(null)
+              if (!logOpen) onClose()
+            }}
+          />
+        )}
+        {error && !logOpen && !undo && (
+          <Modal title={t(action === 'ban' ? 'fail2ban.fleetBanTitle' : 'fail2ban.fleetUnbanTitle')} onClose={onClose}>
+            <Banner kind="error">{error}</Banner>
+          </Modal>
+        )}
+      </>
     )
   }
   return (
