@@ -190,12 +190,25 @@ func stackServices(ctx context.Context, c collect.Collector, engine, name, file 
 // compose (expose, target у ports) и в образе (EXPOSE). found — сервис
 // есть в стеке; пусто — образ портов не объявляет (проверять не с чем).
 func serviceDeclaredPorts(ctx context.Context, c collect.Collector, engine, dir, project, file, service string) (ports []int, image string, found bool, err error) {
+	ports, image, _, found, err = serviceDeclaredPortsFrom(ctx, c, engine, dir, project, file, service)
+	return
+}
+
+// Откуда известны порты сервиса: из EXPOSE скачанного образа или только из
+// compose (ports/expose) — второе не доказывает, что процесс их слушает.
+const (
+	PortsFromImage   = "image"
+	PortsFromCompose = "compose"
+)
+
+// serviceDeclaredPortsFrom — serviceDeclaredPorts и источник портов.
+func serviceDeclaredPortsFrom(ctx context.Context, c collect.Collector, engine, dir, project, file, service string) (ports []int, image, from string, found bool, err error) {
 	res, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgsIn(c, dir, project, file), "config", "--format", "json")...)
 	if err != nil {
-		return nil, "", false, err
+		return nil, "", "", false, err
 	}
 	if !res.OK() {
-		return nil, "", false, msgs.Errorf("compose.configRejected", strings.TrimSpace(res.Output()))
+		return nil, "", "", false, msgs.Errorf("compose.configRejected", strings.TrimSpace(res.Output()))
 	}
 	var doc struct {
 		Services map[string]struct {
@@ -207,11 +220,11 @@ func serviceDeclaredPorts(ctx context.Context, c collect.Collector, engine, dir,
 		} `json:"services"`
 	}
 	if err := json.Unmarshal([]byte(res.Stdout), &doc); err != nil {
-		return nil, "", false, msgs.Errorf("compose.configRejected", err.Error())
+		return nil, "", "", false, msgs.Errorf("compose.configRejected", err.Error())
 	}
 	svc, ok := doc.Services[service]
 	if !ok {
-		return nil, "", false, nil
+		return nil, "", "", false, nil
 	}
 	// Образ объявляет порты (EXPOSE) — сверка только с ними: expose в
 	// compose — лишь пометка, процесс в контейнере она не заставит
@@ -244,14 +257,15 @@ func serviceDeclaredPorts(ctx context.Context, c collect.Collector, engine, dir,
 			}
 		}
 	}
+	from = PortsFromCompose
 	if len(imageSet) > 0 {
-		set = imageSet
+		set, from = imageSet, PortsFromImage
 	}
 	for n := range set {
 		ports = append(ports, n)
 	}
 	sort.Ints(ports)
-	return ports, svc.Image, true, nil
+	return ports, svc.Image, from, true, nil
 }
 
 // portList — «80, 443» для сообщений.

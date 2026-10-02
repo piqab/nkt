@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/api"
 	"net/http"
 	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/config"
@@ -58,6 +60,8 @@ type composeCheck struct {
 	SiteFound      bool     `json:"site_found"`
 	SitePorts      []int    `json:"site_ports"`
 	SiteImage      string   `json:"site_image"`
+	// SitePortsFrom — image, compose или пусто (старый хост).
+	SitePortsFrom string `json:"site_ports_from"`
 }
 
 // dryRun — задание сухого прогона.
@@ -140,6 +144,14 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 		} else if keys := c.AllEnvKeys(); len(keys) > 0 {
 			jc.Log("deploy.dryEnvKeysOK", strings.Join(keys, ", "))
 		}
+		envText := ""
+		if env != nil {
+			envText = *env
+		}
+		for _, ref := range envForwardRefs(envText) {
+			problems++
+			jc.Log("deploy.dryEnvForwardRef", ref[0], ref[1], ref[1], ref[0])
+		}
 	}
 	for _, t := range targets {
 		var res composeCheck
@@ -170,7 +182,7 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 			problems += s.dryHostVersion(ctx, jc, t)
 		}
 		if c.Site.Managed() && res.SiteChecked && on("site_host") {
-			n, port := logSitePort(jc, c, res)
+			n, port := logSitePort(ctx, jc, c, res, registryHTTP)
 			problems += n
 			sitePort = port
 		}
@@ -407,14 +419,32 @@ func (s *Server) handleDeployGit(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
-// logSitePort — сервис и порт сайта против того, что объявляют стек и
-// образ; число проблем и порт, который получит сайт (auto — из образа).
-func logSitePort(jc *jobs.Context, c *deploy.ComposeSpec, res composeCheck) (int, int) {
+// registryHTTP — запросы сухого прогона к registry (порты образа).
+var registryHTTP = &http.Client{Timeout: 20 * time.Second}
+
+// logSitePort — сервис и порт сайта против того, что объявляет образ;
+// число проблем и порт, который получит сайт (auto — из образа). Образ на
+// хосте не скачан — его EXPOSE берётся из registry; не вышло — порты
+// известны только из compose, а это не доказательство: тогда не ошибка, а
+// предупреждение (сайт проверится после выкладки).
+func logSitePort(ctx context.Context, jc *jobs.Context, c *deploy.ComposeSpec, res composeCheck, client *http.Client) (int, int) {
 	sp := c.Site
+	regErr := ""
+	if res.SiteFound && res.SitePortsFrom == api.PortsFromCompose && res.SiteImage != "" {
+		ports, err := imageExposedPorts(ctx, client, res.SiteImage, res.HostArch)
+		switch {
+		case err != nil:
+			regErr = err.Error()
+		case len(ports) > 0:
+			res.SitePorts, res.SitePortsFrom = ports, "registry"
+			jc.Log("deploy.drySitePortRegistry", res.SiteImage, portsText(ports))
+		}
+	}
 	ports := make([]string, len(res.SitePorts))
 	for i, p := range res.SitePorts {
 		ports[i] = strconv.Itoa(p)
 	}
+	composeOnly := res.SitePortsFrom == api.PortsFromCompose
 	switch {
 	case !res.SiteFound:
 		jc.Log("deploy.drySiteNoService", sp.Service, c.Project, strings.Join(res.Services, ", "))
@@ -427,6 +457,11 @@ func logSitePort(jc *jobs.Context, c *deploy.ComposeSpec, res composeCheck) (int
 		return 1, 0
 	case len(res.SitePorts) == 0:
 		jc.Log("deploy.drySitePortUnknown", res.SiteImage)
+	case !slices.Contains(res.SitePorts, sp.Port) && composeOnly:
+		if regErr == "" {
+			regErr = "—"
+		}
+		jc.Log("deploy.drySitePortComposeOnly", res.SiteImage, regErr, sp.Service, strings.Join(ports, ", "), sp.Port)
 	case !slices.Contains(res.SitePorts, sp.Port) && len(res.SitePorts) == 1:
 		jc.Log("deploy.drySitePortBadOne", sp.Port, res.SiteImage, res.SitePorts[0], res.SitePorts[0])
 		return 1, sp.Port

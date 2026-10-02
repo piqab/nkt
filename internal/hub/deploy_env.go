@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -232,6 +234,53 @@ func missingEnvKeys(keys []string, env *string) []string {
 		if v, ok := have[k]; !ok || strings.TrimSpace(v) == "" {
 			out = append(out, k)
 		}
+	}
+	return out
+}
+
+var envRefRe = regexp.MustCompile(`\$(?:\{([A-Za-z_][A-Za-z0-9_]*)|([A-Za-z_][A-Za-z0-9_]*))`)
+
+// envForwardRefs — ссылки вперёд в .env: значение использует ${X} (или $X),
+// а X задана ниже. docker compose подставляет в .env только заданное
+// выше, поэтому такое значение молча получится не тем (например,
+// «https://» вместо адреса). Значения в одинарных кавычках не
+// подставляются и не считаются; «$$» — буквальный знак.
+func envForwardRefs(text string) [][2]string {
+	type line struct{ key, val string }
+	var lines []line
+	for _, l := range strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n") {
+		l = strings.TrimSpace(l)
+		if l == "" || strings.HasPrefix(l, "#") {
+			continue
+		}
+		l = strings.TrimPrefix(l, "export ")
+		k, v, ok := strings.Cut(l, "=")
+		if k = strings.TrimSpace(k); ok && k != "" {
+			lines = append(lines, line{k, strings.TrimSpace(v)})
+		}
+	}
+	defined := map[string]bool{}
+	later := map[string]bool{}
+	for _, l := range lines {
+		later[l.key] = true
+	}
+	var out [][2]string
+	for _, l := range lines {
+		if !strings.HasPrefix(l.val, "'") {
+			for _, m := range envRefRe.FindAllStringSubmatchIndex(strings.ReplaceAll(l.val, "$$", "  "), -1) {
+				v := strings.ReplaceAll(l.val, "$$", "  ")
+				name := ""
+				if m[2] >= 0 {
+					name = v[m[2]:m[3]]
+				} else {
+					name = v[m[4]:m[5]]
+				}
+				if name != l.key && !defined[name] && later[name] && !slices.ContainsFunc(out, func(p [2]string) bool { return p == [2]string{l.key, name} }) {
+					out = append(out, [2]string{l.key, name})
+				}
+			}
+		}
+		defined[l.key] = true
 	}
 	return out
 }

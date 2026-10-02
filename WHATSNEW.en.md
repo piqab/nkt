@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.97 — 2026-10-02
+
+- **Dry run: the site port without false errors.** If the image is not
+  pulled on the host yet, its ports (`EXPOSE`) come from the registry
+  without pulling (Docker Hub, ghcr.io, quay.io), not from the compose
+  publications: the gitea example with `ports: gitea: ["0.0.0.0:2222:22"]`
+  and `site.port: 3000` no longer fails with "image listens on 22". If the
+  registry does not answer, it is a warning ("the site is checked after the
+  deployment"), not an error. The text is more precise ("image declares
+  only port …"), and other publications of the site service (gitea's SSH)
+  are a plain note without "?".
+- **`.env`: references to variables further down.** If a value uses
+  `${X}` and `X` is set below it, docker compose substitutes nothing; the
+  dry run now names the line and says what to move up.
+
 ## v1.11.96 — 2026-10-02
 
 - **Documentation:** a screenshot of the "Edit host sections" window in
