@@ -295,6 +295,9 @@ type Manager struct {
 	// own Server.vuln is.
 	vulnMu    sync.Mutex
 	vulnScans map[int64]*hubVulnState
+	// vulnExposure — что из уязвимого доступно из сети, по хостам (кэш
+	// ответа /vulnerabilities/exposure хоста), под vulnMu.
+	vulnExposure map[int64]hostExposure
 
 	// vulnDBMu guards the hub's own single shared trivy+DB refresh state —
 	// see vulndb.go. Unlike vulnScans above, there is exactly one of these

@@ -219,6 +219,10 @@ export interface VulnStatus {
   progress?: string
   scan?: VulnScan
   error?: string
+  /** Порты, по которым до пакета ОС или образа можно достучаться из сети
+   * (слушает не только loopback; контейнер публикует порт наружу). Нет —
+   * хост старой версии или не ответил. */
+  exposure?: { packages: Record<string, number[]>; images: Record<string, number[]> }
 }
 
 export interface ServiceUnit {

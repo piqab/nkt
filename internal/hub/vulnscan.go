@@ -402,3 +402,67 @@ func tunnelHTTPClientNoTimeout(dial dialFunc, addr string) *http.Client {
 		},
 	}
 }
+
+// hostExposure — ответ хоста о доступности из сети (nil — не узнать:
+// старый nkt, хост недоступен) и когда спрошен.
+type hostExposure struct {
+	value json.RawMessage
+	at    time.Time
+}
+
+// vulnExposureTTL — как долго хаб не переспрашивает хост: страница
+// уязвимостей опрашивает статус раз в несколько секунд.
+const vulnExposureTTL = 2 * time.Minute
+
+// HostVulnExposure — какие пакеты и образы хоста доступны из сети (ответ
+// его /vulnerabilities/exposure как есть). Неудача тоже кэшируется: хост,
+// который не отвечает, не тормозит каждый опрос страницы.
+func (m *Manager) HostVulnExposure(ctx context.Context, hostID int64) json.RawMessage {
+	m.vulnMu.Lock()
+	if c, ok := m.vulnExposure[hostID]; ok && time.Since(c.at) < vulnExposureTTL {
+		m.vulnMu.Unlock()
+		return c.value
+	}
+	m.vulnMu.Unlock()
+
+	value := m.fetchHostExposure(ctx, hostID)
+	m.vulnMu.Lock()
+	if m.vulnExposure == nil {
+		m.vulnExposure = map[int64]hostExposure{}
+	}
+	m.vulnExposure[hostID] = hostExposure{value: value, at: time.Now()}
+	m.vulnMu.Unlock()
+	return value
+}
+
+func (m *Manager) fetchHostExposure(ctx context.Context, hostID int64) json.RawMessage {
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+	dial, _, _, err := m.dialerFor(ctx, hostID)
+	if err != nil {
+		return nil
+	}
+	cookie, err := m.cookieFor(ctx, hostID, dial)
+	if err != nil {
+		return nil
+	}
+	addr := m.hostAPIAddr(ctx, hostID)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+addr+"/api/vulnerabilities/exposure", nil)
+	if err != nil {
+		return nil
+	}
+	req.AddCookie(&http.Cookie{Name: auth.SessionCookie, Value: cookie})
+	resp, err := tunnelHTTPClientNoTimeout(dial, addr).Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var raw json.RawMessage
+	if json.NewDecoder(resp.Body).Decode(&raw) != nil || !json.Valid(raw) {
+		return nil
+	}
+	return raw
+}

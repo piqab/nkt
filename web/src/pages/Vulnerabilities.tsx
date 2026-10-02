@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Button, Input, Select, Tabs, Tag, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { AIExplain } from '../components/AIExplain'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -141,9 +141,21 @@ function VulnTab({ me }: { me: Me }) {
   }
 
   const findings = status?.scan?.findings ?? []
+  // Реальная опасность: уязвимое, до которого достают из сети, — первым;
+  // затем серьёзность; при равных — то, что можно исправить обновлением.
+  const exposure = status?.exposure
+  const portsOf = (f: VulnFinding): number[] => (f.target ? exposure?.images[f.target] : exposure?.packages[f.package]) ?? []
+  const [order, setOrder] = useState<'danger' | 'severity'>('danger')
+  const [onlyExposed, setOnlyExposed] = useState(false)
+  const [onlyFixable, setOnlyFixable] = useState(false)
+  const exposedCount = useMemo(() => findings.filter((f) => portsOf(f).length > 0).length, [findings, exposure])
+  const fixableCount = useMemo(() => findings.filter((f) => !!f.fixed_version).length, [findings])
   const visible = useMemo(() => {
     const needle = query.trim().toLowerCase()
+    const sev = (f: VulnFinding) => SEVERITY_ORDER.indexOf(f.severity)
     return findings
+      .filter((f) => !onlyExposed || portsOf(f).length > 0)
+      .filter((f) => !onlyFixable || !!f.fixed_version)
       .filter((f) => !severity || f.severity === severity)
       .filter((f) => target === ALL_TARGETS || (f.target ?? '') === target)
       .filter(
@@ -153,8 +165,13 @@ function VulnTab({ me }: { me: Me }) {
           f.package.toLowerCase().includes(needle) ||
           (f.target ?? '').toLowerCase().includes(needle),
       )
-      .sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
-  }, [findings, severity, target, query])
+      .sort((a, b) =>
+        order === 'severity'
+          ? sev(a) - sev(b)
+          : Number(portsOf(b).length > 0) - Number(portsOf(a).length > 0) || sev(a) - sev(b) || Number(!!b.fixed_version) - Number(!!a.fixed_version),
+      )
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- portsOf читает exposure
+  }, [findings, severity, target, query, order, onlyExposed, onlyFixable, exposure])
 
   const counts = useMemo(() => {
     const c: Partial<Record<VulnFinding['severity'], number>> = {}
@@ -221,6 +238,22 @@ function VulnTab({ me }: { me: Me }) {
       ),
     },
     { title: t('vulns.col.package'), dataIndex: 'package', width: 200, className: 'mono' },
+    {
+      title: t('vulns.col.exposed'),
+      key: 'exposed',
+      width: 130,
+      render: (_: unknown, f: VulnFinding) => {
+        const ports = portsOf(f)
+        if (!exposure) return <span className="small muted">?</span>
+        return ports.length > 0 ? (
+          <Tooltip title={t(f.target ? 'vulns.exposedImageHint' : 'vulns.exposedPkgHint', { ports: ports.join(', ') })}>
+            <Tag color="red">{t('vulns.exposedPorts', { ports: ports.slice(0, 3).join(', ') + (ports.length > 3 ? '…' : '') })}</Tag>
+          </Tooltip>
+        ) : (
+          <span className="small muted">—</span>
+        )
+      },
+    },
     { title: t('vulns.col.installed'), dataIndex: 'installed_version', width: 160, className: 'mono' },
     {
       title: t('vulns.col.fix'),
@@ -340,6 +373,21 @@ function VulnTab({ me }: { me: Me }) {
                   />
                 </label>
               )}
+              <label>
+                {t('vulns.order')}
+                <Select
+                  value={order}
+                  onChange={(v) => {
+                    setOrder(v)
+                    setPage(1)
+                  }}
+                  style={{ minWidth: '11rem' }}
+                  options={[
+                    { value: 'danger', label: t('vulns.orderDanger') },
+                    { value: 'severity', label: t('vulns.orderSeverity') },
+                  ]}
+                />
+              </label>
               <label style={{ flex: 1, minWidth: '14rem' }}>
                 {t('common.search')}
                 <Input
@@ -348,6 +396,28 @@ function VulnTab({ me }: { me: Me }) {
                   placeholder={t('vulns.searchPlaceholder')}
                 />
               </label>
+              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', paddingBottom: '0.4rem' }}>
+                <Checkbox
+                  checked={onlyExposed}
+                  disabled={!exposure}
+                  onChange={(e) => {
+                    setOnlyExposed(e.target.checked)
+                    setPage(1)
+                  }}
+                />
+                {t('vulns.onlyExposed', { count: exposedCount })}
+              </label>
+              <label style={{ flexDirection: 'row', alignItems: 'center', gap: '0.4rem', paddingBottom: '0.4rem' }}>
+                <Checkbox
+                  checked={onlyFixable}
+                  onChange={(e) => {
+                    setOnlyFixable(e.target.checked)
+                    setPage(1)
+                  }}
+                />
+                {t('vulns.onlyFixable', { count: fixableCount })}
+              </label>
+              {order === 'danger' && <p className="small muted" style={{ flexBasis: '100%', margin: 0 }}>{t('vulns.dangerHint')}</p>}
               <span className="small muted" style={{ paddingBottom: '0.4rem' }}>
                 {t('common.shown', { shown: visible.length, total: findings.length })}
               </span>
@@ -372,7 +442,7 @@ function VulnTab({ me }: { me: Me }) {
                   // itself. A remount is a blunter fix than tracking down
                   // the exact antd internal at fault, but it's guaranteed
                   // to leave nothing stale behind.
-                  key={`${severity}|${target}|${query}`}
+                  key={`${severity}|${target}|${query}|${order}|${onlyExposed}|${onlyFixable}`}
                   dataSource={visible}
                   columns={columns}
                   rowKey={(f) => `${f.target ?? ''}-${f.id}-${f.package}`}

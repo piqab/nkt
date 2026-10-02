@@ -1444,12 +1444,22 @@
       "package": "Package",
       "installed": "Installed",
       "fix": "Fix",
-      "description": "Description"
+      "description": "Description",
+      "exposed": "Network"
     },
     "scanTitle": "Vulnerability scan",
     "hideContinuesBackground": "Hide (continues in the background)",
     "firstRunNote": "The first run may need to download trivy and the vulnerability database (about 1 GB) — this can take a few minutes.",
-    "tabCVE": "CVE"
+    "tabCVE": "CVE",
+    "order": "Order",
+    "orderDanger": "by danger",
+    "orderSeverity": "by severity",
+    "onlyExposed": "only reachable from the network ({{count}})",
+    "onlyFixable": "only with a fix ({{count}})",
+    "exposedPorts": "network: {{ports}}",
+    "exposedPkgHint": "A service from this package listens beyond loopback, on ports {{ports}}: the vulnerability can be reached from the network.",
+    "exposedImageHint": "A container with this image publishes ports {{ports}}: the vulnerability can be reached from the network.",
+    "dangerHint": "“By danger”: first what can be reached from the network (the package's service listens beyond loopback, or a container publishes a port), then severity, and among equals what an update fixes. Libraries (such as libssl in nginx) are not linked to services yet."
   },
   "availability": {
     "what": "monitoring targets",
