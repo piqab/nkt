@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.89 — 2026-10-02
+
+- **Documentation:** the site's home page mentions the finding buttons and
+  vulnerabilities "network-reachable first"; config checks are described
+  more precisely (the written file is checked by the service and restored
+  if rejected, and the service does not reload it); the quick start gives
+  the real number of demo findings (over 70); new screenshots of Findings
+  and the hub's hosts.
+
 ## v1.11.88 — 2026-10-02
 
 - **Vulnerabilities by real danger.** The new default order is "by

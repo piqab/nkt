@@ -136,7 +136,7 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 
 ### Configs
 - Every discovered config of nginx, haproxy, caddy, docker compose, systemd, cron, sshd, netplan, libvirt — by category, with jump-to-line from a finding.
-- Editor with line numbers; the config is checked by the service itself before writing, and on failure the file is restored automatically.
+- Editor with line numbers; the written config is checked by the service itself right away; on failure the file is restored automatically and the service does not reload it.
 - Version history of every file: view, diff, rollback to any version, a note per change.
 - Apply after writing: service `reload`/`restart`, `docker compose up`, `virsh define`, `netplan` — with a check.
 - Block editor: a tree of nginx/haproxy blocks (`server`, `location`, `frontend`, `backend`), add, edit and remove a block without breaking its neighbours.

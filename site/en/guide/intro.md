@@ -63,7 +63,8 @@ NKT_MODE=fixtures ./nkt        # http://127.0.0.1:8077, password in the console
 ```
 
 `fixtures` mode reads nothing from your machine and touches nothing: the
-panel immediately shows 25 findings — Redis open to the world, a port
+panel immediately shows over 70 findings (5 of them critical and 24
+high): Redis open to the world, a port
 conflict, a container in a restart loop, expired TLS. Probes and metrics
 are simulated there (a banner in the UI, `"simulated": true` in the API),
 and 14 days of history are seeded on first start; turn that off with
