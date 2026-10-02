@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.88 — 2026-10-02
+
+- **Vulnerabilities by real danger.** The new default order is "by
+  danger": vulnerabilities reachable from the network come first, then
+  severity, and among equals the ones an update fixes. The "Network"
+  column shows the ports: the package's service listens beyond loopback
+  (the package is found from the process's binary), or a container with
+  the image publishes a port. Filters "only reachable from the network"
+  and "only with a fix". Works on the hub too. The previous order is "by
+  severity".
+
 ## v1.11.87 — 2026-10-02
 
 - **An empty hub suggests where to start.** While there are no hosts

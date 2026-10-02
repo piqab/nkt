@@ -91,6 +91,8 @@ type Server struct {
 	// second concurrent scan would just redo the same work the first one
 	// is already doing.
 	vuln vulnState
+	// vulnExposureCache — доступность уязвимых пакетов и образов из сети.
+	vulnExposureCache vulnExposureCache
 	clam clamState
 }
 
@@ -316,6 +318,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/system/apt/packages/{name}/remove/status", s.handleAptRemoveStatus)
 			r.Get("/vulnerabilities", s.handleVulnerabilities)
 			r.Get("/vulnerabilities/manifest", s.handleVulnManifest)
+			r.Get("/vulnerabilities/exposure", s.handleVulnExposure)
 			r.Get("/malware", s.handleMalware)
 			r.Get("/k8s", s.handleK8sStatus)
 			r.Get("/k8s/join", s.handleK8sJoin)

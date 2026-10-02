@@ -94,6 +94,22 @@ database is downloaded automatically (or taken from the hub, which keeps
 one for all hosts). The list: severity, package, fixed version, links; the
 scan progress is live.
 
+**The "by danger" order** (the default) puts first what can be reached
+from the network, then sorts by severity, and among equals puts first what
+an update fixes:
+
+- **the "Network" column** shows the ports through which the vulnerable
+  code is reachable: a service from the OS package listens beyond loopback
+  (the package owns the listening process's binary, by `dpkg -S` or
+  `rpm -qf`), or a container with this image publishes a port not on
+  127.0.0.1;
+- the **"only reachable from the network"** and **"only with a fix"**
+  filters;
+- the **"by severity"** order is the previous one, without the network.
+
+Libraries (such as libssl inside nginx) are not linked to services yet:
+a vulnerability in one is ordered by severity, without the "network" mark.
+
 ![Malware](/screens/en/malware.png)
 
 The **“Malware”** tab — a check for miners and signs of a break-in with

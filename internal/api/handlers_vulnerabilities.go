@@ -155,11 +155,19 @@ func (s *Server) handleVulnerabilities(w http.ResponseWriter, r *http.Request) {
 	}
 	if result != nil {
 		resp["scan"] = result
+		resp["exposure"] = s.vulnExposure(r.Context())
 	}
 	if lastErr != "" {
 		resp["error"] = lastErr
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// handleVulnExposure — GET /vulnerabilities/exposure: какие пакеты и
+// образы доступны из сети и по каким портам. Хаб, сканирующий хост сам,
+// спрашивает это здесь: слушателей и контейнеры видит только хост.
+func (s *Server) handleVulnExposure(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, s.vulnExposure(r.Context()))
 }
 
 // handleVulnScanStart kicks off a scan in the background and returns

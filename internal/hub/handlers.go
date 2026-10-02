@@ -406,6 +406,9 @@ func (s *Server) handleHostVulnStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	if result != nil {
 		resp["scan"] = result
+		if exp := s.hub.HostVulnExposure(r.Context(), id); exp != nil {
+			resp["exposure"] = exp
+		}
 	}
 	if lastErr != "" {
 		resp["error"] = lastErr

@@ -52,6 +52,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - Packages inside guests: LXD instances (via lxd-agent for LXD VMs) and libvirt machines (via qemu-guest-agent) — locally and on the hub; a finding's origin is "LXD name" or "VM name".
 - trivy is installed automatically on the first scan.
 - Vulnerability list with severity, package, fixed version and links; filters.
+- "By danger" order: first what is reachable from the network (the package's service listens beyond loopback, a container publishes a port; with the ports), then severity, then whether a fix exists; "only reachable from the network" and "only with a fix" filters.
 - Scan progress in real time.
 - The “Malware” tab: a heuristic check for miners and signs of a break-in with no third-party tools — processes named like miners, pool connections, binaries deleted from disk or started from /tmp, long CPU load by a process not from any package, /etc/ld.so.preload, cron with “curl | sh”, units from temporary directories, foreign SUID files, blocks in /etc/hosts; on every scan, results go to Findings and hub alerts.
 - ClamAV: package install, signature database updates, scans of chosen host directories and container images (one, selected or all) with a live log, quarantine of infected files with restore and purge.
