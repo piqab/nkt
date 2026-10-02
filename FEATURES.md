@@ -214,7 +214,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 ## Hub
 
 - One hub manages many hosts: a host connects over SSH (password or key), nkt is installed on it automatically for the right architecture.
-- Hosts are grouped; each has a status, nkt version, problems, reachability, sudo and fallback channel.
+- Hosts are grouped; each has a status, nkt version, problems, reachability, sudo and fallback channel; one line per host, with the same column widths in every group.
 - Open any host in the same UI — every section above works through the hub.
 - The "localhost" row — the hub's own machine without SSH.
 - An empty hub (no hosts besides localhost) shows a "Where to start" card: add a host or import from another hub, open the hub's machine, try a deployment on an example, help on a demo without servers.
@@ -232,7 +232,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - A "Profiles" section on the hub, each profile has a color; a profile is set on a group at creation: machines created in the group are built from it and their rows are tinted with its color; moving a host into a group applies nothing.
 - Model analysis (AI) on the hub: Anthropic or an OpenAI-compatible provider, including local ones (Ollama, vLLM, LM Studio); the model is picked from the provider's list by “Get models” (searchable, release date or size, non-chat models hidden) or typed by hand; a live “Test”, a daily limit, anonymization, editable instructions; “show request” shows the whole request (instruction, message, what was replaced).
 - Alerts: unreachable, responding again, serious problems appeared, resolved, job failed, new fail2ban bans; an AI check with its own instruction for every external IP in an alert, with “Ban on all hosts” in the answer window; an alert journal with settings for what to record, what to notify about and what to hide, filters by kind and host and a text search over the whole journal, collapsing short episodes; browser notifications.
-- fail2ban across hosts: where it is installed and how many are banned, banned addresses and where (on how many hosts, in which jails), banning and unbanning on all hosts as a hub job with a per-host log (banning an internal address asks for a separate confirmation; "Undo" for 15 seconds after success), custom jail templates, a “Banned” column in the host list.
+- fail2ban across hosts: where it is installed and how many are banned, banned addresses and where (on how many hosts, in which jails), banning and unbanning on all hosts as a hub job with a per-host log (banning an internal address asks for a separate confirmation; "Undo" for 15 seconds after success), custom jail templates, an “f2b” column in the host list.
 - Hub jobs with a log.
 - Hub API tokens for automation (n8n, CI, scripts): a read or admin role, a host and group scope, an address and subnet list and an expiry; Bearer or a signed request (HMAC, a one-time nonce, the secret never crosses the network); hub management, the terminal, files and websockets are closed to tokens; the secret is shown once, a new secret and revocation take effect at once; edits come with a diff, and everything goes to the audit log.
 - nkt-edge with roles: deployment webhooks and/or the API, meaning signed API token requests from outside (Bearer, cookies, password login and websockets do not pass, and the token secret never reaches the VPS; the token needs the "through nkt-edge" box); several edges on one hub, on different VPSes and names; roles change by reinstalling.

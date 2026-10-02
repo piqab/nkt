@@ -549,14 +549,13 @@
     "colAddr": "Address",
     "thisMachine": "this machine — the hub scans itself, no SSH",
     "colProblems": "Problems",
-    "colArch": "Architecture",
     "colStatus": "Status",
     "colSudo": "Sudo",
     "colChannel": "Channel",
-    "colVersion": "nkt version",
+    "colVersion": "nkt",
     "staleVersion": "installed {{version}} — update didn't take effect",
     "hubVersion": "on the hub: {{version}}",
-    "colLastSeen": "Last seen",
+    "colLastSeen": "Seen",
     "never": "never",
     "title": "Hosts",
     "hint": "Each host is a separate VPS running its own nkt: the hub pushes the binary over SSH, sets it up as a systemd service, and proxies requests to it — so the dashboard and controls look no different from a plain single-host nkt.",
@@ -747,7 +746,7 @@
     "updateAllActive": "Already updating, left alone: {{names}}",
     "updateAllUnreachable": "Unreachable, skipped: {{names}}",
     "updateAllStart": "Update ({{count}})",
-    "colBanned": "Banned",
+    "colBanned": "f2b",
     "f2bMissing": "fail2ban is not installed",
     "f2bStopped": "fail2ban down",
     "f2bBannedHint": "How many addresses fail2ban keeps banned right now",
@@ -802,7 +801,9 @@
       "deployTitle": "Try a deployment",
       "deployHint": "\"Deployments\" → \"New pipeline\" → \"Examples\": hello-app or httpbin on the hub's machine, to try a dry run, a deployment and a rollback without servers of your own.",
       "openDeploy": "go to deployments"
-    }
+    },
+    "colVersionHint": "nkt version on the host",
+    "colLastSeenHint": "When the host was last seen on the network"
   },
   "events": {
     "title": "Alerts",

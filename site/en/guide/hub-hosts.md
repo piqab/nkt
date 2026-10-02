@@ -121,6 +121,10 @@ The "Help: a demo without servers" button opens the
 [quick start](/en/guide/intro#quick-start) with the `fixtures` mode. The
 card disappears as soon as the first host appears.
 
+Each host takes one line, and the column widths are shared by all
+groups: the columns of different groups line up exactly and do not shift
+when the numbers change. Whatever does not fit is an icon with a tooltip.
+
 - **Availability icon** before the name: green — answered the last poll,
   red — unreachable (the tooltip says when it last answered), gray — not
   polled yet. Polling — every `NKT_HUB_FINDINGS_POLL_INTERVAL` (60 s)
@@ -128,16 +132,20 @@ card disappears as soon as the first host appears.
 - **Address** — `user@address:port`, always short: only the beginning is
   visible (in full in the tooltip); the icon next to it copies the whole
   string. Machines inside a host show it the same way.
-- **Banned** — how many addresses fail2ban holds now (a shield and the
+- **f2b** — how many addresses fail2ban holds now (a shield and the
   number); a red pause icon means fail2ban is stopped, "—" that it is not
   installed.
-- **Findings** — finding counters; for an unreachable host — numbers
+- **Findings** — finding counters; for an unreachable host — a red
+  disconnect icon (the tooltip says when it last answered) and numbers
   from the last successful poll (dimmed) or "no data".
-- **nkt version** — if it differs from the hub, "on hub: …" appears next
-  to it and the button becomes "update". "Open" on an outdated host
+- **nkt** — the nkt version on the host. If it differs from the hub or an
+  update did not take effect, an orange ⚠ sign appears next to it ("on
+  hub: …" or "installed … — the update did not take effect" in the
+  tooltip), and the button becomes "update". "Open" on an outdated host
   updates it first and goes to the panel only after success. The
   comparison uses the hub version from the same response, so an old tab
   doesn't reinstall hosts in a loop after the hub is updated.
+- **Seen** — when the host last answered.
 - **"Update all"** — a job for each outdated host, at most three at a
   time (otherwise dozens of SSH connections hit sshd's `MaxStartups` or a
   jump host). The confirmation window shows who gets updated and who
