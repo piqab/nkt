@@ -14,10 +14,11 @@ straight to the line.
 
 - Line numbers, a change note, a “reload the service after saving”
   switch.
-- **Before writing, the config is checked by the service itself**
+- **The written config is checked by the service itself right away**
   (`nginx -t`, `haproxy -c`, `docker compose config -q`,
   `virt-xml-validate`…). If the check fails, the file is automatically
-  restored to its previous state.
+  restored to its previous state, and the service does not reload it.
+  Files with nothing to check them are written without a check.
 - **Apply after writing**: `reload`/`restart` of the service, `docker
   compose up`, `virsh define` — with a check as well; netplan is checked
   with `netplan generate` and applied by hand, so you do not lose the

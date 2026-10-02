@@ -21,19 +21,19 @@ hero:
 features:
   - icon: 🔎
     title: Finds problems, not just lists things
-    details: Parses nginx, haproxy, caddy, docker compose, firewall and certificates, checks them against the live host state and explains every finding — file, line, what to do.
+    details: Parses nginx, haproxy, caddy, docker compose, firewall and certificates, checks them against the live host state and explains every finding — file, line, what to do — with a button to where it gets fixed.
   - icon: 🧩
     title: Everything on one screen
     details: Services, Docker/Podman/LXD containers, libvirt machines with a VNC/SPICE screen in the browser, backups and snapshots, packages, disks, files, interfaces, hardware, system settings — with actions, not only lists; long operations run as background jobs.
   - icon: 📝
     title: Configs with history and checks
-    details: An editor that validates with the service itself before writing, versions, diff, rollback, a block editor for nginx/haproxy, sshd protection against locking yourself out.
+    details: An editor with a diff before writing and validation by the service itself — if it rejects the file, the file goes back as it was; versions, diff, rollback, a block editor for nginx/haproxy, sshd protection against locking yourself out.
   - icon: 🔐
     title: Certificates in full
     details: Every certificate from the configs and /etc/letsencrypt, comparison with the TLS socket, auto-renewal, Let's Encrypt issuance, PEM for haproxy, self-signed ones.
   - icon: 🛡️
     title: Firewall, vulnerabilities, malware
-    details: ufw and firewalld with port 22 protection; CVEs in the host's OS packages, inside LXD and libvirt guests and in images via trivy; miners and signs of a break-in with no third-party tools, ClamAV with quarantine.
+    details: ufw and firewalld with port 22 protection; CVEs in the host's OS packages, inside LXD and libvirt guests and in images via trivy, network-reachable ones first; miners and signs of a break-in with no third-party tools, ClamAV with quarantine.
   - icon: 📈
     title: Monitoring
     details: Availability of listeners, container ports and machines on a schedule, a downtime heatmap, container and machine load, live logs, a terminal and btop in the browser.
