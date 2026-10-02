@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.85 — 2026-10-02
+
+- **Action buttons on findings.** Below a finding is a way to where it
+  gets fixed: "Open at line N" opens the file in "Configs" with the line
+  highlighted, "Go to certificate" highlights the certificate's row in
+  "Certificates", "Firewall" appears for ports open to the internet, "Go
+  to malware" opens the right tab. A container in a restart loop or not
+  running gets "Logs" in a window and "Restart"/"Start" with a
+  confirmation and a live log.
+
 ## v1.11.84 — 2026-10-02
 
 - **Hosts on the hub:** the address is cut to the column width (in full

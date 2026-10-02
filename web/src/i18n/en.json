@@ -233,6 +233,17 @@
     "searchPlaceholder": "port, file, rule name…",
     "loadingList": "issue list",
     "whatToDo": "What to do: ",
+    "act": {
+      "cert": "Go to certificate",
+      "logs": "Logs",
+      "restart": "Restart",
+      "start": "Start",
+      "firewall": "Firewall",
+      "malware": "Go to malware",
+      "fail2ban": "Fail2ban",
+      "open": "Open file",
+      "openLine": "Open at line {{line}}"
+    },
     "onlyNew": "only new ({{count}})",
     "newTag": "new"
   },

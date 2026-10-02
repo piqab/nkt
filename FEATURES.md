@@ -37,6 +37,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 ### Findings
 - Analysis of nginx, haproxy, caddy, docker compose, firewall and certificate configs, cross-checked against the host's real state.
 - Every finding: severity, explanation, file and line, a concrete fix, documentation links.
+- Action buttons on a finding: "Open at line N" (the line highlighted in "Configs"), "Go to certificate", "Logs" and "Restart"/"Start" for a container, "Firewall", "Go to malware".
 - Network and firewall rules: port conflicts, declared-but-not-listening, listening-but-not-declared, no default deny, public port blocked by the firewall, Docker bypassing the firewall, stale rules, sensitive services on all interfaces.
 - TLS rules: weak protocols, missing HSTS, certificate not set, expired, expiring, not yet valid, unreadable, name mismatch, not renewed automatically, orphan certbot lineage, self-signed, weak key or signature, service did not reload the certificate, public plaintext proxy.
 - Pool and container rules: undefined or orphan upstream, backend down, all backends disabled, single backend, no health check, container restarting, not running, undeclared, no restart policy, haproxy stats panel without a password.

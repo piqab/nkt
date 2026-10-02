@@ -38,6 +38,21 @@ Every finding has a severity, a plain-language explanation, the file and
 line, a concrete fix and links to documentation. Search and filters by
 severity, service and text.
 
+Below a finding are buttons that take you where it gets fixed:
+
+- **Open at line N**: the file in "Configs", with the line highlighted
+  and scrolled into view;
+- **Go to certificate**: "Certificates" with the certificate's row
+  highlighted; "Renew" there runs with a live certbot log;
+- **Logs**, **Restart**, **Start**: for a container in a restart loop or
+  not running; logs open in a window, start and restart ask for
+  confirmation and show a live log, as in "Docker" (admins only, with
+  actions allowed);
+- **Firewall**: for a port open to the internet, Docker or Kubernetes
+  bypassing the rules, a stale rule;
+- **Go to malware**: the "Malware" tab in "Vulnerabilities";
+- **Fail2ban**: for fail2ban findings.
+
 What is checked:
 
 - **Network and firewall** — port conflicts, “declared but not

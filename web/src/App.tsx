@@ -760,7 +760,7 @@ function Shell({
             <ErrorBoundary key={location.pathname} section={location.pathname}>
               <Routes>
                 <Route path="/" element={<OverviewPage me={me} />} />
-                <Route path="/findings" element={<Findings />} />
+                <Route path="/findings" element={<Findings me={me} />} />
                 <Route path="/vulnerabilities" element={<Vulnerabilities me={me} />} />
                 <Route path="/topology" element={<TopologyPage />} />
                 <Route path="/availability" element={<Availability me={me} />} />

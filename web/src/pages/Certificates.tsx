@@ -256,6 +256,14 @@ export default function Certificates({ me }: { me: Me }) {
   }, [certs])
   const summary = data?.summary
   const canControl = me.is_admin && me.allow_mutations
+  // Переход из находки: /certificates?focus=<путь> — строка подсвечена и
+  // прокручена в видимую часть.
+  const [focusPath] = useState(() => new URLSearchParams(location.search).get('focus'))
+  useEffect(() => {
+    if (!focusPath || certs.length === 0) return
+    const id = window.setTimeout(() => document.querySelector('.row-focus')?.scrollIntoView({ block: 'center' }), 150)
+    return () => window.clearTimeout(id)
+  }, [focusPath, certs.length])
 
   // Есть ли certbot — проверяется при входе, а не отказом на нажатие:
   // без него «выпустить» и «продлить» бессмысленны, и раздел говорит об
@@ -547,6 +555,7 @@ export default function Certificates({ me }: { me: Me }) {
             dataSource={certs}
             rowKey="id"
             columns={certColumns(canControl, busy, renew)}
+            rowClassName={(c) => (c.path === focusPath ? 'row-focus' : '')}
             // Ширина по содержимому: при делении поровну колонки со
             // статусами («certbot record lost», «not checked») не влезали
             // в свою долю и наползали на соседние.

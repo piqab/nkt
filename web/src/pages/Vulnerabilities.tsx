@@ -46,6 +46,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
         </h1>
       </div>
       <Tabs
+        defaultActiveKey={new URLSearchParams(location.search).get('tab') === 'malware' ? 'malware' : 'cve'}
         items={[
           { key: 'cve', label: t('vulns.tabCVE'), children: <VulnTab me={me} /> },
           { key: 'malware', label: t('malware.tab'), children: <MalwareTab me={me} /> },

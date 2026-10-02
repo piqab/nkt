@@ -233,6 +233,17 @@
     "searchPlaceholder": "порт, файл, имя правила…",
     "loadingList": "список проблем",
     "whatToDo": "Что сделать: ",
+    "act": {
+      "cert": "К сертификату",
+      "logs": "Логи",
+      "restart": "Перезапустить",
+      "start": "Запустить",
+      "firewall": "Firewall",
+      "malware": "К вредоносному",
+      "fail2ban": "Fail2ban",
+      "open": "Открыть файл",
+      "openLine": "Открыть на строке {{line}}"
+    },
     "onlyNew": "только новые ({{count}})",
     "newTag": "новая"
   },

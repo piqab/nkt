@@ -4,7 +4,8 @@ import { blurText } from '../privacy'
 import { Checkbox, Input, Select, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { qs, useApi } from '../api'
-import type { Finding, Severity } from '../types'
+import type { Finding, Me, Severity } from '../types'
+import { FindingActions } from '../components/FindingActions'
 import { Card, ErrorNote, Loading, SeverityBadge, SEVERITIES, severityLabel } from '../components/ui'
 import { formatNumber } from '../components/charts'
 import { TitleHelp } from '../components/Docs'
@@ -15,7 +16,7 @@ interface FindingsResponse {
   total: number
 }
 
-export default function Findings() {
+export default function Findings({ me }: { me: Me | null }) {
   const { t } = useTranslation()
   const [severity, setSeverity] = useState('')
   const [service, setService] = useState('')
@@ -149,6 +150,7 @@ export default function Findings() {
                       <span className="secondary">{f.suggestion}</span>
                     </p>
                   )}
+                  <FindingActions f={f} me={me} />
                 </div>
                 {f.file && (
                   <div className="small muted nowrap mono">
