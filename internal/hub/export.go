@@ -67,6 +67,9 @@ func (m *Manager) ExportHub(ctx context.Context, includeKey, includeUsers bool) 
 	if err := m.exportAccess(ctx, &export); err != nil {
 		return store.HubExport{}, err
 	}
+	if err := m.exportSites(ctx, &export); err != nil {
+		return store.HubExport{}, err
+	}
 	return export, nil
 }
 
@@ -146,6 +149,7 @@ func (m *Manager) ImportPlan(ctx context.Context, export store.HubExport) ([]sto
 	}
 	plan = append(plan, edge)
 	plan = append(plan, m.planAccess(ctx, export)...)
+	plan = append(plan, m.planSites(ctx, export))
 	return plan, nil
 }
 
@@ -239,6 +243,16 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 			p.GitCred, e2 = reenc(p.GitCred)
 			p.RegistryCred, e3 = reenc(p.RegistryCred)
 			p.EnvEnc, e4 = reenc(p.EnvEnc)
+			// История .env — тем же ключом; копия, файл вызывающего не меняется.
+			envs := make([]store.EnvVersionExport, len(p.EnvVersions))
+			for i, v := range p.EnvVersions {
+				var err error
+				if v.EnvEnc, err = reenc(v.EnvEnc); err != nil {
+					e4 = errors.Join(e4, err)
+				}
+				envs[i] = v
+			}
+			p.EnvVersions = envs
 			if err := errors.Join(e1, e2, e3, e4); err != nil {
 				pre = append(pre, fmt.Sprintf("%s: %v", p.Name, err))
 				continue
@@ -291,6 +305,8 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 	m.importF2BTemplates(ctx, export.F2BTemplates, res, &rep)
 	m.importEdges(ctx, export.EdgeList(), res, &rep)
 	m.importAccess(ctx, export, res, &rep)
+	// Сайты — после хостов и конвейеров: ищутся по их именам.
+	m.importSites(ctx, export.Sites, res, &rep)
 	// Образы для кластеров: чего нет в библиотеке этого хаба.
 	have := map[string]bool{}
 	for _, img := range m.ClusterImages() {

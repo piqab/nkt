@@ -1,6 +1,7 @@
 package store
 
 import (
+	"fmt"
 	"context"
 	"encoding/json"
 	"path/filepath"
@@ -337,7 +338,7 @@ func TestExportImportV2RoundTrip(t *testing.T) {
 	if _, err := DecodeHubExport([]byte(`{"version": 1, "hosts": []}`)); err != nil {
 		t.Errorf("файл версии 1 отвергнут: %v", err)
 	}
-	if _, err := DecodeHubExport([]byte(`{"version": 5, "hosts": []}`)); err == nil {
+	if _, err := DecodeHubExport([]byte(fmt.Sprintf(`{"version": %d, "hosts": []}`, ExportFormatVersion+1))); err == nil {
 		t.Error("файл из будущего принят")
 	}
 }

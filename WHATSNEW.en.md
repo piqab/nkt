@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.92 — 2026-10-02
+
+- **The hub export caught up with the hub.** The file now carries the
+  deployment sites (the host and the pipeline by name; a site whose host
+  is missing is not imported), the selected dry run checks and the `.env`
+  history of pipelines (re-encrypted with the receiving hub's key), and
+  the help site address with its history. The import plan has a "Sites"
+  section with "skip / replace". The format is version 5; files of
+  versions 1 to 4 import as before.
+
 ## v1.11.91 — 2026-10-02
 
 - **Hosts on the hub: an even table.** Each host takes one line: a version
