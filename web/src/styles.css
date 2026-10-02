@@ -957,10 +957,11 @@ span.vm-toggle {
   .modal-resize-handle, .modal-max-btn { display: none !important; }
 }
 
-/* Адрес хоста в таблице хаба: по ширине колонки, целиком — в подсказке. */
+/* Адрес хоста в таблице хаба: всегда коротко (начало и «…»), целиком — в
+ * подсказке и иконкой копирования. */
 .addr-ellipsis {
   display: inline-block;
-  max-width: 11rem;
+  max-width: 5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

@@ -125,8 +125,9 @@ card disappears as soon as the first host appears.
   red — unreachable (the tooltip says when it last answered), gray — not
   polled yet. Polling — every `NKT_HUB_FINDINGS_POLL_INTERVAL` (60 s)
   over the already open SSH connection.
-- **Address** — `user@address:port`, cut to the column width (in full in
-  the tooltip); the icon next to it copies the whole string.
+- **Address** — `user@address:port`, always short: only the beginning is
+  visible (in full in the tooltip); the icon next to it copies the whole
+  string. Machines inside a host show it the same way.
 - **Banned** — how many addresses fail2ban holds now (a shield and the
   number); a red pause icon means fail2ban is stopped, "—" that it is not
   installed.

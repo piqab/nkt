@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.90 — 2026-10-02
+
+- **Hosts on the hub:** the address is now always short, with only the
+  beginning visible (`alex@127.…`); in full in the tooltip and via the
+  copy icon. A short address used to fit the column in full. Machines
+  inside a host show it the same way.
+
 ## v1.11.89 — 2026-10-02
 
 - **Documentation:** the site's home page mentions the finding buttons and
