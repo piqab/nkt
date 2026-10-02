@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.96 — 2026-10-02
+
+- **Documentation:** a screenshot of the "Edit host sections" window in
+  the "Menu" section of the hub updates page (ru, en).
+
 ## v1.11.95 — 2026-10-02
 
 - **Menu layout.** The hub's "About" has a "Menu" card: "Hub section
