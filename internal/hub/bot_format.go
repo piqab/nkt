@@ -332,3 +332,79 @@ func (c *botCore) status(ctx context.Context, lang msgs.Lang) botReply {
 			findings["critical"], findings["high"], findings["medium"]),
 	}}}
 }
+
+// findingIcon — важность находки значком.
+var findingIcon = map[string]string{"critical": "🔴", "high": "🟠", "medium": "🟡"}
+
+// hostDetail — «Обзор» хоста и (кнопка «Проблемы») его серьёзные находки:
+// десять самых важных, на языке бота.
+func (c *botCore) hostDetail(ctx context.Context, id int64, withFindings bool, lang msgs.Lang) botReply {
+	rows, err := c.s.hostRows(ctx)
+	if err != nil {
+		return botReply{Text: msgs.Localize(lang, err)}
+	}
+	i := slices.IndexFunc(rows, func(h hostWithOverview) bool { return h.ID == id })
+	if i < 0 {
+		return botReply{Text: msgs.T(lang, "tg.noHost", id)}
+	}
+	h := rows[i]
+	icon, rank, what := hostState(lang, h)
+	lines := []string{h.Addr}
+	if rank == 0 || rank == 4 {
+		lines = append(lines, what)
+	} else {
+		lines = append(lines, msgs.T(lang, "tg.hostUp")+" · "+what)
+	}
+	if h.RunningVersion != "" {
+		lines = append(lines, "nkt "+h.RunningVersion)
+	}
+	headKey := "tg.overviewHead"
+	if withFindings {
+		headKey = "tg.findingsHead"
+	}
+	part := botPart{Head: icon + " " + h.Name + " — " + msgs.T(lang, headKey)}
+	if withFindings {
+		var res struct {
+			Findings []struct {
+				Severity string `json:"severity"`
+				Title    string `json:"title"`
+			} `json:"findings"`
+		}
+		path := "/api/findings?lang=" + string(lang)
+		if id == localHostID {
+			_, err = c.s.localAPI(ctx, "", "GET", path, nil, &res)
+		} else {
+			_, err = c.s.hub.HostAPI(ctx, id, "GET", path, nil, &res)
+		}
+		if err != nil {
+			lines = append(lines, msgs.Localize(lang, err))
+		} else {
+			order := map[string]int{"critical": 0, "high": 1, "medium": 2}
+			serious := slices.DeleteFunc(res.Findings, func(f struct {
+				Severity string `json:"severity"`
+				Title    string `json:"title"`
+			}) bool {
+				_, ok := order[f.Severity]
+				return !ok
+			})
+			sort.SliceStable(serious, func(a, b int) bool {
+				if order[serious[a].Severity] != order[serious[b].Severity] {
+					return order[serious[a].Severity] < order[serious[b].Severity]
+				}
+				return serious[a].Title < serious[b].Title
+			})
+			if len(serious) == 0 {
+				lines = append(lines, msgs.T(lang, "tg.noFindings"))
+			}
+			for n, f := range serious {
+				if n == 10 {
+					lines = append(lines, msgs.T(lang, "tg.andMore", len(serious)-10))
+					break
+				}
+				lines = append(lines, findingIcon[f.Severity]+" "+f.Title)
+			}
+		}
+	}
+	part.Body = strings.Join(lines, "\n")
+	return botReply{Parts: []botPart{part}}
+}

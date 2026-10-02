@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.83 — 2026-10-02
+
+- **Bots: the "⚠️ Findings" button works**; it used to answer with a
+  "cannot unmarshal object" error. The reply is a block: address, state,
+  nkt version and the ten most important findings with severity icons
+  (🔴 🟠 🟡), in the bot's language. "🔎 Overview" is the same block
+  without the list.
+
 ## v1.11.82 — 2026-10-02
 
 - **Telegram and Slack bot messages are readable**: an event is a block
