@@ -238,21 +238,25 @@ encrypted SSH and admin secrets and settings, groups (empty ones too),
 machine-to-host links, Kubernetes clusters (nodes, API address,
 kubeconfig, WireGuard plan), profiles and scripts with history, machine
 templates, **deployment pipelines** with their revision history, secrets
-(webhook signature, git and registry tokens) and webhook address,
-**fail2ban templates** with version history, every **nkt-edge** with its
+(webhook signature, git and registry tokens), webhook address, the
+selected dry run checks and the `.env` history, deployment **sites**
+(domains, proxy, stack or address, firewall, state; the host and the
+pipeline go by name: a site whose host is missing is not imported, and a
+site without its pipeline becomes a manual one), **fail2ban templates** with version history, every **nkt-edge** with its
 roles (address, domain, token, pinned certificate, the host it runs on),
 **API tokens** (role, scope, addresses, expiry, secret), **outgoing
 webhooks** and the Telegram and Slack **bots** (tokens and secrets; hosts
 in a scope go by name, and a token or recipient whose host is missing is
 not imported), hub settings
 (alerts, package cache, model analysis with the API key and every edited
-instruction, beta channel), saved cluster form presets, fallback channel
+instruction, beta channel, the help site address with its history), saved cluster form presets, fallback channel
 switches and tokens. With the "Web interface user accounts" checkbox it
 also carries logins, roles and password hashes. The file is JSON version
-4; versions 1 to 3 import too.
+5; versions 1 to 4 import too.
 
 - **The hub's encryption key travels in the file**: the receiving hub
-  decrypts the secrets with it (of hosts, clusters, pipelines, edge, the
+  decrypts the secrets with it (of hosts, clusters, pipelines with the
+  `.env` history, edge, tokens, bots, the
   model key) and re-encrypts them with its own right away. That's why the
   export **insists** on encrypting the file with a password (Web Crypto,
   PBKDF2 + AES-256-GCM, the password never leaves the browser); an empty
@@ -267,7 +271,8 @@ also carries logins, roles and password hashes. The file is JSON version
   default) or **"replace"**, and each section has "skip all / replace
   all". Replacing a profile, script, pipeline or fail2ban template adds a
   new version to this hub's history (you can roll back to the previous
-  one); for a host the address, access and secrets are replaced while its
+  one; for a pipeline's `.env` too); for a site the domains, proxy,
+  target and state are replaced; for a host the address, access and secrets are replaced while its
   log and bindings stay; for a user account, the password hash, role and
   lock. Clusters with a taken name are only skipped. After the import
   comes a report by section: added, replaced, skipped, errors.

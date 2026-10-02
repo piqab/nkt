@@ -31,8 +31,10 @@ var validAdminUser = regexp.MustCompile(`^[A-Za-z0-9_.-]{1,64}$`)
 // лимит кэша пакетов и список образов для кластеров; версия 4 —
 // конвейеры выкладок с историей, учётные записи веб-интерфейса (по
 // выбору), шаблоны fail2ban с историей, настройки nkt-edge и все
-// инструкции ИИ. Файлы версий 1–3 читаются по-прежнему.
-const ExportFormatVersion = 4
+// инструкции ИИ; версия 5 — сайты выкладок, выбор проверок сухого
+// прогона и история .env конвейеров, адрес сайта справки. Файлы версий
+// 1–4 читаются по-прежнему.
+const ExportFormatVersion = 5
 
 // minExportFormatVersion — самая старая версия, которую импорт ещё
 // понимает.
@@ -209,6 +211,8 @@ type HubExport struct {
 	APITokens []APITokenExport           `json:"api_tokens,omitempty"`
 	OutHooks  []OutHookExport            `json:"webhooks,omitempty"`
 	Bots      map[string]json.RawMessage `json:"bots,omitempty"`
+	// Версия 5: сайты выкладок (хост и конвейер — по именам).
+	Sites []SiteExport `json:"sites,omitempty"`
 	// MasterKey is the exporting hub's own secretbox key (base64), present
 	// only when the operator opted into a one-step migration — see
 	// Manager.ExportHosts/ImportHosts in internal/hub, which is what
@@ -241,6 +245,8 @@ var ExportedSettingKeys = []string{
 	"ai.prompt.config/ru", "ai.prompt.config/en", "ai.prompt.ip/ru", "ai.prompt.ip/en",
 	// Бета-канал обновлений.
 	"update.beta",
+	// Адрес сайта справки и его история («О системе»).
+	"ui.docs_url", "ui.docs_url.history",
 }
 
 // ExportHosts returns every managed host in the shape GET /hub/export sends
@@ -386,6 +392,7 @@ const (
 	SectionUsers          = "users"
 	SectionSettings       = "settings"
 	SectionF2BTemplates   = "f2b_templates"
+	SectionSites          = "sites"
 	SectionEdge           = "edge"
 	SectionAPITokens      = "api_tokens"
 	SectionWebhooks       = "webhooks"

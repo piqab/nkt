@@ -28,6 +28,36 @@ type PipelineExport struct {
 	Author       string                 `json:"author,omitempty"`
 	CreatedAt    string                 `json:"created_at,omitempty"`
 	Versions     []ProfileVersionExport `json:"versions,omitempty"`
+	// DrySkip — снятые галочки проверок сухого прогона (версия 5).
+	DrySkip string `json:"dry_skip,omitempty"`
+	// EnvVersions — история .env, старые первыми (зашифрованы, как EnvEnc).
+	EnvVersions []EnvVersionExport `json:"env_versions,omitempty"`
+}
+
+// EnvVersionExport — версия .env конвейера (пусто — .env убран).
+type EnvVersionExport struct {
+	TS     string `json:"ts"`
+	Author string `json:"author,omitempty"`
+	Note   string `json:"note,omitempty"`
+	EnvEnc []byte `json:"env_enc,omitempty"`
+}
+
+// SiteExport — сайт выкладок: хост и конвейер — по именам (номера в
+// другом хабе другие), имя сайта — первый домен.
+type SiteExport struct {
+	Domains       []string `json:"domains"`
+	Host          string   `json:"host"`
+	Proxy         string   `json:"proxy"`
+	Stack         string   `json:"stack,omitempty"`
+	Service       string   `json:"service,omitempty"`
+	ContainerPort int      `json:"container_port,omitempty"`
+	Upstream      string   `json:"upstream,omitempty"`
+	OpenFirewall  bool     `json:"open_firewall"`
+	Pipeline      string   `json:"pipeline,omitempty"`
+	Status        string   `json:"status,omitempty"`
+	Error         string   `json:"error,omitempty"`
+	Author        string   `json:"author,omitempty"`
+	CreatedAt     string   `json:"created_at,omitempty"`
 }
 
 // UserExport — учётная запись веб-интерфейса с хэшем пароля (argon2id —
@@ -97,6 +127,15 @@ func (db *DB) ExportPipelines(ctx context.Context) ([]PipelineExport, error) {
 			}
 			pe.Versions = append(pe.Versions, ProfileVersionExport{TS: v.TS, Author: v.Author, Note: v.Note, Content: v.Content})
 		}
+		pe.DrySkip = p.DrySkip
+		envs, err := db.EnvVersions(ctx, p.ID, 1000)
+		if err != nil {
+			return nil, err
+		}
+		for i := len(envs) - 1; i >= 0; i-- {
+			e := envs[i]
+			pe.EnvVersions = append(pe.EnvVersions, EnvVersionExport{TS: e.TS, Author: e.Author, Note: e.Note, EnvEnc: e.EnvEnc})
+		}
 		out = append(out, pe)
 	}
 	return out, nil
@@ -139,7 +178,9 @@ func (db *DB) importPipelines(ctx context.Context, pipelines []PipelineExport, r
 			continue
 		}
 		var id int64
+		replaced := false
 		if old, ok := byName[p.Name]; ok {
+			replaced = true
 			if !res.Replace(SectionPipelines, p.Name) {
 				cnt.Skipped++
 				continue
@@ -199,6 +240,29 @@ func (db *DB) importPipelines(ctx context.Context, pipelines []PipelineExport, r
 		}
 		if len(p.EnvEnc) > 0 {
 			if err := db.SetPipelineEnv(ctx, id, p.EnvEnc); err != nil {
+				rep.Err("%s: %v", p.Name, err)
+			}
+		}
+		if err := db.SetPipelineDrySkip(ctx, id, p.DrySkip); err != nil {
+			rep.Err("%s: %v", p.Name, err)
+		}
+		// История .env: новому конвейеру — из файла как есть; у
+		// заменённого своя история остаётся, а пришедший .env ложится в неё
+		// новой версией с пометкой об импорте.
+		if !replaced {
+			for _, v := range p.EnvVersions {
+				var enc any
+				if len(v.EnvEnc) > 0 {
+					enc = v.EnvEnc
+				}
+				if _, err := db.ExecContext(ctx, `INSERT INTO pipeline_env_versions (pipeline_id, ts, author, note, env_enc) VALUES (?, ?, ?, ?, ?)`,
+					id, v.TS, v.Author, v.Note, enc); err != nil {
+					rep.Err("%s: %v", p.Name, err)
+					break
+				}
+			}
+		} else if len(p.EnvEnc) > 0 {
+			if _, err := db.AddEnvVersion(ctx, EnvVersion{PipelineID: id, Author: p.Author, Note: importNote(ctx), EnvEnc: p.EnvEnc}); err != nil {
 				rep.Err("%s: %v", p.Name, err)
 			}
 		}
