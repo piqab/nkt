@@ -441,6 +441,7 @@ var ruCatalog = map[string]string{
 	"ai.promptYours":                                      "ваша",
 	"ai.timeout":                                          "модель не ответила за %d с — увеличьте время ожидания в настройках ИИ («О системе») или возьмите модель поменьше",
 	"ai.generated":                                        "Сгенерировано моделью %s. Проверьте команды перед выполнением.",
+	"api.badJobFilter":                                    "неверный фильтр заданий: состояние и вид — латиница, цифры, точка, дефис",
 	"api.backgroundJobsAreUnavailable":                    "фоновые задания недоступны",
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",

@@ -55,6 +55,13 @@ and cancellation. The host job list: kind, step, status, author,
 duration; the log is live. A job interrupted by a service restart resumes
 or is honestly marked interrupted.
 
+The list works like the alert journal: filters by state and kind, a text
+search (the title and its arguments such as host names and addresses, the
+author, the step, the error) across all jobs rather than only the latest
+ones, pages of 20, 50 or 100, and date order by clicking "Started". The
+filter, page size and order are remembered in this browser. The hub's
+"Jobs" work the same way.
+
 Jobs also cover installing and removing apt, snap and flatpak packages,
 the system upgrade, installing engines (LXD, Podman), btop, tmux, ufw and
 firewalld, creating LXD instances and Podman containers, downloading LXD

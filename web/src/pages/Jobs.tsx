@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { blurText } from '../privacy'
-import { Button, Progress, Spin, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Input, Progress, Select, Spin, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { RedoOutlined } from '@ant-design/icons'
 import { AIExplain } from '../components/AIExplain'
 
@@ -36,10 +36,64 @@ const STATUS_COLOR: Record<string, string> = {
   interrupted: 'warning',
 }
 
+const JOB_STATUSES = ['queued', 'running', 'succeeded', 'failed', 'canceled', 'interrupted'] as const
+
+/** Фильтр раздела — запоминается в этом браузере, как у журнала
+ * оповещений. */
+interface JobFilter {
+  statuses: string[]
+  kinds: string[]
+  q: string
+  pageSize: number
+  asc: boolean
+}
+
+const JOB_FILTER_KEY = 'nkt-jobs-filter'
+const JOB_FILTER_DEFAULT: JobFilter = { statuses: [], kinds: [], q: '', pageSize: 50, asc: false }
+
+function loadJobFilter(): JobFilter {
+  try {
+    const raw = localStorage.getItem(JOB_FILTER_KEY)
+    if (raw) {
+      const f = { ...JOB_FILTER_DEFAULT, ...JSON.parse(raw) }
+      return [20, 50, 100].includes(f.pageSize) ? f : { ...f, pageSize: 50 }
+    }
+  } catch {
+    // нет хранилища — фильтр по умолчанию
+  }
+  return JOB_FILTER_DEFAULT
+}
+
 export default function Jobs({ me }: { me: Me }) {
   const { t } = useTranslation()
-  const jobs = useApi<{ jobs: Job[]; active: number }>('/jobs', LIST_POLL_MS)
+  const [filter, setFilterState] = useState<JobFilter>(loadJobFilter)
+  const [text, setText] = useState(filter.q)
+  const [page, setPage] = useState(1)
+  const setFilter = (patch: Partial<JobFilter>) => {
+    setPage(1)
+    setFilterState((f) => {
+      const next = { ...f, ...patch }
+      try {
+        localStorage.setItem(JOB_FILTER_KEY, JSON.stringify(next))
+      } catch {
+        // не запомнится — не страшно
+      }
+      return next
+    })
+  }
+  const jobs = useApi<{ jobs: Job[]; active: number; total?: number; kinds?: string[] }>(
+    `/jobs${qs({
+      q: filter.q,
+      status: filter.statuses.join(','),
+      kind: filter.kinds.join(','),
+      limit: filter.pageSize,
+      offset: (page - 1) * filter.pageSize,
+      order: filter.asc ? 'asc' : '',
+    })}`,
+    LIST_POLL_MS,
+  )
   const [openJob, setOpenJob] = useState<Job | null>(null)
+  const filtered = filter.statuses.length > 0 || filter.kinds.length > 0 || !!filter.q
 
   const columns: TableColumnsType<Job> = [
     {
@@ -85,6 +139,10 @@ export default function Jobs({ me }: { me: Me }) {
     {
       title: t('jobs.colStarted'),
       key: 'started',
+      // Порядок — на сервере: по дате заводятся и номера заданий.
+      sorter: true,
+      sortOrder: filter.asc ? 'ascend' : 'descend',
+      sortDirections: ['descend', 'ascend', 'descend'],
       render: (_, j) => (
         <span className="small nowrap">{j.started_at ? formatDateTime(j.started_at) : formatDateTime(j.created_at)}</span>
       ),
@@ -119,6 +177,7 @@ export default function Jobs({ me }: { me: Me }) {
   ]
 
   const list = jobs.data?.jobs ?? []
+  const total = jobs.data?.total ?? list.length
 
   return (
     <>
@@ -133,15 +192,81 @@ export default function Jobs({ me }: { me: Me }) {
 
       <Card
         title={t('jobs.listTitle')}
-        subtitle={t('jobs.listSubtitle', { count: jobs.data?.active ?? 0 })}
+        subtitle={
+          (filtered ? t('jobs.listFiltered', { total }) + ' · ' : '') + t('jobs.listSubtitle', { count: jobs.data?.active ?? 0 })
+        }
       >
+        <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.5rem' }}>
+          <Select
+            mode="multiple"
+            allowClear
+            style={{ minWidth: 200 }}
+            placeholder={t('jobs.filterStatus')}
+            value={filter.statuses}
+            onChange={(v: string[]) => setFilter({ statuses: v })}
+            options={JOB_STATUSES.map((s) => ({ value: s, label: t(`jobs.status.${s}`) }))}
+          />
+          <Select
+            mode="multiple"
+            allowClear
+            style={{ minWidth: 220 }}
+            placeholder={t('jobs.filterKind')}
+            value={filter.kinds}
+            onChange={(v: string[]) => setFilter({ kinds: v })}
+            options={(jobs.data?.kinds ?? []).map((k) => ({ value: k, label: k }))}
+          />
+          <Input.Search
+            allowClear
+            style={{ maxWidth: 300 }}
+            placeholder={t('jobs.filterText')}
+            value={text}
+            onChange={(e) => {
+              setText(e.target.value)
+              if (!e.target.value) setFilter({ q: '' })
+            }}
+            onSearch={(v) => setFilter({ q: v.trim() })}
+          />
+          {filtered && (
+            <Button
+              size="small"
+              type="link"
+              onClick={() => {
+                setText('')
+                setFilter({ statuses: [], kinds: [], q: '' })
+              }}
+            >
+              {t('jobs.filterReset')}
+            </Button>
+          )}
+        </div>
         {jobs.loading && !jobs.data ? (
           <Loading what={t('jobs.loading')} />
         ) : list.length === 0 ? (
-          <p className="small muted">{t('jobs.empty')}</p>
+          <p className="small muted">{filtered ? t('jobs.emptyFiltered') : t('jobs.empty')}</p>
         ) : (
           <div className="table-wrap">
-            <DataTable<Job> dataSource={list} columns={columns} rowKey="id" tableLayout="auto" />
+            <DataTable<Job>
+              dataSource={list}
+              columns={columns}
+              rowKey="id"
+              tableLayout="auto"
+              pagination={{
+                current: page,
+                pageSize: filter.pageSize,
+                total,
+                showSizeChanger: true,
+                pageSizeOptions: [20, 50, 100],
+                size: 'small',
+                onChange: (p, size) => {
+                  if (size !== filter.pageSize) setFilter({ pageSize: size })
+                  else setPage(p)
+                },
+              }}
+              onChange={(_p, _f, sorter) => {
+                const s = Array.isArray(sorter) ? sorter[0] : sorter
+                if (s?.columnKey === 'started') setFilter({ asc: s.order === 'ascend' })
+              }}
+            />
           </div>
         )}
       </Card>

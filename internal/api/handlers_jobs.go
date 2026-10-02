@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"github.com/piqab/nkt/internal/msgs"
 	"net/http"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/coder/websocket"
@@ -26,9 +28,49 @@ import (
 // jobLogLimit — сколько строк журнала отдаётся за один запрос.
 const jobLogLimit = 2000
 
+// jobFilterValueRe — допустимые значения status и kind в фильтре.
+var jobFilterValueRe = regexp.MustCompile(`^[a-z0-9._-]{1,64}$`)
+
+// handleJobList — GET /jobs: страница заданий. Параметры: q (текст),
+// status и kind (через запятую), limit, offset, order=asc (старые сверху).
+// Без них — последние задания, как раньше.
 func (s *Server) handleJobList(w http.ResponseWriter, r *http.Request) {
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	list, err := s.db.ListJobs(r.Context(), limit)
+	q := r.URL.Query()
+	limit, _ := strconv.Atoi(q.Get("limit"))
+	offset, _ := strconv.Atoi(q.Get("offset"))
+	split := func(raw string) ([]string, bool) {
+		var out []string
+		for _, v := range strings.Split(raw, ",") {
+			if v = strings.TrimSpace(v); v == "" {
+				continue
+			}
+			if !jobFilterValueRe.MatchString(v) {
+				return nil, false
+			}
+			out = append(out, v)
+		}
+		return out, true
+	}
+	statuses, ok1 := split(q.Get("status"))
+	kinds, ok2 := split(q.Get("kind"))
+	if !ok1 || !ok2 {
+		writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "api.badJobFilter"))
+		return
+	}
+	text := q.Get("q")
+	if len(text) > 200 {
+		text = text[:200]
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	list, total, err := s.db.FindJobs(r.Context(), store.JobFilter{Q: text, Statuses: statuses, Kinds: kinds,
+		Limit: limit, Offset: offset, Asc: q.Get("order") == "asc"})
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	allKinds, err := s.db.JobKinds(r.Context())
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
@@ -42,7 +84,7 @@ func (s *Server) handleJobList(w http.ResponseWriter, r *http.Request) {
 	for i := range list {
 		localizeJob(lang, &list[i])
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"jobs": list, "active": active})
+	writeJSON(w, http.StatusOK, map[string]any{"jobs": list, "active": active, "total": total, "kinds": allKinds})
 }
 
 // localizeJob подставляет заголовок, шаг и ошибку на языке читающего —

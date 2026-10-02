@@ -85,6 +85,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 
 ### Jobs
 - List of the host's background jobs: kind, step, status, author, duration.
+- Filters by state and kind, a text search across all jobs, pages of 20/50/100 and date order, like the alert journal; the hub's "Jobs" work the same way.
 - Job log in real time, cancellation; jobs interrupted by a restart resume or get marked.
 
 ### Audit log

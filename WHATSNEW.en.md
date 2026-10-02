@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.94 — 2026-10-02
+
+- **"Jobs" work like the alert journal**, on the hub and on a host:
+  filters by state and kind, a text search (title, host, author, error)
+  across all jobs rather than only the latest hundred, pages of 20, 50 or
+  100, and date order by clicking "Started"; the choice is remembered in
+  the browser. API: `GET /jobs` accepts `q`, `status`, `kind`, `limit`,
+  `offset`, `order=asc` and returns `total` and `kinds`.
+- Tables, pickers and sort hints now follow the interface language.
+
 ## v1.11.93 — 2026-10-02
 
 - **Hosts on the hub:** only the first two or three characters of the
