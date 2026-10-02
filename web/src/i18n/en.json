@@ -1996,7 +1996,13 @@
       "interrupted": "interrupted"
     },
     "retry": "try again",
-    "retryHint": "A new job with the same parameters continues from where this one stopped: done work (created machines, installed roles) is skipped, the failed step runs again."
+    "retryHint": "A new job with the same parameters continues from where this one stopped: done work (created machines, installed roles) is skipped, the failed step runs again.",
+    "filterStatus": "all states",
+    "filterKind": "all kinds",
+    "filterText": "search: title, host, author, error",
+    "filterReset": "reset filter",
+    "listFiltered": "found: {{total}}",
+    "emptyFiltered": "Nothing matches the filter."
   },
   "profiles": {
     "title": "Profiles",

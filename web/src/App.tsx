@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import ruRU from 'antd/locale/ru_RU'
+import enUS from 'antd/locale/en_US'
 import { Badge, Button, ConfigProvider, Layout, Menu, Tabs, Tag, Tooltip, type MenuProps, type ThemeConfig } from 'antd'
 import {
   AlertOutlined,
@@ -276,7 +278,7 @@ function SidebarBrand({ collapsed, onToggle, sub, beta }: { collapsed: boolean; 
 
 
 export default function App() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [me, setMe] = useState<Me | null>(null)
   const [checked, setChecked] = useState(false)
   const navigate = useNavigate()
@@ -350,7 +352,7 @@ export default function App() {
   }
 
   return (
-    <ConfigProvider theme={antdTheme}>
+    <ConfigProvider theme={antdTheme} locale={i18n.language.startsWith('en') ? enUS : ruRU}>
       {!checked ? (
         <div className="login-wrap">{t('app.loading')}</div>
       ) : !me ? (

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -127,6 +128,92 @@ func (db *DB) ListJobs(ctx context.Context, limit int) ([]Job, error) {
 	}
 	defer rows.Close()
 	return scanJobs(rows)
+}
+
+// JobFilter — выборка заданий для раздела «Задания»: текст, состояния,
+// виды, страница и порядок по дате.
+type JobFilter struct {
+	// Q ищется в названии (и его аргументах — именах хостов, адресах),
+	// виде, авторе, шаге и ошибке.
+	Q        string
+	Statuses []string
+	Kinds    []string
+	Limit    int
+	Offset   int
+	// Asc — старые сверху (по умолчанию новые сверху).
+	Asc bool
+}
+
+// FindJobs — страница заданий по фильтру и сколько их всего под фильтром.
+func (db *DB) FindJobs(ctx context.Context, f JobFilter) ([]Job, int, error) {
+	if f.Limit <= 0 || f.Limit > 500 {
+		f.Limit = 50
+	}
+	if f.Offset < 0 {
+		f.Offset = 0
+	}
+	var where []string
+	var args []any
+	if q := strings.TrimSpace(f.Q); q != "" {
+		like := "%" + strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(q) + "%"
+		where = append(where, `(title LIKE ? ESCAPE '\' OR title_args LIKE ? ESCAPE '\' OR kind LIKE ? ESCAPE '\' OR author LIKE ? ESCAPE '\'
+			OR step_name LIKE ? ESCAPE '\' OR error LIKE ? ESCAPE '\' OR error_args LIKE ? ESCAPE '\')`)
+		for range 7 {
+			args = append(args, like)
+		}
+	}
+	in := func(col string, vals []string) {
+		if len(vals) == 0 {
+			return
+		}
+		where = append(where, col+" IN ("+strings.TrimSuffix(strings.Repeat("?,", len(vals)), ",")+")")
+		for _, v := range vals {
+			args = append(args, v)
+		}
+	}
+	in("status", f.Statuses)
+	in("kind", f.Kinds)
+	cond := ""
+	if len(where) > 0 {
+		cond = " WHERE " + strings.Join(where, " AND ")
+	}
+	var total int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM jobs`+cond, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	order := "DESC"
+	if f.Asc {
+		order = "ASC"
+	}
+	rows, err := db.QueryContext(ctx, `
+		SELECT id, kind, title, queue, status, params, resume, step, steps, step_name,
+		       error, author, lang, created_at, started_at, finished_at,
+		       title_key, title_args, step_key, step_args, error_key, error_args
+		FROM jobs`+cond+` ORDER BY id `+order+` LIMIT ? OFFSET ?`, append(args, f.Limit, f.Offset)...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	list, err := scanJobs(rows)
+	return list, total, err
+}
+
+// JobKinds — виды заданий, которые есть в журнале (для фильтра).
+func (db *DB) JobKinds(ctx context.Context) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `SELECT DISTINCT kind FROM jobs ORDER BY kind`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []string
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
 }
 
 // UnfinishedJobs отдаёт задания, которые числятся идущими или ждущими

@@ -54,7 +54,7 @@ For example, `GET /api/hosts/3/services` — the services of host 3.
 | libvirt | `/vms/*`, `/vm/*` | Machines, the creation wizard, images, networks, VNC/SPICE screen |
 | Guests | `/guests/{kind}/{name}/*` | Guest login and password |
 | Backups | `/backups*` | List, create, restore, download |
-| Jobs | `/jobs*` | List, log, log stream, cancel, retry (`/jobs/{id}/retry`) |
+| Jobs | `/jobs*` | List (`?q=&status=&kind=&limit=&offset=&order=asc`, the response carries `total` and `kinds`), log, log stream, cancel, retry (`/jobs/{id}/retry`) |
 | Configs | `/configs/*` | Files, blocks, validated write, versions, diff, rollback |
 | Profiles | `/profiles*` | Desired state, plan, apply |
 | Firewall | `/firewall/*` | ufw and firewalld rules, install |

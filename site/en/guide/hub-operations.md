@@ -46,7 +46,9 @@ again”**: a new job with the same parameters continues from the saved
 state (created machines, the tunnel, installed roles are skipped), the
 old log stays. Job logs, titles and errors, like alerts, are shown **in
 the reader's language** — a job started from a Russian UI reads in
-English for an English user; raw tool output stays as is.
+English for an English user; raw tool output stays as is. The list has
+filters by state and kind, a text search, pages and date order, like the
+alert journal (see the host's [Jobs](/en/guide/monitoring#jobs)).
 
 A job that resumes after a service restart remembers how many times it
 was resumed: if the service restarted in the middle of it more than
