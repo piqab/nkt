@@ -92,3 +92,26 @@ func TestBotAlertsGrouping(t *testing.T) {
 		t.Fatal("no findings buttons")
 	}
 }
+
+// Кнопки «Проблемы» и «Обзор»: ответ хоста — объект с findings, список —
+// значками важности, на языке бота.
+func TestBotHostFindingsButton(t *testing.T) {
+	srv, _, _ := localFixtureHub(t)
+	ctx := context.Background()
+	turn := botTurn{Lang: msgs.EN, User: "1"}
+	r := srv.botCore().press(ctx, turn, "fd:-1")
+	if len(r) != 1 || len(r[0].Parts) != 1 {
+		t.Fatalf("reply: %+v", r)
+	}
+	p := r[0].Parts[0]
+	if !strings.Contains(p.Head, "localhost — findings") || strings.Contains(p.Body, "unmarshal") {
+		t.Fatalf("findings: %q / %q", p.Head, p.Body)
+	}
+	if !strings.ContainsAny(p.Body, "🔴🟠🟡") {
+		t.Fatalf("no findings listed: %q", p.Body)
+	}
+	ov := srv.botCore().press(ctx, turn, "ov:-1")
+	if len(ov) != 1 || !strings.Contains(ov[0].Parts[0].Head, "overview") || strings.ContainsAny(ov[0].Parts[0].Body, "🔴🟠🟡") {
+		t.Fatalf("overview: %+v", ov)
+	}
+}

@@ -35,7 +35,6 @@ var ruTelegramCatalog = map[string]string{
 	"tg.noHost":                "Нет хоста %d.",
 	"tg.hostUp":                "отвечает",
 	"tg.hostDown":              "не отвечает",
-	"tg.hostDetail":            "%s (%s) — %s, nkt %s\n%s",
 	"tg.noAlerts":              "Оповещений нет.",
 	"tg.kind.unreachable":      "не отвечает",
 	"tg.kind.recovered":        "снова отвечает",
@@ -84,4 +83,6 @@ var ruTelegramCatalog = map[string]string{
 	"tg.hostInstalling":        "устанавливается",
 	"tg.hostNoData":            "нет данных",
 	"tg.badTimezone":           "Неизвестный часовой пояс: %q (нужно вида Europe/Moscow)",
+	"tg.overviewHead":          "обзор",
+	"tg.findingsHead":          "проблемы",
 }

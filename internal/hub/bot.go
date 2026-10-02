@@ -4,10 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"regexp"
-	"slices"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -144,7 +141,7 @@ func (c *botCore) press(ctx context.Context, t botTurn, data string) []botReply 
 		if err != nil {
 			return nil
 		}
-		return one(c.hostDetail(ctx, id, kind == "fd", lang))
+		return []botReply{c.hostDetail(ctx, id, kind == "fd", lang)}
 	case "jl":
 		id, err := strconv.ParseInt(arg, 10, 64)
 		if err != nil {
@@ -283,49 +280,6 @@ func (c *botCore) watchJob(ctx context.Context, t botTurn, id int64) {
 }
 
 // --- тексты ---------------------------------------------------------------------
-
-func (c *botCore) hostDetail(ctx context.Context, id int64, withFindings bool, lang msgs.Lang) string {
-	rows, err := c.s.hostRows(ctx)
-	if err != nil {
-		return msgs.Localize(lang, err)
-	}
-	i := slices.IndexFunc(rows, func(h hostWithOverview) bool { return h.ID == id })
-	if i < 0 {
-		return msgs.T(lang, "tg.noHost", id)
-	}
-	h := rows[i]
-	state := msgs.T(lang, "tg.hostUp")
-	if h.Reachable != nil && !*h.Reachable {
-		state = msgs.T(lang, "tg.hostDown")
-	}
-	text := msgs.T(lang, "tg.hostDetail", h.Name, h.Addr, state, h.RunningVersion, findingsText(lang, h.Findings))
-	if !withFindings {
-		return text
-	}
-	var list []struct {
-		Severity string `json:"severity"`
-		Title    string `json:"title"`
-	}
-	path := "/api/findings"
-	if id == localHostID {
-		_, err = c.s.localAPI(ctx, "", http.MethodGet, path, nil, &list)
-	} else {
-		_, err = c.s.hub.HostAPI(ctx, id, http.MethodGet, path, nil, &list)
-	}
-	if err != nil {
-		return text + "\n" + msgs.Localize(lang, err)
-	}
-	rank := map[string]int{"critical": 0, "high": 1, "medium": 2, "low": 3}
-	sort.SliceStable(list, func(i, j int) bool { return rank[list[i].Severity] < rank[list[j].Severity] })
-	for i, f := range list {
-		if i >= 10 {
-			text += "\n…"
-			break
-		}
-		text += fmt.Sprintf("\n• [%s] %s", f.Severity, f.Title)
-	}
-	return text
-}
 
 func (c *botCore) pipelines(ctx context.Context, lang msgs.Lang) string {
 	list, err := c.s.db.ListPipelines(ctx)

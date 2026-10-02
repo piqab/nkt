@@ -35,7 +35,6 @@ var enTelegramCatalog = map[string]string{
 	"tg.noHost":                "No host %d.",
 	"tg.hostUp":                "up",
 	"tg.hostDown":              "unreachable",
-	"tg.hostDetail":            "%s (%s) — %s, nkt %s\n%s",
 	"tg.noAlerts":              "No alerts.",
 	"tg.kind.unreachable":      "unreachable",
 	"tg.kind.recovered":        "recovered",
@@ -84,4 +83,6 @@ var enTelegramCatalog = map[string]string{
 	"tg.hostInstalling":        "installing",
 	"tg.hostNoData":            "no data",
 	"tg.badTimezone":           "Unknown time zone: %q (expected like Europe/Moscow)",
+	"tg.overviewHead":          "overview",
+	"tg.findingsHead":          "findings",
 }
