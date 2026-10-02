@@ -128,3 +128,24 @@ site describes the latest nkt version; your own copy built from the same
 commit as the installed nkt matches it exactly. If your server forbids
 being shown inside other pages (`X-Frame-Options`), the window stays
 empty; use "Detach" or "In a new tab".
+
+## Menu
+
+The **"Menu"** card in "About" (admins only):
+
+- **"Hub section order"**: a window with the list of hub menu sections;
+  drag a section (or move it with the ↑↓ arrows). Hub sections cannot be
+  hidden, only reordered.
+- **"Edit host sections"**: the same for the host menu, plus a **"show"**
+  checkbox; the menu of every host opened through the hub follows it.
+  "Overview" cannot be hidden. A hidden section only leaves the menu; a
+  direct link still opens it and permissions do not change.
+
+Before saving, a "now → will be" diff is shown; each layout has a version
+history with "restore this one" and "Reset to default". The layouts are
+shared by everyone on the hub, stored on the hub and carried in its
+export; sections that appear in later versions go to the end of the menu.
+A standalone host without a hub shows the default menu. API: `GET` and
+`PUT /api/hub/ui/nav/hub` and `/api/hub/ui/nav/host` with `{"order": [...],
+"hidden": [...]}`.
+

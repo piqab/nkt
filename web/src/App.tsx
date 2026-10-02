@@ -3,38 +3,20 @@ import ruRU from 'antd/locale/ru_RU'
 import enUS from 'antd/locale/en_US'
 import { Badge, Button, ConfigProvider, Layout, Menu, Tabs, Tag, Tooltip, type MenuProps, type ThemeConfig } from 'antd'
 import {
-  AlertOutlined,
-  ApartmentOutlined,
-  AppstoreOutlined,
-  AuditOutlined,
   BellOutlined,
-  BugOutlined,
   ClusterOutlined,
   RocketOutlined,
-  CodeOutlined,
-  DashboardOutlined,
-  DesktopOutlined,
-  FileTextOutlined,
-  FundOutlined,
-  HddOutlined,
-  HeartOutlined,
   InfoCircleOutlined,
   LogoutOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlayCircleOutlined,
   ProfileOutlined,
-  SafetyCertificateOutlined,
-  SafetyOutlined,
   SecurityScanOutlined,
-  SettingOutlined,
-  ShareAltOutlined,
-  TeamOutlined,
-  ToolOutlined,
-  UserOutlined,
-  WifiOutlined,
 } from '@ant-design/icons'
 import { notifyNewEvents } from './notifications'
+import { NAV_ITEMS } from './navItems'
+import { applyNavLayout, type NavLayout } from './navLayout'
 import type { ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
@@ -137,54 +119,6 @@ function useTheme(): [Theme, (t: Theme) => void, ThemeConfig] {
 // stale when the language changes later.
 // Разделы сгруппированы по назначению: двадцать с лишним пунктов плоским
 // списком читаются как свалка, в которой нужное ищут глазами каждый раз.
-// Группы — по тому, чем человек занят: смотрит состояние, наблюдает за
-// изменениями во времени, правит сам хост, разбирается с сетью, выдаёт
-// доступ.
-//
-// Порядок разделов — от «что происходит» к «кому что можно»: сверху то,
-// ради чего сюда заходят чаще всего. Плоский список без групп: у каждого
-// раздела своя иконка, и в свёрнутом сайдбаре меню остаётся тем же
-// столбцом иконок.
-const NAV_ITEMS: {
-  to: string
-  labelKey: string
-  icon: ReactNode
-  end?: boolean
-  adminOnly?: boolean
-  badge?: 'findings' | 'certs' | 'jobs'
-}[] = [
-  { to: '/', labelKey: 'nav.overview', icon: <DashboardOutlined />, end: true },
-  { to: '/findings', labelKey: 'nav.findings', icon: <AlertOutlined />, badge: 'findings' },
-  { to: '/vulnerabilities', labelKey: 'nav.vulnerabilities', icon: <BugOutlined /> },
-  { to: '/topology', labelKey: 'nav.topology', icon: <ApartmentOutlined /> },
-  { to: '/availability', labelKey: 'nav.availability', icon: <HeartOutlined /> },
-  { to: '/usage', labelKey: 'nav.usage', icon: <FundOutlined /> },
-  { to: '/logs', labelKey: 'nav.logs', icon: <FileTextOutlined /> },
-  // Задания рядом с журналами: и то, и другое — «что происходило, пока я
-  // не смотрел».
-  { to: '/jobs', labelKey: 'nav.jobs', icon: <PlayCircleOutlined />, badge: 'jobs' },
-  { to: '/audit', labelKey: 'nav.audit', icon: <AuditOutlined /> },
-  { to: '/services', labelKey: 'nav.services', icon: <AppstoreOutlined /> },
-  { to: '/containers', labelKey: 'nav.containers', icon: <ClusterOutlined /> },
-  { to: '/packages', labelKey: 'nav.packages', icon: <ToolOutlined /> },
-  { to: '/configs', labelKey: 'nav.configs', icon: <SettingOutlined /> },
-  // Профили живут вкладкой в «Контейнеры и ВМ»: там же, где стеки compose
-  // и заготовки машин, которыми профиль и распоряжается.
-  { to: '/disks', labelKey: 'nav.disks', icon: <HddOutlined /> },
-  { to: '/hardware', labelKey: 'nav.hardware', icon: <DesktopOutlined /> },
-  { to: '/system', labelKey: 'nav.system', icon: <SafetyOutlined />, adminOnly: true },
-  // Терминал viewer'у бесполезен: подключиться он всё равно не сможет, а
-  // сервер откажет — поэтому скрыт, а не показан выключенным.
-  { to: '/terminal', labelKey: 'nav.terminal', icon: <CodeOutlined />, adminOnly: true },
-  { to: '/interfaces', labelKey: 'nav.interfaces', icon: <WifiOutlined /> },
-  { to: '/firewall', labelKey: 'nav.firewall', icon: <ShareAltOutlined /> },
-  { to: '/fail2ban', labelKey: 'nav.fail2ban', icon: <SecurityScanOutlined /> },
-  { to: '/certificates', labelKey: 'nav.certificates', icon: <SafetyCertificateOutlined />, badge: 'certs' },
-  // Учётки веб-интерфейса и учётки самой машины рядом, но по-прежнему
-  // раздельно: путать их нельзя, вторые дают вход на сам сервер.
-  { to: '/users', labelKey: 'nav.users', icon: <UserOutlined />, adminOnly: true },
-  { to: '/os-users', labelKey: 'nav.osUsers', icon: <TeamOutlined />, adminOnly: true },
-]
 
 /** Раздел справки для адреса страницы: самый длинный подходящий ключ
  * docsMap.json («/containers/…» → «/containers»; «/» — только сам). */
@@ -434,6 +368,20 @@ function Shell({
   // looking at the host list — matches how criticalCount/certAlerts below
   // are always live regardless of which per-host page is open.
   const hubUpdate = useApi<HubVersionInfo>(isHub ? '/hub/version' : null, 5 * 60_000)
+  // Раскладка меню хаба и хоста — общая, хранится на хабе; у отдельного
+  // хоста без хаба меню по умолчанию. После правки в «О системе» окно
+  // шлёт nkt-nav-changed — меню перестраивается сразу.
+  const hubNav = useApi<{ layout: NavLayout }>(isHub ? '/hub/ui/nav/hub' : null, 5 * 60_000)
+  const hostNav = useApi<{ layout: NavLayout }>(isHub ? '/hub/ui/nav/host' : null, 5 * 60_000)
+  useEffect(() => {
+    const reload = () => {
+      void hubNav.reload()
+      void hostNav.reload()
+    }
+    window.addEventListener('nkt-nav-changed', reload)
+    return () => window.removeEventListener('nkt-nav-changed', reload)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reload стабилен
+  }, [])
   // Хаб обновился, пока вкладка открыта: /auth/me с прежней hub_version
   // перечитывается, чтобы бейджи и сравнение версий не жили прошлым.
   useEffect(() => {
@@ -631,7 +579,7 @@ function Shell({
             className="nav-menu"
             selectedKeys={[hubView]}
             onClick={({ key }: { key: string }) => setHubView(key as typeof hubView)}
-            items={hubItems}
+            items={applyNavLayout(hubItems ?? [], (i) => String(i?.key ?? ''), hubNav.data?.layout, true)}
           />
 
           {foot}
@@ -699,7 +647,11 @@ function Shell({
           className="nav-menu"
           selectedKeys={[navSelectedKey]}
           onClick={({ key }: { key: string }) => navigate(key)}
-          items={NAV_ITEMS.filter((item) => !item.adminOnly || me.is_admin).map((item) => {
+          items={applyNavLayout(
+            NAV_ITEMS.filter((item) => !item.adminOnly || me.is_admin),
+            (item) => item.to,
+            hostNav.data?.layout,
+          ).map((item) => {
             const count =
               item.badge === 'findings' ? criticalCount : item.badge === 'certs' ? certAlerts : item.badge === 'jobs' ? activeJobs : 0
             return {

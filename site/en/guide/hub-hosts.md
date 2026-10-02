@@ -250,7 +250,7 @@ webhooks** and the Telegram and Slack **bots** (tokens and secrets; hosts
 in a scope go by name, and a token or recipient whose host is missing is
 not imported), hub settings
 (alerts, package cache, model analysis with the API key and every edited
-instruction, beta channel, the help site address with its history), saved cluster form presets, fallback channel
+instruction, beta channel, the help site address with its history, the hub and host menu layouts), saved cluster form presets, fallback channel
 switches and tokens. With the "Web interface user accounts" checkbox it
 also carries logins, roles and password hashes. The file is JSON version
 5; versions 1 to 4 import too.

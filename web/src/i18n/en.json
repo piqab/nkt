@@ -3853,5 +3853,21 @@
     "addChannel": "Add channel",
     "users": "Who may act (Slack user id)",
     "usersHint": "Empty means anyone in a channel with the admin role. Your id: /nkt id."
+  },
+  "navLayout": {
+    "title": "Menu",
+    "hint": "The order of the hub menu sections and the host menu sections — for everyone on the hub and for all hosts at once.",
+    "editHub": "Hub section order",
+    "editHost": "Edit host sections",
+    "hubHint": "Drag the sections (or move them with the arrows). Hub sections cannot be hidden, only reordered.",
+    "hostHint": "Drag the sections and untick “show” on the ones you do not need: the menu of every host opened through the hub will look like this. A hidden section only leaves the menu; a direct link still opens it and permissions do not change. “Overview” cannot be hidden.",
+    "show": "show",
+    "up": "Up",
+    "down": "Down",
+    "reset": "Reset to default",
+    "discard": "discard the edit",
+    "history": "History",
+    "restore": "restore this one",
+    "hiddenMark": "hidden"
   }
 }

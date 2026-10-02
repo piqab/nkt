@@ -258,6 +258,8 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/hub/events", s.handleEvents)
 				r.Post("/hub/events/seen", s.handleEventsSeen)
 				r.Get("/hub/events/settings", s.handleEventSettings)
+				// Раскладку меню читают все: по ней строится меню.
+				r.Get("/hub/ui/nav/{kind}", s.handleNavLayout)
 				r.Get("/hub/fail2ban/banned", s.handleF2BBanned)
 				r.Get("/hub/scripts", s.handleScriptList)
 				r.Get("/hub/scripts/help", s.handleScriptHelp)
@@ -405,6 +407,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts/{id}/vm-reach", s.handleVMReach)
 					r.Post("/hub/hosts/{id}/vm-import", s.handleVMImport)
 					r.Post("/hub/events/settings", s.handleEventSettings)
+					r.Put("/hub/ui/nav/{kind}", s.handleNavLayout)
 					r.Post("/hub/fail2ban/fleet", s.handleF2BFleet)
 					r.Post("/hub/hosts/{id}/group", s.handleSetHostGroup)
 					r.Post("/hub/hosts/{id}/install", s.handleStartInstall)

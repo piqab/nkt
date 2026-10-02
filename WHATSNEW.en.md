@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.95 — 2026-10-02
+
+- **Menu layout.** The hub's "About" has a "Menu" card: "Hub section
+  order" (drag or arrows; hiding is not allowed) and "Edit host sections",
+  with the order and a "show" checkbox for all hosts opened through the
+  hub at once ("Overview" cannot be hidden). A hidden section only leaves
+  the menu; a link still opens it. A diff is shown before saving, with a
+  version history and "Reset to default"; the layouts are carried in the
+  hub export.
+
 ## v1.11.94 — 2026-10-02
 
 - **"Jobs" work like the alert journal**, on the hub and on a host:
