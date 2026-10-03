@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.110 — 2026-10-03
+
+- **Narrow sudo.** The first installation of nkt as a user with
+  `NOPASSWD: ALL` narrows it right away: without a password the hub may
+  only run `nkt hub-sudo`, which runs as root only requests signed by the
+  hub's key (derived from the master key) and only operations from a fixed
+  list: installing and updating nkt (files checked against signed hashes),
+  the service, its journal, the nkt admin password, the apt proxy. An old
+  request cannot be replayed. It works for any build and without GitHub.
+  The host list shows a green "narrow sudo" shield.
+
 ## v1.11.109 — 2026-10-03
 
 - **Documentation:** the hub hosts screenshot now has polled hosts and

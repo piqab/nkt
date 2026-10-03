@@ -24,7 +24,7 @@ type AccessCheck struct {
 	HasToken bool `json:"has_token,omitempty"`
 	// TokenHint — последние знаки сохранённого токена (сверить с сервером).
 	TokenHint string `json:"token_hint,omitempty"`
-	HasKey   bool `json:"has_key,omitempty"`
+	HasKey    bool   `json:"has_key,omitempty"`
 	// Registry — образ из registry: (пусто — не задан, не проверялся).
 	Registry      string `json:"registry,omitempty"`
 	RegistryOK    bool   `json:"registry_ok,omitempty"`

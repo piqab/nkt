@@ -32,6 +32,9 @@ const (
 	SudoStatusRoot             = "root"
 	SudoStatusNopasswd         = "nopasswd"
 	SudoStatusPasswordRequired = "password_required"
+	// SudoStatusNarrow — узкий sudo: без пароля только подписанные хабом
+	// операции (nkt hub-sudo).
+	SudoStatusNarrow = "narrow"
 )
 
 // Host is one VPS a hub instance manages over SSH.
