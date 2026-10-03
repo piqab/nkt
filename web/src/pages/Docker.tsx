@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Segmented, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { useFocusRow } from '../focus'
 import { useHostRescan } from '../rescan'
 import { api, qs, useApi } from '../api'
 import type { Container, DockerNetwork, FileContent, Me } from '../types'
@@ -24,6 +25,7 @@ import { TitleHelp } from '../components/Docs'
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
   const docker = useApi<{ containers: Container[]; networks: DockerNetwork[] }>('/containers', 30_000)
+  const focusContainer = useFocusRow(!!docker.data)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
   const [configModal, setConfigModal] = useState<{ path: string; focusName?: string; autoCreate?: boolean } | null>(null)
@@ -363,6 +365,7 @@ export default function Docker({ me }: { me: Me }) {
               <DataTable<Container>                 dataSource={activeContainers}
                 columns={containerColumns}
                 rowKey="name"
+                rowClassName={(c) => (c.name === focusContainer ? 'row-focus' : '')}
                 rowSelection={
                   canControl
                     ? {

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { api, qs } from '../api'
 import type { Finding, Me } from '../types'
 import { confirmAction } from './confirm'
+import { SERVICE_PAGE_NAMES } from '../focus'
 import CommandModal from './CommandModal'
 import ContainerLogsModal from './ContainerLogsModal'
 
@@ -43,6 +44,13 @@ export function findingActions(f: Finding, canControl: boolean, t: (k: string, o
     if (canControl && f.rule === 'container-not-running') {
       out.push({ kind: 'run', label: t('findings.act.start'), container: f.object, action: 'start' })
     }
+  }
+  // Кто отвечает: контейнер — его строка в «Контейнерах», служба — её
+  // строка в «Сервисах».
+  if (f.service === 'docker' && f.object && f.rule.startsWith('container-')) {
+    out.push({ kind: 'link', label: t('findings.act.toContainer', { name: f.object }), to: `/containers${qs({ tab: 'docker', focus: f.object })}` })
+  } else if (SERVICE_PAGE_NAMES.has(f.service)) {
+    out.push({ kind: 'link', label: t('findings.act.toService', { name: f.service }), to: `/services${qs({ focus: f.service })}` })
   }
   if (FIREWALL_RULES.has(f.rule)) {
     out.push({ kind: 'link', label: t('findings.act.firewall'), to: '/firewall' })
