@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -31,6 +32,64 @@ type Git struct {
 	// Dir — каталог конвейера на хабе (ключи, known_hosts, checkout).
 	Dir  string
 	Cred Cred
+	// Repo — адрес репозитория (для вида токена; ставится Remote и
+	// Checkout сами).
+	Repo string
+}
+
+// PlaceholderRepo — адрес-заглушка из шаблона описания.
+const PlaceholderRepo = "https://github.com/org/app.git"
+
+// tokenUser — логин для токена в Basic: GitLab ждёт «oauth2»; GitHub,
+// Forgejo, Gitea и прочие берут токен из пароля, логин не важен.
+func tokenUser(repo string) string {
+	if u, err := url.Parse(repo); err == nil && strings.Contains(strings.ToLower(u.Hostname()), "gitlab") {
+		return "oauth2"
+	}
+	return "x-access-token"
+}
+
+// Причины отказа git, понятные человеку.
+const (
+	GitNoAccess      = "no_access"      // ключей нет: закрыт или его нет
+	GitTokenRejected = "token_rejected" // токен есть, но не подошёл
+	GitKeyRejected   = "key_rejected"   // ключ ssh не подошёл
+	GitNotFound      = "not_found"      // сервер ответил, что репозитория нет
+	GitHostUnknown   = "host_unknown"   // имя сервера не разрешается или нет соединения
+	GitOther         = "other"
+)
+
+var (
+	gitAuthRe    = regexp.MustCompile(`(?i)could not read username|terminal prompts disabled|authentication failed|invalid username or (token|password)|http basic: access denied|\b(401|403)\b`)
+	gitKeyRe     = regexp.MustCompile(`(?i)permission denied \(publickey|host key verification failed|no supported authentication`)
+	gitNotFound  = regexp.MustCompile(`(?i)repository not found|does not appear to be a git repository|\b404\b|not found`)
+	gitNetworkRe = regexp.MustCompile(`(?i)could not resolve host|name or service not known|connection refused|connection timed out|network is unreachable|no route to host|ssl certificate problem|server certificate verification failed`)
+)
+
+// ClassifyGitError — причина отказа git по его выводу и тому, были ли
+// ключи. Сервер на закрытый и несуществующий репозиторий без входа
+// отвечает одинаково (просьбой войти), поэтому без ключей это одна причина.
+func ClassifyGitError(text string, hasToken, hasKey bool) string {
+	switch {
+	case gitNetworkRe.MatchString(text):
+		return GitHostUnknown
+	case gitKeyRe.MatchString(text):
+		if hasKey {
+			return GitKeyRejected
+		}
+		return GitNoAccess
+	case gitAuthRe.MatchString(text):
+		if hasToken {
+			return GitTokenRejected
+		}
+		return GitNoAccess
+	case gitNotFound.MatchString(text):
+		if hasToken || hasKey {
+			return GitNotFound
+		}
+		return GitNoAccess
+	}
+	return GitOther
 }
 
 var shaRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
@@ -47,7 +106,7 @@ func (g Git) run(ctx context.Context, dir string, args ...string) (string, error
 	}
 	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=/bin/false", "LC_ALL=C")
 	if g.Cred.Token != "" {
-		auth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + g.Cred.Token))
+		auth := base64.StdEncoding.EncodeToString([]byte(tokenUser(g.Repo) + ":" + g.Cred.Token))
 		env = append(env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader", "GIT_CONFIG_VALUE_0=Authorization: Basic "+auth)
 	}
 	sshOpts := "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=" + filepath.Join(g.Dir, "known_hosts")
@@ -86,6 +145,7 @@ func (g Git) Remote(ctx context.Context, repo string) (map[string]string, error)
 	if err := ValidRepo(repo); err != nil {
 		return nil, err
 	}
+	g.Repo = repo
 	out, err := g.run(ctx, g.Dir, "ls-remote", "--heads", "--tags", "--", repo)
 	if err != nil {
 		return nil, err
@@ -117,6 +177,7 @@ func (g Git) Checkout(ctx context.Context, repo, ref, sha, dest string) error {
 	if !ValidSHA(sha) || (ref != "" && !ValidRef(ref)) {
 		return msgs.Errorf("deploy.badCommit", sha)
 	}
+	g.Repo = repo
 	_ = os.RemoveAll(dest)
 	if err := os.MkdirAll(dest, 0o700); err != nil {
 		return err

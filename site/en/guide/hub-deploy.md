@@ -520,6 +520,27 @@ access" with the reason (`Permission denied`, a wrong token) or "no such
 branch"; if the description has `registry:`, it also logs in to the
 registry and counts the tags. "Check again" repeats it.
 
+If a compose link is already pasted in the description window but "Fill
+in the description" has not been clicked, "Access" first fills the
+description from the link, so the link's repository is checked rather than
+the template placeholder (`github.com/org/app`; if the description is still
+the template, the check says so directly). Refusals are explained in words
+(the raw git output is in the tooltip):
+
+| Reason | Meaning |
+|---|---|
+| private or missing | no keys, and the server asks to sign in; it answers that way for both private and nonexistent repositories |
+| token rejected | wrong, expired or without read access: Forgejo/Gitea repository: Read, GitHub Contents: Read, GitLab read_repository |
+| ssh key does not fit | not added to the repository's deploy keys |
+| keys accepted, no repository | a typo in the address |
+| server unreachable | the name does not resolve, no connection, or the certificate is not accepted |
+
+The token goes in a Basic header: with the login `oauth2` for GitLab;
+for the others (GitHub, Forgejo, Gitea, Codeberg) the login does not
+matter. After the keys are saved, the "repository is private" note in the
+description window disappears, and "Fill in the description" notes that the
+file was fetched with the pipeline's keys.
+
 A pipeline's "Access":
 
 - **Repository** — a token (for `https://`, e.g. a GitHub fine-grained

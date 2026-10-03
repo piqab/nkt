@@ -17,6 +17,12 @@ type AccessCheck struct {
 	RepoOK    bool   `json:"repo_ok"`
 	RefFound  bool   `json:"ref_found"`
 	RepoError string `json:"repo_error,omitempty"`
+	// RepoReason — причина отказа (deploy.Git*) или placeholder — в
+	// описании адрес из шаблона.
+	RepoReason string `json:"repo_reason,omitempty"`
+	// HasToken, HasKey — какие ключи у конвейера сохранены.
+	HasToken bool `json:"has_token,omitempty"`
+	HasKey   bool `json:"has_key,omitempty"`
 	// Registry — образ из registry: (пусто — не задан, не проверялся).
 	Registry      string `json:"registry,omitempty"`
 	RegistryOK    bool   `json:"registry_ok,omitempty"`
@@ -40,10 +46,19 @@ func (s *Server) handlePipelineAccessCheck(w http.ResponseWriter, r *http.Reques
 	ctx := r.Context()
 	res := AccessCheck{Repo: spec.Repo, Ref: spec.Ref}
 	g := deploy.Git{Dir: s.pipelineDir(pl.ID), Cred: s.pipelineCred(pl)}
-	refs, err := g.Remote(ctx, spec.Repo)
-	if err != nil {
-		res.RepoError = quietSSH(msgs.Localize(msgs.FromContext(ctx), err))
+	res.HasToken, res.HasKey = g.Cred.Token != "", g.Cred.SSHKey != ""
+	refs, err := map[string]string(nil), error(nil)
+	if spec.Repo == deploy.PlaceholderRepo {
+		res.RepoReason = "placeholder"
 	} else {
+		refs, err = g.Remote(ctx, spec.Repo)
+	}
+	switch {
+	case res.RepoReason != "":
+	case err != nil:
+		res.RepoError = quietSSH(msgs.Localize(msgs.FromContext(ctx), err))
+		res.RepoReason = deploy.ClassifyGitError(res.RepoError, res.HasToken, res.HasKey)
+	default:
 		res.RepoOK = true
 		_, res.RefFound = refs["refs/heads/"+spec.Ref]
 		if !res.RefFound {

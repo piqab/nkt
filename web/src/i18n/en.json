@@ -3396,7 +3396,16 @@
     "siteAuto": "Site: auto ({{name}})",
     "siteAutoNone": "Site: auto (not found)",
     "siteService": "Site",
-    "siteNone": "No site"
+    "siteNone": "No site",
+    "gitReason": {
+      "no_access": "the repository is private or does not exist: set “Access” or check the address",
+      "token_rejected": "the token was rejected: wrong, expired or without read access to the repository (Forgejo/Gitea: repository: Read; GitHub: Contents: Read; GitLab: read_repository)",
+      "key_rejected": "the ssh key does not fit or is not added to the repository (Deploy keys)",
+      "not_found": "the keys were accepted, but there is no such repository: check the address",
+      "host_unknown": "the server is unreachable: the name does not resolve, no connection, or the certificate is not accepted"
+    },
+    "accessPlaceholder": "the description has the template placeholder address: paste a compose link or fill in repo:",
+    "scanWithAccess": "Fetched with the keys of pipeline “{{name}}”."
   },
   "edge": {
     "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment webhooks and/or signed API token requests), and the hub keeps the tunnel to it. There can be several edges.",
