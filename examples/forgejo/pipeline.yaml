@@ -1,0 +1,28 @@
+# Forgejo + PostgreSQL из examples/ репозитория nkt.
+repo: https://github.com/piqab/nkt.git
+ref: main
+
+action: compose
+compose:
+  file: examples/forgejo/deploy/docker-compose.yml
+  project: forgejo
+  hosts: [web1]
+  wait_timeout: 5m
+  # SSH для git — наружу (bind по умолчанию сделал бы его 127.0.0.1):
+  ports:
+    forgejo: ["0.0.0.0:2222:2222"]
+  # Без этих переменных в .env сухой прогон не пропустит выкладку:
+  env_keys:
+    forgejo-admin: [FORGEJO_ADMIN_USER, FORGEJO_ADMIN_PASSWORD, FORGEJO_ADMIN_EMAIL]
+  site:
+    domains: [git.example.com]
+    service: forgejo
+    port: 3000
+
+# .env стека — «Доступ» → «.env стека»:
+#   POSTGRES_PASSWORD=<пароль базы>
+#   FORGEJO_DOMAIN=git.example.com
+#   FORGEJO_ROOT_URL=https://git.example.com/
+#   FORGEJO_ADMIN_USER=<логин администратора>
+#   FORGEJO_ADMIN_PASSWORD=<пароль администратора>
+#   FORGEJO_ADMIN_EMAIL=<почта администратора>
