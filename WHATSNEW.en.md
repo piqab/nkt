@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.102 — 2026-10-03
+
+- **"Access" straight from the pipeline window, with an access check.**
+  The description window has an "Access" button: for a new pipeline it
+  first saves it under the entered name (disabled without a name) and opens
+  the same window as in the list. On opening and after saving the keys,
+  the "Access" window checks the repository (`git ls-remote`: access,
+  branch) and the registry if one is set; the result is shown in place.
+
 ## v1.11.101 — 2026-10-03
 
 - **Forgejo example:** the `.env` template notes that Forgejo forbids
