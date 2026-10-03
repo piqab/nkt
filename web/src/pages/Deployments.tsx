@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { Button, Checkbox, Dropdown, Input, Select, Space, Switch, Tabs, Tag, Tooltip } from 'antd'
 import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -415,6 +415,8 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
   const [created, setCreated] = useState<Pipeline | null>(null)
   const pipeline = initial ?? created ?? undefined
   const [access, setAccess] = useState<Pipeline | null>(null)
+  const [accessTick, setAccessTick] = useState(0)
+  const linkYamlRef = useRef<(() => { yaml: string; repo: string; name: string } | null) | null>(null)
   const tpl = useApi<{ content: string }>(pipeline ? null : '/hub/pipelines/template')
   const [name, setName] = useState('')
   const [note, setNote] = useState('')
@@ -436,7 +438,15 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
       let id = pipeline?.id
       if (!id) {
         setBusy(true)
-        const res = await api<{ id: number }>('/hub/pipelines', { method: 'POST', body: { name, content: text } })
+        // Ссылка на compose уже вставлена, а описание по ней не заполнено
+        // (в нём шаблон) — сначала из ссылки: проверять надо её репозиторий.
+        let content = text
+        const fromLink = linkYamlRef.current?.()
+        if (fromLink && !text.includes(`repo: ${fromLink.repo}`)) {
+          content = fromLink.yaml
+          setDraft(content)
+        }
+        const res = await api<{ id: number }>('/hub/pipelines', { method: 'POST', body: { name, content } })
         id = res.id
         onSaved()
       }
@@ -490,6 +500,9 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
             {!initial && (
               <ComposeFromLink
                 pipelineId={pipeline?.id}
+                pipelineName={pipeline?.name}
+                accessTick={accessTick}
+                linkYamlRef={linkYamlRef}
                 onFill={(yaml, suggested) => {
                   setDraft(yaml)
                   if (!name) setName(suggested)
@@ -535,7 +548,16 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
           }}
         />
       )}
-      {access && <AccessModal p={access} onClose={() => setAccess(null)} onSaved={onSaved} />}
+      {access && (
+        <AccessModal
+          p={access}
+          onClose={() => setAccess(null)}
+          onSaved={() => {
+            setAccessTick((n) => n + 1)
+            onSaved()
+          }}
+        />
+      )}
       {dryJob && <JobLogModal job={dryJob} scope="/hosts/local" onClose={() => setDryJob(null)} />}
       {history && pipeline && (
         <VersionsModal
@@ -588,7 +610,23 @@ export function parseComposeLink(link: string): { repo: string; ref: string; fil
 
 /** «Compose по ссылке»: ссылка на compose-файл, хосты, имя стека →
  * описание конвейера action: compose (дальше — обычная правка с диффом). */
-function ComposeFromLink({ pipelineId, onFill, onName }: { pipelineId?: number; onFill: (yaml: string, name: string) => void; onName: (name: string) => void }) {
+function ComposeFromLink({
+  pipelineId,
+  pipelineName,
+  accessTick,
+  linkYamlRef,
+  onFill,
+  onName,
+}: {
+  pipelineId?: number
+  pipelineName?: string
+  /** Растёт при каждой записи ключей в «Доступе» — старая надпись о закрытом репозитории больше не верна. */
+  accessTick: number
+  /** Описание из одной ссылки (без скачивания) — для «Доступа». */
+  linkYamlRef: MutableRefObject<(() => { yaml: string; repo: string; name: string } | null) | null>
+  onFill: (yaml: string, name: string) => void
+  onName: (name: string) => void
+}) {
   const { t } = useTranslation()
   const hosts = useApi<HubHost[]>('/hub/hosts')
   const [link, setLink] = useState('')
@@ -604,6 +642,10 @@ function ComposeFromLink({ pipelineId, onFill, onName }: { pipelineId?: number; 
   const [scanNote, setScanNote] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
   const [siteChoice, setSiteChoice] = useState<string>('auto')
+  const [scanWithAccess, setScanWithAccess] = useState(false)
+  useEffect(() => {
+    if (accessTick > 0) setScanNote(null)
+  }, [accessTick])
   async function fill(link: string, project: string, ex?: PipelineExample, choice = siteChoice) {
     const p = parseComposeLink(link)
     if (!p) {
@@ -618,15 +660,18 @@ function ComposeFromLink({ pipelineId, onFill, onName }: { pipelineId?: number; 
         setScanning(true)
         setScanNote(null)
         try {
-          const res = await api<{ scan?: ComposeScan; error?: string; closed?: boolean; has_access?: boolean }>('/hub/pipelines/scan', {
+          const res = await api<{ scan?: ComposeScan; error?: string; reason?: string; has_access?: boolean }>('/hub/pipelines/scan', {
             method: 'POST',
             body: { repo: p.repo, ref: p.ref, file: p.file, pipeline_id: pipelineId ?? 0 },
           })
           if (res.scan) {
             sc = res.scan
             setScan({ link, scan: res.scan })
+            setScanWithAccess(!!res.has_access)
+          } else if (res.reason === 'no_access') {
+            setScanNote(t('deploy.scanClosed'))
           } else {
-            setScanNote(res.closed && !res.has_access ? t('deploy.scanClosed') : t('deploy.scanFailed', { error: res.error ?? '' }))
+            setScanNote(t('deploy.scanFailed', { error: gitReasonText(t, res.reason, res.error) }))
           }
         } catch (err) {
           setScanNote(t('deploy.scanFailed', { error: errText(err) }))
@@ -639,6 +684,11 @@ function ComposeFromLink({ pipelineId, onFill, onName }: { pipelineId?: number; 
         return
       }
     }
+    onFill(linkOnlyYaml(p, proj, ex), proj)
+  }
+  // Описание из одной ссылки (без скачивания файла): примеры и запасной
+  // путь, когда файл не скачать.
+  function linkOnlyYaml(p: { repo: string; ref: string; file: string; name: string }, proj: string, ex?: PipelineExample): string {
     // Сервисов чужого compose хаб не знает — заглушка явная.
     const site = ex?.site ?? { service: t('deploy.fromLinkSiteService'), port: t('deploy.fromLinkSitePort') }
     const block = (name: string, rec: Record<string, string | string[]> | undefined, comment: string) =>
@@ -674,7 +724,14 @@ function ComposeFromLink({ pipelineId, onFill, onName }: { pipelineId?: number; 
       `  #   port: ${site.port}\n` +
       `\n# poll: 5m   # ${t('deploy.fromLinkPollComment')}\n` +
       envTemplate
-    onFill(yaml, proj)
+    return yaml
+  }
+  linkYamlRef.current = () => {
+    const p = parseComposeLink(link)
+    if (!p) return null
+    const ex = pending?.link === link ? pending : undefined
+    const proj = (project || p.name).toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^[-_]+/, '').slice(0, 63) || 'app'
+    return { yaml: linkOnlyYaml(p, proj, ex), repo: p.repo, name: proj }
   }
   function example(ex: PipelineExample) {
     setLink(ex.link)
@@ -755,7 +812,12 @@ function ComposeFromLink({ pipelineId, onFill, onName }: { pipelineId?: number; 
       )}
       {bad && <span className="small" style={{ color: 'var(--status-error)' }}>{t('deploy.fromLinkBad')}</span>}
       {scanNote && <span className="small" style={{ color: 'var(--status-warning)', fontWeight: 600 }}>{scanNote}</span>}
-      {scan?.link === link && <span className="small muted">{t('deploy.scanDone', { services: scan.scan.services.length, vars: scan.scan.vars.length })}</span>}
+      {scan?.link === link && (
+        <span className="small muted">
+          {t('deploy.scanDone', { services: scan.scan.services.length, vars: scan.scan.vars.length })}
+          {scanWithAccess && pipelineName ? ' ' + t('deploy.scanWithAccess', { name: pipelineName }) : ''}
+        </span>
+      )}
     </div>
   )
 }
@@ -975,8 +1037,10 @@ function HistoryModal({ p, onClose, onOpenJob, onChanged }: { p: Pipeline; onClo
 
 /** Доступ к репозиторию и registry — значения не показываются, только
  * задаются или убираются. */
-function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void; onSaved: () => void }) {
+function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: () => void; onSaved: () => void }) {
   const { t } = useTranslation()
+  // Отметки «задан / не задан» — по свежему конвейеру после каждой записи.
+  const [p, setP] = useState<Pipeline>(initialP)
   const [token, setToken] = useState('')
   const [key, setKey] = useState('')
   const [registry, setRegistry] = useState('')
@@ -1032,6 +1096,7 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
       setRegistry('')
       setEnv('')
       setSaved(true)
+      setP(await api<Pipeline>(`/hub/pipelines/${p.id}`).catch(() => p))
       await runCheck()
     } catch (err) {
       setError(errText(err))
@@ -1294,6 +1359,9 @@ interface AccessCheck {
   repo_ok: boolean
   ref_found: boolean
   repo_error?: string
+  repo_reason?: string
+  has_token?: boolean
+  has_key?: boolean
   registry?: string
   registry_ok?: boolean
   registry_tags?: number
@@ -1324,7 +1392,13 @@ function AccessCheckView({ check, checking, onRecheck }: { check: AccessCheck | 
             ? check.ref_found
               ? ok(true, t('deploy.accessRepoOK', { repo: check.repo, ref: check.ref }))
               : ok(false, t('deploy.accessRefMissing', { repo: check.repo, ref: check.ref }))
-            : ok(false, t('deploy.accessRepoFail', { repo: check.repo, error: check.repo_error ?? '' }))}
+            : check.repo_reason === 'placeholder'
+              ? ok(false, t('deploy.accessPlaceholder'))
+              : (
+                  <Tooltip title={check.repo_error}>
+                    <span>{ok(false, t('deploy.accessRepoFail', { repo: check.repo, error: gitReasonText(t, check.repo_reason, check.repo_error) }))}</span>
+                  </Tooltip>
+                )}
           {check.registry &&
             (check.registry_ok
               ? ok(true, t('deploy.accessRegistryOK', { image: check.registry, count: check.registry_tags ?? 0 }))
@@ -1393,4 +1467,9 @@ function scannedYaml(
     }
   }
   return lines.join('\n') + '\n'
+}
+
+/** Причина отказа git словами (deploy.Git* на хабе); прочее — вывод git. */
+function gitReasonText(t: (k: string, o?: Record<string, unknown>) => string, reason?: string, raw?: string): string {
+  return reason && reason !== 'other' ? t(`deploy.gitReason.${reason}`) : (raw ?? '')
 }

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sync"
 	"time"
 
@@ -18,9 +17,6 @@ import (
 // ссылке (неглубоко, один коммит; закрытый репозиторий — ключами
 // сохранённого конвейера) и разбирает его — сервисы, порты образов из
 // registry, переменные, файлы рядом.
-
-// closedRepoRe — ответы git, означающие «нужен вход».
-var closedRepoRe = regexp.MustCompile(`(?i)permission denied|authentication failed|could not read username|terminal prompts disabled|access denied|401|403|repository not found|not found`)
 
 // handlePipelineScan — POST /hub/pipelines/scan {repo, ref, file,
 // pipeline_id}.
@@ -67,7 +63,8 @@ func (s *Server) handlePipelineScan(w http.ResponseWriter, r *http.Request) {
 	}
 	fail := func(err error) {
 		text := quietSSH(msgs.Localize(lang, err))
-		writeJSON(w, http.StatusOK, map[string]any{"error": text, "closed": closedRepoRe.MatchString(text), "has_access": len(g.Cred.Token)+len(g.Cred.SSHKey) > 0})
+		writeJSON(w, http.StatusOK, map[string]any{"error": text, "reason": deploy.ClassifyGitError(text, g.Cred.Token != "", g.Cred.SSHKey != ""),
+			"has_access": len(g.Cred.Token)+len(g.Cred.SSHKey) > 0})
 	}
 	refs, err := g.Remote(ctx, req.Repo)
 	if err != nil {
@@ -124,5 +121,5 @@ func (s *Server) handlePipelineScan(w http.ResponseWriter, r *http.Request) {
 		fail(msgs.Errorf("compose.configRejected", err.Error()))
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"scan": scan, "commit": sha})
+	writeJSON(w, http.StatusOK, map[string]any{"scan": scan, "commit": sha, "has_access": len(g.Cred.Token)+len(g.Cred.SSHKey) > 0})
 }

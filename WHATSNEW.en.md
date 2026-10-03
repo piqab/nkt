@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.104 — 2026-10-03
+
+- **Repository access, explained.** "Access" in the new pipeline window
+  takes the compose link already pasted (not the template placeholder
+  address); if the description is still the template, the check says so.
+  Instead of git output, the reason is given in words: private or missing,
+  token rejected (with the permission needed in Forgejo/Gitea, GitHub,
+  GitLab), ssh key does not fit, server unreachable. The GitLab token uses
+  the login `oauth2`. After keys are saved, the old "private" note goes
+  away and the "set" marks refresh.
+
 ## v1.11.103 — 2026-10-03
 
 - **"Fill in the description" from the file itself.** For your own link
