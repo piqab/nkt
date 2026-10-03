@@ -235,8 +235,8 @@ func removeAuthorizedKeyCmd(sudo, user, keyLine string) string {
 		body = fields[1]
 	}
 	return fmt.Sprintf(
-		"test -f %[1]s && %[2]sgrep -vF %[3]s %[1]s > /tmp/nkt-ak && %[2]sinstall -m 0600 -o %[4]s -g %[4]s /tmp/nkt-ak %[1]s;"+
-			" rc=$?; rm -f /tmp/nkt-ak; exit $rc",
+		"t=$(mktemp) && test -f %[1]s && %[2]sgrep -vF %[3]s %[1]s > \"$t\" && %[2]sinstall -m 0600 -o %[4]s -g %[4]s \"$t\" %[1]s;"+
+			" rc=$?; rm -f \"$t\"; exit $rc",
 		path, sudo, shellQuote(body), user)
 }
 

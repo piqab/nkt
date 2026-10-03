@@ -528,7 +528,7 @@ func k3sSteps(s InstallSpec) []Step {
 	if s.Role == RoleAgent {
 		unit = "k3s-agent"
 	}
-	download := fetchPrelude(s) + "art https://get.k3s.io > /tmp/nkt-k3s-install.sh\nhead -c 200 /tmp/nkt-k3s-install.sh | grep -q '#!/bin/sh'"
+	download := fetchPrelude(s) + k3sWorkDir + "art https://get.k3s.io > /var/lib/nkt-k3s/k3s-install.sh\nhead -c 200 /var/lib/nkt-k3s/k3s-install.sh | grep -q '#!/bin/sh'"
 	installEnv := strings.Join(env, " ")
 	// Канал k3s: stable или минорная ветка (v1.36) — та же «версия», что
 	// у kubeadm задаёт ветку репозитория.
@@ -547,13 +547,13 @@ func k3sSteps(s InstallSpec) []Step {
 			"test -n \"$VER\"",
 			"echo \"k3s $VER ($A) via hub cache\"",
 			"REL=https://github.com/k3s-io/k3s/releases/download/$VER",
-			"art $REL/sha256sum-$A.txt > /tmp/nkt-k3s.sums",
-			"art $REL/$BIN > /tmp/nkt-k3s.bin",
-			"echo \"$(grep \" $BIN$\" /tmp/nkt-k3s.sums | awk '{print $1}')  /tmp/nkt-k3s.bin\" | sha256sum -c - >/dev/null",
-			"install -m 755 /tmp/nkt-k3s.bin /usr/local/bin/k3s && rm -f /tmp/nkt-k3s.bin",
+			"art $REL/sha256sum-$A.txt > /var/lib/nkt-k3s/k3s.sums",
+			"art $REL/$BIN > /var/lib/nkt-k3s/k3s.bin",
+			"echo \"$(grep \" $BIN$\" /var/lib/nkt-k3s/k3s.sums | awk '{print $1}')  /var/lib/nkt-k3s/k3s.bin\" | sha256sum -c - >/dev/null",
+			"install -m 755 /var/lib/nkt-k3s/k3s.bin /usr/local/bin/k3s && rm -f /var/lib/nkt-k3s/k3s.bin",
 			"mkdir -p /var/lib/rancher/k3s/agent/images",
 			"art $REL/k3s-airgap-images-$A.tar.zst > /var/lib/rancher/k3s/agent/images/k3s-airgap-images-$A.tar.zst.part",
-			"echo \"$(grep \" k3s-airgap-images-$A.tar.zst$\" /tmp/nkt-k3s.sums | awk '{print $1}')  /var/lib/rancher/k3s/agent/images/k3s-airgap-images-$A.tar.zst.part\" | sha256sum -c - >/dev/null",
+			"echo \"$(grep \" k3s-airgap-images-$A.tar.zst$\" /var/lib/nkt-k3s/k3s.sums | awk '{print $1}')  /var/lib/rancher/k3s/agent/images/k3s-airgap-images-$A.tar.zst.part\" | sha256sum -c - >/dev/null",
 			"mv -f /var/lib/rancher/k3s/agent/images/k3s-airgap-images-$A.tar.zst.part /var/lib/rancher/k3s/agent/images/k3s-airgap-images-$A.tar.zst",
 			"mkdir -p /etc/rancher/k3s",
 			"cat > /etc/rancher/k3s/registries.yaml <<'EOF'\n" + registriesYAML(s.HubCache) + "EOF",
@@ -563,7 +563,7 @@ func k3sSteps(s InstallSpec) []Step {
 	steps := []Step{
 		{"k8s.step.prepare", "set -e\nexport DEBIAN_FRONTEND=noninteractive\napt-get -o DPkg::Lock::Timeout=600 update -qq\napt-get -o DPkg::Lock::Timeout=600 install -y -qq curl ca-certificates\nswapoff -a || true\nsed -i.bak '/\\sswap\\s/s/^/#/' /etc/fstab || true"},
 		{"k8s.step.download", download},
-		{"k8s.step.install", "set -e\n" + installEnv + " INSTALL_K3S_EXEC=" + shq(strings.Join(exec, " ")) + " sh /tmp/nkt-k3s-install.sh\nrm -f /tmp/nkt-k3s-install.sh"},
+		{"k8s.step.install", "set -e\n" + installEnv + " INSTALL_K3S_EXEC=" + shq(strings.Join(exec, " ")) + " sh /var/lib/nkt-k3s/k3s-install.sh\nrm -f /var/lib/nkt-k3s/k3s-install.sh"},
 		{"k8s.step.wait", "set -e\nfor i in $(seq 1 60); do systemctl is-active --quiet " + unit + " && break; sleep 2; done\nsystemctl is-active --quiet " + unit},
 	}
 	if s.Role == RoleServer {
@@ -742,6 +742,11 @@ func registryServer(reg string) string {
 
 // fetchPrelude — начало скрипта с функцией art URL: через кэш хаба
 // (файл оседает на хабе) или напрямую curl'ом.
+// k3sWorkDir — рабочий каталог загрузок k3s: в /var/lib пишет только
+// root, а не любой пользователь, как в /tmp (файл с известным именем там
+// подменили бы между проверкой хэша и установкой).
+const k3sWorkDir = "install -d -m 700 /var/lib/nkt-k3s\n"
+
 func fetchPrelude(s InstallSpec) string {
 	if s.HubCache != "" {
 		return "set -e\nNKT_CACHE=" + s.HubCache + "\nart() { curl -fsSL -G --data-urlencode \"url=$1\" \"$NKT_CACHE/nkt/artifact\"; }\n"

@@ -407,8 +407,8 @@ func installAuthorizedKey(client *ssh.Client, sudo, user, authorizedKey string) 
 func sudoersInstallCmd(sudo, user string) string {
 	rule := fmt.Sprintf("%s ALL=(ALL) NOPASSWD: ALL", user)
 	return fmt.Sprintf(
-		"printf '%%s\n' %[1]s > /tmp/nkt-sudoers && %[2]svisudo -cf /tmp/nkt-sudoers"+
-			" && %[2]sinstall -m 0440 -o root -g root /tmp/nkt-sudoers %[3]s; rc=$?; rm -f /tmp/nkt-sudoers; exit $rc",
+		"t=$(mktemp) && printf '%%s\n' %[1]s > \"$t\" && %[2]svisudo -cf \"$t\""+
+			" && %[2]sinstall -m 0440 -o root -g root \"$t\" %[3]s; rc=$?; rm -f \"$t\"; exit $rc",
 		shellQuote(rule), sudo, sudoersDropIn)
 }
 

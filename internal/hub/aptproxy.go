@@ -255,7 +255,10 @@ func configureAptProxy(client *ssh.Client, sshUser string, port int, enabled boo
 		return msgs.Errorf("hub.openingSFTP", err)
 	}
 	defer sftpClient.Close()
-	tmpDir := fmt.Sprintf("/tmp/nkt-aptproxy-%d", time.Now().UnixNano())
+	tmpDir, err := makeStageDir(client, "/tmp/nkt-aptproxy-")
+	if err != nil {
+		return err
+	}
 	defer func() { _, _ = runRemote(client, "rm -rf "+tmpDir) }()
 	if err := uploadBytes(sftpClient, []byte(aptProxyDetectScript(port)), tmpDir+"/nkt-apt-proxy", 0o755); err != nil {
 		return msgs.Errorf("hub.aptProxyConfigure", err, "")

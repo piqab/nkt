@@ -370,8 +370,8 @@ func (m *OSUserManager) grantSudo(ctx context.Context, user string) error {
 	rule := fmt.Sprintf("%s ALL=(ALL) NOPASSWD: ALL", user)
 	target := nktSudoersPath(user)
 	cmd := fmt.Sprintf(
-		"printf '%%s\\n' %s > /tmp/nkt-osuser && visudo -cf /tmp/nkt-osuser"+
-			" && install -m 0440 -o root -g root /tmp/nkt-osuser %s; rc=$?; rm -f /tmp/nkt-osuser; exit $rc",
+		"t=$(mktemp) && printf '%%s\\n' %s > \"$t\" && visudo -cf \"$t\""+
+			" && install -m 0440 -o root -g root \"$t\" %s; rc=$?; rm -f \"$t\"; exit $rc",
 		shellSingleQuote(rule), target)
 	res, err := m.run(ctx, "sh", "-c", cmd)
 	if err != nil {
