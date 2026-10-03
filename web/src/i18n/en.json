@@ -3954,7 +3954,8 @@
       "nopasswd": "Full passwordless sudo (NOPASSWD: ALL): whoever signs in as this user is root. Narrow it to the nkt operations.",
       "password_required": "sudo needs a password: the hub cannot install or update nkt.",
       "root": "Signed in as root: sudo is not needed.",
-      "unknown": "Unknown: the state is learned on the next install or update."
+      "unknown": "Unknown: the check did not succeed.",
+      "nopasswdOther": "The nkt rule is narrow, but another sudoers rule gives this user passwordless full sudo; see below where it comes from."
     },
     "explain": "The hub is root on the host through nkt anyway; the danger of full sudo lies in the other ways into this user (people, other keys, applications running as it). Narrow sudo leaves the hub only signed operations; the list cannot be edited, it changes with the nkt version.",
     "opsTitle": "Operations of {{command}}:",
@@ -3977,8 +3978,31 @@
     "remove": "Remove the nkt rule",
     "confirmNarrow": "Narrow sudo for {{user}} on {{name}}: the nkt rule is replaced with a narrow one, allowing only operations signed by the hub without a password. nkt on the host must not be older than the hub. Continue?",
     "narrowed": "Done: sudo narrowed.",
-    "narrowedOtherRule": "The nkt rule is narrowed, but another sudoers rule still gives this user passwordless sudo; remove it by hand.",
-    "removed": "The nkt rule is removed. Installing and updating nkt on this host will now need sudo or root."
+    "narrowedOtherRule": "The nkt rule is narrowed, but another sudoers rule still gives this user passwordless sudo; its source is shown above.",
+    "removed": "The nkt rule is removed. Installing and updating nkt on this host will now need sudo or root.",
+    "alreadyNarrow": "sudo is already narrowed: the hub key is in place, only hub-sudo runs without a password, and there is no full sudo. The state has been updated.",
+    "checkFailed": "Could not check sudo on the host; showing the remembered state: {{error}}",
+    "recheck": "Check again",
+    "sourcesTitle": "Where passwordless full sudo comes from:",
+    "sourcesUnknown": "Passwordless full sudo by these rules (the file could not be found):",
+    "kind": {
+      "user": "user",
+      "group": "group",
+      "all": "all users",
+      "alias": "via alias",
+      "nkt": "nkt rule"
+    },
+    "manual": {
+      "user": "The hub disables such a line itself only in a separate file in /etc/sudoers.d that names just this user. Here, remove it by hand (visudo).",
+      "group": "A group rule covers all its members, so the hub leaves it alone. Remove the user from the group or edit the rule by hand (visudo).",
+      "all": "A rule for all users; the hub leaves it alone. Edit it by hand (visudo).",
+      "alias": "A rule via User_Alias; the hub leaves it alone. Remove the user from the alias by hand (visudo).",
+      "notNarrowed": "Narrow sudo first: while the nkt rule is full, there is nothing to fall back on after disabling another rule."
+    },
+    "ruleOff": "Disable the line",
+    "confirmRuleOff": "Disable line {{line}} in {{file}}:\n{{text}}\n\nThe line is commented out (the file is checked with visudo, and the previous one stays next to it as .nkt-bak). After that, {{user}} gets only the hub-sudo operations without a password.",
+    "noPasswordWarn": "User {{user}} has no password (or it is locked): whoever signs in as this account will not be able to run sudo at all once the rule is disabled. Set a password first or work under another account.",
+    "ruleOffDone": "The line in {{file}} is disabled."
   },
   "purgeAll": {
     "title": "Danger zone",

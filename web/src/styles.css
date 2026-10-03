@@ -1109,3 +1109,17 @@ span.vm-toggle {
 .error-text {
   color: var(--status-critical);
 }
+
+/* Окно sudo хаба: строки sudoers, дающие полный sudo. */
+.sudo-source {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--gridline);
+  border-radius: var(--radius-sm);
+}
+.sudo-source pre {
+  align-self: stretch;
+}

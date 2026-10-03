@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.115 — 2026-10-03
+
+- **The "hub's sudo" window checks the host live.** When it opens and on
+  "Check again", the hub looks at what is really allowed without a
+  password: if sudoers was edited by hand, the mark in the host list
+  corrects itself.
+- **Where full sudo comes from.** If another rule grants it, the window
+  shows the sudoers lines (file:line, user or group). On a narrowed host,
+  a separate line about just this user can be disabled, with a visudo
+  check and a `.nkt-bak` copy; the window warns if the user has no
+  password. Group and shared rules are left alone.
+- **Pressing "Narrow sudo" again** on an already narrowed host no longer
+  asks for passwordless full sudo; it records "already narrowed".
+
 ## v1.11.114 — 2026-10-03
 
 - **Host accounts: groups, editing, deletion.** "Add" and "Edit" open one

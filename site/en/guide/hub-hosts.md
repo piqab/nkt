@@ -210,8 +210,9 @@ own build, an offline copy) does not matter: the hub the host already
 trusts signs it.
 
 If another rule (such as `90-cloud-init-users`) also gives this user
-passwordless sudo, the installation log warns about it: the mark stays
-red, and that rule has to be removed by hand.
+passwordless sudo, the installation log warns about it, the mark stays
+red, and the "The hub's sudo" window shows where full sudo comes from
+(see below).
 
 **One thing does not work without a password on a narrow-sudo host:**
 installing nkt-edge on it (certbot, its own service and ports are not
@@ -227,7 +228,28 @@ key path, with "Narrow sudo" (for full sudo) and "Remove the nkt rule"
 buttons. Narrowing first, while full sudo still works, places the key and
 checks with a signed request that `hub-sudo` exists on the host; an old
 nkt does not know this command, and the window then asks to update nkt on
-the host first.
+the host first. Pressing "Narrow sudo" again on a host that is already
+narrowed does not need full sudo: the hub sees its key and a working
+`hub-sudo` and just records "already narrowed".
+
+**The window checks the host live** every time it opens and on "Check
+again": whether the hub key is in place and what is allowed without a
+password (`sudo -n -l`). If the sudoers rules were changed by hand, the
+mark in the host list corrects itself. There is no constant polling,
+because every `sudo` call is written to the host's auth log.
+
+**Another rule with full sudo.** While full sudo still works, the hub
+reads `/etc/sudoers` and `/etc/sudoers.d/` and shows the lines that grant
+it (file:line, and who is named: the user, a group, everyone or an
+alias). On a host that is already narrowed, a line in a separate
+`sudoers.d` file that names only this user can be **disabled**: it is
+commented out, the file is checked with `visudo` before it is replaced,
+and the previous one stays next to it as `.nkt-bak` (sudo does not read
+such files). Group rules, rules for everyone, aliases and lines in
+`/etc/sudoers` itself affect more than this user, so the hub leaves them
+alone and explains what to fix by hand. If the user has no password
+(cloud images), the window warns that this account will have no sudo at
+all once the rule is disabled.
 
 ## Host SSH key
 
