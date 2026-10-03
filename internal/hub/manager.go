@@ -1348,7 +1348,7 @@ func (m *Manager) recordSudoOutcome(ctx context.Context, hostID int64, sshUser s
 	case err != nil:
 		status = store.SudoStatusPasswordRequired
 	}
-	_ = m.db.SetHostSudoStatus(ctx, hostID, status)
+	m.saveSudoStatus(ctx, hostID, status)
 }
 
 // SetServiceRunning starts or stops the netknownsthat systemd unit on a

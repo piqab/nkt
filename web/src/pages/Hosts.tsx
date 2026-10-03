@@ -126,9 +126,9 @@ const SUDO_LABEL_KEY: Record<NonNullable<HubHost['sudo_status']>, string> = {
 }
 
 
-/** What the last install/update on this host actually observed about sudo
- * — set as a side effect (Manager.recordSudoOutcome), never probed on its
- * own, so this can be stale until the next install/update touches the host. */
+/** Состояние sudo хоста по последней проверке хаба (после установки,
+ * обновления, сужения и при открытии окна «sudo хаба»); постоянного
+ * опроса нет. */
 function SudoBadge({ status }: { status: HubHost['sudo_status'] }) {
   const { t } = useTranslation()
   const s = status ?? ''

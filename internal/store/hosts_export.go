@@ -956,23 +956,33 @@ func (d *DB) importOneHost(ctx context.Context, h HostExport) (int64, error) {
 	if h.AdminUser != "" && !validAdminUser.MatchString(h.AdminUser) {
 		return 0, msgs.Errorf("store.invalidAdminName", h.AdminUser)
 	}
+	sudo := importedSudoStatus(h.SudoStatus)
 	res, err := d.ExecContext(ctx,
 		`INSERT INTO hosts(
 			name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
 			arch, status, nkt_version, admin_user, admin_password_enc,
-			sudo_status, terminal_enabled, tunnel_enabled, tunnel_token_enc,
+			sudo_status, sudo_mode, terminal_enabled, tunnel_enabled, tunnel_token_enc,
 			error_msg, created_at, last_seen_at, group_name, apt_via_hub,
 			via, binary_via, ssh_host_key, api_port
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		h.Name, h.Addr, h.SSHPort, h.SSHUser, h.SSHAuthKind, h.SecretEnc,
 		h.Arch, h.Status, h.NktVersion, h.AdminUser, h.AdminPasswordEnc,
-		h.SudoStatus, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
+		legacySudoStatus(sudo), sudo, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
 		h.ErrorMsg, h.CreatedAt, h.LastSeenAt, h.Group, h.AptViaHub,
 		h.Via, h.BinaryVia, h.SSHHostKey, h.APIPort)
 	if err != nil {
 		return 0, err
 	}
 	return res.LastInsertId()
+}
+
+// importedSudoStatus — состояние sudo из файла экспорта; незнакомое —
+// «неизвестно» (уточнится первой же проверкой хоста).
+func importedSudoStatus(s string) string {
+	if ValidSudoStatus(s) {
+		return s
+	}
+	return SudoStatusUnknown
 }
 
 // replaceHost переписывает существующий хост данными из файла: адрес,
@@ -985,17 +995,18 @@ func (d *DB) replaceHost(ctx context.Context, id int64, h HostExport) error {
 	if h.AdminUser != "" && !validAdminUser.MatchString(h.AdminUser) {
 		return msgs.Errorf("store.invalidAdminName", h.AdminUser)
 	}
+	sudo := importedSudoStatus(h.SudoStatus)
 	_, err := d.ExecContext(ctx,
 		`UPDATE hosts SET
 			addr = ?, ssh_port = ?, ssh_user = ?, ssh_auth_kind = ?, secret_enc = ?,
 			arch = ?, status = ?, nkt_version = ?, admin_user = ?, admin_password_enc = ?,
-			sudo_status = ?, terminal_enabled = ?, tunnel_enabled = ?, tunnel_token_enc = ?,
+			sudo_status = ?, sudo_mode = ?, terminal_enabled = ?, tunnel_enabled = ?, tunnel_token_enc = ?,
 			error_msg = ?, group_name = ?, apt_via_hub = ?, via = ?, binary_via = ?,
 			ssh_host_key = ?, api_port = ?
 		WHERE id = ?`,
 		h.Addr, h.SSHPort, h.SSHUser, h.SSHAuthKind, h.SecretEnc,
 		h.Arch, h.Status, h.NktVersion, h.AdminUser, h.AdminPasswordEnc,
-		h.SudoStatus, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
+		legacySudoStatus(sudo), sudo, h.TerminalEnabled, h.TunnelEnabled, h.TunnelTokenEnc,
 		h.ErrorMsg, h.Group, h.AptViaHub, h.Via, h.BinaryVia,
 		h.SSHHostKey, h.APIPort, id)
 	return err
