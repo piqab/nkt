@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.120 — 2026-10-03
+
+- **The old hub-sudo instructions fit on one line.** The commands for a
+  host narrowed by nkt v1.11.111–1.11.117 are now joined with `&&` and can
+  be copied from the error window as a whole; there is also a `sudo sh -c`
+  variant for signing in as a user with a password.
+
 ## v1.11.119 — 2026-10-03
 
 - **Narrow sudo: `nkt.env` in the signed request.** When installing and

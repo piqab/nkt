@@ -208,9 +208,13 @@ request, and there is no compatibility. Updating such a host from the hub
 fails with instructions. On the host, as root, run:
 
 ```sh
-rm -f /etc/nkt/hub-sign.pub
-echo 'user ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub
-chmod 440 /etc/sudoers.d/nkt-hub
+rm -f /etc/nkt/hub-sign.pub && echo 'user ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub && chmod 440 /etc/sudoers.d/nkt-hub
+```
+
+If you sign in as this user and it has a sudo password:
+
+```sh
+sudo sh -c "rm -f /etc/nkt/hub-sign.pub && echo 'user ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub && chmod 440 /etc/sudoers.d/nkt-hub"
 ```
 
 Then press "Reinstall" and "Narrow sudo" in the hub.
