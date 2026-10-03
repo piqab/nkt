@@ -194,24 +194,30 @@ with full sudo narrows it right away:
   operation from a fixed list (installing or updating nkt, with the binary,
   unit and env checked against signed hashes; starting, stopping and
   restarting the service; its journal; the nkt admin password; the apt
-  proxy; removing its own rule), with a serial number, so an old request
+  proxy; the ClamAV database from the hub; cleanup when deleting the host;
+  removing its own rule), with a serial number, so an old request
   cannot be replayed. Files are first copied into a root directory and
   checked there, so they cannot be swapped after the check.
 
 The list of operations is built into nkt and only changes with its
 version; it cannot be edited from the interface, or the restriction would
-be worthless. Your own `sudo` steps in scripts take a separate rule in your
-own `sudoers.d` file, which nkt leaves alone. Where the hub got the binary
-(a release, your own build, an offline copy) does not matter: the hub the
-host already trusts signs it.
+be worthless. Hub scripts ("Profiles" → "Scripts") are not affected by
+narrow sudo: the `install` step installs nkt through the same job, the other
+steps go through the nkt API on the host (which runs as root), and
+`user add … sudo` creates a user with sudo rights on the host rather than
+giving the hub any rights. Where the hub got the binary (a release, your
+own build, an offline copy) does not matter: the hub the host already
+trusts signs it.
 
 If another rule (such as `90-cloud-init-users`) also gives this user
 passwordless sudo, the installation log warns about it: the mark stays
 red, and that rule has to be removed by hand.
 
-**What does not work without a password on a narrow-sudo host yet:**
-cleanup when deleting the host, the ClamAV database from the hub,
-installing nkt-edge on this host, and script steps with `sudo: true`.
+**One thing does not work without a password on a narrow-sudo host:**
+installing nkt-edge on it (certbot, its own service and ports are not
+`hub-sudo` operations). The hub refuses right away, before the job:
+temporarily give the user a `NOPASSWD: ALL` rule (or use a host connected
+as root), then press "Narrow sudo" after the installation.
 
 **Hosts installed earlier** keep full sudo until it is narrowed: the Sudo
 column has a "narrow sudo" button next to the red ⚠. It, and a click on

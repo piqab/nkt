@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"github.com/piqab/nkt/internal/hubsudo"
 	"io"
 	"net/http"
 	"os"
@@ -272,6 +273,22 @@ func (r *ClamDBPushRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	// Файлы принадлежат clamav, чтобы freshclam потом мог их обновлять;
 	// служба на время замены остановлена — иначе она может как раз в
 	// этот момент писать в те же файлы.
+	if host.SSHUser != "root" && r.m.hasHubKey(link.client) {
+		files := map[string]string{}
+		for _, name := range clamDBFiles {
+			if h, err := hubsudo.FileHash(filepath.Join(r.m.clamDBDir(), name)); err == nil {
+				files[name] = h
+			}
+		}
+		if out, err := r.m.hubSudo(link.client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpClamAV, Args: map[string]string{"stage": tmpDir}, Files: files}); err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return msgs.Errorf("hub.clamDBInstall", err, out)
+		}
+		jc.Log("hub.clamDBDone", host.Name)
+		return nil
+	}
 	script := fmt.Sprintf("set -e; systemctl stop clamav-freshclam 2>/dev/null || true; "+
 		"install -d -m 755 /var/lib/clamav; for f in %s/*.cvd; do install -m 644 \"$f\" /var/lib/clamav/; done; "+
 		"chown clamav:clamav /var/lib/clamav/*.cvd 2>/dev/null || true; systemctl start clamav-freshclam 2>/dev/null || true", tmpDir)

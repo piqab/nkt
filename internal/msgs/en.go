@@ -456,6 +456,7 @@ var enCatalog = map[string]string{
 	"hub.narrowSudoDone":                                  "sudo narrowed: without a password the hub may only run nkt hub-sudo",
 	"hub.narrowSudoOtherRule":                             "The nkt rule is narrowed, but passwordless sudo remains through another sudoers rule for this user; remove it by hand",
 	"hub.narrowSudoNeedsUpdate":                           "the host runs an old nkt without hub-sudo: update nkt on the host first, then narrow sudo (%s)",
+	"edge.narrowSudo":                                     "%s has narrow sudo; installing nkt-edge needs full sudo: temporarily give user %s a NOPASSWD: ALL rule (or use a host connected as root), then press “Narrow sudo” after the installation",
 	"api.backgroundJobsAreUnavailable":                    "background jobs are unavailable",
 	"api.curlInstalledHost":                               "curl is not installed on the host",
 	"api.emptyCommand":                                    "empty command",

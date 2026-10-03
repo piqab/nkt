@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.112 — 2026-10-03
+
+- **Narrow sudo: cleanup and ClamAV.** A narrow-sudo host now supports
+  cleanup when the host is deleted and the ClamAV database from the hub,
+  as signed `hub-sudo` operations (cleanup in one call, step by step in the
+  report). Installing nkt-edge on such a host is refused right away, with
+  instructions, instead of failing mid-job. The docs are corrected: hub
+  scripts are not affected by narrow sudo.
+
 ## v1.11.111 — 2026-10-03
 
 - **"Narrow sudo" for hosts installed earlier.** The Sudo column has a
