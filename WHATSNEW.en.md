@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.125 — 2026-10-03
+
+- **nkt repairs its outdated fail2ban filter by itself.** The `nkt-manual`
+  jail filter from nkt 1.11.x (without `<HOST>`) passed the configuration
+  check but broke the whole fail2ban reload, leaving the server without
+  jails, `sshd` included ("jail 'sshd' does not exist"). Now the host
+  replaces such a filter when nkt starts and every half hour and reloads
+  fail2ban; the audit log records it.
+
 ## v1.11.124 — 2026-10-03
 
 - **The fail2ban configuration check writes only jail and filter files**

@@ -447,6 +447,9 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages, Files: r.files, CloneRunner: r.cloneRun, GuestCreds: r.guestCreds,
 		UI: ui, Log: log, Version: version,
 	})
+	// Свои файлы fail2ban (устаревший фильтр nkt-manual и т. п.) — сверка
+	// при запуске и раз в полчаса.
+	server.StartMaintenance(ctx)
 
 	cmdjobSecrets = r.guestCreds.Secret
 	registerJobRunners(r.cfg, r.jobs, r.services, r.configs, r.firewall, r.firewalld, r.osusers,
@@ -908,6 +911,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	scheduler.SetDriftCheck(hubDriftCheck(r))
 	var jobs sync.WaitGroup
 	scheduler.Start(ctx, &jobs)
+	localAPI.StartMaintenance(ctx)
 
 	ui := webui.FS()
 	if ui == nil {

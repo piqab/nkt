@@ -15,6 +15,7 @@ var ruFail2banCatalog = map[string]string{
 	"finding.f2bConfigBroken.title":      "Конфигурация fail2ban не проходит проверку",
 	"finding.f2bConfigBroken.detail":     "fail2ban-client -t: %s. Сервер ещё работает со старыми настройками, но следующая перезагрузка или перезапуск fail2ban упадёт.",
 	"finding.f2bConfigBroken.suggestion": "Исправьте джейл из ошибки: поставьте недостающий фильтр или выключите джейл (enabled = false) в «Конфигурациях» → fail2ban.",
+	"f2b.noteOwnRefresh":                 "nkt: устаревший фильтр ручного джейла заменён текущим",
 	"f2b.notInstalled":                   "fail2ban не установлен",
 	"f2b.badBanTime":                     "Срок бана — от минуты до 10 лет",
 	"f2b.badIP":                          "Не адрес IPv4/IPv6: %q",
