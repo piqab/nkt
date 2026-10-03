@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.101 — 2026-10-03
+
+- **Forgejo example:** the `.env` template notes that Forgejo forbids
+  `admin`, `api`, `user`, `org`, `login` and other service names for
+  `FORGEJO_ADMIN_USER` (the deployment failed with `name is reserved`).
+
 ## v1.11.100 — 2026-10-03
 
 - **A Forgejo example instead of Gitea, without the install wizard.**

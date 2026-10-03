@@ -83,7 +83,7 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
       'POSTGRES_PASSWORD=<пароль базы>',
       'FORGEJO_DOMAIN=git.example.com',
       'FORGEJO_ROOT_URL=https://git.example.com/',
-      'FORGEJO_ADMIN_USER=<логин администратора>',
+      'FORGEJO_ADMIN_USER=<логин администратора; не admin, api, user, org, login… — Forgejo их запрещает>',
       'FORGEJO_ADMIN_PASSWORD=<пароль администратора>',
       'FORGEJO_ADMIN_EMAIL=<почта администратора>',
     ],
