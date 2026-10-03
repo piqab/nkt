@@ -33,6 +33,14 @@ nkt writes only its own files: `jail.d/nkt-*.local`,
 `jail.d/zz-nkt-hub.local`, `filter.d/nkt-*.conf`. The package's
 `jail.conf` is never touched, because a package update overwrites it.
 
+nkt updates its own files from earlier versions by itself, when the
+service starts and every half hour. The `nkt-manual` filter from nkt
+1.11.x lacked the `<HOST>` group: `fail2ban-client -t` accepts it, but a
+fail2ban reload fails as a whole and leaves the server without jails,
+`sshd` included ("jail 'sshd' does not exist"). Such a filter is replaced
+with the current one and a running fail2ban is reloaded; the audit log
+records it under `nkt`.
+
 ## State and jails
 
 The **“State”** card: whether the server runs, its version, how many

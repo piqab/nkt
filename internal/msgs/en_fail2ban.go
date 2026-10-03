@@ -15,6 +15,7 @@ var enFail2banCatalog = map[string]string{
 	"finding.f2bConfigBroken.title":      "The fail2ban configuration fails its check",
 	"finding.f2bConfigBroken.detail":     "fail2ban-client -t: %s. The server is still running with the old settings, but the next fail2ban reload or restart will fail.",
 	"finding.f2bConfigBroken.suggestion": "Fix the jail from the error: install the missing filter or disable the jail (enabled = false) in “Configs” → fail2ban.",
+	"f2b.noteOwnRefresh":                 "nkt: outdated manual jail filter replaced with the current one",
 	"f2b.notInstalled":                   "fail2ban is not installed",
 	"f2b.badBanTime":                     "Ban time must be between a minute and 10 years",
 	"f2b.badIP":                          "Not an IPv4/IPv6 address: %q",
