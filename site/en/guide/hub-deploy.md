@@ -535,9 +535,15 @@ the template, the check says so directly). Refusals are explained in words
 | keys accepted, no repository | a typo in the address |
 | server unreachable | the name does not resolve, no connection, or the certificate is not accepted |
 
-The token goes in a Basic header: with the login `oauth2` for GitLab;
-for the others (GitHub, Forgejo, Gitea, Codeberg) the login does not
-matter. After the keys are saved, the "repository is private" note in the
+The token is entered as is or as **`login:token`**. The hub signs in the
+way ordinary git does: the server answers "sign in needed" and git hands
+over the login and token (no header sent in advance, which some proxies in
+front of the server drop). Without a login in the field, GitLab gets
+`oauth2`, and for the others (GitHub, Forgejo, Gitea, Codeberg) the login
+does not matter. The hub's git does not use the system's saved passwords
+(`credential.helper`), only the pipeline's access. The check shows the last
+four characters of the saved token: compare them with the token on the
+server. After the keys are saved, the "repository is private" note in the
 description window disappears, and "Fill in the description" notes that the
 file was fetched with the pipeline's keys.
 

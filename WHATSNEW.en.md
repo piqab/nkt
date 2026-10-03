@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.105 — 2026-10-03
+
+- **A "login:token" token and sign-in like ordinary git.** In "Access" the
+  token can be entered as `login:token`; before, the whole string went as
+  the password and Forgejo rejected it. The hub signs in after the
+  server's request, like `git push`, instead of a header sent in advance;
+  the system's saved passwords (`credential.helper`) are no longer mixed
+  in. The access check shows the last four characters of the saved token.
+  Verified on Forgejo 16.0.5.
+
 ## v1.11.104 — 2026-10-03
 
 - **Repository access, explained.** "Access" in the new pipeline window

@@ -26,3 +26,18 @@ func TestClassifyGitError(t *testing.T) {
 		t.Error("token user")
 	}
 }
+
+func TestTokenLogin(t *testing.T) {
+	for _, c := range []struct{ repo, tok, user, pass string }{
+		{"https://forgejo.example.com/a/b.git", "abc123", "x-access-token", "abc123"},
+		{"https://gitlab.com/a/b.git", "glpat-x", "oauth2", "glpat-x"},
+		{"https://forgejo.example.com/a/b.git", "alex:abc123", "alex", "abc123"},
+	} {
+		if u, p := TokenLogin(c.repo, c.tok); u != c.user || p != c.pass {
+			t.Errorf("%s %s: %s %s", c.repo, c.tok, u, p)
+		}
+	}
+	if TokenHint("ddb8fd040dccff6fa3534487b84ce32abb97b90c") != "b90c" || TokenHint("short") != "" || TokenHint("alex:ddb8fd040dccff6fa3534487b84ce32abb97b90c") != "b90c" {
+		t.Error("hint")
+	}
+}
