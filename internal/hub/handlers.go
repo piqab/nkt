@@ -991,7 +991,45 @@ func (s *Server) handleSudoInfo(w http.ResponseWriter, r *http.Request) {
 	info := SudoInfo(host.SSHUser)
 	info["status"] = host.SudoStatus
 	info["user"] = host.SSHUser
+	// Живая проверка — только у установленного хоста: файл sudoers могли
+	// поменять руками, запомненное при установке устарело бы.
+	if host.Status != store.HostStatusNew && host.SSHUser != "root" {
+		st, err := s.hub.CheckSudo(r.Context(), id)
+		if err != nil {
+			info["check_error"] = msgs.Localize(msgs.FromContext(r.Context()), err)
+		} else {
+			info["status"] = st.Status
+			info["check"] = st
+			info["status_changed"] = st.Status != host.SudoStatus
+		}
+	}
 	writeJSON(w, http.StatusOK, info)
+}
+
+// handleDisableSudoRule — POST /hub/hosts/{id}/sudo/rule-off: отключить
+// чужую строку sudoers с полным sudo без пароля для пользователя хаба.
+func (s *Server) handleDisableSudoRule(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	var req struct {
+		File string `json:"file"`
+		Line int    `json:"line"`
+		Text string `json:"text"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	st, err := s.hub.DisableSudoRule(r.Context(), id, req.File, req.Line, req.Text)
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "host.sudo.ruleoff", strconv.FormatInt(id, 10), auditOutcome(err), req.File+":"+strconv.Itoa(req.Line))
+	if err != nil {
+		writeErr(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, st)
 }
 
 // handleRemoveSudoAccess deletes the sudoers drop-in the docs tell an

@@ -107,6 +107,15 @@ func (m *Manager) narrowSudo(client *ssh.Client, sshUser string) (string, error)
 	if sshUser == "root" || !validAdminUser.MatchString(sshUser) {
 		return "", msgs.Errorf("hub.narrowSudoUser", sshUser)
 	}
+	// Уже сужен (ключ хаба на месте, hub-sudo без пароля, полного sudo
+	// нет) — делать нечего; полный sudo для повтора не нужен.
+	if m.hasHubKey(client) {
+		if st, err := m.probeSudo(client, sshUser); err == nil && st.Status == store.SudoStatusNarrow {
+			if out, err := m.hubSudo(client, sshUser, hubsudo.Request{Op: hubsudo.OpPing}); err == nil && strings.Contains(out, "ok") {
+				return "already", nil
+			}
+		}
+	}
 	pub := hubsudo.PublicText(m.signKey())
 	rule := hubsudo.SudoersRule(sshUser)
 	keyScript := "set -e; umask 022; install -d -m 755 /etc/nkt; " +
@@ -149,7 +158,7 @@ func (m *Manager) NarrowSudo(ctx context.Context, hostID int64) (string, error) 
 		return "", err
 	}
 	status := store.SudoStatusNarrow
-	if mode != "narrow" {
+	if mode == "full" {
 		status = store.SudoStatusNopasswd
 	}
 	return mode, m.db.SetHostSudoStatus(ctx, hostID, status)
