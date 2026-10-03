@@ -34,6 +34,7 @@ import { ClustersCard, NewClusterModal } from '../components/Clusters'
 import { ImportPlanModal } from '../components/ImportPlanModal'
 import { HelpButton, TitleHelp } from '../components/Docs'
 import { takeUpdateAllAfterHub } from '../updateAllAfterHub'
+import { SudoInfoModal } from '../components/SudoInfoModal'
 
 /** Хост из параметров задания установки (host.install), иначе null. */
 function installJobHost(job: Job): number | null {
@@ -376,6 +377,7 @@ export default function Hosts({
   // «Обновить всё»: пока запускаются задания по хостам.
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [updateAllDialog, setUpdateAllDialog] = useState(false)
+  const [sudoInfo, setSudoInfo] = useState<HubHost | null>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
   // Set when "экспорт с ключом" is clicked — opens ExportPasswordModal
   // instead of downloading immediately, since the file about to be
@@ -742,17 +744,6 @@ export default function Hosts({
     try {
       const res = await api<{ authorized_key: string }>(`/hub/hosts/${host.id}/pubkey`)
       setPubKeyInfo({ hostName: host.name, key: res.authorized_key })
-    } catch (err) {
-      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
-    }
-  }
-
-  async function removeSudoAccess(host: HubHost) {
-    if (!(await confirmAction(t('hosts.confirmRemoveSudo', { user: host.ssh_user, name: host.name })))) return
-    setNotice(null)
-    try {
-      await api(`/hub/hosts/${host.id}/sudo/remove`, { method: 'POST' })
-      reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
     }
@@ -1230,15 +1221,11 @@ export default function Hosts({
           <span className="small muted">—</span>
         ) : (
           <span className="row row-nowrap" style={{ gap: '0.15rem', alignItems: 'center' }}>
-            <SudoBadge status={h.sudo_status} />
+            <span role="button" style={{ cursor: 'pointer' }} onClick={() => setSudoInfo(h)}>
+              <SudoBadge status={h.sudo_status} />
+            </span>
             {h.sudo_status === 'nopasswd' ? (
-              <RowAction
-                action="disable"
-                label={t('hosts.removeNopasswd')}
-                danger
-                disabled={h.status === 'installing'}
-                onClick={() => removeSudoAccess(h)}
-              />
+              <RowAction action="backup" label={t('sudo.narrowShort')} disabled={h.status === 'installing'} onClick={() => setSudoInfo(h)} />
             ) : (
               // Пустое место той же ширины, что кнопка «снять»: без него
               // строки без NOPASSWD были бы короче, и колонка прыгала.
@@ -1347,6 +1334,7 @@ export default function Hosts({
 
   return (
     <>
+      {sudoInfo && <SudoInfoModal hostId={sudoInfo.id} hostName={sudoInfo.name} onClose={() => setSudoInfo(null)} onChanged={() => reload()} />}
       {updateAllDialog && (
         <UpdateAllModal plan={updatePlan} onClose={() => setUpdateAllDialog(false)} onStart={(retry) => void updateAllOutdated(retry)} />
       )}

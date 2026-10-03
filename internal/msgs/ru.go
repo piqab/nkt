@@ -454,6 +454,7 @@ var ruCatalog = map[string]string{
 	"hub.narrowSudoFailed":                                "Не удалось сузить sudo (полный остаётся): %v",
 	"hub.narrowSudoDone":                                  "sudo сужен: без пароля хабу разрешён только nkt hub-sudo",
 	"hub.narrowSudoOtherRule":                             "Правило nkt сужено, но sudo без пароля остаётся по другому правилу sudoers этого пользователя — уберите его вручную",
+	"hub.narrowSudoNeedsUpdate":                           "на хосте старый nkt без hub-sudo — сначала обновите nkt на хосте, потом сузьте sudo (%s)",
 	"api.backgroundJobsAreUnavailable":                    "фоновые задания недоступны",
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",

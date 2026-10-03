@@ -3920,5 +3920,36 @@
     "history": "History",
     "restore": "restore this one",
     "hiddenMark": "hidden"
+  },
+  "sudo": {
+    "title": "The hub's sudo on {{name}}",
+    "state": {
+      "narrow": "Narrow sudo: without a password the hub may run only the operations below, and only those it signs.",
+      "nopasswd": "Full passwordless sudo (NOPASSWD: ALL): whoever signs in as this user is root. Narrow it to the nkt operations.",
+      "password_required": "sudo needs a password: the hub cannot install or update nkt.",
+      "root": "Signed in as root: sudo is not needed.",
+      "unknown": "Unknown: the state is learned on the next install or update."
+    },
+    "explain": "The hub is root on the host through nkt anyway; the danger of full sudo lies in the other ways into this user (people, other keys, applications running as it). Narrow sudo leaves the hub only signed operations; the list cannot be edited, it changes with the nkt version.",
+    "opsTitle": "Operations of {{command}}:",
+    "op": {
+      "ping": "connection and key check",
+      "install": "installing and updating nkt: the binary, unit and env against signed hashes",
+      "activate": "reload units, enable and restart the nkt service",
+      "service": "start, stop or restart the nkt service",
+      "journal": "the nkt service journal (last lines)",
+      "passwd": "the nkt admin password on the host (for the hub's login)",
+      "aptproxy": "apt through the hub's package cache: on or off",
+      "sudoers-remove": "remove this rule"
+    },
+    "ruleTitle": "Rule {{path}}:",
+    "keyNote": "The hub's public key: {{path}}. Requests signed by another key and replays of old ones are rejected.",
+    "narrow": "Narrow sudo",
+    "narrowShort": "narrow sudo to the nkt operations",
+    "remove": "Remove the nkt rule",
+    "confirmNarrow": "Narrow sudo for {{user}} on {{name}}: the nkt rule is replaced with a narrow one, allowing only operations signed by the hub without a password. nkt on the host must not be older than the hub. Continue?",
+    "narrowed": "Done: sudo narrowed.",
+    "narrowedOtherRule": "The nkt rule is narrowed, but another sudoers rule still gives this user passwordless sudo; remove it by hand.",
+    "removed": "The nkt rule is removed. Installing and updating nkt on this host will now need sudo or root."
   }
 }
