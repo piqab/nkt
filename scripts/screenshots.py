@@ -75,8 +75,8 @@ SCREENS = [
     ('deploy-edges', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); scrollToText('nkt-edge')"),
     ('edge-probe', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Проверить снаружи', en: 'Check from outside'}) + '$')); await sleep(1000); setInput('.ant-modal input', 'example.com'); await sleep(300); clickText('.ant-modal button', new RegExp('^' + pick({ru: 'Проверить', en: 'Check'}) + '$')); await sleep(4000)"),
     ('hub-api-tokens', 'hub', '/', "menu({ru: 'О системе', en: 'About'}); await sleep(1500); scrollToText(pick({ru: 'API-токены', en: 'API tokens'}))"),
-    ('hub-webhooks', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'}); await sleep(1500); scrollToText(pick({ru: 'Исходящие вебхуки', en: 'Outgoing webhooks'}))"),
-    ('hub-bots', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'}); await sleep(1500); scrollToText(pick({ru: 'Бот Telegram', en: 'Telegram bot'}))"),
+    ('hub-webhooks', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'}); await sleep(1500); tab({ru: 'Настройка', en: 'Settings'}); await sleep(1200); scrollToText(pick({ru: 'Исходящие вебхуки', en: 'Outgoing webhooks'}))"),
+    ('hub-bots', 'hub', '/', "menu({ru: 'Оповещения', en: 'Alerts'}); await sleep(1500); tab({ru: 'Настройка', en: 'Settings'}); await sleep(1200); scrollToText(pick({ru: 'Бот Telegram', en: 'Telegram bot'}))"),
     ('deploy-edge', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Вебхук', en: 'Webhook'}) + '$')); await sleep(1200); clickText('.ant-modal .ant-tabs-tab-btn, .ant-modal .ant-segmented-item-label, .ant-modal button', new RegExp('^' + pick({ru: 'Через edge', en: 'Via edge'})))"),
 ]
 

@@ -16,6 +16,10 @@ log with settings for what to record and what to notify about; short
 episodes (“down” → “back” a couple of minutes later) collapse into one
 line “was down for N min”.
 
+The section has two tabs: **"Journal"** (always opened on entry) and
+**"Settings"**: what to record, notify about and hide, outgoing webhooks,
+and the Telegram and Slack bots.
+
 The third settings column is **"hide"**: the kind is recorded but not
 shown in the log and not counted as unread; hidden kinds cannot notify.
 Above the log are **filters**: by kind (several at once), by host, and a

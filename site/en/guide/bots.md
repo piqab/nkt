@@ -18,7 +18,7 @@ NAT.
 
 1. With [@BotFather](https://t.me/BotFather), use `/newbot` and get the
    token (`123456789:AA…`).
-2. "Alerts" → **"Telegram bot"** → "Configure": paste the token; the hub
+2. "Alerts" → "Settings" → **"Telegram bot"** → "Configure": paste the token; the hub
    checks it with Telegram and shows the bot name.
 3. Send the bot `/start` in the chat you need (add the bot to a group
    first): it answers with the chat number. Add the chat in the settings:
@@ -128,7 +128,7 @@ no way in.
      `https://<edge>/callbacks/slack/interactive`;
    - **Install to Workspace**; invite the bot to channels
      (`/invite @bot`).
-2. "Alerts" → **"Slack"** → "Configure": the **Bot User OAuth Token**
+2. "Alerts" → "Settings" → **"Slack"** → "Configure": the **Bot User OAuth Token**
    (`xoxb-…`, which the hub checks with Slack) and the **Signing Secret**
    (Basic Information). The card shows ready Request URLs: through an edge
    with the callbacks role if there is one, otherwise the hub's own

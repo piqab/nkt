@@ -108,7 +108,7 @@ output.
 ## Step 5. The Telegram bot
 
 1. [@BotFather](https://t.me/BotFather) → `/newbot` → token.
-2. "Alerts" → **"Telegram bot"** → "Configure": the token; then add the
+2. "Alerts" → "Settings" → **"Telegram bot"** → "Configure": the token; then add the
    bot to the team chat and send `/start`, and it answers with the chat
    number.
 3. The chat: role **admin**, alerts on. "Who may act": the on-call
@@ -138,7 +138,7 @@ buttons, and the commands `/status`, `/hosts`, `/deploy shop` (after the
    **GitHub: Create Issue**: an expression with `$json.pipeline.name` in
    the title, and `$json.error`, `$json.tag` and a link to the hub in the
    body.
-2. Put the trigger's Production URL into the hub: "Alerts" → **"Outgoing
+2. Put the trigger's Production URL into the hub: "Alerts" → "Settings" → **"Outgoing
    webhooks"** → "New recipient", event "deployment failed". Paste the
    secret the hub shows into the trigger's Signing Secret field.
 3. "Test" on the recipient: n8n receives a `test` event (the trigger skips

@@ -166,7 +166,7 @@ The response body is `{"error": "…"}` in the `Accept-Language` language.
 ## Outgoing webhooks
 
 The other direction: the hub sends events out by itself, to n8n, a chat
-bot or your own system. "Alerts" → **"Outgoing webhooks"** → "New
+bot or your own system. "Alerts" → "Settings" → **"Outgoing webhooks"** → "New
 recipient": a name, a URL (`http://` or `https://`), which events, hosts
 and groups, and the text language. The hub reaches out by itself, so
 nothing needs to be exposed.
