@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.118 — 2026-10-03
+
+- **The sudo mark follows a check of the host after every operation.**
+  After installation, update, narrowing and rule removal, the hub looks
+  at what is really allowed without a password. Previously, reinstalling
+  a host with the hub key turned the mark green even if another rule
+  still granted full sudo, and removing the rule left it "unknown".
+
 ## v1.11.117 — 2026-10-03
 
 - **Temporary files on hosts are owner-only.** The staging directories

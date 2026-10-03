@@ -157,11 +157,16 @@ func (m *Manager) NarrowSudo(ctx context.Context, hostID int64) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	status := store.SudoStatusNarrow
+	fallback := store.SudoStatusNarrow
 	if mode == "full" {
-		status = store.SudoStatusNopasswd
+		fallback = store.SudoStatusNopasswd
 	}
-	return mode, m.db.SetHostSudoStatus(ctx, hostID, status)
+	// Итог — по живой проверке: окно пишет «полный sudo остался» ровно
+	// тогда, когда значок останется красным.
+	if m.refreshSudoStatus(ctx, hostID, link.client, host.SSHUser, fallback) == store.SudoStatusNopasswd {
+		mode = "full"
+	}
+	return mode, nil
 }
 
 // SudoInfo — что разрешено хабу без пароля на хосте (окно «что

@@ -1083,26 +1083,34 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// Both steps above needed sudo for a non-root SSHUser and neither
 	// failed on it — nopasswd sudo (or root, needing none at all) is
 	// confirmed working, right here, for free, with no separate probe.
+	// Значок sudo — по живой проверке хоста после установки, а не по
+	// догадке: на хосте с ключом хаба может оставаться чужое правило с
+	// полным sudo.
 	switch {
 	case narrow:
-		_ = m.db.SetHostSudoStatus(ctx, hostID, store.SudoStatusNarrow)
+		if m.refreshSudoStatus(ctx, hostID, client, host.SSHUser, store.SudoStatusNarrow) == store.SudoStatusNopasswd {
+			report("hub.narrowSudoOtherRule")
+		}
 	case host.SSHUser != "root" && host.NktVersion == "":
 		// Первая установка с полным sudo — сразу сузить: дальше хабу без
 		// пароля нужен только hub-sudo.
 		if mode, err := m.narrowSudo(client, host.SSHUser); err != nil {
 			report("hub.narrowSudoFailed", err)
-			m.recordSudoOutcome(ctx, hostID, host.SSHUser, nil)
-		} else if mode == "narrow" {
-			report("hub.narrowSudoDone")
-			narrow = true
-			_ = m.db.SetHostSudoStatus(ctx, hostID, store.SudoStatusNarrow)
+			m.refreshSudoStatus(ctx, hostID, client, host.SSHUser, store.SudoStatusNopasswd)
 		} else {
-			report("hub.narrowSudoOtherRule")
 			narrow = true
-			_ = m.db.SetHostSudoStatus(ctx, hostID, store.SudoStatusNopasswd)
+			fallback := store.SudoStatusNarrow
+			if mode == "full" {
+				fallback = store.SudoStatusNopasswd
+			}
+			if m.refreshSudoStatus(ctx, hostID, client, host.SSHUser, fallback) == store.SudoStatusNopasswd {
+				report("hub.narrowSudoOtherRule")
+			} else {
+				report("hub.narrowSudoDone")
+			}
 		}
 	default:
-		m.recordSudoOutcome(ctx, hostID, host.SSHUser, nil)
+		m.refreshSudoStatus(ctx, hostID, client, host.SSHUser, sudoStatusAfterSuccess(host.SSHUser))
 	}
 
 	report("hub.waitingHealth")
@@ -1409,10 +1417,10 @@ func (m *Manager) RemoveSudoAccess(ctx context.Context, hostID int64) error {
 	} else if out, err := runRemote(link.client, "sudo -n rm -f "+sudoersDropIn); err != nil {
 		return diagnoseInstallError(host.SSHUser, sudoersDropIn, err, out)
 	}
-	// Not password_required: some *other* NOPASSWD rule this file didn't
-	// create might still grant access. Unknown is the honest answer until
-	// the next install/update actually re-observes it either way.
-	return m.db.SetHostSudoStatus(ctx, hostID, store.SudoStatusUnknown)
+	// Что осталось — проверкой: чужое правило может по-прежнему давать
+	// sudo без пароля. Не вышло проверить — «неизвестно», а не догадка.
+	m.refreshSudoStatus(ctx, hostID, link.client, host.SSHUser, store.SudoStatusUnknown)
+	return nil
 }
 
 // loadUnitTemplate reads deploy/netknownsthat.service as-is from the hub's
