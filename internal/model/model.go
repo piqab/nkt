@@ -1103,6 +1103,9 @@ type Fail2banState struct {
 	BannedNow int `json:"banned_now"`
 	// Error — почему состояние не прочитано (сервер не отвечает и т. п.).
 	Error string `json:"error,omitempty"`
+	// ConfigError — конфигурация не проходит fail2ban-client -t: сервер
+	// ещё работает, но следующая перезагрузка или перезапуск упадёт.
+	ConfigError string `json:"config_error,omitempty"`
 }
 
 // Fail2banJail — один запущенный джейл.

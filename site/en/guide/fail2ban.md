@@ -50,8 +50,14 @@ bans (now / total). Row actions:
   shows before writing;
 - **version history** of the jail file.
 
-Disabled nkt jails (not among the running ones) are listed below the
-table with an “enable” link.
+Disabled nkt jails (`enabled = false`) are listed below the table with
+an “enable” link. Jails that are enabled but that fail2ban did not start
+(no log, no filter, the wrong backend) are shown separately, in red,
+with the fail2ban log lines about the reason and an “Edit” link;
+“enable” would not help them. If the whole fail2ban configuration fails
+its check (`fail2ban-client -t`), a warning with the error appears above
+the table: the server is still running with the old settings, but the
+next reload will fail.
 
 ## Editing a jail
 
@@ -179,6 +185,8 @@ ban the hub itself. So:
 - **fail2ban does not protect SSH**: no sshd jail is running.
 - **A jail sees nothing**: its log files are not on disk.
 - **The hub can ban itself**: high.
+- **The fail2ban configuration fails its check**: high; the next fail2ban
+  reload or restart will fail.
 
 The findings show in the host's “Findings”; high ones arrive as hub
 alerts.
@@ -199,14 +207,37 @@ The **“fail2ban”** section of the hub menu:
 
 **Template to hosts.** A window with the list of hosts: checkboxes are
 cleared by default, with “Select all” and “Clear all”; a host without
-fail2ban cannot be selected. **“Check”** is required first: a dry run on
-each selected host that writes nothing. For every host it shows “will
-change”, “no changes”, “skipped” (with the reason) or “error”, and a file
-diff for changes. **“Apply”** becomes available only after the check and
-applies exactly what was checked: a hub job, three hosts at a time, with
-the standard job log window. Each host writes the files, checks the
-fail2ban configuration and rolls the files back itself on error. A check
-is valid for 30 minutes; if you change the host selection, check again.
+fail2ban cannot be selected. **“Check”** is required first: a hub job
+that does a dry run on each selected host and writes nothing. The host
+builds a copy of its fail2ban configuration with the template files and
+checks it as a whole (`fail2ban-client -t`). For every host it shows
+“will change”, “no changes”, “skipped” (with the reason) or “error”; for
+changes, a file diff and the hub protection: “hub in ignoreip” or “hub
+protection will be added first”. If the host's configuration was broken
+before the template (for example, a jail points at a missing filter),
+the window says so plainly, and such a host is not included in the
+application.
+
+**“Apply”** becomes available only after the check and applies exactly
+what was checked: a hub job, three hosts at a time, with the standard
+job log window. On each host, in order:
+
+1. The hub protection file: the hub address as this host sees it (the
+   hub learns it over SSH right before the check) goes into `ignoreip`.
+   A host whose hub address cannot be learned (reachable only through
+   the tunnel) does not get the template.
+2. The template files, a configuration check and a fail2ban reload.
+3. A check that all previous jails and the template's jail are running;
+   if not, the files are rolled back, fail2ban is reloaded again, and the
+   error carries the fail2ban log lines.
+4. If the hub still got banned (old log entries picked up by a fresh
+   jail), the ban is lifted right away; the job log shows this.
+
+All hub fail2ban jobs (checks, template applications, banning and
+unbanning on all hosts) run in one queue, one at a time. A check is
+valid for 30 minutes and once; if you change the host selection, check
+again. A host with an old nkt (without the configuration check) is
+skipped with a request to update nkt.
 
 Each host provides its own text of a standard template: for example,
 `sshd` on a host where the sshd log is only in journald gets

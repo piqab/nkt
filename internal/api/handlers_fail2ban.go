@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -92,7 +93,24 @@ func (s *Server) f2bSummary(ctx context.Context) map[string]any {
 			bans = append(bans, map[string]string{"ip": b.IP, "jail": b.Jail})
 		}
 	}
-	return map[string]any{"installed": st.Installed, "running": st.Running, "banned": st.BannedNow, "bans": bans}
+	out := map[string]any{"installed": st.Installed, "running": st.Running, "banned": st.BannedNow, "bans": bans}
+	if st.Installed {
+		// Хаб по этому флагу передаёт свой адрес сразу, а не через
+		// несколько часов: fail2ban могли поставить только что.
+		out["hub_protected"] = s.f2bHubProtected(ctx)
+	}
+	return out
+}
+
+// f2bHubProtected — адрес хаба известен и файл защиты актуален.
+func (s *Server) f2bHubProtected(ctx context.Context) bool {
+	hub := s.f2bHubAddr(ctx)
+	if !hub.IsValid() {
+		return false
+	}
+	c := s.f2bCollector()
+	raw, err := c.ReadFile(path.Join(s.f2bRoot(), fail2ban.HubIgnoreFile))
+	return err == nil && string(raw) == fail2ban.HubIgnoreContent(fail2ban.DefaultIgnoreIP(c, s.f2bRoot()), hub)
 }
 
 // f2bHubAddr — внешний адрес хаба, сообщённый хабом.
@@ -162,7 +180,7 @@ func (s *Server) handleF2BStatus(w http.ResponseWriter, r *http.Request) {
 		"actions":        fail2ban.Actions,
 		"simulated":      s.cfg.IsFixtures(),
 	}
-	out["nkt_jails"] = s.f2bNktJails()
+	out["nkt_jails"] = s.f2bNktJails(st)
 	if hub.IsValid() {
 		out["hub_addr"] = hub.String()
 	}
@@ -178,9 +196,13 @@ type f2bNktJail struct {
 	Jail    string `json:"jail"`
 	Path    string `json:"path"`
 	Enabled bool   `json:"enabled"`
+	// Failed — включён, сервер работает, а джейла среди запущенных нет:
+	// fail2ban его не поднял. Reason — строки журнала fail2ban о нём.
+	Failed bool   `json:"failed,omitempty"`
+	Reason string `json:"reason,omitempty"`
 }
 
-func (s *Server) f2bNktJails() []f2bNktJail {
+func (s *Server) f2bNktJails(st *model.Fail2banState) []f2bNktJail {
 	c := s.f2bCollector()
 	files, _ := c.Glob(path.Join(s.f2bRoot(), "jail.d", "nkt-*.local"))
 	sort.Strings(files)
@@ -195,10 +217,45 @@ func (s *Server) f2bNktJails() []f2bNktJail {
 				continue
 			}
 			enabled := strings.EqualFold(strings.TrimSpace(keys["enabled"]), "true")
-			out = append(out, f2bNktJail{Jail: name, Path: f, Enabled: enabled})
+			j := f2bNktJail{Jail: name, Path: f, Enabled: enabled}
+			if enabled && st != nil && st.Running && !fail2ban.HasJail(st, name) {
+				j.Failed = true
+				j.Reason = jailStartError(c, name)
+			}
+			out = append(out, j)
 		}
 	}
 	return out
+}
+
+// jailStartError — последние строки журнала fail2ban об ошибках джейла
+// (почему он не поднялся: нет журнала, нет фильтра, не тот backend).
+func jailStartError(c collect.Collector, jail string) string {
+	raw, err := c.ReadFile(fail2ban.LogPath)
+	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	if len(lines) > 2000 {
+		lines = lines[len(lines)-2000:]
+	}
+	marks := []string{"'" + jail + "'", "[" + jail + "]", " " + jail + " jail", "jail " + jail}
+	var hit []string
+	for _, l := range lines {
+		if !strings.Contains(l, "ERROR") && !strings.Contains(l, "WARNING") {
+			continue
+		}
+		for _, m := range marks {
+			if strings.Contains(l, m) {
+				hit = append(hit, strings.TrimSpace(l))
+				break
+			}
+		}
+	}
+	if len(hit) > 5 {
+		hit = hit[len(hit)-5:]
+	}
+	return strings.Join(hit, "\n")
 }
 
 // handleF2BLog — GET /fail2ban/log?days=7&q=&jail=&action=&limit=.
@@ -772,6 +829,9 @@ type f2bTemplateRequest struct {
 	Filter      string `json:"filter"`
 	Note        string `json:"note"`
 	DryRun      bool   `json:"dry_run"`
+	// HubAddr — адрес хаба глазами этого хоста (хаб узнаёт его по SSH
+	// перед применением): защита от самобана ставится до джейла.
+	HubAddr string `json:"hub_addr,omitempty"`
 }
 
 func (req *f2bTemplateRequest) check() error {
@@ -888,29 +948,75 @@ func (s *Server) handleF2BTemplateApply(w http.ResponseWriter, r *http.Request) 
 	}
 	ctx := r.Context()
 	c := s.f2bCollector()
+	root := s.f2bRoot()
+	hub := s.f2bHubAddr(ctx)
+	if req.HubAddr != "" {
+		a, err := fail2ban.ParseIP(req.HubAddr)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		hub = a
+	}
 	jailName := fail2ban.TemplateJailName(req.Jail)
 	jailText := strings.TrimRight(fail2ban.WithFilter(req.Name, req.Jail, req.Filter), "\n") + "\n"
 	header := "# Managed by nkt: template " + req.Name + "\n"
 	jailText = header + strings.TrimPrefix(jailText, header)
 	var changes []f2bFileChange
 	add := func(rel, after string) {
-		full := path.Join(s.f2bRoot(), rel)
+		full := path.Join(root, rel)
 		ch := f2bFileChange{Path: full, After: after}
 		if raw, err := c.ReadFile(full); err == nil {
 			ch.Before, ch.Exists = string(raw), true
 		}
 		changes = append(changes, ch)
 	}
+	// Защита хаба — первой: джейл не должен начать работу раньше, чем
+	// адрес хаба окажется в ignoreip.
+	hubProtected := false
+	if hub.IsValid() {
+		add(fail2ban.HubIgnoreFile, fail2ban.HubIgnoreContent(fail2ban.DefaultIgnoreIP(c, root), hub))
+		last := changes[len(changes)-1]
+		hubProtected = last.Before == last.After
+	}
 	if f := strings.TrimSpace(req.Filter); f != "" {
 		add(fail2ban.FilterFile(req.Name), f+"\n")
 	}
 	add(fail2ban.JailFile(jailName), jailText)
+
+	// Проверка конфигурации с будущими файлами — и в пробном прогоне, и
+	// перед записью.
+	pending := map[string]string{}
+	for _, ch := range changes {
+		if ch.Before != ch.After {
+			pending[strings.TrimPrefix(strings.TrimPrefix(ch.Path, root), "/")] = ch.After
+		}
+	}
+	installed := fail2ban.Installed(ctx, c)
+	var test fail2ban.ConfigTest
+	if installed && len(pending) > 0 {
+		test = fail2ban.TestConfig(ctx, c, root, pending)
+	} else {
+		test = fail2ban.ConfigTest{OK: true}
+	}
+	hubStr := ""
+	if hub.IsValid() {
+		hubStr = hub.String()
+	}
 	if req.DryRun {
-		writeJSON(w, http.StatusOK, map[string]any{"files": changes})
+		writeJSON(w, http.StatusOK, map[string]any{"files": changes, "test": test, "hub_addr": hubStr, "hub_protected": hubProtected})
 		return
 	}
-	if !fail2ban.Installed(ctx, c) {
+	if !installed {
 		writeErr(w, r, http.StatusConflict, msgs.Errorf("f2b.notInstalled"))
+		return
+	}
+	if !test.OK {
+		key := "f2b.configTestFailed"
+		if test.Preexisting {
+			key = "f2b.configBrokenBefore"
+		}
+		writeErr(w, r, http.StatusBadRequest, msgs.Errorf(key, test.Output))
 		return
 	}
 	user := auth.Username(ctx)
@@ -918,34 +1024,113 @@ func (s *Server) handleF2BTemplateApply(w http.ResponseWriter, r *http.Request) 
 	if note == "" {
 		note = msgs.Tc(ctx, "f2b.noteTemplate", req.Name)
 	}
-	running := fail2ban.CollectBans(ctx, c).Running
+	if req.HubAddr != "" && hub != s.f2bHubAddr(ctx) {
+		_ = s.db.KVSet(ctx, f2bHubAddrKey, hub.String())
+		s.db.Audit(ctx, user, "fail2ban.hub_addr", hub.String(), "ok", nil)
+	}
+	before := fail2ban.CollectBans(ctx, c)
+	running := before.Running
+	rollback := func(upto int, reload bool) {
+		for k, prev := range changes[:upto] {
+			if prev.Before == prev.After {
+				continue
+			}
+			last := reload && k == upto-1
+			if prev.Exists {
+				_, _ = s.configs.Write(ctx, msgs.FromContext(ctx), user, prev.Path, prev.Before, note, last)
+			} else {
+				_ = c.DeleteFile(prev.Path)
+			}
+		}
+		if reload {
+			_, _ = fail2ban.Reload(ctx, c, "")
+		}
+	}
+	lastChanged := -1
 	for i, ch := range changes {
-		last := i == len(changes)-1
+		if ch.Before != ch.After {
+			lastChanged = i
+		}
+	}
+	for i, ch := range changes {
 		if ch.Before == ch.After {
 			continue
 		}
-		if _, err := s.configs.Write(ctx, msgs.FromContext(ctx), user, ch.Path, ch.After, note, last && running); err != nil {
-			// Джейл не прошёл проверку — фильтр, записанный перед ним,
-			// тоже возвращается как был.
-			for _, prev := range changes[:i] {
-				if prev.Before == prev.After {
-					continue
-				}
-				if prev.Exists {
-					_, _ = s.configs.Write(ctx, msgs.FromContext(ctx), user, prev.Path, prev.Before, note, false)
-				} else {
-					_ = c.DeleteFile(prev.Path)
-				}
-			}
+		if _, err := s.configs.Write(ctx, msgs.FromContext(ctx), user, ch.Path, ch.After, note, i == lastChanged && running); err != nil {
+			// Не прошла проверка или перезагрузка — записанное до этого
+			// возвращается как было.
+			rollback(i, false)
 			s.db.Audit(ctx, user, "fail2ban.template_apply", req.Name, "error", err.Error())
 			writeErr(w, r, http.StatusBadRequest, err)
 			return
 		}
 	}
+	s.f2bInvalidate()
+	var unbanned []string
+	// В снимке (fixtures) команды поддельные: список джейлов после
+	// перезагрузки не меняется, сверять нечего.
+	if running && c.Mode() != "fixtures" {
+		// Перезагрузка прошла, но джейл мог не подняться (нет журнала,
+		// не тот backend): прежние джейлы и джейл шаблона должны работать.
+		after := fail2ban.CollectBans(ctx, c)
+		want := fail2ban.RunningJails(before)
+		if jailEnabled(jailText, jailName) {
+			want = append(want, jailName)
+		}
+		have := map[string]bool{}
+		for _, n := range fail2ban.RunningJails(after) {
+			have[n] = true
+		}
+		var lost []string
+		for _, n := range want {
+			if !have[n] && !slices.Contains(lost, n) {
+				lost = append(lost, n)
+			}
+		}
+		if len(lost) > 0 {
+			rollback(len(changes), true)
+			s.f2bInvalidate()
+			msg := msgs.Errorf("f2b.jailsLost", strings.Join(lost, ", "), f2bLogTail(c))
+			s.db.Audit(ctx, user, "fail2ban.template_apply", req.Name, "error", msgs.Localize(msgs.FromContext(ctx), msg))
+			writeErr(w, r, http.StatusBadRequest, msg)
+			return
+		}
+		// Хаб успел попасть в бан (старые записи журнала свежим джейлом) —
+		// снять сразу.
+		if hub.IsValid() {
+			if unbanned = fail2ban.BannedIn(after, hub.String()); len(unbanned) > 0 {
+				_ = fail2ban.UnbanIP(ctx, c, hub.String())
+				s.db.Audit(ctx, user, "fail2ban.hub_unban", hub.String(), "ok", strings.Join(unbanned, ", "))
+			}
+		}
+	}
 	s.db.Audit(ctx, user, "fail2ban.template_apply", req.Name, "ok", nil)
 	s.f2bInvalidate()
 	s.rescanLater()
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "files": changes, "jail": jailName})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "files": changes, "jail": jailName, "hub_unbanned": unbanned})
+}
+
+// jailEnabled — включён ли джейл name в тексте.
+func jailEnabled(text, name string) bool {
+	v := strings.ToLower(strings.TrimSpace(fail2ban.ParseINI(text)[name]["enabled"]))
+	return v == "true" || v == "yes" || v == "1" || v == "on"
+}
+
+// f2bLogTail — последние строки журнала fail2ban (почему джейл не
+// поднялся).
+func f2bLogTail(c collect.Collector) string {
+	raw, err := c.ReadFile("/var/log/fail2ban.log")
+	if err != nil {
+		if res, err := c.Run(context.Background(), "journalctl", "-u", "fail2ban", "-n", "15", "--no-pager"); err == nil {
+			return strings.TrimSpace(res.Stdout)
+		}
+		return ""
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	if len(lines) > 15 {
+		lines = lines[len(lines)-15:]
+	}
+	return strings.Join(lines, "\n")
 }
 
 var logPathRe = regexp.MustCompile(`^/var/log/[A-Za-z0-9._/-]+$`)

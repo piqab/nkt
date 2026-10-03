@@ -210,7 +210,7 @@ func (m *Manager) pollHost(ctx context.Context, hostID int64) {
 	m.noteFindings(ctx, hostID, body.Findings, severeNow)
 	m.noteUptime(ctx, hostID, body.UptimeS)
 	m.noteBans(ctx, hostID, body.Fail2ban)
-	m.maybePushHubAddr(hostID, channel)
+	m.maybePushHubAddr(hostID, channel, body.Fail2ban)
 
 	// Машины внутри хоста: их состояние знает только он. Спрашиваем
 	// вторым запросом и только когда есть кого спрашивать — у хоста без

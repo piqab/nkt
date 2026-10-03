@@ -1078,6 +1078,8 @@ export interface Fail2banState {
   jails: Fail2banJail[]
   banned_now: number
   error?: string
+  /** fail2ban-client -t не проходит: следующая перезагрузка упадёт. */
+  config_error?: string
 }
 
 /** GET /fail2ban. */
@@ -1121,4 +1123,7 @@ export interface Fail2banNktJail {
   jail: string
   path: string
   enabled: boolean
+  /** Включён, а fail2ban его не поднял; reason — строки журнала. */
+  failed?: boolean
+  reason?: string
 }

@@ -71,7 +71,10 @@ export default function Fail2ban({ me }: { me: Me }) {
 
   const hubCovered = (j: Fail2banJail) => !data?.hub_addr || j.name === data.manual_jail || ignoreCovers(j.ignore_ip ?? [], data.hub_addr)
   const runningNames = new Set((state?.jails ?? []).map((j) => j.name))
-  const disabledNkt = (data?.nkt_jails ?? []).filter((j) => !runningNames.has(j.jail))
+  // Выключенные файлом (enabled = false) и включённые, но не поднятые
+  // fail2ban, — разные случаи: второму «включить» не поможет.
+  const disabledNkt = (data?.nkt_jails ?? []).filter((j) => !runningNames.has(j.jail) && !j.failed)
+  const failedNkt = (data?.nkt_jails ?? []).filter((j) => j.failed)
 
   return (
     <>
@@ -201,13 +204,39 @@ export default function Fail2ban({ me }: { me: Me }) {
                           {j.name !== data.manual_jail && (
                             <RowAction action="disable" label={t('fail2ban.disableJail')} danger onClick={() => setEdit({ jail: j.name, enabled: false })} />
                           )}
-                          <RowAction action="history" label={t('configs.versionHistoryTitle')} onClick={() => setHistory(`${data.root}/jail.d/nkt-${j.name}.local`)} />
+                          <RowAction action="history" label={t('configs.versionHistoryTitle')} onClick={() => setHistory(jailFilePath(data, j.name))} />
                         </div>
                       ),
                   },
                 ]}
               />
             </div>
+            {failedNkt.length > 0 && (
+              <Banner kind="error">
+                <div>{t('fail2ban.failedJails')}</div>
+                {failedNkt.map((j) => (
+                  <div key={j.jail} style={{ marginTop: '0.3rem' }}>
+                    <span className="mono">{j.jail}</span>{' '}
+                    {admin && (
+                      <Button size="small" type="link" onClick={() => setEdit({ jail: j.jail })}>
+                        {t('fail2ban.editJail')}
+                      </Button>
+                    )}
+                    {j.reason ? (
+                      <pre className="mono small" style={{ margin: '0.2rem 0 0', whiteSpace: 'pre-wrap' }}>{j.reason}</pre>
+                    ) : (
+                      <div className="small muted">{t('fail2ban.failedJailNoReason')}</div>
+                    )}
+                  </div>
+                ))}
+              </Banner>
+            )}
+            {data.state.config_error && (
+              <Banner kind="error">
+                <div>{t('fail2ban.configBroken')}</div>
+                <pre className="mono small" style={{ margin: '0.2rem 0 0', whiteSpace: 'pre-wrap' }}>{data.state.config_error}</pre>
+              </Banner>
+            )}
             {disabledNkt.length > 0 && (
               <div className="small" style={{ marginTop: '0.5rem' }}>
                 {t('fail2ban.disabledJails')}{' '}
@@ -421,6 +450,13 @@ function ManualBanModal({ status, onClose, onDone }: { status: Fail2banStatus; o
  * конфигураций (fail2ban-client -t, откат при ошибке, перезагрузка,
  * история). Форма меняет строки текста, текст можно править и руками.
  */
+/** Файл джейла nkt: настоящий путь из списка файлов (у ручного джейла
+ * nkt-manual файл — jail.d/nkt-manual.local, а не nkt-nkt-manual), иначе
+ * — тот, что nkt создаст для нового. */
+function jailFilePath(status: Fail2banStatus, jail: string): string {
+  return status.nkt_jails?.find((j) => j.jail === jail)?.path ?? `${status.root}/jail.d/nkt-${jail}.local`
+}
+
 function JailEditModal({
   jail,
   enabled,
@@ -439,7 +475,7 @@ function JailEditModal({
   onSaved: () => void
 }) {
   const { t } = useTranslation()
-  const path = `${status.root}/jail.d/nkt-${jail}.local`
+  const path = jailFilePath(status, jail)
   const [file, setFile] = useState<FileContent | null | undefined>(undefined)
   const [draft, setDraft] = useState('')
   const [note, setNote] = useState('')

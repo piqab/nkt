@@ -8,6 +8,27 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.123 — 2026-10-03
+
+- **fail2ban templates to hosts are safer.** “Check” is a hub job: the
+  host checks its whole fail2ban configuration together with the
+  template, so a configuration that was broken before the template (a
+  jail without a filter) shows up right away and such a host is left
+  out. Before the jail, the hub's ban protection is set (the hub address
+  as the host sees it); after the reload the host checks that all jails
+  are running and rolls the files back otherwise; a banned hub is
+  unbanned right away. All hub fail2ban jobs run in one queue. A host
+  with an old nkt is skipped with a request to update.
+- **The hub sends its address to a host right away** if the host has no
+  protection (for example, fail2ban was just installed), not after six
+  hours.
+- **Jails that fail2ban did not start** are shown separately, with the
+  reason from the log; previously they were listed as “disabled”, and
+  “enable” changed nothing. A new finding: the fail2ban configuration
+  fails its check.
+- **Editing the manual `nkt-manual` jail** opened an empty draft instead
+  of its file; fixed (version history too).
+
 ## v1.11.122 — 2026-10-03
 
 - **fail2ban on the hub: templates to selected hosts.** The hub's
