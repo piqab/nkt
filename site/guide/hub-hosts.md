@@ -201,9 +201,13 @@ title: Хосты хаба
 Обновление такого хоста с хаба откажет с инструкцией — на хосте под root:
 
 ```sh
-rm -f /etc/nkt/hub-sign.pub
-echo 'пользователь ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub
-chmod 440 /etc/sudoers.d/nkt-hub
+rm -f /etc/nkt/hub-sign.pub && echo 'пользователь ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub && chmod 440 /etc/sudoers.d/nkt-hub
+```
+
+Если вы входите этим пользователем и у него есть пароль sudo:
+
+```sh
+sudo sh -c "rm -f /etc/nkt/hub-sign.pub && echo 'пользователь ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub && chmod 440 /etc/sudoers.d/nkt-hub"
 ```
 
 затем в хабе «Переустановить» и «Сузить sudo».

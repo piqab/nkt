@@ -482,7 +482,7 @@ var enCatalog = map[string]string{
 	"hub.sudoRuleFileBad":                                 "file %q is not a separate rule in /etc/sudoers.d",
 	"hub.sudoRuleChanged":                                 "line %s:%d changed since the check; check again",
 	"hub.sudoRuleNotRemovable":                            "the hub does not disable the rule in %s itself: it is not only about this user, or the host is not narrowed yet",
-	"hub.hubSudoOutdated":                                 "the host has an old hub-sudo (nkt v1.11.111–1.11.117): it does not accept the new installation method, and there is no compatibility. On the host, as root, run:\n  rm -f /etc/nkt/hub-sign.pub\n  echo '%[1]s ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub\n  chmod 440 /etc/sudoers.d/nkt-hub\nthen in the hub press “Reinstall” and “Narrow sudo”",
+	"hub.hubSudoOutdated":                                 "the host has an old hub-sudo (nkt v1.11.111–1.11.117): it does not accept the new installation method, and there is no compatibility. On the host, run as root in one line: rm -f /etc/nkt/hub-sign.pub && echo '%[1]s ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub && chmod 440 /etc/sudoers.d/nkt-hub — or, signed in as %[1]s with a sudo password: sudo sh -c \"rm -f /etc/nkt/hub-sign.pub && echo '%[1]s ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub && chmod 440 /etc/sudoers.d/nkt-hub\" — then in the hub press “Reinstall” and “Narrow sudo”",
 	"api.backgroundJobsAreUnavailable":                    "background jobs are unavailable",
 	"api.curlInstalledHost":                               "curl is not installed on the host",
 	"api.emptyCommand":                                    "empty command",
