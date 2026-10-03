@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.111 — 2026-10-03
+
+- **"Narrow sudo" for hosts installed earlier.** The Sudo column has a
+  "narrow sudo" button for full sudo; it, and a click on the mark, open
+  "The hub's sudo" window: the state, the `hub-sudo` operations, the
+  sudoers rule, "Narrow sudo" and "Remove the nkt rule". Before replacing
+  the rule the hub checks that `hub-sudo` exists on the host (an old nkt
+  has to be updated first).
+
 ## v1.11.110 — 2026-10-03
 
 - **Narrow sudo.** The first installation of nkt as a user with

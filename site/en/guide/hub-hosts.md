@@ -212,8 +212,16 @@ red, and that rule has to be removed by hand.
 **What does not work without a password on a narrow-sudo host yet:**
 cleanup when deleting the host, the ClamAV database from the hub,
 installing nkt-edge on this host, and script steps with `sudo: true`.
-Hosts installed earlier keep full sudo until the "narrow" button (coming
-versions).
+
+**Hosts installed earlier** keep full sudo until it is narrowed: the Sudo
+column has a "narrow sudo" button next to the red ⚠. It, and a click on
+the mark, open the **"The hub's sudo"** window: the state, the list of
+`hub-sudo` operations with explanations, the sudoers rule itself and the
+key path, with "Narrow sudo" (for full sudo) and "Remove the nkt rule"
+buttons. Narrowing first, while full sudo still works, places the key and
+checks with a signed request that `hub-sudo` exists on the host; an old
+nkt does not know this command, and the window then asks to update nkt on
+the host first.
 
 ## Host SSH key
 

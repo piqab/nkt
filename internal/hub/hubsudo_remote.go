@@ -1,8 +1,11 @@
 package hub
 
 import (
+	"context"
+
 	"bytes"
 	"crypto/ed25519"
+	"github.com/piqab/nkt/internal/store"
 	"regexp"
 	"strconv"
 	"strings"
@@ -106,15 +109,55 @@ func (m *Manager) narrowSudo(client *ssh.Client, sshUser string) (string, error)
 	}
 	pub := hubsudo.PublicText(m.signKey())
 	rule := hubsudo.SudoersRule(sshUser)
-	script := "set -e; umask 022; install -d -m 755 /etc/nkt; " +
-		"printf %s " + shellQuote(pub) + " > " + hubsudo.PubKeyPath + ".new; chmod 644 " + hubsudo.PubKeyPath + ".new; mv " + hubsudo.PubKeyPath + ".new " + hubsudo.PubKeyPath + "; " +
-		"t=$(mktemp); printf %s " + shellQuote(rule) + " > $t; visudo -cf $t >/dev/null; chmod 440 $t; mv $t " + sudoersDropIn
-	out, err := runRemote(client, "sudo -n sh -c "+shellQuote(script))
-	if err != nil {
+	keyScript := "set -e; umask 022; install -d -m 755 /etc/nkt; " +
+		"printf %s " + shellQuote(pub) + " > " + hubsudo.PubKeyPath + ".new; chmod 644 " + hubsudo.PubKeyPath + ".new; mv " + hubsudo.PubKeyPath + ".new " + hubsudo.PubKeyPath
+	if out, err := runRemote(client, "sudo -n sh -c "+shellQuote(keyScript)); err != nil {
+		return "", diagnoseInstallError(sshUser, hubsudo.PubKeyPath, err, out)
+	}
+	// Пока полный sudo действует — убедиться, что hub-sudo на хосте есть и
+	// принимает ключ: старый nkt такой команды не знает, и с узким
+	// правилом хаб не смог бы его даже обновить.
+	if out, err := m.hubSudo(client, sshUser, hubsudo.Request{Op: hubsudo.OpPing}); err != nil || !strings.Contains(out, "ok") {
+		return "", msgs.Errorf("hub.narrowSudoNeedsUpdate", strings.TrimSpace(out))
+	}
+	ruleScript := "set -e; t=$(mktemp); printf %s " + shellQuote(rule) + " > $t; visudo -cf $t >/dev/null; chmod 440 $t; mv $t " + sudoersDropIn
+	if out, err := runRemote(client, "sudo -n sh -c "+shellQuote(ruleScript)); err != nil {
 		return "", diagnoseInstallError(sshUser, sudoersDropIn, err, out)
 	}
 	if _, err := runRemote(client, "sudo -n true"); err == nil {
 		return "full", nil
 	}
 	return "narrow", nil
+}
+
+// NarrowSudo — «сузить sudo» уже установленного хоста с полным sudo.
+func (m *Manager) NarrowSudo(ctx context.Context, hostID int64) (string, error) {
+	host, err := m.db.HostByID(ctx, hostID)
+	if err != nil {
+		return "", err
+	}
+	if host.SSHUser == "root" {
+		return "", msgs.Errorf("hub.hostConnectedAsRootSudo")
+	}
+	link, err := m.dialHost(ctx, host)
+	if err != nil {
+		return "", err
+	}
+	defer link.Close()
+	mode, err := m.narrowSudo(link.client, host.SSHUser)
+	if err != nil {
+		return "", err
+	}
+	status := store.SudoStatusNarrow
+	if mode != "narrow" {
+		status = store.SudoStatusNopasswd
+	}
+	return mode, m.db.SetHostSudoStatus(ctx, hostID, status)
+}
+
+// SudoInfo — что разрешено хабу без пароля на хосте (окно «что
+// разрешено»): операции hub-sudo и правило sudoers.
+func SudoInfo(sshUser string) map[string]any {
+	return map[string]any{"ops": hubsudo.Ops, "rule": hubsudo.SudoersRule(sshUser), "rule_path": sudoersDropIn,
+		"key_path": hubsudo.PubKeyPath, "command": hubsudo.Command}
 }

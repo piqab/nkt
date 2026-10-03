@@ -960,6 +960,40 @@ func (s *Server) handleHostPubKey(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"authorized_key": line})
 }
 
+// handleNarrowSudo — POST /hub/hosts/{id}/sudo/narrow: полный sudo → узкий.
+func (s *Server) handleNarrowSudo(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	mode, err := s.hub.NarrowSudo(r.Context(), id)
+	s.db.Audit(r.Context(), auth.Username(r.Context()), "host.sudo.narrow", strconv.FormatInt(id, 10), auditOutcome(err), mode)
+	if err != nil {
+		writeErr(w, r, http.StatusBadGateway, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"mode": mode})
+}
+
+// handleSudoInfo — GET /hub/hosts/{id}/sudo: что разрешено хабу без пароля.
+func (s *Server) handleSudoInfo(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	host, err := s.db.HostByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	info := SudoInfo(host.SSHUser)
+	info["status"] = host.SudoStatus
+	info["user"] = host.SSHUser
+	writeJSON(w, http.StatusOK, info)
+}
+
 // handleRemoveSudoAccess deletes the sudoers drop-in the docs tell an
 // operator to create for a non-root SSH user — a deliberate, admin-only
 // cleanup action, not something a viewer should ever be able to trigger on
