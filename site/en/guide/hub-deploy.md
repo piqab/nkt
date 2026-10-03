@@ -192,8 +192,32 @@ name. Then it is an ordinary edit with a diff. **"Examples"** are ready
 pipelines, each verified by a deployment; details and `.env` templates are
 in the repository's `examples/`. The chosen example is remembered: clicking
 "Fill in the description" again (say, after changing hosts) fills it in
-completely again. For your own link the `site:` block is commented out,
-with the placeholders `<service from compose>` and `<container port>`:
+completely again.
+
+For your own link the hub **fetches the compose file itself** (one commit,
+no history; a private repository with the pipeline's keys from "Access")
+and builds the description from it:
+
+- **the site**: the web service found by image ports (`EXPOSE` from the
+  registry, or compose `ports`/`expose` without it); databases, caches and
+  queues (postgres, mysql, redis…) are skipped, and the port is the one
+  inside the container. A **"Site"** choice appears next to the button:
+  "auto", any service of the file, or "no site"; changing it rebuilds the
+  description. The `site:` block stays commented out: put in the name and
+  uncomment it;
+- **files next to it**: relative volumes (`./nginx.conf`) → `files:`;
+- **services built from source** (`build:` without `image:`) → `images:`
+  asking for a ready image;
+- **unversioned images** (`latest`): a "pin a tag" comment;
+- **publications to the outside** (not on 127.0.0.1) of other services: a
+  commented-out `ports:`, since the default `bind` keeps them on loopback;
+- **`${…}` variables**: a `.env` template in a comment, defaults as they
+  are, password- or key-like ones as `<secret>`, `${X:?…}` as "required".
+
+A private repository without keys: the window says "the repository is
+private: set the name and “Access”, then “Fill in the description” again",
+and for now the description comes from the link alone, with the
+placeholders `<service from compose>` and `<container port>` in `site:`:
 
 | Example | What it shows |
 |---|---|

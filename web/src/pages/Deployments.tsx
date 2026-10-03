@@ -487,8 +487,9 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
               <HelpButton docKey="deploy:compose" isHub admin label={t('docs.labelCompose')} />
               <HelpButton docKey="deploy:site" isHub admin label={t('docs.labelSite')} />
             </Space>
-            {!pipeline && (
+            {!initial && (
               <ComposeFromLink
+                pipelineId={pipeline?.id}
                 onFill={(yaml, suggested) => {
                   setDraft(yaml)
                   if (!name) setName(suggested)
@@ -587,7 +588,7 @@ export function parseComposeLink(link: string): { repo: string; ref: string; fil
 
 /** «Compose по ссылке»: ссылка на compose-файл, хосты, имя стека →
  * описание конвейера action: compose (дальше — обычная правка с диффом). */
-function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: string) => void; onName: (name: string) => void }) {
+function ComposeFromLink({ pipelineId, onFill, onName }: { pipelineId?: number; onFill: (yaml: string, name: string) => void; onName: (name: string) => void }) {
   const { t } = useTranslation()
   const hosts = useApi<HubHost[]>('/hub/hosts')
   const [link, setLink] = useState('')
@@ -598,7 +599,12 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
   // описание»), и после — повторное заполнение тоже по примеру, пока
   // ссылку не сменили.
   const [pending, setPending] = useState<PipelineExample | null>(null)
-  function fill(link: string, project: string, ex?: PipelineExample) {
+  // Разбор самого файла (своя ссылка): кэш по ссылке и выбор сервиса сайта.
+  const [scan, setScan] = useState<{ link: string; scan: ComposeScan } | null>(null)
+  const [scanNote, setScanNote] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
+  const [siteChoice, setSiteChoice] = useState<string>('auto')
+  async function fill(link: string, project: string, ex?: PipelineExample, choice = siteChoice) {
     const p = parseComposeLink(link)
     if (!p) {
       setBad(true)
@@ -606,6 +612,33 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
     }
     setBad(false)
     const proj = (project || p.name).toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^[-_]+/, '').slice(0, 63) || 'app'
+    if (!ex) {
+      let sc = scan?.link === link ? scan.scan : null
+      if (!sc) {
+        setScanning(true)
+        setScanNote(null)
+        try {
+          const res = await api<{ scan?: ComposeScan; error?: string; closed?: boolean; has_access?: boolean }>('/hub/pipelines/scan', {
+            method: 'POST',
+            body: { repo: p.repo, ref: p.ref, file: p.file, pipeline_id: pipelineId ?? 0 },
+          })
+          if (res.scan) {
+            sc = res.scan
+            setScan({ link, scan: res.scan })
+          } else {
+            setScanNote(res.closed && !res.has_access ? t('deploy.scanClosed') : t('deploy.scanFailed', { error: res.error ?? '' }))
+          }
+        } catch (err) {
+          setScanNote(t('deploy.scanFailed', { error: errText(err) }))
+        } finally {
+          setScanning(false)
+        }
+      }
+      if (sc) {
+        onFill(scannedYaml(sc, p, proj, picked, choice, t), proj)
+        return
+      }
+    }
     // Сервисов чужого compose хаб не знает — заглушка явная.
     const site = ex?.site ?? { service: t('deploy.fromLinkSiteService'), port: t('deploy.fromLinkSitePort') }
     const block = (name: string, rec: Record<string, string | string[]> | undefined, comment: string) =>
@@ -666,9 +699,27 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
           options={(hosts.data ?? []).map((h) => ({ value: h.name, label: h.name }))}
         />
         <Input size="small" style={{ width: 140 }} value={project} onChange={(e) => setProject(e.target.value)} placeholder={t('deploy.fromLinkProject')} />
-        <Button size="small" disabled={!link || picked.length === 0} onClick={() => fill(link, project, pending?.link === link ? pending : undefined)}>
+        <Button size="small" loading={scanning} disabled={!link || picked.length === 0} onClick={() => void fill(link, project, pending?.link === link ? pending : undefined)}>
           {t('deploy.fromLinkFill')}
         </Button>
+        {scan?.link === link && pending?.link !== link && (
+          <Tooltip title={t('deploy.siteChoiceHint')}>
+            <Select
+              size="small"
+              style={{ minWidth: 190 }}
+              value={siteChoice}
+              onChange={(v: string) => {
+                setSiteChoice(v)
+                void fill(link, project, undefined, v)
+              }}
+              options={[
+                { value: 'auto', label: scan.scan.web ? t('deploy.siteAuto', { name: scan.scan.web }) : t('deploy.siteAutoNone') },
+                ...scan.scan.services.filter((s) => !s.build_only).map((s) => ({ value: s.name, label: `${t('deploy.siteService')}: ${s.name}` })),
+                { value: 'none', label: t('deploy.siteNone') },
+              ]}
+            />
+          </Tooltip>
+        )}
         <Dropdown
           trigger={['click']}
           menu={{
@@ -703,6 +754,8 @@ function ComposeFromLink({ onFill, onName }: { onFill: (yaml: string, name: stri
         </div>
       )}
       {bad && <span className="small" style={{ color: 'var(--status-error)' }}>{t('deploy.fromLinkBad')}</span>}
+      {scanNote && <span className="small" style={{ color: 'var(--status-warning)', fontWeight: 600 }}>{scanNote}</span>}
+      {scan?.link === link && <span className="small muted">{t('deploy.scanDone', { services: scan.scan.services.length, vars: scan.scan.vars.length })}</span>}
     </div>
   )
 }
@@ -1280,4 +1333,64 @@ function AccessCheckView({ check, checking, onRecheck }: { check: AccessCheck | 
       ) : null}
     </div>
   )
+}
+
+interface ComposeScan {
+  services: { name: string; image?: string; build_only?: boolean; ports?: number[]; image_ports?: boolean; published?: string[]; db?: boolean; unpinned?: boolean }[]
+  vars: { name: string; default?: string; has_default?: boolean; required?: boolean; secret?: boolean }[]
+  files?: string[]
+  web?: string
+  web_port?: number
+}
+
+const WEB_PORTS = [80, 8080, 3000, 8000, 5000, 8081, 8888, 9000, 4000, 5173, 8443, 443]
+
+/** Описание конвейера по разобранному compose-файлу: сайт (выбранный или
+ * «авто»), файлы рядом, образы для сервисов со сборкой, наружные
+ * публикации и шаблон .env — комментариями, где решать человеку. */
+function scannedYaml(
+  sc: ComposeScan,
+  p: { repo: string; ref: string; file: string },
+  proj: string,
+  hosts: string[],
+  choice: string,
+  t: (k: string, o?: Record<string, unknown>) => string,
+): string {
+  const svcPort = (name: string) => {
+    const s = sc.services.find((x) => x.name === name)
+    const ports = s?.ports ?? []
+    return WEB_PORTS.find((w) => ports.includes(w)) ?? ports[0] ?? 0
+  }
+  const siteService = choice === 'none' ? '' : choice === 'auto' ? (sc.web ?? '') : choice
+  const sitePort = siteService ? (choice === 'auto' ? (sc.web_port ?? svcPort(siteService)) : svcPort(siteService)) : 0
+  const lines: string[] = [`# ${t('deploy.scanComment')}`, `repo: ${p.repo}`, `ref: ${p.ref}`, '', 'action: compose', 'compose:', `  file: ${p.file}`, `  project: ${proj}`, `  hosts: [${hosts.join(', ')}]`]
+  if (sc.files?.length) lines.push(`  files: [${sc.files.join(', ')}]  # ${t('deploy.fromLinkFilesComment')}`)
+  lines.push('  wait_timeout: 5m')
+  const builds = sc.services.filter((s) => s.build_only)
+  if (builds.length) {
+    lines.push(`  images:  # ${t('deploy.scanBuildComment')}`)
+    for (const b of builds) lines.push(`    ${b.name}: <${t('deploy.scanImagePlaceholder')}>`)
+  }
+  // Публикации не на loopback — то, что автор хотел наружу.
+  const pubOut = (s: ComposeScan['services'][number]) => (s.published ?? []).filter((x) => !x.startsWith('127.') && !x.startsWith('localhost:'))
+  const outside = sc.services.filter((s) => s.name !== siteService && pubOut(s).length > 0)
+  if (outside.length) {
+    lines.push(`  # ports:  # ${t('deploy.scanPortsComment')}`)
+    for (const s of outside) lines.push(`  #   ${s.name}: [${pubOut(s).map((x) => `"${x.split(':').length === 2 ? '0.0.0.0:' + x : x}"`).join(', ')}]`)
+  }
+  for (const s of sc.services.filter((x) => x.unpinned && x.image)) lines.push(`  # ${t('deploy.scanUnpinned', { image: s.image, name: s.name })}`)
+  if (siteService) {
+    lines.push(`  # site:  # ${t('deploy.fromLinkSiteComment')}`, `  #   domains: [${proj}.example.com]`, `  #   service: ${siteService}`, `  #   port: ${sitePort || t('deploy.fromLinkSitePort')}`)
+  } else if (choice !== 'none') {
+    lines.push(`  # ${t('deploy.scanNoWeb')}`)
+  }
+  lines.push('', `# poll: 5m   # ${t('deploy.fromLinkPollComment')}`)
+  if (sc.vars.length) {
+    lines.push('', `# ${t('deploy.envTemplateComment')}`)
+    for (const v of sc.vars) {
+      const val = v.has_default ? v.default : v.secret ? `<${t('deploy.scanSecret')}>` : `<${t('deploy.scanValue')}>`
+      lines.push(`#   ${v.name}=${val}${v.required ? `  # ${t('deploy.scanRequired')}` : ''}`)
+    }
+  }
+  return lines.join('\n') + '\n'
 }
