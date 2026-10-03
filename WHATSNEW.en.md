@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.109 — 2026-10-03
+
+- **Documentation:** the hub hosts screenshot now has polled hosts and
+  the red passwordless sudo mark.
+
 ## v1.11.108 — 2026-10-03
 
 - **Passwordless sudo in red.** In the host list, "passwordless" is now a
