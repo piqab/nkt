@@ -158,3 +158,24 @@ A standalone host without a hub shows the default menu. API: `GET` and
 `PUT /api/hub/ui/nav/hub` and `/api/hub/ui/nav/host` with `{"order": [...],
 "hidden": [...]}`.
 
+## Danger zone
+
+A card with a red border (admins only): **"Remove nkt from all hosts"**:
+
+1. **Export, required.** First comes the same window as "export" in
+   "Hosts" (full, with the key; password encryption). Until the file is
+   downloaded you cannot go on; the hub checks too and rejects the request
+   without a full export within the last 30 minutes.
+2. **Choosing hosts.** A list of all the hub's hosts, **unticked**; "Select
+   all" and "Clear all". The hub's machine (localhost) is not listed. Hosts
+   where removal is bound to fail (sudo asks for a password, unreachable)
+   are marked. What to remove is the same as when deleting one host; by
+   default the service and files, data, the hub's access traces and
+   restoring password login, without deleting the SSH user.
+3. **Confirmation**: type the word "delete", then a hub job with the
+   standard log window runs three hosts at a time, and one failure does not
+   stop the rest. Where the cleanup succeeds, the host leaves the hub; where
+   it does not, the host stays listed and the log gives the reason.
+
+The hub and the hosts come back by importing that very export file.
+

@@ -417,6 +417,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts/{id}/forget-hostkey", s.handleForgetHostKey)
 					r.Post("/hub/hosts/{id}/sudo/remove", s.handleRemoveSudoAccess)
 					r.Post("/hub/hosts/{id}/sudo/narrow", s.handleNarrowSudo)
+					r.Post("/hub/purge-all", s.handlePurgeAll)
 					r.Get("/hub/hosts/{id}/sudo", s.handleSudoInfo)
 					r.Post("/hub/hosts/{id}/stop", s.handleStopHost)
 					r.Post("/hub/hosts/{id}/start", s.handleStartHost)

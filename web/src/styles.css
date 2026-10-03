@@ -1066,3 +1066,16 @@ span.vm-toggle {
 .nav-layout-label {
   flex: 1;
 }
+
+/* «Опасная зона» в «О системе» хаба. */
+.danger-zone {
+  border: 1px solid var(--status-critical) !important;
+}
+.danger-zone .ant-card-head,
+.danger-zone .card-title {
+  color: var(--status-critical);
+}
+.purge-all-list {
+  max-height: 40vh;
+  overflow-y: auto;
+}

@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.113 — 2026-10-03
+
+- **A "Danger zone" in "About": remove nkt from all hosts.** A full export
+  comes first and is required (the hub checks too), then the host list,
+  unticked, with "Select all / Clear all", what to remove (as when deleting
+  one host), the typed word "delete" and a hub job three hosts at a time;
+  where the cleanup succeeds, the host leaves the hub.
+
 ## v1.11.112 — 2026-10-03
 
 - **Narrow sudo: cleanup and ClamAV.** A narrow-sudo host now supports
