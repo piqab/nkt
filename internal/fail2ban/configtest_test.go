@@ -56,6 +56,15 @@ func TestConfigTestFindsBrokenAndPreexisting(t *testing.T) {
 	if ok, out := CheckCurrent(ctx, c); ok || !strings.Contains(out, "openvpn") {
 		t.Fatalf("current: %v %q", ok, out)
 	}
+	// Путь вне jail.d/filter.d или с «..» — отказ, без записи.
+	for _, bad := range []string{"../escape.local", "jail.d/../../escape.local", "/etc/passwd", "action.d/x.conf", "jail.d/a/b.local"} {
+		if r := TestConfig(ctx, c, root, map[string]string{bad: "[x]\n"}); r.OK {
+			t.Fatalf("%s accepted", bad)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(root), "escape.local")); !os.IsNotExist(err) {
+		t.Fatal("wrote outside the copy")
+	}
 	// Сам каталог настроек не тронут.
 	if _, err := os.Stat(filepath.Join(root, "jail.d", "nkt-a.local")); !os.IsNotExist(err) {
 		t.Fatal("test wrote into the real config")

@@ -23,6 +23,14 @@ func TestJailStartError(t *testing.T) {
 	if !strings.Contains(got, "Have not found any log file for sshd jail") || strings.Contains(got, "openvpn") {
 		t.Fatalf("reason: %q", got)
 	}
+	// Огромная строка reload — обрезается до причины.
+	long := "2026-10-03 21:00:01,1 fail2ban.transmitter [1]: ERROR   Command ['reload', '--all', [], [['add', 'sshd', 'systemd'], " +
+		strings.Repeat("['set', 'x'], ", 2000) + "]] has failed. Received RegexException(\"No failure-id group in '^nkt-manual-never-matches$'\")\n"
+	_ = os.WriteFile(filepath.Join(root, "var", "log", "fail2ban.log"), []byte(log+long), 0o644)
+	got = jailStartError(collect.NewFixtures(root), "sshd")
+	if len(got) > 2000 || !strings.Contains(got, "No failure-id group") {
+		t.Fatalf("long line: %d %q", len(got), got[len(got)-200:])
+	}
 	if jailStartError(collect.NewFixtures(root), "nginx-http-auth") != "" {
 		t.Fatal("unrelated jail got a reason")
 	}

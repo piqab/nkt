@@ -154,14 +154,16 @@ when the numbers change. Whatever does not fit is an icon with a tooltip.
   alone ("updating: N" next to the button), unreachable ones are skipped,
   and ones that failed last time only with the "retry failed" checkbox.
   While updates run, the host list refreshes every few seconds.
-- **Sudo** — what the last installation found: a red ⚠ for
-  "passwordless" (dangerous: whoever signs in as this user gets root at
-  once), a green shield for "narrow sudo" (see [below](#narrow-sudo)), a
-  green check for "password required", a grey question mark for
-  "unknown". With "passwordless" there is a **"remove
-  NOPASSWD"** button — it deletes `/etc/sudoers.d/nkt-hub` when permanent
-  access is no longer needed (after that the hub needs sudo or root again
-  for updates).
+- **Sudo** — what the hub user is really allowed to do without a password,
+  per the latest check of the host (after installation, update,
+  narrowing, rule removal and when the "The hub's sudo" window opens): a
+  red ⚠ for "passwordless" (dangerous: whoever signs in as this user gets
+  root at once), a green shield for "narrow sudo" (see
+  [below](#narrow-sudo)), a green check for "password required", a grey
+  question mark for "unknown". A click on the mark (and the "narrow sudo"
+  button next to a red one) opens the **"The hub's sudo"** window: what is
+  allowed, "Narrow sudo", "Remove the nkt rule" (after the removal the
+  hub needs sudo or root again for updates).
 - **Channel** — the fallback channel state: gray — off; green
   "connected" — held, regular SSH is used; yellow "via fallback" — SSH is
   unavailable right now, everything goes through the channel.
