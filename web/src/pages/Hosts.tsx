@@ -32,6 +32,7 @@ import { JobLogModal } from './Jobs'
 import { ClustersCard, NewClusterModal } from '../components/Clusters'
 import { ImportPlanModal } from '../components/ImportPlanModal'
 import { HelpButton, TitleHelp } from '../components/Docs'
+import { takeUpdateAllAfterHub } from '../updateAllAfterHub'
 
 /** Хост из параметров задания установки (host.install), иначе null. */
 function installJobHost(job: Job): number | null {
@@ -1341,6 +1342,13 @@ export default function Hosts({
 
   const updatePlan = planUpdateAll(hosts ?? [], hubVersion)
   const outdatedCount = updatePlan.ready.length + updatePlan.failed.length
+
+  // Хаб обновили с галочкой «обновить все хосты» — после перезагрузки
+  // сразу окно «Обновить всё».
+  useEffect(() => {
+    if (hosts && takeUpdateAllAfterHub(hubVersion)) setUpdateAllDialog(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- один раз, когда список пришёл
+  }, [!!hosts, hubVersion])
 
   return (
     <>

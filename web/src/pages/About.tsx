@@ -21,7 +21,8 @@ interface AptCacheInfo {
   connected_hosts: number
 }
 import { Banner, Card, ErrorNote, Loading, formatBytesShort, formatRelative } from '../components/ui'
-import { confirmAction } from '../components/confirm'
+import { confirmAction, confirmWithOption } from '../components/confirm'
+import { cancelUpdateAllAfterHub, requestUpdateAllAfterHub } from '../updateAllAfterHub'
 
 /**
  * The hub's own "About" page — its running version, whatever
@@ -137,7 +138,14 @@ export default function About({ admin = false }: { admin?: boolean }) {
   }
 
   async function applyUpdate() {
-    if (!(await confirmAction(t('about.confirmUpdate', { version: version.data?.latest })))) return
+    const ok = await confirmWithOption(t('about.confirmUpdate', { version: version.data?.latest }), t('about.updateAllHosts'), {
+      optionHint: t('about.updateAllHostsHint'),
+      defaultChecked: true,
+      danger: false,
+    })
+    if (!ok) return
+    if (ok.checked && version.data?.current) requestUpdateAllAfterHub(version.data.current)
+    else cancelUpdateAllAfterHub()
     setUpdating(true)
     setNotice(null)
     try {
@@ -150,6 +158,7 @@ export default function About({ admin = false }: { admin?: boolean }) {
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
       setUpdating(false)
+      cancelUpdateAllAfterHub()
     }
   }
 

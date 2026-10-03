@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.106 — 2026-10-03
+
+- **Updating the hub, then the hosts.** The "Update the hub" confirmation
+  has an "After the hub update, update nkt on all hosts" checkbox, on by
+  default: after the hub restarts, the page opens "Hosts" with the "Update
+  all" window.
+
 ## v1.11.105 — 2026-10-03
 
 - **A "login:token" token and sign-in like ordinary git.** In "Access" the

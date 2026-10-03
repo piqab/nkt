@@ -44,17 +44,17 @@ export function confirmAction(
 export function confirmWithOption(
   content: string,
   optionLabel: string,
-  opts: { title?: string; okText?: string; optionHint?: string } = {},
+  opts: { title?: string; okText?: string; optionHint?: string; defaultChecked?: boolean; danger?: boolean } = {},
 ): Promise<{ checked: boolean } | null> {
   return new Promise((resolve) => {
-    let checked = false
+    let checked = !!opts.defaultChecked
     Modal.confirm({
       title: blurText(opts.title ?? i18n.t('common.confirmTitle')),
       content: (
         <div>
           <p>{blurText(content)}</p>
           <label style={{ display: 'flex', flexDirection: 'row', gap: '0.4rem', alignItems: 'flex-start' }}>
-            <input type="checkbox" defaultChecked={false} onChange={(e) => (checked = e.target.checked)} style={{ marginTop: '0.2rem' }} />
+            <input type="checkbox" defaultChecked={!!opts.defaultChecked} onChange={(e) => (checked = e.target.checked)} style={{ marginTop: '0.2rem' }} />
             <span>
               {optionLabel}
               {opts.optionHint && <div className="small muted">{opts.optionHint}</div>}
@@ -64,7 +64,7 @@ export function confirmWithOption(
       ),
       okText: opts.okText ?? i18n.t('common.confirmOk'),
       cancelText: i18n.t('common.cancel'),
-      okButtonProps: { danger: true },
+      okButtonProps: { danger: opts.danger ?? true },
       width: 560,
       onOk: () => resolve({ checked }),
       onCancel: () => resolve(null),

@@ -35,6 +35,13 @@ Below — the **release notes** in the UI language (from `WHATSNEW.md` and
 3. the hub is unavailable for a few seconds; the open page polls
    `/api/health` and reloads itself.
 
+The confirmation has a **"After the hub update, update nkt on all hosts"**
+checkbox, on by default. Then, after the reload, "Hosts" opens right away
+with the **"Update all"** window: who will be updated, who is already
+updating, who is unreachable. The window opens only if the hub version did
+change; if it has not changed within half an hour, the intent is dropped
+(it is remembered in this browser).
+
 There is a **rollback** to the previous version if something goes wrong.
 
 The update doesn't touch `hub.env` — unlike hosts' `nkt.env`, which the
