@@ -191,13 +191,30 @@ with full sudo narrows it right away:
   `user ALL=(root) NOPASSWD: /usr/local/bin/nkt hub-sudo` (checked with
   `visudo -cf` before the replacement);
 - `nkt hub-sudo` runs as root **only requests signed by the hub**: an
-  operation from a fixed list (installing or updating nkt, with the binary,
-  unit and env checked against signed hashes; starting, stopping and
+  operation from a fixed list (installing or updating nkt, with the binary
+  and unit checked against signed hashes and `nkt.env` with the admin
+  password carried in the signed request itself, with no temporary file on
+  the host; starting, stopping and
   restarting the service; its journal; the nkt admin password; the apt
   proxy; the ClamAV database from the hub; cleanup when deleting the host;
   removing its own rule), with a serial number, so an old request
   cannot be replayed. Files are first copied into a root directory and
   checked there, so they cannot be swapped after the check.
+
+::: warning Hosts narrowed by nkt v1.11.111–1.11.117
+Since v1.11.119, `nkt.env` is carried in the signed request rather than as
+a file checked by hash. The previous `hub-sudo` does not accept such a
+request, and there is no compatibility. Updating such a host from the hub
+fails with instructions. On the host, as root, run:
+
+```sh
+rm -f /etc/nkt/hub-sign.pub
+echo 'user ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub
+chmod 440 /etc/sudoers.d/nkt-hub
+```
+
+Then press "Reinstall" and "Narrow sudo" in the hub.
+:::
 
 The list of operations is built into nkt and only changes with its
 version; it cannot be edited from the interface, or the restriction would

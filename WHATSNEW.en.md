@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.119 — 2026-10-03
+
+- **Narrow sudo: `nkt.env` in the signed request.** When installing and
+  updating via `hub-sudo`, the file with the admin password is no longer
+  placed in a temporary directory on the host and checked by hash: its
+  content arrives in the request signed by the hub.
+- **Hosts narrowed by nkt v1.11.111–1.11.117** are not compatible: an
+  update from the hub fails with instructions. On the host, as root,
+  temporarily restore full sudo, then press "Reinstall" and "Narrow sudo".
+
 ## v1.11.118 — 2026-10-03
 
 - **The sudo mark follows a check of the host after every operation.**

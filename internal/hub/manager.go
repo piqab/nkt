@@ -1043,7 +1043,12 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	if narrow {
 		report("hub.narrowSudoUsing")
 		place = func(tmpDir string, hashes map[string]string) error {
-			_, err := m.hubSudo(client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpInstall, Args: map[string]string{"stage": tmpDir}, Files: hashes})
+			out, err := m.hubSudo(client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpInstall, Args: map[string]string{"stage": tmpDir, "env": envContent}, Files: hashes})
+			if err != nil && strings.Contains(out, "no signed hash for nkt.env") {
+				// hub-sudo из v1.11.111–1.11.117 ждёт nkt.env файлом по
+				// хэшу; совместимости нет — хост переводится заново.
+				return msgs.Errorf("hub.hubSudoOutdated", host.SSHUser)
+			}
 			return err
 		}
 	}

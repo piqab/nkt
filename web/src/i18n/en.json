@@ -3961,7 +3961,7 @@
     "opsTitle": "Operations of {{command}}:",
     "op": {
       "ping": "connection and key check",
-      "install": "installing and updating nkt: the binary, unit and env against signed hashes",
+      "install": "installing and updating nkt: the binary and unit against signed hashes, env inside the signed request",
       "activate": "reload units, enable and restart the nkt service",
       "service": "start, stop or restart the nkt service",
       "journal": "the nkt service journal (last lines)",

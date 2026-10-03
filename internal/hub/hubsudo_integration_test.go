@@ -50,7 +50,7 @@ func TestNarrowSudoInstallRoundTrip(t *testing.T) {
 	nop := func(string, ...any) {}
 	err = stageFiles(client, me.Username, binarySource{LocalPath: localBin}, "[Unit]\n", "NKT_A=1\n", "", "", "", nop, nop,
 		func(tmpDir string, hashes map[string]string) error {
-			env, err := hubsudo.Sign(m.signKey(), hubsudo.Request{Op: hubsudo.OpInstall, Args: map[string]string{"stage": tmpDir}, Files: hashes, Serial: nextSerial(0)})
+			env, err := hubsudo.Sign(m.signKey(), hubsudo.Request{Op: hubsudo.OpInstall, Args: map[string]string{"stage": tmpDir, "env": "NKT_A=1\n"}, Files: hashes, Serial: nextSerial(0)})
 			if err != nil {
 				return err
 			}
