@@ -79,6 +79,9 @@ func collectState(ctx context.Context, c collect.Collector, full bool) *model.Fa
 		if res, err := c.Run(ctx, Client, "version"); err == nil && res.OK() {
 			st.Version = parseVersion(res.Stdout)
 		}
+		if ok, out := CheckCurrent(ctx, c); !ok {
+			st.ConfigError = out
+		}
 	}
 	res, err := c.Run(ctx, Client, "status")
 	if err != nil || !res.OK() {

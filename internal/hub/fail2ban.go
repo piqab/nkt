@@ -43,11 +43,17 @@ type f2bSummary struct {
 	Running   bool     `json:"running"`
 	Banned    int      `json:"banned"`
 	Bans      []f2bBan `json:"bans"`
+	// HubProtected — адрес хаба в ignoreip хоста; nil — старый nkt.
+	HubProtected *bool `json:"hub_protected,omitempty"`
 }
 
 // f2bPushInterval — как часто хаб заново сообщает хосту свой адрес: он
 // меняется редко, но хост мог быть переустановлен или сменить сеть.
 const f2bPushInterval = 6 * time.Hour
+
+// f2bPushRetry — как скоро повторить, если хост говорит, что защиты хаба
+// у него нет (fail2ban поставили только что, файл защиты убрали).
+const f2bPushRetry = 10 * time.Minute
 
 // f2bPushState — когда и какой адрес хаб последний раз передал хосту.
 type f2bPushState struct {
@@ -97,16 +103,20 @@ func (m *Manager) noteBans(ctx context.Context, hostID int64, now *f2bSummary) {
 // сессии), и передать хосту: он добавит его в ignoreip fail2ban. Только
 // по SSH: через обратный туннель адрес соединения — не тот, с которого
 // хаб ходит по SSH.
-func (m *Manager) maybePushHubAddr(hostID int64, channel string) {
+func (m *Manager) maybePushHubAddr(hostID int64, channel string, sum *f2bSummary) {
 	if channel != channelSSH {
 		return
+	}
+	interval := f2bPushInterval
+	if sum != nil && sum.Installed && sum.HubProtected != nil && !*sum.HubProtected {
+		interval = f2bPushRetry
 	}
 	m.f2bMu.Lock()
 	if m.f2bPushed == nil {
 		m.f2bPushed = map[int64]f2bPushState{}
 	}
 	st := m.f2bPushed[hostID]
-	if time.Since(st.at) < f2bPushInterval {
+	if time.Since(st.at) < interval {
 		m.f2bMu.Unlock()
 		return
 	}
@@ -355,7 +365,7 @@ func (s *Server) handleF2BFleet(w http.ResponseWriter, r *http.Request) {
 		titleKey = "hub.f2bJobUnban"
 	}
 	id, err := s.jobs.Start(r.Context(), jobs.Spec{
-		Kind: KindF2BFleet, TitleKey: titleKey, TitleArgs: []any{strings.Join(p.IPs, ", "), len(targets)},
+		Kind: KindF2BFleet, Queue: F2BQueue, TitleKey: titleKey, TitleArgs: []any{strings.Join(p.IPs, ", "), len(targets)},
 		Author: auth.Username(r.Context()), Steps: len(targets), Params: p,
 	})
 	if err != nil {

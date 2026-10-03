@@ -3669,12 +3669,12 @@
     "undo": "Undo ({{n}})",
     "fleetTplButton": "To hosts",
     "fleetTplTitle": "Template {{name}} to hosts",
-    "fleetTplHintBuiltin": "Standard template: each host provides its own text (for example, sshd with the journal in journald or in a file). Hosts without the required program are skipped.",
-    "fleetTplHintCustom": "Custom template from the hub: one text for all selected hosts.",
+    "fleetTplHintBuiltin": "Standard template: each host provides its own text (for example, sshd with the journal in journald or in a file). Hosts without the required program are skipped. Before the jail, the host gets the hub's ban protection; after the fail2ban reload, the host checks that all jails are running and rolls the files back otherwise.",
+    "fleetTplHintCustom": "Custom template from the hub: one text for all selected hosts. Before the jail, the host gets the hub's ban protection; after the fail2ban reload, the host checks that all jails are running and rolls the files back otherwise.",
     "fleetTplNotInstalled": "fail2ban is not installed",
     "fleetTplCheck": "Check",
     "fleetTplApply": "Apply ({{count}})",
-    "fleetTplCheckFirst": "Press \"Check\" first: a dry run on each host shows which files will change. Exactly what was checked gets applied.",
+    "fleetTplCheckFirst": "Press “Check” first: a hub job does a dry run on each host, with a file diff and a check of the whole fail2ban configuration with the template. Exactly what was checked gets applied.",
     "fleetTplCheckTitle": "Check:",
     "fleetTplShowDiff": "diff",
     "fleetTplHideDiff": "hide",
@@ -3684,7 +3684,15 @@
       "same": "no changes",
       "skip": "skipped",
       "error": "error"
-    }
+    },
+    "fleetTplChecking": "Checking: job #{{id}} in the hub's fail2ban job queue.",
+    "fleetTplCheckLog": "Log",
+    "fleetTplCheckFailed": "The check did not finish; see the job log for details.",
+    "fleetTplHubProtected": "hub {{addr}} in ignoreip",
+    "fleetTplHubWillAdd": "hub {{addr}} protection will be added first",
+    "failedJails": "Enabled but not running: fail2ban did not start these jails (“enable” will not help here; the reason is in the log lines):",
+    "failedJailNoReason": "No reason found in the fail2ban log; see “Services” → fail2ban → log.",
+    "configBroken": "The fail2ban configuration fails its check (fail2ban-client -t): the server is still running with the old settings, but the next reload or restart will fail."
   },
   "sites": {
     "title": "Sites",

@@ -349,7 +349,7 @@ func trimRunes(s string, n int) string {
 
 // jobsSpecF2B — задание бана на хостах (как из «fail2ban» хаба).
 func jobsSpecF2B(titleKey, author string, p F2BFleetParams) jobs.Spec {
-	return jobs.Spec{Kind: KindF2BFleet, TitleKey: titleKey, TitleArgs: []any{strings.Join(p.IPs, ", "), len(p.HostIDs)},
+	return jobs.Spec{Kind: KindF2BFleet, Queue: F2BQueue, TitleKey: titleKey, TitleArgs: []any{strings.Join(p.IPs, ", "), len(p.HostIDs)},
 		Author: author, Steps: len(p.HostIDs), Params: p}
 }
 

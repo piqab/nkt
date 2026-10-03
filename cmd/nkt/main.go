@@ -942,6 +942,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// Бан и разбан адресов fail2ban на всех хостах.
 	r.jobs.Register(hub.KindF2BFleet, hub.NewF2BFleetRunner(server))
 	r.jobs.Register(hub.KindF2BTemplate, hub.NewF2BTemplateRunner(server))
+	r.jobs.Register(hub.KindF2BTemplateCheck, hub.NewF2BTemplateCheckRunner(server))
 	// Сайт: DNS и порты снаружи, прокси, задание хоста, HTTPS.
 	r.jobs.Register(hub.KindSiteSetup, hub.NewSiteSetupRunner(server))
 	r.jobs.Register(hub.KindSiteRemove, hub.NewSiteRemoveRunner(server))

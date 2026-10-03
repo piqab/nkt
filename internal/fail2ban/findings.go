@@ -44,6 +44,9 @@ func Findings(st *model.Fail2banState, listeners []model.Listener, hub netip.Add
 	}
 	ssh := SSHExposed(listeners)
 	var out []model.Finding
+	if st.Installed && st.ConfigError != "" {
+		out = append(out, finding("fail2ban-config-broken", model.SeverityHigh, "f2bConfigBroken", nil, []any{st.ConfigError}, "fail2ban"))
+	}
 	switch {
 	case !st.Installed:
 		if ssh {
