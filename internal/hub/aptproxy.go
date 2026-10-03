@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/hubsudo"
 	"net"
 	"net/http"
 	"path/filepath"
@@ -198,25 +199,13 @@ func linkClosed(link *sshLink) <-chan struct{} {
 // хосте может не быть. Ответ DIRECT при закрытом порте — штатное
 // поведение apt: без хаба пакеты качаются как обычно.
 const (
-	aptProxyDetectPath = "/usr/local/bin/nkt-apt-proxy"
-	aptProxyConfPath   = "/etc/apt/apt.conf.d/99nkt-hub-proxy"
+	aptProxyDetectPath = hubsudo.AptProxyDetect
+	aptProxyConfPath   = hubsudo.AptProxyConf
 )
 
-func aptProxyDetectScript(port int) string {
-	return fmt.Sprintf(`#!/bin/bash
-# nkt: apt через кэш пакетов хаба, если хаб сейчас держит проброс порта.
-if (exec 3<>/dev/tcp/127.0.0.1/%d) 2>/dev/null; then
-  exec 3>&-
-  echo "http://127.0.0.1:%d"
-else
-  echo DIRECT
-fi
-`, port, port)
-}
+func aptProxyDetectScript(port int) string { return hubsudo.AptProxyDetectScript(port) }
 
-const aptProxyConf = `// nkt: кэш пакетов хаба; скрипт отвечает DIRECT, когда хаб не подключён.
-Acquire::http::Proxy-Auto-Detect "` + aptProxyDetectPath + `";
-`
+const aptProxyConf = hubsudo.AptProxyConfText
 
 // ApplyAptProxy включает или выключает apt через хаб на хосте: кладёт или
 // убирает конфиг и запоминает флаг.
@@ -230,10 +219,22 @@ func (m *Manager) ApplyAptProxy(ctx context.Context, hostID int64, enabled bool)
 		return err
 	}
 	defer link.Close()
-	if err := configureAptProxy(link.client, host.SSHUser, m.cfg.HubAptCachePort, enabled); err != nil {
+	narrow := host.SSHUser != "root" && m.hasHubKey(link.client)
+	if err := m.configureAptProxyAny(link.client, host.SSHUser, narrow, enabled); err != nil {
 		return err
 	}
 	return m.db.SetHostAptViaHub(ctx, hostID, enabled)
+}
+
+// configureAptProxyAny — через hub-sudo на хосте с узким sudo, иначе как
+// раньше.
+func (m *Manager) configureAptProxyAny(client *ssh.Client, sshUser string, narrow, enabled bool) error {
+	if !narrow {
+		return configureAptProxy(client, sshUser, m.cfg.HubAptCachePort, enabled)
+	}
+	_, err := m.hubSudo(client, sshUser, hubsudo.Request{Op: hubsudo.OpAptProxy,
+		Args: map[string]string{"enabled": strconv.FormatBool(enabled), "port": strconv.Itoa(m.cfg.HubAptCachePort)}})
+	return err
 }
 
 // configureAptProxy — сама раскладка файлов по открытому соединению;

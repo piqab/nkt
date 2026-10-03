@@ -10,11 +10,14 @@ import (
 	"flag"
 	"fmt"
 	"github.com/piqab/nkt/internal/backup"
+	"github.com/piqab/nkt/internal/hubsudo"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -178,6 +181,22 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 		}
 		defer app.close()
 		return app.runHub(log)
+	case "hub-sudo":
+		// Узкий sudo хаба: только подписанные им операции (см. hubsudo).
+		// Без конфигурации и базы — работает до запуска и при сломанной
+		// службе.
+		envelope, err := io.ReadAll(io.LimitReader(os.Stdin, 1<<20))
+		if err != nil {
+			return err
+		}
+		out, err := hubsudo.System().Execute(envelope)
+		if out != "" {
+			fmt.Print(out)
+			if !strings.HasSuffix(out, "\n") {
+				fmt.Println()
+			}
+		}
+		return err
 	case "users", "passwd":
 		// Neither command ever touches the collector — they only read and
 		// write the accounts table — so they work the same way under every

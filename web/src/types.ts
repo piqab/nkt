@@ -81,7 +81,7 @@ export interface HubHost {
   /** What the last install/update actually observed about sudo for a
    * non-root ssh_user — '' means never observed (or invalidated by an
    * "изменить" that changed the connection). See store.SudoStatus*. */
-  sudo_status?: '' | 'root' | 'nopasswd' | 'password_required'
+  sudo_status?: '' | 'root' | 'nopasswd' | 'password_required' | 'narrow'
   /** Whether the hub passes NKT_TERMINAL_ENABLED=true when it (re)installs
    * this host — off by default. The host's own nkt.env is regenerated from
    * scratch on every install/update, so this has to live here (not edited

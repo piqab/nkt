@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/piqab/nkt/internal/aptcache"
+	"github.com/piqab/nkt/internal/hubsudo"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -1035,11 +1036,30 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	envContent := renderEnv(adminUser, adminPassword, host.TerminalEnabled, host.SSHUser, tun, m.hostAPIAddrFor(host))
 	src := binarySource{LocalPath: binPath, Release: m.releaseDelivery(ctx, goos, goarch, binPath),
 		OnVia: func(via string) { _ = m.db.SetHostBinaryVia(ctx, hostID, via) }}
-	if err := stageFiles(client, host.SSHUser, src, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report, job.replaceLast); err != nil {
+	// Узкий sudo: на хосте ключ этого хаба — всё, что требует root,
+	// идёт подписанными запросами hub-sudo.
+	narrow := host.SSHUser != "root" && m.hasHubKey(client)
+	var place func(string, map[string]string) error
+	if narrow {
+		report("hub.narrowSudoUsing")
+		place = func(tmpDir string, hashes map[string]string) error {
+			_, err := m.hubSudo(client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpInstall, Args: map[string]string{"stage": tmpDir}, Files: hashes})
+			return err
+		}
+	}
+	if err := stageFiles(client, host.SSHUser, src, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report, job.replaceLast, place); err != nil {
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
 		return fail(err)
 	}
-	if err := activateService(client, host.SSHUser, report); err != nil {
+	if narrow {
+		report("hub.startingSystemdService")
+		if out, err := m.hubSudo(client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpActivate}); err != nil {
+			if journal, jerr := m.hubSudo(client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpJournal}); jerr == nil && strings.TrimSpace(journal) != "" {
+				out = strings.TrimSpace(out) + msgs.T(msgs.DefaultLang, "hub.hostLogSeparator") + strings.TrimSpace(journal)
+			}
+			return fail(msgs.Errorf("hub.hubSudoFailed", err, out))
+		}
+	} else if err := activateService(client, host.SSHUser, report); err != nil {
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
 		return fail(err)
 	}
@@ -1047,7 +1067,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// здесь не роняет установку — nkt уже работает, а без прокси apt
 	// просто ходит напрямую.
 	if host.AptViaHub {
-		if err := configureAptProxy(client, host.SSHUser, m.cfg.HubAptCachePort, true); err != nil {
+		if err := m.configureAptProxyAny(client, host.SSHUser, narrow, true); err != nil {
 			report("hub.aptProxyConfigureWarn", err)
 		} else {
 			report("hub.aptProxyConfigured")
@@ -1063,7 +1083,27 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// Both steps above needed sudo for a non-root SSHUser and neither
 	// failed on it — nopasswd sudo (or root, needing none at all) is
 	// confirmed working, right here, for free, with no separate probe.
-	m.recordSudoOutcome(ctx, hostID, host.SSHUser, nil)
+	switch {
+	case narrow:
+		_ = m.db.SetHostSudoStatus(ctx, hostID, store.SudoStatusNarrow)
+	case host.SSHUser != "root" && host.NktVersion == "":
+		// Первая установка с полным sudo — сразу сузить: дальше хабу без
+		// пароля нужен только hub-sudo.
+		if mode, err := m.narrowSudo(client, host.SSHUser); err != nil {
+			report("hub.narrowSudoFailed", err)
+			m.recordSudoOutcome(ctx, hostID, host.SSHUser, nil)
+		} else if mode == "narrow" {
+			report("hub.narrowSudoDone")
+			narrow = true
+			_ = m.db.SetHostSudoStatus(ctx, hostID, store.SudoStatusNarrow)
+		} else {
+			report("hub.narrowSudoOtherRule")
+			narrow = true
+			_ = m.db.SetHostSudoStatus(ctx, hostID, store.SudoStatusNopasswd)
+		}
+	default:
+		m.recordSudoOutcome(ctx, hostID, host.SSHUser, nil)
+	}
 
 	report("hub.waitingHealth")
 	// Служба слушает сразу, первый скан идёт в фоне (см.
@@ -1084,7 +1124,13 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	report("hub.checkingAdminAccount")
 	if _, err := bootstrapLogin(ctx, client.Dial, apiAddr, adminUser, adminPassword); err != nil {
 		report("hub.loginFailedResetting")
-		if resetErr := resetRemoteAdminPassword(client, host.SSHUser, adminUser, adminPassword, remoteDataDir, remoteBinPath); resetErr != nil {
+		resetErr := error(nil)
+		if narrow {
+			_, resetErr = m.hubSudo(client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpPasswd, Args: map[string]string{"user": adminUser, "password": adminPassword}})
+		} else {
+			resetErr = resetRemoteAdminPassword(client, host.SSHUser, adminUser, adminPassword, remoteDataDir, remoteBinPath)
+		}
+		if resetErr != nil {
 			return fail(msgs.Errorf("hub.adminLoginFailedResettingPassword", err, resetErr))
 		}
 		if _, err := bootstrapLogin(ctx, client.Dial, apiAddr, adminUser, adminPassword); err != nil {
@@ -1316,6 +1362,10 @@ func (m *Manager) SetServiceRunning(ctx context.Context, hostID int64, running b
 	if running {
 		action = "start"
 	}
+	if host.SSHUser != "root" && m.hasHubKey(link.client) {
+		_, err := m.hubSudo(link.client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpService, Args: map[string]string{"action": action}})
+		return err
+	}
 	cmd := "systemctl " + action + " netknownsthat"
 	if host.SSHUser != "root" {
 		cmd = "sudo -n " + cmd
@@ -1342,7 +1392,7 @@ func (m *Manager) RemoveSudoAccess(ctx context.Context, hostID int64) error {
 	if host.SSHUser == "root" {
 		return msgs.Errorf("hub.hostConnectedAsRootSudo")
 	}
-	if host.SudoStatus != store.SudoStatusNopasswd {
+	if host.SudoStatus != store.SudoStatusNopasswd && host.SudoStatus != store.SudoStatusNarrow {
 		return msgs.Errorf("hub.passwordlessSudoConfirmedHostNothing")
 	}
 
@@ -1352,8 +1402,11 @@ func (m *Manager) RemoveSudoAccess(ctx context.Context, hostID int64) error {
 	}
 	defer link.Close()
 
-	out, err := runRemote(link.client, "sudo -n rm -f "+sudoersDropIn)
-	if err != nil {
+	if m.hasHubKey(link.client) {
+		if _, err := m.hubSudo(link.client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpSudoers}); err != nil {
+			return err
+		}
+	} else if out, err := runRemote(link.client, "sudo -n rm -f "+sudoersDropIn); err != nil {
 		return diagnoseInstallError(host.SSHUser, sudoersDropIn, err, out)
 	}
 	// Not password_required: some *other* NOPASSWD rule this file didn't

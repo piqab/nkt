@@ -156,7 +156,8 @@ when the numbers change. Whatever does not fit is an icon with a tooltip.
   While updates run, the host list refreshes every few seconds.
 - **Sudo** — what the last installation found: a red ⚠ for
   "passwordless" (dangerous: whoever signs in as this user gets root at
-  once), a green check for "password required", a grey question mark for
+  once), a green shield for "narrow sudo" (see [below](#narrow-sudo)), a
+  green check for "password required", a grey question mark for
   "unknown". With "passwordless" there is a **"remove
   NOPASSWD"** button — it deletes `/etc/sudoers.d/nkt-hub` when permanent
   access is no longer needed (after that the hub needs sudo or root again
@@ -175,6 +176,44 @@ API never comes up, the error says so plainly: "SSH answers, but the nkt
 API on the host is not up" — with diagnostics gathered over SSH:
 the unit state, who listens on the API port, the last journal lines.
 "Update" from the hub reinstalls and restarts the service over SSH.
+
+## Narrow sudo
+
+`NOPASSWD: ALL` makes root out of anyone who signs in as that user:
+people, other keys in `authorized_keys`, a compromised application running
+as it. The hub itself gains almost nothing from it, since it is root on the
+host through nkt anyway. So the **first installation** of nkt as a user
+with full sudo narrows it right away:
+
+- the hub's public signing key goes to `/etc/nkt/hub-sign.pub` (root,
+  0644); the key is derived from the hub's master key;
+- the `/etc/sudoers.d/nkt-hub` rule is replaced with
+  `user ALL=(root) NOPASSWD: /usr/local/bin/nkt hub-sudo` (checked with
+  `visudo -cf` before the replacement);
+- `nkt hub-sudo` runs as root **only requests signed by the hub**: an
+  operation from a fixed list (installing or updating nkt, with the binary,
+  unit and env checked against signed hashes; starting, stopping and
+  restarting the service; its journal; the nkt admin password; the apt
+  proxy; removing its own rule), with a serial number, so an old request
+  cannot be replayed. Files are first copied into a root directory and
+  checked there, so they cannot be swapped after the check.
+
+The list of operations is built into nkt and only changes with its
+version; it cannot be edited from the interface, or the restriction would
+be worthless. Your own `sudo` steps in scripts take a separate rule in your
+own `sudoers.d` file, which nkt leaves alone. Where the hub got the binary
+(a release, your own build, an offline copy) does not matter: the hub the
+host already trusts signs it.
+
+If another rule (such as `90-cloud-init-users`) also gives this user
+passwordless sudo, the installation log warns about it: the mark stays
+red, and that rule has to be removed by hand.
+
+**What does not work without a password on a narrow-sudo host yet:**
+cleanup when deleting the host, the ClamAV database from the hub,
+installing nkt-edge on this host, and script steps with `sudo: true`.
+Hosts installed earlier keep full sudo until the "narrow" button (coming
+versions).
 
 ## Host SSH key
 

@@ -12,6 +12,7 @@ import {
   QuestionCircleOutlined,
   SyncOutlined,
   WarningFilled,
+  SafetyCertificateFilled,
   DisconnectOutlined,
   CloudDownloadOutlined,
   ClusterOutlined,
@@ -119,6 +120,7 @@ const SUDO_LABEL_KEY: Record<NonNullable<HubHost['sudo_status']>, string> = {
   root: 'hosts.sudoRoot',
   nopasswd: 'hosts.sudoNopasswd',
   password_required: 'hosts.sudoPasswordRequired',
+  narrow: 'hosts.sudoNarrow',
 }
 
 
@@ -134,6 +136,8 @@ function SudoBadge({ status }: { status: HubHost['sudo_status'] }) {
   const icon =
     s === 'nopasswd' ? (
       <WarningFilled style={{ color: 'var(--status-critical)' }} />
+    ) : s === 'narrow' ? (
+      <SafetyCertificateFilled style={{ color: 'var(--status-good)' }} />
     ) : s === 'password_required' ? (
       <CheckCircleFilled style={{ color: 'var(--status-good)' }} />
     ) : (

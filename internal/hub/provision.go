@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"github.com/piqab/nkt/internal/hubsudo"
 	"github.com/piqab/nkt/internal/msgs"
 	"io"
 	"os"
@@ -246,7 +247,7 @@ func generatePassword() (string, error) {
 // progress reports a step's repeated in-flight updates (currently just the
 // binary upload's percentage) — replacing the last log line in place rather
 // than adding a new one each time, unlike report's one-off step messages.
-func stageFiles(client *ssh.Client, sshUser string, src binarySource, unitContent, envContent, binPath, servicePath, envPath string, report, progress func(key string, args ...any)) error {
+func stageFiles(client *ssh.Client, sshUser string, src binarySource, unitContent, envContent, binPath, servicePath, envPath string, report, progress func(key string, args ...any), place ...func(tmpDir string, hashes map[string]string) error) error {
 	// UseConcurrentWrites — без него pkg/sftp шлёт пакеты по 32 КиБ строго
 	// по одному, дожидаясь ответа на каждый: 16 МБ бинарника — это ~500
 	// круговых обходов, и на дальнем хосте заливка тянется минуту при
@@ -303,6 +304,17 @@ func stageFiles(client *ssh.Client, sshUser string, src binarySource, unitConten
 	}
 
 	report("hub.installingFiles")
+	// Узкий sudo: файлы ставит hub-sudo по подписанным хэшам (бинарник —
+	// тот же, что у хаба: копия с GitHub предлагается, только если она
+	// байт в байт совпадает с ним).
+	if len(place) > 0 && place[0] != nil {
+		binHash, err := hubsudo.FileHash(src.LocalPath)
+		if err != nil {
+			return err
+		}
+		return place[0](tmpDir, map[string]string{"nkt": binHash,
+			"netknownsthat.service": hubsudo.BytesHash([]byte(unitContent)), "nkt.env": hubsudo.BytesHash([]byte(envContent))})
+	}
 	if err := installRemoteFile(client, sshUser, tmpBin, binPath, 0o755); err != nil {
 		return msgs.Errorf("hub.installingBinary", err)
 	}

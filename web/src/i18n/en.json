@@ -813,7 +813,8 @@
       "openDeploy": "go to deployments"
     },
     "colVersionHint": "nkt version on the host",
-    "colLastSeenHint": "When the host was last seen on the network"
+    "colLastSeenHint": "When the host was last seen on the network",
+    "sudoNarrow": "narrow sudo: without a password the hub may only run nkt operations it signs (install and update, the service, apt proxy)"
   },
   "events": {
     "title": "Alerts",
