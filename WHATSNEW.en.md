@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.114 — 2026-10-03
+
+- **Host accounts: groups, editing, deletion.** "Add" and "Edit" open one
+  window with a diff before saving: shell, passwordless sudo, groups as
+  checkboxes (`docker`, `sudo`, `adm` and other common ones first, then
+  all with search; `docker` warns that it amounts to root), keys (remove
+  a single one or add several). The list gains a groups column and a
+  "hub" mark. Deletion can take the home directory too; root and the hub
+  user cannot be deleted, and cutting off the hub's key or sudo needs a
+  confirmation.
+
 ## v1.11.113 — 2026-10-03
 
 - **A "Danger zone" in "About": remove nkt from all hosts.** A full export

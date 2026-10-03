@@ -27,8 +27,39 @@ sudo nkt users                       # who exists and who logged in when
 
 ## Host accounts
 
-System users with shell, home, groups and sudo. Creating a user with an
-SSH key, granting passwordless sudo, deletion.
+System users with shell, home, groups and sudo. The list shows keys,
+supplementary groups (`docker` in orange, `sudo`/`wheel` in red), rights
+and shell; the user the hub signs in as is marked "hub".
+
+"Add user" and "Edit" open the same window:
+
+- **Shell**: from `/etc/shells` (or `nologin`).
+- **Passwordless sudo**: the nkt rule `/etc/sudoers.d/nkt-<name>`
+  (checked with `visudo` before it is written). sudo granted by a group
+  or another rule is not affected by the checkbox.
+- **Groups**: checkboxes. Commonly needed groups come first if the host
+  has them (`docker`, `sudo`, `wheel`, `adm`, `systemd-journal`, `lxd`,
+  `libvirt`, `www-data`), followed by all the others with a search box.
+  On creation the user is added to the checked groups; on edit the list
+  is replaced (`usermod -G`).
+- **Keys**: uncheck a key to remove its line from `authorized_keys`
+  (other lines stay as they were) and add new keys, one per line. A key
+  is optional on creation.
+
+Before saving, the window shows a "current → new" diff.
+
+::: warning The docker group
+A member of the `docker` group can start a container with the host's
+root mounted inside, which amounts to root. The window warns about this
+when the group is checked.
+:::
+
+**Deletion** runs `userdel` and removes the nkt sudo rule; with the
+checkbox, the home directory goes too (`userdel -r`). root and the hub
+user cannot be deleted. Removing the hub user's key, sudo rule or
+`sudo`/`wheel` group needs a separate confirmation, because the hub may
+lose access to the host. The hub user is detected from
+`NKT_TERMINAL_USER` and the `/etc/sudoers.d/nkt-hub` rule.
 
 ## Security
 

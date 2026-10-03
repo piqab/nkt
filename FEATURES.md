@@ -210,7 +210,8 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 
 ### Host accounts
 - System users with shell, home, groups and sudo.
-- User creation with an SSH key, passwordless sudo, removal.
+- Creation and editing in one window with a diff: shell, passwordless sudo (nkt rule), groups as checkboxes (`docker`, `sudo`/`wheel`, `adm` and other common ones first, then all with search; `docker` comes with a warning), keys (add, remove a single one).
+- Deletion (`userdel`, optionally with the home directory); root and the hub user cannot be deleted, and cutting off the hub's key or sudo needs a confirmation.
 
 ## Hub
 

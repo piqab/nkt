@@ -1079,3 +1079,33 @@ span.vm-toggle {
   max-height: 40vh;
   overflow-y: auto;
 }
+
+/* Учётные записи хоста: группы галочками в окне правки. */
+.os-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.9rem;
+}
+.os-groups.common {
+  padding-bottom: 0.4rem;
+  margin-bottom: 0.4rem;
+  border-bottom: 1px solid var(--gridline);
+}
+.os-groups.all {
+  max-height: 11rem;
+  overflow-y: auto;
+}
+.os-groups .ant-checkbox-wrapper {
+  margin-inline-start: 0;
+}
+.tag-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem;
+}
+.tag-row .ant-tag {
+  margin-inline-end: 0;
+}
+.error-text {
+  color: var(--status-critical);
+}

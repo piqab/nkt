@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -39,6 +40,12 @@ type OSUser struct {
 	// KeysError объясняет, почему ключи прочитать не удалось (нет файла —
 	// это не ошибка, а обычное состояние учётки без ключей).
 	KeysError string `json:"keys_error,omitempty"`
+	// Groups — дополнительные группы (из /etc/group), без основной.
+	Groups []string `json:"groups"`
+	// NktSudo — права выданы правилом nkt (/etc/sudoers.d/nkt-<имя>).
+	NktSudo bool `json:"nkt_sudo,omitempty"`
+	// HubUser — под этим пользователем на хост входит хаб.
+	HubUser bool `json:"hub_user,omitempty"`
 }
 
 // OSUserKey — одна строка authorized_keys в виде, пригодном для показа.
@@ -48,6 +55,8 @@ type OSUserKey struct {
 	// Fingerprint — первые и последние символы самой базы ключа: по ним
 	// человек узнаёт свой ключ, не видя его целиком.
 	Fingerprint string `json:"fingerprint"`
+	// ID — короткий хэш тела ключа: им окно указывает, какой ключ убрать.
+	ID string `json:"id,omitempty"`
 }
 
 // PrivilegedRunner выполняет команду вне песочницы собственного юнита.
@@ -60,6 +69,15 @@ type PrivilegedRunner func(ctx context.Context, argv ...string) (collect.Command
 type OSUserManager struct {
 	c      collect.Collector
 	escape PrivilegedRunner
+	// hubUser — пользователь, под которым входит хаб (NKT_TERMINAL_USER);
+	// ещё он узнаётся по правилу /etc/sudoers.d/nkt-hub.
+	hubUser string
+}
+
+// WithHubUser — пользователь хаба на этом хосте (из настроек службы).
+func (m *OSUserManager) WithHubUser(name string) *OSUserManager {
+	m.hubUser = name
+	return m
 }
 
 // NewOSUserManager строит менеджер. escape может быть nil — тогда команды
@@ -105,7 +123,7 @@ func ParseAuthorizedKey(line string) (OSUserKey, error) {
 	if len(body) > 16 {
 		short = body[:8] + "…" + body[len(body)-8:]
 	}
-	return OSUserKey{Type: m[1], Comment: strings.TrimSpace(m[4]), Fingerprint: short}, nil
+	return OSUserKey{Type: m[1], Comment: strings.TrimSpace(m[4]), Fingerprint: short, ID: keyID(body)}, nil
 }
 
 // List возвращает учётные записи людей вместе с их ключами.
@@ -115,6 +133,8 @@ func (m *OSUserManager) List(ctx context.Context) ([]OSUser, error) {
 		return nil, msgs.Errorf("control.readingEtcPasswd", err)
 	}
 	sudoers := m.sudoGroupMembers(ctx)
+	groups := m.memberships()
+	hub := m.HubUsers()
 
 	// Пустой список, а не nil: см. DiskManager.Overview — null вместо
 	// массива роняет интерфейс на первом же .length.
@@ -126,6 +146,12 @@ func (m *OSUserManager) List(ctx context.Context) ([]OSUser, error) {
 		}
 		u.Sudo = sudoers[u.Name] || m.hasSudoersDropIn(ctx, u.Name)
 		u.Keys, u.KeysError = m.readKeys(u.Home)
+		u.Groups = groups[u.Name]
+		if u.Groups == nil {
+			u.Groups = []string{}
+		}
+		u.NktSudo = m.c.Exists(nktSudoersPath(u.Name))
+		u.HubUser = hub[u.Name]
 		out = append(out, u)
 	}
 	return out, nil
@@ -247,8 +273,13 @@ func firstWords(line string, n int) string {
 // CreateOptions описывает добавление учётной записи.
 type CreateOptions struct {
 	Name string `json:"name"`
+	// Key — необязателен: учётку можно завести и без входа по ключу.
 	Key  string `json:"key"`
 	Sudo bool   `json:"sudo"`
+	// Groups — дописать в эти группы (к уже имеющимся).
+	Groups []string `json:"groups,omitempty"`
+	// Shell — оболочка новой учётки (по умолчанию /bin/bash).
+	Shell string `json:"shell,omitempty"`
 }
 
 // Create заводит пользователя (если его ещё нет) и дописывает ему ключ.
@@ -259,8 +290,28 @@ func (m *OSUserManager) Create(ctx context.Context, opts CreateOptions) error {
 	if !osUserNameRe.MatchString(opts.Name) {
 		return msgs.Errorf("control.invalidUserName", opts.Name)
 	}
-	if _, err := ParseAuthorizedKey(opts.Key); err != nil {
-		return err
+	if strings.TrimSpace(opts.Key) != "" {
+		if _, err := ParseAuthorizedKey(opts.Key); err != nil {
+			return err
+		}
+	}
+	shell := "/bin/bash"
+	if opts.Shell != "" {
+		if !slices.Contains(m.validShells(), opts.Shell) {
+			return msgs.Errorf("control.osShellBad", opts.Shell)
+		}
+		shell = opts.Shell
+	}
+	if len(opts.Groups) > 0 {
+		known, err := m.Groups(ctx)
+		if err != nil {
+			return err
+		}
+		for _, g := range opts.Groups {
+			if !slices.ContainsFunc(known, func(k OSGroup) bool { return k.Name == g }) {
+				return msgs.Errorf("control.osGroupMissing", g)
+			}
+		}
 	}
 
 	line := strings.TrimSpace(opts.Key)
@@ -274,12 +325,25 @@ func (m *OSUserManager) Create(ctx context.Context, opts CreateOptions) error {
 		argv []string
 	}{
 		{msgs.Tc(ctx, "control.userStepCreate"), []string{"sh", "-c",
-			fmt.Sprintf("id -u %[1]s >/dev/null 2>&1 || useradd --create-home --shell /bin/bash %[1]s", opts.Name)}},
-		{msgs.Tc(ctx, "control.userStepSSHDir"), []string{"install", "-d", "-m", "0700", "-o", opts.Name, "-g", opts.Name, home + "/.ssh"}},
-		{msgs.Tc(ctx, "control.userStepKey"), []string{"sh", "-c",
-			fmt.Sprintf("printf '%%s\\n' %s >> %s/.ssh/authorized_keys", shellSingleQuote(line), home)}},
-		{msgs.Tc(ctx, "control.userStepKeyPerms"), []string{"sh", "-c",
-			fmt.Sprintf("chown %[1]s:%[1]s %[2]s/.ssh/authorized_keys && chmod 0600 %[2]s/.ssh/authorized_keys", opts.Name, home)}},
+			fmt.Sprintf("id -u %[1]s >/dev/null 2>&1 || useradd --create-home --shell %[2]s %[1]s", opts.Name, shellSingleQuote(shell))}},
+	}
+	if line != "" {
+		steps = append(steps, []struct {
+			what string
+			argv []string
+		}{
+			{msgs.Tc(ctx, "control.userStepSSHDir"), []string{"install", "-d", "-m", "0700", "-o", opts.Name, "-g", opts.Name, home + "/.ssh"}},
+			{msgs.Tc(ctx, "control.userStepKey"), []string{"sh", "-c",
+				fmt.Sprintf("printf '%%s\\n' %s >> %s/.ssh/authorized_keys", shellSingleQuote(line), home)}},
+			{msgs.Tc(ctx, "control.userStepKeyPerms"), []string{"sh", "-c",
+				fmt.Sprintf("chown %[1]s:%[1]s %[2]s/.ssh/authorized_keys && chmod 0600 %[2]s/.ssh/authorized_keys", opts.Name, home)}},
+		}...)
+	}
+	if len(opts.Groups) > 0 {
+		steps = append(steps, struct {
+			what string
+			argv []string
+		}{msgs.Tc(ctx, "control.userStepGroups"), []string{"usermod", "-aG", strings.Join(opts.Groups, ","), opts.Name}})
 	}
 	for _, step := range steps {
 		res, err := m.run(ctx, step.argv...)
@@ -304,7 +368,7 @@ func (m *OSUserManager) Create(ctx context.Context, opts CreateOptions) error {
 // для всех, включая того, кто его положил.
 func (m *OSUserManager) grantSudo(ctx context.Context, user string) error {
 	rule := fmt.Sprintf("%s ALL=(ALL) NOPASSWD: ALL", user)
-	target := "/etc/sudoers.d/nkt-" + user
+	target := nktSudoersPath(user)
 	cmd := fmt.Sprintf(
 		"printf '%%s\\n' %s > /tmp/nkt-osuser && visudo -cf /tmp/nkt-osuser"+
 			" && install -m 0440 -o root -g root /tmp/nkt-osuser %s; rc=$?; rm -f /tmp/nkt-osuser; exit $rc",
