@@ -127,7 +127,10 @@ compose:
   version history, then `docker compose config` checks the stack; if it is
   rejected, the files are put back. Then a host job runs `pull` and
   `up -d --remove-orphans --wait`: the job waits until the containers are
-  up and their healthchecks pass. **The next host starts only after the
+  up and their healthchecks pass. One-shot services (`restart: "no"`, such
+  as creating the administrator in the Forgejo example) exit; if only they
+  exited, with code 0, and everything else runs and is healthy, the
+  deployment succeeds. **The next host starts only after the
   previous one succeeded**; the first failure stops the deployment.
 - Without Docker, Podman (`podman compose`) is used; the wait lasts until
   every container of the project runs and is healthy.
@@ -198,7 +201,7 @@ with the placeholders `<service from compose>` and `<container port>`:
 | Uptime Kuma | the project's compose file as is, data in `./data` |
 | umami + PostgreSQL | secrets from `.env` (`env_keys`), a pinned version (`images`) |
 | n8n + PostgreSQL | three services, a file alongside (`files`), everything from the project's `.env` |
-| Gitea + PostgreSQL | a second port to the outside, SSH 2222 (`ports` with `0.0.0.0`) |
+| Forgejo + PostgreSQL | no install wizard: the administrator comes from `.env` through a one-shot service; a second port to the outside, SSH 2222 (`ports` with `0.0.0.0`) |
 | WordPress + MariaDB | a site behind the HTTPS proxy (`X-Forwarded-Proto`) |
 | Plausible | three services with ClickHouse, a config directory (`files`) |
 
@@ -391,7 +394,7 @@ compose:
   nothing, so it is a warning ("the site is checked after the deployment")
   rather than an error. If the image declares no ports there is nothing to
   check; if the site answers 502, the log suggests checking the port.
-  Other publications of the site service (gitea's SSH `2222:22` in
+  Other publications of the site service (Forgejo's SSH `2222:2222` in
   `compose.ports`) do not get in the site's way; the log just notes they go
   separately.
 - **What the host lacks is installed:** the proxy and `certbot` (to issue
@@ -490,7 +493,7 @@ A pipeline's "Access":
 - **Registry** — `login:token` for a private registry (for tag watching).
 - **Stack .env** — for `action: compose`: the stack's environment
   variables (`KEY=value` per line). The order of lines only matters when a
-  value refers to another variable (`GITEA_ROOT_URL=https://${GITEA_SSH_DOMAIN}`):
+  value refers to another variable (`FORGEJO_ROOT_URL=https://${FORGEJO_DOMAIN}/`):
   docker compose only substitutes what is set above in `.env`, so such a
   variable must come after the one it refers to; otherwise the dry run
   names the line and says what to move up.

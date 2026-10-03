@@ -1,0 +1,81 @@
+# Forgejo + PostgreSQL для выкладки через хаб nkt: секреты и адреса — из
+# .env конвейера («Доступ» → «.env стека»), версии закреплены. Мастера
+# установки нет: настройки — из окружения, администратор заводится
+# разовым сервисом forgejo-admin из .env.
+services:
+  forgejo:
+    # rootless: работает от пользователя git (1000), SSH — встроенный, 2222.
+    image: codeberg.org/forgejo/forgejo:16.0-rootless
+    restart: unless-stopped
+    environment:
+      FORGEJO__database__DB_TYPE: postgres
+      FORGEJO__database__HOST: db:5432
+      FORGEJO__database__NAME: forgejo
+      FORGEJO__database__USER: forgejo
+      FORGEJO__database__PASSWD: ${POSTGRES_PASSWORD}
+      FORGEJO__server__ROOT_URL: ${FORGEJO_ROOT_URL}
+      FORGEJO__server__DOMAIN: ${FORGEJO_DOMAIN}
+      FORGEJO__server__SSH_DOMAIN: ${FORGEJO_DOMAIN}
+      FORGEJO__server__SSH_PORT: "2222"
+      FORGEJO__server__SSH_LISTEN_PORT: "2222"
+      FORGEJO__server__START_SSH_SERVER: "true"
+      # Без страницы установки; регистрация закрыта — пользователей
+      # заводит администратор.
+      FORGEJO__security__INSTALL_LOCK: "true"
+      FORGEJO__service__DISABLE_REGISTRATION: "true"
+    volumes:
+      - forgejo-data:/var/lib/gitea
+    # Веб (3000) не публикуется: сайт опубликует его на 127.0.0.1 сам.
+    # SSH для git — наружу; в конвейере: ports: forgejo: ["0.0.0.0:2222:2222"].
+    ports:
+      - "2222:2222"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://127.0.0.1:3000/api/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # Разовый: заводит администратора из .env, когда forgejo поднялся, и
+  # завершается. Уже есть — ничего не делает (пароль потом меняют в самом
+  # Forgejo). nkt считает его завершение с кодом 0 успехом выкладки.
+  forgejo-admin:
+    image: codeberg.org/forgejo/forgejo:16.0-rootless
+    restart: "no"
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        forgejo admin user list --admin | awk 'NR>1 {print $$2}' | grep -qx "$$FORGEJO_ADMIN_USER" ||
+        forgejo admin user create --admin --username "$$FORGEJO_ADMIN_USER"
+        --password "$$FORGEJO_ADMIN_PASSWORD" --email "$$FORGEJO_ADMIN_EMAIL" --must-change-password=false
+    environment:
+      FORGEJO_ADMIN_USER: ${FORGEJO_ADMIN_USER}
+      FORGEJO_ADMIN_PASSWORD: ${FORGEJO_ADMIN_PASSWORD}
+      FORGEJO_ADMIN_EMAIL: ${FORGEJO_ADMIN_EMAIL}
+    volumes:
+      - forgejo-data:/var/lib/gitea
+    depends_on:
+      forgejo:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: forgejo
+      POSTGRES_USER: forgejo
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U forgejo -d forgejo"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  forgejo-data:
+  db-data:

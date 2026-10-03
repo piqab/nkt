@@ -3354,9 +3354,9 @@
         "title": "n8n + PostgreSQL",
         "hint": "Automation: three services, the init-data.sh file alongside (files), everything from the project's .env."
       },
-      "gitea": {
-        "title": "Gitea + PostgreSQL",
-        "hint": "A git server: the web through the site, SSH on 2222 open to the outside (ports, 0.0.0.0)."
+      "forgejo": {
+        "title": "Forgejo + PostgreSQL",
+        "hint": "A git server without the install wizard: the administrator from .env (a one-shot service), the web through the site, SSH on 2222 open to the outside."
       },
       "wordpress": {
         "title": "WordPress + MariaDB",

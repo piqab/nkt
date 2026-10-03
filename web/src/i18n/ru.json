@@ -3358,9 +3358,9 @@
         "title": "n8n + PostgreSQL",
         "hint": "Автоматизация: три сервиса, файл init-data.sh рядом (files), всё — из .env проекта."
       },
-      "gitea": {
-        "title": "Gitea + PostgreSQL",
-        "hint": "Git-сервер: веб — через сайт, SSH на 2222 — наружу (ports, 0.0.0.0)."
+      "forgejo": {
+        "title": "Forgejo + PostgreSQL",
+        "hint": "Git-сервер без мастера установки: администратор из .env (разовый сервис), веб — через сайт, SSH на 2222 — наружу."
       },
       "wordpress": {
         "title": "WordPress + MariaDB",

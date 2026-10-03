@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -308,7 +309,15 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if p.Engine == "docker" {
 		// --wait: ждать, пока контейнеры поднимутся и пройдут healthcheck.
 		if err := run(wait+5*time.Minute, "up", "-d", "--remove-orphans", "--wait", "--wait-timeout", strconv.Itoa(p.WaitTimeout)); err != nil {
-			return diagnose(err)
+			// Разовые сервисы (restart: "no" — например, заведение
+			// администратора) завершаются, и --wait считает это провалом.
+			// Если завершились только они и с кодом 0, а остальное работает
+			// и здорово, — стек поднят.
+			if done := oneShotsOnly(ctx, c, p.Engine, p.Project, p.File); len(done) > 0 {
+				jc.Log("compose.oneShotDone", strings.Join(done, ", "))
+			} else {
+				return diagnose(err)
+			}
 		}
 	} else {
 		if err := run(10*time.Minute, "up", "-d", "--remove-orphans"); err != nil {
@@ -403,4 +412,45 @@ func composePullCause(out string, pullErr error) error {
 		return msgs.Errorf("compose.pullNotFound")
 	}
 	return pullErr
+}
+
+// oneShotsOnly — разовые сервисы стека, завершившиеся с кодом 0, если
+// кроме них всё работает и здорово (иначе nil). Разовый — restart «no» или
+// не задан.
+func oneShotsOnly(ctx context.Context, c collect.Collector, engine, project, file string) []string {
+	cfg, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgs(c, project, file), "config", "--format", "json")...)
+	if err != nil || !cfg.OK() {
+		return nil
+	}
+	ps, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgs(c, project, file), "ps", "-a", "--format", "json")...)
+	if err != nil || !ps.OK() {
+		return nil
+	}
+	return oneShotsDone(cfg.Stdout, composePS(ps.Stdout))
+}
+
+// oneShotsDone — чистая часть oneShotsOnly (для тестов).
+func oneShotsDone(configJSON string, entries []composePSEntry) []string {
+	var doc struct {
+		Services map[string]struct {
+			Restart string `json:"restart"`
+		} `json:"services"`
+	}
+	if json.Unmarshal([]byte(configJSON), &doc) != nil || len(entries) == 0 {
+		return nil
+	}
+	var done []string
+	for _, e := range entries {
+		svc, known := doc.Services[e.Service]
+		switch {
+		case e.State == "running" && (e.Health == "" || e.Health == "healthy"):
+		case e.State == "exited" && e.ExitCode == 0 && known && (svc.Restart == "" || svc.Restart == "no"):
+			if !slices.Contains(done, e.Service) {
+				done = append(done, e.Service)
+			}
+		default:
+			return nil
+		}
+	}
+	return done
 }

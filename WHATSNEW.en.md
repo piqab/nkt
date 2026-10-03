@@ -8,6 +8,18 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.100 — 2026-10-03
+
+- **A Forgejo example instead of Gitea, without the install wizard.**
+  Forgejo 16.0 (rootless) + PostgreSQL 17: settings from the environment,
+  registration closed, and the administrator created from `.env` by the
+  one-shot `forgejo-admin` service, so you can sign in right after the
+  deployment. SSH is built in, on 2222. The old gitea example's data does
+  not move over: remove that stack and deploy the new one.
+- **One-shot services in a stack.** If `up --wait` only trips over
+  services with `restart: "no"` that exited with code 0 while everything
+  else runs and is healthy, the deployment succeeds (the log lists them).
+
 ## v1.11.99 — 2026-10-03
 
 - **Go to whatever is responsible.** Findings get "Go to service nginx"
