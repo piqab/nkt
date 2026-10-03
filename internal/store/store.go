@@ -320,6 +320,8 @@ CREATE TABLE IF NOT EXISTS hosts (
     via                TEXT NOT NULL DEFAULT '',   -- как хаб подключается к машине: '' авто | direct | jump (через хост)
     ssh_host_key       TEXT NOT NULL DEFAULT '',   -- публичный ключ SSH хоста (base64), запомнен при первом подключении
     api_port           INTEGER NOT NULL DEFAULT 0, -- порт API nkt на хосте; 0 — как у хаба (NKT_HUB_HOST_API_PORT)
+    sudo_mode          TEXT NOT NULL DEFAULT '',   -- точное состояние sudo (в т. ч. narrow); sudo_status — совместимое
+                                                    -- значение под старый CHECK, его без пересборки таблицы не расширить
     tunnel_enabled     INTEGER NOT NULL DEFAULT 0, -- reverse-tunnel fallback for when SSH is unreachable, see internal/tunnel
     tunnel_token_hash  BLOB,                       -- legacy/unused: SHA-256 of the token, from when the host verified it;
                                                     -- kept only per this file's own "never remove a past column" policy
@@ -568,6 +570,9 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"host_events", "detail_args", `ALTER TABLE host_events ADD COLUMN detail_args TEXT NOT NULL DEFAULT ''`},
 	{"job_log", "key", `ALTER TABLE job_log ADD COLUMN key TEXT NOT NULL DEFAULT ''`},
 	{"job_log", "args", `ALTER TABLE job_log ADD COLUMN args TEXT NOT NULL DEFAULT ''`},
+	// sudo_mode — точное состояние sudo: у sudo_status CHECK без
+	// «narrow», а CHECK в SQLite меняется только пересборкой таблицы.
+	{"hosts", "sudo_mode", `ALTER TABLE hosts ADD COLUMN sudo_mode TEXT NOT NULL DEFAULT ''`},
 	{"host_groups", "profile_id", `ALTER TABLE host_groups ADD COLUMN profile_id INTEGER NOT NULL DEFAULT 0`},
 	{"profiles", "color", `ALTER TABLE profiles ADD COLUMN color TEXT NOT NULL DEFAULT ''`},
 	{"hosts", "profile_id", `ALTER TABLE hosts ADD COLUMN profile_id INTEGER NOT NULL DEFAULT 0`},

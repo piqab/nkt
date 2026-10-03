@@ -145,7 +145,7 @@ func (d *DB) CreateHost(ctx context.Context, name, addr string, sshPort int, ssh
 }
 
 const hostColumns = `id, name, addr, ssh_port, ssh_user, ssh_auth_kind, secret_enc,
-	arch, status, nkt_version, admin_user, admin_password_enc, sudo_status, terminal_enabled,
+	arch, status, nkt_version, admin_user, admin_password_enc, COALESCE(NULLIF(sudo_mode, ''), sudo_status), terminal_enabled,
 	tunnel_enabled, tunnel_token_enc, tunnel_cert_sha256, error_msg, created_at, last_seen_at, group_name,
 	parent_id, profile_id, apt_via_hub, cluster_id, k8s_role, binary_via, via, ssh_host_key, api_port`
 
@@ -235,8 +235,8 @@ func (d *DB) UpdateHost(ctx context.Context, id int64, name, addr string, sshPor
 	// clearing it here means the UI shows "неизвестно" instead of a status
 	// that may no longer be true until the next install/update reobserves it.
 	res, err := d.ExecContext(ctx,
-		`UPDATE hosts SET name = ?, addr = ?, ssh_port = ?, ssh_user = ?, ssh_auth_kind = ?, sudo_status = ? WHERE id = ?`,
-		name, addr, sshPort, sshUser, authKind, SudoStatusUnknown, id)
+		`UPDATE hosts SET name = ?, addr = ?, ssh_port = ?, ssh_user = ?, ssh_auth_kind = ?, sudo_status = ?, sudo_mode = ? WHERE id = ?`,
+		name, addr, sshPort, sshUser, authKind, SudoStatusUnknown, SudoStatusUnknown, id)
 	if err != nil {
 		return err
 	}
@@ -287,16 +287,32 @@ func (d *DB) SetHostGroup(ctx context.Context, id int64, group string) error {
 	return tx.Commit()
 }
 
+// ValidSudoStatus — известное состояние sudo.
+func ValidSudoStatus(s string) bool {
+	switch s {
+	case SudoStatusUnknown, SudoStatusRoot, SudoStatusNopasswd, SudoStatusPasswordRequired, SudoStatusNarrow:
+		return true
+	}
+	return false
+}
+
+// legacySudoStatus — значение для старого столбца sudo_status (его CHECK
+// не знает «narrow»: для sudo вне hub-sudo это «нужен пароль»).
+func legacySudoStatus(s string) string {
+	if s == SudoStatusNarrow {
+		return SudoStatusPasswordRequired
+	}
+	return s
+}
+
 // SetHostSudoStatus records what the last install/update actually observed
 // about sudo access for a non-root SSH user (or that none was needed,
 // SudoStatusRoot) — see the SudoStatus* constants.
 func (d *DB) SetHostSudoStatus(ctx context.Context, id int64, status string) error {
-	switch status {
-	case SudoStatusUnknown, SudoStatusRoot, SudoStatusNopasswd, SudoStatusPasswordRequired:
-	default:
+	if !ValidSudoStatus(status) {
 		return errors.New("unknown sudo status: " + status)
 	}
-	res, err := d.ExecContext(ctx, `UPDATE hosts SET sudo_status = ? WHERE id = ?`, status, id)
+	res, err := d.ExecContext(ctx, `UPDATE hosts SET sudo_status = ?, sudo_mode = ? WHERE id = ?`, legacySudoStatus(status), status, id)
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.121 — 2026-10-03
+
+- **The "narrow sudo" mark is finally saved.** The `narrow` state failed
+  the hub database check and was silently not written: after narrowing,
+  the mark stayed as it was, red or "?". It is now stored in a separate
+  column, carried over by export and import, and a write error goes to the
+  service log. Hosts already narrowed get the green mark on the first
+  check: open the "hub's sudo" window or update nkt on the host.
+
 ## v1.11.120 — 2026-10-03
 
 - **The old hub-sudo instructions fit on one line.** The commands for a

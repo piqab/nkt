@@ -193,8 +193,16 @@ func (m *Manager) refreshSudoStatus(ctx context.Context, hostID int64, client *s
 	if st, err := m.probeSudo(client, user); err == nil {
 		status = st.Status
 	}
-	_ = m.db.SetHostSudoStatus(ctx, hostID, status)
+	m.saveSudoStatus(ctx, hostID, status)
 	return status
+}
+
+// saveSudoStatus — записать состояние sudo; ошибка записи — в журнал
+// службы, а не молча (так «narrow» однажды не записывался вовсе).
+func (m *Manager) saveSudoStatus(ctx context.Context, hostID int64, status string) {
+	if err := m.db.SetHostSudoStatus(ctx, hostID, status); err != nil {
+		m.log.Error("saving host sudo status", "host", hostID, "status", status, "err", err)
+	}
 }
 
 // sudoStatusAfterSuccess — состояние, если операция с sudo прошла, а
@@ -226,7 +234,7 @@ func (m *Manager) CheckSudo(ctx context.Context, hostID int64) (SudoState, error
 		return st, err
 	}
 	if st.Status != host.SudoStatus {
-		_ = m.db.SetHostSudoStatus(ctx, hostID, st.Status)
+		m.saveSudoStatus(ctx, hostID, st.Status)
 	}
 	return st, nil
 }
@@ -282,7 +290,7 @@ func (m *Manager) DisableSudoRule(ctx context.Context, hostID int64, file string
 	}
 	st, err = m.probeSudo(link.client, host.SSHUser)
 	if err == nil {
-		_ = m.db.SetHostSudoStatus(ctx, hostID, st.Status)
+		m.saveSudoStatus(ctx, hostID, st.Status)
 	}
 	return st, err
 }
