@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.116 — 2026-10-03
+
+- **Fixes from the security scanners.** Deployment git: the "--" before
+  the repository address and ref is now right in the git call, and the
+  checkout commit is written to HEAD instead of being passed as an
+  argument. hub-sudo: a file close error after a failed copy is no longer
+  lost.
+
 ## v1.11.115 — 2026-10-03
 
 - **The "hub's sudo" window checks the host live.** When it opens and on

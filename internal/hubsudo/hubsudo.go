@@ -336,8 +336,7 @@ func copyHash(src, dst string) (string, error) {
 	}
 	hash := sha256.New()
 	if _, err := io.Copy(io.MultiWriter(out, hash), io.LimitReader(in, 512<<20)); err != nil {
-		out.Close()
-		return "", err
+		return "", errors.Join(err, out.Close())
 	}
 	if err := out.Close(); err != nil {
 		return "", err
@@ -362,8 +361,7 @@ func placeFile(src, dest string, mode os.FileMode) error {
 		return err
 	}
 	if _, err := io.Copy(out, in); err != nil {
-		out.Close()
-		return err
+		return errors.Join(err, out.Close())
 	}
 	if err := out.Close(); err != nil {
 		return err
