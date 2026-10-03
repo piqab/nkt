@@ -3231,7 +3231,7 @@
     "registryCred": "Registry",
     "set": "set",
     "notSet": "not set",
-    "tokenPlaceholder": "access token (https)",
+    "tokenPlaceholder": "token (https) or login:token",
     "keyPlaceholder": "private deploy key (ssh), -----BEGIN OPENSSH PRIVATE KEY-----…",
     "registryPlaceholder": "registry: login:token",
     "saveAccess": "Save",
@@ -3405,7 +3405,8 @@
       "host_unknown": "the server is unreachable: the name does not resolve, no connection, or the certificate is not accepted"
     },
     "accessPlaceholder": "the description has the template placeholder address: paste a compose link or fill in repo:",
-    "scanWithAccess": "Fetched with the keys of pipeline “{{name}}”."
+    "scanWithAccess": "Fetched with the keys of pipeline “{{name}}”.",
+    "tokenHint": "The saved token ends in …{{hint}}; compare it with the token on the server. You can enter “login:token” if the server needs the login."
   },
   "edge": {
     "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment webhooks and/or signed API token requests), and the hub keeps the tunnel to it. There can be several edges.",

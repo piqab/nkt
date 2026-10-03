@@ -3,7 +3,6 @@ package deploy
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"net/url"
 	"os"
 	"os/exec"
@@ -40,8 +39,43 @@ type Git struct {
 // PlaceholderRepo — адрес-заглушка из шаблона описания.
 const PlaceholderRepo = "https://github.com/org/app.git"
 
-// tokenUser — логин для токена в Basic: GitLab ждёт «oauth2»; GitHub,
-// Forgejo, Gitea и прочие берут токен из пароля, логин не важен.
+// TokenLogin — логин и пароль для токена. «логин:токен» в поле — как
+// есть (сервер, которому важен логин); иначе логин по серверу: GitLab ждёт
+// «oauth2», GitHub, Forgejo, Gitea и прочие берут токен из пароля.
+func TokenLogin(repo, token string) (string, string) {
+	if user, pass, ok := strings.Cut(token, ":"); ok && user != "" && pass != "" && !strings.ContainsAny(user, " \t") {
+		return user, pass
+	}
+	return tokenUser(repo), token
+}
+
+// askpassScript — отвечает git на «Username…» и «Password…» значениями из
+// окружения; в самом файле секретов нет.
+const askpassScript = "#!/bin/sh\ncase \"$1\" in\n  Username*|username*) printf '%s\\n' \"$NKT_GIT_USER\" ;;\n  *) printf '%s\\n' \"$NKT_GIT_PASS\" ;;\nesac\n"
+
+func writeAskpass(dir string) (string, error) {
+	p := filepath.Join(dir, "askpass.sh")
+	if b, err := os.ReadFile(p); err == nil && string(b) == askpassScript {
+		return p, nil
+	}
+	if err := os.WriteFile(p, []byte(askpassScript), 0o700); err != nil {
+		return "", err
+	}
+	return p, nil
+}
+
+// TokenHint — последние четыре знака токена: сверить с сервером, тот ли
+// токен сохранён (сам токен не показывается).
+func TokenHint(token string) string {
+	_, pass := TokenLogin("", token)
+	if len(pass) < 8 {
+		return ""
+	}
+	return pass[len(pass)-4:]
+}
+
+// tokenUser — логин для токена: GitLab ждёт «oauth2»; GitHub, Forgejo,
+// Gitea и прочие берут токен из пароля, логин не важен.
 func tokenUser(repo string) string {
 	if u, err := url.Parse(repo); err == nil && strings.Contains(strings.ToLower(u.Hostname()), "gitlab") {
 		return "oauth2"
@@ -104,11 +138,26 @@ func (g Git) run(ctx context.Context, dir string, args ...string) (string, error
 	if err := os.MkdirAll(g.Dir, 0o700); err != nil {
 		return "", err
 	}
-	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_ASKPASS=/bin/false", "LC_ALL=C")
+	env := append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C")
 	if g.Cred.Token != "" {
-		auth := base64.StdEncoding.EncodeToString([]byte(tokenUser(g.Repo) + ":" + g.Cred.Token))
-		env = append(env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=http.extraHeader", "GIT_CONFIG_VALUE_0=Authorization: Basic "+auth)
+		// Вход — как у обычного git: сервер отвечает 401, git спрашивает
+		// логин и пароль у askpass. Заранее отправленный заголовок
+		// отбрасывают некоторые прокси перед сервером и переадресации, а
+		// ответ на запрос входа доходит всегда. Сам askpass — сценарий
+		// без секретов: значения берёт из окружения процесса git.
+		user, pass := TokenLogin(g.Repo, g.Cred.Token)
+		askpass, err := writeAskpass(g.Dir)
+		if err != nil {
+			return "", err
+		}
+		env = append(env, "GIT_ASKPASS="+askpass, "NKT_GIT_USER="+user, "NKT_GIT_PASS="+pass)
+	} else {
+		env = append(env, "GIT_ASKPASS=/bin/false")
 	}
+	// Только доступ конвейера: хранилища паролей системы и пользователя
+	// (credential.helper store и т. п.) не подмешиваются — иначе закрытый
+	// репозиторий «открывался» бы чужими сохранёнными паролями.
+	env = append(env, "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=credential.helper", "GIT_CONFIG_VALUE_0=")
 	sshOpts := "ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=" + filepath.Join(g.Dir, "known_hosts")
 	if g.Cred.SSHKey != "" {
 		key := filepath.Join(g.Dir, "deploy_key")

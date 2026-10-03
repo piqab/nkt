@@ -22,6 +22,8 @@ type AccessCheck struct {
 	RepoReason string `json:"repo_reason,omitempty"`
 	// HasToken, HasKey — какие ключи у конвейера сохранены.
 	HasToken bool `json:"has_token,omitempty"`
+	// TokenHint — последние знаки сохранённого токена (сверить с сервером).
+	TokenHint string `json:"token_hint,omitempty"`
 	HasKey   bool `json:"has_key,omitempty"`
 	// Registry — образ из registry: (пусто — не задан, не проверялся).
 	Registry      string `json:"registry,omitempty"`
@@ -47,6 +49,7 @@ func (s *Server) handlePipelineAccessCheck(w http.ResponseWriter, r *http.Reques
 	res := AccessCheck{Repo: spec.Repo, Ref: spec.Ref}
 	g := deploy.Git{Dir: s.pipelineDir(pl.ID), Cred: s.pipelineCred(pl)}
 	res.HasToken, res.HasKey = g.Cred.Token != "", g.Cred.SSHKey != ""
+	res.TokenHint = deploy.TokenHint(g.Cred.Token)
 	refs, err := map[string]string(nil), error(nil)
 	if spec.Repo == deploy.PlaceholderRepo {
 		res.RepoReason = "placeholder"

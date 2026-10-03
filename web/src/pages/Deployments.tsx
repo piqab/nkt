@@ -1362,6 +1362,7 @@ interface AccessCheck {
   repo_reason?: string
   has_token?: boolean
   has_key?: boolean
+  token_hint?: string
   registry?: string
   registry_ok?: boolean
   registry_tags?: number
@@ -1399,6 +1400,7 @@ function AccessCheckView({ check, checking, onRecheck }: { check: AccessCheck | 
                     <span>{ok(false, t('deploy.accessRepoFail', { repo: check.repo, error: gitReasonText(t, check.repo_reason, check.repo_error) }))}</span>
                   </Tooltip>
                 )}
+          {check.has_token && check.token_hint && <div className="small muted">{t('deploy.tokenHint', { hint: check.token_hint })}</div>}
           {check.registry &&
             (check.registry_ok
               ? ok(true, t('deploy.accessRegistryOK', { image: check.registry, count: check.registry_tags ?? 0 }))
