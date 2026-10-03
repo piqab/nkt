@@ -930,6 +930,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// задание хаба: одну половину делает хост, вторую он сам.
 	r.jobs.Register(hub.KindVMProvision, hub.NewVMProvisionRunner(manager))
 	r.jobs.Register(hub.KindClamDBPush, hub.NewClamDBPushRunner(manager))
+	r.jobs.Register(hub.KindPurgeAll, hub.NewPurgeAllRunner(manager))
 	// Сценарии — тоже задание хаба; исполнителю нужен сервер, потому что
 	// он запускает и другие задания хаба (создание машин).
 	r.jobs.Register(hub.KindScriptRun, server.ScriptRunner())

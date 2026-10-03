@@ -7,6 +7,7 @@ import { usePrivacy } from '../privacy'
 import { AISettingsCard } from '../components/AISettingsCard'
 import { ApiTokensCard } from '../components/ApiTokensCard'
 import { NavLayoutCard } from '../components/NavLayoutModal'
+import { DangerZoneCard } from '../components/PurgeAllModal'
 import type { HubVersionInfo, HubVulnDBInfo } from '../types'
 
 interface AptCacheInfo {
@@ -475,6 +476,9 @@ export default function About({ admin = false }: { admin?: boolean }) {
           </>
         )}
       </Card>
+
+      {/* Опасная зона — перед приватным режимом: тот по просьбе последний. */}
+      <DangerZoneCard admin={admin} />
 
       {/* Приватный режим — настройка браузера, живёт здесь рядом с
           остальными настройками хаба; включённый виден по оранжевому

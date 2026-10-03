@@ -3953,5 +3953,25 @@
     "narrowed": "Done: sudo narrowed.",
     "narrowedOtherRule": "The nkt rule is narrowed, but another sudoers rule still gives this user passwordless sudo; remove it by hand.",
     "removed": "The nkt rule is removed. Installing and updating nkt on this host will now need sudo or root."
+  },
+  "purgeAll": {
+    "title": "Danger zone",
+    "hint": "Remove nkt from the hub's hosts. A full export comes first and is required: the hub and the hosts can be restored from it.",
+    "button": "Remove nkt from all hosts",
+    "selectTitle": "Remove nkt from hosts",
+    "selectHint": "The export is downloaded. Tick the hosts: nkt will be removed from them, and they will leave the hub. The hub's machine (localhost) is not listed; the hub does not remove nkt from itself this way.",
+    "selectAll": "Select all",
+    "selectNone": "Clear all",
+    "selected": "{{count}} of {{total}} selected",
+    "noHosts": "No hosts.",
+    "warnSudo": "sudo needs a password: removal will fail",
+    "warnUnreachable": "unreachable: removal will fail",
+    "warnNotInstalled": "nkt is not installed",
+    "whatTitle": "What to remove on each host:",
+    "optUser": "delete the hub's SSH user (except root)",
+    "removedFromHub": "Where the cleanup succeeds, the host leaves the hub; where it does not, it stays listed with the error.",
+    "confirmWord": "delete",
+    "typeWord": "To confirm, type “{{word}}”:",
+    "start": "Remove nkt from hosts: {{count}}"
   }
 }
