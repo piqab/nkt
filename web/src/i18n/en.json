@@ -51,7 +51,12 @@
     "profiles": "Profiles",
     "clusters": "Clusters",
     "deploy": "Deployments",
-    "fail2ban": "fail2ban"
+    "fail2ban": "fail2ban",
+    "toService": "Go to service {{name}}",
+    "toConfig": "Go to config",
+    "toContainer": "Go to container {{name}}",
+    "toSection": "Open: {{name}}",
+    "toFirewall": "Firewall"
   },
   "about": {
     "title": "About",
@@ -242,7 +247,9 @@
       "malware": "Go to malware",
       "fail2ban": "Fail2ban",
       "open": "Open file",
-      "openLine": "Open at line {{line}}"
+      "openLine": "Open at line {{line}}",
+      "toService": "Go to service {{name}}",
+      "toContainer": "Go to container {{name}}"
     },
     "onlyNew": "only new ({{count}})",
     "newTag": "new"

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Form, Input, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { useFocusRow } from '../focus'
 import { useHostRescan } from '../rescan'
 import { api, useApi } from '../api'
 import type { Me, PodmanContainer } from '../types'
@@ -22,6 +23,7 @@ import { TitleHelp } from '../components/Docs'
 export default function Podman({ me }: { me: Me }) {
   const { t } = useTranslation()
   const containers = useApi<{ containers: PodmanContainer[] }>('/podman/containers', 30_000)
+  const focusContainer = useFocusRow(!!containers.data)
   const launcher = useJobLauncher(() => void api('/inventory/refresh', { method: 'POST' }).then(() => containers.reload()))
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
@@ -250,6 +252,7 @@ export default function Podman({ me }: { me: Me }) {
               <DataTable<PodmanContainer>                 dataSource={activeContainers}
                 columns={columns}
                 rowKey="id"
+                rowClassName={(c) => (c.name === focusContainer ? 'row-focus' : '')}
                 rowSelection={
                   canControl
                     ? {

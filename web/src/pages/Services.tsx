@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Sensitive } from '../privacy'
 import { Button, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { useFocusRow } from '../focus'
 import { useHostRescan } from '../rescan'
 import { api, useApi } from '../api'
 import type { Listener, Me, ServiceUnit } from '../types'
@@ -159,6 +160,7 @@ function buildMiscColumns(
 export default function Services({ me }: { me: Me }) {
   const { t } = useTranslation()
   const services = useApi<{ services: ServiceUnit[]; allow_mutations: boolean }>('/services', 30_000)
+  const focusService = useFocusRow(!!services.data)
   const misc = useApi<{ listeners: Listener[] }>('/misc', 60_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
@@ -406,6 +408,7 @@ export default function Services({ me }: { me: Me }) {
                 dataSource={installedServices}
                 columns={columns}
                 rowKey="name"
+                rowClassName={(s) => (s.name === focusService ? 'row-focus' : '')}
                 // Ширина по содержимому: при делении поровну колонке
                 // действий не хватало места и кнопки вставали столбиком.
                 tableLayout="auto"

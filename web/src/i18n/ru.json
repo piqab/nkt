@@ -51,7 +51,12 @@
     "profiles": "Профили",
     "clusters": "Кластеры",
     "deploy": "Выкладки",
-    "fail2ban": "fail2ban"
+    "fail2ban": "fail2ban",
+    "toService": "К службе {{name}}",
+    "toConfig": "К конфигу",
+    "toContainer": "К контейнеру {{name}}",
+    "toSection": "Открыть: {{name}}",
+    "toFirewall": "Firewall"
   },
   "about": {
     "title": "О системе",
@@ -242,7 +247,9 @@
       "malware": "К вредоносному",
       "fail2ban": "Fail2ban",
       "open": "Открыть файл",
-      "openLine": "Открыть на строке {{line}}"
+      "openLine": "Открыть на строке {{line}}",
+      "toService": "К службе {{name}}",
+      "toContainer": "К контейнеру {{name}}"
     },
     "onlyNew": "только новые ({{count}})",
     "newTag": "новая"

@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { Tabs } from 'antd'
 import Images from './Images'
 import { useTranslation } from 'react-i18next'
+import { tabFromQuery } from '../focus'
 import { useApi } from '../api'
 import type { Container, LXDInstance, Me, PodmanContainer, VirtualMachine } from '../types'
 import Docker from './Docker'
@@ -37,11 +39,15 @@ export default function Containers({ me }: { me: Me }) {
   const vms = useApi<{ vms: VirtualMachine[] }>('/vms', 30_000)
   const images = useApi<{ images: unknown[] }>('/images', 60_000)
   const k8s = useApi<{ status: { installed: boolean }; nodes?: unknown[] }>('/k8s', 60_000)
+  const [tab, setTab] = useState<string>(() => tabFromQuery(['docker', 'podman', 'lxd', 'vms', 'k8s', 'profiles'] as const, 'docker'))
   void images // счётчик образов теперь внутри вкладки Docker, отдельной метки у них нет
 
   return (
     <Tabs
-      defaultActiveKey="docker"
+      // Вкладка из ссылки (?tab=) — управляемо: вкладка Kubernetes
+      // появляется только после ответа /k8s.
+      activeKey={tab}
+      onChange={setTab}
       items={[
         {
           key: 'docker',

@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.99 — 2026-10-03
+
+- **Go to whatever is responsible.** Findings get "Go to service nginx"
+  ("Services" with the row highlighted) and "Go to container"
+  ("Containers" with the row highlighted); the same buttons now appear in
+  "What's broken" on the overview. The selected resource map node has a
+  button to its service, config, container or tab (LXD, machines,
+  Kubernetes), and an undeclared listener links to "Firewall".
+
 ## v1.11.98 — 2026-10-03
 
 - **Hub "Alerts" has two tabs:** "Journal" (always opened first) and

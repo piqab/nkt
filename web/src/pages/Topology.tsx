@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button, Checkbox } from 'antd'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
+import { nodeTarget } from '../focus'
 import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
 import { AIReviewCard } from '../components/AIReview'
@@ -70,6 +72,7 @@ interface Placed extends GraphNode {
 
 export default function TopologyPage() {
   const { t } = useTranslation()
+  const navigate = useNavigate()
   const { data, error, loading } = useApi<Graph>('/topology', 120_000)
   // Чей это разбор: настоящий хост хаба или сам хаб/одиночный nkt.
   // LOCAL_HOST_ID (-1) и «хост не выбран» (null) — это 0, то есть «свой».
@@ -380,6 +383,16 @@ export default function TopologyPage() {
                 {selectedNode.kind}
                 {selectedNode.sublabel ? ` · ${selectedNode.sublabel}` : ''} · {selectedNode.status}
               </div>
+              {(() => {
+                const target = nodeTarget(selectedNode)
+                return target ? (
+                  <div>
+                    <Button size="small" onClick={() => navigate(target.to)}>
+                      {t(target.labelKey, { name: target.name ?? '' })}
+                    </Button>
+                  </div>
+                ) : null
+              })()}
               {selectedFindings.map((f, i) => (
                 <span key={i} className="topology-finding-chip">
                   <SeverityBadge severity={f.severity} />

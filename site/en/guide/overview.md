@@ -51,7 +51,13 @@ Below a finding are buttons that take you where it gets fixed:
 - **Firewall**: for a port open to the internet, Docker or Kubernetes
   bypassing the rules, a stale rule;
 - **Go to malware**: the "Malware" tab in "Vulnerabilities";
-- **Fail2ban**: for fail2ban findings.
+- **Fail2ban**: for fail2ban findings;
+- **Go to service nginx** (haproxy, caddy, docker, fail2ban…): "Services"
+  with the service's row highlighted; **Go to container**: "Containers"
+  with the row highlighted.
+
+The same buttons appear on each finding in "What's broken" on the
+overview.
 
 What is checked:
 
@@ -133,7 +139,11 @@ external network → service → listener → pool → backend → container or 
 Edges come from the configs (`proxy_pass`, `upstream`, `use_backend`,
 published ports), node state from live listeners, containers and
 findings. The column layout stays stable between scans; zoom and drag
-with the mouse, node details on hover.
+with the mouse, node details on hover. The selected node's panel has a
+button to whatever is responsible for it: a service opens "Services" with
+its row highlighted, a listener or pool its config, a Docker or Podman
+container its row in "Containers", LXD, machines and Kubernetes their tab,
+a network "Network interfaces", an undeclared listener "Firewall".
 
 libvirt machines and LXD instances are linked to their networks (a
 libvirt bridge, an LXD network) and to backends pointing at their

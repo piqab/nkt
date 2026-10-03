@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { Sensitive, blurText } from '../privacy'
 import { Link } from 'react-router-dom'
+import { FindingActions } from '../components/FindingActions'
 import { Button, Tag, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useHostRescan } from '../rescan'
@@ -242,6 +243,7 @@ export default function OverviewPage({ me }: { me: Me }) {
                   </div>
                   <div className="small secondary">{blurText(f.detail ?? '')}</div>
                   {f.object && <Tag>{blurText(f.object)}</Tag>}
+                  <FindingActions f={f} me={me} />
                 </div>
               ))}
             </div>
