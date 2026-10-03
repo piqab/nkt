@@ -845,7 +845,9 @@
     "filterText": "search: host, address, text",
     "showHidden": "show hidden ({{count}})",
     "filterReset": "reset the filter",
-    "emptyFiltered": "Nothing found; change the filter."
+    "emptyFiltered": "Nothing found; change the filter.",
+    "tabJournal": "Journal",
+    "tabSettings": "Settings"
   },
   "changes": {
     "title": "What changed",

@@ -90,7 +90,7 @@ also acts; a host and group scope narrows both lists and actions.
 ## Triggers
 
 **nkt Trigger** (webhook): add the node, copy its Production URL into the
-hub ("Alerts" → "Outgoing webhooks" → "New recipient") and paste the
+hub ("Alerts" → "Settings" → "Outgoing webhooks" → "New recipient") and paste the
 secret the hub shows into the node's **Signing Secret** field. A request
 with a wrong signature or older than 10 minutes gets 401 and does not
 start the workflow. **Events** chooses which events start it (the

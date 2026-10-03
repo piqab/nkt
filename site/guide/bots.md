@@ -17,7 +17,7 @@ title: Боты
 
 1. У [@BotFather](https://t.me/BotFather) — `/newbot`, получите токен
    (`123456789:AA…`).
-2. «Оповещения» → **«Бот Telegram»** → «Настроить»: вставьте токен — хаб
+2. «Оповещения» → «Настройка» → **«Бот Telegram»** → «Настроить»: вставьте токен — хаб
    проверит его у Telegram и покажет имя бота.
 3. Напишите боту `/start` в нужном чате (группу — сначала добавьте в неё
    бота): он ответит номером чата. Добавьте чат в настройках:
@@ -120,7 +120,7 @@ title: Боты
    - **Interactivity & Shortcuts** → On, Request URL —
      `https://<edge>/callbacks/slack/interactive`;
    - **Install to Workspace**; пригласите бота в каналы (`/invite @бот`).
-2. «Оповещения» → **«Slack»** → «Настроить»: **Bot User OAuth Token**
+2. «Оповещения» → «Настройка» → **«Slack»** → «Настроить»: **Bot User OAuth Token**
    (`xoxb-…`, хаб проверит его у Slack) и **Signing Secret** (Basic
    Information). Карточка показывает готовые Request URL — с edge с ролью
    «колбэки», если он есть, иначе адрес самого хаба.

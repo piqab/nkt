@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.98 — 2026-10-03
+
+- **Hub "Alerts" has two tabs:** "Journal" (always opened first) and
+  "Settings": what to record and notify about, outgoing webhooks, the
+  Telegram and Slack bots. The journal no longer sits below the settings.
+
 ## v1.11.97 — 2026-10-02
 
 - **Dry run: the site port without false errors.** If the image is not

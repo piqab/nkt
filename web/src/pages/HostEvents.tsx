@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AIExplain } from '../components/AIExplain'
 import { Sensitive, blurText } from '../privacy'
-import { Button, Checkbox, Input, InputNumber, Select, Switch, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { Button, Checkbox, Input, InputNumber, Select, Switch, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, qs, useApi } from '../api'
 import type { HostEvent, Me } from '../types'
@@ -303,6 +303,78 @@ export default function HostEvents({ me }: { me?: Me }) {
     },
   ]
 
+  const journal = (
+    <Card
+      title={t('events.listTitle')}
+      subtitle={
+        filtered
+          ? t('events.listFiltered', { shown: list.length, total: events.data?.total ?? 0 })
+          : t('events.listSubtitle', { count: list.length })
+      }
+    >
+      <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.5rem' }}>
+        <Select
+          mode="multiple"
+          allowClear
+          style={{ minWidth: 220 }}
+          placeholder={t('events.filterKinds')}
+          value={filter.kinds}
+          onChange={(v: string[]) => setFilter({ kinds: v })}
+          options={Object.keys(KIND_COLOR)
+            .concat(['rebooted'])
+            .filter((k, i, a) => a.indexOf(k) === i)
+            .map((k) => ({ value: k, label: t(`events.kind.${k}`, { defaultValue: k }) }))}
+        />
+        <Select
+          allowClear
+          showSearch
+          style={{ minWidth: 180 }}
+          placeholder={t('events.filterHost')}
+          value={filter.host || undefined}
+          onChange={(v?: string) => setFilter({ host: v ?? '' })}
+          options={(events.data?.hosts ?? []).map((h) => ({ value: h, label: h }))}
+        />
+        <Input.Search
+          allowClear
+          style={{ maxWidth: 300 }}
+          placeholder={t('events.filterText')}
+          value={text}
+          onChange={(e) => {
+            setText(e.target.value)
+            if (!e.target.value) setFilter({ q: '' })
+          }}
+          onSearch={(v) => setFilter({ q: v.trim() })}
+        />
+        {(filter.hidden || (events.data?.hidden ?? 0) > 0 || Object.values(events.data?.hide ?? {}).some(Boolean)) && (
+          <Checkbox checked={filter.hidden} onChange={(e) => setFilter({ hidden: e.target.checked })}>
+            {t('events.showHidden', { count: events.data?.hidden ?? 0 })}
+          </Checkbox>
+        )}
+        {filtered && (
+          <Button
+            size="small"
+            type="link"
+            onClick={() => {
+              setText('')
+              setFilter({ kinds: [], host: '', q: '' })
+            }}
+          >
+            {t('events.filterReset')}
+          </Button>
+        )}
+      </div>
+      {events.loading && !events.data ? (
+        <Loading what={t('events.title')} />
+      ) : list.length === 0 ? (
+        <p className="small muted">{filtered ? t('events.emptyFiltered') : t('events.empty')}</p>
+      ) : (
+        <div className="table-wrap">
+          <DataTable<HostEvent> dataSource={list} columns={columns} rowKey="id" />
+        </div>
+      )}
+    </Card>
+  )
+
   return (
     <>
       <div className="page-head spread">
@@ -317,80 +389,26 @@ export default function HostEvents({ me }: { me?: Me }) {
 
       <ErrorNote error={events.error} />
 
-      <EventSettingsCard onSaved={() => events.reload()} />
-      <OutgoingWebhooksCard admin={!!me?.is_admin} />
-      <TelegramCard admin={!!me?.is_admin} />
-      <SlackCard admin={!!me?.is_admin} />
-
-      <Card
-        title={t('events.listTitle')}
-        subtitle={
-          filtered
-            ? t('events.listFiltered', { shown: list.length, total: events.data?.total ?? 0 })
-            : t('events.listSubtitle', { count: list.length })
-        }
-      >
-        <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.5rem' }}>
-          <Select
-            mode="multiple"
-            allowClear
-            style={{ minWidth: 220 }}
-            placeholder={t('events.filterKinds')}
-            value={filter.kinds}
-            onChange={(v: string[]) => setFilter({ kinds: v })}
-            options={Object.keys(KIND_COLOR)
-              .concat(['rebooted'])
-              .filter((k, i, a) => a.indexOf(k) === i)
-              .map((k) => ({ value: k, label: t(`events.kind.${k}`, { defaultValue: k }) }))}
-          />
-          <Select
-            allowClear
-            showSearch
-            style={{ minWidth: 180 }}
-            placeholder={t('events.filterHost')}
-            value={filter.host || undefined}
-            onChange={(v?: string) => setFilter({ host: v ?? '' })}
-            options={(events.data?.hosts ?? []).map((h) => ({ value: h, label: h }))}
-          />
-          <Input.Search
-            allowClear
-            style={{ maxWidth: 300 }}
-            placeholder={t('events.filterText')}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value)
-              if (!e.target.value) setFilter({ q: '' })
-            }}
-            onSearch={(v) => setFilter({ q: v.trim() })}
-          />
-          {(filter.hidden || (events.data?.hidden ?? 0) > 0 || Object.values(events.data?.hide ?? {}).some(Boolean)) && (
-            <Checkbox checked={filter.hidden} onChange={(e) => setFilter({ hidden: e.target.checked })}>
-              {t('events.showHidden', { count: events.data?.hidden ?? 0 })}
-            </Checkbox>
-          )}
-          {filtered && (
-            <Button
-              size="small"
-              type="link"
-              onClick={() => {
-                setText('')
-                setFilter({ kinds: [], host: '', q: '' })
-              }}
-            >
-              {t('events.filterReset')}
-            </Button>
-          )}
-        </div>
-        {events.loading && !events.data ? (
-          <Loading what={t('events.title')} />
-        ) : list.length === 0 ? (
-          <p className="small muted">{filtered ? t('events.emptyFiltered') : t('events.empty')}</p>
-        ) : (
-          <div className="table-wrap">
-            <DataTable<HostEvent> dataSource={list} columns={columns} rowKey="id" />
-          </div>
-        )}
-      </Card>
+      {/* Журнал — всегда первым при входе; всё, что настраивается, —
+          на соседней вкладке. */}
+      <Tabs
+        defaultActiveKey="journal"
+        items={[
+          { key: 'journal', label: t('events.tabJournal'), children: journal },
+          {
+            key: 'settings',
+            label: t('events.tabSettings'),
+            children: (
+              <>
+                <EventSettingsCard onSaved={() => events.reload()} />
+                <OutgoingWebhooksCard admin={!!me?.is_admin} />
+                <TelegramCard admin={!!me?.is_admin} />
+                <SlackCard admin={!!me?.is_admin} />
+              </>
+            ),
+          },
+        ]}
+      />
     </>
   )
 }
