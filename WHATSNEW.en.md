@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.122 — 2026-10-03
+
+- **fail2ban on the hub: templates to selected hosts.** The hub's
+  template panel shows standard and custom templates, each with “To
+  hosts”: pick hosts (checkboxes cleared, “Select all / Clear all”), a
+  required “Check” with a file diff per host, then “Apply”, a hub job
+  running three hosts at a time that applies exactly what was checked;
+  on error the host rolls its files back. Each host provides its own text
+  of a standard template; hosts without the required program are skipped.
+
 ## v1.11.121 — 2026-10-03
 
 - **The "narrow sudo" mark is finally saved.** The `narrow` state failed

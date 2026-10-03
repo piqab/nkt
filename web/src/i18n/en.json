@@ -3666,7 +3666,25 @@
     "fleetPrivateConfirm": "{{ips}} are internal addresses (a private network, loopback or link-local). Banning them may cut off your own access: a proxy, a VPN, neighbouring machines, the hub itself. Ban anyway?",
     "undoBanned": "Banned: {{ips}} on hosts: {{count}}",
     "undoUnbanned": "Unbanned: {{ips}} on hosts: {{count}}",
-    "undo": "Undo ({{n}})"
+    "undo": "Undo ({{n}})",
+    "fleetTplButton": "To hosts",
+    "fleetTplTitle": "Template {{name}} to hosts",
+    "fleetTplHintBuiltin": "Standard template: each host provides its own text (for example, sshd with the journal in journald or in a file). Hosts without the required program are skipped.",
+    "fleetTplHintCustom": "Custom template from the hub: one text for all selected hosts.",
+    "fleetTplNotInstalled": "fail2ban is not installed",
+    "fleetTplCheck": "Check",
+    "fleetTplApply": "Apply ({{count}})",
+    "fleetTplCheckFirst": "Press \"Check\" first: a dry run on each host shows which files will change. Exactly what was checked gets applied.",
+    "fleetTplCheckTitle": "Check:",
+    "fleetTplShowDiff": "diff",
+    "fleetTplHideDiff": "hide",
+    "fleetTplNothing": "Nothing to apply: no host has changes.",
+    "fleetTplStatus": {
+      "changes": "will change",
+      "same": "no changes",
+      "skip": "skipped",
+      "error": "error"
+    }
   },
   "sites": {
     "title": "Sites",
