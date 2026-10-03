@@ -1124,7 +1124,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	report("hub.checkingAdminAccount")
 	if _, err := bootstrapLogin(ctx, client.Dial, apiAddr, adminUser, adminPassword); err != nil {
 		report("hub.loginFailedResetting")
-		resetErr := error(nil)
+		var resetErr error
 		if narrow {
 			_, resetErr = m.hubSudo(client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpPasswd, Args: map[string]string{"user": adminUser, "password": adminPassword}})
 		} else {

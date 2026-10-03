@@ -15,10 +15,11 @@ import (
 )
 
 // Git на хабе — программой git (в образе хаба она есть). Учётные данные
-// не попадают в командную строку: токен — заголовком через
-// GIT_CONFIG_COUNT/KEY/VALUE (окружение, не argv), ключ SSH — временным
-// файлом 0600 через GIT_SSH_COMMAND. Все значения из описания проверены
-// (ValidRepo, ValidRef), а перед адресом репозитория стоит «--».
+// не попадают в командную строку: токен — через askpass из окружения
+// процесса git, ключ SSH — временным файлом 0600 через GIT_SSH_COMMAND.
+// Все значения из описания проверены (ValidRepo, ValidRef, ValidSHA);
+// перед адресом и ссылкой стоит «--» прямо в вызове git, а коммит для
+// checkout передаётся не аргументом, а записью в HEAD.
 
 // Cred — доступ к репозиторию: токен (https) или ключ развёртывания (ssh).
 type Cred struct {
@@ -49,16 +50,16 @@ func TokenLogin(repo, token string) (string, string) {
 	return tokenUser(repo), token
 }
 
-// askpassScript — отвечает git на «Username…» и «Password…» значениями из
+// gitPromptScript — отвечает git на «Username…» и «Password…» значениями из
 // окружения; в самом файле секретов нет.
-const askpassScript = "#!/bin/sh\ncase \"$1\" in\n  Username*|username*) printf '%s\\n' \"$NKT_GIT_USER\" ;;\n  *) printf '%s\\n' \"$NKT_GIT_PASS\" ;;\nesac\n"
+const gitPromptScript = "#!/bin/sh\ncase \"$1\" in\n  Username*|username*) printf '%s\\n' \"$NKT_GIT_USER\" ;;\n  *) printf '%s\\n' \"$NKT_GIT_PASS\" ;;\nesac\n"
 
 func writeAskpass(dir string) (string, error) {
 	p := filepath.Join(dir, "askpass.sh")
-	if b, err := os.ReadFile(p); err == nil && string(b) == askpassScript {
+	if b, err := os.ReadFile(p); err == nil && string(b) == gitPromptScript {
 		return p, nil
 	}
-	if err := os.WriteFile(p, []byte(askpassScript), 0o700); err != nil {
+	if err := os.WriteFile(p, []byte(gitPromptScript), 0o700); err != nil {
 		return "", err
 	}
 	return p, nil
@@ -131,7 +132,13 @@ var shaRe = regexp.MustCompile(`^[0-9a-f]{40}$`)
 // ValidSHA — полный хэш коммита.
 func ValidSHA(s string) bool { return shaRe.MatchString(s) }
 
-func (g Git) run(ctx context.Context, dir string, args ...string) (string, error) {
+// gitTimeout — предел одного вызова git.
+const gitTimeout = 5 * time.Minute
+
+// run выполняет подготовленный вызовом exec.CommandContext(…, "git", …)
+// git: окружение (доступ, ssh) и каталог ставит сам. Команду собирает
+// вызывающий — с «--» перед значениями из описания прямо в вызове.
+func (g Git) run(cmd *exec.Cmd, dir, what string) (string, error) {
 	if _, err := exec.LookPath("git"); err != nil {
 		return "", msgs.Errorf("deploy.noGit")
 	}
@@ -168,15 +175,12 @@ func (g Git) run(ctx context.Context, dir string, args ...string) (string, error
 		sshOpts += " -o IdentitiesOnly=yes -i " + key
 	}
 	env = append(env, "GIT_SSH_COMMAND="+sshOpts)
-	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
 	cmd.Env = env
 	var out, errb bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &errb
 	if err := cmd.Run(); err != nil {
-		return "", msgs.Errorf("deploy.git", args[0], strings.TrimSpace(redact(errb.String(), g.Cred.Token)))
+		return "", msgs.Errorf("deploy.git", what, strings.TrimSpace(redact(errb.String(), g.Cred.Token)))
 	}
 	return out.String(), nil
 }
@@ -195,7 +199,9 @@ func (g Git) Remote(ctx context.Context, repo string) (map[string]string, error)
 		return nil, err
 	}
 	g.Repo = repo
-	out, err := g.run(ctx, g.Dir, "ls-remote", "--heads", "--tags", "--", repo)
+	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
+	defer cancel()
+	out, err := g.run(exec.CommandContext(ctx, "git", "ls-remote", "--heads", "--tags", "--", repo), g.Dir, "ls-remote")
 	if err != nil {
 		return nil, err
 	}
@@ -231,18 +237,26 @@ func (g Git) Checkout(ctx context.Context, repo, ref, sha, dest string) error {
 	if err := os.MkdirAll(dest, 0o700); err != nil {
 		return err
 	}
-	if _, err := g.run(ctx, dest, "init", "-q"); err != nil {
+	ctx, cancel := context.WithTimeout(ctx, 3*gitTimeout)
+	defer cancel()
+	if _, err := g.run(exec.CommandContext(ctx, "git", "init", "-q"), dest, "init"); err != nil {
 		return err
 	}
-	if _, err := g.run(ctx, dest, "fetch", "-q", "--depth", "1", "--", repo, sha); err != nil {
+	if _, err := g.run(exec.CommandContext(ctx, "git", "fetch", "-q", "--depth", "1", "--", repo, sha), dest, "fetch"); err != nil {
 		if ref == "" {
 			return err
 		}
-		if _, err2 := g.run(ctx, dest, "fetch", "-q", "--depth", "200", "--", repo, ref); err2 != nil {
+		if _, err2 := g.run(exec.CommandContext(ctx, "git", "fetch", "-q", "--depth", "200", "--", repo, ref), dest, "fetch"); err2 != nil {
 			return err2
 		}
 	}
-	_, err := g.run(ctx, dest, "-c", "advice.detachedHead=false", "checkout", "-q", sha)
+	// Отделённый HEAD — это файл HEAD с хэшем коммита (так его пишет и
+	// сам git); reset --hard разворачивает по нему рабочее дерево. Хэш
+	// не уходит в командную строку git вовсе.
+	if err := os.WriteFile(filepath.Join(dest, ".git", "HEAD"), []byte(sha+"\n"), 0o644); err != nil {
+		return err
+	}
+	_, err := g.run(exec.CommandContext(ctx, "git", "reset", "-q", "--hard"), dest, "checkout")
 	return err
 }
 
