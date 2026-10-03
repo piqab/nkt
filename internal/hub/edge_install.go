@@ -170,11 +170,10 @@ func (r *EdgeInstallRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		return err
 	}
 	defer sc.Close()
-	stage := "/tmp/nkt-edge-install-" + randomHex(6)
-	if err := sc.MkdirAll(stage); err != nil {
+	stage, err := makeStageDir(client, "/tmp/nkt-edge-install-")
+	if err != nil {
 		return err
 	}
-	_ = sc.Chmod(stage, 0o700)
 	defer func() { _, _ = runRemote(client, "rm -rf "+stage) }()
 	if err := uploadFile(sc, bin, stage+"/nkt-edge", 0o755, report); err != nil {
 		return err

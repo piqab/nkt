@@ -131,16 +131,16 @@ func UpgradeScript(flavor, role string, u UpgradeSpec) string {
 		if role == RoleAgent {
 			unit = "k3s-agent"
 		}
-		return prelude + strings.Join([]string{
+		return prelude + k3sWorkDir + strings.Join([]string{
 			"ARCH=$(uname -m); case $ARCH in x86_64) A=amd64; BIN=k3s;; aarch64) A=arm64; BIN=k3s-arm64;; armv7l) A=arm; BIN=k3s-armhf;; *) echo \"unsupported arch $ARCH\"; exit 1;; esac",
 			"VER=$(art https://update.k3s.io/v1-release/channels | grep -o '\"id\":\"v" + u.Version + "\".\\{0,400\\}' | grep -o '\"latest\":\"[^\"]*\"' | head -1 | cut -d'\"' -f4)",
 			"test -n \"$VER\" || { echo 'no k3s release in channel v" + u.Version + "'; exit 1; }",
 			"echo \"k3s: $(k3s --version | head -1) -> $VER\"",
 			"REL=https://github.com/k3s-io/k3s/releases/download/$VER",
-			"art $REL/sha256sum-$A.txt > /tmp/nkt-k3s.sums",
-			"art $REL/$BIN > /tmp/nkt-k3s.bin",
-			"echo \"$(grep \" $BIN$\" /tmp/nkt-k3s.sums | awk '{print $1}')  /tmp/nkt-k3s.bin\" | sha256sum -c - >/dev/null",
-			"install -m 755 /tmp/nkt-k3s.bin /usr/local/bin/k3s && rm -f /tmp/nkt-k3s.bin /tmp/nkt-k3s.sums",
+			"art $REL/sha256sum-$A.txt > /var/lib/nkt-k3s/k3s.sums",
+			"art $REL/$BIN > /var/lib/nkt-k3s/k3s.bin",
+			"echo \"$(grep \" $BIN$\" /var/lib/nkt-k3s/k3s.sums | awk '{print $1}')  /var/lib/nkt-k3s/k3s.bin\" | sha256sum -c - >/dev/null",
+			"install -m 755 /var/lib/nkt-k3s/k3s.bin /usr/local/bin/k3s && rm -f /var/lib/nkt-k3s/k3s.bin /var/lib/nkt-k3s/k3s.sums",
 			"systemctl restart " + unit,
 			"sleep 5; systemctl is-active " + unit,
 			"k3s --version | head -1",

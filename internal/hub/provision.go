@@ -258,13 +258,13 @@ func stageFiles(client *ssh.Client, sshUser string, src binarySource, unitConten
 	}
 	defer sftpClient.Close()
 
-	tmpDir := fmt.Sprintf("/tmp/nkt-install-%d", time.Now().UnixNano())
+	tmpDir, err := makeStageDir(client, "/tmp/nkt-install-")
+	if err != nil {
+		return err
+	}
 	defer func() { _, _ = runRemote(client, "rm -rf "+tmpDir) }()
 
 	tmpBin := gopath.Join(tmpDir, "nkt")
-	if err := sftpClient.MkdirAll(tmpDir); err != nil {
-		return msgs.Errorf("collect.creatingDirectory", tmpDir, err)
-	}
 	// Откуда брать бинарник: проба обоих путей при каждой доставке —
 	// доступность GitHub и скорость каналов меняются, прошлый итог
 	// ничего не гарантирует; без копии на GitHub — только SFTP.
@@ -299,7 +299,9 @@ func stageFiles(client *ssh.Client, sshUser string, src binarySource, unitConten
 		return msgs.Errorf("hub.uploadingSystemdUnit", err)
 	}
 	tmpEnv := gopath.Join(tmpDir, "nkt.env")
-	if err := uploadBytes(sftpClient, []byte(envContent), tmpEnv, 0o644); err != nil {
+	// В env пароль админа: файл только для владельца (ставит его root
+	// своими правами, исходные права не переносятся).
+	if err := uploadBytes(sftpClient, []byte(envContent), tmpEnv, 0o600); err != nil {
 		return msgs.Errorf("hub.uploadingNktEnv", err)
 	}
 
@@ -568,6 +570,22 @@ func (p *progressReader) reportNow() {
 	// the English side doesn't end up with a Russian "МБ" baked into an
 	// otherwise-translated line.
 	p.report(p.key, pct, float64(p.read)/(1<<20), float64(p.total)/(1<<20))
+}
+
+// makeStageDir — временный каталог на хосте: создаётся одним mkdir с
+// правами 0700 (только владелец), а занятое имя — ошибка, а не чужой
+// каталог или ссылка. Имя — prefix и число: такие пути принимает hub-sudo.
+func makeStageDir(client *ssh.Client, prefix string) (string, error) {
+	var out string
+	var err error
+	for attempt := 0; attempt < 3; attempt++ {
+		dir := fmt.Sprintf("%s%d", prefix, time.Now().UnixNano())
+		out, err = runRemote(client, "mkdir -m 700 "+shellQuote(dir))
+		if err == nil {
+			return dir, nil
+		}
+	}
+	return "", msgs.Errorf("collect.creatingDirectory", prefix+"…", strings.TrimSpace(out))
 }
 
 func uploadBytes(sftpClient *sftp.Client, data []byte, remotePath string, mode os.FileMode) error {

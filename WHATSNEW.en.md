@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.117 — 2026-10-03
+
+- **Temporary files on hosts are owner-only.** The staging directories
+  for nkt installation, the ClamAV database, the apt proxy and nkt-edge
+  are created by a single `mkdir -m 700` (a taken name is an error rather
+  than someone else's directory), and `nkt.env` with the admin password
+  is `0600`. sudoers rules and `authorized_keys` edits go through
+  `mktemp` instead of fixed names in `/tmp`, and k3s downloads go to
+  `/var/lib/nkt-k3s`, which only root can write to, so a file can no
+  longer be swapped between the check and the installation.
+
 ## v1.11.116 — 2026-10-03
 
 - **Fixes from the security scanners.** Deployment git: the "--" before

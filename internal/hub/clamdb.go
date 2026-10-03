@@ -250,7 +250,10 @@ func (r *ClamDBPushRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	}
 	defer sftpClient.Close()
 
-	tmpDir := fmt.Sprintf("/tmp/nkt-clamdb-%d", time.Now().UnixNano())
+	tmpDir, err := makeStageDir(link.client, hubsudo.ClamStagePrefix)
+	if err != nil {
+		return err
+	}
 	defer func() { _, _ = runRemote(link.client, "rm -rf "+tmpDir) }()
 	jc.StepKey(2, 3, "hub.clamDBStepUpload")
 	for _, name := range clamDBFiles {
