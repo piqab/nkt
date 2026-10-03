@@ -3609,7 +3609,7 @@
     "hubBannedSubtitle": "Addresses: {{count}}",
     "colHosts": "Banned on",
     "colCount": "Hosts",
-    "hubTemplatesSubtitle": "Custom templates are stored on the hub with version history; apply them on a host's fail2ban page",
+    "hubTemplatesSubtitle": "Standard and custom ones (custom ones are stored on the hub, with version history); “To hosts” applies to selected hosts after a required check",
     "tplName": "Name",
     "tplDescription": "Description",
     "tplAvailable": "On this host",

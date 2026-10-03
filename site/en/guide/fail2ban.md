@@ -167,8 +167,11 @@ changed key, an overloaded host) are reason enough for an sshd jail to
 ban the hub itself. So:
 
 - the hub learns its **external address as the host sees it**, from the
-  `SSH_CONNECTION` of its SSH session (every 6 hours and after a start),
-  and passes it to the host;
+  `SSH_CONNECTION` of its SSH session, and passes it to the host: after
+  the hub starts, every 6 hours, and within 10 minutes if the host
+  reports having no protection (for example, fail2ban was just
+  installed); before a [template to hosts](#on-the-hub), always, as the
+  first file;
 - the host keeps this address in `[DEFAULT] ignoreip` (the file
   `jail.d/zz-nkt-hub.local`, read last: the common list plus the hub
   address) and rebuilds the file when the address or the common list

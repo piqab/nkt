@@ -247,7 +247,18 @@ func jailStartError(c collect.Collector, jail string) string {
 		}
 		for _, m := range marks {
 			if strings.Contains(l, m) {
-				hit = append(hit, strings.TrimSpace(l))
+				// Команды reload fail2ban пишет целиком — десятки
+				// килобайт; причина в конце строки («Received …»).
+				l = strings.TrimSpace(l)
+				if len(l) > 400 {
+					if i := strings.LastIndex(l, "Received "); i > 0 {
+						l = l[:120] + " … " + l[i:]
+					}
+					if len(l) > 600 {
+						l = l[:600] + " …"
+					}
+				}
+				hit = append(hit, l)
 				break
 			}
 		}

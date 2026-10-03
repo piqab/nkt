@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.124 — 2026-10-03
+
+- **The fail2ban configuration check writes only jail and filter files**
+  into its temporary copy: a path outside `jail.d/` and `filter.d/` or
+  with `..` is rejected (per the CodeQL scanner).
+- **The reason a jail did not start** no longer includes the multi-kilobyte
+  fail2ban command lines: the start and the error itself remain.
+- **The site docs** are brought up to date: the sudo mark from a live
+  check and the "hub's sudo" window, how the hub address is passed for
+  fail2ban, and the hub fail2ban screenshot with "To hosts".
+
 ## v1.11.123 — 2026-10-03
 
 - **fail2ban templates to hosts are safer.** “Check” is a hub job: the

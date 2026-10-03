@@ -5,6 +5,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -28,6 +29,10 @@ type ConfigTest struct {
 	// Skipped — проверить нечем (снимок fixtures).
 	Skipped bool `json:"skipped,omitempty"`
 }
+
+// changeFileRe — какие файлы проверка кладёт в копию: jail.d/ и filter.d/,
+// имя без каталогов и «..».
+var changeFileRe = regexp.MustCompile(`^(jail\.d|filter\.d)/[A-Za-z0-9_][A-Za-z0-9_.-]{0,100}\.(local|conf)$`)
 
 // configTestTimeout — предел одной проверки.
 const configTestTimeout = 2 * time.Minute
@@ -73,8 +78,15 @@ func testCopy(ctx context.Context, c collect.Collector, root string, changes map
 		return false, err.Error()
 	}
 	for rel, content := range changes {
-		rel = path.Clean("/" + rel)[1:]
+		// Только файлы джейлов и фильтров: путь из запроса не должен
+		// уводить запись из временной копии.
+		if !changeFileRe.MatchString(rel) {
+			return false, "bad file " + rel
+		}
 		dst := filepath.Join(tmp, filepath.FromSlash(rel))
+		if !strings.HasPrefix(dst, tmp+string(filepath.Separator)) {
+			return false, "bad file " + rel
+		}
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 			return false, err.Error()
 		}
