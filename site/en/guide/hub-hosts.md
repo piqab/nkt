@@ -235,8 +235,11 @@ narrowed does not need full sudo: the hub sees its key and a working
 **The window checks the host live** every time it opens and on "Check
 again": whether the hub key is in place and what is allowed without a
 password (`sudo -n -l`). If the sudoers rules were changed by hand, the
-mark in the host list corrects itself. There is no constant polling,
-because every `sudo` call is written to the host's auth log.
+mark in the host list corrects itself. The same check runs after
+installation, update, narrowing and rule removal, so the mark reflects
+what is on the host: for example, it stays red if the user has another
+rule with full sudo. There is no constant polling, because every `sudo`
+call is written to the host's auth log.
 
 **Another rule with full sudo.** While full sudo still works, the hub
 reads `/etc/sudoers` and `/etc/sudoers.d/` and shows the lines that grant

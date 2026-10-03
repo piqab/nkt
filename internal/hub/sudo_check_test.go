@@ -85,3 +85,35 @@ func TestProbeSudoPasswordRequired(t *testing.T) {
 		t.Fatalf("state: %+v", st)
 	}
 }
+
+// После операции значок пишется по проверке, а не по догадке: здесь sudo
+// просит пароль — запомненное «без пароля» заменяется честным состоянием.
+func TestRefreshSudoStatusOverridesGuess(t *testing.T) {
+	if _, err := exec.LookPath("sudo"); err != nil {
+		t.Skip("no sudo")
+	}
+	addr, port, keyPEM := startTestSSHD(t)
+	me, _ := osuser.Current()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	client, err := dialSSH(ctx, addr, port, me.Username, store.HostAuthKey, keyPEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	m, db := newTestManager(t)
+	id, err := db.CreateHost(ctx, "h", addr, port, me.Username, store.HostAuthKey, []byte("x"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st, err := m.probeSudo(client, me.Username); err != nil || st.Full {
+		t.Skipf("sudo here is not the password-required kind: %+v %v", st, err)
+	}
+	if got := m.refreshSudoStatus(ctx, id, client, me.Username, store.SudoStatusNarrow); got != store.SudoStatusPasswordRequired {
+		t.Fatalf("status %q", got)
+	}
+	h, _ := db.HostByID(ctx, id)
+	if h.SudoStatus != store.SudoStatusPasswordRequired {
+		t.Fatalf("stored %q", h.SudoStatus)
+	}
+}

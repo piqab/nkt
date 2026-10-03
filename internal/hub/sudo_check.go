@@ -186,6 +186,26 @@ func (m *Manager) sudoSources(client *ssh.Client, user string, narrowed bool) []
 	return res
 }
 
+// refreshSudoStatus — после операции по SSH записать состояние sudo по
+// живой проверке; не вышла — fallback (то, что следует из самой операции).
+func (m *Manager) refreshSudoStatus(ctx context.Context, hostID int64, client *ssh.Client, user, fallback string) string {
+	status := fallback
+	if st, err := m.probeSudo(client, user); err == nil {
+		status = st.Status
+	}
+	_ = m.db.SetHostSudoStatus(ctx, hostID, status)
+	return status
+}
+
+// sudoStatusAfterSuccess — состояние, если операция с sudo прошла, а
+// проверить не удалось: root или sudo без пароля.
+func sudoStatusAfterSuccess(user string) string {
+	if user == "root" {
+		return store.SudoStatusRoot
+	}
+	return store.SudoStatusNopasswd
+}
+
 // CheckSudo — живая проверка sudo хоста; состояние записывается в хаб.
 func (m *Manager) CheckSudo(ctx context.Context, hostID int64) (SudoState, error) {
 	host, err := m.db.HostByID(ctx, hostID)
