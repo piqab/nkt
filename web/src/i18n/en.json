@@ -3940,7 +3940,9 @@
       "journal": "the nkt service journal (last lines)",
       "passwd": "the nkt admin password on the host (for the hub's login)",
       "aptproxy": "apt through the hub's package cache: on or off",
-      "sudoers-remove": "remove this rule"
+      "sudoers-remove": "remove this rule",
+      "purge": "cleanup when deleting the host: the nkt service, files and data, the rule and the hub's key, optionally the user",
+      "clamav": "the ClamAV database from the hub against signed hashes"
     },
     "ruleTitle": "Rule {{path}}:",
     "keyNote": "The hub's public key: {{path}}. Requests signed by another key and replays of old ones are rejected.",

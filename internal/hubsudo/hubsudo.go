@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
 )
 
 // Пути на хосте: где лежит ключ, номер и куда ставится nkt. Совпадают с
@@ -55,10 +56,24 @@ const (
 	OpPasswd   = "passwd"
 	OpAptProxy = "aptproxy"
 	OpSudoers  = "sudoers-remove"
+	OpPurge    = "purge"
+	OpClamAV   = "clamav"
 )
 
+// Пути очистки и ClamAV.
+const (
+	SSHDropIn       = "/etc/ssh/sshd_config.d/99-nkt-no-password.conf"
+	EnvDir          = "/etc/netknownsthat"
+	LogDir          = "/var/log/netknownsthat"
+	ClamDir         = "/var/lib/clamav"
+	ClamStagePrefix = "/tmp/nkt-clamdb-"
+)
+
+// ClamFiles — файлы базы ClamAV, которые хаб привозит.
+var ClamFiles = []string{"main.cvd", "daily.cvd", "bytecode.cvd"}
+
 // Ops — все операции (для окна «что разрешено хабу»).
-var Ops = []string{OpPing, OpInstall, OpActivate, OpService, OpJournal, OpPasswd, OpAptProxy, OpSudoers}
+var Ops = []string{OpPing, OpInstall, OpActivate, OpService, OpJournal, OpPasswd, OpAptProxy, OpClamAV, OpPurge, OpSudoers}
 
 // Request — подписываемая часть.
 type Request struct {
@@ -164,10 +179,12 @@ func System() Host {
 func (h Host) path(p string) string { return filepath.Join(h.Root, p) }
 
 var (
-	stageRe  = regexp.MustCompile(`^/tmp/nkt-install-[0-9]{1,24}$`)
-	userRe   = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
-	actionRe = regexp.MustCompile(`^(start|stop|restart)$`)
-	hexRe    = regexp.MustCompile(`^[0-9a-f]{64}$`)
+	stageRe   = regexp.MustCompile(`^/tmp/nkt-install-[0-9]{1,24}$`)
+	clamRe    = regexp.MustCompile(`^/tmp/nkt-clamdb-[0-9]{1,24}$`)
+	keyBodyRe = regexp.MustCompile(`^[A-Za-z0-9+/=]{16,1000}$`)
+	userRe    = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$`)
+	actionRe  = regexp.MustCompile(`^(start|stop|restart)$`)
+	hexRe     = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
 // installFiles — что ставит OpInstall: имя в каталоге подготовки → куда и
@@ -223,6 +240,10 @@ func (h Host) Execute(envelope []byte) (string, error) {
 		return h.Run(strings.NewReader(pw+"\n"), "env", "NKT_MODE=local", "NKT_DATA_DIR="+DataDir, h.path(BinPath), "passwd", user)
 	case OpAptProxy:
 		return h.aptProxy(req)
+	case OpPurge:
+		return h.purge(req)
+	case OpClamAV:
+		return h.clamav(req)
 	case OpSudoers:
 		if err := os.Remove(h.path(SudoersPath)); err != nil && !os.IsNotExist(err) {
 			return "", err
@@ -434,3 +455,168 @@ fi
 const AptProxyConfText = `// nkt: кэш пакетов хаба; скрипт отвечает DIRECT, когда хаб не подключён.
 Acquire::http::Proxy-Auto-Detect "` + AptProxyDetect + `";
 `
+
+// clamav — база ClamAV из каталога подготовки по подписанным хэшам: файлы
+// принадлежат clamav (freshclam потом обновляет их сам), служба на время
+// замены остановлена.
+func (h Host) clamav(req Request) (string, error) {
+	stage := req.Args["stage"]
+	if !clamRe.MatchString(stage) {
+		return "", fmt.Errorf("hub-sudo: bad clamav stage %q", stage)
+	}
+	work, err := os.MkdirTemp(h.StateDir, "clamav-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(work)
+	var names []string
+	for _, name := range ClamFiles {
+		want, ok := req.Files[name]
+		if !ok {
+			continue
+		}
+		if !hexRe.MatchString(want) {
+			return "", fmt.Errorf("hub-sudo: bad hash for %s", name)
+		}
+		got, err := copyHash(h.path(filepath.Join(stage, name)), filepath.Join(work, name))
+		if err != nil {
+			return "", err
+		}
+		if got != want {
+			return "", fmt.Errorf("hub-sudo: %s does not match the signed hash", name)
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return "", errors.New("hub-sudo: no clamav files")
+	}
+	_, _ = h.Run(nil, "systemctl", "stop", "clamav-freshclam")
+	defer func() { _, _ = h.Run(nil, "systemctl", "start", "clamav-freshclam") }()
+	for _, name := range names {
+		dest := h.path(filepath.Join(ClamDir, name))
+		if err := placeFile(filepath.Join(work, name), dest, 0o644); err != nil {
+			return "", err
+		}
+		_, _ = h.Run(nil, "chown", "clamav:clamav", dest)
+	}
+	return "installed " + strings.Join(names, ", "), nil
+}
+
+// purge — очистка хоста при удалении из хаба, одним вызовом и в том же
+// порядке, что без узкого sudo: после неё ни бинарника, ни правила уже
+// нет. Каждый шаг — строка «ok|fail шаг: вывод»; провал шага не
+// останавливает остальные (как и раньше).
+func (h Host) purge(req Request) (string, error) {
+	on := func(k string) bool { return req.Args[k] == "true" }
+	var lines []string
+	step := func(name string, fn func() (string, error)) {
+		out, err := fn()
+		if err != nil {
+			lines = append(lines, "fail "+name+": "+strings.TrimSpace(out+" "+err.Error()))
+			return
+		}
+		lines = append(lines, "ok "+name)
+	}
+	rm := func(paths ...string) func() (string, error) {
+		return func() (string, error) {
+			for _, p := range paths {
+				if err := os.RemoveAll(h.path(p)); err != nil {
+					return "", err
+				}
+			}
+			return "", nil
+		}
+	}
+	if on("restore_password") {
+		step("restore_password", func() (string, error) {
+			if _, err := os.Stat(h.path(SSHDropIn)); err != nil {
+				return "", nil
+			}
+			if err := os.Remove(h.path(SSHDropIn)); err != nil {
+				return "", err
+			}
+			if out, err := h.Run(nil, "sshd", "-t"); err != nil {
+				return out, err
+			}
+			if out, err := h.Run(nil, "systemctl", "reload", "ssh"); err != nil {
+				return h.Run(nil, "systemctl", "reload", "sshd")
+			} else {
+				return out, nil
+			}
+		})
+	}
+	if on("service") {
+		step("service", func() (string, error) {
+			_, _ = h.Run(nil, "systemctl", "disable", "--now", Unit)
+			if _, err := rm(ServicePath, BinPath, EnvDir)(); err != nil {
+				return "", err
+			}
+			return h.Run(nil, "systemctl", "daemon-reload")
+		})
+	}
+	if on("data") {
+		step("data", rm(DataDir, LogDir))
+	}
+	if on("access") {
+		step("access", func() (string, error) {
+			if body := req.Args["key_body"]; body != "" {
+				user := req.Args["user"]
+				if !keyBodyRe.MatchString(body) || !userRe.MatchString(user) {
+					return "", errors.New("bad key arguments")
+				}
+				if err := h.dropAuthorizedKey(user, body); err != nil {
+					return "", err
+				}
+			}
+			return rm(SudoersPath, filepath.Dir(PubKeyPath), StateDir)()
+		})
+	}
+	if on("delete_user") {
+		user := req.Args["user"]
+		step("delete_user", func() (string, error) {
+			if !userRe.MatchString(user) || user == "root" {
+				return "", errors.New("bad user")
+			}
+			return h.Run(nil, "userdel", "-r", user)
+		})
+	}
+	return strings.Join(lines, "\n"), nil
+}
+
+// dropAuthorizedKey — убрать из authorized_keys пользователя ровно строки
+// с этим телом ключа; остальные (чей-то рабочий доступ) остаются.
+func (h Host) dropAuthorizedKey(user, body string) error {
+	home := "/home/" + user
+	if user == "root" {
+		home = "/root"
+	}
+	p := h.path(filepath.Join(home, ".ssh", "authorized_keys"))
+	raw, err := os.ReadFile(p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var keep []string
+	for _, l := range strings.Split(string(raw), "\n") {
+		if f := strings.Fields(l); len(f) >= 2 && f[1] == body {
+			continue
+		}
+		keep = append(keep, l)
+	}
+	fi, err := os.Stat(p)
+	if err != nil {
+		return err
+	}
+	tmp := p + ".nkt-new"
+	if err := os.WriteFile(tmp, []byte(strings.Join(keep, "\n")), fi.Mode().Perm()); err != nil {
+		return err
+	}
+	// Владелец — прежний: файл, принадлежащий не тому, sshd может не
+	// принять (StrictModes).
+	if st, ok := fi.Sys().(*syscall.Stat_t); ok {
+		_ = os.Chown(tmp, int(st.Uid), int(st.Gid))
+	}
+	return os.Rename(tmp, p)
+}

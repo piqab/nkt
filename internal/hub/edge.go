@@ -633,6 +633,12 @@ func (s *Server) handleEdgeInstall(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	// Узкий sudo: установка edge ставит certbot, свою службу и открывает
+	// порты — это не операции hub-sudo. Отказ сразу, а не посреди задания.
+	if host.SudoStatus == store.SudoStatusNarrow {
+		writeErr(w, r, http.StatusConflict, msgs.Errorf("edge.narrowSudo", host.Name, host.SSHUser))
+		return
+	}
 	user := auth.Username(ctx)
 	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindEdgeInstall, TitleKey: "edge.jobTitle", TitleArgs: []any{host.Name, req.Domain},

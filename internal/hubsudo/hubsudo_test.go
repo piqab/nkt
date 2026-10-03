@@ -180,3 +180,76 @@ func TestOps(t *testing.T) {
 		t.Fatalf("rule %q", r)
 	}
 }
+
+func TestPurgeAndClamAV(t *testing.T) {
+	h, sign := newHost(t, "hub-secret")
+	put := func(p, c string) {
+		full := filepath.Join(h.Root, p)
+		_ = os.MkdirAll(filepath.Dir(full), 0o755)
+		if err := os.WriteFile(full, []byte(c), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	put(BinPath, "bin")
+	put(ServicePath, "unit")
+	put(EnvPath, "env")
+	put(DataDir+"/nkt.db", "db")
+	put(SudoersPath, "rule")
+	put("/home/deploy/.ssh/authorized_keys", "ssh-ed25519 AAAAOTHERKEYBODYAAAAAAAA other\nssh-ed25519 AAAAHUBKEYBODYAAAAAAAAAA nkt-hub\n")
+	out, err := h.Execute(sign(Request{Op: OpPurge, Args: map[string]string{"service": "true", "data": "true", "access": "true",
+		"user": "deploy", "key_body": "AAAAHUBKEYBODYAAAAAAAAAA"}}))
+	if err != nil || strings.Contains(out, "fail") {
+		t.Fatalf("purge: %q %v", out, err)
+	}
+	for _, p := range []string{BinPath, ServicePath, EnvPath, DataDir, SudoersPath} {
+		if _, err := os.Stat(filepath.Join(h.Root, p)); !os.IsNotExist(err) {
+			t.Errorf("%s still there", p)
+		}
+	}
+	if b, _ := os.ReadFile(filepath.Join(h.Root, "/home/deploy/.ssh/authorized_keys")); strings.Contains(string(b), "HUBKEY") || !strings.Contains(string(b), "OTHERKEY") {
+		t.Errorf("authorized_keys %q", b)
+	}
+	// Подмена тела ключа на что-то шелловое — отказ шага.
+	out, _ = h.Execute(sign(Request{Op: OpPurge, Args: map[string]string{"access": "true", "user": "deploy", "key_body": "x; rm -rf /"}}))
+	if !strings.Contains(out, "fail access") {
+		t.Errorf("bad key accepted: %q", out)
+	}
+	// ClamAV: файлы по подписанным хэшам.
+	dir := "/tmp/nkt-clamdb-77"
+	put(dir+"/main.cvd", "MAIN")
+	put(dir+"/daily.cvd", "DAILY")
+	files := map[string]string{"main.cvd": BytesHash([]byte("MAIN")), "daily.cvd": BytesHash([]byte("DAILY"))}
+	if _, err := h.Execute(sign(Request{Op: OpClamAV, Args: map[string]string{"stage": dir}, Files: files})); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(h.Root, ClamDir, "daily.cvd")); string(b) != "DAILY" {
+		t.Fatalf("daily %q", b)
+	}
+	files["main.cvd"] = BytesHash([]byte("OTHER"))
+	if _, err := h.Execute(sign(Request{Op: OpClamAV, Args: map[string]string{"stage": dir}, Files: files})); err == nil {
+		t.Fatal("wrong clamav hash accepted")
+	}
+	if _, err := h.Execute(sign(Request{Op: OpClamAV, Args: map[string]string{"stage": "/etc"}, Files: files})); err == nil {
+		t.Fatal("bad clamav stage accepted")
+	}
+}
+
+func TestPurgeDeleteUserFlag(t *testing.T) {
+	h, sign := newHost(t, "hub-secret")
+	if _, err := h.Execute(sign(Request{Op: OpPurge, Args: map[string]string{"user": "deploy", "access": "true"}})); err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range h.calls {
+		if strings.HasPrefix(c, "userdel") {
+			t.Fatalf("user deleted without delete_user: %v", h.calls)
+		}
+	}
+	out, _ := h.Execute(sign(Request{Op: OpPurge, Args: map[string]string{"user": "deploy", "delete_user": "true"}}))
+	if !strings.Contains(out, "ok delete_user") || !strings.Contains(strings.Join(h.calls, "|"), "userdel -r deploy") {
+		t.Fatalf("delete_user: %q %v", out, h.calls)
+	}
+	out, _ = h.Execute(sign(Request{Op: OpPurge, Args: map[string]string{"user": "root", "delete_user": "true"}}))
+	if !strings.Contains(out, "fail delete_user") {
+		t.Fatalf("root deletion allowed: %q", out)
+	}
+}

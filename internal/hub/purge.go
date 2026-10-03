@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/hubsudo"
 	"github.com/piqab/nkt/internal/msgs"
 	"net/url"
 	"strings"
@@ -116,6 +117,48 @@ func (m *Manager) PurgeHost(ctx context.Context, hostID int64, opts PurgeOptions
 	}
 	defer link.Close()
 	client := link.client
+
+	// Узкий sudo: вся очистка — одной подписанной операцией hub-sudo
+	// (после неё ни бинарника, ни правила уже нет).
+	if host.SSHUser != "root" && m.hasHubKey(client) {
+		args := map[string]string{"user": host.SSHUser}
+		for k, on := range map[string]bool{"restore_password": opts.RestorePassword, "service": opts.Service, "data": opts.Data, "access": opts.Access, "delete_user": opts.User} {
+			if on {
+				args[k] = "true"
+			}
+		}
+		if opts.Access {
+			if line := hubPublicKeyLine(host, secret); line != "" {
+				if f := strings.Fields(line); len(f) >= 2 {
+					args["key_body"] = f[1]
+				}
+			}
+		}
+		out, err := m.hubSudo(client, host.SSHUser, hubsudo.Request{Op: hubsudo.OpPurge, Args: args})
+		if err != nil {
+			res.Error = err.Error()
+			return res
+		}
+		names := map[string]string{"restore_password": "hub.purgePasswordRestored", "service": "hub.purgeServiceStopped",
+			"data": "hub.purgeDataRemoved", "access": "hub.purgeSudoRemoved"}
+		for _, l := range strings.Split(strings.TrimSpace(out), "\n") {
+			ok, rest, _ := strings.Cut(l, " ")
+			step, detail, _ := strings.Cut(rest, ":")
+			name := step
+			if k, found := names[step]; found {
+				name = msgs.Tc(ctx, k)
+			} else if step == "delete_user" || step == "user" {
+				name = msgs.Tc(ctx, "hub.purgeAccountRemoved", host.SSHUser)
+			}
+			if ok == "ok" {
+				res.Steps = append(res.Steps, msgs.Tc(ctx, "hub.stepDone", name))
+			} else {
+				res.Steps = append(res.Steps, msgs.Tc(ctx, "hub.failed", name, strings.TrimSpace(detail)))
+			}
+		}
+		res.OK = true
+		return res
+	}
 
 	sudo := sudoPrefix(host.SSHUser)
 	step := func(name, cmd string) {
