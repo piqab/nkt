@@ -213,6 +213,7 @@ var ruSitesCatalog = map[string]string{
 	"deploy.sitePortAutoUnknown":    "site.port: auto — порт образа не узнать (фикстуры или образ ещё не скачан); укажите port",
 	"hub.siteWrongCert":             "https://%s отвечает сертификатом на %s — не для этого имени: конфигурация сайта не действует (прокси отвечает другим сайтом). Проверьте «Настроить» и журнал; на хосте — nginx -T",
 	"compose.oneShotDone":           "Разовые сервисы выполнились и завершились (код 0): %s — стек поднят",
+	"deploy.refMissing":             "в репозитории нет ветки или тега %s",
 	"compose.diagnose":              "Стек не поднялся — состояние контейнеров:",
 	"compose.diagContainer":         "  %s: %s %s (код выхода %d)",
 	"compose.diagLogs":              "Последние строки журнала сервиса %s:",

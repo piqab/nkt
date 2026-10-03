@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.103 — 2026-10-03
+
+- **"Fill in the description" from the file itself.** For your own link
+  the hub fetches the compose file (a private repository with the keys
+  from "Access") and builds the description from it: the site is the web
+  service by image ports (databases skipped), with a "Site: auto / service
+  / no site" choice, `files:` for files next to it, `images:` for services
+  built from source, notes on unversioned images and outside publications,
+  and a `.env` template from `${…}`. A private repository without keys gets
+  a hint to set "Access".
+
 ## v1.11.102 — 2026-10-03
 
 - **"Access" straight from the pipeline window, with an access check.**

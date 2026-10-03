@@ -213,6 +213,7 @@ var enSitesCatalog = map[string]string{
 	"deploy.sitePortAutoUnknown":    "site.port: auto, but the image port cannot be determined (fixtures or the image is not pulled yet); set port",
 	"hub.siteWrongCert":             "https://%s answers with a certificate for %s, not for this name: the site configuration is not in effect (the proxy answers as another site). Check \"Set up\" and the log; on the host, nginx -T",
 	"compose.oneShotDone":           "One-shot services ran and exited (code 0): %s; the stack is up",
+	"deploy.refMissing":             "the repository has no branch or tag %s",
 	"compose.diagnose":              "The stack did not come up; container states:",
 	"compose.diagContainer":         "  %s: %s %s (exit code %d)",
 	"compose.diagLogs":              "Last log lines of service %s:",
