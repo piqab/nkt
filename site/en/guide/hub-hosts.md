@@ -154,8 +154,10 @@ when the numbers change. Whatever does not fit is an icon with a tooltip.
   alone ("updating: N" next to the button), unreachable ones are skipped,
   and ones that failed last time only with the "retry failed" checkbox.
   While updates run, the host list refreshes every few seconds.
-- **Sudo** — what the last installation found: "passwordless", "password
-  required" or "unknown". With "passwordless" there is a **"remove
+- **Sudo** — what the last installation found: a red ⚠ for
+  "passwordless" (dangerous: whoever signs in as this user gets root at
+  once), a green check for "password required", a grey question mark for
+  "unknown". With "passwordless" there is a **"remove
   NOPASSWD"** button — it deletes `/etc/sudoers.d/nkt-hub` when permanent
   access is no longer needed (after that the hub needs sudo or root again
   for updates).
