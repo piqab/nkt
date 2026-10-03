@@ -121,12 +121,6 @@ const SUDO_LABEL_KEY: Record<NonNullable<HubHost['sudo_status']>, string> = {
   password_required: 'hosts.sudoPasswordRequired',
 }
 
-const SUDO_COLOR: Record<NonNullable<HubHost['sudo_status']>, string> = {
-  '': 'var(--text-muted)',
-  root: 'var(--text-muted)',
-  nopasswd: 'var(--status-good)',
-  password_required: 'var(--status-critical)',
-}
 
 /** What the last install/update on this host actually observed about sudo
  * — set as a side effect (Manager.recordSudoOutcome), never probed on its
@@ -134,15 +128,16 @@ const SUDO_COLOR: Record<NonNullable<HubHost['sudo_status']>, string> = {
 function SudoBadge({ status }: { status: HubHost['sudo_status'] }) {
   const { t } = useTranslation()
   const s = status ?? ''
-  // Галочка или крестик, слово — в подсказке: колонка отвечает на один
-  // вопрос «есть ли sudo без пароля», и двух знаков ей достаточно.
-  // Всё, что не NOPASSWD, — красный крестик: колонка отвечает на один
-  // вопрос, и «ещё не проверялось» для него — тоже «нет».
+  // sudo без пароля — опасность: кто зашёл под этим пользователем, тот
+  // сразу root. Поэтому красный знак; «нужен пароль» — зелёная галочка,
+  // «ещё не проверялось» — серый вопрос. Слово — в подсказке.
   const icon =
     s === 'nopasswd' ? (
-      <CheckCircleFilled style={{ color: SUDO_COLOR[s] }} />
+      <WarningFilled style={{ color: 'var(--status-critical)' }} />
+    ) : s === 'password_required' ? (
+      <CheckCircleFilled style={{ color: 'var(--status-good)' }} />
     ) : (
-      <CloseCircleFilled style={{ color: 'var(--status-critical)' }} />
+      <QuestionCircleOutlined style={{ color: 'var(--text-muted)' }} />
     )
   return (
     <Tooltip title={t(SUDO_LABEL_KEY[s])}>
@@ -1241,13 +1236,9 @@ export default function Hosts({
                 onClick={() => removeSudoAccess(h)}
               />
             ) : (
-              // Второй знак той же ширины, что кнопка «снять»: без него
+              // Пустое место той же ширины, что кнопка «снять»: без него
               // строки без NOPASSWD были бы короче, и колонка прыгала.
-              <Tooltip title={t(SUDO_LABEL_KEY[h.sudo_status ?? ''])}>
-                <span className="sudo-placeholder" aria-hidden="true">
-                  <CloseCircleFilled style={{ color: 'var(--status-critical)' }} />
-                </span>
-              </Tooltip>
+              <span className="sudo-placeholder" aria-hidden="true" />
             )}
           </span>
         ),

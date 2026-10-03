@@ -518,7 +518,7 @@
     "statusError": "error",
     "sudoUnknown": "unknown",
     "sudoRoot": "root",
-    "sudoNopasswd": "passwordless",
+    "sudoNopasswd": "passwordless: dangerous, whoever signs in as this user gets root at once; remove NOPASSWD once setup is done",
     "sudoPasswordRequired": "needs password",
     "tunnelActiveTooltip": "SSH is currently unreachable — the dashboard, terminal, and reinstall/update are running over the fallback channel",
     "tunnelActive": "via fallback channel",
