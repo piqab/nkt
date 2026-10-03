@@ -295,7 +295,7 @@ func newRuntime() (*runtime, error) {
 		configs:   control.NewConfigManager(cfg, collector, db, scanner, services),
 		// В fixtures-режиме выхода из песочницы не даём: команды там должны
 		// оставаться поддельными, а не править настоящую систему.
-		osusers:    control.NewOSUserManager(collector, privilegedRunner(cfg)),
+		osusers:    control.NewOSUserManager(collector, privilegedRunner(cfg)).WithHubUser(cfg.TerminalUser),
 		disks:      control.NewDiskManager(collector),
 		hardware:   control.NewHardwareManager(collector),
 		sysconfig:  control.NewSysConfigManager(collector).WithEscape(privilegedRunner(cfg)),
@@ -686,7 +686,7 @@ func newHubRuntime() (*hubRuntime, error) {
 		configs:    control.NewConfigManager(cfg, collector, db, scanner, services),
 		// В fixtures-режиме выхода из песочницы не даём: команды там должны
 		// оставаться поддельными, а не править настоящую систему.
-		osusers:    control.NewOSUserManager(collector, privilegedRunner(cfg)),
+		osusers:    control.NewOSUserManager(collector, privilegedRunner(cfg)).WithHubUser(cfg.TerminalUser),
 		disks:      control.NewDiskManager(collector),
 		hardware:   control.NewHardwareManager(collector),
 		sysconfig:  control.NewSysConfigManager(collector).WithEscape(privilegedRunner(cfg)),
