@@ -298,6 +298,19 @@ func stageFiles(client *ssh.Client, sshUser string, src binarySource, unitConten
 	if err := uploadBytes(sftpClient, []byte(unitContent), tmpUnit, 0o644); err != nil {
 		return msgs.Errorf("hub.uploadingSystemdUnit", err)
 	}
+	// Узкий sudo: бинарник и юнит ставит hub-sudo по подписанным хэшам
+	// (бинарник — тот же, что у хаба: копия с GitHub предлагается, только
+	// если она байт в байт совпадает с ним), а nkt.env с паролем админа
+	// приходит в самом подписанном запросе — на диск хоста во временный
+	// каталог он не попадает.
+	if len(place) > 0 && place[0] != nil {
+		report("hub.installingFiles")
+		binHash, err := hubsudo.FileHash(src.LocalPath)
+		if err != nil {
+			return err
+		}
+		return place[0](tmpDir, map[string]string{"nkt": binHash, "netknownsthat.service": hubsudo.BytesHash([]byte(unitContent))})
+	}
 	tmpEnv := gopath.Join(tmpDir, "nkt.env")
 	// В env пароль админа: файл только для владельца (ставит его root
 	// своими правами, исходные права не переносятся).
@@ -306,17 +319,6 @@ func stageFiles(client *ssh.Client, sshUser string, src binarySource, unitConten
 	}
 
 	report("hub.installingFiles")
-	// Узкий sudo: файлы ставит hub-sudo по подписанным хэшам (бинарник —
-	// тот же, что у хаба: копия с GitHub предлагается, только если она
-	// байт в байт совпадает с ним).
-	if len(place) > 0 && place[0] != nil {
-		binHash, err := hubsudo.FileHash(src.LocalPath)
-		if err != nil {
-			return err
-		}
-		return place[0](tmpDir, map[string]string{"nkt": binHash,
-			"netknownsthat.service": hubsudo.BytesHash([]byte(unitContent)), "nkt.env": hubsudo.BytesHash([]byte(envContent))})
-	}
 	if err := installRemoteFile(client, sshUser, tmpBin, binPath, 0o755); err != nil {
 		return msgs.Errorf("hub.installingBinary", err)
 	}

@@ -100,9 +100,9 @@ func TestSignatureAndSerial(t *testing.T) {
 
 func TestInstall(t *testing.T) {
 	h, sign := newHost(t, "hub-secret")
-	files := map[string]string{"nkt": "BINARY", "netknownsthat.service": "[Unit]\n", "nkt.env": "NKT_X=1\n"}
+	files := map[string]string{"nkt": "BINARY", "netknownsthat.service": "[Unit]\n"}
 	dir, hashes := stage(t, h.Root, files)
-	if _, err := h.Execute(sign(Request{Op: OpInstall, Args: map[string]string{"stage": dir}, Files: hashes})); err != nil {
+	if _, err := h.Execute(sign(Request{Op: OpInstall, Args: map[string]string{"stage": dir, "env": "NKT_X=1\n"}, Files: hashes})); err != nil {
 		t.Fatal(err)
 	}
 	if b, _ := os.ReadFile(filepath.Join(h.Root, BinPath)); string(b) != "BINARY" {
@@ -111,11 +111,18 @@ func TestInstall(t *testing.T) {
 	if fi, _ := os.Stat(filepath.Join(h.Root, EnvPath)); fi == nil || fi.Mode().Perm() != 0o640 {
 		t.Fatalf("env mode %v", fi)
 	}
+	if b, _ := os.ReadFile(filepath.Join(h.Root, EnvPath)); string(b) != "NKT_X=1\n" {
+		t.Fatalf("env %q", b)
+	}
+	// Прежняя форма — env файлом по хэшу, без env в запросе — отказ.
+	if _, err := h.Execute(sign(Request{Op: OpInstall, Args: map[string]string{"stage": dir}, Files: hashes})); err == nil {
+		t.Fatal("install without signed env accepted")
+	}
 	// Подменённый после подписи файл — отказ, на месте прежний.
 	if err := os.WriteFile(filepath.Join(h.Root, dir, "nkt"), []byte("EVIL"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := h.Execute(sign(Request{Op: OpInstall, Args: map[string]string{"stage": dir}, Files: hashes})); err == nil {
+	if _, err := h.Execute(sign(Request{Op: OpInstall, Args: map[string]string{"stage": dir, "env": "NKT_X=1\n"}, Files: hashes})); err == nil {
 		t.Fatal("swapped binary accepted")
 	}
 	if b, _ := os.ReadFile(filepath.Join(h.Root, BinPath)); string(b) != "BINARY" {
@@ -124,7 +131,7 @@ func TestInstall(t *testing.T) {
 	// Ссылка вместо файла — отказ.
 	_ = os.Remove(filepath.Join(h.Root, dir, "nkt"))
 	_ = os.Symlink("/etc/shadow", filepath.Join(h.Root, dir, "nkt"))
-	if _, err := h.Execute(sign(Request{Op: OpInstall, Args: map[string]string{"stage": dir}, Files: hashes})); err == nil {
+	if _, err := h.Execute(sign(Request{Op: OpInstall, Args: map[string]string{"stage": dir, "env": "NKT_X=1\n"}, Files: hashes})); err == nil {
 		t.Fatal("symlink accepted")
 	}
 	// Каталог подготовки вне /tmp/nkt-install-N — отказ.

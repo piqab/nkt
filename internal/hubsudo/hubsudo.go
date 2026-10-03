@@ -187,16 +187,20 @@ var (
 	hexRe     = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
-// installFiles — что ставит OpInstall: имя в каталоге подготовки → куда и
-// с какими правами.
+// installFiles — что ставит OpInstall по хэшам: имя в каталоге подготовки
+// → куда и с какими правами. nkt.env (в нём пароль админа) сюда не входит:
+// его содержимое приходит в самом подписанном запросе (Args["env"]) и в
+// каталог подготовки не кладётся.
 var installFiles = []struct {
 	name, dest string
 	mode       os.FileMode
 }{
 	{"nkt", BinPath, 0o755},
 	{"netknownsthat.service", ServicePath, 0o644},
-	{"nkt.env", EnvPath, 0o640},
 }
+
+// envMax — предел nkt.env в запросе.
+const envMax = 64 << 10
 
 // Execute — проверка конверта и операция; вывод — для журнала хаба.
 func (h Host) Execute(envelope []byte) (string, error) {
@@ -291,7 +295,15 @@ func (h Host) install(req Request) (string, error) {
 		src, dest string
 		mode      os.FileMode
 	}
-	var list []ready
+	env := req.Args["env"]
+	if env == "" || len(env) > envMax || strings.ContainsRune(env, 0) {
+		return "", errors.New("hub-sudo: no nkt.env in the signed request")
+	}
+	envCopy := filepath.Join(work, "nkt.env")
+	if err := os.WriteFile(envCopy, []byte(env), 0o600); err != nil {
+		return "", err
+	}
+	list := []ready{{envCopy, h.path(EnvPath), 0o640}}
 	for _, f := range installFiles {
 		want := req.Files[f.name]
 		if !hexRe.MatchString(want) {

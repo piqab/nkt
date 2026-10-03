@@ -481,6 +481,7 @@ var ruCatalog = map[string]string{
 	"hub.sudoRuleFileBad":                                 "файл %q — не отдельное правило в /etc/sudoers.d",
 	"hub.sudoRuleChanged":                                 "строка %s:%d изменилась с момента проверки — проверьте заново",
 	"hub.sudoRuleNotRemovable":                            "правило в %s хаб сам не отключает: оно не только про этого пользователя или хост ещё не сужен",
+	"hub.hubSudoOutdated":                                 "на хосте hub-sudo старой версии (nkt v1.11.111–1.11.117): он не принимает новый способ установки, а совместимости нет. На хосте под root выполните:\n  rm -f /etc/nkt/hub-sign.pub\n  echo '%[1]s ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/nkt-hub\n  chmod 440 /etc/sudoers.d/nkt-hub\nзатем в хабе — «Переустановить» и «Сузить sudo»",
 	"api.backgroundJobsAreUnavailable":                    "фоновые задания недоступны",
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",
