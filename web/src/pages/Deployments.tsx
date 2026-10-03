@@ -497,8 +497,9 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
               <HelpButton docKey="deploy:compose" isHub admin label={t('docs.labelCompose')} />
               <HelpButton docKey="deploy:site" isHub admin label={t('docs.labelSite')} />
             </Space>
-            {!initial && (
+            {(!initial || /^action:\s*compose\b/m.test(initial.content ?? '')) && (
               <ComposeFromLink
+                initialFrom={initial?.content}
                 pipelineId={pipeline?.id}
                 pipelineName={pipeline?.name}
                 accessTick={accessTick}
@@ -514,6 +515,11 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
             )}
             <Space wrap style={{ marginBottom: '0.5rem' }}>
               {!pipeline && <Input size="small" style={{ width: '16rem' }} value={name} placeholder={t('deploy.name')} onChange={(e) => setName(e.target.value)} />}
+              {pipeline && (
+                <Tooltip title={t('deploy.nameReadonly')}>
+                  <Input size="small" style={{ width: '12rem' }} value={pipeline.name} readOnly />
+                </Tooltip>
+              )}
               {pipeline && <Input size="small" style={{ width: '20rem' }} value={note} placeholder={t('deploy.notePlaceholder')} onChange={(e) => setNote(e.target.value)} />}
               <Tooltip title={!pipeline && !name.trim() ? t('deploy.accessNeedsName') : t('deploy.accessFromEditor')}>
                 <Button size="small" disabled={busy || (!pipeline && !name.trim())} onClick={() => void openAccess()}>
@@ -615,6 +621,7 @@ function ComposeFromLink({
   pipelineName,
   accessTick,
   linkYamlRef,
+  initialFrom,
   onFill,
   onName,
 }: {
@@ -624,14 +631,17 @@ function ComposeFromLink({
   accessTick: number
   /** Описание из одной ссылки (без скачивания) — для «Доступа». */
   linkYamlRef: MutableRefObject<(() => { yaml: string; repo: string; name: string } | null) | null>
+  /** Сохранённое описание: поля окна заполняются по нему. */
+  initialFrom?: string
   onFill: (yaml: string, name: string) => void
   onName: (name: string) => void
 }) {
   const { t } = useTranslation()
   const hosts = useApi<HubHost[]>('/hub/hosts')
-  const [link, setLink] = useState('')
-  const [picked, setPicked] = useState<string[]>([])
-  const [project, setProject] = useState('')
+  const [init] = useState(() => (initialFrom ? fromDescription(initialFrom) : null))
+  const [link, setLink] = useState(init?.link ?? '')
+  const [picked, setPicked] = useState<string[]>(init?.hosts ?? [])
+  const [project, setProject] = useState(init?.project ?? '')
   const [bad, setBad] = useState(false)
   // Выбранный пример: и до хостов (описание заполнится по «Заполнить
   // описание»), и после — повторное заполнение тоже по примеру, пока
@@ -641,7 +651,7 @@ function ComposeFromLink({
   const [scan, setScan] = useState<{ link: string; scan: ComposeScan } | null>(null)
   const [scanNote, setScanNote] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
-  const [siteChoice, setSiteChoice] = useState<string>('auto')
+  const [siteChoice, setSiteChoice] = useState<string>(init?.site || 'auto')
   const [scanWithAccess, setScanWithAccess] = useState(false)
   useEffect(() => {
     if (accessTick > 0) setScanNote(null)
@@ -680,15 +690,15 @@ function ComposeFromLink({
         }
       }
       if (sc) {
-        onFill(scannedYaml(sc, p, proj, picked, choice, t), proj)
+        onFill(scannedYaml(link, sc, p, proj, picked, choice, t), proj)
         return
       }
     }
-    onFill(linkOnlyYaml(p, proj, ex), proj)
+    onFill(linkOnlyYaml(p, proj, ex, link), proj)
   }
   // Описание из одной ссылки (без скачивания файла): примеры и запасной
   // путь, когда файл не скачать.
-  function linkOnlyYaml(p: { repo: string; ref: string; file: string; name: string }, proj: string, ex?: PipelineExample): string {
+  function linkOnlyYaml(p: { repo: string; ref: string; file: string; name: string }, proj: string, ex: PipelineExample | undefined, src: string): string {
     // Сервисов чужого compose хаб не знает — заглушка явная.
     const site = ex?.site ?? { service: t('deploy.fromLinkSiteService'), port: t('deploy.fromLinkSitePort') }
     const block = (name: string, rec: Record<string, string | string[]> | undefined, comment: string) =>
@@ -710,6 +720,7 @@ function ComposeFromLink({
       : ''
     const yaml =
       (ex ? `# ${t('deploy.exampleComment')}: ${ex.readme}\n` : '') +
+      `# compose: ${src}\n` +
       `repo: ${p.repo}\nref: ${p.ref}\n\naction: compose\ncompose:\n  file: ${p.file}\n  project: ${proj}\n` +
       `  hosts: [${picked.join(', ')}]\n` +
       (ex ? '' : `  # files: [${p.file.includes('/') ? p.file.slice(0, p.file.lastIndexOf('/') + 1) : ''}nginx.conf]  # ${t('deploy.fromLinkFilesComment')}\n`) +
@@ -731,7 +742,7 @@ function ComposeFromLink({
     if (!p) return null
     const ex = pending?.link === link ? pending : undefined
     const proj = (project || p.name).toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^[-_]+/, '').slice(0, 63) || 'app'
-    return { yaml: linkOnlyYaml(p, proj, ex), repo: p.repo, name: proj }
+    return { yaml: linkOnlyYaml(p, proj, ex, link), repo: p.repo, name: proj }
   }
   function example(ex: PipelineExample) {
     setLink(ex.link)
@@ -1425,6 +1436,7 @@ const WEB_PORTS = [80, 8080, 3000, 8000, 5000, 8081, 8888, 9000, 4000, 5173, 844
  * «авто»), файлы рядом, образы для сервисов со сборкой, наружные
  * публикации и шаблон .env — комментариями, где решать человеку. */
 function scannedYaml(
+  link: string,
   sc: ComposeScan,
   p: { repo: string; ref: string; file: string },
   proj: string,
@@ -1439,7 +1451,7 @@ function scannedYaml(
   }
   const siteService = choice === 'none' ? '' : choice === 'auto' ? (sc.web ?? '') : choice
   const sitePort = siteService ? (choice === 'auto' ? (sc.web_port ?? svcPort(siteService)) : svcPort(siteService)) : 0
-  const lines: string[] = [`# ${t('deploy.scanComment')}`, `repo: ${p.repo}`, `ref: ${p.ref}`, '', 'action: compose', 'compose:', `  file: ${p.file}`, `  project: ${proj}`, `  hosts: [${hosts.join(', ')}]`]
+  const lines: string[] = [`# ${t('deploy.scanComment')}`, `# compose: ${link}`, `repo: ${p.repo}`, `ref: ${p.ref}`, '', 'action: compose', 'compose:', `  file: ${p.file}`, `  project: ${proj}`, `  hosts: [${hosts.join(', ')}]`]
   if (sc.files?.length) lines.push(`  files: [${sc.files.join(', ')}]  # ${t('deploy.fromLinkFilesComment')}`)
   lines.push('  wait_timeout: 5m')
   const builds = sc.services.filter((s) => s.build_only)
@@ -1474,4 +1486,55 @@ function scannedYaml(
 /** Причина отказа git словами (deploy.Git* на хабе); прочее — вывод git. */
 function gitReasonText(t: (k: string, o?: Record<string, unknown>) => string, reason?: string, raw?: string): string {
   return reason && reason !== 'other' ? t(`deploy.gitReason.${reason}`) : (raw ?? '')
+}
+
+/** Ссылка на файл в веб-интерфейсе Git по адресу репозитория: GitHub —
+ * /blob/, GitLab — /-/blob/, Forgejo/Gitea/Codeberg и прочие —
+ * /src/branch/. */
+export function composeLinkFor(repo: string, ref: string, file: string): string {
+  let u: URL
+  try {
+    u = new URL(repo)
+  } catch {
+    return ''
+  }
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return ''
+  const base = `${u.protocol}//${u.host}${u.pathname.replace(/\.git$/, '')}`
+  const host = u.hostname.toLowerCase()
+  if (host === 'github.com') return `${base}/blob/${ref}/${file}`
+  if (host.includes('gitlab')) return `${base}/-/blob/${ref}/${file}`
+  return `${base}/src/branch/${ref}/${file}`
+}
+
+/** Что окно «по ссылке» берёт из сохранённого описания: ссылка (строка
+ * «# compose: …» или по repo/ref/file), хосты, имя стека, сервис сайта.
+ * Простой построчный разбор: эти поля в описании по ссылке всегда одного
+ * вида; не нашлось — поле пустое. */
+export function fromDescription(text: string): { link: string; hosts: string[]; project: string; site: string } {
+  const lines = text.split('\n')
+  const top = (k: string) => lines.find((l) => l.startsWith(k + ':'))?.slice(k.length + 1).trim().replace(/^["']|["']$/g, '') ?? ''
+  let section = ''
+  let sub = ''
+  const compose: Record<string, string> = {}
+  let site = ''
+  for (const l of lines) {
+    if (/^\S/.test(l)) {
+      section = l.replace(/:.*$/, '')
+      sub = ''
+      continue
+    }
+    if (section !== 'compose') continue
+    const m2 = /^ {2}([a-z_]+):\s*(.*)$/.exec(l)
+    if (m2) {
+      sub = m2[1]
+      compose[m2[1]] = m2[2].trim()
+      continue
+    }
+    const m4 = /^ {4}service:\s*(\S+)/.exec(l)
+    if (m4 && sub === 'site') site = m4[1]
+  }
+  const mark = lines.find((l) => l.startsWith('# compose: '))?.slice('# compose: '.length).trim() ?? ''
+  const hosts = (compose.hosts ?? '').replace(/^\[|\]$/g, '').split(',').map((h) => h.trim()).filter(Boolean)
+  const link = mark || (top('repo') && compose.file ? composeLinkFor(top('repo'), top('ref') || 'main', compose.file) : '')
+  return { link, hosts, project: compose.project ?? '', site }
 }

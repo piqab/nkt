@@ -214,6 +214,23 @@ and builds the description from it:
 - **`${…}` variables**: a `.env` template in a comment, defaults as they
   are, password- or key-like ones as `<secret>`, `${X:?…}` as "required".
 
+The description window is the same for a new and a saved compose
+pipeline: for a saved one ("Description" in the list) the "from a link"
+block is already filled from the description, with the link (the
+`# compose: …` line that "Fill in the description" writes, or else built
+from `repo:`, `ref:` and `compose.file`), hosts, stack name and site
+service; "Fill in the description" rebuilds it from the file, and the
+difference is shown before saving. The pipeline name is read-only.
+
+**The stack name** (`compose.project`) is the docker compose project name
+on the host: the directory `/srv/compose/<name>/` (compose file, files next
+to it, `.env`), containers `<name>-<service>-1`, the network
+`<name>_default`, volumes `<name>_<volume>`. The deployment updates, and
+removal removes, exactly this stack. Changing the name of a deployed
+pipeline brings up a **new stack next to it** with empty volumes; two
+pipelines on one host need different names. Empty means the repository
+name from the link.
+
 A private repository without keys: the window says "the repository is
 private: set the name and “Access”, then “Fill in the description” again",
 and for now the description comes from the link alone, with the

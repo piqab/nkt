@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.107 — 2026-10-03
+
+- **One description window for new and saved pipelines.** A saved compose
+  pipeline ("Description") gets the same "from a link" block, filled from
+  the description: the link, hosts, stack name and site service; "Fill in
+  the description" rebuilds it with a diff before saving. The link is kept
+  as a `# compose: …` line in the description (older ones are rebuilt from
+  `repo:`). The pipeline name is shown next to the edit note. The docs
+  explain what the stack name means.
+
 ## v1.11.106 — 2026-10-03
 
 - **Updating the hub, then the hosts.** The "Update the hub" confirmation
