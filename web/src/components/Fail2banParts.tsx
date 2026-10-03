@@ -12,6 +12,7 @@ import { confirmAction } from './confirm'
 import { VersionHistory } from './VersionHistory'
 import { unifiedDiff } from './textDiff'
 import { BAN_TIMES, fmtDuration, isExternalIP } from '../fail2ban'
+import { F2BTemplateFleetModal } from './F2BTemplateFleetModal'
 
 /**
  * Общие части раздела fail2ban: хоста и хаба.
@@ -558,7 +559,10 @@ export function TemplatesPanel({
   const local = useApi<{ builtin: Fail2banTemplate[]; custom: Fail2banTemplate[] }>(hubLevel ? null : '/fail2ban/templates')
   const hub = useApi<{ builtin: Fail2banTemplate[]; custom: Fail2banTemplate[] }>(`${base}/fail2ban/templates`)
   const [edit, setEdit] = useState<Fail2banTemplate | null | 'new'>(null)
-  const builtin = hubLevel ? [] : (local.data?.builtin ?? [])
+  const [fleet, setFleet] = useState<Fail2banTemplate | null>(null)
+  // У хаба стандартные — список машины хаба (текст под каждый хост хаб
+  // берёт у самого хоста при проверке).
+  const builtin = hubLevel ? (hub.data?.builtin ?? []) : (local.data?.builtin ?? [])
   const custom = hub.data?.custom ?? []
 
   async function remove(tpl: Fail2banTemplate) {
@@ -619,6 +623,11 @@ export function TemplatesPanel({
                       {t('fail2ban.tplApply')}
                     </Button>
                   )}
+                  {hubLevel && me.is_admin && (
+                    <Button size="small" type="primary" onClick={() => setFleet(r)}>
+                      {t('fail2ban.fleetTplButton')}
+                    </Button>
+                  )}
                   {!r.builtin && me.is_admin && (
                     <>
                       <RowAction action="edit" label={t('configs.edit')} onClick={() => setEdit(r)} />
@@ -631,6 +640,7 @@ export function TemplatesPanel({
           ]}
         />
       </div>
+      {fleet && <F2BTemplateFleetModal template={fleet} onClose={() => setFleet(null)} />}
       {edit && (
         <TemplateEditModal
           base={base}

@@ -194,7 +194,25 @@ The **“fail2ban”** section of the hub menu:
 - **Banned addresses** across all hosts: the address, on which hosts and
   in which jails; those banned on more hosts come first. With checkboxes:
   **“Ban on all hosts”** and **“Unban on all hosts”**.
-- **Custom templates**, stored here with version history.
+- **Templates**: standard and custom ones (custom ones are stored here,
+  with version history); each has a **“To hosts”** button.
+
+**Template to hosts.** A window with the list of hosts: checkboxes are
+cleared by default, with “Select all” and “Clear all”; a host without
+fail2ban cannot be selected. **“Check”** is required first: a dry run on
+each selected host that writes nothing. For every host it shows “will
+change”, “no changes”, “skipped” (with the reason) or “error”, and a file
+diff for changes. **“Apply”** becomes available only after the check and
+applies exactly what was checked: a hub job, three hosts at a time, with
+the standard job log window. Each host writes the files, checks the
+fail2ban configuration and rolls the files back itself on error. A check
+is valid for 30 minutes; if you change the host selection, check again.
+
+Each host provides its own text of a standard template: for example,
+`sshd` on a host where the sshd log is only in journald gets
+`backend = systemd`. A host without the template's program (no nginx for
+`nginx-*`) is skipped. A custom template is one text from the hub for all
+hosts.
 
 **Ban on all hosts** is a hub job with a log, one step per host: the
 address is banned in the `nkt-manual` jail for the chosen time (a week by

@@ -72,7 +72,7 @@ func localFixtureHub(t *testing.T) (*Server, *store.DB, string) {
 	t.Cleanup(func() { _ = db.Close() })
 	cfg := &config.Config{Mode: config.ModeFixtures, FixturesRoot: root, DataDir: t.TempDir(),
 		NginxRoot: "/etc/nginx", NginxMainConfig: "/etc/nginx/nginx.conf", HAProxyRoot: "/etc/haproxy", HAProxyMainConf: "/etc/haproxy/haproxy.cfg",
-		CaddyRoot: "/etc/caddy", CaddyMainConfig: "/etc/caddy/Caddyfile", CommandTimeout: 5 * time.Second, CertbotTimeout: time.Minute,
+		CaddyRoot: "/etc/caddy", CaddyMainConfig: "/etc/caddy/Caddyfile", Fail2banRoot: "/etc/fail2ban", CommandTimeout: 5 * time.Second, CertbotTimeout: time.Minute,
 		AllowMutations: true, SessionTTL: time.Hour}
 	authSvc := auth.NewService(db, cfg)
 	hash, _ := auth.HashPassword("admin-password-1234")

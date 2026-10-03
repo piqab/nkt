@@ -411,6 +411,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/events/settings", s.handleEventSettings)
 					r.Put("/hub/ui/nav/{kind}", s.handleNavLayout)
 					r.Post("/hub/fail2ban/fleet", s.handleF2BFleet)
+					r.Post("/hub/fail2ban/templates/check", s.handleF2BTemplateCheck)
+					r.Post("/hub/fail2ban/templates/apply", s.handleF2BTemplateApply)
 					r.Post("/hub/hosts/{id}/group", s.handleSetHostGroup)
 					r.Post("/hub/hosts/{id}/install", s.handleStartInstall)
 					r.Post("/hub/hosts/{id}/install/cancel", s.handleCancelInstall)

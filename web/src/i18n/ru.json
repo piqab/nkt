@@ -3680,7 +3680,25 @@
     "fleetPrivateConfirm": "Адреса {{ips}} — внутренние (частная сеть, loopback или link-local). Бан может отрезать доступ своим: прокси, VPN, соседним машинам, самому хабу. Всё равно забанить?",
     "undoBanned": "Забанено: {{ips}} на хостах: {{count}}",
     "undoUnbanned": "Разбанено: {{ips}} на хостах: {{count}}",
-    "undo": "Отменить ({{n}})"
+    "undo": "Отменить ({{n}})",
+    "fleetTplButton": "На хосты",
+    "fleetTplTitle": "Шаблон {{name}} на хосты",
+    "fleetTplHintBuiltin": "Стандартный шаблон: текст берётся у каждого хоста свой (например, sshd с журналом в journald или в файле). Хосты без нужной программы будут пропущены.",
+    "fleetTplHintCustom": "Свой шаблон с хаба — один текст на все выбранные хосты.",
+    "fleetTplNotInstalled": "fail2ban не установлен",
+    "fleetTplCheck": "Проверить",
+    "fleetTplApply": "Применить ({{count}})",
+    "fleetTplCheckFirst": "Сначала «Проверить»: пробный прогон на каждом хосте покажет, какие файлы изменятся. Применится ровно проверенное.",
+    "fleetTplCheckTitle": "Проверка:",
+    "fleetTplShowDiff": "дифф",
+    "fleetTplHideDiff": "скрыть",
+    "fleetTplNothing": "Применять нечего: изменений нет ни на одном хосте.",
+    "fleetTplStatus": {
+      "changes": "будут изменения",
+      "same": "без изменений",
+      "skip": "пропущен",
+      "error": "ошибка"
+    }
   },
   "sites": {
     "title": "Сайты",
