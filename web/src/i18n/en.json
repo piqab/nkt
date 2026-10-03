@@ -3368,7 +3368,18 @@
       }
     },
     "imagesComment": "pinned image versions",
-    "portsComment": "port publications instead of the file's"
+    "portsComment": "port publications instead of the file's",
+    "accessNeedsName": "Set the pipeline name first: “Access” saves it",
+    "accessFromEditor": "Keys for a private repository and registry; a new pipeline is saved first",
+    "accessSaved": "Keys saved; the check is below.",
+    "accessCheckTitle": "Access check",
+    "accessRecheck": "check again",
+    "accessChecking": "checking…",
+    "accessRepoOK": "repository {{repo}}: access granted, branch {{ref}} found",
+    "accessRefMissing": "repository {{repo}}: access granted, but there is no branch or tag {{ref}}",
+    "accessRepoFail": "repository {{repo}}: no access: {{error}}",
+    "accessRegistryOK": "registry {{image}}: access granted, tags: {{count}}",
+    "accessRegistryFail": "registry {{image}}: no access: {{error}}"
   },
   "edge": {
     "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment webhooks and/or signed API token requests), and the hub keeps the tunnel to it. There can be several edges.",

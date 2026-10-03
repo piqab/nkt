@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button, Checkbox, Dropdown, Input, Select, Space, Switch, Tabs, Tag, Tooltip } from 'antd'
 import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
@@ -409,8 +409,12 @@ function HubGitBanner({ admin }: { admin: boolean }) {
 }
 
 /** Описание конвейера (YAML): правка с диффом, история редакций. */
-function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; onClose: () => void; onSaved: () => void }) {
+function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pipeline; onClose: () => void; onSaved: () => void }) {
   const { t } = useTranslation()
+  // Новый конвейер, сохранённый кнопкой «Доступ», — дальше окно правит его.
+  const [created, setCreated] = useState<Pipeline | null>(null)
+  const pipeline = initial ?? created ?? undefined
+  const [access, setAccess] = useState<Pipeline | null>(null)
   const tpl = useApi<{ content: string }>(pipeline ? null : '/hub/pipelines/template')
   const [name, setName] = useState('')
   const [note, setNote] = useState('')
@@ -423,6 +427,31 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
   const [dryJob, setDryJob] = useState<Job | null>(null)
   const [dryOpen, setDryOpen] = useState(false)
   const [drySkip, setDrySkip] = useState(() => parseDrySkip(pipeline?.dry_skip))
+
+  // «Доступ»: новый конвейер сначала сохраняется (нужно имя), затем —
+  // то же окно, что в списке, с проверкой доступа.
+  async function openAccess() {
+    setError(null)
+    try {
+      let id = pipeline?.id
+      if (!id) {
+        setBusy(true)
+        const res = await api<{ id: number }>('/hub/pipelines', { method: 'POST', body: { name, content: text } })
+        id = res.id
+        onSaved()
+      }
+      const fresh = await api<Pipeline>(`/hub/pipelines/${id}`)
+      if (!initial) {
+        setCreated(fresh)
+        setDraft(null)
+      }
+      setAccess(fresh)
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   async function save(): Promise<boolean> {
     setBusy(true)
@@ -472,6 +501,11 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
             <Space wrap style={{ marginBottom: '0.5rem' }}>
               {!pipeline && <Input size="small" style={{ width: '16rem' }} value={name} placeholder={t('deploy.name')} onChange={(e) => setName(e.target.value)} />}
               {pipeline && <Input size="small" style={{ width: '20rem' }} value={note} placeholder={t('deploy.notePlaceholder')} onChange={(e) => setNote(e.target.value)} />}
+              <Tooltip title={!pipeline && !name.trim() ? t('deploy.accessNeedsName') : t('deploy.accessFromEditor')}>
+                <Button size="small" disabled={busy || (!pipeline && !name.trim())} onClick={() => void openAccess()}>
+                  {t('deploy.access')}
+                </Button>
+              </Tooltip>
               {/action:\s*compose/.test(text) && (
                 <Tooltip title={t('deploy.dryRunHint')}>
                   <Button size="small" onClick={() => setDryOpen(true)}>
@@ -500,6 +534,7 @@ function PipelineEditor({ pipeline, onClose, onSaved }: { pipeline?: Pipeline; o
           }}
         />
       )}
+      {access && <AccessModal p={access} onClose={() => setAccess(null)} onSaved={onSaved} />}
       {dryJob && <JobLogModal job={dryJob} scope="/hosts/local" onClose={() => setDryJob(null)} />}
       {history && pipeline && (
         <VersionsModal
@@ -896,6 +931,24 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [envHistory, setEnvHistory] = useState(false)
+  // Проверка доступа с сохранёнными ключами: при открытии и после записи.
+  const [check, setCheck] = useState<AccessCheck | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [saved, setSaved] = useState(false)
+  async function runCheck() {
+    setChecking(true)
+    try {
+      setCheck(await api<AccessCheck>(`/hub/pipelines/${p.id}/access/check`, { method: 'POST' }))
+    } catch (err) {
+      setCheck({ repo: '', ref: '', repo_ok: false, ref_found: false, repo_error: errText(err) })
+    } finally {
+      setChecking(false)
+    }
+  }
+  useEffect(() => {
+    void runCheck()
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- при открытии окна
+  }, [p.id])
   // Новый .env — сначала разница по именам с текущим (значения — секреты).
   async function save() {
     if (env) {
@@ -920,7 +973,13 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
     try {
       await api(`/hub/pipelines/${p.id}/credentials`, { method: 'POST', body })
       onSaved()
-      onClose()
+      // Окно остаётся открытым: сразу проверка с новыми ключами.
+      setToken('')
+      setKey('')
+      setRegistry('')
+      setEnv('')
+      setSaved(true)
+      await runCheck()
     } catch (err) {
       setError(errText(err))
     } finally {
@@ -934,6 +993,8 @@ function AccessModal({ p, onClose, onSaved }: { p: Pipeline; onClose: () => void
         <HelpButton docKey="deploy:access" isHub admin />
       </Space>
       {error && <Banner kind="error">{error}</Banner>}
+      {saved && <Banner kind="info">{t('deploy.accessSaved')}</Banner>}
+      <AccessCheckView check={check} checking={checking} onRecheck={() => void runCheck()} />
       <p className="small">
         {t('deploy.gitCred')}: <Tag color={p.has_git_cred ? 'success' : 'default'}>{p.has_git_cred ? t('deploy.set') : t('deploy.notSet')}</Tag>
         {' · '}
@@ -1171,5 +1232,52 @@ curl -fsS -X POST ${url} -H "X-NKT-Timestamp: $TS" -H "X-NKT-Signature: $SIG" -d
         {curl}
       </pre>
     </Modal>
+  )
+}
+
+interface AccessCheck {
+  repo: string
+  ref: string
+  repo_ok: boolean
+  ref_found: boolean
+  repo_error?: string
+  registry?: string
+  registry_ok?: boolean
+  registry_tags?: number
+  registry_error?: string
+}
+
+/** Итог проверки доступа: репозиторий и ветка, registry. */
+function AccessCheckView({ check, checking, onRecheck }: { check: AccessCheck | null; checking: boolean; onRecheck: () => void }) {
+  const { t } = useTranslation()
+  const ok = (good: boolean, text: string) => (
+    <div className="small" style={{ color: good ? 'var(--status-good)' : 'var(--status-critical)', fontWeight: good ? undefined : 600 }}>
+      {good ? '✓' : '✗'} {text}
+    </div>
+  )
+  return (
+    <div className="col" style={{ gap: '0.15rem', margin: '0.4rem 0 0.6rem' }}>
+      <Space size={6}>
+        <strong className="small">{t('deploy.accessCheckTitle')}</strong>
+        <Button size="small" type="link" loading={checking} onClick={onRecheck}>
+          {t('deploy.accessRecheck')}
+        </Button>
+      </Space>
+      {checking && !check ? (
+        <span className="small muted">{t('deploy.accessChecking')}</span>
+      ) : check ? (
+        <>
+          {check.repo_ok
+            ? check.ref_found
+              ? ok(true, t('deploy.accessRepoOK', { repo: check.repo, ref: check.ref }))
+              : ok(false, t('deploy.accessRefMissing', { repo: check.repo, ref: check.ref }))
+            : ok(false, t('deploy.accessRepoFail', { repo: check.repo, error: check.repo_error ?? '' }))}
+          {check.registry &&
+            (check.registry_ok
+              ? ok(true, t('deploy.accessRegistryOK', { image: check.registry, count: check.registry_tags ?? 0 }))
+              : ok(false, t('deploy.accessRegistryFail', { image: check.registry, error: check.registry_error ?? '' })))}
+        </>
+      ) : null}
+    </div>
   )
 }

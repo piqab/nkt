@@ -486,6 +486,16 @@ page.
 
 ## Access and secrets
 
+The **"Access"** window opens from the pipeline's button in the list and
+from the **"Access"** button in the description window. For a new pipeline
+that button first saves it under the entered name (it is disabled without
+a name), and the window then edits the saved pipeline. On opening and
+after "Save", the window checks access with the saved keys right away:
+`git ls-remote` on `repo:` gives "access granted, branch found", "no
+access" with the reason (`Permission denied`, a wrong token) or "no such
+branch"; if the description has `registry:`, it also logs in to the
+registry and counts the tags. "Check again" repeats it.
+
 A pipeline's "Access":
 
 - **Repository** — a token (for `https://`, e.g. a GitHub fine-grained

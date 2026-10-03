@@ -138,3 +138,10 @@ func TestLogSitePortSources(t *testing.T) {
 		t.Fatalf("image: problems %d, log %v", n, keys)
 	}
 }
+
+func TestQuietSSH(t *testing.T) {
+	in := "git ls-remote: Warning: Permanently added '[127.0.0.1]:2299' (ED25519) to the list of known hosts.\r\nalex@127.0.0.1: Permission denied (publickey).\r\nfatal: Could not read"
+	if got := quietSSH(in); got != "git ls-remote:\nalex@127.0.0.1: Permission denied (publickey).\nfatal: Could not read" {
+		t.Fatalf("%q", got)
+	}
+}

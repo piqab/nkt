@@ -372,6 +372,7 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/pipelines/{id}/enabled", s.handlePipelineEnabled)
 					r.Get("/hub/pipelines/{id}/versions", s.handlePipelineVersions)
 					r.Post("/hub/pipelines/{id}/credentials", s.handlePipelineCredentials)
+					r.Post("/hub/pipelines/{id}/access/check", s.handlePipelineAccessCheck)
 					r.Get("/hub/pipelines/{id}/env/versions", s.handlePipelineEnvVersions)
 					r.Post("/hub/pipelines/{id}/env/versions/{vid}/reveal", s.handlePipelineEnvReveal)
 					r.Post("/hub/pipelines/{id}/env/versions/{vid}/restore", s.handlePipelineEnvRestore)
