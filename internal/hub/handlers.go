@@ -1313,7 +1313,7 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	settings := s.hub.EventSettings(r.Context())
 	writeJSON(w, http.StatusOK, map[string]any{
 		"events": res.Events, "unread": res.Unread, "total": res.Total, "hosts": res.Hosts, "hidden": res.Hidden,
-		"notify": settings.Notify, "hide": settings.Hide,
+		"notify": settings.Notify, "hide": settings.Hide, "kinds": EventKinds,
 	})
 }
 

@@ -33,10 +33,11 @@ func (d *DB) MetricHourly(ctx context.Context, since, until string, sources []st
 		ph[i] = "?"
 		args = append(args, s)
 	}
-	rows, err := d.QueryContext(ctx, `SELECT source, subject, metric, substr(ts, 1, 13) AS h,
-		AVG(value), MAX(value), SUM(value), COUNT(*)
-		FROM metric_samples WHERE ts >= ? AND ts < ? AND source IN (`+strings.Join(ph, ",")+`)
-		GROUP BY source, subject, metric, h ORDER BY source, subject, metric, h`, args...)
+	args[0], args[1] = hourOf(since), hourOf(until)
+	rows, err := d.reader().QueryContext(ctx, `SELECT source, subject, metric, hour,
+		sum / n, max, sum, n
+		FROM metric_hourly WHERE hour >= ? AND hour < ? AND n > 0 AND source IN (`+strings.Join(ph, ",")+`)
+		ORDER BY source, subject, metric, hour`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +65,7 @@ type HourlyProbe struct {
 
 // ProbeHourly — почасовые итоги проверок всех целей за [since, until).
 func (d *DB) ProbeHourly(ctx context.Context, since, until string) ([]HourlyProbe, error) {
-	rows, err := d.QueryContext(ctx, `SELECT target_id, substr(ts, 1, 13) AS h, SUM(ok), COUNT(*),
+	rows, err := d.reader().QueryContext(ctx, `SELECT target_id, substr(ts, 1, 13) AS h, SUM(ok), COUNT(*),
 		COALESCE(AVG(CASE WHEN ok THEN latency_ms END), 0)
 		FROM probe_results WHERE ts >= ? AND ts < ?
 		GROUP BY target_id, h ORDER BY target_id, h`, since, until)

@@ -87,7 +87,60 @@ func DeriveTargets(snap *model.Snapshot) []store.Target {
 		}
 	}
 	deriveWorkloadTargets(snap, add)
+	deriveK8sTargets(snap, add)
 	return out
+}
+
+// deriveK8sTargets — цели кластера Kubernetes (на control plane): Ingress
+// проверяется HTTP-запросом с его именем хоста через входной контроллер
+// на этом узле, NodePort и LoadBalancer — соединением с портом узла, узлы
+// кластера — ping по их адресу. Без этого на хосте, где кроме кластера
+// ничего нет, «Доступность» была пустой.
+func deriveK8sTargets(snap *model.Snapshot, add func(store.Target)) {
+	k := snap.K8s
+	if k == nil {
+		return
+	}
+	for _, ing := range k.Ingresses {
+		for _, h := range ing.Hosts {
+			if !isHostname(h) {
+				continue
+			}
+			add(store.Target{
+				Key:   fmt.Sprintf("k8s-ing:%s/%s:%s", ing.Namespace, ing.Name, h),
+				Label: fmt.Sprintf("k8s ingress · %s/%s %s", ing.Namespace, ing.Name, h),
+				Kind:  "http", Host: "127.0.0.1", Port: 80, HostHeader: h,
+				Source: model.ServiceK8s, Service: model.ServiceK8s, NodeID: "k8s:ing:" + ing.Namespace + "/" + ing.Name,
+			})
+		}
+	}
+	for _, svc := range k.Services {
+		if svc.Type != "NodePort" && svc.Type != "LoadBalancer" {
+			continue
+		}
+		for _, p := range svc.Ports {
+			if p.NodePort <= 0 || (p.Protocol != "" && !strings.EqualFold(p.Protocol, "tcp")) {
+				continue
+			}
+			add(store.Target{
+				Key:   fmt.Sprintf("k8s-svc:%s/%s:%d", svc.Namespace, svc.Name, p.NodePort),
+				Label: fmt.Sprintf("k8s service · %s/%s %d→%d", svc.Namespace, svc.Name, p.NodePort, p.Port),
+				Kind:  "tcp", Host: "127.0.0.1", Port: p.NodePort,
+				Source: model.ServiceK8s, Service: model.ServiceK8s, NodeID: "k8s:svc:" + svc.Namespace + "/" + svc.Name,
+			})
+		}
+	}
+	for _, n := range k.Nodes {
+		if n.IP == "" {
+			continue
+		}
+		add(store.Target{
+			Key:   "k8s-node:" + n.Name,
+			Label: fmt.Sprintf("k8s node · %s", n.Name),
+			Kind:  "icmp", Host: n.IP,
+			Source: model.ServiceK8s, Service: model.ServiceK8s, NodeID: "k8s:node:" + n.Name,
+		})
+	}
 }
 
 // deriveWorkloadTargets — опубликованные порты Podman, проброшенные порты

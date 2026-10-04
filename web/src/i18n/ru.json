@@ -1630,7 +1630,12 @@
     },
     "source": "Источник",
     "sourceHost": "Хост целиком",
-    "noData": "нет данных"
+    "noData": "нет данных",
+    "sourceK8sNode": "Kubernetes · узлы",
+    "allNodes": "все узлы",
+    "allNamespaces": "все namespace",
+    "pickSubjects": "самые нагруженные — или выберите из {{count}}",
+    "whatInOther": "Что в «Другом»?"
   },
   "blocks": {
     "loadingStructure": "Загрузка структуры файла…",
@@ -4217,7 +4222,26 @@
       "leak_days": "Утечка памяти: рост без остановки, дней",
       "leak_growth_pct": "Утечка памяти: рост за это время не меньше, %",
       "avail_drop_pp": "Доступность цели упала за сутки больше чем на, п. п."
-    }
+    },
+    "k8sRole": {
+      "control-plane": "control plane",
+      "worker": "worker"
+    },
+    "k8sCluster": "кластер {{name}}",
+    "allClusters": "все кластеры",
+    "allNodes": "все узлы",
+    "allNamespaces": "все namespace",
+    "nodesWithoutHost": "узлы без хоста на хабе",
+    "noGroup": "Без группы",
+    "hostsCount": "хостов: {{count}}",
+    "nodeNotReady": "узел не готов (NotReady)",
+    "cores": "ядер",
+    "barHint": "Полоса — среднее за период, метка — пик",
+    "memBarHint": "Среднее {{avg}}%, пик {{max}}%",
+    "colNode": "Узел",
+    "ofNode": "узла",
+    "k8sNodeKind": "Узел k8s",
+    "nodesCount": "узлов: {{count}}"
   },
   "reboot": {
     "button": "Перезагрузить хост",

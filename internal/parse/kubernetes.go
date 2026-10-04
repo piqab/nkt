@@ -160,6 +160,12 @@ func ParseK8sSummary(raw []byte) (*model.K8sState, error) {
 			_ = json.Unmarshal(it.Spec, &spec)
 			_ = json.Unmarshal(it.Status, &status)
 			n := model.K8sNode{Name: md.Name, Unschedulable: spec.Unschedulable}
+			// Роль — по меткам node-role (control-plane, у старых — master).
+			for _, l := range []string{"node-role.kubernetes.io/control-plane", "node-role.kubernetes.io/master"} {
+				if _, ok := md.Labels[l]; ok {
+					n.ControlPlane = true
+				}
+			}
 			for _, c := range status.Conditions {
 				if c.Type == "Ready" {
 					n.Ready = c.Status == "True"

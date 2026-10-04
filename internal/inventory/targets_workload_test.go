@@ -40,3 +40,32 @@ func TestDeriveWorkloadTargets(t *testing.T) {
 		}
 	}
 }
+
+// Хост, где кроме кластера ничего нет, тоже получает цели доступности.
+func TestDeriveK8sTargets(t *testing.T) {
+	snap := &model.Snapshot{K8s: &model.K8sState{
+		Ingresses: []model.K8sIngress{{Namespace: "default", Name: "web", Hosts: []string{"shop.example.com", "*"}}},
+		Services: []model.K8sService{
+			{Namespace: "shop", Name: "api", Type: "NodePort", Ports: []model.K8sServicePort{{Port: 8080, NodePort: 30080, Protocol: "TCP"}}},
+			{Namespace: "shop", Name: "db", Type: "ClusterIP", Ports: []model.K8sServicePort{{Port: 5432}}},
+		},
+		Nodes: []model.K8sNode{{Name: "w-1", IP: "192.168.122.11"}, {Name: "w-2"}},
+	}}
+	got := map[string]string{}
+	for _, tg := range DeriveTargets(snap) {
+		got[tg.Key] = tg.Kind + " " + tg.Address() + " " + tg.HostHeader
+	}
+	want := map[string]string{
+		"k8s-ing:default/web:shop.example.com": "http 127.0.0.1:80 shop.example.com",
+		"k8s-svc:shop/api:30080":               "tcp 127.0.0.1:30080 ",
+		"k8s-node:w-1":                         "icmp 192.168.122.11:0 ",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("цели: %v", got)
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s: %q, want %q", k, got[k], v)
+		}
+	}
+}

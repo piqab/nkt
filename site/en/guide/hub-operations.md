@@ -22,7 +22,7 @@ and the Telegram and Slack bots.
 
 The third settings column is **"hide"**: the kind is recorded but not
 shown in the log and not counted as unread; hidden kinds cannot notify.
-Above the log are **filters**: by kind (several at once), by host, and a
+Above the log are **filters**: by kind (several at once; the list of kinds comes from the hub, all of them, “forecast” and “rebooted” included), by host, and a
 **search** by host name, address and event text, run over the whole log
 (the latest 2000 events) rather than the page on screen; the **"show
 hidden"** checkbox brings hidden kinds back. The filter is remembered in
@@ -77,13 +77,27 @@ latency charts); a downtime heatmap by hour of week in your local time.
 
 ![Monitoring: load](/screens/en/hub-monitoring-load.png)
 
-**"Load":** hosts with CPU and memory (average and peak for the period),
-load, each disk with its percentage and a "fills in N days" forecast;
-click for the host's charts (CPU, memory with a capacity line, load,
-disks in percent) and its workloads. **Containers and machines of all
-hosts, each separately:** Docker, Podman, LXD, libvirt machines and
-Kubernetes pods with CPU, memory and network, a kind filter, search, and
-charts on click. A CPU heatmap by hour of week.
+**"Load":** hosts look like the hub's host list: hub groups as
+collapsible sections, a status icon, CPU and memory as bars (the bar is
+the period average, the mark is the peak; the colour follows
+"Thresholds"), load, each disk as a bar with a "fills in N days"
+forecast; click for the host's charts (CPU, memory with a capacity line,
+load, disks in percent) and its workloads. A cluster filter and search.
+
+**Kubernetes.** A control plane hands the hub the cluster layout: nodes
+with their role and the node of every pod. Hub hosts that are nodes are
+labelled "k8s · control plane" or "k8s · worker" with the cluster name
+(a node is matched to a host by address, then by name; hosts of clusters
+the hub created use their role in "Clusters"). Nodes that are not hub
+hosts get their own section "cluster … · nodes without a hub host" with
+readiness, address, CPU and memory from `kubectl top nodes` (share of the
+node's capacity).
+
+**Containers and machines of all hosts, each separately:** Docker,
+Podman, LXD, libvirt machines, Kubernetes pods and Kubernetes nodes with
+CPU, memory and network; pods have a "Node" column (worker nodes show up
+as the nodes of their pods). Filters: kind, cluster, nodes (several),
+namespace, search; charts on click. A CPU heatmap by hour of week.
 
 **Forecasts and hints** sit at the top of each tab, from the trends of
 recent days (a robust slope estimate, the median of the slopes of all

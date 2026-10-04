@@ -11,8 +11,11 @@ title: Monitoring
 On a schedule (`NKT_PROBE_INTERVAL`, once a minute by default) nkt probes
 web server listeners and pool backends, published Docker and Podman ports,
 forwarded LXD ports, and running LXD instances and libvirt machines by
-ping at their address. A probe is a TCP connection, an HTTP request with
-the right `Host` header, or a ping. The history turns into:
+ping at their address. On a Kubernetes control plane the cluster is
+probed too: Ingresses (an HTTP request with their host name through the
+ingress controller), NodePort and LoadBalancer services (a connection to
+the node port) and cluster nodes (ping). A probe is a TCP connection, an
+HTTP request with the right `Host` header, or a ping. The history turns into:
 
 - a “weekday hour × downtime” heatmap — you see when a service fails
   regularly;
@@ -40,6 +43,20 @@ list.
   Kubernetes); sources without data are marked “no data”. The last
   source, **Whole host**, is the CPU and memory of the machine itself; it
   opens when the host has no container engines.
+- Kubernetes has two sources: **Kubernetes** for pods and **Kubernetes ·
+  nodes** for cluster nodes, workers included (`kubectl top nodes`). Pods
+  can be filtered by nodes (several) and namespace.
+- Above the chart is an **object picker**: by default the busiest are
+  drawn and the rest fold into “Other”; the searchable list lets you pick
+  any, and “What is in “Other”?” opens it.
+- Charts, the ranking and the schedule read **hourly summaries** kept as
+  samples are written, not the per-minute samples: the page opens fast
+  and does not hold the host's database (on a host with Kubernetes these
+  queries used to take seconds, and the host could miss the hub's poll
+  meanwhile). Per-minute samples are kept for three days, hourly
+  summaries for at least 90 days (`NKT_RETENTION` if longer). The first
+  start after the update builds the summaries from the existing history
+  once.
 - A ranking of the busiest resources and a load schedule by hour.
 - The **btop** tab — a live `btop` in a terminal window; installed with a
   button if the host lacks it.

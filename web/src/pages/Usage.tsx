@@ -102,6 +102,8 @@ const WORKLOADS = [
   { value: 'lxd', label: 'LXD' },
   { value: 'libvirt', label: 'Libvirt' },
   { value: 'k8s', label: 'Kubernetes' },
+  // Узлы кластера, включая рабочие (kubectl top nodes на control plane).
+  { value: 'k8s_node', label: 'k8s_node' },
   // Сам хост — процессор и память машины целиком; последним: по умолчанию
   // открывается первый работающий движок, а хост — когда их нет. Сеть
   // хоста не собирается, у сетевых рядов этого источника нет.
@@ -159,6 +161,10 @@ function UsageCharts() {
   // не трогается.
   const sources = useApi<{ sources: string[] }>('/monitor/usage/sources')
   const [picked, setPicked] = useState<string | null>(null)
+  const [chosen, setChosen] = useState<string[]>([])
+  const [nodes, setNodes] = useState<string[]>([])
+  const [namespace, setNamespace] = useState('')
+  const [pickerOpen, setPickerOpen] = useState(false)
   const tz = tzOffsetMinutes()
 
   const base = SERIES.find((s) => s.id === seriesId)!
@@ -166,17 +172,51 @@ function UsageCharts() {
   const isNet = base.metric.startsWith('net_')
   const workloadOptions = WORKLOADS.filter((w) => !(isNet && w.value === 'host')).map((w) => ({
     value: w.value,
-    label: w.value === 'host' ? t('usage.sourceHost') : w.label,
+    label: w.value === 'host' ? t('usage.sourceHost') : w.value === 'k8s_node' ? t('usage.sourceK8sNode') : w.label,
   }))
   const live = new Set(sources.data?.sources ?? [])
   const firstLive = workloadOptions.find((w) => live.has(w.value))?.value ?? (sources.error || !sources.data ? 'docker' : workloadOptions[0].value)
   const workload = picked && workloadOptions.some((w) => w.value === picked) ? picked : firstLive
-  const setWorkload = (v: string) => setPicked(v)
+  const setWorkload = (v: string) => {
+    setPicked(v)
+    setChosen([])
+    setNodes([])
+    setNamespace('')
+  }
   // У хоста память — занятая (mem_used_bytes), у контейнеров — mem_bytes.
   const metric = isWorkload && workload === 'host' && base.metric === 'mem_bytes' ? 'mem_used_bytes' : base.metric
   const spec = { ...base, metric, source: isWorkload ? workload : base.source }
   const rangeSpec = RANGES.find((r) => r.value === range)!
 
+  const top = useApi<{ top: SubjectTotal[] }>(
+    `/monitor/usage/top${qs({ source: spec.source, metric: spec.metric, since: range, limit: 10 })}`,
+  )
+  // Все объекты источника за период — для выбора, что рисовать: раньше
+  // всё сверх семи самых нагруженных сворачивалось в «Другое» без выбора.
+  const all = useApi<{ top: SubjectTotal[] }>(
+    `/monitor/usage/top${qs({ source: spec.source, metric: spec.metric, since: range, limit: 2000 })}`,
+  )
+  // Kubernetes: узел каждого пода и узлы — фильтры «узел» и «namespace».
+  const isK8s = spec.source === 'k8s' || spec.source === 'k8s_node'
+  const k8s = useApi<{ nodes: { name: string; control_plane?: boolean }[]; pods: Record<string, string> }>(isK8s ? '/monitor/usage/k8s' : null)
+  const nodeOf = (subject: string) => (spec.source === 'k8s_node' ? subject : k8s.data?.pods[subject])
+  const candidates = useMemo(() => {
+    return (all.data?.top ?? []).filter(
+      (s) =>
+        (!isK8s || nodes.length === 0 || nodes.includes(nodeOf(s.subject) ?? '')) &&
+        (spec.source !== 'k8s' || !namespace || s.subject.startsWith(namespace + '/')),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- nodeOf зависит от k8s.data и источника
+  }, [all.data, isK8s, nodes, namespace, k8s.data, spec.source])
+  const namespaces = useMemo(
+    () => (spec.source === 'k8s' ? [...new Set((all.data?.top ?? []).map((s) => s.subject.split('/')[0]))].sort() : []),
+    [all.data, spec.source],
+  )
+  // Что рисовать: выбранные объекты, иначе — при фильтре узла или
+  // namespace — подходящие под него, иначе — все (верхушка + «Другое»).
+  const filtering = isK8s && (nodes.length > 0 || !!namespace)
+  const drawn = chosen.length > 0 ? chosen : filtering ? candidates.map((c) => c.subject).slice(0, 300) : []
+  const subjectsParam = drawn.join(',')
   const usage = useApi<{ points: MetricPoint[]; simulated: boolean; total: number | null }>(
     `/monitor/usage${qs({
       source: spec.source,
@@ -185,11 +225,9 @@ function UsageCharts() {
       since: range,
       granularity: rangeSpec.granularity,
       tz,
+      subjects: subjectsParam,
     })}`,
     120_000,
-  )
-  const top = useApi<{ top: SubjectTotal[] }>(
-    `/monitor/usage/top${qs({ source: spec.source, metric: spec.metric, since: range, limit: 10 })}`,
   )
   const heat = useApi<{ cells: HeatCell[] }>(
     `/monitor/usage/heatmap${qs({ source: spec.source, metric: spec.metric, since: range === '24h' ? '7d' : range, tz })}`,
@@ -201,7 +239,8 @@ function UsageCharts() {
     for (const p of points) totals.set(p.subject, (totals.get(p.subject) ?? 0) + p.value)
 
     const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name)
-    const keep = new Set(ranked.slice(0, MAX_SERIES - (ranked.length > MAX_SERIES ? 1 : 0)))
+    // Выбранные вручную рисуются все, без «Другого».
+    const keep = new Set(chosen.length > 0 ? ranked : ranked.slice(0, MAX_SERIES - (ranked.length > MAX_SERIES ? 1 : 0)))
 
     const other = i18n.t('usage.other')
     const grouped = new Map<string, Map<string, number>>()
@@ -222,7 +261,8 @@ function UsageCharts() {
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([x, y]) => ({ x, y })),
       }))
-  }, [usage.data])
+  }, [usage.data, chosen.length])
+  const hasOther = chartSeries.some((s) => s.name === i18n.t('usage.other'))
 
   return (
     <>
@@ -231,7 +271,10 @@ function UsageCharts() {
           {t('usage.metric')}
           <Select
             value={seriesId}
-            onChange={setSeriesId}
+            onChange={(v) => {
+              setSeriesId(v)
+              setChosen([])
+            }}
             style={{ minWidth: '16rem' }}
             options={SERIES.map((s) => ({ value: s.id, label: t(s.labelKey) }))}
           />
@@ -256,6 +299,54 @@ function UsageCharts() {
             options={RANGES.map((r) => ({ value: r.value, label: t(r.labelKey) }))}
           />
         </label>
+      </div>
+
+      <div className="row" style={{ marginBottom: '0.75rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+        {isK8s && (k8s.data?.nodes.length ?? 0) > 0 && (
+          <Select
+            mode="multiple"
+            allowClear
+            value={nodes}
+            onChange={(v) => {
+              setNodes(v)
+              setChosen([])
+            }}
+            placeholder={t('usage.allNodes')}
+            style={{ minWidth: '13rem' }}
+            options={(k8s.data?.nodes ?? []).map((n) => ({ value: n.name, label: `${n.name}${n.control_plane ? ' · control plane' : ''}` }))}
+          />
+        )}
+        {spec.source === 'k8s' && namespaces.length > 0 && (
+          <Select
+            value={namespace}
+            onChange={(v) => {
+              setNamespace(v)
+              setChosen([])
+            }}
+            style={{ minWidth: '11rem' }}
+            options={[{ value: '', label: t('usage.allNamespaces') }, ...namespaces.map((n) => ({ value: n, label: n }))]}
+          />
+        )}
+        {candidates.length > 0 && (
+          <Select
+            mode="multiple"
+            allowClear
+            showSearch
+            open={pickerOpen}
+            onDropdownVisibleChange={setPickerOpen}
+            value={chosen}
+            onChange={setChosen}
+            maxTagCount="responsive"
+            placeholder={t('usage.pickSubjects', { count: candidates.length })}
+            style={{ minWidth: '18rem', flex: 1, maxWidth: '40rem' }}
+            options={candidates.map((c) => ({ value: c.subject, label: c.subject }))}
+          />
+        )}
+        {hasOther && chosen.length === 0 && (
+          <Button size="small" type="link" onClick={() => setPickerOpen(true)}>
+            {t('usage.whatInOther')}
+          </Button>
+        )}
       </div>
 
       <ErrorNote error={usage.error} />
@@ -291,7 +382,7 @@ function UsageCharts() {
             <Loading what={t('usage.rating')} />
           ) : (
             <BarChart
-              data={(top.data?.top ?? []).map((s) => ({
+              data={(filtering ? candidates.slice(0, 10) : top.data?.top ?? []).map((s) => ({
                 label: s.subject,
                 value: s.total,
                 note: t('usage.measurementsCount', { count: formatNumber(s.samples) }),
