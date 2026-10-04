@@ -208,7 +208,15 @@ function loadFilter(): EventFilter {
   return { kinds: [], host: '', q: '', hidden: false }
 }
 
-export default function HostEvents({ me }: { me?: Me }) {
+/** Куда вести с события, если своей ссылки у него нет (старые записи). */
+const KIND_LINK: Record<string, string> = {
+  problems: '/findings',
+  resolved: '/findings',
+  bans: '/fail2ban',
+  'job-failed': '/jobs',
+}
+
+export default function HostEvents({ me, onOpenHost }: { me?: Me; onOpenHost?: (id: number, name: string, path: string) => void }) {
   const { t } = useTranslation()
   const [filter, setFilterState] = useState<EventFilter>(loadFilter)
   const [text, setText] = useState(filter.q)
@@ -290,6 +298,16 @@ export default function HostEvents({ me }: { me?: Me }) {
                 />
               )}
             </span>
+            {/* К хосту — сразу в раздел, где это видно, с подсветкой. */}
+            {onOpenHost && !!e.host_id && (
+              <Button
+                size="small"
+                style={{ marginTop: '0.25rem' }}
+                onClick={() => onOpenHost(e.host_id!, e.host_name, e.link || KIND_LINK[e.kind] || '/')}
+              >
+                {t(`events.goTo.${e.link ? e.link.split(/[?/]/)[1] || 'overview' : (KIND_LINK[e.kind] ?? '/').slice(1) || 'overview'}`, { defaultValue: t('events.goTo.host') })}
+              </Button>
+            )}
             {ips.length > 0 && (
               <div className="row" style={{ flexWrap: 'wrap', gap: '0.1rem 0.6rem', marginTop: '0.15rem' }}>
                 {ips.map((ip) => (

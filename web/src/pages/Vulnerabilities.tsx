@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { Button, Checkbox, Input, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import { AIExplain } from '../components/AIExplain'
 import { useTranslation } from 'react-i18next'
-import { api, useApi } from '../api'
+import { api, qs, useApi } from '../api'
+import { useNavigate } from 'react-router-dom'
 import type { Me, Severity, VulnFinding, VulnStatus } from '../types'
 import { Banner, Card, ErrorNote, Loading, Modal, SeverityBadge, Spinner, formatRelative } from '../components/ui'
 import { DataTable } from '../components/DataTable'
@@ -57,6 +58,7 @@ export default function Vulnerabilities({ me }: { me: Me }) {
 }
 
 function VulnTab({ me }: { me: Me }) {
+  const navigate = useNavigate()
   const { t } = useTranslation()
   const canUse = me.is_admin && me.allow_mutations
   // Polls fast while a scan is actually running (for prompt progress text
@@ -284,6 +286,27 @@ function VulnTab({ me }: { me: Me }) {
             object: f.package,
           }}
         />
+      ),
+    },
+    {
+      // Где это чинится: пакет хоста — в «Пакетах» (ячейка подсвечена),
+      // уязвимость образа — в «Контейнерах», на строках с этим образом.
+      title: '',
+      key: 'go',
+      width: 110,
+      render: (_: unknown, f: VulnFinding) => (
+        <Button
+          size="small"
+          onClick={() =>
+            navigate(
+              f.target
+                ? `/containers${qs({ tab: 'docker', focus: f.target })}`
+                : `/packages${qs({ focus: f.package })}`,
+            )
+          }
+        >
+          {f.target ? t('vulns.toContainers') : t('vulns.toPackage')}
+        </Button>
       ),
     },
   ]

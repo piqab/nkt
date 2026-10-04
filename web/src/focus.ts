@@ -9,10 +9,16 @@ export function useFocusRow(ready: boolean): string | null {
   const [focus] = useState(() => new URLSearchParams(location.search).get('focus'))
   useEffect(() => {
     if (!focus || !ready) return
-    const id = window.setTimeout(() => document.querySelector('.row-focus')?.scrollIntoView({ block: 'center' }), 150)
+    const id = window.setTimeout(() => document.querySelector('.row-focus, .card-focus, .pkg-focus')?.scrollIntoView({ block: 'center' }), 150)
     return () => window.clearTimeout(id)
   }, [focus, ready])
   return focus
+}
+
+/** Несколько значений в одном ?focus= — через запятую (оповещение хаба о
+ * нескольких новых проблемах или банах подсвечивает их все). */
+export function focusSet(focus: string | null): Set<string> {
+  return new Set((focus ?? '').split(',').map((v) => v.trim()).filter(Boolean))
 }
 
 /** Вкладка из ?tab=, если она из допустимых. */
@@ -25,7 +31,7 @@ export function tabFromQuery<T extends string>(allowed: readonly T[], fallback: 
 export const SERVICE_PAGE_NAMES = new Set(['nginx', 'haproxy', 'caddy', 'docker', 'podman', 'lxd', 'libvirt', 'ufw', 'firewalld', 'fail2ban'])
 
 /** Куда вести с узла карты ресурсов: путь и подпись (ключ перевода). */
-export function nodeTarget(n: { kind: string; label: string; group?: string; meta?: Record<string, string> }): { to: string; labelKey: string; name?: string } | null {
+export function nodeTarget(n: { kind: string; label: string; group?: string; port?: number; meta?: Record<string, string> }): { to: string; labelKey: string; name?: string } | null {
   const q = (p: Record<string, string>) => '?' + new URLSearchParams(p).toString()
   const service = n.meta?.service || n.group || ''
   switch (n.kind) {
@@ -46,9 +52,15 @@ export function nodeTarget(n: { kind: string; label: string; group?: string; met
     case 'network':
       return { to: '/interfaces', labelKey: 'nav.toSection', name: n.label }
     case 'undeclared':
-      return { to: '/firewall', labelKey: 'nav.toFirewall' }
+      return { to: '/firewall' + (n.port ? q({ focus: String(n.port) }) : ''), labelKey: 'nav.toFirewall' }
   }
   if (n.kind.startsWith('k8s_')) return { to: '/containers' + q({ tab: 'k8s' }), labelKey: 'nav.toSection', name: 'Kubernetes' }
   if (SERVICE_PAGE_NAMES.has(service)) return { to: '/services' + q({ focus: service }), labelKey: 'nav.toService', name: service }
   return null
+}
+
+/** Лежит ли файл под одним из корней проводника (/files/roots): только
+ * такой можно открыть «в файлах». */
+export function underFileRoots(path: string, roots: string[] | undefined): boolean {
+  return (roots ?? []).some((r) => path === r || path.startsWith(r.endsWith('/') ? r : r + '/'))
 }

@@ -254,7 +254,7 @@ export default function Podman({ me }: { me: Me }) {
               <DataTable<PodmanContainer>                 dataSource={activeContainers}
                 columns={columns}
                 rowKey="id"
-                rowClassName={(c) => (c.name === focusContainer ? 'row-focus' : '')}
+                rowClassName={(c) => (focusContainer && (c.name === focusContainer || c.image === focusContainer) ? 'row-focus' : '')}
                 rowSelection={
                   canControl
                     ? {

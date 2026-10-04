@@ -2,10 +2,10 @@ import { useState } from 'react'
 import { Button, Space } from 'antd'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { api, qs } from '../api'
+import { api, qs, useApi } from '../api'
 import type { Finding, Me } from '../types'
 import { confirmAction } from './confirm'
-import { SERVICE_PAGE_NAMES } from '../focus'
+import { SERVICE_PAGE_NAMES, underFileRoots } from '../focus'
 import CommandModal from './CommandModal'
 import ContainerLogsModal from './ContainerLogsModal'
 
@@ -56,7 +56,17 @@ export function findingActions(f: Finding, canControl: boolean, t: (k: string, o
     out.push({ kind: 'link', label: t('findings.act.firewall'), to: '/firewall' })
   }
   if (f.rule.startsWith('malware-')) {
-    out.push({ kind: 'link', label: t('findings.act.malware'), to: `/vulnerabilities${qs({ tab: 'malware' })}` })
+    out.push({ kind: 'link', label: t('findings.act.malware'), to: `/vulnerabilities${qs({ tab: 'malware', focus: f.id })}` })
+    // Файл на хосте — в проводнике, на его строке. Файл внутри контейнера
+    // хостовым проводником не открыть.
+    if (f.file && f.service !== 'docker') out.push({ kind: 'link', label: t('findings.act.openInFiles'), to: `/disks${qs({ browse: f.file })}` })
+  }
+  // Неучтённый слушатель: закрыть порт — в межсетевом экране (правила и
+  // сокет этого порта подсвечены), кто слушает — на карте ресурсов.
+  if (f.rule === 'listening-not-declared' && f.object) {
+    const port = f.object.slice(f.object.lastIndexOf(':') + 1)
+    out.push({ kind: 'link', label: t('findings.act.firewallPort', { port }), to: `/firewall${qs({ focus: port })}` })
+    out.push({ kind: 'link', label: t('findings.act.onMap'), to: `/topology${qs({ focus: f.object })}` })
   }
   if (f.rule === 'fail2ban') {
     out.push({ kind: 'link', label: t('findings.act.fail2ban'), to: '/fail2ban' })
@@ -81,7 +91,11 @@ export function FindingActions({ f, me }: { f: Finding; me: Me | null }) {
   const canControl = !!me?.is_admin && !!me?.allow_mutations
   const [logs, setLogs] = useState<string | null>(null)
   const [run, setRun] = useState<{ name: string; action: 'start' | 'restart'; outcome?: { ok: boolean; exitCode?: number } | null } | null>(null)
-  const actions = findingActions(f, canControl, t)
+  // «Открыть в файлах» — только для файла под корнем проводника.
+  const roots = useApi<{ roots: string[] }>(f.file && f.rule.startsWith('malware-') ? '/files/roots' : null)
+  const actions = findingActions(f, canControl, t).filter(
+    (a) => !(a.kind === 'link' && a.to.startsWith('/disks?browse=') && !underFileRoots(f.file ?? '', roots.data?.roots)),
+  )
   if (actions.length === 0) return null
 
   async function finished() {

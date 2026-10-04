@@ -14,6 +14,7 @@ import PackageInstallModal from '../components/PackageInstallModal'
 import { FilesDiffModal, IPWithCheck, TemplateApplyModal, TemplatesPanel, underHub, type ApplyChange } from '../components/Fail2banParts'
 import { BAN_TIMES, fmtDuration, getIniKey, ignoreCovers, sameIgnore, setIniKey } from '../fail2ban'
 import { TitleHelp } from '../components/Docs'
+import { focusSet, useFocusRow } from '../focus'
 
 /**
  * fail2ban хоста: джейлы, забаненные адреса (разбан галочками, ручной
@@ -37,6 +38,9 @@ export default function Fail2ban({ me }: { me: Me }) {
   const data = st.data
   const state = data?.state
   const admin = me.is_admin
+  // Переход из оповещения хаба «новые баны»: ?focus=ip[,ip…] — эти
+  // адреса подсвечены в списке забаненных.
+  const focusIPs = focusSet(useFocusRow(!!data))
 
   async function run(key: string, fn: () => Promise<unknown>, okText?: string) {
     setBusy(key)
@@ -298,6 +302,7 @@ export default function Fail2ban({ me }: { me: Me }) {
               <DataTable<Fail2banBan & { key: string }>
                 dataSource={bans}
                 rowKey="key"
+                rowClassName={(b) => (focusIPs.has(b.ip) ? 'row-focus' : '')}
                 rowSelection={admin ? { selectedRowKeys: selected, onChange: (keys) => setSelected(keys as string[]) } : undefined}
                 columns={[
                   { title: t('fail2ban.colIP'), key: 'ip', render: (_, b) => <IPWithCheck ip={b.ip} me={me} /> },

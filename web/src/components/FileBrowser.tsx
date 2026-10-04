@@ -149,14 +149,24 @@ export default function FileBrowser() {
   const info = useApi<RootsInfo>('/files/roots')
   const roots = info.data?.roots ?? []
   const [dir, setDir] = useState<string | null>(null)
+  // Переход «открыть в файлах» (находка вредоносного, ClamAV): ?browse=<файл>
+  // — открыт его каталог, сам файл подсвечен.
+  const [focusFile] = useState(() => new URLSearchParams(location.search).get('browse'))
   // Первый корень становится текущим каталогом, как только список пришёл.
   useEffect(() => {
-    if (dir === null && roots.length > 0) setDir(roots[0])
-  }, [dir, roots])
+    if (dir !== null || roots.length === 0) return
+    const parent = focusFile ? focusFile.replace(/\/[^/]*$/, '') || '/' : null
+    setDir(parent && roots.some((r) => underRoot(parent, r)) ? parent : roots[0])
+  }, [dir, roots, focusFile])
   // Самый длинный подходящий корень: если один корень вложен в другой,
   // текущим считается ближайший.
   const root = roots.filter((r) => dir !== null && underRoot(dir, r)).sort((a, b) => b.length - a.length)[0] ?? roots[0] ?? ''
   const listing = useApi<{ entries: Entry[] }>(dir ? `/files/list${qs({ path: dir })}` : null)
+  useEffect(() => {
+    if (!focusFile || !listing.data) return
+    const id = window.setTimeout(() => document.querySelector('.row-focus')?.scrollIntoView({ block: 'center' }), 150)
+    return () => window.clearTimeout(id)
+  }, [focusFile, listing.data])
   // Чей это список: пока ответ для нового каталога не пришёл, показывать
   // старый нельзя — большая папка грузится секунды, и старое содержимое
   // выглядит как «ничего не произошло».
@@ -610,6 +620,7 @@ export default function FileBrowser() {
           <DataTable<Entry>
             dataSource={entries}
             rowKey="path"
+            rowClassName={(e) => (focusFile && e.path === focusFile ? 'row-focus' : '')}
             size="small"
             pagination={entries.length > 100 ? { pageSize: 100 } : false}
             columns={columns}

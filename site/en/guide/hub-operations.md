@@ -28,6 +28,16 @@ Above the log are **filters**: by kind (several at once), by host, and a
 hidden"** checkbox brings hidden kinds back. The filter is remembered in
 this browser.
 
+A host event has a button that goes **straight to the right section of
+that host** with the item highlighted: new findings open "Findings" with
+those findings' cards highlighted; new bans open fail2ban with the banned
+addresses highlighted; a forecast opens "Disks" (the mount point),
+"Containers" (the engine tab and the container's row) or "Availability"
+(the target); unreachable, back online and rebooted open the host
+overview. Events recorded before this version have no link of their
+own — the button goes to the section matching the event kind. "Monitoring"
+hints use the same links.
+
 Every external IP in an alert's text gets its own bulb: an AI check of
 the address and a **“Ban on all hosts”** button in the answer window,
 see [fail2ban](/en/guide/fail2ban#alerts-and-address-checks).

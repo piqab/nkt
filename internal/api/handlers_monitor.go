@@ -134,6 +134,17 @@ func (s *Server) handleUsage(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// handleUsageSources — источники с данными за сутки: «Нагрузка» открывает
+// первый работающий, а не Docker, которого на хосте может не быть.
+func (s *Server) handleUsageSources(w http.ResponseWriter, r *http.Request) {
+	list, err := s.db.MetricSources(r.Context(), sinceParam(r, 24*time.Hour))
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"sources": list})
+}
+
 func (s *Server) handleUsageTop(w http.ResponseWriter, r *http.Request) {
 	source := defaultParam(r, "source", "docker")
 	metric := defaultParam(r, "metric", "net_rx_bytes")

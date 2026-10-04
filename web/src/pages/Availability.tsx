@@ -12,6 +12,7 @@ import i18n from '../i18n'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { TitleHelp } from '../components/Docs'
+import { useFocusRow } from '../focus'
 
 interface TargetsResponse {
   targets: TargetStatus[]
@@ -132,6 +133,8 @@ export default function Availability({ me }: { me?: Me }) {
   const tz = tzOffsetMinutes()
 
   const targets = useApi<TargetsResponse>('/monitor/targets', 60_000)
+  // Прогноз хаба «упала доступность»: ?focus=<подпись или ключ цели>.
+  const focusTarget = useFocusRow(!!targets.data)
   const history = useApi<{ target: TargetStatus; buckets: Bucket[] }>(
     selected ? `/monitor/targets/${selected}/history${qs({ since: range, granularity: 'hour', tz })}` : null,
   )
@@ -406,6 +409,7 @@ export default function Availability({ me }: { me?: Me }) {
         <div className="table-wrap">
           <DataTable<TargetStatus>             dataSource={sorted}
             rowKey="id"
+            rowClassName={(tg) => (focusTarget && (tg.label === focusTarget || tg.key === focusTarget) ? 'row-focus' : '')}
             onRow={(tgt) => ({
               // Открыть окно ресурса. Не переключатель: окно закрывается
               // своим крестиком или Esc, а повторный клик по строке под ним

@@ -899,9 +899,11 @@ export interface HostEvent {
   /** Имя и адрес на момент события: хост могли переименовать или удалить. */
   host_name: string
   host_addr: string
-  kind: 'unreachable' | 'recovered' | 'problems' | 'resolved' | 'job-failed' | 'rebooted' | 'bans'
+  kind: 'unreachable' | 'recovered' | 'problems' | 'resolved' | 'job-failed' | 'rebooted' | 'bans' | 'forecast'
   severity?: string
   detail?: string
+  /** Раздел хоста с подсветкой (?focus=…); у старых событий нет. */
+  link?: string
 }
 
 export interface Job {

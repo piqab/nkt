@@ -346,6 +346,7 @@ export function JobLogModal({
   const [current, setCurrent] = useState<Job>(job)
   const [live, setLive] = useState(false)
   const [retrying, setRetrying] = useState(false)
+  const [canceling, setCanceling] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
   const lastSeq = useRef(0)
   const bodyRef = useRef<HTMLPreElement | null>(null)
@@ -463,6 +464,29 @@ export function JobLogModal({
           </span>
         )}
         {!isJobDone(current) && !live && <span className="small muted">{t('jobs.polling')}</span>}
+        {/* Отмена — прямо из окна: задание запускают отсюда же, и искать его
+            потом в списке «Заданий» ради одной кнопки незачем. */}
+        {!isJobDone(current) && (
+          <Button
+            size="small"
+            danger
+            loading={canceling}
+            style={{ marginLeft: 'auto' }}
+            onClick={async () => {
+              if (!(await confirmAction(t('jobs.confirmCancel', { title: current.title || current.kind })))) return
+              setCanceling(true)
+              try {
+                await api(`${scope}/jobs/${current.id}/cancel`, { method: 'POST' })
+              } catch (err) {
+                setRetryError(err instanceof Error ? err.message : String(err))
+              } finally {
+                setCanceling(false)
+              }
+            }}
+          >
+            {t('jobs.cancelJob')}
+          </Button>
+        )}
         {canRetry && (
           <Tooltip title={t('jobs.retryHint')}>
             <Button size="small" type="primary" icon={<RedoOutlined />} loading={retrying} onClick={() => void retry()} style={{ marginLeft: 'auto' }}>

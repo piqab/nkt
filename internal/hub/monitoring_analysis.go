@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math"
+	"net/url"
 	"sort"
 	"time"
 
@@ -61,6 +62,8 @@ type Insight struct {
 	// Link — раздел хоста, где это решается (disks, images, containers,
 	// availability, services).
 	Link string `json:"link,omitempty"`
+	// Path — тот же раздел с вкладкой и подсветкой объекта (?focus=).
+	Path string `json:"path,omitempty"`
 	Key  string `json:"-"`
 	Args []any  `json:"-"`
 	// Text — на языке читающего (заполняет API).
@@ -394,10 +397,39 @@ func (s *Server) alertInsights(ctx context.Context, list []Insight) {
 		} else if hh, err := s.db.HostByID(ctx, in.HostID); err == nil {
 			host = hh
 		}
-		s.hub.recordEventMsg(ctx, host, store.EventForecast, in.Severity, in.Key, in.Args...)
+		s.hub.recordEventLink(ctx, host, store.EventForecast, in.Severity, insightLink(in), in.Key, in.Args...)
 	}
 	raw, _ := json.Marshal(next)
 	_ = s.db.KVSet(ctx, monAlertedKV, string(raw))
+}
+
+// insightLink — раздел хоста для оповещения-прогноза, с подсветкой
+// объекта: диска, контейнера, цели доступности.
+func insightLink(in Insight) string {
+	var focus []string
+	if in.Subject != "" {
+		focus = []string{in.Subject}
+	}
+	switch in.Link {
+	case "":
+		return ""
+	case "disks", "availability":
+		return eventLink("/"+in.Link, focus)
+	case "containers":
+		tab := in.Source
+		if tab == monitor.SourceLibvirt {
+			tab = "vms"
+		}
+		if tab == "" {
+			return "/containers"
+		}
+		link := "/containers?tab=" + url.QueryEscape(tab)
+		if in.Subject != "" {
+			link += "&focus=" + url.QueryEscape(in.Subject)
+		}
+		return link
+	}
+	return "/" + in.Link
 }
 
 func lastHours(rows []store.MonRow, now time.Time, hours int) []store.MonRow {
@@ -465,6 +497,7 @@ func localizedInsights(ctx context.Context, list []Insight) []Insight {
 	out := make([]Insight, len(list))
 	for i, in := range list {
 		in.Text = msgs.Tc(ctx, in.Key, in.Args...)
+		in.Path = insightLink(in)
 		out[i] = in
 	}
 	return out

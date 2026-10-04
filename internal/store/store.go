@@ -502,7 +502,8 @@ CREATE TABLE IF NOT EXISTS host_events (
     severity  TEXT NOT NULL DEFAULT '',
     detail    TEXT NOT NULL DEFAULT '',
     detail_key  TEXT NOT NULL DEFAULT '', -- ключ каталога msgs (пусто — сырой текст)
-    detail_args TEXT NOT NULL DEFAULT ''  -- аргументы (msgs.EncodeArgs)
+    detail_args TEXT NOT NULL DEFAULT '', -- аргументы (msgs.EncodeArgs)
+    link        TEXT NOT NULL DEFAULT ''  -- раздел хоста с подсветкой
 );
 CREATE INDEX IF NOT EXISTS idx_host_events_ts ON host_events(id DESC);
 
@@ -568,6 +569,7 @@ var columnMigrations = []struct{ table, column, ddl string }{
 	{"jobs", "error_args", `ALTER TABLE jobs ADD COLUMN error_args TEXT NOT NULL DEFAULT ''`},
 	{"host_events", "detail_key", `ALTER TABLE host_events ADD COLUMN detail_key TEXT NOT NULL DEFAULT ''`},
 	{"host_events", "detail_args", `ALTER TABLE host_events ADD COLUMN detail_args TEXT NOT NULL DEFAULT ''`},
+	{"host_events", "link", `ALTER TABLE host_events ADD COLUMN link TEXT NOT NULL DEFAULT ''`},
 	{"job_log", "key", `ALTER TABLE job_log ADD COLUMN key TEXT NOT NULL DEFAULT ''`},
 	{"job_log", "args", `ALTER TABLE job_log ADD COLUMN args TEXT NOT NULL DEFAULT ''`},
 	// sudo_mode — точное состояние sudo: у sudo_status CHECK без

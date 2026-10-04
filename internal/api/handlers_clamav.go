@@ -12,14 +12,17 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/clamav"
 	"github.com/piqab/nkt/internal/collect"
 	"github.com/piqab/nkt/internal/config"
+	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/store"
 )
 
 // Ключи kv для последних прогонов — как vulnScanKVKey: перезапуск nkt не
@@ -28,59 +31,42 @@ const (
 	clamHostKVKey   = "clamav_last_host"
 	clamImagesKVKey = "clamav_last_images"
 	clamPathsKVKey  = "clamav_paths"
-	clamLogKeep     = 200
 )
 
-// clamState — одна операция ClamAV за раз (установка, обновление базы,
-// скан хоста, скан образов) с потоковым журналом: clamscan по большому
-// каталогу идёт минуты, и оператору нужно видеть, что он не завис.
+// clamState — последние результаты сканов (живут и в kv). Сами операции
+// ClamAV — установка, база, сканы — идут заданиями очереди clamQueue: по
+// одной за раз, с журналом в стандартном окне и отменой, которая
+// останавливает clamscan, а не только ожидание.
 type clamState struct {
-	mu       sync.Mutex
-	running  bool
-	op       string
-	progress string
-	log      []string
-	lastErr  string
-	host     *model.ClamScan
-	images   *model.ClamScan
-	cancel   context.CancelFunc
+	mu     sync.Mutex
+	host   *model.ClamScan
+	images *model.ClamScan
 }
 
-func (c *clamState) append(line string) {
-	c.mu.Lock()
-	c.log = append(c.log, line)
-	if len(c.log) > clamLogKeep {
-		c.log = c.log[len(c.log)-clamLogKeep:]
+// KindClamAV — задание ClamAV; clamQueue — его очередь (одно за раз:
+// freshclam и clamscan делят базу, два скана разом только мешают друг другу).
+const (
+	KindClamAV = "clamav.run"
+	clamQueue  = "clamav"
+)
+
+// clamParams — вход задания: операция и что сканировать. Команды
+// собирает сервер, клиент присылает только пути и имена образов.
+type clamParams struct {
+	Op     string   `json:"op"`
+	Paths  []string `json:"paths,omitempty"`
+	Images []string `json:"images,omitempty"`
+	Tool   string   `json:"tool,omitempty"`
+}
+
+type clamRunner struct{ s *Server }
+
+func (c *clamRunner) Run(ctx context.Context, jc *jobs.Context) error {
+	var p clamParams
+	if err := jc.Params(&p); err != nil {
+		return err
 	}
-	c.mu.Unlock()
-}
-
-func (c *clamState) setProgress(p string) {
-	c.mu.Lock()
-	c.progress = p
-	c.mu.Unlock()
-}
-
-// begin занимает состояние под операцию op; false — уже что-то идёт.
-func (c *clamState) begin(op string) (context.Context, bool) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.running {
-		return nil, false
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	c.running, c.op, c.progress, c.lastErr, c.log, c.cancel = true, op, "", "", nil, cancel
-	return ctx, true
-}
-
-func (c *clamState) end(err error) {
-	c.mu.Lock()
-	c.running, c.op, c.progress = false, "", ""
-	if err != nil {
-		c.lastErr = err.Error()
-	}
-	c.cancel = nil
-	c.mu.Unlock()
+	return c.s.runClam(ctx, jc, p)
 }
 
 func (s *Server) quarantineDir() string { return filepath.Join(s.cfg.DataDir, "quarantine") }
@@ -116,6 +102,23 @@ func (s *Server) saveClamScan(ctx context.Context, key string, sc *model.ClamSca
 	}
 }
 
+// activeClamJob — идущее или ждущее задание ClamAV (nil — нет).
+func (s *Server) activeClamJob(ctx context.Context) *store.Job {
+	if s.jobs == nil {
+		return nil
+	}
+	list, err := s.db.UnfinishedJobs(ctx)
+	if err != nil {
+		return nil
+	}
+	for i := range list {
+		if list[i].Queue == clamQueue {
+			return &list[i]
+		}
+	}
+	return nil
+}
+
 // handleClamStatus — всё для карточки ClamAV одним запросом.
 func (s *Server) handleClamStatus(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -129,15 +132,16 @@ func (s *Server) handleClamStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := map[string]any{
 		"status":     st,
-		"running":    s.clam.running,
-		"op":         s.clam.op,
-		"progress":   s.clam.progress,
-		"log":        append([]string{}, s.clam.log...),
-		"error":      s.clam.lastErr,
+		"running":    false,
 		"host_scan":  s.clam.host,
 		"image_scan": s.clam.images,
 	}
 	s.clam.mu.Unlock()
+	if job := s.activeClamJob(ctx); job != nil {
+		var p clamParams
+		_ = json.Unmarshal([]byte(job.Params), &p)
+		resp["running"], resp["op"], resp["job_id"] = true, p.Op, job.ID
+	}
 	resp["paths"] = s.clamPaths(ctx)
 	images := s.runningImages(ctx)
 	if images == nil {
@@ -149,31 +153,161 @@ func (s *Server) handleClamStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, resp)
 }
 
-// startClamOp запускает операцию в фоне; занято — 409.
-func (s *Server) startClamOp(w http.ResponseWriter, r *http.Request, op string, run func(ctx context.Context) error) {
+// startClamJob заводит задание ClamAV и отвечает {job_id}; уже идёт
+// другое — 409 с его номером, чтобы окно открылось на нём.
+func (s *Server) startClamJob(w http.ResponseWriter, r *http.Request, p clamParams, titleArgs ...any) {
 	if s.cfg.Mode == config.ModeFixtures {
 		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "clamav.fixturesDisabled"))
 		return
 	}
-	ctx, ok := s.clam.begin(op)
-	if !ok {
-		writeError(w, http.StatusConflict, msgs.T(msgs.LangFromRequest(r), "clamav.busy"))
+	if s.jobs == nil {
+		writeError(w, http.StatusServiceUnavailable, msgs.Tc(r.Context(), "api.backgroundJobsAreUnavailable"))
 		return
 	}
-	ctx = msgs.WithLang(ctx, msgs.FromContext(r.Context()))
+	if job := s.activeClamJob(r.Context()); job != nil {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": msgs.T(msgs.LangFromRequest(r), "clamav.busy"), "job_id": job.ID})
+		return
+	}
 	user := auth.Username(r.Context())
-	go func() {
-		err := run(ctx)
-		s.db.Audit(context.Background(), user, "clamav."+op, "", auditResult(err), errText(err))
-		s.clam.end(err)
-	}()
-	writeJSON(w, http.StatusOK, map[string]string{"status": "started"})
+	id, err := s.jobs.Start(r.Context(), jobs.Spec{
+		Kind: KindClamAV, Queue: clamQueue, Author: user, Params: p,
+		TitleKey: "clamav.job." + p.Op, TitleArgs: titleArgs,
+	})
+	if err != nil {
+		writeErr(w, r, http.StatusInternalServerError, err)
+		return
+	}
+	s.db.Audit(r.Context(), user, "clamav."+p.Op, strings.Join(append(p.Paths, p.Images...), " "), "ok", map[string]any{"job_id": id})
+	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
 }
 
-// streamScript выполняет скрипт вне песочницы и отдаёт строки вывода
-// построчно — и в журнал операции, и вызывающему для разбора.
-func (s *Server) streamScript(ctx context.Context, script string, onLine func(string)) error {
-	cmd := unrestrictedQuietCommand(ctx, map[string]string{"DEBIAN_FRONTEND": "noninteractive", "LC_ALL": "C"}, "sh", "-c", script)
+// runClam — тело задания.
+func (s *Server) runClam(ctx context.Context, jc *jobs.Context, p clamParams) error {
+	switch p.Op {
+	case "install":
+		jc.StepKey(0, 0, "clamav.installing")
+		if err := s.clamStream(ctx, jc, clamav.InstallScript, nil); err != nil {
+			return msgs.Errorf("clamav.installFailed", err)
+		}
+		return nil
+	case "update":
+		jc.StepKey(0, 0, "clamav.updatingDB")
+		if err := s.clamStream(ctx, jc, clamav.UpdateScript, nil); err != nil {
+			return msgs.Errorf("clamav.updateFailed", err)
+		}
+		return nil
+	case "scan":
+		return s.runClamHostScan(ctx, jc, p.Paths)
+	case "scan-images":
+		return s.runClamImageScan(ctx, jc, p.Tool, p.Images)
+	}
+	return msgs.Errorf("clamav.badOp", p.Op)
+}
+
+func (s *Server) runClamHostScan(ctx context.Context, jc *jobs.Context, paths []string) error {
+	result := &model.ClamScan{Kind: "host", Targets: paths, StartedAt: time.Now(), Hits: []model.ClamHit{}}
+	var existing []string
+	for _, p := range paths {
+		if s.scanner.Collector().Exists(p) {
+			existing = append(existing, p)
+		} else {
+			w := msgs.T(jc.Lang(), "clamav.pathMissing", p)
+			result.Warnings = append(result.Warnings, w)
+			jc.Logf("! %s", w)
+		}
+	}
+	if len(existing) == 0 {
+		return msgs.Errorf("clamav.nothingToScan")
+	}
+	jc.StepKey(0, 0, "clamav.scanning", strings.Join(existing, ", "))
+	err := s.clamStream(ctx, jc, shellJoin(clamav.ScanArgs(existing)), func(line string) {
+		if hit, counter, n := clamav.ParseLine(line); hit != nil {
+			result.Hits = append(result.Hits, *hit)
+			jc.StepKey(0, 0, "clamav.scanningFound", len(result.Hits))
+		} else if counter == "Scanned files" {
+			result.Scanned = n
+		}
+	})
+	if ctx.Err() != nil {
+		// Отменённый скан не затирает прошлый полный результат.
+		return ctx.Err()
+	}
+	// clamscan: 0 — чисто, 1 — найдено, 2 — ошибка.
+	if err != nil {
+		var ee *exec.ExitError
+		if !isExit(err, &ee, 1) {
+			result.Error = err.Error()
+		}
+	}
+	result.FinishedAt = time.Now()
+	s.clam.mu.Lock()
+	s.clam.host = result
+	s.clam.mu.Unlock()
+	s.saveClamScan(context.Background(), clamHostKVKey, result)
+	if result.Error != "" {
+		return msgs.Errorf("clamav.scanFailed", result.Error)
+	}
+	jc.Log("clamav.scanResult", result.Scanned, len(result.Hits))
+	return nil
+}
+
+func (s *Server) runClamImageScan(ctx context.Context, jc *jobs.Context, tool string, images []string) error {
+	if tool != "podman" {
+		tool = "docker"
+	}
+	result := &model.ClamScan{Kind: "images", Targets: images, StartedAt: time.Now(), Hits: []model.ClamHit{}}
+	for i, ref := range images {
+		jc.StepKey(i+1, len(images), "clamav.scanningImage", i+1, len(images), ref)
+		jc.Logf("== %s", ref)
+		err := s.clamStream(ctx, jc, clamav.ImageScanScript(tool, ref), func(line string) {
+			if hit, counter, n := clamav.ParseLine(line); hit != nil {
+				hit.Target = ref
+				result.Hits = append(result.Hits, *hit)
+			} else if counter == "Scanned files" {
+				result.Scanned += n
+			}
+		})
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if err != nil {
+			var ee *exec.ExitError
+			if !isExit(err, &ee, 1) {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %s", ref, err.Error()))
+			}
+		}
+	}
+	result.FinishedAt = time.Now()
+	s.clam.mu.Lock()
+	s.clam.images = result
+	s.clam.mu.Unlock()
+	s.saveClamScan(context.Background(), clamImagesKVKey, result)
+	jc.Log("clamav.scanResult", result.Scanned, len(result.Hits))
+	return nil
+}
+
+// clamStream выполняет скрипт вне песочницы, отдавая строки в журнал
+// задания и onLine. Отмена задания останавливает всё дерево процессов:
+// при systemd — своим юнитом с KillMode=control-group (у обычного
+// «тихого» запуска KillMode=process, и clamscan пережил бы остановку sh),
+// без него — группой процессов.
+func (s *Server) clamStream(ctx context.Context, jc *jobs.Context, script string, onLine func(string)) error {
+	env := map[string]string{"DEBIAN_FRONTEND": "noninteractive", "LC_ALL": "C"}
+	var cmd *exec.Cmd
+	unit := ""
+	if usingSystemdSandbox() {
+		unit = fmt.Sprintf("nkt-clamav-%d-%d", jc.Job.ID, time.Now().UnixNano()%1_000_000)
+		args := systemdRunQuietArgs(env, "sh", "-c", script)
+		for i, a := range args {
+			if a == "KillMode=process" {
+				args[i] = "KillMode=control-group"
+			}
+		}
+		cmd = exec.Command("systemd-run", append([]string{"--unit=" + unit}, args...)...)
+	} else {
+		cmd = unrestrictedQuietCommand(context.Background(), env, "sh", "-c", script)
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
@@ -182,16 +316,37 @@ func (s *Server) streamScript(ctx context.Context, script string, onLine func(st
 	if err := cmd.Start(); err != nil {
 		return err
 	}
+	stop := make(chan struct{})
+	defer close(stop)
+	go func() {
+		select {
+		case <-stop:
+		case <-ctx.Done():
+			jc.Log("clamav.stopping")
+			if unit != "" {
+				_, _ = RunUnrestricted(context.Background(), "systemctl", "stop", unit)
+			} else if cmd.Process != nil {
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
+			}
+		}
+	}()
 	sc := bufio.NewScanner(stdout)
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 	for sc.Scan() {
 		line := strings.TrimRight(sc.Text(), "\r")
-		s.clam.append(line)
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		jc.Logf("%s", line)
 		if onLine != nil {
 			onLine(line)
 		}
 	}
-	return cmd.Wait()
+	err = cmd.Wait()
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	return err
 }
 
 func (s *Server) handleClamInstall(w http.ResponseWriter, r *http.Request) {
@@ -199,23 +354,11 @@ func (s *Server) handleClamInstall(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, msgs.T(msgs.LangFromRequest(r), "pkgInstall.aptGetMissing"))
 		return
 	}
-	s.startClamOp(w, r, "install", func(ctx context.Context) error {
-		s.clam.setProgress(msgs.Tc(ctx, "clamav.installing"))
-		if err := s.streamScript(ctx, clamav.InstallScript, nil); err != nil {
-			return msgs.Errorf("clamav.installFailed", err)
-		}
-		return nil
-	})
+	s.startClamJob(w, r, clamParams{Op: "install"})
 }
 
 func (s *Server) handleClamUpdateDB(w http.ResponseWriter, r *http.Request) {
-	s.startClamOp(w, r, "update", func(ctx context.Context) error {
-		s.clam.setProgress(msgs.Tc(ctx, "clamav.updatingDB"))
-		if err := s.streamScript(ctx, clamav.UpdateScript, nil); err != nil {
-			return msgs.Errorf("clamav.updateFailed", err)
-		}
-		return nil
-	})
+	s.startClamJob(w, r, clamParams{Op: "update"})
 }
 
 // handleClamScan сканирует каталоги хоста; список сохраняется как
@@ -241,46 +384,7 @@ func (s *Server) handleClamScan(w http.ResponseWriter, r *http.Request) {
 	if raw, err := json.Marshal(paths); err == nil {
 		_ = s.db.KVSet(r.Context(), clamPathsKVKey, string(raw))
 	}
-	s.startClamOp(w, r, "scan", func(ctx context.Context) error {
-		result := &model.ClamScan{Kind: "host", Targets: paths, StartedAt: time.Now(), Hits: []model.ClamHit{}}
-		var existing []string
-		for _, p := range paths {
-			if s.scanner.Collector().Exists(p) {
-				existing = append(existing, p)
-			} else {
-				result.Warnings = append(result.Warnings, msgs.Tc(ctx, "clamav.pathMissing", p))
-			}
-		}
-		if len(existing) == 0 {
-			return msgs.Errorf("clamav.nothingToScan")
-		}
-		s.clam.setProgress(msgs.Tc(ctx, "clamav.scanning", strings.Join(existing, ", ")))
-		args := clamav.ScanArgs(existing)
-		err := s.streamScript(ctx, shellJoin(args), func(line string) {
-			if hit, counter, n := clamav.ParseLine(line); hit != nil {
-				result.Hits = append(result.Hits, *hit)
-				s.clam.setProgress(msgs.Tc(ctx, "clamav.scanningFound", len(result.Hits)))
-			} else if counter == "Scanned files" {
-				result.Scanned = n
-			}
-		})
-		// clamscan: 0 — чисто, 1 — найдено, 2 — ошибка.
-		if err != nil {
-			var ee *exec.ExitError
-			if !isExit(err, &ee, 1) {
-				result.Error = err.Error()
-			}
-		}
-		result.FinishedAt = time.Now()
-		s.clam.mu.Lock()
-		s.clam.host = result
-		s.clam.mu.Unlock()
-		s.saveClamScan(context.Background(), clamHostKVKey, result)
-		if result.Error != "" {
-			return msgs.Errorf("clamav.scanFailed", result.Error)
-		}
-		return nil
-	})
+	s.startClamJob(w, r, clamParams{Op: "scan", Paths: paths}, strings.Join(paths, ", "))
 }
 
 // handleClamScanImages сканирует образы контейнеров: выбранные или все,
@@ -302,7 +406,7 @@ func (s *Server) handleClamScanImages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, ref := range images {
-		if strings.ContainsAny(ref, " \n\t\x00") || ref == "" {
+		if ref == "" || strings.ContainsAny(ref, " \n\t\x00") || strings.HasPrefix(ref, "-") {
 			writeError(w, http.StatusBadRequest, msgs.T(msgs.LangFromRequest(r), "clamav.badImage", ref))
 			return
 		}
@@ -311,42 +415,16 @@ func (s *Server) handleClamScanImages(w http.ResponseWriter, r *http.Request) {
 	if !collect.Which(r.Context(), s.scanner.Collector(), "docker") && collect.Which(r.Context(), s.scanner.Collector(), "podman") {
 		tool = "podman"
 	}
-	s.startClamOp(w, r, "scan-images", func(ctx context.Context) error {
-		result := &model.ClamScan{Kind: "images", Targets: images, StartedAt: time.Now(), Hits: []model.ClamHit{}}
-		for i, ref := range images {
-			s.clam.setProgress(msgs.Tc(ctx, "clamav.scanningImage", i+1, len(images), ref))
-			s.clam.append("== " + ref)
-			err := s.streamScript(ctx, clamav.ImageScanScript(tool, ref), func(line string) {
-				if hit, counter, n := clamav.ParseLine(line); hit != nil {
-					hit.Target = ref
-					result.Hits = append(result.Hits, *hit)
-				} else if counter == "Scanned files" {
-					result.Scanned += n
-				}
-			})
-			if err != nil {
-				var ee *exec.ExitError
-				if !isExit(err, &ee, 1) {
-					result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %s", ref, err.Error()))
-				}
-			}
-		}
-		result.FinishedAt = time.Now()
-		s.clam.mu.Lock()
-		s.clam.images = result
-		s.clam.mu.Unlock()
-		s.saveClamScan(context.Background(), clamImagesKVKey, result)
-		return nil
-	})
+	s.startClamJob(w, r, clamParams{Op: "scan-images", Images: images, Tool: tool}, len(images))
 }
 
-// handleClamCancel прерывает текущую операцию.
+// handleClamCancel — для старого интерфейса: отменяет идущее задание ClamAV.
 func (s *Server) handleClamCancel(w http.ResponseWriter, r *http.Request) {
-	s.clam.mu.Lock()
-	cancel := s.clam.cancel
-	s.clam.mu.Unlock()
-	if cancel != nil {
-		cancel()
+	if job := s.activeClamJob(r.Context()); job != nil && s.jobs != nil {
+		if err := s.jobs.Cancel(r.Context(), job.ID); err != nil {
+			writeErr(w, r, http.StatusConflict, err)
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled"})
 }

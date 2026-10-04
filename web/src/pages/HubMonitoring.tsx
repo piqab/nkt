@@ -79,6 +79,7 @@ interface Insight {
   subject?: string
   value?: number
   link?: string
+  path?: string
   text: string
   quiet_window?: [number, number]
 }
@@ -190,7 +191,7 @@ export default function HubMonitoring({ me, onOpenHost }: { me: Me; onOpenHost: 
                     : i.text}
                 </span>
                 {i.link && i.host_id !== 0 && (
-                  <Button size="small" onClick={() => onOpenHost(i.host_id, i.host, `/${i.link}`)}>
+                  <Button size="small" onClick={() => onOpenHost(i.host_id, i.host, i.path || `/${i.link}`)}>
                     {t(`monitoring.link.${i.link}`, { defaultValue: t('monitoring.openHost') })}
                   </Button>
                 )}

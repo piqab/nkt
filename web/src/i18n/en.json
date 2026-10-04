@@ -252,7 +252,10 @@
       "open": "Open file",
       "openLine": "Open at line {{line}}",
       "toService": "Go to service {{name}}",
-      "toContainer": "Go to container {{name}}"
+      "toContainer": "Go to container {{name}}",
+      "openInFiles": "Open in files",
+      "firewallPort": "Port {{port}} in Firewall",
+      "onMap": "On the resource map"
     },
     "onlyNew": "only new ({{count}})",
     "newTag": "new"
@@ -866,7 +869,19 @@
     "filterReset": "reset the filter",
     "emptyFiltered": "Nothing found; change the filter.",
     "tabJournal": "Journal",
-    "tabSettings": "Settings"
+    "tabSettings": "Settings",
+    "goTo": {
+      "host": "To host",
+      "overview": "Host overview",
+      "findings": "To host findings",
+      "fail2ban": "To host fail2ban",
+      "jobs": "To host jobs",
+      "disks": "To host disks",
+      "containers": "To host containers",
+      "availability": "To host availability",
+      "images": "To host images",
+      "services": "To host services"
+    }
   },
   "changes": {
     "title": "What changed",
@@ -1115,7 +1130,14 @@
     "colK8sIngress": "Ingress",
     "colK8sService": "k8s services",
     "colK8sPod": "Pods",
-    "colK8sNode": "k8s nodes"
+    "colK8sNode": "k8s nodes",
+    "portsCount_one": "{{count}} port",
+    "portsCount_other": "{{count}} ports",
+    "groupHint": "{{count}} ports folded. Each opens the section where it is configured.",
+    "expandGroup": "Expand on the map",
+    "findingsCount": "findings: {{count}}",
+    "groupOver": "Fold service ports above",
+    "portToFirewall": "Port {{name}} in Firewall"
   },
   "configs": {
     "colTs": "When",
@@ -1482,7 +1504,9 @@
     "exposedPorts": "network: {{ports}}",
     "exposedPkgHint": "A service from this package listens beyond loopback, on ports {{ports}}: the vulnerability can be reached from the network.",
     "exposedImageHint": "A container with this image publishes ports {{ports}}: the vulnerability can be reached from the network.",
-    "dangerHint": "“By danger”: first what can be reached from the network (the package's service listens beyond loopback, or a container publishes a port), then severity, and among equals what an update fixes. Libraries (such as libssl in nginx) are not linked to services yet."
+    "dangerHint": "“By danger”: first what can be reached from the network (the package's service listens beyond loopback, or a container publishes a port), then severity, and among equals what an update fixes. Libraries (such as libssl in nginx) are not linked to services yet.",
+    "toPackage": "To package",
+    "toContainers": "To containers"
   },
   "availability": {
     "what": "monitoring targets",
@@ -1600,7 +1624,9 @@
       "requests": "requests",
       "responses": "responses"
     },
-    "source": "Source"
+    "source": "Source",
+    "sourceHost": "Whole host",
+    "noData": "no data"
   },
   "blocks": {
     "loadingStructure": "Loading file structure…",
@@ -2049,7 +2075,8 @@
     "filterText": "search: title, host, author, error",
     "filterReset": "reset filter",
     "listFiltered": "found: {{total}}",
-    "emptyFiltered": "Nothing matches the filter."
+    "emptyFiltered": "Nothing matches the filter.",
+    "cancelJob": "Cancel job"
   },
   "profiles": {
     "title": "Profiles",
@@ -2487,7 +2514,9 @@
     "confirmPurge": "Delete {{path}} from quarantine for good?",
     "dbFromHub": "database from hub",
     "dbFromHubDone": "The ClamAV database was uploaded from the hub.",
-    "dbFromHubFailed": "The database upload from the hub failed — see the job log."
+    "dbFromHubFailed": "The database upload from the hub failed — see the job log.",
+    "openLog": "Log",
+    "confirmCancel": "Stop the ClamAV operation? The scan is interrupted; the previous result stays."
   },
   "clusters": {
     "new": "new cluster",

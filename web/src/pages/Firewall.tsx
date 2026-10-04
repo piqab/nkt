@@ -10,6 +10,7 @@ import PackageInstallModal from '../components/PackageInstallModal'
 import i18n from '../i18n'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
+import { useFocusRow } from '../focus'
 import { RowAction } from '../components/RowAction'
 import { ProbeLink } from '../components/PortProbe'
 import { TitleHelp } from '../components/Docs'
@@ -148,6 +149,10 @@ function chainName(parts: (string | undefined)[]) {
 export default function Firewall({ me }: { me: Me }) {
   const { t } = useTranslation()
   const fw = useApi<FirewallResponse>('/firewall', 60_000)
+  // Переход «закрыть порт» из находки или карты ресурсов: ?focus=<порт> —
+  // правила и сокеты этого порта подсвечены.
+  const focusRaw = useFocusRow(!!fw.data)
+  const focusPort = focusRaw && /^\d{1,5}$/.test(focusRaw) ? focusRaw : null
   const numbered = useApi<{ rules: NumberedRule[]; added: AddedRule[] }>('/firewall/rules', 60_000)
   const [backend, setBackend] = useState('')
   const [chain, setChain] = useState('')
@@ -828,6 +833,7 @@ export default function Firewall({ me }: { me: Me }) {
         >
           <div className="table-wrap">
             <DataTable<NumberedRule>               dataSource={numbered.data.rules}
+              rowClassName={(r) => (focusPort && new RegExp(`\\b${focusPort}\\b`).test(r.text) ? 'row-focus' : '')}
               columns={numberedColumns}
               rowKey="number"
               tableLayout="auto"
@@ -877,6 +883,7 @@ export default function Firewall({ me }: { me: Me }) {
                 содержимому, а .table-wrap прокручивается. */}
             <DataTable<FirewallRule>
               dataSource={rules}
+              rowClassName={(r) => (focusPort && (r.ports ?? []).includes(Number(focusPort)) ? 'row-focus' : '')}
               columns={ruleColumns}
               rowKey="id"
               tableLayout="auto"
@@ -895,6 +902,7 @@ export default function Firewall({ me }: { me: Me }) {
       >
         <div className="table-wrap">
           <DataTable<Listener>             dataSource={fw.data?.listeners ?? []}
+            rowClassName={(l) => (focusPort && String(l.port) === focusPort ? 'row-focus' : '')}
             columns={listenerColumns}
             rowKey={(_, i) => i ?? 0}
           />
