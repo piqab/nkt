@@ -13,6 +13,7 @@ import (
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/msgs"
+	"github.com/piqab/nkt/internal/parse"
 	"github.com/piqab/nkt/internal/profile"
 	"github.com/piqab/nkt/internal/store"
 	"github.com/piqab/nkt/internal/topology"
@@ -284,6 +285,36 @@ func (s *Server) handleServices(w http.ResponseWriter, r *http.Request) {
 		"services":        servicesWithPorts(snap.Services, snap.Listeners),
 		"allow_mutations": s.cfg.AllowMutations,
 	})
+}
+
+// handleServiceInstalledLive — GET /services/{name}/installed: установлена
+// ли служба прямо сейчас (systemctl и PATH), а не по последнему снимку.
+// Плашка «установить» во вкладках «Контейнеров и ВМ» висела после
+// установки до следующего скана; теперь она спрашивает это и, если снимок
+// отстал, хост пересканирует себя в фоне.
+func (s *Server) handleServiceInstalledLive(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	var spec *parse.ServiceSpec
+	for _, sp := range parse.DefaultServiceSpecs() {
+		if sp.Name == name {
+			sp := sp
+			spec = &sp
+		}
+	}
+	if spec == nil {
+		writeError(w, http.StatusNotFound, msgs.T(msgs.LangFromRequest(r), "pkgInstall.unknownService", name))
+		return
+	}
+	units, _ := parse.Services(r.Context(), s.scanner.Collector(), []parse.ServiceSpec{*spec})
+	installed := len(units) == 1 && units[0].Installed
+	if snap := s.scanner.Latest(); snap != nil {
+		for _, u := range snap.Services {
+			if u.Name == name && u.Installed != installed {
+				s.rescanLater()
+			}
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"installed": installed})
 }
 
 // serviceWithPorts — служба и сокеты, которые она слушает.

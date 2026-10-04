@@ -30,7 +30,12 @@ export function EngineInstallBanner({ service, canControl, onInstalled }: { serv
     onInstalled()
   }
   const docker = useJobLauncher(() => void refresh())
+  // Снимок мог отстать (движок поставили после скана) — прямо сейчас
+  // спрашиваем хост; пока ответа нет, плашку не показываем. Старый хост
+  // без этого запроса (ошибка) — по снимку, как раньше.
+  const live = useApi<{ installed: boolean }>(unit && !unit.installed ? `/services/${service}/installed` : null)
   if (!unit || unit.installed) return null
+  if (!live.error && (!live.data || live.data.installed)) return null
 
   async function finished() {
     const st = await api<{ succeeded?: boolean; exit_code?: number }>(`/services/${service}/install/status`).catch(() => null)

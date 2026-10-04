@@ -273,6 +273,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/services", s.handleServices)
 			r.Get("/services/{name}/logs", s.handleServiceLogs)
 			r.Get("/services/{name}/install/status", s.handleServiceInstallStatus)
+			r.Get("/services/{name}/installed", s.handleServiceInstalledLive)
 			r.Get("/containers", s.handleContainers)
 			r.Get("/images", s.handleImages)
 			r.Get("/podman/containers", s.handlePodmanContainers)

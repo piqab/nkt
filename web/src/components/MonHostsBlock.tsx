@@ -76,7 +76,7 @@ export function MiniBar({ pct, peak, limit, label, title }: { pct: number; peak?
           <div className="mon-bar-fill" style={{ width: `${v}%`, background: color }} />
           {peak !== undefined && peak > pct && <div className="mon-bar-peak" style={{ left: `${Math.min(100, peak)}%`, background: color }} />}
         </div>
-        <span className="small nowrap">{label}</span>
+        <span className="small nowrap mon-bar-label">{label}</span>
       </div>
     </Tooltip>
   )
@@ -186,7 +186,7 @@ export function MonHostsBlock({
       <span className="mon-col-disks">
         {h.disks.map((dk) => (
           <span key={dk.mount} className="mon-disk">
-            <MiniBar pct={dk.pct} limit={90} label={`${dk.mount} ${dk.pct}%`} />
+            <MiniBar pct={dk.pct} limit={90} label={`${dk.mount} ${dk.pct}%`} title={`${dk.mount} — ${dk.pct}%`} />
             {dk.eta_days !== undefined && (
               <Tag color={dk.eta_days <= diskCritDays ? 'red' : dk.eta_days <= diskWarnDays ? 'orange' : 'blue'}>{t('monitoring.diskEta', { days: dk.eta_days })}</Tag>
             )}

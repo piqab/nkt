@@ -1051,6 +1051,8 @@ var ruCatalog = map[string]string{
 	"hub.installingUserCannotUseSudo":                     "установка %s: пользователь %q не может использовать sudo на этом хосте — на хосте выполните:\n%s\nлибо укажите root как SSH-пользователя: %v: %s",
 	"hub.installingUserLacksPermissionsSudo":              "установка %s: пользователю %q не хватает прав, а sudo недоступен — укажите root как SSH-пользователя, либо на хосте выполните:\n%s\n: %v: %s",
 	"hub.installingUserNeedsPasswordlessSudo":             "установка %s: пользователю %q нужен sudo без пароля (NOPASSWD) — на хосте выполните:\n%s\nлибо укажите root как SSH-пользователя: %v: %s",
+	"hub.narrowSudoKeyMissing":                            "на хосте узкий sudo для %q, но ключа этого хаба на нём нет (файл удалён или остался от другого хаба) — без него хаб не может подписать операцию. Полный sudo без пароля не нужен: один раз выполните на хосте (sudo спросит ваш пароль):\n%s\nи повторите операцию",
+	"hub.narrowSudoOpUnsupported":                         "на хосте узкий sudo для %q, а эта операция пока выполняется только через полный sudo — сообщите, какая: %v",
 	"hub.invalidHostAdminName":                            "недопустимое имя администратора хоста %q",
 	"hub.invalidHostAdminNameProbably":                    "недопустимое имя администратора хоста %q (вероятно, повреждённый или подделанный импорт реестра хостов)",
 	"hub.invalidHostId":                                   "неверный id хоста",

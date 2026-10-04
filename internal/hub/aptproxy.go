@@ -230,7 +230,7 @@ func (m *Manager) ApplyAptProxy(ctx context.Context, hostID int64, enabled bool)
 // раньше.
 func (m *Manager) configureAptProxyAny(client *ssh.Client, sshUser string, narrow, enabled bool) error {
 	if !narrow {
-		return configureAptProxy(client, sshUser, m.cfg.HubAptCachePort, enabled)
+		return m.narrowSudoHint(client, sshUser, configureAptProxy(client, sshUser, m.cfg.HubAptCachePort, enabled))
 	}
 	_, err := m.hubSudo(client, sshUser, hubsudo.Request{Op: hubsudo.OpAptProxy,
 		Args: map[string]string{"enabled": strconv.FormatBool(enabled), "port": strconv.Itoa(m.cfg.HubAptCachePort)}})

@@ -1056,7 +1056,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	}
 	if err := stageFiles(client, host.SSHUser, src, unitContent, envContent, remoteBinPath, remoteServicePath, remoteEnvPath, report, job.replaceLast, place); err != nil {
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
-		return fail(err)
+		return fail(m.narrowSudoHint(client, host.SSHUser, err))
 	}
 	if narrow {
 		report("hub.startingSystemdService")
@@ -1068,7 +1068,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 		}
 	} else if err := activateService(client, host.SSHUser, report); err != nil {
 		m.recordSudoOutcome(ctx, hostID, host.SSHUser, err)
-		return fail(err)
+		return fail(m.narrowSudoHint(client, host.SSHUser, err))
 	}
 	// Кэш пакетов хаба: конфиг apt кладётся тем же соединением. Ошибка
 	// здесь не роняет установку — nkt уже работает, а без прокси apt
@@ -1392,7 +1392,7 @@ func (m *Manager) SetServiceRunning(ctx context.Context, hostID int64, running b
 	}
 	out, err := runRemote(link.client, cmd)
 	if err != nil {
-		return diagnoseInstallError(host.SSHUser, "netknownsthat.service", err, out)
+		return m.narrowSudoHint(link.client, host.SSHUser, diagnoseInstallError(host.SSHUser, "netknownsthat.service", err, out))
 	}
 	return nil
 }
