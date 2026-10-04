@@ -54,6 +54,10 @@ type HostEvent struct {
 	// Detail на языке читающего; в JSON не уходят.
 	DetailKey  string `json:"-"`
 	DetailArgs string `json:"-"`
+	// Link — раздел хоста, где это видно и решается, с подсветкой
+	// («/findings?focus=…», «/fail2ban?focus=1.2.3.4»). Пусто у старых
+	// событий — интерфейс выводит раздел из вида.
+	Link string `json:"link,omitempty"`
 }
 
 // AddHostEvent записывает оповещение.
@@ -62,9 +66,9 @@ func (d *DB) AddHostEvent(ctx context.Context, e HostEvent) (int64, error) {
 		e.TS = FormatTime(time.Now())
 	}
 	res, err := d.ExecContext(ctx, `
-		INSERT INTO host_events (ts, host_id, host_name, host_addr, kind, severity, detail, detail_key, detail_args)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		e.TS, e.HostID, e.HostName, e.HostAddr, e.Kind, e.Severity, e.Detail, e.DetailKey, e.DetailArgs)
+		INSERT INTO host_events (ts, host_id, host_name, host_addr, kind, severity, detail, detail_key, detail_args, link)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		e.TS, e.HostID, e.HostName, e.HostAddr, e.Kind, e.Severity, e.Detail, e.DetailKey, e.DetailArgs, e.Link)
 	if err != nil {
 		return 0, err
 	}
@@ -77,7 +81,7 @@ func (d *DB) ListHostEvents(ctx context.Context, limit int) ([]HostEvent, error)
 		limit = 200
 	}
 	rows, err := d.QueryContext(ctx, `
-		SELECT id, ts, host_id, host_name, host_addr, kind, severity, detail, detail_key, detail_args
+		SELECT id, ts, host_id, host_name, host_addr, kind, severity, detail, detail_key, detail_args, link
 		FROM host_events ORDER BY id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
@@ -89,7 +93,7 @@ func (d *DB) ListHostEvents(ctx context.Context, limit int) ([]HostEvent, error)
 	for rows.Next() {
 		var e HostEvent
 		if err := rows.Scan(&e.ID, &e.TS, &e.HostID, &e.HostName, &e.HostAddr,
-			&e.Kind, &e.Severity, &e.Detail, &e.DetailKey, &e.DetailArgs); err != nil {
+			&e.Kind, &e.Severity, &e.Detail, &e.DetailKey, &e.DetailArgs, &e.Link); err != nil {
 			return nil, err
 		}
 		out = append(out, e)

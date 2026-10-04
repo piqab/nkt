@@ -100,6 +100,9 @@ func ImageScanScript(tool, ref string) string {
 	return "set -e\n" +
 		"d=$(mktemp -d /var/tmp/nkt-clam-XXXXXX)\n" +
 		"trap 'rm -rf \"$d\"; [ -n \"$cid\" ] && " + tool + " rm -f \"$cid\" >/dev/null 2>&1 || true' EXIT\n" +
+		// Отмена задания — SIGTERM всей группе: без своего обработчика sh
+		// умер бы, не выполнив EXIT, и развёрнутый образ остался бы в /var/tmp.
+		"trap 'exit 143' INT TERM\n" +
 		"cid=$(" + tool + " create " + q + ")\n" +
 		tool + " export \"$cid\" | tar -xf - -C \"$d\" 2>/dev/null || true\n" +
 		strings.Join(ScanArgs([]string{"\"$d\""}), " ") + " | sed \"s#^$d##\"\n"

@@ -601,7 +601,7 @@ function Shell({
               {hubView === 'hosts' ? (
                 <Hosts onSelect={selectHost} hubVersion={me.hub_version} onOpenProfiles={() => setHubView('profiles')} onOpenDeploy={() => setHubView('deploy')} />
               ) : hubView === 'events' ? (
-                <HostEvents me={me} />
+                <HostEvents me={me} onOpenHost={openHostAt} />
               ) : hubView === 'monitoring' ? (
                 <HubMonitoring me={me} onOpenHost={openHostAt} />
               ) : hubView === 'fail2ban' ? (

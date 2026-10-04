@@ -368,7 +368,7 @@ export default function Docker({ me }: { me: Me }) {
               <DataTable<Container>                 dataSource={activeContainers}
                 columns={containerColumns}
                 rowKey="name"
-                rowClassName={(c) => (c.name === focusContainer ? 'row-focus' : '')}
+                rowClassName={(c) => (focusContainer && (c.name === focusContainer || c.image === focusContainer) ? 'row-focus' : '')}
                 rowSelection={
                   canControl
                     ? {

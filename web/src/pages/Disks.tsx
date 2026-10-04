@@ -9,6 +9,7 @@ import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import FileBrowser from '../components/FileBrowser'
 import { TitleHelp } from '../components/Docs'
+import { useFocusRow } from '../focus'
 
 interface Filesystem {
   device: string
@@ -66,6 +67,9 @@ function usageColor(percent: number): string {
 export default function Disks() {
   const { t } = useTranslation()
   const disks = useApi<DiskOverview>('/disks', 60_000)
+  // Прогноз «Мониторинга» хаба «диск скоро заполнится»: ?focus=<точка
+  // монтирования> — её строка подсвечена.
+  const focusMount = useFocusRow(!!disks.data)
   // Псевдофайловые системы (tmpfs, overlay, squashfs от snap) на обычной
   // машине занимают две трети списка и место на диске не расходуют —
   // поэтому по умолчанию скрыты, но доступны переключателем.
@@ -239,6 +243,7 @@ export default function Disks() {
             // squashfs от snap), а таблица с раскрытием и повторяющимися
             // ключами уходит в бесконечную перерисовку и вешает вкладку.
             rowKey={(f) => `${f.device}|${f.mount_point}`}
+            rowClassName={(f) => (focusMount && f.mount_point === focusMount ? 'row-focus' : '')}
             pagination={filesystems.length > 30 ? { pageSize: 30 } : false}
             columns={fsColumns}
           />

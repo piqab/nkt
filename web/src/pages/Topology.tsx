@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Button, Checkbox } from 'antd'
+import { Button, Checkbox, InputNumber } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
-import { nodeTarget } from '../focus'
+import { nodeTarget, useFocusRow } from '../focus'
 import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
 import { AIReviewCard } from '../components/AIReview'
@@ -70,6 +70,41 @@ interface Placed extends GraphNode {
   y: number
 }
 
+/** Свёрнутые порты одной службы: узел карты и те, кого он заменяет. */
+interface PortGroup {
+  key: string
+  node: GraphNode
+  members: GraphNode[]
+}
+
+// Слушатели одной службы сворачиваются в один узел, если их больше порога:
+// nginx с двадцатью server-блоками или процесс, открывший десяток портов, —
+// это одна служба, и двадцать одинаковых прямоугольников только прячут
+// остальную карту.
+const GROUP_KINDS = new Set(['endpoint', 'undeclared'])
+const GROUP_KEY = 'nkt.topology.groupOver'
+const STATUS_RANK: Record<string, number> = { error: 3, warn: 2, unknown: 1, ok: 0 }
+
+function groupKeyOf(n: GraphNode): string {
+  if (n.kind === 'endpoint') return n.group || n.meta?.service || n.label
+  return `${n.label}|${n.meta?.unit ?? n.meta?.container_id ?? ''}`
+}
+
+function readGroupOver(): number {
+  try {
+    const v = Number(localStorage.getItem(GROUP_KEY))
+    return Number.isFinite(v) && v >= 1 ? v : 4
+  } catch {
+    return 4
+  }
+}
+
+/** Куда вести с отдельного порта в окне свёрнутой службы. */
+function portTarget(n: GraphNode): { to: string; labelKey: string; name?: string } | null {
+  if (n.kind === 'undeclared' && n.port) return { to: `/firewall?${new URLSearchParams({ focus: String(n.port) })}`, labelKey: 'topology.portToFirewall', name: String(n.port) }
+  return nodeTarget(n)
+}
+
 export default function TopologyPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
@@ -87,11 +122,29 @@ export default function TopologyPage() {
   const [hideInactive, setHideInactive] = useState(true)
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
-  const dragRef = useRef<{ x: number; y: number; panX: number; panY: number } | null>(null)
+  // Перетаскивание: указатель захвачен svg (курсор может уйти за край),
+  // сдвиг применяется раз в кадр, а сдвинутая карта не считается щелчком.
+  const dragRef = useRef<{ x: number; y: number; panX: number; panY: number; scale: number; moved: boolean; pointer: number } | null>(null)
+  const frameRef = useRef<number | null>(null)
+  const suppressClick = useRef(false)
+  const [dragging, setDragging] = useState(false)
   const svgRef = useRef<SVGSVGElement>(null)
+  const [groupOver, setGroupOverState] = useState(readGroupOver)
+  const setGroupOver = (v: number) => {
+    setGroupOverState(v)
+    try {
+      localStorage.setItem(GROUP_KEY, String(v))
+    } catch {
+      // не запомнится — не страшно
+    }
+  }
+  // Свёрнутые службы, которые развернули из их окна.
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set())
 
-  const { placed, edges, width, height, columns } = useMemo(() => {
-    if (!data) return { placed: [], edges: [], width: 100, height: 100, columns: [] as typeof COLUMNS }
+  const { placed, edges, width, height, columns, groups, memberOf } = useMemo(() => {
+    const groups = new Map<string, PortGroup>()
+    const memberOf = new Map<string, string>()
+    if (!data) return { placed: [], edges: [], width: 100, height: 100, columns: [] as typeof COLUMNS, groups, memberOf }
 
     let nodes = data.nodes
     if (hideInactive) {
@@ -111,6 +164,44 @@ export default function TopologyPage() {
         if (keep.has(e.to)) keep.add(e.from)
       }
       nodes = nodes.filter((n) => keep.has(n.id))
+    }
+
+    // Свернуть слушателей одной службы сверх порога в один узел.
+    const buckets = new Map<string, GraphNode[]>()
+    for (const n of nodes) {
+      if (!GROUP_KINDS.has(n.kind)) continue
+      const key = `${n.kind}|${groupKeyOf(n)}`
+      ;(buckets.get(key) ?? buckets.set(key, []).get(key)!).push(n)
+    }
+    for (const [key, list] of buckets) {
+      if (list.length <= groupOver || expanded.has(key)) continue
+      const worst = list.reduce((a, b) => ((STATUS_RANK[b.status] ?? 0) > (STATUS_RANK[a.status] ?? 0) ? b : a))
+      const name = list[0].kind === 'endpoint' ? list[0].group || list[0].meta?.service || list[0].label : list[0].label
+      const node: GraphNode = {
+        id: `group:${key}`,
+        kind: list[0].kind,
+        label: name,
+        sublabel: t('topology.portsCount', { count: list.length }),
+        group: list[0].group,
+        status: worst.status,
+        findings: list.reduce((sum, m) => sum + (m.findings || 0), 0),
+        public: list.some((m) => m.public),
+      }
+      groups.set(node.id, { key, node, members: list })
+      for (const m of list) memberOf.set(m.id, node.id)
+    }
+    if (groups.size > 0) {
+      const placedGroups = new Set<string>()
+      const next: GraphNode[] = []
+      for (const n of nodes) {
+        const gid = memberOf.get(n.id)
+        if (!gid) next.push(n)
+        else if (!placedGroups.has(gid)) {
+          placedGroups.add(gid)
+          next.push(groups.get(gid)!.node)
+        }
+      }
+      nodes = next
     }
 
     const byKind = new Map<string, GraphNode[]>()
@@ -140,7 +231,22 @@ export default function TopologyPage() {
     })
 
     const positions = new Map(out.map((n) => [n.id, n]))
-    const visibleEdges = (data.edges ?? []).filter((e) => positions.has(e.from) && positions.has(e.to))
+    // Рёбра свёрнутых портов ведут к узлу службы; одинаковые — одним.
+    const seen = new Set<string>()
+    const visibleEdges: GraphEdge[] = []
+    for (const e of data.edges ?? []) {
+      const from = memberOf.get(e.from) ?? e.from
+      const to = memberOf.get(e.to) ?? e.to
+      if (from === to || !positions.has(from) || !positions.has(to)) continue
+      if (from === e.from && to === e.to) {
+        visibleEdges.push(e)
+        continue
+      }
+      const id = `${from}>${to}>${e.kind}`
+      if (seen.has(id)) continue
+      seen.add(id)
+      visibleEdges.push({ ...e, id, from, to, label: undefined })
+    }
 
     return {
       placed: out,
@@ -148,21 +254,38 @@ export default function TopologyPage() {
       width: 40 + usedColumns.length * (NODE_W + COL_GAP),
       height: 70 + maxRows * (NODE_H + ROW_GAP),
       columns: usedColumns,
+      groups,
+      memberOf,
     }
-  }, [data, hideHealthy, hideInactive])
+  }, [data, hideHealthy, hideInactive, groupOver, expanded, t])
 
   const positions = useMemo(() => new Map(placed.map((n) => [n.id, n])), [placed])
+
+  // Переход из находки «неучтённый слушатель»: ?focus=<адрес:порт> или id
+  // узла — узел (или свёрнутая служба с ним) выбран, окно открыто.
+  const focusParam = useFocusRow(!!data)
+  const [focusMember, setFocusMember] = useState<string | null>(null)
+  const focusDone = useRef(false)
+  useEffect(() => {
+    if (!focusParam || !data || focusDone.current) return
+    const hit = data.nodes.find((n) => n.id === focusParam || n.id.endsWith(`:${focusParam}`) || (n.sublabel ?? '').endsWith(` ${focusParam}`))
+    if (!hit) return
+    focusDone.current = true
+    setFocusMember(hit.id)
+    setSelected(memberOf.get(hit.id) ?? hit.id)
+  }, [focusParam, data, memberOf])
   // Модели — ровно то, что на экране: узлы, скрытые фильтрами, и рёбра к
   // ним в разбор не попадают.
   const reviewGraph = useMemo<Graph | undefined>(() => {
     if (!data) return undefined
     const visible = new Set(placed.map((n) => n.id))
+    for (const id of memberOf.keys()) visible.add(id)
     return {
       ...data,
       nodes: data.nodes.filter((n) => visible.has(n.id)),
       edges: (data.edges ?? []).filter((e) => visible.has(e.from) && visible.has(e.to)),
     }
-  }, [data, placed])
+  }, [data, placed, memberOf])
 
   // A node with several incoming (or outgoing) edges used to have every
   // one of them meet at the exact same point — the box's dead centre.
@@ -352,7 +475,13 @@ export default function TopologyPage() {
   // the highlight on the map itself, but the info panel only reacts to a
   // click, so it doesn't flicker as the cursor crosses the diagram.
   const selectedNode = selected ? positions.get(selected) : null
-  const selectedFindings = selected ? (data.findings ?? []).filter((f) => f.node_id === selected) : []
+  const selectedGroup = selected ? groups.get(selected) : undefined
+  const selectedIDs = new Set(selectedGroup ? selectedGroup.members.map((m) => m.id) : selected ? [selected] : [])
+  // У свёрнутой службы одна и та же проблема висит на каждом её порту —
+  // в окне она одна.
+  const selectedFindings = (data.findings ?? [])
+    .filter((f) => selectedIDs.has(f.node_id))
+    .filter((f, i, all) => all.findIndex((o) => o.title === f.title && o.severity === f.severity) === i)
   const selectedMeta = Object.entries(selectedNode?.meta ?? {}).filter(([, v]) => v)
 
   return (
@@ -376,7 +505,51 @@ export default function TopologyPage() {
               {selectedNode.kind}
               {selectedNode.sublabel ? ` · ${selectedNode.sublabel}` : ''} · {selectedNode.status}
             </div>
-            {(() => {
+            {selectedGroup && (
+              <div className="col" style={{ gap: '0.35rem' }}>
+                <div className="row" style={{ alignItems: 'center', gap: '0.5rem' }}>
+                  <span className="small muted">{t('topology.groupHint', { count: selectedGroup.members.length })}</span>
+                  <Button
+                    size="small"
+                    style={{ marginLeft: 'auto' }}
+                    onClick={() => {
+                      setExpanded((cur) => new Set(cur).add(selectedGroup.key))
+                      setSelected(null)
+                    }}
+                  >
+                    {t('topology.expandGroup')}
+                  </Button>
+                </div>
+                <div className="table-wrap">
+                  <table className="topology-group-table">
+                    <tbody>
+                      {selectedGroup.members.map((m) => {
+                        const target = portTarget(m)
+                        const count = (data.findings ?? []).filter((f) => f.node_id === m.id).length
+                        return (
+                          <tr key={m.id} className={m.id === focusMember ? 'row-focus' : undefined}>
+                            <td>
+                              <span className="legend-swatch" style={{ background: STATUS_COLOR[m.status] ?? STATUS_COLOR.unknown, display: 'inline-block', marginRight: 6 }} />
+                              <span className="mono">{m.label}</span>
+                            </td>
+                            <td className="mono small muted">{m.sublabel}</td>
+                            <td className="small">{count > 0 ? t('topology.findingsCount', { count }) : ''}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              {target && (
+                                <Button size="small" onClick={() => navigate(target.to)}>
+                                  {t(target.labelKey, { name: target.name ?? '' })}
+                                </Button>
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            {!selectedGroup && (() => {
               const target = nodeTarget(selectedNode)
               return target ? (
                 <div>
@@ -436,6 +609,10 @@ export default function TopologyPage() {
               <Checkbox checked={hideHealthy} onChange={(e) => setHideHealthy(e.target.checked)}>
                 {t('topology.onlyProblems')}
               </Checkbox>
+              <span className="row row-nowrap" style={{ alignItems: 'center', gap: '0.35rem' }}>
+                {t('topology.groupOver')}
+                <InputNumber size="small" min={1} max={99} value={groupOver} onChange={(v) => v && setGroupOver(Number(v))} style={{ width: 64 }} />
+              </span>
             </div>
             <span className="small muted">
               {t('topology.nodesEdgesCount', { nodes: data.nodes.length, edges: data.edges.length })}
@@ -464,29 +641,55 @@ export default function TopologyPage() {
           </div>
 
           <svg
-            className="sensitive-area"
             ref={svgRef}
             viewBox={`${pan.x} ${pan.y} ${viewW} ${viewH}`}
             style={{ height: Math.min(height, 720) }}
-            onMouseDown={(e) => {
-              dragRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y }
+            className={`sensitive-area${dragging ? ' map-dragging' : ''}`}
+            onPointerDown={(e) => {
+              if (e.button !== 0) return
+              const rect = e.currentTarget.getBoundingClientRect()
+              // viewBox вписан в svg с сохранением пропорций (meet): один
+              // пиксель экрана — это наибольшее из двух отношений. Брать
+              // только ширину — карта ползла медленнее курсора.
+              const scale = Math.max(viewW / rect.width, viewH / rect.height)
+              dragRef.current = { x: e.clientX, y: e.clientY, panX: pan.x, panY: pan.y, scale, moved: false, pointer: e.pointerId }
             }}
-            onMouseMove={(e) => {
+            onPointerMove={(e) => {
               const drag = dragRef.current
               if (!drag) return
-              const rect = e.currentTarget.getBoundingClientRect()
-              const scale = viewW / rect.width
-              setPan({
-                x: drag.panX - (e.clientX - drag.x) * scale,
-                y: drag.panY - (e.clientY - drag.y) * scale,
+              const dx = e.clientX - drag.x
+              const dy = e.clientY - drag.y
+              if (!drag.moved) {
+                if (Math.abs(dx) + Math.abs(dy) < 4) return
+                drag.moved = true
+                e.currentTarget.setPointerCapture(drag.pointer)
+                setDragging(true)
+                setHovered(null)
+              }
+              e.preventDefault()
+              if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)
+              frameRef.current = requestAnimationFrame(() => {
+                frameRef.current = null
+                setPan({ x: drag.panX - dx * drag.scale, y: drag.panY - dy * drag.scale })
               })
             }}
-            onMouseUp={() => {
+            onPointerUp={(e) => {
+              const drag = dragRef.current
               dragRef.current = null
+              if (drag?.moved) {
+                // Отпускание после сдвига — не щелчок по узлу под курсором.
+                suppressClick.current = true
+                window.setTimeout(() => (suppressClick.current = false), 0)
+                if (e.currentTarget.hasPointerCapture(drag.pointer)) e.currentTarget.releasePointerCapture(drag.pointer)
+              }
+              setDragging(false)
+            }}
+            onPointerCancel={() => {
+              dragRef.current = null
+              setDragging(false)
             }}
             onMouseLeave={() => {
-              dragRef.current = null
-              setHovered(null)
+              if (!dragRef.current) setHovered(null)
             }}
           >
             {columns.map((col, i) => (
@@ -521,8 +724,12 @@ export default function TopologyPage() {
                 node={n}
                 dimmed={connected !== null && !connected.has(n.id)}
                 selected={selected === n.id}
-                onHover={setHovered}
-                onSelect={(id) => setSelected((cur) => (cur === id ? null : id))}
+                onHover={(id) => !dragging && setHovered(id)}
+                onSelect={(id) => {
+                  if (suppressClick.current) return
+                  setFocusMember(null)
+                  setSelected((cur) => (cur === id ? null : id))
+                }}
               />
             ))}
           </svg>

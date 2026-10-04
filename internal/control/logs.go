@@ -98,6 +98,11 @@ func (m *LogManager) ListSources() []LogSource {
 	// to run, which is a far shorter and more useful list.
 	if snap := m.scanner.Latest(); snap != nil {
 		for _, svc := range snap.Services {
+			// Неустановленная служба — строка «Сервисов» с кнопкой
+			// установки; журнала у неё нет, и в выборе ему не место.
+			if !svc.Installed {
+				continue
+			}
 			unit := svc.Unit
 			if unit == "" {
 				unit = svc.Name

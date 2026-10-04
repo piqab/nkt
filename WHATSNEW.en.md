@@ -8,6 +8,28 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.134 — 2026-10-04
+
+- **Links to where a problem is fixed.** An “undeclared listener” has
+  “Port N in Firewall” (the port's rules and socket highlighted) and “On
+  the resource map”. Vulnerabilities have “To package” and “To
+  containers”; malware hits have “Open in files” (the file's row in the
+  browser), “Configs” and the container; the target row or card is
+  highlighted.
+- **ClamAV runs as jobs.** Install, database update and scans are host
+  jobs in the standard log window; “Cancel” now really stops clamscan.
+  Any job can be cancelled right from its log window.
+- **Hub alerts lead to the host**: a button opens the right section of
+  the host with the item highlighted — new findings, banned addresses, a
+  disk, a container, an availability target.
+- **Resource map**: dragging no longer selects text or stutters at high
+  zoom; ports of one service above a threshold (set above the map, 4 by
+  default) fold into one node whose window lists the ports, each linking
+  to its own section.
+- **Load**: CPU opens by default, then memory; the source is the first
+  one with data; a new “Whole host” source.
+- **Logs**: the unit list shows installed services only.
+
 ## v1.11.133 — 2026-10-04
 
 - **Installing Docker and libvirt/KVM** with a bar and a button right in

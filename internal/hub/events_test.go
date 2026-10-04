@@ -118,6 +118,10 @@ func TestEventFindingsTransitions(t *testing.T) {
 	if !strings.Contains(events[0].Detail, "Порт 6379 открыт наружу; Сертификат просрочен") {
 		t.Errorf("в подробностях нет названий новых находок: %q", events[0].Detail)
 	}
+	// Ссылка — в «Проблемы» хоста с подсветкой новых находок.
+	if events[0].Link != "/findings?focus=a%2Cb" {
+		t.Errorf("ссылка события: %q", events[0].Link)
+	}
 
 	m.overviewMu.Lock()
 	m.overview[id] = hostOverview{reachable: true, findings: map[string]int{"critical": 2, "high": 1}}
@@ -287,5 +291,26 @@ func TestEventQueryHideAndFilters(t *testing.T) {
 	}
 	if res, _ := m.QueryEvents(ctx, EventQuery{Text: "203.0.113.5", ShowHidden: true}); res.Total != 1 {
 		t.Fatalf("text in hidden: %+v", res)
+	}
+}
+
+func TestInsightLink(t *testing.T) {
+	for _, c := range []struct {
+		in   Insight
+		want string
+	}{
+		{Insight{Link: "disks", Subject: "/var"}, "/disks?focus=%2Fvar"},
+		{Insight{Link: "containers", Source: "libvirt", Subject: "vm 1"}, "/containers?tab=vms&focus=vm+1"},
+		{Insight{Link: "containers"}, "/containers"},
+		{Insight{Link: "availability", Subject: "api"}, "/availability?focus=api"},
+		{Insight{Link: "services"}, "/services"},
+		{Insight{}, ""},
+	} {
+		if got := insightLink(c.in); got != c.want {
+			t.Errorf("%+v: %q, want %q", c.in, got, c.want)
+		}
+	}
+	if got := eventLink("/fail2ban", []string{"1", "2", "3", "4", "5", "6"}); got != "/fail2ban?focus=1%2C2%2C3%2C4%2C5" {
+		t.Errorf("eventLink: %q", got)
 	}
 }

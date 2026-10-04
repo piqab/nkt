@@ -12,6 +12,7 @@ import { confirmAction } from '../components/confirm'
 import { RowAction } from '../components/RowAction'
 import { RebootHostButton } from '../components/RebootHost'
 import { TitleHelp } from '../components/Docs'
+import { useFocusRow } from '../focus'
 
 interface AptSearchResult {
   name: string
@@ -89,7 +90,9 @@ export function PackageGrid({
   action,
   showVersion,
   showState,
+  focus,
 }: {
+  focus?: string | null
   rows: PackageRow[]
   picked: string[]
   onPick: (names: string[]) => void
@@ -107,7 +110,7 @@ export function PackageGrid({
     <>
       <div className="pkg-grid">
         {visible.map((p) => (
-          <div key={p.name} className={`pkg-cell${p.match ? ` pkg-match-${p.match}` : ''}`}>
+          <div key={p.name} className={`pkg-cell${p.match ? ` pkg-match-${p.match}` : ''}${focus && p.name === focus ? ' pkg-focus' : ''}`}>
             <Checkbox checked={picked.includes(p.name)} disabled={!canPick(p)} onChange={(e) => toggle(p.name, e.target.checked)} />
             <code className="mono" title={p.name}>
               {p.name}
@@ -216,7 +219,10 @@ export default function Packages({ me }: { me: Me }) {
 
   // --- everything currently installed ---
   const installed = useApi<{ packages: AptInstalledPackage[] }>('/system/apt/installed', 60_000)
-  const [installedQuery, setInstalledQuery] = useState('')
+  // Переход «к пакету» (уязвимость, проблема): список сразу отфильтрован
+  // по имени, ячейка подсвечена.
+  const focusPkg = useFocusRow(!!installed.data)
+  const [installedQuery, setInstalledQuery] = useState(() => focusPkg ?? '')
   // Удаление — набором, тем же путём, что установка: одним apt-get,
   // который разрешает зависимости всего набора разом. Одиночное удаление
   // — тот же набор из одного имени.
@@ -422,6 +428,7 @@ export default function Packages({ me }: { me: Me }) {
               </p>
             )}
             <PackageGrid
+              focus={focusPkg}
               rows={visibleInstalled}
               picked={pickedInstalled}
               onPick={setPickedInstalled}

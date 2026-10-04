@@ -34,6 +34,12 @@ list.
   Libvirt (`virsh domstats`) or Kubernetes (pods, `kubectl top`); log entries are sorted by their own
   timestamp, so the graph shows when the load happened, not when it was
   collected.
+- Metrics go by importance: **CPU** first and selected by default, then
+  memory, then network and the rest. The default source is the first one
+  with data for the last day (Docker → Podman → LXD → Libvirt →
+  Kubernetes); sources without data are marked “no data”. The last
+  source, **Whole host**, is the CPU and memory of the machine itself; it
+  opens when the host has no container engines.
 - A ranking of the busiest resources and a load schedule by hour.
 - The **btop** tab — a live `btop` in a terminal window; installed with a
   button if the host lacks it.
@@ -41,7 +47,8 @@ list.
 ## Logs
 
 journald logs by unit and files from `/var/log`, including rotated and
-compressed ones. Live following over WebSocket with a filter,
+compressed ones. The unit list shows installed services only: a service
+missing from the host has no journal either. Live following over WebSocket with a filter,
 highlighting and autoscroll; the log window can be detached into a
 separate browser window.
 

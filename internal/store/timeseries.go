@@ -585,6 +585,25 @@ func (d *DB) MetricSeries(ctx context.Context, q MetricQuery) ([]MetricPoint, er
 	return out, rows.Err()
 }
 
+// MetricSources — источники, у которых есть замеры новее since: какие
+// из «Docker, Podman, LXD…» на этом хосте реально работают.
+func (d *DB) MetricSources(ctx context.Context, since string) ([]string, error) {
+	rows, err := d.QueryContext(ctx, `SELECT DISTINCT source FROM metric_samples WHERE ts >= ?`, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var s string
+		if err := rows.Scan(&s); err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
 // SubjectTotal is one row of a usage leaderboard.
 type SubjectTotal struct {
 	Subject string  `json:"subject"`

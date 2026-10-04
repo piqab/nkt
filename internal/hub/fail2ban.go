@@ -92,10 +92,12 @@ func (m *Manager) noteBans(ctx context.Context, hostID int64, now *f2bSummary) {
 	}
 	sort.Strings(fresh)
 	count := len(fresh)
+	// Ссылка — в fail2ban хоста, новые адреса подсвечены.
+	link := eventLink("/fail2ban", fresh)
 	if len(fresh) > 20 {
 		fresh = append(fresh[:20], "…")
 	}
-	m.recordEventMsg(ctx, host, store.EventBans, "", "hub.newBans", count, strings.Join(fresh, ", "))
+	m.recordEventLink(ctx, host, store.EventBans, "", link, "hub.newBans", count, strings.Join(fresh, ", "))
 }
 
 // maybePushHubAddr — раз в f2bPushInterval (и сразу после запуска хаба)

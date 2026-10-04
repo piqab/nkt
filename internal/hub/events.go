@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/piqab/nkt/internal/msgs"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -30,14 +31,32 @@ const eventKeep = 2000
 // recordEventMsg — событие с текстом из каталога: ключ и аргументы
 // хранятся рядом, чтобы журнал читался на языке смотрящего.
 func (m *Manager) recordEventMsg(ctx context.Context, host store.Host, kind, severity, key string, args ...any) {
-	m.recordEventKey(ctx, host, kind, severity, msgs.Tc(ctx, key, args...), key, msgs.EncodeArgs(args))
+	m.recordEventKey(ctx, host, kind, severity, msgs.Tc(ctx, key, args...), key, msgs.EncodeArgs(args), "")
+}
+
+// recordEventLink — то же со ссылкой в раздел хоста, где событие видно
+// и решается (кнопка «К хосту» в журнале).
+func (m *Manager) recordEventLink(ctx context.Context, host store.Host, kind, severity, link, key string, args ...any) {
+	m.recordEventKey(ctx, host, kind, severity, msgs.Tc(ctx, key, args...), key, msgs.EncodeArgs(args), link)
 }
 
 func (m *Manager) recordEvent(ctx context.Context, host store.Host, kind, severity, detail string) {
-	m.recordEventKey(ctx, host, kind, severity, detail, "", "")
+	m.recordEventKey(ctx, host, kind, severity, detail, "", "", "")
 }
 
-func (m *Manager) recordEventKey(ctx context.Context, host store.Host, kind, severity, detail, key, args string) {
+// eventLink — путь раздела хоста с ?focus= (несколько значений — через
+// запятую, не больше пяти: ссылка, а не список).
+func eventLink(path string, focus []string) string {
+	if len(focus) > 5 {
+		focus = focus[:5]
+	}
+	if len(focus) == 0 {
+		return path
+	}
+	return path + "?" + url.Values{"focus": {strings.Join(focus, ",")}}.Encode()
+}
+
+func (m *Manager) recordEventKey(ctx context.Context, host store.Host, kind, severity, detail, key, args, link string) {
 	// Исходящие вебхуки — независимо от записи в журнал (выбор событий у
 	// адресата свой).
 	var eventID int64
@@ -53,7 +72,7 @@ func (m *Manager) recordEventKey(ctx context.Context, host store.Host, kind, sev
 	}
 	id, err := m.db.AddHostEvent(ctx, store.HostEvent{
 		HostID: host.ID, HostName: host.Name, HostAddr: hostAddrLabel(ctx, host),
-		Kind: kind, Severity: severity, Detail: detail, DetailKey: key, DetailArgs: args,
+		Kind: kind, Severity: severity, Detail: detail, DetailKey: key, DetailArgs: args, Link: link,
 	})
 	if err != nil {
 		m.log.Warn("не удалось записать оповещение", "host", host.Name, "kind", kind, "err", err)
@@ -157,23 +176,27 @@ func (m *Manager) noteFindings(ctx context.Context, hostID int64, findings map[s
 		// Какие именно: те, чьих ID в прошлом опросе не было. Хост отдаёт
 		// только верхушку списка, так что для лавины находок будут
 		// названы первые, а счётчик — точный.
-		var names []string
+		var names, ids []string
 		for id, title := range severeNow {
 			if _, old := prev.severe[id]; !old {
 				names = append(names, title)
+				ids = append(ids, id)
 			}
 		}
 		sort.Strings(names)
+		sort.Strings(ids)
 		if len(names) > 5 {
 			names = append(names[:5], "…")
 		}
+		// Ссылка — в «Проблемы» хоста, новые находки подсвечены.
+		link := eventLink("/findings", ids)
 		if len(names) > 0 {
-			m.recordEventMsg(ctx, host, store.EventProblems, "critical+high", "hub.seriousFindingsNowNamed", now, was, strings.Join(names, "; "))
+			m.recordEventLink(ctx, host, store.EventProblems, "critical+high", link, "hub.seriousFindingsNowNamed", now, was, strings.Join(names, "; "))
 		} else {
-			m.recordEventMsg(ctx, host, store.EventProblems, "critical+high", "hub.seriousFindingsNow", now, was)
+			m.recordEventLink(ctx, host, store.EventProblems, "critical+high", link, "hub.seriousFindingsNow", now, was)
 		}
 	case now == 0:
-		m.recordEventMsg(ctx, host, store.EventResolved, "critical+high", "hub.seriousFindingsLeft", was)
+		m.recordEventLink(ctx, host, store.EventResolved, "critical+high", "/findings", "hub.seriousFindingsLeft", was)
 	}
 }
 

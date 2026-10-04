@@ -50,7 +50,12 @@ Below a finding are buttons that take you where it gets fixed:
   actions allowed);
 - **Firewall**: for a port open to the internet, Docker or Kubernetes
   bypassing the rules, a stale rule;
-- **Go to malware**: the "Malware" tab in "Vulnerabilities";
+- **Port N in Firewall** and **On the resource map**: for an undeclared
+  listener; "Firewall" highlights the rules and the socket of that port,
+  the map opens its node (or the folded service it belongs to);
+- **Go to malware**: the "Malware" tab in "Vulnerabilities" with the
+  finding's card highlighted; **Open in files**: the "Disks" file browser
+  on the file's row (when the file is under a browser root);
 - **Fail2ban**: for fail2ban findings;
 - **Go to service nginx** (haproxy, caddy, docker, fail2ban…): "Services"
   with the service's row highlighted; **Go to container**: "Containers"
@@ -116,6 +121,11 @@ an update fixes:
 Libraries (such as libssl inside nginx) are not linked to services yet:
 a vulnerability in one is ordered by severity, without the "network" mark.
 
+Each row leads to where it gets fixed: **To package** opens "Packages"
+filtered by name with the package's cell highlighted; **To containers**
+opens "Containers" with the rows of containers running that image
+highlighted.
+
 ![Malware](/screens/en/malware.png)
 
 The **“Malware”** tab — a check for miners and signs of a break-in with
@@ -124,7 +134,17 @@ binaries from /tmp or deleted from disk, cron with “curl | sh”, units
 from temporary directories, foreign SUID files, `/etc/ld.so.preload`,
 blocks in `/etc/hosts`) on every scan, and below it **ClamAV**: install,
 signature database, scans of host directories and container images,
-quarantine.
+quarantine. Each hit has buttons: a file opens in the "Disks" file
+browser on its row (when it is under a browser root), a file in `/etc` in
+"Configs", a container in "Containers".
+
+Installing ClamAV, updating its database (freshclam) and scanning run as
+host **jobs**, one at a time: starting one opens the standard job log
+window, and while it runs the card shows what is running with **Log** and
+**Cancel** buttons. Cancel also stops clamscan itself (with systemd, the
+whole transient unit), and an image unpacked for scanning is removed; the
+previous scan result stays. Any job can also be cancelled from its log
+window with **Cancel job**.
 
 ## Resource map
 
@@ -145,7 +165,22 @@ parameters in full; it also has a button to whatever is responsible for
 it: a service opens "Services" with
 its row highlighted, a listener or pool its config, a Docker or Podman
 container its row in "Containers", LXD, machines and Kubernetes their tab,
-a network "Network interfaces", an undeclared listener "Firewall".
+a network "Network interfaces", an undeclared listener "Firewall" with
+the rules of its port highlighted.
+
+The map drags with the mouse at any zoom; label text is not selected
+while dragging, and releasing after a drag does not open the node under
+the cursor.
+
+**Ports of one service are folded.** When a service (nginx with a dozen
+server blocks, a process with many ports open) has more listeners than
+the threshold, the map shows them as one node "nginx · 12 ports" carrying
+the edges of all of them. The threshold sits in the row above the map
+next to the checkboxes ("Fold service ports above", 4 by default) and is
+remembered in the browser. A click on a folded node opens a window
+listing its ports: each with its state, finding count and a button to
+where it is configured (the listener's config, the port in "Firewall");
+**Expand on the map** shows the service's ports one by one.
 
 libvirt machines and LXD instances are linked to their networks (a
 libvirt bridge, an LXD network) and to backends pointing at their

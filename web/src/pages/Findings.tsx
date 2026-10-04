@@ -9,6 +9,7 @@ import { FindingActions } from '../components/FindingActions'
 import { Card, ErrorNote, Loading, SeverityBadge, SEVERITIES, severityLabel } from '../components/ui'
 import { formatNumber } from '../components/charts'
 import { TitleHelp } from '../components/Docs'
+import { focusSet, useFocusRow } from '../focus'
 
 interface FindingsResponse {
   findings: Finding[]
@@ -36,6 +37,10 @@ export default function Findings({ me }: { me: Me | null }) {
     for (const c of changes.data?.changes ?? []) if (c.kind === 'finding' && c.action === 'appeared') set.add(c.key)
     return set
   }, [changes.data])
+
+  // Переход из оповещения хаба или карты ресурсов: ?focus=id[,id…] —
+  // эти находки подсвечены, к первой прокручено.
+  const focused = focusSet(useFocusRow(!!data))
 
   const services = useMemo(() => {
     const set = new Set<string>()
@@ -113,7 +118,7 @@ export default function Findings({ me }: { me: Me | null }) {
       ) : (
         <div className="col">
           {visible.map((f) => (
-            <Card key={f.id}>
+            <Card key={f.id} className={focused.has(f.id) ? 'card-focus' : undefined}>
               <div className="spread" style={{ alignItems: 'flex-start' }}>
                 <div style={{ minWidth: 0 }}>
                   <div className="row" style={{ marginBottom: '0.25rem' }}>

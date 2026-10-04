@@ -18,26 +18,6 @@ import { TitleHelp } from '../components/Docs'
  */
 const SERIES = [
   {
-    id: 'docker-net',
-    labelKey: 'usage.series.dockerNet',
-    source: 'docker',
-    workload: true,
-    metric: 'net_rx_bytes',
-    agg: 'sum',
-    unitKey: 'usage.unit.bytes',
-    format: formatBytes,
-  },
-  {
-    id: 'docker-net-tx',
-    labelKey: 'usage.series.netTx',
-    source: 'docker',
-    workload: true,
-    metric: 'net_tx_bytes',
-    agg: 'sum',
-    unitKey: 'usage.unit.bytes',
-    format: formatBytes,
-  },
-  {
     id: 'docker-cpu',
     labelKey: 'usage.series.dockerCpu',
     source: 'docker',
@@ -54,6 +34,26 @@ const SERIES = [
     workload: true,
     metric: 'mem_bytes',
     agg: 'avg',
+    unitKey: 'usage.unit.bytes',
+    format: formatBytes,
+  },
+  {
+    id: 'docker-net',
+    labelKey: 'usage.series.dockerNet',
+    source: 'docker',
+    workload: true,
+    metric: 'net_rx_bytes',
+    agg: 'sum',
+    unitKey: 'usage.unit.bytes',
+    format: formatBytes,
+  },
+  {
+    id: 'docker-net-tx',
+    labelKey: 'usage.series.netTx',
+    source: 'docker',
+    workload: true,
+    metric: 'net_tx_bytes',
+    agg: 'sum',
     unitKey: 'usage.unit.bytes',
     format: formatBytes,
   },
@@ -102,6 +102,10 @@ const WORKLOADS = [
   { value: 'lxd', label: 'LXD' },
   { value: 'libvirt', label: 'Libvirt' },
   { value: 'k8s', label: 'Kubernetes' },
+  // Сам хост — процессор и память машины целиком; последним: по умолчанию
+  // открывается первый работающий движок, а хост — когда их нет. Сеть
+  // хоста не собирается, у сетевых рядов этого источника нет.
+  { value: 'host', label: 'host' },
 ]
 
 const RANGES = [
@@ -147,14 +151,30 @@ export default function Usage({ me }: { me: Me }) {
 
 function UsageCharts() {
   const { t } = useTranslation()
+  // Первым и по умолчанию — процессор, за ним память.
   const [seriesId, setSeriesId] = useState<string>(SERIES[0].id)
   const [range, setRange] = useState('7d')
-  const [workload, setWorkload] = useState('docker')
+  // Источник по умолчанию — первый, у которого есть данные за сутки:
+  // на хосте без Docker открывать пустой Docker незачем. Выбранный вручную
+  // не трогается.
+  const sources = useApi<{ sources: string[] }>('/monitor/usage/sources')
+  const [picked, setPicked] = useState<string | null>(null)
   const tz = tzOffsetMinutes()
 
   const base = SERIES.find((s) => s.id === seriesId)!
   const isWorkload = 'workload' in base && base.workload
-  const spec = { ...base, source: isWorkload ? workload : base.source }
+  const isNet = base.metric.startsWith('net_')
+  const workloadOptions = WORKLOADS.filter((w) => !(isNet && w.value === 'host')).map((w) => ({
+    value: w.value,
+    label: w.value === 'host' ? t('usage.sourceHost') : w.label,
+  }))
+  const live = new Set(sources.data?.sources ?? [])
+  const firstLive = workloadOptions.find((w) => live.has(w.value))?.value ?? (sources.error || !sources.data ? 'docker' : workloadOptions[0].value)
+  const workload = picked && workloadOptions.some((w) => w.value === picked) ? picked : firstLive
+  const setWorkload = (v: string) => setPicked(v)
+  // У хоста память — занятая (mem_used_bytes), у контейнеров — mem_bytes.
+  const metric = isWorkload && workload === 'host' && base.metric === 'mem_bytes' ? 'mem_used_bytes' : base.metric
+  const spec = { ...base, metric, source: isWorkload ? workload : base.source }
   const rangeSpec = RANGES.find((r) => r.value === range)!
 
   const usage = useApi<{ points: MetricPoint[]; simulated: boolean; total: number | null }>(
@@ -219,7 +239,12 @@ function UsageCharts() {
         {isWorkload && (
           <label>
             {t('usage.source')}
-            <Select value={workload} onChange={setWorkload} style={{ minWidth: '9rem' }} options={WORKLOADS} />
+            <Select
+              value={workload}
+              onChange={setWorkload}
+              style={{ minWidth: '9rem' }}
+              options={workloadOptions.map((w) => ({ ...w, label: live.has(w.value) ? w.label : `${w.label} · ${t('usage.noData')}` }))}
+            />
           </label>
         )}
         <label>

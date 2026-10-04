@@ -37,7 +37,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 ### Findings
 - Analysis of nginx, haproxy, caddy, docker compose, firewall and certificate configs, cross-checked against the host's real state.
 - Every finding: severity, explanation, file and line, a concrete fix, documentation links.
-- Action buttons on a finding: "Open at line N" (the line highlighted in "Configs"), "Go to certificate", "Go to service", "Go to container", "Logs" and "Restart"/"Start" for a container, "Firewall", "Go to malware"; the same buttons in "What's broken" on the overview, and a resource map node links to its service, config or container.
+- Action buttons on a finding: "Open at line N" (the line highlighted in "Configs"), "Go to certificate", "Go to service", "Go to container", "Logs" and "Restart"/"Start" for a container, "Firewall", "Port N in Firewall" and "On the resource map" for an undeclared listener (the port's rules and socket highlighted, the map node opened), "Go to malware" with the card highlighted, "Open in files"; the same buttons in "What's broken" on the overview, and a resource map node links to its service, config or container.
 - Network and firewall rules: port conflicts, declared-but-not-listening, listening-but-not-declared, no default deny, public port blocked by the firewall, Docker bypassing the firewall, stale rules, sensitive services on all interfaces.
 - TLS rules: weak protocols, missing HSTS, certificate not set, expired, expiring, not yet valid, unreadable, name mismatch, not renewed automatically, orphan certbot lineage, self-signed, weak key or signature, service did not reload the certificate, public plaintext proxy.
 - Pool and container rules: undefined or orphan upstream, backend down, all backends disabled, single backend, no health check, container restarting, not running, undeclared, no restart policy, haproxy stats panel without a password.
@@ -55,7 +55,8 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - "By danger" order: first what is reachable from the network (the package's service listens beyond loopback, a container publishes a port; with the ports), then severity, then whether a fix exists; "only reachable from the network" and "only with a fix" filters.
 - Scan progress in real time.
 - The “Malware” tab: a heuristic check for miners and signs of a break-in with no third-party tools — processes named like miners, pool connections, binaries deleted from disk or started from /tmp, long CPU load by a process not from any package, /etc/ld.so.preload, cron with “curl | sh”, units from temporary directories, foreign SUID files, blocks in /etc/hosts; on every scan, results go to Findings and hub alerts.
-- ClamAV: package install, signature database updates, scans of chosen host directories and container images (one, selected or all) with a live log, quarantine of infected files with restore and purge.
+- ClamAV: package install, signature database updates, scans of chosen host directories and container images (one, selected or all) — as host jobs, one at a time, in the standard job log window, with a cancel that also stops clamscan itself; quarantine of infected files with restore and purge; hits link to the file browser row, "Configs" or the container.
+- Every vulnerability links to where it is fixed: "To package" (the cell highlighted in "Packages") or "To containers" (the rows of containers running that image).
 
 ### Resource map
 - Graph "external network → service → listener → pool → backend → container or machine → network" built from configs and the real state.
@@ -63,7 +64,9 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - A machine node shows its address, ping, current CPU and memory and the vulnerabilities of its packages; no ping reply turns it red, critical vulnerabilities yellow.
 - Kubernetes: Ingress → Service → pods → cluster node → the host machine it runs on.
 - Node status from live listeners, containers and findings.
-- Stable column layout, zoom and drag with the mouse, node details on hover.
+- Stable column layout, zoom and drag with the mouse at any zoom without selecting text, node details on hover.
+- Ports of one service above a threshold (set above the map, 4 by default) fold into one node "service · N ports"; its window lists the ports, each with a link to where it is configured, and "Expand on the map".
+- Opening a node by a link from a finding.
 
 ## Monitoring
 
@@ -75,18 +78,18 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 
 ### Load
 - Load charts from iptables counters and nginx/haproxy access logs for a chosen period, a rating of the busiest resources, a load schedule by hour.
-- Network, CPU and memory of containers and machines with a source picker: Docker, Podman, LXD, Libvirt (`virsh domstats`).
+- CPU, memory and network of containers and machines with a source picker: Docker, Podman, LXD, Libvirt (`virsh domstats`), Kubernetes and "Whole host"; CPU and the first source with data open by default.
 - Live `btop` in a terminal window, installed if missing, with key hints.
 
 ### Logs
-- journald logs by unit and files from `/var/log`, including archived and compressed ones.
+- journald logs by unit of installed services and files from `/var/log`, including archived and compressed ones.
 - Live log following over WebSocket with a filter, highlighting, case sensitivity and autoscroll.
 - Detach the log into a separate browser window.
 
 ### Jobs
 - List of the host's background jobs: kind, step, status, author, duration.
 - Filters by state and kind, a text search across all jobs, pages of 20/50/100 and date order, like the alert journal; the hub's "Jobs" work the same way.
-- Job log in real time, cancellation; jobs interrupted by a restart resume or get marked.
+- Job log in real time, cancellation (also right from the log window); jobs interrupted by a restart resume or get marked.
 
 ### Audit log
 - Every change made through the UI and API: who, what, when, with what outcome and command output; filters by action and outcome.
@@ -237,7 +240,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - Scripts (experimental): a line-based deployment language (group, hosts, nkt install, packages, services, firewall, Docker and compose stacks, machines, profiles, files, user accounts, system settings, certificates, git clone, k8s clusters; several hosts in one command) with run-time parameters, waiting for a port/HTTP/service, a check, a dry run, a reference and execution as a hub job.
 - A "Profiles" section on the hub, each profile has a color; a profile is set on a group at creation: machines created in the group are built from it and their rows are tinted with its color; moving a host into a group applies nothing.
 - Model analysis (AI) on the hub: Anthropic or an OpenAI-compatible provider, including local ones (Ollama, vLLM, LM Studio); the model is picked from the provider's list by “Get models” (searchable, release date or size, non-chat models hidden) or typed by hand; a live “Test”, a daily limit, anonymization, editable instructions; “show request” shows the whole request (instruction, message, what was replaced).
-- Alerts: unreachable, responding again, serious problems appeared, resolved, job failed, new fail2ban bans; an AI check with its own instruction for every external IP in an alert, with “Ban on all hosts” in the answer window; an alert journal (the "Journal" tab; settings, webhooks and bots are on the "Settings" tab) with settings for what to record, what to notify about and what to hide, filters by kind and host and a text search over the whole journal, collapsing short episodes; browser notifications.
+- Alerts: unreachable, responding again, serious problems appeared, resolved, job failed, new fail2ban bans; an AI check with its own instruction for every external IP in an alert, with “Ban on all hosts” in the answer window; an alert journal (the "Journal" tab; settings, webhooks and bots are on the "Settings" tab) with settings for what to record, what to notify about and what to hide, filters by kind and host and a text search over the whole journal, collapsing short episodes; each event links straight to the host's section with the item highlighted (new findings, bans, disk, container, availability target); browser notifications.
 - Hub "Monitoring" (below "Alerts"): availability and load of all hosts from the hub history (hourly summaries from hosts once an hour; hours for 90 days, days for a year), each container, machine and pod separately, heatmaps by hour of week; trend forecasts (disks filling up, memory and CPU, likely leaks, availability drops, latency growth), hints linking to the host section, the quiet window of the week, workload rebalancing, model analysis; "forecast" alerts with thresholds.
 - fail2ban across hosts: where it is installed and how many are banned, banned addresses and where (on how many hosts, in which jails), banning and unbanning on all hosts as a hub job with a per-host log (banning an internal address asks for a separate confirmation; "Undo" for 15 seconds after success), jail templates (standard and custom) applied to selected hosts: a required check as a hub job (per host, a diff and a check of the whole fail2ban configuration with the template, plus the hub ban protection), then a hub job three hosts at a time: the hub protection first, a rollback on the host if the configuration fails or a jail does not start, lifting a ban on the hub; all hub fail2ban jobs run in one queue; an “f2b” column in the host list.
 - Hub jobs with a log.

@@ -548,8 +548,12 @@ pre.diff .hunk { color: var(--text-muted); }
   background: var(--surface-1);
   overflow: hidden;
 }
-.map-wrap svg { display: block; width: 100%; touch-action: none; cursor: grab; }
-.map-wrap svg:active { cursor: grabbing; }
+.map-wrap svg { display: block; width: 100%; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+.map-wrap svg:active, .map-wrap svg.map-dragging, .map-wrap svg.map-dragging * { cursor: grabbing !important; }
+/* Окно свёрнутой службы на карте: порты строками, у каждого — переход. */
+.topology-group-table { width: 100%; border-collapse: collapse; }
+.topology-group-table td { padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+.topology-group-table tr.row-focus > td { background: color-mix(in srgb, var(--status-warning) 22%, transparent); }
 .map-controls {
   position: absolute;
   right: 0.6rem;
@@ -950,6 +954,12 @@ span.vm-toggle {
 /* Строка таблицы, к которой перешли из находки. */
 .row-focus > td {
   background: color-mix(in srgb, var(--status-warning) 22%, transparent) !important;
+}
+/* То же для карточки (находка в «Проблемах») и ячейки пакета. */
+.card-focus.ant-card,
+.pkg-cell.pkg-focus {
+  outline: 2px solid var(--status-warning);
+  background: color-mix(in srgb, var(--status-warning) 14%, var(--surface-raised, transparent));
 }
 
 /* «Отменить» после бана или разбана на хостах — поверх окон. */

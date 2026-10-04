@@ -93,7 +93,7 @@ type Server struct {
 	vuln vulnState
 	// vulnExposureCache — доступность уязвимых пакетов и образов из сети.
 	vulnExposureCache vulnExposureCache
-	clam clamState
+	clam              clamState
 }
 
 // Deps bundles the constructed subsystems.
@@ -160,6 +160,7 @@ func New(d Deps) *Server {
 		s.jobs.Register(KindComposeDeploy, &composeDeployRunner{s})
 		s.jobs.Register(KindComposeRemove, &composeRemoveRunner{s})
 		s.jobs.Register(KindSiteApply, &siteRunner{s})
+		s.jobs.Register(KindClamAV, &clamRunner{s})
 	}
 	return s
 }
@@ -393,6 +394,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/monitor/outages", s.handleOutages)
 			r.Get("/monitor/usage", s.handleUsage)
 			r.Get("/monitor/usage/top", s.handleUsageTop)
+			r.Get("/monitor/usage/sources", s.handleUsageSources)
 			r.Get("/monitor/usage/heatmap", s.handleUsageHeatmap)
 			r.Get("/monitor/summary", s.handleMonitorSummary)
 			r.Get("/monitor/jobs", s.handleJobs)
@@ -585,8 +587,8 @@ func (s *Server) Handler() http.Handler {
 				r.Get("/network/manager", s.handleNetworkManager)
 				r.Get("/system/sandbox-packages", s.handleSandboxPackages)
 				r.Get("/system/sandbox-packages/status", s.handleSandboxPackagesStatus)
-			r.Get("/system/reboot/preview", s.handleRebootPreview)
-			r.Get("/images/archives", s.handleImageArchives)
+				r.Get("/system/reboot/preview", s.handleRebootPreview)
+				r.Get("/images/archives", s.handleImageArchives)
 				r.Get("/disks", s.handleDisks)
 				r.Get("/disks/usage", s.handleDiskUsage)
 				r.Get("/os-users", s.handleOSUserList)
