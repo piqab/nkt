@@ -530,6 +530,7 @@ var ruCatalog = map[string]string{
 	"api.backgroundJobsAreUnavailable":                    "фоновые задания недоступны",
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",
+	"api.toolNotAllowed":                                  "программа %s не из списка разрешённых для запуска вне песочницы",
 	"api.consoleBadTarget":                                "нельзя открыть консоль: %s %q",
 	"api.spiceUnavailable":                                "SPICE машины %s недоступен: %s — нужна графика spice с обычным (не только TLS) портом, машина должна работать",
 	"api.lxdSpiceMissing":                                 "у %s нет SPICE-сокета — экран есть только у работающей виртуальной машины LXD",

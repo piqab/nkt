@@ -148,9 +148,12 @@ func (s *Server) handleReboot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.db.Audit(r.Context(), user, "system.reboot", "", "ok", nil)
+	// Запрос закончится раньше перезагрузки: контекст — от запроса, но
+	// без его отмены.
+	bg := context.WithoutCancel(r.Context())
 	go func() {
 		time.Sleep(rebootDelay)
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(bg, 30*time.Second)
 		defer cancel()
 		if res, err := RunUnrestricted(ctx, "systemctl", "reboot"); (err != nil || !res.OK()) && s.log != nil {
 			s.log.Error("reboot failed", "err", err, "out", strings.TrimSpace(res.Output()))

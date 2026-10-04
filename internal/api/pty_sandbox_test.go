@@ -539,3 +539,18 @@ func TestUnrestrictedCommandAsUserPlainExecSetsCredential(t *testing.T) {
 		}
 	}
 }
+
+// Вне песочницы запускается только программа из списка: путь собирается
+// из констант, незнакомое имя отклоняется.
+func TestTrustedProgram(t *testing.T) {
+	for in, want := range map[string]string{"bash": "bash", "/snap/bin/lxc": "/snap/bin/lxc", "/opt/x/docker": "docker"} {
+		if got, err := trustedProgram(in); err != nil || got != want {
+			t.Errorf("%s → %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, in := range []string{"rm", "/tmp/evil", "", "curl"} {
+		if _, err := trustedProgram(in); err == nil {
+			t.Errorf("%q разрешён", in)
+		}
+	}
+}
