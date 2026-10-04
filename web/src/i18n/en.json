@@ -56,7 +56,8 @@
     "toConfig": "Go to config",
     "toContainer": "Go to container {{name}}",
     "toSection": "Open: {{name}}",
-    "toFirewall": "Firewall"
+    "toFirewall": "Firewall",
+    "monitoring": "Monitoring"
   },
   "about": {
     "title": "About",
@@ -836,7 +837,8 @@
       "resolved": "problems cleared",
       "job-failed": "job failed",
       "bans": "new bans",
-      "rebooted": "rebooted"
+      "rebooted": "rebooted",
+      "forecast": "forecast"
     },
     "settingsTitle": "What to record and what to notify about",
     "settingsHint": "Shared by the hub, not this browser. “Record” — the event goes to the log; “notify” — it pops up in the browser when its “Notify on problems” switch is on.",
@@ -2943,7 +2945,8 @@
     "requestUser": "Message (user), as sent to the model",
     "requestAliases": "What was replaced",
     "requestAliasesHint": "(visible to admins only; the model got the aliases on the left)",
-    "requestMissing": "This answer predates v1.11.41: only the message was saved, not the instruction or request settings."
+    "requestMissing": "This answer predates v1.11.41: only the message was saved, not the instruction or request settings.",
+    "promptMonitoring": "planning from the hub \"Monitoring\" (forecasts and hints)"
   },
   "editModal": {
     "saved": "saved",
@@ -4067,5 +4070,98 @@
     "start": "Install ({{count}})",
     "banner": "Hosts without nkt: {{count}} (for example, after an import or removing nkt).",
     "bannerButton": "Install"
+  },
+  "monitoring": {
+    "title": "Monitoring",
+    "hint": "Availability and load of all hosts from the hub's history: once an hour the hub pulls hourly summaries from the hosts and keeps them (hours for 90 days, days for a year), so hosts that are unreachable right now are covered too. Forecasts follow the trend of recent days; hints lead to the host section where the issue is handled — the hub changes nothing by itself.",
+    "range": {
+      "24h": "day",
+      "7d": "7 days",
+      "30d": "30 days",
+      "90d": "90 days",
+      "365d": "year"
+    },
+    "collectNow": "Collect now",
+    "thresholds": "Thresholds",
+    "thresholdsHint": "Thresholds for forecasts and \"forecast\" alerts (they also go to Telegram and Slack if configured). Stored on the hub for everyone.",
+    "lastRun": "Last collection: {{when}}",
+    "tabAvailability": "Availability",
+    "tabLoad": "Load",
+    "insightsTitle": "Forecasts and hints",
+    "insightsHint": "From the trends of recent days; important ones also arrive as alerts.",
+    "noInsights": "Nothing needs attention yet, or there is too little data: forecasts need a few days of history.",
+    "sev": {
+      "critical": "urgent",
+      "warning": "attention",
+      "info": "FYI"
+    },
+    "quietWindowLocal": "The quietest window of the week is {{day}} {{from}}–{{to}} (average CPU load {{load}}%): good for maintenance.",
+    "openHost": "Open host",
+    "link": {
+      "disks": "Host disks",
+      "containers": "Containers and VMs",
+      "availability": "Host availability",
+      "images": "Images",
+      "services": "Services"
+    },
+    "colHost": "Host",
+    "colCPU": "CPU",
+    "colMem": "Memory",
+    "colLoad": "Load (avg/peak)",
+    "colDisks": "Disks",
+    "colWorkloads": "Workloads",
+    "avgMax": "{{avg}} / {{max}}",
+    "diskEta": "fills in {{days}} d",
+    "oldNkt": "update nkt: no summaries without it",
+    "noData": "no data",
+    "collectError": "collection failed: {{error}}",
+    "reachTitle": "Hub connection to hosts",
+    "reachable": "reachable",
+    "unreachable": "unreachable",
+    "targetsTitle": "Availability targets of all hosts",
+    "targetsHint": "Targets: {{count}}. Worst availability first; click for charts.",
+    "colTarget": "Target",
+    "colService": "Service",
+    "colUptime": "Availability",
+    "colChecks": "Checks",
+    "colLatency": "Latency",
+    "heatAvailTitle": "Downtime by hour of week",
+    "heatCPUTitle": "CPU load by hour of week",
+    "heatLocal": "All hosts together, your local time; up to 30 days.",
+    "cpuScale": "average host CPU, %",
+    "hostsTitle": "Hosts",
+    "hostsHint": "For the selected period: average and peak. Click a host for its charts and workloads.",
+    "workloadsTitle": "Containers and machines of all hosts",
+    "workloadsHint": "Docker, Podman, LXD, machines and Kubernetes pods, each separately; click for charts.",
+    "allKinds": "all kinds",
+    "search": "Search",
+    "colKind": "Kind",
+    "colName": "Name",
+    "colNet": "Network",
+    "avg": "average",
+    "peak": "peak",
+    "metric": {
+      "cpu_pct": "CPU, %",
+      "mem_bytes": "Memory",
+      "mem_used_bytes": "Host memory",
+      "used_bytes": "Disk usage (hourly peak)",
+      "net_rx_bytes": "Network: received",
+      "net_tx_bytes": "Network: sent",
+      "load1": "Load average",
+      "latency_ms": "Latency",
+      "uptime": "Availability",
+      "disk_pct": "Disk usage, % (hourly peak)"
+    },
+    "aiTitleLoad": "Load of all hosts: forecasts and hints ({{range}})",
+    "aiTitleAvail": "Availability of all hosts: forecasts and hints ({{range}})",
+    "set": {
+      "disk_warn_days": "Disk: warn if it fills up sooner than, days",
+      "disk_crit_days": "Disk: urgent if it fills up sooner than, days",
+      "mem_pct": "Host memory above, % (a whole day)",
+      "cpu_pct": "Host CPU daily average above, %",
+      "leak_days": "Memory leak: growing without a break, days",
+      "leak_growth_pct": "Memory leak: growth over that time at least, %",
+      "avail_drop_pp": "Target availability dropped over the day by more than, pp"
+    }
   }
 }

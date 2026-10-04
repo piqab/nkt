@@ -954,6 +954,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	r.jobs.Register(hub.KindPipelineRemove, hub.NewPipelineRemoveRunner(server))
 	// Опрос репозиториев и registry у конвейеров выкладки.
 	server.StartPipelineWatch(ctx)
+	server.StartMonitoring(ctx)
 	// Соединение с nkt-edge (вебхуки из интернета без открытого хаба).
 	r.jobs.Register(hub.KindEdgeInstall, hub.NewEdgeInstallRunner(server))
 	r.jobs.Register(hub.KindEdgeUninstall, hub.NewEdgeUninstallRunner(server))

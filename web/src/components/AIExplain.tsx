@@ -28,7 +28,7 @@ import { aiAnswerState, currentAIHostID, invalidateAIAnswers, useAIAnswers } fro
  */
 
 export interface AIContext {
-  kind: 'finding' | 'vuln' | 'malware' | 'event' | 'job-error' | 'config-error' | 'config' | 'ip'
+  kind: 'finding' | 'vuln' | 'malware' | 'event' | 'job-error' | 'config-error' | 'config' | 'ip' | 'monitoring'
   title: string
   detail?: string
   suggestion?: string

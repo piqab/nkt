@@ -241,6 +241,11 @@ type Config struct {
 	// tab is open, so it deliberately defaults slower than the frontend's
 	// own 30s Hosts.tsx poll.
 	HubFindingsPollInterval time.Duration
+
+	// HubHistoryHourly / HubHistoryDaily — сколько хаб хранит почасовые и
+	// суточные сводки «Мониторинга» (NKT_HUB_HISTORY_HOURLY, …_DAILY).
+	HubHistoryHourly time.Duration
+	HubHistoryDaily  time.Duration
 	// HubUpdateCheckInterval is how often the hub polls GitHub Releases
 	// (HubReleaseRepo) in the background for a newer nkt version than its
 	// own (see Manager.versionCheckLoop) — purely informational (a badge in
@@ -411,6 +416,8 @@ func Load() (*Config, error) {
 		HubReleaseRepo:           envStr("NKT_HUB_RELEASE_REPO", "piqab/nkt"),
 		HubGitHubAPI:             envStr("NKT_HUB_GITHUB_API", "https://api.github.com"),
 		HubFindingsPollInterval:  envDur("NKT_HUB_FINDINGS_POLL_INTERVAL", 60*time.Second),
+		HubHistoryHourly:         envDur("NKT_HUB_HISTORY_HOURLY", 90*24*time.Hour),
+		HubHistoryDaily:          envDur("NKT_HUB_HISTORY_DAILY", 365*24*time.Hour),
 		HubUpdateCheckInterval:   envDur("NKT_HUB_UPDATE_CHECK_INTERVAL", 6*time.Hour),
 		HubVulnDBRefreshInterval: envDur("NKT_HUB_VULNDB_REFRESH_INTERVAL", 12*time.Hour),
 		HubClamDBRefreshInterval: envDur("NKT_HUB_CLAMDB_REFRESH_INTERVAL", 24*time.Hour),

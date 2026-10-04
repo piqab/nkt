@@ -37,6 +37,9 @@ const (
 	// опасен, стоит ли банить на всех хостах. Контекст собирает хаб:
 	// баны на хостах, события журналов fail2ban, обратный DNS.
 	KindIP = "ip"
+	// KindMonitoring — «Мониторинг» хаба: прогнозы и подсказки по
+	// нагрузке и доступности всех хостов — что делать в первую очередь.
+	KindMonitoring = "monitoring"
 )
 
 // systemPrompt — общая инструкция для разбора одной находки.
@@ -110,10 +113,12 @@ const (
 	PromptMap     = "map"
 	PromptConfig  = "config"
 	PromptIP      = "ip"
+	// PromptMonitoring — планирование ресурсов по «Мониторингу» хаба.
+	PromptMonitoring = "monitoring"
 )
 
 // PromptKinds — в порядке показа в настройках.
-var PromptKinds = []string{PromptFinding, PromptMap, PromptConfig, PromptIP}
+var PromptKinds = []string{PromptFinding, PromptMap, PromptConfig, PromptIP, PromptMonitoring}
 
 // PromptKindFor — какая инструкция нужна виду разбора.
 func PromptKindFor(kind string) string {
@@ -124,6 +129,8 @@ func PromptKindFor(kind string) string {
 		return PromptConfig
 	case KindIP:
 		return PromptIP
+	case KindMonitoring:
+		return PromptMonitoring
 	default:
 		return PromptFinding
 	}
@@ -137,6 +144,8 @@ func systemPromptFor(promptKind string, lang msgs.Lang) string {
 		return configSystemPrompt(lang)
 	case PromptIP:
 		return ipSystemPrompt(lang)
+	case PromptMonitoring:
+		return monitoringSystemPrompt(lang)
 	default:
 		return systemPrompt(lang)
 	}
@@ -365,4 +374,29 @@ func MapPrompt(lines []string, lang msgs.Lang) string {
 		fmt.Fprintf(&b, "%s\n", strings.TrimSpace(l))
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// monitoringSystemPrompt — инструкция разбора «Мониторинга» хаба:
+// прогнозы и сводки по хостам → что делать и в каком порядке.
+func monitoringSystemPrompt(lang msgs.Lang) string {
+	if lang != msgs.EN {
+		return strings.Join([]string{
+			"Ты помогаешь системному администратору планировать ресурсы и доступность его серверов. На вход — прогнозы и подсказки по трендам (заполнение дисков, память, CPU, похожие на утечку рост памяти контейнеров, падение доступности целей) и сводка по хостам за период.",
+			"Отвечай по-русски, коротко и по делу. Опирайся только на приведённые цифры; прогнозы — оценки по тренду, а не факт: учитывай это и не преувеличивай.",
+			"Структура ответа — ровно три раздела, каждый начинается со строки «## »:",
+			"## Главное — что из этого действительно требует внимания и насколько срочно, 2–5 пунктов по убыванию срочности.",
+			"## Что сделать — конкретные шаги по каждому пункту: что проверить, что почистить или перенести, когда (с учётом тихого окна, если оно есть); команды — в блоке ```bash```.",
+			"## Что наблюдать дальше — какие показатели и пороги держать в поле зрения, чтобы решение не опоздало.",
+			"Не советуй действий, которые уронят доступ к серверу или данные, без явного предупреждения.",
+		}, "\n")
+	}
+	return strings.Join([]string{
+		"You help a system administrator plan capacity and availability of their servers. The input is trend-based forecasts and hints (disks filling up, memory, CPU, container memory growth that looks like a leak, target availability drops) and a per-host summary for the period.",
+		"Answer in English, briefly and to the point. Rely only on the given numbers; forecasts are trend estimates, not facts: keep that in mind and do not exaggerate.",
+		"Structure: exactly three sections, each starting with a '## ' line:",
+		"## What matters — what actually needs attention and how urgently, 2-5 items, most urgent first.",
+		"## What to do — concrete steps for each item: what to check, what to clean up or move, when (using the quiet window if there is one); commands in a ```bash``` block.",
+		"## What to watch next — which numbers and thresholds to keep an eye on so the decision is not late.",
+		"Never suggest actions that would cut off access to the server or lose data without an explicit warning.",
+	}, "\n")
 }
