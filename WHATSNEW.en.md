@@ -8,6 +8,10 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.131 — 2026-10-04
+
+- **"Monitoring" docs** with screenshots of both tabs.
+
 ## v1.11.130 — 2026-10-04
 
 - **"Monitoring" history in the hub export**, behind a separate checkbox

@@ -42,6 +42,8 @@ HMAC signature. See [Outgoing webhooks](/en/guide/hub-api#outgoing-webhooks).
 
 ## Monitoring
 
+![Monitoring: availability](/screens/en/hub-monitoring.png)
+
 A hub menu section right below "Alerts": **availability and load of all
 hosts** with forecasts and hints. Two tabs, **"Availability"** and
 **"Load"**; at the top: the period (day, 7, 30, 90 days, year), "Collect
@@ -62,6 +64,8 @@ is marked "update nkt".
 targets of all hosts with the percentage for the period, checks and
 latency (worst first, search, click for hourly or daily availability and
 latency charts); a downtime heatmap by hour of week in your local time.
+
+![Monitoring: load](/screens/en/hub-monitoring-load.png)
 
 **"Load":** hosts with CPU and memory (average and peak for the period),
 load, each disk with its percentage and a "fills in N days" forecast;
