@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react'
 import { Sensitive, blurText, setKnownNames } from '../privacy'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { AutoComplete, Button, Checkbox, Form, Input, InputNumber, Select, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
+import { AutoComplete, Button, Checkbox, Form, Input, InputNumber, Select, Space, Tabs, Tag, Tooltip, type TableColumnsType } from 'antd'
 import {
   InfoCircleOutlined,
   CheckCircleFilled,
@@ -37,6 +37,7 @@ import { takeUpdateAllAfterHub } from '../updateAllAfterHub'
 import { SudoInfoModal } from '../components/SudoInfoModal'
 import { ExportPasswordModal, downloadHubExport } from '../components/HubExport'
 import { msg, tx, type Msg } from '../msg'
+import { InstallAllModal } from '../components/InstallAllModal'
 import i18n from '../i18n'
 
 /** Хост из параметров задания установки (host.install), иначе null. */
@@ -407,6 +408,8 @@ export default function Hosts({
   // «Обновить всё»: пока запускаются задания по хостам.
   const [bulkUpdating, setBulkUpdating] = useState(false)
   const [updateAllDialog, setUpdateAllDialog] = useState(false)
+  // Хосты без nkt (после импорта или удаления nkt) — плашка с установкой.
+  const [installAll, setInstallAll] = useState<number[] | null>(null)
   const [sudoInfo, setSudoInfo] = useState<HubHost | null>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
   // Set when "экспорт с ключом" is clicked — opens ExportPasswordModal
@@ -1435,6 +1438,28 @@ export default function Hosts({
       </Modal>
       )}
 
+      {(() => {
+        const missing = (hosts ?? []).filter((h) => h.id !== LOCAL_HOST_ID && h.status === 'new')
+        return missing.length > 0 ? (
+          <Banner kind="info">
+            <Space wrap>
+              {t('installAll.banner', { count: missing.length })}
+              <Button size="small" type="primary" onClick={() => setInstallAll(missing.map((h) => h.id))}>
+                {t('installAll.bannerButton')}
+              </Button>
+            </Space>
+          </Banner>
+        ) : null
+      })()}
+      {installAll && (
+        <InstallAllModal
+          preselect={installAll}
+          onClose={() => {
+            setInstallAll(null)
+            reload()
+          }}
+        />
+      )}
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
           {msg(notice.text)}

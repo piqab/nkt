@@ -8,6 +8,7 @@ import { AISettingsCard } from '../components/AISettingsCard'
 import { ApiTokensCard } from '../components/ApiTokensCard'
 import { NavLayoutCard } from '../components/NavLayoutModal'
 import { DangerZoneCard } from '../components/PurgeAllModal'
+import { InstallAllCard } from '../components/InstallAllModal'
 import type { HubVersionInfo, HubVulnDBInfo } from '../types'
 
 interface AptCacheInfo {
@@ -477,7 +478,9 @@ export default function About({ admin = false }: { admin?: boolean }) {
         )}
       </Card>
 
-      {/* Опасная зона — перед приватным режимом: тот по просьбе последний. */}
+      {/* Установка на хосты — рядом с удалением; опасная зона — перед
+          приватным режимом: тот по просьбе последний. */}
+      <InstallAllCard admin={admin} />
       <DangerZoneCard admin={admin} />
 
       {/* Приватный режим — настройка браузера, живёт здесь рядом с

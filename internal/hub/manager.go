@@ -288,6 +288,8 @@ type Manager struct {
 	// ignoreip fail2ban (fail2ban.go).
 	f2bMu     sync.Mutex
 	f2bPushed map[int64]f2bPushState
+	// legacy — ключи подписи прежних хабов (переезд, hubsudo_legacy.go).
+	legacy legacyKeys
 
 	// vulnMu/vulnScans track each host's in-flight/last vulnerability scan —
 	// see vulnscan.go. Keyed by hostID like overview above, for the same
@@ -1093,6 +1095,11 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 	// полным sudo.
 	switch {
 	case narrow:
+		// Хост доверяет прежнему хабу (переезд): теперь, с новым nkt, он
+		// умеет сменить ключ на ключ этого хаба.
+		if m.rekeyIfLegacy(client, host.SSHUser) {
+			report("hub.rekeyDone")
+		}
 		if m.refreshSudoStatus(ctx, hostID, client, host.SSHUser, store.SudoStatusNarrow) == store.SudoStatusNopasswd {
 			report("hub.narrowSudoOtherRule")
 		}

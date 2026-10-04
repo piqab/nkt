@@ -219,6 +219,9 @@ type HubExport struct {
 	// actually knows how to use it (this package only carries it through
 	// JSON; the store layer itself never decrypts anything).
 	MasterKey string `json:"master_key,omitempty"`
+	// LegacySignKeys — ключи подписи хабов, от которых этот хаб сам
+	// переехал (только вместе с MasterKey): хосты, ещё не сменившие ключ.
+	LegacySignKeys []string `json:"legacy_sign_keys,omitempty"`
 }
 
 func hostToExport(h Host) HostExport {

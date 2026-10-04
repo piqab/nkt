@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.127 — 2026-10-04
+
+- **"Installing nkt on hosts" in "About"**, next to the "Danger zone":
+  pick hosts (checkboxes cleared, "Select all / Clear all", each host's
+  state) and a regular installation runs on each as a hub job, three hosts
+  at a time; a host with another hub's nkt is skipped.
+- **After an import, the hub checks the hosts by itself**: where nkt is
+  missing, the host is "not installed" (gray, with installation), and a
+  "Hosts without nkt: N → Install" bar appears above the list.
+- **Moving narrow-sudo hosts.** Importing a full export carries over the
+  previous hub's signing key; hosts narrowed by it keep working with the
+  new hub, and on an nkt install or update the hub replaces their key
+  with its own (the new `hub-sudo rekey` operation signed with the
+  previous key).
+
 ## v1.11.126 — 2026-10-04
 
 - **An unreachable host: check now.** A click on the red (or gray "not

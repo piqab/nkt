@@ -50,8 +50,8 @@ func nextSerial(atLeast int64) int64 {
 // hasHubKey — на хосте наш открытый ключ: хост переведён на узкий sudo
 // этим хабом.
 func (m *Manager) hasHubKey(client *ssh.Client) bool {
-	out, err := runRemote(client, "cat "+hubsudo.PubKeyPath+" 2>/dev/null; true")
-	return err == nil && strings.TrimSpace(out) == strings.TrimSpace(hubsudo.PublicText(m.signKey()))
+	_, _, ok := m.keyFor(client)
+	return ok
 }
 
 var staleSerialRe = regexp.MustCompile(`stale serial, last (\d+)`)
@@ -63,10 +63,13 @@ func (m *Manager) hubSudo(client *ssh.Client, sshUser string, req hubsudo.Reques
 	if sshUser != "root" {
 		cmd = "sudo -n " + cmd
 	}
+	// Подпись — тем ключом, которому хост доверяет (свой или прежнего
+	// хаба после переезда, см. hubsudo_legacy.go).
+	key, _, _ := m.keyFor(client)
 	var floor int64
 	for attempt := 0; attempt < 2; attempt++ {
 		req.Serial = nextSerial(floor)
-		env, err := hubsudo.Sign(m.signKey(), req)
+		env, err := hubsudo.Sign(key, req)
 		if err != nil {
 			return "", err
 		}
@@ -107,6 +110,8 @@ func (m *Manager) narrowSudo(client *ssh.Client, sshUser string) (string, error)
 	if sshUser == "root" || !validAdminUser.MatchString(sshUser) {
 		return "", msgs.Errorf("hub.narrowSudoUser", sshUser)
 	}
+	// Ключ прежнего хаба (переезд) — сменить на свой, если хост умеет.
+	m.rekeyIfLegacy(client, sshUser)
 	// Уже сужен (ключ хаба на месте, hub-sudo без пароля, полного sudo
 	// нет) — делать нечего; полный sudo для повтора не нужен.
 	if m.hasHubKey(client) {

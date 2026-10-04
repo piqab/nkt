@@ -1134,6 +1134,13 @@ func (s *Server) handleImportHosts(w http.ResponseWriter, r *http.Request) {
 		added = c.Added + c.Replaced
 	}
 	s.db.Audit(r.Context(), auth.Username(r.Context()), "hub.import", fmt.Sprintf("v%d", export.Version), auditOK(len(rep.Errors) == 0), rep)
+	// Где nkt нет (удалили перед переездом) — «не установлен», а не
+	// «недоступен»: проверка по SSH в фоне.
+	names := make([]string, 0, len(export.Hosts))
+	for _, h := range export.Hosts {
+		names = append(names, h.Name)
+	}
+	s.hub.CheckImportedHosts(names)
 	if rep.Errors == nil {
 		rep.Errors = []string{}
 	}

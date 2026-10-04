@@ -42,6 +42,7 @@ func (m *Manager) ExportHub(ctx context.Context, includeKey, includeUsers bool) 
 	}
 	if includeKey {
 		export.MasterKey = base64.StdEncoding.EncodeToString(m.key)
+		export.LegacySignKeys = m.LegacySignSeeds()
 	}
 	if includeUsers {
 		if export.Users, err = m.db.ExportUsers(ctx); err != nil {
@@ -297,7 +298,13 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 				export.Settings[aiKeyKVKey] = string(r)
 			}
 		}
+		// Ключ подписи прежнего хаба — для хостов с узким sudo: им хаб
+		// подписывает, пока они не сменят ключ на этот.
+		if err := m.importLegacySign(ctx, oldKey, export.LegacySignKeys); err != nil {
+			pre = append(pre, err.Error())
+		}
 		export.MasterKey = "" // never persisted; the point of this whole path is to not need it again
+		export.LegacySignKeys = nil
 	}
 
 	rep := m.db.ImportHosts(ctx, export, res)
