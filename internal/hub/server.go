@@ -257,6 +257,9 @@ func (s *Server) Handler() http.Handler {
 				// это то же состояние, только во времени.
 				r.Get("/hub/events", s.handleEvents)
 				r.Post("/hub/events/seen", s.handleEventsSeen)
+				// Опросить хост сейчас (щелчок по значку «недоступен»): на
+				// хосте ничего не меняет, поэтому — всем, кто видит список.
+				r.Post("/hub/hosts/{id}/poll", s.handleHostPoll)
 				r.Get("/hub/events/settings", s.handleEventSettings)
 				// Раскладку меню читают все: по ней строится меню.
 				r.Get("/hub/ui/nav/{kind}", s.handleNavLayout)

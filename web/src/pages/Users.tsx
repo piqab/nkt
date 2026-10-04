@@ -9,6 +9,7 @@ import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 /** Matches the minimum the API enforces, counted in characters. */
 const MIN_LENGTH = 10
@@ -16,7 +17,7 @@ const MIN_LENGTH = 10
 export default function Users({ me }: { me: Me }) {
   const { t } = useTranslation()
   const { data, error, loading, reload } = useApi<{ users: Account[] }>('/users', 30_000)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
 
   async function toggleDisabled(u: Account) {
@@ -27,7 +28,7 @@ export default function Users({ me }: { me: Me }) {
       await api(`/users/${u.username}`, { method: 'PATCH', body: { disabled: !u.disabled } })
       setNotice({
         kind: 'info',
-        text: t(u.disabled ? 'users.enabledNotice' : 'users.disabledNotice', { username: u.username }),
+        text: tx(u.disabled ? 'users.enabledNotice' : 'users.disabledNotice', { username: u.username }),
       })
       reload()
     } catch (err) {
@@ -44,7 +45,7 @@ export default function Users({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(`/users/${u.username}`, { method: 'PATCH', body: { role: nextRole } })
-      setNotice({ kind: 'info', text: t('users.roleChanged', { username: u.username, role: nextRole }) })
+      setNotice({ kind: 'info', text: tx('users.roleChanged', { username: u.username, role: nextRole }) })
       reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -59,7 +60,7 @@ export default function Users({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(`/users/${u.username}`, { method: 'DELETE' })
-      setNotice({ kind: 'info', text: t('users.deletedNotice', { username: u.username }) })
+      setNotice({ kind: 'info', text: tx('users.deletedNotice', { username: u.username }) })
       reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -145,7 +146,7 @@ export default function Users({ me }: { me: Me }) {
       <ErrorNote error={error} />
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
 

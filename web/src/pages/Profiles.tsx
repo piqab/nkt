@@ -12,6 +12,7 @@ import { EditTextModal } from '../components/EditTextModal'
 import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 /** Заготовка для нового профиля: показывает форму, а не пустой экран. */
 const TEMPLATE = `version: 1
@@ -137,7 +138,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
   const [plan, setPlan] = useState<ProfilePlan | null>(null)
   const [chosen, setChosen] = useState<Set<number>>(new Set())
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
   const [openJob, setOpenJob] = useState<Job | null>(null)
   const [detail, setDetail] = useState<PlanChange | null>(null)
@@ -170,7 +171,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
       }
       await list.reload()
       await current.reload()
-      setNotice({ kind: 'info', text: t('profiles.saved') })
+      setNotice({ kind: 'info', text: tx('profiles.saved') })
       return true
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -329,7 +330,7 @@ export default function Profiles({ me, hubLevel = false }: { me: Me; hubLevel?: 
 
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
       <ErrorNote error={list.error} />

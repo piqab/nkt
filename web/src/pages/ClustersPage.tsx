@@ -12,6 +12,7 @@ import { confirmAction } from '../components/confirm'
 import { ClustersCard } from '../components/Clusters'
 import { JobLogModal } from './Jobs'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 /**
  * Раздел «Кластеры» на хабе: все кластеры Kubernetes и создание кластера
@@ -58,7 +59,7 @@ export default function ClustersPage({ me }: { me: Me }) {
   const [creating, setCreating] = useState(false)
   const [helmMulti, setHelmMulti] = useState(false)
   const [hubJob, setHubJob] = useState<Job | null>(null)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [tick, setTick] = useState(0)
 
   async function openHubJob(id: number) {
@@ -89,7 +90,7 @@ export default function ClustersPage({ me }: { me: Me }) {
       <Banner kind="warn">{t('clusters.experimental')}</Banner>
       {notice && (
         <Banner kind={notice.kind} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
       <ClustersCard key={tick} onOpenJob={(id) => void openHubJob(id)} onChanged={() => setTick((n) => n + 1)} showEmpty />
@@ -128,7 +129,7 @@ function ClusterImagesCard({ canEdit }: { canEdit: boolean }) {
   const { t } = useTranslation()
   const images = useApi<{ images: ClusterImage[] }>('/hub/cluster-images')
   const [uploading, setUploading] = useState<number | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   function upload(file: File) {
@@ -148,12 +149,12 @@ function ClusterImagesCard({ canEdit }: { canEdit: boolean }) {
       try {
         setError((JSON.parse(xhr.responseText) as { error?: string }).error ?? t('common.httpCode', { code: xhr.status }))
       } catch {
-        setError(t('common.httpCode', { code: xhr.status }))
+        setError(tx('common.httpCode', { code: xhr.status }))
       }
     }
     xhr.onerror = () => {
       setUploading(null)
-      setError(t('vmimages.uploadFailed'))
+      setError(tx('vmimages.uploadFailed'))
     }
     xhr.send(file)
   }
@@ -184,7 +185,7 @@ function ClusterImagesCard({ canEdit }: { canEdit: boolean }) {
         ) : undefined
       }
     >
-      <ErrorNote error={error} />
+      <ErrorNote error={msg(error)} />
       <ErrorNote error={images.error} />
       {uploading !== null && <Progress percent={uploading} size="small" style={{ marginBottom: '0.5rem' }} />}
       {list.length === 0 ? (
@@ -209,7 +210,7 @@ function ClusterImagesCard({ canEdit }: { canEdit: boolean }) {
   )
 }
 
-function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStarted: (text: string, jobID: number) => void }) {
+function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStarted: (text: Msg, jobID: number) => void }) {
   const { t } = useTranslation()
   const hosts = useApi<HubHost[]>('/hub/hosts')
   const online = (hosts.data ?? []).filter((h) => h.status === 'online' && h.id > 0)
@@ -228,7 +229,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const [ports, setPorts] = useState<{ api: number | null; http: number | null; https: number | null }>({ api: 6443, http: 80, https: 443 })
   const [prepare, setPrepare] = useState(true)
   const [busy, setBusy] = useState<'create' | 'dry' | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   // Журнал сухого прогона — поверх формы, настройки не теряются.
   const [dryJob, setDryJob] = useState<Job | null>(null)
 
@@ -249,7 +250,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
   const presets = useApi<{ presets: { id: number; name: string; form: string }[] }>('/hub/cluster-presets')
   const [presetName, setPresetName] = useState('')
   const [presetBusy, setPresetBusy] = useState(false)
-  const [presetNote, setPresetNote] = useState<string | null>(null)
+  const [presetNote, setPresetNote] = useState<Msg | null>(null)
   const hostNameOf = (id: number | null) => (id === null ? '' : (hosts.data ?? []).find((h) => h.id === id)?.name ?? '')
 
   async function savePreset() {
@@ -265,7 +266,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
       }
       await api('/hub/cluster-presets', { method: 'POST', body: { name: pname, form } })
       await presets.reload()
-      setPresetNote(t('clusters.presetSaved', { name: pname }))
+      setPresetNote(tx('clusters.presetSaved', { name: pname }))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -280,7 +281,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     try {
       form = JSON.parse(p.form) as PresetForm
     } catch {
-      setError(t('clusters.presetBroken', { name: p.name }))
+      setError(tx('clusters.presetBroken', { name: p.name }))
       return
     }
     const byName = new Map((hosts.data ?? []).map((h) => [h.name, h.id]))
@@ -403,7 +404,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
         setDryJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
         return
       }
-      onStarted(t('clusters.started', { name }), res.job_id)
+      onStarted(tx('clusters.started', { name }), res.job_id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -418,7 +419,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
     <Modal title={t('clusters.newMultiTitle')} onClose={onClose} width={1180}>
       <Banner kind="warn">{t('clusters.experimental')}</Banner>
       <p className="small muted">{t('clusters.newMultiBody')}</p>
-      <ErrorNote error={error} />
+      <ErrorNote error={msg(error)} />
       <ErrorNote error={hosts.error} />
       <div className="row" style={{ gap: '0.5rem', alignItems: 'flex-end', marginBottom: '0.6rem', flexWrap: 'wrap' }}>
         <label style={{ minWidth: '16rem', margin: 0 }}>
@@ -443,7 +444,7 @@ function MultiClusterModal({ onClose, onStarted }: { onClose: () => void; onStar
             {t('clusters.presetDelete')}
           </Button>
         )}
-        {presetNote && <span className="small muted">{presetNote}</span>}
+        {presetNote && <span className="small muted">{msg(presetNote)}</span>}
       </div>
       <div className="grid grid-4" style={{ marginBottom: '0.6rem' }}>
         <label>

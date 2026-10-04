@@ -13,6 +13,7 @@ import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
 import { ProbeLink } from '../components/PortProbe'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 interface FirewallResponse {
   managers: FirewallManagerState[]
@@ -151,7 +152,7 @@ export default function Firewall({ me }: { me: Me }) {
   const [backend, setBackend] = useState('')
   const [chain, setChain] = useState('')
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [addForm] = Form.useForm<AddRuleValues>()
   const [addFirewalldForm] = Form.useForm<AddFirewalldValues>()
   const [installTarget, setInstallTarget] = useState<'ufw' | 'firewalld' | null>(null)
@@ -210,7 +211,7 @@ export default function Firewall({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(MANAGER_META[name].reloadPath, { method: 'POST' })
-      setNotice({ kind: 'info', text: t('fw.reloaded', { label: MANAGER_META[name].label }) })
+      setNotice({ kind: 'info', text: tx('fw.reloaded', { label: MANAGER_META[name].label }) })
       fw.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -259,10 +260,10 @@ export default function Firewall({ me }: { me: Me }) {
           comment: values.comment,
         },
       })
-      const ufwOffNote = ufwManager && !ufwManager.active ? t('fw.ufwOffNote') : ''
+      const ufwOffNote = ufwManager && !ufwManager.active ? tx('fw.ufwOffNote') : ''
       setNotice({
         kind: 'info',
-        text: t('fw.ruleAdded', { simulated: res.simulated ? t('fw.simulated') : '', output: res.output?.trim() || 'ok', note: ufwOffNote }),
+        text: tx('fw.ruleAdded', { simulated: res.simulated ? tx('fw.simulated') : '', output: res.output?.trim() || 'ok', note: ufwOffNote }),
       })
       addForm.setFieldsValue({ port: '', comment: '' })
       fw.reload()
@@ -276,7 +277,7 @@ export default function Firewall({ me }: { me: Me }) {
 
   async function addFirewalldRule(values: AddFirewalldValues) {
     if (!values.runtime && !values.permanent) {
-      setNotice({ kind: 'error', text: t('fw.selectOneOption') })
+      setNotice({ kind: 'error', text: tx('fw.selectOneOption') })
       return
     }
     const isService = values.targetType === 'service'
@@ -296,7 +297,7 @@ export default function Firewall({ me }: { me: Me }) {
       })
       setNotice({
         kind: 'info',
-        text: t('fw.ruleAdded', { simulated: res.simulated ? t('fw.simulated') : '', output: res.output?.trim() || 'ok', note: '' }),
+        text: tx('fw.ruleAdded', { simulated: res.simulated ? tx('fw.simulated') : '', output: res.output?.trim() || 'ok', note: '' }),
       })
       addFirewalldForm.setFieldsValue({ port: '', service: '' })
       fw.reload()
@@ -329,7 +330,7 @@ export default function Firewall({ me }: { me: Me }) {
         body.service = r.port_spec
       }
       await api('/firewall/firewalld/rules', { method: 'DELETE', body })
-      setNotice({ kind: 'info', text: t('fw.firewalldRuleDeleted', { zone: r.zone, label }) })
+      setNotice({ kind: 'info', text: tx('fw.firewalldRuleDeleted', { zone: r.zone, label }) })
       fw.reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -346,7 +347,7 @@ export default function Firewall({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(`/firewall/rules/${rule.number}`, { method: 'DELETE', body: { expected: rule.text } })
-      setNotice({ kind: 'info', text: t('fw.ruleNumberDeleted', { number: rule.number }) })
+      setNotice({ kind: 'info', text: tx('fw.ruleNumberDeleted', { number: rule.number }) })
       fw.reload()
       numbered.reload()
     } catch (err) {
@@ -372,7 +373,7 @@ export default function Firewall({ me }: { me: Me }) {
         method: 'DELETE',
         body: { action: added.action || 'allow', port: added.port, protocol: added.protocol || 'tcp', from: '', comment: '' },
       })
-      setNotice({ kind: 'info', text: t('fw.ruleDeletedSpec', { spec: added.spec }) })
+      setNotice({ kind: 'info', text: tx('fw.ruleDeletedSpec', { spec: added.spec }) })
       fw.reload()
       numbered.reload()
     } catch (err) {
@@ -394,10 +395,10 @@ export default function Firewall({ me }: { me: Me }) {
         method: 'POST',
         body: { action: 'allow', port: l.port, protocol: l.protocol, from: '', comment: '' },
       })
-      const ufwOffNote = ufwManager && !ufwManager.active ? t('fw.ufwOffNote') : ''
+      const ufwOffNote = ufwManager && !ufwManager.active ? tx('fw.ufwOffNote') : ''
       setNotice({
         kind: 'info',
-        text: t('fw.ruleAdded', { simulated: res.simulated ? t('fw.simulated') : '', output: res.output?.trim() || 'ok', note: ufwOffNote }),
+        text: tx('fw.ruleAdded', { simulated: res.simulated ? tx('fw.simulated') : '', output: res.output?.trim() || 'ok', note: ufwOffNote }),
       })
       fw.reload()
       numbered.reload()
@@ -626,7 +627,7 @@ export default function Firewall({ me }: { me: Me }) {
       <ErrorNote error={fw.error} />
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
 

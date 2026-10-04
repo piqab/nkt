@@ -14,6 +14,7 @@ import { RowAction } from '../components/RowAction'
 import { PowerToggle, servicePowerState } from '../components/PowerToggle'
 import { ProbeLink } from '../components/PortProbe'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 const ACTION_LABEL_KEY: Record<string, string> = {
   start: 'services.actionStart',
@@ -163,7 +164,7 @@ export default function Services({ me }: { me: Me }) {
   const focusService = useFocusRow(!!services.data)
   const misc = useApi<{ listeners: Listener[] }>('/misc', 60_000)
   const [busy, setBusy] = useState<string | null>(null)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [killBusy, setKillBusy] = useState<string | null>(null)
   // Set when a SIGTERM'd process is still listed after a rescan — offers
   // the SIGKILL escalation the operator asked for, without jumping
@@ -200,10 +201,10 @@ export default function Services({ me }: { me: Me }) {
       const res = await api<{ output?: string; valid?: boolean; simulated?: boolean }>(path, {
         method: 'POST',
       })
-      const suffix = res.simulated ? t('services.simulatedSuffix') : ''
+      const suffix = res.simulated ? tx('services.simulatedSuffix') : ''
       setNotice({
         kind: res.valid === false ? 'error' : 'info',
-        text: t('services.actionDone', { service, action: t(ACTION_LABEL_KEY[action]), output: res.output?.trim() || t('services.done'), suffix }),
+        text: tx('services.actionDone', { service, action: tx(ACTION_LABEL_KEY[action]), output: res.output?.trim() || tx('services.done'), suffix }),
       })
       // The backend only kicks off a fire-and-forget background rescan
       // (rescanLater) — a bare reload() right after would just reread the
@@ -246,9 +247,9 @@ export default function Services({ me }: { me: Me }) {
       const stillThere = fresh.listeners.some((x) => listenerKey(x) === key)
       if (signal === 'TERM' && stillThere) {
         setKillEscalation(l)
-        setNotice({ kind: 'info', text: t('services.notTerminated', { pid: l.pid }) })
+        setNotice({ kind: 'info', text: tx('services.notTerminated', { pid: l.pid }) })
       } else {
-        setNotice({ kind: 'info', text: t('services.signalSent', { pid: l.pid, signal }) })
+        setNotice({ kind: 'info', text: tx('services.signalSent', { pid: l.pid, signal }) })
       }
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -381,7 +382,7 @@ export default function Services({ me }: { me: Me }) {
       <ErrorNote error={services.error} />
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
       {killEscalation && (

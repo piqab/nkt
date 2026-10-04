@@ -814,7 +814,9 @@
     },
     "colVersionHint": "nkt version on the host",
     "colLastSeenHint": "When the host was last seen on the network",
-    "sudoNarrow": "narrow sudo: without a password the hub may only run nkt operations it signs (install and update, the service, apt proxy)"
+    "sudoNarrow": "narrow sudo: without a password the hub may only run nkt operations it signs (install and update, the service, apt proxy)",
+    "statusRecheckHint": "Click to check now.",
+    "statusRechecking": "Checking the host connection…"
   },
   "events": {
     "title": "Alerts",

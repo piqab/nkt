@@ -10,6 +10,7 @@ import { DataTable } from '../components/DataTable'
 import { confirmAction } from '../components/confirm'
 import { K8sUpgradeModal } from '../components/K8sUpgrade'
 import { useJobLauncher } from '../components/useJobLauncher'
+import { msg, tx, type Msg } from '../msg'
 
 /**
  * Вкладка Kubernetes на хосте (internal/k8s): что стоит, узлы кластера и
@@ -40,7 +41,7 @@ export default function Kubernetes({ me }: { me: Me }) {
   const st = status.data?.status
   const isServer = !!st?.installed && st.role === 'server' && st.active
   const [busy, setBusy] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Msg | null>(null)
   const [upgrading, setUpgrading] = useState(false)
   const upgradeJob = useJobLauncher(() => void status.reload())
 
@@ -52,7 +53,7 @@ export default function Kubernetes({ me }: { me: Me }) {
     setBusy(true)
     try {
       await api('/k8s/uninstall', { method: 'POST' })
-      setNotice(t('k8s.uninstalled'))
+      setNotice(tx('k8s.uninstalled'))
       await status.reload()
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err))
@@ -103,7 +104,7 @@ export default function Kubernetes({ me }: { me: Me }) {
           </div>
         }
       >
-        {notice && <Banner kind="info" onClose={() => setNotice(null)}>{notice}</Banner>}
+        {notice && <Banner kind="info" onClose={() => setNotice(null)}>{msg(notice)}</Banner>}
         {upgradeJob.modal}
         {upgrading && (
           <K8sUpgradeModal

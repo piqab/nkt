@@ -8,6 +8,7 @@ import { DataTable } from './DataTable'
 import { confirmAction } from './confirm'
 import { unifiedDiff } from './textDiff'
 import { HelpButton } from './Docs'
+import { msg, tx, type Msg } from '../msg'
 
 /** Адресат исходящих вебхуков (секрет не приходит — показывается один раз). */
 interface OutHook {
@@ -46,9 +47,9 @@ export function OutgoingWebhooksCard({ admin }: { admin: boolean }) {
   const hosts = useApi<HubHost[]>(admin ? '/hub/hosts' : null)
   const [edit, setEdit] = useState<OutHook | 'new' | null>(null)
   const [secret, setSecret] = useState<{ name: string; secret: string } | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   const [testing, setTesting] = useState<number | null>(null)
-  const [note, setNote] = useState<string | null>(null)
+  const [note, setNote] = useState<Msg | null>(null)
   const hostName = useMemo(() => {
     const m = new Map<number, string>()
     for (const h of hosts.data ?? []) m.set(h.id, h.name)
@@ -128,8 +129,8 @@ export function OutgoingWebhooksCard({ admin }: { admin: boolean }) {
               setNote(null)
               try {
                 const res = await api<{ code: number; error?: string }>(`/hub/webhooks/${h.id}/test`, { method: 'POST' })
-                if (res.error) setError(t('webhooks.testFailed', { name: h.name, error: res.error }))
-                else setNote(t('webhooks.testOK', { name: h.name, code: res.code }))
+                if (res.error) setError(tx('webhooks.testFailed', { name: h.name, error: res.error }))
+                else setNote(tx('webhooks.testOK', { name: h.name, code: res.code }))
                 void list.reload()
               } catch (err) {
                 setError(errText(err))
@@ -189,12 +190,12 @@ export function OutgoingWebhooksCard({ admin }: { admin: boolean }) {
       <ErrorNote error={list.error} />
       {error && (
         <Banner kind="error" onClose={() => setError(null)}>
-          {error}
+          {msg(error)}
         </Banner>
       )}
       {note && (
         <Banner kind="info" onClose={() => setNote(null)}>
-          {note}
+          {msg(note)}
         </Banner>
       )}
       {list.loading && !list.data ? (
@@ -270,7 +271,7 @@ function HookModal({
     : { name: '', url: '', kinds: ['unreachable', 'problems', 'job-failed', 'deploy-failed'], hosts: [], groups: [], lang: i18n.language.startsWith('en') ? 'en' : 'ru', enabled: true }
   const [d, setD] = useState<Draft>(initial)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   const diff = hook ? unifiedDiff(draftText(initial, hostName, kindLabel, t), draftText(d, hostName, kindLabel, t), t('tokens.saved'), t('tokens.draft')) : ''
   const changed = !hook || diff.trim() !== ''
   const hostOptions = [{ value: LOCAL_ID, label: 'localhost' }, ...hosts.filter((h) => h.id !== LOCAL_ID).map((h) => ({ value: h.id, label: h.name }))]
@@ -335,7 +336,7 @@ function HookModal({
             <DiffView text={diff} />
           </>
         )}
-        {error && <Banner kind="error">{error}</Banner>}
+        {error && <Banner kind="error">{msg(error)}</Banner>}
         <div>
           <Button
             type="primary"

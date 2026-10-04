@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next'
 import { api, hostScope, LOCAL_HOST_ID, useApi } from '../api'
 import type { NetworkInterface } from '../types'
 import { Modal } from './ui'
+import { msg, tx, type Msg } from '../msg'
 
 /**
  * Проверка порта — то, что делают руками, когда «сервис вроде слушает,
@@ -155,7 +156,7 @@ export function PortProbeModal({ address, port, onClose }: { address: string; po
   const [timeout, setTimeout_] = useState(5)
   const [busy, setBusy] = useState<'host' | 'hub' | null>(null)
   const [result, setResult] = useState<{ from: 'host' | 'hub'; res: ProbeResult } | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   const [view, setView] = useState<'text' | 'render'>('text')
 
   const viaHub = hostScope.id !== null && hostScope.id !== LOCAL_HOST_ID
@@ -197,7 +198,7 @@ export function PortProbeModal({ address, port, onClose }: { address: string; po
       try {
         JSON.parse(body)
       } catch {
-        setError(t('probe.badJSON'))
+        setError(tx('probe.badJSON'))
         setBusy(null)
         return
       }
@@ -380,7 +381,7 @@ export function PortProbeModal({ address, port, onClose }: { address: string; po
           )}
         </div>
 
-        {error && <div style={{ color: 'var(--status-critical)' }}>{error}</div>}
+        {error && <div style={{ color: 'var(--status-critical)' }}>{msg(error)}</div>}
 
         {result && <ProbeOutcome result={result.res} from={result.from} view={view} setView={setView} port={port} />}
       </div>

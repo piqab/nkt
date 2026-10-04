@@ -139,8 +139,10 @@ external network → service → listener → pool → backend → container or 
 Edges come from the configs (`proxy_pass`, `upstream`, `use_backend`,
 published ports), node state from live listeners, containers and
 findings. The column layout stays stable between scans; zoom and drag
-with the mouse, node details on hover. The selected node's panel has a
-button to whatever is responsible for it: a service opens "Services" with
+with the mouse, link highlighting on hover. A click on a node opens a
+window with its details: kind, state, the node's findings and all its
+parameters in full; it also has a button to whatever is responsible for
+it: a service opens "Services" with
 its row highlighted, a listener or pool its config, a Docker or Podman
 container its row in "Containers", LXD, machines and Kubernetes their tab,
 a network "Network interfaces", an undeclared listener "Firewall".

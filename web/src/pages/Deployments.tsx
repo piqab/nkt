@@ -15,6 +15,7 @@ import { SitesPanel } from '../components/SitesPanel'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
 import { HelpButton, TitleHelp } from '../components/Docs'
 import { PIPELINE_EXAMPLES, type PipelineExample } from '../pipelineExamples'
+import { msg, tx, type Msg } from '../msg'
 
 interface Deployment {
   id: number
@@ -649,7 +650,7 @@ function ComposeFromLink({
   const [pending, setPending] = useState<PipelineExample | null>(null)
   // Разбор самого файла (своя ссылка): кэш по ссылке и выбор сервиса сайта.
   const [scan, setScan] = useState<{ link: string; scan: ComposeScan } | null>(null)
-  const [scanNote, setScanNote] = useState<string | null>(null)
+  const [scanNote, setScanNote] = useState<Msg | null>(null)
   const [scanning, setScanning] = useState(false)
   const [siteChoice, setSiteChoice] = useState<string>(init?.site || 'auto')
   const [scanWithAccess, setScanWithAccess] = useState(false)
@@ -679,12 +680,12 @@ function ComposeFromLink({
             setScan({ link, scan: res.scan })
             setScanWithAccess(!!res.has_access)
           } else if (res.reason === 'no_access') {
-            setScanNote(t('deploy.scanClosed'))
+            setScanNote(tx('deploy.scanClosed'))
           } else {
-            setScanNote(t('deploy.scanFailed', { error: gitReasonText(t, res.reason, res.error) }))
+            setScanNote(tx('deploy.scanFailed', { error: gitReasonText(t, res.reason, res.error) }))
           }
         } catch (err) {
-          setScanNote(t('deploy.scanFailed', { error: errText(err) }))
+          setScanNote(tx('deploy.scanFailed', { error: errText(err) }))
         } finally {
           setScanning(false)
         }
@@ -822,7 +823,7 @@ function ComposeFromLink({
         </div>
       )}
       {bad && <span className="small" style={{ color: 'var(--status-error)' }}>{t('deploy.fromLinkBad')}</span>}
-      {scanNote && <span className="small" style={{ color: 'var(--status-warning)', fontWeight: 600 }}>{scanNote}</span>}
+      {scanNote && <span className="small" style={{ color: 'var(--status-warning)', fontWeight: 600 }}>{msg(scanNote)}</span>}
       {scan?.link === link && (
         <span className="small muted">
           {t('deploy.scanDone', { services: scan.scan.services.length, vars: scan.scan.vars.length })}

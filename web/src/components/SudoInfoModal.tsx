@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import { Banner, Loading, Modal } from './ui'
 import { confirmAction } from './confirm'
+import { msg, tx, type Msg } from '../msg'
 
 interface SudoSource {
   file: string
@@ -43,7 +44,7 @@ export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId
   const { t } = useTranslation()
   const info = useApi<SudoInfo>(`/hub/hosts/${hostId}/sudo`)
   const [busy, setBusy] = useState<string | null>(null)
-  const [note, setNote] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [note, setNote] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const d = info.data
   const c = d?.check
   // Правило nkt уже узкое, полный sudo даёт чужое.
@@ -66,7 +67,7 @@ export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId
     setNote(null)
     try {
       await api(`/hub/hosts/${hostId}/sudo/rule-off`, { method: 'POST', body: { file: s.file, line: s.line, text: s.text } })
-      setNote({ kind: 'info', text: t('sudo.ruleOffDone', { file: s.file }) })
+      setNote({ kind: 'info', text: tx('sudo.ruleOffDone', { file: s.file }) })
       onChanged()
       await info.reload()
     } catch (err) {
@@ -90,7 +91,7 @@ export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId
         })
       } else {
         await api(`/hub/hosts/${hostId}/sudo/remove`, { method: 'POST' })
-        setNote({ kind: 'info', text: t('sudo.removed') })
+        setNote({ kind: 'info', text: tx('sudo.removed') })
       }
       onChanged()
       await info.reload()
@@ -150,7 +151,7 @@ export function SudoInfoModal({ hostId, hostName, onClose, onChanged }: { hostId
           <p className="small muted" style={{ margin: 0 }}>
             {t('sudo.explain')}
           </p>
-          {note && <Banner kind={note.kind}>{note.text}</Banner>}
+          {note && <Banner kind={note.kind}>{msg(note.text)}</Banner>}
           <div>
             <div className="small" style={{ marginBottom: '0.25rem' }}>
               <strong>{t('sudo.opsTitle', { command: d.command })}</strong>

@@ -1553,3 +1553,28 @@ func (s *Server) proxyHost(w http.ResponseWriter, r *http.Request) {
 	}
 	s.hub.Proxy(id).ServeHTTP(w, r2)
 }
+
+// handleHostPoll — POST /hub/hosts/{id}/poll: опросить хост сейчас, а не
+// ждать таймера (щелчок по красному значку в списке хостов).
+func (s *Server) handleHostPoll(w http.ResponseWriter, r *http.Request) {
+	id, err := hostIDParam(r)
+	if err != nil {
+		writeErr(w, r, http.StatusBadRequest, err)
+		return
+	}
+	if allow := s.scopeFilter(r.Context()); allow != nil && !allow(id) {
+		writeErr(w, r, http.StatusForbidden, msgs.Errorf("auth.tokenHostDenied"))
+		return
+	}
+	host, err := s.db.HostByID(r.Context(), id)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	if host.Status != store.HostStatusOnline {
+		writeJSON(w, http.StatusOK, map[string]any{"polled": false})
+		return
+	}
+	s.hub.pollHost(r.Context(), id)
+	writeJSON(w, http.StatusOK, map[string]any{"polled": true})
+}

@@ -26,12 +26,13 @@ import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
 import { LXDImagePicker } from '../components/LXDImagePicker'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 export default function LXD({ me }: { me: Me }) {
   const { t } = useTranslation()
   const instances = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [creating, setCreating] = useState(false)
   const [consoleFor, setConsoleFor] = useState<string | null>(null)
   const [logsFor, setLogsFor] = useState<string | null>(null)
@@ -84,7 +85,7 @@ export default function LXD({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(`/lxd/instances/${name}/${action}`, { method: 'POST' })
-      setNotice({ kind: 'info', text: t('lxd.actionDone', { name, action }) })
+      setNotice({ kind: 'info', text: tx('lxd.actionDone', { name, action }) })
       // The backend only kicks off a fire-and-forget background rescan
       // (rescanLater) — a bare reload() right after would just reread the
       // still-stale cached snapshot. /inventory/refresh runs the same
@@ -264,7 +265,7 @@ export default function LXD({ me }: { me: Me }) {
       <ErrorNote error={instances.error} />
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
       {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}

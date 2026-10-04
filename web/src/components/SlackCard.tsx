@@ -6,6 +6,7 @@ import { Banner, Card, DiffView, ErrorNote, Loading, Modal } from './ui'
 import { unifiedDiff } from './textDiff'
 import { HelpButton } from './Docs'
 import { zoneOptions } from './TelegramCard'
+import { msg, tx, type Msg } from '../msg'
 
 interface Channel {
   id: string
@@ -45,7 +46,7 @@ export function SlackCard({ admin }: { admin: boolean }) {
   const edges = useApi<{ edges: EdgeLite[] }>(admin ? '/hub/edges' : null)
   const kinds = useApi<{ kinds: string[] }>(admin ? '/hub/webhooks' : null)
   const [edit, setEdit] = useState(false)
-  const [note, setNote] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [note, setNote] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   if (!admin) return null
   const s = st.data
   const via = (edges.data?.edges ?? []).filter((e) => e.roles.includes('callbacks') && e.domain)
@@ -66,7 +67,7 @@ export function SlackCard({ admin }: { admin: boolean }) {
       <ErrorNote error={st.error} />
       {note && (
         <Banner kind={note.kind} onClose={() => setNote(null)}>
-          {note.text}
+          {msg(note.text)}
         </Banner>
       )}
       {!s ? (
@@ -103,7 +104,7 @@ export function SlackCard({ admin }: { admin: boolean }) {
                   onClick={async () => {
                     try {
                       await api('/hub/slack/test', { method: 'POST', body: { channel: c.id } })
-                      setNote({ kind: 'info', text: t('telegram.testSent', { id: c.id }) })
+                      setNote({ kind: 'info', text: tx('telegram.testSent', { id: c.id }) })
                     } catch (err) {
                       setNote({ kind: 'error', text: errText(err) })
                     }

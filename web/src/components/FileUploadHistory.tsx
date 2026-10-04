@@ -10,6 +10,7 @@ import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
 import { VersionHistory } from './VersionHistory'
+import { msg, tx, type Msg } from '../msg'
 
 /**
  * История загрузок «Дисков → Файлов»: план загрузки с диффом и выбором
@@ -481,7 +482,7 @@ export function HistoryStorageModal({ onClose }: { onClose: () => void }) {
   const [limits, setLimits] = useState<HistoryUsage['limits'] | null>(null)
   const [olderDays, setOlderDays] = useState(14)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Msg | null>(null)
   const usage = data.data?.usage
   const current = limits ?? usage?.limits
 
@@ -490,7 +491,7 @@ export function HistoryStorageModal({ onClose }: { onClose: () => void }) {
     setError(null)
     try {
       const res = await api<{ deleted: number }>('/files/history/delete', { method: 'POST', body })
-      setNotice(t('files.history.deleted', { count: res.deleted }))
+      setNotice(tx('files.history.deleted', { count: res.deleted }))
       void data.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -502,7 +503,7 @@ export function HistoryStorageModal({ onClose }: { onClose: () => void }) {
     setError(null)
     try {
       const res = await api<{ pruned: number }>('/files/history/settings', { method: 'PUT', body: current })
-      setNotice(t('files.history.saved', { count: res.pruned }))
+      setNotice(tx('files.history.saved', { count: res.pruned }))
       setLimits(null)
       void data.reload()
     } catch (err) {
@@ -513,7 +514,7 @@ export function HistoryStorageModal({ onClose }: { onClose: () => void }) {
   return (
     <Modal title={t('files.history.title')} onClose={onClose} width="min(96vw, 900px)">
       {error && <Banner kind="error">{error}</Banner>}
-      {notice && <Banner kind="info">{notice}</Banner>}
+      {notice && <Banner kind="info">{msg(notice)}</Banner>}
       {!usage || !current ? (
         <Spinner />
       ) : (

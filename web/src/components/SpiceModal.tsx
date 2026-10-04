@@ -3,6 +3,7 @@ import { Button } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { wsURL } from '../hooks/usePty'
 import { Banner, Modal } from './ui'
+import { msg, tx, type Msg } from '../msg'
 
 // Клиент spice-html5 (LGPL-3.0) лежит отдельными неминифицированными
 // файлами в /vendor/spice-html5/ и грузится только при открытии окна —
@@ -39,7 +40,7 @@ export function SpiceModal({ title, wsPath, onClose, extra, below }: { title: st
   const connRef = useRef<SpiceConn | null>(null)
   const modRef = useRef<SpiceModule | null>(null)
   const [state, setState] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
-  const [reason, setReason] = useState<string | null>(null)
+  const [reason, setReason] = useState<Msg | null>(null)
 
   useEffect(() => {
     if (!screen) return
@@ -48,7 +49,7 @@ export function SpiceModal({ title, wsPath, onClose, extra, below }: { title: st
     const timer = window.setTimeout(() => {
       if (!connected && !cancelled) {
         setState('disconnected')
-        setReason(t('spice.noConnect'))
+        setReason(tx('spice.noConnect'))
       }
     }, 15_000)
     loadSpice()
@@ -79,7 +80,7 @@ export function SpiceModal({ title, wsPath, onClose, extra, below }: { title: st
       })
       .catch((e) => {
         setState('disconnected')
-        setReason(t('spice.loadFailed', { error: e instanceof Error ? e.message : String(e) }))
+        setReason(tx('spice.loadFailed', { error: e instanceof Error ? e.message : String(e) }))
       })
     return () => {
       cancelled = true
@@ -108,7 +109,7 @@ export function SpiceModal({ title, wsPath, onClose, extra, below }: { title: st
         {extra}
       </div>
       {below}
-      {reason && <Banner kind="error">{reason}</Banner>}
+      {reason && <Banner kind="error">{msg(reason)}</Banner>}
       <div className="modal-fill" style={{ width: '100%', height: '70vh', background: '#000', borderRadius: 'var(--radius-sm)', overflow: 'auto' }}>
         <div id={screenId} ref={setScreen} tabIndex={0} style={{ display: 'inline-block', minWidth: '100%', minHeight: '100%', outline: 'none' }} />
       </div>

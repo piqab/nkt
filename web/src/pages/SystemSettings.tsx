@@ -7,6 +7,7 @@ import { Banner, Card, ErrorNote, Loading } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { LocaleCard, TimeSyncCard } from '../components/LocaleTimeCards'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 interface SystemSettings {
   hostname: string
@@ -68,7 +69,7 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
   const [form] = Form.useForm<{ hostname: string; timezone: string }>()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Msg | null>(null)
 
   const [wifiSSID, setWifiSSID] = useState<string | null>(null)
   const [wifiPassword, setWifiPassword] = useState('')
@@ -91,7 +92,7 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api('/system/settings', { method: 'POST', body })
-      setNotice(t('sysSettings.saved', { what }))
+      setNotice(tx('sysSettings.saved', { what }))
       await settings.reload()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
@@ -169,7 +170,7 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
       {error && <Banner kind="error">{error}</Banner>}
       {notice && (
         <Banner kind="info" onClose={() => setNotice(null)}>
-          {notice}
+          {msg(notice)}
         </Banner>
       )}
       {settings.data?.notes?.map((n) => (

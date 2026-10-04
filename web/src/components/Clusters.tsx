@@ -11,6 +11,7 @@ import { DataTable } from './DataTable'
 import { RowAction } from './RowAction'
 import { K8sUpgradeModal } from './K8sUpgrade'
 import { confirmAction } from './confirm'
+import { tx, type Msg } from '../msg'
 
 /**
  * Кластеры Kubernetes на виртуалках хоста (internal/hub/cluster.go):
@@ -51,7 +52,7 @@ export function NewClusterModal({
 }: {
   host: HubHost
   onClose: () => void
-  onStarted: (text: string, jobID: number) => void
+  onStarted: (text: Msg, jobID: number) => void
 }) {
   const { t } = useTranslation()
   const images = useApi<{ catalog: { id: string; name: string }[]; local: { id: string; downloaded: boolean }[] }>(`/hosts/${host.id}/vm/images`, 10_000)
@@ -119,7 +120,7 @@ export function NewClusterModal({
         setDryJob(await api<Job>(`/hosts/local/jobs/${res.job_id}`))
         return
       }
-      onStarted(t('clusters.started', { name }), res.job_id)
+      onStarted(tx('clusters.started', { name }), res.job_id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

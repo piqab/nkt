@@ -11,6 +11,7 @@ import { confirmAction } from '../components/confirm'
 import { JobLogModal } from './Jobs'
 import ScriptScheme from '../components/ScriptScheme'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 /**
  * Сценарии хаба: короткий построчный язык, которым описывают, что
@@ -128,7 +129,7 @@ export default function Scripts({ me }: { me: Me }) {
   const [color, setColor] = useState('')
   const [tab, setTab] = useState<'text' | 'scheme' | 'help'>('text')
   const [busy, setBusy] = useState<string | null>(null)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [check, setCheck] = useState<CheckResult | null>(null)
   const [showVersions, setShowVersions] = useState(false)
   const [openJob, setOpenJob] = useState<Job | null>(null)
@@ -175,7 +176,7 @@ export default function Scripts({ me }: { me: Me }) {
       }
       await list.reload()
       await current.reload()
-      setNotice({ kind: 'info', text: t('scripts.saved') })
+      setNotice({ kind: 'info', text: tx('scripts.saved') })
       return id
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -252,7 +253,7 @@ export default function Scripts({ me }: { me: Me }) {
       <Banner kind="warn">{t('scripts.experimental')}</Banner>
       {notice && (
         <Banner kind={notice.kind} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
 

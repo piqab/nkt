@@ -5,6 +5,7 @@ import { api, useApi } from '../api'
 import { Banner, Card, DiffView, ErrorNote, Loading, Modal, formatBytesShort } from './ui'
 import { invalidateAIAnswers } from '../aiAnswers'
 import { EditTextModal } from './EditTextModal'
+import { msg, tx, type Msg } from '../msg'
 
 /**
  * Настройка модели — одна на всю установку, на хабе: ключ хранится
@@ -111,7 +112,7 @@ export function AISettingsCard() {
   const [saved, setSaved] = useState(false)
   // Итог проверки: живой запрос к модели теми настройками, что сейчас в
   // форме, — иначе неверный ключ обнаружится только при первом разборе.
-  const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null)
+  const [test, setTest] = useState<{ ok: boolean; text: Msg } | null>(null)
 
   // Список моделей провайдера — только по кнопке и только на время
   // выбора: при смене провайдера или адреса он устаревает.
@@ -237,7 +238,7 @@ export function AISettingsCard() {
       })
       setTest(
         res.ok
-          ? { ok: true, text: t('ai.testOK', { ms: res.took_ms, reply: res.reply }) }
+          ? { ok: true, text: tx('ai.testOK', { ms: res.took_ms, reply: res.reply }) }
           : { ok: false, text: res.message ?? '' },
       )
       status.reload()
@@ -410,7 +411,7 @@ export function AISettingsCard() {
               растаскивать кнопки и счётчики. */}
           {test && (
             <div className="small" style={{ color: test.ok ? 'var(--status-good)' : 'var(--status-critical)', whiteSpace: 'pre-wrap' }}>
-              {test.ok ? '✓' : '✗'} {test.text}
+              {test.ok ? '✓' : '✗'} {msg(test.text)}
             </div>
           )}
 

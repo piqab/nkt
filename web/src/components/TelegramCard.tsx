@@ -5,6 +5,7 @@ import { api, useApi } from '../api'
 import { Banner, Card, DiffView, ErrorNote, Loading, Modal, formatRelative } from './ui'
 import { unifiedDiff } from './textDiff'
 import { HelpButton } from './Docs'
+import { msg, tx, type Msg } from '../msg'
 
 interface Chat {
   id: number
@@ -38,7 +39,7 @@ export function TelegramCard({ admin }: { admin: boolean }) {
   const st = useApi<TelegramStatus>(admin ? '/hub/telegram' : null, 15_000)
   const kinds = useApi<{ kinds: string[] }>(admin ? '/hub/webhooks' : null)
   const [edit, setEdit] = useState(false)
-  const [note, setNote] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [note, setNote] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   if (!admin) return null
   const s = st.data
   return (
@@ -57,7 +58,7 @@ export function TelegramCard({ admin }: { admin: boolean }) {
       <ErrorNote error={st.error} />
       {note && (
         <Banner kind={note.kind} onClose={() => setNote(null)}>
-          {note.text}
+          {msg(note.text)}
         </Banner>
       )}
       {!s ? (
@@ -86,7 +87,7 @@ export function TelegramCard({ admin }: { admin: boolean }) {
                   onClick={async () => {
                     try {
                       await api('/hub/telegram/test', { method: 'POST', body: { chat_id: c.id } })
-                      setNote({ kind: 'info', text: t('telegram.testSent', { id: c.id }) })
+                      setNote({ kind: 'info', text: tx('telegram.testSent', { id: c.id }) })
                     } catch (err) {
                       setNote({ kind: 'error', text: errText(err) })
                     }

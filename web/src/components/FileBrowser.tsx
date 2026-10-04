@@ -15,6 +15,7 @@ import { RowAction } from './RowAction'
 import { confirmAction } from './confirm'
 import { JobLogModal } from '../pages/Jobs'
 import { collectIgnoreSets, ignoredBy, isHiddenPath } from '../gitignore'
+import { msg, tx, type Msg } from '../msg'
 
 /**
  * Проводник по каталогам хоста — раздел «Диски → Файлы».
@@ -180,7 +181,7 @@ export default function FileBrowser() {
   const me = useApi<Me>('/auth/me')
   // План загрузки: очередь, ответ сервера и сколько отсеяно «без скрытых».
   const [plan, setPlan] = useState<{ pending: Pending[]; plan: UploadPlan; skipped: number } | null>(null)
-  const [planning, setPlanning] = useState<string | null>(null)
+  const [planning, setPlanning] = useState<Msg | null>(null)
   const [uploadsModal, setUploadsModal] = useState(false)
   const [protectModal, setProtectModal] = useState(false)
   const [storageModal, setStorageModal] = useState(false)
@@ -241,10 +242,10 @@ export default function FileBrowser() {
     try {
       const entries = []
       for (let i = 0; i < list.length; i++) {
-        setPlanning(t('files.plan.hashing', { done: i, total: list.length }))
+        setPlanning(tx('files.plan.hashing', { done: i, total: list.length }))
         entries.push({ rel: list[i].rel, size: list[i].file.size, sha256: await sha256Of(list[i].file) })
       }
-      setPlanning(t('files.plan.comparing'))
+      setPlanning(tx('files.plan.comparing'))
       const res = await api<UploadPlan>('/files/upload/plan', { method: 'POST', body: { dir, entries } })
       setPlan({ pending: list, plan: res, skipped })
     } catch (err) {
@@ -543,7 +544,7 @@ export default function FileBrowser() {
 
       {planning && (
         <div className="small muted" style={{ margin: '0.4rem 0' }}>
-          <Spinner /> {planning}
+          <Spinner /> {msg(planning)}
         </div>
       )}
       {upload && (

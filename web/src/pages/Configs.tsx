@@ -14,6 +14,7 @@ import { DataTable } from '../components/DataTable'
 import PathPicker from '../components/PathPicker'
 import { RowAction } from '../components/RowAction'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 const BLOCK_SERVICES = new Set(['nginx', 'haproxy', 'docker', 'caddy', 'libvirt'])
 
@@ -149,7 +150,7 @@ export default function Configs({ me }: { me: Me }) {
   // помешала песочница, повторяется мимо неё, и до этой кнопки дело не
   // доходит.
   const [allowingWrite, setAllowingWrite] = useState(false)
-  const [allowNotice, setAllowNotice] = useState<string | null>(null)
+  const [allowNotice, setAllowNotice] = useState<Msg | null>(null)
 
   async function allowWrite() {
     if (!path) return
@@ -162,7 +163,7 @@ export default function Configs({ me }: { me: Me }) {
         { method: 'POST', body: { path } },
       )
       if (res.restarting) {
-        setAllowNotice(t('configs.allowWriteRestarting'))
+        setAllowNotice(tx('configs.allowWriteRestarting'))
         // Служба перезапускается — файл станет доступен на запись только
         // после этого, поэтому список и сам файл перечитываются с
         // задержкой, а не сразу.
@@ -658,7 +659,7 @@ export default function Configs({ me }: { me: Me }) {
                             </span>
                           )}
                           {allowNotice && (
-                            <span className="small mono" style={{ whiteSpace: 'pre-wrap' }}>{allowNotice}</span>
+                            <span className="small mono" style={{ whiteSpace: 'pre-wrap' }}>{msg(allowNotice)}</span>
                           )}
                         </div>
                       </Banner>
