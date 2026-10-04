@@ -22,21 +22,20 @@ export default function Audit() {
   const [result, setResult] = useState('')
   const [limit, setLimit] = useState(200)
 
-  const audit = useApi<{ entries: AuditEntry[] }>(`/audit${qs({ action, result, limit })}`, 30_000)
+  const audit = useApi<{ entries: AuditEntry[]; kinds?: string[] }>(`/audit${qs({ action, result, limit })}`, 30_000)
   const jobs = useApi<JobsResponse>('/monitor/jobs', 30_000)
 
-  // action.*/config.* etc. are literal audit-log prefixes (Go's own action
-  // naming, see internal/api's writeAudit calls), not translatable text.
+  // Виды — префиксы действий, что есть в журнале (хост отдаёт их сам):
+  // новые разделы появляются в фильтре без правки интерфейса. Значение с
+  // точкой — чтобы «service» не захватывал «services.*».
+  // Виды считаются по всему журналу, а не по отфильтрованной выдаче.
+  const kinds = audit.data?.kinds ?? []
   const actionOptions = [
     { value: '', label: t('audit.actionAll') },
-    { value: 'service', label: 'service.*' },
-    { value: 'config', label: 'config.*' },
-    { value: 'firewall', label: 'firewall.*' },
-    { value: 'container', label: 'container.*' },
-    { value: 'auth', label: 'auth.*' },
-    { value: 'user', label: 'user.*' },
-    { value: 'monitor', label: 'monitor.*' },
-    { value: 'inventory', label: 'inventory.*' },
+    ...(kinds.length > 0 ? kinds : ['service', 'config', 'firewall', 'container', 'auth', 'user', 'monitor', 'inventory']).map((k) => ({
+      value: `${k}.`,
+      label: `${k}.*`,
+    })),
   ]
 
   const resultOptions = [

@@ -48,6 +48,29 @@ type AuditFilter struct {
 	Offset   int
 }
 
+// AuditKinds — виды действий журнала: префиксы до первой точки
+// («clamav», «firewall», «system»), что реально в нём встречаются, по
+// алфавиту. Фильтр «Журнала действий» строится из них, а не из списка в
+// интерфейсе, который отставал от новых разделов.
+func (d *DB) AuditKinds(ctx context.Context) ([]string, error) {
+	rows, err := d.QueryContext(ctx, `
+		SELECT DISTINCT CASE WHEN instr(action, '.') > 0 THEN substr(action, 1, instr(action, '.') - 1) ELSE action END AS kind
+		FROM audit_log WHERE action <> '' ORDER BY kind`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var k string
+		if err := rows.Scan(&k); err != nil {
+			return nil, err
+		}
+		out = append(out, k)
+	}
+	return out, rows.Err()
+}
+
 // ListAudit returns audit entries, newest first.
 func (d *DB) ListAudit(ctx context.Context, f AuditFilter) ([]AuditEntry, error) {
 	var where []string

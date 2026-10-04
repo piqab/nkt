@@ -92,7 +92,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - Job log in real time, cancellation (also right from the log window); jobs interrupted by a restart resume or get marked.
 
 ### Audit log
-- Every change made through the UI and API: who, what, when, with what outcome and command output; filters by action and outcome.
+- Every change made through the UI and API: who, what, when, with what outcome and command output; filters by action and outcome; the action kinds come from the log itself, so new sections appear in the filter automatically.
 - State of the scheduler's background tasks: interval, last run, processed, errors.
 
 ## Host

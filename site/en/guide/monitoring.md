@@ -82,6 +82,8 @@ own jobs.
 ![Audit log](/screens/en/audit.png)
 
 Every change through the UI and the API: who, what, when, with what
-result and command output; filters by action and result. The scheduler's
+result and command output; filters by action and result. The action
+kinds in the filter (`clamav.*`, `fail2ban.*`, `system.*`…) come from the
+log itself — the list holds exactly what has occurred on this host. The scheduler's
 background tasks are here too: interval, last run, how many processed,
 errors.
