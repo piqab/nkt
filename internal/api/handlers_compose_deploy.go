@@ -67,6 +67,9 @@ type composeDeployRequest struct {
 	// запускается обратно, при успехе убирается (каталог — в .nkt-removed).
 	// Сухой прогон не считает его порты и имена контейнеров занятыми.
 	Replace string `json:"replace,omitempty"`
+	// ForceRecreate — пересоздать контейнеры, даже если compose не видит
+	// изменений (хаб: .env поменялся с прошлой выкладки).
+	ForceRecreate bool `json:"force_recreate,omitempty"`
 }
 
 // ComposeDeployParams — вход задания (без содержимого файлов).
@@ -77,6 +80,8 @@ type ComposeDeployParams struct {
 	Pull        bool   `json:"pull"`
 	WaitTimeout int    `json:"wait_timeout"`
 	Replace     string `json:"replace,omitempty"`
+	// ForceRecreate — up --force-recreate.
+	ForceRecreate bool `json:"force_recreate,omitempty"`
 }
 
 func composeStackDir(project string) string { return parse.ComposeStacksDir + "/" + project }
@@ -227,7 +232,7 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindComposeDeploy, TitleKey: "compose.jobTitle", TitleArgs: []any{req.Project},
 		Queue: "compose:" + req.Project, Author: user, Steps: 3,
-		Params: ComposeDeployParams{Project: req.Project, File: req.File, Engine: engine, Pull: req.Pull, WaitTimeout: wait, Replace: req.Replace},
+		Params: ComposeDeployParams{Project: req.Project, File: req.File, Engine: engine, Pull: req.Pull, WaitTimeout: wait, Replace: req.Replace, ForceRecreate: req.ForceRecreate},
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
@@ -345,9 +350,16 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 		return err
 	}
+	upArgs := func(extra ...string) []string {
+		args := []string{"up", "-d", "--remove-orphans"}
+		if p.ForceRecreate {
+			args = append(args, "--force-recreate")
+		}
+		return append(args, extra...)
+	}
 	if p.Engine == "docker" {
 		// --wait: ждать, пока контейнеры поднимутся и пройдут healthcheck.
-		if err := run(wait+5*time.Minute, "up", "-d", "--remove-orphans", "--wait", "--wait-timeout", strconv.Itoa(p.WaitTimeout)); err != nil {
+		if err := run(wait+5*time.Minute, upArgs("--wait", "--wait-timeout", strconv.Itoa(p.WaitTimeout))...); err != nil {
 			// Разовые сервисы (restart: "no" — например, заведение
 			// администратора) завершаются, и --wait считает это провалом.
 			// Если завершились только они и с кодом 0, а остальное работает
@@ -359,7 +371,7 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			}
 		}
 	} else {
-		if err := run(10*time.Minute, "up", "-d", "--remove-orphans"); err != nil {
+		if err := run(10*time.Minute, upArgs()...); err != nil {
 			return upFailed(diagnose(err))
 		}
 		if err := waitPodmanStack(ctx, jc, c, p.Project, wait); err != nil {

@@ -175,6 +175,10 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 		if env != nil {
 			envText = *env
 		}
+		// Переменные .env, которые compose никуда не передаёт.
+		if unused := envUnused(envText, files[main]); len(unused) > 0 {
+			jc.Log("deploy.dryEnvUnused", strings.Join(unused, ", "))
+		}
 		for _, ref := range envForwardRefs(envText) {
 			problems++
 			jc.Log("deploy.dryEnvForwardRef", ref[0], ref[1], ref[1], ref[0])

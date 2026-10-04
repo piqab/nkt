@@ -1179,6 +1179,8 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
   const [check, setCheck] = useState<AccessCheck | null>(null)
   const [checking, setChecking] = useState(false)
   const [saved, setSaved] = useState(false)
+  // .env записан на хабе — на хосты он попадёт только следующей выкладкой.
+  const [envSaved, setEnvSaved] = useState(false)
   async function runCheck() {
     setChecking(true)
     try {
@@ -1221,6 +1223,7 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
       setToken('')
       setKey('')
       setRegistry('')
+      setEnvSaved(!!body.env || !!body.clear_env)
       setEnv('')
       setSaved(true)
       setP(await api<Pipeline>(`/hub/pipelines/${p.id}`).catch(() => p))
@@ -1239,6 +1242,7 @@ function AccessModal({ p: initialP, onClose, onSaved }: { p: Pipeline; onClose: 
       </Space>
       {error && <Banner kind="error">{error}</Banner>}
       {saved && <Banner kind="info">{t('deploy.accessSaved')}</Banner>}
+      {envSaved && <Banner kind="warn">{t('deploy.envSavedRedeploy')}</Banner>}
       <AccessCheckView check={check} checking={checking} onRecheck={() => void runCheck()} />
       <p className="small">
         {t('deploy.gitCred')}: <Tag color={p.has_git_cred ? 'success' : 'default'}>{p.has_git_cred ? t('deploy.set') : t('deploy.notSet')}</Tag>

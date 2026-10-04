@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"net/http"
+	"path"
 	"regexp"
 	"slices"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"gopkg.in/yaml.v3"
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/msgs"
@@ -282,5 +284,64 @@ func envForwardRefs(text string) [][2]string {
 		}
 		defined[l.key] = true
 	}
+	return out
+}
+
+// usesDotEnvFile — какой-то сервис подключает .env целиком (env_file:
+// строкой, списком строк или списком {path: …}): тогда в контейнер идут
+// все переменные.
+func usesDotEnvFile(composeText string) bool {
+	var doc struct {
+		Services map[string]struct {
+			EnvFile any `yaml:"env_file"`
+		} `yaml:"services"`
+	}
+	if yaml.Unmarshal([]byte(composeText), &doc) != nil {
+		return false
+	}
+	isDotEnv := func(v any) bool {
+		p, _ := v.(string)
+		if m, ok := v.(map[string]any); ok {
+			p, _ = m["path"].(string)
+		}
+		return path.Clean(strings.TrimSpace(p)) == ".env"
+	}
+	for _, svc := range doc.Services {
+		switch v := svc.EnvFile.(type) {
+		case string:
+			if isDotEnv(v) {
+				return true
+			}
+		case []any:
+			for _, it := range v {
+				if isDotEnv(it) {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}
+
+// envUnused — переменные .env, которые не попадут ни в один контейнер:
+// docker compose берёт .env только для подстановки ${ИМЯ} в сам файл, а
+// не передаёт его в контейнеры. Нет ни ссылки на имя, ни env_file с .env —
+// значение никто не увидит. Служебные COMPOSE_* и DOCKER_* — для самого
+// compose, их не считаем.
+func envUnused(env, composeText string) []string {
+	if usesDotEnvFile(composeText) {
+		return nil
+	}
+	var out []string
+	for name := range envVars(env) {
+		if strings.HasPrefix(name, "COMPOSE_") || strings.HasPrefix(name, "DOCKER_") {
+			continue
+		}
+		if regexp.MustCompile(`\$\{?` + regexp.QuoteMeta(name) + `\b`).MatchString(composeText) {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
 	return out
 }
