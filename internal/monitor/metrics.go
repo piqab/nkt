@@ -31,6 +31,7 @@ type MetricsCollector struct {
 	db  *store.DB
 	c   collect.Collector
 	cfg *config.Config
+	cpu cpuState
 }
 
 // NewMetricsCollector builds the usage collector.
@@ -49,6 +50,12 @@ func (m *MetricsCollector) RunOnce(ctx context.Context) (int, error) {
 		return 0, err
 	}
 	samples = append(samples, fw...)
+
+	host, err := m.hostSamples(ctx, ts, now)
+	if err != nil {
+		return 0, err
+	}
+	samples = append(samples, host...)
 
 	docker, err := m.dockerSamples(ctx, ts, now)
 	if err != nil {

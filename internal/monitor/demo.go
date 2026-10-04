@@ -140,3 +140,29 @@ func BackfillDemoHistory(ctx context.Context, db *store.DB, days int) (int, erro
 	}
 	return len(probes) + len(samples), nil
 }
+
+// demoHostBackfillKey — отдельная отметка для рядов хоста: базы демо,
+// заполненные до их появления, получают их отдельно.
+const demoHostBackfillKey = "demo:backfilled:host"
+
+// BackfillDemoHostHistory — почасовые ряды хоста (CPU, память, нагрузка,
+// диски) за days дней, один раз на базу. Только fixtures.
+func BackfillDemoHostHistory(ctx context.Context, db *store.DB, days int) (int, error) {
+	if done, _, err := db.KVGet(ctx, demoHostBackfillKey); err != nil {
+		return 0, err
+	} else if done != "" {
+		return 0, nil
+	}
+	now := time.Now().UTC().Truncate(time.Hour)
+	var samples []store.MetricSample
+	for ts := now.Add(-time.Duration(days) * 24 * time.Hour); ts.Before(now); ts = ts.Add(time.Hour) {
+		samples = append(samples, demoHostSamples(store.FormatTime(ts), ts)...)
+	}
+	if err := db.InsertMetrics(ctx, samples); err != nil {
+		return 0, msgs.Errorf("monitor.demoMetricsHistory", err)
+	}
+	if err := db.KVSet(ctx, demoHostBackfillKey, store.Now()); err != nil {
+		return 0, err
+	}
+	return len(samples), nil
+}

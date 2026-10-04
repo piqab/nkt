@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.128 — 2026-10-04
+
+- **The host collects its own load series**: CPU, memory, load and the
+  usage of each file system, once a minute along with the other metrics,
+  and serves hourly summaries (host, disks, each container and machine,
+  availability targets) via `/monitor/summary`. This is the base of the
+  upcoming hub "Monitoring" section with forecasts.
+
 ## v1.11.127 — 2026-10-04
 
 - **"Installing nkt on hosts" in "About"**, next to the "Danger zone":

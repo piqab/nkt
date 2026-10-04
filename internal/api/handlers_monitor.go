@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/monitor"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
 )
@@ -324,3 +326,112 @@ func defaultParam(r *http.Request, name, def string) string {
 	}
 	return def
 }
+
+// summarySources — ряды, которые «Мониторинг» хаба берёт с хоста.
+var summarySources = []string{monitor.SourceHost, monitor.SourceDisk, monitor.SourceDocker, monitor.SourcePodman,
+	monitor.SourceLXD, monitor.SourceLibvirt, monitor.SourceK8s}
+
+// summaryMaxSpan — сколько часов отдаётся за раз (хаб дозабирает частями).
+const summaryMaxSpan = 31 * 24 * time.Hour
+
+type summarySeries struct {
+	Source  string `json:"source"`
+	Subject string `json:"subject"`
+	Metric  string `json:"metric"`
+	// Points — [час, среднее, пик, сумма].
+	Points [][4]any `json:"points"`
+}
+
+type summaryTarget struct {
+	ID      int64  `json:"id"`
+	Key     string `json:"key"`
+	Label   string `json:"label"`
+	Kind    string `json:"kind"`
+	Host    string `json:"host"`
+	Port    int    `json:"port"`
+	Service string `json:"service"`
+	Enabled bool   `json:"enabled"`
+	// Points — [час, удачных, всего, средняя задержка мс].
+	Points [][4]any `json:"points"`
+}
+
+// handleMonitorSummary — GET /monitor/summary?since=&until=: почасовые
+// сводки рядов хоста, контейнеров и машин и проверок доступности за
+// полные часы [since, until) (по умолчанию — последние сутки).
+func (s *Server) handleMonitorSummary(w http.ResponseWriter, r *http.Request) {
+	now := time.Now().UTC().Truncate(time.Hour)
+	until := now
+	if v := r.URL.Query().Get("until"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		until = t.UTC().Truncate(time.Hour)
+		if until.After(now) {
+			until = now
+		}
+	}
+	since := until.Add(-24 * time.Hour)
+	if v := r.URL.Query().Get("since"); v != "" {
+		t, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			writeErr(w, r, http.StatusBadRequest, err)
+			return
+		}
+		since = t.UTC().Truncate(time.Hour)
+	}
+	if until.Sub(since) > summaryMaxSpan {
+		since = until.Add(-summaryMaxSpan)
+	}
+	ctx := r.Context()
+	fromS, toS := store.FormatTime(since), store.FormatTime(until)
+	hm, err := s.db.MetricHourly(ctx, fromS, toS, summarySources)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	series := []summarySeries{}
+	for _, m := range hm {
+		n := len(series)
+		if n == 0 || series[n-1].Source != m.Source || series[n-1].Subject != m.Subject || series[n-1].Metric != m.Metric {
+			series = append(series, summarySeries{Source: m.Source, Subject: m.Subject, Metric: m.Metric})
+			n++
+		}
+		series[n-1].Points = append(series[n-1].Points, [4]any{m.Hour, round2(m.Avg), round2(m.Max), round2(m.Sum)})
+	}
+	targets, err := s.db.ListTargets(ctx, false)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	hp, err := s.db.ProbeHourly(ctx, fromS, toS)
+	if err != nil {
+		fail(w, r, err)
+		return
+	}
+	byID := map[int64]*summaryTarget{}
+	outT := make([]summaryTarget, 0, len(targets))
+	for _, t := range targets {
+		outT = append(outT, summaryTarget{ID: t.ID, Key: t.Key, Label: t.Label, Kind: t.Kind, Host: t.Host, Port: t.Port,
+			Service: t.Service, Enabled: t.Enabled, Points: [][4]any{}})
+	}
+	for i := range outT {
+		byID[outT[i].ID] = &outT[i]
+	}
+	for _, p := range hp {
+		if t := byID[p.TargetID]; t != nil {
+			t.Points = append(t.Points, [4]any{p.Hour, p.OK, p.Total, round2(p.LatencyMS)})
+		}
+	}
+	out := map[string]any{
+		"version": 1, "since": fromS, "until": toS, "series": series, "targets": outT,
+		"simulated": s.metricsSimulated(),
+	}
+	if snap := s.scanner.Latest(); snap != nil {
+		out["capacity"] = snap.Capacity
+	}
+	writeJSON(w, http.StatusOK, out)
+}
+
+func round2(v float64) float64 { return math.Round(v*100) / 100 }

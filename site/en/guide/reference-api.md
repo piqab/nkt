@@ -59,7 +59,7 @@ For example, `GET /api/hosts/3/services` — the services of host 3.
 | Profiles | `/profiles*` | Desired state, plan, apply |
 | Firewall | `/firewall/*` | ufw and firewalld rules, install |
 | Certificates | `/certificates*` | Certificates, issuance, renewal, self-signed |
-| Monitoring | `/monitor/*` | Availability targets, usage, heatmaps, outages |
+| Monitoring | `/monitor/*` | Availability targets, usage, heatmaps, outages; `/monitor/summary?since=&until=` — hourly summaries (host, disks, containers and machines, targets) for the hub's "Monitoring" |
 | Security | `/vulnerabilities*`, `/malware`, `/clamav/*` | Vulnerabilities, malware, ClamAV |
 | System | `/system/*`, `/updates*`, `/disks*`, `/files*`, `/hardware`, `/network*`, `/interfaces` | Packages, updates, disks, files, hardware, network |
 | Accounts | `/users*`, `/os-users*`, `/audit` | nkt and OS users, audit log |

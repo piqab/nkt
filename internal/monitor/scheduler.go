@@ -132,6 +132,11 @@ func (s *Scheduler) startJobs(ctx context.Context, wg *sync.WaitGroup) {
 	if s.cfg.IsFixtures() && s.cfg.DemoBackfill {
 		started := time.Now()
 		n, err := BackfillDemoHistory(ctx, s.db, 14)
+		if m, herr := BackfillDemoHostHistory(ctx, s.db, 14); herr != nil && err == nil {
+			err = herr
+		} else {
+			n += m
+		}
 		if n > 0 || err != nil {
 			s.record("demo-backfill", 0, started, n, err)
 			s.log.Info("seeded synthetic history in fixtures mode",
