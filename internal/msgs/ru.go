@@ -524,6 +524,7 @@ var ruCatalog = map[string]string{
 	"mon.quietWindow":                                     "Самое тихое окно недели — два часа со средней нагрузкой CPU %v%%: подходит для обслуживания",
 	"mon.settingsBad":                                     "неверные пороги «Мониторинга»",
 	"hub.monImportNoHost":                                 "хоста %q здесь нет — его история не импортирована",
+	"system.rebootNotConfirmed":                           "перезагрузка не подтверждена",
 	"api.backgroundJobsAreUnavailable":                    "фоновые задания недоступны",
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",

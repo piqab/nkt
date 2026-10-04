@@ -159,6 +159,7 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 - Machine, CPU, memory, batteries, temperatures (lm-sensors), PCI and USB devices.
 
 ### System settings
+- Host reboot from "System settings" and the "reboot required" bar: a window with a count of what is running and a list of what will not come back by itself (containers without a restart policy, machines and LXD without autostart, disabled services), with a required checkbox.
 - Machine name, time zone (with search), NTP flag, state of automatic security updates.
 - Locales: everything the system knows as cells with search, generation of the selected ones, choosing the default.
 - Time synchronization: which service is installed (systemd-timesyncd, chrony, ntpsec), what it syncs with, stratum and offset; NTP servers from a list or your own; "synchronize now"; service installation if none is present.

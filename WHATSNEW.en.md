@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.132 — 2026-10-04
+
+- **Host reboot**, always in "System settings" and in the "Reboot
+  required" bar on "Overview" and in "Packages". The window shows how much
+  is running now (containers, LXD, machines, services) and lists what will
+  not come back by itself after the reboot; the reboot runs only after a
+  confirmation checkbox.
+- **The "Hosts without nkt" bar can be closed**; it comes back only if a
+  new such host appears.
+- **"Create group"** in the host toolbar now comes after "Update all".
+
 ## v1.11.131 — 2026-10-04
 
 - **"Monitoring" docs** with screenshots of both tabs.

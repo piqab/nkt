@@ -4168,5 +4168,28 @@
       "leak_growth_pct": "Memory leak: growth over that time at least, %",
       "avail_drop_pp": "Target availability dropped over the day by more than, pp"
     }
+  },
+  "reboot": {
+    "button": "Reboot host",
+    "title": "Reboot the host",
+    "required": "A reboot is required: an update has been applied and waits for a restart (for example, after a kernel update).",
+    "runningTitle": "Running now",
+    "kind": {
+      "docker": "Docker",
+      "podman": "Podman",
+      "lxd": "LXD",
+      "vm": "machines",
+      "service": "services"
+    },
+    "noAutoTitle": "Will not start by itself after the reboot",
+    "noAutoNone": "Everything that is running will start by itself (container restart policies, machine and service autostart).",
+    "noAutoHint": "This is running now but has no autostart: after the reboot it has to be started by hand.",
+    "confirm": "I confirm the host reboot",
+    "confirmWithList": "I confirm the reboot and understand that the items listed will not start by themselves",
+    "go": "Reboot",
+    "started": "The host reboots in {{s}} s; the interface will be unavailable for a few minutes.",
+    "simulated": "Snapshot mode: the reboot is only simulated.",
+    "cardTitle": "Host reboot",
+    "cardHint": "Before rebooting, the window shows what is running now and what will not come back by itself."
   }
 }

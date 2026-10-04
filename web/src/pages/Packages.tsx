@@ -10,6 +10,7 @@ import PackageInstallModal from '../components/PackageInstallModal'
 import UpdateModal from '../components/UpdateModal'
 import { confirmAction } from '../components/confirm'
 import { RowAction } from '../components/RowAction'
+import { RebootHostButton } from '../components/RebootHost'
 import { TitleHelp } from '../components/Docs'
 
 interface AptSearchResult {
@@ -303,7 +304,12 @@ export default function Packages({ me }: { me: Me }) {
           )}
           {updates.data?.reboot_required && (
             <div style={{ marginTop: '0.75rem' }}>
-              <Banner kind="warn">{t('overview.rebootRequired')}</Banner>
+              <Banner kind="warn">
+                <div className="row" style={{ gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <span style={{ flex: 1, minWidth: '16rem' }}>{t('overview.rebootRequired')}</span>
+                  <RebootHostButton me={me} size="small" primary />
+                </div>
+              </Banner>
             </div>
           )}
         </Card>
