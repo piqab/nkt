@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
-import { Button, Checkbox, Dropdown, Input, Select, Space, Switch, Tabs, Tag, Tooltip } from 'antd'
+import { Button, Checkbox, Dropdown, Input, Select, Space, Spin, Switch, Tabs, Tag, Tooltip } from 'antd'
 import { CopyOutlined, DownOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
@@ -367,13 +367,64 @@ function RemoveModal({ p, onClose, onStarted }: { p: Pipeline; onClose: () => vo
   const [volumes, setVolumes] = useState(prev?.volumes ?? false)
   const [images, setImages] = useState(prev?.images ?? false)
   const [cert, setCert] = useState(prev?.cert ?? false)
-  const [busy, setBusy] = useState(false)
+  const [busy, setBusy] = useState<'remove' | 'unhost' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // План: где стек этого конвейера на деле и что с ним будет. Общий с
+  // другим конвейером стек не трогается; выбор — галочками.
+  type PlanItem = { host_id: number; host: string; project: string; state: 'remove' | 'shared' | 'unreachable' | 'gone'; shared_with?: string; reason?: string }
+  const plan = useApi<{ items: PlanItem[]; hosts_listed: boolean }>(`/hub/pipelines/${p.id}/remove/plan`)
+  const key = (it: PlanItem) => `${it.host_id}|${it.project}`
+  const [picked, setPicked] = useState<string[] | null>(null)
+  const removable = (plan.data?.items ?? []).filter((it) => it.state === 'remove')
+  const chosen = picked ?? removable.map(key)
+  const items = removable.filter((it) => chosen.includes(key(it))).map((it) => ({ host_id: it.host_id, project: it.project }))
+  const orphans = removable.filter((it) => !chosen.includes(key(it)))
+  async function start(keep: boolean) {
+    setBusy(keep ? 'unhost' : 'remove')
+    setError(null)
+    try {
+      const r = await api<{ job_id: number }>(`/hub/pipelines/${p.id}/remove`, { method: 'POST', body: { volumes, images, cert, items, keep_pipeline: keep } })
+      onStarted(r.job_id)
+    } catch (err) {
+      setError(errText(err))
+    } finally {
+      setBusy(null)
+    }
+  }
   return (
-    <Modal title={t('deploy.removeTitle', { name: p.name })} onClose={onClose} width={640}>
+    <Modal title={t('deploy.removeTitle', { name: p.name })} onClose={onClose} width={680}>
       <p className="small">{t('deploy.removeHint')}</p>
       {prev?.error && <Banner kind="error">{t('deploy.removeUnfinishedText', { error: prev.error })}</Banner>}
       {error && <Banner kind="error">{error}</Banner>}
+      <div className="col" style={{ gap: '0.25rem', margin: '0.4rem 0' }}>
+        <strong className="small">{t('deploy.removePlan')}</strong>
+        {!plan.data ? (
+          <Spin size="small" />
+        ) : plan.data.items.length === 0 ? (
+          <span className="small muted">{t('deploy.removePlanEmpty')}</span>
+        ) : (
+          plan.data.items.map((it) => (
+            <div key={key(it)} className="row" style={{ gap: '0.5rem', alignItems: 'center' }}>
+              <Checkbox
+                disabled={it.state !== 'remove'}
+                checked={it.state === 'remove' && chosen.includes(key(it))}
+                onChange={(e) => setPicked(e.target.checked ? [...chosen, key(it)] : chosen.filter((k) => k !== key(it)))}
+              >
+                <span className="mono">{it.host}</span> · <span className="mono">{it.project}</span>
+              </Checkbox>
+              {it.state === 'remove' && <Tag color="error">{t('deploy.planRemove')}</Tag>}
+              {it.state === 'shared' && <Tag color="blue">{t('deploy.planShared', { name: it.shared_with })}</Tag>}
+              {it.state === 'unreachable' && (
+                <Tooltip title={it.reason}>
+                  <Tag color="warning">{t('deploy.planUnreachable')}</Tag>
+                </Tooltip>
+              )}
+              {it.state === 'gone' && <Tag>{t('deploy.planGone')}</Tag>}
+            </div>
+          ))
+        )}
+        {orphans.length > 0 && <Banner kind="warn">{t('deploy.removeOrphansWarn', { hosts: orphans.map((o) => o.host).join(', ') })}</Banner>}
+      </div>
       <div className="col" style={{ gap: '0.4rem', margin: '0.5rem 0' }}>
         <Checkbox checked={volumes} onChange={(e) => setVolumes(e.target.checked)}>
           <span style={{ color: volumes ? 'var(--status-error)' : undefined }}>{t('deploy.removeVolumes')}</span>
@@ -386,26 +437,19 @@ function RemoveModal({ p, onClose, onStarted }: { p: Pipeline; onClose: () => vo
           {t('deploy.removeCert')}
         </Checkbox>
       </div>
-      <Space>
-        <Button
-          danger
-          type="primary"
-          loading={busy}
-          onClick={async () => {
-            setBusy(true)
-            setError(null)
-            try {
-              const r = await api<{ job_id: number }>(`/hub/pipelines/${p.id}/remove`, { method: 'POST', body: { volumes, images, cert } })
-              onStarted(r.job_id)
-            } catch (err) {
-              setError(errText(err))
-            } finally {
-              setBusy(false)
-            }
-          }}
-        >
+      <Space wrap>
+        <Button danger type="primary" loading={busy === 'remove'} disabled={!plan.data || busy !== null} onClick={() => void start(false)}>
           {prev?.error ? t('deploy.deleteRetry') : t('deploy.removeStart')}
         </Button>
+        {/* Убрать стек только с выбранных хостов: конвейер остаётся и
+            работает на остальных, эти хосты уходят из его описания. */}
+        {plan.data?.hosts_listed && !prev && (
+          <Tooltip title={t('deploy.unhostHint')}>
+            <Button danger loading={busy === 'unhost'} disabled={items.length === 0 || items.length >= (plan.data?.items.length ?? 0) || busy !== null} onClick={() => void start(true)}>
+              {t('deploy.unhostStart', { count: items.length })}
+            </Button>
+          </Tooltip>
+        )}
         <Button onClick={onClose}>{t('common.cancel')}</Button>
       </Space>
     </Modal>

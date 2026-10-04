@@ -261,3 +261,94 @@ func (s *Server) handlePipelineLeftoverRemove(w http.ResponseWriter, r *http.Req
 func sameHostName(a, b string) bool {
 	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
 }
+
+// removalItem — строка плана удаления: стек на хосте и что с ним будет.
+type removalItem struct {
+	HostID  int64  `json:"host_id"`
+	Host    string `json:"host"`
+	Project string `json:"project"`
+	// State — remove (уберётся), shared (стек с этим именем на хосте числится
+	// за другим конвейером — не трогается), unreachable (хост недоступен),
+	// gone (хоста на хабе нет).
+	State      string `json:"state"`
+	SharedWith string `json:"shared_with,omitempty"`
+	Reason     string `json:"reason,omitempty"`
+}
+
+// removalKey — выбранная строка плана.
+type removalKey struct {
+	HostID  int64  `json:"host_id"`
+	Project string `json:"project"`
+}
+
+// stackPlaces — где стек конвейера на деле: запомненное положение и
+// оставшиеся старые стеки; конвейер, о котором хаб ещё ничего не помнит
+// (выложен до этой версии), — по описанию.
+func (s *Server) stackPlaces(ctx context.Context, pl store.Pipeline) []leftoverStack {
+	var out []leftoverStack
+	add := func(id int64, host, project string) {
+		if !slices.ContainsFunc(out, func(l leftoverStack) bool { return l.HostID == id && l.Project == project }) {
+			out = append(out, leftoverStack{HostID: id, Host: host, Project: project})
+		}
+	}
+	d := s.loadDeployed(ctx, pl.ID)
+	if d == nil {
+		d = s.deployedFromContent(ctx, pl.Content)
+	}
+	if d != nil {
+		for _, h := range d.Hosts {
+			add(h.ID, h.Name, d.Project)
+		}
+	}
+	for _, l := range s.loadLeftovers(ctx, pl.ID) {
+		add(l.HostID, l.Host, l.Project)
+	}
+	return out
+}
+
+// removalPlan — что удаление конвейера сделает на каждом хосте. Стек с
+// тем же именем на том же хосте, который числится и за другим
+// конвейером, — один и тот же каталог; убрать его значило бы снести чужую
+// выкладку, поэтому он «общий» и не трогается.
+func (s *Server) removalPlan(ctx context.Context, pl store.Pipeline) []removalItem {
+	others, _ := s.db.ListPipelines(ctx)
+	var plan []removalItem
+	for _, l := range s.stackPlaces(ctx, pl) {
+		it := removalItem{HostID: l.HostID, Host: l.Host, Project: l.Project, State: "remove"}
+		for _, o := range others {
+			if o.ID == pl.ID {
+				continue
+			}
+			if slices.ContainsFunc(s.stackPlaces(ctx, o), func(x leftoverStack) bool { return x.HostID == l.HostID && x.Project == l.Project }) {
+				it.State, it.SharedWith = "shared", o.Name
+				break
+			}
+		}
+		if it.State == "remove" {
+			if ok, why := s.hostUsable(ctx, l.HostID); !ok {
+				it.State, it.Reason = "unreachable", why
+				if _, err := s.db.HostByID(ctx, l.HostID); err != nil && l.HostID != localHostID {
+					it.State = "gone"
+				}
+			}
+		}
+		plan = append(plan, it)
+	}
+	return plan
+}
+
+// handlePipelineRemovalPlan — GET /hub/pipelines/{id}/remove/plan.
+func (s *Server) handlePipelineRemovalPlan(w http.ResponseWriter, r *http.Request) {
+	pl, ok := s.pipelineFromReq(w, r)
+	if !ok {
+		return
+	}
+	plan := s.removalPlan(r.Context(), pl)
+	if plan == nil {
+		plan = []removalItem{}
+	}
+	// Можно ли убрать хосты из описания, не удаляя конвейер: нужен список
+	// hosts:, а не группа.
+	_, listed := deploy.WithoutHosts(pl.Content, []string{"\x00"})
+	writeJSON(w, http.StatusOK, map[string]any{"items": plan, "hosts_listed": listed})
+}

@@ -3489,7 +3489,16 @@
     "leftoverRemove": "Remove",
     "leftoverForget": "Forget",
     "leftoverRemoveConfirm": "Remove stack {{project}} from host {{host}}? Its containers stop and the stack directory with its data moves to .nkt-removed.",
-    "leftoverForgetConfirm": "Forget stack {{project}} on {{host}}? Nothing changes on the host — if the stack is there, it keeps running."
+    "leftoverForgetConfirm": "Forget stack {{project}} on {{host}}? Nothing changes on the host — if the stack is there, it keeps running.",
+    "removePlan": "What happens to the stack",
+    "removePlanEmpty": "This pipeline’s stack is not deployed anywhere — only the hub record is removed.",
+    "planRemove": "removed",
+    "planShared": "kept — the same stack belongs to pipeline “{{name}}”",
+    "planUnreachable": "host unreachable — stays",
+    "planGone": "host not on the hub",
+    "removeOrphansWarn": "The stack on {{hosts}} stays without a pipeline — nothing will manage it any more.",
+    "unhostStart": "Only remove from selected ({{count}})",
+    "unhostHint": "The pipeline stays and runs on the other hosts; the selected hosts leave its description (hosts:) and the stack is removed from them."
   },
   "edge": {
     "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment webhooks and/or signed API token requests), and the hub keeps the tunnel to it. There can be several edges.",

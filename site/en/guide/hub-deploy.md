@@ -258,8 +258,9 @@ under which name the last successful deployment put the stack:
   ignoring spaces; an unknown one comes with similar names. When the
   pipeline's site moves and the domain still points to the previous host,
   the dry run says “change the DNS record before deploying”.
-- Removing the pipeline removes the stack where it is actually deployed
-  too, as well as leftover old stacks on reachable hosts.
+- Deleting the pipeline removes the stack where this pipeline deployed it,
+  as well as leftover old stacks on reachable hosts — see “Deleting a
+  compose pipeline” below.
 
 A private repository without keys: the window says "the repository is
 private: set the name and “Access”, then “Fill in the description” again",
@@ -641,10 +642,32 @@ then the hub record with its history. Without the "volumes" tick the stack
 directory is not wiped but moved to
 `/srv/compose/.nkt-removed/<stack>-<time>`, so bind-mount data (`./data`)
 and docker volumes are kept; with it, `down -v` runs and the directory is
-deleted entirely. Images and the certificate are also behind ticks. A host
-that is no longer on the hub is skipped; a host that is not running is an
-error: the pipeline stays marked "deletion unfinished" (and disabled), and
-"Retry deletion" repeats it with the same ticks.
+deleted entirely. Images and the certificate are also behind ticks.
+
+**What is removed where.** The deletion window shows a plan for every host
+where this pipeline's stack is actually deployed (by the remembered
+placement and leftover old stacks; for a pipeline deployed before
+v1.11.139, by its description):
+
+- **“removed”**, ticked; untick it and the stack stays on that host (the
+  window warns that nothing will manage it any more);
+- **“kept — the same stack belongs to pipeline …”**: a stack with the same
+  name on the same host is also another pipeline's — it is one directory
+  `/srv/compose/<name>`, and deleting one pipeline does not wipe the other's
+  deployment;
+- **“host unreachable — stays”** and **“host not on the hub”**.
+
+Hosts from the description or group where this pipeline never deployed
+are not touched. Deletion without a choice (through the API) behaves as
+before: a host that is not running is an error, the pipeline stays marked
+"deletion unfinished" (and disabled), and "Retry deletion" repeats it with
+the same ticks.
+
+**“Only remove from selected”** removes the stack from the ticked hosts
+while the pipeline stays and runs on the rest: the ticked hosts leave the
+`hosts:` of its description (a new version in the history). Not available
+when the stack is chosen by a group (`group:`) or no host would remain —
+then delete the pipeline.
 
 ![Deleting a pipeline](/screens/en/deploy-remove.png)
 

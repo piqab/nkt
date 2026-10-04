@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.140 — 2026-10-04
+
+- **Pipeline deletion by plan.** The window shows where this pipeline's
+  stack is deployed and what happens to it: “removed”, “kept — the same
+  stack belongs to another pipeline”, “host unreachable”. A stack shared
+  with another pipeline is no longer wiped; hosts the pipeline never
+  deployed to are not touched; hosts are picked with ticks.
+- **“Only remove from selected”** removes the stack from the ticked hosts
+  while the pipeline stays and runs on the rest (the hosts leave its
+  description).
+
 ## v1.11.139 — 2026-10-04
 
 - **Deployments: changing the host and the stack name.** The Hosts and
