@@ -66,6 +66,10 @@ SCREENS = [
     ('hub-scripts', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/)"),
     ('hub-script-scheme', 'hub', '/', "menu({ru: 'Профили', en: 'Profiles'}); await sleep(800); tab({ru: 'Сценарии', en: 'Scripts'}); await sleep(800); clickText('button', /^new-web-host/); await sleep(800); tab({ru: 'Схема', en: 'Scheme'})"),
     ('hub-fail2ban', 'hub', '/', "menu('fail2ban')"),
+    # «Мониторинг»: перед снимком хаб должен хоть раз собрать сводки с
+    # хостов («Собрать сейчас» или через пару минут после запуска).
+    ('hub-monitoring', 'hub', '/', "menu({ru: 'Мониторинг', en: 'Monitoring'}); await sleep(1500)"),
+    ('hub-monitoring-load', 'hub', '/', "menu({ru: 'Мониторинг', en: 'Monitoring'}); await sleep(1500); tab({ru: 'Нагрузка', en: 'Load'}); await sleep(1000)"),
     ('hub-about', 'hub', '/', "menu({ru: 'О системе', en: 'About'})"),
     ('hub-nav', 'hub', '/', "menu({ru: 'О системе', en: 'About'}); await sleep(1500); clickText('button', new RegExp('^' + pick({ru: 'Редактирование разделов хоста', en: 'Edit host sections'}) + '$'))"),
     ('deployments', 'hub', '/', "menu({ru: 'Выкладки', en: 'Deployments'})"),
