@@ -26,6 +26,22 @@ file list too.
 
 - **Containers**: status, image, ports, networks; start, stop, restart,
   remove, logs; create a container; scan compose stacks.
+- **Inspect** (an icon in the container row), with tabs:
+  - **Variables** — the container environment with its source:
+    “container” (compose, `.env`, `docker run -e`), “over image” (its own
+    value instead of the image `ENV`), “image”. You can see whether a new
+    `.env` value reached the container. Values are hidden by default — the
+    server does not even send them; an administrator reveals them with
+    “Show values” after a confirmation, and this is recorded in the audit
+    log (`container.inspect_reveal`); the viewer role sees names only;
+  - **General** — the image and its ID (with a warning when the tag
+    already points to a newer image while the container runs the old one),
+    state and healthcheck, start time, restart policy and count, command,
+    user, memory and CPU limits, the compose stack;
+  - **Network & volumes** — published ports, volumes and mounts, networks
+    with addresses;
+  - **Labels** and the full `docker inspect` **JSON** (variable values are
+    masked there too).
 - **Images**: size, date, who uses it; remove, save to a tar on the host,
   prune orphaned layers.
 - **Stacks**: the host's compose files — `up`, `down`, `restart`; compose

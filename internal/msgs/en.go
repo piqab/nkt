@@ -1447,6 +1447,8 @@ var enCatalog = map[string]string{
 	"clamav.quarantineFailed":                             "quarantine %s: %v",
 	"clamav.badQuarantineID":                              "invalid quarantine id",
 	"clamav.quarantineNotFound":                           "no such file in quarantine",
+	"docker.inspectRevealAdmin":                           "only an administrator can see the container's variable values",
+	"docker.inspectNotFound":                              "there is no container %s",
 	"compose.replaceStop":                                 "stopping the previous stack %s before starting %s",
 	"compose.replaceRestore":                              "the new stack did not start — starting the previous %s again",
 	"compose.replaceRemove":                               "the new stack runs — removing the previous %s",

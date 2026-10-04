@@ -1,0 +1,22 @@
+{
+ "Id": "sha256:1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+ "RepoTags": [
+  "ghcr.io/acme/app:1.24.3"
+ ],
+ "Created": "2026-07-18T10:00:00Z",
+ "Size": 84213760,
+ "Config": {
+  "Env": [
+   "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+   "APP_VERSION=1.24.3",
+   "TZ=Europe/Berlin"
+  ],
+  "Cmd": [
+   "--listen",
+   ":8080"
+  ],
+  "Entrypoint": [
+   "/app/server"
+  ]
+ }
+}
