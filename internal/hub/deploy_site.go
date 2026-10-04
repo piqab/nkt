@@ -251,7 +251,18 @@ func (s *Server) dryRunSite(ctx context.Context, jc *jobs.Context, user string, 
 			jc.Log("deploy.drySiteNoDNS", d.Domain)
 		default:
 			problems++
-			jc.Log("deploy.drySiteDNS", d.Domain, strings.Join(d.DomainIPs, ", "), strings.Join(d.HostIPs, ", "))
+			// Сайт переезжает с другого хоста, а DNS ещё смотрит туда —
+			// так и сказать, а не просто «не тот адрес».
+			moved := false
+			if cur != nil && cur.HostID != t.ID {
+				if old, err := s.db.HostByID(ctx, cur.HostID); err == nil && slices.Contains(d.DomainIPs, old.Addr) {
+					jc.Log("deploy.drySiteDNSMove", d.Domain, old.Name, t.Name, strings.Join(d.HostIPs, ", "))
+					moved = true
+				}
+			}
+			if !moved {
+				jc.Log("deploy.drySiteDNS", d.Domain, strings.Join(d.DomainIPs, ", "), strings.Join(d.HostIPs, ", "))
+			}
 		}
 		// AAAA не на хост: Let's Encrypt предпочитает IPv6 и придёт не туда,
 		// даже если A-запись верна.

@@ -221,15 +221,45 @@ block is already filled from the description, with the link (the
 from `repo:`, `ref:` and `compose.file`), hosts, stack name and site
 service; "Fill in the description" rebuilds it from the file, and the
 difference is shown before saving. The pipeline name is read-only.
+**Hosts and the stack name** in this block edit the description right
+away — only the `hosts:` and `project:` lines, nothing else; and editing
+those lines in the text updates the fields. Before, a host picked there
+reached the description only through "Fill in the description", and
+"Save" kept the old one.
 
 **The stack name** (`compose.project`) is the docker compose project name
 on the host: the directory `/srv/compose/<name>/` (compose file, files next
 to it, `.env`), containers `<name>-<service>-1`, the network
 `<name>_default`, volumes `<name>_<volume>`. The deployment updates, and
-removal removes, exactly this stack. Changing the name of a deployed
-pipeline brings up a **new stack next to it** with empty volumes; two
-pipelines on one host need different names. Empty means the repository
-name from the link.
+removal removes, exactly this stack; two pipelines on one host need
+different names. Empty means the repository name from the link.
+
+**Changing the host or the stack name.** The hub remembers where and
+under which name the last successful deployment put the stack:
+
+- **A new stack name on the same host** is a replacement: the previous
+  stack stops before the new one starts (its ports and container names do
+  not count as busy); if the new one fails, the previous starts again; if
+  it succeeds, the previous is removed. **Data is not carried over:** the
+  new stack has its own volumes and directory and starts empty; the
+  previous directory (with `./data`) moves to `/srv/compose/.nkt-removed/`,
+  where you can take it from.
+- **Another host:** the deployment goes to the new one; the previous host
+  is not needed for it. After success the stack is removed from the
+  previous host; if that host is unreachable or deleted from the hub, the
+  deployment still succeeds and the pipeline gets a “stack … left on …”
+  mark with **Remove** (once the host is back) and **Forget** buttons.
+  Data is not carried over to the new host either.
+- The **dry run** says what happens to the old stack (removed, replaced, or
+  left on an unreachable host) and warns about data; a `container_name`
+  taken by a container of another project is a problem before the
+  deployment rather than a `compose up` error.
+- A host name in the description is compared **case-insensitively** and
+  ignoring spaces; an unknown one comes with similar names. When the
+  pipeline's site moves and the domain still points to the previous host,
+  the dry run says “change the DNS record before deploying”.
+- Removing the pipeline removes the stack where it is actually deployed
+  too, as well as leftover old stacks on reachable hosts.
 
 A private repository without keys: the window says "the repository is
 private: set the name and “Access”, then “Fill in the description” again",

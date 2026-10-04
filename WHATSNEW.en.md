@@ -8,6 +8,23 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.139 — 2026-10-04
+
+- **Deployments: changing the host and the stack name.** The Hosts and
+  Stack fields in the pipeline editor edit the description right away —
+  Save no longer keeps the old host. The hub remembers where the stack is
+  deployed: a new host is deployed without the previous one, the old stack
+  is removed there after success, and if the previous host is unreachable
+  the pipeline shows “stack left” with Remove and Forget. A new stack name
+  on the same host is a replacement: the old one stops while the new one
+  starts and is restarted on failure. Data is not carried over — the dry
+  run warns about it.
+- Dry run: a container name taken by another project is a problem before
+  deploying; a site moving while DNS points to the old host gets a clear
+  message.
+- Host names in the description are case-insensitive; an unknown one
+  comes with suggestions.
+
 ## v1.11.138 — 2026-10-04
 
 - **Narrow sudo:** when the hub's key is gone from a host, the hub no

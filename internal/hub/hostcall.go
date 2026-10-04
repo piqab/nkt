@@ -3,6 +3,7 @@ package hub
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/piqab/nkt/internal/jobs"
@@ -89,7 +90,9 @@ func (s *Server) resolveHosts(ctx context.Context, names []string, group string)
 		}
 		found := false
 		for _, h := range hosts {
-			if h.Name == n {
+			// Без учёта регистра и пробелов по краям: «Web-1» в описании —
+			// тот же хост, что web-1 на хабе.
+			if sameHostName(h.Name, n) {
 				found = true
 				if h.Status != store.HostStatusOnline {
 					return nil, msgs.Errorf("hub.hostReadyYetStatus", h.Name, h.Status)
@@ -98,6 +101,9 @@ func (s *Server) resolveHosts(ctx context.Context, names []string, group string)
 			}
 		}
 		if !found {
+			if like := similarHosts(n, hosts); len(like) > 0 {
+				return nil, msgs.Errorf("deploy.hostUnknownLike", n, strings.Join(like, ", "))
+			}
 			return nil, msgs.Errorf("deploy.hostUnknown", n)
 		}
 	}
@@ -115,4 +121,26 @@ func (s *Server) resolveHosts(ctx context.Context, names []string, group string)
 		return nil, msgs.Errorf("deploy.noHosts")
 	}
 	return out, nil
+}
+
+// similarHosts — похожие имена хостов хаба (общая часть имени), не больше
+// пяти; нет похожих — все, если их немного.
+func similarHosts(name string, hosts []store.Host) []string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	var out []string
+	for _, h := range hosts {
+		hn := strings.ToLower(h.Name)
+		if n != "" && (strings.Contains(hn, n) || strings.Contains(n, hn) || (len(n) >= 3 && len(hn) >= 3 && hn[:3] == n[:3])) {
+			out = append(out, h.Name)
+		}
+	}
+	if len(out) == 0 && len(hosts) <= 8 {
+		for _, h := range hosts {
+			out = append(out, h.Name)
+		}
+	}
+	if len(out) > 5 {
+		out = out[:5]
+	}
+	return out
 }

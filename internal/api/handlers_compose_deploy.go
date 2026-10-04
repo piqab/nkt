@@ -16,6 +16,7 @@ import (
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/collect"
+	"github.com/piqab/nkt/internal/config"
 	"github.com/piqab/nkt/internal/deploy"
 	"github.com/piqab/nkt/internal/jobs"
 	"github.com/piqab/nkt/internal/msgs"
@@ -61,6 +62,11 @@ type composeDeployRequest struct {
 	// healthcheck, секунды (0 — 300).
 	WaitTimeout int    `json:"wait_timeout"`
 	Note        string `json:"note"`
+	// Replace — прежнее имя этого же стека на хосте (конвейер переименовал
+	// project): старый останавливается перед подъёмом нового, при неудаче
+	// запускается обратно, при успехе убирается (каталог — в .nkt-removed).
+	// Сухой прогон не считает его порты и имена контейнеров занятыми.
+	Replace string `json:"replace,omitempty"`
 }
 
 // ComposeDeployParams — вход задания (без содержимого файлов).
@@ -70,6 +76,7 @@ type ComposeDeployParams struct {
 	Engine      string `json:"engine"`
 	Pull        bool   `json:"pull"`
 	WaitTimeout int    `json:"wait_timeout"`
+	Replace     string `json:"replace,omitempty"`
 }
 
 func composeStackDir(project string) string { return parse.ComposeStacksDir + "/" + project }
@@ -95,6 +102,9 @@ func (req *composeDeployRequest) validate() error {
 	}
 	if names := deploy.BuildOnlyServices(req.Files[req.File]); len(names) > 0 {
 		return msgs.Errorf("compose.buildOnly", strings.Join(names, ", "))
+	}
+	if req.Replace != "" && (!site.ValidName(req.Replace) || req.Replace == req.Project) {
+		return msgs.Errorf("compose.badProject", req.Replace)
 	}
 	return nil
 }
@@ -217,7 +227,7 @@ func (s *Server) handleComposeDeploy(w http.ResponseWriter, r *http.Request) {
 	id, err := s.jobs.Start(ctx, jobs.Spec{
 		Kind: KindComposeDeploy, TitleKey: "compose.jobTitle", TitleArgs: []any{req.Project},
 		Queue: "compose:" + req.Project, Author: user, Steps: 3,
-		Params: ComposeDeployParams{Project: req.Project, File: req.File, Engine: engine, Pull: req.Pull, WaitTimeout: wait},
+		Params: ComposeDeployParams{Project: req.Project, File: req.File, Engine: engine, Pull: req.Pull, WaitTimeout: wait, Replace: req.Replace},
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
@@ -249,7 +259,8 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 	if err := jc.Params(&p); err != nil {
 		return err
 	}
-	if !site.ValidName(p.Project) || !deploy.ValidPath(p.File) || (p.Engine != "docker" && p.Engine != "podman") {
+	if !site.ValidName(p.Project) || !deploy.ValidPath(p.File) || (p.Engine != "docker" && p.Engine != "podman") ||
+		(p.Replace != "" && (!site.ValidName(p.Replace) || p.Replace == p.Project)) {
 		return msgs.Errorf("compose.badProject", p.Project)
 	}
 	c := d.s.scanner.Collector()
@@ -306,6 +317,34 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		}
 	}
 	jc.StepKey(2, 3, "compose.stepUp", p.Project)
+	// Переименованный стек: старый держит те же порты и имена контейнеров —
+	// остановить его до подъёма нового; новый не поднялся — запустить
+	// старый обратно, чтобы не остаться без обоих.
+	oldFile := ""
+	if p.Replace != "" {
+		oldFile = composeFileIn(c, composeStackDir(p.Replace))
+	}
+	runOld := func(extra ...string) {
+		if oldFile == "" {
+			return
+		}
+		args := append(composeArgs(c, p.Replace, oldFile), extra...)
+		jc.Logf("$ %s %s", p.Engine, strings.Join(args, " "))
+		if res, err := c.RunTimeout(ctx, 10*time.Minute, p.Engine, args...); err != nil || !res.OK() {
+			jc.Logf("      %s", strings.TrimSpace(res.Output()))
+		}
+	}
+	if oldFile != "" {
+		jc.Log("compose.replaceStop", p.Replace, p.Project)
+		runOld("stop")
+	}
+	upFailed := func(err error) error {
+		if oldFile != "" {
+			jc.Log("compose.replaceRestore", p.Replace)
+			runOld("start")
+		}
+		return err
+	}
 	if p.Engine == "docker" {
 		// --wait: ждать, пока контейнеры поднимутся и пройдут healthcheck.
 		if err := run(wait+5*time.Minute, "up", "-d", "--remove-orphans", "--wait", "--wait-timeout", strconv.Itoa(p.WaitTimeout)); err != nil {
@@ -316,15 +355,29 @@ func (d *composeDeployRunner) Run(ctx context.Context, jc *jobs.Context) error {
 			if done := oneShotsOnly(ctx, c, p.Engine, p.Project, p.File); len(done) > 0 {
 				jc.Log("compose.oneShotDone", strings.Join(done, ", "))
 			} else {
-				return diagnose(err)
+				return upFailed(diagnose(err))
 			}
 		}
 	} else {
 		if err := run(10*time.Minute, "up", "-d", "--remove-orphans"); err != nil {
-			return diagnose(err)
+			return upFailed(diagnose(err))
 		}
 		if err := waitPodmanStack(ctx, jc, c, p.Project, wait); err != nil {
-			return err
+			return upFailed(err)
+		}
+	}
+	if oldFile != "" {
+		// Новый работает — старый снять, каталог (с данными в ./…) — в
+		// .nkt-removed, как при обычном удалении стека.
+		jc.Log("compose.replaceRemove", p.Replace)
+		runOld("down", "--remove-orphans")
+		if d.s.cfg.Mode != config.ModeFixtures {
+			dest := ComposeRemovedDir + "/" + p.Replace + "-" + time.Now().Format("20060102-150405")
+			if out, err := unrestrictedCommand(nil, "sh", "-c", composeRemoveScript, "sh", composeStackDir(p.Replace), dest).CombinedOutput(); err != nil {
+				jc.Log("compose.replaceDirLeft", composeStackDir(p.Replace), strings.TrimSpace(string(out)))
+			} else {
+				jc.Log("compose.removeDirMoved", composeStackDir(p.Replace), dest)
+			}
 		}
 	}
 	jc.StepKey(3, 3, "compose.stepStatus", p.Project)

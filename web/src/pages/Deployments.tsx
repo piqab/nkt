@@ -51,6 +51,8 @@ interface Pipeline {
   removal?: string
   /** JSON: проверки сухого прогона, с которых сняли галочки. */
   dry_skip?: string
+  /** Старый стек, оставшийся на прежнем хосте после переезда (хост был недоступен). */
+  leftovers?: { host_id: number; host: string; project: string; reason?: string; at: string }[]
 }
 interface PipelineVersion {
   id: number
@@ -94,6 +96,26 @@ export default function Deployments({ me }: { me: Me }) {
   const [job, setJob] = useState<Job | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [remove, setRemove] = useState<Pipeline | null>(null)
+  // Уборка оставшегося стека — задание на самом хосте: окно журнала с его областью.
+  const [hostJob, setHostJob] = useState<{ job: Job; scope: string } | null>(null)
+
+  async function leftover(p: Pipeline, l: NonNullable<Pipeline['leftovers']>[number], forget: boolean) {
+    const q = forget ? t('deploy.leftoverForgetConfirm', { host: l.host, project: l.project }) : t('deploy.leftoverRemoveConfirm', { host: l.host, project: l.project })
+    if (!(await confirmAction(q))) return
+    try {
+      const res = await api<{ status: string; job_id?: number; host_id?: number }>(`/hub/pipelines/${p.id}/leftovers/remove`, {
+        method: 'POST',
+        body: { host_id: l.host_id, project: l.project, forget },
+      })
+      void list.reload()
+      if (res.job_id && res.host_id !== undefined) {
+        const scope = `/hosts/${res.host_id === -1 ? 'local' : res.host_id}`
+        setHostJob({ job: await api<Job>(`${scope}/jobs/${res.job_id}`), scope })
+      }
+    } catch (err) {
+      setError(errText(err))
+    }
+  }
 
   async function openJob(id?: number) {
     if (!id) return
@@ -123,6 +145,25 @@ export default function Deployments({ me }: { me: Me }) {
           ) : removalOf(p) ? (
             <Tag color="processing">{t('deploy.removing')}</Tag>
           ) : null}
+          {/* Стек переехал, а прежний хост был недоступен — старый стек
+              там остался: убрать, когда хост вернётся, или забыть. */}
+          {(p.leftovers ?? []).map((l) => (
+            <Space key={`${l.host_id}|${l.project}`} size={2}>
+              <Tooltip title={l.reason ? t('deploy.leftoverHint', { reason: l.reason }) : undefined}>
+                <Tag color="warning">{t('deploy.leftover', { host: l.host, project: l.project })}</Tag>
+              </Tooltip>
+              {me.is_admin && (
+                <>
+                  <Button size="small" type="link" onClick={() => void leftover(p, l, false)}>
+                    {t('deploy.leftoverRemove')}
+                  </Button>
+                  <Button size="small" type="link" onClick={() => void leftover(p, l, true)}>
+                    {t('deploy.leftoverForget')}
+                  </Button>
+                </>
+              )}
+            </Space>
+          ))}
         </Space>
       ),
     },
@@ -292,6 +333,7 @@ export default function Deployments({ me }: { me: Me }) {
           }}
         />
       )}
+      {hostJob && <JobLogModal job={hostJob.job} scope={hostJob.scope} onClose={() => setHostJob(null)} />}
       {job && <JobLogModal job={job} scope="/hosts/local" onClose={() => setJob(null)} onDone={() => void list.reload()} />}
     </>
   )
@@ -501,6 +543,8 @@ function PipelineEditor({ pipeline: initial, onClose, onSaved }: { pipeline?: Pi
             {(!initial || /^action:\s*compose\b/m.test(initial.content ?? '')) && (
               <ComposeFromLink
                 initialFrom={initial?.content}
+                draft={text}
+                onPatch={setDraft}
                 pipelineId={pipeline?.id}
                 pipelineName={pipeline?.name}
                 accessTick={accessTick}
@@ -623,6 +667,8 @@ function ComposeFromLink({
   accessTick,
   linkYamlRef,
   initialFrom,
+  draft,
+  onPatch,
   onFill,
   onName,
 }: {
@@ -634,6 +680,11 @@ function ComposeFromLink({
   linkYamlRef: MutableRefObject<(() => { yaml: string; repo: string; name: string } | null) | null>
   /** Сохранённое описание: поля окна заполняются по нему. */
   initialFrom?: string
+  /** Текущий текст описания и правка в нём одной строки: хосты и имя
+   * стека меняются сразу в тексте (раньше — только по «Заполнить
+   * описание», и «Сохранить» записывал старый хост). */
+  draft?: string
+  onPatch?: (yaml: string) => void
   onFill: (yaml: string, name: string) => void
   onName: (name: string) => void
 }) {
@@ -643,6 +694,24 @@ function ComposeFromLink({
   const [link, setLink] = useState(init?.link ?? '')
   const [picked, setPicked] = useState<string[]>(init?.hosts ?? [])
   const [project, setProject] = useState(init?.project ?? '')
+  // Текст описания правят руками — поля «Хосты» и «Стек» следуют за ним.
+  useEffect(() => {
+    if (!draft || !/^action:\s*compose\b/m.test(draft)) return
+    const d = fromDescription(draft)
+    setPicked((cur) => (cur.join(',') === d.hosts.join(',') ? cur : d.hosts))
+    if (d.project) setProject((cur) => (cur === d.project ? cur : d.project))
+  }, [draft])
+  // И обратно: выбор в полях — сразу в тексте, одной строкой.
+  const patchable = !!draft && !!onPatch && /^action:\s*compose\b/m.test(draft)
+  function pickHosts(v: string[]) {
+    setPicked(v)
+    if (patchable) onPatch!(patchComposeLine(draft!, 'hosts', `[${v.join(', ')}]`))
+  }
+  function changeProject(v: string) {
+    setProject(v)
+    const clean = v.toLowerCase().replace(/[^a-z0-9_-]/g, '-').replace(/^[-_]+/, '').slice(0, 63)
+    if (patchable && clean) onPatch!(patchComposeLine(draft!, 'project', clean))
+  }
   const [bad, setBad] = useState(false)
   // Выбранный пример: и до хостов (описание заполнится по «Заполнить
   // описание»), и после — повторное заполнение тоже по примеру, пока
@@ -764,10 +833,10 @@ function ComposeFromLink({
           style={{ minWidth: 200 }}
           placeholder={t('deploy.fromLinkHosts')}
           value={picked}
-          onChange={setPicked}
+          onChange={pickHosts}
           options={(hosts.data ?? []).map((h) => ({ value: h.name, label: h.name }))}
         />
-        <Input size="small" style={{ width: 140 }} value={project} onChange={(e) => setProject(e.target.value)} placeholder={t('deploy.fromLinkProject')} />
+        <Input size="small" style={{ width: 140 }} value={project} onChange={(e) => changeProject(e.target.value)} placeholder={t('deploy.fromLinkProject')} />
         <Button size="small" loading={scanning} disabled={!link || picked.length === 0} onClick={() => void fill(link, project, pending?.link === link ? pending : undefined)}>
           {t('deploy.fromLinkFill')}
         </Button>
@@ -1538,4 +1607,12 @@ export function fromDescription(text: string): { link: string; hosts: string[]; 
   const hosts = (compose.hosts ?? '').replace(/^\[|\]$/g, '').split(',').map((h) => h.trim()).filter(Boolean)
   const link = mark || (top('repo') && compose.file ? composeLinkFor(top('repo'), top('ref') || 'main', compose.file) : '')
   return { link, hosts, project: compose.project ?? '', site }
+}
+
+/** Строка «  key: value» блока compose: заменить значение (комментарий в
+ * конце строки сохраняется), нет такой строки — вставить после compose:. */
+export function patchComposeLine(text: string, key: string, value: string): string {
+  const re = new RegExp(`^([ \\t]{2,})${key}:[ \\t]*([^#\\n]*?)([ \\t]*#.*)?$`, 'm')
+  if (re.test(text)) return text.replace(re, (_m, indent: string, _old: string, comment?: string) => `${indent}${key}: ${value}${comment ?? ''}`)
+  return text.replace(/^compose:[ \t]*$/m, (m) => `${m}\n  ${key}: ${value}`)
 }
