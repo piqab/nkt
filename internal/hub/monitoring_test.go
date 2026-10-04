@@ -112,3 +112,58 @@ func TestMonitoringLeakDetection(t *testing.T) {
 		t.Fatalf("leak: leaky=%v steady=%v %+v", leaky, steady, srv.mon.insights)
 	}
 }
+
+// Control plane отдаёт состав кластера: узлы, включая рабочие, видны
+// отдельными рядами с кластером, а поды — со своим узлом.
+func TestMonitoringK8sNodes(t *testing.T) {
+	srv, db, _ := localFixtureHub(t)
+	ctx := context.Background()
+	if _, err := monitor.BackfillDemoHistory(ctx, db, 2); err != nil {
+		t.Fatal(err)
+	}
+	srv.collectMonitoring(ctx)
+	req := httptest.NewRequest(http.MethodGet, "/hub/monitoring/overview?range=7d", nil).
+		WithContext(auth.WithUser(ctx, store.User{Username: "admin", Role: store.RoleAdmin}))
+	w := httptest.NewRecorder()
+	srv.handleMonitoringOverview(w, req)
+	var out struct {
+		Clusters []struct {
+			Name  string `json:"name"`
+			Nodes []struct {
+				Name         string `json:"name"`
+				ControlPlane bool   `json:"control_plane"`
+			} `json:"nodes"`
+		} `json:"clusters"`
+		Workloads []struct {
+			Source  string `json:"source"`
+			Subject string `json:"subject"`
+			Cluster string `json:"cluster"`
+			Node    string `json:"node"`
+		} `json:"workloads"`
+		Hosts []struct {
+			K8sRole string `json:"k8s_role"`
+			K8sNode string `json:"k8s_node"`
+		} `json:"hosts"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if len(out.Clusters) != 1 || len(out.Clusters[0].Nodes) != 3 || !out.Clusters[0].Nodes[0].ControlPlane {
+		t.Fatalf("clusters: %+v", out.Clusters)
+	}
+	var worker, pod bool
+	for _, wl := range out.Workloads {
+		if wl.Source == monitor.SourceK8sNode && wl.Subject == "lab-w-1" && wl.Cluster != "" {
+			worker = true
+		}
+		if wl.Source == monitor.SourceK8s && wl.Subject == "shop/api-7c9d8-a1b2c" && wl.Node != "" {
+			pod = true
+		}
+	}
+	if len(out.Hosts) == 0 || out.Hosts[0].K8sRole != RoleControlPlane || out.Hosts[0].K8sNode != "lab-cp-1" {
+		t.Fatalf("control plane не подписан: %+v", out.Hosts)
+	}
+	if !worker || !pod {
+		t.Fatalf("workloads: worker=%v pod=%v %+v", worker, pod, out.Workloads)
+	}
+}

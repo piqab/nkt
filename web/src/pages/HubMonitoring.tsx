@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Button, Input, InputNumber, Select, Space, Tabs, Tag, type TableColumnsType } from 'antd'
+import { Button, Input, InputNumber, Select, Space, Tabs, Tag } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { api, useApi } from '../api'
 import type { Me } from '../types'
@@ -10,6 +10,7 @@ import { TitleHelp } from '../components/Docs'
 import { unifiedDiff } from '../components/textDiff'
 import { AIExplain } from '../components/AIExplain'
 import { Sensitive } from '../privacy'
+import { MonHostsBlock, type MonClusterLite } from '../components/MonHostsBlock'
 
 type Range = '24h' | '7d' | '30d' | '90d' | '365d'
 
@@ -41,6 +42,9 @@ interface MonHost {
   load_max: number
   disks: MonDisk[]
   workloads: number
+  k8s_cluster?: string
+  k8s_role?: string
+  k8s_node?: string
 }
 
 interface MonWorkload {
@@ -54,6 +58,10 @@ interface MonWorkload {
   mem_max: number
   net_rx: number
   net_tx: number
+  cluster?: string
+  node?: string
+  cpu_share?: number
+  mem_share?: number
 }
 
 interface MonTarget {
@@ -95,6 +103,7 @@ interface MonSettings {
 }
 
 interface Overview {
+  clusters?: MonClusterLite[]
   hosts: MonHost[]
   workloads: MonWorkload[]
   targets: MonTarget[]
@@ -108,7 +117,7 @@ interface Overview {
 }
 
 const SEV_COLOR = { critical: 'red', warning: 'orange', info: 'blue' } as const
-const SOURCE_LABEL: Record<string, string> = { docker: 'Docker', podman: 'Podman', lxd: 'LXD', libvirt: 'VM', k8s: 'Kubernetes' }
+const SOURCE_LABEL: Record<string, string> = { docker: 'Docker', podman: 'Podman', lxd: 'LXD', libvirt: 'VM', k8s: 'Kubernetes', k8s_node: 'Kubernetes · node' }
 
 /** Сдвиг UTC → местное время браузера в часах. */
 const tzShift = () => -Math.round(new Date().getTimezoneOffset() / 60)
@@ -214,62 +223,6 @@ export default function HubMonitoring({ me, onOpenHost }: { me: Me; onOpenHost: 
     )
   }
 
-  const hostColumns: TableColumnsType<MonHost> = [
-    {
-      title: t('monitoring.colHost'),
-      key: 'name',
-      render: (_, h) => (
-        <div className="col">
-          <strong>
-            <Sensitive>{h.name}</Sensitive>
-          </strong>
-          {h.old ? (
-            <span className="small" style={{ color: 'var(--status-warning)' }}>{t('monitoring.oldNkt')}</span>
-          ) : !h.has_data ? (
-            <span className="small muted">{h.error ? t('monitoring.collectError', { error: h.error }) : t('monitoring.noData')}</span>
-          ) : null}
-        </div>
-      ),
-    },
-    {
-      title: t('monitoring.colCPU'),
-      key: 'cpu',
-      render: (_, h) => (h.has_data ? <span className="small nowrap">{t('monitoring.avgMax', { avg: h.cpu_avg, max: h.cpu_max })}%</span> : '—'),
-    },
-    {
-      title: t('monitoring.colMem'),
-      key: 'mem',
-      render: (_, h) =>
-        h.mem_total > 0 ? (
-          <span className="small nowrap">
-            {formatBytes(h.mem_used)} / {formatBytes(h.mem_total)} · {t('monitoring.avgMax', { avg: h.mem_avg_pct, max: h.mem_max_pct })}%
-          </span>
-        ) : (
-          '—'
-        ),
-    },
-    { title: t('monitoring.colLoad'), key: 'load', render: (_, h) => (h.has_data ? <span className="small">{h.load_avg} / {h.load_max}</span> : '—') },
-    {
-      title: t('monitoring.colDisks'),
-      key: 'disks',
-      render: (_, h) => (
-        <div className="col" style={{ gap: '0.1rem' }}>
-          {h.disks.map((dk) => (
-            <span key={dk.mount} className="small nowrap">
-              <span className="mono">{dk.mount}</span> {dk.pct}%{' '}
-              {dk.eta_days !== undefined && (
-                <Tag color={dk.eta_days <= (d?.settings.disk_crit_days ?? 2) ? 'red' : dk.eta_days <= (d?.settings.disk_warn_days ?? 7) ? 'orange' : 'blue'}>
-                  {t('monitoring.diskEta', { days: dk.eta_days })}
-                </Tag>
-              )}
-            </span>
-          ))}
-        </div>
-      ),
-    },
-    { title: t('monitoring.colWorkloads'), key: 'wl', align: 'right', render: (_, h) => h.workloads || '—' },
-  ]
-
   return (
     <>
       <div className="page-head spread">
@@ -336,11 +289,17 @@ export default function HubMonitoring({ me, onOpenHost }: { me: Me; onOpenHost: 
               children: (
                 <>
                   {insightList('load')}
-                  <Card title={t('monitoring.hostsTitle')} subtitle={t('monitoring.hostsHint')}>
-                    <div className="table-wrap">
-                      <DataTable<MonHost> dataSource={d.hosts} rowKey="id" columns={hostColumns} onRow={(h) => ({ onClick: () => h.has_data && setHostOpen(h), style: { cursor: h.has_data ? 'pointer' : undefined } })} />
-                    </div>
-                  </Card>
+                  <MonHostsBlock
+                    hosts={d.hosts}
+                    clusters={d.clusters ?? []}
+                    nodeLoads={d.workloads.filter((w) => w.source === 'k8s_node')}
+                    cpuLimit={d.settings.cpu_pct}
+                    memLimit={d.settings.mem_pct}
+                    diskWarnDays={d.settings.disk_warn_days}
+                    diskCritDays={d.settings.disk_crit_days}
+                    onOpen={(h) => setHostOpen(d.hosts.find((x) => x.id === h.id) ?? null)}
+                    onOpenNode={(n, cluster) => setChart({ title: `${cluster} · ${n.subject}`, hostId: n.host_id, source: 'k8s_node', subject: n.subject })}
+                  />
                   <Card title={t('monitoring.workloadsTitle')} subtitle={t('monitoring.workloadsHint')}>
                     <WorkloadsTable workloads={d.workloads} onOpen={(w) => setChart({ title: `${w.host} · ${w.subject}`, hostId: w.host_id, source: w.source, subject: w.subject })} />
                   </Card>
@@ -411,21 +370,50 @@ function TargetsTable({ targets, onOpen }: { targets: MonTarget[]; onOpen: (t: M
 function WorkloadsTable({ workloads, onOpen }: { workloads: MonWorkload[]; onOpen: (w: MonWorkload) => void }) {
   const { t } = useTranslation()
   const [source, setSource] = useState<string>('')
+  const [cluster, setCluster] = useState('')
+  const [nodes, setNodes] = useState<string[]>([])
+  const [namespace, setNamespace] = useState('')
   const [q, setQ] = useState('')
+  const isK8s = (w: MonWorkload) => w.source === 'k8s' || w.source === 'k8s_node'
+  const nsOf = (w: MonWorkload) => (w.source === 'k8s' ? w.subject.split('/')[0] : '')
   const list = useMemo(() => {
     const s = q.trim().toLowerCase()
-    return workloads.filter((w) => (!source || w.source === source) && (!s || `${w.host} ${w.subject}`.toLowerCase().includes(s)))
-  }, [workloads, source, q])
+    return workloads.filter(
+      (w) =>
+        (!source || w.source === source) &&
+        (!cluster || w.cluster === cluster) &&
+        (nodes.length === 0 || (w.node !== undefined && nodes.includes(w.node))) &&
+        (!namespace || nsOf(w) === namespace) &&
+        (!s || `${w.host} ${w.subject} ${w.node ?? ''}`.toLowerCase().includes(s)),
+    )
+  }, [workloads, source, cluster, nodes, namespace, q])
   const sources = [...new Set(workloads.map((w) => w.source))]
+  const k8s = workloads.filter(isK8s)
+  const clusters = [...new Set(k8s.map((w) => w.cluster).filter(Boolean))] as string[]
+  const nodeNames = [...new Set(k8s.filter((w) => !cluster || w.cluster === cluster).map((w) => w.node).filter(Boolean))].sort() as string[]
+  const namespaces = [...new Set(k8s.map(nsOf).filter(Boolean))].sort()
+  const showK8s = k8s.length > 0 && (!source || source === 'k8s' || source === 'k8s_node')
+  const label = (src: string) => (src === 'k8s_node' ? t('monitoring.k8sNodeKind') : SOURCE_LABEL[src] ?? src)
   return (
     <>
       <Space wrap style={{ marginBottom: '0.5rem' }}>
         <Select
           value={source}
           onChange={setSource}
-          style={{ width: '10rem' }}
-          options={[{ value: '', label: t('monitoring.allKinds') }, ...sources.map((s) => ({ value: s, label: SOURCE_LABEL[s] ?? s }))]}
+          style={{ width: '12rem' }}
+          options={[{ value: '', label: t('monitoring.allKinds') }, ...sources.map((s) => ({ value: s, label: label(s) }))]}
         />
+        {/* Kubernetes: какой кластер, какие узлы и namespace смотреть —
+            поды рабочих узлов видны с их узлом. */}
+        {showK8s && clusters.length > 1 && (
+          <Select value={cluster} onChange={setCluster} style={{ width: '11rem' }} options={[{ value: '', label: t('monitoring.allClusters') }, ...clusters.map((c) => ({ value: c, label: c }))]} />
+        )}
+        {showK8s && nodeNames.length > 0 && (
+          <Select mode="multiple" allowClear value={nodes} onChange={setNodes} placeholder={t('monitoring.allNodes')} style={{ minWidth: '12rem' }} options={nodeNames.map((n) => ({ value: n, label: n }))} />
+        )}
+        {showK8s && namespaces.length > 0 && source !== 'k8s_node' && (
+          <Select value={namespace} onChange={setNamespace} style={{ width: '11rem' }} options={[{ value: '', label: t('monitoring.allNamespaces') }, ...namespaces.map((n) => ({ value: n, label: n }))]} />
+        )}
         <Input.Search allowClear placeholder={t('monitoring.search')} value={q} onChange={(e) => setQ(e.target.value)} style={{ width: '18rem' }} />
       </Space>
       <div className="table-wrap">
@@ -435,11 +423,28 @@ function WorkloadsTable({ workloads, onOpen }: { workloads: MonWorkload[]; onOpe
           onRow={(r) => ({ onClick: () => onOpen(r), style: { cursor: 'pointer' } })}
           columns={[
             { title: t('monitoring.colHost'), key: 'host', render: (_, r) => <Sensitive>{r.host}</Sensitive> },
-            { title: t('monitoring.colKind'), key: 'src', render: (_, r) => <Tag>{SOURCE_LABEL[r.source] ?? r.source}</Tag> },
+            { title: t('monitoring.colKind'), key: 'src', render: (_, r) => <Tag>{label(r.source)}</Tag> },
             { title: t('monitoring.colName'), key: 'name', render: (_, r) => <span className="mono small">{r.subject}</span> },
-            { title: t('monitoring.colCPU'), key: 'cpu', align: 'right', sorter: (a, b) => a.cpu_avg - b.cpu_avg, render: (_, r) => <span className="small nowrap">{r.cpu_avg} / {r.cpu_max}%</span> },
-            { title: t('monitoring.colMem'), key: 'mem', align: 'right', sorter: (a, b) => a.mem_avg - b.mem_avg, render: (_, r) => <span className="small nowrap">{formatBytes(r.mem_avg)} / {formatBytes(r.mem_max)}</span> },
-            { title: t('monitoring.colNet'), key: 'net', align: 'right', sorter: (a, b) => a.net_rx + a.net_tx - b.net_rx - b.net_tx, render: (_, r) => <span className="small nowrap">↓{formatBytes(r.net_rx)} ↑{formatBytes(r.net_tx)}</span> },
+            ...(k8s.length > 0
+              ? [
+                  {
+                    title: t('monitoring.colNode'),
+                    key: 'node',
+                    render: (_: unknown, r: MonWorkload) =>
+                      r.node ? (
+                        <span className="small">
+                          <span className="mono">{r.node}</span>
+                          {r.cluster && <span className="muted"> · {r.cluster}</span>}
+                        </span>
+                      ) : (
+                        '—'
+                      ),
+                  },
+                ]
+              : []),
+            { title: t('monitoring.colCPU'), key: 'cpu', align: 'right', sorter: (a, b) => a.cpu_avg - b.cpu_avg, render: (_, r) => <span className="small nowrap">{r.cpu_avg} / {r.cpu_max}%{r.cpu_share !== undefined && <span className="muted"> · {r.cpu_share}% {t('monitoring.ofNode')}</span>}</span> },
+            { title: t('monitoring.colMem'), key: 'mem', align: 'right', sorter: (a, b) => a.mem_avg - b.mem_avg, render: (_, r) => <span className="small nowrap">{formatBytes(r.mem_avg)} / {formatBytes(r.mem_max)}{r.mem_share !== undefined && <span className="muted"> · {r.mem_share}%</span>}</span> },
+            { title: t('monitoring.colNet'), key: 'net', align: 'right', sorter: (a, b) => a.net_rx + a.net_tx - b.net_rx - b.net_tx, render: (_, r) => (r.net_rx || r.net_tx ? <span className="small nowrap">↓{formatBytes(r.net_rx)} ↑{formatBytes(r.net_tx)}</span> : '—') },
           ]}
         />
       </div>

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Target is something the prober checks on a schedule.
@@ -214,28 +215,26 @@ type TargetStatus struct {
 
 // TargetStatuses joins every target with its latest probe and a 24h rollup.
 func (d *DB) TargetStatuses(ctx context.Context) ([]TargetStatus, error) {
-	rows, err := d.QueryContext(ctx, `
+	rows, err := d.reader().QueryContext(ctx, `
 		SELECT t.id, t.key, t.label, t.kind, t.host, t.port, t.path, t.source, t.service,
 		       t.node_id, t.enabled, t.first_seen, t.last_seen,
 		       last.ts, last.ok, last.latency_ms, last.error,
 		       COALESCE(agg.checks, 0), COALESCE(agg.failures, 0), COALESCE(agg.avg_latency, 0)
 		  FROM targets t
-		  LEFT JOIN (
-		        SELECT p.target_id, p.ts, p.ok, p.latency_ms, p.error
-		          FROM probe_results p
-		          JOIN (SELECT target_id, MAX(ts) AS ts FROM probe_results GROUP BY target_id) m
-		            ON m.target_id = p.target_id AND m.ts = p.ts
-		       ) last ON last.target_id = t.id
+		  -- Последняя проверка — по индексу (target_id, ts), а не MAX(ts) по
+		  -- всей истории всех целей.
+		  LEFT JOIN probe_results last ON last.id = (
+		        SELECT id FROM probe_results WHERE target_id = t.id ORDER BY ts DESC LIMIT 1)
 		  LEFT JOIN (
 		        SELECT target_id,
 		               COUNT(*) AS checks,
 		               SUM(CASE WHEN ok = 0 THEN 1 ELSE 0 END) AS failures,
 		               AVG(latency_ms) AS avg_latency
 		          FROM probe_results
-		         WHERE ts >= datetime('now', '-1 day')
+		         WHERE ts >= ?
 		         GROUP BY target_id
 		       ) agg ON agg.target_id = t.id
-		 ORDER BY t.label, t.port`)
+		 ORDER BY t.label, t.port`, FormatTime(time.Now().Add(-24*time.Hour)))
 	if err != nil {
 		return nil, err
 	}
@@ -319,7 +318,7 @@ func (d *DB) AvailabilityBuckets(ctx context.Context, targetID int64, since, gra
 		 GROUP BY bucket
 		 ORDER BY bucket`, expr, filter)
 
-	rows, err := d.QueryContext(ctx, q, args...)
+	rows, err := d.reader().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -371,7 +370,7 @@ func (d *DB) AvailabilityHeatmap(ctx context.Context, targetID int64, since stri
 		 GROUP BY dow, hour
 		 ORDER BY dow, hour`, shift, shift, filter)
 
-	rows, err := d.QueryContext(ctx, q, args...)
+	rows, err := d.reader().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -406,7 +405,7 @@ type Outage struct {
 // per target is bounded by the retention window, so grouping in Go is cheaper
 // and clearer than a windowed SQL query.
 func (d *DB) RecentOutages(ctx context.Context, since string, limit int) ([]Outage, error) {
-	rows, err := d.QueryContext(ctx, `
+	rows, err := d.reader().QueryContext(ctx, `
 		SELECT p.target_id, t.label, p.ts, p.ok, COALESCE(p.error, '')
 		  FROM probe_results p JOIN targets t ON t.id = p.target_id
 		 WHERE p.ts >= ?
@@ -500,10 +499,22 @@ func (d *DB) InsertMetrics(ctx context.Context, samples []MetricSample) error {
 		return err
 	}
 	defer stmt.Close()
+	// Почасовая сводка ведётся тут же, в той же транзакции: графики,
+	// рейтинг и расписание читают её, а не миллионы минутных замеров.
+	hourly, err := tx.PrepareContext(ctx, metricHourlyUpsert)
+	if err != nil {
+		return err
+	}
+	defer hourly.Close()
 
 	for _, s := range samples {
 		if _, err := stmt.ExecContext(ctx, s.TS, s.Source, s.Subject, s.Metric, s.Value); err != nil {
 			return err
+		}
+		if len(s.TS) >= 13 {
+			if _, err := hourly.ExecContext(ctx, s.Source, s.Metric, s.Subject, s.TS[:13], s.Value, s.Value); err != nil {
+				return err
+			}
 		}
 	}
 	return tx.Commit()
@@ -528,7 +539,11 @@ type MetricQuery struct {
 }
 
 // MetricSeries aggregates usage samples into per-subject time buckets.
+// Часы и дни считаются по почасовым сводкам, минуты — по сырым замерам.
 func (d *DB) MetricSeries(ctx context.Context, q MetricQuery) ([]MetricPoint, error) {
+	if q.Granularity != "minute" {
+		return d.metricSeriesHourly(ctx, q)
+	}
 	expr, err := bucketExpr("ts", q.Granularity, q.TZOffset)
 	if err != nil {
 		return nil, err
@@ -568,7 +583,7 @@ func (d *DB) MetricSeries(ctx context.Context, q MetricQuery) ([]MetricPoint, er
 		 GROUP BY bucket, subject
 		 ORDER BY bucket, subject`, expr, agg, strings.Join(where, " AND "))
 
-	rows, err := d.QueryContext(ctx, sqlText, args...)
+	rows, err := d.reader().QueryContext(ctx, sqlText, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -585,10 +600,71 @@ func (d *DB) MetricSeries(ctx context.Context, q MetricQuery) ([]MetricPoint, er
 	return out, rows.Err()
 }
 
+// metricSeriesHourly — MetricSeries по почасовым сводкам.
+func (d *DB) metricSeriesHourly(ctx context.Context, q MetricQuery) ([]MetricPoint, error) {
+	expr, err := bucketExpr("hour || ':00:00'", q.Granularity, q.TZOffset)
+	if err != nil {
+		return nil, err
+	}
+	agg := "SUM(sum)"
+	switch strings.ToLower(q.Aggregate) {
+	case "", "sum":
+	case "avg":
+		agg = "SUM(sum) / SUM(n)"
+	case "max":
+		agg = "MAX(max)"
+	default:
+		return nil, fmt.Errorf("unknown aggregate %q", q.Aggregate)
+	}
+	where := []string{"hour >= ?"}
+	args := []any{hourOf(q.Since)}
+	if q.Source != "" {
+		where = append(where, "source = ?")
+		args = append(args, q.Source)
+	}
+	if q.Metric != "" {
+		where = append(where, "metric = ?")
+		args = append(args, q.Metric)
+	}
+	if len(q.Subjects) > 0 {
+		where = append(where, "subject IN (?"+strings.Repeat(",?", len(q.Subjects)-1)+")")
+		for _, s := range q.Subjects {
+			args = append(args, s)
+		}
+	}
+	rows, err := d.reader().QueryContext(ctx, fmt.Sprintf(`
+		SELECT %s AS bucket, subject, %s
+		  FROM metric_hourly
+		 WHERE %s
+		 GROUP BY bucket, subject
+		 ORDER BY bucket, subject`, expr, agg, strings.Join(where, " AND ")), args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []MetricPoint{}
+	for rows.Next() {
+		var p MetricPoint
+		if err := rows.Scan(&p.Bucket, &p.Subject, &p.Value); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+
+// hourOf — «2026-10-04T05» из метки RFC 3339 (часовой ключ сводок).
+func hourOf(ts string) string {
+	if len(ts) >= 13 {
+		return ts[:13]
+	}
+	return ts
+}
+
 // MetricSources — источники, у которых есть замеры новее since: какие
 // из «Docker, Podman, LXD…» на этом хосте реально работают.
 func (d *DB) MetricSources(ctx context.Context, since string) ([]string, error) {
-	rows, err := d.QueryContext(ctx, `SELECT DISTINCT source FROM metric_samples WHERE ts >= ?`, since)
+	rows, err := d.reader().QueryContext(ctx, `SELECT DISTINCT source FROM metric_hourly WHERE hour >= ?`, hourOf(since))
 	if err != nil {
 		return nil, err
 	}
@@ -616,13 +692,13 @@ func (d *DB) MetricTop(ctx context.Context, source, metric, since string, limit 
 	if limit <= 0 {
 		limit = 10
 	}
-	rows, err := d.QueryContext(ctx, `
-		SELECT subject, SUM(value) AS total, COUNT(*)
-		  FROM metric_samples
-		 WHERE ts >= ? AND source = ? AND metric = ?
+	rows, err := d.reader().QueryContext(ctx, `
+		SELECT subject, SUM(sum) AS total, SUM(n)
+		  FROM metric_hourly
+		 WHERE hour >= ? AND source = ? AND metric = ?
 		 GROUP BY subject
 		 ORDER BY total DESC
-		 LIMIT ?`, since, source, metric, limit)
+		 LIMIT ?`, hourOf(since), source, metric, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -643,22 +719,22 @@ func (d *DB) MetricTop(ctx context.Context, source, metric, since string, limit 
 // utilisation schedule.
 func (d *DB) UsageHeatmap(ctx context.Context, source, metric, subject, since string, tzOffsetMinutes int) ([]HeatCell, error) {
 	shift := fmt.Sprintf("'%+d minutes'", tzOffsetMinutes)
-	where := []string{"ts >= ?", "source = ?", "metric = ?"}
-	args := []any{since, source, metric}
+	where := []string{"hour >= ?", "source = ?", "metric = ?"}
+	args := []any{hourOf(since), source, metric}
 	if subject != "" {
 		where = append(where, "subject = ?")
 		args = append(args, subject)
 	}
 	q := fmt.Sprintf(`
-		SELECT CAST(strftime('%%w', ts, %s) AS INTEGER) AS dow,
-		       CAST(strftime('%%H', ts, %s) AS INTEGER) AS hour,
-		       COUNT(*), SUM(value)
-		  FROM metric_samples
+		SELECT CAST(strftime('%%w', hour || ':00:00', %s) AS INTEGER) AS dow,
+		       CAST(strftime('%%H', hour || ':00:00', %s) AS INTEGER) AS h,
+		       SUM(n), SUM(sum)
+		  FROM metric_hourly
 		 WHERE %s
-		 GROUP BY dow, hour
-		 ORDER BY dow, hour`, shift, shift, strings.Join(where, " AND "))
+		 GROUP BY dow, h
+		 ORDER BY dow, h`, shift, shift, strings.Join(where, " AND "))
 
-	rows, err := d.QueryContext(ctx, q, args...)
+	rows, err := d.reader().QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

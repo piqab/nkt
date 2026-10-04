@@ -8,6 +8,28 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.137 — 2026-10-04
+
+- **“Load” and “Availability” no longer stall the host.** Charts, the
+  ranking and the schedule read hourly summaries instead of millions of
+  per-minute samples (tens of times faster on a host with Kubernetes);
+  long reads use a separate pool and do not hold the database, so the
+  host stops dropping off the hub meanwhile. Per-minute samples are kept
+  for three days, summaries for at least 90 days; the first start after
+  the update builds the summaries from history once.
+- **Kubernetes availability.** A control plane probes Ingresses,
+  NodePort and LoadBalancer services and cluster nodes — the section used
+  to be empty on a host running only a cluster.
+- **Kubernetes nodes.** CPU and memory of every node, workers included;
+  “Load” gets a “Kubernetes · nodes” source, node and namespace filters
+  and an object picker instead of an anonymous “Other”.
+- **Hub “Monitoring”:** hosts look like the host list (groups, bars,
+  “k8s · control plane / worker” and cluster labels), nodes without a hub
+  host are shown separately; pods carry their node, with cluster, node
+  and namespace filters.
+- **Alerts:** the kind filter lists every kind, “forecast” included.
+- Target availability “over 24 hours” took in up to a day too much — fixed.
+
 ## v1.11.136 — 2026-10-04
 
 - Security: outside the sandbox and without systemd, only programs from a

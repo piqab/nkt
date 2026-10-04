@@ -65,6 +65,10 @@ type monHostRow struct {
 	LoadMax     float64   `json:"load_max"`
 	Disks       []monDisk `json:"disks"`
 	Workloads   int       `json:"workloads"`
+	// Узел Kubernetes: кластер, роль (control-plane | worker), имя узла.
+	K8sCluster string `json:"k8s_cluster,omitempty"`
+	K8sRole    string `json:"k8s_role,omitempty"`
+	K8sNode    string `json:"k8s_node,omitempty"`
 }
 
 type monWorkload struct {
@@ -78,6 +82,11 @@ type monWorkload struct {
 	MemMax  float64 `json:"mem_max"`
 	NetRx   float64 `json:"net_rx"`
 	NetTx   float64 `json:"net_tx"`
+	// Kubernetes: кластер и узел пода (у узла — он сам), доля ёмкости узла.
+	Cluster  string  `json:"cluster,omitempty"`
+	Node     string  `json:"node,omitempty"`
+	CPUShare float64 `json:"cpu_share,omitempty"`
+	MemShare float64 `json:"mem_share,omitempty"`
 }
 
 type monTargetRow struct {
@@ -134,6 +143,26 @@ func (s *Server) handleMonitoringOverview(w http.ResponseWriter, r *http.Request
 	insights := append([]Insight(nil), s.mon.insights...)
 	collecting, lastRun := s.mon.collecting, s.mon.lastRun
 	s.mon.mu.Unlock()
+
+	var visible []store.Host
+	for _, h := range hosts {
+		if rows[h.ID] != nil {
+			visible = append(visible, h)
+		}
+	}
+	clusters, tags := s.monClusters(ctx, visible)
+	if clusters == nil {
+		clusters = []monCluster{}
+	}
+	for id, tg := range tags {
+		if row := rows[id]; row != nil {
+			row.K8sCluster, row.K8sRole, row.K8sNode = tg.Cluster, tg.Role, tg.Node
+		}
+	}
+	clusterOf := map[int64]*monCluster{}
+	for i := range clusters {
+		clusterOf[clusters[i].HostID] = &clusters[i]
+	}
 
 	eta := map[string]float64{}
 	for _, in := range insights {
@@ -208,6 +237,18 @@ func (s *Server) handleMonitoringOverview(w http.ResponseWriter, r *http.Request
 				x.NetRx = a.Sum
 			case "net_tx_bytes":
 				x.NetTx = a.Sum
+			case "cpu_share_pct":
+				x.CPUShare = round1(a.Avg)
+			case "mem_share_pct":
+				x.MemShare = round1(a.Avg)
+			}
+			if c := clusterOf[a.HostID]; c != nil {
+				switch a.Source {
+				case monitor.SourceK8s:
+					x.Cluster, x.Node = c.Name, c.pods[a.Subject]
+				case monitor.SourceK8sNode:
+					x.Cluster, x.Node = c.Name, a.Subject
+				}
 			}
 		}
 	}
@@ -232,7 +273,9 @@ func (s *Server) handleMonitoringOverview(w http.ResponseWriter, r *http.Request
 	outWL := make([]monWorkload, 0, len(wl))
 	for _, x := range wl {
 		outWL = append(outWL, *x)
-		rows[x.HostID].Workloads++
+		if x.Source != monitor.SourceK8sNode {
+			rows[x.HostID].Workloads++
+		}
 	}
 	sort.Slice(outWL, func(i, j int) bool { return outWL[i].CPUAvg > outWL[j].CPUAvg })
 	// Подписи целей — из сохранённого списка хоста.
@@ -324,7 +367,7 @@ func (s *Server) handleMonitoringOverview(w http.ResponseWriter, r *http.Request
 		}
 	}
 	out := map[string]any{
-		"hosts": hostRows, "workloads": outWL, "targets": outT,
+		"hosts": hostRows, "workloads": outWL, "targets": outT, "clusters": clusters,
 		"heat_avail": heatAvail, "heat_cpu": heatCPU,
 		"insights": localizedInsights(ctx, vis), "collecting": collecting,
 		"settings": s.MonitoringSettings(ctx), "daily": daily,

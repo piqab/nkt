@@ -145,6 +145,8 @@ type summaryResp struct {
 		Enabled bool    `json:"enabled"`
 		Points  [][]any `json:"points"`
 	} `json:"targets"`
+	// K8s — состав кластера, если хост — control plane.
+	K8s *monK8s `json:"k8s,omitempty"`
 }
 
 // collectHost — недостающие полные часы хоста кусками по неделе.
@@ -159,6 +161,7 @@ func (s *Server) collectHost(ctx context.Context, id int64) monHostState {
 	}
 	st := monHostState{At: time.Now()}
 	days := map[string]bool{}
+	var k8s *monK8s
 	for from := since; from.Before(now); from = from.Add(monChunkSpan) {
 		to := from.Add(monChunkSpan)
 		if to.After(now) {
@@ -173,6 +176,9 @@ func (s *Server) collectHost(ctx context.Context, id int64) monHostState {
 			}
 			st.Error = msgs.Localize(msgs.DefaultLang, err)
 			return st
+		}
+		if resp.K8s != nil {
+			k8s = resp.K8s
 		}
 		var rows []store.MonRow
 		for _, sr := range resp.Series {
@@ -212,6 +218,7 @@ func (s *Server) collectHost(ctx context.Context, id int64) monHostState {
 			_ = s.db.MonSetTargets(ctx, id, targets)
 		}
 	}
+	s.saveMonK8s(ctx, id, k8s)
 	list := make([]string, 0, len(days))
 	for d := range days {
 		list = append(list, d)

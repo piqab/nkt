@@ -1051,6 +1051,9 @@ type K8sNode struct {
 	Ready         bool   `json:"ready"`
 	IP            string `json:"ip,omitempty"`
 	Unschedulable bool   `json:"unschedulable,omitempty"`
+	// ControlPlane — узел управляющий (метка node-role control-plane или
+	// master); остальные — рабочие.
+	ControlPlane bool `json:"control_plane,omitempty"`
 }
 
 // K8sPVC — заявка на том.

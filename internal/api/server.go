@@ -395,6 +395,7 @@ func (s *Server) Handler() http.Handler {
 			r.Get("/monitor/usage", s.handleUsage)
 			r.Get("/monitor/usage/top", s.handleUsageTop)
 			r.Get("/monitor/usage/sources", s.handleUsageSources)
+			r.Get("/monitor/usage/k8s", s.handleUsageK8s)
 			r.Get("/monitor/usage/heatmap", s.handleUsageHeatmap)
 			r.Get("/monitor/summary", s.handleMonitorSummary)
 			r.Get("/monitor/jobs", s.handleJobs)

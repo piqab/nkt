@@ -12,6 +12,7 @@ import (
 
 	"github.com/piqab/nkt/internal/auth"
 	"github.com/piqab/nkt/internal/control"
+	"github.com/piqab/nkt/internal/model"
 	"github.com/piqab/nkt/internal/monitor"
 	"github.com/piqab/nkt/internal/msgs"
 	"github.com/piqab/nkt/internal/store"
@@ -145,11 +146,49 @@ func (s *Server) handleUsageSources(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"sources": list})
 }
 
+// k8sCluster — состав кластера для «Нагрузки» и сводки хаба: узлы с
+// ролью и узел каждого пода («namespace/под» → узел). Берётся из
+// последнего скана — отдельных вызовов kubectl не нужно.
+type k8sCluster struct {
+	Nodes []model.K8sNode   `json:"nodes"`
+	Pods  map[string]string `json:"pods"`
+}
+
+func (s *Server) k8sCluster() *k8sCluster {
+	if s.scanner == nil {
+		return nil
+	}
+	snap := s.scanner.Latest()
+	if snap == nil || snap.K8s == nil {
+		return nil
+	}
+	out := &k8sCluster{Nodes: snap.K8s.Nodes, Pods: map[string]string{}}
+	if out.Nodes == nil {
+		out.Nodes = []model.K8sNode{}
+	}
+	for _, p := range snap.K8s.Pods {
+		if p.Node != "" {
+			out.Pods[p.Namespace+"/"+p.Name] = p.Node
+		}
+	}
+	return out
+}
+
+// handleUsageK8s — GET /monitor/usage/k8s: узлы и узлы подов (пусто, если
+// это не control plane).
+func (s *Server) handleUsageK8s(w http.ResponseWriter, r *http.Request) {
+	c := s.k8sCluster()
+	if c == nil {
+		c = &k8sCluster{Nodes: []model.K8sNode{}, Pods: map[string]string{}}
+	}
+	writeJSON(w, http.StatusOK, c)
+}
+
 func (s *Server) handleUsageTop(w http.ResponseWriter, r *http.Request) {
 	source := defaultParam(r, "source", "docker")
 	metric := defaultParam(r, "metric", "net_rx_bytes")
 	rows, err := s.db.MetricTop(r.Context(), source, metric,
-		sinceParam(r, 24*time.Hour), intParam(r, "limit", 10))
+		sinceParam(r, 24*time.Hour), min(intParam(r, "limit", 10), 2000))
 	if err != nil {
 		fail(w, r, err)
 		return
@@ -340,7 +379,7 @@ func defaultParam(r *http.Request, name, def string) string {
 
 // summarySources — ряды, которые «Мониторинг» хаба берёт с хоста.
 var summarySources = []string{monitor.SourceHost, monitor.SourceDisk, monitor.SourceDocker, monitor.SourcePodman,
-	monitor.SourceLXD, monitor.SourceLibvirt, monitor.SourceK8s}
+	monitor.SourceLXD, monitor.SourceLibvirt, monitor.SourceK8s, monitor.SourceK8sNode}
 
 // summaryMaxSpan — сколько часов отдаётся за раз (хаб дозабирает частями).
 const summaryMaxSpan = 31 * 24 * time.Hour
@@ -441,6 +480,9 @@ func (s *Server) handleMonitorSummary(w http.ResponseWriter, r *http.Request) {
 	}
 	if snap := s.scanner.Latest(); snap != nil {
 		out["capacity"] = snap.Capacity
+	}
+	if c := s.k8sCluster(); c != nil {
+		out["k8s"] = c
 	}
 	writeJSON(w, http.StatusOK, out)
 }

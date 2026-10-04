@@ -1626,7 +1626,12 @@
     },
     "source": "Source",
     "sourceHost": "Whole host",
-    "noData": "no data"
+    "noData": "no data",
+    "sourceK8sNode": "Kubernetes · nodes",
+    "allNodes": "all nodes",
+    "allNamespaces": "all namespaces",
+    "pickSubjects": "the busiest — or pick from {{count}}",
+    "whatInOther": "What is in “Other”?"
   },
   "blocks": {
     "loadingStructure": "Loading file structure…",
@@ -4199,7 +4204,26 @@
       "leak_days": "Memory leak: growing without a break, days",
       "leak_growth_pct": "Memory leak: growth over that time at least, %",
       "avail_drop_pp": "Target availability dropped over the day by more than, pp"
-    }
+    },
+    "k8sRole": {
+      "control-plane": "control plane",
+      "worker": "worker"
+    },
+    "k8sCluster": "cluster {{name}}",
+    "allClusters": "all clusters",
+    "allNodes": "all nodes",
+    "allNamespaces": "all namespaces",
+    "nodesWithoutHost": "nodes without a hub host",
+    "noGroup": "No group",
+    "hostsCount": "hosts: {{count}}",
+    "nodeNotReady": "node not ready (NotReady)",
+    "cores": "cores",
+    "barHint": "The bar is the period average, the mark is the peak",
+    "memBarHint": "Average {{avg}}%, peak {{max}}%",
+    "colNode": "Node",
+    "ofNode": "of node",
+    "k8sNodeKind": "k8s node",
+    "nodesCount": "nodes: {{count}}"
   },
   "reboot": {
     "button": "Reboot host",

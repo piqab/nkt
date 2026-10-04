@@ -174,6 +174,8 @@ const KIND_COLOR: Record<string, string> = {
   resolved: 'success',
   'job-failed': 'error',
   bans: 'volcano',
+  rebooted: 'processing',
+  forecast: 'purple',
 }
 
 /**
@@ -230,7 +232,7 @@ export default function HostEvents({ me, onOpenHost }: { me?: Me; onOpenHost?: (
       }
       return next
     })
-  const events = useApi<{ events: HostEvent[]; unread: number; total: number; hosts: string[]; hidden: number; hide?: Record<string, boolean> }>(
+  const events = useApi<{ events: HostEvent[]; unread: number; total: number; hosts: string[]; hidden: number; hide?: Record<string, boolean>; kinds?: string[] }>(
     `/hub/events${qs({ limit: 200, kind: filter.kinds.join(','), host: filter.host, q: filter.q, hidden: filter.hidden ? 1 : '' })}`,
     POLL_MS,
   )
@@ -338,10 +340,9 @@ export default function HostEvents({ me, onOpenHost }: { me?: Me; onOpenHost?: (
           placeholder={t('events.filterKinds')}
           value={filter.kinds}
           onChange={(v: string[]) => setFilter({ kinds: v })}
-          options={Object.keys(KIND_COLOR)
-            .concat(['rebooted'])
-            .filter((k, i, a) => a.indexOf(k) === i)
-            .map((k) => ({ value: k, label: t(`events.kind.${k}`, { defaultValue: k }) }))}
+          // Виды — с хаба (EventKinds): новый вид оповещений попадает в
+          // фильтр сам, без правки списка здесь.
+          options={(events.data?.kinds ?? Object.keys(KIND_COLOR)).map((k) => ({ value: k, label: t(`events.kind.${k}`, { defaultValue: k }) }))}
         />
         <Select
           allowClear

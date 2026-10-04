@@ -90,6 +90,21 @@ CREATE TABLE IF NOT EXISTS metric_samples (
 CREATE INDEX IF NOT EXISTS idx_metric_lookup ON metric_samples(source, metric, subject, ts DESC);
 CREATE INDEX IF NOT EXISTS idx_metric_ts ON metric_samples(ts DESC);
 
+-- Почасовые сводки замеров: ведутся при записи (InsertMetrics). Графики,
+-- рейтинг, расписание и сводка для хаба читают их — минутные замеры
+-- хранятся недолго и нужны только для «по минутам».
+CREATE TABLE IF NOT EXISTS metric_hourly (
+    source  TEXT NOT NULL,
+    metric  TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    hour    TEXT NOT NULL,              -- 2026-10-04T05 (UTC)
+    sum     REAL NOT NULL,
+    max     REAL NOT NULL,
+    n       INTEGER NOT NULL,
+    PRIMARY KEY (source, metric, subject, hour)
+) WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_metric_hourly_hour ON metric_hourly(hour);
+
 -- Monotonic counters need their previous reading to become a rate.
 CREATE TABLE IF NOT EXISTS counter_state (
     key   TEXT PRIMARY KEY,
@@ -652,10 +667,42 @@ func tableColumns(ctx context.Context, db *sql.DB, table string) (map[string]boo
 	return cols, rows.Err()
 }
 
+// metricHourlyUpsert — добавить замер в почасовую сводку.
+const metricHourlyUpsert = `INSERT INTO metric_hourly(source, metric, subject, hour, sum, max, n) VALUES(?, ?, ?, ?, ?, ?, 1)
+	ON CONFLICT(source, metric, subject, hour) DO UPDATE SET sum = sum + excluded.sum, max = MAX(max, excluded.max), n = n + 1`
+
+// RawMetricsKeep — сколько хранятся минутные замеры: дольше их не читает
+// ничего, кроме графика «по минутам»; история — в почасовых сводках.
+const RawMetricsKeep = 72 * time.Hour
+
+// HourlyMetricsMinKeep — почасовые сводки хранятся не меньше этого, даже
+// если срок хранения рядов (NKT_RETENTION) короче.
+const HourlyMetricsMinKeep = 90 * 24 * time.Hour
+
 // DB wraps the SQLite handle.
 type DB struct {
 	*sql.DB
+	// rd — пул только для чтения (WAL читает параллельно с записью): долгие
+	// графики идут через него и не держат единственное соединение записи,
+	// которым пользуются вход, запись замеров и опрос хаба.
+	rd   *sql.DB
 	path string
+}
+
+// reader — пул для долгих чтений (нет — общее соединение).
+func (d *DB) reader() *sql.DB {
+	if d.rd != nil {
+		return d.rd
+	}
+	return d.DB
+}
+
+// Close закрывает оба пула.
+func (d *DB) Close() error {
+	if d.rd != nil {
+		_ = d.rd.Close()
+	}
+	return d.DB.Close()
 }
 
 // Open creates (or opens) the database and applies the schema.
@@ -684,7 +731,33 @@ func Open(path string) (*DB, error) {
 	if err := addMissingColumns(ctx, sqlDB); err != nil {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
-	return &DB{DB: sqlDB, path: path}, nil
+	if err := backfillMetricHourly(sqlDB); err != nil {
+		return nil, fmt.Errorf("metric hourly: %w", err)
+	}
+	rd, err := sql.Open("sqlite", dsn+"&_pragma=query_only(1)")
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite reader %s: %w", path, err)
+	}
+	rd.SetMaxOpenConns(4)
+	return &DB{DB: sqlDB, rd: rd, path: path}, nil
+}
+
+// backfillMetricHourly — один раз после обновления: почасовые сводки из
+// уже накопленных замеров (дальше их ведёт InsertMetrics).
+func backfillMetricHourly(db *sql.DB) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	var done int
+	if err := db.QueryRowContext(ctx, `SELECT COUNT(*) FROM kv WHERE key = 'metric_hourly_v1'`).Scan(&done); err != nil || done > 0 {
+		return err
+	}
+	if _, err := db.ExecContext(ctx, `INSERT OR REPLACE INTO metric_hourly(source, metric, subject, hour, sum, max, n)
+		SELECT source, metric, subject, substr(ts, 1, 13), SUM(value), MAX(value), COUNT(*)
+		FROM metric_samples GROUP BY source, metric, subject, substr(ts, 1, 13)`); err != nil {
+		return err
+	}
+	_, err := db.ExecContext(ctx, `INSERT INTO kv(key, value) VALUES('metric_hourly_v1', '1')`)
+	return err
 }
 
 // Path returns the database file location.
@@ -746,10 +819,29 @@ func (d *DB) Purge(ctx context.Context, retention time.Duration) (PurgeResult, e
 	}
 	out.Probes = rows(res)
 
-	if res, err = d.ExecContext(ctx, `DELETE FROM metric_samples WHERE ts < ?`, cutoff); err != nil {
+	raw := cutoff
+	if c := FormatTime(time.Now().Add(-RawMetricsKeep)); c > raw {
+		raw = c
+	}
+	// Порциями: после обновления лишними становятся миллионы строк сразу,
+	// и одно удаление надолго заняло бы соединение записи.
+	for {
+		if res, err = d.ExecContext(ctx, `DELETE FROM metric_samples WHERE id IN (SELECT id FROM metric_samples WHERE ts < ? LIMIT 20000)`, raw); err != nil {
+			return out, err
+		}
+		n := rows(res)
+		out.Metrics += n
+		if n < 20000 {
+			break
+		}
+	}
+	keep := retention
+	if keep < HourlyMetricsMinKeep {
+		keep = HourlyMetricsMinKeep
+	}
+	if _, err = d.ExecContext(ctx, `DELETE FROM metric_hourly WHERE hour < ?`, hourOf(FormatTime(time.Now().Add(-keep)))); err != nil {
 		return out, err
 	}
-	out.Metrics = rows(res)
 
 	if res, err = d.ExecContext(ctx, `DELETE FROM sessions WHERE expires_at < ?`, Now()); err != nil {
 		return out, err
