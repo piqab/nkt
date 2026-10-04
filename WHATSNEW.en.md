@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.141 — 2026-10-04
+
+- **Deployments: port conflicts inside a stack.** Two publications of the
+  same host port on overlapping addresses (`0.0.0.0:8080` and
+  `127.0.0.1:8080`) are now a dry run problem, and the deployment refuses
+  before touching any host — before, it surfaced as “port is already
+  allocated” on `compose up`.
+- “Deployments” shows an “experimental feature” banner, like “Clusters”.
+
 ## v1.11.140 — 2026-10-04
 
 - **Pipeline deletion by plan.** The window shows where this pipeline's

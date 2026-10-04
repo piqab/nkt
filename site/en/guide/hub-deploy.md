@@ -17,6 +17,13 @@ the right to "poke" one pipeline's webhook, and what goes where is
 decided by the description on the hub — only the branch, commit and tag
 are taken from the request.
 
+::: warning Experimental feature
+A deployment changes stacks on hosts — starts, replaces and removes them,
+and removes the old stack when the host or the stack name changes. Run the
+“Dry run” first, try it on test hosts, check the job log. The same banner
+sits at the top of the “Deployments” section.
+:::
+
 ## Pipeline
 
 "New pipeline" → a name and a YAML description. Editing happens in a
@@ -167,6 +174,14 @@ compose:
   in `ports:` (`"0.0.0.0:25:25"`). An entry with a variable (`${PORT}:80`)
   cannot be parsed; the log warns. The deployment and dry run logs show
   what happened to each port.
+- **One host port, one publication.** `0.0.0.0:8080` already covers
+  `127.0.0.1:8080`, so two such publications (in one service or in
+  different ones, short or long syntax) do not start together: the second
+  bind fails with “port is already allocated”. The hub checks this on the
+  final compose file (after `ports:` and `bind:`): the dry run names the
+  pair as a problem, and the deployment refuses before touching any host.
+  Different specific addresses (`127.0.0.1` and `192.168.1.5`) and
+  different protocols (`53/tcp` and `53/udp`) are not a conflict.
 - **The stack's `.env`** is set in the pipeline's "Access": stored on the
   hub encrypted, written to the host with 0600 permissions, never in the
   version history or logs.

@@ -3498,7 +3498,8 @@
     "planGone": "host not on the hub",
     "removeOrphansWarn": "The stack on {{hosts}} stays without a pipeline — nothing will manage it any more.",
     "unhostStart": "Only remove from selected ({{count}})",
-    "unhostHint": "The pipeline stays and runs on the other hosts; the selected hosts leave its description (hosts:) and the stack is removed from them."
+    "unhostHint": "The pipeline stays and runs on the other hosts; the selected hosts leave its description (hosts:) and the stack is removed from them.",
+    "experimental": "Experimental feature: a deployment changes stacks on hosts — starts, replaces and removes them, and removes the old stack when the host or the stack name changes. Run the “Dry run” first, try it on test hosts, check the job log."
   },
   "edge": {
     "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment webhooks and/or signed API token requests), and the hub keeps the tunnel to it. There can be several edges.",

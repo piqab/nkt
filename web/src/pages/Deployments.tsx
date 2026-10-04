@@ -275,6 +275,8 @@ export default function Deployments({ me }: { me: Me }) {
           </Button>
         )}
       </div>
+      {/* Как «Кластеры» и «Сценарии»: выкладка меняет стеки на хостах. */}
+      <Banner kind="warn">{t('deploy.experimental')}</Banner>
       {error && (
         <Banner kind="error" onClose={() => setError(null)}>
           {error}
