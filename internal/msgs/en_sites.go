@@ -67,6 +67,8 @@ var enSitesCatalog = map[string]string{
 	"deploy.composeNote":            "Pipeline %s, commit %s",
 	"deploy.composeOutside":         "%s is outside the compose file's directory %s, so compose's relative references to it will not work",
 	"deploy.hostUnknown":            "The hub has no host %q",
+	"deploy.dryEnvUnused":           "! .env has variables that will not reach any container: %s — compose uses .env only to substitute ${NAME} in the file; add them to the service environment, env_file: .env or env_keys",
+	"deploy.envChangedRecreate":     ".env changed since the last deployment — containers are recreated (--force-recreate) to pick up the new values",
 	"deploy.dryPortSelfConflict":    "✗ Port %d/%s is published twice on overlapping addresses: %s and %s — 0.0.0.0 already covers any address, the second bind fails with “port is already allocated”",
 	"deploy.portSelfConflict":       "Port publications in the stack conflict with each other (%d) — fix ports: in the description or the compose file; nothing changed on the hosts",
 	"deploy.removeItemNotAllowed":   "Stack %s cannot be removed on that host: it is shared with another pipeline, the host is unreachable, or the stack is not deployed there",

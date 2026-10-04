@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.142 — 2026-10-04
+
+- **Deployments and `.env`.** If `.env` changed since the last deployment,
+  containers are force-recreated, so new values arrive with podman as well
+  as docker. The dry run names `.env` variables that reach no container
+  (compose uses `.env` only to substitute `${NAME}`). After saving `.env`
+  in “Access”, a hint says it reaches the hosts with the next deployment.
+
 ## v1.11.141 — 2026-10-04
 
 - **Deployments: port conflicts inside a stack.** Two publications of the

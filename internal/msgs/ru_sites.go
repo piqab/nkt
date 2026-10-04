@@ -67,6 +67,8 @@ var ruSitesCatalog = map[string]string{
 	"deploy.composeNote":            "Конвейер %s, коммит %s",
 	"deploy.composeOutside":         "%s вне каталога compose-файла %s — относительные ссылки compose на него не сработают",
 	"deploy.hostUnknown":            "Хоста %q в хабе нет",
+	"deploy.dryEnvUnused":           "! В .env есть переменные, которые не попадут в контейнеры: %s — compose берёт .env только для подстановки ${ИМЯ} в файл; добавьте их в environment сервиса, env_file: .env или env_keys",
+	"deploy.envChangedRecreate":     ".env изменился с прошлой выкладки — контейнеры пересоздаются (--force-recreate), чтобы взять новые значения",
 	"deploy.dryPortSelfConflict":    "✗ Порт %d/%s публикуется дважды на пересекающихся адресах: %s и %s — 0.0.0.0 уже включает любой адрес, второй bind упадёт с «port is already allocated»",
 	"deploy.portSelfConflict":       "Публикации портов в стеке конфликтуют между собой (%d) — исправьте ports: в описании или compose-файле; на хостах ничего не менялось",
 	"deploy.removeItemNotAllowed":   "Стек %s на этом хосте убрать нельзя: он общий с другим конвейером, хост недоступен или стек там не выложен",

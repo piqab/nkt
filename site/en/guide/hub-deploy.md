@@ -184,7 +184,16 @@ compose:
   different protocols (`53/tcp` and `53/udp`) are not a conflict.
 - **The stack's `.env`** is set in the pipeline's "Access": stored on the
   hub encrypted, written to the host with 0600 permissions, never in the
-  version history or logs.
+  version history or logs. It reaches the hosts with the **next
+  deployment** — press “Deploy” after saving (the webhook and repository
+  polling do not react to a `.env` change). If `.env` changed since the
+  last deployment, containers are force-recreated (`--force-recreate`, for
+  docker and podman alike) to pick up the new values.
+- **`.env` is not the container environment.** docker compose uses it only
+  to substitute `${NAME}` in the compose file itself. A variable reaches a
+  container when the service references it (`environment: X: ${X}`), loads
+  `env_file: .env`, or it is listed in `env_keys`. The dry run names `.env`
+  variables that reach no container.
 - **Secrets written as values in someone else's compose file**
   (`APP_SECRET: replace-me…`) are not overridden by `.env`; use
   `env_keys:` in the pipeline: the hub replaces those variables' values
