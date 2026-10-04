@@ -496,7 +496,11 @@ func (s *Server) handleAudit(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"entries": entries})
+	kinds, err := s.db.AuditKinds(r.Context())
+	if err != nil {
+		kinds = []string{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": entries, "kinds": kinds})
 }
 
 // ------------------------------------------------------------------- actions
