@@ -29,6 +29,8 @@ type pipelineJSON struct {
 	Last *store.Deployment `json:"last,omitempty"`
 	// Action — действие из описания (compose удаляется заданием с хостов).
 	Action string `json:"action,omitempty"`
+	// Leftovers — старый стек, оставшийся на прежнем хосте после переезда.
+	Leftovers []leftoverStack `json:"leftovers,omitempty"`
 }
 
 // handlePipelines — GET /hub/pipelines: конвейеры с последней выкладкой.
@@ -52,6 +54,7 @@ func (s *Server) handlePipelines(w http.ResponseWriter, r *http.Request) {
 		if ds, err := s.db.Deployments(r.Context(), p.ID, 1); err == nil && len(ds) > 0 {
 			row.Last = &ds[0]
 		}
+		row.Leftovers = s.loadLeftovers(r.Context(), p.ID)
 		out = append(out, row)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"pipelines": out})
@@ -151,6 +154,10 @@ func (s *Server) handlePipelineUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	user := auth.Username(r.Context())
+	// Выложенный конвейер правят впервые с этой версии — запомнить, где
+	// стек сейчас (по описанию до правки): иначе выкладка по новому
+	// описанию не узнает, что убрать на прежнем хосте.
+	s.rememberDeployedBefore(r.Context(), p)
 	err := s.db.UpdatePipelineContent(r.Context(), p.ID, req.Content, user, req.Note)
 	s.db.Audit(r.Context(), user, "pipeline.update", p.Name, auditOutcome(err), req.Note)
 	if err != nil {

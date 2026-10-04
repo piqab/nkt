@@ -50,6 +50,10 @@ type composeCheck struct {
 		Addr   string `json:"addr"`
 		Holder string `json:"holder"`
 	} `json:"ports_busy"`
+	NamesBusy []struct {
+		Name    string `json:"name"`
+		Project string `json:"project"`
+	} `json:"names_busy"`
 	HostArch       string   `json:"host_arch"`
 	UnsetVars      []string `json:"unset_vars"`
 	NoHealthcheck  []string `json:"no_healthcheck"`
@@ -129,6 +133,21 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 	}
 	problems := 0
 	sitePort := 0
+	// Переезд и переименование: что станет со стеком, выложенным раньше.
+	var prev *deployedStack
+	if pl.ID > 0 {
+		prev = s.loadDeployed(ctx, pl.ID)
+		if prev == nil && pl.LastCommit != "" {
+			prev = s.deployedFromContent(ctx, pl.Content)
+		}
+	}
+	for _, h := range stackMovesFrom(prev, targets) {
+		if ok, why := s.hostUsable(ctx, h.ID); ok {
+			jc.Log("deploy.dryOldStackRemove", prev.Project, h.Name)
+		} else {
+			jc.Log("deploy.dryOldStackStays", prev.Project, h.Name, why)
+		}
+	}
 	if skipped := on.skippedNames(lang); skipped != "" {
 		jc.Log("deploy.drySkipped", skipped)
 	}
@@ -161,6 +180,10 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 		}
 		if skip := on.hostSkip(); len(skip) > 0 {
 			body["skip"] = skip
+		}
+		if old := replaceOn(prev, t.ID, c.Project); old != "" {
+			body["replace"] = old
+			jc.Log("deploy.dryStackRenamed", old, c.Project, t.Name)
 		}
 		code, err := s.composeHostPost(ctx, jc, user, t, "/api/compose/stacks/check", body, &res)
 		switch {
@@ -288,6 +311,13 @@ func logComposeCheck(jc *jobs.Context, host, project string, res composeCheck, e
 		}
 		problems++
 		jc.Log("deploy.dryPortBusy", pb.Addr, pb.Holder)
+	}
+	for _, nb := range res.NamesBusy {
+		if !on("ports") {
+			break
+		}
+		problems++
+		jc.Log("deploy.dryNameBusy", nb.Name, nb.Project)
 	}
 	for _, img := range res.Images {
 		if !on("images") {

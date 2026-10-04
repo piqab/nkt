@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"slices"
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
@@ -125,7 +126,7 @@ func (s *Server) removalHosts(ctx context.Context, jc *jobs.Context, c *deploy.C
 		}
 		found := false
 		for _, h := range hosts {
-			if h.Name == n {
+			if sameHostName(h.Name, n) {
 				found = true
 				if err := check(h); err != nil {
 					return nil, err
@@ -216,6 +217,37 @@ func (r *PipelineRemoveRunner) Run(ctx context.Context, jc *jobs.Context) (err e
 			return msgs.Errorf("deploy.removeHostFailed", t.Name, msgs.Localize(jc.Lang(), err))
 		}
 	}
+	// Где стек выложен на деле (описание могли поменять без выкладки) и
+	// старые стеки, оставшиеся после переезда: доступный хост — убрать,
+	// недоступный — в журнал (запись конвейера всё равно удаляется).
+	extra := s.loadLeftovers(ctx, pl.ID)
+	if d := s.loadDeployed(ctx, pl.ID); d != nil {
+		for _, h := range d.Hosts {
+			extra = append(extra, leftoverStack{HostID: h.ID, Host: h.Name, Project: d.Project})
+		}
+	}
+	for _, l := range extra {
+		if l.Project == c.Project && slices.ContainsFunc(targets, func(t targetHost) bool { return t.ID == l.HostID }) {
+			continue
+		}
+		if ok, why := s.hostUsable(ctx, l.HostID); !ok {
+			jc.Log("deploy.oldStackLeft", l.Project, l.Host, why)
+			continue
+		}
+		jc.Log("deploy.removeHost", l.Host, l.Project)
+		var started struct {
+			JobID int64 `json:"job_id"`
+		}
+		body := map[string]any{"project": l.Project, "volumes": p.Volumes, "images": p.Images}
+		if _, err := s.hostCall(ctx, user, l.HostID, "POST", "/api/compose/stacks/remove", body, &started); err == nil {
+			err = s.waitHostJobVia(ctx, jc, user, l.HostID, started.JobID)
+			if err != nil {
+				jc.Log("deploy.oldStackLeft", l.Project, l.Host, msgs.Localize(jc.Lang(), err))
+			}
+		} else {
+			jc.Log("deploy.oldStackLeft", l.Project, l.Host, msgs.Localize(jc.Lang(), err))
+		}
+	}
 
 	// 3. Запись на хабе и её рабочий каталог (checkout).
 	jc.StepKey(3, 3, "deploy.removeStepHub")
@@ -223,6 +255,8 @@ func (r *PipelineRemoveRunner) Run(ctx context.Context, jc *jobs.Context) (err e
 		return err
 	}
 	_ = os.RemoveAll(s.pipelineDir(pl.ID))
+	_ = s.db.KVSet(ctx, deployedKey(pl.ID), "")
+	s.saveLeftovers(ctx, pl.ID, nil)
 	s.db.Audit(ctx, jc.Job.Author, "pipeline.delete", pl.Name, "ok", map[string]any{"job_id": jc.Job.ID})
 	jc.Log("deploy.removed", pl.Name)
 	return nil

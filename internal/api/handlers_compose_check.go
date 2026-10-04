@@ -136,6 +136,9 @@ type ComposeCheckResult struct {
 	DiskFreeMB     int `json:"disk_free_mb,omitempty"`
 	// PortsBusy — порты хоста из публикаций, занятые не этим стеком.
 	PortsBusy []ComposePortBusy `json:"ports_busy,omitempty"`
+	// NamesBusy — container_name стека, занятые контейнерами другого
+	// проекта (up упал бы на «name already in use»).
+	NamesBusy []ComposeNameBusy `json:"names_busy,omitempty"`
 	// HostArch — архитектура хоста (для сверки с образами).
 	HostArch string `json:"host_arch,omitempty"`
 	// Simulated — фикстуры: команды не выполнялись по-настоящему.
@@ -255,7 +258,8 @@ func (s *Server) handleComposeCheck(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if on("ports") {
-		res.PortsBusy = busyPorts(ctx, c, res.Engine, work, req.Project, req.File)
+		res.PortsBusy = busyPorts(ctx, c, res.Engine, work, req.Project, req.File, req.Replace)
+		res.NamesBusy = busyNames(ctx, c, res.Engine, work, req.Project, req.File, req.Replace)
 	}
 	if on("health") {
 		res.NoHealthcheck = noHealthcheck(ctx, c, res.Engine, work, req.Project, req.File)
@@ -457,9 +461,63 @@ type ComposePortBusy struct {
 	Holder string `json:"holder,omitempty"`
 }
 
+// ComposeNameBusy — имя контейнера из container_name, которое уже носит
+// контейнер другого проекта.
+type ComposeNameBusy struct {
+	Name    string `json:"name"`
+	Project string `json:"project,omitempty"`
+}
+
+// busyNames — container_name сервисов стека против контейнеров хоста: имя
+// у контейнера другого проекта — конфликт; у этого стека или его прежнего
+// имени (replace) — нет.
+func busyNames(ctx context.Context, c collect.Collector, engine, work, project, file, replace string) []ComposeNameBusy {
+	res, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgsIn(c, work, project, file), "config", "--format", "json")...)
+	if err != nil || !res.OK() {
+		return nil
+	}
+	var doc struct {
+		Services map[string]struct {
+			ContainerName string `json:"container_name"`
+		} `json:"services"`
+	}
+	if json.Unmarshal([]byte(res.Stdout), &doc) != nil {
+		return nil
+	}
+	want := map[string]bool{}
+	for _, svc := range doc.Services {
+		if svc.ContainerName != "" {
+			want[svc.ContainerName] = true
+		}
+	}
+	if len(want) == 0 {
+		return nil
+	}
+	label := "com.docker.compose.project"
+	if engine == "podman" {
+		label = "io.podman.compose.project"
+	}
+	ps, err := c.RunTimeout(ctx, time.Minute, engine, "ps", "-a", "--format", "{{.Names}}\t{{.Label \""+label+"\"}}")
+	if err != nil || !ps.OK() {
+		return nil
+	}
+	var out []ComposeNameBusy
+	for _, line := range splitLines(ps.Stdout) {
+		name, proj, _ := strings.Cut(line, "\t")
+		name = strings.TrimPrefix(strings.TrimSpace(name), "/")
+		if !want[name] || proj == project || (replace != "" && proj == replace) {
+			continue
+		}
+		out = append(out, ComposeNameBusy{Name: name, Project: proj})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
 // busyPorts — публикации стека (копия в work) против слушающих сокетов
-// хоста; порты, которые держит этот же стек (compose ps), — не заняты.
-func busyPorts(ctx context.Context, c collect.Collector, engine, work, project, file string) []ComposePortBusy {
+// хоста; порты, которые держит этот же стек (compose ps) или его прежнее
+// имя (replace), — не заняты.
+func busyPorts(ctx context.Context, c collect.Collector, engine, work, project, file, replace string) []ComposePortBusy {
 	res, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgsIn(c, work, project, file), "config", "--format", "json")...)
 	if err != nil || !res.OK() {
 		return nil
@@ -505,8 +563,15 @@ func busyPorts(ctx context.Context, c collect.Collector, engine, work, project, 
 	}
 	// Что уже держит сам стек (повторная выкладка — не «занято»).
 	own := map[string]bool{}
-	if dir := composeStackDir(project); composeFileIn(c, dir) != "" {
-		if ps, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgs(c, project, composeFileIn(c, dir)), "ps", "--format", "json")...); err == nil && ps.OK() {
+	for _, proj := range []string{project, replace} {
+		if proj == "" {
+			continue
+		}
+		dir := composeStackDir(proj)
+		if composeFileIn(c, dir) == "" {
+			continue
+		}
+		if ps, err := c.RunTimeout(ctx, time.Minute, engine, append(composeArgs(c, proj, composeFileIn(c, dir)), "ps", "--format", "json")...); err == nil && ps.OK() {
 			for _, ct := range composePS(ps.Stdout) {
 				for _, p := range ct.Publishers {
 					if p.PublishedPort > 0 {

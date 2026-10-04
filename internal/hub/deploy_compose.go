@@ -157,9 +157,19 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	if err := bindComposePorts(jc, files, main, c); err != nil {
 		return err
 	}
+	// Где стек был до этой выкладки: переименованный — заменяется на том
+	// же хосте, с прежних хостов — убирается после успеха.
+	prev := s.loadDeployed(ctx, pl.ID)
+	for _, h := range stackMovesFrom(prev, targets) {
+		jc.Log("deploy.stackMoves", prev.Project, h.Name)
+	}
 	for i, t := range targets {
 		jc.StepKey(2+i, 2+len(targets), "deploy.stepCompose", t.Name)
 		body := composeBody(c, main, files, env, pl.EnvSHA, msgs.T(lang, "deploy.composeNote", pl.Name, deploy.ShortSHA(vars.Commit)))
+		if old := replaceOn(prev, t.ID, c.Project); old != "" {
+			body["replace"] = old
+			jc.Log("deploy.stackRenamed", old, c.Project, t.Name)
+		}
 		var started struct {
 			JobID     int64  `json:"job_id"`
 			Engine    string `json:"engine"`
@@ -181,6 +191,14 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 		}
 		jc.Log("deploy.composeHostDone", t.Name)
 	}
+	// Все хосты подняты — запомнить, где стек теперь, и убрать старый с
+	// прежних хостов (недоступный — «остался», выкладка от этого не падает).
+	cur := deployedStack{Project: c.Project}
+	for _, t := range targets {
+		cur.Hosts = append(cur.Hosts, deployedHost{ID: t.ID, Name: t.Name})
+	}
+	s.saveDeployed(ctx, pl.ID, cur)
+	s.cleanupMovedStacks(ctx, jc, user, pl, c.Project, prev, targets)
 	switch {
 	case c.Site.Managed():
 		// Сайт — после стека, на единственном хосте; не настроился — в
