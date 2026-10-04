@@ -525,6 +525,7 @@ var enCatalog = map[string]string{
 	"mon.quietWindow":                                     "The quietest window of the week is two hours with an average CPU load of %v%%: good for maintenance",
 	"mon.settingsBad":                                     "invalid “Monitoring” thresholds",
 	"hub.monImportNoHost":                                 "there is no host %q here; its history was not imported",
+	"system.rebootNotConfirmed":                           "the reboot was not confirmed",
 	"api.backgroundJobsAreUnavailable":                    "background jobs are unavailable",
 	"api.curlInstalledHost":                               "curl is not installed on the host",
 	"api.emptyCommand":                                    "empty command",

@@ -7,6 +7,7 @@ import { Banner, Card, ErrorNote, Loading } from '../components/ui'
 import { DataTable } from '../components/DataTable'
 import { LocaleCard, TimeSyncCard } from '../components/LocaleTimeCards'
 import { TitleHelp } from '../components/Docs'
+import { RebootCard } from '../components/RebootHost'
 import { msg, tx, type Msg } from '../msg'
 
 interface SystemSettings {
@@ -64,6 +65,7 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
   const { t } = useTranslation()
   const settings = useApi<SystemSettings>('/system/settings', 60_000)
   const network = useApi<NetworkState>('/network/manager', 60_000)
+  const reboot = useApi<{ reboot_required: boolean }>('/system/reboot/preview', 5 * 60_000)
   const timezones = useApi<{ timezones: string[] }>('/system/timezones')
 
   const [form] = Form.useForm<{ hostname: string; timezone: string }>()
@@ -178,6 +180,8 @@ export default function SystemSettingsPage({ me }: { me: Me }) {
           {n}
         </Banner>
       ))}
+
+      <RebootCard me={me} required={!!reboot.data?.reboot_required} />
 
       <Card title={t('sysSettings.system')} subtitle={settings.data?.operating_system}>
         {/* Имя проверяется по RFC 1123 прямо здесь — теми же правилами, что

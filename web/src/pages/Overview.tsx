@@ -13,6 +13,7 @@ import { Banner, Card, ErrorNote, InfoHint, Loading, SeverityBadge, StateBadge, 
 import { AIExplain } from '../components/AIExplain'
 import i18n from '../i18n'
 import { DataTable } from '../components/DataTable'
+import { RebootHostButton } from '../components/RebootHost'
 import { TitleHelp } from '../components/Docs'
 
 // Module-level column builders take t() as an argument rather than calling
@@ -166,7 +167,14 @@ export default function OverviewPage({ me }: { me: Me }) {
           {note}
         </Banner>
       ))}
-      {data.package_updates?.reboot_required && <Banner kind="warn">{t('overview.rebootRequired')}</Banner>}
+      {data.package_updates?.reboot_required && (
+        <Banner kind="warn">
+          <div className="row" style={{ gap: '0.6rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            <span style={{ flex: 1, minWidth: '16rem' }}>{t('overview.rebootRequired')}</span>
+            <RebootHostButton me={me} size="small" primary />
+          </div>
+        </Banner>
+      )}
 
       {/* Первым делом — что изменилось с прошлого захода: ради этого
           вопроса снимки состояния и хранятся. */}

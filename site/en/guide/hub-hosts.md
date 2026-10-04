@@ -410,6 +410,8 @@ also carries logins, roles and password hashes. The file is JSON version
   without nkt: N" bar with an "Install" button opens the install window
   with those hosts already selected (see
   ["Installing nkt on hosts"](/en/guide/hub-updates#installing-nkt-on-hosts)).
+  The bar can be closed with its cross; it does not come back until a new
+  host without nkt appears (remembered in this browser).
 - **Moving narrow-sudo hosts.** Such a host holds the public key of the
   hub that narrowed it and would reject the new hub's signature. When a
   **full** export (with the key) is imported, the new hub keeps the

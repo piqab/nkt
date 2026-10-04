@@ -74,6 +74,18 @@ devices.
   “sync now”; installing the service if there is none.
 - NetworkManager: connections, devices, Wi-Fi networks, connecting with a
   password.
+- **Host reboot**: the card is always here (highlighted when a reboot is
+  required, for example after a kernel update); the same button is in the
+  "Reboot required" bar on "Overview" and in "Packages". Before rebooting,
+  the window shows **how much is running now** (Docker and Podman
+  containers, LXD instances, machines, services) and **a list of what
+  will not come back by itself**: containers without an `always` or
+  `unless-stopped` restart policy, machines without autostart, LXD
+  instances without `boot.autostart`, and services that are running but
+  not enabled for autostart. "Reboot" becomes available only after the
+  confirmation checkbox; the reboot starts in a few seconds (so the reply
+  gets through, including via the hub) and goes to the audit log. On the
+  hub, the host turns "unreachable" for a while, then "rebooted" arrives.
 
 ## Terminal
 

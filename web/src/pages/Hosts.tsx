@@ -368,6 +368,9 @@ function ProblemsCell({ host }: { host: HubHost }) {
  * online host hands its id up to the shell (App.tsx), which scopes every
  * other page's API calls to it — those pages are otherwise unmodified.
  */
+/** Закрытая плашка «Хостов без nkt»: какие хосты в ней были. */
+const MISSING_DISMISSED_KEY = 'nkt-hub-missing-dismissed'
+
 export default function Hosts({
   onSelect,
   hubVersion: hubVersionProp,
@@ -410,6 +413,13 @@ export default function Hosts({
   const [updateAllDialog, setUpdateAllDialog] = useState(false)
   // Хосты без nkt (после импорта или удаления nkt) — плашка с установкой.
   const [installAll, setInstallAll] = useState<number[] | null>(null)
+  const [missingDismissed, setMissingDismissed] = useState<number[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem(MISSING_DISMISSED_KEY) ?? '[]') as number[]
+    } catch {
+      return []
+    }
+  })
   const [sudoInfo, setSudoInfo] = useState<HubHost | null>(null)
   const importInputRef = useRef<HTMLInputElement>(null)
   // Set when "экспорт с ключом" is clicked — opens ExportPasswordModal
@@ -1440,8 +1450,22 @@ export default function Hosts({
 
       {(() => {
         const missing = (hosts ?? []).filter((h) => h.id !== LOCAL_HOST_ID && h.status === 'new')
+        // Закрытая плашка не возвращается, пока не появится новый хост без
+        // nkt (запоминается в этом браузере).
+        if (missing.length === 0 || missing.every((h) => missingDismissed.includes(h.id))) return null
         return missing.length > 0 ? (
-          <Banner kind="info">
+          <Banner
+            kind="info"
+            onClose={() => {
+              const ids = missing.map((h) => h.id)
+              setMissingDismissed(ids)
+              try {
+                localStorage.setItem(MISSING_DISMISSED_KEY, JSON.stringify(ids))
+              } catch {
+                /* без хранилища — до перезагрузки страницы */
+              }
+            }}
+          >
             <Space wrap>
               {t('installAll.banner', { count: missing.length })}
               <Button size="small" type="primary" onClick={() => setInstallAll(missing.map((h) => h.id))}>
@@ -1494,17 +1518,6 @@ export default function Hosts({
             </Button>
             <Button
               size="small"
-              type="primary"
-              onClick={() => {
-                setGroupName('')
-                setGroupProfileID(0)
-                setGroupDialog({ mode: 'create' })
-              }}
-            >
-              {t('hosts.createGroupBtn')}
-            </Button>
-            <Button
-              size="small"
               type={outdatedCount > 0 ? 'primary' : 'default'}
               loading={bulkUpdating}
               disabled={outdatedCount === 0 || bulkBusy !== null}
@@ -1518,6 +1531,17 @@ export default function Hosts({
                 <span className="small muted">{t('hosts.updateSkippedUnreachable', { count: updatePlan.unreachable.length })}</span>
               </Tooltip>
             )}
+            <Button
+              size="small"
+              type="primary"
+              onClick={() => {
+                setGroupName('')
+                setGroupProfileID(0)
+                setGroupDialog({ mode: 'create' })
+              }}
+            >
+              {t('hosts.createGroupBtn')}
+            </Button>
             <Button
               size="small"
               loading={bulkBusy === 'start'}
