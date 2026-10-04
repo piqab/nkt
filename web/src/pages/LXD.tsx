@@ -26,10 +26,13 @@ import { CheckCircleFilled, CloseCircleOutlined } from '@ant-design/icons'
 import { LXDImagePicker } from '../components/LXDImagePicker'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 import { TitleHelp } from '../components/Docs'
+import { ImageArchivesCard } from '../components/ImageArchives'
+import type { LXDImage } from '../components/LXDImagePicker'
 import { msg, tx, type Msg } from '../msg'
 
 export default function LXD({ me }: { me: Me }) {
   const { t } = useTranslation()
+  const lxdImages = useApi<{ images: LXDImage[] }>('/lxd/images?remote=local', 60_000)
   const instances = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
   const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
@@ -321,6 +324,11 @@ export default function LXD({ me }: { me: Me }) {
       </Card>
 
       <LXDResources canControl={canControl} />
+      <ImageArchivesCard
+        engine="lxd"
+        canControl={canControl}
+        sources={(lxdImages.data?.images ?? []).filter((im) => im.fingerprint).map((im) => ({ value: im.fingerprint as string, alias: im.alias, label: `${im.alias || (im.fingerprint as string).slice(0, 12)} · ${im.description || im.os}` }))}
+      />
 
       {creating && (
         <CreateInstanceForm

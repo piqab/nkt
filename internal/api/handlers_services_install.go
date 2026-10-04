@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"os/exec"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -50,7 +51,7 @@ func (s *Server) handleServiceInstallWS(w http.ResponseWriter, r *http.Request) 
 		if target.Method == parse.InstallViaSnap {
 			argv = []string{"bash", "-c", snapInstallScript(target.Package)}
 		} else {
-			argv = []string{"bash", "-c", "apt-get update && apt-get install -y " + target.Package}
+			argv = []string{"bash", "-c", strings.TrimSpace("apt-get update && apt-get install -y " + target.Package + " " + target.Extra)}
 		}
 		return unrestrictedCommand(env, argv...)
 	}

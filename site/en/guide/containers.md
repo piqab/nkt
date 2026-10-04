@@ -31,8 +31,18 @@ file list too.
 - **Stacks**: the host's compose files — `up`, `down`, `restart`; compose
   is edited in the [config editor](/en/guide/configs) with a `docker
   compose config` check; a new stack from a template.
-- No Docker on the host — install it with a button from the official
-  docker.com repository (or the get.docker.com script) with a live log.
+- No Docker on the host — a bar with an install button right in the tab
+  (the official docker.com repository or distribution packages with
+  compose), as a background job with the standard log window.
+- **Image archives**: a card below the images (Podman and LXD have the
+  same): image files on the host in the nkt save directory. **"Save an
+  image to an archive"** runs `docker save` for the selected image as a
+  background job; **"Download"** gets the file to your computer;
+  **"Upload from computer"** streams a `.tar`, `.tar.gz` and the like to
+  the host with a progress bar (via the hub too); **"Load into Docker"**
+  runs `docker load` as a job; "Delete". Images saved earlier with the
+  images' "Save" button are here too. Download and upload are admin-only,
+  since an image may carry secrets.
 
 ## Podman and LXD
 
@@ -79,12 +89,26 @@ a diff and a version in history. Below the instance list are LXD
 the host** (delete, download in advance from `images:` or `ubuntu:` with
 live output) and **storage pools** (read-only).
 
+- **No Podman or LXD**: a bar with an install button (Podman via apt,
+  LXD via snap and `lxd init --auto`).
+- **Image archives**, as with Docker: Podman uses `podman save` and
+  `podman load`; LXD has **"Export an image to an archive"** (`lxc image
+  export`: one file or a metadata + root file system pair, `.root`) and
+  **"Import into LXD"** (`lxc image import`, together with the `.root`
+  file for a split image, with an optional alias). Download and upload
+  from your computer work the same way.
+
 ## Libvirt (KVM virtual machines)
 
 ![Virtual machines](/screens/en/vms.png)
 
+- No libvirt/KVM on the host — a bar with an install button: the daemon,
+  clients, `qemu-utils`, `virtinst` and qemu for the host architecture.
 - libvirt domains: start, shut down, force off, reboot, autostart, delete
   with or without disks; machine addresses.
+- Machine images: besides uploading from your computer, **"Download to
+  computer"** for a downloaded library image and for a file in the
+  libvirt disk directory.
 - **Machine screen** — a "screen" icon on a running machine: VNC right in
   the browser (noVNC), with Ctrl+Alt+Del and a "view only" mode, through
   the hub too. A machine with SPICE graphics only opens over SPICE

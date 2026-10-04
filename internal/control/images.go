@@ -208,3 +208,6 @@ func dockerMessage(raw []byte, status int) string {
 	}
 	return msgs.T(msgs.DefaultLang, "control.dockerReplied", status, strings.TrimSpace(string(raw)))
 }
+
+// ValidImageRef — ссылка на образ годится для команды (save и т. п.).
+func ValidImageRef(ref string) error { return checkImageRef(ref) }

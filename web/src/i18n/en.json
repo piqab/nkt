@@ -2252,7 +2252,8 @@
     "confirmDeleteHost": "Delete the file \"{{name}}\" from the libvirt disk directory? This cannot be undone.",
     "confirmDeleteHostBusy": "The file \"{{name}}\" is the disk of machine \"{{vm}}\". Delete it? The machine will be left without a disk and stop starting.",
     "networkWillCreate": "default — will be created on start",
-    "bulkBusyDisks": "Some are machine disks: {{list}} — those machines will be left without them."
+    "bulkBusyDisks": "Some are machine disks: {{list}} — those machines will be left without them.",
+    "toComputer": "Download to computer"
   },
   "vmnet": {
     "title": "VM networks",
@@ -2962,7 +2963,9 @@
   "engineInstall": {
     "lxd": "LXD is not installed. Installation: snapd (if missing) → snap install lxd → lxd init --auto (default storage and bridge).",
     "podman": "Podman is not installed. Installation via apt.",
-    "install": "install"
+    "install": "install",
+    "docker": "Docker is not installed.",
+    "libvirt": "libvirt/KVM is not installed, so there is nothing to create machines with."
   },
   "lxdImages": {
     "local": "on the host",
@@ -4191,5 +4194,28 @@
     "simulated": "Snapshot mode: the reboot is only simulated.",
     "cardTitle": "Host reboot",
     "cardHint": "Before rebooting, the window shows what is running now and what will not come back by itself."
+  },
+  "archives": {
+    "title": "{{engine}} image archives",
+    "hint": "Image files on the host ({{dir}}): download to your computer, upload from it, load into the engine.",
+    "save": "Save an image to an archive",
+    "saveHint": "The image is saved to a file on the host (save) as a background job; then it can be downloaded to your computer.",
+    "export": "Export an image to an archive",
+    "exportHint": "lxc image export — one file or a pair of metadata and root file system (.root), as a background job.",
+    "upload": "Upload from computer",
+    "uploadFailed": "The upload failed",
+    "none": "No archives yet.",
+    "colName": "File",
+    "colSize": "Size",
+    "colWhen": "Modified",
+    "download": "Download",
+    "load": "Load into {{engine}}",
+    "import": "Import into LXD",
+    "importHint": "For a split image, also pick the root file system file (.root); the alias is optional.",
+    "meta": "metadata",
+    "rootfs": "Root file system",
+    "rootfsNone": "none (unified archive)",
+    "alias": "Alias",
+    "deleteConfirm": "Delete archive {{name}} from the host?"
   }
 }

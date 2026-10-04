@@ -525,6 +525,8 @@ var ruCatalog = map[string]string{
 	"mon.settingsBad":                                     "неверные пороги «Мониторинга»",
 	"hub.monImportNoHost":                                 "хоста %q здесь нет — его история не импортирована",
 	"system.rebootNotConfirmed":                           "перезагрузка не подтверждена",
+	"api.archiveBadName":                                  "неверное имя файла образа: %q",
+	"api.archiveBadEngine":                                "неизвестный движок %q (docker или podman)",
 	"api.backgroundJobsAreUnavailable":                    "фоновые задания недоступны",
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",
