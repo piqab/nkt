@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next'
 import RFB from '@novnc/novnc'
 import { wsURL } from '../hooks/usePty'
 import { Banner, Modal } from './ui'
+import { msg, tx, type Msg } from '../msg'
 
 /**
  * Экран виртуальной машины в браузере (noVNC): WebSocket до хоста (и
@@ -19,7 +20,7 @@ export function VNCModal({ name, onClose, extra, below }: { name: string; onClos
   const [screen, setScreen] = useState<HTMLDivElement | null>(null)
   const rfbRef = useRef<RFB | null>(null)
   const [state, setState] = useState<'connecting' | 'connected' | 'disconnected' | 'password'>('connecting')
-  const [reason, setReason] = useState<string | null>(null)
+  const [reason, setReason] = useState<Msg | null>(null)
   const [password, setPassword] = useState('')
   const [viewOnly, setViewOnly] = useState(false)
 
@@ -37,7 +38,7 @@ export function VNCModal({ name, onClose, extra, below }: { name: string; onClos
     const onDisconnect = (e: Event) => {
       setState('disconnected')
       const clean = (e as CustomEvent<{ clean: boolean }>).detail?.clean
-      if (!clean) setReason(t('vnc.lost'))
+      if (!clean) setReason(tx('vnc.lost'))
     }
     const onCredentials = () => setState('password')
     const onFailure = (e: Event) => setReason((e as CustomEvent<{ reason?: string }>).detail?.reason ?? t('vnc.failed'))
@@ -48,7 +49,7 @@ export function VNCModal({ name, onClose, extra, below }: { name: string; onClos
     const timer = window.setTimeout(() => {
       if (!connected) {
         setState('disconnected')
-        setReason(t('vnc.noConnect'))
+        setReason(tx('vnc.noConnect'))
       }
     }, 10_000)
     rfb.addEventListener('connect', () => {
@@ -88,7 +89,7 @@ export function VNCModal({ name, onClose, extra, below }: { name: string; onClos
         {extra}
       </div>
       {below}
-      {reason && <Banner kind="error">{reason}</Banner>}
+      {reason && <Banner kind="error">{msg(reason)}</Banner>}
       {state === 'password' && (
         <div className="row" style={{ gap: '0.5rem', marginBottom: '0.5rem' }}>
           <Input.Password placeholder={t('vnc.password')} value={password} onChange={(e) => setPassword(e.target.value)} style={{ maxWidth: '16rem' }} />

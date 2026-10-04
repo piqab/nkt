@@ -6,6 +6,7 @@ import { api, hostScope, readSelectedHost, useApi } from '../api'
 import { wsURL } from '../hooks/usePty'
 import { Card, ErrorNote } from '../components/ui'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 type LogSource = {
   kind: 'unit' | 'file'
@@ -36,7 +37,7 @@ export default function Logs() {
   const [customPath, setCustomPath] = useState('')
   const [lines, setLines] = useState<string[]>([])
   const [connected, setConnected] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
 
   // Which kind of source the picker is showing. Units and files were one
   // grouped dropdown before, and with a couple of dozen units the files sat
@@ -112,7 +113,7 @@ export default function Logs() {
         return next.length > MAX_LINES ? next.slice(next.length - MAX_LINES) : next
       })
     }
-    ws.onerror = () => setError(t('logs.connectionFailed'))
+    ws.onerror = () => setError(tx('logs.connectionFailed'))
     ws.onclose = () => setConnected(false)
   }
 
@@ -204,7 +205,7 @@ export default function Logs() {
       </div>
 
       <ErrorNote error={sources.error} />
-      {error && <ErrorNote error={error} />}
+      {error && <ErrorNote error={msg(error)} />}
 
       <Card
         title={t('logs.pickerTitle')}

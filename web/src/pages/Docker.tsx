@@ -21,13 +21,14 @@ import { ConsoleModal, type ConsoleKind } from '../components/ConsoleModal'
 import { BackupModal, type BackupKind } from '../components/BackupModal'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 export default function Docker({ me }: { me: Me }) {
   const { t } = useTranslation()
   const docker = useApi<{ containers: Container[]; networks: DockerNetwork[] }>('/containers', 30_000)
   const focusContainer = useFocusRow(!!docker.data)
   const [busy, setBusy] = useState<string | null>(null)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [configModal, setConfigModal] = useState<{ path: string; focusName?: string; autoCreate?: boolean } | null>(null)
   const [pickingPath, setPickingPath] = useState(false)
 
@@ -285,7 +286,7 @@ export default function Docker({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(`/containers/${name}/${action}`, { method: 'POST' })
-      setNotice({ kind: 'info', text: t('docker.actionDone', { name, action }) })
+      setNotice({ kind: 'info', text: tx('docker.actionDone', { name, action }) })
       // handleContainerAction itself only calls rescanLater() — a fire-
       // and-forget *background* full rescan, deliberately not blocking
       // that response — so a bare docker.reload() right after would just
@@ -325,7 +326,7 @@ export default function Docker({ me }: { me: Me }) {
       <ErrorNote error={docker.error} />
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
       {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}

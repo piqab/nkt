@@ -36,6 +36,8 @@ import { HelpButton, TitleHelp } from '../components/Docs'
 import { takeUpdateAllAfterHub } from '../updateAllAfterHub'
 import { SudoInfoModal } from '../components/SudoInfoModal'
 import { ExportPasswordModal, downloadHubExport } from '../components/HubExport'
+import { msg, tx, type Msg } from '../msg'
+import i18n from '../i18n'
 
 /** Хост из параметров задания установки (host.install), иначе null. */
 function installJobHost(job: Job): number | null {
@@ -156,8 +158,12 @@ function SudoBadge({ status }: { status: HubHost['sudo_status'] }) {
  * он на последний опрос хаба (зелёная — отвечает, красная — недоступен,
  * серая — ещё не опрашивался); иначе — ход установки. Слово, время
  * последнего ответа и текст ошибки — в подсказке. */
-function HostStatusIcon({ host }: { host: HubHost }) {
+function HostStatusIcon({ host, onRecheck }: { host: HubHost; onRecheck?: () => Promise<void> }) {
   const { t } = useTranslation()
+  const [checking, setChecking] = useState(false)
+  // Недоступен или ещё не опрашивался — щелчок опрашивает сейчас, не
+  // дожидаясь таймера хаба.
+  const recheckable = !!onRecheck && host.status === 'online' && host.reachable !== true
   let label = t(STATUS_LABEL_KEY[host.status]) + (host.status === 'error' && host.error_msg ? `: ${host.error_msg}` : '')
   if (host.status === 'online') {
     label =
@@ -183,6 +189,29 @@ function HostStatusIcon({ host }: { host: HubHost }) {
     ) : (
       <MinusCircleOutlined style={{ color: STATUS_COLOR.new }} />
     )
+  if (recheckable) {
+    const tip = `${label} ${t('hosts.statusRecheckHint')}`
+    return (
+      <Tooltip title={checking ? t('hosts.statusRechecking') : tip}>
+        <span
+          role="button"
+          aria-label={tip}
+          style={{ cursor: checking ? 'progress' : 'pointer' }}
+          onClick={async () => {
+            if (checking) return
+            setChecking(true)
+            try {
+              await onRecheck()
+            } finally {
+              setChecking(false)
+            }
+          }}
+        >
+          {checking ? <SyncOutlined spin style={{ color: 'var(--text-muted)' }} /> : icon}
+        </span>
+      </Tooltip>
+    )
+  }
   return (
     <Tooltip title={label}>
       <span aria-label={label}>{icon}</span>
@@ -369,7 +398,7 @@ export default function Hosts({
   useEffect(() => {
     setKnownNames((hosts ?? []).map((h) => h.name))
   }, [hosts])
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [editingHost, setEditingHost] = useState<HubHost | null>(null)
   const [creatingHost, setCreatingHost] = useState(false)
   const [pubKeyInfo, setPubKeyInfo] = useState<{ hostName: string; key: string } | null>(null)
@@ -469,19 +498,17 @@ export default function Hosts({
         detail?: string
       }>(`/hub/hosts/${h.id}/detect-address`, { method: 'POST' })
       if (res.found) {
-        setNotice({ kind: 'info', text: t('hosts.detectAddressFound', { name: h.name, addr: res.address }) })
+        setNotice({ kind: 'info', text: tx('hosts.detectAddressFound', { name: h.name, addr: res.address }) })
         reload()
         return
       }
       // «Не знаю» без причины — тупик: оператору некуда идти дальше.
       // Причина приходит кодом, а сырой ответ virsh идёт следом.
-      const reason = t(`hosts.detectAddressReason.${res.reason ?? 'no-lease'}`, {
-        defaultValue: t('hosts.detectAddressReason.no-lease'),
-        state: res.state ?? '—',
-      })
+      const reasonKey = `hosts.detectAddressReason.${res.reason ?? 'no-lease'}`
+      const reason = tx(i18n.exists(reasonKey) ? reasonKey : 'hosts.detectAddressReason.no-lease', { state: res.state ?? '—' })
       setNotice({
         kind: 'info',
-        text: t('hosts.detectAddressNone', { name: h.name, reason }) + (res.detail ? ` (${res.detail})` : ''),
+        text: tx('hosts.detectAddressNone', { name: h.name, reason }, res.detail ? ` (${res.detail})` : ''),
       })
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -693,6 +720,16 @@ export default function Hosts({
    * «Заданиях» и в статусах строк таблицы. Хосты, у которых установка уже
    * идёт или ждёт, недоступные и упавшие в прошлый раз в цели не входят —
    * упавшие только по галочке «повторить неудачные». */
+  /** Опросить хост сейчас (щелчок по красному значку). */
+  async function recheckHost(h: HubHost) {
+    try {
+      await api(`/hub/hosts/${h.id}/poll`, { method: 'POST', timeoutMs: 90_000 })
+    } catch (err) {
+      setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
+    }
+    await reload()
+  }
+
   async function updateAllOutdated(retryFailed: boolean) {
     const targets = [...updatePlan.ready, ...(retryFailed ? updatePlan.failed : [])]
     setUpdateAllDialog(false)
@@ -709,7 +746,7 @@ export default function Hosts({
     }
     setNotice({
       kind: started === targets.length ? 'info' : 'error',
-      text: t('hosts.bulkUpdateStarted', { started, total: targets.length }),
+      text: tx('hosts.bulkUpdateStarted', { started, total: targets.length }),
     })
     reload()
   }
@@ -795,7 +832,7 @@ export default function Hosts({
     setNotice(null)
     try {
       await api(`/hub/hosts/${host.id}/vm/${action}`, { method: 'POST' })
-      if (action === 'start') setNotice({ kind: 'info', text: t('hosts.vmStarted', { name: host.name }) })
+      if (action === 'start') setNotice({ kind: 'info', text: tx('hosts.vmStarted', { name: host.name }) })
       reload()
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -820,7 +857,7 @@ export default function Hosts({
       const results = await Promise.all(targets.map((h) => setServiceRunning(h, running)))
       const failed = results.filter((e): e is string => e !== null).length
       if (failed > 0) {
-        setNotice({ kind: 'error', text: t('hosts.bulkFailed', { failed, total: targets.length }) })
+        setNotice({ kind: 'error', text: tx('hosts.bulkFailed', { failed, total: targets.length }) })
       }
       reload()
     } finally {
@@ -914,7 +951,7 @@ export default function Hosts({
       if (p?.attempted && !p.ok) {
         // Запись всё равно удалена: хост мог быть уже погашен. Молчать об
         // этом нельзя — на сервере остался работающий nkt.
-        setNotice({ kind: 'error', text: t('hosts.purgeFailed', { name: host.name, error: p.error ?? '' }) })
+        setNotice({ kind: 'error', text: tx('hosts.purgeFailed', { name: host.name, error: p.error ?? '' }) })
       } else if (p?.attempted && p.steps?.length) {
         setNotice({ kind: 'info', text: `${host.name}: ${p.steps.join('; ')}` })
       }
@@ -1125,7 +1162,7 @@ export default function Hosts({
                         {vm.vm_state === 'running' ? t('hosts.vmRunning') : t('hosts.vmOff', { state: vm.vm_state })}
                       </Tag>
                     )}
-                    <HostStatusIcon host={vm} />
+                    <HostStatusIcon host={vm} onRecheck={() => recheckHost(vm)} />
                   </span>
                 </div>
                 {renderActions(vm)}
@@ -1146,7 +1183,7 @@ export default function Hosts({
       key: 'status',
       width: '2rem',
       className: 'nowrap',
-      render: (_, h) => <HostStatusIcon host={h} />,
+      render: (_, h) => <HostStatusIcon host={h} onRecheck={() => recheckHost(h)} />,
     },
     {
       title: t('hosts.colName'),
@@ -1400,7 +1437,7 @@ export default function Hosts({
 
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
       <ErrorNote error={error} />
@@ -2462,7 +2499,7 @@ function ProvisionVMModal({
   // предупреждать не о чем.
   hubVersion?: string
   onClose: () => void
-  onStarted: (text: string, jobID: number) => void
+  onStarted: (text: Msg, jobID: number) => void
   /** Вкладка «найти машины» добавила машины в список — перечитать хосты. */
   onImported: () => void
   /** Профиль группы хоста — подставляется по умолчанию: машина в группе
@@ -2545,7 +2582,7 @@ function ProvisionVMModal({
           },
         },
       })
-      onStarted(t('hosts.newVMStarted', { name, job: res.job_id }), res.job_id)
+      onStarted(tx('hosts.newVMStarted', { name, job: res.job_id }), res.job_id)
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {

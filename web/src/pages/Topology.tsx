@@ -7,7 +7,7 @@ import { useApi } from '../api'
 import type { Graph, GraphEdge, GraphNode } from '../types'
 import { AIReviewCard } from '../components/AIReview'
 import { hostScope } from '../api'
-import { Card, ErrorNote, Loading, SeverityBadge } from '../components/ui'
+import { Card, ErrorNote, Loading, Modal, SeverityBadge } from '../components/ui'
 import { TitleHelp } from '../components/Docs'
 
 /**
@@ -364,58 +364,51 @@ export default function TopologyPage() {
             <TitleHelp>{t('topology.hint')}</TitleHelp>
           </h1>
         </div>
-
-        {/* Fixed height and always rendered, whether or not something is
-            selected, so switching between nodes with very different amounts
-            of info never shifts the map below up or down. Shares the row
-            with the title when there's room (page-head wraps), drops below
-            it otherwise. */}
-        <div className="topology-focus-panel">
-          {selectedNode ? (
-            <>
-              <div className="topology-focus-head">
-                <strong>{selectedNode.label}</strong>
-                <Button type="text" size="small" onClick={() => setSelected(null)} title={t('common.close')} style={{ padding: '0 0.3rem' }}>
-                  ×
-                </Button>
-              </div>
-              <div className="small muted">
-                {selectedNode.kind}
-                {selectedNode.sublabel ? ` · ${selectedNode.sublabel}` : ''} · {selectedNode.status}
-              </div>
-              {(() => {
-                const target = nodeTarget(selectedNode)
-                return target ? (
-                  <div>
-                    <Button size="small" onClick={() => navigate(target.to)}>
-                      {t(target.labelKey, { name: target.name ?? '' })}
-                    </Button>
-                  </div>
-                ) : null
-              })()}
-              {selectedFindings.map((f, i) => (
-                <span key={i} className="topology-finding-chip">
-                  <SeverityBadge severity={f.severity} />
-                  {f.title}
-                </span>
-              ))}
-              {selectedMeta.length > 0 && (
-                <div className="topology-focus-meta">
-                  {selectedMeta.map(([k, v]) => (
-                    <span key={k} title={v.length > 140 ? v : undefined}>
-                      <span className="muted">{k}:</span> {v.length > 140 ? `${v.slice(0, 139)}…` : v}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </>
-          ) : (
-            <span className="small muted">
-              {data.findings.length > 0 ? t('topology.findingsHint', { count: data.findings.length }) : t('topology.clickNodeHint')}
-            </span>
-          )}
-        </div>
       </div>
+      <p className="small muted" style={{ marginTop: '-0.4rem' }}>
+        {data.findings.length > 0 ? t('topology.findingsHint', { count: data.findings.length }) : t('topology.clickNodeHint')}
+      </p>
+
+      {selectedNode && (
+        <Modal title={selectedNode.label} onClose={() => setSelected(null)} width={680}>
+          <div className="col" style={{ gap: '0.6rem' }}>
+            <div className="small muted">
+              {selectedNode.kind}
+              {selectedNode.sublabel ? ` · ${selectedNode.sublabel}` : ''} · {selectedNode.status}
+            </div>
+            {(() => {
+              const target = nodeTarget(selectedNode)
+              return target ? (
+                <div>
+                  <Button type="primary" size="small" onClick={() => navigate(target.to)}>
+                    {t(target.labelKey, { name: target.name ?? '' })}
+                  </Button>
+                </div>
+              ) : null
+            })()}
+            {selectedFindings.length > 0 && (
+              <div className="col" style={{ gap: '0.3rem' }}>
+                {selectedFindings.map((f, i) => (
+                  <span key={i} className="topology-finding-chip">
+                    <SeverityBadge severity={f.severity} />
+                    {f.title}
+                  </span>
+                ))}
+              </div>
+            )}
+            {selectedMeta.length > 0 && (
+              <dl className="topology-node-meta">
+                {selectedMeta.map(([k, v]) => (
+                  <div key={k}>
+                    <dt className="muted">{k}</dt>
+                    <dd className="mono">{v}</dd>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </div>
+        </Modal>
+      )}
 
       <Card
         actions={

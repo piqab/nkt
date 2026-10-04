@@ -535,34 +535,6 @@ pre.diff .hunk { color: var(--text-muted); }
 
 /* ------------------------------------------------------------------ topology */
 
-.topology-focus-panel {
-  flex: 1 1 28rem;
-  min-width: 20rem;
-  max-width: 54rem;
-  height: 5.5rem;
-  padding: 0.4rem 0.8rem;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-  font-size: 0.8rem;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 0.25rem;
-  overflow-y: auto;
-}
-.topology-focus-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-}
-.topology-focus-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.1rem 0.7rem;
-  color: var(--text-secondary);
-}
 .topology-finding-chip {
   display: inline-flex;
   align-items: center;
@@ -1122,4 +1094,24 @@ span.vm-toggle {
 }
 .sudo-source pre {
   align-self: stretch;
+}
+
+/* Карта ресурсов: параметры элемента в окне — целиком, без обрезки. */
+.topology-node-meta {
+  margin: 0;
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.25rem 0.8rem;
+}
+.topology-node-meta > div {
+  display: contents;
+}
+.topology-node-meta dt {
+  font-size: 0.85em;
+}
+.topology-node-meta dd {
+  margin: 0;
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
 }

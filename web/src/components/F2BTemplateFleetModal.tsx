@@ -6,6 +6,7 @@ import type { Fail2banTemplate, Job } from '../types'
 import { JobLogModal } from '../pages/Jobs'
 import { Banner, DiffView, Loading, Modal } from './ui'
 import { unifiedDiff } from './textDiff'
+import { msg, tx, type Msg } from '../msg'
 
 interface HostState {
   id: number
@@ -47,7 +48,7 @@ export function F2BTemplateFleetModal({ template, onClose }: { template: Fail2ba
   const [check, setCheck] = useState<{ hosts: CheckHost[]; token?: string } | null>(null)
   const [open, setOpen] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   const [job, setJob] = useState<Job | null>(null)
   // Проверка — задание хаба в очереди fail2ban: окно ждёт его итог.
   const [checkJob, setCheckJob] = useState<number | null>(null)
@@ -66,7 +67,7 @@ export function F2BTemplateFleetModal({ template, onClose }: { template: Fail2ba
         }
         setCheckJob(null)
         if (res.hosts) setCheck({ hosts: res.hosts, token: res.token })
-        else setError(t('fail2ban.fleetTplCheckFailed'))
+        else setError(tx('fail2ban.fleetTplCheckFailed'))
       } catch (err) {
         if (!stop) {
           setCheckJob(null)
@@ -222,7 +223,7 @@ export function F2BTemplateFleetModal({ template, onClose }: { template: Fail2ba
         </Banner>
       )}
       {checkLog && <JobLogModal job={checkLog} scope="/hosts/local" onClose={() => setCheckLog(null)} />}
-      {error && <Banner kind="error">{error}</Banner>}
+      {error && <Banner kind="error">{msg(error)}</Banner>}
       <Space wrap style={{ marginTop: '0.8rem' }}>
         <Button
           type={check ? 'default' : 'primary'}

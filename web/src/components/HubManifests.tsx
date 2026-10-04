@@ -8,6 +8,7 @@ import { EditTextModal } from './EditTextModal'
 import { confirmAction } from './confirm'
 import { unifiedDiff } from './textDiff'
 import { ClusterPicker } from './HubClustersMulti'
+import { msg, tx, type Msg } from '../msg'
 
 interface Manifest {
   id: number
@@ -60,7 +61,7 @@ export function HubManifestsCard() {
   const [edit, setEdit] = useState<{ manifest?: Manifest; content?: string } | null>(null)
   const [history, setHistory] = useState<Manifest | null>(null)
   const [results, setResults] = useState<{ name: string; results: Result[] } | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
 
   async function open(m: Manifest, content?: string) {
     try {
@@ -120,7 +121,7 @@ export function HubManifestsCard() {
       <ErrorNote error={list.error} />
       {error && (
         <Banner kind="error" onClose={() => setError(null)}>
-          {error}
+          {msg(error)}
         </Banner>
       )}
       {results && <ResultsBanner name={results.name} results={results.results} onClose={() => setResults(null)} />}
@@ -183,7 +184,7 @@ function ApplyModal({ manifest, initial, onClose, onApplied }: { manifest?: Mani
   const saved = manifest?.content ?? ''
   const [draft, setDraft] = useState(initial ?? (manifest ? saved : SAMPLE))
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
 
   async function clusterDiff(): Promise<string> {
     if (selected.length === 0) throw new Error(t('manifests.pickClusters'))
@@ -195,7 +196,7 @@ function ApplyModal({ manifest, initial, onClose, onApplied }: { manifest?: Mani
   async function apply(): Promise<boolean> {
     setError(null)
     if (selected.length === 0) {
-      setError(t('manifests.pickClusters'))
+      setError(tx('manifests.pickClusters'))
       return false
     }
     setBusy(true)
@@ -237,7 +238,7 @@ function ApplyModal({ manifest, initial, onClose, onApplied }: { manifest?: Mani
       below={
         error ? (
           <Banner kind="error" onClose={() => setError(null)}>
-            {error}
+            {msg(error)}
           </Banner>
         ) : null
       }

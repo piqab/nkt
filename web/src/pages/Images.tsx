@@ -7,6 +7,7 @@ import { Banner, Card, ErrorNote, Loading, formatDateTime } from '../components/
 import { formatBytes } from '../components/charts'
 import { DataTable } from '../components/DataTable'
 import { useDeletions, type DeleteItem } from '../components/useDeletions'
+import { msg, tx, type Msg } from '../msg'
 
 export interface DockerImage {
   id: string
@@ -39,7 +40,7 @@ export default function Images({ me }: { me: Me }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [outcomes, setOutcomes] = useState<Outcome[] | null>(null)
-  const [note, setNote] = useState<string | null>(null)
+  const [note, setNote] = useState<Msg | null>(null)
 
   const canAct = me.is_admin && me.allow_mutations
   // Удаление образов (большие слои — не мгновенно) — заданием; пока образ
@@ -82,7 +83,7 @@ export default function Images({ me }: { me: Me }) {
       })
       if (res.results) setOutcomes(res.results)
       if (typeof res.reclaimed === 'number') {
-        setNote(t('images.reclaimed', { size: formatBytes(res.reclaimed) }))
+        setNote(tx('images.reclaimed', { size: formatBytes(res.reclaimed) }))
       }
       setSelected([])
       await images.reload()
@@ -150,7 +151,7 @@ export default function Images({ me }: { me: Me }) {
     <>
       <ErrorNote error={images.error} />
       {error && <Banner kind="error">{error}</Banner>}
-      {note && <Banner kind="info">{note}</Banner>}
+      {note && <Banner kind="info">{msg(note)}</Banner>}
 
       {outcomes && (
         <div className="col" style={{ marginBottom: '0.85rem' }}>

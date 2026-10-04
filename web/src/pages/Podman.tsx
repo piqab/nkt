@@ -19,6 +19,7 @@ import { BackupModal } from '../components/BackupModal'
 import { useJobLauncher } from '../components/useJobLauncher'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 export default function Podman({ me }: { me: Me }) {
   const { t } = useTranslation()
@@ -26,7 +27,7 @@ export default function Podman({ me }: { me: Me }) {
   const focusContainer = useFocusRow(!!containers.data)
   const launcher = useJobLauncher(() => void api('/inventory/refresh', { method: 'POST' }).then(() => containers.reload()))
   const [busy, setBusy] = useState<string | null>(null)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [creating, setCreating] = useState(false)
 
   const canControl = me.is_admin && me.allow_mutations
@@ -71,7 +72,7 @@ export default function Podman({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(`/podman/containers/${name}/${action}`, { method: 'POST' })
-      setNotice({ kind: 'info', text: t('podman.actionDone', { name, action }) })
+      setNotice({ kind: 'info', text: tx('podman.actionDone', { name, action }) })
       // The backend only kicks off a fire-and-forget background rescan
       // (rescanLater) — a bare reload() right after would just reread the
       // still-stale cached snapshot. /inventory/refresh runs the same
@@ -211,7 +212,7 @@ export default function Podman({ me }: { me: Me }) {
       <ErrorNote error={containers.error} />
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
       {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}

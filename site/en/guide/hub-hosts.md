@@ -128,7 +128,10 @@ when the numbers change. Whatever does not fit is an icon with a tooltip.
 - **Availability icon** before the name: green — answered the last poll,
   red — unreachable (the tooltip says when it last answered), gray — not
   polled yet. Polling — every `NKT_HUB_FINDINGS_POLL_INTERVAL` (60 s)
-  over the already open SSH connection.
+  over the already open SSH connection. A click on a red or gray icon
+  polls the host right away instead of waiting for the timer (the icon
+  spins while polling); it changes nothing on the host, so read-only users
+  can do it too.
 - **Address** (before "nkt") — `user@address:port`, with only the first
   two or three characters visible, so neither the user nor the address can
   be read on screen; in full in the tooltip, and the icon next to it

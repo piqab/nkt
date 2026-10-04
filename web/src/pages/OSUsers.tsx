@@ -10,6 +10,7 @@ import { TitleHelp } from '../components/Docs'
 import { RowAction } from '../components/RowAction'
 import { confirmWithOption } from '../components/confirm'
 import { unifiedDiff } from '../components/textDiff'
+import { msg, tx, type Msg } from '../msg'
 
 interface OSUserKey {
   type: string
@@ -58,7 +59,7 @@ export default function OSUsers({ me }: { me: Me }) {
   const users = useApi<{ users: OSUser[] }>('/os-users', 60_000)
   const [editing, setEditing] = useState<OSUser | 'new' | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState<string | null>(null)
+  const [done, setDone] = useState<Msg | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
 
   const canUse = me.is_admin && me.allow_mutations
@@ -75,7 +76,7 @@ export default function OSUsers({ me }: { me: Me }) {
     setDone(null)
     try {
       await api(`/os-users/${encodeURIComponent(u.name)}${res.checked ? '?home=1' : ''}`, { method: 'DELETE' })
-      setDone(t('osUsers.deleted', { name: u.name }))
+      setDone(tx('osUsers.deleted', { name: u.name }))
       await users.reload()
     } catch (err) {
       setError(errText(err))
@@ -187,7 +188,7 @@ export default function OSUsers({ me }: { me: Me }) {
 
       <ErrorNote error={users.error} />
       {error && <Banner kind="error">{error}</Banner>}
-      {done && <Banner kind="info">{done}</Banner>}
+      {done && <Banner kind="info">{msg(done)}</Banner>}
 
       <Card title={t('osUsers.listTitle')} subtitle={t('osUsers.count', { count: users.data?.users.length ?? 0 })}>
         {users.loading && !users.data ? (
@@ -225,7 +226,7 @@ interface Draft {
 }
 
 /** Окно заведения и правки: всё, что меняется, — в диффе перед записью. */
-function OSUserModal({ user, onClose, onSaved }: { user: OSUser | null; onClose: () => void; onSaved: (msg: string) => Promise<void> }) {
+function OSUserModal({ user, onClose, onSaved }: { user: OSUser | null; onClose: () => void; onSaved: (message: Msg) => Promise<void> }) {
   const { t } = useTranslation()
   const catalog = useApi<{ groups: OSGroup[]; shells: string[] }>('/os-users/groups')
   const initial: Draft = useMemo(
@@ -296,7 +297,7 @@ function OSUserModal({ user, onClose, onSaved }: { user: OSUser | null; onClose:
         if (newKeys.length > 1) {
           await api(`/os-users/${encodeURIComponent(d.name.trim())}`, { method: 'PATCH', body: { add_keys: newKeys.slice(1) } })
         }
-        await onSaved(t('osUsers.created', { name: d.name.trim() }))
+        await onSaved(tx('osUsers.created', { name: d.name.trim() }))
         return
       }
       const body: Record<string, unknown> = { confirm_hub: confirmHub }
@@ -306,7 +307,7 @@ function OSUserModal({ user, onClose, onSaved }: { user: OSUser | null; onClose:
       if (newKeys.length > 0) body.add_keys = newKeys
       if (d.removeKeys.length > 0) body.remove_keys = d.removeKeys
       await api(`/os-users/${encodeURIComponent(user.name)}`, { method: 'PATCH', body })
-      await onSaved(t('osUsers.saved', { name: user.name }))
+      await onSaved(tx('osUsers.saved', { name: user.name }))
     } catch (err) {
       setError(errText(err))
     } finally {

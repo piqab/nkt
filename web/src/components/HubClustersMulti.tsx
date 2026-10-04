@@ -6,6 +6,7 @@ import type { Finding, HubHost, Severity } from '../types'
 import { Banner, Card, ErrorNote, Loading, SeverityBadge } from './ui'
 import { EditTextModal } from './EditTextModal'
 import { AIExplain } from './AIExplain'
+import { msg, tx, type Msg } from '../msg'
 
 interface ClusterRow {
   id: number
@@ -109,13 +110,13 @@ export function HelmMultiModal({ onClose, onStarted }: { onClose: () => void; on
   const [f, setF] = useState({ repo_name: '', repo_url: '', chart: '', version: '', release: '', namespace: 'default' })
   const [values, setValues] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   const set = (patch: Partial<typeof f>) => setF({ ...f, ...patch })
 
   async function save(): Promise<boolean> {
     setError(null)
     if (clusters.length === 0) {
-      setError(t('manifests.pickClusters'))
+      setError(tx('manifests.pickClusters'))
       return false
     }
     setBusy(true)
@@ -163,7 +164,7 @@ export function HelmMultiModal({ onClose, onStarted }: { onClose: () => void; on
           </Space>
         </>
       }
-      below={error ? <Banner kind="error" onClose={() => setError(null)}>{error}</Banner> : null}
+      below={error ? <Banner kind="error" onClose={() => setError(null)}>{msg(error)}</Banner> : null}
     />
   )
 }

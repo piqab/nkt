@@ -22,6 +22,7 @@ import { RowAction } from '../components/RowAction'
 import { StandaloneConfirm } from '../components/StandaloneConfirm'
 import PackageInstallModal from '../components/PackageInstallModal'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 /** How often to poll a running renew job for new progress lines. */
 const RENEW_POLL_MS = 800
@@ -427,7 +428,7 @@ export default function Certificates({ me }: { me: Me }) {
   }
 
   if (loading && !data) return <Loading what={t('certs.loading')} />
-  if (error && !data) return <ErrorNote error={error} />
+  if (error && !data) return <ErrorNote error={msg(error)} />
 
   return (
     <>
@@ -852,7 +853,7 @@ function IssueForm({
   const { t } = useTranslation()
   const [form] = Form.useForm<{ domains: string; force?: boolean }>()
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
 
   async function submit(values: { domains: string; force?: boolean }) {
     const domainList = values.domains
@@ -860,7 +861,7 @@ function IssueForm({
       .map((d) => d.trim())
       .filter(Boolean)
     if (domainList.length === 0) {
-      setError(t('certs.specifyDomain'))
+      setError(tx('certs.specifyDomain'))
       return
     }
     confirm(t('certs.confirmIssueTitle', { domains: domainList.join(', ') }), async (restartPIDs) => {
@@ -891,7 +892,7 @@ function IssueForm({
       }
     >
       <Form form={form} layout="vertical" onFinish={submit}>
-        {error && <Banner kind="error">{error}</Banner>}
+        {error && <Banner kind="error">{msg(error)}</Banner>}
         <div className="filters">
           <Form.Item name="domains" label={t('certs.domainsLabel')} rules={[{ required: true }]} style={{ flex: 1, minWidth: '18rem' }}>
             <Input placeholder="new.example.com, www.new.example.com" />
@@ -938,14 +939,14 @@ function CombineForm({
   const [lineage, setLineage] = useState('')
   const [targetPath, setTargetPath] = useState(NEW_FILE)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   const [result, setResult] = useState<CombineResult | null>(null)
 
   const pathOptions = haproxyPaths.data?.paths ?? []
 
   async function submit() {
     if (!lineage) {
-      setError(t('certs.selectLineage'))
+      setError(tx('certs.selectLineage'))
       return
     }
     setBusy(true)
@@ -975,7 +976,7 @@ function CombineForm({
       }
     >
       <Form layout="vertical" onFinish={submit}>
-        {error && <Banner kind="error">{error}</Banner>}
+        {error && <Banner kind="error">{msg(error)}</Banner>}
         <ErrorNote error={lineagesError} />
         <div className="filters">
           <Form.Item label={t('certs.lineageFieldLabel')} style={{ flex: 1, minWidth: '18rem' }}>
@@ -1045,7 +1046,7 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
   const { t } = useTranslation()
   const [form] = Form.useForm<SelfSignedFormValues>()
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   const [results, setResults] = useState<SelfSignedResult[]>([])
 
   async function submit(values: SelfSignedFormValues) {
@@ -1054,7 +1055,7 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
       .map((n) => n.trim())
       .filter(Boolean)
     if (nameList.length === 0) {
-      setError(t('certs.specifyName'))
+      setError(tx('certs.specifyName'))
       return
     }
     setBusy(true)
@@ -1095,7 +1096,7 @@ function SelfSignedForm({ onIssued }: { onIssued: () => void }) {
         onFinish={submit}
         initialValues={{ service: 'nginx', bits: 2048, days: 397 }}
       >
-        {error && <Banner kind="error">{error}</Banner>}
+        {error && <Banner kind="error">{msg(error)}</Banner>}
         <div className="filters">
           <Form.Item name="names" label={t('certs.namesLabel')} rules={[{ required: true }]} style={{ flex: 2, minWidth: '16rem' }}>
             <Input placeholder="internal.example.com, *.internal.example.com" />

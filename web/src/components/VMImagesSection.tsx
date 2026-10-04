@@ -11,6 +11,7 @@ import { confirmAction } from './confirm'
 import { JobLogModal } from '../pages/Jobs'
 import VMNetworksCard from './VMNetworksCard'
 import { BulkDeleteBar } from './useDeletions'
+import { msg, tx, type Msg } from '../msg'
 
 /** Пока идёт скачивание, список надо перечитывать: недокачанный кусок
  * растёт, и оператор должен видеть, что дело движется. */
@@ -92,7 +93,7 @@ export default function VMImagesSection({ me, reloadKey = 0 }: { me: Me; reloadK
   const [creating, setCreating] = useState<VMImage | null>(null)
   const [generatedKey, setGeneratedKey] = useState<string | null>(null)
   const templates = useApi<{ templates: VMTemplate[] }>('/vm/templates', 60_000)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
 
   // Свои образы идут тем же списком и теми же кнопками: для создания
   // машины разницы между ними и каталожными нет.
@@ -203,7 +204,7 @@ export default function VMImagesSection({ me, reloadKey = 0 }: { me: Me; reloadK
         </h2>
       </div>
 
-      <ErrorNote error={error} />
+      <ErrorNote error={msg(error)} />
       <ErrorNote error={images.error} />
 
       {/* Без qemu-img и virsh форма создания только обманывала бы
@@ -510,7 +511,7 @@ function CreateVMModal({
   const chosenNetwork = network || known[0]?.name || 'default' 
   const [autostart, setAutostart] = useState(false)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   const [templateName, setTemplateName] = useState('')
 
   // Шаблон подставляет железо и пользователя, но не имя машины: имя у
@@ -590,7 +591,7 @@ function CreateVMModal({
 
   return (
     <Modal title={t('vmimages.createTitle', { image: image.name })} onClose={onClose} width={720}>
-      <ErrorNote error={error} />
+      <ErrorNote error={msg(error)} />
       {warning && <Banner kind="warn">{warning}</Banner>}
       {!sshKey.trim() && <Banner kind="info">{t('vmimages.keyWillBeGenerated')}</Banner>}
 
@@ -731,7 +732,7 @@ function AddImageModal({
   const [fileName, setFileName] = useState('')
   const [checksum, setChecksum] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   const [uploading, setUploading] = useState<number | null>(null)
 
   async function fetchByURL() {
@@ -772,12 +773,12 @@ function AddImageModal({
       try {
         setError((JSON.parse(xhr.responseText) as { error?: string }).error ?? t('common.httpCode', { code: xhr.status }))
       } catch {
-        setError(t('common.httpCode', { code: xhr.status }))
+        setError(tx('common.httpCode', { code: xhr.status }))
       }
     }
     xhr.onerror = () => {
       setUploading(null)
-      setError(t('vmimages.uploadFailed'))
+      setError(tx('vmimages.uploadFailed'))
     }
     xhr.send(file)
   }
@@ -785,7 +786,7 @@ function AddImageModal({
   return (
     <Modal title={t('vmimages.addOwnTitle')} onClose={onClose} width={720}>
       <p className="small muted">{t('vmimages.addOwnBody')}</p>
-      <ErrorNote error={error} />
+      <ErrorNote error={msg(error)} />
 
       <Card title={t('vmimages.byURL')} subtitle={t('vmimages.byURLHint')}>
         <div className="col" style={{ gap: '0.5rem' }}>

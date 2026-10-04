@@ -8,6 +8,20 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.126 — 2026-10-04
+
+- **An unreachable host: check now.** A click on the red (or gray "not
+  polled") icon in the hub's host list polls the host right away rather
+  than in a minute; the icon spins while polling.
+- **Messages switch language with the interface.** Blue and red messages
+  after actions (update started, service restart, firewall rule and
+  others) used to stay in the language they appeared in; now they are
+  translated when shown. Texts that come from the server (errors) stay as
+  they came.
+- **Resource map: node details in a window.** A click on a node opens a
+  window with its kind, state, findings, all parameters in full and a
+  button to the service; the panel next to the title is gone.
+
 ## v1.11.125 — 2026-10-03
 
 - **nkt repairs its outdated fail2ban filter by itself.** The `nkt-manual`

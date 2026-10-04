@@ -20,6 +20,7 @@ import { PowerToggle, vmPowerState } from '../components/PowerToggle'
 import VMImagesSection from '../components/VMImagesSection'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 import { TitleHelp } from '../components/Docs'
+import { msg, tx, type Msg } from '../msg'
 
 function domainXMLSkeleton(name: string): string {
   return domainXMLFromWizard(name, { memoryMB: 2048, vcpus: 2, diskPath: defaultDiskPath(name), bridge: 'br0' })
@@ -223,7 +224,7 @@ export default function Virtualization({ me }: { me: Me }) {
   const { t } = useTranslation()
   const vms = useApi<{ vms: VirtualMachine[] }>('/vms', 30_000)
   const [busy, setBusy] = useState<string | null>(null)
-  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: string } | null>(null)
+  const [notice, setNotice] = useState<{ kind: 'info' | 'error'; text: Msg } | null>(null)
   const [creating, setCreating] = useState<{ name: string; initialContent?: string } | null>(null)
   // Правка XML существующей машины — тот же VMEditor, что и создание.
   const [editing, setEditing] = useState<string | null>(null)
@@ -264,7 +265,7 @@ export default function Virtualization({ me }: { me: Me }) {
     setNotice(null)
     try {
       await api(`/vms/${name}/${action}`, { method: 'POST' })
-      setNotice({ kind: 'info', text: t('virt.actionDone', { name, action: label }) })
+      setNotice({ kind: 'info', text: tx('virt.actionDone', { name, action: action === 'destroy' ? tx('virt.forceDestroy') : action }) })
       // The backend only kicks off a fire-and-forget background rescan
       // (rescanLater) — a bare reload() right after would just reread the
       // still-stale cached snapshot. /inventory/refresh runs the same
@@ -344,7 +345,7 @@ export default function Virtualization({ me }: { me: Me }) {
       <ErrorNote error={vms.error} />
       {notice && (
         <Banner kind={notice.kind === 'error' ? 'error' : 'info'} onClose={() => setNotice(null)}>
-          {notice.text}
+          {msg(notice.text)}
         </Banner>
       )}
       {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}
@@ -478,13 +479,13 @@ function VMCreateChooser({
   const [bridge, setBridge] = useState('br0')
   const [createDiskFile, setCreateDiskFile] = useState(true)
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
 
   const diskPath = defaultDiskPath(name || 'new-vm')
 
   async function submit() {
     if (!domainNameRe.test(name)) {
-      setError(t('virt.invalidName'))
+      setError(tx('virt.invalidName'))
       return
     }
     if (mode === 'raw') {
@@ -518,7 +519,7 @@ function VMCreateChooser({
       maskClosable={false}
     >
       <Form layout="vertical" onFinish={submit}>
-        {error && <Banner kind="error">{error}</Banner>}
+        {error && <Banner kind="error">{msg(error)}</Banner>}
         <Segmented
           value={mode}
           onChange={(v) => setMode(v as 'wizard' | 'raw')}
@@ -603,7 +604,7 @@ function VMEditor({
   const [apply, setApply] = useState(true)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<WriteResult | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<Msg | null>(null)
   // Дифф «на диске → черновик», который надо подтвердить перед записью:
   // define применяется к работающей машине, и «применить» должно
   // нажиматься глядя на изменения, а не на весь XML.
@@ -626,7 +627,7 @@ function VMEditor({
         body: { path, content },
       })
       if (!res.changed) {
-        setError(t('virt.noChanges'))
+        setError(tx('virt.noChanges'))
         return
       }
       setPreview(res.diff)
@@ -703,8 +704,8 @@ function VMEditor({
           {intro && <Banner kind="info">{intro}</Banner>}
           {error && (
             <Banner kind="error">
-              {error}
-              {error !== t('virt.noChanges') && <AIConfigError path={path} service="libvirt" content={content} message={error} />}
+              {msg(error)}
+              {msg(error) !== t('virt.noChanges') && <AIConfigError path={path} service="libvirt" content={content} message={msg(error)} />}
             </Banner>
           )}
           {result && (
