@@ -157,6 +157,15 @@ func (r *DeployRunner) deployCompose(ctx context.Context, jc *jobs.Context, pl s
 	if err := bindComposePorts(jc, files, main, c); err != nil {
 		return err
 	}
+	// Один порт хоста опубликован дважды на пересекающихся адресах —
+	// compose up упал бы на первом же хосте; отказ до того, как что-то
+	// тронуто.
+	if conf := deploy.PortConflicts(files[main]); len(conf) > 0 {
+		for _, pc := range conf {
+			jc.Log("deploy.dryPortSelfConflict", pc.Port, pc.Proto, pc.A, pc.B)
+		}
+		return msgs.Errorf("deploy.portSelfConflict", len(conf))
+	}
 	// Где стек был до этой выкладки: переименованный — заменяется на том
 	// же хосте, с прежних хостов — убирается после успеха.
 	prev := s.loadDeployed(ctx, pl.ID)

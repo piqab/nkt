@@ -132,6 +132,14 @@ func (r *DeployRunner) checkCompose(ctx context.Context, jc *jobs.Context, pl st
 		return err
 	}
 	problems := 0
+	// Публикации внутри стека, которые не поднимутся вместе (хост такое
+	// не видит: он сравнивает стек только с тем, что уже слушает).
+	if on("ports") {
+		for _, pc := range deploy.PortConflicts(files[main]) {
+			problems++
+			jc.Log("deploy.dryPortSelfConflict", pc.Port, pc.Proto, pc.A, pc.B)
+		}
+	}
 	sitePort := 0
 	// Переезд и переименование: что станет со стеком, выложенным раньше.
 	var prev *deployedStack
