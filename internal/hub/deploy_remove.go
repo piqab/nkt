@@ -8,6 +8,7 @@ import (
 	"os"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -52,6 +53,15 @@ type pipelineRemoval struct {
 type PipelineRemoveParams struct {
 	PipelineID int64 `json:"pipeline_id"`
 	RemoveOptions
+	// Items — с каких хостов убрать стек (из плана, только «уберётся»);
+	// nil — все такие (как раньше, у заданий старых версий).
+	Items []removalKey `json:"items,omitempty"`
+	// Chosen — хосты выбраны в окне по плану (Items может быть и пустым:
+	// «ничего не убирать»); без выбора — всё, и недоступный хост — ошибка.
+	Chosen bool `json:"chosen,omitempty"`
+	// KeepPipeline — убрать стек только с этих хостов: конвейер остаётся,
+	// хосты уходят из его описания.
+	KeepPipeline bool `json:"keep_pipeline,omitempty"`
 }
 
 // SiteRemoveParams — вход задания удаления сайта.
@@ -67,89 +77,74 @@ func (s *Server) handlePipelineRemove(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var opts RemoveOptions
-	if err := decodeJSON(r, &opts); err != nil {
+	var req struct {
+		RemoveOptions
+		Items        []removalKey `json:"items"`
+		KeepPipeline bool         `json:"keep_pipeline"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
 		writeErr(w, r, http.StatusBadRequest, err)
 		return
 	}
+	opts := req.RemoveOptions
 	spec, err := deploy.ParseSpec(p.Content)
 	if err != nil || spec.Action != deploy.ActionCompose {
 		writeErr(w, r, http.StatusBadRequest, msgs.Errorf("deploy.removeOnlyCompose"))
 		return
 	}
 	ctx := r.Context()
+	// Выбранное — только из плана и только «уберётся»: общий чужой стек
+	// снести нельзя и прямым запросом.
+	plan := s.removalPlan(ctx, p)
+	for _, k := range req.Items {
+		if !slices.ContainsFunc(plan, func(it removalItem) bool {
+			return it.HostID == k.HostID && it.Project == k.Project && it.State == "remove"
+		}) {
+			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("deploy.removeItemNotAllowed", k.Project))
+			return
+		}
+	}
+	if req.KeepPipeline {
+		if len(req.Items) == 0 {
+			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("deploy.unhostNothing"))
+			return
+		}
+		var names []string
+		for _, k := range req.Items {
+			for _, it := range plan {
+				if it.HostID == k.HostID && it.Project == k.Project {
+					names = append(names, it.Host)
+				}
+			}
+		}
+		if _, ok := deploy.WithoutHosts(p.Content, names); !ok {
+			writeErr(w, r, http.StatusBadRequest, msgs.Errorf("deploy.unhostImpossible"))
+			return
+		}
+	}
 	user := auth.Username(ctx)
-	// Пока удаляется — ни вебхук, ни опрос не выкладывают его заново.
-	_ = s.db.SetPipelineEnabled(ctx, p.ID, false)
+	title := "deploy.removeTitle"
+	if req.KeepPipeline {
+		title = "deploy.unhostTitle"
+	} else {
+		// Пока удаляется — ни вебхук, ни опрос не выкладывают его заново.
+		_ = s.db.SetPipelineEnabled(ctx, p.ID, false)
+	}
 	id, err := s.jobs.Start(ctx, jobs.Spec{
-		Kind: KindPipelineRemove, TitleKey: "deploy.removeTitle", TitleArgs: []any{p.Name},
+		Kind: KindPipelineRemove, TitleKey: title, TitleArgs: []any{p.Name},
 		Queue: fmt.Sprintf("deploy:%d", p.ID), Author: user, Steps: 3,
-		Params: PipelineRemoveParams{PipelineID: p.ID, RemoveOptions: opts},
+		Params: PipelineRemoveParams{PipelineID: p.ID, RemoveOptions: opts, Items: req.Items, Chosen: req.Items != nil, KeepPipeline: req.KeepPipeline},
 	})
 	if err != nil {
 		writeErr(w, r, http.StatusInternalServerError, err)
 		return
 	}
-	raw, _ := json.Marshal(pipelineRemoval{RemoveOptions: opts, JobID: id})
-	_ = s.db.SetPipelineRemoval(ctx, p.ID, string(raw))
+	if !req.KeepPipeline {
+		raw, _ := json.Marshal(pipelineRemoval{RemoveOptions: opts, JobID: id})
+		_ = s.db.SetPipelineRemoval(ctx, p.ID, string(raw))
+	}
 	s.db.Audit(ctx, user, "pipeline.remove", p.Name, "ok", map[string]any{"job_id": id, "volumes": opts.Volumes, "images": opts.Images, "cert": opts.Cert})
 	writeJSON(w, http.StatusOK, map[string]any{"job_id": id})
-}
-
-// removalHosts — хосты стека для удаления: хост, которого на хабе уже
-// нет, пропускается (убирать не на чем); не работающий — ошибка (стек
-// там остался бы).
-func (s *Server) removalHosts(ctx context.Context, jc *jobs.Context, c *deploy.ComposeSpec) ([]targetHost, error) {
-	hosts, err := s.db.ListHosts(ctx)
-	if err != nil {
-		return nil, err
-	}
-	var out []targetHost
-	seen := map[int64]bool{}
-	add := func(t targetHost) {
-		if !seen[t.ID] {
-			seen[t.ID] = true
-			out = append(out, t)
-		}
-	}
-	check := func(h store.Host) error {
-		if h.Status != store.HostStatusOnline {
-			return msgs.Errorf("hub.hostReadyYetStatus", h.Name, h.Status)
-		}
-		add(targetHost{ID: h.ID, Name: h.Name, Addr: h.Addr})
-		return nil
-	}
-	for _, n := range c.Hosts {
-		if n == "localhost" && s.local != nil {
-			add(targetHost{ID: localHostID, Name: "localhost", Addr: "127.0.0.1"})
-			continue
-		}
-		found := false
-		for _, h := range hosts {
-			if sameHostName(h.Name, n) {
-				found = true
-				if err := check(h); err != nil {
-					return nil, err
-				}
-			}
-		}
-		if !found {
-			jc.Log("deploy.removeHostGone", n)
-		}
-	}
-	if c.Group != "" {
-		if s.local != nil && s.hub.LocalHostGroup(ctx) == c.Group {
-			add(targetHost{ID: localHostID, Name: "localhost", Addr: "127.0.0.1"})
-		}
-		for _, h := range hosts {
-			if h.Group == c.Group {
-				if err := check(h); err != nil {
-					return nil, err
-				}
-			}
-		}
-	}
-	return out, nil
 }
 
 // PipelineRemoveRunner — задание удаления конвейера.
@@ -170,7 +165,7 @@ func (r *PipelineRemoveRunner) Run(ctx context.Context, jc *jobs.Context) (err e
 		return err
 	}
 	defer func() {
-		if err != nil {
+		if err != nil && !p.KeepPipeline {
 			raw, _ := json.Marshal(pipelineRemoval{RemoveOptions: p.RemoveOptions, JobID: jc.Job.ID, Error: msgs.Localize(jc.Lang(), err)})
 			_ = s.db.SetPipelineRemoval(context.WithoutCancel(ctx), pl.ID, string(raw))
 		}
@@ -179,10 +174,59 @@ func (r *PipelineRemoveRunner) Run(ctx context.Context, jc *jobs.Context) (err e
 	if err != nil {
 		return err
 	}
-	c := spec.Compose
+	// Хосты описания, которых на хабе уже нет, — убирать не на чем.
+	if spec.Compose != nil && s.loadDeployed(ctx, pl.ID) == nil {
+		hosts, _ := s.db.ListHosts(ctx)
+		for _, n := range spec.Compose.Hosts {
+			if n == "localhost" && s.local != nil {
+				continue
+			}
+			if !slices.ContainsFunc(hosts, func(h store.Host) bool { return sameHostName(h.Name, n) }) {
+				jc.Log("deploy.removeHostGone", n)
+			}
+		}
+	}
 	user := s.actingUser(ctx, jc.Job.Author, pl.Author, s.firstAdmin(ctx))
 
-	// 1. Сайт конвейера (до стека: прокси не должен смотреть в пустоту).
+	// План: где стек этого конвейера на деле и что с ним делать. Убирается
+	// только выбранное (nil — всё, что можно убрать); общий с другим
+	// конвейером стек и недоступные хосты — остаются, с объяснением.
+	plan := s.removalPlan(ctx, pl)
+	chosen := func(it removalItem) bool {
+		if it.State != "remove" {
+			return false
+		}
+		if !p.Chosen {
+			return true
+		}
+		return slices.ContainsFunc(p.Items, func(k removalKey) bool { return k.HostID == it.HostID && k.Project == it.Project })
+	}
+	// Без выбора по плану (старое задание, API) — как раньше: недоступный
+	// хост — удаление не завершено, иначе стек там остался бы сиротой.
+	if !p.Chosen && !p.KeepPipeline {
+		for _, it := range plan {
+			if it.State == "unreachable" {
+				return msgs.Errorf("deploy.removeHostFailed", it.Host, it.Reason)
+			}
+		}
+	}
+	var targets []removalItem
+	for _, it := range plan {
+		switch {
+		case chosen(it):
+			targets = append(targets, it)
+		case it.State == "shared":
+			jc.Log("deploy.removeShared", it.Project, it.Host, it.SharedWith)
+		case it.State == "unreachable" || it.State == "gone":
+			jc.Log("deploy.oldStackLeft", it.Project, it.Host, it.Reason)
+		case !p.KeepPipeline:
+			jc.Log("deploy.removeNotChosen", it.Project, it.Host)
+		}
+	}
+
+	// 1. Сайт конвейера (до стека: прокси не должен смотреть в пустоту) —
+	// при удалении конвейера всегда, при уборке с хостов — если сайт на
+	// одном из них.
 	jc.StepKey(1, 3, "deploy.removeStepSite")
 	sites, err := s.db.ListSites(ctx)
 	if err != nil {
@@ -192,65 +236,63 @@ func (r *PipelineRemoveRunner) Run(ctx context.Context, jc *jobs.Context) (err e
 		if st.PipelineID != pl.ID {
 			continue
 		}
+		if p.KeepPipeline && !slices.ContainsFunc(targets, func(it removalItem) bool { return it.HostID == st.HostID }) {
+			continue
+		}
 		// Стек всё равно уходит — публикацию сервиса не снимаем.
 		if err := s.removeSiteFromHost(ctx, jc, user, st, false, p.Cert); err != nil {
 			return err
 		}
 	}
 
-	// 2. Стек на каждом хосте.
-	targets, err := s.removalHosts(ctx, jc, c)
-	if err != nil {
-		return err
-	}
+	// 2. Стек на выбранных хостах.
 	jc.StepKey(2, 3, "deploy.removeStepHosts", len(targets))
-	for _, t := range targets {
-		jc.Log("deploy.removeHost", t.Name, c.Project)
+	for _, it := range targets {
+		jc.Log("deploy.removeHost", it.Host, it.Project)
 		var started struct {
 			JobID int64 `json:"job_id"`
 		}
-		body := map[string]any{"project": c.Project, "volumes": p.Volumes, "images": p.Images}
-		if _, err := s.hostCall(ctx, user, t.ID, "POST", "/api/compose/stacks/remove", body, &started); err != nil {
-			return msgs.Errorf("deploy.removeHostFailed", t.Name, msgs.Localize(jc.Lang(), err))
+		body := map[string]any{"project": it.Project, "volumes": p.Volumes, "images": p.Images}
+		if _, err := s.hostCall(ctx, user, it.HostID, "POST", "/api/compose/stacks/remove", body, &started); err != nil {
+			return msgs.Errorf("deploy.removeHostFailed", it.Host, msgs.Localize(jc.Lang(), err))
 		}
-		if err := s.waitHostJobVia(ctx, jc, user, t.ID, started.JobID); err != nil {
-			return msgs.Errorf("deploy.removeHostFailed", t.Name, msgs.Localize(jc.Lang(), err))
-		}
-	}
-	// Где стек выложен на деле (описание могли поменять без выкладки) и
-	// старые стеки, оставшиеся после переезда: доступный хост — убрать,
-	// недоступный — в журнал (запись конвейера всё равно удаляется).
-	extra := s.loadLeftovers(ctx, pl.ID)
-	if d := s.loadDeployed(ctx, pl.ID); d != nil {
-		for _, h := range d.Hosts {
-			extra = append(extra, leftoverStack{HostID: h.ID, Host: h.Name, Project: d.Project})
-		}
-	}
-	for _, l := range extra {
-		if l.Project == c.Project && slices.ContainsFunc(targets, func(t targetHost) bool { return t.ID == l.HostID }) {
-			continue
-		}
-		if ok, why := s.hostUsable(ctx, l.HostID); !ok {
-			jc.Log("deploy.oldStackLeft", l.Project, l.Host, why)
-			continue
-		}
-		jc.Log("deploy.removeHost", l.Host, l.Project)
-		var started struct {
-			JobID int64 `json:"job_id"`
-		}
-		body := map[string]any{"project": l.Project, "volumes": p.Volumes, "images": p.Images}
-		if _, err := s.hostCall(ctx, user, l.HostID, "POST", "/api/compose/stacks/remove", body, &started); err == nil {
-			err = s.waitHostJobVia(ctx, jc, user, l.HostID, started.JobID)
-			if err != nil {
-				jc.Log("deploy.oldStackLeft", l.Project, l.Host, msgs.Localize(jc.Lang(), err))
-			}
-		} else {
-			jc.Log("deploy.oldStackLeft", l.Project, l.Host, msgs.Localize(jc.Lang(), err))
+		if err := s.waitHostJobVia(ctx, jc, user, it.HostID, started.JobID); err != nil {
+			return msgs.Errorf("deploy.removeHostFailed", it.Host, msgs.Localize(jc.Lang(), err))
 		}
 	}
 
-	// 3. Запись на хабе и её рабочий каталог (checkout).
+	// Убранное больше не числится ни выложенным, ни оставшимся.
+	removed := func(id int64, project string) bool {
+		return slices.ContainsFunc(targets, func(it removalItem) bool { return it.HostID == id && it.Project == project })
+	}
+	if d := s.loadDeployed(ctx, pl.ID); d != nil {
+		d.Hosts = slices.DeleteFunc(d.Hosts, func(h deployedHost) bool { return removed(h.ID, d.Project) })
+		s.saveDeployed(ctx, pl.ID, *d)
+	}
+	s.saveLeftovers(ctx, pl.ID, slices.DeleteFunc(s.loadLeftovers(ctx, pl.ID), func(l leftoverStack) bool { return removed(l.HostID, l.Project) }))
+
+	// 3. Конвейер: остаётся без этих хостов в описании — или удаляется.
 	jc.StepKey(3, 3, "deploy.removeStepHub")
+	if p.KeepPipeline {
+		var names []string
+		for _, it := range targets {
+			names = append(names, it.Host)
+		}
+		content, ok := deploy.WithoutHosts(pl.Content, names)
+		if !ok {
+			return msgs.Errorf("deploy.unhostImpossible")
+		}
+		if err := s.db.UpdatePipelineContent(ctx, pl.ID, content, jc.Job.Author, msgs.T(jc.Lang(), "deploy.unhostNote", strings.Join(names, ", "))); err != nil {
+			return err
+		}
+		jc.Log("deploy.unhostDone", strings.Join(names, ", "))
+		return nil
+	}
+	for _, it := range plan {
+		if !chosen(it) && it.State == "remove" {
+			jc.Log("deploy.removeOrphan", it.Project, it.Host)
+		}
+	}
 	if err := s.db.DeletePipeline(ctx, pl.ID); err != nil {
 		return err
 	}

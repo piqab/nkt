@@ -81,3 +81,56 @@ func TestCleanupMovedStacks(t *testing.T) {
 		t.Fatalf("забыть: %d %s, осталось %+v", w.Code, w.Body.String(), srv.loadLeftovers(ctx, plID))
 	}
 }
+
+// Стек с тем же именем на том же хосте числится и за другим конвейером —
+// удаление первого его не трогает; уборка с хоста оставляет конвейер без
+// этого хоста в описании.
+func TestRemovalPlanSharedAndUnhost(t *testing.T) {
+	srv, db, _ := localFixtureHub(t)
+	ctx := context.Background()
+	mk := func(name, hosts string) store.Pipeline {
+		id, err := db.CreatePipeline(ctx, store.Pipeline{Name: name, HookID: "h-" + name, Author: "admin",
+			Content: "repo: https://example.com/a.git\nref: main\naction: compose\ncompose:\n  file: compose.yaml\n  project: shop\n  hosts: [" + hosts + "]\n"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		p, _ := db.PipelineByID(ctx, id)
+		return p
+	}
+	a := mk("a", "localhost")
+	b := mk("b", "localhost")
+	srv.saveDeployed(ctx, a.ID, deployedStack{Project: "shop", Hosts: []deployedHost{{ID: localHostID, Name: "localhost"}}})
+	srv.saveDeployed(ctx, b.ID, deployedStack{Project: "shop", Hosts: []deployedHost{{ID: localHostID, Name: "localhost"}}})
+	plan := srv.removalPlan(ctx, a)
+	if len(plan) != 1 || plan[0].State != "shared" || plan[0].SharedWith != "b" {
+		t.Fatalf("план: %+v", plan)
+	}
+	run := func(p PipelineRemoveParams) (store.Job, string) {
+		jid, err := srv.jobs.Start(ctx, jobs.Spec{Kind: KindPipelineRemove, Queue: "deploy:t", Author: "admin", Steps: 3, Params: p})
+		if err != nil {
+			t.Fatal(err)
+		}
+		j := waitJobDone(t, db, jid)
+		return j, jobLogText(t, ctx, db, jid)
+	}
+	j, log := run(PipelineRemoveParams{PipelineID: a.ID})
+	if j.Status != store.JobSucceeded || !strings.Contains(log, "«b»") || strings.Contains(log, "удаление стека shop") {
+		t.Fatalf("общий стек тронут: %+v\n%s", j, log)
+	}
+
+	// Уборка с хоста: localhost из описания уходит, конвейер — нет.
+	offID, _ := db.CreateHost(ctx, "web-x", "203.0.113.7", 22, "root", "password", []byte("x"))
+	c := mk("c", "localhost, web-x")
+	srv.saveDeployed(ctx, c.ID, deployedStack{Project: "shop2", Hosts: []deployedHost{{ID: localHostID, Name: "localhost"}, {ID: offID, Name: "web-x"}}})
+	j, log = run(PipelineRemoveParams{PipelineID: c.ID, Chosen: true, KeepPipeline: true, Items: []removalKey{{HostID: localHostID, Project: "shop2"}}})
+	if j.Status != store.JobSucceeded {
+		t.Fatalf("уборка: %+v\n%s", j, log)
+	}
+	got, err := db.PipelineByID(ctx, c.ID)
+	if err != nil || !strings.Contains(got.Content, "hosts: [web-x]") {
+		t.Fatalf("описание: %v %q", err, got.Content)
+	}
+	if d := srv.loadDeployed(ctx, c.ID); d == nil || len(d.Hosts) != 1 || d.Hosts[0].ID != offID {
+		t.Fatalf("положение: %+v", d)
+	}
+}

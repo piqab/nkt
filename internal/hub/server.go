@@ -386,6 +386,7 @@ func (s *Server) Handler() http.Handler {
 					r.Delete("/hub/pipelines/{id}", s.handlePipelineDelete)
 					r.Post("/hub/pipelines/{id}/remove", s.handlePipelineRemove)
 					r.Post("/hub/pipelines/{id}/leftovers/remove", s.handlePipelineLeftoverRemove)
+					r.Get("/hub/pipelines/{id}/remove/plan", s.handlePipelineRemovalPlan)
 					r.Post("/hub/pipelines/{id}/enabled", s.handlePipelineEnabled)
 					r.Get("/hub/pipelines/{id}/versions", s.handlePipelineVersions)
 					r.Post("/hub/pipelines/{id}/credentials", s.handlePipelineCredentials)
