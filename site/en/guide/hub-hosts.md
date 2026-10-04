@@ -246,6 +246,14 @@ installing nkt-edge on it (certbot, its own service and ports are not
 temporarily give the user a `NOPASSWD: ALL` rule (or use a host connected
 as root), then press "Narrow sudo" after the installation.
 
+**The hub's key is gone from the host** (`/etc/nkt/hub-sign.pub` was
+removed or belongs to another hub): operations that need root fail with
+“sudo asks for a password”. The hub then does not advise a `NOPASSWD: ALL`
+rule; it says the key is missing and gives a command that puts only the
+hub's public key on the host — run it once on the host with your own
+password. If the key is in place and the operation still fails, the hub
+names it: it does not support narrow sudo yet.
+
 **Hosts installed earlier** keep full sudo until it is narrowed: the Sudo
 column has a "narrow sudo" button next to the red ⚠. It, and a click on
 the mark, open the **"The hub's sudo"** window: the state, the list of

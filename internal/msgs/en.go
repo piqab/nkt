@@ -1052,6 +1052,8 @@ var enCatalog = map[string]string{
 	"hub.installingUserCannotUseSudo":                     "installing %s: user %q cannot use sudo on this host — run on the host:\n%s\nor specify root as the SSH user: %v: %s",
 	"hub.installingUserLacksPermissionsSudo":              "installing %s: user %q lacks permissions and sudo is unavailable — specify root as the SSH user, or run on the host:\n%s\n: %v: %s",
 	"hub.installingUserNeedsPasswordlessSudo":             "installing %s: user %q needs passwordless sudo (NOPASSWD) — run on the host:\n%s\nor specify root as the SSH user: %v: %s",
+	"hub.narrowSudoKeyMissing":                            "the host has narrow sudo for %q, but this hub’s key is not on it (the file was removed or belongs to another hub), so the hub cannot sign the operation. Full passwordless sudo is not needed: run this on the host once (sudo will ask your password):\n%s\nand retry the operation",
+	"hub.narrowSudoOpUnsupported":                         "the host has narrow sudo for %q, and this operation still runs only through full sudo — report which one: %v",
 	"hub.invalidHostAdminName":                            "invalid host admin name %q",
 	"hub.invalidHostAdminNameProbably":                    "invalid host admin name %q (probably a corrupted or tampered host registry import)",
 	"hub.invalidHostId":                                   "invalid host id",

@@ -8,6 +8,19 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.138 — 2026-10-04
+
+- **Narrow sudo:** when the hub's key is gone from a host, the hub no
+  longer advises full passwordless sudo — it says the key is missing and
+  gives a command that puts only the hub's public key there (once, with
+  your own password). If an operation does not support narrow sudo, the
+  hub names it.
+- **“Containers & VMs”:** the “install” banner no longer lingers for
+  installed Docker, Podman, LXD and libvirt — the host checks this right
+  away instead of relying on the last scan.
+- **Hub “Monitoring”:** a long disk name no longer overflows the window —
+  it is truncated, the full name is in the tooltip.
+
 ## v1.11.137 — 2026-10-04
 
 - **“Load” and “Availability” no longer stall the host.** Charts, the

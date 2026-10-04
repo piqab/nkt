@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"errors"
 
 	"bytes"
 	"crypto/ed25519"
@@ -142,6 +143,34 @@ func (m *Manager) narrowSudo(client *ssh.Client, sshUser string) (string, error)
 		return "full", nil
 	}
 	return "narrow", nil
+}
+
+// narrowSudoHint — операция упала на «sudo просит пароль», а на хосте
+// правило узкого sudo. Совет «дайте NOPASSWD: ALL» здесь вреден: узкий
+// sudo и задуман без него. Ключа хаба на хосте нет (удалён, от чужого
+// хаба) — команда, которая кладёт только открытый ключ (её выполняет
+// человек со своим паролем); ключ есть — операция не умеет узкий sudo, и
+// это называется прямо.
+func (m *Manager) narrowSudoHint(client *ssh.Client, sshUser string, err error) error {
+	if err == nil || client == nil || sshUser == "root" || !sudoRequiresPassword(err) {
+		return err
+	}
+	out, lerr := runRemote(client, "sudo -n -l 2>&1")
+	if lerr != nil || !strings.Contains(out, hubsudo.Command) {
+		return err
+	}
+	if !m.hasHubKey(client) {
+		pub := strings.TrimSpace(hubsudo.PublicText(m.signKey()))
+		cmd := "echo " + shellQuote(pub) + " | sudo tee " + hubsudo.PubKeyPath + " >/dev/null"
+		return msgs.Errorf("hub.narrowSudoKeyMissing", sshUser, cmd)
+	}
+	return msgs.Errorf("hub.narrowSudoOpUnsupported", sshUser, err)
+}
+
+// isNarrowHint — ошибка — подсказка narrowSudoHint.
+func isNarrowHint(err error) bool {
+	var e *msgs.Err
+	return errors.As(err, &e) && (e.Key == "hub.narrowSudoKeyMissing" || e.Key == "hub.narrowSudoOpUnsupported")
 }
 
 // NarrowSudo — «сузить sudo» уже установленного хоста с полным sudo.

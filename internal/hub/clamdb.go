@@ -303,6 +303,9 @@ func (r *ClamDBPushRunner) Run(ctx context.Context, jc *jobs.Context) error {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
+		if hint := r.m.narrowSudoHint(link.client, host.SSHUser, diagnoseInstallError(host.SSHUser, "/var/lib/clamav", err, out)); sudoRequiresPassword(hint) || isNarrowHint(hint) {
+			return hint
+		}
 		return msgs.Errorf("hub.clamDBInstall", err, out)
 	}
 	jc.Log("hub.clamDBDone", host.Name)
