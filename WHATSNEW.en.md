@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.136 — 2026-10-04
+
+- Security: outside the sandbox and without systemd, only programs from a
+  closed list are started; background actions (reboot, stopping ClamAV)
+  take their context from the request or job instead of an empty one.
+
 ## v1.11.135 — 2026-10-04
 
 - **Audit log**: the kind filter now lists every kind present in the

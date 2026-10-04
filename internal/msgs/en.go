@@ -531,6 +531,7 @@ var enCatalog = map[string]string{
 	"api.backgroundJobsAreUnavailable":                    "background jobs are unavailable",
 	"api.curlInstalledHost":                               "curl is not installed on the host",
 	"api.emptyCommand":                                    "empty command",
+	"api.toolNotAllowed":                                  "program %s is not on the list allowed to run outside the sandbox",
 	"api.consoleBadTarget":                                "cannot open a console: %s %q",
 	"api.spiceUnavailable":                                "SPICE of machine %s is unavailable: %s — it needs spice graphics with a plain (not TLS-only) port, and the machine must be running",
 	"api.lxdSpiceMissing":                                 "%s has no SPICE socket — only a running LXD virtual machine has a screen",

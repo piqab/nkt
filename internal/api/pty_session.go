@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -62,12 +63,50 @@ func buildUnrestricted(env map[string]string, argv ...string) *exec.Cmd {
 	if needsNsenterFallback() {
 		return exec.Command("nsenter", nsenterArgs(env, argv...)...)
 	}
-	cmd := exec.Command(argv[0], argv[1:]...)
+	prog, err := trustedProgram(argv[0])
+	if err != nil {
+		// Start вернёт эту ошибку: незнакомая программа не запускается.
+		return &exec.Cmd{Args: argv, Err: err}
+	}
+	cmd := exec.Command(prog, argv[1:]...)
 	cmd.Env = os.Environ()
 	for k, v := range env {
 		cmd.Env = append(cmd.Env, k+"="+v)
 	}
 	return cmd
+}
+
+// unrestrictedTools — программы, которые интерактивные сессии запускают
+// вне песочницы: оболочки, менеджеры пакетов, движки контейнеров, консоли.
+// Программу всегда выбирает сервер, но аргументы несут имена из запроса
+// (контейнер, пакет, под) — поэтому имя программы берётся из этого списка,
+// а не из argv, и всё, чего в нём нет, не запускается.
+var unrestrictedTools = map[string]string{
+	"bash": "bash", "sh": "sh", "dash": "dash", "zsh": "zsh", "fish": "fish", "ksh": "ksh",
+	"env": "env", "sudo": "sudo", "tmux": "tmux", "btop": "btop", "cat": "cat", "echo": "echo",
+	"apt-get": "apt-get", "snap": "snap",
+	"docker": "docker", "podman": "podman", "lxc": "lxc", "virsh": "virsh",
+	"kubectl": "kubectl", "k3s": "k3s",
+}
+
+// toolDirs — где искать программу, заданную полным путем (lxc из snap).
+var toolDirs = []string{"/usr/local/sbin", "/usr/local/bin", "/usr/sbin", "/usr/bin", "/sbin", "/bin", "/snap/bin"}
+
+// trustedProgram — имя или путь программы, собранные из констант списка
+// unrestrictedTools; полный путь сохраняется, если он из toolDirs.
+func trustedProgram(p string) (string, error) {
+	name, ok := unrestrictedTools[filepath.Base(p)]
+	if !ok {
+		return "", msgs.Errorf("api.toolNotAllowed", filepath.Base(p))
+	}
+	if strings.Contains(p, "/") {
+		for _, dir := range toolDirs {
+			if c := dir + "/" + name; c == p {
+				return c, nil
+			}
+		}
+	}
+	return name, nil
 }
 
 // systemdRunArgs builds the argv systemd-run needs to run argv in a fresh,

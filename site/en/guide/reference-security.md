@@ -83,6 +83,13 @@ Debian 11 without dbus), the fallback is `CAP_SYS_ADMIN` in the unit and
 narrowed to exactly `mnt`. The "Terminal" page says if neither path is
 available and offers to install dbus.
 
+Only the server builds the commands for these sessions; names from a
+request (container, package, pod) are validated and matched against the
+inventory. When nkt does not run as a unit and starts the program
+directly, its name comes from a closed list (shells, `apt-get`, `snap`,
+`docker`, `podman`, `lxc`, `virsh`, `kubectl`, `k3s`, `tmux`, `btop` and
+so on); anything else is not started.
+
 The web terminal is off by default (`NKT_TERMINAL_ENABLED`); a host under
 a hub has its own checkbox in its form.
 

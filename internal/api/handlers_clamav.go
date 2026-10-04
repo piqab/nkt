@@ -324,7 +324,11 @@ func (s *Server) clamStream(ctx context.Context, jc *jobs.Context, script string
 		case <-ctx.Done():
 			jc.Log("clamav.stopping")
 			if unit != "" {
-				_, _ = RunUnrestricted(context.Background(), "systemctl", "stop", unit)
+				// Контекст задания уже отменён — остановке нужен свой, без
+				// отмены, но с теми же значениями (язык) и с пределом.
+				stopCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+				_, _ = RunUnrestricted(stopCtx, "systemctl", "stop", unit)
+				cancel()
 			} else if cmd.Process != nil {
 				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 			}
