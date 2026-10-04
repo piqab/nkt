@@ -222,6 +222,9 @@ type HubExport struct {
 	// LegacySignKeys — ключи подписи хабов, от которых этот хаб сам
 	// переехал (только вместе с MasterKey): хосты, ещё не сменившие ключ.
 	LegacySignKeys []string `json:"legacy_sign_keys,omitempty"`
+	// Monitoring — история «Мониторинга» (только по отдельной галочке:
+	// файл с ней заметно больше).
+	Monitoring []MonHostExport `json:"monitoring,omitempty"`
 }
 
 func hostToExport(h Host) HostExport {
@@ -402,6 +405,9 @@ const (
 	SectionAPITokens      = "api_tokens"
 	SectionWebhooks       = "webhooks"
 	SectionBots           = "bots"
+	// SectionMonitoring — история «Мониторинга»: «заменить» здесь значит
+	// «дополнить» — недостающие часы добавляются, имеющиеся не трогаются.
+	SectionMonitoring = "monitoring"
 )
 
 // ImportResolutions — что делать с тем, что в этом хабе уже есть под тем

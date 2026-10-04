@@ -37,11 +37,11 @@ export function DangerZoneCard({ admin }: { admin: boolean }) {
       {stage === 'export' && (
         <ExportPasswordModal
           busy={exportBusy}
-          onDownload={async (password, users) => {
+          onDownload={async (password, users, monitoring) => {
             setExportBusy(true)
             setError(null)
             try {
-              await downloadHubExport(true, password, users)
+              await downloadHubExport(true, password, users, monitoring)
               setStage('select')
             } catch (err) {
               setError(err instanceof Error ? err.message : String(err))

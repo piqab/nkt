@@ -523,6 +523,7 @@ var ruCatalog = map[string]string{
 	"mon.rebalance":                                       "%s на %s занимает %v ГБ, а память этого хоста на пределе; на %s свободно %v ГБ — можно перенести",
 	"mon.quietWindow":                                     "Самое тихое окно недели — два часа со средней нагрузкой CPU %v%%: подходит для обслуживания",
 	"mon.settingsBad":                                     "неверные пороги «Мониторинга»",
+	"hub.monImportNoHost":                                 "хоста %q здесь нет — его история не импортирована",
 	"api.backgroundJobsAreUnavailable":                    "фоновые задания недоступны",
 	"api.curlInstalledHost":                               "на хосте нет curl",
 	"api.emptyCommand":                                    "пустая команда",

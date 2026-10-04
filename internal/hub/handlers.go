@@ -1093,6 +1093,9 @@ func (s *Server) handleExportHosts(w http.ResponseWriter, r *http.Request) {
 	includeKey := r.URL.Query().Get("include_key") == "1"
 	includeUsers := r.URL.Query().Get("include_users") == "1"
 	export, err := s.hub.ExportHub(r.Context(), includeKey, includeUsers)
+	if err == nil && r.URL.Query().Get("include_monitoring") == "1" {
+		export.Monitoring, err = s.db.ExportMonitoring(r.Context())
+	}
 	if err == nil && includeKey {
 		// «Удалить nkt везде» требует свежего полного экспорта.
 		s.hub.noteFullExport()

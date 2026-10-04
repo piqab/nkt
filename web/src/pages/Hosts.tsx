@@ -886,11 +886,11 @@ export default function Hosts({
    * given, encrypts the downloaded bytes in-browser (see exportCrypto.ts)
    * before the save-as dialog ever sees them — the plaintext export never
    * touches disk itself. */
-  async function downloadExport(includeKey: boolean, password?: string, includeUsers = false) {
+  async function downloadExport(includeKey: boolean, password?: string, includeUsers = false, includeMonitoring = false) {
     setNotice(null)
     setExportBusy(true)
     try {
-      await downloadHubExport(includeKey, password, includeUsers)
+      await downloadHubExport(includeKey, password, includeUsers, includeMonitoring)
       setExportPrompt(false)
     } catch (err) {
       setNotice({ kind: 'error', text: err instanceof Error ? err.message : String(err) })
@@ -1768,7 +1768,7 @@ export default function Hosts({
       {exportPrompt && (
         <ExportPasswordModal
           busy={exportBusy}
-          onDownload={(password, users) => downloadExport(true, password, users)}
+          onDownload={(password, users, monitoring) => downloadExport(true, password, users, monitoring)}
           onClose={() => setExportPrompt(false)}
         />
       )}

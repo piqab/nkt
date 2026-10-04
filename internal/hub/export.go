@@ -151,6 +151,17 @@ func (m *Manager) ImportPlan(ctx context.Context, export store.HubExport) ([]sto
 	plan = append(plan, edge)
 	plan = append(plan, m.planAccess(ctx, export)...)
 	plan = append(plan, m.planSites(ctx, export))
+	// История «Мониторинга»: совпадение — у хоста с этим именем здесь уже
+	// есть история; «заменить» её дополняет.
+	mon := store.PlanSection{Section: store.SectionMonitoring, Items: []store.PlanItem{}}
+	for _, h := range export.Monitoring {
+		conflict := false
+		if id, ok := m.db.MonHostID(ctx, h.Host); ok {
+			conflict = m.db.MonHasHistory(ctx, id)
+		}
+		mon.Items = append(mon.Items, store.PlanItem{Name: h.Host, Conflict: conflict, Replaceable: true})
+	}
+	plan = append(plan, mon)
 	return plan, nil
 }
 
@@ -309,6 +320,7 @@ func (m *Manager) ImportHosts(ctx context.Context, export store.HubExport, res s
 
 	rep := m.db.ImportHosts(ctx, export, res)
 	rep.Errors = append(pre, rep.Errors...)
+	m.importMonitoring(ctx, export.Monitoring, res, &rep)
 	m.importF2BTemplates(ctx, export.F2BTemplates, res, &rep)
 	m.importEdges(ctx, export.EdgeList(), res, &rep)
 	m.importAccess(ctx, export, res, &rep)
@@ -492,4 +504,45 @@ func reencryptHostSecrets(oldKey, newKey []byte, h store.HostExport) (store.Host
 		h.TunnelTokenEnc = tokenEnc
 	}
 	return h, nil
+}
+
+// importMonitoring — история после хостов (их номера уже есть). Хоста с
+// таким именем нет — пропуск с ошибкой; история уже есть — по выбору
+// «дополнить» (недостающие часы и дни), иначе пропуск.
+func (m *Manager) importMonitoring(ctx context.Context, list []store.MonHostExport, res store.ImportResolutions, rep *store.ImportReport) {
+	if len(list) == 0 {
+		return
+	}
+	cnt := rep.Count(store.SectionMonitoring)
+	for _, h := range list {
+		id, ok := m.db.MonHostID(ctx, h.Host)
+		if !ok {
+			cnt.Skipped++
+			rep.Err("%s: %s", store.SectionMonitoring, msgs.Tc(ctx, "hub.monImportNoHost", h.Host))
+			continue
+		}
+		had := m.db.MonHasHistory(ctx, id)
+		if had && !res.Replace(store.SectionMonitoring, h.Host) {
+			cnt.Skipped++
+			continue
+		}
+		if err := m.db.MonUpsertHourly(ctx, id, h.Hourly, true); err != nil {
+			rep.Err("%s %s: %v", store.SectionMonitoring, h.Host, err)
+			continue
+		}
+		if err := m.db.MonUpsertDaily(ctx, id, h.Daily, true); err != nil {
+			rep.Err("%s %s: %v", store.SectionMonitoring, h.Host, err)
+			continue
+		}
+		if len(h.Targets) > 0 {
+			if cur, _ := m.db.MonTargets(ctx, id); len(cur) == 0 {
+				_ = m.db.MonSetTargets(ctx, id, h.Targets)
+			}
+		}
+		if had {
+			cnt.Replaced++
+		} else {
+			cnt.Added++
+		}
+	}
 }

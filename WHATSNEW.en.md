@@ -8,6 +8,14 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.130 — 2026-10-04
+
+- **"Monitoring" history in the hub export**, behind a separate checkbox
+  (the file gets noticeably larger). The import plan has its own section:
+  hosts by name; history is added where there is none, and where there is
+  some, it is skipped or merged (missing hours and days are added,
+  existing ones are left alone).
+
 ## v1.11.129 — 2026-10-04
 
 - **"Monitoring" on the hub**: a section below "Alerts" with
