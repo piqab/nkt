@@ -260,3 +260,34 @@ func TestPurgeDeleteUserFlag(t *testing.T) {
 		t.Fatalf("root deletion allowed: %q", out)
 	}
 }
+
+// Смена ключа: подпись старым ключом ставит новый; дальше старый не
+// принимается, новый — да; чужой ключ ключ не меняет; мусор — отказ.
+func TestRekey(t *testing.T) {
+	h, signOld := newHost(t, "old-hub")
+	newPriv := KeyFromSecret([]byte("new-hub"))
+	newPub := strings.TrimSpace(PublicText(newPriv))
+
+	// Чужой хаб сменить ключ не может.
+	stranger := KeyFromSecret([]byte("stranger"))
+	env, _ := Sign(stranger, Request{Op: OpRekey, Args: map[string]string{"pub": strings.TrimSpace(PublicText(stranger))}, Serial: 100})
+	if _, err := h.Execute(env); err == nil {
+		t.Fatal("rekey by a foreign key accepted")
+	}
+	if _, err := h.Execute(signOld(Request{Op: OpRekey, Args: map[string]string{"pub": "not-a-key"}})); err == nil {
+		t.Fatal("garbage key accepted")
+	}
+	if _, err := h.Execute(signOld(Request{Op: OpRekey, Args: map[string]string{"pub": newPub}})); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(h.PubKey); strings.TrimSpace(string(b)) != newPub {
+		t.Fatalf("key file %q", b)
+	}
+	if _, err := h.Execute(signOld(Request{Op: OpPing})); err == nil {
+		t.Fatal("old key still accepted")
+	}
+	env, _ = Sign(newPriv, Request{Op: OpPing, Serial: 1 << 40})
+	if out, err := h.Execute(env); err != nil || out != "ok" {
+		t.Fatalf("new key: %q %v", out, err)
+	}
+}

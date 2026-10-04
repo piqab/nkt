@@ -393,3 +393,21 @@ also carries logins, roles and password hashes. The file is JSON version
   which to copy into `cluster-images` by hand), the package cache, jobs,
   deployment history, the alert log, saved model answers, the fallback
   channel certificate pin (the new hub pins its own).
+- **Hosts without nkt after an import.** An import installs nothing on
+  hosts. Right after it, the hub signs in to the moved hosts over SSH in
+  the background: where nkt is missing (for example, it was removed before
+  the move), the host becomes "not installed", gray with an install
+  button, rather than red "unreachable". Above the host list, a "Hosts
+  without nkt: N" bar with an "Install" button opens the install window
+  with those hosts already selected (see
+  ["Installing nkt on hosts"](/en/guide/hub-updates#installing-nkt-on-hosts)).
+- **Moving narrow-sudo hosts.** Such a host holds the public key of the
+  hub that narrowed it and would reject the new hub's signature. When a
+  **full** export (with the key) is imported, the new hub keeps the
+  previous hub's signing key (encrypted with its own master key) and
+  signs with it for such hosts. After nkt is installed or updated on the
+  host (and on "Narrow sudo"), the hub replaces the host's key with its
+  own via the `hub-sudo rekey` operation signed with the previous key:
+  trust is handed over by the party the host already trusted, and it
+  grants nothing beyond what the previous hub had. A full export of the
+  new hub carries the inherited keys too, so the next move works as well.

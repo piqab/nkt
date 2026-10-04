@@ -58,6 +58,10 @@ const (
 	OpSudoers  = "sudoers-remove"
 	OpPurge    = "purge"
 	OpClamAV   = "clamav"
+	// OpRekey — заменить открытый ключ хаба на хосте (переезд на новый
+	// хаб). Подписывается текущим, то есть старым ключом: доверие
+	// передаёт тот, кому хост уже доверяет.
+	OpRekey = "rekey"
 )
 
 // Пути очистки и ClamAV.
@@ -73,7 +77,7 @@ const (
 var ClamFiles = []string{"main.cvd", "daily.cvd", "bytecode.cvd"}
 
 // Ops — все операции (для окна «что разрешено хабу»).
-var Ops = []string{OpPing, OpInstall, OpActivate, OpService, OpJournal, OpPasswd, OpAptProxy, OpClamAV, OpPurge, OpSudoers}
+var Ops = []string{OpPing, OpInstall, OpActivate, OpService, OpJournal, OpPasswd, OpAptProxy, OpClamAV, OpPurge, OpSudoers, OpRekey}
 
 // Request — подписываемая часть.
 type Request struct {
@@ -253,6 +257,8 @@ func (h Host) Execute(envelope []byte) (string, error) {
 			return "", err
 		}
 		return "removed", nil
+	case OpRekey:
+		return h.rekey(req)
 	}
 	return "", fmt.Errorf("hub-sudo: unknown operation %q", req.Op)
 }
@@ -629,4 +635,27 @@ func (h Host) dropAuthorizedKey(user, body string) error {
 		_ = os.Chown(tmp, int(st.Uid), int(st.Gid))
 	}
 	return os.Rename(tmp, p)
+}
+
+// rekey — новый открытый ключ хаба вместо текущего (подпись запроса уже
+// проверена текущим). Пишется рядом и переименовывается: недописанный
+// файл оставил бы хост без ключа вовсе.
+func (h Host) rekey(req Request) (string, error) {
+	b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(req.Args["pub"]))
+	if err != nil || len(b) != ed25519.PublicKeySize {
+		return "", errors.New("hub-sudo: bad new key")
+	}
+	text := base64.StdEncoding.EncodeToString(b) + "\n"
+	tmp := h.PubKey + ".new"
+	if err := os.WriteFile(tmp, []byte(text), 0o644); err != nil {
+		return "", err
+	}
+	if err := os.Chmod(tmp, 0o644); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmp, h.PubKey); err != nil {
+		_ = os.Remove(tmp)
+		return "", err
+	}
+	return "rekeyed", nil
 }

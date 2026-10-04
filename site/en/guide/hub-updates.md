@@ -158,6 +158,19 @@ A standalone host without a hub shows the default menu. API: `GET` and
 `PUT /api/hub/ui/nav/hub` and `/api/hub/ui/nav/host` with `{"order": [...],
 "hidden": [...]}`.
 
+## Installing nkt on hosts
+
+The **"Installing nkt on hosts"** card (admin only) sits next to the danger
+zone. A window lists the hub's hosts: checkboxes cleared, with "Select all"
+and "Clear all"; each host shows its state (nkt of some version, not
+installed, unreachable, installation error). The hub machine (localhost)
+is not listed. "Install" starts a hub job with the standard log window:
+three hosts at a time, each getting a regular installation, like a host's
+"Reinstall" (its job shows in "Jobs"); the job waits for each result and
+logs it. A host with nkt installed by **another** hub is skipped; reinstall
+it from the host list with confirmation. SSH access and root or
+passwordless sudo are needed.
+
 ## Danger zone
 
 A card with a red border (admins only): **"Remove nkt from all hosts"**:
@@ -177,5 +190,15 @@ A card with a red border (admins only): **"Remove nkt from all hosts"**:
    stop the rest. Where the cleanup succeeds, the host leaves the hub; where
    it does not, the host stays listed and the log gives the reason.
 
-The hub and the hosts come back by importing that very export file.
+The hub and the hosts come back by importing that very export file: the
+hosts return to the list, the hub notices on its own where nkt is missing
+and offers to [install it](#installing-nkt-on-hosts). The installation,
+however, needs SSH access and passwordless sudo: if the hub's access
+traces were removed, the hub key is gone from `authorized_keys` along
+with its sudo rule. The new hub cannot sign in to a host added with a
+key; it can sign in to one added with a password, but passwordless sudo
+has to be restored by hand (or the host connected as root). With "delete
+the SSH user" checked, there is no account to sign in to at all. If the
+goal is only to move to a new hub, there is no need to remove nkt: export
+and import are enough, and the hosts keep working.
 

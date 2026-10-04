@@ -3997,7 +3997,8 @@
       "aptproxy": "apt through the hub's package cache: on or off",
       "sudoers-remove": "remove this rule",
       "purge": "cleanup when deleting the host: the nkt service, files and data, the rule and the hub's key, optionally the user",
-      "clamav": "the ClamAV database from the hub against signed hashes"
+      "clamav": "the ClamAV database from the hub against signed hashes",
+      "rekey": "changing the hub key on the host when moving to a new hub, signed with the previous hub key"
     },
     "ruleTitle": "Rule {{path}}:",
     "keyNote": "The hub's public key: {{path}}. Requests signed by another key and replays of old ones are rejected.",
@@ -4051,5 +4052,20 @@
     "confirmWord": "delete",
     "typeWord": "To confirm, type “{{word}}”:",
     "start": "Remove nkt from hosts: {{count}}"
+  },
+  "installAll": {
+    "title": "Installing nkt on hosts",
+    "hint": "Install or reinstall nkt on selected hosts as a hub job, three hosts at a time; each installation works like a host's “Reinstall”.",
+    "button": "Install nkt on hosts",
+    "selectTitle": "Install nkt on hosts",
+    "selectHint": "Select hosts. Each gets a regular installation (SSH access and root or passwordless sudo are needed); a host with nkt installed by another hub is skipped — reinstall it from the host list with confirmation. The hub machine is not shown here.",
+    "stateNew": "nkt not installed",
+    "stateInstalling": "installing",
+    "stateError": "installation error",
+    "stateUnreachable": "unreachable",
+    "stateInstalled": "nkt {{version}}",
+    "start": "Install ({{count}})",
+    "banner": "Hosts without nkt: {{count}} (for example, after an import or removing nkt).",
+    "bannerButton": "Install"
   }
 }
