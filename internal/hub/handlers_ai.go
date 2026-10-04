@@ -163,7 +163,7 @@ func (s *Server) handleAIExplain(w http.ResponseWriter, r *http.Request) {
 	}
 	kind := req.Kind
 	switch kind {
-	case ai.KindFinding, ai.KindVuln, ai.KindMalware, ai.KindEvent, ai.KindJobError, ai.KindConfigError, ai.KindConfig, ai.KindIP:
+	case ai.KindFinding, ai.KindVuln, ai.KindMalware, ai.KindEvent, ai.KindJobError, ai.KindConfigError, ai.KindConfig, ai.KindIP, ai.KindMonitoring:
 	default:
 		kind = ai.KindFinding
 	}

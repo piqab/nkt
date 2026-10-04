@@ -13,6 +13,7 @@ import {
   PlayCircleOutlined,
   ProfileOutlined,
   SecurityScanOutlined,
+  LineChartOutlined,
 } from '@ant-design/icons'
 import { notifyNewEvents } from './notifications'
 import { NAV_ITEMS } from './navItems'
@@ -49,6 +50,7 @@ import TerminalPage from './pages/Terminal'
 import Firewall from './pages/Firewall'
 import Fail2ban from './pages/Fail2ban'
 import HubFail2ban from './pages/HubFail2ban'
+import HubMonitoring from './pages/HubMonitoring'
 import Interfaces from './pages/Interfaces'
 import Certificates from './pages/Certificates'
 import Availability from './pages/Availability'
@@ -362,7 +364,7 @@ function Shell({
   // depends on the address bar staying whatever it was from a previous
   // host session — introducing routing here would have to interact with
   // that, for no real benefit (this is not something worth bookmarking).
-  const [hubView, setHubView] = useState<'hosts' | 'events' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'about'>('hosts')
+  const [hubView, setHubView] = useState<'hosts' | 'events' | 'monitoring' | 'fail2ban' | 'jobs' | 'profiles' | 'clusters' | 'deploy' | 'about'>('hosts')
   // Polled independently of whichever section is actually showing, so the
   // sidebar's own "доступно обновление" badge stays current even while
   // looking at the host list — matches how criticalCount/certAlerts below
@@ -421,6 +423,14 @@ function Shell({
   // Задания и профили хаба — это задания и профили его собственной машины:
   // раздел работает через /hosts/local без выбранного хоста.
   if (isHub && !selectedHost && (hubView === 'jobs' || hubView === 'profiles' || hubView === 'clusters' || hubView === 'deploy')) hostScope.id = LOCAL_HOST_ID
+
+  /** Открыть хост сразу на нужном разделе (подсказки «Мониторинга»). */
+  function openHostAt(id: number, name: string, path: string) {
+    const host = { id, name } as SelectedHost
+    setSelectedHost(host)
+    writeSelectedHost(host)
+    navigate(path)
+  }
 
   function selectHost(host: SelectedHost | null) {
     setSelectedHost(host)
@@ -534,6 +544,7 @@ function Shell({
           </span>
         ),
       },
+      { key: 'monitoring', icon: <LineChartOutlined />, label: t('nav.monitoring') },
       { key: 'fail2ban', icon: <SecurityScanOutlined />, label: t('nav.fail2ban') },
       {
         key: 'jobs',
@@ -591,6 +602,8 @@ function Shell({
                 <Hosts onSelect={selectHost} hubVersion={me.hub_version} onOpenProfiles={() => setHubView('profiles')} onOpenDeploy={() => setHubView('deploy')} />
               ) : hubView === 'events' ? (
                 <HostEvents me={me} />
+              ) : hubView === 'monitoring' ? (
+                <HubMonitoring me={me} onOpenHost={openHostAt} />
               ) : hubView === 'fail2ban' ? (
                 <HubFail2ban me={me} />
               ) : hubView === 'jobs' ? (

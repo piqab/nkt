@@ -21,6 +21,7 @@ import {
   SafetyCertificateOutlined,
   SafetyOutlined,
   SecurityScanOutlined,
+  LineChartOutlined,
   SettingOutlined,
   ShareAltOutlined,
   TeamOutlined,
@@ -88,6 +89,7 @@ export const NAV_ITEMS: {
 export const HUB_NAV: { key: string; labelKey: string; icon: ReactNode }[] = [
   { key: 'hosts', labelKey: 'hosts.title', icon: <ClusterOutlined /> },
   { key: 'events', labelKey: 'events.title', icon: <BellOutlined /> },
+  { key: 'monitoring', labelKey: 'nav.monitoring', icon: <LineChartOutlined /> },
   { key: 'fail2ban', labelKey: 'nav.fail2ban', icon: <SecurityScanOutlined /> },
   { key: 'jobs', labelKey: 'nav.jobs', icon: <PlayCircleOutlined /> },
   { key: 'profiles', labelKey: 'nav.profiles', icon: <ProfileOutlined /> },

@@ -8,6 +8,21 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.129 — 2026-10-04
+
+- **"Monitoring" on the hub**: a section below "Alerts" with
+  "Availability" and "Load" tabs across all hosts, from the hub history
+  (summaries from hosts once an hour, hours for 90 days, days for a
+  year); each container, machine and pod separately, charts on click,
+  heatmaps by hour of week.
+- **Forecasts and hints**: when a disk fills up, memory and CPU at their
+  limit and their growth, a likely memory leak, a target availability
+  drop, latency growth, what to move off an overloaded host, a quiet
+  window for maintenance; a button to the host section where it is
+  handled, and model analysis.
+- **"Forecast" alerts** with configurable thresholds (a window with a
+  diff); they also go to Telegram, Slack and webhooks.
+
 ## v1.11.128 — 2026-10-04
 
 - **The host collects its own load series**: CPU, memory, load and the

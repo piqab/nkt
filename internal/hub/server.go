@@ -31,6 +31,8 @@ import (
 // internal/auth, unchanged) plus the host registry and per-host proxy
 // routes backed by Manager.
 type Server struct {
+	// mon — сбор и анализ «Мониторинга» (monitoring.go).
+	mon          monState
 	cfg          *config.Config
 	db           *store.DB
 	auth         *auth.Service
@@ -260,6 +262,10 @@ func (s *Server) Handler() http.Handler {
 				// Опросить хост сейчас (щелчок по значку «недоступен»): на
 				// хосте ничего не меняет, поэтому — всем, кто видит список.
 				r.Post("/hub/hosts/{id}/poll", s.handleHostPoll)
+				// «Мониторинг» читают все, кто видит список хостов.
+				r.Get("/hub/monitoring/overview", s.handleMonitoringOverview)
+				r.Get("/hub/monitoring/series", s.handleMonitoringSeries)
+				r.Get("/hub/monitoring/settings", s.handleMonitoringSettings)
 				r.Get("/hub/events/settings", s.handleEventSettings)
 				// Раскладку меню читают все: по ней строится меню.
 				r.Get("/hub/ui/nav/{kind}", s.handleNavLayout)
@@ -426,6 +432,8 @@ func (s *Server) Handler() http.Handler {
 					r.Post("/hub/hosts/{id}/sudo/rule-off", s.handleDisableSudoRule)
 					r.Post("/hub/purge-all", s.handlePurgeAll)
 					r.Post("/hub/install-all", s.handleInstallAll)
+					r.Post("/hub/monitoring/collect", s.handleMonitoringCollect)
+					r.Put("/hub/monitoring/settings", s.handleMonitoringSettings)
 					r.Get("/hub/hosts/{id}/sudo", s.handleSudoInfo)
 					r.Post("/hub/hosts/{id}/stop", s.handleStopHost)
 					r.Post("/hub/hosts/{id}/start", s.handleStartHost)

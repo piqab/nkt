@@ -676,6 +676,9 @@ func Open(path string) (*DB, error) {
 	if _, err := sqlDB.ExecContext(ctx, schema); err != nil {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
+	if _, err := sqlDB.ExecContext(ctx, monSchema); err != nil {
+		return nil, fmt.Errorf("apply schema: %w", err)
+	}
 	if err := addMissingColumns(ctx, sqlDB); err != nil {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}

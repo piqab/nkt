@@ -376,7 +376,7 @@ type EventSettings struct {
 }
 
 // EventKinds — все виды в порядке показа.
-var EventKinds = []string{store.EventUnreachable, store.EventRecovered, store.EventProblems, store.EventResolved, store.EventJobFailed, store.EventRebooted, store.EventBans}
+var EventKinds = []string{store.EventUnreachable, store.EventRecovered, store.EventProblems, store.EventResolved, store.EventJobFailed, store.EventRebooted, store.EventBans, store.EventForecast}
 
 // defaultEventSettings — всё записывается; будят недоступностью,
 // проблемами и провалом задания, но не возвратами.

@@ -132,7 +132,7 @@ func botTime(ts time.Time, loc *time.Location, lang msgs.Lang, now time.Time) st
 // --- события ----------------------------------------------------------------------
 
 var botEventIcon = map[string]string{store.EventUnreachable: "🔴", store.EventRecovered: "🟢", store.EventProblems: "⚠️", store.EventResolved: "✅",
-	store.EventJobFailed: "❌", store.EventRebooted: "🔄", store.EventBans: "🚫", OutDeploySucceeded: "🚀", OutDeployFailed: "💥"}
+	store.EventJobFailed: "❌", store.EventRebooted: "🔄", store.EventBans: "🚫", store.EventForecast: "📈", OutDeploySucceeded: "🚀", OutDeployFailed: "💥"}
 
 // eventBody — текст события; новые находки — заголовком и списком (до
 // трёх, дальше «…и ещё N»). Разбивка по аргументам события — годится и

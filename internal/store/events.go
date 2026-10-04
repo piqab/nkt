@@ -32,6 +32,9 @@ const (
 	EventRebooted = "rebooted"
 	// EventBans — fail2ban на хосте забанил новые адреса.
 	EventBans = "bans"
+	// EventForecast — прогноз «Мониторинга»: диск скоро заполнится,
+	// память на пределе, похоже на утечку, упала доступность.
+	EventForecast = "forecast"
 )
 
 // HostEvent — одно оповещение.
