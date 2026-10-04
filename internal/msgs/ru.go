@@ -1446,6 +1446,8 @@ var ruCatalog = map[string]string{
 	"clamav.quarantineFailed":                             "карантин %s: %v",
 	"clamav.badQuarantineID":                              "недопустимый идентификатор карантина",
 	"clamav.quarantineNotFound":                           "в карантине нет такого файла",
+	"docker.inspectRevealAdmin":                           "значения переменных контейнера видит только администратор",
+	"docker.inspectNotFound":                              "контейнера %s нет",
 	"compose.replaceStop":                                 "останавливаю прежний стек %s перед запуском %s",
 	"compose.replaceRestore":                              "новый стек не поднялся — запускаю прежний %s обратно",
 	"compose.replaceRemove":                               "новый стек работает — убираю прежний %s",

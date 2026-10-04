@@ -1,0 +1,116 @@
+{
+ "Id": "8f3a1c9e21b4d5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0",
+ "Created": "2026-07-20T09:00:00.000000000Z",
+ "Path": "/app/server",
+ "Args": [
+  "--listen",
+  ":8080"
+ ],
+ "State": {
+  "Status": "running",
+  "Running": true,
+  "Restarting": false,
+  "ExitCode": 0,
+  "StartedAt": "2026-09-26T08:12:03.000000000Z",
+  "FinishedAt": "0001-01-01T00:00:00Z",
+  "Health": {
+   "Status": "healthy",
+   "FailingStreak": 0
+  }
+ },
+ "Image": "sha256:1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+ "Name": "/acme-app",
+ "RestartCount": 0,
+ "HostConfig": {
+  "RestartPolicy": {
+   "Name": "unless-stopped",
+   "MaximumRetryCount": 0
+  },
+  "Memory": 536870912,
+  "NanoCpus": 1000000000,
+  "PortBindings": {
+   "8080/tcp": [
+    {
+     "HostIp": "127.0.0.1",
+     "HostPort": "8080"
+    }
+   ]
+  }
+ },
+ "Mounts": [
+  {
+   "Type": "bind",
+   "Source": "/srv/docker/data/app",
+   "Destination": "/data",
+   "Mode": "rw",
+   "RW": true
+  },
+  {
+   "Type": "volume",
+   "Name": "acme_uploads",
+   "Source": "/var/lib/docker/volumes/acme_uploads/_data",
+   "Destination": "/uploads",
+   "Driver": "local",
+   "Mode": "z",
+   "RW": true
+  }
+ ],
+ "Config": {
+  "Hostname": "8f3a1c9e21b4",
+  "User": "app",
+  "Env": [
+   "DATABASE_URL=postgres://acme:S3cret-demo@acme-postgres:5432/acme",
+   "REDIS_URL=redis://acme-redis:6379/0",
+   "APP_SECRET=demo-not-a-real-secret",
+   "LOG_LEVEL=info",
+   "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+   "APP_VERSION=1.24.3",
+   "TZ=UTC"
+  ],
+  "Cmd": [
+   "--listen",
+   ":8080"
+  ],
+  "Entrypoint": [
+   "/app/server"
+  ],
+  "Image": "ghcr.io/acme/app:1.24.3",
+  "WorkingDir": "/app",
+  "Healthcheck": {
+   "Test": [
+    "CMD",
+    "/app/server",
+    "health"
+   ],
+   "Interval": 30000000000
+  },
+  "Labels": {
+   "com.docker.compose.project": "acme",
+   "com.docker.compose.service": "app",
+   "com.docker.compose.project.config_files": "/srv/docker/docker-compose.yml",
+   "com.docker.compose.project.working_dir": "/srv/docker",
+   "org.opencontainers.image.version": "1.24.3"
+  }
+ },
+ "NetworkSettings": {
+  "Ports": {
+   "8080/tcp": [
+    {
+     "HostIp": "127.0.0.1",
+     "HostPort": "8080"
+    }
+   ]
+  },
+  "Networks": {
+   "acme_backend": {
+    "IPAddress": "172.19.0.2",
+    "Gateway": "172.19.0.1",
+    "MacAddress": "02:42:ac:13:00:02",
+    "Aliases": [
+     "app",
+     "acme-app"
+    ]
+   }
+  }
+ }
+}

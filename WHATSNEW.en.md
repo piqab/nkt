@@ -8,6 +8,15 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.143 — 2026-10-04
+
+- **Docker container “Inspect”** — an icon in the container row: all
+  environment variables with their source (container, over image, image),
+  the image and whether it is current, state, restarts, command, limits,
+  ports, volumes, networks, labels and the full JSON. Variable values are
+  hidden; an administrator reveals them after a confirmation, and the
+  reveal is recorded in the audit log.
+
 ## v1.11.142 — 2026-10-04
 
 - **Deployments and `.env`.** If `.env` changed since the last deployment,

@@ -13,6 +13,7 @@ import PathPicker, { ownerFromPath } from '../components/PathPicker'
 import { confirmAction } from '../components/confirm'
 import { DataTable } from '../components/DataTable'
 import { RowAction } from '../components/RowAction'
+import { ContainerInspectModal } from '../components/ContainerInspectModal'
 import { PowerToggle, containerPowerState } from '../components/PowerToggle'
 import { ProbeLink } from '../components/PortProbe'
 import CommandModal from '../components/CommandModal'
@@ -173,6 +174,7 @@ export default function Docker({ me }: { me: Me }) {
             />
           )}
           <RowAction action="log" label={t('docker.logs')} onClick={() => setLogsFor(c.name)} />
+          {c.state !== 'declared' && <RowAction action="details" label={t('docker.inspect')} onClick={() => setInspectFor(c.name)} />}
           {canControl && containerPowerState(c.state) === 'running' && (
             <RowAction action="console" label={t('console.action')} onClick={() => setConsoleFor({ kind: 'docker', name: c.name })} />
           )}
@@ -266,6 +268,7 @@ export default function Docker({ me }: { me: Me }) {
   // состояние через несколько секунд и хвост логов, если не running.
   const [run, setRun] = useState<{ name: string; action: 'start' | 'restart'; outcome?: { ok: boolean; exitCode?: number } | null } | null>(null)
   const [logsFor, setLogsFor] = useState<string | null>(null)
+  const [inspectFor, setInspectFor] = useState<string | null>(null)
   const [consoleFor, setConsoleFor] = useState<{ kind: ConsoleKind; name: string } | null>(null)
   const [backupFor, setBackupFor] = useState<{ kind: BackupKind; name: string; projectDir?: string } | null>(null)
 
@@ -428,6 +431,7 @@ export default function Docker({ me }: { me: Me }) {
         />
       )}
       {logsFor && <ContainerLogsModal name={logsFor} base="/containers" onClose={() => setLogsFor(null)} />}
+      {inspectFor && <ContainerInspectModal name={inspectFor} admin={!!me.is_admin} onClose={() => setInspectFor(null)} />}
       {consoleFor && <ConsoleModal kind={consoleFor.kind} name={consoleFor.name} onClose={() => setConsoleFor(null)} />}
       {backupFor && (
         <BackupModal
