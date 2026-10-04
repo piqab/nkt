@@ -775,7 +775,8 @@
       "api_tokens": "API tokens",
       "webhooks": "Outgoing webhooks",
       "bots": "Bots",
-      "sites": "Sites"
+      "sites": "Sites",
+      "monitoring": "\"Monitoring\" history"
     },
     "importPlanTitle": "Import: what the file contains",
     "importPlanHint": "A version {{version}} file from {{date}}. Items whose name already exists on this hub are skipped by default; “replace” is chosen per item or for a whole section.",
@@ -817,7 +818,11 @@
     "colLastSeenHint": "When the host was last seen on the network",
     "sudoNarrow": "narrow sudo: without a password the hub may only run nkt operations it signs (install and update, the service, apt proxy)",
     "statusRecheckHint": "Click to check now.",
-    "statusRechecking": "Checking the host connection…"
+    "statusRechecking": "Checking the host connection…",
+    "exportMonitoring": "\"Monitoring\" history",
+    "exportMonitoringHint": "The hourly and daily load and availability summaries of all hosts that the hub keeps. The file is noticeably larger; on import, hosts are matched by name.",
+    "importMerge": "merge",
+    "importAllMerge": "merge all"
   },
   "events": {
     "title": "Alerts",

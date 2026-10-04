@@ -159,7 +159,7 @@ export function ImportPlanModal({ jsonText, onClose, onDone }: { jsonText: strin
                   {conflicts.some((i) => i.replaceable) && (
                     <>
                       <Button size="small" type="link" onClick={() => setAll(s, 'skip')}>{t('hosts.importAllSkip')}</Button>
-                      <Button size="small" type="link" onClick={() => setAll(s, 'replace')}>{t('hosts.importAllReplace')}</Button>
+                      <Button size="small" type="link" onClick={() => setAll(s, 'replace')}>{s.section === 'monitoring' ? t('hosts.importAllMerge') : t('hosts.importAllReplace')}</Button>
                     </>
                   )}
                 </div>
@@ -175,7 +175,7 @@ export function ImportPlanModal({ jsonText, onClose, onDone }: { jsonText: strin
                             onChange={(v) => setChoice(s.section, i.name, v as 'skip' | 'replace')}
                             options={[
                               { value: 'skip', label: t('hosts.importSkip') },
-                              { value: 'replace', label: t('hosts.importReplace') },
+                              { value: 'replace', label: s.section === 'monitoring' ? t('hosts.importMerge') : t('hosts.importReplace') },
                             ]}
                           />
                         ) : (

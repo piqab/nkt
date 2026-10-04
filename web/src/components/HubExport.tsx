@@ -9,8 +9,8 @@ import { confirmAction } from './confirm'
 /** Экспорт хаба файлом: GET /hub/export (не JSON для интерфейса — мимо
  * api()), при пароле — шифрование в браузере до сохранения (exportCrypto):
  * открытый экспорт на диск не попадает. */
-export async function downloadHubExport(includeKey: boolean, password?: string, includeUsers = false): Promise<void> {
-  const q = [includeKey && 'include_key=1', includeUsers && 'include_users=1'].filter(Boolean).join('&')
+export async function downloadHubExport(includeKey: boolean, password?: string, includeUsers = false, includeMonitoring = false): Promise<void> {
+  const q = [includeKey && 'include_key=1', includeUsers && 'include_users=1', includeMonitoring && 'include_monitoring=1'].filter(Boolean).join('&')
   const res = await fetch(`/api/hub/export${q ? `?${q}` : ''}`, { credentials: 'same-origin' })
   if (!res.ok) {
     const payload = await res.json().catch(() => null)
@@ -40,22 +40,24 @@ export function ExportPasswordModal({
   onClose,
 }: {
   busy: boolean
-  onDownload: (password: string | undefined, users: boolean) => void
+  onDownload: (password: string | undefined, users: boolean, monitoring: boolean) => void
   onClose: () => void
 }) {
   const { t } = useTranslation()
   const [password, setPassword] = useState('')
   const [users, setUsers] = useState(false)
+  // История «Мониторинга» — отдельной галочкой: файл с ней заметно больше.
+  const [monitoring, setMonitoring] = useState(false)
 
   async function download() {
     if (!password) {
       if (!(await confirmAction(t('hosts.confirmExportUnencrypted')))) {
         return
       }
-      onDownload(undefined, users)
+      onDownload(undefined, users, monitoring)
       return
     }
-    onDownload(password, users)
+    onDownload(password, users, monitoring)
   }
 
   return (
@@ -70,6 +72,12 @@ export function ExportPasswordModal({
             {t('hosts.exportUsers')}
           </Checkbox>
           <div className="small muted">{t('hosts.exportUsersHint')}</div>
+        </Form.Item>
+        <Form.Item>
+          <Checkbox checked={monitoring} onChange={(e) => setMonitoring(e.target.checked)}>
+            {t('hosts.exportMonitoring')}
+          </Checkbox>
+          <div className="small muted">{t('hosts.exportMonitoringHint')}</div>
         </Form.Item>
         <Form.Item label={t('hosts.encryptPasswordLabel')}>
           <Input.Password

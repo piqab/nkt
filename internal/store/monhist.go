@@ -328,3 +328,62 @@ func (d *DB) MonByHour(ctx context.Context, from, to, source string) ([]MonHourC
 	}
 	return out, rows.Err()
 }
+
+// MonHostExport — история «Мониторинга» одного хоста в файле экспорта
+// (хост — по имени: на другом хабе у него другой номер).
+type MonHostExport struct {
+	Host    string      `json:"host"`
+	Hourly  []MonRow    `json:"hourly,omitempty"`
+	Daily   []MonRow    `json:"daily,omitempty"`
+	Targets []MonTarget `json:"targets,omitempty"`
+}
+
+// MonLocalName — имя машины хаба в файле экспорта.
+const MonLocalName = "localhost"
+
+// ExportMonitoring — история всех хостов (и машины хаба).
+func (d *DB) ExportMonitoring(ctx context.Context) ([]MonHostExport, error) {
+	hosts, err := d.ListHosts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	ids := map[int64]string{-1: MonLocalName}
+	for _, h := range hosts {
+		ids[h.ID] = h.Name
+	}
+	var out []MonHostExport
+	for id, name := range ids {
+		hourly, err := d.MonAllHourly(ctx, id, "0000", "9999")
+		if err != nil {
+			return nil, err
+		}
+		daily, err := d.MonAllDaily(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		if len(hourly) == 0 && len(daily) == 0 {
+			continue
+		}
+		targets, _ := d.MonTargets(ctx, id)
+		out = append(out, MonHostExport{Host: name, Hourly: hourly, Daily: daily, Targets: targets})
+	}
+	return out, nil
+}
+
+// MonHostID — номер хоста по имени («localhost» — машина хаба); ok=false
+// — такого хоста нет.
+func (d *DB) MonHostID(ctx context.Context, name string) (int64, bool) {
+	if name == MonLocalName {
+		return -1, true
+	}
+	hosts, err := d.ListHosts(ctx)
+	if err != nil {
+		return 0, false
+	}
+	for _, h := range hosts {
+		if h.Name == name {
+			return h.ID, true
+		}
+	}
+	return 0, false
+}

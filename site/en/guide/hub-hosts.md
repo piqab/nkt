@@ -393,6 +393,15 @@ also carries logins, roles and password hashes. The file is JSON version
   which to copy into `cluster-images` by hand), the package cache, jobs,
   deployment history, the alert log, saved model answers, the fallback
   channel certificate pin (the new hub pins its own).
+- **"Monitoring" history**, behind a separate checkbox in the export
+  window (off by default, since the file gets noticeably larger): the
+  hourly and daily load and availability summaries the hub keeps, with
+  the availability targets. The import plan has its own section, and
+  hosts are matched by name (the hub machine is "localhost"). If a host
+  has no history here, it is added; if it has, it is skipped by default,
+  and **"merge"** adds the missing hours and days without touching the
+  existing ones. If there is no host with that name, its history is
+  skipped and the report says so.
 - **Hosts without nkt after an import.** An import installs nothing on
   hosts. Right after it, the hub signs in to the moved hosts over SSH in
   the background: where nkt is missing (for example, it was removed before
