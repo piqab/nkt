@@ -19,6 +19,7 @@ import { BackupModal } from '../components/BackupModal'
 import { useJobLauncher } from '../components/useJobLauncher'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 import { TitleHelp } from '../components/Docs'
+import { ImageArchivesCard } from '../components/ImageArchives'
 import { msg, tx, type Msg } from '../msg'
 
 export default function Podman({ me }: { me: Me }) {
@@ -295,6 +296,11 @@ export default function Podman({ me }: { me: Me }) {
       {backupFor && (
         <BackupModal kind="podman" name={backupFor} canControl={canControl} onClose={() => setBackupFor(null)} onRestored={() => containers.reload()} />
       )}
+      <ImageArchivesCard
+        engine="podman"
+        canControl={canControl}
+        sources={[...new Set((containers.data?.containers ?? []).map((c) => c.image))].filter(Boolean).map((img) => ({ value: img, label: img }))}
+      />
     </>
   )
 }

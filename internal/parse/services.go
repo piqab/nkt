@@ -62,6 +62,8 @@ const (
 
 // ServiceInstallInfo is InstallTarget's result.
 type ServiceInstallInfo struct {
+	// Extra — что ставится вместе с Package (только apt).
+	Extra   string
 	Method  ServiceInstallMethod
 	Package string
 	// Binary is spec.Binary — what a caller checks with collect.Which to
@@ -94,6 +96,13 @@ var serviceInstallOverride = map[string]struct {
 // keeps a URL path parameter from ever reaching a shell command
 // unvalidated (the same role ServiceManager.Action's own s.specs[service]
 // lookup already plays for start/stop/restart).
+// serviceInstallExtra — что ставится вместе с пакетом службы (выражение
+// для bash, константа кода). libvirt — сам гипервизор: клиенты, qemu
+// нужной архитектуры (qemu-kvm в Debian 12 нет), virtinst.
+var serviceInstallExtra = map[string]string{
+	"libvirt": `libvirt-clients qemu-utils virtinst $(case "$(dpkg --print-architecture)" in arm64) echo qemu-system-arm;; *) echo qemu-system-x86;; esac)`,
+}
+
 func InstallTarget(service string) (ServiceInstallInfo, bool) {
 	for _, spec := range DefaultServiceSpecs() {
 		if spec.Name != service {
@@ -104,6 +113,7 @@ func InstallTarget(service string) (ServiceInstallInfo, bool) {
 			info.Method = o.Method
 			info.Package = o.Package
 		}
+		info.Extra = serviceInstallExtra[service]
 		return info, true
 	}
 	return ServiceInstallInfo{}, false

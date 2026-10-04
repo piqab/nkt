@@ -526,6 +526,8 @@ var enCatalog = map[string]string{
 	"mon.settingsBad":                                     "invalid “Monitoring” thresholds",
 	"hub.monImportNoHost":                                 "there is no host %q here; its history was not imported",
 	"system.rebootNotConfirmed":                           "the reboot was not confirmed",
+	"api.archiveBadName":                                  "invalid image file name: %q",
+	"api.archiveBadEngine":                                "unknown engine %q (docker or podman)",
 	"api.backgroundJobsAreUnavailable":                    "background jobs are unavailable",
 	"api.curlInstalledHost":                               "curl is not installed on the host",
 	"api.emptyCommand":                                    "empty command",

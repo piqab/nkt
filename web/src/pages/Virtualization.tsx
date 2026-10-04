@@ -20,6 +20,7 @@ import { PowerToggle, vmPowerState } from '../components/PowerToggle'
 import VMImagesSection from '../components/VMImagesSection'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 import { TitleHelp } from '../components/Docs'
+import { EngineInstallBanner } from '../components/EngineInstallBanner'
 import { msg, tx, type Msg } from '../msg'
 
 function domainXMLSkeleton(name: string): string {
@@ -349,6 +350,7 @@ export default function Virtualization({ me }: { me: Me }) {
         </Banner>
       )}
       {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}
+      <EngineInstallBanner service="libvirt" canControl={canControl} onInstalled={() => void vms.reload()} />
 
       <Card
         title={t('virt.domains')}

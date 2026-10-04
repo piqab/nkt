@@ -8,6 +8,16 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.133 — 2026-10-04
+
+- **Installing Docker and libvirt/KVM** with a bar and a button right in
+  the "Containers and VMs" tabs, like Podman and LXD.
+- **Image archives** for Docker, Podman and LXD: save (export) an image to
+  an archive on the host, download it to your computer, upload an archive
+  from your computer (with progress, via the hub too), load it into
+  Docker/Podman or import it into LXD, as background jobs. Machine images
+  can be downloaded to your computer.
+
 ## v1.11.132 — 2026-10-04
 
 - **Host reboot**, always in "System settings" and in the "Reboot

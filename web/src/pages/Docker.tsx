@@ -21,6 +21,7 @@ import { ConsoleModal, type ConsoleKind } from '../components/ConsoleModal'
 import { BackupModal, type BackupKind } from '../components/BackupModal'
 import { BulkDeleteBar, useDeletions, type DeleteItem } from '../components/useDeletions'
 import { TitleHelp } from '../components/Docs'
+import { EngineInstallBanner } from '../components/EngineInstallBanner'
 import { msg, tx, type Msg } from '../msg'
 
 export default function Docker({ me }: { me: Me }) {
@@ -330,6 +331,7 @@ export default function Docker({ me }: { me: Me }) {
         </Banner>
       )}
       {!canControl && <Banner kind="info">{t('common.mutationsDisabled')}</Banner>}
+      <EngineInstallBanner service="docker" canControl={canControl} onInstalled={() => void docker.reload()} />
 
       <Card
         title={t('docker.containers')}

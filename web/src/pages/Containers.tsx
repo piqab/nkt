@@ -10,6 +10,7 @@ import Podman from './Podman'
 import LXD from './LXD'
 import Virtualization from './Virtualization'
 import Profiles from './Profiles'
+import { ImageArchivesCard } from '../components/ImageArchives'
 import Kubernetes from './Kubernetes'
 
 function tabLabel(text: string, count: number | undefined): string {
@@ -37,7 +38,7 @@ export default function Containers({ me }: { me: Me }) {
   const podman = useApi<{ containers: PodmanContainer[] }>('/podman/containers', 30_000)
   const lxd = useApi<{ instances: LXDInstance[] }>('/lxd/instances', 30_000)
   const vms = useApi<{ vms: VirtualMachine[] }>('/vms', 30_000)
-  const images = useApi<{ images: unknown[] }>('/images', 60_000)
+  const images = useApi<{ images: { tags?: string[] }[] }>('/images', 60_000)
   const k8s = useApi<{ status: { installed: boolean }; nodes?: unknown[] }>('/k8s', 60_000)
   const [tab, setTab] = useState<string>(() => tabFromQuery(['docker', 'podman', 'lxd', 'vms', 'k8s', 'profiles'] as const, 'docker'))
   void images // счётчик образов теперь внутри вкладки Docker, отдельной метки у них нет
@@ -59,6 +60,11 @@ export default function Containers({ me }: { me: Me }) {
             <>
               <Docker me={me} />
               <Images me={me} />
+              <ImageArchivesCard
+                engine="docker"
+                canControl={me.is_admin && me.allow_mutations}
+                sources={(images.data?.images ?? []).flatMap((im) => (im.tags ?? []).map((tag) => ({ value: tag, label: tag })))}
+              />
             </>
           ),
         },

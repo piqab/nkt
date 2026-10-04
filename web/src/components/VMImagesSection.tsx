@@ -11,6 +11,7 @@ import { confirmAction } from './confirm'
 import { JobLogModal } from '../pages/Jobs'
 import VMNetworksCard from './VMNetworksCard'
 import { BulkDeleteBar } from './useDeletions'
+import { SaveOutlined } from '@ant-design/icons'
 import { msg, tx, type Msg } from '../msg'
 
 /** Пока идёт скачивание, список надо перечитывать: недокачанный кусок
@@ -167,6 +168,15 @@ export default function VMImagesSection({ me, reloadKey = 0 }: { me: Me; reloadK
             )}
             {canEdit && l?.downloaded && (
               <RowAction action="create" label={t('vmimages.createVM')} onClick={() => setCreating(img)} />
+            )}
+            {canEdit && l?.downloaded && l.path && (
+              <RowAction
+                icon={<SaveOutlined />}
+                label={t('vmimages.toComputer')}
+                onClick={() => {
+                  window.location.href = apiURL(`/vm/images/file/download?where=library&name=${encodeURIComponent(l.path?.split('/').pop() ?? '')}`)
+                }}
+              />
             )}
             {canEdit && (l?.downloaded || l?.partial) && (
               <RowAction
@@ -874,6 +884,13 @@ function hostColumns(
         canEdit && (
           <div className="row row-nowrap">
             <RowAction action="create" label={t('vmimages.createVM')} onClick={() => onCreate(img)} />
+            <RowAction
+              icon={<SaveOutlined />}
+              label={t('vmimages.toComputer')}
+              onClick={() => {
+                window.location.href = apiURL(`/vm/images/file/download?where=host&name=${encodeURIComponent(img.name)}`)
+              }}
+            />
             <RowAction action="delete" label={t('common.delete')} danger disabled={delBusy !== null} loading={delBusy === `host:${img.path}`} onClick={() => onDelete(img)} />
           </div>
         ),

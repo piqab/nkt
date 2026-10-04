@@ -204,6 +204,13 @@ func (s *Server) Handler() http.Handler {
 			r.Post("/hub/cluster-images/upload", s.handleClusterImageUpload)
 			r.Post("/hosts/{id}/vm/images/upload", s.proxyHost)
 			r.Get("/hosts/{id}/backups/download", s.proxyHost)
+			// Архивы образов Docker, Podman, LXD и образы машин — гигабайты.
+			r.Put("/hosts/{id}/images/archives/upload", s.proxyHost)
+			r.Get("/hosts/{id}/images/archives/{name}/download", s.proxyHost)
+			r.Get("/hosts/{id}/vm/images/file/download", s.proxyHost)
+			r.Put("/hosts/local/images/archives/upload", s.proxyLocal)
+			r.Get("/hosts/local/images/archives/{name}/download", s.proxyLocal)
+			r.Get("/hosts/local/vm/images/file/download", s.proxyLocal)
 			r.Get("/hosts/local/backups/download", s.proxyLocal)
 		})
 
