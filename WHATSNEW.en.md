@@ -8,6 +8,11 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.147 — 2026-10-05
+
+- **Android app:** API responses in the tests are recaptured from the
+  current server — the app's models are compatible with this nkt version.
+
 ## v1.11.146 — 2026-10-05
 
 - **Site:** the home page has 21 tiles instead of 11 — each with a
