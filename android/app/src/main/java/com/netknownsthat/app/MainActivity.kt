@@ -1,5 +1,6 @@
 package com.netknownsthat.app
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -14,6 +15,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,6 +51,20 @@ import com.netknownsthat.app.ui.host.UsersViewModel
 import com.netknownsthat.app.ui.host.VulnerabilitiesViewModel
 import com.netknownsthat.app.ui.hosts.HostListScreen
 import com.netknownsthat.app.ui.hosts.HostListViewModel
+import com.netknownsthat.app.ui.host.HostSection
+import com.netknownsthat.app.ui.hub.DeploymentsViewModel
+import com.netknownsthat.app.ui.hub.EventsViewModel
+import com.netknownsthat.app.ui.hub.EventsWorker
+import com.netknownsthat.app.ui.hub.Fail2banViewModel
+import com.netknownsthat.app.ui.hub.FleetFail2banViewModel
+import com.netknownsthat.app.ui.hub.HostJobsViewModel
+import com.netknownsthat.app.ui.hub.HubJobsViewModel
+import com.netknownsthat.app.ui.hub.HubScreen
+import com.netknownsthat.app.ui.hub.HubSection
+import com.netknownsthat.app.ui.hub.HubViewModels
+import com.netknownsthat.app.ui.hub.JobLogViewModel
+import com.netknownsthat.app.ui.hub.MonitoringViewModel
+import com.netknownsthat.app.ui.hub.RebootViewModel
 import com.netknownsthat.app.ui.login.AuthViewModel
 import com.netknownsthat.app.ui.login.LoginScreen
 import com.netknownsthat.app.ui.theme.NktTheme
@@ -57,7 +74,12 @@ private object Routes {
     const val HOSTS = "hosts"
     const val ABOUT = "about"
     const val HOST = "host"
+    const val HUB = "hub"
 }
+
+/** A jump to a host section requested from outside the UI — a tapped
+ * notification. */
+private data class HostJump(val hostId: Long, val path: String)
 
 class MainActivity : ComponentActivity() {
     private val app get() = application as NktApplication
@@ -83,6 +105,38 @@ class MainActivity : ComponentActivity() {
     private val topologyViewModel: TopologyViewModel by viewModels { factory }
     private val terminalViewModel: TerminalViewModel by viewModels { factory }
     private val logsViewModel: LogsViewModel by viewModels { factory }
+    private val hostJobsViewModel: HostJobsViewModel by viewModels { factory }
+    private val hubJobsViewModel: HubJobsViewModel by viewModels { factory }
+    private val jobLogViewModel: JobLogViewModel by viewModels { factory }
+    private val eventsViewModel: EventsViewModel by viewModels { factory }
+    private val fail2banViewModel: Fail2banViewModel by viewModels { factory }
+    private val fleetFail2banViewModel: FleetFail2banViewModel by viewModels { factory }
+    private val monitoringViewModel: MonitoringViewModel by viewModels { factory }
+    private val deploymentsViewModel: DeploymentsViewModel by viewModels { factory }
+    private val rebootViewModel: RebootViewModel by viewModels { factory }
+
+    private val hubViewModels by lazy {
+        HubViewModels(
+            events = eventsViewModel,
+            jobs = hubJobsViewModel,
+            monitoring = monitoringViewModel,
+            fail2ban = fleetFail2banViewModel,
+            deployments = deploymentsViewModel,
+            jobLog = jobLogViewModel,
+        )
+    }
+
+    private var pendingJump by mutableStateOf<HostJump?>(null)
+
+    private fun takeJump(intent: Intent?) {
+        val id = intent?.getLongExtra(EventsWorker.EXTRA_HOST_ID, 0L) ?: 0L
+        if (id != 0L) pendingJump = HostJump(id, intent?.getStringExtra(EventsWorker.EXTRA_PATH) ?: "/")
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        takeJump(intent)
+    }
 
     private val hostViewModels by lazy {
         HostViewModels(
@@ -103,11 +157,16 @@ class MainActivity : ComponentActivity() {
             topology = topologyViewModel,
             terminal = terminalViewModel,
             logs = logsViewModel,
+            jobs = hostJobsViewModel,
+            fail2ban = fail2banViewModel,
+            jobLog = jobLogViewModel,
+            reboot = rebootViewModel,
         )
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) takeJump(intent)
         setContent {
             NktTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -118,6 +177,9 @@ class MainActivity : ComponentActivity() {
                         hostListViewModel = hostListViewModel,
                         aboutViewModel = aboutViewModel,
                         hostViewModels = hostViewModels,
+                        hubViewModels = hubViewModels,
+                        pendingJump = pendingJump,
+                        onJumpTaken = { pendingJump = null },
                     )
                 }
             }
@@ -139,7 +201,14 @@ private fun NktApp(
     hostListViewModel: HostListViewModel,
     aboutViewModel: AboutViewModel,
     hostViewModels: HostViewModels,
+    hubViewModels: HubViewModels,
+    pendingJump: HostJump?,
+    onJumpTaken: () -> Unit,
 ) {
+    val context = LocalContext.current
+    var hubSection by rememberSaveable { mutableStateOf(HubSection.EVENTS) }
+    var hostSection by remember { mutableStateOf(HostSection.OVERVIEW) }
+    var notifyEnabled by remember { mutableStateOf(false) }
     val navController = rememberNavController()
     var startDestination by remember { mutableStateOf<String?>(null) }
     var showBetaNotice by remember { mutableStateOf(false) }
@@ -154,6 +223,7 @@ private fun NktApp(
 
     LaunchedEffect(Unit) {
         showBetaNotice = !settingsStore.betaNoticeHidden()
+        notifyEnabled = settingsStore.eventsNotify()
         val hasHub = hubClient.bootstrap()
         startDestination = if (hasHub && hubClient.me() is HubClient.ApiResult.Success) {
             Routes.HOSTS
@@ -168,6 +238,22 @@ private fun NktApp(
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
         return
+    }
+
+    // Opens a host at the section an alert/insight/notification points to.
+    val openHostAt: (Long, String) -> Unit = { hostId, path ->
+        scope.launch {
+            if (hostListViewModel.selectById(hostId) != null) {
+                hostSection = HostSection.fromPath(path)
+                navController.navigate(Routes.HOST)
+            }
+        }
+    }
+    LaunchedEffect(pendingJump, resolvedStart) {
+        val jump = pendingJump ?: return@LaunchedEffect
+        if (resolvedStart != Routes.HOSTS) return@LaunchedEffect
+        onJumpTaken()
+        openHostAt(jump.hostId, jump.path)
     }
 
     NavHost(navController = navController, startDestination = resolvedStart) {
@@ -185,7 +271,33 @@ private fun NktApp(
             HostListScreen(
                 viewModel = hostListViewModel,
                 onOpenAbout = { navController.navigate(Routes.ABOUT) },
-                onOpenHost = { navController.navigate(Routes.HOST) },
+                onOpenHost = {
+                    hostSection = HostSection.OVERVIEW
+                    navController.navigate(Routes.HOST)
+                },
+                onOpenHub = { navController.navigate(Routes.HUB) },
+                onOpenEvents = {
+                    hubSection = HubSection.EVENTS
+                    navController.navigate(Routes.HUB)
+                },
+            )
+        }
+        composable(Routes.HUB) {
+            // Hub sections talk to the hub, never to the host opened last —
+            // and this runs again on returning here from a host.
+            LaunchedEffect(Unit) { hostListViewModel.deselectHost() }
+            HubScreen(
+                section = hubSection,
+                onSectionChange = { hubSection = it },
+                viewModels = hubViewModels,
+                notifyEnabled = notifyEnabled,
+                onNotifyChange = { on ->
+                    notifyEnabled = on
+                    scope.launch { settingsStore.setEventsNotify(on) }
+                    EventsWorker.schedule(context, on)
+                },
+                onOpenHost = openHostAt,
+                onBack = { navController.popBackStack() },
             )
         }
         composable(Routes.ABOUT) {
@@ -198,6 +310,7 @@ private fun NktApp(
                 hostId = host?.id,
                 viewModels = hostViewModels,
                 onBack = { navController.popBackStack() },
+                initialSection = hostSection,
             )
         }
     }

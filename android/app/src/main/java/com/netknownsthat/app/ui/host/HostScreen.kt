@@ -8,8 +8,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -31,6 +34,13 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.netknownsthat.app.ui.hub.Fail2banScreen
+import com.netknownsthat.app.ui.hub.Fail2banViewModel
+import com.netknownsthat.app.ui.hub.HostJobsViewModel
+import com.netknownsthat.app.ui.hub.JobLogDialog
+import com.netknownsthat.app.ui.hub.JobLogViewModel
+import com.netknownsthat.app.ui.hub.JobsScreen
+import com.netknownsthat.app.ui.hub.RebootViewModel
 import kotlinx.coroutines.launch
 
 /**
@@ -57,7 +67,40 @@ enum class HostSection(val title: String) {
     MISC("Разное"),
     TOPOLOGY("Карта"),
     USERS("Пользователи"),
+    JOBS("Задания"),
+    FAIL2BAN("Fail2ban"),
     AUDIT("Журнал"),
+    ;
+
+    companion object {
+        /**
+         * Section for a web UI path such as "/findings?focus=…" — what hub
+         * events and monitoring insights link to. Unknown paths land on the
+         * overview rather than nowhere.
+         */
+        fun fromPath(path: String): HostSection {
+            val first = path.trimStart('/').substringBefore('?').substringBefore('/')
+            return when (first) {
+                "findings" -> FINDINGS
+                "services" -> SERVICES
+                "containers", "docker", "podman", "lxd", "vms" -> CONTAINERS
+                "vulnerabilities", "packages" -> VULNERABILITIES
+                "availability" -> AVAILABILITY
+                "usage" -> USAGE
+                "configs" -> CONFIGS
+                "firewall" -> FIREWALL
+                "certificates" -> CERTIFICATES
+                "interfaces" -> INTERFACES
+                "topology" -> TOPOLOGY
+                "users" -> USERS
+                "jobs" -> JOBS
+                "fail2ban" -> FAIL2BAN
+                "audit" -> AUDIT
+                "logs" -> LOGS
+                else -> OVERVIEW
+            }
+        }
+    }
 }
 
 /** Every ViewModel the host screen's sections need, passed as one bundle so
@@ -81,6 +124,10 @@ class HostViewModels(
     val topology: TopologyViewModel,
     val terminal: TerminalViewModel,
     val logs: LogsViewModel,
+    val jobs: HostJobsViewModel,
+    val fail2ban: Fail2banViewModel,
+    val jobLog: JobLogViewModel,
+    val reboot: RebootViewModel,
 ) {
     /** Null for the live sections: a terminal has nothing to load or
      * refresh, so the generic fetch/refresh plumbing does not apply. */
@@ -100,6 +147,8 @@ class HostViewModels(
         HostSection.MISC -> misc
         HostSection.TOPOLOGY -> topology
         HostSection.USERS -> users
+        HostSection.JOBS -> jobs
+        HostSection.FAIL2BAN -> fail2ban
         HostSection.AUDIT -> audit
     }
 }
@@ -111,8 +160,11 @@ fun HostScreen(
     hostId: Long?,
     viewModels: HostViewModels,
     onBack: () -> Unit,
+    initialSection: HostSection = HostSection.OVERVIEW,
 ) {
-    var section by remember { mutableStateOf(HostSection.OVERVIEW) }
+    var section by remember(hostId, initialSection) { mutableStateOf(initialSection) }
+    var rebootOpen by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -131,6 +183,15 @@ fun HostScreen(
             active.actionMessage = null
         }
     }
+
+    LaunchedEffect(viewModels.reboot.message) {
+        viewModels.reboot.message?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModels.reboot.message = null
+        }
+    }
+    if (rebootOpen) RebootDialog(hostName, viewModels.reboot, onDismiss = { rebootOpen = false })
+    JobLogDialog(viewModels.jobLog)
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -175,6 +236,20 @@ fun HostScreen(
                                 Icon(Icons.Default.Refresh, contentDescription = "Обновить")
                             }
                         }
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Default.MoreVert, contentDescription = "Ещё")
+                            }
+                            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                                DropdownMenuItem(
+                                    text = { Text("Перезагрузить хост…") },
+                                    onClick = {
+                                        menuOpen = false
+                                        rebootOpen = true
+                                    },
+                                )
+                            }
+                        }
                         IconButton(onClick = onBack) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
@@ -204,6 +279,8 @@ fun HostScreen(
                     HostSection.MISC -> MiscScreen(viewModels.misc)
                     HostSection.TOPOLOGY -> TopologyScreen(viewModels.topology)
                     HostSection.USERS -> UsersScreen(viewModels.users)
+                    HostSection.JOBS -> JobsScreen(viewModels.jobs, viewModels.jobLog)
+                    HostSection.FAIL2BAN -> Fail2banScreen(viewModels.fail2ban)
                     HostSection.AUDIT -> AuditScreen(viewModels.audit)
                 }
             }

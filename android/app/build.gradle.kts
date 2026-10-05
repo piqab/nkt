@@ -71,6 +71,10 @@ dependencies {
     // every time, matching a browser tab's own behavior.
     implementation("androidx.datastore:datastore-preferences:1.1.1")
 
+    // Phone notifications about hub alerts: a periodic poll of
+    // /api/hub/events that survives the app being closed (ui/hub/EventsWorker.kt).
+    implementation("androidx.work:work-runtime-ktx:2.9.1")
+
     // OkHttp: REST + WebSocket (terminal/install-log streams, phase 6) share
     // one client and its CookieJar — see net/HubClient.kt.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
