@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.151 — 2026-10-05
+
+- **Android app — host management:** “+” in the host list adds a host
+  (password, own key or a hub key — then the `authorized_keys` line is
+  shown) and optionally installs nkt right away; a row's “⋮” menu has
+  install, update to the hub's version or reinstall of nkt as a hub job
+  with a live log, the install log, moving to a group, and deleting (from
+  the hub only or cleaning the host). The list is grouped and an outdated
+  nkt version is visible at once; groups are created, renamed and deleted
+  from the app.
+
 ## v1.11.150 — 2026-10-05
 
 - **Android app in releases:** every release carries a signed

@@ -41,9 +41,19 @@ there.
 
 ## What's inside
 
-**Host list** — state, number of problems, group, Kubernetes role and sudo
-(passwordless in red). The bell on top is unread alerts; the menu button on
-the left opens the hub sections.
+**Host list** — by group: state, number of problems, Kubernetes role, sudo
+(passwordless in red), an nkt version behind the hub. The bell on top is
+unread alerts, the menu button on the left opens the hub sections, the list
+icon manages groups (create, rename, delete).
+
+**Host management** (admins): “+” adds a host — address, SSH user and
+sign-in with a password, your own key or a hub key (the app then shows the
+line for the host's `authorized_keys`), and optionally installs nkt right
+away. A row's “⋮” menu has install, update to the hub's version or reinstall
+of nkt (a hub job with a live log), the last install log, moving to a group,
+and deleting: from the hub only, or together with nkt on the host itself
+(service, data, the hub's access; password sign-in is restored). If the host
+already runs a foreign nkt, the app asks whether to install over it.
 
 **A host** opens with its own section menu: overview, problems (each with a
 jump to where it is fixed), terminal and btop, logs, services, containers
@@ -63,8 +73,8 @@ itself.
 | Fail2ban | banned addresses across all hosts; ban and unban everywhere as a hub job |
 | Deployments | pipelines: deploy, dry run, log, history with rollback, old stacks left on a previous host |
 
-Creating and editing pipelines, profiles, scripts, clusters and hub
-settings stays in the web UI: those are editors with diffs, not phone work.
+Creating and editing pipelines, profiles, scripts, clusters, hub export and
+import, and settings stays in the web UI: those are editors with diffs, not phone work.
 
 ## Notifications
 

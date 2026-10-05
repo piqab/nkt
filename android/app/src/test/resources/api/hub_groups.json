@@ -1,1 +1,1 @@
-{"groups":["production","staging"],"profiles":[{"group":"production","id":1,"name":"web-base","color":"#5aa66f"}]}
+{"groups":["empty","lab"],"profiles":[]}
