@@ -22,15 +22,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.Finding
+import com.netknownsthat.app.i18n.t
 
 private val SEVERITY_ORDER = listOf("critical", "high", "medium", "low", "info")
 
-private val SEVERITY_LABELS = mapOf(
-    "critical" to "Критичные",
-    "high" to "Высокие",
-    "medium" to "Средние",
-    "low" to "Низкие",
-    "info" to "Информационные",
+private val SEVERITY_LABELS get() = mapOf(
+    "critical" to t("Критичные", "Critical"),
+    "high" to t("Высокие", "High"),
+    "medium" to t("Средние", "Medium"),
+    "low" to t("Низкие", "Low"),
+    "info" to t("Информационные", "Info"),
 )
 
 /** A jump from a finding: a host section, and for configs the file to open. */
@@ -54,21 +55,21 @@ fun findingJumps(f: Finding): List<FindingJump> {
     val out = mutableListOf<FindingJump>()
     val obj = f.`object`.orEmpty()
     val file = f.file.orEmpty()
-    if (f.rule.startsWith("tls-cert-") && obj.isNotEmpty()) out += FindingJump("К сертификату", HostSection.CERTIFICATES)
+    if (f.rule.startsWith("tls-cert-") && obj.isNotEmpty()) out += FindingJump(t("К сертификату", "To certificate"), HostSection.CERTIFICATES)
     if (f.service == "docker" && obj.isNotEmpty() && f.rule.startsWith("container-")) {
-        out += FindingJump("К контейнеру $obj", HostSection.CONTAINERS)
+        out += FindingJump(t("К контейнеру $obj", "To container $obj"), HostSection.CONTAINERS)
     } else if (f.service in SERVICE_PAGE_NAMES) {
-        out += FindingJump("К службе ${f.service}", HostSection.SERVICES)
+        out += FindingJump(t("К службе ${f.service}", "To service ${f.service}"), HostSection.SERVICES)
     }
     if (f.rule in FIREWALL_RULES) out += FindingJump("Firewall", HostSection.FIREWALL)
-    if (f.rule.startsWith("malware-")) out += FindingJump("К вредоносному", HostSection.MALWARE)
+    if (f.rule.startsWith("malware-")) out += FindingJump(t("К вредоносному", "To malware"), HostSection.MALWARE)
     if (f.rule == "listening-not-declared" && obj.isNotEmpty()) {
-        out += FindingJump("Порт ${obj.substringAfterLast(':')} в Firewall", HostSection.FIREWALL)
-        out += FindingJump("На карте ресурсов", HostSection.TOPOLOGY)
+        out += FindingJump(t("Порт ${obj.substringAfterLast(':')} в Firewall", "Port ${obj.substringAfterLast(':')} in Firewall"), HostSection.FIREWALL)
+        out += FindingJump(t("На карте ресурсов", "On the resource map"), HostSection.TOPOLOGY)
     }
     if (f.rule == "fail2ban") out += FindingJump("Fail2ban", HostSection.FAIL2BAN)
     if (file.isNotEmpty() && !f.rule.startsWith("malware-") && !f.rule.startsWith("tls-cert-")) {
-        out += FindingJump(if (f.line > 0) "Открыть на строке ${f.line}" else "Открыть файл", HostSection.CONFIGS, file)
+        out += FindingJump(if (f.line > 0) t("Открыть на строке ${f.line}", "Open at line ${f.line}") else t("Открыть файл", "Open file"), HostSection.CONFIGS, file)
     }
     return out
 }
@@ -79,7 +80,7 @@ fun FindingsScreen(viewModel: FindingsViewModel, onJump: (FindingJump) -> Unit =
 
     SectionContent(
         state = viewModel.state,
-        emptyText = "Проблем не найдено",
+        emptyText = t("Проблем не найдено", "No problems found"),
         isEmpty = { it.findings.isEmpty() },
     ) { response ->
         // Filtering client-side rather than refetching with ?severity=: the
@@ -143,7 +144,7 @@ private fun FindingCard(finding: Finding, onJump: (FindingJump) -> Unit) {
             }
             finding.suggestion?.takeIf { it.isNotBlank() }?.let {
                 Text(
-                    text = "Что сделать: $it",
+                    text = t("Что сделать: $it", "What to do: $it"),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(top = 8.dp),

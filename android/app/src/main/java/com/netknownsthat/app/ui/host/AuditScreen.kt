@@ -14,12 +14,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.AuditEntry
+import com.netknownsthat.app.i18n.t
 
 @Composable
 fun AuditScreen(viewModel: AuditViewModel) {
     SectionContent(
         state = viewModel.state,
-        emptyText = "Журнал пуст",
+        emptyText = t("Журнал пуст", "The log is empty"),
         isEmpty = { it.entries.isEmpty() },
     ) { response ->
         LazyColumn(contentPadding = PaddingValues(16.dp)) {

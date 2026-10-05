@@ -23,6 +23,7 @@ import com.netknownsthat.app.NktApplication
 import com.netknownsthat.app.net.HubClient
 import com.netknownsthat.app.net.model.HubEventsResponse
 import java.util.concurrent.TimeUnit
+import com.netknownsthat.app.i18n.t
 
 /**
  * Hub alerts as phone notifications. A periodic poll rather than push: the
@@ -94,8 +95,8 @@ class EventsWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         private const val MAX_PER_RUN = 10
 
         fun createChannel(context: Context) {
-            val channel = NotificationChannel(CHANNEL_ID, "Оповещения хаба", NotificationManager.IMPORTANCE_DEFAULT)
-            channel.description = "Хост не отвечает, новые проблемы, проваленные задания"
+            val channel = NotificationChannel(CHANNEL_ID, t("Оповещения хаба", "Hub alerts"), NotificationManager.IMPORTANCE_DEFAULT)
+            channel.description = t("Хост не отвечает, новые проблемы, проваленные задания", "Host not answering, new problems, failed jobs")
             context.getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
 

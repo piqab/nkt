@@ -17,6 +17,7 @@ import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManager
 import javax.net.ssl.TrustManagerFactory
 import javax.net.ssl.X509TrustManager
+import com.netknownsthat.app.i18n.t
 
 /**
  * Thrown when an already-pinned hub presents a different certificate. Kept
@@ -29,8 +30,8 @@ class CertPinMismatchException(
     val pinned: String,
     val presented: String,
 ) : CertificateException(
-    "Сертификат хаба $authority изменился (ожидался $pinned, получен $presented) — " +
-        "либо хаб переустановлен и сгенерировал новый сертификат, либо соединение перехватывается"
+    t("Сертификат хаба $authority изменился (ожидался $pinned, получен $presented) — ", "The certificate of hub $authority changed (expected $pinned, got $presented) — ") +
+        t("либо хаб переустановлен и сгенерировал новый сертификат, либо соединение перехватывается", "either the hub was reinstalled and generated a new certificate, or the connection is being intercepted")
 )
 
 private fun sha256Hex(cert: X509Certificate): String =
@@ -98,7 +99,7 @@ private class TofuTrustManager(
 ) : X509TrustManager {
 
     override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {
-        val leaf = chain?.firstOrNull() ?: throw CertificateException("Хаб не предъявил сертификат")
+        val leaf = chain?.firstOrNull() ?: throw CertificateException(t("Хаб не предъявил сертификат", "The hub presented no certificate"))
         try {
             delegate.checkServerTrusted(chain, authType)
             return
@@ -107,7 +108,7 @@ private class TofuTrustManager(
         }
 
         val authority = pins.currentAuthority
-            ?: throw CertificateException("Неизвестно, к какому хабу идёт соединение — сертификат не проверить")
+            ?: throw CertificateException(t("Неизвестно, к какому хабу идёт соединение — сертификат не проверить", "Unknown which hub the connection goes to — the certificate cannot be checked"))
         val presented = sha256Hex(leaf)
         val pinned = pins.pinnedFor(authority)
         when (pinned) {

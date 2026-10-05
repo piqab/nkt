@@ -15,6 +15,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import com.netknownsthat.app.net.model.HubHost
 import kotlinx.coroutines.launch
+import com.netknownsthat.app.i18n.t
 
 data class HostListUiState(
     val loading: Boolean = true,
@@ -121,17 +122,17 @@ class HostListViewModel(private val hubClient: HubClient) : ViewModel() {
                 put("terminal_enabled", form.terminal)
             }.toString()
             when (val r = hubClient.post<AddHostResponse>("/hub/hosts", body)) {
-                is HubClient.ApiResult.Failure -> message = "Не удалось: ${r.message}"
+                is HubClient.ApiResult.Failure -> message = t("Не удалось: ${r.message}", "Failed: ${r.message}")
                 is HubClient.ApiResult.Success -> {
                     refresh()
                     if (r.value.authorizedKey.isNotBlank()) {
                         // Nothing can be installed until the key is on the host.
                         pendingKey = null to r.value.authorizedKey
-                        message = "Хост ${form.name} добавлен — добавьте ключ хаба на хост и нажмите «Установить nkt»"
+                        message = t("Хост ${form.name} добавлен — добавьте ключ хаба на хост и нажмите «Установить nkt»", "Host ${form.name} added — add the hub key on the host and tap “Install nkt”")
                     } else if (install) {
                         install(r.value.id, false, onJob)
                     } else {
-                        message = "Хост ${form.name} добавлен"
+                        message = t("Хост ${form.name} добавлен", "Host ${form.name} added")
                     }
                 }
             }
@@ -148,7 +149,7 @@ class HostListViewModel(private val hubClient: HubClient) : ViewModel() {
                 }
                 is HubClient.ApiResult.Failure ->
                     if (r.httpCode == 409) foreignInstall = id to r.message
-                    else message = "Не удалось: ${r.message}"
+                    else message = t("Не удалось: ${r.message}", "Failed: ${r.message}")
             }
         }
     }
@@ -174,32 +175,32 @@ class HostListViewModel(private val hubClient: HubClient) : ViewModel() {
                 put("restore_password", true)
             }.toString() else null
             message = when (val r = hubClient.delete<Unit>("/hub/hosts/${host.id}", body)) {
-                is HubClient.ApiResult.Success -> "${host.name} удалён"
-                is HubClient.ApiResult.Failure -> "Не удалось: ${r.message}"
+                is HubClient.ApiResult.Success -> t("${host.name} удалён", "${host.name} deleted")
+                is HubClient.ApiResult.Failure -> t("Не удалось: ${r.message}", "Failed: ${r.message}")
             }
             refresh()
         }
     }
 
-    fun setGroup(host: HubHost, group: String) = groupCall("/hub/hosts/${host.id}/group", "Группа изменена") {
+    fun setGroup(host: HubHost, group: String) = groupCall("/hub/hosts/${host.id}/group", t("Группа изменена", "Group changed")) {
         put("group", group.trim())
     }
 
-    fun createGroup(name: String) = groupCall("/hub/groups", "Группа создана") { put("name", name.trim()) }
+    fun createGroup(name: String) = groupCall("/hub/groups", t("Группа создана", "Group created")) { put("name", name.trim()) }
 
-    fun renameGroup(name: String, to: String) = groupCall("/hub/groups/rename", "Группа переименована") {
+    fun renameGroup(name: String, to: String) = groupCall("/hub/groups/rename", t("Группа переименована", "Group renamed")) {
         put("name", name)
         put("to", to.trim())
     }
 
     /** Hosts of a deleted group move to «Без группы». */
-    fun deleteGroup(name: String) = groupCall("/hub/groups/delete", "Группа удалена") { put("name", name) }
+    fun deleteGroup(name: String) = groupCall("/hub/groups/delete", t("Группа удалена", "Group deleted")) { put("name", name) }
 
     private fun groupCall(path: String, ok: String, body: JsonObjectBuilder.() -> Unit) {
         viewModelScope.launch {
             message = when (val r = hubClient.post<Unit>(path, buildJsonObject(body).toString())) {
                 is HubClient.ApiResult.Success -> ok
-                is HubClient.ApiResult.Failure -> "Не удалось: ${r.message}"
+                is HubClient.ApiResult.Failure -> t("Не удалось: ${r.message}", "Failed: ${r.message}")
             }
             loadGroups()
             refresh()

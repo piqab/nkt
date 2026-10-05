@@ -69,6 +69,7 @@ import com.netknownsthat.app.ui.hub.RebootViewModel
 import com.netknownsthat.app.ui.login.AuthViewModel
 import com.netknownsthat.app.ui.login.LoginScreen
 import com.netknownsthat.app.ui.theme.NktTheme
+import com.netknownsthat.app.i18n.t
 
 private object Routes {
     const val LOGIN = "login"
@@ -310,7 +311,7 @@ private fun NktApp(
         composable(Routes.HOST) {
             val host = hostListViewModel.selectedHost
             HostScreen(
-                hostName = host?.name ?: "Хост",
+                hostName = host?.name ?: t("Хост", "Host"),
                 hostId = host?.id,
                 viewModels = hostViewModels,
                 onBack = { navController.popBackStack() },

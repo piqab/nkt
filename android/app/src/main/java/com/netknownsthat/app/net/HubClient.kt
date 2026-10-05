@@ -1,6 +1,7 @@
 package com.netknownsthat.app.net
 
 import com.netknownsthat.app.data.SettingsStore
+import com.netknownsthat.app.i18n.I18n
 import com.netknownsthat.app.net.model.LoginRequest
 import com.netknownsthat.app.net.model.Me
 import kotlinx.coroutines.CompletableDeferred
@@ -20,6 +21,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import java.io.IOException
 import java.util.concurrent.TimeUnit
+import com.netknownsthat.app.i18n.t
 
 /**
  * The one networking chokepoint every screen goes through — REST today,
@@ -59,10 +61,11 @@ class HubClient(
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(30, TimeUnit.SECONDS)
         // Server-side texts (errors, job logs, alert details) come in the
-        // language this header names — the app's own UI is Russian, so ask
-        // for Russian explicitly instead of relying on the server default.
+        // language this header names — always the app's current interface
+        // language, never the server default. WebSocket upgrades pass
+        // through here too.
         .addInterceptor { chain ->
-            chain.proceed(chain.request().newBuilder().header("X-NKT-Lang", "ru").build())
+            chain.proceed(chain.request().newBuilder().header("X-NKT-Lang", I18n.lang.code).build())
         }
         .apply {
             // A hub with NKT_TLS_ENABLED generates its own self-signed
@@ -152,7 +155,7 @@ class HubClient(
     suspend fun setHubBaseUrl(rawUrl: String): Result<Unit> {
         val normalized = rawUrl.trim().let { if ("://" in it) it else "http://$it" }
         val parsed = normalized.toHttpUrlOrNull()
-            ?: return Result.failure(IllegalArgumentException("Не похоже на адрес хаба: $rawUrl"))
+            ?: return Result.failure(IllegalArgumentException(t("Не похоже на адрес хаба: $rawUrl", "Does not look like a hub address: $rawUrl")))
         
         // Clear cookies when changing hub URL to prevent cross-origin session
         // leakage: a host-only session cookie issued by hub A must never be
@@ -208,7 +211,7 @@ class HubClient(
             withTimeoutOrNull(5_000) { bootstrapped.await() }
 
             val base = baseUrl
-                ?: return@withContext RawResult.Err("Хаб не настроен — укажите адрес на экране входа", null)
+                ?: return@withContext RawResult.Err(t("Хаб не настроен — укажите адрес на экране входа", "No hub configured — enter its address on the sign-in screen"), null)
             try {
                 // Scope the path only; the query string must stay a query
                 // string (see buildApiUrl).
@@ -230,7 +233,7 @@ class HubClient(
                         val message = runCatching { json.decodeFromString<ErrorBody>(text).error }
                             .getOrNull()
                             ?.takeIf { it.isNotBlank() }
-                            ?: "Ошибка ${response.code}"
+                            ?: t("Ошибка ${response.code}", "Error ${response.code}")
                         return@withContext RawResult.Err(message, response.code)
                     }
                     RawResult.Ok(text)
@@ -241,7 +244,7 @@ class HubClient(
                 val mismatch = generateSequence(e as Throwable) { it.cause }
                     .filterIsInstance<CertPinMismatchException>()
                     .firstOrNull()
-                RawResult.Err(mismatch?.message ?: e.message ?: "Сетевая ошибка", null)
+                RawResult.Err(mismatch?.message ?: e.message ?: t("Сетевая ошибка", "Network error"), null)
             }
         }
 
@@ -256,7 +259,7 @@ class HubClient(
                     try {
                         ApiResult.Success(json.decodeFromString<T>(raw.text))
                     } catch (e: kotlinx.serialization.SerializationException) {
-                        ApiResult.Failure("Не удалось разобрать ответ сервера: ${e.message}")
+                        ApiResult.Failure(t("Не удалось разобрать ответ сервера: ${e.message}", "Could not parse the server response: ${e.message}"))
                     }
                 }
         }

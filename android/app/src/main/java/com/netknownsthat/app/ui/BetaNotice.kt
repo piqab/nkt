@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
+import com.netknownsthat.app.i18n.t
 
 /**
  * Shown once at startup: this app can restart services, rewrite configs and
@@ -45,13 +46,13 @@ fun BetaNotice(
 
     AlertDialog(
         onDismissRequest = { onDismiss(dontShowAgain) },
-        title = { Text("Бета-версия") },
+        title = { Text(t("Бета-версия", "Beta version")) },
         text = {
             Column {
                 Text(
-                    text = "Приложение управляет настоящими хостами: перезапускает сервисы, " +
-                        "переписывает конфигурацию, меняет правила firewall. Оно ещё не " +
-                        "обкатано — проверяйте, что делаете, особенно на боевых машинах.",
+                    text = t("Приложение управляет настоящими хостами: перезапускает сервисы, ", "The app manages real hosts: it restarts services, ") +
+                        t("переписывает конфигурацию, меняет правила firewall. Оно ещё не ", "rewrites configuration, changes firewall rules. It is not ") +
+                        t("обкатано — проверяйте, что делаете, особенно на боевых машинах.", "battle-tested yet — double-check what you do, especially on production machines."),
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Row(
@@ -62,12 +63,12 @@ fun BetaNotice(
                         checked = dontShowAgain,
                         onCheckedChange = { dontShowAgain = it },
                     )
-                    Text("Больше не показывать", style = MaterialTheme.typography.bodyMedium)
+                    Text(t("Больше не показывать", "Don't show again"), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         },
         confirmButton = {
-            TextButton(onClick = { onDismiss(dontShowAgain) }) { Text("Понятно") }
+            TextButton(onClick = { onDismiss(dontShowAgain) }) { Text(t("Понятно", "Got it")) }
         },
     )
 }

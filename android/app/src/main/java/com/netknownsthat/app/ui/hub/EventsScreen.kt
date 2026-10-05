@@ -31,17 +31,18 @@ import com.netknownsthat.app.status.HealthStatus
 import com.netknownsthat.app.ui.host.SectionContent
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
 /** Same wording as the web UI's events.kind.* labels. */
-val EVENT_KIND = mapOf(
-    "unreachable" to "не отвечает",
-    "recovered" to "снова отвечает",
-    "problems" to "новые проблемы",
-    "resolved" to "проблемы устранены",
-    "job-failed" to "задание не выполнено",
-    "bans" to "новые баны",
-    "rebooted" to "перезагрузился",
-    "forecast" to "прогноз",
+val EVENT_KIND get() = mapOf(
+    "unreachable" to t("не отвечает", "not answering"),
+    "recovered" to t("снова отвечает", "answering again"),
+    "problems" to t("новые проблемы", "new problems"),
+    "resolved" to t("проблемы устранены", "problems resolved"),
+    "job-failed" to t("задание не выполнено", "job failed"),
+    "bans" to t("новые баны", "new bans"),
+    "rebooted" to t("перезагрузился", "rebooted"),
+    "forecast" to t("прогноз", "forecast"),
 )
 
 fun eventHealth(kind: String): HealthStatus = when (kind) {
@@ -86,9 +87,9 @@ fun EventsScreen(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text("Уведомления на телефоне", style = MaterialTheme.typography.bodyMedium)
+                Text(t("Уведомления на телефоне", "Phone notifications"), style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "Проверка раз в 15 минут; виды — как в настройках оповещений хаба",
+                    t("Проверка раз в 15 минут; виды — как в настройках оповещений хаба", "Checked every 15 minutes; kinds as in the hub's alert settings"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -116,7 +117,7 @@ fun EventsScreen(
                     viewModel.kindFilter = null
                     viewModel.load()
                 },
-                label = { Text("Все") },
+                label = { Text(t("Все", "All")) },
                 modifier = Modifier.padding(end = 8.dp),
             )
             kinds.forEach { kind ->
@@ -133,7 +134,7 @@ fun EventsScreen(
         }
         SectionContent(
             state = viewModel.state,
-            emptyText = "Событий нет",
+            emptyText = t("Событий нет", "No events"),
             isEmpty = { it.events.isEmpty() },
         ) { response ->
             LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
@@ -152,7 +153,7 @@ private fun EventCard(e: HubEvent, onOpenHost: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 StatusDot(eventHealth(e.kind))
                 Text(
-                    text = e.hostName.ifBlank { "хаб" },
+                    text = e.hostName.ifBlank { t("хаб", "hub") },
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f),
                 )
@@ -173,7 +174,7 @@ private fun EventCard(e: HubEvent, onOpenHost: () -> Unit) {
                     modifier = Modifier.weight(1f),
                 )
                 // host_id is zero on events not tied to a host.
-                if (e.hostId != 0L) TextButton(onClick = onOpenHost) { Text("К хосту") }
+                if (e.hostId != 0L) TextButton(onClick = onOpenHost) { Text(t("К хосту", "To host")) }
             }
         }
     }

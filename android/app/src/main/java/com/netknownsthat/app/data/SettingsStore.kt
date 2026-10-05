@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.netknownsthat.app.i18n.AppLang
 import kotlinx.coroutines.flow.first
 
 private val Context.dataStore by preferencesDataStore(name = "nkt_settings")
@@ -26,6 +27,7 @@ class SettingsStore(private val context: Context) {
         val COOKIES = stringSetPreferencesKey("session_cookies")
         val PINNED_CERTS = stringSetPreferencesKey("pinned_certs")
         val BETA_NOTICE_HIDDEN = booleanPreferencesKey("beta_notice_hidden")
+        val APP_LANG = stringPreferencesKey("app_lang")
         val EVENTS_NOTIFY = booleanPreferencesKey("events_notify")
         val EVENTS_LAST_ID = longPreferencesKey("events_last_id")
     }
@@ -87,5 +89,13 @@ class SettingsStore(private val context: Context) {
 
     suspend fun setEventsLastId(id: Long) {
         context.dataStore.edit { it[Keys.EVENTS_LAST_ID] = id }
+    }
+
+    /** Interface language the operator chose; null — follow the phone. */
+    suspend fun appLang(): AppLang? =
+        AppLang.fromCode(context.dataStore.data.first()[Keys.APP_LANG])
+
+    suspend fun setAppLang(lang: AppLang) {
+        context.dataStore.edit { it[Keys.APP_LANG] = lang.code }
     }
 }

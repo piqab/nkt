@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.UsageResponse
 import com.netknownsthat.app.net.model.UsageTopEntry
 import com.netknownsthat.app.ui.hub.humanBytes
+import com.netknownsthat.app.i18n.t
 
 /** Distinct series colours that read on both light and dark backgrounds. */
 private val SERIES_COLORS = listOf(
@@ -57,7 +58,7 @@ private fun UsageTopEntry.shown(metric: String): Double =
  */
 @Composable
 fun UsageScreen(viewModel: UsageViewModel) {
-    SectionContent(state = viewModel.state, emptyText = "Нет данных о нагрузке") { data ->
+    SectionContent(state = viewModel.state, emptyText = t("Нет данных о нагрузке", "No usage data")) { data ->
         val source = viewModel.source
         val metric = viewModel.metric
         LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
@@ -88,7 +89,7 @@ fun UsageScreen(viewModel: UsageViewModel) {
                         FilterChip(
                             selected = viewModel.node == null,
                             onClick = { viewModel.node = null; viewModel.load() },
-                            label = { Text("Все узлы") },
+                            label = { Text(t("Все узлы", "All nodes")) },
                             modifier = Modifier.padding(end = 8.dp),
                         )
                         cluster.nodes.forEach { n ->
@@ -105,7 +106,7 @@ fun UsageScreen(viewModel: UsageViewModel) {
                         FilterChip(
                             selected = viewModel.namespace == null,
                             onClick = { viewModel.namespace = null; viewModel.load() },
-                            label = { Text("Все namespace") },
+                            label = { Text(t("Все namespace", "All namespaces")) },
                             modifier = Modifier.padding(end = 8.dp),
                         )
                         namespaces.forEach { ns ->
@@ -122,14 +123,14 @@ fun UsageScreen(viewModel: UsageViewModel) {
                     UsageChart(data.series, data.chartSubjects, metric)
                 }
                 Text(
-                    text = if (viewModel.picked.isEmpty()) "За сутки · на графике — первые 5; отметьте свои (до $USAGE_MAX_SERIES)"
-                    else "Отмечено ${viewModel.picked.size} из $USAGE_MAX_SERIES",
+                    text = if (viewModel.picked.isEmpty()) t("За сутки · на графике — первые 5; отметьте свои (до $USAGE_MAX_SERIES)", "Last day · the chart shows the top 5; tick your own (up to $USAGE_MAX_SERIES)")
+                    else t("Отмечено ${viewModel.picked.size} из $USAGE_MAX_SERIES", "Picked ${viewModel.picked.size} of $USAGE_MAX_SERIES"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                 )
                 if (data.top.isEmpty()) {
-                    Text("Данных за сутки нет", modifier = Modifier.padding(16.dp))
+                    Text(t("Данных за сутки нет", "No data for the last day"), modifier = Modifier.padding(16.dp))
                 }
             }
             items(data.top, key = { it.subject }) { e ->
@@ -154,7 +155,7 @@ fun UsageScreen(viewModel: UsageViewModel) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(e.subject, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         data.cluster?.pods?.get(e.subject)?.let {
-                            Text("узел $it", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(t("узел $it", "node $it"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                     Text(formatValue(metric, e.shown(metric)), style = MaterialTheme.typography.bodyMedium)
@@ -163,7 +164,7 @@ fun UsageScreen(viewModel: UsageViewModel) {
             if (data.jobs.jobs.isNotEmpty()) {
                 item {
                     Text(
-                        "Сбор метрик",
+                        t("Сбор метрик", "Metric collection"),
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(start = 16.dp, top = 16.dp, bottom = 8.dp),
                     )
@@ -173,8 +174,8 @@ fun UsageScreen(viewModel: UsageViewModel) {
                         Column(modifier = Modifier.padding(12.dp)) {
                             Text(job.name, style = MaterialTheme.typography.titleSmall)
                             Text(
-                                "Интервал ${job.interval} · запусков ${job.runs}" +
-                                    if (job.lastRun.isNotBlank()) " · последний ${job.lastRun}" else "",
+                                t("Интервал ${job.interval} · запусков ${job.runs}", "Interval ${job.interval} · runs ${job.runs}") +
+                                    if (job.lastRun.isNotBlank()) t(" · последний ${job.lastRun}", " · last ${job.lastRun}") else "",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -204,7 +205,7 @@ private fun UsageChart(series: UsageResponse, subjects: List<String>, metric: St
     val axis = MaterialTheme.colorScheme.outlineVariant
     Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
-            Text("макс ${formatValue(metric, max)}", style = MaterialTheme.typography.labelSmall)
+            Text(t("макс ${formatValue(metric, max)}", "max ${formatValue(metric, max)}"), style = MaterialTheme.typography.labelSmall)
             Canvas(modifier = Modifier.fillMaxWidth().height(160.dp).padding(vertical = 4.dp)) {
                 drawLine(axis, Offset(0f, size.height), Offset(size.width, size.height))
                 val step = size.width / (buckets.size - 1)

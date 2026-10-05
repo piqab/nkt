@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.152 — 2026-10-05
+
+- **Android app in English:** the whole interface is translated; the
+  language follows the phone or the choice (“Русский / English”) on the
+  sign-in screen and in About, and switches instantly. The server answers
+  the app in the chosen language — errors, job logs, alerts.
+
 ## v1.11.151 — 2026-10-05
 
 - **Android app — host management:** “+” in the host list adds a host

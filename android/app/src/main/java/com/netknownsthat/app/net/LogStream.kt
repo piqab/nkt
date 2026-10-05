@@ -12,6 +12,7 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import com.netknownsthat.app.i18n.t
 
 /**
  * A followed log over a WebSocket.
@@ -67,9 +68,9 @@ class LogStream(
                 scope.launch {
                     connected = false
                     error = when {
-                        response?.code == 400 -> "Источник не подходит: ${response.message}"
-                        response != null -> "Не удалось подключиться: ${response.code}"
-                        else -> t.message ?: "Соединение разорвано"
+                        response?.code == 400 -> t("Источник не подходит: ${response.message}", "Source not accepted: ${response.message}")
+                        response != null -> t("Не удалось подключиться: ${response.code}", "Could not connect: ${response.code}")
+                        else -> t.message ?: t("Соединение разорвано", "Connection lost")
                     }
                 }
             }

@@ -23,12 +23,13 @@ import com.netknownsthat.app.net.model.JobRecord
 import com.netknownsthat.app.ui.host.SectionContent
 import com.netknownsthat.app.ui.theme.StatusDot
 import com.netknownsthat.app.ui.theme.statusColor
+import com.netknownsthat.app.i18n.t
 
-private val STATUS_FILTERS = listOf(
-    "" to "Все",
-    "queued,running" to "Идут",
-    "failed,interrupted" to "С ошибкой",
-    "succeeded" to "Выполнены",
+private val STATUS_FILTERS get() = listOf(
+    "" to t("Все", "All"),
+    "queued,running" to t("Идут", "Running"),
+    "failed,interrupted" to t("С ошибкой", "Failed"),
+    "succeeded" to t("Выполнены", "Succeeded"),
 )
 
 /**
@@ -58,14 +59,14 @@ fun JobsScreen(viewModel: JobsViewModel, jobLog: JobLogViewModel) {
         }
         SectionContent(
             state = viewModel.state,
-            emptyText = "Заданий нет",
+            emptyText = t("Заданий нет", "No jobs"),
             isEmpty = { it.jobs.isEmpty() },
         ) { response ->
             LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp)) {
                 if (response.active > 0) {
                     item {
                         Text(
-                            text = "Выполняется: ${response.active}",
+                            text = t("Выполняется: ${response.active}", "Running: ${response.active}"),
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier.padding(bottom = 8.dp),
                         )
@@ -109,7 +110,7 @@ private fun JobCard(job: JobRecord, onOpen: () -> Unit, onCancel: () -> Unit, ac
                     job.kind,
                     job.author.ifBlank { null },
                     formatTs(job.createdAt),
-                    if (job.steps > 0 && !job.finished) "шаг ${job.step}/${job.steps}" else null,
+                    if (job.steps > 0 && !job.finished) t("шаг ${job.step}/${job.steps}", "step ${job.step}/${job.steps}") else null,
                 ).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -126,7 +127,7 @@ private fun JobCard(job: JobRecord, onOpen: () -> Unit, onCancel: () -> Unit, ac
                 )
             }
             if (!job.finished) {
-                TextButton(onClick = onCancel, enabled = actionsEnabled) { Text("Отменить") }
+                TextButton(onClick = onCancel, enabled = actionsEnabled) { Text(t("Отменить", "Cancel")) }
             }
         }
     }

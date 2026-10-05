@@ -49,6 +49,7 @@ import com.netknownsthat.app.net.model.HubHost
 import com.netknownsthat.app.ui.hub.JobLogDialog
 import com.netknownsthat.app.ui.hub.JobLogViewModel
 import com.netknownsthat.app.ui.hub.JobPlace
+import com.netknownsthat.app.i18n.t
 
 /**
  * Same role as Hosts.tsx's host-picker screen — the landing page once
@@ -90,15 +91,15 @@ fun HostListScreen(
     viewModel.foreignInstall?.let { (id, text) ->
         AlertDialog(
             onDismissRequest = { viewModel.foreignInstall = null },
-            title = { Text("На хосте уже есть nkt") },
-            text = { Text("$text\n\nУстановить поверх?") },
+            title = { Text(t("На хосте уже есть nkt", "nkt is already on the host")) },
+            text = { Text(t("$text\n\nУстановить поверх?", "$text\n\nInstall over it?")) },
             confirmButton = {
                 TextButton(onClick = {
                     viewModel.foreignInstall = null
                     viewModel.install(id, true, openJob)
-                }) { Text("Установить поверх") }
+                }) { Text(t("Установить поверх", "Install over it")) }
             },
-            dismissButton = { TextButton(onClick = { viewModel.foreignInstall = null }) { Text("Отмена") } },
+            dismissButton = { TextButton(onClick = { viewModel.foreignInstall = null }) { Text(t("Отмена", "Cancel")) } },
         )
     }
     deleting?.let { h ->
@@ -142,14 +143,14 @@ fun HostListScreen(
             FloatingActionButton(onClick = {
                 viewModel.loadGroups()
                 adding = true
-            }) { Icon(Icons.Default.Add, contentDescription = "Добавить хост") }
+            }) { Icon(Icons.Default.Add, contentDescription = t("Добавить хост", "Add host")) }
         },
         topBar = {
             TopAppBar(
-                title = { Text("Хосты") },
+                title = { Text(t("Хосты", "Hosts")) },
                 navigationIcon = {
                     IconButton(onClick = onOpenHub) {
-                        Icon(Icons.Default.Menu, contentDescription = "Разделы хаба")
+                        Icon(Icons.Default.Menu, contentDescription = t("Разделы хаба", "Hub sections"))
                     }
                 },
                 actions = {
@@ -157,20 +158,20 @@ fun HostListScreen(
                         BadgedBox(badge = {
                             if (state.unread > 0) Badge { Text(if (state.unread > 99) "99+" else state.unread.toString()) }
                         }) {
-                            Icon(Icons.Default.Notifications, contentDescription = "Оповещения")
+                            Icon(Icons.Default.Notifications, contentDescription = t("Оповещения", "Alerts"))
                         }
                     }
                     IconButton(onClick = viewModel::refresh) {
-                        Icon(Icons.Default.Refresh, contentDescription = "Обновить")
+                        Icon(Icons.Default.Refresh, contentDescription = t("Обновить", "Refresh"))
                     }
                     IconButton(onClick = onOpenAbout) {
-                        Icon(Icons.Default.Info, contentDescription = "О системе")
+                        Icon(Icons.Default.Info, contentDescription = t("О системе", "About"))
                     }
                     IconButton(onClick = {
                         viewModel.loadGroups()
                         groupsOpen = true
                     }) {
-                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Группы хостов")
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = t("Группы хостов", "Host groups"))
                     }
                 },
             )
@@ -197,7 +198,7 @@ fun HostListScreen(
                         if (order.size > 1) {
                             item(key = "group:$group") {
                                 Text(
-                                    text = group.ifBlank { "Без группы" },
+                                    text = group.ifBlank { t("Без группы", "No group") },
                                     style = MaterialTheme.typography.titleSmall,
                                     color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
@@ -215,9 +216,9 @@ fun HostListScreen(
                                 // manage and cannot be deleted.
                                 menu = if (host.id == HubHost.LOCAL_HOST_ID) null else HostMenu(
                                     installLabel = when {
-                                        host.status == "new" || host.shownVersion.isBlank() -> "Установить nkt"
-                                        host.outdated -> "Обновить nkt до ${host.hubVersion}"
-                                        else -> "Переустановить nkt"
+                                        host.status == "new" || host.shownVersion.isBlank() -> t("Установить nkt", "Install nkt")
+                                        host.outdated -> t("Обновить nkt до ${host.hubVersion}", "Update nkt to ${host.hubVersion}")
+                                        else -> t("Переустановить nkt", "Reinstall nkt")
                                     },
                                     onInstall = { viewModel.install(host.id, false, openJob) },
                                     onInstallLog = { viewModel.openInstallLog(host.id, openJob) },
@@ -234,11 +235,11 @@ fun HostListScreen(
 }
 
 /** Web's hosts.sudo* wording, shortened for a phone. */
-private val SUDO_LABEL = mapOf(
+private val SUDO_LABEL get() = mapOf(
     "root" to "sudo: root",
-    "nopasswd" to "sudo без пароля — опасно",
-    "password_required" to "sudo с паролем",
-    "narrow" to "узкий sudo",
+    "nopasswd" to t("sudo без пароля — опасно", "passwordless sudo — dangerous"),
+    "password_required" to t("sudo с паролем", "sudo with password"),
+    "narrow" to t("узкий sudo", "narrow sudo"),
 )
 
 /** Management actions of a host row (admin). */
@@ -269,20 +270,20 @@ private fun HostRow(host: HubHost, onClick: () -> Unit, menu: HostMenu?) {
                 if (menu != null) {
                     Box {
                         IconButton(onClick = { open = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "Действия с хостом")
+                            Icon(Icons.Default.MoreVert, contentDescription = t("Действия с хостом", "Host actions"))
                         }
                         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                             DropdownMenuItem(text = { Text(menu.installLabel) }, onClick = { open = false; menu.onInstall() })
-                            DropdownMenuItem(text = { Text("Журнал установки") }, onClick = { open = false; menu.onInstallLog() })
-                            DropdownMenuItem(text = { Text("Группа…") }, onClick = { open = false; menu.onGroup() })
-                            DropdownMenuItem(text = { Text("Удалить…") }, onClick = { open = false; menu.onDelete() })
+                            DropdownMenuItem(text = { Text(t("Журнал установки", "Install log")) }, onClick = { open = false; menu.onInstallLog() })
+                            DropdownMenuItem(text = { Text(t("Группа…", "Group…")) }, onClick = { open = false; menu.onGroup() })
+                            DropdownMenuItem(text = { Text(t("Удалить…", "Delete…")) }, onClick = { open = false; menu.onDelete() })
                         }
                     }
                 }
             }
             if (host.outdated) {
                 Text(
-                    text = "nkt ${host.shownVersion} — хаб ${host.hubVersion}",
+                    text = t("nkt ${host.shownVersion} — хаб ${host.hubVersion}", "nkt ${host.shownVersion} — hub ${host.hubVersion}"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.tertiary,
                 )
@@ -296,7 +297,7 @@ private fun HostRow(host: HubHost, onClick: () -> Unit, menu: HostMenu?) {
                 host.group.ifBlank { null },
                 host.k8sRole.ifBlank { null }?.let { "k8s $it" },
                 SUDO_LABEL[host.sudoStatus.orEmpty()],
-                if (host.installActive) "идёт установка" else null,
+                if (host.installActive) t("идёт установка", "installing") else null,
             )
             if (tags.isNotEmpty()) {
                 Text(
@@ -311,14 +312,14 @@ private fun HostRow(host: HubHost, onClick: () -> Unit, menu: HostMenu?) {
             val findingsTotal = host.findings?.values?.sum() ?: 0
             if (findingsTotal > 0) {
                 Text(
-                    text = "Проблем: $findingsTotal",
+                    text = t("Проблем: $findingsTotal", "Problems: $findingsTotal"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
             }
             if (host.reachable == false) {
                 Text(
-                    text = "Недоступен",
+                    text = t("Недоступен", "Unreachable"),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )

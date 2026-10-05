@@ -12,6 +12,7 @@ import com.netknownsthat.app.net.model.LogSourcesResponse
 import com.netknownsthat.app.net.model.LogTailResponse
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
+import com.netknownsthat.app.i18n.t
 
 /**
  * Owns the log list and the one open stream. Not a SectionViewModel: there
@@ -58,7 +59,7 @@ class LogsViewModel(private val hubClient: HubClient) : ViewModel() {
 
     fun watch(source: LogSource) {
         current = source
-        currentLabel = if (source.kind == "unit") "журнал: ${source.name}" else source.name
+        currentLabel = if (source.kind == "unit") t("журнал: ${source.name}", "log: ${source.name}") else source.name
         restart()
     }
 

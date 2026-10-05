@@ -44,6 +44,7 @@ import com.netknownsthat.app.ui.hub.JobLogViewModel
 import com.netknownsthat.app.ui.hub.JobsScreen
 import com.netknownsthat.app.ui.hub.RebootViewModel
 import kotlinx.coroutines.launch
+import com.netknownsthat.app.i18n.t
 
 /**
  * Sections of a single host. A drawer rather than a bottom bar on purpose:
@@ -51,29 +52,32 @@ import kotlinx.coroutines.launch
  * fill in the rest), which a bottom bar cannot hold, and adding one here
  * later would mean rebuilding the navigation instead of extending this list.
  */
-enum class HostSection(val title: String) {
-    OVERVIEW("Обзор"),
-    FINDINGS("Проблемы"),
-    TERMINAL("Терминал"),
-    BTOP("Монитор (btop)"),
-    LOGS("Логи"),
-    SERVICES("Сервисы"),
-    CONTAINERS("Контейнеры"),
-    VULNERABILITIES("Уязвимости"),
-    MALWARE("Вредоносное (ClamAV)"),
-    AVAILABILITY("Доступность"),
-    USAGE("Нагрузка"),
-    CONFIGS("Конфигурация"),
+enum class HostSection(private val ru: String, private val en: String = ru) {
+    OVERVIEW("Обзор", "Overview"),
+    FINDINGS("Проблемы", "Problems"),
+    TERMINAL("Терминал", "Terminal"),
+    BTOP("Монитор (btop)", "Monitor (btop)"),
+    LOGS("Логи", "Logs"),
+    SERVICES("Сервисы", "Services"),
+    CONTAINERS("Контейнеры", "Containers"),
+    VULNERABILITIES("Уязвимости", "Vulnerabilities"),
+    MALWARE("Вредоносное (ClamAV)", "Malware (ClamAV)"),
+    AVAILABILITY("Доступность", "Availability"),
+    USAGE("Нагрузка", "Usage"),
+    CONFIGS("Конфигурация", "Configuration"),
     FIREWALL("Firewall"),
-    CERTIFICATES("Сертификаты"),
-    INTERFACES("Интерфейсы"),
-    MISC("Разное"),
-    TOPOLOGY("Карта"),
-    USERS("Пользователи"),
-    JOBS("Задания"),
+    CERTIFICATES("Сертификаты", "Certificates"),
+    INTERFACES("Интерфейсы", "Interfaces"),
+    MISC("Разное", "Misc"),
+    TOPOLOGY("Карта", "Map"),
+    USERS("Пользователи", "Users"),
+    JOBS("Задания", "Jobs"),
     FAIL2BAN("Fail2ban"),
-    AUDIT("Журнал"),
+    AUDIT("Журнал", "Log"),
     ;
+
+    /** Read on every access, so a language switch renames the menu. */
+    val title: String get() = t(ru, en)
 
     companion object {
         /**
@@ -233,22 +237,22 @@ fun HostScreen(
                     title = { Text(section.title) },
                     navigationIcon = {
                         IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Default.Menu, contentDescription = "Разделы")
+                            Icon(Icons.Default.Menu, contentDescription = t("Разделы", "Sections"))
                         }
                     },
                     actions = {
                         if (active != null) {
                             IconButton(onClick = { active.load() }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Обновить")
+                                Icon(Icons.Default.Refresh, contentDescription = t("Обновить", "Refresh"))
                             }
                         }
                         Box {
                             IconButton(onClick = { menuOpen = true }) {
-                                Icon(Icons.Default.MoreVert, contentDescription = "Ещё")
+                                Icon(Icons.Default.MoreVert, contentDescription = t("Ещё", "More"))
                             }
                             DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
                                 DropdownMenuItem(
-                                    text = { Text("Перезагрузить хост…") },
+                                    text = { Text(t("Перезагрузить хост…", "Reboot host…")) },
                                     onClick = {
                                         menuOpen = false
                                         rebootOpen = true
@@ -259,7 +263,7 @@ fun HostScreen(
                         IconButton(onClick = onBack) {
                             Icon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "К списку хостов",
+                                contentDescription = t("К списку хостов", "Back to hosts"),
                             )
                         }
                     },

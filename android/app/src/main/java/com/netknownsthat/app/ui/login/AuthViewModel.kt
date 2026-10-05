@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.netknownsthat.app.net.HubClient
 import com.netknownsthat.app.net.model.Me
 import kotlinx.coroutines.launch
+import com.netknownsthat.app.i18n.t
 
 data class AuthUiState(
     val hubUrl: String = "",
@@ -41,7 +42,7 @@ class AuthViewModel(private val hubClient: HubClient) : ViewModel() {
 
     fun login(onSuccess: (Me) -> Unit) {
         if (uiState.hubUrl.isBlank() || uiState.username.isBlank() || uiState.password.isBlank()) {
-            uiState = uiState.copy(error = "Заполните адрес хаба, логин и пароль")
+            uiState = uiState.copy(error = t("Заполните адрес хаба, логин и пароль", "Enter the hub address, login and password"))
             return
         }
         viewModelScope.launch {
@@ -51,7 +52,7 @@ class AuthViewModel(private val hubClient: HubClient) : ViewModel() {
             if (urlResult.isFailure) {
                 uiState = uiState.copy(
                     loading = false,
-                    error = urlResult.exceptionOrNull()?.message ?: "Некорректный адрес хаба",
+                    error = urlResult.exceptionOrNull()?.message ?: t("Некорректный адрес хаба", "Invalid hub address"),
                 )
                 return@launch
             }
