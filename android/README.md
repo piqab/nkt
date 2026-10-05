@@ -98,6 +98,9 @@
 (задание `android-apk`) из секретов `ANDROID_KEYSTORE_BASE64`,
 `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`;
 локально — переменные `NKT_ANDROID_KEYSTORE*` (см. сайт: «Android-приложение»).
+Отдельный бета-релиз приложения — workflow `android-beta-release`
+(запуск вручную), версия в приложении — `X.Y.Z-beta`
+(`-PnktVersionSuffix=-beta`).
 
 ### Тесты
 

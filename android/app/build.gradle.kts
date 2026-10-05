@@ -10,6 +10,9 @@ plugins {
 // derived from it so every release installs over the previous one —
 // 1.11.149 → 1_011_149. A "-beta" release tag does not change it.
 val nktVersion: String = rootProject.file("../VERSION").readText().trim()
+// "-beta" for beta builds (-PnktVersionSuffix=-beta): shown in About, so a
+// tester can tell a beta from a stable build. versionCode ignores it.
+val nktVersionSuffix: String = (project.findProperty("nktVersionSuffix") as String?).orEmpty()
 val nktVersionCode: Int = nktVersion.split(".").map { it.toInt() }
     .let { (major, minor, patch) -> major * 1_000_000 + minor * 1_000 + patch }
 
@@ -31,7 +34,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = nktVersionCode
-        versionName = nktVersion
+        versionName = nktVersion + nktVersionSuffix
     }
 
     signingConfigs {

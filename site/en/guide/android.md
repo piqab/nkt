@@ -123,6 +123,16 @@ Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
 without an APK. Keep the key separately and safely: a lost key means
 installed apps can no longer be updated.
 
+### Beta release of the app only
+
+To publish the app separately from nkt: **Actions → android-beta-release →
+Run workflow**. It runs the tests, signs the APK with the same key and
+creates a pre-release `android-v<version>-beta` with
+`nkt-android-<version>-beta.apk` and `SHA256SUMS`; the app's About shows the
+version as `<version>-beta`. Hubs do not see such a release and do not offer
+it as an update. Running it again for the same version replaces the APK in
+that release.
+
 A locally signed build uses the same environment variables
 (`NKT_ANDROID_KEYSTORE` is the .jks path; the rest are passwords and alias):
 
