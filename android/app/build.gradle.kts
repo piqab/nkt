@@ -5,6 +5,20 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// The app is versioned with the server: versionName is the repository's
+// VERSION file (the same number a release tag carries), and versionCode is
+// derived from it so every release installs over the previous one —
+// 1.11.149 → 1_011_149. A "-beta" release tag does not change it.
+val nktVersion: String = rootProject.file("../VERSION").readText().trim()
+val nktVersionCode: Int = nktVersion.split(".").map { it.toInt() }
+    .let { (major, minor, patch) -> major * 1_000_000 + minor * 1_000 + patch }
+
+// Release signing comes from the environment only — a keystore and its
+// passwords never live in the repository. CI decodes the keystore from a
+// secret into a temporary file (.github/workflows/release.yml); locally the
+// same variables work. Without them assembleRelease still builds, unsigned.
+val releaseKeystore: String? = System.getenv("NKT_ANDROID_KEYSTORE")?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.netknownsthat.app"
     compileSdk = 35
@@ -16,13 +30,25 @@ android {
         // both assume 21+ anyway.
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = nktVersionCode
+        versionName = nktVersion
+    }
+
+    signingConfigs {
+        if (releaseKeystore != null) {
+            create("release") {
+                storeFile = file(releaseKeystore)
+                storePassword = System.getenv("NKT_ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("NKT_ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("NKT_ANDROID_KEY_PASSWORD")
+            }
+        }
     }
 
     buildTypes {
         release {
             isMinifyEnabled = false
+            if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 
@@ -36,6 +62,8 @@ android {
 
     buildFeatures {
         compose = true
+        // BuildConfig.VERSION_NAME for the About screen.
+        buildConfig = true
     }
     // No composeOptions.kotlinCompilerExtensionVersion here — since Kotlin
     // 2.0 the Compose compiler is the separate org.jetbrains.kotlin.plugin.compose

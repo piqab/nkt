@@ -177,6 +177,65 @@ jobs:
           path: dist/n8n-nodes-nkt-*.tgz
           retention-days: 1
 
+  # Android-приложение (android/) — подписанным APK в релизе:
+  # nkt-android-<версия>.apk. versionName берётся из VERSION (см.
+  # android/app/build.gradle.kts), так что приложение и сервер выходят под
+  # одним номером. Ключ подписи — только в секретах репозитория:
+  #   ANDROID_KEYSTORE_BASE64   — keystore (.jks) в base64
+  #   ANDROID_KEYSTORE_PASSWORD — пароль keystore
+  #   ANDROID_KEY_ALIAS         — псевдоним ключа
+  #   ANDROID_KEY_PASSWORD      — пароль ключа
+  # Без них задание ничего не собирает и не валит релиз: APK просто не
+  # будет в ассетах (подписывать отладочным ключом нельзя — следующий
+  # релиз с настоящим ключом не встал бы поверх). Ключ один на все релизы:
+  # потеряете — обновить установленное приложение будет нечем.
+  android-apk:
+    needs: check-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Есть ли ключ подписи
+        id: key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then echo "present=true" >> "$GITHUB_OUTPUT"; else
+            echo "::notice::секрета ANDROID_KEYSTORE_BASE64 нет — APK в релиз не попадёт"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-java@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Собрать и подписать APK
+        if: steps.key.outputs.present == 'true'
+        working-directory: android
+        # Секреты — только через окружение: ни в argv, ни в лог они не
+        # попадают; keystore раскладывается во временный файл раннера.
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          NKT_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          NKT_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          NKT_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          export NKT_ANDROID_KEYSTORE="$RUNNER_TEMP/nkt-release.jks"
+          printf '%s' "$KEYSTORE_B64" | base64 -d > "$NKT_ANDROID_KEYSTORE"
+          chmod +x ./gradlew
+          ./gradlew --no-daemon test assembleRelease
+          rm -f "$NKT_ANDROID_KEYSTORE"
+          mkdir -p ../dist
+          cp app/build/outputs/apk/release/app-release.apk \
+            "../dist/nkt-android-${{ needs.check-version.outputs.binary_version }}.apk"
+          "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs ../dist/nkt-android-*.apk | head -3
+      - uses: actions/upload-artifact@v4
+        if: steps.key.outputs.present == 'true'
+        with:
+          name: nkt-android
+          path: dist/nkt-android-*.apk
+          retention-days: 1
+
   # Собирает и публикует образ ХАБА (Dockerfile.hub) в GitHub Container
   # Registry — на него ссылаются deploy/docker-compose.hub.release.yml и
   # deploy/k8s/hub.yaml, чтобы их можно было развернуть без клонирования
@@ -220,7 +279,7 @@ jobs:
           tags: ${{ steps.version.outputs.tags }}
 
   release:
-    needs: [check-version, build, n8n-node]
+    needs: [check-version, build, n8n-node, android-apk]
     runs-on: ubuntu-latest
     steps:
       # Нужен именно чекаут, а не голый gh: --generate-notes и определение
@@ -242,6 +301,12 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: n8n-node
+          path: dist
+      # APK есть, только когда настроен ключ подписи (задание android-apk).
+      - uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: nkt-android
           path: dist
       # Манифесты для «готового образа» приклеиваются к релизу с точной
       # версией вместо :latest — мутабельный тег можно переставить на
@@ -267,7 +332,8 @@ jobs:
           chmod +x nkt-linux-* nkt-edge-linux-*
           # Манифесты тоже: они лежат рядом с бинарниками и их так же
           # скачивают по ссылке из README.
-          sha256sum nkt-linux-* nkt-edge-linux-* n8n-nodes-nkt-*.tgz docker-compose.hub.release.yml k8s-hub.yaml > SHA256SUMS
+          apk="$(ls nkt-android-*.apk 2>/dev/null || true)"
+          sha256sum nkt-linux-* nkt-edge-linux-* n8n-nodes-nkt-*.tgz docker-compose.hub.release.yml k8s-hub.yaml $apk > SHA256SUMS
       # Описание релиза — то, что хаб показывает в «О системе», когда видит
       # новую версию (internal/hub/versioncheck.go читает body этого релиза).
       # Поэтому оно должно быть написанным текстом из WHATSNEW.md, а не
