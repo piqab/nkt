@@ -11,10 +11,20 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
@@ -28,10 +38,17 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.netknownsthat.app.net.model.HubHost
+import com.netknownsthat.app.ui.hub.JobLogDialog
+import com.netknownsthat.app.ui.hub.JobLogViewModel
+import com.netknownsthat.app.ui.hub.JobPlace
 
 /**
  * Same role as Hosts.tsx's host-picker screen — the landing page once
@@ -46,8 +63,65 @@ fun HostListScreen(
     onOpenHost: (HubHost) -> Unit,
     onOpenHub: () -> Unit,
     onOpenEvents: () -> Unit,
+    jobLog: JobLogViewModel,
 ) {
     val state = viewModel.uiState
+    val snackbar = remember { SnackbarHostState() }
+    var adding by remember { mutableStateOf(false) }
+    var groupsOpen by remember { mutableStateOf(false) }
+    var deleting by remember { mutableStateOf<HubHost?>(null) }
+    var regrouping by remember { mutableStateOf<HubHost?>(null) }
+    val openJob: (Long) -> Unit = { id -> if (id > 0) jobLog.show(JobPlace.HUB, id) }
+
+    LaunchedEffect(viewModel.message) {
+        viewModel.message?.let {
+            snackbar.showSnackbar(it)
+            viewModel.message = null
+        }
+    }
+    JobLogDialog(jobLog)
+    if (adding) {
+        AddHostDialog(viewModel.groups, onDismiss = { adding = false }) { form, install ->
+            adding = false
+            viewModel.addHost(form, install, openJob)
+        }
+    }
+    viewModel.pendingKey?.let { (_, key) -> AuthorizedKeyDialog(key) { viewModel.pendingKey = null } }
+    viewModel.foreignInstall?.let { (id, text) ->
+        AlertDialog(
+            onDismissRequest = { viewModel.foreignInstall = null },
+            title = { Text("На хосте уже есть nkt") },
+            text = { Text("$text\n\nУстановить поверх?") },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.foreignInstall = null
+                    viewModel.install(id, true, openJob)
+                }) { Text("Установить поверх") }
+            },
+            dismissButton = { TextButton(onClick = { viewModel.foreignInstall = null }) { Text("Отмена") } },
+        )
+    }
+    deleting?.let { h ->
+        DeleteHostDialog(h, onDismiss = { deleting = null }) { purge ->
+            deleting = null
+            viewModel.delete(h, purge)
+        }
+    }
+    regrouping?.let { h ->
+        SetGroupDialog(h, viewModel.groups, onDismiss = { regrouping = null }) { g ->
+            regrouping = null
+            viewModel.setGroup(h, g)
+        }
+    }
+    if (groupsOpen) {
+        GroupsDialog(
+            viewModel.groups,
+            onDismiss = { groupsOpen = false },
+            onCreate = viewModel::createGroup,
+            onRename = viewModel::renameGroup,
+            onDelete = viewModel::deleteGroup,
+        )
+    }
 
     // Loaded here rather than from the ViewModel's init: the ViewModel is
     // created during composition, before the hub URL has been restored, so an
@@ -59,9 +133,17 @@ fun HostListScreen(
     LaunchedEffect(Unit) {
         viewModel.deselectHost()
         viewModel.refresh()
+        viewModel.loadGroups()
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbar) },
+        floatingActionButton = {
+            FloatingActionButton(onClick = {
+                viewModel.loadGroups()
+                adding = true
+            }) { Icon(Icons.Default.Add, contentDescription = "Добавить хост") }
+        },
         topBar = {
             TopAppBar(
                 title = { Text("Хосты") },
@@ -84,6 +166,12 @@ fun HostListScreen(
                     IconButton(onClick = onOpenAbout) {
                         Icon(Icons.Default.Info, contentDescription = "О системе")
                     }
+                    IconButton(onClick = {
+                        viewModel.loadGroups()
+                        groupsOpen = true
+                    }) {
+                        Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Группы хостов")
+                    }
                 },
             )
         },
@@ -100,12 +188,44 @@ fun HostListScreen(
                         modifier = Modifier.align(Alignment.Center).padding(24.dp),
                     )
 
-                else -> LazyColumn(contentPadding = PaddingValues(16.dp)) {
-                    items(state.hosts, key = { it.id }) { host ->
-                        HostRow(host = host, onClick = {
-                            viewModel.select(host)
-                            onOpenHost(host)
-                        })
+                // Grouped like the web list: named groups in order, hosts
+                // without a group last (the hub's own machine first of all).
+                else -> LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp)) {
+                    val byGroup = state.hosts.groupBy { it.group }
+                    val order = byGroup.keys.sortedWith(compareBy({ it.isBlank() }, { it }))
+                    order.forEach { group ->
+                        if (order.size > 1) {
+                            item(key = "group:$group") {
+                                Text(
+                                    text = group.ifBlank { "Без группы" },
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                                )
+                            }
+                        }
+                        items(byGroup.getValue(group), key = { it.id }) { host ->
+                            HostRow(
+                                host = host,
+                                onClick = {
+                                    viewModel.select(host)
+                                    onOpenHost(host)
+                                },
+                                // The hub's own machine has no SSH install to
+                                // manage and cannot be deleted.
+                                menu = if (host.id == HubHost.LOCAL_HOST_ID) null else HostMenu(
+                                    installLabel = when {
+                                        host.status == "new" || host.shownVersion.isBlank() -> "Установить nkt"
+                                        host.outdated -> "Обновить nkt до ${host.hubVersion}"
+                                        else -> "Переустановить nkt"
+                                    },
+                                    onInstall = { viewModel.install(host.id, false, openJob) },
+                                    onInstallLog = { viewModel.openInstallLog(host.id, openJob) },
+                                    onGroup = { regrouping = host },
+                                    onDelete = { deleting = host },
+                                ),
+                            )
+                        }
                     }
                 }
             }
@@ -121,8 +241,18 @@ private val SUDO_LABEL = mapOf(
     "narrow" to "узкий sudo",
 )
 
+/** Management actions of a host row (admin). */
+private class HostMenu(
+    val installLabel: String,
+    val onInstall: () -> Unit,
+    val onInstallLog: () -> Unit,
+    val onGroup: () -> Unit,
+    val onDelete: () -> Unit,
+)
+
 @Composable
-private fun HostRow(host: HubHost, onClick: () -> Unit) {
+private fun HostRow(host: HubHost, onClick: () -> Unit, menu: HostMenu?) {
+    var open by remember { mutableStateOf(false) }
     Card(
         onClick = onClick,
         modifier = Modifier
@@ -134,8 +264,28 @@ private fun HostRow(host: HubHost, onClick: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                Text(host.name, style = MaterialTheme.typography.titleMedium)
+                Text(host.name, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Text(host.status, style = MaterialTheme.typography.labelMedium)
+                if (menu != null) {
+                    Box {
+                        IconButton(onClick = { open = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "Действия с хостом")
+                        }
+                        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                            DropdownMenuItem(text = { Text(menu.installLabel) }, onClick = { open = false; menu.onInstall() })
+                            DropdownMenuItem(text = { Text("Журнал установки") }, onClick = { open = false; menu.onInstallLog() })
+                            DropdownMenuItem(text = { Text("Группа…") }, onClick = { open = false; menu.onGroup() })
+                            DropdownMenuItem(text = { Text("Удалить…") }, onClick = { open = false; menu.onDelete() })
+                        }
+                    }
+                }
+            }
+            if (host.outdated) {
+                Text(
+                    text = "nkt ${host.shownVersion} — хаб ${host.hubVersion}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary,
+                )
             }
             Text(
                 text = host.addr,

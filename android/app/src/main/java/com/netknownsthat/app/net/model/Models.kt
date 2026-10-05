@@ -65,7 +65,15 @@ data class HubHost(
     /** control-plane | worker — set for hosts of a cluster the hub built. */
     @SerialName("k8s_role") val k8sRole: String = "",
     @SerialName("install_active") val installActive: Boolean = false,
+    /** The hub's own version — a host behind it is offered «Обновить». */
+    @SerialName("hub_version") val hubVersion: String = "",
 ) {
+    /** Version the host actually runs (falls back to what was installed). */
+    val shownVersion: String get() = runningVersion?.ifBlank { null } ?: nktVersion
+
+    val outdated: Boolean
+        get() = hubVersion.isNotBlank() && shownVersion.isNotBlank() && shownVersion != hubVersion
+
     companion object {
         /** Mirrors web/src/api.ts's LOCAL_HOST_ID — the hub's own machine. */
         const val LOCAL_HOST_ID = -1L

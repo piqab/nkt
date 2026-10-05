@@ -283,6 +283,7 @@ private fun NktApp(
                     hubSection = HubSection.EVENTS
                     navController.navigate(Routes.HUB)
                 },
+                jobLog = hubViewModels.jobLog,
             )
         }
         composable(Routes.HUB) {

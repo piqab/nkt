@@ -90,4 +90,18 @@ class HubEndpointsTest {
         val left = r.pipelines.flatMap { it.leftovers }
         assertTrue("leftovers", left.isNotEmpty() && left.first().hostId > 0 && left.first().project.isNotBlank())
     }
+
+    @Test
+    fun hubHostsAndGroups() {
+        val hosts = decode<List<HubHost>>("hub_hosts")
+        val local = hosts.first { it.id == HubHost.LOCAL_HOST_ID }
+        assertTrue(local.hubVersion.isNotBlank() && !local.outdated)
+        val added = hosts.first { it.id > 0 }
+        assertEquals("new", added.status)
+        assertTrue(added.group.isNotBlank() && added.hubVersion.isNotBlank())
+        assertTrue("not installed is not outdated", !added.outdated)
+        assertTrue(decode<HostGroupsResponse>("hub_groups").groups.isNotEmpty())
+        val behind = added.copy(nktVersion = "1.0.0", hubVersion = "1.0.1")
+        assertTrue(behind.outdated)
+    }
 }

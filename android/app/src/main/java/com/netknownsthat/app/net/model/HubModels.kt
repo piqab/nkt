@@ -396,3 +396,19 @@ data class ClamHit(
     val signature: String = "",
     val target: String = "",
 )
+
+/** GET /api/hub/groups. */
+@Serializable
+data class HostGroupsResponse(val groups: List<String> = emptyList())
+
+/** POST /api/hub/hosts — `authorized_key` only for auth_kind "generated":
+ * the line to put into the host's authorized_keys before installing. */
+@Serializable
+data class AddHostResponse(
+    val id: Long = 0,
+    @SerialName("authorized_key") val authorizedKey: String = "",
+)
+
+/** POST /api/hub/hosts/{id}/install and GET …/install/latest: {"job": N}. */
+@Serializable
+data class InstallJobResponse(val job: Long = 0)

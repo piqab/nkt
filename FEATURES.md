@@ -270,7 +270,8 @@ are in [WHATSNEW.en.md](WHATSNEW.en.md). Русская версия: [FEATURES.
 ## Android app
 
 - A native hub client for Android 8+ (Kotlin, Jetpack Compose): the same API as the web UI, sign-in with a hub account, the session survives restarts; a self-signed hub certificate is pinned on first sign-in.
-- Host list: state, problems, group, Kubernetes role, sudo; a bell with unread alerts.
+- Host list by group: state, problems, Kubernetes role, sudo, an outdated nkt version; a bell with unread alerts.
+- Host management: adding (password, own key or a hub key with the authorized_keys line), installing, updating and reinstalling nkt as a hub job with a log, the install log, moving to a group, deleting (from the hub only or cleaning the host); groups — create, rename, delete.
 - Host sections: overview, problems with jumps to the right section, terminal and btop, logs, services, containers (Docker with “Inspect”, Podman, LXD, VMs, images), vulnerabilities, ClamAV, availability, usage with Kubernetes nodes and a chart, configs with history and rollback, firewall, certificates, interfaces, a touch resource map, users, jobs, fail2ban, audit log; reboot with a preview of what will not come back by itself.
 - Hub sections: alerts with a jump to the host, hub jobs, monitoring, fleet fail2ban, deployments (deploy, dry run, history and rollback, old stacks).
 - Phone notifications for hub alerts (polled every 15 minutes; kinds as in the hub's alert settings); tapping one opens the host at the right section.
