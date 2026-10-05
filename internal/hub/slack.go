@@ -284,7 +284,7 @@ func (s *Server) slackNotify(ctx context.Context, ev OutEvent) {
 	for _, c := range st.Channels {
 		if c.Notify {
 			if err := slackPost(ctx, token, c.ID, r); err != nil {
-				s.log.Warn("бот Slack: оповещение не отправлено", "channel", c.ID, "err", err)
+				s.log.Warn("Slack bot: alert not sent", "channel", c.ID, "err", err)
 			}
 		}
 	}

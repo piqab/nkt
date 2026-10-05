@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/piqab/nkt/internal/msgs"
+	"strings"
 	"time"
 )
 
@@ -89,6 +91,11 @@ type Host struct {
 	// видит — им нужен «direct».
 	Via      string `json:"via,omitempty"`
 	ErrorMsg string `json:"error_msg,omitempty"`
+	// ErrorKey/ErrorArgs — ключ каталога msgs и его аргументы, когда
+	// причина — ошибка каталога (см. HostError): API переводит ErrorMsg на
+	// язык читающего. Пусто — ErrorMsg как есть.
+	ErrorKey  string `json:"-"`
+	ErrorArgs string `json:"-"`
 	// Group — произвольная группа в списке хостов («прод», «клиент А»).
 	// Пустая строка означает «Без группы»: такой раздел показывается в
 	// конце списка, а не прячется — хост без группы не должен исчезать.
@@ -164,7 +171,52 @@ func scanHost(row interface{ Scan(...any) error }) (Host, error) {
 	h.TunnelTokenEnc = tunnelTokenEnc
 	h.TunnelCertSHA256 = tunnelCertSHA256
 	h.LastSeenAt = lastSeen.String
+	h.ErrorMsg, h.ErrorKey, h.ErrorArgs = decodeHostError(h.ErrorMsg)
 	return h, nil
+}
+
+// hostErrorMark открывает в error_msg закодированную ошибку каталога:
+// «\x00msgs\x00ключ\x00аргументы». Отдельных столбцов нет нарочно — так
+// та же строка без изменений переживает экспорт и импорт хаба.
+const hostErrorMark = "\x00msgs\x00"
+
+// HostError — значение error_msg для SetHostStatus: ошибка каталога msgs
+// сохраняется ключом с аргументами и потом переводится на язык читающего,
+// любая другая — текстом.
+func HostError(err error) string {
+	if err == nil {
+		return ""
+	}
+	var e *msgs.Err
+	if errors.As(err, &e) && error(e) == err {
+		return hostErrorMark + e.Key + "\x00" + msgs.EncodeArgs(e.Args)
+	}
+	return err.Error()
+}
+
+// decodeHostError разбирает error_msg: текст на языке по умолчанию и,
+// если это ошибка каталога, её ключ с аргументами.
+func decodeHostError(raw string) (text, key, args string) {
+	rest, ok := strings.CutPrefix(raw, hostErrorMark)
+	if !ok {
+		return raw, "", ""
+	}
+	key, args, _ = strings.Cut(rest, "\x00")
+	return msgs.Render(msgs.DefaultLang, key, args, key), key, args
+}
+
+// RawError — error_msg как в базе: для экспорта, чтобы ключ каталога
+// пережил перенос на другой хаб.
+func (h Host) RawError() string {
+	if h.ErrorKey == "" {
+		return h.ErrorMsg
+	}
+	return hostErrorMark + h.ErrorKey + "\x00" + h.ErrorArgs
+}
+
+// LocalizedError — причина ошибки хоста на языке lang.
+func (h Host) LocalizedError(lang msgs.Lang) string {
+	return msgs.Render(lang, h.ErrorKey, h.ErrorArgs, h.ErrorMsg)
 }
 
 // SetHostParent привязывает хост к машине, на которой он работает, и

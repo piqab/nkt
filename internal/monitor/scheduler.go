@@ -95,7 +95,7 @@ func (s *Scheduler) record(name string, interval time.Duration, started time.Tim
 	st.Runs++
 	if err != nil {
 		st.LastError = err.Error()
-		s.log.Error("фоновая задача завершилась ошибкой", "job", name, "err", err)
+		s.log.Error("background task failed", "job", name, "err", err)
 	} else {
 		st.LastError = ""
 	}

@@ -270,7 +270,8 @@ func (s *Server) handleTopology(w http.ResponseWriter, r *http.Request) {
 		fail(w, r, err)
 		return
 	}
-	g := topology.Build(r.Context(), snap)
+	// Находки на узлах карты — на языке запроса, как и в «Проблемах».
+	g := topology.Build(r.Context(), model.LocalizeSnapshot(msgs.LangFromRequest(r), snap))
 	s.enrichTopology(r.Context(), g)
 	writeJSON(w, http.StatusOK, g)
 }

@@ -194,7 +194,7 @@ func (m *Manager) installOverTunnel(ctx context.Context, hostID int64, host stor
 		// a newer StartInstall for the same host must not still be able to
 		// write that host's status once it eventually unwinds.
 		if m.isCurrentJob(hostID, job) {
-			_ = m.db.SetHostStatus(ctx, hostID, store.HostStatusError, err.Error())
+			_ = m.db.SetHostStatus(ctx, hostID, store.HostStatusError, store.HostError(err))
 		}
 		return err
 	}

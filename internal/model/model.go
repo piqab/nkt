@@ -952,6 +952,8 @@ type HostInfo struct {
 	Kernel   string   `json:"kernel"`
 	OS       string   `json:"os"`
 	Notes    []string `json:"notes,omitempty"`
+	// NoteRefs — ключи каталога для Notes, позиция в позицию.
+	NoteRefs []TextRef `json:"-"`
 	// UptimeS — секунды с загрузки хоста (см. collect.HostInfo).
 	UptimeS int64 `json:"uptime_s,omitempty"`
 }

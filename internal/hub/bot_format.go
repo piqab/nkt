@@ -257,7 +257,7 @@ func hostState(lang msgs.Lang, h hostWithOverview) (string, int, string) {
 	f := h.Findings
 	switch {
 	case h.Status == store.HostStatusError:
-		msg := strings.TrimSpace(strings.SplitN(h.ErrorMsg, "\n", 2)[0])
+		msg := strings.TrimSpace(strings.SplitN(h.LocalizedError(lang), "\n", 2)[0])
 		return "🔴", 0, msgs.T(lang, "tg.hostError", trimRunes(msg, 80))
 	case h.Reachable != nil && !*h.Reachable:
 		return "🔴", 0, msgs.T(lang, "tg.hostDown")

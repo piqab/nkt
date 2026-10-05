@@ -348,7 +348,11 @@ func (m *Manager) Kubeconfig(ctx context.Context, serverAddr string) (string, er
 	}
 	raw, err := m.c.ReadFile(path)
 	if err != nil {
-		// Файл читается только root — через runner.
+		// Файл читается только root — через runner; без него (снапшот)
+		// читать нечем.
+		if m.run == nil {
+			return "", msgs.Errorf("k8s.kubeconfigRead", err)
+		}
 		out, rerr := m.run(ctx, "cat", path)
 		if rerr != nil || out.ExitCode != 0 {
 			return "", msgs.Errorf("k8s.kubeconfigRead", err)

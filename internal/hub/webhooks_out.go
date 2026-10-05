@@ -157,7 +157,7 @@ func (m *Manager) emitOut(ev OutEvent) {
 	select {
 	case d.queue <- ev:
 	default:
-		m.log.Warn("очередь исходящих вебхуков полна, событие пропущено", "kind", ev.Kind)
+		m.log.Warn("outgoing webhook queue full, event dropped", "kind", ev.Kind)
 	}
 }
 
@@ -287,7 +287,7 @@ func (m *Manager) deliverOut(ctx context.Context, h OutHook, ev OutEvent, retry 
 	d.status[h.ID] = st
 	d.mu.Unlock()
 	if st.Err != "" {
-		m.log.Warn("исходящий вебхук не доставлен", "hook", h.Name, "kind", ev.Kind, "err", st.Err)
+		m.log.Warn("outgoing webhook not delivered", "hook", h.Name, "kind", ev.Kind, "err", st.Err)
 	}
 	return st
 }

@@ -233,7 +233,7 @@ func hostToExport(h Host) HostExport {
 		SecretEnc: h.SecretEnc, Arch: h.Arch, Status: h.Status, NktVersion: h.NktVersion,
 		AdminUser: h.AdminUser, AdminPasswordEnc: h.AdminPasswordEnc, SudoStatus: h.SudoStatus,
 		TerminalEnabled: h.TerminalEnabled, AptViaHub: h.AptViaHub, TunnelEnabled: h.TunnelEnabled, TunnelTokenEnc: h.TunnelTokenEnc,
-		ErrorMsg: h.ErrorMsg, CreatedAt: h.CreatedAt, LastSeenAt: h.LastSeenAt,
+		ErrorMsg: h.RawError(), CreatedAt: h.CreatedAt, LastSeenAt: h.LastSeenAt,
 		Group: h.Group, Via: h.Via, BinaryVia: h.BinaryVia, K8sRole: h.K8sRole, SSHHostKey: h.SSHHostKey,
 		APIPort: h.APIPort,
 	}

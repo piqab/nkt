@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -43,7 +44,7 @@ func runHubDelete(opts commandOptions, log *slog.Logger) error {
 		return err
 	}
 	if cfg.Mode != config.ModeHub {
-		return fmt.Errorf("nkt hub delete требует NKT_MODE=hub, сейчас %q", cfg.Mode)
+		return msgs.Errorf("cli.needsHubMode", "nkt hub delete", cfg.Mode)
 	}
 
 	db, err := store.Open(cfg.DBPath())
@@ -59,7 +60,7 @@ func runHubDelete(opts commandOptions, log *slog.Logger) error {
 
 	key, err := secretbox.ResolveKey(cfg.HubMasterKey, cfg.HubKeyFile())
 	if err != nil {
-		return fmt.Errorf("ключ шифрования секретов хаба: %w", err)
+		return msgs.Errorf("cli.hubKey", err)
 	}
 	manager := hub.NewManager(cfg, db, key, version, log)
 
@@ -75,7 +76,7 @@ func runHubDelete(opts commandOptions, log *slog.Logger) error {
 			return err
 		}
 		if !ok {
-			fmt.Println("Отменено, ничего не удалено.")
+			fmt.Println(cli("cli.delete.canceled"))
 			return nil
 		}
 	}
@@ -88,24 +89,16 @@ func runHubDelete(opts commandOptions, log *slog.Logger) error {
 	stopHubUnit(log)
 
 	if err := db.Close(); err != nil {
-		log.Warn("закрытие базы перед удалением", "err", err)
+		log.Warn("closing the database before deletion", "err", err)
 	}
 	closed = true
 
-	fmt.Printf("Стираю %s…\n", cfg.DataDir)
+	fmt.Print(cli("cli.delete.wiping", cfg.DataDir))
 	if err := wipeHubData(cfg); err != nil {
-		return fmt.Errorf("удаление данных хаба: %w", err)
+		return msgs.Errorf("cli.delete.failed", err)
 	}
 
-	fmt.Printf(
-		"Готово: ключ шифрования, база (включая SSH- и admin-секреты всех подключённых "+
-			"хостов), история конфигов и TLS-ключ в %s затёрты и удалены; кэш бинарников и "+
-			"Go-тулчейн — просто удалены (в них нет секретов, только публичный код).\n"+
-			"Сами хосты и установленный на них nkt это не трогает — только то, что хаб о них знал.\n"+
-			"Бинарник и systemd-юнит хаба остались на месте: `sudo systemctl start "+
-			"netknownsthat-hub` поднимет полностью новый хаб — новый ключ, новая учётная "+
-			"запись администратора.\n",
-		cfg.DataDir)
+	fmt.Print(cli("cli.delete.done", cfg.DataDir))
 	return nil
 }
 
@@ -130,14 +123,12 @@ func offerExport(ctx context.Context, manager *hub.Manager, opts commandOptions,
 		// must still be able to finish.
 		return writeHubExport(ctx, manager, opts.export, os.Getenv("NKT_HUB_EXPORT_PASSWORD"))
 	case opts.yes:
-		return fmt.Errorf(
-			"с -yes нужно явно указать -export <файл> или -no-export — без терминала нечем " +
-				"спросить, нужен ли бэкап перед необратимым удалением")
+		return msgs.Errorf("cli.delete.yesNeedsExport")
 	case !term.IsTerminal(int(os.Stdin.Fd())):
-		return fmt.Errorf("стандартный ввод не терминал — укажите -export <файл> или -no-export явно")
+		return msgs.Errorf("cli.delete.noTerminal")
 	}
 
-	fmt.Print("Сохранить экспорт хостов с ключом перед удалением, для восстановления? [Y/n]: ")
+	fmt.Print(cli("cli.delete.askExport"))
 	answer, err := stdin.ReadString('\n')
 	if err != nil && answer == "" {
 		return err
@@ -146,14 +137,14 @@ func offerExport(ctx context.Context, manager *hub.Manager, opts commandOptions,
 		return nil
 	}
 
-	fmt.Print("Куда сохранить файл экспорта: ")
+	fmt.Print(cli("cli.delete.askPath"))
 	path, err := stdin.ReadString('\n')
 	if err != nil && path == "" {
 		return err
 	}
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return fmt.Errorf("путь для экспорта не указан")
+		return msgs.Errorf("cli.delete.noPath")
 	}
 
 	password, err := promptExportPassword(stdin)
@@ -171,13 +162,11 @@ func offerExport(ctx context.Context, manager *hub.Manager, opts commandOptions,
 // happens, this function's job is just collecting the choice.
 func promptExportPassword(stdin *bufio.Reader) (string, error) {
 	fmt.Println()
-	fmt.Println("Файл экспорта — открытый JSON с ключом шифрования хаба и SSH-/admin-секретами")
-	fmt.Println("всех хостов внутри: у кого окажется файл, у того и они. НАСТОЯТЕЛЬНО")
-	fmt.Println("рекомендуется зашифровать его паролем прямо сейчас, а не хранить как есть.")
+	fmt.Println(cli("cli.export.warn"))
 
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {
-		fmt.Print("Пароль для шифрования файла (пусто — не шифровать, не рекомендуется): ")
+		fmt.Print(cli("cli.export.askPassword"))
 		line, err := stdin.ReadString('\n')
 		if err != nil && line == "" {
 			return "", err
@@ -185,7 +174,7 @@ func promptExportPassword(stdin *bufio.Reader) (string, error) {
 		return strings.TrimSpace(line), nil
 	}
 
-	fmt.Print("Пароль для шифрования файла (пусто — не шифровать, не рекомендуется): ")
+	fmt.Print(cli("cli.export.askPassword"))
 	first, err := term.ReadPassword(fd)
 	fmt.Println()
 	if err != nil {
@@ -194,14 +183,14 @@ func promptExportPassword(stdin *bufio.Reader) (string, error) {
 	if len(first) == 0 {
 		return "", nil
 	}
-	fmt.Print("Повторите пароль: ")
+	fmt.Print(cli("cli.passwordRepeat"))
 	second, err := term.ReadPassword(fd)
 	fmt.Println()
 	if err != nil {
 		return "", err
 	}
 	if string(first) != string(second) {
-		return "", fmt.Errorf("пароли не совпадают")
+		return "", msgs.Errorf("cli.passwordMismatch")
 	}
 	return string(first), nil
 }
@@ -215,39 +204,29 @@ func promptExportPassword(stdin *bufio.Reader) (string, error) {
 func writeHubExport(ctx context.Context, manager *hub.Manager, path, password string) error {
 	export, err := manager.ExportHosts(ctx, true)
 	if err != nil {
-		return fmt.Errorf("подготовка экспорта: %w", err)
+		return msgs.Errorf("cli.export.prepare", err)
 	}
 	data, err := json.MarshalIndent(export, "", "  ")
 	if err != nil {
-		return fmt.Errorf("сериализация экспорта: %w", err)
+		return msgs.Errorf("cli.export.marshal", err)
 	}
 
 	encrypted := password != ""
 	if encrypted {
 		data, err = secretbox.EncryptWithPassword(password, data)
 		if err != nil {
-			return fmt.Errorf("шифрование экспорта паролем: %w", err)
+			return msgs.Errorf("cli.export.encrypt", err)
 		}
 	}
 	if err := os.WriteFile(path, data, 0o600); err != nil {
-		return fmt.Errorf("запись %s: %w", path, err)
+		return msgs.Errorf("cli.export.write", path, err)
 	}
 
 	if encrypted {
-		fmt.Printf(
-			"Экспорт с ключом зашифрован паролем и сохранён в %s (%d хостов). Восстановить его "+
-				"обратно — `nkt hub import -file %s`. Без пароля файл бесполезен, но храните "+
-				"пароль отдельно от файла (не рядом, не в той же переписке) — иначе шифрование "+
-				"ничего не даёт.\n",
-			path, len(export.Hosts), path)
+		fmt.Print(cli("cli.export.savedEncrypted", path, len(export.Hosts), path))
 		return nil
 	}
-	fmt.Printf(
-		"\n!!! Экспорт с ключом сохранён БЕЗ ШИФРОВАНИЯ в %s (%d хостов). !!!\n"+
-			"Это открытый файл: ключ шифрования хаба и SSH-/admin-секреты всех хостов читаются "+
-			"из него напрямую, без пароля. Храните и передавайте его так же осторожно, как файл "+
-			"с паролями, и удалите сразу после того, как он больше не нужен.\n\n",
-		path, len(export.Hosts))
+	fmt.Print(cli("cli.export.savedPlain", path, len(export.Hosts)))
 	return nil
 }
 
@@ -257,18 +236,12 @@ func writeHubExport(ctx context.Context, manager *hub.Manager, path, password st
 // click to undo-by-not-clicking; this one has nothing to undo at all once
 // it runs.
 func confirmHubDelete(cfg *config.Config, stdin *bufio.Reader) (bool, error) {
-	fmt.Printf(
-		"\nВНИМАНИЕ: необратимо сотрёт (с затиранием содержимого, не просто rm) ключ "+
-			"шифрования, базу хаба — включая SSH- и admin-секреты ВСЕХ подключённых хостов — "+
-			"кэш бинарников и историю конфигов в %s.\n"+
-			"Сами управляемые хосты и nkt на них не трогает — только то, что этот хаб о них знал.\n\n"+
-			"Наберите «удалить», чтобы продолжить: ",
-		cfg.DataDir)
+	fmt.Print(cli("cli.delete.confirm", cfg.DataDir, cli("cli.delete.word")))
 	line, err := stdin.ReadString('\n')
 	if err != nil && line == "" {
 		return false, err
 	}
-	return strings.TrimSpace(line) == "удалить", nil
+	return strings.TrimSpace(line) == cli("cli.delete.word"), nil
 }
 
 // wipeHubData shreds only what can actually hold a secret, then removes
@@ -306,7 +279,7 @@ func wipeHubData(cfg *config.Config) error {
 	}
 	for _, path := range shred {
 		if err := secretbox.SecureWipeDir(path); err != nil {
-			return fmt.Errorf("затирание %s: %w", path, err)
+			return msgs.Errorf("cli.delete.shred", path, err)
 		}
 	}
 
@@ -315,7 +288,7 @@ func wipeHubData(cfg *config.Config) error {
 	// command feel hung. A plain recursive delete is the entire point.
 	for _, path := range []string{cfg.HubBinCacheDir(), cfg.HubGoToolchainDir()} {
 		if err := os.RemoveAll(path); err != nil {
-			return fmt.Errorf("удаление %s: %w", path, err)
+			return msgs.Errorf("cli.delete.remove", path, err)
 		}
 	}
 

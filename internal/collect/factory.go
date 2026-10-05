@@ -13,10 +13,11 @@ func New(mode, fixturesRoot, dockerSocket, podmanSocket string, commandTimeout t
 	case "fixtures":
 		st, err := os.Stat(fixturesRoot)
 		if err != nil {
-			hint := "запускайте из корня репозитория или задайте NKT_FIXTURES_ROOT"
+			// Подсказка — тоже ошибка каталога: переводится вместе с
+			// внешним текстом.
+			hint := msgs.Errorf("collect.snapshotHintRepo")
 			if runtime.GOOS == "linux" {
-				hint = "если это боевой хост, нужен режим NKT_MODE=local; " +
-					"для снапшота — запуск из корня репозитория или NKT_FIXTURES_ROOT"
+				hint = msgs.Errorf("collect.snapshotHintLinux")
 			}
 			return nil, msgs.Errorf("collect.snapshotDirectoryFound", fixturesRoot, hint)
 		}

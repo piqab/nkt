@@ -15,6 +15,11 @@ title: Command line and configuration
 | `nkt hub` | the [hub](/en/guide/hub); `nkt hub import` restores the registry, `nkt hub delete` removes the hub's data completely |
 | `nkt version` | the version |
 
+The command language follows the terminal locale: `LANG=ru_RU.UTF-8` (or
+`LC_ALL`, `LC_MESSAGES`) — Russian, anything else — English. The service
+journal (`journalctl -u netknownsthat`) is always in English, whatever the
+interface language.
+
 ## Terminal UI
 
 `nkt tui` shows the same data in the terminal: overview, findings, the

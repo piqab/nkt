@@ -42,7 +42,7 @@ func (s *Server) handleUIError(w http.ResponseWriter, r *http.Request) {
 	}
 	user := auth.Username(r.Context())
 
-	s.log.Warn("ошибка отрисовки интерфейса",
+	s.log.Warn("UI render error",
 		"user", user,
 		"section", trim(req.Section),
 		"message", trim(req.Message),

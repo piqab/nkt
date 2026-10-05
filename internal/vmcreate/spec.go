@@ -39,6 +39,19 @@ type Tool struct {
 	// Alternative — команда, которая заменяет эту. Из пары нужна любая.
 	Alternative string `json:"alternative,omitempty"`
 	Present     bool   `json:"present"`
+	whyKey      string
+}
+
+// Localized — то же с пояснениями на языке lang.
+func Localized(lang msgs.Lang, tools []Tool) []Tool {
+	out := make([]Tool, len(tools))
+	for i, t := range tools {
+		if t.whyKey != "" {
+			t.Why = msgs.T(lang, t.whyKey)
+		}
+		out[i] = t
+	}
+	return out
 }
 
 // Tools — что должно быть на хосте, чтобы создание машин работало.
@@ -47,14 +60,15 @@ type Tool struct {
 // nkt, и предлагать установку того, чего в их репозиториях нет, было бы
 // нечестно.
 func Tools() []Tool {
-	return []Tool{
-		{Command: "qemu-img", Package: "qemu-utils", Why: "делает диск машины из образа"},
-		{Command: "virsh", Package: "libvirt-clients", Why: "определяет и запускает машину"},
+	tools := []Tool{
+		{Command: "qemu-img", Package: "qemu-utils", whyKey: "vmcreate.why.qemuImg"},
+		{Command: "virsh", Package: "libvirt-clients", whyKey: "vmcreate.why.virsh"},
 		{Command: "cloud-localds", Package: "cloud-image-utils",
-			Why: "собирает настройки первого запуска", Alternative: "genisoimage"},
+			whyKey: "vmcreate.why.cloudLocalds", Alternative: "genisoimage"},
 		{Command: "genisoimage", Package: "genisoimage",
-			Why: "то же самое, если нет cloud-localds", Alternative: "cloud-localds"},
+			whyKey: "vmcreate.why.genisoimage", Alternative: "cloud-localds"},
 	}
+	return Localized(msgs.DefaultLang, tools)
 }
 
 // MissingTools отвечает, чего не хватает. Пара с заменой считается

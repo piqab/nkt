@@ -132,7 +132,7 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.auth.ClearSessionCookie(w)
-	s.db.Audit(r.Context(), user.Username, "auth.password", "", "ok", "все сессии завершены")
+	s.db.Audit(r.Context(), user.Username, "auth.password", "", "ok", map[string]any{"sessions_closed": true})
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": msgs.Tc(r.Context(), "api.passwordChangedLoginAgain")})
 }
 

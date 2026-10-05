@@ -284,7 +284,7 @@ func (m *Manager) run(ctx context.Context, id int64, queue string) {
 
 	job, err := m.db.JobByID(context.Background(), id)
 	if err != nil {
-		m.log.Error("задание не прочитано", "id", id, "err", err)
+		m.log.Error("job not read", "id", id, "err", err)
 		return
 	}
 	m.mu.Lock()
@@ -298,7 +298,7 @@ func (m *Manager) run(ctx context.Context, id int64, queue string) {
 	}
 
 	if err := m.db.MarkJobRunning(context.Background(), id); err != nil {
-		m.log.Error("задание не отмечено идущим", "id", id, "err", err)
+		m.log.Error("job not marked running", "id", id, "err", err)
 	}
 	m.notifyJob(id)
 
@@ -336,7 +336,7 @@ func (m *Manager) run(ctx context.Context, id int64, queue string) {
 		_ = m.db.SetJobErrorKey(context.Background(), id, key, args)
 	}
 	if err := m.db.FinishJob(context.Background(), id, status, msg); err != nil {
-		m.log.Error("исход задания не записан", "id", id, "err", err)
+		m.log.Error("job outcome not recorded", "id", id, "err", err)
 	}
 	m.notifyJob(id)
 	m.closeWatchers(id)
@@ -478,7 +478,7 @@ func (m *Manager) appendLog(id int64, text string) {
 
 func (m *Manager) appendLogKey(id int64, text, key, args string) {
 	if err := m.db.AppendJobLogKey(context.Background(), id, text, key, args); err != nil {
-		m.log.Error("строка журнала задания не записана", "id", id, "err", err)
+		m.log.Error("job log line not recorded", "id", id, "err", err)
 		return
 	}
 	m.notify(id, Update{Line: &store.JobLogLine{Text: text, Key: key, Args: args}})
@@ -502,7 +502,7 @@ func argsIf(errKey, args string) string {
 
 func (m *Manager) setStepKey(id int64, n, total int, name, key, args string) {
 	if err := m.db.SetJobStepKey(context.Background(), id, n, total, name, key, args); err != nil {
-		m.log.Error("шаг задания не записан", "id", id, "err", err)
+		m.log.Error("job step not recorded", "id", id, "err", err)
 		return
 	}
 	m.notifyJob(id)
@@ -510,14 +510,14 @@ func (m *Manager) setStepKey(id int64, n, total int, name, key, args string) {
 
 func (m *Manager) setStep(id int64, n, total int, name string) {
 	if err := m.db.SetJobStep(context.Background(), id, n, total, name); err != nil {
-		m.log.Error("шаг задания не записан", "id", id, "err", err)
+		m.log.Error("job step not recorded", "id", id, "err", err)
 	}
 	m.notifyJob(id)
 }
 
 func (m *Manager) setResume(id int64, resume string) {
 	if err := m.db.SetJobResume(context.Background(), id, resume); err != nil {
-		m.log.Error("состояние продолжения не записано", "id", id, "err", err)
+		m.log.Error("job resume state not recorded", "id", id, "err", err)
 	}
 }
 
@@ -577,7 +577,7 @@ func (m *Manager) countResume(ctx context.Context, id int64) int {
 func (m *Manager) runSafely(ctx context.Context, runner Runner, jc *Context) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
-			m.log.Error("задание упало", "id", jc.Job.ID, "kind", jc.Job.Kind, "panic", p, "stack", string(debug.Stack()))
+			m.log.Error("job panicked", "id", jc.Job.ID, "kind", jc.Job.Kind, "panic", p, "stack", string(debug.Stack()))
 			err = msgs.Errorf("jobs.panicked", fmt.Sprint(p))
 		}
 	}()

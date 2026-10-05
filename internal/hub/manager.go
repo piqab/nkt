@@ -915,7 +915,8 @@ func (m *Manager) CancelInstall(ctx context.Context, hostID int64) error {
 	job := m.jobByHost[hostID]
 	m.jobsMu.Unlock()
 
-	message := msgs.Tc(ctx, "hub.installCanceledByUser")
+	reason := msgs.Errorf("hub.installCanceledByUser")
+	message := store.HostError(reason)
 	if job == nil || job.isDone() {
 		return m.db.SetHostStatus(ctx, hostID, store.HostStatusError, message)
 	}
@@ -927,7 +928,7 @@ func (m *Manager) CancelInstall(ctx context.Context, hostID int64) error {
 		_ = m.jobs.Cancel(ctx, job.jobID)
 	}
 	job.cancelNow()
-	job.finish(errors.New(message))
+	job.finish(reason)
 	return m.db.SetHostStatus(ctx, hostID, store.HostStatusError, message)
 }
 
@@ -947,7 +948,7 @@ func (m *Manager) install(ctx context.Context, hostID int64, job *installJob) er
 
 	fail := func(err error) error {
 		if m.isCurrentJob(hostID, job) {
-			_ = m.db.SetHostStatus(ctx, hostID, store.HostStatusError, err.Error())
+			_ = m.db.SetHostStatus(ctx, hostID, store.HostStatusError, store.HostError(err))
 		}
 		return err
 	}

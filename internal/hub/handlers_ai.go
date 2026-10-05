@@ -272,7 +272,7 @@ func (s *Server) aiHostContext(ctx context.Context, hostID int64) (string, []str
 			name = h.Name
 			if ov, ok := s.hub.Overview(hostID); ok {
 				snap = nil
-				return fmt.Sprintf("%s (%s)", name, hostSummary(ov)), nil
+				return fmt.Sprintf("%s (%s)", name, hostSummary(ctx, ov)), nil
 			}
 		}
 	}
@@ -285,25 +285,26 @@ func (s *Server) aiHostContext(ctx context.Context, hostID int64) (string, []str
 		if len(around) >= 12 {
 			break
 		}
-		access := "локальный"
+		// Справка для модели — на языке запроса, как и сама инструкция.
+		access := msgs.Tc(ctx, "ai.ctx.portLocal")
 		if l.Public() {
-			access = "публичный"
+			access = msgs.Tc(ctx, "ai.ctx.portPublic")
 		}
-		around = append(around, fmt.Sprintf("порт %d/%s %s, процесс %s", l.Port, l.Protocol, access, l.Process))
+		around = append(around, msgs.Tc(ctx, "ai.ctx.port", l.Port, l.Protocol, access, l.Process))
 	}
 	for _, c := range snap.Container {
 		if len(around) >= 20 {
 			break
 		}
-		around = append(around, fmt.Sprintf("контейнер %s (%s), запущен: %t", c.Name, c.Image, c.Running))
+		around = append(around, msgs.Tc(ctx, "ai.ctx.container", c.Name, c.Image, c.Running))
 	}
 	if len(snap.Firewall.Managers) > 0 {
 		var fw []string
 		for _, mgr := range snap.Firewall.Managers {
 			if mgr.Installed {
-				state := "выключен"
+				state := msgs.Tc(ctx, "ai.ctx.fwOff")
 				if mgr.Active {
-					state = "включён"
+					state = msgs.Tc(ctx, "ai.ctx.fwOn")
 				}
 				fw = append(fw, fmt.Sprintf("%s: %s %s", mgr.Name, state, mgr.Policy))
 			}
@@ -315,8 +316,8 @@ func (s *Server) aiHostContext(ctx context.Context, hostID int64) (string, []str
 	return head, around
 }
 
-func hostSummary(ov HostOverview) string {
-	return fmt.Sprintf("проблем: critical %d, high %d", ov.Findings["critical"], ov.Findings["high"])
+func hostSummary(ctx context.Context, ov HostOverview) string {
+	return msgs.Tc(ctx, "ai.ctx.hostSummary", ov.Findings["critical"], ov.Findings["high"])
 }
 
 // localSnapshot — снимок собственной машины хаба, если он есть.
@@ -404,20 +405,20 @@ func (s *Server) aiHubLines(ctx context.Context) []string {
 		return nil
 	}
 	out := make([]string, 0, len(hosts)+1)
-	out = append(out, "Хосты хаба:")
+	out = append(out, msgs.Tc(ctx, "ai.ctx.hubHosts"))
 	for _, h := range hosts {
-		line := fmt.Sprintf("- %s (%s), статус %s", h.Name, h.Addr, h.Status)
+		line := msgs.Tc(ctx, "ai.ctx.hubHost", h.Name, h.Addr, h.Status)
 		if h.Group != "" {
-			line += ", группа " + h.Group
+			line += msgs.Tc(ctx, "ai.ctx.group", h.Group)
 		}
 		if h.ClusterID != 0 {
-			line += fmt.Sprintf(", узел кластера %d, роль %s", h.ClusterID, h.K8sRole)
+			line += msgs.Tc(ctx, "ai.ctx.clusterNode", h.ClusterID, h.K8sRole)
 		}
 		if h.ParentID != 0 {
-			line += ", машина на другом хосте"
+			line += msgs.Tc(ctx, "ai.ctx.vmOnHost")
 		}
 		if ov, ok := s.hub.Overview(h.ID); ok {
-			line += fmt.Sprintf(", проблем critical %d / high %d", ov.Findings["critical"], ov.Findings["high"])
+			line += msgs.Tc(ctx, "ai.ctx.problems", ov.Findings["critical"], ov.Findings["high"])
 		}
 		out = append(out, line)
 	}

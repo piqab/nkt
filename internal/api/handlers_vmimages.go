@@ -32,7 +32,7 @@ func (s *Server) handleVMImages(w http.ResponseWriter, r *http.Request) {
 	}
 	// Заодно отвечаем, чем на этом хосте машины вообще создавать: без
 	// qemu-img и virsh форма создания только обманывала бы ожидания.
-	tools := vmcreate.CheckTools(r.Context(), RunTooling)
+	tools := vmcreate.Localized(msgs.LangFromRequest(r), vmcreate.CheckTools(r.Context(), RunTooling))
 	writeJSON(w, http.StatusOK, map[string]any{
 		"catalog": vmimage.Catalog,
 		"local":   s.vmimages.Status(),

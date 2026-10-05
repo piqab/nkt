@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"log/slog"
 	"os"
 	"sort"
@@ -25,7 +26,7 @@ import (
 // never touches disk.
 func runHubImport(opts commandOptions, log *slog.Logger) error {
 	if opts.file == "" {
-		return fmt.Errorf("укажите файл экспорта: nkt hub import -file <файл>")
+		return msgs.Errorf("cli.import.noFile")
 	}
 
 	cfg, err := config.Load()
@@ -33,7 +34,7 @@ func runHubImport(opts commandOptions, log *slog.Logger) error {
 		return err
 	}
 	if cfg.Mode != config.ModeHub {
-		return fmt.Errorf("nkt hub import требует NKT_MODE=hub, сейчас %q", cfg.Mode)
+		return msgs.Errorf("cli.needsHubMode", "nkt hub import", cfg.Mode)
 	}
 
 	db, err := store.Open(cfg.DBPath())
@@ -44,13 +45,13 @@ func runHubImport(opts commandOptions, log *slog.Logger) error {
 
 	key, err := secretbox.ResolveKey(cfg.HubMasterKey, cfg.HubKeyFile())
 	if err != nil {
-		return fmt.Errorf("ключ шифрования секретов хаба: %w", err)
+		return msgs.Errorf("cli.hubKey", err)
 	}
 	manager := hub.NewManager(cfg, db, key, version, log)
 
 	data, err := os.ReadFile(opts.file)
 	if err != nil {
-		return fmt.Errorf("чтение %s: %w", opts.file, err)
+		return msgs.Errorf("cli.import.read", opts.file, err)
 	}
 
 	if secretbox.IsPasswordEncrypted(data) {
@@ -71,7 +72,7 @@ func runHubImport(opts commandOptions, log *slog.Logger) error {
 
 	// Из командной строки совпадения по имени пропускаются: заменить
 	// существующее можно в окне импорта хаба, там выбор поштучный.
-	rep := manager.ImportHosts(context.Background(), export, nil)
+	rep := manager.ImportHosts(msgs.WithLang(context.Background(), cliLang()), export, nil)
 	sections := make([]string, 0, len(rep.Sections))
 	for name := range rep.Sections {
 		sections = append(sections, name)
@@ -79,16 +80,16 @@ func runHubImport(opts commandOptions, log *slog.Logger) error {
 	sort.Strings(sections)
 	for _, name := range sections {
 		c := rep.Sections[name]
-		fmt.Printf("%s: добавлено %d, заменено %d, пропущено (уже есть) %d\n", name, c.Added, c.Replaced, c.Skipped)
+		fmt.Print(cli("cli.import.section", name, c.Added, c.Replaced, c.Skipped))
 	}
 	// Ошибки несут имена из файла импорта — без переводов строк, чтобы
 	// чужой файл не подделал соседние строки вывода.
 	oneLine := strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
 	for _, e := range rep.Errors {
-		fmt.Printf("  ошибка: %s\n", oneLine.Replace(e))
+		fmt.Print(cli("cli.import.error", oneLine.Replace(e)))
 	}
 	if len(rep.Errors) > 0 {
-		return fmt.Errorf("ошибок при импорте: %d", len(rep.Errors))
+		return msgs.Errorf("cli.import.errors", len(rep.Errors))
 	}
 	return nil
 }
@@ -104,10 +105,9 @@ func readImportPassword() (string, error) {
 	}
 	fd := int(os.Stdin.Fd())
 	if !term.IsTerminal(fd) {
-		return "", fmt.Errorf(
-			"файл зашифрован паролем, а стандартный ввод не терминал — задайте NKT_HUB_EXPORT_PASSWORD")
+		return "", msgs.Errorf("cli.import.noTerminal")
 	}
-	fmt.Print("Файл зашифрован паролем. Пароль: ")
+	fmt.Print(cli("cli.import.askPassword"))
 	pw, err := term.ReadPassword(fd)
 	fmt.Println()
 	if err != nil {

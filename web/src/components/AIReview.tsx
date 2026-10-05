@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Button } from 'antd'
 import { BulbOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import { api, useApi } from '../api'
 import { AI_REQUEST_TIMEOUT_MS, AIRequestView, Thinking, useElapsed, type AIRequest } from './AIExplain'
 import { Banner, Card, formatDateTime } from './ui'
@@ -55,23 +56,23 @@ function ShowRequest({ request }: { request?: AIRequest }) {
 
 /** Карта → строки для модели. Берётся то, что важно для архитектуры:
  * что это, в каком состоянии, публично ли, с чем связано. */
-export function graphToLines(g: Graph): string[] {
+export function graphToLines(g: Graph, t: TFunction): string[] {
   const byID = new Map(g.nodes.map((n) => [n.id, n]))
   const lines: string[] = []
-  lines.push(`Узлов: ${g.nodes.length}, связей: ${(g.edges ?? []).length}`)
+  lines.push(t('ai.graph.summary', { nodes: g.nodes.length, edges: (g.edges ?? []).length }))
   for (const n of g.nodes) {
     const bits = [`${n.kind}: ${n.label}`]
     if (n.sublabel) bits.push(n.sublabel)
-    if (n.port) bits.push(`порт ${n.port}`)
-    if (n.public) bits.push('доступен снаружи')
-    if (n.status && n.status !== 'ok') bits.push(`состояние ${n.status}`)
-    if (n.findings) bits.push(`проблем: ${n.findings}${n.severity ? ` (${n.severity})` : ''}`)
+    if (n.port) bits.push(t('ai.graph.port', { port: n.port }))
+    if (n.public) bits.push(t('ai.graph.public'))
+    if (n.status && n.status !== 'ok') bits.push(t('ai.graph.state', { state: n.status }))
+    if (n.findings) bits.push(t('ai.graph.problems', { count: n.findings }) + (n.severity ? ` (${n.severity})` : ''))
     lines.push('- ' + bits.join(', '))
   }
   for (const e of g.edges ?? []) {
     const from = byID.get(e.from)?.label ?? e.from
     const to = byID.get(e.to)?.label ?? e.to
-    lines.push(`- связь: ${from} → ${to}${e.label ? ` (${e.label})` : ''}${e.status && e.status !== 'ok' ? `, ${e.status}` : ''}`)
+    lines.push(`- ${t('ai.graph.link')}: ${from} → ${to}${e.label ? ` (${e.label})` : ''}${e.status && e.status !== 'ok' ? `, ${e.status}` : ''}`)
   }
   return lines
 }
@@ -107,7 +108,7 @@ export function AIReviewCard({
         body: {
           scope,
           host_id: hostID ?? 0,
-          lines: graph ? graphToLines(graph) : [],
+          lines: graph ? graphToLines(graph, t) : [],
         },
       })
       setAnswer(res)
