@@ -46,7 +46,7 @@ jobs:
           java-version: "17"
           cache: gradle
       - name: Тесты, сборка и подпись
-        working-directory: android
+        working-directory: mobile
         # Секреты — только через окружение; keystore — во временный файл
         # раннера и удаляется сразу после сборки.
         env:
@@ -75,11 +75,11 @@ jobs:
             exit 1
           fi
           chmod +x ./gradlew
-          ./gradlew --no-daemon test assembleRelease -PnktVersionSuffix=-beta
+          ./gradlew --no-daemon testDebugUnitTest :androidApp:assembleRelease -PnktVersionSuffix=-beta
           rm -f "$NKT_ANDROID_KEYSTORE"
           mkdir -p ../dist
           apk="../dist/nkt-android-${{ steps.v.outputs.version }}-beta.apk"
-          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          cp androidApp/build/outputs/apk/release/androidApp-release.apk "$apk"
           "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs "$apk" | head -3
           (cd ../dist && sha256sum nkt-android-*.apk > SHA256SUMS && cat SHA256SUMS)
       - name: Описание релиза

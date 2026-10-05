@@ -4,7 +4,7 @@
 
 # Исключение из правила LF выше: батник Gradle запускается cmd.exe, которому
 # нужны CRLF; с LF он на Windows ломается.
-android/gradlew.bat text eol=crlf
+mobile/gradlew.bat text eol=crlf
 
 # Бинарные и сгенерированные файлы git не трогает.
 *.png binary
@@ -21,7 +21,7 @@ android/gradlew.bat text eol=crlf
 # Снятый вывод терминала: \r там — управляющий символ протокола, а не
 # конец строки. Нормализация CRLF->LF молча испортила бы эти данные и
 # изменила бы то, что проверяют тесты эмулятора.
-android/app/src/test/resources/terminal/** -text
+mobile/shared/terminal/src/androidUnitTest/resources/terminal/** -text
 
 # Собранный фронтенд вшивается в бинарник — в diff его показывать бессмысленно.
 internal/webui/dist/** linguist-generated=true -diff

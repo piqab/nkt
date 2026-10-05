@@ -23,14 +23,15 @@ Thumbs.db
 # Local overrides
 .env
 
-# Android — build output and machine-specific paths. The Gradle wrapper
-# (android/gradlew, android/gradle/wrapper/) IS committed on purpose: it is
-# what lets a fresh clone build without a preinstalled Gradle.
-/android/.gradle/
-/android/build/
-/android/app/build/
-/android/local.properties
-/android/scripts/env.sh
+# Mobile app (mobile/, Kotlin Multiplatform) — the Gradle wrapper IS
+# committed on purpose (a fresh clone builds without a preinstalled Gradle);
+# build output, Kotlin/Native caches and machine paths are not.
+/mobile/.gradle/
+/mobile/.kotlin/
+/mobile/**/build/
+/mobile/local.properties
+/mobile/scripts/env.sh
+/mobile/iosApp/**/xcuserdata/
 
 # Personal/promotional writing — not project documentation, not tracked.
 /articles/
