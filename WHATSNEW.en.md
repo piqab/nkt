@@ -8,6 +8,13 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.155 — 2026-10-05
+
+- **`nkt passwd -random` prints the password only to a terminal.** With
+  redirected output (a file, CI, a journal, `docker compose exec -T`) the
+  command refuses before changing the password — the generated password
+  does not end up in logs in clear text.
+
 ## v1.11.154 — 2026-10-05
 
 - Security check (gosec): the command-line message catalogs are marked as

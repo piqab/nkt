@@ -51,7 +51,7 @@ failed actions — in the audit log.
 | A host is stuck on "installing" | "Cancel" next to the button. After a hub restart it fixes itself |
 | The "Channel" column is always gray "not connected" | The hub can't reach `8078` (`NKT_HUB_TUNNEL_PORT`): open the port for the hub's address, check that nkt on the host is running and the port is free |
 | File upload: some files weren't saved | The connection to the host died in the pool (NAT, sshd restart). The hub replaces a dead connection and retries a file up to three times; the rest — "retry failed". The "skip hidden" checkbox doesn't send `.git`, `.env` and ignored files |
-| Forgotten hub admin password | Docker: `docker compose exec hub nkt passwd -random`. systemd: `sudo systemctl stop netknownsthat-hub && sudo env NKT_MODE=hub NKT_DATA_DIR=/var/lib/netknownsthat-hub nkt passwd -random && sudo systemctl start netknownsthat-hub` |
+| Forgotten hub admin password | Docker: `docker compose exec hub nkt passwd -random`. systemd: `sudo systemctl stop netknownsthat-hub && sudo env NKT_MODE=hub NKT_DATA_DIR=/var/lib/netknownsthat-hub nkt passwd -random && sudo systemctl start netknownsthat-hub`. The password is printed only to a terminal — with redirected output (or `docker compose exec -T`) the command refuses |
 | The hub in Docker doesn't start: the volume belongs to root | The hub in the container is uid 1000: `docker run --rm -v <volume>:/data alpine chown -R 1000:1000 /data` |
 | No "Update" button in "About" | The hub doesn't run as a systemd unit (Docker, Kubernetes or started by hand) — update the image or install the hub as a service |
 

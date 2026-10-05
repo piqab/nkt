@@ -18,7 +18,7 @@ From the command line:
 ```bash
 sudo nkt passwd                      # change the admin password
 sudo nkt passwd ops -role viewer     # a read-only account
-sudo nkt passwd -random              # generate a password
+sudo nkt passwd -random              # generate a password (printed only to a terminal)
 sudo nkt users                       # who exists and who logged in when
 ```
 

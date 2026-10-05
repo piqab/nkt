@@ -18,7 +18,7 @@ title: Доступ и безопасность
 ```bash
 sudo nkt passwd                      # сменить пароль администратора
 sudo nkt passwd ops -role viewer     # учётка только для чтения
-sudo nkt passwd -random              # сгенерировать пароль
+sudo nkt passwd -random              # сгенерировать пароль (печать — только в терминал)
 sudo nkt users                       # кто есть и кто когда входил
 ```
 
