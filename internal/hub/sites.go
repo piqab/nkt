@@ -136,7 +136,7 @@ func (s *Server) siteOutsideEdge(ctx context.Context, t targetHost, domains []st
 	}
 	res, err := runProbe(ctx, sess, checks)
 	if err != nil || len(res.Results) != len(checks) {
-		s.log.Warn("проверка снаружи с edge не удалась — с хаба", "edge", edgeName(st), "err", err)
+		s.log.Warn("outside check via edge failed, checking from the hub", "edge", edgeName(st), "err", err)
 		return SiteCheck{}, false
 	}
 	chk := SiteCheck{Ports: map[string]string{}, Via: edgeName(st)}

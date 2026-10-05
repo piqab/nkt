@@ -74,6 +74,7 @@ func (s *Scanner) Scan(ctx context.Context) (*model.Snapshot, error) {
 			Kernel:   hostInfo.Kernel,
 			OS:       hostInfo.OS,
 			Notes:    hostInfo.Notes,
+			NoteRefs: noteRefs(hostInfo.NoteRefs),
 			UptimeS:  hostInfo.UptimeS,
 		},
 	}
@@ -334,4 +335,13 @@ func (s *Scanner) persist(ctx context.Context, snap *model.Snapshot) error {
 		return err
 	}
 	return s.syncTargets(ctx, snap)
+}
+
+// noteRefs переносит ключи заметок коллектора в снимок.
+func noteRefs(in []collect.NoteRef) []model.TextRef {
+	var out []model.TextRef
+	for _, r := range in {
+		out = append(out, model.TextRef{Key: r.Key, Args: r.Args})
+	}
+	return out
 }

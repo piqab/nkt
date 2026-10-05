@@ -16,7 +16,7 @@ import (
 // аргументом.
 func TestEveryUsedKeyIsInBothCatalogs(t *testing.T) {
 	root := filepath.Join("..", "..")
-	first := regexp.MustCompile(`\b(?:Errorf|Log|report|Msg|logf|warn)\(\s*"([a-z][A-Za-z0-9]*\.[A-Za-z0-9_.]+)"`)
+	first := regexp.MustCompile(`\b(?:Errorf|Log|report|Msg|logf|warn|cli)\(\s*"([a-z][A-Za-z0-9]*\.[A-Za-z0-9_.]+)"`)
 	second := regexp.MustCompile(`\b(?:Tc|T)\(\s*[^,()]+,\s*"([a-z][A-Za-z0-9]*\.[A-Za-z0-9_.]+)"`)
 	used := map[string][]string{}
 	err := filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {

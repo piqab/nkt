@@ -8,6 +8,26 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.153 — 2026-10-05
+
+- **English without Russian leftovers.** The English interface no longer
+  shows Russian text:
+  - finding captions on the Map;
+  - the “same certificate as…” note in Certificates and Problems;
+  - snapshot-mode notes in Overview;
+  - tool explanations in Virtual machines;
+  - a host's install error reason on the hub;
+  - the host details sent to the model (AI);
+  - hints in the `.env` templates of the deployment examples.
+- **The service journal is in English** (`journalctl`), error texts
+  included.
+- **A bilingual command line:** help, `scan`, `users`/`passwd`,
+  `hub delete`/`hub import` — Russian with `LANG=ru*`, English otherwise.
+- A test walks every GET route of the host and the hub in English and
+  fails on any untranslated string.
+- Fixed: the kubeconfig request on the fixtures stand failed with a
+  server error.
+
 ## v1.11.152 — 2026-10-05
 
 - **Android app in English:** the whole interface is translated; the

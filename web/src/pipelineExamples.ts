@@ -16,6 +16,8 @@ export interface PipelineExample {
   envKeys?: Record<string, string[]>
   waitTimeout?: string
   /** Строки шаблона .env (в описание — комментарием). */
+  // Строки .env-шаблона; {ключ} в угловых скобках — подсказка из
+  // deploy.envPh.* (см. envTemplateLines), на языке интерфейса.
   envTemplate?: string[]
 }
 
@@ -47,8 +49,8 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     envTemplate: [
       'APP_SECRET=<openssl rand -hex 32>',
       'TWO_FACTOR_ENCRYPTION_KEY=<openssl rand -hex 32>',
-      'POSTGRES_PASSWORD=<пароль базы>',
-      'DATABASE_URL=postgresql://umami:<пароль базы>@db:5432/umami',
+      'POSTGRES_PASSWORD=<{dbPassword}>',
+      'DATABASE_URL=postgresql://umami:<{dbPassword}>@db:5432/umami',
     ],
   },
   {
@@ -62,10 +64,10 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     envTemplate: [
       'N8N_VERSION=2.41.4',
       'POSTGRES_USER=postgres',
-      'POSTGRES_PASSWORD=<пароль администратора базы>',
+      'POSTGRES_PASSWORD=<{dbAdminPassword}>',
       'POSTGRES_DB=n8n',
       'POSTGRES_NON_ROOT_USER=n8n',
-      'POSTGRES_NON_ROOT_PASSWORD=<пароль базы n8n>',
+      'POSTGRES_NON_ROOT_PASSWORD=<{n8nDbPassword}>',
       'RUNNERS_AUTH_TOKEN=<openssl rand -hex 16>',
       'WEBHOOK_URL=https://n8n.example.com/',
       'N8N_PROXY_HOPS=1',
@@ -80,12 +82,12 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     ports: { forgejo: ['0.0.0.0:2222:2222'] },
     envKeys: { 'forgejo-admin': ['FORGEJO_ADMIN_USER', 'FORGEJO_ADMIN_PASSWORD', 'FORGEJO_ADMIN_EMAIL'] },
     envTemplate: [
-      'POSTGRES_PASSWORD=<пароль базы>',
+      'POSTGRES_PASSWORD=<{dbPassword}>',
       'FORGEJO_DOMAIN=git.example.com',
       'FORGEJO_ROOT_URL=https://git.example.com/',
-      'FORGEJO_ADMIN_USER=<логин администратора; не admin, api, user, org, login… — Forgejo их запрещает>',
-      'FORGEJO_ADMIN_PASSWORD=<пароль администратора>',
-      'FORGEJO_ADMIN_EMAIL=<почта администратора>',
+      'FORGEJO_ADMIN_USER=<{forgejoAdminUser}>',
+      'FORGEJO_ADMIN_PASSWORD=<{adminPassword}>',
+      'FORGEJO_ADMIN_EMAIL=<{adminEmail}>',
     ],
   },
   {
@@ -94,7 +96,7 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
     project: 'wordpress',
     readme: `${NKT}/tree/main/examples/wordpress`,
     site: { service: 'wordpress', port: 80 },
-    envTemplate: ['DB_PASSWORD=<пароль базы WordPress>', 'DB_ROOT_PASSWORD=<пароль root MariaDB>'],
+    envTemplate: ['DB_PASSWORD=<{wpDbPassword}>', 'DB_ROOT_PASSWORD=<{mariadbRootPassword}>'],
   },
   {
     key: 'plausible',
@@ -109,9 +111,14 @@ export const PIPELINE_EXAMPLES: PipelineExample[] = [
       'BASE_URL=https://plausible.example.com',
       'SECRET_KEY_BASE=<openssl rand -base64 48>',
       'TOTP_VAULT_KEY=<openssl rand -base64 32>',
-      'POSTGRES_PASSWORD=<пароль базы>',
-      'DATABASE_URL=postgres://postgres:<пароль базы>@plausible_db:5432/plausible_db',
+      'POSTGRES_PASSWORD=<{dbPassword}>',
+      'DATABASE_URL=postgres://postgres:<{dbPassword}>@plausible_db:5432/plausible_db',
       'DISABLE_REGISTRATION=invite_only',
     ],
   },
 ]
+
+/** Строки .env-шаблона примера с подсказками на языке интерфейса. */
+export function envTemplateLines(lines: string[], t: (key: string) => string): string[] {
+  return lines.map((l) => l.replace(/\{(\w+)\}/g, (_, k: string) => t(`deploy.envPh.${k}`)))
+}

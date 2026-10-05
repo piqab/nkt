@@ -9,7 +9,10 @@ func resolve(lang msgs.Lang, text, key string, args []any) string {
 	if key == "" {
 		return text
 	}
-	return msgs.T(lang, key, args...)
+	// Err.In, not T: an argument may itself be a catalog error (a renewal
+	// explanation inside a "derived certificate" one) and must follow the
+	// same language.
+	return (&msgs.Err{Key: key, Args: args}).In(lang)
 }
 
 // LocalizeSnapshot returns a shallow copy of snap with every translatable
@@ -28,6 +31,13 @@ func LocalizeSnapshot(lang msgs.Lang, snap *Snapshot) *Snapshot {
 	out.Sources = localizeSources(lang, snap.Sources)
 	out.Certs = localizeCerts(lang, snap.Certs)
 	out.Findings = localizeFindings(lang, snap.Findings)
+	if len(snap.Host.NoteRefs) == len(snap.Host.Notes) && len(snap.Host.Notes) > 0 {
+		notes := make([]string, len(snap.Host.Notes))
+		for i, n := range snap.Host.Notes {
+			notes[i] = resolve(lang, n, snap.Host.NoteRefs[i].Key, snap.Host.NoteRefs[i].Args)
+		}
+		out.Host.Notes = notes
+	}
 	return &out
 }
 

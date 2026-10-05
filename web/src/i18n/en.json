@@ -1551,7 +1551,13 @@
     "exposedImageHint": "A container with this image publishes ports {{ports}}: the vulnerability can be reached from the network.",
     "dangerHint": "“By danger”: first what can be reached from the network (the package's service listens beyond loopback, or a container publishes a port), then severity, and among equals what an update fixes. Libraries (such as libssl in nginx) are not linked to services yet.",
     "toPackage": "To package",
-    "toContainers": "To containers"
+    "toContainers": "To containers",
+    "ai": {
+      "package": "package {{name}} {{version}}",
+      "fixedIn": "fixed in {{version}}",
+      "source": "source {{target}}",
+      "noFix": "no fix yet"
+    }
   },
   "availability": {
     "what": "monitoring targets",
@@ -2521,6 +2527,9 @@
       "unit": "systemd unit",
       "suid": "SUID not from a package",
       "hosts-block": "/etc/hosts"
+    },
+    "ai": {
+      "file": "file {{path}}"
     }
   },
   "clamav": {
@@ -3031,7 +3040,15 @@
     "requestAliases": "What was replaced",
     "requestAliasesHint": "(visible to admins only; the model got the aliases on the left)",
     "requestMissing": "This answer predates v1.11.41: only the message was saved, not the instruction or request settings.",
-    "promptMonitoring": "planning from the hub \"Monitoring\" (forecasts and hints)"
+    "promptMonitoring": "planning from the hub \"Monitoring\" (forecasts and hints)",
+    "graph": {
+      "summary": "Nodes: {{nodes}}, links: {{edges}}",
+      "port": "port {{port}}",
+      "public": "reachable from outside",
+      "state": "state {{state}}",
+      "problems": "problems: {{count}}",
+      "link": "link"
+    }
   },
   "editModal": {
     "saved": "saved",
@@ -3545,7 +3562,17 @@
     "unhostStart": "Only remove from selected ({{count}})",
     "unhostHint": "The pipeline stays and runs on the other hosts; the selected hosts leave its description (hosts:) and the stack is removed from them.",
     "experimental": "Experimental feature: a deployment changes stacks on hosts — starts, replaces and removes them, and removes the old stack when the host or the stack name changes. Run the “Dry run” first, try it on test hosts, check the job log.",
-    "envSavedRedeploy": ".env is saved on the hub. It reaches the hosts with the next deployment — press “Deploy”: the webhook and repository polling do not react to a .env change. Containers will be recreated to pick up the new values."
+    "envSavedRedeploy": ".env is saved on the hub. It reaches the hosts with the next deployment — press “Deploy”: the webhook and repository polling do not react to a .env change. Containers will be recreated to pick up the new values.",
+    "envPh": {
+      "dbPassword": "database password",
+      "dbAdminPassword": "database admin password",
+      "n8nDbPassword": "n8n database password",
+      "forgejoAdminUser": "admin login; not admin, api, user, org, login… — Forgejo forbids them",
+      "adminPassword": "admin password",
+      "adminEmail": "admin email",
+      "wpDbPassword": "WordPress database password",
+      "mariadbRootPassword": "MariaDB root password"
+    }
   },
   "edge": {
     "subtitle": "Entry from the internet without exposing the hub: an edge on a VPS accepts only its roles (deployment webhooks and/or signed API token requests), and the hub keeps the tunnel to it. There can be several edges.",

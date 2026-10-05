@@ -75,12 +75,12 @@ func (m *Manager) recordEventKey(ctx context.Context, host store.Host, kind, sev
 		Kind: kind, Severity: severity, Detail: detail, DetailKey: key, DetailArgs: args, Link: link,
 	})
 	if err != nil {
-		m.log.Warn("не удалось записать оповещение", "host", host.Name, "kind", kind, "err", err)
+		m.log.Warn("could not record alert", "host", host.Name, "kind", kind, "err", err)
 		return
 	}
 	eventID = id
 	if err := m.db.PruneHostEvents(ctx, eventKeep); err != nil {
-		m.log.Warn("не удалось подчистить журнал оповещений", "err", err)
+		m.log.Warn("could not prune the alert journal", "err", err)
 	}
 }
 

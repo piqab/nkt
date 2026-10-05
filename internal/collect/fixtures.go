@@ -286,7 +286,9 @@ func (f *Fixtures) Run(ctx context.Context, name string, args ...string) (Comman
 	}
 
 	res.ExitCode = 127
-	res.Stderr = msgs.Tc(ctx, "collect.snapshotHasCannedOutputCommand", strings.Join(argv, " "))
+	// По-английски всегда: это заменитель stderr команды, а команды пишут
+	// по-английски; текст попадает в предупреждения снимка дословно.
+	res.Stderr = msgs.T(msgs.EN, "collect.snapshotHasCannedOutputCommand", strings.Join(argv, " "))
 	return res, nil
 }
 
@@ -445,6 +447,10 @@ func (f *Fixtures) HostInfo(ctx context.Context) HostInfo {
 			msgs.Tc(ctx, "collect.snapshotMode", filepath.ToSlash(f.root)),
 			msgs.Tc(ctx, "collect.snapshotSimulated"),
 		},
+		NoteRefs: []NoteRef{
+			{Key: "collect.snapshotMode", Args: []any{filepath.ToSlash(f.root)}},
+			{Key: "collect.snapshotSimulated"},
+		},
 		UptimeS: readUptimeSeconds(f),
 	}
 	if raw, err := os.ReadFile(filepath.Join(f.root, "etc", "hostname")); err == nil {
@@ -454,6 +460,7 @@ func (f *Fixtures) HostInfo(ctx context.Context) HostInfo {
 	}
 	if runtime.GOOS == "windows" {
 		info.Notes = append(info.Notes, msgs.Tc(ctx, "collect.snapshotWindows"))
+		info.NoteRefs = append(info.NoteRefs, NoteRef{Key: "collect.snapshotWindows"})
 	}
 	return info
 }

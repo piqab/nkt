@@ -276,9 +276,9 @@ function VulnTab({ me }: { me: Me }) {
             title: `${f.id}: ${f.title || f.package}`,
             detail: [
               f.title,
-              `пакет ${f.package} ${f.installed_version}`,
-              f.fixed_version ? `исправлено в ${f.fixed_version}` : 'исправления пока нет',
-              f.target ? `источник ${f.target}` : '',
+              t('vulns.ai.package', { name: f.package, version: f.installed_version }),
+              f.fixed_version ? t('vulns.ai.fixedIn', { version: f.fixed_version }) : t('vulns.ai.noFix'),
+              f.target ? t('vulns.ai.source', { target: f.target }) : '',
             ]
               .filter(Boolean)
               .join('. '),

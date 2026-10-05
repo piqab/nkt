@@ -602,6 +602,9 @@ func (s *Server) hostRows(ctx context.Context) ([]hostWithOverview, error) {
 				h.Group = group
 			}
 		}
+		// Причина ошибки — на языке читающего (ошибки каталога хранятся
+		// ключом, см. store.HostError).
+		h.ErrorMsg = h.LocalizedError(msgs.FromContext(ctx))
 		row := hostWithOverview{Host: h, HubVersion: s.hub.Version()}
 		if h.SSHHostKey != "" {
 			row.HostKeyFP = fingerprintOf(h.SSHHostKey)
@@ -713,7 +716,7 @@ func (s *Server) handleAddHost(w http.ResponseWriter, r *http.Request) {
 // из-за не сохранившейся метки было бы хуже, чем метку потерять.
 func (s *Server) setHostGroup(ctx context.Context, id int64, group string) {
 	if err := s.hub.SetHostGroup(ctx, id, group); err != nil {
-		s.log.Warn("не удалось сохранить группу хоста", "host", id, "err", err)
+		s.log.Warn("could not save host group", "host", id, "err", err)
 	}
 }
 

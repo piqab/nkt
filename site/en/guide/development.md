@@ -233,6 +233,21 @@ key of the `internal/msgs` catalog with translations in `ru.go` and
 A key is `<package>.<meaning>` (`files.pathOutsideAllowed`). Output of
 external programs (nginx -t, apt, certbot, git) isn't translated.
 
+What else keeps translations in place:
+
+- text saved to the database (a host's error reason) is stored as a key:
+  written via `store.HostError(err)`, rendered with `h.LocalizedError(lang)`;
+  snapshot texts (findings, notes, warnings) go through
+  `model.LocalizeSnapshot`;
+- `cmd/nkt/i18n_sweep_test.go` starts the host API on fixtures and the hub
+  API and walks every GET route in English: Cyrillic in a response is an
+  untranslated string and fails the test;
+- the service journal (slog) is English only, catalog errors in it are
+  rendered in English too (`englishErrors`);
+- the command line uses `cli.*` keys (`internal/msgs/{ru,en}_cli.go`), the
+  language follows `LANG`;
+- the Android app uses `t("рус", "eng")`, checked by `I18nCoverageTest`.
+
 ## Site and screenshots
 
 The site (VitePress) is in `site/`, with its own `package.json`:

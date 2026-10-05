@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/piqab/nkt/internal/msgs"
 	"os"
 	"strings"
 	"unicode/utf8"
@@ -25,19 +26,19 @@ func (r *accountsRuntime) listUsers(ctx context.Context) error {
 		return err
 	}
 	if len(users) == 0 {
-		fmt.Println("Учётных записей нет. Запустите nkt — администратор создастся при первом старте.")
+		fmt.Println(cli("cli.users.none"))
 		return nil
 	}
 
-	fmt.Printf("%-20s %-8s %-10s %-22s %s\n", "ЛОГИН", "РОЛЬ", "СОСТОЯНИЕ", "СОЗДАН", "ПОСЛЕДНИЙ ВХОД")
+	fmt.Printf("%-20s %-8s %-10s %-22s %s\n", cli("cli.users.colLogin"), cli("cli.users.colRole"), cli("cli.users.colState"), cli("cli.users.colCreated"), cli("cli.users.colLast"))
 	for _, u := range users {
-		state := "активна"
+		state := cli("cli.users.active")
 		if u.Disabled {
-			state = "отключена"
+			state = cli("cli.users.disabled")
 		}
 		last := u.LastLoginAt
 		if last == "" {
-			last = "не входил"
+			last = cli("cli.users.never")
 		}
 		fmt.Printf("%-20s %-8s %-10s %-22s %s\n", u.Username, u.Role, state, u.CreatedAt, last)
 	}
@@ -56,13 +57,10 @@ func (r *accountsRuntime) setPassword(ctx context.Context, username, role string
 	_, err := r.db.UserByName(ctx, username)
 	switch {
 	case errors.Is(err, store.ErrNotFound) && role == "":
-		return fmt.Errorf(
-			"учётной записи %q нет. Существующие: nkt users. "+
-				"Чтобы создать новую, укажите роль: nkt passwd %s -role admin",
-			username, username)
+		return msgs.Errorf("cli.passwd.noAccount", username, username)
 	case errors.Is(err, store.ErrNotFound):
 		if role != store.RoleAdmin && role != store.RoleViewer {
-			return fmt.Errorf("роль должна быть admin или viewer, получено %q", role)
+			return msgs.Errorf("cli.passwd.badRole", role)
 		}
 	case err != nil:
 		return err
@@ -80,7 +78,7 @@ func (r *accountsRuntime) setPassword(ctx context.Context, username, role string
 	// Count characters, not bytes: five Cyrillic letters are ten bytes in UTF-8
 	// and would otherwise sail past a byte-based minimum.
 	if utf8.RuneCountInString(password) < minPasswordLength {
-		return fmt.Errorf("пароль должен быть не короче %d символов", minPasswordLength)
+		return msgs.Errorf("cli.passwd.tooShort", minPasswordLength)
 	}
 
 	hash, err := auth.HashPassword(password)
@@ -91,28 +89,27 @@ func (r *accountsRuntime) setPassword(ctx context.Context, username, role string
 	action := "auth.password.cli"
 	if creating {
 		if _, err := r.db.CreateUser(ctx, username, hash, role); err != nil {
-			return fmt.Errorf("создание учётной записи: %w", err)
+			return msgs.Errorf("cli.passwd.createFailed", err)
 		}
 		action = "user.create.cli"
-		fmt.Printf("Создана учётная запись %s с ролью %s.\n", username, role)
+		fmt.Print(cli("cli.passwd.created", username, role))
 	} else {
 		// Existing sessions are dropped by SetPasswordHash: a password reset
 		// should log out whoever was using the old one.
 		if err := r.db.SetPasswordHash(ctx, username, hash); err != nil {
-			return fmt.Errorf("смена пароля: %w", err)
+			return msgs.Errorf("cli.passwd.setFailed", err)
 		}
 		if role != "" {
 			if err := r.db.SetUserRole(ctx, username, role); err != nil {
-				return fmt.Errorf("смена роли: %w", err)
+				return msgs.Errorf("cli.passwd.roleFailed", err)
 			}
-			fmt.Printf("Роль %s изменена на %s.\n", username, role)
+			fmt.Print(cli("cli.passwd.roleChanged", username, role))
 		}
-		fmt.Printf("Пароль %s изменён, все его сессии завершены.\n", username)
+		fmt.Print(cli("cli.passwd.changed", username))
 	}
 
 	if generate {
-		fmt.Printf("\n  логин:  %s\n  пароль: %s\n\n  Сохраните пароль: он больше нигде не отображается.\n",
-			username, password)
+		fmt.Print(cli("cli.passwd.generated", username, password))
 	}
 
 	r.db.Audit(ctx, cliActor(), action, username, "ok",
@@ -136,20 +133,20 @@ func promptPassword() (string, error) {
 		return strings.TrimRight(strings.TrimPrefix(line, utf8BOM), "\r\n"), nil
 	}
 
-	fmt.Print("Новый пароль: ")
+	fmt.Print(cli("cli.passwd.prompt"))
 	first, err := term.ReadPassword(fd)
 	fmt.Println()
 	if err != nil {
 		return "", err
 	}
-	fmt.Print("Повторите пароль: ")
+	fmt.Print(cli("cli.passwordRepeat"))
 	second, err := term.ReadPassword(fd)
 	fmt.Println()
 	if err != nil {
 		return "", err
 	}
 	if string(first) != string(second) {
-		return "", errors.New("пароли не совпадают")
+		return "", msgs.Errorf("cli.passwordMismatch")
 	}
 	return string(first), nil
 }

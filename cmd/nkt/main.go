@@ -11,7 +11,9 @@ import (
 	"fmt"
 	"github.com/piqab/nkt/internal/backup"
 	"github.com/piqab/nkt/internal/hubsudo"
+	"github.com/piqab/nkt/internal/msgs"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"os"
@@ -50,38 +52,8 @@ import (
 // version is overridden at build time with -ldflags "-X main.version=...".
 var version = "dev"
 
-const usage = `NetKnownsThat %s — карта сетевых ресурсов и проверка конфигураций хоста.
-
-Использование:
-  nkt [serve]         запустить веб-дашборд и фоновый сбор данных (по умолчанию)
-  nkt tui             терминальный интерфейс: то же самое без браузера
-  nkt scan            разовая проверка, отчёт в stdout, код 2 при критичных находках
-  nkt hub             управляющий центр: установка и проксирование nkt на других хостах по SSH
-  nkt hub delete      безвозвратно стереть данные и ключи хаба (сервис и бинарник остаются)
-  nkt hub import -file <файл>   восстановить хосты из экспорта (обычного или с паролем)
-  nkt users           показать учётные записи веб-интерфейса
-  nkt passwd [логин]  сменить пароль (по умолчанию admin), спросит его без эха
-  nkt version         показать версию
-
-Флаги:
-  -v                  подробный лог
-  -random             в passwd: сгенерировать пароль и напечатать один раз
-  -role admin|viewer  в passwd: создать учётную запись с этой ролью, если её нет
-  -yes                в hub delete: не спрашивать подтверждения
-  -export <файл>      в hub delete: сохранить сюда экспорт хостов с ключом перед удалением
-  -no-export          в hub delete: не предлагать и не делать экспорт перед удалением
-  -file <файл>        в hub import: путь к файлу экспорта
-
-Примеры:
-  sudo nkt passwd                     сменить пароль администратора
-  sudo nkt passwd ops -role viewer    завести учётку только на чтение
-  sudo nkt passwd -random             выдать новый случайный пароль admin
-  sudo nkt hub delete                 удалить хаб: спросит про экспорт и подтверждение
-  sudo nkt hub delete -export a.json  удалить хаб, предварительно сохранив экспорт в a.json
-  sudo nkt hub import -file a.json    восстановить хосты из ранее сохранённого экспорта
-
-Настройка — через переменные окружения NKT_*, см. deploy/nkt.env.example.
-`
+// usage — справка командной строки (cli.usage), на языке терминала.
+func usage() string { return cli("cli.usage") }
 
 func main() {
 	// Программы из snap (lxc) — в /snap/bin, которого нет в PATH службы.
@@ -93,17 +65,17 @@ func main() {
 	}
 
 	fs := flag.NewFlagSet("nkt", flag.ExitOnError)
-	verbose := fs.Bool("v", false, "подробный лог")
+	verbose := fs.Bool("v", false, cli("cli.flag.verbose"))
 	// Kept so that the documented `nkt -scan` keeps working.
-	scanFlag := fs.Bool("scan", false, "разовая проверка и выход")
-	versionFlag := fs.Bool("version", false, "показать версию и выйти")
-	randomFlag := fs.Bool("random", false, "сгенерировать пароль вместо ввода")
-	roleFlag := fs.String("role", "", "роль создаваемой учётной записи: admin или viewer")
-	yesFlag := fs.Bool("yes", false, "в hub delete: не спрашивать подтверждения")
-	exportFlag := fs.String("export", "", "в hub delete: сохранить сюда экспорт хостов с ключом перед удалением")
-	noExportFlag := fs.Bool("no-export", false, "в hub delete: не предлагать и не делать экспорт перед удалением")
-	fileFlag := fs.String("file", "", "в hub import: путь к файлу экспорта (обычному или зашифрованному паролем)")
-	fs.Usage = func() { fmt.Fprintf(os.Stderr, usage, version) }
+	scanFlag := fs.Bool("scan", false, cli("cli.flag.scan"))
+	versionFlag := fs.Bool("version", false, cli("cli.flag.version"))
+	randomFlag := fs.Bool("random", false, cli("cli.flag.random"))
+	roleFlag := fs.String("role", "", cli("cli.flag.role"))
+	yesFlag := fs.Bool("yes", false, cli("cli.flag.yes"))
+	exportFlag := fs.String("export", "", cli("cli.flag.export"))
+	noExportFlag := fs.Bool("no-export", false, cli("cli.flag.noExport"))
+	fileFlag := fs.String("file", "", cli("cli.flag.file"))
+	fs.Usage = func() { fmt.Fprintf(os.Stderr, usage(), version) }
 
 	// The flag package stops at the first non-flag argument, so `passwd ops
 	// -role viewer` would silently ignore the role. Parse what precedes the
@@ -136,10 +108,14 @@ func main() {
 	if *verbose {
 		level = slog.LevelDebug
 	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level}))
+	// The service journal is English throughout: catalog errors (msgs.Err)
+	// would otherwise render in the default language via Error().
+	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level, ReplaceAttr: englishErrors}))
 
 	if err := dispatch(command, opts, log); err != nil {
-		log.Error("command failed", "command", command, "err", err)
+		// Ошибка команды — на языке терминала (служба под systemd без
+		// локали получает английский, как и весь журнал).
+		log.Error("command failed", "command", command, "err", msgs.Localize(cliLang(), err))
 		os.Exit(1)
 	}
 }
@@ -164,7 +140,7 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 		fmt.Printf("netknownsthat %s\n", version)
 		return nil
 	case "help", "-h", "--help":
-		fmt.Fprintf(os.Stderr, usage, version)
+		fmt.Fprintf(os.Stderr, usage(), version)
 		return nil
 	case "hub":
 		switch opts.username {
@@ -213,8 +189,8 @@ func dispatch(command string, opts commandOptions, log *slog.Logger) error {
 		return app.setPassword(context.Background(), opts.username, opts.role, opts.random)
 	case "serve", "tui", "scan":
 	default:
-		fmt.Fprintf(os.Stderr, usage, version)
-		return fmt.Errorf("неизвестная команда %q", command)
+		fmt.Fprintf(os.Stderr, usage(), version)
+		return msgs.Errorf("cli.unknownCommand", command)
 	}
 
 	app, err := newRuntime()
@@ -440,13 +416,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 		log.Warn("frontend not built, serving API only (run npm run build in web/)")
 	}
 
-	server := api.New(api.Deps{
-		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
-		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
-		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
-		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages, Files: r.files, CloneRunner: r.cloneRun, GuestCreds: r.guestCreds,
-		UI: ui, Log: log, Version: version,
-	})
+	server := r.apiServer(authSvc, scheduler, ui, log)
 	// Свои файлы fail2ban (устаревший фильтр nkt-manual и т. п.) — сверка
 	// при запуске и раз в полчаса.
 	server.StartMaintenance(ctx)
@@ -461,7 +431,7 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	// честно помечаются прерванными. Иначе список показывал бы вечно
 	// «идёт» то, чья горутина умерла вместе с прошлым процессом.
 	if err := r.jobs.Recover(ctx); err != nil {
-		log.Error("не удалось разобрать незавершённые задания", "err", err)
+		log.Error("could not recover unfinished jobs", "err", err)
 	}
 	defer r.jobs.Close()
 
@@ -530,6 +500,18 @@ func (r *runtime) runServer(log *slog.Logger) error {
 	return nil
 }
 
+// apiServer — API хоста со всеми менеджерами рантайма. Вынесено из
+// runServer, чтобы тест (i18n_sweep_test.go) поднимал ровно тот же сервер.
+func (r *runtime) apiServer(authSvc *auth.Service, scheduler *monitor.Scheduler, ui fs.FS, log *slog.Logger) *api.Server {
+	return api.New(api.Deps{
+		Cfg: r.cfg, DB: r.db, Auth: authSvc, Scanner: r.scanner, Scheduler: scheduler,
+		Services: r.services, Configs: r.configs, OSUsers: r.osusers, Disks: r.disks, Hardware: r.hardware, SysConfig: r.sysconfig,
+		NetManager: r.netmanager, SandboxPkg: r.sandboxpkg, Firewall: r.firewall, Firewalld: r.firewalld, Certs: r.certs,
+		Podman: r.podman, LXD: r.lxd, Libvirt: r.libvirt, Logs: r.logs, Images: r.images, Jobs: r.jobs, VMImages: r.vmimages, Files: r.files, CloneRunner: r.cloneRun, GuestCreds: r.guestCreds,
+		UI: ui, Log: log, Version: version,
+	})
+}
+
 // ---------------------------------------------------------------------- scan
 
 // printScanReport runs one scan and writes a human-readable summary, which makes
@@ -540,28 +522,28 @@ func (r *runtime) printScanReport(ctx context.Context) error {
 		return err
 	}
 
-	fmt.Printf("Хост:       %s (%s, режим %s)\n", snap.Host.Hostname, snap.Host.OS, snap.Mode)
-	fmt.Printf("Скан:       %s за %d мс\n", snap.TS, snap.ScanMS)
-	fmt.Printf("Найдено:    %d слушателей в конфигах, %d пулов, %d контейнеров, %d правил firewall\n\n",
-		len(snap.Endpoints), len(snap.Upstreams), len(snap.Container), len(snap.Firewall.Rules))
+	snap = model.LocalizeSnapshot(cliLang(), snap)
+	fmt.Print(cli("cli.scan.host", snap.Host.Hostname, snap.Host.OS, snap.Mode))
+	fmt.Print(cli("cli.scan.took", snap.TS, snap.ScanMS))
+	fmt.Print(cli("cli.scan.found", len(snap.Endpoints), len(snap.Upstreams), len(snap.Container), len(snap.Firewall.Rules)))
 
 	for _, src := range snap.Sources {
 		state := "ok"
 		if src.Error != "" {
-			state = "ОШИБКА: " + src.Error
+			state = cli("cli.scan.sourceError", src.Error)
 		} else if !src.Available {
-			state = "недоступен"
+			state = cli("cli.scan.sourceUnavailable")
 		}
 		fmt.Printf("  %-12s %-40s %s\n", src.Name, state, src.Version)
 	}
 
 	counts := snap.FindingCounts()
-	fmt.Printf("\nПроблемы: critical=%d high=%d medium=%d low=%d info=%d\n",
+	fmt.Print(cli("cli.scan.problems",
 		counts[model.SeverityCritical], counts[model.SeverityHigh], counts[model.SeverityMedium],
-		counts[model.SeverityLow], counts[model.SeverityInfo])
+		counts[model.SeverityLow], counts[model.SeverityInfo]))
 
 	for _, f := range snap.Findings {
-		fmt.Printf("\n[%s] %s\n    объект: %s\n    %s\n", f.Severity, f.Title, f.Object, f.Detail)
+		fmt.Print(cli("cli.scan.finding", f.Severity, f.Title, f.Object, f.Detail))
 		if f.Suggestion != "" {
 			fmt.Printf("    → %s\n", f.Suggestion)
 		}
@@ -870,12 +852,9 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// finished (a crash, or this very restart) — nothing left alive can
 	// ever complete it, so it must not stay stuck forever with its
 	// "переустановить"/cancel controls unable to act on anything real.
-	// This reason string lands in Host.ErrorMsg, shown in the web UI, not
-	// the console — left in Russian like every other install-failure
-	// message that field carries today (internal/hub's own error text is
-	// entirely Russian still; translating only this one would be a random
-	// half-measure, not what console-startup-message English covers).
-	if n, err := r.db.ResetStuckInstalls(context.Background(), "установка прервана перезапуском хаба"); err != nil {
+	// The reason lands in Host.ErrorMsg as a catalog key (store.HostError),
+	// so the web UI shows it in the reader's language.
+	if n, err := r.db.ResetStuckInstalls(context.Background(), store.HostError(msgs.Errorf("hub.installInterruptedByRestart"))); err != nil {
 		log.Warn("could not reset stuck installs", "err", err)
 	} else if n > 0 {
 		log.Info("reset stuck host installs", "count", n)
@@ -972,7 +951,7 @@ func (r *hubRuntime) runHub(log *slog.Logger) error {
 	// То же, что в runServer: незавершённые задания разбираются до
 	// приёма запросов.
 	if err := r.jobs.Recover(ctx); err != nil {
-		log.Error("не удалось разобрать незавершённые задания", "err", err)
+		log.Error("could not recover unfinished jobs", "err", err)
 	}
 	defer r.jobs.Close()
 
@@ -1053,15 +1032,11 @@ func vmimageStore(cfg *config.Config) *vmimage.Store {
 // том данных, заведённый прежней версией от root, надо переназначить.
 func checkDataDirWritable(dir string) error {
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("каталог данных %s: %w\n"+
-			"хаб работает от пользователя uid %d; отдайте ему каталог данных, например:\n"+
-			"  docker run --rm -v <том>:/data alpine chown -R 1000:1000 /data", dir, err, os.Getuid())
+		return msgs.Errorf("cli.dataDir", dir, err, os.Getuid())
 	}
 	probe := filepath.Join(dir, ".write-check")
 	if err := os.WriteFile(probe, []byte("ok"), 0o600); err != nil {
-		return fmt.Errorf("каталог данных %s не доступен на запись: %w\n"+
-			"хаб работает от пользователя uid %d; отдайте ему каталог данных, например:\n"+
-			"  docker run --rm -v <том>:/data alpine chown -R 1000:1000 /data", dir, err, os.Getuid())
+		return msgs.Errorf("cli.dataDirNotWritable", dir, err, os.Getuid())
 	}
 	_ = os.Remove(probe)
 	return nil
@@ -1070,3 +1045,13 @@ func checkDataDirWritable(dir string) error {
 // cmdjobSecrets — откуда задание «выполнить команды» берёт секреты
 // (пароль гостя); задаётся при запуске службы, когда открыта база.
 var cmdjobSecrets cmdjob.Secrets
+
+// englishErrors renders error attributes of log records in English — the
+// journal (journalctl) is read and searched in one language whatever the
+// interface language of whoever triggered the event.
+func englishErrors(_ []string, a slog.Attr) slog.Attr {
+	if err, ok := a.Value.Any().(error); ok {
+		return slog.String(a.Key, msgs.Localize(msgs.EN, err))
+	}
+	return a
+}

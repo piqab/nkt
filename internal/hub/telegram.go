@@ -254,7 +254,7 @@ func (b *tgBot) loop(ctx context.Context) {
 		}
 		if err != nil && pctx.Err() == nil {
 			b.setState(false, err)
-			b.s.log.Warn("бот Telegram: ошибка опроса", "err", err)
+			b.s.log.Warn("Telegram bot: polling error", "err", err)
 			select {
 			case <-ctx.Done():
 				return
@@ -382,7 +382,7 @@ func (b *tgBot) notify(ctx context.Context, ev OutEvent) {
 			continue
 		}
 		if err := b.sendReply(ctx, token, c.ID, r); err != nil {
-			b.s.log.Warn("бот Telegram: оповещение не отправлено", "chat", c.ID, "err", err)
+			b.s.log.Warn("Telegram bot: alert not sent", "chat", c.ID, "err", err)
 		}
 	}
 }

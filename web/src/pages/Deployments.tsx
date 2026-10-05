@@ -14,7 +14,7 @@ import { EdgeCard } from '../components/EdgeCard'
 import { SitesPanel } from '../components/SitesPanel'
 import { ComposeEngineStatus } from '../components/ComposeEngineStatus'
 import { HelpButton, TitleHelp } from '../components/Docs'
-import { PIPELINE_EXAMPLES, type PipelineExample } from '../pipelineExamples'
+import { PIPELINE_EXAMPLES, envTemplateLines, type PipelineExample } from '../pipelineExamples'
 import { msg, tx, type Msg } from '../msg'
 
 interface Deployment {
@@ -832,7 +832,7 @@ function ComposeFromLink({
           .join('')
       : ''
     const envTemplate = ex?.envTemplate
-      ? `\n# ${t('deploy.envTemplateComment')}\n` + ex.envTemplate.map((l) => `#   ${l}\n`).join('')
+      ? `\n# ${t('deploy.envTemplateComment')}\n` + envTemplateLines(ex.envTemplate, t).map((l) => `#   ${l}\n`).join('')
       : ''
     const yaml =
       (ex ? `# ${t('deploy.exampleComment')}: ${ex.readme}\n` : '') +

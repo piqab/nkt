@@ -393,15 +393,18 @@ func markDerivedCertbotCerts(certs []model.Certificate, renewals renewalIndex) {
 		sourcePath := LetsEncryptLive + lineage + "/fullchain.pem"
 		src := renewals.forPath(sourcePath)
 
-		detail := fmt.Sprintf(
-			"тот же сертификат, что и %s — похоже, объединён с приватным ключом для другого "+
-				"сервиса (типично для haproxy, которому certbot не пишет напрямую).", sourcePath)
-		if src.Managed {
-			detail += fmt.Sprintf(" certbot renew --cert-name %s продлит оригинал, но этот файл "+
-				"нужно пересобрать отдельно — deploy-hook'ом certbot или вручную.", lineage)
-		} else {
-			detail += " " + src.Detail
+		// Ключ и аргументы — чтобы ответ API был на языке читающего;
+		// пояснение источника вкладывается как ошибка каталога и
+		// переводится вместе с внешним текстом (model.resolve).
+		detailKey, detailArgs := "parse.renewalDerivedManaged", []any{sourcePath, lineage}
+		if !src.Managed {
+			var srcDetail error = errors.New(src.Detail)
+			if src.DetailKey != "" {
+				srcDetail = msgs.Errorf(src.DetailKey, src.DetailArgs...)
+			}
+			detailKey, detailArgs = "parse.renewalDerived", []any{sourcePath, srcDetail}
 		}
+		detail := (&msgs.Err{Key: detailKey, Args: detailArgs}).Error()
 
 		cert.Renewal = model.RenewalInfo{
 			Tool:       src.Tool,
@@ -411,6 +414,8 @@ func markDerivedCertbotCerts(certs []model.Certificate, renewals renewalIndex) {
 			Derived:    true,
 			SourcePath: sourcePath,
 			Detail:     detail,
+			DetailKey:  detailKey,
+			DetailArgs: detailArgs,
 		}
 	}
 }
