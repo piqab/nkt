@@ -8,6 +8,29 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.148 — 2026-10-05
+
+- **Android app — hub sections:** the host list's menu button opens
+  Alerts, Hub jobs, Monitoring, Fail2ban and Deployments. Each event has a
+  “To host” button that opens the host right at the relevant section. A
+  bell shows the unread count.
+- **Phone notifications:** a switch in Alerts; every 15 minutes the app
+  checks the hub journal and shows events of the kinds the hub notifies
+  about (same as Slack/Telegram). Tapping one opens the host.
+- **Jobs:** a list with a status filter, a live log with steps and a
+  “Cancel job” button — for a host and for the hub.
+- **Fail2ban:** on a host — jails, bans, “Ban IP” and “Unban”; on the
+  hub — every banned address in the fleet, ban and unban on all hosts as a
+  job with a log.
+- **Hub monitoring:** what needs attention (disks, leaks, availability
+  drops) with a jump to the host, CPU/memory/disks per host, Kubernetes
+  cluster nodes.
+- **Deployments:** pipelines with their last deployment, “Deploy”, “Dry
+  run”, log, history with rollback, old stacks left on a previous host —
+  “Remove” or “Forget”.
+- **Host reboot:** in the host's “⋮” menu — first shows what is running
+  and what will not come back by itself.
+
 ## v1.11.147 — 2026-10-05
 
 - **Android app:** API responses in the tests are recaptured from the

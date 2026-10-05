@@ -9,6 +9,9 @@
          unrelated host stays blocked. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Hub alerts as phone notifications (Android 13+ asks at runtime,
+         when the switch on the alerts screen is turned on). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:name=".NktApplication"
@@ -22,6 +25,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.Nkt">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

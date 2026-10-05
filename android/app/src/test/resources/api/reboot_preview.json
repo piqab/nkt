@@ -1,0 +1,1 @@
+{"no_autostart":[{"kind":"lxd","name":"dns-cache","reason":"boot.autostart: false"},{"kind":"podman","name":"monitoring-grafana","reason":"restart: no"},{"kind":"podman","name":"monitoring-prometheus","reason":"restart: no"}],"reboot_required":false,"running":{"docker":6,"lxd":2,"podman":2,"service":10,"vm":1},"simulated":true}

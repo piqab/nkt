@@ -22,6 +22,15 @@ import com.netknownsthat.app.ui.host.UsageViewModel
 import com.netknownsthat.app.ui.host.UsersViewModel
 import com.netknownsthat.app.ui.host.VulnerabilitiesViewModel
 import com.netknownsthat.app.ui.hosts.HostListViewModel
+import com.netknownsthat.app.ui.hub.DeploymentsViewModel
+import com.netknownsthat.app.ui.hub.EventsViewModel
+import com.netknownsthat.app.ui.hub.Fail2banViewModel
+import com.netknownsthat.app.ui.hub.FleetFail2banViewModel
+import com.netknownsthat.app.ui.hub.HostJobsViewModel
+import com.netknownsthat.app.ui.hub.HubJobsViewModel
+import com.netknownsthat.app.ui.hub.JobLogViewModel
+import com.netknownsthat.app.ui.hub.MonitoringViewModel
+import com.netknownsthat.app.ui.hub.RebootViewModel
 import com.netknownsthat.app.ui.login.AuthViewModel
 
 /**
@@ -53,6 +62,15 @@ class AppViewModelFactory(private val hubClient: HubClient) : ViewModelProvider.
         TopologyViewModel::class.java -> TopologyViewModel(hubClient) as T
         TerminalViewModel::class.java -> TerminalViewModel(hubClient) as T
         LogsViewModel::class.java -> LogsViewModel(hubClient) as T
+        HostJobsViewModel::class.java -> HostJobsViewModel(hubClient) as T
+        HubJobsViewModel::class.java -> HubJobsViewModel(hubClient) as T
+        JobLogViewModel::class.java -> JobLogViewModel(hubClient) as T
+        EventsViewModel::class.java -> EventsViewModel(hubClient) as T
+        Fail2banViewModel::class.java -> Fail2banViewModel(hubClient) as T
+        FleetFail2banViewModel::class.java -> FleetFail2banViewModel(hubClient) as T
+        MonitoringViewModel::class.java -> MonitoringViewModel(hubClient) as T
+        DeploymentsViewModel::class.java -> DeploymentsViewModel(hubClient) as T
+        RebootViewModel::class.java -> RebootViewModel(hubClient) as T
         else -> throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
     }
 }

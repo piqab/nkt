@@ -3,6 +3,7 @@ package com.netknownsthat.app.data
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -25,6 +26,8 @@ class SettingsStore(private val context: Context) {
         val COOKIES = stringSetPreferencesKey("session_cookies")
         val PINNED_CERTS = stringSetPreferencesKey("pinned_certs")
         val BETA_NOTICE_HIDDEN = booleanPreferencesKey("beta_notice_hidden")
+        val EVENTS_NOTIFY = booleanPreferencesKey("events_notify")
+        val EVENTS_LAST_ID = longPreferencesKey("events_last_id")
     }
 
     suspend fun hubBaseUrl(): String? =
@@ -68,5 +71,21 @@ class SettingsStore(private val context: Context) {
 
     suspend fun savePinnedCerts(entries: Set<String>) {
         context.dataStore.edit { it[Keys.PINNED_CERTS] = entries }
+    }
+
+    /** Whether hub alerts are posted as phone notifications (EventsWorker). */
+    suspend fun eventsNotify(): Boolean =
+        context.dataStore.data.first()[Keys.EVENTS_NOTIFY] ?: false
+
+    suspend fun setEventsNotify(on: Boolean) {
+        context.dataStore.edit { it[Keys.EVENTS_NOTIFY] = on }
+    }
+
+    /** Newest hub event already notified about; 0 — none yet. */
+    suspend fun eventsLastId(): Long =
+        context.dataStore.data.first()[Keys.EVENTS_LAST_ID] ?: 0L
+
+    suspend fun setEventsLastId(id: Long) {
+        context.dataStore.edit { it[Keys.EVENTS_LAST_ID] = id }
     }
 }

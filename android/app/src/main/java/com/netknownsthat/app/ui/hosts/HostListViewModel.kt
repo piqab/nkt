@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.netknownsthat.app.net.HubClient
+import com.netknownsthat.app.net.model.HubEventsResponse
 import com.netknownsthat.app.net.model.HubHost
 import kotlinx.coroutines.launch
 
@@ -13,6 +14,8 @@ data class HostListUiState(
     val loading: Boolean = true,
     val hosts: List<HubHost> = emptyList(),
     val error: String? = null,
+    /** Unread hub alerts, for the bell. */
+    val unread: Int = 0,
 )
 
 /**
@@ -34,7 +37,27 @@ class HostListViewModel(private val hubClient: HubClient) : ViewModel() {
                 is HubClient.ApiResult.Failure ->
                     uiState = uiState.copy(loading = false, error = result.message)
             }
+            val events = hubClient.get<HubEventsResponse>("/hub/events?limit=1")
+            if (events is HubClient.ApiResult.Success) uiState = uiState.copy(unread = events.value.unread)
         }
+    }
+
+    /**
+     * Selects a host by id for a jump from an alert, a monitoring insight or
+     * a notification — the list may not be loaded yet (cold start from a
+     * notification), so it is fetched when needed. Null if the host is gone.
+     */
+    suspend fun selectById(id: Long): HubHost? {
+        var host = uiState.hosts.firstOrNull { it.id == id }
+        if (host == null) {
+            val result = hubClient.get<List<HubHost>>("/hub/hosts")
+            if (result is HubClient.ApiResult.Success) {
+                uiState = uiState.copy(hosts = result.value)
+                host = result.value.firstOrNull { it.id == id }
+            }
+        }
+        host?.let(::select)
+        return host
     }
 
     /** The host whose sections are open, kept here so the host screen can

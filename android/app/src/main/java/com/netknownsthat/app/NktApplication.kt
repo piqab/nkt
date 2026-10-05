@@ -3,6 +3,7 @@ package com.netknownsthat.app
 import android.app.Application
 import com.netknownsthat.app.data.SettingsStore
 import com.netknownsthat.app.net.HubClient
+import com.netknownsthat.app.ui.hub.EventsWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 
@@ -27,5 +28,6 @@ class NktApplication : Application() {
         super.onCreate()
         settingsStore = SettingsStore(this)
         hubClient = HubClient(settingsStore, appScope)
+        EventsWorker.createChannel(this)
     }
 }

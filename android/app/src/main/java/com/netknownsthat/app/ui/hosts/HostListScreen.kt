@@ -12,7 +12,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -40,6 +44,8 @@ fun HostListScreen(
     viewModel: HostListViewModel,
     onOpenAbout: () -> Unit,
     onOpenHost: (HubHost) -> Unit,
+    onOpenHub: () -> Unit,
+    onOpenEvents: () -> Unit,
 ) {
     val state = viewModel.uiState
 
@@ -59,7 +65,19 @@ fun HostListScreen(
         topBar = {
             TopAppBar(
                 title = { Text("Хосты") },
+                navigationIcon = {
+                    IconButton(onClick = onOpenHub) {
+                        Icon(Icons.Default.Menu, contentDescription = "Разделы хаба")
+                    }
+                },
                 actions = {
+                    IconButton(onClick = onOpenEvents) {
+                        BadgedBox(badge = {
+                            if (state.unread > 0) Badge { Text(if (state.unread > 99) "99+" else state.unread.toString()) }
+                        }) {
+                            Icon(Icons.Default.Notifications, contentDescription = "Оповещения")
+                        }
+                    }
                     IconButton(onClick = viewModel::refresh) {
                         Icon(Icons.Default.Refresh, contentDescription = "Обновить")
                     }

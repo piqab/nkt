@@ -102,6 +102,13 @@ class HubClient(
         }
     }
 
+    /** For a background worker in a fresh process: restores the saved hub
+     * and cookie unless the activity has already done so. */
+    suspend fun ensureBootstrapped(): Boolean {
+        if (!bootstrapped.isCompleted) return bootstrap()
+        return baseUrl != null
+    }
+
     private fun HttpUrl.authority(): String = "$host:$port"
 
     /**
