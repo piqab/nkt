@@ -1,0 +1,63 @@
+[versions]
+kotlin = "2.3.21"
+agp = "8.13.2"
+compose-mp = "1.11.1"
+cmp-material3 = "1.9.0"
+cmp-adaptive = "1.2.0"
+cmp-icons = "1.7.3"
+jb-lifecycle = "2.10.0"
+jb-navigation = "2.9.2"
+coroutines = "1.11.0"
+serialization = "1.11.0"
+datetime = "0.7.1"
+ktor = "3.5.2"
+koin = "4.2.2"
+datastore = "1.2.1"
+kermit = "2.2.0"
+work = "2.10.5"
+activity = "1.11.0"
+core-ktx = "1.17.0"
+turbine = "1.2.1"
+junit = "4.13.2"
+okio = "3.9.1"
+
+[libraries]
+coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
+coroutines-android = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-android", version.ref = "coroutines" }
+coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "coroutines" }
+serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "serialization" }
+datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "datetime" }
+ktor-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
+ktor-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
+ktor-websockets = { module = "io.ktor:ktor-client-websockets", version.ref = "ktor" }
+ktor-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
+koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
+koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
+koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
+koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
+koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin" }
+datastore-preferences-core = { module = "androidx.datastore:datastore-preferences-core", version.ref = "datastore" }
+kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
+lifecycle-viewmodel-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel-compose", version.ref = "jb-lifecycle" }
+lifecycle-runtime-compose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "jb-lifecycle" }
+navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "jb-navigation" }
+cmp-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "cmp-material3" }
+cmp-adaptive = { module = "org.jetbrains.compose.material3.adaptive:adaptive", version.ref = "cmp-adaptive" }
+cmp-navsuite = { module = "org.jetbrains.compose.material3:material3-adaptive-navigation-suite", version.ref = "cmp-material3" }
+cmp-icons = { module = "org.jetbrains.compose.material:material-icons-core", version.ref = "cmp-icons" }
+work-runtime = { module = "androidx.work:work-runtime-ktx", version.ref = "work" }
+activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activity" }
+core-ktx = { module = "androidx.core:core-ktx", version.ref = "core-ktx" }
+turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+junit = { module = "junit:junit", version.ref = "junit" }
+okio = { module = "com.squareup.okio:okio", version.ref = "okio" }
+
+[plugins]
+kotlin-multiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
+compose-mp = { id = "org.jetbrains.compose", version.ref = "compose-mp" }
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }

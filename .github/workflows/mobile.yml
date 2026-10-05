@@ -1,0 +1,60 @@
+name: mobile
+
+# The Kotlin Multiplatform app (mobile/): every change is tested and built
+# for Android, and the iOS app is compiled on a macOS runner (no signing and
+# no publication — that needs an Apple developer account). Also runnable by
+# hand from Actions.
+on:
+  push:
+    paths: ["mobile/**", "VERSION", ".github/workflows/mobile.yml"]
+  pull_request:
+    paths: ["mobile/**", "VERSION", ".github/workflows/mobile.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Tests and debug APK
+        working-directory: mobile
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon testDebugUnitTest :androidApp:assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nkt-mobile-debug-apk
+          path: mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk
+          retention-days: 7
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+      - name: Generate the Xcode project
+        working-directory: mobile/iosApp
+        run: |
+          brew install xcodegen
+          xcodegen generate
+      - name: Build for the simulator (unsigned)
+        working-directory: mobile/iosApp
+        run: |
+          chmod +x ../gradlew
+          xcodebuild -project iosApp.xcodeproj -scheme iosApp \
+            -sdk iphonesimulator -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            MARKETING_VERSION="$(tr -d '[:space:]' < ../../VERSION)" \
+            CODE_SIGNING_ALLOWED=NO build

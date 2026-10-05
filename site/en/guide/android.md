@@ -1,13 +1,15 @@
 ---
-title: Android app
+title: Mobile app
 ---
 
-# Android app
+# Mobile app (Android and iOS)
 
 A native phone client for the [hub](/en/guide/hub): the same API as the web
 UI, with screens built for a finger rather than a mouse. The hub itself does
-not change — the app is just another way to talk to it, like a browser.
-Android 8 or newer is required.
+not change — the app is just another way to talk to it, like a browser. One
+Kotlin Multiplatform code base for Android (8 or newer) and iOS (16 or newer):
+the APK comes with releases, the iOS version is built from source for now —
+it is not published to the App Store.
 
 ::: warning Beta
 The app is new. Everything it does is checked by decoding real server
@@ -48,10 +50,15 @@ there.
 
 ## What's inside
 
+**Navigation.** At the bottom (at the side on a tablet or in landscape) are
+the hub sections: hosts, alerts, monitoring, jobs, “more” (fail2ban,
+deployments, about). Under the title are breadcrumbs, e.g.
+`Hosts › web-1 › Containers › acme-app`: each one goes back to its level, and
+the system Back button goes back one step.
+
 **Host list** — by group: state, number of problems, Kubernetes role, sudo
-(passwordless in red), an nkt version behind the hub. The bell on top is
-unread alerts, the menu button on the left opens the hub sections, the list
-icon manages groups (create, rename, delete).
+(passwordless in red), an nkt version behind the hub. The list icon on top
+manages groups (create, rename, delete).
 
 **Host management** (admins): “+” adds a host — address, SSH user and
 sign-in with a password, your own key or a hub key (the app then shows the
@@ -62,13 +69,21 @@ and deleting: from the hub only, or together with nkt on the host itself
 (service, data, the hub's access; password sign-in is restored). If the host
 already runs a foreign nkt, the app asks whether to install over it.
 
-**A host** opens with its own section menu: overview, problems (each with a
-jump to where it is fixed), terminal and btop, logs, services, containers
-(Docker has “Inspect” with environment variables), vulnerabilities, ClamAV,
-availability, usage, configs, firewall, certificates, interfaces, the
-resource map, users, jobs, fail2ban, audit log. The “⋮” menu has host
-reboot: the app first shows what is running and what will not come back by
-itself.
+**A host** opens as a grouped list of sections: overview, problems (each
+with a jump to where it is fixed), terminal and btop, logs, services,
+containers, vulnerabilities, ClamAV, availability, usage, configs, firewall,
+certificates, interfaces, the resource map, users, jobs, fail2ban, audit log.
+Details are pages of their own: a container (“Inspect” with environment
+variables), a config file (edit, history, rollback), a job (live log and
+cancel), a pipeline (history and rollback). The host's “⋮” menu has reboot:
+the app first shows what is running and what will not come back by itself.
+
+**The terminal** takes the whole screen. If the host has tmux, the session
+opens in it and survives a dropped connection: the app re-attaches to the
+same session by itself. The “tmux ▾” button on the key bar has tmux actions
+without typing `Ctrl+B …`: new window, next and previous, window list,
+splits, scroll mode, detach, mouse on/off. Without tmux a plain shell opens
+with an offer to install tmux — the install runs with live output.
 
 **Hub sections:**
 
@@ -97,15 +112,32 @@ server key, and the phone reaches the hub itself, like a browser.
 
 ## Building from source
 
+The code is in `mobile/` (how it is organised — `mobile/README.md`).
+
 ```sh
-android/scripts/setup-toolchain.sh   # JDK 17 and Android SDK in ~/.local, no root
-android/scripts/build.sh test        # tests: server responses decoded by the app's models
-android/scripts/build.sh             # debug APK
+mobile/scripts/setup-toolchain.sh          # JDK 17 and Android SDK in ~/.local, no root
+mobile/scripts/build.sh testDebugUnitTest  # tests
+mobile/scripts/build.sh                    # debug APK
 ```
 
-The APK is `android/app/build/outputs/apk/debug/app-debug.apk`. A debug build
-is signed with a developer key and will not install over a release build
-(or the other way round) — uninstall the app first.
+The APK is `mobile/androidApp/build/outputs/apk/debug/androidApp-debug.apk`.
+A debug build is signed with a developer key and will not install over a
+release build (or the other way round) — uninstall the app first.
+
+**iOS** builds on macOS with Xcode only:
+
+```sh
+brew install xcodegen
+cd mobile/iosApp && xcodegen generate && open iosApp.xcodeproj
+```
+
+It can be installed on your own iPhone from Xcode with a free Apple account;
+publishing (TestFlight, App Store) needs a paid Apple Developer account. CI
+(`.github/workflows/mobile.yml`) builds the iOS version for the simulator on
+every change, so it cannot break unnoticed.
+
+Notifications on iOS are best effort: background refresh runs when the
+system decides, and every 15 minutes cannot be guaranteed.
 
 ### Signed APK in a release
 
@@ -118,7 +150,7 @@ keytool -genkeypair -keystore nkt-release.jks -alias nkt \
 base64 -w0 nkt-release.jks   # → secret ANDROID_KEYSTORE_BASE64
 ```
 
-`keytool` comes with the JDK (after `android/scripts/setup-toolchain.sh` it
+`keytool` comes with the JDK (after `mobile/scripts/setup-toolchain.sh` it
 is in `~/.local/jdk-17/bin`). Put the `.b64` content on the clipboard
 directly rather than copying it from the terminal window —
 `clip.exe < nkt-release.b64` on WSL, `xclip -sel clip < …` or `pbcopy < …` —
@@ -147,5 +179,5 @@ A locally signed build uses the same environment variables
 ```sh
 NKT_ANDROID_KEYSTORE=$HOME/nkt-release.jks NKT_ANDROID_KEY_ALIAS=nkt \
 NKT_ANDROID_KEYSTORE_PASSWORD=… NKT_ANDROID_KEY_PASSWORD=… \
-  android/scripts/build.sh assembleRelease
+  mobile/scripts/build.sh :androidApp:assembleRelease
 ```

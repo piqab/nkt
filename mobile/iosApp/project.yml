@@ -1,0 +1,44 @@
+# XcodeGen spec of the iOS app — the .xcodeproj is generated from this
+# (xcodegen generate), not committed: a hand-merged project.pbxproj is where
+# iOS builds go to die. The app is a thin SwiftUI shell around the shared
+# Compose UI built by Gradle (shared/app → Shared.framework).
+name: iosApp
+options:
+  bundleIdPrefix: com.netknownsthat
+  deploymentTarget:
+    iOS: "16.0"
+settings:
+  base:
+    MARKETING_VERSION: "0.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources: [iosApp]
+    info:
+      path: iosApp/Info.plist
+      properties:
+        CFBundleDisplayName: NetKnownsThat
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        # Hubs are usually reached over plain HTTP on a LAN or an SSH
+        # tunnel; self-signed HTTPS is checked by the app's own pinning.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+        UIBackgroundModes: [fetch, processing]
+        BGTaskSchedulerPermittedIdentifiers: [com.netknownsthat.app.events]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.netknownsthat.app
+        FRAMEWORK_SEARCH_PATHS: "$(SRCROOT)/../shared/app/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+        OTHER_LDFLAGS: ["-framework", "Shared"]
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    preBuildScripts:
+      - name: Kotlin framework
+        basedOnDependencyAnalysis: false
+        script: |
+          cd "$SRCROOT/.."
+          ./gradlew :shared:app:embedAndSignAppleFrameworkForXcode

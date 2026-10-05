@@ -8,6 +8,24 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.158 — 2026-10-05
+
+- **The mobile app is rewritten in Kotlin Multiplatform** (`mobile/`):
+  one codebase for Android and iOS, Clean Architecture, Koin, navigation
+  with breadcrumbs (`Hosts › web-1 › Containers › acme-app`, each link
+  goes back to its level), details as separate pages. iOS is only built in
+  CI for now and is not published to the App Store.
+- **Terminal:** typing on the phone keyboard no longer doubles letters,
+  Backspace works on an empty line too; the keyboard no longer covers the
+  screen; the “tmux ▾” button is a reliable menu of tmux actions (windows,
+  splits, scrolling, detach); after a dropped connection the app
+  reconnects to the same tmux session by itself.
+- Sign-in: a wrong password shows the hub's answer instead of “the
+  session has ended”; the form scrolls above the keyboard.
+- Empty lists from the server (`null`) no longer break screens (e.g. “Hub
+  jobs” on a fresh hub); sizes and times in configurations are readable.
+- The old `android/` app is removed.
+
 ## v1.11.157 — 2026-10-05
 
 - **The GitHub APK build tolerates line breaks in the key:** spaces and line

@@ -177,9 +177,9 @@ jobs:
           path: dist/n8n-nodes-nkt-*.tgz
           retention-days: 1
 
-  # Android-приложение (android/) — подписанным APK в релизе:
+  # Мобильное приложение (mobile/, Android-часть) — подписанным APK в релизе:
   # nkt-android-<версия>.apk. versionName берётся из VERSION (см.
-  # android/app/build.gradle.kts), так что приложение и сервер выходят под
+  # mobile/androidApp/build.gradle.kts), так что приложение и сервер выходят под
   # одним номером. Ключ подписи — только в секретах репозитория:
   #   ANDROID_KEYSTORE_BASE64   — keystore (.jks) в base64
   #   ANDROID_KEYSTORE_PASSWORD — пароль keystore
@@ -212,7 +212,7 @@ jobs:
           cache: gradle
       - name: Собрать и подписать APK
         if: steps.key.outputs.present == 'true'
-        working-directory: android
+        working-directory: mobile
         # Секреты — только через окружение: ни в argv, ни в лог они не
         # попадают; keystore раскладывается во временный файл раннера.
         env:
@@ -244,10 +244,10 @@ jobs:
           # Бета-тег — и приложение «X.Y.Z-beta» в «О системе».
           suffix=""
           if [ "${{ needs.check-version.outputs.beta }}" = true ]; then suffix="-beta"; fi
-          ./gradlew --no-daemon test assembleRelease -PnktVersionSuffix="$suffix"
+          ./gradlew --no-daemon testDebugUnitTest :androidApp:assembleRelease -PnktVersionSuffix="$suffix"
           rm -f "$NKT_ANDROID_KEYSTORE"
           mkdir -p ../dist
-          cp app/build/outputs/apk/release/app-release.apk \
+          cp androidApp/build/outputs/apk/release/androidApp-release.apk \
             "../dist/nkt-android-${{ needs.check-version.outputs.binary_version }}.apk"
           "$ANDROID_HOME"/build-tools/*/apksigner verify --print-certs ../dist/nkt-android-*.apk | head -3
       - uses: actions/upload-artifact@v4
