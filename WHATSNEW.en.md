@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.157 — 2026-10-05
+
+- **The GitHub APK build tolerates line breaks in the key:** spaces and line
+  breaks in the `ANDROID_KEYSTORE_BASE64` secret (left by copying from a
+  terminal) no longer break the build; a key that does not open with the
+  password is reported right away and clearly.
+- The signing key alias is the repository variable `ANDROID_KEY_ALIAS`
+  (`nkt` by default), not a secret: as a secret, GitHub masked the word
+  “nkt” across the whole build log. A separate key password is needed only
+  when it differs from the keystore password.
+
 ## v1.11.156 — 2026-10-05
 
 - **A beta release of the Android app apart from nkt:** a manual

@@ -10,8 +10,9 @@ name: android-beta-release
 # Повторный запуск с той же версией заменяет APK в существующем релизе.
 #
 # Ключ подписи — те же секреты, что у задания android-apk в release.yml:
-#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
-#   ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD (ANDROID_KEY_PASSWORD —
+#   только если пароль ключа другой). Псевдоним — переменная репозитория
+#   ANDROID_KEY_ALIAS, по умолчанию nkt.
 on:
   workflow_dispatch:
 
@@ -34,10 +35,9 @@ jobs:
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
-          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ] || [ -z "$KEY_ALIAS" ]; then
-            echo "::error::нет ключа подписи: задайте секреты ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD (Settings → Secrets and variables → Actions)"
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::нет ключа подписи: задайте секреты ANDROID_KEYSTORE_BASE64 и ANDROID_KEYSTORE_PASSWORD (и ANDROID_KEY_PASSWORD, если пароль ключа другой) — Settings → Secrets and variables → Actions"
             exit 1
           fi
       - uses: actions/setup-java@v4
@@ -52,11 +52,28 @@ jobs:
         env:
           KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           NKT_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          NKT_ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          NKT_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          # Псевдоним — не секрет: значение секрета GitHub прячет в логе
+          # везде, и «nkt» превращалось в *** по всему журналу сборки.
+          NKT_ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'nkt' }}
+          # Пароль ключа — отдельный секрет, если задан; иначе тот же, что у
+          # хранилища (PKCS12 от keytool другого и не спрашивает).
+          NKT_ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD || secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
           export NKT_ANDROID_KEYSTORE="$RUNNER_TEMP/nkt-release.jks"
-          printf '%s' "$KEYSTORE_B64" | base64 -d > "$NKT_ANDROID_KEYSTORE"
+          # Пробелы, переносы и \r — частый след копирования длинной строки
+          # из терминала; base64 -d на них падает с «invalid input».
+          if ! printf '%s' "$KEYSTORE_B64" | tr -d ' \t\r\n' | base64 -d > "$NKT_ANDROID_KEYSTORE" 2>/dev/null; then
+            echo "::error::ANDROID_KEYSTORE_BASE64 — не base64: создайте секрет заново из файла (base64 -w0 nkt-release.jks), скопировав его целиком"
+            exit 1
+          fi
+          # Ключ открывается паролем и содержит псевдоним — проверить сразу,
+          # а не получить невнятную ошибку Gradle. Пароль — из окружения.
+          if ! keytool -list -keystore "$NKT_ANDROID_KEYSTORE" -storepass:env NKT_ANDROID_KEYSTORE_PASSWORD \
+              -alias "$NKT_ANDROID_KEY_ALIAS" >/dev/null 2>&1; then
+            rm -f "$NKT_ANDROID_KEYSTORE"
+            echo "::error::ключ не открывается: проверьте ANDROID_KEYSTORE_PASSWORD, псевдоним ($NKT_ANDROID_KEY_ALIAS; переменная репозитория ANDROID_KEY_ALIAS) и что ANDROID_KEYSTORE_BASE64 скопирован целиком"
+            exit 1
+          fi
           chmod +x ./gradlew
           ./gradlew --no-daemon test assembleRelease -PnktVersionSuffix=-beta
           rm -f "$NKT_ANDROID_KEYSTORE"

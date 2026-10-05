@@ -118,9 +118,17 @@ keytool -genkeypair -keystore nkt-release.jks -alias nkt \
 base64 -w0 nkt-release.jks   # → secret ANDROID_KEYSTORE_BASE64
 ```
 
-Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`,
-`ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`. Without them the release ships
-without an APK. Keep the key separately and safely: a lost key means
+`keytool` comes with the JDK (after `android/scripts/setup-toolchain.sh` it
+is in `~/.local/jdk-17/bin`). Put the `.b64` content on the clipboard
+directly rather than copying it from the terminal window —
+`clip.exe < nkt-release.b64` on WSL, `xclip -sel clip < …` or `pbcopy < …` —
+otherwise line breaks end up in the secret.
+
+Secrets: `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, and
+`ANDROID_KEY_PASSWORD` only if the key password differs. The key alias is
+the repository variable `ANDROID_KEY_ALIAS` (Variables, not Secrets),
+`nkt` by default. Without the secrets the release ships without an APK; a
+key that does not open with the password is reported right away. Keep the key separately and safely: a lost key means
 installed apps can no longer be updated.
 
 ### Beta release of the app only
