@@ -8,6 +8,12 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.145 — 2026-10-05
+
+- **Docs:** “Hub monitoring” has its own page in the site menu; the hub
+  page lists the sections in hub menu order, including Monitoring,
+  fail2ban and Jobs.
+
 ## v1.11.144 — 2026-10-05
 
 - **Docs: screenshots refreshed.** All sections are reshot (ru and en),

@@ -26,35 +26,46 @@ the hosts expose nothing except SSH for the hub.
 
 ## What the hub has
 
+Sections in the order they appear in the hub menu:
+
 - **[Hosts](/en/guide/hub-hosts)** — installing and updating nkt,
   availability and findings of all hosts, groups, a fallback channel for
   when SSH fails, machines inside hosts, export and import.
-- **Profiles** — a host's desired state in YAML (packages, services,
-  files, firewall, accounts, compose stacks) with a plan and apply;
-  drift shows as findings. A group can have a profile for new machines.
-- **[Scripts](/en/guide/hub-scripts)** (experimental) — a line-based
+- **[Alerts](/en/guide/hub-operations)** — a host unreachable or back,
+  rebooted, new findings, failed jobs, new bans, forecasts; each event
+  links straight to the host's section; model analysis and privacy mode
+  are on the same page.
+- **[Monitoring](/en/guide/hub-monitoring)** — availability and load of
+  all hosts from the hub history, containers, machines, pods and
+  Kubernetes nodes, trend forecasts and hints on what to do.
+- **[fail2ban](/en/guide/fail2ban#on-the-hub)** — bans and unbans across
+  many hosts at once, banned addresses of all hosts, jail templates for
+  selected hosts.
+- **[Jobs](/en/guide/hub-operations#hub-jobs)** — the hub's background
+  jobs: installs, deployments, machine and cluster creation, each with
+  its log.
+- **[Profiles and scripts](/en/guide/profiles)** — a host's desired state
+  in YAML with a plan and apply, drift as findings;
+  [scripts](/en/guide/hub-scripts) (experimental) — a line-based
   deployment language with a dry run, help and a diagram.
-- **[Kubernetes clusters](/en/guide/hub-clusters)** — on machines of one
+- **[Clusters](/en/guide/hub-clusters)** — Kubernetes on machines of one
   or several hosts, with WireGuard, Cilium, manifests and Helm into
   several clusters at once.
-- **[Deployments](/en/guide/hub-deploy)** — applications from Git to
-  clusters and hosts on a button, webhook, polling or a new image tag;
-  compose stacks with sites and HTTPS, a dry run with selectable checks,
-  [CI/CD examples](/en/guide/cicd-examples).
-- **[nkt-edge](/en/guide/edge)** — a way in from the internet for a hub
-  behind NAT: the "webhooks", "API", "outside checks" and "callbacks"
-  roles; there can be several edges.
-- **[API and tokens](/en/guide/hub-api)** — access for automation with a
-  role and a host and group scope; [outgoing
-  webhooks](/en/guide/hub-api#outgoing-webhooks) for alerts.
+- **[Deployments](/en/guide/hub-deploy)** (experimental) — applications
+  from Git to clusters and hosts on a button, webhook, polling or a new
+  image tag; compose stacks with sites and HTTPS, a dry run,
+  [CI/CD examples](/en/guide/cicd-examples); [nkt-edge](/en/guide/edge) —
+  a way in from the internet for a hub behind NAT.
+- **About** — [updates](/en/guide/hub-updates) of the hub and hosts, the
+  shared vulnerability and ClamAV databases, [API tokens](/en/guide/hub-api),
+  the menu layout, model analysis, export and the “danger zone”.
+
+Outside the menu, around the hub:
+
 - **[n8n](/en/guide/n8n)** and **[Telegram and Slack bots](/en/guide/bots)**
   — workflows around the hub, alerts with buttons and commands from a
-  chat; [a complete example](/en/guide/case-automation).
-- **[Alerts, jobs, AI](/en/guide/hub-operations)** — host unreachable,
-  findings, failed jobs; the job log; model analysis of findings; privacy
-  mode.
-- **[Updates](/en/guide/hub-updates)** — of the hub and hosts, the beta
-  channel, the shared vulnerability and ClamAV databases.
+  chat; [a complete example](/en/guide/case-automation);
+  [outgoing webhooks](/en/guide/hub-api#outgoing-webhooks) for alerts.
 - **[Package cache](/en/guide/hub-cache)** — `.deb` files, downloads and
   container images through the hub; hosts without internet.
 
