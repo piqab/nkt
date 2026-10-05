@@ -50,4 +50,9 @@ class AboutViewModel(private val hubClient: HubClient) : ViewModel() {
             )
         }
     }
+
+    fun forgetCert() {
+        hubClient.forgetPinnedCert()
+        uiState = uiState.copy(certFingerprint = null)
+    }
 }

@@ -269,6 +269,16 @@ Everything nkt can do, by UI section — one line, one feature. How to install i
 - Menu layout in "About": the hub section order by drag and drop; host sections, ordered and hidden for all hosts at once; a diff, version history, reset to default; carried in the hub export.
 - Configuration via `hub.env`, running as a systemd unit, in Docker Compose or Kubernetes.
 
+## Android app
+
+- A native hub client for Android 8+ (Kotlin, Jetpack Compose): the same API as the web UI, sign-in with a hub account, the session survives restarts; a self-signed hub certificate is pinned on first sign-in.
+- Host list: state, problems, group, Kubernetes role, sudo; a bell with unread alerts.
+- Host sections: overview, problems with jumps to the right section, terminal and btop, logs, services, containers (Docker with “Inspect”, Podman, LXD, VMs, images), vulnerabilities, ClamAV, availability, usage with Kubernetes nodes and a chart, configs with history and rollback, firewall, certificates, interfaces, a touch resource map, users, jobs, fail2ban, audit log; reboot with a preview of what will not come back by itself.
+- Hub sections: alerts with a jump to the host, hub jobs, monitoring, fleet fail2ban, deployments (deploy, dry run, history and rollback, old stacks).
+- Phone notifications for hub alerts (polled every 15 minutes; kinds as in the hub's alert settings); tapping one opens the host at the right section.
+- Jobs come with a live log and cancel.
+- A signed APK in every release (`nkt-android-<version>.apk`); the app version matches the nkt version.
+
 ## Terminal UI (`nkt tui`)
 
 - The same data in a terminal: overview, findings, resource map as a tree, services, containers, certificates, configs, availability and load.

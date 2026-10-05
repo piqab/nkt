@@ -8,6 +8,17 @@ commits (that is [CHANGELOG.md](CHANGELOG.md)). The Russian original is
 release body after a `<!-- en -->` marker, and the hub shows the reader
 their language in "About" when a newer version appears. Newest first.
 
+## v1.11.150 — 2026-10-05
+
+- **Android app in releases:** every release carries a signed
+  `nkt-android-<version>.apk` (when the repository secrets hold a signing
+  key); the app version now matches the nkt version and is shown in the
+  app's About screen.
+- **Docs:** a new “Android app” page — installation, sign-in, sections,
+  notifications, building and signing; the app is added to Features.
+- The app's About screen has “Forget certificate” for a hub reinstalled
+  with a new self-signed certificate.
+
 ## v1.11.149 — 2026-10-05
 
 - **Android app — on par with the web UI:**

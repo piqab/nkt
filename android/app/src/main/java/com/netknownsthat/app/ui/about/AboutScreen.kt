@@ -73,6 +73,13 @@ fun AboutScreen(
                             state.version?.latest?.let {
                                 Text("Последняя доступная: $it")
                             }
+                            // The app is released together with nkt, so a
+                            // mismatch says which side is behind.
+                            Text(
+                                "Приложение: ${com.netknownsthat.app.BuildConfig.VERSION_NAME}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                             if (state.version?.updateAvailable == true) {
                                 Text(
                                     text = "Доступно обновление",
@@ -129,6 +136,12 @@ fun AboutScreen(
                                     fontFamily = FontFamily.Monospace,
                                     modifier = Modifier.padding(top = 8.dp),
                                 )
+                                // After a deliberate hub reinstall the old pin
+                                // only blocks the new certificate; this lets
+                                // the next connection trust on first use again.
+                                androidx.compose.material3.TextButton(onClick = viewModel::forgetCert) {
+                                    Text("Забыть сертификат (после переустановки хаба)")
+                                }
                             }
                         }
                     }
